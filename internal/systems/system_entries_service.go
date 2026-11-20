@@ -2,6 +2,7 @@ package systems
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -63,6 +64,11 @@ type SystemEntryService interface {
 	// review screen can refuse a bad entry before anything is committed.
 	CheckCreate(ctx context.Context, campaignID string, actor EntryActor, in CreateSystemEntryInput) error
 	Update(ctx context.Context, campaignID string, actor EntryActor, id int64, in UpdateSystemEntryInput) (*SystemEntry, error)
+	// UpdateTelling is Update for the entry editor: beside the saved entry
+	// it returns the question to ask the Director when the save removed or
+	// altered a trait a hero holds (system_entries_tell.go), else nil. role
+	// is the actor's visibility role, for which heroes they may see.
+	UpdateTelling(ctx context.Context, campaignID string, actor EntryActor, role int, id int64, in UpdateSystemEntryInput) (*SystemEntry, *TellQuestion, error)
 	// Delete removes the entry only. Characters keep the name they stored.
 	Delete(ctx context.Context, campaignID string, actor EntryActor, id int64) error
 	// Choices is the ChoiceSource body: the entries this viewer may see
@@ -99,6 +105,7 @@ type systemEntryService struct {
 	manifest EntryManifestResolver
 	chars    EntryCharacters
 	standard StandardSystemResolver
+	people   EntryPeople
 }
 
 // EntryServiceOption adds an optional dependency to the service.
@@ -212,6 +219,7 @@ func (s *systemEntryService) visible(ctx context.Context, campaignID string, ent
 	out := make([]SystemEntry, 0, len(entries))
 	for _, e := range entries {
 		e.Status = entryStatusOrAccepted(e.Status)
+		e.StandsForName = snapshotName(e.StandsForSeen)
 		if e.Status != EntryStatusAccepted && !actor.IsDirector {
 			// A draft is its writer's and the Directors' only, whatever its
 			// visibility will be once accepted.
@@ -260,6 +268,18 @@ func (s *systemEntryService) visible(ctx context.Context, campaignID string, ent
 		out = append(out, e)
 	}
 	return out, nil
+}
+
+// snapshotName is the standard entry's name a tie's snapshot recorded.
+func snapshotName(seen string) string {
+	if seen == "" {
+		return ""
+	}
+	var snap StandardSnapshot
+	if json.Unmarshal([]byte(seen), &snap) != nil {
+		return ""
+	}
+	return snap.Name
 }
 
 // playedBy reports whether userID plays the character. An unclaimed or

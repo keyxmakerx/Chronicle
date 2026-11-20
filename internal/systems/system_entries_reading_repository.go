@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -46,6 +47,9 @@ type ReadingRepository interface {
 	AddNote(ctx context.Context, n *EntryNote) error
 	// ListNotes returns an entry's lines, newest first, at most limit.
 	ListNotes(ctx context.Context, campaignID string, entryID int64, limit int) ([]EntryNote, error)
+	// NotedSince returns the entries the players were told about at or after
+	// since, so a list can mark a recent change without reading each entry.
+	NotedSince(ctx context.Context, campaignID string, since time.Time) (map[int64]bool, error)
 }
 
 // errStandInTaken is the refusal for a second stand-in, whichever write hit
@@ -233,6 +237,28 @@ func (r *systemEntryRepository) AddNote(ctx context.Context, n *EntryNote) error
 	}
 	n.ID, _ = res.LastInsertId()
 	return nil
+}
+
+func (r *systemEntryRepository) NotedSince(ctx context.Context, campaignID string, since time.Time) (map[int64]bool, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT entry_id FROM campaign_system_entry_notes WHERE campaign_id = ? AND created_at >= ?`,
+		campaignID, since.UTC())
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		out[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return out, nil
 }
 
 func (r *systemEntryRepository) ListNotes(ctx context.Context, campaignID string, entryID int64, limit int) ([]EntryNote, error) {

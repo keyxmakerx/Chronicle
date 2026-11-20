@@ -90,7 +90,9 @@ func (h *SystemEntryHandler) CreateAPI(c *echo.Context) error {
 }
 
 // UpdateAPI changes an entry. The body is a partial update: absent keys keep
-// their value, null clears, a value replaces.
+// their value, null clears, a value replaces. When the save removed or
+// altered a trait a hero holds, the answer also carries "tellPlayers": who
+// holds it and a suggested line, for the editor to ask once.
 //
 // PUT /campaigns/:id/system-entries/:entryId
 func (h *SystemEntryHandler) UpdateAPI(c *echo.Context) error {
@@ -106,11 +108,15 @@ func (h *SystemEntryHandler) UpdateAPI(c *echo.Context) error {
 	if err := readEntryBody(c, &in); err != nil {
 		return err
 	}
-	e, err := h.svc.Update(c.Request().Context(), cc.Campaign.ID, entryActor(c, cc), id, in)
+	e, q, err := h.svc.UpdateTelling(c.Request().Context(), cc.Campaign.ID, entryActor(c, cc), cc.VisibilityRole(), id, in)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"entry": e})
+	out := map[string]any{"entry": e}
+	if q != nil {
+		out["tellPlayers"] = q
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // DeleteAPI removes an entry. Characters that picked it keep the name they

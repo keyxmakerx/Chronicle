@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The catalog is the one per-reader list of a rules category. The hero
@@ -16,6 +17,9 @@ import (
 // its standard entry for exactly the readers who may see it, so a
 // Directors-only stand-in is the Director's draft and players still read the
 // printed one. Nothing is ever matched by name.
+
+// ToldWindow is how long a change the players were told about stays marked.
+const ToldWindow = 14 * 24 * time.Hour
 
 // Where an entry's words come from.
 const (
@@ -83,6 +87,9 @@ type CatalogEntry struct {
 	EntryID int64 `json:"entryId,omitempty"`
 	// Status is "draft" or "sent" on a player's entry not yet accepted.
 	Status string `json:"status,omitempty"`
+	// ToldRecently is true when the players were told about a change to this
+	// entry within the last ToldWindow, so a hero's sheet can mark it.
+	ToldRecently bool `json:"toldRecently,omitempty"`
 
 	// Entry and Item are the underlying rows, for callers that render more.
 	Entry *SystemEntry   `json:"-"`
@@ -193,6 +200,7 @@ type readingState struct {
 	std        []ReferenceItem
 	camp       []SystemEntry
 	leftOut    map[string]LeftOut
+	told       map[int64]bool
 	plan       readingPlan
 }
 
@@ -235,6 +243,11 @@ func (s *systemEntryService) readingFor(ctx context.Context, campaignID, categor
 		for _, l := range outs {
 			st.leftOut[l.Slug] = l
 		}
+		if len(st.camp) > 0 {
+			if st.told, err = s.repo.NotedSince(ctx, campaignID, time.Now().Add(-ToldWindow)); err != nil {
+				return nil, err
+			}
+		}
 	}
 	slugs := make([]string, len(st.std))
 	for i := range st.std {
@@ -268,6 +281,7 @@ func (st *readingState) campEntry(j int) CatalogEntry {
 		Name: row.Name, Summary: sum, Description: row.Description, Properties: row.Properties,
 		Origin: OriginCampaign, EntryID: row.ID, KeptFor: row.ForName, Entry: &row,
 		DirectorsOnly: row.Visibility == EntryVisibilityDirectors || row.Status != EntryStatusAccepted,
+		ToldRecently:  st.told[row.ID],
 	}
 	if row.Status != EntryStatusAccepted {
 		e.Status = row.Status
@@ -481,6 +495,12 @@ func (s *systemEntryService) PickList(ctx context.Context, campaignID, systemID,
 		}
 	}
 	plan := planReading(slugs, entries, leftOut)
+	var told map[int64]bool
+	if len(entries) > 0 {
+		if told, err = s.repo.NotedSince(ctx, campaignID, time.Now().Add(-ToldWindow)); err != nil {
+			return nil, err
+		}
+	}
 	out := make([]Choice, 0, len(plan.offered)+len(entries))
 	for _, i := range plan.offered {
 		c := pkg[i]
@@ -489,6 +509,7 @@ func (s *systemEntryService) PickList(ctx context.Context, campaignID, systemID,
 	}
 	for j, e := range entries {
 		c := entryChoice(e, actor)
+		c.ToldRecently = told[e.ID]
 		if _, ok := plan.standsFor[j]; ok {
 			c.Origin, c.StandsFor = OriginRewritten, e.StandsFor
 		}

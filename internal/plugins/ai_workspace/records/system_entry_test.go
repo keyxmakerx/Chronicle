@@ -55,6 +55,11 @@ func (f *fakeEntrySvc) Create(_ context.Context, _ string, a systems.EntryActor,
 	f.created = append(f.created, in)
 	return &systems.SystemEntry{}, nil
 }
+func (f *fakeEntrySvc) UpdateTelling(ctx context.Context, campaignID string, a systems.EntryActor, _ int, id int64, in systems.UpdateSystemEntryInput) (*systems.SystemEntry, *systems.TellQuestion, error) {
+	e, err := f.Update(ctx, campaignID, a, id, in)
+	return e, nil, err
+}
+
 func (f *fakeEntrySvc) Update(_ context.Context, _ string, a systems.EntryActor, id int64, in systems.UpdateSystemEntryInput) (*systems.SystemEntry, error) {
 	f.lastActor = a
 	if f.updated == nil {

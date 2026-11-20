@@ -64,6 +64,9 @@ type Choice struct {
 	// overlay ran.
 	Origin    string `json:"origin,omitempty"`
 	StandsFor string `json:"standsFor,omitempty"`
+	// ToldRecently marks a campaign entry the players were told changed
+	// within the last two weeks (ToldWindow).
+	ToldRecently bool `json:"toldRecently,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system

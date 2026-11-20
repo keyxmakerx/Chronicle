@@ -72,7 +72,10 @@ type SystemEntry struct {
 	// StandsForSeen is the standard entry as it was when tied or last marked
 	// seen (a StandardSnapshot as JSON). Directors read it through the
 	// service; it never leaves in a list.
-	StandsForSeen string    `json:"-"`
+	StandsForSeen string `json:"-"`
+	// StandsForName is the standard entry's name as the snapshot holds it,
+	// so the entry editor can say whose words players still read.
+	StandsForName string    `json:"standsForName,omitempty"`
 	CreatedBy     string    `json:"createdBy,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`

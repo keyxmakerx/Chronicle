@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The in-memory half of fakeEntryRepo for ties, left-out entries, old names
@@ -144,6 +145,9 @@ func (f *fakeEntryRepo) DeleteOldName(_ context.Context, camp string, id int64) 
 func (f *fakeEntryRepo) AddNote(_ context.Context, n *EntryNote) error {
 	f.nextID++
 	n.ID = f.nextID
+	if n.CreatedAt.IsZero() {
+		n.CreatedAt = time.Now()
+	}
 	f.notes = append(f.notes, *n)
 	return nil
 }
@@ -153,6 +157,16 @@ func (f *fakeEntryRepo) ListNotes(_ context.Context, camp string, entryID int64,
 	for i := len(f.notes) - 1; i >= 0 && len(out) < limit; i-- {
 		if n := f.notes[i]; n.CampaignID == camp && n.EntryID == entryID {
 			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeEntryRepo) NotedSince(_ context.Context, camp string, since time.Time) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	for _, n := range f.notes {
+		if n.CampaignID == camp && !n.CreatedAt.Before(since) {
+			out[n.EntryID] = true
 		}
 	}
 	return out, nil
