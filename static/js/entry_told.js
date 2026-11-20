@@ -4,9 +4,11 @@
  * A sheet links each entry it names (ancestry, culture, career, kit) by kind
  * and name: a[data-entry-peek] whose address is
  * /campaigns/:id/systems/:mod/named/:kind?name=... (peek_address.js). When the
- * players were told about a change to the entry that name leads to, the link
- * carries a dot in the accent with the words "Changed recently" for screen
- * readers. Which names are marked comes from one request per new set of
+ * players were told about a change to the entry that name leads to, a dot in
+ * the accent with the words "Changed recently" for screen readers sits right
+ * after the link, and the link is described by those words, so focus on it
+ * reads both. The mark is never inside the link: a sheet reads and animates
+ * the name's own text. Which names are marked comes from one request per new set of
  * names, GET .../systems/:mod/told?n=<kind>:<name>, answered for the reader,
  * so a sheet that renders again asks nothing new. Any game system's sheet
  * that emits the same link gets the mark.
@@ -35,19 +37,44 @@
     return { group: group, cid: m[1], mod: m[2], n: n, key: group + '|' + n };
   }
 
+  var uid = 0;
+
+  // mark puts one mark right after a told link; a mark already there, kept
+  // when a sheet re-renders only the link, is reused, never doubled.
   function mark(a) {
-    if (a.querySelector('.entry-told')) return;
+    var next = a.nextElementSibling;
+    if (next && next.classList.contains('entry-told-mark')) return;
+    var box = document.createElement('span');
+    box.className = 'entry-told-mark';
     var dot = document.createElement('span');
     dot.className = 'entry-told';
     dot.setAttribute('aria-hidden', 'true');
     var words = document.createElement('span');
     words.className = 'entry-told-sr';
-    words.textContent = ' Changed recently';
-    a.appendChild(dot);
-    a.appendChild(words);
+    words.id = 'entry-told-' + (++uid);
+    words.textContent = 'Changed recently';
+    box.appendChild(dot);
+    box.appendChild(words);
+    a.parentNode.insertBefore(box, a.nextSibling);
+    a.setAttribute('aria-describedby', words.id);
+  }
+
+  // unmarkStale removes a mark whose link went or no longer leads to a told
+  // entry, as when a sheet swaps the link for another name's.
+  function unmarkStale() {
+    var marks = document.querySelectorAll('.entry-told-mark');
+    for (var i = 0; i < marks.length; i++) {
+      var a = marks[i].previousElementSibling;
+      var r = a && a.matches('a[data-entry-peek]') ? ref(a) : null;
+      if (r && known[r.key] === true) continue;
+      var words = marks[i].querySelector('.entry-told-sr');
+      if (a && words && a.getAttribute('aria-describedby') === words.id) a.removeAttribute('aria-describedby');
+      marks[i].parentNode.removeChild(marks[i]);
+    }
   }
 
   function decorate() {
+    unmarkStale();
     var links = document.querySelectorAll('a[data-entry-peek]');
     var ask = {};
     for (var i = 0; i < links.length; i++) {
