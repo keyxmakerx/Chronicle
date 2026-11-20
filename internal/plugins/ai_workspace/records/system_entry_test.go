@@ -11,6 +11,10 @@ import (
 
 // fakeEntrySvc records what the kind asks of the systems service.
 type fakeEntrySvc struct {
+	// The reading and catalog halves are not used by AI records; calling
+	// one panics, which would show a record reaching beyond its job.
+	systems.EntryReading
+	systems.EntryCatalog
 	rows      []systems.SystemEntry
 	created   []systems.CreateSystemEntryInput
 	updated   map[int64]systems.UpdateSystemEntryInput
