@@ -1,0 +1,70 @@
+// brochure.templ draws the campaign home's "Brochure" block: a small box on
+// the page, and the dialog that lays the brochure page out as panels. The
+// home's placeholder (campaigns.dashBrochure) loads it.
+package entities
+
+// brochureBlock replaces the placeholder (hx-swap outerHTML). Its controls use
+// inline onclick calls into the always-loaded Chronicle.brochure, never a
+// script sibling, so they work after the swap.
+templ brochureBlock(v brochureView) {
+	<section class="cb-brochure" data-block="brochure" data-widget="brochure" aria-labelledby="brochure-label">
+		<h2 id="brochure-label" class="cb-head cb-start-label text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">
+			<i class="fa-solid fa-book-open mr-1.5" aria-hidden="true"></i>Brochure
+		</h2>
+		if v.Empty {
+			<div class="cb-start-slot border border-dashed border-edge rounded-lg px-4 py-3 text-sm text-fg-secondary">
+				if v.Gone {
+					<p>The page picked here was deleted. Pick another one to be the brochure.</p>
+				} else {
+					<p>Pick the page you wrote for new players. Its title and first line become the cover; each heading starts a new panel.</p>
+				}
+				<p class="mt-1 text-xs text-fg-muted">
+					Only you see this until a page is picked.
+					<a href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/customize/home") } class="text-accent hover:underline">Pick it in the Customizer</a>
+				</p>
+			</div>
+		} else {
+			<button
+				type="button"
+				class="cb-bro-box card block w-full text-left px-4 py-3 hover:shadow-elev-hover group"
+				aria-haspopup="dialog"
+				onclick="(function(b){if(window.Chronicle&&Chronicle.brochure){Chronicle.brochure.open(b);}})(this)"
+				if v.DMOnly {
+					data-dm-only
+				}
+			>
+				<span class="cb-bro-name block font-semibold text-fg">
+					{ v.Name }
+					if v.DMOnly {
+						<i class="cb-dm fa-solid fa-lock ml-1 text-xs text-fg-muted" aria-label="Hidden from players"></i>
+					}
+				</span>
+				if v.Line != "" {
+					<span class="cb-bro-line block mt-1 text-sm text-fg-secondary">{ v.Line }</span>
+				}
+				<span class="cb-bro-foot block mt-2 text-sm">
+					<span class="text-fg-muted">{ brochurePanelsLabel(v.Panels) } &middot; </span>
+					<span class="cb-bro-open text-accent-link group-hover:underline">Open the brochure</span>
+				</span>
+			</button>
+			<dialog class="cb-bro dlg-modal" aria-labelledby="brochure-title" data-brochure-dialog>
+				<header class="cb-bro-bar">
+					<h3 id="brochure-title" class="cb-bro-bar-title">{ v.Name }</h3>
+					<button
+						type="button"
+						class="cb-bro-close"
+						aria-label="Close the brochure"
+						onclick="(function(b){var d=b.closest('dialog');if(d)d.close();})(this)"
+					>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+					</button>
+				</header>
+				<div class="cb-bro-body">
+					<div class="cb-bro-src prose prose-sm dark:prose-invert max-w-none" data-brochure-src>
+						@templ.Raw(v.HTML)
+					</div>
+				</div>
+			</dialog>
+		}
+	</section>
+}

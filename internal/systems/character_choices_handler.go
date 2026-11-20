@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -22,7 +23,7 @@ func NewCharacterChoiceHandler(svc CharacterChoiceService) *CharacterChoiceHandl
 
 // ChoicesAPI returns the pick list for one character field.
 //
-// GET /campaigns/:id/character-choices/:fieldKey
+// GET /campaigns/:id/character-choices/:fieldKey[?as=<userId>]
 //
 // Players can read it, since a list of ancestries or kits is reference data
 // they see in the system pages anyway; whether they may then write the field
@@ -32,7 +33,7 @@ func (h *CharacterChoiceHandler) ChoicesAPI(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	ctx := WithChoiceViewerUser(WithChoiceViewer(c.Request().Context(), cc.CanAuthorDmOnly()), auth.GetUserID(c))
+	ctx := choiceContext(c, cc)
 	list, err := h.svc.CharacterChoiceList(ctx, cc.Campaign.ID, c.Param("fieldKey"))
 	if err != nil {
 		return err
@@ -41,6 +42,24 @@ func (h *CharacterChoiceHandler) ChoicesAPI(c *echo.Context) error {
 	// they may still make their own, which change as they write.
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, list)
+}
+
+// choiceContext says who the list is for. A Director may preview it as one
+// player (?as=), which reads it exactly as that player would, rules and all.
+// Staff below Director (Scribes) make heroes for the table and are not
+// limited. Everyone else is limited by the rules about them.
+func choiceContext(c *echo.Context, cc *campaigns.CampaignContext) context.Context {
+	ctx := c.Request().Context()
+	director := cc.CanAuthorDmOnly()
+	if as := c.QueryParam("as"); director && as != "" && len(as) <= 36 {
+		return WithChoiceFor(WithChoiceViewerUser(WithChoiceViewer(ctx, false), as), as)
+	}
+	user := auth.GetUserID(c)
+	ctx = WithChoiceFor(WithChoiceViewerUser(WithChoiceViewer(ctx, director), user), user)
+	if !director && cc.MemberRole >= campaigns.RoleScribe {
+		ctx = WithChoiceUnlimited(ctx)
+	}
+	return ctx
 }
 
 // RegisterCharacterChoiceRoutes mounts the pick-list endpoint.

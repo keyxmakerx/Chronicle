@@ -1395,8 +1395,58 @@
     @apply absolute top-0 right-[-2px] bottom-0 w-1 bg-accent/40 cursor-col-resize;
     pointer-events: auto;
   }
-  .chronicle-editor__content .tiptap table .tableWrapper {
-    @apply overflow-x-auto my-4;
+  /* A table wider than the page scrolls sideways on its own instead of being
+     cut by the editor's clipping edge. Editing wraps each table in
+     .tableWrapper (the column-resize plugin), which scrolls itself; reading
+     has no wrapper, so the table becomes the scroll box and its rows stay one
+     table that still fills the width. */
+  .chronicle-editor__content .tiptap .tableWrapper {
+    @apply overflow-x-auto;
+  }
+  .chronicle-editor__content .tiptap > table,
+  .chronicle-editor__content .tiptap :not(.tableWrapper) > table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .chronicle-editor__content .tiptap > table > tbody,
+  .chronicle-editor__content .tiptap :not(.tableWrapper) > table > tbody {
+    display: table;
+    min-width: 100%;
+  }
+
+  /* ---- Checklists (TipTap TaskList / TaskItem) ----
+     The editor draws a real checkbox in a label; served HTML has no input
+     (the sanitizer drops it), so the box is drawn from data-checked. Boxes
+     are display-only in reading. */
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] {
+    list-style: none; padding-left: 0;
+  }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li {
+    position: relative; display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.25rem 0; padding-left: 0;
+  }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li > label {
+    flex: none; margin-top: 0.3em; user-select: none;
+  }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li > div { flex: 1 1 auto; min-width: 0; }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li > :is(div, p) > p { margin: 0; }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li > p { flex: 1 1 auto; min-width: 0; margin: 0; }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li:not(:has(> label))::before {
+    content: ""; flex: none; box-sizing: border-box; width: 1rem; height: 1rem; margin-top: 0.3em;
+    border: var(--shape-edge, 1px) solid var(--color-border);
+    border-radius: var(--shape-r-tag, 4px);
+    background: var(--color-card-bg);
+  }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li[data-checked="true"]:not(:has(> label))::before {
+    background: var(--color-accent-fill, var(--color-accent)); border-color: var(--color-accent-fill, var(--color-accent));
+  }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li[data-checked="true"]:not(:has(> label))::after {
+    content: ""; position: absolute; left: 0.3125rem; top: calc(0.3em + 0.125rem);
+    width: 0.3125rem; height: 0.5625rem;
+    border: solid var(--color-accent-on-fill, #fff); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  :is(.chronicle-editor__content .tiptap, .prose) ul[data-type="taskList"] > li > label input {
+    width: 1rem; height: 1rem; accent-color: var(--color-accent-fill, var(--color-accent)); cursor: pointer;
   }
 }
 @layer components {
@@ -1890,6 +1940,10 @@
      need no rule: they are above the tab. */
   body:has(.cal-v5 :is(.wing, .flap, .evp).live, .cal-v5 .drawer.open, .cra-drawer.is-open, .calv5-overlay) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
   .jot-tab[hidden] { display: none; }
+  /* The page scrolls inside #main-content, so the tab floats over its last
+     rows: end the content a tab-height clear of the bottom edge, so whatever
+     sits at the foot (a panel's corner, a button) can scroll above the tab. */
+  body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 5rem; scroll-padding-bottom: 5rem; }
   /* On a phone the tab is just its icon (and count), and the page gets room
      at the bottom so the tab never covers the end of the last rows. */
   @media (max-width: 639px) {
@@ -3211,6 +3265,111 @@ dialog.dlg-modal[open]::backdrop { opacity: 1; transition-duration: var(--dur-st
 html[data-motion] dialog.dlg-modal { transform: none; }
 html[data-motion="off"] dialog.dlg-modal,
 html[data-motion="off"] dialog.dlg-modal::backdrop { transition: none; }
+
+/* === Brochure: the Home block's small box and its folded-out full view ======
+   The box is a card that is wholly a button. The full view is a native dialog
+   (shared dialog motion above) holding the page's served HTML, wrapped into
+   panels by brochure.js: three to a row with a hairline fold between, a wide
+   table's panel two folds wide, one column with "Panel N of M" on a phone.
+   Layout follows the dialog's own width (container queries), not the window,
+   so it also holds in a narrow window. */
+.cb-bro-box { font: inherit; color: inherit; cursor: pointer; }
+.cb-bro-box:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+dialog.cb-bro {
+  width: min(1180px, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  color: var(--color-text-body);
+  background: var(--color-card-bg);
+  border: var(--shape-edge, 1px) solid var(--color-border);
+  border-radius: var(--shape-r-panel, 12px);
+  box-shadow: var(--elev-dragged);
+}
+dialog.cb-bro[open] { display: flex; flex-direction: column; }
+@media (max-width: 640px) {
+  dialog.cb-bro { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+}
+.cb-bro-bar {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.25rem 0.5rem 0.25rem 1.5rem;
+  border-bottom: var(--shape-rule, 1px) solid var(--color-border-light);
+}
+.cb-bro-bar-title { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
+.cb-bro-close {
+  flex: none; min-width: 44px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--color-text-muted); background: transparent; border: 0;
+  border-radius: var(--shape-r-ctl, 8px); cursor: pointer;
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+.cb-bro-close:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
+.cb-bro-close:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.cb-bro-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  container-type: inline-size;
+}
+.cb-bro-src { max-width: none; }
+
+.cb-bro-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: row dense;
+  overflow: hidden;
+}
+/* Each panel draws the fold on its own top and left edge; the grid clips the
+   ones on the outside, so a fold never doubles and a gap draws nothing. */
+.cb-bro-panel {
+  min-width: 0;
+  padding: 1.25rem 1rem;
+  background: var(--color-card-bg);
+  box-shadow: -1px -1px 0 0 var(--color-border-light);
+}
+.cb-bro-panel:not(.cb-bro-cover)::before {
+  content: "Panel " attr(data-n) " of " attr(data-of);
+  display: block; margin-bottom: 0.375rem;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--color-accent-link);
+}
+.cb-bro-panel :is(h2, h3, h4) { margin: 0 0 0.5rem; color: var(--color-text-primary); }
+.cb-bro-panel > h2 { font-size: 1.0625rem; font-weight: 600; }
+.cb-bro-panel h3 { font-size: 0.9375rem; font-weight: 600; }
+.cb-bro-panel :is(p, ul, ol) { margin-top: 0; margin-bottom: 0.75rem; }
+.cb-bro-panel :is(p, li) { line-height: 1.55; }
+.cb-bro-panel :last-child { margin-bottom: 0; }
+.cb-bro-cover h1 {
+  margin: 0 0 0.75rem; padding-bottom: 0.5rem;
+  font-size: 1.5rem; font-weight: 800; line-height: 1.15; letter-spacing: 0.01em; text-transform: uppercase;
+  color: var(--color-text-primary);
+  border-bottom: 2px solid var(--color-accent);
+}
+.cb-bro-cover > p:first-of-type { font-style: italic; color: var(--color-text-muted); }
+.cb-bro-sec + .cb-bro-sec { margin-top: 1rem; }
+/* A wide table scrolls in its own wrapper rather than being cut or squeezed. */
+.cb-bro-tw { max-width: 100%; margin: 0.5rem 0 0.75rem; overflow-x: auto; }
+.cb-bro-tw > table { margin: 0; width: 100%; }
+/* Hairlines between rows only, and snug cells, so a four-column table keeps
+   every column in a phone-wide fold instead of scrolling. */
+.cb-bro-tw :is(th, td) { padding: 0.375rem 0.5rem; font-size: 0.8125rem; line-height: 1.4; border-width: 0 0 var(--shape-rule, 1px) 0; }
+.cb-bro-tw th { background: transparent; vertical-align: bottom; }
+
+@container (min-width: 40rem) {
+  .cb-bro-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cb-bro-panel { padding: 1.25rem 1.5rem; }
+  .cb-bro-panel--wide { grid-column: span 2; }
+  .cb-bro-panel:not(.cb-bro-cover)::before { display: none; }
+  .cb-bro-panel--wide .cb-bro-secs--many {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.5rem;
+  }
+  .cb-bro-panel--wide .cb-bro-sec + .cb-bro-sec { margin-top: 0; }
+}
+@container (min-width: 62rem) {
+  .cb-bro-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 /* === The player call-to-action banner ===========================
    ONE strip above the page content, carrying the single thing a player is
@@ -6810,6 +6969,10 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 .ag-pick[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .ag-src { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
 .ag-note { margin-top: 2px; font-size: 11.5px; color: var(--color-text-muted); }
+.ag-ask { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border: 1px solid var(--color-accent); border-radius: 999px; color: var(--color-accent-link, var(--color-accent)); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.ag-rules { display: grid; gap: 4px; margin: 0 0 10px; }
+.ag-nh[hidden] { display: none; }
+.ag-nh { margin: 6px 0 0; padding: 8px 10px; list-style: none; display: grid; gap: 4px; border-radius: 8px; background: var(--color-bg-tertiary); font-size: 12px; color: var(--color-text-body); }
 .ag-mine { margin-top: 8px; display: flex; gap: 6px; }
 .ag-pickbox .ag-head h4 { color: var(--color-text-primary); }
 .ag-pickbox .ag-x { color: var(--color-text-muted); }
@@ -6970,6 +7133,17 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 }
 .peek-icon[hidden] { display: none; }
 .peek-icon:hover, .peek-icon:focus-visible { color: var(--color-accent-link, var(--color-accent)); border-color: var(--color-accent); }
+/* The small mark beside a hero's entry name whose change the players were
+   told about lately (entry_told.js). A dot in the accent, nothing louder; it
+   does not move. */
+.entry-told {
+  display: inline-block; width: 6px; height: 6px; margin-left: 0.3em; vertical-align: 0.2em;
+  border-radius: 50%; background: var(--color-accent);
+}
+.entry-told-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 @media (max-width: 640px) {
   .peek-panel {
     left: 0; width: 100%; top: auto; height: 78vh;

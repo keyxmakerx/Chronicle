@@ -126,7 +126,7 @@ func (p *BlockPlacementChecker) GuestMaySee(ctx context.Context, campaignID, blo
 var pageHomeBlockTypes = []string{
 	"welcome_banner", "quick_actions", "category_grid", "recent_pages", "entity_list", "pinned_pages",
 	"calendar_preview", "timeline_preview", "calendar_full", "timeline_full", "relations_graph_full",
-	"map_full", "coming_up", "start_here", "at_a_glance", "party", "your_hero", "getting_started",
+	"map_full", "coming_up", "start_here", "brochure", "at_a_glance", "party", "your_hero", "getting_started",
 	"when_we_play", "where_we_play", "house_rules", "last_time", "table_agreement", "making_a_hero", "run_by", "activity_feed", "sync_status",
 }
 

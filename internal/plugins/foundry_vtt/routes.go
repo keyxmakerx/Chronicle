@@ -44,15 +44,18 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/foundry-presence", h.GetFoundryPresenceAPI)
 }
 
-// RegisterDMTeamRoutes mounts the NPC "Show in Foundry" button and its
-// action for the campaign owner and members given DM access. Caller
-// passes the same campaign-member group as RegisterOwnerRoutes.
+// RegisterDMTeamRoutes mounts the NPC "Show in Foundry" and creature "Add
+// to Foundry" buttons and their actions for the campaign owner and members
+// given DM access. Caller passes the same campaign-member group as
+// RegisterOwnerRoutes.
 func RegisterDMTeamRoutes(cg *echo.Group, h *Handler) {
 	dmTeam := campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool {
 		return cc.CanAuthorDmOnly()
 	}, "only the campaign owner or a member with DM access may do this")
 	cg.GET("/foundry-vtt/npc-spotlight/:eid", h.NPCSpotlightButtonHandler, dmTeam)
 	cg.POST("/foundry-vtt/npc-spotlight/:eid", h.NPCSpotlightAPI, dmTeam)
+	cg.GET("/foundry-vtt/creature-add/:eid", h.CreatureAddButtonHandler, dmTeam)
+	cg.POST("/foundry-vtt/creature-add/:eid", h.CreatureAddAPI, dmTeam)
 }
 
 // RegisterAdminRoutes mounts the admin endpoints for the "Campaigns

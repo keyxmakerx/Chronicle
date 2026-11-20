@@ -331,6 +331,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		// Who is in the Foundry world and which member each user is linked
 		// to, from the GM's client. Owner or DM access only (in the handler).
 		cg.POST("/sync/players", api.history.ReportPlayers, RequirePermission(PermSync))
+		// A code a player typed in Foundry, redeemed by the GM's client to
+		// link that Foundry user. Owner or DM access only (in the handler).
+		cg.POST("/sync/link-code", api.history.RedeemLinkCode, RequirePermission(PermSync))
 		// The monsters the Foundry world can place, from the GM's client, for
 		// the AI connection's fight planning. Owner or DM access only.
 		cg.POST("/sync/monsters", api.history.ReportMonsters, RequirePermission(PermSync))

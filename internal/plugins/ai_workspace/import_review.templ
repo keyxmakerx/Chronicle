@@ -514,7 +514,8 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 
 // reviewRowSheetCheck is where the campaign's game system sets the numbers
 // the AI wrote beside what its published formulas give (the
-// import-sheet-check widget, empty when the system has no such check).
+// import-sheet-check widget; with no such check it says so on a creature or
+// character row and stays empty otherwise).
 // The hidden input carries the numbers the director takes from the
 // formulas; the commit puts them over the AI's.
 templ reviewRowSheetCheck(campaignID string, idx int, cls importer.Classification) {

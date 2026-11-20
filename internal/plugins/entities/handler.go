@@ -80,9 +80,10 @@ type SessionSearcher interface {
 }
 
 // SystemSearcher provides game system search results for the quick
-// search popup. Implemented by systems.SystemSearchAdapter.
+// search popup. Implemented by systems.SystemSearchAdapter. The reader's
+// account and the campaign's name let it answer from that reader's own list.
 type SystemSearcher interface {
-	SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error)
+	SearchSystemContent(ctx context.Context, campaignID, query string, director bool, userID, campaignName string) ([]map[string]string, error)
 }
 
 // MemberLister retrieves campaign members for the permissions UI.
@@ -128,6 +129,7 @@ type Handler struct {
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
+	heroRules          HeroRules
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -1197,7 +1199,7 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		if h.systemSearcher != nil && query != "" {
 			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
-				cc.VisibilityRole() >= int(campaigns.RoleOwner),
+				cc.VisibilityRole() >= int(campaigns.RoleOwner), auth.GetUserID(c), cc.Campaign.Name,
 			); err == nil {
 				items = append(items, toAnyMaps(modResults)...)
 				total += len(modResults)
@@ -2297,14 +2299,14 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	// Strip GM-only and owner-only field VALUES for viewers who can't see
 	// them. The field DEFINITIONS stay so the attributes widget can render
 	// its schema (and hide the box); only the restricted values are
-	// withheld. Gate on the full type schema
-	// (et.Fields), not effectiveFields, so a per-entity "hidden" override
-	// can't leave a restricted value un-stripped. The owner, Co-DMs and
+	// withheld. Gate on RestrictionDefs, not effectiveFields, so a
+	// per-entity "hidden" override can't leave a restricted value
+	// un-stripped and a field added to this page is gated too. The owner, Co-DMs and
 	// Foundry Bearer callers keep full data — same bar as inline secrets;
 	// an owner-only value is also kept for the entity's own claimed owner.
 	canSeeGM := cc.CanAuthorDmOnly()
 	isOwner := entity.IsOwnedBy(userID)
-	visible := FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner)
+	visible := FilterRestrictedFields(entity.FieldsData, RestrictionDefs(et.Fields, entity.FieldOverrides), canSeeGM, isOwner)
 	response := map[string]any{
 		"fields":          effectiveFields,
 		"fields_data":     visible,
@@ -2316,6 +2318,10 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
 		response["dateBook"] = cal
 	}
+	if keys := h.ownerFieldsFor(c.Request().Context(), cc, entity, et, userID); len(keys) > 0 {
+		response["owner_fields"] = keys
+	}
+	h.addHeroRuleNotes(c.Request().Context(), response, cc.Campaign.ID, entity, canSeeGM || isOwner)
 	return c.JSON(http.StatusOK, response)
 }
 
@@ -2400,6 +2406,16 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 		return err
 	}
 
+	// A claimed owner's pick of an ask-first entry is not written: it waits for
+	// a Director as a request, and the write answers with that outcome. The
+	// rest of the patch is saved as usual.
+	var asks []HeroAsk
+	if len(picks) > 0 && fieldsPatch != nil {
+		for _, t := range takeAskFirst(entity, fieldsPatch, picks) {
+			asks = append(asks, HeroAsk{FieldKey: t.fieldKey, EntryName: t.name})
+		}
+	}
+
 	// A Scribe is not served the hidden fields, so their save neither changes
 	// nor clears them.
 	fieldsData := body.FieldsData
@@ -2416,7 +2432,11 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	var saveErr error
 	if body.FieldsPatch != nil {
 		patch := fieldsPatch
-		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
+		ClearStaleStepOptions(entity, patch)
+		// Nothing left to write when every key was an ask-first pick.
+		if len(patch) > 0 || len(asks) == 0 {
+			saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
+		}
 	} else {
 		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, fieldsData)
 	}
@@ -2426,6 +2446,14 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
 
+	if len(asks) > 0 {
+		requests, failed := h.recordAsks(c, cc.Campaign.ID, entity, asks)
+		resp := map[string]any{"status": "ok", "requests": requests}
+		if len(failed) > 0 {
+			resp["requestFailed"] = failed
+		}
+		return c.JSON(http.StatusOK, resp)
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -2623,7 +2651,7 @@ func (h *Handler) PreviewAPI(c *echo.Context) error {
 	// campaign route.
 	var fieldsData map[string]any
 	if entityType != nil {
-		fieldsData = FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID))
+		fieldsData = FilterRestrictedFields(entity.FieldsData, RestrictionDefs(entityType.Fields, entity.FieldOverrides), cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID))
 	}
 
 	var tokenPath string
@@ -3275,14 +3303,16 @@ func (h *Handler) BlockTypesAPI(c *echo.Context) error {
 	// When a game system owns the character sheet — it registers a page renderer
 	// bound to the "character" preset_category, which takes over every character
 	// entity's show page — the generic core "character_surface" block is
-	// redundant, so drop it from the palette. The renderer registry is global
-	// (lookupEntityShowRenderer is not campaign-scoped), so once such a renderer
-	// is registered the generic block is overridden everywhere; hiding it here
-	// stays consistent with that. System-agnostic campaigns (no character
-	// renderer registered) keep the block.
+	// redundant, so drop it from the palette. The binding is the system's, so
+	// only a campaign running one of the binding systems loses the block.
 	systemOwnsCharacterSheet := false
 	if reg := globalEntityShowRendererRegistry.Load(); reg != nil {
-		_, systemOwnsCharacterSheet = reg.LookupByPresetCategory("character")
+		for _, sys := range reg.PresetSystems("character") {
+			if sys == "" || h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, sys) {
+				systemOwnsCharacterSheet = true
+				break
+			}
+		}
 	}
 	types = hideRedundantCharacterSurface(types, systemOwnsCharacterSheet)
 

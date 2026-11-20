@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // HomeAPI is a campaign's home pages, one arrangement per audience, as the
@@ -71,6 +72,16 @@ const maxHomeText = 4000
 // again, so rearranging never loses a choice the owner made.
 type HomeKind struct {
 	Svc HomeAPI
+	// Pages names the page a Brochure block points at, both ways. Nil leaves
+	// a brochure block without a page to point at.
+	Pages HomePages
+}
+
+// HomePages finds a campaign page by name (to write a brochure's page) and by
+// id (to export it back as a name). Both are campaign-scoped by the caller.
+type HomePages interface {
+	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
+	GetByID(ctx context.Context, id string) (*entities.Entity, error)
 }
 
 func (HomeKind) Name() string  { return "home" }
@@ -83,7 +94,7 @@ func (k HomeKind) Doc() string {
 	if k.Svc != nil {
 		types = "`" + strings.Join(k.Svc.BlockTypes(), "`, `") + "`"
 	}
-	return "The home page one audience sees, matched by `audience`: `everyone`, `players`, `scribes`, `directors` or `guests`. Key: `rows`, a list of rows, each a list of `columns`; a column has a `width` (1 to 12, a row's widths add to 12 at most) and `blocks`, in the order shown. A block is its type written alone, or `{type: text_block, text: \"words\"}` to write a Text Block's words in markdown. Block types: " + types + ". A block already on the home keeps its settings when listed again, so list every block the home should keep; one left out is removed. `create` and `update` replace the whole arrangement; `delete` takes the audience's own home away so it shows the Everyone home again. Only the campaign's owner can change a home. Some blocks show only what that audience may see, or only to the DM team, and the review says when a block is placed where it can't draw. A home with a tile section can only be arranged in Customize.\n\n```\n---\nkind: home\naudience: players\nrows:\n  - columns:\n      - width: 12\n        blocks: [welcome_banner]\n  - columns:\n      - width: 7\n        blocks:\n          - start_here\n          - {type: text_block, text: \"Bring dice and snacks.\"}\n          - recent_pages\n      - width: 5\n        blocks: [coming_up, party]\n---\n```"
+	return "The home page one audience sees, matched by `audience`: `everyone`, `players`, `scribes`, `directors` or `guests`. Key: `rows`, a list of rows, each a list of `columns`; a column has a `width` (1 to 12, a row's widths add to 12 at most) and `blocks`, in the order shown. A block is its type written alone, `{type: text_block, text: \"words\"}` to write a Text Block's words in markdown, or `{type: brochure, page: \"Page name\", text: \"words on the box\"}` to point a Brochure block at the campaign page that is the new-player brochure (the page must exist; `text` is optional, and without it the box shows the page's first line). A brochure written without `page` or `text` keeps the ones it has. Block types: " + types + ". A block already on the home keeps its settings when listed again, so list every block the home should keep; one left out is removed. `create` and `update` replace the whole arrangement; `delete` takes the audience's own home away so it shows the Everyone home again. Only the campaign's owner can change a home. Some blocks show only what that audience may see, or only to the DM team, and the review says when a block is placed where it can't draw. A home with a tile section can only be arranged in Customize.\n\n```\n---\nkind: home\naudience: players\nrows:\n  - columns:\n      - width: 12\n        blocks: [welcome_banner]\n  - columns:\n      - width: 7\n        blocks:\n          - start_here\n          - {type: text_block, text: \"Bring dice and snacks.\"}\n          - {type: brochure, page: \"New player brochure\", text: \"Read this before your first night.\"}\n          - recent_pages\n      - width: 5\n        blocks: [coming_up, party]\n---\n```"
 }
 
 // homeBlocks that draw nothing for anyone but the DM team.
@@ -168,7 +179,8 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 			col := HomeColumn{ID: fmt.Sprintf("col-ai-%d-%d", ri+1, ci+1), Width: w}
 			blocks, _ := cm["blocks"].([]any)
 			for bi, bv := range blocks {
-				typ, text, hasText, err := homeBlockSpec(bv)
+				spec, err := homeBlockSpec(bv)
+				typ := spec.typ
 				if err != nil {
 					return t, badRequestf("row %d, column %d, block %d: %v", ri+1, ci+1, bi+1, err)
 				}
@@ -180,17 +192,27 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 					b.ID, b.Config = old[used[typ]].ID, cloneConfig(old[used[typ]].Config)
 				}
 				used[typ]++
-				if hasText {
-					if typ != "text_block" {
-						return t, badRequestf("only a text_block takes `text`; %s does not", quote(typ))
+				if spec.hasText && typ != "text_block" && typ != "brochure" {
+					return t, badRequestf("only a text_block or a brochure takes `text`; %s does not", quote(typ))
+				}
+				if spec.hasPage && typ != "brochure" {
+					return t, badRequestf("only a brochure takes `page`; %s does not", quote(typ))
+				}
+				switch typ {
+				case "text_block":
+					if spec.hasText {
+						if len([]rune(spec.text)) > maxHomeText {
+							return t, badRequestf("a text block's words run over %d characters", maxHomeText)
+						}
+						if b.Config == nil {
+							b.Config = map[string]any{}
+						}
+						b.Config["_md"] = spec.text // turned into HTML at Apply
 					}
-					if len([]rune(text)) > maxHomeText {
-						return t, badRequestf("a text block's words run over %d characters", maxHomeText)
+				case "brochure":
+					if err := k.setBrochure(ctx, campaignID, &b, spec); err != nil {
+						return t, badRequestf("row %d, column %d: %v", ri+1, ci+1, err)
 					}
-					if b.Config == nil {
-						b.Config = map[string]any{}
-					}
-					b.Config["_md"] = text // turned into HTML at Apply
 				}
 				col.Blocks = append(col.Blocks, b)
 			}
@@ -201,22 +223,72 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 	return t, nil
 }
 
-// homeBlockSpec reads a block written as its type or as {type, text}.
-func homeBlockSpec(v any) (typ, text string, hasText bool, err error) {
+// homeSpec is a block as written: its type and the words or page it carries.
+type homeSpec struct {
+	typ              string
+	text             string
+	hasText, hasPage bool
+	page             string
+}
+
+// maxBrochureWords bounds the words on a brochure's box, which the box
+// shortens anyway.
+const maxBrochureWords = 300
+
+// setBrochure writes a brochure block's page and words into its config. A
+// field the record leaves out keeps the block's existing one, so listing the
+// block again never loses a choice the owner made.
+func (k HomeKind) setBrochure(ctx context.Context, campaignID string, b *HomeBlock, spec homeSpec) error {
+	if b.Config == nil {
+		b.Config = map[string]any{}
+	}
+	if spec.hasPage {
+		name := strings.TrimSpace(spec.page)
+		if name == "" {
+			return fmt.Errorf("`page` names the brochure's page")
+		}
+		if k.Pages == nil {
+			return fmt.Errorf("a brochure's page can't be looked up here")
+		}
+		e, err := k.Pages.GetBySlug(ctx, campaignID, entities.Slugify(name))
+		if err != nil || e == nil || e.CampaignID != campaignID {
+			return fmt.Errorf("no page called %s; the brochure's page must exist", quote(name))
+		}
+		b.Config["entity_id"] = e.ID
+	}
+	if spec.hasText {
+		if len([]rune(spec.text)) > maxBrochureWords {
+			return fmt.Errorf("the words on a brochure run over %d characters", maxBrochureWords)
+		}
+		if spec.text == "" {
+			delete(b.Config, "content")
+		} else {
+			b.Config["content"] = spec.text
+		}
+	}
+	return nil
+}
+
+// homeBlockSpec reads a block written as its type or as {type, text, page}.
+func homeBlockSpec(v any) (homeSpec, error) {
 	switch b := v.(type) {
 	case string:
-		return strings.TrimSpace(b), "", false, nil
+		return homeSpec{typ: strings.TrimSpace(b)}, nil
 	case map[string]any:
-		typ, _ = b["type"].(string)
+		typ, _ := b["type"].(string)
 		if strings.TrimSpace(typ) == "" {
-			return "", "", false, fmt.Errorf("a block with `text` needs a `type`")
+			return homeSpec{}, fmt.Errorf("a block with `text` or `page` needs a `type`")
 		}
+		spec := homeSpec{typ: strings.TrimSpace(typ)}
 		if tv, ok := b["text"]; ok {
-			return strings.TrimSpace(typ), strings.TrimSpace(fmt.Sprint(tv)), true, nil
+			spec.text, spec.hasText = strings.TrimSpace(fmt.Sprint(tv)), true
 		}
-		return strings.TrimSpace(typ), "", false, nil
+		if pv, ok := b["page"]; ok {
+			spec.page, spec.hasPage = fmt.Sprint(pv), true
+		}
+		return spec, nil
 	}
-	return "", "", false, fmt.Errorf("write a block as its type, or `{type: text_block, text: \"…\"}`")
+	return homeSpec{}, fmt.Errorf("write a block as its type, or `{type: text_block, text: \"…\"}`")
 }
 
 func wholeNumber(v any) (int, error) {
@@ -376,7 +448,13 @@ func homeShape(l HomeLayout) string {
 		for _, c := range row.Columns {
 			fmt.Fprintf(&b, "|%d:", c.Width)
 			for _, bl := range c.Blocks {
-				b.WriteString(bl.Type + ",")
+				b.WriteString(bl.Type)
+				if bl.Type == "brochure" {
+					// Its page and words are the block's whole content, so a
+					// change to them is a change to the home.
+					fmt.Fprintf(&b, "(%v,%v)", bl.Config["entity_id"], bl.Config["content"])
+				}
+				b.WriteString(",")
 			}
 		}
 	}
@@ -455,6 +533,10 @@ func (k HomeKind) Export(ctx context.Context, campaignID string, a Actor) (strin
 							continue
 						}
 					}
+					if bl.Type == "brochure" {
+						b.WriteString("          - " + k.brochureSpec(ctx, campaignID, bl) + "\n")
+						continue
+					}
 					b.WriteString("          - " + bl.Type + "\n")
 				}
 			}
@@ -462,6 +544,25 @@ func (k HomeKind) Export(ctx context.Context, campaignID string, a Actor) (strin
 		b.WriteString("---\n\n")
 	}
 	return b.String(), nil
+}
+
+// brochureSpec writes a brochure block in the form a record reads: the page by
+// name and the words on the box. A page that is gone, or a block with neither,
+// is written as the bare type, which keeps whatever the block holds.
+func (k HomeKind) brochureSpec(ctx context.Context, campaignID string, b HomeBlock) string {
+	var parts []string
+	if id, _ := b.Config["entity_id"].(string); id != "" && k.Pages != nil {
+		if e, err := k.Pages.GetByID(ctx, id); err == nil && e != nil && e.CampaignID == campaignID {
+			parts = append(parts, "page: "+quote(e.Name))
+		}
+	}
+	if words, _ := b.Config["content"].(string); strings.TrimSpace(words) != "" {
+		parts = append(parts, "text: "+quote(words))
+	}
+	if len(parts) == 0 {
+		return "brochure"
+	}
+	return "{type: brochure, " + strings.Join(parts, ", ") + "}"
 }
 
 // textOf is a Text Block's HTML as plain words, tags dropped, for an export an

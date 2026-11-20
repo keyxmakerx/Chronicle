@@ -22,13 +22,43 @@
     'with-time': { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }
   };
 
+  // 'recent' is the weekday within the last week, so a change reads "on
+  // Tuesday"; older, the day and month, with the year only when it is not
+  // this year. The days are counted in the reader's zone.
+  var WEEK_DAYS = 6;
+
+  function civilDay(d, zone) {
+    var spec = { year: 'numeric', month: 'numeric', day: 'numeric' };
+    if (zone) spec.timeZone = zone;
+    var parts = {};
+    new Intl.DateTimeFormat('en-US', spec).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+    return { y: +parts.year, n: Date.UTC(+parts.year, +parts.month - 1, +parts.day) / 86400000 };
+  }
+
+  function recentSpec(d, opts) {
+    var zone = opts.timeZone;
+    var a;
+    var b;
+    try {
+      a = civilDay(d, zone);
+      b = civilDay(opts.now ? new Date(opts.now) : new Date(), zone);
+    } catch (e) {
+      a = civilDay(d);
+      b = civilDay(opts.now ? new Date(opts.now) : new Date());
+    }
+    var ago = b.n - a.n;
+    if (ago >= 0 && ago <= WEEK_DAYS) return { weekday: 'long' };
+    if (a.y === b.y) return FORMS.day;
+    return FORMS.short;
+  }
+
   // format returns the text for an ISO instant, or null when it cannot be
   // read (the server's fallback text then stays).
   function format(iso, form, opts) {
-    var o = FORMS[form];
     var d = new Date(iso);
-    if (!o || isNaN(d.getTime())) return null;
     opts = opts || {};
+    var o = form === 'recent' && !isNaN(d.getTime()) ? recentSpec(d, opts) : FORMS[form];
+    if (!o || isNaN(d.getTime())) return null;
     var spec = Object.assign({}, o);
     if (opts.timeZone) spec.timeZone = opts.timeZone;
     try {

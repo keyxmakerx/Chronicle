@@ -368,7 +368,7 @@ templ heroLog(v *CharacterPanelView) {
 				</select>
 			}
 			if v.CanDirect {
-				<label class="hl-dm"><input type="checkbox" name="director_only" value="1"/>Director only</label>
+				<label class="hl-dm"><input type="checkbox" name="director_only" value="1"/>{ layouts.GMTerm(ctx) } only</label>
 			}
 		</form>
 		if len(v.Log) == 0 {
@@ -407,7 +407,7 @@ templ heroLogEntry(v *CharacterPanelView, e LogEntry) {
 				<small class="hl-about">about { e.About }</small>
 			}
 			if e.DirectorOnly {
-				<small class="hl-about">Director only</small>
+				<small class="hl-about">{ layouts.GMTerm(ctx) } only</small>
 			}
 		</span>
 		if e.CanDelete {

@@ -273,7 +273,8 @@ category, matching one of your `entity_presets[].category` values), never both:
 ]
 ```
 
-The widget then renders any entity type carrying that category. The host
+The widget then renders any entity type carrying that category, in campaigns
+that run your system; another system's campaigns are not affected. The host
 resolves slug first, then the type's `preset_category`, so a preset binding
 never shadows another package's slug-bound type. This lets a package fill a
 category core owns (see "Player-character sheet").

@@ -28,6 +28,9 @@ type Repository interface {
 	// RevokeAllMadeBy revokes every connection userID made, in every
 	// campaign, that is not revoked.
 	RevokeAllMadeBy(ctx context.Context, userID string, at time.Time) error
+	// RevokeGuestKeys revokes every live connection whose maker is a guest,
+	// and returns how many it ended.
+	RevokeGuestKeys(ctx context.Context, at time.Time) (int64, error)
 	// SetPaused pauses (at set) or resumes (nil) the campaign's connection id
 	// while it is not revoked.
 	SetPaused(ctx context.Context, campaignID string, id int64, at *time.Time) error
@@ -190,6 +193,19 @@ func (r *repository) RevokeAllMadeBy(ctx context.Context, userID string, at time
 		return dbError("revoking connections", err)
 	}
 	return nil
+}
+
+func (r *repository) RevokeGuestKeys(ctx context.Context, at time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE ai_connections c INNER JOIN users u ON u.id = c.user_id
+		    SET c.revoked_at = ?
+		  WHERE c.revoked_at IS NULL AND u.guest_campaign_id IS NOT NULL`,
+		at.UTC())
+	if err != nil {
+		return 0, dbError("revoking guests' connections", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func (r *repository) SetPaused(ctx context.Context, campaignID string, id int64, at *time.Time) error {

@@ -160,7 +160,7 @@ test('a player has no AI until the owner allows it; their key changes only their
   assert.equal(JSON.stringify((await owner.api(`/campaigns/${cid}/entities/${tyne}/fields`)).body.fields_data || {}).includes('Gnome'), true);
 
   // The player's AI asking over its key never lands in the owner's panel.
-  const asked = await theirAI.call('ask_for_changes', { summary: 'Tyne again', changes: '---\naction: update\nname: Tyne\nfields:\n  background: Hermit\n---\n' });
+  const asked = await theirAI.call('ask_for_changes', { summary: 'Tyne again', changes: '---\naction: update\nname: Tyne\nfields:\n  race: Halfling\n---\n' });
   assert.ok(!asked.isError, asked.out);
   await owner.go(`/campaigns/${cid}`);
   await owner.page.locator('[data-ai-chip]').click();

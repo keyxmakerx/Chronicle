@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"html"
+	"log/slog"
 	"math"
 	"regexp"
 	"strings"
@@ -32,6 +32,10 @@ type BestiaryService interface {
 	Publish(ctx context.Context, creatorID string, input CreatePublicationInput) (*Publication, error)
 	// GetBySlug returns a publication by its URL slug.
 	GetBySlug(ctx context.Context, slug string) (*Publication, error)
+	// ViewBySlug returns a publication by slug as userID may see it: hidden
+	// ones are not found for anyone but the creator, and ids from the creator's
+	// own campaign and moderation details are removed for everyone else.
+	ViewBySlug(ctx context.Context, userID, slug string) (*Publication, error)
 	// GetByID returns a publication by its UUID.
 	GetByID(ctx context.Context, id string) (*Publication, error)
 	// Update modifies an existing publication (creator only).
@@ -147,12 +151,9 @@ func (s *bestiaryService) Publish(ctx context.Context, creatorID string, input C
 	validateOptionalText(&input.Description, 5000)
 	validateOptionalText(&input.FlavorText, 5000)
 
-	// Strip HTML metacharacters from every statblock string before the
-	// denormalized columns are extracted — widgets render these fields via
-	// innerHTML, and this content is authored by any authenticated user.
-	// See sanitize.go.
-	input.StatblockJSON = sanitizeStatblockJSON(input.StatblockJSON)
-
+	// Text is stored as written; every renderer escapes on output. Rewriting
+	// it here lost real content (Draw Steel's "M < 1" potency tests) and put
+	// entity codes in page names.
 	// Extract denormalized fields from the statblock for filtering.
 	org, role, level := extractStatblockFields(input.StatblockJSON)
 
@@ -167,10 +168,10 @@ func (s *bestiaryService) Publish(ctx context.Context, creatorID string, input C
 		SourceEntityID:   input.SourceEntityID,
 		SourceCampaignID: input.SourceCampaignID,
 		SystemID:         input.SystemID,
-		Name:             sanitizeText(input.Name),
+		Name:             strings.TrimSpace(input.Name),
 		Slug:             slug,
-		Description:      sanitizeOptionalText(input.Description),
-		FlavorText:       sanitizeOptionalText(input.FlavorText),
+		Description:      trimOptionalText(input.Description),
+		FlavorText:       trimOptionalText(input.FlavorText),
 		StatblockJSON:    input.StatblockJSON,
 		Version:          1,
 		Tags:             input.Tags,
@@ -189,6 +190,18 @@ func (s *bestiaryService) Publish(ctx context.Context, creatorID string, input C
 // GetBySlug returns a publication visible by its URL slug.
 func (s *bestiaryService) GetBySlug(ctx context.Context, slug string) (*Publication, error) {
 	return s.repo.GetBySlug(ctx, slug)
+}
+
+// ViewBySlug applies the visibility rule and the per-viewer redaction.
+func (s *bestiaryService) ViewBySlug(ctx context.Context, userID, slug string) (*Publication, error) {
+	pub, err := s.repo.GetBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	if pub.Visibility != VisibilityPublished && pub.Visibility != VisibilityUnlisted && pub.CreatorID != userID {
+		return nil, apperror.NewNotFound("publication not found")
+	}
+	return pub.ForViewer(userID), nil
 }
 
 // GetByID returns a publication by UUID.
@@ -212,7 +225,7 @@ func (s *bestiaryService) Update(ctx context.Context, userID, publicationID stri
 		if err := validateName(name); err != nil {
 			return nil, err
 		}
-		pub.Name = sanitizeText(name)
+		pub.Name = strings.TrimSpace(name)
 		// Regenerate slug when name changes.
 		slug, err := s.generateUniqueSlug(ctx, pub.Name)
 		if err != nil {
@@ -224,19 +237,17 @@ func (s *bestiaryService) Update(ctx context.Context, userID, publicationID stri
 	if input.Description.Present() {
 		desc := input.Description.Ptr(nil)
 		validateOptionalText(&desc, 5000)
-		pub.Description = sanitizeOptionalText(desc)
+		pub.Description = trimOptionalText(desc)
 	}
 	if input.FlavorText.Present() {
 		flavor := input.FlavorText.Ptr(nil)
 		validateOptionalText(&flavor, 5000)
-		pub.FlavorText = sanitizeOptionalText(flavor)
+		pub.FlavorText = trimOptionalText(flavor)
 	}
 	if patch.HasRawValue(input.StatblockJSON) {
 		if err := validateStatblock(input.StatblockJSON); err != nil {
 			return nil, err
 		}
-		// Same write-side scrub as Publish.
-		input.StatblockJSON = sanitizeStatblockJSON(input.StatblockJSON)
 		pub.StatblockJSON = input.StatblockJSON
 		pub.Organization, pub.Role, pub.Level = extractStatblockFields(input.StatblockJSON)
 	}
@@ -441,7 +452,7 @@ func (s *bestiaryService) Rate(ctx context.Context, userID, publicationID string
 		truncated := (*reviewText)[:2000]
 		reviewText = &truncated
 	}
-	reviewText = sanitizeOptionalText(reviewText)
+	reviewText = trimOptionalText(reviewText)
 
 	pub, err := s.viewable(ctx, userID, publicationID)
 	if err != nil {
@@ -542,6 +553,12 @@ func (s *bestiaryService) Fork(ctx context.Context, userID, publicationID, campa
 }
 
 // importOrFork is the shared logic for Import and Fork.
+//
+// Only an Import is recorded in bestiary_imports: that table's unique key
+// (publication, campaign) is what stops one creature being imported twice, and
+// a fork is an editable copy that may be made any number of times. Recording
+// forks there made a second fork fail after its page existed and blocked a
+// plain Import for good.
 func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationID, campaignID string, isFork bool) (*ImportResult, error) {
 	if s.entities == nil {
 		return nil, apperror.NewInternal(fmt.Errorf("entity creator not configured"))
@@ -569,14 +586,9 @@ func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationI
 		return nil, apperror.NewForbidden("publication is not available for import")
 	}
 
-	// Check for duplicate import (not for forks — forks always create new entities).
 	if !isFork {
-		exists, err := s.repo.ImportExists(ctx, publicationID, campaignID)
-		if err != nil {
-			return nil, fmt.Errorf("check import exists: %w", err)
-		}
-		if exists {
-			return nil, apperror.NewConflict("this creature has already been imported into this campaign")
+		if err := s.refuseLiveImport(ctx, publicationID, campaignID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -590,16 +602,23 @@ func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationI
 		return nil, fmt.Errorf("create entity from statblock: %w", err)
 	}
 
-	// Record the import.
-	imp := &Import{
-		ID:            generateID(),
-		PublicationID: publicationID,
-		UserID:        userID,
-		CampaignID:    campaignID,
-		EntityID:      &entityID,
-	}
-	if err := s.repo.CreateImport(ctx, imp); err != nil {
-		return nil, err
+	if !isFork {
+		imp := &Import{
+			ID:            generateID(),
+			PublicationID: publicationID,
+			UserID:        userID,
+			CampaignID:    campaignID,
+			EntityID:      &entityID,
+		}
+		// The page already exists, so a failed record (a concurrent import won
+		// the unique key) must not turn the request into an error: the user has
+		// their creature and the record only guards against repeat imports.
+		if err := s.repo.CreateImport(ctx, imp); err != nil {
+			slog.Warn("bestiary import: page created but import not recorded",
+				slog.String("publication_id", publicationID),
+				slog.String("campaign_id", campaignID),
+				slog.Any("error", err))
+		}
 	}
 
 	// Increment download counter.
@@ -611,6 +630,32 @@ func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationI
 		PublicationID: publicationID,
 		CreatureName:  name,
 	}, nil
+}
+
+// refuseLiveImport returns Conflict when the creature was imported into the
+// campaign and that page still exists. A record whose page was deleted is
+// stale: it is removed so the creature can be imported again.
+func (s *bestiaryService) refuseLiveImport(ctx context.Context, publicationID, campaignID string) error {
+	imp, err := s.repo.GetImport(ctx, publicationID, campaignID)
+	if err != nil {
+		return fmt.Errorf("check import exists: %w", err)
+	}
+	if imp == nil {
+		return nil
+	}
+	if imp.EntityID != nil {
+		exists, err := s.entities.EntityExists(ctx, campaignID, *imp.EntityID)
+		if err != nil {
+			return fmt.Errorf("check imported page exists: %w", err)
+		}
+		if exists {
+			return apperror.NewConflict("this creature has already been imported into this campaign")
+		}
+	}
+	if err := s.repo.DeleteImport(ctx, publicationID, campaignID); err != nil {
+		return fmt.Errorf("clear stale import: %w", err)
+	}
+	return nil
 }
 
 // Flag flags a publication for moderation. Auto-flags at 3+ unique user flags.
@@ -639,7 +684,16 @@ var validModerationActions = map[string]bool{
 	"restore": true,
 }
 
-// Moderate performs an admin moderation action: approve (unflag), archive, or restore.
+// Moderate performs an admin moderation action: approve (clear a flag),
+// archive, or restore.
+//
+// Approve and restore put a publication back where it was before moderation
+// hid it (PriorVisibility), never somewhere it was not: a draft stays a draft.
+// Leaving the flagged state also zeroes the flag count, otherwise the very
+// next flag would hide it again. A publication with no recorded prior state
+// (hidden before that was tracked) goes back to published if it was flagged,
+// which is the only way it could have been hidden then, and to draft if it was
+// archived, so the creator decides whether to republish.
 func (s *bestiaryService) Moderate(ctx context.Context, moderatorID, publicationID, action string, reason *string) error {
 	if !validModerationActions[action] {
 		return apperror.NewValidation(fmt.Sprintf("invalid moderation action: %q", action))
@@ -650,19 +704,11 @@ func (s *bestiaryService) Moderate(ctx context.Context, moderatorID, publication
 		return err
 	}
 
-	// Determine the new visibility based on the action.
-	var newVisibility string
-	switch action {
-	case "approve":
-		newVisibility = VisibilityPublished
-	case "archive":
-		newVisibility = VisibilityArchived
-	case "restore":
-		// Restore to published regardless of current state.
-		newVisibility = VisibilityPublished
+	newVisibility, prior, resetFlags, err := moderationOutcome(pub, action)
+	if err != nil {
+		return err
 	}
-
-	if err := s.repo.UpdateVisibility(ctx, pub.ID, newVisibility); err != nil {
+	if err := s.repo.ApplyModeration(ctx, pub.ID, newVisibility, prior, resetFlags); err != nil {
 		return err
 	}
 
@@ -678,6 +724,52 @@ func (s *bestiaryService) Moderate(ctx context.Context, moderatorID, publication
 		Reason:        reason,
 	}
 	return s.repo.CreateModerationEntry(ctx, entry)
+}
+
+// moderationOutcome computes the visibility, the state to remember and
+// whether to reset the flag count for a moderation action on pub.
+func moderationOutcome(pub *Publication, action string) (visibility string, prior *string, resetFlags bool, err error) {
+	switch action {
+	case "archive":
+		if pub.Visibility == VisibilityArchived {
+			return VisibilityArchived, pub.PriorVisibility, false, nil
+		}
+		// A flagged publication already remembers what it was.
+		if pub.Visibility == VisibilityFlagged {
+			return VisibilityArchived, pub.PriorVisibility, true, nil
+		}
+		v := pub.Visibility
+		return VisibilityArchived, &v, false, nil
+	case "approve", "restore":
+		switch pub.Visibility {
+		case VisibilityFlagged:
+			return restoredVisibility(pub, VisibilityPublished), nil, true, nil
+		case VisibilityArchived:
+			if action == "approve" {
+				return "", nil, false, apperror.NewConflict("only a flagged publication can be approved; use restore for an archived one")
+			}
+			return restoredVisibility(pub, VisibilityDraft), nil, false, nil
+		default:
+			if action == "restore" {
+				return "", nil, false, apperror.NewConflict("publication is not archived or flagged")
+			}
+			// Nothing hides it: approving only clears leftover flags.
+			return pub.Visibility, nil, true, nil
+		}
+	}
+	return "", nil, false, apperror.NewValidation(fmt.Sprintf("invalid moderation action: %q", action))
+}
+
+// restoredVisibility is the recorded prior state, or fallback when none is
+// recorded.
+func restoredVisibility(pub *Publication, fallback string) string {
+	if pub.PriorVisibility != nil {
+		switch *pub.PriorVisibility {
+		case VisibilityDraft, VisibilityPublished, VisibilityUnlisted, VisibilityArchived:
+			return *pub.PriorVisibility
+		}
+	}
+	return fallback
 }
 
 // GetModerationLog returns the full audit trail for a publication.
@@ -810,19 +902,16 @@ func extractStatblockFields(raw json.RawMessage) (*string, *string, *int) {
 	return sb.Organization, sb.Role, sb.Level
 }
 
-// --- Text sanitization ---
+// --- Text handling ---
 
-// sanitizeText escapes HTML entities to prevent XSS.
-func sanitizeText(s string) string {
-	return html.EscapeString(strings.TrimSpace(s))
-}
-
-// sanitizeOptionalText escapes an optional text pointer.
-func sanitizeOptionalText(s *string) *string {
+// trimOptionalText trims an optional text pointer. It deliberately does not
+// escape: stored text is what the author wrote, and escaping belongs to the
+// renderer that knows its output context.
+func trimOptionalText(s *string) *string {
 	if s == nil {
 		return nil
 	}
-	v := sanitizeText(*s)
+	v := strings.TrimSpace(*s)
 	return &v
 }
 

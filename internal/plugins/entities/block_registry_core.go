@@ -4,7 +4,11 @@
 // the Go dashboard handler, not the block registry).
 package entities
 
-import "github.com/a-h/templ"
+import (
+	"github.com/a-h/templ"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
 
 // IntPtr is a helper for inline *int literals in ConfigFieldMeta.
 func IntPtr(n int) *int { return &n }
@@ -121,12 +125,10 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Addon:       "player-notes",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
-		// Every entity_notes route is RequireAuth, so the block 401s for a
-		// viewer with no identity — gate on ctx.UserID (real authenticated
-		// identity), not role, since an anonymous public-campaign visitor
-		// is RoleNone rather than RolePlayer but role isn't the real
-		// prerequisite here.
-		if ctx.UserID == "" {
+		// Every entity_notes route needs a signed-in member (RolePlayer), so
+		// a visitor (signed out, or on a look-around pass) gets no block
+		// rather than one that fails to load and offers New note.
+		if ctx.UserID == "" || ctx.CC == nil || ctx.CC.MemberRole < campaigns.RolePlayer {
 			return templ.NopComponent
 		}
 		return blockEntityNotes(ctx.CC, ctx.Entity, ctx.CSRFToken)
@@ -425,6 +427,16 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		ConfigFields: []ConfigFieldMeta{
 			// "page" renders as a page search in the Customizer.
 			{Key: "entity_id", Label: "Page", Type: "page", Hint: "Players see it only if they can open the page."},
+		},
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "brochure", Label: "Brochure", Icon: "fa-book-open",
+		Description: "A small box that opens a new-player page as a folded brochure",
+		Contexts: []string{"dashboard"},
+		ConfigFields: []ConfigFieldMeta{
+			{Key: "entity_id", Label: "Page", Type: "page", Hint: "Its title and first line make the cover; each heading starts a new panel. Players see it only if they can open the page."},
+			{Key: "content", Label: "Words on the box", Type: "textarea", Hint: "Optional, shown on the small box. Leave empty to use the page's own first line."},
 		},
 	}, nil)
 

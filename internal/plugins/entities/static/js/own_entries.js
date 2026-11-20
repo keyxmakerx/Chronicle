@@ -22,6 +22,19 @@
  * may write what and validates every list. Descriptions are HTML the server sanitizes; a
  * passage wrapped in <span data-secret> is kept from players, as on pages.
  *
+ * A Director's tab also lists every entry the game system brings, beside the
+ * campaign's own, each with its mark (Open, Ask first, Not here, Everyone
+ * takes it) set from the row's menu, for everyone or for one player. The marks
+ * are the campaign's hero-choice rules, read and written through the
+ * choice-rules API; a request a player makes for an Ask-first entry waits
+ * beside the handed-in drafts, to allow or answer.
+ *
+ * An entry can hold more than this form edits (a rewritten copy of a
+ * system's own entry carries ability objects, rolls, extra keys on traits).
+ * What the form does not show goes back on save exactly as it was loaded, and
+ * a trait keeps its extra keys while its name is unchanged, so a save never
+ * drops a part the Director could not see.
+ *
  * Served from the plugin body-script registry so it survives boosted
  * navigation. Re-wires after HTMX swaps.
  */
@@ -80,6 +93,15 @@
   function namedList(v) {
     return Array.isArray(v) && v.length > 0 && v.every(function (it) { return it && typeof it === 'object' && typeof it.name === 'string'; });
   }
+  // A plain list of short words (a quick build), edited one per line.
+  function wordList(v) {
+    return Array.isArray(v) && v.length > 0 && v.every(function (w) { return typeof w === 'string'; });
+  }
+  // A fact too long for one line is written in a box (a benefit, a drawback).
+  function longFact(v) { return typeof v === 'string' && (v.length > 120 || v.indexOf('\n') >= 0); }
+  // Where the words came from is the page's credit, not a fact to edit; it
+  // goes back as loaded and is not named among the kept parts.
+  function creditKey(k) { return k === 'provenance' || k === 'provenance_display'; }
   // The shape a system's own entries share, so a Director's entry can carry
   // the same parts: scalar facts, lists of named items that at least half of
   // them have (a list whose items cost points is one a hero buys from), and
@@ -124,6 +146,12 @@
     this.forId = root.getAttribute('data-for-id') || '';
     this.forName = root.getAttribute('data-for-name') || '';
     this.backUrl = root.getAttribute('data-back-url') || '';
+    // Opened by address: straight on one entry (the page's pen, or landing
+    // after a rewrite), or on a new one; returnUrl is the page to go back to.
+    this.startEntry = root.getAttribute('data-entry') || '';
+    this.startNew = root.getAttribute('data-new') === 'true';
+    this.made = root.getAttribute('data-made') === 'true';
+    this.returnUrl = root.getAttribute('data-return-url') || '';
     this.grants = [];   // permissions: all for a Director, the player's own
     this.members = [];  // a Director's list of who can be given one
     this.giving = false;
@@ -137,12 +165,25 @@
     this.paste = false;
     this.tryBuy = [];   // traits ticked in the player's view, never saved
     this.busy = false;
+    // A Director's marks: each list's entries with their marks per field and
+    // viewer, the requests waiting for an answer, and what is open on the page.
+    this.apiBase = this.entriesUrl ? this.entriesUrl.replace(/\/system-entries$/, '') : '';
+    this.rules = {};
+    this.rulesErr = {};
+    this.rulesBusy = {};
+    this.requests = [];
+    this.as = '';       // the player the list is shown as; '' is everyone
+    this.ui = { menu: null, strip: null, suggest: null, q: '', marked: false, more: 40 };
   }
 
   Entries.prototype.load = function () {
     var self = this;
     var reads = [api(this.planUrl).then(json), api(this.entriesUrl).then(json), api(this.entriesUrl + '/grants').then(json)];
-    if (this.director) reads.push(api(this.membersUrl, { headers: { Accept: 'application/json' } }).then(json));
+    if (this.director) {
+      reads.push(api(this.membersUrl, { headers: { Accept: 'application/json' } }).then(json));
+      // The requests are a part of the page; failing to read them never stops it.
+      reads.push(api(this.apiBase + '/choice-requests').then(json).catch(function () { return { ok: false }; }));
+    }
     Promise.all(reads).then(function (res) {
       if (!res[0].ok || !res[1].ok || !res[2].ok) throw new Error('load');
       var plan = res[0].body || {};
@@ -156,13 +197,18 @@
       self.entries = (res[1].body && res[1].body.entries) || [];
       self.grants = (res[2].body && res[2].body.grants) || [];
       if (res[3] && res[3].ok && Array.isArray(res[3].body)) self.members = res[3].body;
+      if (res[4] && res[4].ok && res[4].body && Array.isArray(res[4].body.requests)) self.requests = res[4].body.requests;
       if (!self.director) {
         // A player's page holds only what they were let write, and what they wrote.
         self.entries = self.entries.filter(function (e) { return e.createdBy === self.user; });
         self.fields = self.fields.filter(function (f) { return self.grantFor(f.key) || self.mine(f.key).length; });
       }
-      for (var i = 0; i < self.fields.length; i++) if (self.fields[i].key === self.startField) self.field = i;
+      var start = self.startEntry ? self.entries.filter(function (e) { return String(e.id) === self.startEntry; })[0] : null;
+      var key = start ? start.fieldKey : self.startField;
+      for (var i = 0; i < self.fields.length; i++) if (self.fields[i].key === key) self.field = i;
       self.render();
+      if (start && self.cur() && self.cur().key === start.fieldKey) { self.openPop(start, null); self.leaveTo = self.returnUrl; }
+      else if (self.startNew && self.cur()) { self.openPop(null, self.root.querySelector('[data-act="add"]')); self.leaveTo = self.returnUrl; }
     }).catch(function () {
       var t = self.root.querySelector('.hc-loading__text');
       if (t) t.textContent = 'Your entries could not be opened. Reload the page to try again.';
@@ -194,24 +240,44 @@
   }
   // Numbers stay numbers so the creator can do sums with them ("3" points).
   function factValue(v) { v = v.trim(); return /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }
+  // An item as the form edits it; orig is the item as loaded, whose other
+  // keys go back with it while its name stays the same.
   function itemOf(it) {
-    return { name: String(it.name || ''), cost: typeof it.cost === 'number' ? it.cost : 1, description: String(it.description || '') };
+    var text = typeof it.description === 'string' || it.description == null;
+    return { name: String(it.name || ''), cost: typeof it.cost === 'number' ? it.cost : 1,
+      description: text ? String(it.description || '') : '', orig: it };
+  }
+  // The keys of a loaded item the form does not edit.
+  function extraKeys(orig) {
+    if (!orig || typeof orig !== 'object') return [];
+    return Object.keys(orig).filter(function (k) {
+      return k !== 'name' && k !== 'cost' && !(k === 'description' && (typeof orig.description === 'string' || orig.description == null));
+    });
   }
   // A draft holds facts as label/value lines, each shaped list by its key,
-  // and the points budget; lists the system doesn't share are kept as they are.
+  // word lists as lines, and the points budget. A list the system doesn't
+  // share is edited too (extraLists); anything else the form cannot edit
+  // (an object, a yes/no, an empty list) is carried as loaded.
   function draftOf(e, f, budget0) {
     var lists = {};
     f.lists.forEach(function (l) { lists[l.key] = []; });
     if (!e) {
       return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '',
-        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }) };
+        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }), wordLists: [], extraLists: [], carried: {} };
     }
-    var props = e.properties || {}, facts = [], budget = f.budget;
+    var props = e.properties || {}, facts = [], wls = [], extra = [], carried = {}, budget = f.budget;
+    var shared = {};
+    f.lists.forEach(function (l) { shared[l.key] = true; });
     Object.keys(props).forEach(function (k) {
       var v = props[k];
-      if (namedList(v)) lists[k] = v.map(itemOf);
-      else if (k === f.budgetKey && typeof v === 'number') budget = v;
-      else if (!Array.isArray(v) && v !== null && typeof v !== 'object') facts.push({ label: words(k), value: String(v), key: k });
+      if (creditKey(k)) carried[k] = v;
+      else if (namedList(v)) {
+        lists[k] = v.map(itemOf);
+        if (!shared[k]) extra.push({ key: k, label: words(k), buy: v.every(function (it) { return typeof it.cost === 'number'; }) });
+      } else if (k === f.budgetKey && typeof v === 'number') budget = v;
+      else if (wordList(v)) wls.push({ key: k, label: words(k), text: v.join('\n'), orig: v });
+      else if (typeof v === 'number' || typeof v === 'string') facts.push({ label: words(k), value: String(v), key: k, orig: v, long: longFact(v) });
+      else carried[k] = v;
     });
     var who = e.visibility || 'everyone';
     // A player's draft is only theirs until accepted; accepting it offers
@@ -219,8 +285,68 @@
     if (isDraft(e)) who = e.visibility === 'character' ? 'character' : 'everyone';
     return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: who,
       forName: e.visibility === 'character' ? (e.forName || '') : undefined,
-      budget: budget0 || budget, lists: lists, facts: facts,
+      budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried,
+      standsFor: e.standsFor || '', standsForName: e.standsForName || '', savedWho: e.visibility || 'everyone',
       status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
+  }
+  // Every list the form edits for a draft: the system's shared lists, then
+  // the entry's own.
+  function listsOf(d, f) { return f.lists.concat(d.extraLists || []); }
+
+  // propsOf builds the properties sent to Chronicle from a draft: what the
+  // form could not edit first, exactly as loaded, then facts under snake_case
+  // keys (numbers as numbers, an untouched value as it was), the budget, word
+  // lists, and each list with only its named items, an item keeping its
+  // other keys while its name is unchanged.
+  function propsOf(d, f) {
+    var props = {}, seen = {};
+    Object.keys(d.carried || {}).forEach(function (k) { props[k] = d.carried[k]; });
+    for (var i = 0; i < d.facts.length; i++) {
+      var p = d.facts[i];
+      if (!p.label.trim() || !p.value.trim()) continue;
+      // An untouched label keeps the key it came with, so a fact the system
+      // spells differently is not renamed by a save.
+      var k = (p.key && words(p.key) === p.label) ? p.key : keyOf(p.label);
+      if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
+      seen[k] = true;
+      props[k] = (p.orig !== undefined && k === p.key && p.value === String(p.orig)) ? p.orig : factValue(p.value);
+    }
+    if (f.budgetKey) props[f.budgetKey] = d.budget;
+    (d.wordLists || []).forEach(function (w) {
+      var items = w.text.split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!items.length) return;
+      props[w.key] = w.orig && w.orig.join('\n') === items.join('\n') ? w.orig : items;
+    });
+    var buyOf = {};
+    listsOf(d, f).forEach(function (l) { buyOf[l.key] = l.buy; });
+    Object.keys(d.lists).forEach(function (key) {
+      var items = d.lists[key].filter(function (it) { return it.name.trim(); }).map(function (it) {
+        var o = {}, same = it.orig && String(it.orig.name || '').trim() === it.name.trim();
+        if (same) extraKeys(it.orig).forEach(function (x) { o[x] = it.orig[x]; });
+        o.name = it.name.trim();
+        if (buyOf[key]) o.cost = it.cost;
+        else if (same && typeof it.orig.cost === 'number') o.cost = it.orig.cost;
+        if (it.description.trim()) o.description = it.description.trim();
+        return o;
+      });
+      if (items.length) props[key] = items;
+    });
+    return { props: props };
+  }
+
+  // keptLine names the parts the form keeps but cannot edit, in one quiet
+  // line, or '' when there are none.
+  function keptLine(d, f) {
+    var parts = Object.keys(d.carried || {}).filter(function (k) { return !creditKey(k); }).map(words);
+    var traits = [];
+    listsOf(d, f).forEach(function (l) {
+      (d.lists[l.key] || []).forEach(function (it) {
+        if (extraKeys(it.orig).length && String(it.orig.name || '').trim() === it.name.trim()) traits.push(it.name.trim());
+      });
+    });
+    if (traits.length) parts.push('the rules attached to ' + (traits.length > 3 ? traits.slice(0, 3).join(', ') + ' and ' + (traits.length - 3) + ' more' : traits.join(', ')));
+    if (!parts.length) return '';
+    return 'Kept as printed, not edited here: ' + parts.join('; ') + '.';
   }
   // The writing box's HTML reduced to the few tags it can make, parsed in an
   // inert document and stripped of every attribute but data-secret, so the
@@ -261,33 +387,461 @@
   Entries.prototype.pageHTML = function () {
     if (!this.director) return this.playerPageHTML();
     var self = this, f = this.cur();
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · Directors only</p><h1 tabindex="-1">Your own entries</h1>' +
-      '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them.</p></div>';
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · Directors only</p><h1 tabindex="-1">Entries and players’ drafts</h1>' +
+      '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them. Players’ drafts wait here for you, and you let players make their own. Mark any entry to limit what players can pick, or to ask them to take it.</p></div>';
     if (!f) {
-      return '<section class="hc-page paper" aria-label="Your own entries">' + head +
+      return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
         '<p class="hc-empty">' + esc(this.system) + ' doesn’t list any choices for making a hero, so there is nothing to add to here.</p></section>';
     }
     var tabs = this.fields.map(function (x, i) {
-      var waiting = self.mine(x.key).filter(function (e) { return e.status === 'sent'; }).length;
+      var waiting = self.mine(x.key).filter(function (e) { return e.status === 'sent'; }).length + self.waitingFor(x.key).length;
       return '<button type="button" role="tab" data-field="' + i + '" aria-selected="' + (i === self.field) + '">' + esc(x.label) +
         '<small>' + self.mine(x.key).length + (waiting ? ' · ' + waiting + ' waiting' : '') + '</small></button>';
     }).join('');
-    var mine = this.mine(f.key), pl = plural(f.label);
-    var rows = mine.length ? '<ul class="oe-list">' + mine.map(function (e) {
-      return '<li><button type="button" class="hc-row" data-open="' + esc(e.id) + '" aria-expanded="' + (self.open === String(e.id)) + '"><b>' + esc(e.name) +
-        (e.status === 'sent' ? ' <span class="hc-seal oe-seal--wait">Waiting for you · ' + esc(self.memberName(e.createdBy)) + '</span>' : '') +
-        (e.status === 'draft' ? ' <span class="hc-seal oe-seal--dm">Draft · ' + esc(self.memberName(e.createdBy)) + '</span>' : '') +
-        (!isDraft(e) && e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">Directors only</span>' : '') +
-        (!isDraft(e) && e.visibility === 'character' ? ' <span class="hc-seal oe-seal--dm">For ' + esc(e.forName || 'one character') + '</span>' : '') +
-        '</b><span class="hc-row__go" aria-hidden="true">' + (e.status === 'sent' ? 'Review ›' : 'Edit ›') + '</span><small>' + esc(e.summary) + '</small></button></li>';
-    }).join('') + '</ul>'
-      : '<p class="hc-empty">No ' + esc(pl) + ' of your own yet. Add one and players see it next to ' + esc(this.system) + '’s ' + esc(pl) + ' when they make a hero.</p>';
-    return '<section class="hc-page paper" aria-label="Your own entries">' + head +
-      '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + rows +
-      '<p class="oe-pkg">' + esc(this.system) + ' brings ' + f.pkg + ' ' + esc(f.pkg === 1 ? lower(f.label) : pl) + ' of its own; they are not changed here.</p>' +
+    var mine = this.mine(f.key), pl = plural(f.label), data = this.rulesFor(f.key);
+    var list;
+    if (data) list = this.listHTML(data, f);
+    else if (this.rulesErr[this.ck(f.key)]) {
+      list = '<p class="hc-empty" role="alert">' + esc(this.rulesErr[this.ck(f.key)]) + ' <button type="button" class="oe-link" data-act="retryrules">Try again</button></p>';
+    } else list = '<p class="oe-hint" role="status">Opening the ' + esc(lower(f.label)) + ' list…</p>';
+    return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
+      '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + this.waitingHTML(f) + list +
       this.grantsHTML() +
       '<div class="hc-foot"><span>' + mine.length + ' of your own</span><span class="hc-foot__sp"></span>' +
       '<button type="button" class="hc-btn" data-act="add">+ Add ' + an(f.label) + ' ' + esc(lower(f.label)) + '</button></div></section>';
+  };
+
+  // --- A Director's marks ---------------------------------------------------
+  // Each list's rows come from the choice-rules API: the system's entries and
+  // the campaign's own, each with the mark that applies, and the marks set
+  // for single players. Nothing here decides who may pick what; the server
+  // does, so this only draws what it says and sends what the Director sets.
+
+  var STATES = [['open', 'Open'], ['ask_first', 'Ask first'], ['not_offered', 'Not here'], ['required', 'Everyone takes it']];
+  function stateWord(st) {
+    for (var i = 0; i < STATES.length; i++) if (STATES[i][0] === st) return STATES[i][1];
+    return st === 'left_out' ? 'Not on the short list' : '';
+  }
+  // A mark's words, aimed at one player when there is one.
+  function markLabel(st, who) {
+    if (!who) return stateWord(st);
+    if (st === 'required') return who + ' takes it';
+    return stateWord(st) + ' for ' + who;
+  }
+  function byAttr(root, sel, attr, val) {
+    var nodes = root.querySelectorAll(sel);
+    for (var i = 0; i < nodes.length; i++) if (nodes[i].getAttribute(attr) === val) return nodes[i];
+    return null;
+  }
+
+  Entries.prototype.ck = function (key) { return key + '|' + this.as; };
+  Entries.prototype.rulesFor = function (key) {
+    var ck = this.ck(key);
+    if (this.rules[ck]) return this.rules[ck];
+    if (!this.rulesBusy[ck] && !this.rulesErr[ck]) this.fetchRules(key);
+    return null;
+  };
+  // Reads one list's marks. What is on screen stays until the answer lands,
+  // so a mark that was just saved never flashes an empty list.
+  Entries.prototype.fetchRules = function (key, then) {
+    var self = this, ck = this.ck(key);
+    this.rulesBusy[ck] = true;
+    delete this.rulesErr[ck];
+    api(this.apiBase + '/choice-rules/entries?fieldKey=' + encodeURIComponent(key) + (this.as ? '&as=' + encodeURIComponent(this.as) : '')).then(json).then(function (res) {
+      delete self.rulesBusy[ck];
+      if (res.ok && res.body && res.body.entries) self.rules[ck] = res.body;
+      else self.rulesErr[ck] = res.body.message || res.body.error || 'The marks could not be opened.';
+    }).catch(function () {
+      delete self.rulesBusy[ck];
+      self.rulesErr[ck] = 'The marks could not be opened. Check your connection and try again.';
+    }).then(function () {
+      if (then) then(); else if (self.open === null) self.render();
+    });
+  };
+  // After anything that changes the entries or the marks: the other lists'
+  // copies are stale, the shown one is read again in place.
+  Entries.prototype.reloadRules = function (then) {
+    var f = this.cur(), keep = f && this.rules[this.ck(f.key)], mine = {};
+    if (keep) mine[this.ck(f.key)] = keep;
+    this.rules = mine;
+    this.rulesErr = {};
+    if (f) this.fetchRules(f.key, then);
+    else if (then) then();
+  };
+  Entries.prototype.reloadRequests = function (then) {
+    var self = this;
+    api(this.apiBase + '/choice-requests').then(json).then(function (res) {
+      if (res.ok && res.body && Array.isArray(res.body.requests)) self.requests = res.body.requests;
+    }).catch(function () {}).then(function () { if (then) then(); });
+  };
+  Entries.prototype.waitingFor = function (key) {
+    return this.requests.filter(function (r) { return r.fieldKey === key; });
+  };
+  Entries.prototype.memberLabel = function (data, id) {
+    var m = (data.members || []).filter(function (x) { return x.userId === id; })[0];
+    return m ? m.name : this.memberName(id);
+  };
+  function firstName(n) { return String(n || 'them').trim().split(/\s+/)[0] || 'them'; }
+
+  // Players' Ask-first requests wait here, beside the handed-in drafts below.
+  Entries.prototype.waitingHTML = function (f) {
+    var self = this, rs = this.waitingFor(f.key), lab = lower(f.label);
+    if (!rs.length) return '';
+    return '<div class="oe-wait" role="region" aria-label="Waiting for you"><p class="oe-k">Waiting for you</p><ul>' + rs.map(function (r) {
+      var sg = String(self.ui.suggest) === String(r.id), who = r.playerName || 'A player';
+      return '<li><p><b>' + esc(who) + '</b> asks for <b>' + esc(r.entryName) + '</b> as ' +
+        (r.entityName ? esc(r.entityName) + '’s ' : 'their ') + esc(lab) + '.</p>' +
+        '<div class="oe-req__acts"><button type="button" class="oe-btn" data-act="allow" data-req="' + esc(r.id) + '">Allow for ' + esc(firstName(who)) + '</button>' +
+        '<button type="button" class="oe-link" data-act="suggest" data-req="' + esc(r.id) + '" aria-expanded="' + sg + '">Suggest another</button></div>' +
+        (sg ? '<div class="oe-suggest"><label class="oe-f"><span class="oe-k">What ' + esc(firstName(who)) + ' reads</span>' +
+          '<input type="text" data-suggest-msg maxlength="300" autocomplete="off" placeholder="A short note, such as which entry fits the table better"></label>' +
+          '<div class="oe-req__acts"><button type="button" class="oe-btn" data-act="sendsuggest" data-req="' + esc(r.id) + '">Send</button>' +
+          '<button type="button" class="oe-link" data-act="nosuggest">Cancel</button></div></div>' : '') + '</li>';
+    }).join('') + '</ul></div>';
+  };
+
+  // The list: a search and who it is shown as, then the rows.
+  Entries.prototype.listHTML = function (data, f) {
+    var self = this, ui = this.ui, pl = plural(f.label);
+    var shown = '<label class="oe-show"><span class="oe-k">Showing</span><select data-show aria-label="Show the list as">' +
+      '<option value="">Everyone</option>' + (data.members || []).map(function (m) {
+        return '<option value="' + esc(m.userId) + '"' + (m.userId === self.as ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+      }).join('') + '</select></label>';
+    var marked = data.entries.filter(function (e) { return self.markedEntry(e); }).length;
+    var ctl = '<div class="oe-ctl"><label class="sr-only" for="oe-q">Search the ' + esc(lower(f.label)) + ' list</label>' +
+      '<input id="oe-q" type="search" data-oe-q autocomplete="off" placeholder="Search ' + data.entries.length + ' ' + esc(data.entries.length === 1 ? lower(f.label) : pl) + '" value="' + esc(ui.q) + '">' + shown +
+      (marked ? '<button type="button" class="oe-link" data-act="onlymarked" aria-pressed="' + ui.marked + '">Only marked (' + marked + ')</button>' : '') + '</div>';
+    var foot = '';
+    (data.warnings || []).forEach(function (w) { foot += '<p class="oe-pkg">' + esc(w) + '</p>'; });
+    (data.orphans || []).forEach(function (o, i) {
+      foot += '<p class="oe-pkg">' + esc(o.name || o.key) + ' was marked ' + esc(lower(stateWord(o.state))) + (o.target ? ' for ' + esc(self.memberLabel(data, o.target)) : '') +
+        ' and is no longer in ' + esc(self.system) + '. <button type="button" class="oe-link" data-act="clearorphan" data-orphan="' + i + '">Clear it</button></p>';
+    });
+    return ctl + '<div class="oe-rows" data-rows>' + this.rowsHTML(data, f) + '</div>' + foot;
+  };
+
+  // Whether an entry carries a mark of its own, for anyone.
+  Entries.prototype.markedEntry = function (e) {
+    return !!(e.everyone && e.everyone.state !== 'open') || (e.players && e.players.length > 0) || e.state !== 'open';
+  };
+
+  Entries.prototype.rowsHTML = function (data, f) {
+    var self = this, ui = this.ui, q = lower(ui.q).trim();
+    var groups = (data.groups || []).map(function (g) {
+      var note = g.source === 'campaign' ? 'Your homebrew, and anything you write later.' : esc(self.system) + '’s own, and anything a package update adds.';
+      return self.rowHTML({ group: true, ref: g.source + ':' + g.key, source: g.source, key: g.key, name: g.label, note: note,
+        everyone: g.everyone, players: g.players || [], state: g.everyone ? g.everyone.state : 'open', reason: g.everyone && g.everyone.reason }, data);
+    }).join('');
+    var list = data.entries.filter(function (e) {
+      if (ui.marked && !self.markedEntry(e)) return false;
+      return !q || lower(e.name + ' ' + (e.summary || '')).indexOf(q) >= 0;
+    });
+    var rows = list.slice(0, ui.more).map(function (e) {
+      return self.rowHTML({ ref: e.source + ':' + e.key, source: e.source, key: e.key, name: e.name, e: e,
+        everyone: e.everyone, players: e.players || [], state: e.state, reason: e.reason }, data);
+    }).join('');
+    var more = list.length > ui.more ? '<p class="oe-more"><button type="button" class="oe-link" data-act="more">Show ' + Math.min(list.length - ui.more, 60) + ' more</button>' +
+      '<span class="oe-hint"> ' + (list.length - ui.more) + ' not shown</span></p>' : '';
+    var none = !list.length ? '<p class="hc-empty">' + (q ? 'Nothing here matches “' + esc(ui.q.trim()) + '”.' : ui.marked ? 'Nothing is marked yet.' : 'No ' + esc(plural(f.label)) + ' to show.') + '</p>' : '';
+    var mine = this.mine(f.key);
+    var own = !mine.length && !q && !ui.marked ? '<p class="oe-pkg">No ' + esc(plural(f.label)) + ' of your own yet. Add one and players see it next to ' + esc(this.system) + '’s ' + esc(plural(f.label)) + ' when they make a hero.</p>' : '';
+    return '<ul class="oe-list oe-groups">' + groups + '</ul><ul class="oe-list oe-ents">' + rows + '</ul>' + none + more + this.restHTML(data) + own;
+  };
+
+  Entries.prototype.sealsHTML = function (e) {
+    if (!e) return '';
+    return (e.status === 'sent' ? ' <span class="hc-seal oe-seal--wait">Waiting for you · ' + esc(this.memberName(e.createdBy)) + '</span>' : '') +
+      (e.status === 'draft' ? ' <span class="hc-seal oe-seal--dm">Draft · ' + esc(this.memberName(e.createdBy)) + '</span>' : '') +
+      (!isDraft(e) && e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">Directors only</span>' : '') +
+      (!isDraft(e) && e.visibility === 'character' ? ' <span class="hc-seal oe-seal--dm">For ' + esc(e.forName || 'one character') + '</span>' : '');
+  };
+
+  // Marks the entry carries for single players, and why, in a quiet line.
+  // Each part is plain text; the caller escapes it.
+  Entries.prototype.noteLine = function (ent, data) {
+    var self = this, parts = [];
+    ent.players.forEach(function (p) {
+      if (self.as && p.userId !== self.as) return;
+      parts.push(markLabel(p.state, p.playerName || self.memberLabel(data, p.userId)));
+    });
+    if (ent.reason && ent.state !== 'open') parts.push('Why: ' + ent.reason);
+    if (ent.e && ent.e.inherited && ent.state !== 'open') parts.push('Same as the rest of ' + (ent.source === 'campaign' ? 'this campaign’s own' : self.system + '’s own'));
+    if (ent.state === 'left_out') parts.push('Not on the short list');
+    return parts;
+  };
+
+  Entries.prototype.rowHTML = function (ent, data) {
+    var ui = this.ui, e = ent.e, st = ent.state || 'open', ref = ent.ref;
+    var campaign = ent.source === 'campaign' && !ent.group && e && e.entryId;
+    var mineEntry = campaign ? this.entries.filter(function (x) { return String(x.id) === String(e.entryId); })[0] : null;
+    var summary = ent.group ? ent.note : (e.summary || '');
+    var notes = this.noteLine(ent, data);
+    var menuOpen = ui.menu && ui.menu.ref === ref, strip = ui.strip && ui.strip.ref === ref && !ui.strip.bulk;
+    var main;
+    if (mineEntry) {
+      main = '<button type="button" class="hc-row" data-open="' + esc(mineEntry.id) + '" aria-expanded="' + (this.open === String(mineEntry.id)) + '"><b>' + esc(ent.name) + this.sealsHTML(mineEntry) +
+        '</b><span class="hc-row__go" aria-hidden="true">' + (mineEntry.status === 'sent' ? 'Review ›' : 'Edit ›') + '</span>' +
+        (summary ? '<small>' + esc(summary) + '</small>' : '') + '</button>';
+    } else {
+      main = '<div class="hc-row oe-ent__static"><b>' + esc(ent.name) + (campaign ? ' <span class="hc-seal">Campaign</span>' : '') + '</b>' +
+        (summary ? '<small>' + (ent.group ? summary : esc(summary)) + '</small>' : '') + '</div>';
+    }
+    var chip = st === 'open' ? '' : '<span class="oe-mark oe-mark--' + esc(st.replace('_', '-')) + '">' + esc(st === 'required' && this.as ? 'Takes it' : stateWord(st)) + '</span>';
+    return '<li class="oe-ent' + (ent.group ? ' oe-ent--group' : '') + (st === 'not_offered' ? ' is-no' : '') + (ui.working === ref ? ' is-working' : '') + '" data-ref="' + esc(ref) + '">' +
+      '<div class="oe-ent__line">' + main + chip +
+      '<button type="button" class="oe-dots" data-menu="' + esc(ref) + '" aria-haspopup="menu" aria-expanded="' + !!menuOpen + '" aria-label="Marks for ' + esc(ent.name) + '"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>' +
+      (menuOpen ? this.menuHTML(ent, data) : '') + '</div>' +
+      (notes.length ? '<p class="oe-ent__note">' + notes.map(function (n) { return esc(n); }).join(' · ') + '</p>' : '') +
+      (strip ? this.stripHTML() : '') + '</li>';
+  };
+
+  // The row's menu: the four marks for everyone (or for the player the list
+  // is shown as), then "For one player…" and the reason. A second step picks
+  // the player and a third their marks; Back returns.
+  Entries.prototype.menuItems = function (ent, data) {
+    var m = this.ui.menu, items = [];
+    if (m.step === 'rest') {
+      items.push({ head: ent.restNote });
+      items.push({ act: 'restmark', state: 'not_offered', label: 'Not here' });
+      items.push({ act: 'restmark', state: 'ask_first', label: 'Ask first' });
+      return items;
+    }
+    if (m.step === 'players') {
+      items.push({ act: 'back', label: 'Back' }, { sep: true });
+      (data.members || []).forEach(function (p) {
+        var mk = ent.players.filter(function (x) { return x.userId === p.userId; })[0];
+        items.push({ act: 'player', player: p.userId, label: p.name, note: mk ? stateWord(mk.state) : '' });
+      });
+      return items;
+    }
+    var target = m.step === 'player' ? m.player : this.as, who = target ? this.memberLabel(data, target) : '';
+    var mk = target ? ent.players.filter(function (x) { return x.userId === target; })[0] : ent.everyone;
+    var cur = mk ? mk.state : (target ? null : 'open');
+    if (m.step === 'player') items.push({ act: 'back', label: 'Back' }, { sep: true });
+    STATES.forEach(function (s) {
+      items.push({ act: 'mark', state: s[0], target: target, checked: cur === s[0], label: markLabel(s[0], who) });
+    });
+    if (target && mk) items.push({ act: 'mark', state: 'clear', target: target, label: 'Same as everyone' });
+    var extra = [];
+    if (!target && (data.members || []).length) extra.push({ act: 'players', label: 'For one player…' });
+    if (mk && mk.state !== 'open') extra.push({ act: 'reason', state: mk.state, target: target, label: mk.reason ? 'Change the reason…' : 'Add a reason…' });
+    if (extra.length) items.push({ sep: true });
+    return items.concat(extra);
+  };
+
+  Entries.prototype.menuHTML = function (ent, data) {
+    var items = this.menuItems(ent, data);
+    return '<div class="oe-menu" role="menu" aria-label="Marks for ' + esc(ent.name) + '">' + items.map(function (it) {
+      if (it.sep) return '<div class="oe-menu__sep" role="separator"></div>';
+      if (it.head) return '<p class="oe-menu__h">' + esc(it.head) + '</p>';
+      var radio = it.act === 'mark' && it.state !== 'clear';
+      return '<button type="button" class="oe-menu__item" role="' + (radio ? 'menuitemradio' : 'menuitem') + '"' + (radio ? ' aria-checked="' + !!it.checked + '"' : '') +
+        ' data-mact="' + it.act + '"' + (it.state ? ' data-state="' + it.state + '"' : '') + (it.target != null ? ' data-target="' + esc(it.target) + '"' : '') +
+        (it.player ? ' data-player="' + esc(it.player) + '"' : '') + '><span>' + esc(it.label) + '</span>' +
+        (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</button>';
+    }).join('') + '</div>';
+  };
+
+  // "Mark the rest…": every entry with no mark of its own, marked at once.
+  Entries.prototype.restOf = function (data) {
+    return data.entries.filter(function (e) {
+      return !e.everyone && e.status !== 'draft' && e.status !== 'sent';
+    });
+  };
+  Entries.prototype.restHTML = function (data) {
+    if (this.as) return '';
+    var rest = this.restOf(data), ui = this.ui;
+    if (!rest.length) return '';
+    var open = ui.menu && ui.menu.ref === 'rest', strip = ui.strip && ui.strip.bulk;
+    var ent = { ref: 'rest', name: 'the rest', players: [], restNote: 'The other ' + rest.length + ' with no mark' };
+    return '<div class="oe-rest"><button type="button" class="oe-link" data-menu="rest" aria-haspopup="menu" aria-expanded="' + !!open + '">Mark the rest…</button>' +
+      '<span class="oe-hint">' + rest.length + ' with no mark</span>' + (open ? this.menuHTML(ent, data) : '') + (strip ? this.stripHTML() : '') + '</div>';
+  };
+
+  // The strip that opens under a row when a mark needs a word from the
+  // Director: heroes it would break, an error, and the optional reason.
+  Entries.prototype.stripHTML = function () {
+    var s = this.ui.strip, c = s.check, h = '<div class="oe-strip" role="group" aria-label="Before this is saved">';
+    h += '<p class="oe-strip__what">' + s.what + '</p>';
+    if (s.error) h += '<p class="oe-error" role="alert">' + esc(s.error) + '</p>';
+    if (c && c.count) {
+      var shownN = Math.min(6, (c.heroes || []).length);
+      var heroes = (c.heroes || []).slice(0, 6).map(function (x) { return esc(x.heroName) + (x.playerName ? ' (' + esc(x.playerName) + ')' : ''); }).join(', ');
+      var more = c.count > shownN ? ', and ' + (c.count - shownN) + ' more' : '';
+      h += '<p class="oe-asked" role="note">' + c.count + (c.count === 1 ? ' hero already made breaks' : ' heroes already made break') + ' this: ' + heroes + more + '. They keep what they have.</p>';
+    }
+    h += '<label class="oe-f"><span class="oe-k">Reason players see (optional)</span><input type="text" data-strip-reason maxlength="300" autocomplete="off" value="' + esc(s.reason || '') + '"></label>' +
+      '<div class="oe-req__acts"><button type="button" class="oe-btn" data-act="stripsave">Save</button>' +
+      '<button type="button" class="oe-link" data-act="stripno">Cancel</button></div></div>';
+    return h;
+  };
+
+  // Redraws only the rows, so a half-typed search and the scroll place stay.
+  Entries.prototype.redrawRows = function () {
+    var f = this.cur(), data = f && this.rules[this.ck(f.key)], box = this.root.querySelector('[data-rows]');
+    if (box && data) box.innerHTML = this.rowsHTML(data, f);
+  };
+  Entries.prototype.focusDots = function (ref) {
+    var b = byAttr(this.root, '[data-menu]', 'data-menu', ref);
+    if (b) b.focus({ preventScroll: true });
+  };
+  Entries.prototype.entOf = function (data, ref) {
+    var g = (data.groups || []).filter(function (x) { return x.source + ':' + x.key === ref; })[0];
+    if (g) return { group: true, ref: ref, source: g.source, key: g.key, name: g.label, everyone: g.everyone, players: g.players || [] };
+    var e = data.entries.filter(function (x) { return x.source + ':' + x.key === ref; })[0];
+    return e ? { ref: ref, source: e.source, key: e.key, name: e.name, e: e, everyone: e.everyone, players: e.players || [] } : null;
+  };
+  Entries.prototype.closeMenu = function (focus) {
+    var ref = this.ui.menu && this.ui.menu.ref;
+    this.ui.menu = null;
+    this.redrawRows();
+    if (focus && ref) this.focusDots(ref);
+  };
+  Entries.prototype.openMenu = function (ref) {
+    var f = this.cur(), data = this.rules[this.ck(f.key)];
+    if (!data) return;
+    if (this.ui.menu && this.ui.menu.ref === ref) { this.closeMenu(true); return; }
+    this.ui.menu = { ref: ref, step: ref === 'rest' ? 'rest' : 'marks' };
+    this.ui.strip = null;
+    this.redrawRows();
+    this.focusMenu();
+  };
+  Entries.prototype.focusMenu = function () {
+    var cur = this.root.querySelector('.oe-menu [aria-checked="true"]') || this.root.querySelector('.oe-menu .oe-menu__item');
+    if (cur) cur.focus({ preventScroll: true });
+  };
+
+  // A mark in a sentence: lower-cased, but never a player's name.
+  function markIn(st, who) {
+    if (st === 'required' && who) return who + ' takes it';
+    return lower(stateWord(st)) + (who ? ' for ' + who : '');
+  }
+  // What the strip says it will do.
+  Entries.prototype.phrase = function (ent, target, state, data) {
+    var who = target ? this.memberLabel(data, target) : '';
+    if (state === 'clear') return 'Put <b>' + esc(ent.name) + '</b> back to the same as everyone for <b>' + esc(who) + '</b>.';
+    return 'Mark <b>' + esc(ent.name) + '</b> as <b>' + esc(markIn(state, who)) + '</b>' + (target ? '' : ' for everyone') + '.';
+  };
+  Entries.prototype.markSaid = function (ent, target, state, data) {
+    var who = target ? this.memberLabel(data, target) : '';
+    if (state === 'clear') return ent.name + ' is the same as everyone again for ' + who;
+    return ent.name + (state === 'required' && who ? ': ' : ' is ') + markIn(state, who);
+  };
+
+  Entries.prototype.chooseMark = function (ref, target, state, reasonOnly) {
+    var f = this.cur(), data = this.rules[this.ck(f.key)], ent = this.entOf(data, ref);
+    if (!ent) return;
+    var cur = target ? ent.players.filter(function (x) { return x.userId === target; })[0] : ent.everyone;
+    var strip = { ref: ref, bulk: false, marks: [{ source: ent.source, key: ent.key, target: target || '', state: state }],
+      what: reasonOnly ? 'Reason for <b>' + esc(ent.name) + '</b>, marked <b>' + esc(lower(stateWord(state))) + '</b>.' : this.phrase(ent, target, state, data),
+      reason: (cur && cur.reason) || '', check: null, error: '', label: this.markSaid(ent, target, state, data) };
+    this.ui.menu = null;
+    if (reasonOnly) { strip.useReason = true; this.ui.strip = strip; this.redrawRows(); this.focusReason(); return; }
+    this.review(strip, state === 'not_offered' || state === 'required');
+  };
+  Entries.prototype.focusReason = function () {
+    var i = this.root.querySelector('[data-strip-reason]');
+    if (i) i.focus({ preventScroll: true });
+  };
+
+  // A mark that could break a hero already made is checked first; a quiet
+  // one is saved at once, since a single pick saves the moment it is made.
+  Entries.prototype.review = function (strip, ask) {
+    var self = this, f = this.cur();
+    this.ui.working = strip.ref;
+    this.ui.strip = null;
+    this.redrawRows();
+    if (!ask) { this.saveMarks(strip); return; }
+    api(this.apiBase + '/choice-rules/check', { method: 'POST', body: { fieldKey: f.key, marks: strip.marks }, csrfToken: this.csrf }).then(json).then(function (res) {
+      self.ui.working = null;
+      if (!res.ok) { strip.error = res.body.message || res.body.error || 'That mark could not be checked. Try again.'; self.ui.strip = strip; self.redrawRows(); self.focusReason(); return; }
+      strip.check = res.body;
+      if (res.body.count > 0) { self.ui.strip = strip; self.redrawRows(); self.focusReason(); return; }
+      self.saveMarks(strip);
+    }).catch(function () {
+      self.ui.working = null;
+      strip.error = 'That mark could not be checked. Check your connection and try again.';
+      self.ui.strip = strip; self.redrawRows();
+    });
+  };
+
+  Entries.prototype.saveMarks = function (strip) {
+    var self = this, f = this.cur();
+    var marks = strip.marks.map(function (m) {
+      var o = { source: m.source, key: m.key, target: m.target, state: m.state };
+      if (strip.useReason || (strip.reason && strip.reason.trim())) o.reason = (strip.reason || '').trim();
+      return o;
+    });
+    this.ui.working = strip.ref;
+    this.redrawRows();
+    // Over 200 at once go in several saves; each is whole on its own.
+    var chunks = [];
+    for (var i = 0; i < marks.length; i += 200) chunks.push(marks.slice(i, i + 200));
+    var step = function (n) {
+      if (n >= chunks.length) return Promise.resolve({ ok: true });
+      return api(self.apiBase + '/choice-rules', { method: 'PUT', body: { fieldKey: f.key, marks: chunks[n] }, csrfToken: self.csrf }).then(json).then(function (res) {
+        return res.ok ? step(n + 1) : res;
+      });
+    };
+    step(0).then(function (res) {
+      self.ui.working = null;
+      if (!res.ok) {
+        strip.error = res.body.message || res.body.error || 'That mark could not be saved. Try again.';
+        self.ui.strip = strip; self.redrawRows(); self.focusReason();
+        return;
+      }
+      self.ui.strip = null;
+      self.reloadRules(function () {
+        self.render();
+        self.focusDots(strip.ref);
+        notify(strip.label);
+        self.announce(strip.label);
+      });
+    }).catch(function () {
+      self.ui.working = null;
+      strip.error = 'That mark could not be saved. Check your connection and try again.';
+      self.ui.strip = strip; self.redrawRows();
+    });
+  };
+
+  // Marks every entry with no mark of its own.
+  Entries.prototype.markRest = function (state) {
+    var f = this.cur(), data = this.rules[this.ck(f.key)], rest = this.restOf(data);
+    if (!rest.length) return;
+    var strip = { ref: 'rest', bulk: true, useReason: false, reason: '', check: null, error: '',
+      marks: rest.map(function (e) { return { source: e.source, key: e.key, target: '', state: state }; }),
+      what: 'Mark the other <b>' + rest.length + '</b> as <b>' + esc(lower(stateWord(state))) + '</b> for everyone.',
+      label: rest.length + ' marked ' + lower(stateWord(state)) };
+    this.ui.menu = null;
+    this.review(strip, state === 'not_offered');
+  };
+
+  // A request a player made for an Ask-first entry: allow it, or send a note.
+  Entries.prototype.answer = function (id, verb, body) {
+    var self = this, r = this.requests.filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!r || this.busy) return;
+    this.busy = true;
+    api(this.apiBase + '/choice-requests/' + encodeURIComponent(id) + '/' + verb, { method: 'POST', body: body || {}, csrfToken: this.csrf }).then(function (res) {
+      return json(res).then(function (b) {
+        self.busy = false;
+        var gone = res.status === 409;
+        if (!res.ok && !gone) { notify(b.body.message || b.body.error || 'That didn’t save. Try again.', 'error'); return; }
+        self.ui.suggest = null;
+        var said = gone ? 'That request was already answered.' : verb === 'allow'
+          ? r.entryName + ' allowed for ' + (r.playerName || 'them') + (b.body && b.body.heroUpdated === false ? '' : ' and put on ' + (r.entityName || 'their hero'))
+          : 'Your note went to ' + (r.playerName || 'them');
+        self.reloadRequests(function () {
+          self.reloadRules(function () { self.render(); notify(said, gone ? 'info' : 'success'); self.announce(said); });
+        });
+      });
+    }).catch(function () { self.busy = false; notify('That didn’t save. Check your connection and try again.', 'error'); });
+  };
+
+  // Clears a mark whose entry has left the game system.
+  Entries.prototype.clearOrphan = function (i) {
+    var f = this.cur(), data = this.rules[this.ck(f.key)], o = data && data.orphans[i];
+    if (!o) return;
+    this.saveMarks({ ref: 'orphan', marks: [{ source: o.source, key: o.key, target: o.target, state: 'clear' }], reason: '', useReason: false, label: (o.name || o.key) + ' mark cleared' });
   };
 
   // A Director's list of the players who may write their own entry for this
@@ -364,12 +918,14 @@
   Entries.prototype.writeHTML = function (d) {
     var f = this.cur();
     var facts = d.facts.map(function (p, i) {
-      return '<input aria-label="Fact name" data-fact="' + i + '" data-part="label" maxlength="40" value="' + esc(p.label) + '" placeholder="Name, e.g. Size">' +
-        '<input aria-label="Fact value" data-fact="' + i + '" data-part="value" maxlength="200" value="' + esc(p.value) + '" placeholder="Value">' +
+      var val = p.long
+        ? '<textarea class="oe-fact-long" rows="4" aria-label="' + esc(p.label || 'Fact') + '" data-fact="' + i + '" data-part="value" maxlength="2000">' + esc(p.value) + '</textarea>'
+        : '<input aria-label="Fact value" data-fact="' + i + '" data-part="value" maxlength="200" value="' + esc(p.value) + '" placeholder="Value">';
+      return '<input aria-label="Fact name" data-fact="' + i + '" data-part="label" maxlength="40" value="' + esc(p.label) + '" placeholder="Name, e.g. Size">' + val +
         '<button type="button" class="oe-rm" data-act="rmfact" data-i="' + i + '" aria-label="Remove ' + esc(p.label || 'this fact') + '">×</button>';
     }).join('');
     var hidden = /data-secret/.test(d.text);
-    var lists = f.lists.map(function (l) {
+    var lists = listsOf(d, f).map(function (l) {
       var items = d.lists[l.key] || [];
       return '<div class="oe-f"><span class="oe-k">' + esc(l.label) + '</span>' + items.map(function (it, i) {
         return '<div class="oe-item"><input class="oe-item__name" aria-label="' + esc(sing(l.label)) + ' name" data-li="' + esc(l.key) + '" data-ii="' + i + '" data-part="name" maxlength="100" value="' + esc(it.name) + '" placeholder="Name">' +
@@ -397,7 +953,11 @@
           : 'Select a passage and press “Hide from players” to keep it for Directors.') + '</span>' : '') + '</div>' +
       '<div class="oe-f"><span class="oe-k">Facts</span>' + (d.facts.length ? '<div class="oe-facts">' + facts + '</div>' : '') +
         '<div><button type="button" class="oe-link" data-act="addfact">+ Add a fact</button></div></div>' +
-      budget + lists + this.whoHTML(d) +
+      (d.wordLists || []).map(function (w, i) {
+        return '<label class="oe-f"><span class="oe-k">' + esc(w.label) + ' <small class="oe-hint">one per line</small></span>' +
+          '<textarea class="oe-words" rows="' + Math.min(6, Math.max(2, w.text.split('\n').length)) + '" data-word="' + i + '">' + esc(w.text) + '</textarea></label>';
+      }).join('') +
+      budget + lists + (keptLine(d, f) ? '<p class="oe-hint oe-kept">' + esc(keptLine(d, f)) + '</p>' : '') + this.whoHTML(d) +
       '</div>';
   };
 
@@ -430,7 +990,7 @@
   Entries.prototype.problems = function (d) {
     var f = this.cur(), out = [];
     if (!d.name.trim()) out.push(['Give it a name.', true]);
-    f.lists.forEach(function (l) {
+    listsOf(d, f).forEach(function (l) {
       var items = d.lists[l.key] || [], seen = {}, total = 0;
       items.forEach(function (it) {
         var k = lower(it.name.trim());
@@ -465,7 +1025,7 @@
       var it = (d.lists[t.split(':')[0]] || [])[+t.split(':')[1]];
       return n + (it ? it.cost : 0);
     }, 0);
-    var lists = f.lists.map(function (l) {
+    var lists = listsOf(d, f).map(function (l) {
       var items = (d.lists[l.key] || []).filter(function (it) { return it.name.trim(); });
       if (!items.length) return '';
       if (!l.buy || !f.budgetKey) {
@@ -510,7 +1070,8 @@
     if (this.confirm === 'discard' || this.confirm === 'delete') {
       var del = this.confirm === 'delete';
       body = '<div class="oe-confirm" role="alertdialog" aria-label="' + (del ? 'Delete ' + esc(d.name) : 'Unsaved changes') + '">' +
-        (del ? 'Delete <b>' + esc(d.name) + '</b>? It leaves the pick lists for everyone. Heroes who picked it keep the name on their sheet.'
+        (del ? 'Delete <b>' + esc(d.name) + '</b>? ' + (this.delRules > 0 ? '<b>' + esc(d.name) + '</b> is in ' + this.delRules + ' hero rule' + (this.delRules === 1 ? '' : 's') + '; they go with it. ' : '') +
+          'It leaves the pick lists for everyone. Heroes who picked it keep the name on their sheet.'
           : 'Close ' + (d.name.trim() ? '<b>' + esc(d.name) + '</b>' : 'this entry') + ' without saving? What you changed is lost.') +
         '<div class="oe-confirm__row"><button type="button" class="oe-btn oe-btn--danger" data-act="' + (del ? 'dodel' : 'discard') + '">' + (del ? 'Delete' : 'Don’t save') + '</button>' +
         '<button type="button" class="oe-btn oe-btn--ghost" data-act="nodel">' + (del ? 'Keep it' : 'Keep writing') + '</button></div></div>';
@@ -519,15 +1080,62 @@
     }
     var asked = d.reviewNote && d.status === 'draft' && !this.director ? '<p class="oe-asked" role="note"><b>Your Director asked:</b> ' + esc(d.reviewNote) + '</p>' : '';
     var handed = isDraft(d) && this.director && d.status === 'sent' ? '<p class="oe-asked" role="note"><b>' + esc(this.memberName(d.by)) + ' handed this in.</b> Accept it, or say what to change.</p>' : '';
-    if (!this.confirm) body = asked + handed + body;
+    // A rewrite starts as the Directors' draft; it replaces nothing until
+    // they change who sees it.
+    var draftOnly = this.director && d.standsFor && d.savedWho === 'directors' && !isDraft(d)
+      ? '<p class="oe-asked oe-asked--dm" role="note" data-dm-only>Only Directors see this yet. Players still read ' + esc(this.system) + '’s ' + esc(d.standsForName || d.name) +
+        '. Choose Everyone under “Who sees it” to put yours in play.</p>' : '';
+    if (!this.confirm) body = asked + handed + draftOnly + body;
     pop.innerHTML = '<header class="oe-pop__head"><div><p class="oe-kind">' + esc(f.label) + ' · ' + (this.director ? 'this campaign · Directors only' : 'yours') + '</p>' +
       '<h2 data-pop-title tabindex="-1">' + esc(d.name.trim() || (isNew ? 'New ' + lower(f.label) : 'Unnamed')) + '</h2></div>' +
       '<div class="oe-pop__acts">' + (this.confirm ? '' : '<button type="button" class="oe-btn oe-btn--ghost" data-act="paste" aria-expanded="' + this.paste + '">Paste from an AI</button>') +
       '<button type="button" class="oe-x" data-act="close" aria-label="Close">×</button></div></header>' +
       '<div class="oe-pop__body">' + body + '</div>' +
-      '<footer class="oe-pop__foot">' + (isNew || !this.director ? '' : '<button type="button" class="oe-link oe-del" data-act="del">Delete</button>') +
+      (this.tell ? this.tellHTML() : this.footHTML(d, isNew));
+  };
+
+  Entries.prototype.footHTML = function (d, isNew) {
+    return '<footer class="oe-pop__foot">' + (isNew || !this.director ? '' : '<button type="button" class="oe-link oe-del" data-act="del">Delete</button>') +
       '<p class="oe-error" role="alert" hidden data-error></p><span class="hc-foot__sp"></span>' +
       '<button type="button" class="oe-btn oe-btn--ghost" data-act="close">Cancel</button>' + this.footActsHTML(d, isNew) + '</footer>';
+  };
+
+  // After a save that changed a trait a hero holds, the editor asks once, in
+  // place of its commands: tell the players, with a line they will read, or
+  // not now. The change is already saved and live either way.
+  Entries.prototype.tellHTML = function () {
+    var q = this.tell.q;
+    return '<footer class="oe-pop__foot oe-tell" role="group" aria-labelledby="oe-tell-q">' +
+      '<p class="oe-tell__q" id="oe-tell-q">Saved. Players read this now. <b>' + esc(q.holders) + '</b></p><span class="hc-foot__sp"></span>' +
+      '<button type="button" class="oe-btn oe-btn--ghost" data-act="tellno">Not now</button>' +
+      '<button type="button" class="oe-btn" data-act="tell" data-working-label="Telling…">Tell the players</button>' +
+      '<label class="oe-tell__line"><span class="oe-k">What they will read</span>' +
+      '<input data-tell-line maxlength="300" autocomplete="off" value="' + esc(this.tell.line) + '"></label>' +
+      '<p class="oe-error" role="alert" hidden data-error></p></footer>';
+  };
+
+  // tellPlayers posts the line; it shows on the entry's page and peek.
+  Entries.prototype.tellPlayers = function () {
+    var self = this, input = this.root.querySelector('[data-tell-line]'), line = input ? input.value.trim() : '';
+    var btn = this.root.querySelector('[data-act="tell"]'), err = this.root.querySelector('.oe-tell [data-error]');
+    if (!line) { if (err) { err.textContent = 'Write the line the players will read, or choose Not now.'; err.hidden = false; } return; }
+    if (this.busy) return;
+    this.busy = true;
+    if (window.Chronicle && Chronicle.working && btn) Chronicle.working(btn, true);
+    api(this.entriesUrl + '/' + encodeURIComponent(this.tell.id) + '/notes', { method: 'POST', body: { line: line }, csrfToken: this.csrf })
+      .then(json).then(function (res) {
+        self.busy = false;
+        if (window.Chronicle && Chronicle.working && btn) Chronicle.working(btn, false);
+        if (!res.ok) { if (err) { err.textContent = res.body.message || res.body.error || 'The players were not told. Try again.'; err.hidden = false; } return; }
+        self.tell = null;
+        self.closePop(true);
+        self.render();
+        notify('Told the players. They read it on the entry’s page.');
+      }).catch(function () {
+        self.busy = false;
+        if (window.Chronicle && Chronicle.working && btn) Chronicle.working(btn, false);
+        if (err) { err.textContent = 'The players were not told. Check your connection and try again.'; err.hidden = false; }
+      });
   };
 
   // The commands for the open entry. A Director saves, and on a player's
@@ -598,6 +1206,9 @@
     this.open = null;
     this.draft = null;
     this.confirm = false;
+    this.tell = null;
+    // Opened from a page by address: closing goes back to that page.
+    if (this.leaveTo) { var to = this.leaveTo; this.leaveTo = ''; dirty(false); window.location.assign(to); return; }
     dirty(false);
     desk.classList.remove('is-open');
     this.root.querySelectorAll('.hc-row').forEach(function (r) { r.setAttribute('aria-expanded', 'false'); });
@@ -615,6 +1226,13 @@
   Entries.prototype.touched = function () {
     if (!this.draft) return;
     dirty(this.isDirty());
+    // Writing again after the question puts the commands back: the new
+    // change has to be saved before anyone is told about it.
+    if (this.tell && this.isDirty()) {
+      this.tell = null;
+      var asked = this.root.querySelector('.oe-tell');
+      if (asked) asked.outerHTML = this.footHTML(this.draft, !this.draft.id);
+    }
     var d = this.draft, view = this.root.querySelector('.oe-view');
     if (view) view.innerHTML = this.viewHTML(d);
     var t = this.root.querySelector('[data-pop-title]');
@@ -680,33 +1298,7 @@
     this.touched();
   };
 
-  // The properties sent to Chronicle: facts under snake_case keys (numbers
-  // as numbers), the budget, and each list with only its named items.
-  Entries.prototype.properties = function () {
-    var d = this.draft, f = this.cur(), props = {}, seen = {};
-    for (var i = 0; i < d.facts.length; i++) {
-      var p = d.facts[i];
-      if (!p.label.trim() || !p.value.trim()) continue;
-      // An untouched label keeps the key it came with, so a fact the system
-      // spells differently is not renamed by a save.
-      var k = (p.key && words(p.key) === p.label) ? p.key : keyOf(p.label);
-      if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
-      seen[k] = true;
-      props[k] = factValue(p.value);
-    }
-    if (f.budgetKey) props[f.budgetKey] = d.budget;
-    Object.keys(d.lists).forEach(function (key) {
-      var buy = f.lists.some(function (l) { return l.key === key && l.buy; });
-      var items = d.lists[key].filter(function (it) { return it.name.trim(); }).map(function (it) {
-        var o = { name: it.name.trim() };
-        if (buy) o.cost = it.cost;
-        if (it.description.trim()) o.description = it.description.trim();
-        return o;
-      });
-      if (items.length) props[key] = items;
-    });
-    return { props: props };
-  };
+  Entries.prototype.properties = function () { return propsOf(this.draft, this.cur()); };
 
   // mode is '' (save), 'send' (a player hands it in), 'accept' or 'ask' (a
   // Director's answer to a player's draft).
@@ -740,7 +1332,21 @@
       .then(json).then(function (res) {
         if (!res.ok || !res.body.entry) { self.fail(res.body.message || res.body.error || 'The entry could not be saved. Try again.'); return; }
         var e = res.body.entry;
+        var had = self.entries.filter(function (x) { return x.id === e.id; })[0];
+        if (had && had.standsForName && !e.standsForName) e.standsForName = had.standsForName;
         self.entries = self.entries.filter(function (x) { return x.id !== e.id; }).concat([e]);
+        if (res.body.tellPlayers && self.director && !isNew) {
+          var q = res.body.tellPlayers;
+          self.busy = false;
+          self.tell = { q: q, id: e.id, line: q.line || '' };
+          self.draft = draftOf(e, f);
+          self.saved = JSON.parse(JSON.stringify(self.draft));
+          dirty(false);
+          self.redraw();
+          var tb = self.root.querySelector('[data-act="tell"]');
+          if (tb) tb.focus();
+          return;
+        }
         if (isNew && !self.director) {
           self.grants.forEach(function (g) { if (g.fieldKey === f.key && g.userId === self.user) g.entryId = e.id; });
           // Made for their hero: the hero's sheet takes the new name at once.
@@ -748,11 +1354,15 @@
         }
         self.busy = false;
         self.closePop(true);
-        self.render();
-        var row = self.root.querySelector('.hc-row[data-open="' + e.id + '"]');
-        if (row) row.focus({ preventScroll: true });
-        var said = { send: ' handed in to your Director', accept: ' accepted', ask: ' handed back with your note' }[mode];
-        notify(e.name + (said || (isNew ? (self.director ? ' added' : ' saved as a draft') : ' saved')));
+        var finish = function () {
+          self.render();
+          var row = byAttr(self.root, '.hc-row[data-open]', 'data-open', String(e.id));
+          if (row) row.focus({ preventScroll: true });
+          var said = { send: ' handed in to your Director', accept: ' accepted', ask: ' handed back with your note' }[mode];
+          notify(e.name + (said || (isNew ? (self.director ? ' added' : ' saved as a draft') : ' saved')));
+        };
+        // The marks list shows the new entry, or the changed name, at once.
+        if (self.director) self.reloadRules(finish); else finish();
       }).catch(function () { self.fail('The entry could not be saved. Check your connection and try again.'); });
   };
 
@@ -804,10 +1414,14 @@
       self.entries = self.entries.filter(function (x) { return x.id !== d.id; });
       self.busy = false;
       self.closePop(true);
-      self.render();
-      var add = self.root.querySelector('[data-act="add"]');
-      if (add) add.focus({ preventScroll: true });
-      notify(d.name + ' deleted');
+      var finish = function () {
+        self.render();
+        var add = self.root.querySelector('[data-act="add"]');
+        if (add) add.focus({ preventScroll: true });
+        notify(d.name + ' deleted');
+      };
+      // Its rules went with it, and so did any request waiting on it.
+      self.reloadRequests(function () { self.reloadRules(finish); });
     }).catch(function () { self.fail('The entry could not be deleted. Check your connection and try again.'); });
   };
 
@@ -937,6 +1551,20 @@
     return out.join('\n');
   };
 
+  // A pick in a row's menu: a mark, a step to the players, or the reason.
+  Entries.prototype.menuAct = function (t) {
+    var m = this.ui.menu, act = t.getAttribute('data-mact');
+    if (!m) return;
+    if (act === 'mark') { this.chooseMark(m.ref, t.getAttribute('data-target') || '', t.getAttribute('data-state')); return; }
+    if (act === 'reason') { this.chooseMark(m.ref, t.getAttribute('data-target') || '', t.getAttribute('data-state'), true); return; }
+    if (act === 'restmark') { this.markRest(t.getAttribute('data-state')); return; }
+    if (act === 'players') m.step = 'players';
+    else if (act === 'player') { m.step = 'player'; m.player = t.getAttribute('data-player'); }
+    else if (act === 'back') m.step = m.step === 'player' ? 'players' : 'marks';
+    this.redrawRows();
+    this.focusMenu();
+  };
+
   Entries.prototype.wire = function () {
     var self = this, root = this.root;
     // The tools act on the writing box's selection, so pressing them must not
@@ -948,11 +1576,14 @@
       if (t.hasAttribute('data-field')) {
         if (self.open !== null) return;
         self.field = +t.getAttribute('data-field');
+        self.ui.menu = null; self.ui.strip = null; self.ui.suggest = null; self.ui.more = 40; self.ui.marked = false;
         self.render();
         var tab = root.querySelector('.oe-fields [data-field="' + self.field + '"]');
         if (tab) tab.focus();
         return;
       }
+      if (t.hasAttribute('data-menu')) { self.openMenu(t.getAttribute('data-menu')); return; }
+      if (t.hasAttribute('data-mact')) { self.menuAct(t); return; }
       if (t.hasAttribute('data-open')) {
         var id = t.getAttribute('data-open');
         var hit = self.entries.filter(function (x) { return String(x.id) === id; })[0];
@@ -969,6 +1600,31 @@
       }
       switch (t.getAttribute('data-act')) {
         case 'add': if (self.open === null) self.openPop(null, t); break;
+        case 'retryrules': self.rulesErr = {}; self.render(); break;
+        case 'more': self.ui.more += 60; self.redrawRows(); break;
+        case 'onlymarked':
+          self.ui.marked = !self.ui.marked; self.ui.more = 40;
+          t.setAttribute('aria-pressed', String(self.ui.marked));
+          self.redrawRows();
+          break;
+        case 'stripsave': if (self.ui.strip) self.saveMarks(self.ui.strip); break;
+        case 'stripno':
+          var from = self.ui.strip && self.ui.strip.ref;
+          self.ui.strip = null; self.redrawRows(); if (from) self.focusDots(from);
+          break;
+        case 'clearorphan': self.clearOrphan(+t.getAttribute('data-orphan')); break;
+        case 'allow': self.answer(t.getAttribute('data-req'), 'allow'); break;
+        case 'suggest':
+          self.ui.suggest = String(self.ui.suggest) === t.getAttribute('data-req') ? null : t.getAttribute('data-req');
+          self.render();
+          var msgBox = root.querySelector('[data-suggest-msg]');
+          if (msgBox) msgBox.focus({ preventScroll: true });
+          break;
+        case 'nosuggest': self.ui.suggest = null; self.render(); break;
+        case 'sendsuggest':
+          var note = root.querySelector('[data-suggest-msg]');
+          self.answer(t.getAttribute('data-req'), 'suggest', { message: note ? note.value.trim() : '' });
+          break;
         case 'close': self.closePop(); break;
         case 'save': self.save(''); break;
         case 'send': self.save('send'); break;
@@ -1041,15 +1697,50 @@
           break;
         case 'del':
           self.syncText();
-          self.confirm = 'delete'; self.paste = false; self.redraw();
+          self.confirm = 'delete'; self.paste = false; self.delRules = 0; self.redraw();
           var keep = root.querySelector('[data-act="nodel"]');
           if (keep) keep.focus();
+          // The hero rules that name the entry go with it, so say so first.
+          api(self.apiBase + '/choice-rules/count?entryId=' + encodeURIComponent(d.id)).then(json).then(function (res) {
+            if (!res.ok || self.confirm !== 'delete' || !(res.body.count > 0)) return;
+            self.delRules = res.body.count;
+            self.redraw();
+            var again = root.querySelector('[data-act="nodel"]');
+            if (again) again.focus();
+          }).catch(function () {});
           break;
         case 'nodel': self.confirm = false; self.redraw(); break;
         case 'dodel': self.remove(); break;
         case 'discard': self.closePop(true); break;
+        case 'tell': self.tellPlayers(); break;
+        case 'tellno': self.tell = null; self.closePop(true); self.render(); break;
       }
     });
+    // A Director's marks: the search, the reason in a strip, who the list is
+    // shown as, and a small menu closing on a click off it.
+    root.addEventListener('input', function (e) {
+      var el = e.target;
+      if (!el.hasAttribute) return;
+      if (el.hasAttribute('data-oe-q')) { self.ui.q = el.value; self.ui.more = 40; self.redrawRows(); }
+      else if (el.hasAttribute('data-strip-reason') && self.ui.strip) self.ui.strip.reason = el.value;
+    });
+    root.addEventListener('change', function (e) {
+      var el = e.target;
+      if (!el.hasAttribute || !el.hasAttribute('data-show')) return;
+      self.as = el.value;
+      self.ui.menu = null; self.ui.strip = null; self.ui.more = 40;
+      self.render();
+      var sel = root.querySelector('[data-show]');
+      if (sel) sel.focus({ preventScroll: true });
+    });
+    this.offMenu = function (e) {
+      if (!document.body.contains(root)) { document.removeEventListener('click', self.offMenu); return; }
+      if (!self.ui.menu) return;
+      var path = e.composedPath ? e.composedPath() : [];
+      var inside = path.some(function (n) { return n.classList && (n.classList.contains('oe-menu') || (n.hasAttribute && n.hasAttribute('data-menu'))); });
+      if (!inside) self.closeMenu(false);
+    };
+    document.addEventListener('click', this.offMenu);
     root.addEventListener('input', function (e) {
       var el = e.target, d = self.draft;
       if (!d || !el.getAttribute) return;
@@ -1058,7 +1749,8 @@
       else if (k) d[k] = el.value;
       if (el.hasAttribute('data-fact')) d.facts[+el.getAttribute('data-fact')][el.getAttribute('data-part')] = el.value;
       if (el.hasAttribute('data-li') && el.hasAttribute('data-part')) d.lists[el.getAttribute('data-li')][+el.getAttribute('data-ii')][el.getAttribute('data-part')] = el.value;
-      if (k || el.hasAttribute('data-fact') || el.hasAttribute('data-li')) self.touched();
+      if (el.hasAttribute('data-word')) d.wordLists[+el.getAttribute('data-word')].text = el.value;
+      if (k || el.hasAttribute('data-fact') || el.hasAttribute('data-li') || el.hasAttribute('data-word')) self.touched();
     });
     root.addEventListener('change', function (e) {
       var el = e.target;
@@ -1082,6 +1774,35 @@
       if (e.target.closest && e.target.closest('.oe-text')) e.preventDefault();
     });
     root.addEventListener('keydown', function (e) {
+      if (self.tell && self.open !== null && (e.key === 'Escape' || (e.key === 'Enter' && e.target.hasAttribute && e.target.hasAttribute('data-tell-line')))) {
+        e.preventDefault();
+        if (e.key === 'Enter') self.tellPlayers(); else { self.tell = null; self.closePop(true); self.render(); }
+        return;
+      }
+      if (self.open === null && self.director) {
+        var inMenu = e.target.closest && e.target.closest('.oe-menu');
+        if (e.key === 'Escape') {
+          if (self.ui.menu) { e.preventDefault(); self.closeMenu(true); return; }
+          if (self.ui.strip) { e.preventDefault(); var sf = self.ui.strip.ref; self.ui.strip = null; self.redrawRows(); self.focusDots(sf); return; }
+          if (self.ui.suggest) { e.preventDefault(); self.ui.suggest = null; self.render(); return; }
+        }
+        if (inMenu && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End')) {
+          e.preventDefault();
+          var its = Array.prototype.slice.call(inMenu.querySelectorAll('.oe-menu__item')), at = its.indexOf(document.activeElement);
+          var to = e.key === 'Home' ? 0 : e.key === 'End' ? its.length - 1 : Math.max(0, Math.min(its.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)));
+          if (its[to]) its[to].focus();
+          return;
+        }
+        if (inMenu && e.key === 'Tab') { self.closeMenu(false); return; }
+        if (e.key === 'Enter' && e.target.hasAttribute) {
+          if (e.target.hasAttribute('data-strip-reason') && self.ui.strip) { e.preventDefault(); self.saveMarks(self.ui.strip); return; }
+          if (e.target.hasAttribute('data-suggest-msg')) {
+            e.preventDefault();
+            self.answer(String(self.ui.suggest), 'suggest', { message: e.target.value.trim() });
+            return;
+          }
+        }
+      }
       if (e.key === 'Escape' && self.open !== null) {
         e.preventDefault();
         if (self.paste) { self.paste = false; self.redraw(); }
@@ -1097,21 +1818,20 @@
     }
   };
 
-  function boot(scope) {
-    var nodes = (scope || document).querySelectorAll('[data-own-entries]:not([data-oe-ready])');
-    for (var i = 0; i < nodes.length; i++) {
-      nodes[i].setAttribute('data-oe-ready', 'true');
-      var p = new Entries(nodes[i]);
-      p.wire();
-      p.load();
-    }
-  }
+  window.ChronicleOwnEntries = { draftOf: draftOf, propsOf: propsOf, keptLine: keptLine, listsOf: listsOf };
 
-  function start() {
-    boot(document);
-    document.addEventListener('htmx:afterSettle', function (e) { boot(e.target); });
+  // Loaded on sight (ADR-063): boot.js fetches this file when it meets the
+  // page's data-widget="own-entries" mount, and register mounts it.
+  function register() {
+    Chronicle.register('own-entries', {
+      init: function (el) {
+        if (el._ownEntries) return;
+        var p = new Entries(el);
+        el._ownEntries = p;
+        p.wire();
+        p.load();
+      }
+    });
   }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
+  if (window.Chronicle && Chronicle.register) register();
 })();

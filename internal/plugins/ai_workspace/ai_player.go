@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v5"
 
@@ -241,7 +243,7 @@ func (h *Handler) PlayerCopy(c *echo.Context) error {
 		}
 	}
 	c.Response().Header().Set("Cache-Control", "no-store")
-	return c.String(http.StatusOK, playerInstructions(cc.Campaign.Name, sheets))
+	return c.String(http.StatusOK, playerInstructions(cc.Campaign.Name, h.playerGMTerm(ctx, cc.Campaign.ID), sheets))
 }
 
 // PlayerPaste reviews an answer the player pasted.
@@ -450,6 +452,29 @@ func playerValue(s string) string {
 		return "(cleared)"
 	}
 	return s
+}
+
+// playerFieldLabel is a sheet key as the player reads it: "skill_options"
+// reads "Skill options", and a builder step's bought options read as that
+// step's choices.
+func playerFieldLabel(k string) string {
+	if step, ok := strings.CutSuffix(k, "_choices_json"); ok {
+		k = step + " choices"
+	}
+	s := strings.TrimSpace(strings.ReplaceAll(k, "_", " "))
+	r, n := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return k
+	}
+	return string(unicode.ToUpper(r)) + s[n:]
+}
+
+// playerApplyLabel is the Apply button before the page's script counts.
+func playerApplyLabel(n int) string {
+	if n == 1 {
+		return "Apply 1 change"
+	}
+	return fmt.Sprintf("Apply %d changes", n)
 }
 
 // playerPageName names a held-back block.

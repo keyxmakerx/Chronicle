@@ -136,14 +136,15 @@ func stripEntitiesSecretsForEgress(es []entities.Entity, role int) {
 // touches the HTML/JSON prose fields), this scrubs the custom-field map,
 // where a system marks fields gm_only (e.g. Draw Steel's director gm_notes)
 // or owner_only (e.g. Draw Steel's backstory). resolveFields returns the
-// entity type's declared field defs — the source of both markers. No-op for
+// entity type's declared field defs; the entity's own added fields carry
+// the same markers and are gated with them. No-op for
 // owner, Co-DM and Bearer callers (role >= Owner). FilterRestrictedFields never
 // mutates the input map (nil-safe).
 func stripEntityFieldsForEgress(e *entities.Entity, role int, userID string, resolveFields func(typeID int) []entities.FieldDefinition) {
 	if e == nil || role >= int(campaigns.RoleOwner) {
 		return
 	}
-	e.FieldsData = entities.FilterRestrictedFields(e.FieldsData, resolveFields(e.EntityTypeID), false, e.IsOwnedBy(userID))
+	e.FieldsData = entities.FilterRestrictedFields(e.FieldsData, entities.RestrictionDefs(resolveFields(e.EntityTypeID), e.FieldOverrides), false, e.IsOwnedBy(userID))
 }
 
 // stripEntitiesFieldsForEgress applies stripEntityFieldsForEgress across

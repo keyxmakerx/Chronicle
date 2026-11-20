@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -22,10 +24,16 @@ const (
 	maxEntryProps       = 20
 	maxEntryPropKey     = 40
 	maxEntryPropString  = 200
-	maxEntryPropsBytes  = 32768
+	// maxEntryPropText bounds one text detail (a benefit, a drawback); the
+	// bytes cap below still bounds the entry as a whole.
+	maxEntryPropText   = 2000
+	maxEntryPropsBytes = 32768
 	// A detail may also be a list of named items (traits, features), as a
 	// package's own entries carry, so the creator can show and sell them.
-	maxEntryLists     = 6
+	maxEntryLists = 6
+	// A detail may be a plain list of short words (a quick build, a list of
+	// skills), as package entries carry; its own cap keeps them few.
+	maxEntryWordLists = 6
 	maxEntryListItems = 40
 	maxEntryItemName  = 100
 	maxEntryItemText  = 2000
@@ -58,6 +66,11 @@ type SystemEntryService interface {
 	// review screen can refuse a bad entry before anything is committed.
 	CheckCreate(ctx context.Context, campaignID string, actor EntryActor, in CreateSystemEntryInput) error
 	Update(ctx context.Context, campaignID string, actor EntryActor, id int64, in UpdateSystemEntryInput) (*SystemEntry, error)
+	// UpdateTelling is Update for the entry editor: beside the saved entry
+	// it returns the question to ask the Director when the save removed or
+	// altered a trait a hero holds (system_entries_tell.go), else nil. role
+	// is the actor's visibility role, for which heroes they may see.
+	UpdateTelling(ctx context.Context, campaignID string, actor EntryActor, role int, id int64, in UpdateSystemEntryInput) (*SystemEntry, *TellQuestion, error)
 	// Delete removes the entry only. Characters keep the name they stored.
 	Delete(ctx context.Context, campaignID string, actor EntryActor, id int64) error
 	// Choices is the ChoiceSource body: the entries this viewer may see
@@ -79,12 +92,35 @@ type SystemEntryService interface {
 	// CanMake reports whether the user holds an unspent permission for the
 	// field, so a pick list can offer "make your own".
 	CanMake(ctx context.Context, campaignID, fieldKey, userID string) (bool, error)
+
+	// EntryReading is how the campaign reads the standard entries in its own
+	// words: ties, left-out entries, old names and notes
+	// (system_entries_reading.go).
+	EntryReading
+	// EntryCatalog is the one per-reader list every consumer draws on
+	// (entry_catalog.go).
+	EntryCatalog
 }
 
 type systemEntryService struct {
 	repo     SystemEntryRepository
 	manifest EntryManifestResolver
 	chars    EntryCharacters
+	rules    EntryRuleForgetter
+	standard StandardSystemResolver
+	people   EntryPeople
+}
+
+// EntryRuleForgetter removes the hero-choice rules that name a campaign
+// entry, so deleting the entry leaves no rule behind that nothing can show or
+// undo. The rules service implements it.
+type EntryRuleForgetter interface {
+	ForgetEntry(ctx context.Context, campaignID, systemID, fieldKey string, entryID int64) (int, error)
+}
+
+// WithEntryRules makes deleting an entry delete the rules that name it.
+func WithEntryRules(r EntryRuleForgetter) EntryServiceOption {
+	return func(s *systemEntryService) { s.rules = r }
 }
 
 // EntryServiceOption adds an optional dependency to the service.
@@ -95,6 +131,13 @@ type EntryServiceOption func(*systemEntryService)
 // Directors only.
 func WithEntryCharacters(c EntryCharacters) EntryServiceOption {
 	return func(s *systemEntryService) { s.chars = c }
+}
+
+// WithStandardSystem gives the service the game system's own entries, so
+// ties, rewrites and the per-reader catalog can read them. Without it the
+// catalog holds the campaign's entries only and every tie is refused.
+func WithStandardSystem(r StandardSystemResolver) EntryServiceOption {
+	return func(s *systemEntryService) { s.standard = r }
 }
 
 // NewSystemEntryService wires the service to its repository and to the
@@ -108,10 +151,11 @@ func NewSystemEntryService(repo SystemEntryRepository, manifest EntryManifestRes
 }
 
 // RegisterSystemEntryChoices plugs the campaign's entries into the character
-// pick lists. Only 'everyone' entries are offered: the hook's context does
-// not say who is asking, and a hidden entry must never reach a player.
+// pick lists through the catalog's merge, for the viewer the pick-list
+// handler marked on the context; an unmarked context reads as a player with
+// no account, so a hidden entry never reaches a player.
 func RegisterSystemEntryChoices(svc SystemEntryService) {
-	RegisterChoiceSource(svc.Choices)
+	RegisterChoiceOverlay(svc.PickList)
 	RegisterMakeOwnCheck(svc.CanMake)
 }
 
@@ -190,6 +234,7 @@ func (s *systemEntryService) visible(ctx context.Context, campaignID string, ent
 	out := make([]SystemEntry, 0, len(entries))
 	for _, e := range entries {
 		e.Status = entryStatusOrAccepted(e.Status)
+		e.StandsForName = snapshotName(e.StandsForSeen)
 		if e.Status != EntryStatusAccepted && !actor.IsDirector {
 			// A draft is its writer's and the Directors' only, whatever its
 			// visibility will be once accepted.
@@ -238,6 +283,18 @@ func (s *systemEntryService) visible(ctx context.Context, campaignID string, ent
 		out = append(out, e)
 	}
 	return out, nil
+}
+
+// snapshotName is the standard entry's name a tie's snapshot recorded.
+func snapshotName(seen string) string {
+	if seen == "" {
+		return ""
+	}
+	var snap StandardSnapshot
+	if json.Unmarshal([]byte(seen), &snap) != nil {
+		return ""
+	}
+	return snap.Name
 }
 
 // playedBy reports whether userID plays the character. An unclaimed or
@@ -350,6 +407,9 @@ func (s *systemEntryService) prepareCreate(ctx context.Context, campaignID strin
 		return nil, nil, err
 	} else if dup != nil {
 		return nil, nil, apperror.NewConflict("an entry called " + e.Name + " already exists")
+	}
+	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0, actor); err != nil {
+		return nil, nil, err
 	}
 	n, err := s.repo.Count(ctx, campaignID, m.ID, e.FieldKey)
 	if err != nil {
@@ -471,10 +531,15 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if in.Visibility.IsNull() {
 		return nil, apperror.NewValidation("Visibility cannot be cleared.")
 	}
+	// Whether the name being given up was ever an accepted entry's, so one
+	// others may have built heroes on: a status change in the same save does
+	// not change what the old name was.
+	wasAccepted := e.Status == EntryStatusAccepted
 	if err := applyStatus(e, in, actor.IsDirector); err != nil {
 		return nil, err
 	}
 	renamed := false
+	prevName := e.Name
 	if v, ok := in.Name.Get(); ok {
 		v = strings.TrimSpace(v)
 		renamed = !strings.EqualFold(v, e.Name)
@@ -506,6 +571,8 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if e.Visibility != EntryVisibilityCharacter {
 		e.ForEntityID = ""
 	}
+	// What the row holds now is the only source a carried value may match.
+	stored := e.Properties
 	if in.Properties.IsNull() {
 		e.Properties = map[string]any{}
 	} else if v, ok := in.Properties.Get(); ok {
@@ -514,7 +581,7 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if grant != nil {
 		holdBudget(e.Properties, grant.Budget)
 	}
-	if err := normalizeEntry(e); err != nil {
+	if err := normalizeEntryCarrying(e, stored); err != nil {
 		return nil, err
 	}
 	if !keptFor || e.ForEntityID != prevFor {
@@ -528,9 +595,17 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 		} else if dup != nil && dup.ID != e.ID {
 			return nil, apperror.NewConflict("an entry called " + e.Name + " already exists")
 		}
+		if err := s.refuseOldName(ctx, campaignID, e.SystemID, e.FieldKey, e.Name, e.ID, actor); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.repo.Update(ctx, e); err != nil {
 		return nil, err
+	}
+	if renamed {
+		if err := s.recordRename(ctx, e, prevName, wasAccepted); err != nil {
+			return nil, err
+		}
 	}
 	return s.repo.Get(ctx, campaignID, id)
 }
@@ -598,12 +673,25 @@ func (s *systemEntryService) Delete(ctx context.Context, campaignID string, acto
 	if err := requireDirector(actor); err != nil {
 		return err
 	}
+	e, err := s.repo.Get(ctx, campaignID, id)
+	if err != nil {
+		return err
+	}
 	ok, err := s.repo.Delete(ctx, campaignID, id)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return apperror.NewNotFound("entry not found")
+	}
+	// Rules are keyed by the entry's id, which never repeats, so one left
+	// behind can never attach to another entry; it is removed anyway so the
+	// Directors' list shows none. A failure here is logged, not returned: the
+	// entry is already gone and what is left is inert.
+	if s.rules != nil {
+		if _, err := s.rules.ForgetEntry(ctx, campaignID, e.SystemID, e.FieldKey, id); err != nil {
+			slog.Warn("deleting an entry's hero rules failed", slog.Int64("entry_id", id), slog.Any("error", err))
+		}
 	}
 	return nil
 }
@@ -694,31 +782,42 @@ func (s *systemEntryService) Choices(ctx context.Context, campaignID, fieldKey s
 	}
 	out := make([]Choice, 0, len(entries))
 	for _, e := range entries {
-		sum := e.Summary
-		if sum == "" {
-			sum = cleanSummary(e.Description)
-		}
-		c := Choice{
-			Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
-			Description: e.Description, Properties: e.Properties, ForName: e.ForName,
-		}
-		// The writer of a draft is told it is theirs and still a draft, and
-		// gets its id to keep it to the hero they make with it.
-		if e.Status != EntryStatusAccepted {
-			c.Status = e.Status
-		}
-		if actor.UserID != "" && e.CreatedBy == actor.UserID && !actor.IsDirector {
-			c.Mine, c.EntryID = true, e.ID
-		}
-		out = append(out, c)
+		out = append(out, entryChoice(e, actor))
 	}
 	return out, nil
+}
+
+// entryChoice shapes a visible campaign entry as a pick-list row.
+func entryChoice(e SystemEntry, actor EntryActor) Choice {
+	sum := e.Summary
+	if sum == "" {
+		sum = cleanSummary(e.Description)
+	}
+	c := Choice{
+		Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
+		Description: e.Description, Properties: e.Properties, ForName: e.ForName, Origin: OriginCampaign,
+		Key: strconv.FormatInt(e.ID, 10), Visibility: e.Visibility,
+	}
+	// The writer of a draft is told it is theirs and still a draft, and
+	// gets its id to keep it to the hero they make with it.
+	if e.Status != EntryStatusAccepted {
+		c.Status = e.Status
+	}
+	if actor.UserID != "" && e.CreatedBy == actor.UserID && !actor.IsDirector {
+		c.Mine, c.EntryID = true, e.ID
+	}
+	return c
 }
 
 // normalizeEntry validates and cleans the editable fields in place. The
 // description is sanitized here, at the one write path, so no caller can
 // store script or event-handler markup.
-func normalizeEntry(e *SystemEntry) error {
+func normalizeEntry(e *SystemEntry) error { return normalizeEntryCarrying(e, nil) }
+
+// normalizeEntryCarrying is normalizeEntry for a write onto stored
+// properties: a value the validator does not understand passes only when it
+// is the one already stored (see validateEntryProperties).
+func normalizeEntryCarrying(e *SystemEntry, stored map[string]any) error {
 	if e.Name == "" {
 		return apperror.NewValidation("A name is required.")
 	}
@@ -745,89 +844,7 @@ func normalizeEntry(e *SystemEntry) error {
 	default:
 		return apperror.NewValidation("Visibility must be \"everyone\", \"directors\" or \"character\".")
 	}
-	return validateEntryProperties(e.Properties)
-}
-
-// ValidateEntryProperties is validateEntryProperties for callers outside the
-// package (AI import's review step).
-func ValidateEntryProperties(p map[string]any) error { return validateEntryProperties(p) }
-
-// validateEntryProperties accepts strings, numbers and booleans, plus a few
-// lists of named items shaped exactly like a package entry's (name, and
-// optionally a whole-number cost and a plain-text description), which is all
-// the hero creator and pick lists read. Nothing deeper is allowed, so a
-// consumer never walks arbitrary nested data.
-func validateEntryProperties(p map[string]any) error {
-	if len(p) > maxEntryProps {
-		return apperror.NewValidation(fmt.Sprintf("At most %d details are allowed.", maxEntryProps))
-	}
-	lists := 0
-	for k, v := range p {
-		if !entryPropKeyPattern.MatchString(k) || len(k) > maxEntryPropKey {
-			return apperror.NewValidation("Detail names must start with a letter and use only letters, digits and underscores.")
-		}
-		switch t := v.(type) {
-		case string:
-			if utf8.RuneCountInString(t) > maxEntryPropString {
-				return apperror.NewValidation(fmt.Sprintf("The detail %q is longer than %d characters.", k, maxEntryPropString))
-			}
-		case bool, float64, int, int64:
-		case []any:
-			if lists++; lists > maxEntryLists {
-				return apperror.NewValidation(fmt.Sprintf("At most %d lists are allowed.", maxEntryLists))
-			}
-			if err := validateEntryList(k, t); err != nil {
-				return err
-			}
-		default:
-			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number, yes/no or a list of named items.", k))
-		}
-	}
-	raw, err := json.Marshal(p)
-	if err != nil || len(raw) > maxEntryPropsBytes {
-		return apperror.NewValidation("The details are too large.")
-	}
-	return nil
-}
-
-// validateEntryList checks one list of named items.
-func validateEntryList(key string, items []any) error {
-	if len(items) == 0 || len(items) > maxEntryListItems {
-		return apperror.NewValidation(fmt.Sprintf("The list %q needs 1 to %d items.", key, maxEntryListItems))
-	}
-	seen := map[string]bool{}
-	for _, raw := range items {
-		it, ok := raw.(map[string]any)
-		if !ok {
-			return apperror.NewValidation(fmt.Sprintf("Each item in %q needs a name.", key))
-		}
-		name, _ := it["name"].(string)
-		name = strings.TrimSpace(name)
-		if name == "" || utf8.RuneCountInString(name) > maxEntryItemName {
-			return apperror.NewValidation(fmt.Sprintf("Each item in %q needs a name of at most %d characters.", key, maxEntryItemName))
-		}
-		if seen[strings.ToLower(name)] {
-			return apperror.NewValidation(fmt.Sprintf("%q is in %q twice.", name, key))
-		}
-		seen[strings.ToLower(name)] = true
-		for ik, iv := range it {
-			switch ik {
-			case "name":
-			case "cost":
-				if c, ok := wholeNumber(iv); !ok || c < 0 || c > maxEntryItemCost {
-					return apperror.NewValidation(fmt.Sprintf("%q needs a whole-number cost from 0 to %d.", name, maxEntryItemCost))
-				}
-			case "description":
-				d, ok := iv.(string)
-				if !ok || utf8.RuneCountInString(d) > maxEntryItemText {
-					return apperror.NewValidation(fmt.Sprintf("The text of %q can be at most %d characters.", name, maxEntryItemText))
-				}
-			default:
-				return apperror.NewValidation(fmt.Sprintf("Items in %q can only have a name, cost and description.", key))
-			}
-		}
-	}
-	return nil
+	return validateEntryProperties(e.Properties, stored)
 }
 
 // wholeNumber reads a cost from JSON (float64) or YAML (int) input.

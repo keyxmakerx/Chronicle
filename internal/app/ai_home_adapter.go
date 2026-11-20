@@ -11,7 +11,7 @@ import (
 
 func init() {
 	addAIKinds(186, func(d *aiDeps) []records.Kind {
-		return []records.Kind{records.HomeKind{Svc: aiHomeAdapter{campaigns: d.Campaigns}}}
+		return []records.Kind{records.HomeKind{Svc: aiHomeAdapter{campaigns: d.Campaigns}, Pages: d.Entities}}
 	})
 }
 

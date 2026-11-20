@@ -59,6 +59,7 @@ type aiDeps struct {
 	RollTables      rolltables.Service
 	Sessions        sessions.SessionService
 	SystemEntries   systems.SystemEntryService
+	ChoiceRules     systems.ChoiceRuleService
 	Systems         *systems.SystemHandler
 	Tags            tags.TagService
 	PageLayouts     entities.PageLayoutService       // nil while its tables are degraded
@@ -193,7 +194,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.FoundryScenes != nil {
 		l.Scenes = d.FoundryScenes
 	}
-	l.Waiting = aiWaitingAdapter{asks: d.AIAsks, entries: d.SystemEntries, members: d.Campaigns, requests: d.ArmoryRequests}
+	l.Waiting = aiWaitingAdapter{asks: d.AIAsks, entries: d.SystemEntries, members: d.Campaigns, requests: d.ArmoryRequests, picks: d.ChoiceRules}
 	if d.ItemLooks != nil {
 		l.Looks = d.ItemLooks
 	}

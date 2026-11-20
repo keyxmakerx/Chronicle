@@ -103,3 +103,39 @@ func TestFoundryMonsterReport_Find(t *testing.T) {
 		t.Fatal("no match must be nil")
 	}
 }
+
+// A cut-short Foundry list proves nothing about an absent name, so the
+// lookup says it could not check instead of saying Foundry can't place it.
+func TestCannotPlace_TruncatedReport(t *testing.T) {
+	at := time.Now()
+	enc := EncounterRef{Name: "Road fight",
+		Creatures: []EncounterCreature{{Name: "Stalker"}, {Name: "Bone Wyrm"}, {EntityID: "p", Name: "Page Beast"}}}
+	tests := []struct {
+		name          string
+		truncated     bool
+		wantMissing   []string
+		wantUnchecked []string
+	}{
+		{"complete list: absent means missing", false, []string{`"Bone Wyrm"`}, nil},
+		{"partial list: absent is unchecked", true, nil, []string{`"Bone Wyrm"`}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := FoundryMonsterReport{ReportedAt: &at, Truncated: tc.truncated, Monsters: []FoundryMonster{{Name: "Stalker"}}}
+			missing, unchecked := cannotPlace(enc, rep)
+			if strings.Join(missing, ",") != strings.Join(tc.wantMissing, ",") || strings.Join(unchecked, ",") != strings.Join(tc.wantUnchecked, ",") {
+				t.Fatalf("missing %v unchecked %v; want %v %v", missing, unchecked, tc.wantMissing, tc.wantUnchecked)
+			}
+
+			l := &Lookups{Encounters: &fakeEncounters{byPage: map[string][]EncounterRef{"p1": {enc}}}, Monsters: fakeMonsters{rep}}
+			text := l.Answer(context.Background(), camp, owner, []Record{lookup("encounters", nil)})[0].Text
+			const partial = "Foundry sent only part of its monster list, so Chronicle couldn't check:"
+			if tc.truncated != strings.Contains(text, partial) {
+				t.Errorf("partial-list line present = %v, want %v in:\n%s", !tc.truncated, tc.truncated, text)
+			}
+			if tc.truncated && strings.Contains(text, "Foundry can't place") {
+				t.Errorf("claimed missing from a partial list:\n%s", text)
+			}
+		})
+	}
+}

@@ -1,8 +1,7 @@
 // hero_creator.templ — the hero creator page: one page per step, and each
 // entry's leaf slides out from under it. The page is a mount point; the
-// creator script (static/js/hero_creator.js, shipped from the plugin
-// body-script registry so boosted navigation keeps it) fetches the steps
-// and draws the paper.
+// creator script (static/js/hero_creator.js, loaded on sight, ADR-063)
+// fetches the steps and draws the paper.
 
 package entities
 
@@ -34,6 +33,7 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 			</nav>
 			<div
 				class="hc"
+				data-widget="hero-creator"
 				data-hero-creator="true"
 				data-campaign-id={ cc.Campaign.ID }
 				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }
@@ -50,6 +50,19 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 					<p class="text-sm text-fg-muted">The hero creator needs JavaScript. You can still add a character page from the Characters page.</p>
 				</noscript>
 			</div>
+		</div>
+	}
+}
+
+// HeroAlreadyPage is what a player who already has a hero sees at the
+// creator's address: players have one hero at a time, so it points them at
+// theirs instead of calling the creator unavailable.
+templ HeroAlreadyPage(cc *campaigns.CampaignContext, hero *Entity) {
+	@layouts.App("You already have a hero - " + cc.Campaign.Name) {
+		<div class="max-w-2xl mx-auto px-4 py-10">
+			<h1 class="text-xl font-semibold text-fg mb-2">You already have a hero</h1>
+			<p class="text-fg-muted mb-4">Players have one hero at a time in this campaign, so there is nothing new to create. Open { hero.Name } to keep building it.</p>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, hero.ID)) } class="btn-primary">Go to { hero.Name }</a>
 		</div>
 	}
 }

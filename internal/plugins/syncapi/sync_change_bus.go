@@ -34,6 +34,7 @@ var changeFeedTypes = map[string]string{
 	"stash":          "stash",
 	"downtime":       "downtime",
 	"hero_layers":    "hero_layers",
+	"creature_add":   "creature_add",
 }
 
 // recordedTypes is changeFeedTypes' resource types, sorted, as the feed

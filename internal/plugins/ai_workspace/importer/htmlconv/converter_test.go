@@ -299,3 +299,32 @@ func TestConvert_RealisticAIOutput(t *testing.T) {
 		t.Errorf("third child = %v, want bulletList", ul["type"])
 	}
 }
+
+// The editor's checklist markup becomes taskList/taskItem nodes with the box
+// state, so an AI-written checklist opens as a checklist in the page editor.
+func TestConvert_Checklist(t *testing.T) {
+	out, err := Convert(`<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Done</p></li><li data-type="taskItem" data-checked="false"><p>Open</p></li></ul>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := firstChildOfDoc(t, out)
+	if list["type"] != "taskList" {
+		t.Fatalf("type = %v, want taskList: %s", list["type"], out)
+	}
+	items := list["content"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2", len(items))
+	}
+	for i, want := range []bool{true, false} {
+		item := items[i].(map[string]any)
+		if item["type"] != "taskItem" {
+			t.Errorf("item %d type = %v", i, item["type"])
+		}
+		if got := item["attrs"].(map[string]any)["checked"]; got != want {
+			t.Errorf("item %d checked = %v, want %v", i, got, want)
+		}
+		if first := item["content"].([]any)[0].(map[string]any); first["type"] != "paragraph" {
+			t.Errorf("item %d opens with %v, want paragraph", i, first["type"])
+		}
+	}
+}

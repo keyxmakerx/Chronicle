@@ -16,6 +16,10 @@
  * html[data-motion] calm/off already reduce it there. This file only waits
  * for the close transition when there is one.
  *
+ * A link carrying data-entry-peek (a rules entry's address) opens its peek on
+ * a plain click or Enter instead of navigating; without this script it is an
+ * ordinary link. Ctrl, Cmd and middle clicks still open a new tab.
+ *
  * Exposes Chronicle.peek.open(anchorOrURL) / .close() / .isOpen().
  */
 (function () {
@@ -41,7 +45,8 @@
   // Every address goes through Chronicle.peekAddress (peek_address.js), which
   // rebuilds it from a fully anchored pattern, so nothing else is fetched.
   function peekURL(a) {
-    return C.peekAddress(a.getAttribute('data-entity-preview') || '') ||
+    return C.peekAddress(a.getAttribute('data-entry-peek') || '') ||
+      C.peekAddress(a.getAttribute('data-entity-preview') || '') ||
       C.peekAddress((a.getAttribute('href') || '').split(/[?#]/)[0]);
   }
 
@@ -216,6 +221,18 @@
   document.addEventListener('click', function (e) {
     if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.button !== 0) return;
     var a = link(e.target);
+    if (!a || a.closest('[contenteditable="true"]') || !peekURL(a)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    open(a);
+  }, true);
+
+  // An entry link marked to peek opens the peek on a plain click (and Enter,
+  // which clicks a focused link). Captured first so a boosted link does not
+  // navigate as well.
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[data-entry-peek]') : null;
     if (!a || a.closest('[contenteditable="true"]') || !peekURL(a)) return;
     e.preventDefault();
     e.stopPropagation();

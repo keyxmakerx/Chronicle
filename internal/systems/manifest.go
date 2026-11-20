@@ -349,6 +349,15 @@ type FieldDef struct {
 	// it beside the field so an AI writes what the system's widgets read.
 	Format string `json:"format,omitempty"`
 
+	// Min and Max bound a number field's value when AI Import writes it.
+	// Absent means no bound; a hand-typed sheet value is not checked.
+	Min *float64 `json:"min,omitempty"`
+	Max *float64 `json:"max,omitempty"`
+
+	// JSONList marks a text field that holds a JSON list (a stat block's
+	// abilities), so AI Import refuses text that does not parse as one.
+	JSONList bool `json:"json_list,omitempty"`
+
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
 	// Used by the generic Foundry adapter to auto-generate field mappings.

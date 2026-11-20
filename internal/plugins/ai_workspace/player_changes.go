@@ -19,7 +19,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
-// PlayerSheet is one character a player claimed, as their AI sees it.
+// PlayerSheet is one character a player claimed, as their AI sees it. Every
+// key listed is a field of the character's category that the player may
+// change, each listed once, with the rule the server applies to it.
 type PlayerSheet struct {
 	ID   string
 	Name string
@@ -31,8 +33,38 @@ type PlayerSheet struct {
 	// Free lists the keys that take short free text (the identity fields).
 	Free []string
 	// Picks maps each hero builder step's key to the names it offers; the
-	// value must be one of them.
+	// value must be one of them, unless Own says the player may also write
+	// their own.
 	Picks map[string][]string
+	Own   map[string]bool
+	// Ask maps a step's key to the entries the player may pick only with
+	// their Director's yes. The AI can't ask for them, so the brief says to
+	// leave them to the player, and the server refuses a write of one.
+	Ask map[string][]string
+	// Required marks a step whose list is a short list the Director set: it
+	// can't be emptied. Fixed holds the one entry such a step is filled in
+	// with, which can't be changed either.
+	Required map[string]bool
+	Fixed    map[string]string
+	// Story lists the keys that take the player's long text (a backstory).
+	Story []string
+	// Lists lists the keys that take a JSON list of short names (skills,
+	// languages, perks).
+	Lists []string
+	// Buys maps a key keeping what the hero bought from an entry
+	// (ancestry_choices_json) to what that entry offers.
+	Buys map[string]PlayerBuy
+	// Shown is the rest of the sheet as the player sees it, key to value,
+	// for the AI to recommend from; none of it can be changed.
+	Shown map[string]string
+}
+
+// PlayerBuy is what one entry lets a hero buy, and the points to spend.
+type PlayerBuy struct {
+	Entry  string
+	Budget float64
+	Names  []string
+	Costs  map[string]float64
 }
 
 // PlayerSheets is the door a player's AI changes go through. internal/app
@@ -41,16 +73,31 @@ type PlayerSheets interface {
 	// Sheets lists the characters userID claimed in the campaign and can
 	// still open.
 	Sheets(ctx context.Context, campaignID, userID string) ([]PlayerSheet, error)
+	// HeldFields judges each key of patch against what userID may change on
+	// their own character entityID and returns, for each key they may not,
+	// why, in the player's terms. err is for a change they may not make at
+	// all (not their character, one they can't open).
+	HeldFields(ctx context.Context, campaignID, userID, entityID string, patch map[string]any) (map[string]string, error)
 	// PatchSheet checks patch against what userID may change on their own
 	// character entityID, and writes it when apply is true. label names
 	// the AI app, for the page's history. The error says, in the player's
 	// terms, why a change isn't allowed.
 	PatchSheet(ctx context.Context, campaignID, userID, entityID string, patch map[string]any, label string, apply bool) error
+	// GMTerm is what the campaign calls its game master.
+	GMTerm(ctx context.Context, campaignID string) string
 }
 
 // SetPlayerSheets wires the door for players' AI changes. Unwired, a
 // player's AI can look things up but every change is held back.
 func (h *Handler) SetPlayerSheets(s PlayerSheets) { h.playerSheets = s }
+
+// playerGMTerm is the campaign's word for its game master, for the brief.
+func (h *Handler) playerGMTerm(ctx context.Context, campaignID string) string {
+	if h.playerSheets == nil {
+		return ""
+	}
+	return h.playerSheets.GMTerm(ctx, campaignID)
+}
 
 // PlayerChange is one block of a player's request, and what happens to it.
 type PlayerChange struct {
@@ -78,9 +125,11 @@ type PlayerChangeLine struct {
 // move or retype the page here.
 var playerBlockKeys = map[string]bool{"name": true, "action": true, "reason": true, "fields": true, "type": true, "kind": true}
 
-// planPlayerChanges reads a player's blocks. Each kept block has passed the
-// sheet's own checks without writing; the caller applies the ones chosen,
-// and PatchSheet checks each again then.
+// planPlayerChanges reads a player's blocks. A block's fields are judged one
+// by one: the ones the player may change are kept as one change, and each
+// one held back is its own "left out" entry with its reason, so one field
+// the AI may not write never hides the rest. The caller applies the kept
+// changes chosen, and PatchSheet checks each again then.
 func planPlayerChanges(ctx context.Context, sheets PlayerSheets, campaignID, userID, changes string) ([]PlayerChange, error) {
 	var mine []PlayerSheet
 	if sheets != nil {
@@ -109,27 +158,52 @@ func planPlayerChanges(ctx context.Context, sheets PlayerSheets, campaignID, use
 				ch.Held = fmt.Sprintf("%q isn't a character you claimed; your AI can only change your own", p.Name)
 			}
 		}
-		if ch.Held == "" {
-			if err := sheets.PatchSheet(ctx, campaignID, userID, sheet.ID, p.FrontMatter.Fields, "", false); err != nil {
-				ch.Held = playerRefusal(err)
+		if ch.Held != "" {
+			out = append(out, ch)
+			continue
+		}
+		left := playerBlockParts(p, sheet.Name, ch.Block)
+		fields := p.FrontMatter.Fields
+		if len(fields) == 0 {
+			if len(left) == 0 {
+				ch.Held = "it changes no sheet fields"
+				out = append(out, ch)
+			}
+			out = append(out, left...)
+			continue
+		}
+		held, err := sheets.HeldFields(ctx, campaignID, userID, sheet.ID, fields)
+		if err != nil {
+			ch.Held = playerRefusal(err)
+			out = append(out, ch)
+			continue
+		}
+		kept := map[string]any{}
+		for k, v := range fields {
+			if why, no := held[k]; no {
+				left = append(left, PlayerChange{Block: ch.Block, Page: sheet.Name, Held: why})
+			} else {
+				kept[k] = v
 			}
 		}
-		if ch.Held == "" {
+		sort.SliceStable(left, func(a, b int) bool { return left[a].Held < left[b].Held })
+		if len(kept) > 0 {
 			// Only fields that differ are offered and written, so a yes never
 			// records a change that changed nothing.
-			if ch.Lines, ch.Fields = changeLines(sheet, p.FrontMatter.Fields); len(ch.Lines) == 0 {
+			if ch.Lines, ch.Fields = changeLines(sheet, kept); len(ch.Lines) == 0 {
 				ch.Held, ch.Fields = "your character's sheet already says this", nil
 			} else {
 				ch.SheetID, ch.Page = sheet.ID, sheet.Name
 			}
+			out = append(out, ch)
 		}
-		out = append(out, ch)
+		out = append(out, left...)
 	}
 	return out, nil
 }
 
-// holdPlayerBlock is why a block can't be a change to a player's own sheet,
-// judged from the block alone; "" when it can be.
+// holdPlayerBlock is why a block can't be a change to a player's own sheet
+// at all, judged from the block alone; "" when it can be.
 func holdPlayerBlock(p importer.ParsedPage) string {
 	switch {
 	case p.Status == importer.StatusParseError:
@@ -143,6 +217,14 @@ func holdPlayerBlock(p importer.ParsedPage) string {
 	case p.FrontMatter.IsEra():
 		return "your AI can't write an era's version of a page"
 	}
+	return ""
+}
+
+// playerBlockParts is the parts of a block besides its fields that a
+// player's AI can't set (other front matter, the page's text), each left
+// out with its reason while the fields go on.
+func playerBlockParts(p importer.ParsedPage, page string, block int) []PlayerChange {
+	var out []PlayerChange
 	var extra []string
 	for k := range p.Fields {
 		if !playerBlockKeys[strings.ToLower(k)] {
@@ -151,15 +233,14 @@ func holdPlayerBlock(p importer.ParsedPage) string {
 	}
 	if len(extra) > 0 {
 		sort.Strings(extra)
-		return "only sheet fields can change here, so this can't set " + strings.Join(extra, ", ")
+		out = append(out, PlayerChange{Block: block, Page: page,
+			Held: "only sheet fields can change here, so this can't set " + strings.Join(extra, ", ")})
 	}
 	if strings.TrimSpace(p.Body) != "" {
-		return "only the sheet can change here, not the page's text"
+		out = append(out, PlayerChange{Block: block, Page: page,
+			Held: "only the sheet can change here, not the page's text; write a backstory as the backstory field when the sheet has one"})
 	}
-	if len(p.FrontMatter.Fields) == 0 {
-		return "it changes no sheet fields"
-	}
-	return ""
+	return out
 }
 
 // playerRefusal turns a refused change into the player's words. An
@@ -227,17 +308,21 @@ func playerCounts(changes []PlayerChange) string {
 
 // playerInstructions is how_to_write_changes for a player's AI, and the
 // text a player copies for an AI they paste into: their characters, what
-// each may change, and the one block format that can change it.
-func playerInstructions(campaignName string, sheets []PlayerSheet) string {
+// each may change with the rule the server applies, the rest of each sheet
+// to recommend from, and the one block format that can change it.
+func playerInstructions(campaignName, gmTerm string, sheets []PlayerSheet) string {
+	if strings.TrimSpace(gmTerm) == "" {
+		gmTerm = "GM"
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Changing your character in %s\n\n", oneLineText(campaignName, 120))
 	b.WriteString("You are helping a player in a tabletop roleplaying campaign kept in Chronicle. ")
-	b.WriteString("You can change only that player's own character's sheet: the identity fields, which take short text, and the hero builder's choices, which take one name from the list given. ")
-	b.WriteString("Everything else (other pages, the page's text, its picture, numbers the Director keeps) is held back if you ask for it. ")
+	b.WriteString("You can change only the fields listed below on that player's own character, each by the rule given with it. ")
+	fmt.Fprintf(&b, "Everything else (other pages, the page's text, its picture, the numbers the %s keeps) is held back if you ask for it. ", gmTerm)
 	b.WriteString("Nothing changes until the player says yes to each change in Chronicle.\n\n")
 	b.WriteString("## How to write a change\n\nOne block per character, like this:\n\n")
 	b.WriteString("```\n---\naction: update\nname: <the character's name, exactly>\nreason: <one line saying why>\nfields:\n  <key>: <new value>\n---\n```\n\n")
-	b.WriteString("Write only the keys you change. Every value is text. Write nothing after the closing `---`.\n\n")
+	b.WriteString("Write only the keys you change. Every value is text; a list is written as JSON text, like `'[\"Sneak\", \"Lie\"]'`. Write nothing after the closing `---`.\n\n")
 	if len(sheets) == 0 {
 		b.WriteString("## Your characters\n\nThe player hasn't claimed a character in this campaign yet, so there is nothing you can change.\n")
 		return b.String()
@@ -249,21 +334,73 @@ func playerInstructions(campaignName string, sheets []PlayerSheet) string {
 			fmt.Fprintf(&b, " (%s)", s.Type)
 		}
 		b.WriteString("\n\n")
-		if len(s.Free) > 0 {
-			b.WriteString("Short text:\n")
-			for _, k := range s.Free {
-				fmt.Fprintf(&b, "- %s: %s\n", k, currentText(s.Values[k]))
-			}
-		}
 		steps := make([]string, 0, len(s.Picks))
 		for k := range s.Picks {
 			steps = append(steps, k)
 		}
 		sort.Strings(steps)
 		if len(steps) > 0 {
-			b.WriteString("Hero builder choices (one of the names listed):\n")
+			b.WriteString("Choices (one of the names listed):\n")
 			for _, k := range steps {
-				fmt.Fprintf(&b, "- %s: %s. Choose from: %s\n", k, currentText(s.Values[k]), strings.Join(s.Picks[k], ", "))
+				own := ""
+				if s.Own[k] {
+					own = ", or a short name of the player's own"
+				}
+				if fixed := s.Fixed[k]; fixed != "" {
+					fmt.Fprintf(&b, "- %s: %s. It is fixed for everyone in this campaign: it must be %s, so leave it alone.\n", k, currentText(s.Values[k]), fixed)
+					continue
+				}
+				extra := ""
+				if s.Required[k] {
+					extra += " Your Director set this short list, so the field can't be emptied."
+				}
+				if ask := s.Ask[k]; len(ask) > 0 {
+					extra += fmt.Sprintf(" Ask your Director first for: %s. Don't write those yourself; tell the player to ask their Director.", strings.Join(ask, ", "))
+				}
+				fmt.Fprintf(&b, "- %s: %s. Choose from: %s%s.%s\n", k, currentText(s.Values[k]), strings.Join(s.Picks[k], ", "), own, extra)
+			}
+		}
+		if len(s.Free) > 0 {
+			b.WriteString("Short text (up to 200 characters):\n")
+			for _, k := range s.Free {
+				fmt.Fprintf(&b, "- %s: %s\n", k, currentText(s.Values[k]))
+			}
+		}
+		if len(s.Story) > 0 {
+			b.WriteString("The player's own words (up to 20000 characters; write what the player tells you, and suggest, never decide, their story):\n")
+			for _, k := range s.Story {
+				fmt.Fprintf(&b, "- %s: %s\n", k, currentText(s.Values[k]))
+			}
+		}
+		if len(s.Lists) > 0 {
+			b.WriteString("Lists of names (a JSON list, up to 40 names of up to 64 characters each; write the whole list):\n")
+			for _, k := range s.Lists {
+				fmt.Fprintf(&b, "- %s: %s\n", k, currentText(s.Values[k]))
+			}
+		}
+		buys := make([]string, 0, len(s.Buys))
+		for k := range s.Buys {
+			buys = append(buys, k)
+		}
+		sort.Strings(buys)
+		for _, k := range buys {
+			by := s.Buys[k]
+			items := make([]string, 0, len(by.Names))
+			for _, n := range by.Names {
+				items = append(items, fmt.Sprintf("%s (%g)", n, by.Costs[n]))
+			}
+			fmt.Fprintf(&b, "Bought from %s (a JSON list of names; their costs may add up to %g points):\n- %s: %s. Choose from: %s\n",
+				by.Entry, by.Budget, k, currentText(s.Values[k]), strings.Join(items, ", "))
+		}
+		if len(s.Shown) > 0 {
+			keys := make([]string, 0, len(s.Shown))
+			for k := range s.Shown {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			b.WriteString("The rest of the sheet, to read and recommend from (you can't change these):\n")
+			for _, k := range keys {
+				fmt.Fprintf(&b, "- %s: %s\n", k, oneLineText(s.Shown[k], 200))
 			}
 		}
 	}

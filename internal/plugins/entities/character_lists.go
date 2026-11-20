@@ -484,6 +484,9 @@ func isCreatureType(t EntityType) bool {
 	return t.Slug == "creature" || strings.HasSuffix(t.Slug, "-monster")
 }
 
+// IsCreatureType is isCreatureType for other plugins, through app.
+func IsCreatureType(t EntityType) bool { return isCreatureType(t) }
+
 // PresetCategoryItem is the preset category of a game system's item types.
 const PresetCategoryItem = "item"
 

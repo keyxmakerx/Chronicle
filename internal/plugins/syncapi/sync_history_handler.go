@@ -42,6 +42,7 @@ type SyncHistoryHandler struct {
 	matcher     *FoundryMatcher
 	scenes      FoundrySceneRepository
 	worldOpen   func(campaignID string) bool
+	linkCodes   *LinkCodes
 	now         func() time.Time
 }
 

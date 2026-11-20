@@ -25,6 +25,7 @@ type mockBestiaryRepo struct {
 	updatePublicationFn  func(ctx context.Context, p *Publication) error
 	archivePublicationFn func(ctx context.Context, id string) error
 	updateVisibilityFn   func(ctx context.Context, id, visibility string) error
+	getImportFn          func(ctx context.Context, publicationID, campaignID string) (*Import, error)
 
 	listPublishedFn func(ctx context.Context, page, perPage int) ([]Publication, int, error)
 	listByCreatorFn func(ctx context.Context, creatorID string, includeAll bool, page, perPage int) ([]Publication, int, error)
@@ -62,6 +63,9 @@ type mockBestiaryRepo struct {
 	// call recorders, for asserting the service called through with the
 	// right arguments rather than just that it didn't error.
 	updateVisibilityCalls   []string
+	moderations             []moderationCall
+	createImportCalls       int
+	deleteImportCalls       int
 	incrementDownloadsCalls int
 }
 
@@ -105,6 +109,37 @@ func (m *mockBestiaryRepo) UpdateVisibility(ctx context.Context, id, visibility 
 	if m.updateVisibilityFn != nil {
 		return m.updateVisibilityFn(ctx, id, visibility)
 	}
+	return nil
+}
+
+// moderationCall records one ApplyModeration write.
+type moderationCall struct {
+	visibility string
+	prior      string
+	hasPrior   bool
+	resetFlags bool
+}
+
+func (m *mockBestiaryRepo) ApplyModeration(_ context.Context, _, visibility string, prior *string, resetFlags bool) error {
+	c := moderationCall{visibility: visibility, resetFlags: resetFlags}
+	if prior != nil {
+		c.prior, c.hasPrior = *prior, true
+	}
+	m.moderations = append(m.moderations, c)
+	return nil
+}
+
+func (m *mockBestiaryRepo) ReconcileEscapedText(context.Context) (int, error) { return 0, nil }
+
+func (m *mockBestiaryRepo) GetImport(ctx context.Context, publicationID, campaignID string) (*Import, error) {
+	if m.getImportFn != nil {
+		return m.getImportFn(ctx, publicationID, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockBestiaryRepo) DeleteImport(context.Context, string, string) error {
+	m.deleteImportCalls++
 	return nil
 }
 
@@ -202,6 +237,7 @@ func (m *mockBestiaryRepo) AdjustFavoriteCount(ctx context.Context, publicationI
 }
 
 func (m *mockBestiaryRepo) CreateImport(ctx context.Context, imp *Import) error {
+	m.createImportCalls++
 	if m.createImportFn != nil {
 		return m.createImportFn(ctx, imp)
 	}
@@ -327,6 +363,12 @@ func (m *mockUserFetcher) GetUserPublicInfo(ctx context.Context, userID string) 
 // mockEntityCreator stubs the cross-plugin entity creation used by Import/Fork.
 type mockEntityCreator struct {
 	createFn func(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (string, error)
+	// pageExists answers EntityExists; absent means the page is gone.
+	pageExists bool
+}
+
+func (m *mockEntityCreator) EntityExists(context.Context, string, string) (bool, error) {
+	return m.pageExists, nil
 }
 
 func (m *mockEntityCreator) CreateFromStatblock(ctx context.Context, campaignID, userID, name, _ string, statblock json.RawMessage) (string, error) {
@@ -474,32 +516,55 @@ func TestPublish_SlugCollisionAppendsSuffix(t *testing.T) {
 	}
 }
 
-// TestPublish_SanitizesStatblockBeforeExtraction proves the write-side XSS
-// scrub runs before organization/role/level are denormalized, so a hostile
-// statblock cannot leave markup in the indexed columns.
-func TestPublish_SanitizesStatblockBeforeExtraction(t *testing.T) {
-	var created *Publication
-	repo := &mockBestiaryRepo{
-		createPublicationFn: func(_ context.Context, p *Publication) error {
-			created = p
-			return nil
-		},
+// TestPublish_StoresTextAsWritten pins that nothing is rewritten on the way in:
+// potency tests keep their "<", and names and descriptions carry no entity
+// codes, because every renderer escapes on output.
+func TestPublish_StoresTextAsWritten(t *testing.T) {
+	desc := "Fish & <chips> \"quoted\""
+	tests := []struct {
+		name, creature, tier string
+	}{
+		{"potency less-than", "Goblin", "5 damage; M < 1 slowed (save ends)"},
+		{"ampersand and apostrophe", "Ogre's Pit & Co", "R < WEAK"},
+		{"angle brackets", "A<B>", "A < 2 and 3 > 1"},
 	}
-	svc := newTestBestiaryService(repo)
-
-	_, err := svc.Publish(context.Background(), "user-1", CreatePublicationInput{
-		Name:          "Goblin",
-		StatblockJSON: json.RawMessage(`{"name":"Goblin","organization":"<script>x</script>horde"}`),
-		Visibility:    VisibilityDraft,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if created.Organization == nil {
-		t.Fatal("expected organization to be extracted")
-	}
-	if *created.Organization == "<script>x</script>horde" {
-		t.Errorf("organization column carries unsanitized markup: %q", *created.Organization)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var created *Publication
+			repo := &mockBestiaryRepo{
+				createPublicationFn: func(_ context.Context, p *Publication) error {
+					created = p
+					return nil
+				},
+			}
+			svc := newTestBestiaryService(repo)
+			statblock, _ := json.Marshal(map[string]any{"name": tt.creature, "tier1": tt.tier, "organization": "<b>horde"})
+			_, err := svc.Publish(context.Background(), "user-1", CreatePublicationInput{
+				Name:          "  " + tt.creature + " ",
+				Description:   &desc,
+				StatblockJSON: statblock,
+				Visibility:    VisibilityDraft,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if created.Name != tt.creature {
+				t.Errorf("name = %q, want %q", created.Name, tt.creature)
+			}
+			if created.Description == nil || *created.Description != desc {
+				t.Errorf("description = %v, want %q", created.Description, desc)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(created.StatblockJSON, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["tier1"] != tt.tier {
+				t.Errorf("tier1 = %q, want %q", got["tier1"], tt.tier)
+			}
+			if created.Organization == nil || *created.Organization != "<b>horde" {
+				t.Errorf("organization = %v, want stored as written", created.Organization)
+			}
+		})
 	}
 }
 
@@ -749,7 +814,7 @@ func TestUpdate_NameChangeRegeneratesSlug(t *testing.T) {
 }
 
 // TestUpdate_StatblockChangeRevalidatesAndRedenormalizes proves a statblock
-// replacement is validated, sanitized and re-extracted, not just stored raw.
+// replacement is validated and re-extracted, with text kept as written, not just stored raw.
 func TestUpdate_StatblockChangeRevalidatesAndRedenormalizes(t *testing.T) {
 	existing := &Publication{ID: "p1", CreatorID: "user-1", Name: "Goblin"}
 	repo := &mockBestiaryRepo{
@@ -765,8 +830,8 @@ func TestUpdate_StatblockChangeRevalidatesAndRedenormalizes(t *testing.T) {
 	if pub.Level == nil || *pub.Level != 7 {
 		t.Errorf("expected level re-denormalized to 7, got %v", pub.Level)
 	}
-	if pub.Organization == nil || *pub.Organization == "<b>horde</b>" {
-		t.Errorf("expected sanitized organization, got %v", pub.Organization)
+	if pub.Organization == nil || *pub.Organization != "<b>horde</b>" {
+		t.Errorf("expected organization stored as written, got %v", pub.Organization)
 	}
 }
 
@@ -1062,15 +1127,71 @@ func TestImport_RejectsDuplicate(t *testing.T) {
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
 			return &Publication{ID: "p1", Visibility: VisibilityPublished, StatblockJSON: validStatblock("Goblin")}, nil
 		},
-		importExistsFn: func(_ context.Context, _, _ string) (bool, error) { return true, nil },
+		getImportFn: func(_ context.Context, _, _ string) (*Import, error) {
+			e := "entity-old"
+			return &Import{ID: "i1", EntityID: &e}, nil
+		},
 	}
 	svc := newTestBestiaryService(repo)
-	svc.SetEntityCreator(&mockEntityCreator{})
+	svc.SetEntityCreator(&mockEntityCreator{pageExists: true})
 	svc.SetCampaignRoleChecker(&mockRoleChecker{})
 	_, err := svc.Import(context.Background(), "user-1", "p1", "camp-1")
 	var appErr *apperror.AppError
 	if !errors.As(err, &appErr) || appErr.Type != "conflict" {
 		t.Fatalf("expected conflict error, got %v", err)
+	}
+	if repo.deleteImportCalls != 0 || repo.createImportCalls != 0 {
+		t.Errorf("a live import must not be cleared or re-recorded")
+	}
+}
+
+// TestImport_StaleRecordDoesNotBlock pins that an import record whose page was
+// deleted (or never got one) is cleared and the creature imports again.
+func TestImport_StaleRecordDoesNotBlock(t *testing.T) {
+	gone := "entity-gone"
+	tests := []struct {
+		name string
+		imp  *Import
+	}{
+		{"page deleted", &Import{ID: "i1", EntityID: &gone}},
+		{"record without a page", &Import{ID: "i1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockBestiaryRepo{
+				getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
+					return &Publication{ID: "p1", Name: "Goblin", Visibility: VisibilityPublished, StatblockJSON: validStatblock("Goblin")}, nil
+				},
+				getImportFn: func(_ context.Context, _, _ string) (*Import, error) { return tt.imp, nil },
+			}
+			svc := newTestBestiaryService(repo)
+			svc.SetEntityCreator(&mockEntityCreator{pageExists: false})
+			svc.SetCampaignRoleChecker(&mockRoleChecker{})
+			if _, err := svc.Import(context.Background(), "user-1", "p1", "camp-1"); err != nil {
+				t.Fatalf("import after the page was deleted: %v", err)
+			}
+			if repo.deleteImportCalls != 1 || repo.createImportCalls != 1 {
+				t.Errorf("delete calls %d, create calls %d; want 1 and 1", repo.deleteImportCalls, repo.createImportCalls)
+			}
+		})
+	}
+}
+
+// TestImport_RecordFailureAfterPageIsNotAnError pins that losing the race for
+// the unique import key leaves the user with their page and a success, not a
+// 500 over a page that exists.
+func TestImport_RecordFailureAfterPageIsNotAnError(t *testing.T) {
+	repo := &mockBestiaryRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
+			return &Publication{ID: "p1", Name: "Goblin", Visibility: VisibilityPublished, StatblockJSON: validStatblock("Goblin")}, nil
+		},
+		createImportFn: func(_ context.Context, _ *Import) error { return errors.New("Duplicate entry") },
+	}
+	svc := newTestBestiaryService(repo)
+	svc.SetEntityCreator(&mockEntityCreator{})
+	svc.SetCampaignRoleChecker(&mockRoleChecker{})
+	if _, err := svc.Import(context.Background(), "user-1", "p1", "camp-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1116,34 +1237,42 @@ func TestImport_Success(t *testing.T) {
 	}
 }
 
-// TestFork_AppendsForkSuffixAndSkipsDuplicateCheck proves Fork names the new
-// entity "(Fork)" and always creates a new entity, even if the same
-// publication was already imported into this campaign.
-func TestFork_AppendsForkSuffixAndSkipsDuplicateCheck(t *testing.T) {
-	var createdName string
+// TestFork_CanRepeatAndLeavesImportAlone pins that a fork is named "(Fork)",
+// may be made again into the same campaign (each time a page, never an error),
+// and writes no import record, so a plain Import still works afterwards.
+func TestFork_CanRepeatAndLeavesImportAlone(t *testing.T) {
+	var names []string
 	repo := &mockBestiaryRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-			return &Publication{ID: "p1", Name: "Goblin", Visibility: VisibilityPublished, StatblockJSON: validStatblock("Goblin")}, nil
+			return &Publication{ID: "p1", Name: "Ogre's Pit & Co", Visibility: VisibilityPublished, StatblockJSON: validStatblock("Goblin")}, nil
 		},
-		importExistsFn: func(_ context.Context, _, _ string) (bool, error) {
-			t.Fatal("Fork must not check for a duplicate import")
-			return true, nil
+		getImportFn: func(_ context.Context, _, _ string) (*Import, error) {
+			t.Fatal("Fork must not look up import records")
+			return nil, nil
 		},
 	}
 	svc := newTestBestiaryService(repo)
 	svc.SetEntityCreator(&mockEntityCreator{
 		createFn: func(_ context.Context, _, _, name string, _ json.RawMessage) (string, error) {
-			createdName = name
-			return "entity-99", nil
+			names = append(names, name)
+			return "entity-" + name, nil
 		},
 	})
 	svc.SetCampaignRoleChecker(&mockRoleChecker{})
 
-	if _, err := svc.Fork(context.Background(), "user-1", "p1", "camp-1"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	for i := 0; i < 2; i++ {
+		if _, err := svc.Fork(context.Background(), "user-1", "p1", "camp-1"); err != nil {
+			t.Fatalf("fork %d: %v", i+1, err)
+		}
 	}
-	if createdName != "Goblin (Fork)" {
-		t.Errorf("expected entity name 'Goblin (Fork)', got %q", createdName)
+	if len(names) != 2 || names[0] != "Ogre's Pit & Co (Fork)" {
+		t.Errorf("fork page names = %q, want two of %q", names, "Ogre's Pit & Co (Fork)")
+	}
+	if repo.createImportCalls != 0 {
+		t.Errorf("a fork wrote %d import records, want 0", repo.createImportCalls)
+	}
+	if repo.incrementDownloadsCalls != 2 {
+		t.Errorf("downloads incremented %d times, want 2", repo.incrementDownloadsCalls)
 	}
 }
 
@@ -1194,28 +1323,59 @@ func TestModerate_RejectsInvalidAction(t *testing.T) {
 	}
 }
 
-func TestModerate_ActionsMapToVisibility(t *testing.T) {
-	cases := []struct {
-		action      string
-		wantVisible string
+// TestModerate_RestoresPriorVisibility pins that approve and restore return a
+// publication to the state it had before moderation hid it, never to
+// published by default, and that leaving the flagged state zeroes the flag
+// count so one new flag cannot hide it again.
+func TestModerate_RestoresPriorVisibility(t *testing.T) {
+	ptr := func(v string) *string { return &v }
+	tests := []struct {
+		name    string
+		current string
+		prior   *string
+		action  string
+		want    moderationCall
+		wantErr bool
 	}{
-		{"approve", VisibilityPublished},
-		{"archive", VisibilityArchived},
-		{"restore", VisibilityPublished},
+		{"approve flagged unlisted", VisibilityFlagged, ptr(VisibilityUnlisted), "approve", moderationCall{visibility: VisibilityUnlisted, resetFlags: true}, false},
+		{"approve flagged published", VisibilityFlagged, ptr(VisibilityPublished), "approve", moderationCall{visibility: VisibilityPublished, resetFlags: true}, false},
+		{"approve flagged with no record", VisibilityFlagged, nil, "approve", moderationCall{visibility: VisibilityPublished, resetFlags: true}, false},
+		{"restore flagged unlisted", VisibilityFlagged, ptr(VisibilityUnlisted), "restore", moderationCall{visibility: VisibilityUnlisted, resetFlags: true}, false},
+		{"restore archived draft", VisibilityArchived, ptr(VisibilityDraft), "restore", moderationCall{visibility: VisibilityDraft}, false},
+		{"restore archived with no record stays unpublished", VisibilityArchived, nil, "restore", moderationCall{visibility: VisibilityDraft}, false},
+		{"restore ignores an unknown prior", VisibilityArchived, ptr("flagged"), "restore", moderationCall{visibility: VisibilityDraft}, false},
+		{"approve a draft keeps it a draft", VisibilityDraft, nil, "approve", moderationCall{visibility: VisibilityDraft, resetFlags: true}, false},
+		{"approve cannot unarchive", VisibilityArchived, ptr(VisibilityPublished), "approve", moderationCall{}, true},
+		{"restore needs something to restore", VisibilityPublished, nil, "restore", moderationCall{}, true},
+		{"archive remembers a published item", VisibilityPublished, nil, "archive", moderationCall{visibility: VisibilityArchived, prior: VisibilityPublished, hasPrior: true}, false},
+		{"archive remembers a draft", VisibilityDraft, nil, "archive", moderationCall{visibility: VisibilityArchived, prior: VisibilityDraft, hasPrior: true}, false},
+		{"archive a flagged item keeps what it was", VisibilityFlagged, ptr(VisibilityUnlisted), "archive", moderationCall{visibility: VisibilityArchived, prior: VisibilityUnlisted, hasPrior: true, resetFlags: true}, false},
+		{"archive twice keeps the first record", VisibilityArchived, ptr(VisibilityPublished), "archive", moderationCall{visibility: VisibilityArchived, prior: VisibilityPublished, hasPrior: true}, false},
 	}
-	for _, tc := range cases {
-		t.Run(tc.action, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockBestiaryRepo{
 				getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-					return &Publication{ID: "p1"}, nil
+					return &Publication{ID: "p1", Visibility: tt.current, PriorVisibility: tt.prior}, nil
 				},
 			}
 			svc := newTestBestiaryService(repo)
-			if err := svc.Moderate(context.Background(), "mod-1", "p1", tc.action, nil); err != nil {
+			err := svc.Moderate(context.Background(), "mod-1", "p1", tt.action, nil)
+			if tt.wantErr {
+				var appErr *apperror.AppError
+				if !errors.As(err, &appErr) || appErr.Type != "conflict" {
+					t.Fatalf("want a conflict, got %v", err)
+				}
+				if len(repo.moderations) != 0 {
+					t.Fatal("a refused action wrote to the publication")
+				}
+				return
+			}
+			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(repo.updateVisibilityCalls) != 1 || repo.updateVisibilityCalls[0] != "p1:"+tc.wantVisible {
-				t.Errorf("expected UpdateVisibility('p1', %q), got %v", tc.wantVisible, repo.updateVisibilityCalls)
+			if len(repo.moderations) != 1 || repo.moderations[0] != tt.want {
+				t.Errorf("ApplyModeration = %+v, want %+v", repo.moderations, tt.want)
 			}
 		})
 	}
@@ -1225,7 +1385,7 @@ func TestModerate_LogsTheAction(t *testing.T) {
 	var logged *ModerationLogEntry
 	repo := &mockBestiaryRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Publication, error) {
-			return &Publication{ID: "p1"}, nil
+			return &Publication{ID: "p1", Visibility: VisibilityPublished}, nil
 		},
 		createModerationEntryFn: func(_ context.Context, entry *ModerationLogEntry) error {
 			logged = entry
@@ -1380,5 +1540,75 @@ func TestByIDRoutesHideUnpublished(t *testing.T) {
 				t.Fatalf("the creator's own read: err %v, reads %d", err, reads)
 			}
 		})
+	}
+}
+
+// TestViewBySlug_RedactsForeignIDs pins that the creator's source campaign and
+// page ids and the reviewing moderator reach only the creator, and that hidden
+// publications stay hidden from everyone else.
+func TestViewBySlug_RedactsForeignIDs(t *testing.T) {
+	tests := []struct {
+		name       string
+		viewer     string
+		visibility string
+		wantFound  bool
+		wantIDs    bool
+	}{
+		{"creator sees own ids", "owner-1", VisibilityPublished, true, true},
+		{"stranger gets no ids on a published one", "stranger", VisibilityPublished, true, false},
+		{"stranger gets no ids on an unlisted one", "stranger", VisibilityUnlisted, true, false},
+		{"anonymous gets no ids", "", VisibilityPublished, true, false},
+		{"stranger cannot see a draft", "stranger", VisibilityDraft, false, false},
+		{"creator sees own draft", "owner-1", VisibilityDraft, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			camp, ent, mod := "camp-9", "ent-9", "mod-1"
+			repo := &mockBestiaryRepo{
+				getBySlugFn: func(_ context.Context, _ string) (*Publication, error) {
+					return &Publication{ID: "p1", CreatorID: "owner-1", Visibility: tt.visibility,
+						SourceCampaignID: &camp, SourceEntityID: &ent, ReviewedBy: &mod}, nil
+				},
+			}
+			svc := newTestBestiaryService(repo)
+			got, err := svc.ViewBySlug(context.Background(), tt.viewer, "slug")
+			if !tt.wantFound {
+				var appErr *apperror.AppError
+				if !errors.As(err, &appErr) || appErr.Code != 404 {
+					t.Fatalf("want not found, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			has := got.SourceCampaignID != nil || got.SourceEntityID != nil || got.ReviewedBy != nil
+			if has != tt.wantIDs {
+				t.Errorf("ids present = %v, want %v", has, tt.wantIDs)
+			}
+			if got.ID != "p1" {
+				t.Errorf("redaction lost the publication")
+			}
+		})
+	}
+	// The stored row must not be mutated: other readers share it.
+	camp := "camp-9"
+	p := &Publication{CreatorID: "owner-1", SourceCampaignID: &camp}
+	_ = p.ForViewer("stranger")
+	if p.SourceCampaignID == nil {
+		t.Error("ForViewer modified the original")
+	}
+}
+
+// TestUnescapePtr pins the inverse of the old escaping, including the ids the
+// old path produced for apostrophes and quotes.
+func TestUnescapePtr(t *testing.T) {
+	in := "Ogre&#39;s Pit &amp; Co &lt;b&gt; &#34;x&#34;"
+	got := unescapePtr(&in)
+	if got == nil || *got != `Ogre's Pit & Co <b> "x"` {
+		t.Errorf("unescapePtr = %v", got)
+	}
+	if unescapePtr(nil) != nil {
+		t.Error("nil must stay nil")
 	}
 }

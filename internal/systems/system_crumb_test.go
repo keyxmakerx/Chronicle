@@ -3,55 +3,35 @@ package systems
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// TestSystemCrumb_PointsAtBrowserWhenBookExists: with a book, the system crumb
-// on a category list and an item page goes to the category browser, not to the
-// book the system's own address shows.
-func TestSystemCrumb_PointsAtBrowserWhenBookExists(t *testing.T) {
-	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test Campaign"}}
-	m := &SystemManifest{ID: "drawsteel", Name: "Draw Steel"}
-	cat := &CategoryDef{Slug: "rules-glossary", Name: "Rules Glossary"}
-	item := &ReferenceItem{ID: "grabbed", Name: "Grabbed"}
-	book := `href="/campaigns/camp-1/systems/drawsteel/browse"`
-	plain := `href="/campaigns/camp-1/systems/drawsteel"`
-
-	tests := []struct {
-		name    string
-		hasBook bool
-		want    string
-		notWant string
-	}{
-		{"book", true, book, ""},
-		{"no book", false, plain, "/browse"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			for page, render := range map[string]func(*bytes.Buffer) error{
-				"category": func(b *bytes.Buffer) error {
-					return CategoryListContent(cc, m, cat, nil, tt.hasBook).Render(context.Background(), b)
-				},
-				"item": func(b *bytes.Buffer) error {
-					return ItemDetailContent(cc, m, cat, item, tt.hasBook).Render(context.Background(), b)
-				},
-			} {
-				var buf bytes.Buffer
-				if err := render(&buf); err != nil {
-					t.Fatal(err)
-				}
-				html := buf.String()
-				if !strings.Contains(html, tt.want) {
-					t.Errorf("%s: missing %s in:\n%s", page, tt.want, html)
-				}
-				if tt.notWant != "" && strings.Contains(html, tt.notWant) {
-					t.Errorf("%s: unexpected %s", page, tt.notWant)
-				}
-			}
-		})
+// TestRulesTrail_WithoutPublisher: a category's list and an entry's page
+// carry the trail campaign / category / entry, never the system's name.
+func TestRulesTrail_WithoutPublisher(t *testing.T) {
+	cat := CategoryDef{Slug: "ancestries", Name: "Ancestries"}
+	list := &RulesListView{CampaignID: "camp-1", CampaignName: "Therin", SystemID: "drawsteel", Category: cat,
+		CategoryURL: "/campaigns/camp-1/systems/drawsteel/ancestries"}
+	page := &EntryView{CampaignID: "camp-1", CampaignName: "Therin", SystemID: "drawsteel", Category: cat,
+		CategoryURL: list.CategoryURL, Name: "Ashborn", Kind: "Ancestry"}
+	for name, c := range map[string]interface {
+		Render(context.Context, io.Writer) error
+	}{"list": CategoryListContent(list), "page": EntryPageContent(page)} {
+		var buf bytes.Buffer
+		if err := c.Render(context.Background(), &buf); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		if !strings.Contains(html, `href="/campaigns/camp-1"`) || !strings.Contains(html, "Therin") {
+			t.Errorf("%s: trail lost the campaign:\n%s", name, html)
+		}
+		if strings.Contains(html, "Draw Steel") || strings.Contains(html, "/browse") {
+			t.Errorf("%s: trail names the publisher:\n%s", name, html)
+		}
 	}
 }
 
