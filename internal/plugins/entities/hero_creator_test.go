@@ -23,7 +23,7 @@ func TestHeroAccessFor(t *testing.T) {
 		{"scribe makes heroes for the table", campaigns.RoleScribe, false, locked, true, heroAccess{Allowed: true}},
 		{"owner", campaigns.RoleOwner, false, claimable, false, heroAccess{Allowed: true}},
 		{"player with claiming on", campaigns.RolePlayer, true, claimable, false, heroAccess{Allowed: true, ForSelf: true}},
-		{"player who already has a hero", campaigns.RolePlayer, true, claimable, true, heroAccess{}},
+		{"player who already has a hero", campaigns.RolePlayer, true, claimable, true, heroAccess{HasHero: true}},
 		{"player with claiming off", campaigns.RolePlayer, false, claimable, false, heroAccess{}},
 		{"player and an unclaimable type", campaigns.RolePlayer, true, locked, false, heroAccess{}},
 	}
@@ -33,6 +33,32 @@ func TestHeroAccessFor(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestHeroRefusalMessage(t *testing.T) {
+	tests := []struct {
+		name   string
+		access heroAccess
+		want   string
+	}{
+		{"already has a hero", heroAccess{HasHero: true}, "one hero at a time"},
+		{"not offered", heroAccess{}, "you can't create a hero in this campaign"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.access.refusalMessage(); !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to contain %q", got, tt.want)
+			}
+		})
+	}
+	no := false
+	locked := &EntityType{ID: 2, Slug: "drawsteel-character", Claimable: &no, Enabled: true}
+	if a := heroAccessFor(campaigns.RolePlayer, true, locked, true); a.HasHero {
+		t.Error("an unclaimable type is not the one-hero rule")
+	}
+	if a := heroAccessFor(campaigns.RolePlayer, false, locked, true); a.HasHero {
+		t.Error("claiming off is not the one-hero rule")
 	}
 }
 
@@ -135,7 +161,7 @@ func TestBuildHeroFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildHeroFields(plan, tt.picks)
+			got, _, err := buildHeroFields(plan, tt.picks)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("got error %v, want one containing %q", err, tt.wantErr)

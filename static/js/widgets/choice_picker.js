@@ -30,6 +30,12 @@
  *   Chronicle.fetchChoices(campaignId, fieldKey)
  *     -> Promise<{systemName, choices: [{slug,name,summary,source}], canMake}>
  *
+ * A Director's rules show here too: an Ask first entry carries its mark and,
+ * when picked and saved, goes to the Director as a request (the field is not
+ * set, and the answer says "waiting for your Director"); entries marked Not
+ * here are gone, with a quiet "n not here" line folding open their names. The
+ * server's own refusal is shown as it was given.
+ *
  * Calling pickChoice again on an anchor whose fold is open closes it. With a
  * pick not yet saved, that and Escape ask first in the shared slip
  * (static/js/theme.js); Cancel and the close button always close.
@@ -103,7 +109,7 @@
       if (!r.ok) throw new Error('choices ' + r.status);
       return r.json();
     }).then(function (d) {
-      return { systemName: d.systemName || '', choices: d.choices || [], canMake: !!d.canMake };
+      return { systemName: d.systemName || '', choices: d.choices || [], canMake: !!d.canMake, rules: d.rules || null };
     });
   };
 
@@ -115,7 +121,10 @@
       method: 'PUT',
       body: { fields_patch: patch }
     }).then(function (r) {
-      if (!r.ok) throw new Error('save ' + r.status);
+      return r.json().catch(function () { return {}; }).then(function (b) {
+        if (!r.ok) { var e = new Error('save ' + r.status); e.said = b && b.message; throw e; }
+        return b || {};
+      });
     });
   }
 
@@ -205,6 +214,7 @@
           '" value="' + esc(x.name) + '"' + (x.name === current ? ' checked' : '') + '>' +
           '<span class="ag-name"><b>' + esc(x.name) + '</b>' +
           (x.mine && x.status ? ' <small class="ag-src">yours · ' + (x.status === 'sent' ? 'handed in' : 'draft') + '</small>' : '') +
+          (x.state === 'ask_first' ? ' <small class="ag-ask">Ask first</small>' : '') +
           (x.summary ? '<small>' + esc(x.summary) + '</small>' : '') + '</span></label>';
       }).join('') + '<div class="ag-more">' + m.length + ' of ' + all.length + '</div>';
     }
@@ -212,7 +222,7 @@
     function renderBody() {
       var has = list.choices.length > 0;
       var sys = list.systemName || 'This game system';
-      var html = header(has ? list.systemName : '') + '<div class="ag-body">';
+      var html = header(has ? list.systemName : '') + '<div class="ag-body">' + rulesNotes();
       if (has) {
         html += '<div data-pickpane><div class="ag-search"><i class="fa-solid fa-magnifying-glass"></i>' +
           '<input type="search" class="input w-full text-sm" placeholder="Search ' + list.choices.length +
@@ -224,9 +234,11 @@
       html += '<div data-ownpane' + (has ? ' hidden' : '') + '><input type="text" class="input w-full text-sm" ' +
         'placeholder="Type your own" aria-label="Your own ' + esc(label) + '" maxlength="200" data-own value="' +
         esc(inList(current) ? '' : current) + '"></div>';
+      html += notHere();
       if (has) {
         html += '<div class="ag-mine"><button type="button" class="ag-link" data-mine>Not listed? Type your own</button></div>';
       }
+      html += '<p class="ag-note" data-askhint hidden>Ask first: your Director allows it, or suggests another. Nothing is set on your hero until they do.</p>';
       if (list.canMake) {
         html += '<div class="ag-mine"><a class="ag-link" href="/campaigns/' + encodeURIComponent(opts.campaignId) + '/characters/entries?field=' +
           encodeURIComponent(opts.fieldKey) + (opts.entityId ? '&for=' + encodeURIComponent(opts.entityId) : '') +
@@ -245,6 +257,33 @@
       if (first && first.focus) first.focus();
     }
 
+    // What the Director's rules say about this list: a pick waiting for an
+    // answer for this hero, or a note asking for another.
+    function rulesNotes() {
+      var r = list.rules || {}, out = '';
+      var w = r.waiting;
+      if (w && (!opts.entityId || String(w.entityId) === String(opts.entityId))) {
+        out += '<p class="ag-note" role="status">' + esc(w.entryName) + ' is waiting for your Director. Pick another to replace it.</p>';
+      } else if (r.suggested) {
+        out += '<p class="ag-note">Your Director asked for another ' + esc(String(label).toLowerCase()) + ' instead of ' + esc(r.suggested.entryName) +
+          (r.suggested.message ? ': “' + esc(r.suggested.message) + '”' : '.') + '</p>';
+      }
+      if (r.required && !r.prefilled) out += '<p class="ag-note">Your Director has set a short list for this.</p>';
+      return out;
+    }
+    function notHere() {
+      var r = list.rules || {};
+      if (!r.notHereCount) return '';
+      return '<div class="ag-mine"><button type="button" class="ag-link" data-nothere aria-expanded="false">' + r.notHereCount + ' not here</button>' +
+        '<ul class="ag-nh" data-nhlist hidden>' + (r.notHere || []).map(function (n) {
+          return '<li><b>' + esc(n.name) + '</b> isn’t here.' + (n.reason ? ' Your Director says: “' + esc(n.reason) + '”' : '') + '</li>';
+        }).join('') + (r.notHereCount > (r.notHere || []).length ? '<li>and ' + (r.notHereCount - (r.notHere || []).length) + ' more</li>' : '') + '</ul></div>';
+    }
+    function pickedAsk() {
+      var v = chosen();
+      return list.choices.some(function (c) { return c.name === v && c.state === 'ask_first'; });
+    }
+
     function inList(v) {
       return !!v && list.choices.some(function (c) { return c.name === v; });
     }
@@ -261,6 +300,9 @@
       if (!save) return;
       var v = chosen();
       save.disabled = !v || v === current;
+      var hint = box.querySelector('[data-askhint]');
+      if (hint) hint.hidden = !pickedAsk();
+      if (willSave) save.textContent = pickedAsk() ? 'Ask your Director' : 'Save';
     }
 
     function toggleOwn(toOwn) {
@@ -283,13 +325,22 @@
       if (!willSave) { close({ value: v }); return; }
       save.disabled = true;
       save.textContent = 'Saving…';
-      saveField(opts, v).then(function () {
+      var ask = pickedAsk();
+      saveField(opts, v).then(function (b) {
+        var req = (b.requests || []).filter(function (q) { return q.fieldKey === opts.fieldKey; })[0];
+        if (b.requestFailed && b.requestFailed.indexOf(opts.fieldKey) >= 0) throw Object.assign(new Error('request'), { said: 'Your pick of ' + v + ' could not be sent to your Director. Try again.' });
+        if (req) {
+          toast(v + ', waiting for your Director');
+          close({ value: current, waiting: v });
+          return;
+        }
         toast('Saved ' + label + ': ' + v);
         close({ value: v });
-      }).catch(function () {
+      }).catch(function (e) {
         save.disabled = false;
-        save.textContent = 'Save';
-        if (err) err.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Could not save. Try again.';
+        save.textContent = ask ? 'Ask your Director' : 'Save';
+        var say = (e && e.said) || 'Could not save. Try again.';
+        if (err) { err.textContent = ''; var ic = document.createElement('i'); ic.className = 'fa-solid fa-triangle-exclamation'; err.appendChild(ic); err.appendChild(document.createTextNode(' ' + say)); }
       });
     }
 
@@ -299,6 +350,11 @@
         if (!t) return;
         if (t.hasAttribute('data-x')) close(null);
         else if (t.hasAttribute('data-mine')) toggleOwn(box.querySelector('[data-ownpane]').hidden);
+        else if (t.hasAttribute('data-nothere')) {
+          var nl = box.querySelector('[data-nhlist]'), openNh = nl.hidden;
+          nl.hidden = !openNh;
+          t.setAttribute('aria-expanded', String(openNh));
+        }
         else if (t.hasAttribute('data-save')) commit();
         else if (t.hasAttribute('data-retry')) load();
         else if (t.hasAttribute('data-own-only')) { list = { systemName: '', choices: [] }; renderBody(); }

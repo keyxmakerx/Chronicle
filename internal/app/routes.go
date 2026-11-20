@@ -2920,7 +2920,7 @@ func registerManifestRenderers(showRegistry *entities.EntityShowRendererRegistry
 			if r.Slug != "" {
 				showRegistry.Register(r.Slug, renderer)
 			} else if r.PresetCategory != "" {
-				showRegistry.RegisterByPresetCategory(r.PresetCategory, renderer)
+				showRegistry.RegisterByPresetCategoryFor(manifest.ID, r.PresetCategory, renderer)
 			}
 		}
 	}
@@ -3176,7 +3176,8 @@ func (a *App) RegisterRoutes() {
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
 	// mini→full launch enhancement, and the scripts below, each loaded on
 	// sight: the Contents block's, Standing's, the Family tree's and the
-	// Characters page's hero builder, the chip naming a page's layout, and
+	// Characters page's hero builder, the hero creator, the own-entries page,
+	// the chip naming a page's layout, and
 	// the search page's Alpine component).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
@@ -3185,7 +3186,9 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
-			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
+			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/hero_creator.js"}},
+			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
 		},
@@ -3987,6 +3990,30 @@ func (a *App) RegisterRoutes() {
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
 	syncService := syncapi.NewSyncAPIService(syncRepo)
+	// A campaign has a Foundry world syncing once an active sync key of its
+	// has been used; sheets say "set in Foundry" only then.
+	// A system's preset-bound sheet draws only in its own campaigns; checks
+	// made outside a page render ask which system that is.
+	entities.SetCampaignSystemResolver(func(ctx context.Context, campaignID string) string {
+		list, err := addonService.ListForCampaign(ctx, campaignID)
+		if err != nil {
+			return ""
+		}
+		_, sys := navAddonsFrom(list)
+		return sys.Slug
+	})
+	entities.SetFoundryLinkChecker(func(ctx context.Context, campaignID string) bool {
+		keys, err := syncService.ListKeysByCampaign(ctx, campaignID)
+		if err != nil {
+			return false
+		}
+		for _, k := range keys {
+			if k.IsActive && k.LastUsedAt != nil {
+				return true
+			}
+		}
+		return false
+	})
 	// The campaign "Sync API" addon toggle is what gates external Bearer
 	// access (REST via syncapi.RequireSyncAPIAddon, WebSocket via
 	// AuthenticateKeyForWS). Both read it through this gate; the WS path
@@ -4178,8 +4205,6 @@ func (a *App) RegisterRoutes() {
 	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
@@ -5556,6 +5581,17 @@ func (a *App) RegisterRoutes() {
 		})
 		aiAsks = aiConnectorSvc
 		aiKeys.svc = aiConnectorSvc
+		// Players' AI is for players with an account: a key a guest made
+		// before that rule held is ended here, at every start.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if n, err := aiConnectorSvc.EndGuestKeys(ctx); err != nil {
+				slog.Error("ending guests' AI keys failed", slog.Any("error", err))
+			} else if n > 0 {
+				slog.Info("ended guests' AI keys", slog.Int64("count", n))
+			}
+		}()
 		// A key ends whenever its maker's sign-ins do (password reset or
 		// change, force sign-out), in every campaign.
 		auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
@@ -5856,10 +5892,31 @@ func (a *App) RegisterRoutes() {
 		if err != nil {
 			return nil
 		}
-		return systems.Find(c.ParseSettings().SystemID)
+		if m := systems.Find(c.ParseSettings().SystemID); m != nil {
+			return m
+		}
+		// A system turned on as an add-on, without the settings' system
+		// choice, is still the campaign's system.
+		for _, sys := range systems.AllSystems() {
+			if on, err := addonService.IsEnabledForCampaign(ctx, campaignID, sys.Info().ID); err == nil && on {
+				return systems.Find(sys.Info().ID)
+			}
+		}
+		return nil
 	})
-	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor),
-		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
+	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes
+	// editor, narrowed for each player by the Directors' hero-choice rules.
+	// Built ahead of the entries service, which tells the rules when an entry
+	// is deleted.
+	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
+	systemEntryRepo := systems.NewSystemEntryRepository(a.DB)
+	choiceRuleSvc := systems.NewChoiceRuleService(systems.NewChoiceRuleRepository(a.DB), systemEntryRepo,
+		characterChoiceSvc, systems.EntryManifestResolver(manifestFor),
+		systems.WithChoiceHeroes(choiceHeroesAdapter{entities: entityService, lists: characterListService, members: campaignService}))
+	characterChoiceSvc.SetChoiceLimiter(choiceRuleSvc)
+	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
+		systems.WithEntryRules(choiceRuleSvc))
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).
@@ -5869,17 +5926,30 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
 	}
+	if n, err := bindCharacterPresetOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService); err != nil {
+		slog.Error("binding the character preset failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("bound Characters to the game system's character preset", slog.Int("campaigns", n))
+	}
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Foundry fills the items it makes for these entries from the player view.
 	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
-	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
-	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
+	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	// A player's Foundry edit is judged with the same plan the web door uses.
+	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
-	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}})
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
+		gmTerm: func(ctx context.Context, campaignID string) string {
+			if m := manifestFor(ctx, campaignID); m != nil {
+				return m.GMTerm()
+			}
+			return ""
+		}})
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the
@@ -6966,6 +7036,7 @@ func (a *App) RegisterRoutes() {
 		RollTables:      rollTablesSvc,
 		Sessions:        sessionsService,
 		SystemEntries:   systemEntrySvc,
+		ChoiceRules:     choiceRuleSvc,
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,

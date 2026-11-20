@@ -6,6 +6,9 @@ package ai_workspace
 
 import (
 	"github.com/labstack/echo/v5"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
 // RegisterOwnerRoutes mounts the per-campaign routes the AI Workspace
@@ -53,15 +56,29 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 // their screen, their key and their AI's changes. requireMember admits
 // anyone in the campaign; each handler works on the signed-in person's own
 // key and requests only, and on their own character only.
+//
+// A guest is refused on every one of them: players' AI is for players with
+// an account, and hiding the button alone wouldn't hold that rule.
 func RegisterPlayerRoutes(cg *echo.Group, h *Handler, requireMember echo.MiddlewareFunc) {
-	cg.GET("/ai/me/chip", h.PlayerChip, requireMember)
-	cg.GET("/ai/me/panel", h.PlayerPanel, requireMember)
-	cg.GET("/ai/me/bubble", h.PlayerBubble, requireMember)
-	cg.GET("/ai/me/copy", h.PlayerCopy, requireMember)
-	cg.POST("/ai/me/key", h.PlayerConnect, requireMember)
-	cg.POST("/ai/me/key/disconnect", h.PlayerDisconnect, requireMember)
-	cg.POST("/ai/me/paste", h.PlayerPaste, requireMember)
-	cg.POST("/ai/me/apply", h.PlayerApply, requireMember)
-	cg.GET("/ai/me/requests/:rid", h.PlayerReviewRequest, requireMember)
-	cg.POST("/ai/me/requests/:rid/turn-down", h.PlayerTurnDown, requireMember)
+	cg.GET("/ai/me/chip", h.PlayerChip, requireMember, refuseGuests)
+	cg.GET("/ai/me/panel", h.PlayerPanel, requireMember, refuseGuests)
+	cg.GET("/ai/me/bubble", h.PlayerBubble, requireMember, refuseGuests)
+	cg.GET("/ai/me/copy", h.PlayerCopy, requireMember, refuseGuests)
+	cg.POST("/ai/me/key", h.PlayerConnect, requireMember, refuseGuests)
+	cg.POST("/ai/me/key/disconnect", h.PlayerDisconnect, requireMember, refuseGuests)
+	cg.POST("/ai/me/paste", h.PlayerPaste, requireMember, refuseGuests)
+	cg.POST("/ai/me/apply", h.PlayerApply, requireMember, refuseGuests)
+	cg.GET("/ai/me/requests/:rid", h.PlayerReviewRequest, requireMember, refuseGuests)
+	cg.POST("/ai/me/requests/:rid/turn-down", h.PlayerTurnDown, requireMember, refuseGuests)
+}
+
+// refuseGuests turns away a guest: someone who joined with a guest code and
+// has no account. The connector refuses their keys too.
+func refuseGuests(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		if s := auth.GetSession(c); s != nil && s.GuestCampaignID != "" {
+			return apperror.NewForbidden("guests can't use an AI here; ask the campaign's owner for an account")
+		}
+		return next(c)
+	}
 }

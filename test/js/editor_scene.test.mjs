@@ -21,12 +21,12 @@ const LIST = [
   { id: 'aaaaaaaaaaaaaaa4', name: 'Crypt Entrance', folder: 'Act 2' },
 ];
 
-function load(fetchImpl) {
+function load(fetchImpl, document) {
   const window = {
     TipTap: { Node: { create: (spec) => ({ spec }) } },
     Chronicle: { apiFetch: fetchImpl },
   };
-  vm.runInNewContext(src, { window, Chronicle: window.Chronicle, TipTap: window.TipTap });
+  vm.runInNewContext(src, { window, document, Chronicle: window.Chronicle, TipTap: window.TipTap });
   return window.Chronicle;
 }
 
@@ -109,4 +109,19 @@ test('the node parses only checked ids from saved HTML', () => {
   assert.equal(attrs.sceneId.parseHTML(el('bad id')), null);
   assert.equal(attrs.sceneId.parseHTML(el(null)), null);
   assert.equal(attrs.name.parseHTML(el(null, '  Sunken Crypt ')), 'Sunken Crypt');
+});
+
+test('a viewer the page does not mark as able to read scenes never asks', async () => {
+  const calls = [];
+  const page = (marked) => ({ documentElement: { hasAttribute: (n) => marked && n === 'data-can-see-scenes' } });
+  const fetchImpl = (url) => { calls.push(url); return Promise.resolve({ ok: true, json: () => Promise.resolve({ scenes: LIST }) }); };
+  const player = load(fetchImpl, page(false));
+  player.FoundryScenes.want('c1');
+  await flush();
+  assert.deepEqual(calls, []);
+  assert.equal(player.FoundryScenes.get('c1'), null);
+  const gm = load(fetchImpl, page(true));
+  gm.FoundryScenes.want('c1');
+  await flush(); await flush();
+  assert.deepEqual(calls, ['/campaigns/c1/foundry/scenes']);
 });

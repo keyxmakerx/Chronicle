@@ -1890,6 +1890,10 @@
      need no rule: they are above the tab. */
   body:has(.cal-v5 :is(.wing, .flap, .evp).live, .cal-v5 .drawer.open, .cra-drawer.is-open, .calv5-overlay) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
   .jot-tab[hidden] { display: none; }
+  /* The page scrolls inside #main-content, so the tab floats over its last
+     rows: end the content a tab-height clear of the bottom edge, so whatever
+     sits at the foot (a panel's corner, a button) can scroll above the tab. */
+  body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 5rem; scroll-padding-bottom: 5rem; }
   /* On a phone the tab is just its icon (and count), and the page gets room
      at the bottom so the tab never covers the end of the last rows. */
   @media (max-width: 639px) {
@@ -6770,6 +6774,10 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 .ag-pick[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .ag-src { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
 .ag-note { margin-top: 2px; font-size: 11.5px; color: var(--color-text-muted); }
+.ag-ask { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border: 1px solid var(--color-accent); border-radius: 999px; color: var(--color-accent-link, var(--color-accent)); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.ag-rules { display: grid; gap: 4px; margin: 0 0 10px; }
+.ag-nh[hidden] { display: none; }
+.ag-nh { margin: 6px 0 0; padding: 8px 10px; list-style: none; display: grid; gap: 4px; border-radius: 8px; background: var(--color-bg-tertiary); font-size: 12px; color: var(--color-text-body); }
 .ag-mine { margin-top: 8px; display: flex; gap: 6px; }
 .ag-pickbox .ag-head h4 { color: var(--color-text-primary); }
 .ag-pickbox .ag-x { color: var(--color-text-muted); }

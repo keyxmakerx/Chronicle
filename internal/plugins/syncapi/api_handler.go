@@ -68,6 +68,7 @@ type APIHandler struct {
 	encounters           *EncounterAPIHandler
 	crafting             *CraftingAPIHandler
 	signer               *media.URLSigner
+	heroPlanner          entities.HeroPlanner
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
@@ -746,6 +747,11 @@ func (h *APIHandler) UpdateEntity(c *echo.Context) error {
 // apiUpdateFieldsRequest is the JSON body for updating entity custom fields.
 type apiUpdateFieldsRequest struct {
 	FieldsData map[string]any `json:"fields_data"`
+	// ActingUserID names the campaign member a Foundry player's change is
+	// made for. The write still arrives under the GM's key; with this set it
+	// is judged as that member (see judgeActingPlayer). Absent keeps today's
+	// behaviour: the key's own user.
+	ActingUserID string `json:"actingUserId"`
 }
 
 // UpdateEntityFields merges the sent custom fields into an entity's fields.
@@ -771,14 +777,35 @@ func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
+	// A player's change comes in under the GM's key, so the key's rights say
+	// nothing about it: judge it as the player, keep the keys that pass and
+	// hold the rest. Held keys are reported, never silently dropped.
+	held, err := h.judgeActingPlayer(ctx, entity, req.ActingUserID, req.FieldsData)
+	if err != nil {
+		return err
+	}
+	if len(held) > 0 {
+		kept := make(map[string]any, len(req.FieldsData))
+		for k, v := range req.FieldsData {
+			if _, refused := held[k]; !refused {
+				kept[k] = v
+			}
+		}
+		req.FieldsData = kept
+	}
+	noteSyncActor(c, req.ActingUserID)
+
 	if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, req.FieldsData); err != nil {
 		return err
 	}
 
 	// Partial update, like every other sync API write: fields the client
-	// doesn't send are kept, null clears one.
-	if err := h.entitySvc.MergeFields(ctx, entityID, req.FieldsData); err != nil {
-		return err
+	// doesn't send are kept, null clears one. A write whose every key was
+	// held has nothing left to merge.
+	if len(req.FieldsData) > 0 || len(held) == 0 {
+		if err := h.entitySvc.MergeFields(ctx, entityID, req.FieldsData); err != nil {
+			return err
+		}
 	}
 
 	// Capture what was sent (read-only diagnostics ring buffer; no DB) so the
@@ -786,7 +813,11 @@ func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 	// entity and compare it against the stored fields.
 	recordInbound(entityID, "fields", req.FieldsData, time.Now())
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	resp := map[string]any{"status": "ok"}
+	if len(held) > 0 {
+		resp["held"] = heldKeysList(held)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // ToggleEntityReveal sets or toggles an entity's is_private flag via the REST API.

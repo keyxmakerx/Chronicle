@@ -128,6 +128,7 @@ type Handler struct {
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
+	heroRules          HeroRules
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -2316,6 +2317,10 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
 		response["dateBook"] = cal
 	}
+	if keys := h.ownerFieldsFor(c.Request().Context(), cc, entity, et, userID); len(keys) > 0 {
+		response["owner_fields"] = keys
+	}
+	h.addHeroRuleNotes(c.Request().Context(), response, cc.Campaign.ID, entity, canSeeGM || isOwner)
 	return c.JSON(http.StatusOK, response)
 }
 
@@ -2400,6 +2405,16 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 		return err
 	}
 
+	// A claimed owner's pick of an ask-first entry is not written: it waits for
+	// a Director as a request, and the write answers with that outcome. The
+	// rest of the patch is saved as usual.
+	var asks []HeroAsk
+	if len(picks) > 0 && fieldsPatch != nil {
+		for _, t := range takeAskFirst(entity, fieldsPatch, picks) {
+			asks = append(asks, HeroAsk{FieldKey: t.fieldKey, EntryName: t.name})
+		}
+	}
+
 	// A Scribe is not served the hidden fields, so their save neither changes
 	// nor clears them.
 	fieldsData := body.FieldsData
@@ -2416,7 +2431,11 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	var saveErr error
 	if body.FieldsPatch != nil {
 		patch := fieldsPatch
-		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
+		ClearStaleStepOptions(entity, patch)
+		// Nothing left to write when every key was an ask-first pick.
+		if len(patch) > 0 || len(asks) == 0 {
+			saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
+		}
 	} else {
 		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, fieldsData)
 	}
@@ -2426,6 +2445,14 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
 
+	if len(asks) > 0 {
+		requests, failed := h.recordAsks(c, cc.Campaign.ID, entity, asks)
+		resp := map[string]any{"status": "ok", "requests": requests}
+		if len(failed) > 0 {
+			resp["requestFailed"] = failed
+		}
+		return c.JSON(http.StatusOK, resp)
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -3275,14 +3302,16 @@ func (h *Handler) BlockTypesAPI(c *echo.Context) error {
 	// When a game system owns the character sheet — it registers a page renderer
 	// bound to the "character" preset_category, which takes over every character
 	// entity's show page — the generic core "character_surface" block is
-	// redundant, so drop it from the palette. The renderer registry is global
-	// (lookupEntityShowRenderer is not campaign-scoped), so once such a renderer
-	// is registered the generic block is overridden everywhere; hiding it here
-	// stays consistent with that. System-agnostic campaigns (no character
-	// renderer registered) keep the block.
+	// redundant, so drop it from the palette. The binding is the system's, so
+	// only a campaign running one of the binding systems loses the block.
 	systemOwnsCharacterSheet := false
 	if reg := globalEntityShowRendererRegistry.Load(); reg != nil {
-		_, systemOwnsCharacterSheet = reg.LookupByPresetCategory("character")
+		for _, sys := range reg.PresetSystems("character") {
+			if sys == "" || h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, sys) {
+				systemOwnsCharacterSheet = true
+				break
+			}
+		}
 	}
 	types = hideRedundantCharacterSurface(types, systemOwnsCharacterSheet)
 

@@ -39,6 +39,7 @@ func (r *reqRepo) RevokeAll(context.Context, string, time.Time) error           
 func (r *reqRepo) RevokeMadeBy(context.Context, string, string, time.Time) error { return nil }
 func (r *reqRepo) RevokeOne(context.Context, string, int64, time.Time) error     { return nil }
 func (r *reqRepo) RevokeAllMadeBy(context.Context, string, time.Time) error      { return nil }
+func (r *reqRepo) RevokeGuestKeys(context.Context, time.Time) (int64, error)     { return 0, nil }
 func (r *reqRepo) Current(_ context.Context, campaignID, userID string) (*connector.Connection, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

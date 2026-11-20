@@ -247,3 +247,35 @@ func TestEndPlayerKey(t *testing.T) {
 		t.Error("ending an ended key succeeded")
 	}
 }
+
+// A guest (joined with a guest code, no account) can neither make a key nor
+// use one made before that rule held, and EndGuestKeys ends such a key.
+func TestPlayerKey_GuestsRefused(t *testing.T) {
+	ctx := context.Background()
+	svc, _, _ := playerService(t)
+	raw, _, err := svc.Connect(ctx, "camp-1", "player-2", aiexport.PrivacyModeSafe, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testGuests["player-2"] = true
+	defer delete(testGuests, "player-2")
+
+	if _, _, err := svc.Connect(ctx, "camp-1", "player-2", aiexport.PrivacyModeSafe, true); err == nil {
+		t.Fatal("a guest made a key")
+	}
+	if _, _, err := svc.Authenticate(ctx, "camp-1", raw); !errors.Is(err, ErrGuest) {
+		t.Fatalf("a guest's older key: %v, want ErrGuest", err)
+	}
+	n, err := svc.EndGuestKeys(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("EndGuestKeys = %d, %v; want 1 key ended", n, err)
+	}
+	// Taking an account later doesn't bring the old key back.
+	delete(testGuests, "player-2")
+	if _, _, err := svc.Authenticate(ctx, "camp-1", raw); !errors.Is(err, ErrKeyEnded) {
+		t.Fatalf("after the guest took an account: %v, want ErrKeyEnded", err)
+	}
+	if _, _, err := svc.Connect(ctx, "camp-1", "player-1", aiexport.PrivacyModeSafe, true); err != nil {
+		t.Fatalf("a player with an account was refused: %v", err)
+	}
+}

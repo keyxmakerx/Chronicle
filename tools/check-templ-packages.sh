@@ -17,7 +17,9 @@ set -euo pipefail
 missing() {
   local root="$1" d
   find "$root" -name '*.templ' -not -path '*/node_modules/*' -printf '%h\n' | sort -u | while IFS= read -r d; do
-    if ! find "$d" -maxdepth 1 -name '*.go' ! -name '*_templ.go' ! -name '*_test.go' | grep -q .; then
+    # -quit stops find at the first match: piping its whole list into
+    # grep -q kills find with SIGPIPE, which pipefail reads as no match.
+    if [ -z "$(find "$d" -maxdepth 1 -name '*.go' ! -name '*_templ.go' ! -name '*_test.go' -print -quit)" ]; then
       echo "${d#"$root"/}"
     fi
   done

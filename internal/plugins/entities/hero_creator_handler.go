@@ -38,35 +38,61 @@ func (h *Handler) heroTarget(c *echo.Context, cc *campaigns.CampaignContext) (*E
 	staff := cc.MemberRole >= campaigns.RoleScribe
 	target := pickHeroType(types, ids, !staff)
 	claimingOn := h.isAddonEnabled(ctx, campaignID, AddonPlayerCharacterClaiming)
-	owns := false
+	var own *Entity
 	if !staff && claimingOn && target != nil {
-		if owns, err = h.ownsCharacter(ctx, campaignID, auth.GetUserID(c), ids); err != nil {
+		if own, err = h.ownedCharacter(ctx, campaignID, auth.GetUserID(c), ids); err != nil {
 			return nil, heroAccess{}, err
 		}
 	}
-	return target, heroAccessFor(cc.MemberRole, claimingOn, target, owns), nil
+	access := heroAccessFor(cc.MemberRole, claimingOn, target, own != nil)
+	if access.HasHero {
+		access.OwnHero = own
+	}
+	return target, access, nil
 }
 
-// ownsCharacter reports whether the user already owns a page of one of the
-// campaign's character types.
-func (h *Handler) ownsCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (bool, error) {
+// ownedCharacter returns the user's page of one of the campaign's character
+// types, or nil when they have none.
+func (h *Handler) ownedCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (*Entity, error) {
 	owned, err := h.service.ListByOwner(ctx, campaignID, userID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	for _, e := range owned {
-		if slices.Contains(charTypeIDs, e.EntityTypeID) {
-			return true, nil
+	for i := range owned {
+		if slices.Contains(charTypeIDs, owned[i].EntityTypeID) {
+			return &owned[i], nil
 		}
 	}
-	return false, nil
+	return nil, nil
+}
+
+// ownsCharacter reports whether the user already owns such a page.
+func (h *Handler) ownsCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (bool, error) {
+	e, err := h.ownedCharacter(ctx, campaignID, userID, charTypeIDs)
+	return e != nil, err
 }
 
 func (h *Handler) heroPlan(c *echo.Context, cc *campaigns.CampaignContext) (*HeroPlan, error) {
 	if h.heroPlanner == nil {
 		return &HeroPlan{Steps: []HeroStep{}}, nil
 	}
-	return h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly())
+	ctx := c.Request().Context()
+	// A Scribe makes heroes for the table and is not limited, as a Director
+	// is not; a player is, by the rules about them.
+	if cc.MemberRole >= campaigns.RoleScribe && !cc.CanAuthorDmOnly() {
+		ctx = WithUnlimitedPlan(ctx)
+	}
+	return h.heroPlanner.HeroPlan(ctx, cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly())
+}
+
+// previewPlan is the plan as one player gets it, for a Director previewing
+// the hero builder as that player. Directors only: the same lists and rules
+// the player is served, with nothing of the Director's own mixed in.
+func (h *Handler) previewPlan(c *echo.Context, cc *campaigns.CampaignContext, asUser string) (*HeroPlan, error) {
+	if h.heroPlanner == nil {
+		return &HeroPlan{Steps: []HeroStep{}}, nil
+	}
+	return h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, asUser, false)
 }
 
 // mayReadHeroPlan reports whether a viewer below Director may read the
@@ -127,7 +153,10 @@ func (h *Handler) NewHero(c *echo.Context) error {
 		return err
 	}
 	if !access.Allowed {
-		return apperror.NewForbidden("you can't create a hero in this campaign")
+		if access.OwnHero != nil {
+			return middleware.Render(c, http.StatusForbidden, HeroAlreadyPage(cc, access.OwnHero))
+		}
+		return apperror.NewForbidden(access.refusalMessage())
 	}
 	return middleware.Render(c, http.StatusOK, HeroCreatorPage(cc, HeroCreatorView{
 		TypeName:  target.Name,
@@ -154,6 +183,14 @@ func (h *Handler) HeroPlanAPI(c *echo.Context) error {
 		if !ok {
 			return apperror.NewForbidden("you can't create a hero in this campaign")
 		}
+	}
+	// ?as= is a Director's preview as one player.
+	if as := c.QueryParam("as"); as != "" && cc.CanAuthorDmOnly() && len(as) <= 36 {
+		plan, err := h.previewPlan(c, cc, as)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, plan)
 	}
 	plan, err := h.heroPlan(c, cc)
 	if err != nil {
@@ -184,13 +221,13 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 		return err
 	}
 	if !access.Allowed {
-		return apperror.NewForbidden("you can't create a hero in this campaign")
+		return apperror.NewForbidden(access.refusalMessage())
 	}
 	plan, err := h.heroPlan(c, cc)
 	if err != nil {
 		return err
 	}
-	fields, err := buildHeroFields(plan, req.Picks)
+	fields, asks, err := buildHeroFields(plan, req.Picks)
 	if err != nil {
 		return err
 	}
@@ -211,10 +248,41 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 		return err
 	}
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
-	return c.JSON(http.StatusCreated, map[string]string{
+	resp := map[string]any{
 		"id":  entity.ID,
 		"url": "/campaigns/" + cc.Campaign.ID + "/entities/" + entity.ID,
-	})
+	}
+	// A pick of an ask-first entry waits for a Director instead of landing in
+	// the hero's fields. The hero is already made, so a request that can't be
+	// recorded is named for the player to ask again, not a failed creation.
+	if len(asks) > 0 {
+		requests, failed := h.recordAsks(c, cc.Campaign.ID, entity, asks)
+		resp["requests"] = requests
+		if len(failed) > 0 {
+			resp["requestFailed"] = failed
+		}
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+// recordAsks records each ask-first pick as a request for the hero, and names
+// the fields whose request could not be recorded.
+func (h *Handler) recordAsks(c *echo.Context, campaignID string, e *Entity, asks []HeroAsk) (done []HeroAskOutcome, failed []string) {
+	done = []HeroAskOutcome{}
+	for _, a := range asks {
+		a.CampaignID, a.UserID, a.EntityID, a.EntityName = campaignID, auth.GetUserID(c), e.ID, e.Name
+		if h.heroRules == nil {
+			failed = append(failed, a.FieldKey)
+			continue
+		}
+		out, err := h.heroRules.RequestChoice(c.Request().Context(), a)
+		if err != nil || out == nil {
+			failed = append(failed, a.FieldKey)
+			continue
+		}
+		done = append(done, *out)
+	}
+	return done, failed
 }
 
 // OwnEntries renders the page for a campaign's own pick-list entries

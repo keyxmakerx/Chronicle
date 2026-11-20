@@ -248,6 +248,13 @@ func GetCampaignName(ctx context.Context) string {
 	return name
 }
 
+// IsCampaignMember reports whether the viewer is a member of the current
+// campaign (Player or above): a visitor on a public campaign or a look-around
+// pass reads pages but has no jots or favourites.
+func IsCampaignMember(ctx context.Context) bool {
+	return GetCampaignRole(ctx) >= 1
+}
+
 // GetCampaignRole returns the user's campaign role as int, or 0.
 func GetCampaignRole(ctx context.Context) int {
 	role, _ := ctx.Value(keyCampaignRole).(int)

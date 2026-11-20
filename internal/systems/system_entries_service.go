@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -85,6 +87,19 @@ type systemEntryService struct {
 	repo     SystemEntryRepository
 	manifest EntryManifestResolver
 	chars    EntryCharacters
+	rules    EntryRuleForgetter
+}
+
+// EntryRuleForgetter removes the hero-choice rules that name a campaign
+// entry, so deleting the entry leaves no rule behind that nothing can show or
+// undo. The rules service implements it.
+type EntryRuleForgetter interface {
+	ForgetEntry(ctx context.Context, campaignID, systemID, fieldKey string, entryID int64) (int, error)
+}
+
+// WithEntryRules makes deleting an entry delete the rules that name it.
+func WithEntryRules(r EntryRuleForgetter) EntryServiceOption {
+	return func(s *systemEntryService) { s.rules = r }
 }
 
 // EntryServiceOption adds an optional dependency to the service.
@@ -598,12 +613,25 @@ func (s *systemEntryService) Delete(ctx context.Context, campaignID string, acto
 	if err := requireDirector(actor); err != nil {
 		return err
 	}
+	e, err := s.repo.Get(ctx, campaignID, id)
+	if err != nil {
+		return err
+	}
 	ok, err := s.repo.Delete(ctx, campaignID, id)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return apperror.NewNotFound("entry not found")
+	}
+	// Rules are keyed by the entry's id, which never repeats, so one left
+	// behind can never attach to another entry; it is removed anyway so the
+	// Directors' list shows none. A failure here is logged, not returned: the
+	// entry is already gone and what is left is inert.
+	if s.rules != nil {
+		if _, err := s.rules.ForgetEntry(ctx, campaignID, e.SystemID, e.FieldKey, id); err != nil {
+			slog.Warn("deleting an entry's hero rules failed", slog.Int64("entry_id", id), slog.Any("error", err))
+		}
 	}
 	return nil
 }
@@ -701,6 +729,7 @@ func (s *systemEntryService) Choices(ctx context.Context, campaignID, fieldKey s
 		c := Choice{
 			Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
 			Description: e.Description, Properties: e.Properties, ForName: e.ForName,
+			Key: strconv.FormatInt(e.ID, 10), Visibility: e.Visibility,
 		}
 		// The writer of a draft is told it is theirs and still a draft, and
 		// gets its id to keep it to the hero they make with it.

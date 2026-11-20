@@ -114,11 +114,11 @@ templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *
 }
 
 // systemPageTabList is the panel's tabs in order, each only where its piece
-// can draw for this viewer: notes need a signed-in viewer, items the armory
+// can draw for this viewer: notes need a member, items the armory
 // panel the show handler set up, files a member.
 func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext) []pageTab {
 	var tabs []pageTab
-	if layouts.GetUserID(ctx) != "" {
+	if layouts.GetUserID(ctx) != "" && cc.MemberRole >= campaigns.RolePlayer {
 		tabs = append(tabs, pageTab{Key: "notes", Label: "Notes", Count: ".en-note[data-en-id]:not(.is-leaving)", Act: `[data-en-act="new"]`})
 	}
 	if autoPagePanel(ctx) && pagePanelURL(ctx) != "" {

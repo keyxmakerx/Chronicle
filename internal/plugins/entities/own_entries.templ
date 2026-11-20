@@ -2,8 +2,7 @@
 // per pick list, and the creator's pull-out leaf for writing an entry. A
 // Director manages every entry there and lets players make their own; a
 // player sees only the entries a Director let them write. The page is a
-// mount point; static/js/own_entries.js (from the plugin body-script
-// registry) reads the pick lists from the creator's plan and the entries and
+// mount point; static/js/own_entries.js (loaded on sight, ADR-063) reads the pick lists from the creator's plan and the entries and
 // permissions from the systems plugin's entry API.
 
 package entities
@@ -44,6 +43,7 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 			</nav>
 			<div
 				class="hc hc--tool"
+				data-widget="own-entries"
 				data-own-entries="true"
 				data-campaign-id={ cc.Campaign.ID }
 				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }
