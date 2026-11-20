@@ -87,15 +87,15 @@ test('a link in the words, a home row and an All pages card change the page in p
   await page.locator('#main-content h1').first().waitFor();
   assert.ok(await marked(page), 'an All pages card reloaded the whole document');
 
-  // 6. A form in the page still posts: make a page from the new-page form
-  // reached by an in-place change.
+  // 6. A form in the page still posts: make a page through the New page sheet
+  // opened from All pages, which was itself reached by an in-place change.
   await owner.go(`/campaigns/${cid}/entities`);
   await mark(page);
-  await page.locator('#main-content a[href$="/entities/new"]').first().click();
-  await page.waitForURL(`${BASE}/campaigns/${cid}/entities/new`);
-  assert.ok(await marked(page), 'the new-page link reloaded the whole document');
-  await page.locator('select#entity_type_id').selectOption({ index: 1 });
-  const field = page.locator('#entity-form input[name=name], form input#name').first();
+  await page.locator('[data-app-opening] a[href*="entities/new"]').click();
+  await page.waitForSelector('dialog.np-sheet[open] #name');
+  assert.ok(await marked(page), 'the New page sheet reloaded the whole document');
+  await page.locator('dialog.np-sheet select[name=entity_type_id]').selectOption({ index: 1 });
+  const field = page.locator('dialog.np-sheet #name');
   await field.fill('Posted In Place');
   await Promise.all([page.waitForURL(/\/entities\/[0-9a-f-]{36}$/), field.press('Enter')]);
   await heading(page, 'Posted In Place');
