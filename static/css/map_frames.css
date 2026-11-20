@@ -1,6 +1,7 @@
 /*
- * map_frames.css: the six frames drawn around a map (Atlas, Arcane, Old,
- * Modern, Futuristic, Gilded). Shared by the dedicated map page, the maps list
+ * map_frames.css: the twelve frames drawn around a map (Atlas, Arcane, Old,
+ * Modern, Futuristic, Gilded, Blueprint, Stone, Verdant, Illuminated,
+ * Corkboard, Terminal). Shared by the dedicated map page, the maps list
  * cards (small form) and the Customize gallery, so one frame looks the same
  * everywhere.
  *
@@ -12,7 +13,7 @@
  *
  * The frame is switched by changing data-frame, so the Map settings sheet can
  * preview a frame without rebuilding anything. Atlas and Modern follow the app
- * theme (.dark); the other four are fixed looks of their own, by design: a
+ * theme (.dark); every other frame is a fixed look of its own, by design: a
  * parchment chart or a tactical display does not turn into something else when
  * the page goes dark.
  */
@@ -36,7 +37,13 @@
 .mp-frame[data-frame="atlas"] .mp-orn [data-o="atlas"],
 .mp-frame[data-frame="arcane"] .mp-orn [data-o="arcane"],
 .mp-frame[data-frame="old"] .mp-orn [data-o="old"],
-.mp-frame[data-frame="futuristic"] .mp-orn [data-o="futuristic"] { display: block; }
+.mp-frame[data-frame="futuristic"] .mp-orn [data-o="futuristic"],
+.mp-frame[data-frame="blueprint"] .mp-orn [data-o="blueprint"],
+.mp-frame[data-frame="stone"] .mp-orn [data-o="stone"],
+.mp-frame[data-frame="verdant"] .mp-orn [data-o="verdant"],
+.mp-frame[data-frame="illuminated"] .mp-orn [data-o="illuminated"],
+.mp-frame[data-frame="corkboard"] .mp-orn [data-o="corkboard"],
+.mp-frame[data-frame="terminal"] .mp-orn [data-o="terminal"] { display: block; }
 
 /* Shared title plate: Atlas, Old. */
 .mp-cart { position: absolute; left: 50%; transform: translateX(-50%); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 10.5px/1 Georgia, "Palatino Linotype", serif; letter-spacing: 0.32em; text-transform: uppercase; }
@@ -97,9 +104,10 @@
 .mp-hud span { overflow: hidden; text-overflow: ellipsis; }
 /* Scan lines sit over the map layers but under the floating controls (z 1100)
    and the pin cards (popup pane), so they never blur the controls. */
-.mp-frame[data-frame="futuristic"] .leaflet-container::after,
-.mp-frame[data-frame="futuristic"] .mp-art-wrap::after {
+.mp-frame:is([data-frame="futuristic"], [data-frame="terminal"]) :is(.leaflet-container, .mp-art-wrap)::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 650;
+}
+.mp-frame[data-frame="futuristic"] :is(.leaflet-container, .mp-art-wrap)::after {
   background: repeating-linear-gradient(0deg, rgb(34 211 238 / 0.06) 0 1px, transparent 1px 4px), linear-gradient(rgb(8 51 68 / 0.18), rgb(8 51 68 / 0.18));
 }
 
@@ -107,10 +115,146 @@
 .mp-frame[data-frame="gilded"] { padding: 16px; border-radius: 6px; border: 0; background: linear-gradient(135deg, var(--mp-gold-2), var(--mp-gold) 30%, #7a5a22 50%, var(--mp-gold) 70%, var(--mp-gold-2)); }
 .mp-frame[data-frame="gilded"] .mp-viewport { border-radius: 1px; box-shadow: inset 0 0 0 2px rgb(0 0 0 / 0.35), inset 0 0 24px rgb(0 0 0 / 0.35), 0 0 0 3px #5b4318; }
 
+/* ---- Blueprint: a draughtsman's sheet. Blue paper ruled in a fine grid,
+   white rules, registration marks, a dimension line and a title block. ---- */
+.mp-frame[data-frame="blueprint"] {
+  padding: 26px 24px 40px; border-radius: 3px; border-color: #0e2f57;
+  background:
+    linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px) 0 0 / 16px 16px,
+    radial-gradient(120% 100% at 30% 20%, #23588f, #173f6e);
+}
+.mp-frame[data-frame="blueprint"] .mp-viewport { border-radius: 0; box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.9), 0 0 0 5px #1b4a7d, 0 0 0 6px rgb(255 255 255 / 0.45); }
+[data-o="blueprint"] { color: rgb(255 255 255 / 0.85); }
+[data-o="blueprint"] svg { width: 20px; height: 20px; }
+.mp-bp-dim { position: absolute; left: 34px; right: 34px; top: 12px; height: 0; border-top: 1px solid currentColor; }
+.mp-bp-dim::before, .mp-bp-dim::after { content: ""; position: absolute; top: -5px; height: 9px; border-left: 1px solid currentColor; }
+.mp-bp-dim::before { left: 0; }
+.mp-bp-dim::after { right: 0; }
+.mp-bp-dim span { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); padding: 0 8px; background: #1f5087; font: 10px/1 ui-monospace, monospace; letter-spacing: 0.14em; white-space: nowrap; }
+.mp-bp-block { position: absolute; right: 24px; bottom: 7px; max-width: 70%; display: flex; align-items: stretch; border: 1px solid currentColor; font: 10px/1 ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; background: #1b4a7d; }
+.mp-bp-block span, .mp-bp-block b { padding: 6px 9px; }
+.mp-bp-block b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: #fff; border-left: 1px solid currentColor; border-right: 1px solid currentColor; }
+
+/* ---- Stone: a carved slab. Speckled granite, a key pattern cut into the
+   margin and the map's name chiselled below. ---- */
+.mp-frame[data-frame="stone"] {
+  --mp-key-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='12'%3E%3Cpath d='M0 10.5h3.5v-9h13v9H20M7 10.5V5h6v2.5h-3' fill='none' stroke='%232c2f34' stroke-opacity='.8' stroke-width='1.6'/%3E%3Cpath d='M0 11.6h4.6v-9h10.8' fill='none' stroke='%23fff' stroke-opacity='.22' stroke-width='1'/%3E%3C/svg%3E");
+  --mp-key-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='20'%3E%3Cpath d='M1.5 0v3.5h9v13h-9V20M1.5 7H7v6H4.5v-3' fill='none' stroke='%232c2f34' stroke-opacity='.8' stroke-width='1.6'/%3E%3C/svg%3E");
+  padding: 28px 28px 46px; border-radius: 4px; border-color: #4a4d53;
+  background:
+    radial-gradient(1.2px 1.2px at 12% 18%, rgb(255 255 255 / 0.35) 50%, transparent 51%) 0 0 / 23px 19px,
+    radial-gradient(1.4px 1.4px at 60% 70%, rgb(0 0 0 / 0.3) 50%, transparent 51%) 0 0 / 29px 31px,
+    radial-gradient(1px 1px at 80% 30%, rgb(255 255 255 / 0.25) 50%, transparent 51%) 0 0 / 17px 23px,
+    radial-gradient(1.6px 1.6px at 30% 85%, rgb(0 0 0 / 0.22) 50%, transparent 51%) 0 0 / 37px 41px,
+    linear-gradient(160deg, #9a9da3, #74777d 55%, #84878d);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.3), inset 2px 0 0 rgb(255 255 255 / 0.12), inset 0 -3px 0 rgb(0 0 0 / 0.3), inset -2px 0 0 rgb(0 0 0 / 0.18), 0 8px 24px rgb(15 17 23 / 0.22);
+}
+.mp-frame[data-frame="stone"] .mp-viewport { border-radius: 1px; box-shadow: 0 0 0 2px #3a3d42, 0 0 0 4px rgb(255 255 255 / 0.28), inset 0 0 22px rgb(0 0 0 / 0.45); }
+.mp-key { position: absolute; }
+.mp-key.t, .mp-key.b { left: 26px; right: 26px; height: 12px; background: var(--mp-key-h) center / 20px 12px repeat-x; }
+.mp-key.l, .mp-key.r { top: 26px; bottom: 44px; width: 12px; background: var(--mp-key-v) center / 12px 20px repeat-y; }
+.mp-key.t { top: 8px; }
+.mp-key.b { bottom: 26px; transform: scaleY(-1); }
+.mp-key.l { left: 8px; }
+.mp-key.r { right: 8px; transform: scaleX(-1); }
+[data-o="stone"] i { position: absolute; width: 12px; height: 12px; background: #7b7e84; box-shadow: inset 1.5px 1.5px 0 rgb(255 255 255 / 0.35), inset -1.5px -1.5px 0 rgb(0 0 0 / 0.4), 0 0 0 1px #3a3d42; }
+[data-o="stone"] i.tl { top: 8px; left: 8px; }
+[data-o="stone"] i.tr { top: 8px; right: 8px; }
+[data-o="stone"] i.br { bottom: 26px; right: 8px; }
+[data-o="stone"] i.bl { bottom: 26px; left: 8px; }
+.mp-stone-plate { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 11px/1 Georgia, "Palatino Linotype", serif; letter-spacing: 0.36em; text-transform: uppercase; color: #2c2f34; text-shadow: 0 1px 0 rgb(255 255 255 / 0.4); }
+
+/* ---- Verdant: a living border. Moss-dark wood, a vine along the top and
+   bottom and ivy creeping in from the corners. ---- */
+.mp-frame[data-frame="verdant"] {
+  --mp-vine: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='14'%3E%3Cpath d='M0 7c7-6 15-6 22 0s15 6 22 0' fill='none' stroke='%237da35a' stroke-width='1.6'/%3E%3Cpath d='M9 3.4c2.5-3.8 7.5-4 10.5-.6-3 3-7.5 3.4-10.5.6zM31 10.6c2.5 3.8 7.5 4 10.5.6-3-3-7.5-3.4-10.5-.6z' fill='%239cc777'/%3E%3C/svg%3E");
+  padding: 28px 26px 40px; border-radius: 10px; border-color: #41603a;
+  background: radial-gradient(120% 90% at 50% 40%, #33512d, #1a2c19);
+  box-shadow: inset 0 0 30px rgb(0 0 0 / 0.35), 0 8px 24px rgb(15 17 23 / 0.18);
+}
+.mp-frame[data-frame="verdant"] .mp-viewport { border-radius: 6px; box-shadow: 0 0 0 1px #b6d394, 0 0 0 4px #1d321b, 0 0 0 5px #5f8346; }
+[data-o="verdant"] { color: #9cc777; }
+[data-o="verdant"] svg { width: 56px; height: 56px; }
+.mp-vine { position: absolute; left: 62px; right: 62px; height: 14px; background: var(--mp-vine) center / 44px 14px repeat-x; }
+.mp-vine.t { top: 7px; }
+.mp-vine.b { bottom: 19px; transform: scaleY(-1); }
+.mp-leaf-tag { position: absolute; left: 50%; bottom: 5px; transform: translateX(-50%); max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: italic 600 13px/1 Georgia, "Palatino Linotype", serif; letter-spacing: 0.08em; color: #dcebc6; }
+
+/* ---- Illuminated: a manuscript page. Vellum, a red, blue and gold border,
+   gold bosses at the corners, the map's first letter as a painted initial
+   and its name as a red rubric. ---- */
+.mp-frame[data-frame="illuminated"] {
+  padding: 52px 28px 28px; border-radius: 2px; border-color: #cdbb8c;
+  background:
+    radial-gradient(50% 40% at 15% 10%, rgb(160 120 50 / 0.14), transparent 70%),
+    radial-gradient(45% 45% at 90% 95%, rgb(150 110 40 / 0.16), transparent 70%),
+    linear-gradient(135deg, #f6eed8, #ebdfbf);
+}
+.mp-frame[data-frame="illuminated"] .mp-viewport { border-radius: 1px; box-shadow: 0 0 0 1px #5b1a14, 0 0 0 3px #c9a03f, 0 0 0 4px #5b1a14, 0 0 0 8px #24468a, 0 0 0 9px #5b1a14, 0 0 0 11px #a8261d, 0 0 0 12px #5b1a14; }
+[data-o="illuminated"] i { position: absolute; width: 17px; height: 17px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f6e2a0, #c9a03f 55%, #8a6820); box-shadow: 0 0 0 1px #5b1a14, 0 1px 2px rgb(0 0 0 / 0.35); }
+[data-o="illuminated"] i.tl { top: 32px; left: 8px; }
+[data-o="illuminated"] i.tr { top: 32px; right: 8px; }
+[data-o="illuminated"] i.br { bottom: 8px; right: 8px; }
+[data-o="illuminated"] i.bl { bottom: 8px; left: 8px; }
+.mp-ill-head { position: absolute; left: 30px; right: 30px; top: 5px; height: 32px; display: flex; align-items: center; gap: 4px; }
+.mp-ill-cap { flex: none; width: 30px; height: 30px; display: grid; place-items: center; background: #24468a; color: #f6e2a0; font: 700 22px/1 "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; border: 2px solid #c9a03f; box-shadow: 0 0 0 1px #5b1a14, inset 0 0 0 1px #a8261d, 0 1px 3px rgb(0 0 0 / 0.3); }
+.mp-ill-rubric { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 17px/1 "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; letter-spacing: 0.06em; color: #a8261d; }
+.mp-ill-rule { flex: 1; min-width: 24px; height: 5px; margin-left: 8px; border-top: 1px solid #5b1a14; border-bottom: 1px solid #5b1a14; background: repeating-linear-gradient(90deg, #24468a 0 8px, #c9a03f 8px 11px, #a8261d 11px 19px, #c9a03f 19px 22px); }
+
+/* ---- Corkboard: a sheet pinned up. Cork, a white paper border, a tack in
+   each corner and the map's name typed on a strip of tape. ---- */
+.mp-frame[data-frame="corkboard"] {
+  padding: 34px 26px 26px; border-radius: 4px; border: 5px solid #6f4a26;
+  background:
+    radial-gradient(2px 1.5px at 20% 30%, rgb(70 40 10 / 0.5) 50%, transparent 51%) 0 0 / 19px 17px,
+    radial-gradient(1.5px 2px at 70% 60%, rgb(255 225 170 / 0.45) 50%, transparent 51%) 0 0 / 23px 29px,
+    radial-gradient(2.5px 2px at 45% 80%, rgb(90 55 20 / 0.4) 50%, transparent 51%) 0 0 / 31px 37px,
+    radial-gradient(1.2px 1.2px at 85% 15%, rgb(60 35 10 / 0.5) 50%, transparent 51%) 0 0 / 13px 11px,
+    linear-gradient(135deg, #c79a63, #b28450);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25), inset 0 3px 10px rgb(0 0 0 / 0.3), 0 8px 24px rgb(15 17 23 / 0.2);
+}
+.mp-frame[data-frame="corkboard"] .mp-viewport { border-radius: 1px; box-shadow: 0 0 0 7px #fbf9f2, 0 0 0 8px rgb(0 0 0 / 0.12), 2px 6px 12px 8px rgb(40 20 0 / 0.35); }
+[data-o="corkboard"] i { position: absolute; width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff8a7a, #c8261c 55%, #7d120c); box-shadow: 1px 3px 3px rgb(0 0 0 / 0.45), inset 0 0 0 1px rgb(0 0 0 / 0.12); }
+[data-o="corkboard"] i.tl { top: 21px; left: 13px; }
+[data-o="corkboard"] i.tr { top: 21px; right: 13px; }
+[data-o="corkboard"] i.br { bottom: 13px; right: 13px; }
+[data-o="corkboard"] i.bl { bottom: 13px; left: 13px; }
+.mp-tape { position: absolute; left: 50%; top: 4px; transform: translateX(-50%) rotate(-1.5deg); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 7px 18px; background: rgb(243 232 190 / 0.92); color: #3b2f1e; font: 600 12px/1 ui-monospace, "Courier New", monospace; letter-spacing: 0.12em; text-transform: uppercase; box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); clip-path: polygon(0 0, 2% 18%, 0 36%, 2% 54%, 0 72%, 2% 90%, 0 100%, 100% 100%, 98% 82%, 100% 64%, 98% 46%, 100% 28%, 98% 10%, 100% 0); }
+
+/* ---- Terminal: an old monitor. A dark bezel, rounded glass, amber scan
+   lines and a status line. ---- */
+.mp-frame[data-frame="terminal"] {
+  padding: 22px 22px 38px; border-radius: 22px; border-color: #14130f;
+  background: linear-gradient(170deg, #45423a, #2a2823 45%, #1f1e1a);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.14), inset 0 -3px 0 rgb(0 0 0 / 0.45), 0 8px 24px rgb(15 17 23 / 0.25);
+}
+.mp-frame[data-frame="terminal"] .mp-viewport { border-radius: 16px; background: #120b00; box-shadow: 0 0 0 3px #0c0b08, 0 0 0 4px rgb(255 255 255 / 0.1), 0 0 26px rgb(255 176 0 / 0.16); }
+.mp-crt { position: absolute; left: 30px; right: 30px; bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 14px; font: 11px/1 ui-monospace, monospace; letter-spacing: 0.12em; color: #ffb000; text-shadow: 0 0 6px rgb(255 176 0 / 0.6); white-space: nowrap; }
+.mp-crt span { overflow: hidden; text-overflow: ellipsis; }
+.mp-crt-cur { display: inline-block; width: 7px; height: 11px; margin-left: 4px; vertical-align: -1px; background: currentColor; box-shadow: 0 0 6px rgb(255 176 0 / 0.6); }
+.mp-crt-led { flex: none; display: inline-flex; align-items: center; gap: 7px; color: #b9b4a3; text-shadow: none; }
+.mp-crt-led::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #6ee05a; box-shadow: 0 0 6px #6ee05a; }
+/* The glass shares the Futuristic scan lines' layer: over the map, under the
+   floating controls. */
+.mp-frame[data-frame="terminal"] :is(.leaflet-container, .mp-art-wrap)::after {
+  background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 3px), radial-gradient(120% 120% at 50% 50%, transparent 55%, rgb(0 0 0 / 0.55));
+}
+
 /* ---- Optional tint: the map picture only, never the controls or pins. ---- */
 .mp-frame[data-tint="1"][data-frame="old"] :is(.leaflet-image-layer, .mp-art) { filter: sepia(0.55) saturate(0.9) contrast(1.05); }
 .mp-frame[data-tint="1"][data-frame="futuristic"] :is(.leaflet-image-layer, .mp-art) { filter: grayscale(0.6) brightness(0.72) contrast(1.1); }
 .mp-frame[data-tint="1"][data-frame="arcane"] :is(.leaflet-image-layer, .mp-art) { filter: saturate(0.75) brightness(0.88); }
+.mp-frame[data-tint="1"][data-frame="blueprint"] :is(.leaflet-image-layer, .mp-art) { filter: grayscale(1) contrast(1.35) invert(1) sepia(1) hue-rotate(175deg) saturate(2.4) brightness(0.9); }
+.mp-frame[data-tint="1"][data-frame="stone"] :is(.leaflet-image-layer, .mp-art) { filter: grayscale(0.55) contrast(1.06) brightness(0.96); }
+.mp-frame[data-tint="1"][data-frame="verdant"] :is(.leaflet-image-layer, .mp-art) { filter: sepia(0.2) hue-rotate(18deg) saturate(1.05) brightness(0.97); }
+.mp-frame[data-tint="1"][data-frame="illuminated"] :is(.leaflet-image-layer, .mp-art) { filter: sepia(0.32) saturate(1.15) contrast(1.03); }
+.mp-frame[data-tint="1"][data-frame="corkboard"] :is(.leaflet-image-layer, .mp-art) { filter: sepia(0.14) saturate(0.82) contrast(1.06); }
+.mp-frame[data-tint="1"][data-frame="terminal"] :is(.leaflet-image-layer, .mp-art) { filter: grayscale(1) contrast(1.4) invert(1) sepia(1) hue-rotate(-12deg) saturate(3.2) brightness(0.85); }
+/* These two repaint the whole picture, so with the tint on they also own the
+   colour around it; the map's own background colour returns with the tint off. */
+.mp-frame[data-tint="1"][data-frame="blueprint"] :is(.leaflet-container, .mp-art-wrap) { background-color: #173a66 !important; }
+.mp-frame[data-tint="1"][data-frame="terminal"] :is(.leaflet-container, .mp-art-wrap) { background-color: #140c00 !important; }
 
 /* ---- Small form: maps list cards. Fine detail is hidden; what is left is
    the frame's colour, rule and corners. ---- */
@@ -122,13 +266,35 @@
 .mp-frame.mp-mini .mp-orn .mp-side-ticks,
 .mp-frame.mp-mini .mp-orn .mp-runes,
 .mp-frame.mp-mini .mp-orn .mp-hud,
-.mp-frame.mp-mini .mp-orn .mp-seal { display: none !important; }
+.mp-frame.mp-mini .mp-orn .mp-seal,
+.mp-frame.mp-mini .mp-orn .mp-bp-dim,
+.mp-frame.mp-mini .mp-orn .mp-bp-block,
+.mp-frame.mp-mini .mp-orn .mp-key,
+.mp-frame.mp-mini .mp-orn .mp-stone-plate,
+.mp-frame.mp-mini .mp-orn .mp-vine,
+.mp-frame.mp-mini .mp-orn .mp-leaf-tag,
+.mp-frame.mp-mini .mp-orn .mp-ill-head,
+.mp-frame.mp-mini .mp-orn .mp-tape,
+.mp-frame.mp-mini .mp-orn .mp-crt { display: none !important; }
 .mp-frame.mp-mini .mp-orn svg { width: 16px; height: 16px; }
 .mp-frame.mp-mini .mp-orn i { width: 12px !important; height: 12px !important; }
 .mp-frame.mp-mini .mp-viewport { border-radius: 2px; }
 .mp-frame.mp-mini[data-frame="atlas"] .mp-viewport { box-shadow: 0 0 0 1px var(--mp-rule); }
 .mp-frame.mp-mini[data-frame="arcane"] .mp-viewport { box-shadow: 0 0 0 1px #c4b5fd, 0 0 12px 1px rgb(124 58 237 / 0.55); }
 .mp-frame.mp-mini[data-frame="futuristic"] .mp-viewport { box-shadow: 0 0 0 1px rgb(34 211 238 / 0.55); }
+.mp-frame.mp-mini[data-frame="blueprint"] .mp-viewport { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.9); }
+.mp-frame.mp-mini[data-frame="stone"] .mp-viewport { box-shadow: 0 0 0 1px #3a3d42, 0 0 0 2px rgb(255 255 255 / 0.28); }
+.mp-frame.mp-mini[data-frame="verdant"] .mp-viewport { box-shadow: 0 0 0 1px #b6d394; }
+.mp-frame.mp-mini[data-frame="illuminated"] .mp-viewport { box-shadow: 0 0 0 1px #5b1a14, 0 0 0 3px #24468a, 0 0 0 4px #c9a03f; }
+.mp-frame.mp-mini[data-frame="corkboard"] { border-width: 3px; }
+.mp-frame.mp-mini[data-frame="corkboard"] .mp-viewport { box-shadow: 0 0 0 3px #fbf9f2, 1px 3px 5px 3px rgb(40 20 0 / 0.35); }
+.mp-frame.mp-mini[data-frame="terminal"] { border-radius: 12px; }
+.mp-frame.mp-mini[data-frame="terminal"] .mp-viewport { border-radius: 7px; box-shadow: 0 0 0 2px #0c0b08; }
+.mp-frame.mp-mini :is([data-o="stone"], [data-o="illuminated"], [data-o="corkboard"]) i.tl { top: 2px; left: 2px; }
+.mp-frame.mp-mini :is([data-o="stone"], [data-o="illuminated"], [data-o="corkboard"]) i.tr { top: 2px; right: 2px; }
+.mp-frame.mp-mini :is([data-o="stone"], [data-o="illuminated"], [data-o="corkboard"]) i.br { bottom: 2px; right: 2px; }
+.mp-frame.mp-mini :is([data-o="stone"], [data-o="illuminated"], [data-o="corkboard"]) i.bl { bottom: 2px; left: 2px; }
+.mp-frame.mp-mini [data-o="verdant"] svg { width: 26px; height: 26px; }
 .mp-art-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: var(--color-bg-tertiary); }
 .mp-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
@@ -137,8 +303,22 @@
   .mp-frame[data-frame="atlas"] { padding: 14px 14px 30px; }
   .mp-frame[data-frame="arcane"] { padding: 18px 14px; }
   .mp-frame[data-frame="futuristic"] { padding: 22px 10px 28px; }
+  .mp-frame[data-frame="blueprint"] { padding: 24px 14px 38px; }
+  .mp-frame[data-frame="stone"] { padding: 26px 24px 44px; }
+  .mp-frame[data-frame="verdant"] { padding: 26px 16px 38px; }
+  .mp-frame[data-frame="illuminated"] { padding: 50px 18px 20px; }
+  .mp-frame[data-frame="corkboard"] { padding: 32px 14px 16px; }
+  .mp-frame[data-frame="terminal"] { padding: 12px 10px 34px; border-radius: 16px; }
+  .mp-frame[data-frame="terminal"] .mp-viewport { border-radius: 10px; }
   .mp-ticks, .mp-side-ticks { display: none; }
   .mp-hud { left: 10px; right: 10px; }
+  .mp-bp-block { right: 14px; }
+  .mp-bp-block span { display: none; }
+  .mp-bp-block b { border: 0; }
+  .mp-ill-head { left: 18px; right: 18px; }
+  .mp-crt { left: 18px; right: 18px; }
+  [data-o="verdant"] svg { width: 40px; height: 40px; }
+  .mp-vine { left: 46px; right: 46px; }
 }
 
 /* ---- Framed preview on a page, and the focus view it unfolds into

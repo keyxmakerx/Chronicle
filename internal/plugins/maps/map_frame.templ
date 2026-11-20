@@ -24,7 +24,7 @@ templ mapFrameStyles() {
 // the active frame's block (data-frame on the parent), so a frame can be
 // switched live without rebuilding markup. Decoration only: aria-hidden, never
 // takes pointer events. title is the map's name, used by the title plates, the
-// wax seal's initial and the futuristic readout.
+// wax seal's and painted initial's letter and the screen readouts.
 templ mapFrameOrnaments(title string) {
 	<div class="mp-orn" aria-hidden="true">
 		<div data-o="atlas">
@@ -69,6 +69,64 @@ templ mapFrameOrnaments(title string) {
 			<i class="bl"></i>
 			<div class="mp-hud top"><span>{ "CHART // " + strings.ToUpper(title) }</span><span>LINK OK</span></div>
 			<div class="mp-hud"><span class="mp-hudpos">X 000  Y 000</span><span class="mp-hudzoom">ZOOM 100%</span></div>
+		</div>
+		<div data-o="blueprint">
+			for _, pos := range []string{"tl", "tr", "br", "bl"} {
+				<svg class={ pos } viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.5">
+					<circle cx="15" cy="15" r="7"></circle>
+					<path d="M15 2v26M2 15h26"></path>
+				</svg>
+			}
+			<div class="mp-bp-dim"><span>PLAN VIEW</span></div>
+			<div class="mp-bp-block"><span>Sheet 1</span><b>{ title }</b><span>Not to scale</span></div>
+		</div>
+		<div data-o="stone">
+			for _, pos := range []string{"t", "r", "b", "l"} {
+				<div class={ "mp-key", pos }></div>
+			}
+			<i class="tl"></i>
+			<i class="tr"></i>
+			<i class="br"></i>
+			<i class="bl"></i>
+			<div class="mp-stone-plate">{ title }</div>
+		</div>
+		<div data-o="verdant">
+			for _, pos := range []string{"tl", "tr", "br", "bl"} {
+				<svg class={ pos } viewBox="0 0 46 46" fill="currentColor" stroke="none">
+					<path d="M5 5C16 4 30 6 42 12M5 5C4 16 6 30 12 42" fill="none" stroke="#7da35a" stroke-width="1.4"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(4 4) rotate(45) scale(1.5)"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(14 5) rotate(-42)"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(23 6.5) rotate(52)"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(33 9) rotate(-30)"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(5 14) rotate(132)"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(6.5 23) rotate(38)"></path>
+					<path d="M0 0C3-4 8-4 10 0 8 4 3 4 0 0z" transform="translate(9 33) rotate(120)"></path>
+				</svg>
+			}
+			<div class="mp-vine t"></div>
+			<div class="mp-vine b"></div>
+			<div class="mp-leaf-tag">{ title }</div>
+		</div>
+		<div data-o="illuminated">
+			<i class="tl"></i>
+			<i class="tr"></i>
+			<i class="br"></i>
+			<i class="bl"></i>
+			<div class="mp-ill-head">
+				<div class="mp-ill-cap">{ frameInitial(title) }</div>
+				<div class="mp-ill-rubric">{ frameRest(title) }</div>
+				<div class="mp-ill-rule"></div>
+			</div>
+		</div>
+		<div data-o="corkboard">
+			<i class="tl"></i>
+			<i class="tr"></i>
+			<i class="br"></i>
+			<i class="bl"></i>
+			<div class="mp-tape">{ title }</div>
+		</div>
+		<div data-o="terminal">
+			<div class="mp-crt"><span>{ "> " + strings.ToUpper(title) }<b class="mp-crt-cur"></b></span><span class="mp-crt-led">READY</span></div>
 		</div>
 	</div>
 }
@@ -148,6 +206,17 @@ func frameInitial(title string) string {
 		return strings.ToUpper(string(r))
 	}
 	return "·"
+}
+
+// frameRest is a map's name after its first letter, which the Illuminated frame
+// paints as a large initial beside it.
+func frameRest(title string) string {
+	for i := range title {
+		if i > 0 {
+			return title[i:]
+		}
+	}
+	return ""
 }
 
 // CustomizeTabFactory contributes the "Maps" tab to the campaigns plugin's

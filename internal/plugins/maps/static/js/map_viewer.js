@@ -344,7 +344,11 @@
 		drop: { cx: 15, cy: 15, fs: 12, ax: 15, ay: 37 },
 		seal: { cx: 15, cy: 22, fs: 12, ax: 15, ay: 37 },
 		flag: { cx: 17, cy: 11, fs: 8, ax: 8, ay: 37 },
-		dot: { cx: 15, cy: 19, fs: 11, ax: 15, ay: 19 }
+		dot: { cx: 15, cy: 19, fs: 11, ax: 15, ay: 19 },
+		shield: { cx: 15, cy: 15, fs: 11, ax: 15, ay: 37 },
+		tack: { cx: 15, cy: 11, fs: 10, ax: 15, ay: 37 },
+		diamond: { cx: 15, cy: 19, fs: 10, ax: 15, ay: 19 },
+		plaque: { cx: 15, cy: 15, fs: 12, ax: 15, ay: 37 }
 	};
 	function pinMetrics() {
 		var k = PIN_SCALE[D.pin_size] || 1;
@@ -356,6 +360,10 @@
 		var dash = dashed ? ' stroke-dasharray="3 2"' : '';
 		if (style === 'seal') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 34v4" stroke="' + c + '" stroke-width="2"/><circle cx="15" cy="22" r="12" fill="' + c + '" stroke="#fff" stroke-width="2"' + dash + '/><circle cx="15" cy="22" r="8" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2"/></svg>';
 		if (style === 'flag') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M8 37V4" stroke="#3b2f1e" stroke-width="2.4"/><path d="M9 5h17l-4 6 4 6H9z" fill="' + c + '" stroke="#fff" stroke-width="1.5"' + dash + '/></svg>';
+		if (style === 'shield') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M3 4h24v13c0 9.5-6.5 15.5-12 20-5.5-4.5-12-10.5-12-20z" fill="' + c + '" stroke="#fff" stroke-width="2" stroke-linejoin="round"' + dash + '/><path d="M6.5 7.5h17v9.5c0 7-4.5 11.5-8.5 15-4-3.5-8.5-8-8.5-15z" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.1"/></svg>';
+		if (style === 'tack') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 20v17" stroke="#4b5563" stroke-width="2.2" stroke-linecap="round"/><circle cx="15" cy="11" r="10" fill="' + c + '" stroke="#fff" stroke-width="2"' + dash + '/><path d="M8.5 8a7.5 7.5 0 016-4.2" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.6" stroke-linecap="round"/></svg>';
+		if (style === 'diamond') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 6l13 13-13 13L2 19z" fill="' + c + '" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"' + dash + '/></svg>';
+		if (style === 'plaque') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M7 3h16a4 4 0 014 4v16a4 4 0 01-4 4h-3.5L15 37l-4.5-10H7a4 4 0 01-4-4V7a4 4 0 014-4z" fill="' + c + '" stroke="#fff" stroke-width="2" stroke-linejoin="round"' + dash + '/></svg>';
 		if (style === 'dot') return '<svg viewBox="0 0 30 38" aria-hidden="true"><circle cx="15" cy="19" r="10" fill="' + c + '" stroke="#fff" stroke-width="2.5"' + dash + '/></svg>';
 		return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 37s-12-12.5-12-22a12 12 0 0124 0c0 9.5-12 22-12 22z" fill="' + c + '" stroke="#fff" stroke-width="2"' + dash + '/></svg>';
 	}

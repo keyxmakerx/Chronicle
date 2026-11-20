@@ -388,7 +388,10 @@ func TestResolveDisplay(t *testing.T) {
 }
 
 func TestIsValidFrame(t *testing.T) {
-	for _, id := range []string{"atlas", "arcane", "old", "modern", "futuristic", "gilded"} {
+	for _, id := range []string{
+		"atlas", "arcane", "old", "modern", "futuristic", "gilded",
+		"blueprint", "stone", "verdant", "illuminated", "corkboard", "terminal",
+	} {
 		if !IsValidFrame(id) {
 			t.Errorf("%q should be valid", id)
 		}
@@ -398,8 +401,33 @@ func TestIsValidFrame(t *testing.T) {
 			t.Errorf("%q should be invalid", id)
 		}
 	}
-	if len(FrameStyles) != 6 || FrameStyles[0].ID != DefaultFrame {
-		t.Errorf("the six frames start with the default: %+v", FrameStyles)
+	if len(FrameStyles) != 12 || FrameStyles[0].ID != DefaultFrame {
+		t.Errorf("the twelve frames start with the default: %+v", FrameStyles)
+	}
+	// The campaign's frame is stored in a VARCHAR(20) column.
+	for _, f := range FrameStyles {
+		if len(f.ID) > 20 {
+			t.Errorf("frame id %q is longer than its column", f.ID)
+		}
+	}
+}
+
+func TestIsValidPinStyle(t *testing.T) {
+	for _, id := range []string{"drop", "seal", "flag", "dot", "shield", "tack", "diamond", "plaque"} {
+		if !IsValidPinStyle(id) {
+			t.Errorf("%q should be valid", id)
+		}
+		if _, err := MergeDisplaySettings(nil, json.RawMessage(`{"pins":{"style":"`+id+`"}}`)); err != nil {
+			t.Errorf("a map should be able to save pin style %q: %v", id, err)
+		}
+	}
+	for _, id := range []string{"", "Drop", "star", "shield ", "../x"} {
+		if IsValidPinStyle(id) {
+			t.Errorf("%q should be invalid", id)
+		}
+	}
+	if len(PinStyles) != 8 || PinStyles[0].ID != PinStyleDrop {
+		t.Errorf("the eight pin shapes start with the default: %+v", PinStyles)
 	}
 }
 
