@@ -182,6 +182,8 @@
     var look = st.look;
     (look ? look.aurora : []).forEach(function (a) { st.aur.push({ k: a.k, c0: a.c0, c1: a.c1, az: 0, span: a.span || 170, base: a.alt === 'high' ? .3 : a.alt === 'low' ? .08 : .16, seed: 1 }); });
     (look ? look.fire : []).forEach(function (f) { fireballs(st, f, night(st) * .85 + .15); lookShower(st, f); });
+    // The shapes a weather draws into the sky: a rainbow, a halo, a rift.
+    if (window.SkyFX.lookItems) window.SkyFX.lookItems(st);
     (dayEvents || []).forEach(function (e) {
       var ms = (e.moons || []).map(function (id) { return findMoonState(st.moons, id); }).filter(function (M) { return M && M.up; });
       if (e.type === 'blood') ms.forEach(function (M) { lunar(st, M, true); });

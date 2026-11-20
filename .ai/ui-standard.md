@@ -664,7 +664,9 @@ second; the dice settle in under 480ms.
   The kind follows as a quiet word at the row's end, and a page that has a
   picture shows a small one there, its own and never a stand-in; a page with
   none shows none. An owner still picks each category's icon in the
-  Customizer, and it shows in the sidebar.
+  Customizer, and it shows in the sidebar. An owner may bring category icons
+  back beside page names, and choose their colour theme, in the Customizer's
+  Icons section; the default is the rule as written.
 - Screens not yet brought to these three icon rules: TODO(#2276).
 - Buttons and pills size to their content; nothing stretches full width after
   a state change.
@@ -800,6 +802,12 @@ their tokens.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
   it; Keystone is soft, raised and rounded (12px), and gives every button the
   heavy press.
+- **Icons** (`data-cz-icons`, `data-cz-icon-colour`): Few is the base; Beside
+  names draws a category's icon in front of a page's name in header search, the
+  link list, page rows and cards; Everywhere also draws the icon on a button
+  or menu row that has a word (`.word-ic`, hidden otherwise). Ink is the
+  base colour; Accent takes the campaign accent; Category mixes the category's
+  saved colour toward the text colour so every category reads alike.
 - **Depth** (`data-cz-elev`, shadows from `czElevation`): Standard is the
   base; Flat, Dramatic, and Ambient, whose shadows are tinted with the accent
   under a faint light from the page's top corner.

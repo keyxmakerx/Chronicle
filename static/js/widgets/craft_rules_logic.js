@@ -46,7 +46,16 @@
     ['Autumn Leaves', 'cloud'], ['Rolling Fog', 'fog'], ['Wildfire Smoke', 'fog'], ['Dust Devil', 'clear'], ['Black Sun', 'cloud'],
     ['Ley Surge', 'storm'], ['Aether Haze', 'fog'], ['Nullfront', 'cloud'], ['Permafrost Surge', 'snow'], ['Gravewind', 'cloud'],
     ['Veilfall', 'fog'], ['Arcane Winds', 'cloud'], ['Acid Rain', 'rain'], ['Blood Rain', 'rain'], ['Meteor Shower', 'clear'],
-    ['Spore Cloud', 'fog'], ['Divine Light', 'clear'], ['Plague Miasma', 'fog']];
+    ['Spore Cloud', 'fog'], ['Divine Light', 'clear'], ['Plague Miasma', 'fog'],
+    ['Showers', 'rain'], ['Flurries', 'snow'], ['Hard Frost', 'clear'], ['Ground Mist', 'fog'], ['Gloom', 'cloud'],
+    ['Sunbeams', 'clear'], ['Bitter Cold', 'clear'], ['Thaw', 'fog'], ['Gale', 'storm'], ['Squall', 'storm'],
+    ['Dry Lightning', 'storm'], ['Thundersnow', 'storm'], ['Freezing Rain', 'rain'], ['Waterspout', 'storm'], ['Firestorm', 'storm'],
+    ['Dust Wall', 'fog'], ['Rainbow', 'clear'], ['Red Sky', 'clear'], ['Sun Halo', 'clear'], ['Night-Shining Clouds', 'clear'],
+    ['Firefly Dusk', 'clear'], ['Pollen Haze', 'fog'], ['Thistledown', 'clear'], ['Gossamer', 'clear'], ['Sea Spray', 'cloud'],
+    ['Locust Swarm', 'cloud'], ['Smog', 'fog'], ['Butterfly Days', 'clear'], ['Wisp Lights', 'fog'], ['Dreamfog', 'fog'],
+    ['Shadowfall', 'cloud'], ['Sky Rift', 'storm'], ['Golden Rain', 'rain'], ['Ink Rain', 'rain'], ['Glass Rain', 'storm'],
+    ['Cinder Rain', 'storm'], ['Star Rain', 'clear'], ['Glimmersnow', 'snow'], ['Witchfire', 'storm'], ['Brimstone', 'fog'],
+    ['Featherfall', 'cloud'], ['Fey Lights', 'clear']];
   var WEATHER = WEATHER_TABLE.map(function (w) { return w[0]; });
   var GLYPHS = ['clear', 'cloud', 'rain', 'snow', 'storm', 'fog'];
   /* Conditions that are not about the day: the preview can't know them, so
@@ -637,7 +646,9 @@
     fine: ['edge', 'points', 'extra', 'none'], poor: ['bane', 'points', 'none'], subCost: ['bane', 'points', 'none'],
     after: [2, 3, 5, 10], gives: ['skip', 'edge', 'points'], learnedBy: ['maker', 'party'], failedTry: ['used', 'half', 'kept'],
     tags: ['metal', 'remnant_part', 'body_part', 'bone', 'hide', 'liquid', 'herb', 'magic_item', 'magic_essence',
-      'fungus', 'wood', 'resin', 'scale', 'feather', 'venom', 'gem', 'stone', 'powder', 'cloth', 'paper'],
+      'fungus', 'wood', 'resin', 'scale', 'feather', 'venom', 'gem', 'stone', 'powder', 'cloth', 'paper',
+      'ore', 'salt', 'oil', 'ash', 'silk', 'ice', 'shadow', 'sand', 'glass', 'wax',
+      'coral', 'starmetal', 'fruit', 'grain', 'flower', 'blood', 'horn', 'shell', 'clay', 'spirit'],
     limits: {subs: 8, salvage: 4, days: 360, hint: 240, mishapMoments: 20, enchantName: 40, slots: 6}
   };
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }

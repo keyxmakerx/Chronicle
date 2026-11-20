@@ -142,7 +142,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 				}
 				<div class="flex justify-end">
 					<button type="submit" class="btn-primary">
-						<i class="fa-solid fa-plus"></i> Add Category
+						<i class="fa-solid fa-plus word-ic"></i> Add Category
 					</button>
 				</div>
 			</form>
@@ -210,14 +210,14 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 					class="btn-ghost btn-sm"
 					title="Configure this category"
 				>
-					<i class="fa-solid fa-gear"></i> Configure
+					<i class="fa-solid fa-gear word-ic"></i> Configure
 				</a>
 				<button
 					@click="editing = true"
 					class="btn-ghost btn-sm"
 					title="Quick edit"
 				>
-					<i class="fa-solid fa-pencil"></i> Edit
+					<i class="fa-solid fa-pencil word-ic"></i> Edit
 				</button>
 				if entityCount == 0 {
 					<button
@@ -225,7 +225,7 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 						class="btn-ghost btn-ghost-danger btn-sm"
 						title="Delete category"
 					>
-						<i class="fa-solid fa-trash"></i> Delete
+						<i class="fa-solid fa-trash word-ic"></i> Delete
 					</button>
 				} else {
 					<span

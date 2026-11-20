@@ -121,7 +121,8 @@ test('a co-DM picks a DM Screen look; narrowing access takes it away and widenin
   await codm.go(`/campaigns/${cid}/my-look`);
   const pick = codm.page.locator('[data-look-part="dmscreen"] button[data-value="ornate"]');
   await pick.click();
-  await codm.page.waitForFunction(() => document.querySelector('[data-look-part="dmscreen"] button[data-value="ornate"]').getAttribute('aria-pressed') === 'true');
+  // The pick reloads the page, so the button can be missing for a moment.
+  await codm.page.waitForFunction(() => document.querySelector('[data-look-part="dmscreen"] button[data-value="ornate"]')?.getAttribute('aria-pressed') === 'true');
   assert.equal(await dmsKit(codm, cid), 'ornate', 'the DM Screen does not wear the picked look');
   assert.notEqual(before, 'ornate');
   assert.equal(await codm.page.evaluate(() => document.documentElement.getAttribute('data-cz-kit')), pageKit, 'the pages around the DM Screen changed');

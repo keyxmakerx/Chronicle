@@ -28,7 +28,7 @@ function load(attr) {
 const W = load(), M = W.MadeItems, R = W.CraftResults;
 
 test('every item key draws as a self-colouring picture', () => {
-  assert.equal(M.keys().length, 80);
+  assert.equal(M.keys().length, 160);
   for (const k of M.keys()) {
     const h = M.html({ shape: k }, 48);
     assert.match(h, new RegExp('^<img class="mi-pic" data-mi="' + k + '" data-mi-z="s" data-mi-c="#[0-9a-f]{6},#[0-9a-f]{6},#[0-9a-f]{6}" width="48" height="48" alt="" aria-hidden="true" decoding="async">$'));

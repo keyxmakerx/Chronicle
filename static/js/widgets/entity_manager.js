@@ -402,14 +402,14 @@
           var newBtn = document.createElement('a');
           newBtn.href = '/campaigns/' + campaignId + '/entities/new?type=' + entityTypeId;
           newBtn.className = 'inline-flex items-center gap-1 px-2 py-1.5 text-xs bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition-colors shrink-0';
-          newBtn.innerHTML = '<i class="fa-solid fa-plus text-[9px]"></i> New';
+          newBtn.innerHTML = '<i class="fa-solid fa-plus word-ic text-[9px]"></i> New';
           toolbar.appendChild(newBtn);
 
           if (quickCreateEndpoint) {
             var folderBtn = document.createElement('button');
             folderBtn.type = 'button';
             folderBtn.className = 'inline-flex items-center gap-1 px-2 py-1.5 text-xs bg-surface-alt border border-border text-fg-muted rounded-lg hover:bg-surface-alt/80 transition-colors shrink-0';
-            folderBtn.innerHTML = '<i class="fa-solid fa-folder-plus text-[9px]"></i> Folder';
+            folderBtn.innerHTML = '<i class="fa-solid fa-folder-plus word-ic text-[9px]"></i> Folder';
             folderBtn.addEventListener('click', createFolder);
             toolbar.appendChild(folderBtn);
           }

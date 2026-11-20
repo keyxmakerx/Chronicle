@@ -580,7 +580,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 		Categories
 	</button>
 	<div class="nav-drill-head">
-		<span class="nav-drill-ic">
+		<span class="nav-drill-ic kind-themed" { KindIconAttrs(ctx, et.Color)... }>
 			if et.Icon != "" {
 				<i class={ "fa-solid " + et.Icon } aria-hidden="true"></i>
 			} else {
@@ -638,7 +638,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 						aria-current="page"
 					}
 				>
-					<span class="nav-drill-sub-ic">
+					<span class="nav-drill-sub-ic kind-themed" { KindIconAttrs(ctx, s.Color)... }>
 						if s.Icon != "" {
 							<i class={ "fa-solid " + s.Icon } aria-hidden="true"></i>
 						} else {
@@ -1124,7 +1124,7 @@ templ Topbar() {
 						     campaign name room (phone_shell.css). It opens the bell's own
 						     list; the count mirrors the bell's badge. -->
 						<button type="button" class="dropdown-item tb-menu-notif w-full text-left" data-notif-menu @click.stop="open = false; document.querySelector('[data-notif-toggle]')?.click()">
-							<i class="fa-solid fa-bell text-xs w-4"></i> Notifications
+							<i class="fa-solid fa-bell text-xs w-4 word-ic"></i> Notifications
 							<span class="tb-menu-count" data-notif-menu-count hidden></span>
 						</button>
 						// A guest has no account page or picture of their own until
@@ -1132,14 +1132,14 @@ templ Topbar() {
 						if !IsGuest(ctx) {
 							@UserPictureBox()
 							<a href="/account" class="dropdown-item" @click="open = false">
-								<i class="fa-solid fa-gear text-xs w-4"></i> Account settings
+								<i class="fa-solid fa-gear text-xs w-4 word-ic"></i> Account settings
 							</a>
 						}
 						if !InSiteAdmin(ctx) {
 							<!-- theme.js shows the half that names the other look. -->
 							<button type="button" data-theme-toggle class="dropdown-item w-full text-left">
-								<span class="theme-icon-dark inline-flex items-center gap-2"><i class="fa-solid fa-moon text-xs w-4" aria-hidden="true"></i> Dark mode</span>
-								<span class="theme-icon-light hidden inline-flex items-center gap-2"><i class="fa-solid fa-sun text-xs w-4" aria-hidden="true"></i> Light mode</span>
+								<span class="theme-icon-dark inline-flex items-center gap-2"><i class="fa-solid fa-moon text-xs w-4 word-ic" aria-hidden="true"></i> Dark mode</span>
+								<span class="theme-icon-light hidden inline-flex items-center gap-2"><i class="fa-solid fa-sun text-xs w-4 word-ic" aria-hidden="true"></i> Light mode</span>
 							</button>
 						}
 						if IsGuest(ctx) {
@@ -1148,7 +1148,7 @@ templ Topbar() {
 							<form method="POST" action="/logout">
 								<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
 								<button type="submit" class="dropdown-item dropdown-item-danger w-full text-left">
-									<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
+									<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4 word-ic"></i> Log out
 								</button>
 							</form>
 						}

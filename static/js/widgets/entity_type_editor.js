@@ -151,7 +151,7 @@
       var addFieldBtn = document.createElement('button');
       addFieldBtn.type = 'button';
       addFieldBtn.className = 'text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300';
-      addFieldBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add Field';
+      addFieldBtn.innerHTML = '<i class="fa-solid fa-plus word-ic mr-1"></i> Add Field';
       addFieldBtn.addEventListener('click', function () {
         fields.push({ key: '', label: '', type: 'text', section: 'Basics', options: [] });
         rerender();
@@ -359,7 +359,7 @@
         var add = document.createElement('button');
         add.type = 'button';
         add.className = 'text-blue-600 dark:text-blue-400 hover:underline';
-        add.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add a countdown';
+        add.innerHTML = '<i class="fa-solid fa-plus word-ic mr-1"></i> Add a countdown';
         add.addEventListener('click', function () { field.countdowns.push({ name: '', lengths: [{ days: 3 }] }); rerender(); });
         box.appendChild(add);
         var hint = document.createElement('p');

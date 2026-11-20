@@ -345,3 +345,35 @@ func TestExtensionsHubPage_ForYourPages(t *testing.T) {
 		}
 	}
 }
+
+// hubAddonLister answers the add-on list the hub and its figure both read.
+type hubAddonLister struct{ addons []PluginHubAddon }
+
+func (l hubAddonLister) ListForPluginHub(context.Context, string) ([]PluginHubAddon, error) {
+	return l.addons, nil
+}
+
+// The count beside the page title lives outside the list a toggle re-fetches,
+// so the list's response must carry it as an out-of-band swap or it stays
+// stale until a reload.
+func TestExtensionsHubFragment_RedrawsTheTitleCount(t *testing.T) {
+	addons := []PluginHubAddon{
+		{AddonID: 1, Slug: "feat-a", Name: "Feature A", Category: "plugin", Installed: true, Enabled: true},
+		{AddonID: 2, Slug: "feat-b", Name: "Feature B", Category: "plugin", Installed: true},
+		{AddonID: 3, Slug: "feat-c", Name: "Feature C", Category: "plugin", Installed: true, Enabled: true},
+	}
+	h := NewHandler(deskFigureService{})
+	h.SetAddonLister(hubAddonLister{addons})
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c1", Name: "Test"}, MemberRole: RoleOwner}
+
+	var buf bytes.Buffer
+	if err := h.hubFragmentWithFigure(cc, addons, "csrf").Render(figureCtx(int(RoleOwner), true), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, want := range []string{`data-extension-slug="feat-a"`, `id="manage-figure"`, `hx-swap-oob="true"`, `data-line="game"`, "2 of 3 on"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("response lacks %q:\n%s", want, html)
+		}
+	}
+}

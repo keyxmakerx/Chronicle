@@ -27,6 +27,8 @@ type Appearance struct {
 	HeadingFont  string `json:"heading_font,omitempty"`  // Heading face id (AppearanceHeadingFonts); "same" follows the text.
 	TypeScale    string `json:"type_scale,omitempty"`    // "compact", "standard" or "roomy".
 	ButtonStyle  string `json:"button_style,omitempty"`  // "lift", "press", "glow", "ink" or "keystone".
+	IconAmount   string `json:"icon_amount,omitempty"`   // How many icons show: "few" (default), "names" or "all".
+	IconColour   string `json:"icon_colour,omitempty"`   // What colours category icons: "ink" (default), "accent" or "category".
 	Elevation    string `json:"elevation,omitempty"`     // "flat", "standard", "dramatic" or "ambient".
 	MotionSpeed  string `json:"motion_speed,omitempty"`  // "snappy", "standard" or "leisurely".
 	ReduceMotion bool   `json:"reduce_motion,omitempty"` // Calmer motion for every member of the campaign.
@@ -73,13 +75,18 @@ var (
 	AppearanceHeadingFonts = []string{"same", "cinzel", "marcellus", "imfell", "cormorant", "fraunces", "playfair", "josefin", "chakra"}
 	AppearanceTypeScales   = []string{"standard", "compact", "roomy"}
 	AppearanceButtonStyles = []string{"lift", "press", "glow", "ink", "keystone"}
-	AppearanceElevations   = []string{"standard", "flat", "dramatic", "ambient"}
-	AppearanceSpeeds       = []string{"standard", "snappy", "leisurely"}
-	AppearanceScrims       = []string{"medium", "light", "strong"}
-	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "era", "session"}
-	AppearanceSidebars     = []string{"charcoal", "ink", "tinted", "own"}
-	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
-	AppearanceGlows        = []string{"accent", "own"}
+	// AppearanceIconAmounts: "few" is the site's rule as written; "names" draws
+	// a category's icon before a page's name in lists; "all" is "names" plus,
+	// later, icons on buttons and menu rows.
+	AppearanceIconAmounts = []string{"few", "names", "all"}
+	AppearanceIconColours = []string{"ink", "accent", "category"}
+	AppearanceElevations  = []string{"standard", "flat", "dramatic", "ambient"}
+	AppearanceSpeeds      = []string{"standard", "snappy", "leisurely"}
+	AppearanceScrims      = []string{"medium", "light", "strong"}
+	AppearanceWidgets     = []string{"links", "text", "note", "search", "date", "weather", "moon", "era", "session"}
+	AppearanceSidebars    = []string{"charcoal", "ink", "tinted", "own"}
+	AppearanceCorners     = []string{"plain", "subtitle", "banner"}
+	AppearanceGlows       = []string{"accent", "own"}
 	// AppearanceEntrances are how a card opens under the Material kit; Grow
 	// is the base and is stored as unset.
 	AppearanceEntrances  = []string{"grow", "bloom", "unfold", "drop"}
@@ -147,6 +154,10 @@ type AppearanceInput struct {
 	Buttons struct {
 		Style string `json:"style"`
 	} `json:"buttons"`
+	Icons struct {
+		Amount string `json:"amount"`
+		Colour string `json:"colour"`
+	} `json:"icons"`
 	Motion struct {
 		Elevation string `json:"elevation"`
 		Speed     string `json:"speed"`
@@ -574,6 +585,8 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.HeadingFont, "heading font", in.Type.Heading, AppearanceHeadingFonts},
 		{&a.TypeScale, "text size", in.Type.Scale, AppearanceTypeScales},
 		{&a.ButtonStyle, "button style", in.Buttons.Style, AppearanceButtonStyles},
+		{&a.IconAmount, "icon amount", in.Icons.Amount, AppearanceIconAmounts},
+		{&a.IconColour, "icon colour", in.Icons.Colour, AppearanceIconColours},
 		{&a.Elevation, "elevation", in.Motion.Elevation, AppearanceElevations},
 		{&a.MotionSpeed, "motion speed", in.Motion.Speed, AppearanceSpeeds},
 		{&a.HeaderHeight, "header height", h.Height, AppearanceHeights},

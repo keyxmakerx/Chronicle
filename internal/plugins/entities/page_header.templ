@@ -37,7 +37,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 			<div class="ph-acts">
 				if canRename {
 					<button type="button" class="btn-ghost btn-sm ph-wide" data-edit-name aria-expanded="false" aria-controls="page-name-fold" onclick={ headerCall("nameFold") }>
-						<i class="fa-solid fa-pencil"></i> Edit name
+						<i class="fa-solid fa-pencil word-ic"></i> Edit name
 					</button>
 				}
 				if isScribe {
@@ -56,7 +56,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 				<div class="ph-more-menu" role="menu" data-more-menu data-kit-open hidden>
 					if canRename {
 						<button type="button" role="menuitem" class="ph-item ph-only-phone" data-edit-name onclick={ headerCall("nameFoldFromMenu") }>
-							<i class="fa-solid fa-pencil"></i> Edit name
+							<i class="fa-solid fa-pencil word-ic"></i> Edit name
 						</button>
 					}
 					if isScribe {
@@ -68,7 +68,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 						>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
 							<button type="submit" role="menuitem" class="ph-item" title="Create a copy of this page">
-								<i class="fa-regular fa-clone"></i> Clone
+								<i class="fa-regular fa-clone word-ic"></i> Clone
 							</button>
 						</form>
 					}
@@ -82,7 +82,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 							<input type="hidden" name="_method" value="DELETE"/>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
 							<button type="button" role="menuitem" class="ph-item danger" data-del onclick={ headerCall("askDelete") }>
-								<i class="fa-solid fa-trash"></i> Delete
+								<i class="fa-solid fa-trash word-ic"></i> Delete
 							</button>
 							<div class="ph-confirm" data-del-ask hidden>
 								<p>Delete { entity.Name }?</p>
@@ -139,7 +139,7 @@ templ claimMarker(cc *campaigns.CampaignContext, entity *Entity, state claimPill
 					data-url={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
 					data-name={ entity.Name }
 					onclick={ headerCall("claim") }
-				><i class="fa-solid fa-user-shield"></i> <span data-claim-label>Claim character</span></button>
+				><i class="fa-solid fa-user-shield word-ic"></i> <span data-claim-label>Claim character</span></button>
 			</span>
 		}
 }

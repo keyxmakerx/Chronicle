@@ -18,7 +18,7 @@ import (
 // Wire keys are snake_case to match the rest of the maps API (pin_category,
 // image_id), not the camelCase default, so one map payload does not mix styles.
 
-// FrameStyle is one of the six frames drawn around the map on the map page.
+// FrameStyle is one of the frames drawn around the map on the map page.
 type FrameStyle struct {
 	ID          string
 	Label       string
@@ -34,6 +34,12 @@ var FrameStyles = []FrameStyle{
 	{"modern", "Modern", "Clean and new: a plain rounded card, nothing in the way of the map."},
 	{"futuristic", "Futuristic", "A tactical display: bracketed corners, scan lines and a live position readout."},
 	{"gilded", "Gilded", "A gold picture frame for the map you want to show off."},
+	{"blueprint", "Blueprint", "A draughtsman's sheet: blue paper, white rules, corner marks and a title block."},
+	{"stone", "Stone", "A carved slab: speckled granite with a key pattern cut into the margin."},
+	{"verdant", "Verdant", "A living border: a vine along the edges and ivy creeping in from the corners."},
+	{"illuminated", "Illuminated", "A manuscript page: a red, blue and gold border and the map's first letter painted large."},
+	{"corkboard", "Corkboard", "Pinned up for the investigation: a tack in each corner and the name typed on tape."},
+	{"terminal", "Terminal", "An old monitor: rounded glass, amber scan lines and a status line."},
 }
 
 // DefaultFrame is what a campaign uses until its owner picks another.
@@ -50,7 +56,7 @@ func frameSummary(id string) string {
 	return frameSummary(DefaultFrame)
 }
 
-// IsValidFrame reports whether id names one of the six frames.
+// IsValidFrame reports whether id names one of the frames.
 func IsValidFrame(id string) bool {
 	for _, f := range FrameStyles {
 		if f.ID == id {
@@ -60,13 +66,65 @@ func IsValidFrame(id string) bool {
 	return false
 }
 
+// PinStyle is one of the shapes a map draws its pins in.
+type PinStyle struct {
+	ID    string
+	Label string
+}
+
+// PinStyles is the closed set of pin shapes, in the order the Map settings
+// sheet offers them. Drop is first because it is the default.
+var PinStyles = []PinStyle{
+	{PinStyleDrop, "Drop"},
+	{PinStyleSeal, "Seal"},
+	{PinStyleFlag, "Flag"},
+	{PinStyleDot, "Dot"},
+	{PinStyleShield, "Shield"},
+	{PinStyleTack, "Tack"},
+	{PinStyleDiamond, "Diamond"},
+	{PinStylePlaque, "Plaque"},
+}
+
+// IsValidPinStyle reports whether id names one of the pin shapes.
+func IsValidPinStyle(id string) bool {
+	for _, p := range PinStyles {
+		if p.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// pinStyleIDList names every pin shape id for a validation message.
+func pinStyleIDList() string {
+	ids := make([]string, len(PinStyles))
+	for i, p := range PinStyles {
+		ids[i] = p.ID
+	}
+	return strings.Join(ids, ", ")
+}
+
+// frameIDList names every frame id for a validation message, so the message
+// cannot fall behind the list.
+func frameIDList() string {
+	ids := make([]string, len(FrameStyles))
+	for i, f := range FrameStyles {
+		ids[i] = f.ID
+	}
+	return strings.Join(ids, ", ")
+}
+
 // Allowed values for the enum-like settings. Kept as small sets so a stored
 // value the renderer does not know can never exist.
 const (
-	PinStyleDrop = "drop"
-	PinStyleSeal = "seal"
-	PinStyleFlag = "flag"
-	PinStyleDot  = "dot"
+	PinStyleDrop    = "drop"
+	PinStyleSeal    = "seal"
+	PinStyleFlag    = "flag"
+	PinStyleDot     = "dot"
+	PinStyleShield  = "shield"
+	PinStyleTack    = "tack"
+	PinStyleDiamond = "diamond"
+	PinStylePlaque  = "plaque"
 
 	PinSizeSmall  = "s"
 	PinSizeMedium = "m"
@@ -296,7 +354,7 @@ func normalizeFrame(raw json.RawMessage) (*FrameDisplay, error) {
 	}
 	f.Style = strings.TrimSpace(f.Style)
 	if f.Style != "" && !IsValidFrame(f.Style) {
-		return nil, apperror.NewValidation("frame style must be one of: atlas, arcane, old, modern, futuristic, gilded")
+		return nil, apperror.NewValidation("frame style must be one of: " + frameIDList())
 	}
 	// Tint on is the default, so it is not stored; only an explicit off is.
 	if f.Tint != nil && *f.Tint {
@@ -313,8 +371,8 @@ func normalizePins(raw json.RawMessage) (*PinDisplay, error) {
 	if err := decodeGroup("pins", raw, &p); err != nil {
 		return nil, err
 	}
-	if p.Style != "" && !oneOf(p.Style, PinStyleDrop, PinStyleSeal, PinStyleFlag, PinStyleDot) {
-		return nil, apperror.NewValidation("pin style must be one of: drop, seal, flag, dot")
+	if p.Style != "" && !IsValidPinStyle(p.Style) {
+		return nil, apperror.NewValidation("pin style must be one of: " + pinStyleIDList())
 	}
 	if p.Size != "" && !oneOf(p.Size, PinSizeSmall, PinSizeMedium, PinSizeLarge) {
 		return nil, apperror.NewValidation("pin size must be one of: s, m, l")

@@ -74,7 +74,7 @@
     toggle.type = 'button';
     toggle.className = 'chronicle-outline__toggle';
     toggle.setAttribute('aria-expanded', 'false');
-    toggle.innerHTML = '<i class="fa-solid fa-list-ul" aria-hidden="true"></i> On this page';
+    toggle.innerHTML = '<i class="fa-solid fa-list-ul word-ic" aria-hidden="true"></i> On this page';
     inner.appendChild(toggle);
 
     var label = document.createElement('p');
