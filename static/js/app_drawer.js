@@ -2,7 +2,7 @@
  * app_drawer.js -- the app drawer beside the campaign sidebar
  *
  * The grid on the Apps heading and the All apps row open it. It grows out
- * beside the sidebar from the thing clicked (200 ms in, 120 ms out), only
+ * beside the sidebar from the thing clicked (the standard and micro durations), only
  * fades under Calm, and simply appears under Off. Esc closes it and puts
  * focus back where it came from; so does a click outside it.
  *
@@ -30,7 +30,11 @@
     return window.Chronicle && window.Chronicle.motionMs ? window.Chronicle.motionMs(name, fallback) : fallback;
   }
 
-  var GROW_IN = 200, GROW_OUT = 120, FOLD_MS = 200;
+  // The Grow and Fold durations are read when each move starts, so the owner's
+  // Motion speed retimes them.
+  function growIn() { return tokMs('--dur-standard', 200); }
+  function growOut() { return tokMs('--dur-micro', 120); }
+  function foldMs() { return tokMs('--dur-standard', 200); }
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)', EASE_IN = 'cubic-bezier(.4,0,1,1)';
   var DRAG_SLOP = 6, GAP_REST = 110;
 
@@ -122,9 +126,9 @@
     var m = motion();
     if (m === 'full') {
       play(d, [{ opacity: 0, transform: 'scale(.94) translateX(-6px)' }, { opacity: 1, transform: 'none' }],
-        { duration: GROW_IN, easing: EASE_OUT });
+        { duration: growIn(), easing: EASE_OUT });
     } else if (m === 'calm') {
-      play(d, [{ opacity: 0 }, { opacity: 1 }], { duration: GROW_IN, easing: 'linear' });
+      play(d, [{ opacity: 0 }, { opacity: 1 }], { duration: growIn(), easing: 'linear' });
     }
     var find = $('[data-apd-find]', d);
     if (find) find.focus({ preventScroll: true });
@@ -152,7 +156,7 @@
       d.classList.add('is-closing');
       done(play(d, m === 'full'
         ? [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.96) translateX(-4px)' }]
-        : [{ opacity: 1 }, { opacity: 0 }], { duration: GROW_OUT, easing: EASE_IN, fill: 'forwards' }), finish);
+        : [{ opacity: 1 }, { opacity: 0 }], { duration: growOut(), easing: EASE_IN, fill: 'forwards' }), finish);
     }
     if (back) back.focus({ preventScroll: true });
   }
@@ -221,7 +225,7 @@
       var h = w.scrollHeight;
       w.style.overflow = 'hidden';
       done(play(w, [{ height: '0px', opacity: 0 }, { height: h + 'px', opacity: 1 }],
-        { duration: FOLD_MS, easing: EASE_OUT }), function () { w.style.overflow = ''; });
+        { duration: foldMs(), easing: EASE_OUT }), function () { w.style.overflow = ''; });
     }
     if (m !== 'off') {
       var row = w.classList.contains('nav-row') ? w : w.querySelector('.nav-row');
@@ -405,7 +409,7 @@
     body.insertBefore(D.gap, at);
     D.before = before ? rowKey(before) : null;
     if (first && motion() === 'full') {
-      play(D.gap, [{ height: '0px', opacity: 0 }, { height: D.gap.offsetHeight + 'px', opacity: 1 }], { duration: FOLD_MS, easing: EASE_OUT });
+      play(D.gap, [{ height: '0px', opacity: 0 }, { height: D.gap.offsetHeight + 'px', opacity: 1 }], { duration: foldMs(), easing: EASE_OUT });
     }
   }
 
