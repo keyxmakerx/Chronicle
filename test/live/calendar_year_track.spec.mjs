@@ -62,7 +62,24 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'the draft was saved before Keep');
   await picture(page, 'year-track-draft', { check: '#2222', about: 'Edit drawer with a fill draft', mask: ['header'] });
 
+  // Keep is done when the draft bar has gone. An Undo button alone does not
+  // say so: the one from an earlier Keep can still be on screen.
+  const refusedWrites = [];
+  page.on('response', (r) => {
+    const q = r.request();
+    if (q.method() !== 'GET' && r.status() >= 400) refusedWrites.push(`${q.method()} ${new URL(r.url()).pathname.replace(base, '')} ${r.status()}`);
+  });
+  const keptAll = async () => {
+    const live = page.locator('#cal5-live');
+    const done = keep.waitFor({ state: 'detached', ...LONG }).then(() => false);
+    const stopped = live.filter({ hasText: /could not|Nothing could be saved|The rest are still a draft/ }).waitFor(LONG).then(() => true, () => false);
+    if (await Promise.race([done, stopped])) {
+      assert.fail(`Keep stopped part way: "${await live.innerText()}"; refused writes: ${[...new Set(refusedWrites.map((w) => w.replace(/[0-9a-f-]{36}/g, ':id')))].join(', ') || 'none'}`);
+    }
+    await live.filter({ hasText: /^Kept/ }).waitFor(LONG);
+  };
   await keep.click();
+  await keptAll();
   const undo = page.getByRole('button', { name: 'Undo' });
   await undo.waitFor();
   assert.match(await page.locator('body').innerText(), /Kept \d+ events?/);
@@ -88,10 +105,9 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   await fill.click();
   await keep.waitFor();
   await keep.click();
-  await undo.waitFor(LONG);
+  await keptAll();
   const first = await yearEvents(owner, base, cal.current_year, months);
   assert.ok(first.length > 0, 'the first fill saved no events');
-  await page.locator('#cal5-live').filter({ hasText: /^Kept/ }).waitFor();
   await fill.click();
   await keep.waitFor();
   const said = await page.locator('.yt-barwrap').innerText();
@@ -100,7 +116,7 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   assert.equal(Number(m[1]), first.length, 'the second fill does not replace all of the first');
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, first.length, 'the second draft changed what is saved before Keep');
   await keep.click();
-  await undo.waitFor(LONG);
+  await keptAll();
   const second = await yearEvents(owner, base, cal.current_year, months);
   const firstIds = new Set(first.map((e) => e.id));
   assert.equal(second.filter((e) => firstIds.has(e.id)).length, 0, 'events of the first fill are still there after the second');
