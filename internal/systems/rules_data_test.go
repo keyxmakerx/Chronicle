@@ -98,3 +98,68 @@ func TestKindData_PerReader(t *testing.T) {
 		t.Fatal("another system has no campaign overlay")
 	}
 }
+
+// Two saves racing can leave a standard entry both rewritten and left out,
+// which the service otherwise refuses. A reader who has the rewrite then gets
+// it alone: never the printed object beside it, a left-out line for it, or
+// its printed words at the printed address.
+func TestLeftOutAndReplacedAtOnce(t *testing.T) {
+	p, svc, repo, sys := newRulesPages(t)
+	ctx := context.Background()
+	elf, err := svc.Rewrite(ctx, "c1", dirActor, RewriteInput{FieldKey: "ancestry", Slug: "elf", Name: "Sea Elf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Update(ctx, "c1", dirActor, elf.ID, UpdateSystemEntryInput{Visibility: patch.Of(EntryVisibilityEveryone)}); err != nil {
+		t.Fatal(err)
+	}
+	// Written past the service, as the race would leave it.
+	if err := repo.PutLeftOut(ctx, &LeftOut{CampaignID: "c1", SystemID: sys.Info().ID, FieldKey: "ancestry", Slug: "elf", Sentence: "Gone."}); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name        string
+		reader      EntryActor
+		printedKind string
+	}{
+		{"a player", playerActor, ResolvedRedirect},
+		{"the Director", dirActor, ResolvedPrinted},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := reader(tt.reader)
+			out, _, err := p.KindData(ctx, sys, "ancestries", []byte(rawAncestries), r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if w := dataWords(t, out); strings.Contains(","+w+",", ",Elf") || !strings.Contains(w, "Sea Elf/rewritten") {
+				t.Fatalf("file = %s", w)
+			}
+			if strings.Contains(string(out), "Old Eyes") {
+				t.Fatal("the printed Elf's words came with the rewrite")
+			}
+			l, err := svc.Catalog(ctx, "c1", "ancestries", tt.reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range append(append([]CatalogEntry{}, l.LeftOutNoted...), l.LeftOut...) {
+				if e.Slug == "elf" {
+					t.Fatalf("the Elf is listed as left out: %+v", e)
+				}
+			}
+			hits, err := p.Search(ctx, sys, "elf", r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, h := range hits {
+				if h.Kind == "left_out" {
+					t.Fatalf("search gave a left-out line: %+v", h)
+				}
+			}
+			res, err := svc.ResolveAddress(ctx, "c1", "ancestries", "elf", true, tt.reader)
+			if err != nil || res.Kind != tt.printedKind {
+				t.Fatalf("printed address = %+v %v, want %s", res, err, tt.printedKind)
+			}
+		})
+	}
+}

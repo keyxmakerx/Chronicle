@@ -111,6 +111,17 @@ type CatalogList struct {
 	LeftOutNoted []CatalogEntry `json:"leftOutNoted"`
 }
 
+// Replaced reports whether a standard slug is read rewritten in this list,
+// so a caller adding left-out package content skips a slug that is both.
+func (l *CatalogList) Replaced(slug string) bool {
+	for i := range l.Entries {
+		if l.Entries[i].Origin == OriginRewritten && l.Entries[i].StandsFor == slug {
+			return true
+		}
+	}
+	return false
+}
+
 // Resolution is what one address or one name means for a reader.
 type Resolution struct {
 	// Kind is one of the Resolved* values.
@@ -181,11 +192,15 @@ func planReading(stdSlugs []string, camp []SystemEntry, leftOut map[string]LeftO
 		}
 	}
 	for i, s := range stdSlugs {
-		if _, out := leftOut[s]; out && s != "" {
-			p.leftOut = append(p.leftOut, i)
+		// Replaced comes before left out. The service refuses both at once,
+		// but two saves racing can leave both; the reader then has the
+		// rewrite alone, and the printed entry never comes with it, not even
+		// as a left-out entry carrying its words.
+		if _, replaced := p.replacedBy[i]; replaced {
 			continue
 		}
-		if _, replaced := p.replacedBy[i]; replaced {
+		if _, out := leftOut[s]; out && s != "" {
+			p.leftOut = append(p.leftOut, i)
 			continue
 		}
 		p.offered = append(p.offered, i)
@@ -360,19 +375,22 @@ func (s *systemEntryService) ResolveAddress(ctx context.Context, campaignID, cat
 		}
 	}
 	if printed && stdIdx >= 0 {
-		if _, out := st.leftOut[slug]; out {
+		_, replaced := st.plan.replacedBy[stdIdx]
+		_, out := st.leftOut[slug]
+		switch {
+		case replaced && reader.IsDirector:
+			e := st.stdEntry(stdIdx)
+			return &Resolution{Kind: ResolvedPrinted, Entry: &e}, nil
+		case replaced:
+			// Anyone else asking for the printed original of what they read
+			// rewritten is answered as if they had not asked, even when the
+			// entry is also marked left out.
+		case out:
 			return st.leftOutRes(stdIdx), nil
-		}
-		if _, replaced := st.plan.replacedBy[stdIdx]; !replaced {
+		default:
 			e := st.stdEntry(stdIdx)
 			return &Resolution{Kind: ResolvedEntry, Entry: &e}, nil
 		}
-		if reader.IsDirector {
-			e := st.stdEntry(stdIdx)
-			return &Resolution{Kind: ResolvedPrinted, Entry: &e}, nil
-		}
-		// Anyone else asking for the printed original of what they read
-		// rewritten is answered as if they had not asked.
 	}
 	for j := range st.camp {
 		if st.camp[j].Slug == slug {

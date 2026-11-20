@@ -94,6 +94,11 @@ func (p *RulesPages) KindData(ctx context.Context, sys System, category string, 
 		return nil, false, err
 	}
 	for _, l := range outs {
+		if list.Replaced(l.Slug) {
+			// Left out and rewritten at once (a race the service refuses):
+			// the reader has the rewrite, never the printed words beside it.
+			continue
+		}
 		if it, ok := bySlug[l.Slug]; ok {
 			marks := map[string]any{"leftOut": true}
 			if l.Sentence != "" {

@@ -220,6 +220,9 @@ func (p *RulesPages) searchKind(ctx context.Context, sys System, category, field
 		if dp == nil {
 			break
 		}
+		if l.Replaced(lo.Slug) {
+			continue // the reader finds the rewrite above, not a left-out line
+		}
 		it, err := dp.Get(category, lo.Slug)
 		if err != nil || it == nil || !strings.Contains(strings.ToLower(it.Name), q) {
 			continue
