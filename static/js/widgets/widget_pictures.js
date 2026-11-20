@@ -51,12 +51,12 @@
       return box(8, 7, 40, 26, 'f', 3) + '<path class="b-s" d="M8 26C16 22 22 30 31 25S43 19 48 22"/>' +
         '<path class="a" d="M30 10.5a4.5 4.5 0 0 1 4.5 4.5c0 3.3-4.5 7.5-4.5 7.5s-4.5-4.2-4.5-7.5a4.5 4.5 0 0 1 4.5-4.5Z"/>' + dot(30, 15, 1.6, 'b');
     },
-    calendar: function () {
+    month: function () {
       var h = bar(8, 7, 40, 3.5), r, c;
       for (r = 0; r < 4; r++) for (c = 0; c < 7; c++) h += box(8 + c * 6, 14 + r * 6, 4, 4, r === 2 && c === 4 ? 'a' : 'f', 1);
       return h;
     },
-    timeline: function () {
+    track: function () {
       return line(8, 22, 48, 22) + dot(13, 22, 2, 'i') + dot(23, 22, 2, 'i') + dot(43, 22, 2, 'i') + dot(34, 22, 3.5, 'a') +
         bar(28, 12, 12, 3) + bar(9, 28, 10, 2.5, 'f') + bar(37, 28, 11, 2.5, 'f');
     },
