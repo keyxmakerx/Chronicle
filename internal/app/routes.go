@@ -3109,7 +3109,8 @@ func (a *App) RegisterRoutes() {
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
 	// mini→full launch enhancement, and the scripts below, each loaded on
 	// sight: the Contents block's, Standing's, the Family tree's and the
-	// Characters page's hero builder, the chip naming a page's layout, and
+	// Characters page's hero builder, the hero creator, the own-entries page,
+	// the chip naming a page's layout, and
 	// the search page's Alpine component).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
@@ -3119,6 +3120,8 @@ func (a *App) RegisterRoutes() {
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
+			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/hero_creator.js"}},
+			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
 		},
@@ -4134,9 +4137,6 @@ func (a *App) RegisterRoutes() {
 	// no-ops when its mount is absent.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/hero_rules_lines.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
-		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",

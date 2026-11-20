@@ -40,9 +40,9 @@ const RULES = () => ({
 const REQUEST = { id: 7, fieldKey: 'class', fieldLabel: 'Class', source: 'package', key: 'tactician', entryName: 'Tactician', userId: 'u2', playerName: 'Pat Lee', entityId: 'e1', entityName: 'Tess', status: 'waiting' };
 
 const html = (director) => `<!doctype html><html><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style></head><body>
-<div class="hc hc--tool" data-own-entries="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-entries-url="${C}/system-entries"
+<div class="hc hc--tool" data-widget="own-entries" data-own-entries="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-entries-url="${C}/system-entries"
   data-members-url="${C}/members" data-director="${director}" data-user="u1" data-field="class" data-csrf="tok"><p class="hc-loading__text">Opening</p></div>
-<script>window.Chronicle = { escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) };</script>
+<script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) };</script>
 <script src="/own_entries.js"></script></body></html>`;
 
 async function open(t, { director = true, checkCount = 0, requests = [REQUEST], putStatus = 200 } = {}) {

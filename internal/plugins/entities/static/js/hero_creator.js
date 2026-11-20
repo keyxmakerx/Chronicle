@@ -557,21 +557,18 @@
     });
   };
 
-  function boot(scope) {
-    var nodes = (scope || document).querySelectorAll('[data-hero-creator]:not([data-hc-ready])');
-    for (var i = 0; i < nodes.length; i++) {
-      nodes[i].setAttribute('data-hc-ready', 'true');
-      var c = new Creator(nodes[i]);
-      c.wire();
-      c.load();
-    }
+  // Loaded on sight (ADR-063): boot.js fetches this script when it meets the
+  // page's data-widget mount, then mounts it through register().
+  function register() {
+    Chronicle.register('hero-creator', {
+      init: function (el) {
+        if (el._heroCreator) return;
+        var p = new Creator(el);
+        el._heroCreator = p;
+        p.wire();
+        p.load();
+      }
+    });
   }
-
-  function start() {
-    boot(document);
-    document.addEventListener('htmx:afterSettle', function (e) { boot(e.target); });
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
+  if (window.Chronicle && Chronicle.register) register();
 })();

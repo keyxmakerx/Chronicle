@@ -1,8 +1,7 @@
 // hero_creator.templ — the hero creator page: one page per step, and each
 // entry's leaf slides out from under it. The page is a mount point; the
-// creator script (static/js/hero_creator.js, shipped from the plugin
-// body-script registry so boosted navigation keeps it) fetches the steps
-// and draws the paper.
+// creator script (static/js/hero_creator.js, loaded on sight, ADR-063)
+// fetches the steps and draws the paper.
 
 package entities
 
@@ -34,6 +33,7 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 			</nav>
 			<div
 				class="hc"
+				data-widget="hero-creator"
 				data-hero-creator="true"
 				data-campaign-id={ cc.Campaign.ID }
 				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }

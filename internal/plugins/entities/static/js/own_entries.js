@@ -1654,21 +1654,18 @@
     }
   };
 
-  function boot(scope) {
-    var nodes = (scope || document).querySelectorAll('[data-own-entries]:not([data-oe-ready])');
-    for (var i = 0; i < nodes.length; i++) {
-      nodes[i].setAttribute('data-oe-ready', 'true');
-      var p = new Entries(nodes[i]);
-      p.wire();
-      p.load();
-    }
+  // Loaded on sight (ADR-063): boot.js fetches this script when it meets the
+  // page's data-widget mount, then mounts it through register().
+  function register() {
+    Chronicle.register('own-entries', {
+      init: function (el) {
+        if (el._ownEntries) return;
+        var p = new Entries(el);
+        el._ownEntries = p;
+        p.wire();
+        p.load();
+      }
+    });
   }
-
-  function start() {
-    boot(document);
-    document.addEventListener('htmx:afterSettle', function (e) { boot(e.target); });
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
+  if (window.Chronicle && Chronicle.register) register();
 })();
