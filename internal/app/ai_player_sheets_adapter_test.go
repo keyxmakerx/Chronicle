@@ -191,3 +191,38 @@ func TestPlayerSheetOf(t *testing.T) {
 		t.Error("a GM-only field reached the player's AI")
 	}
 }
+
+// Under the Directors' rules the brief offers only what the player may pick
+// outright, sends ask-first entries to the Director, fixes a filled-in step,
+// and drops the "your own text" allowance on a limited identity step.
+func TestPlayerSheetOfUnderRules(t *testing.T) {
+	own := "p1"
+	e := &entities.Entity{ID: "e1", Name: "Korr", OwnerUserID: &own, FieldsData: map[string]any{}}
+	fields := []entities.FieldDefinition{{Key: "ancestry"}, {Key: "kit"}, {Key: "class"}}
+	plan := &entities.HeroPlan{Steps: []entities.HeroStep{
+		{FieldKey: "ancestry", Rules: &entities.HeroStepRules{Limited: true}, Choices: []entities.HeroChoice{
+			{Name: "Human"}, {Name: "Mothfolk", State: entities.HeroChoiceStateAskFirst}}},
+		{FieldKey: "kit", Rules: &entities.HeroStepRules{Limited: true, Required: true, Prefilled: "Mountain"},
+			Choices: []entities.HeroChoice{{Name: "Mountain"}}},
+		{FieldKey: "class", Rules: &entities.HeroStepRules{Limited: true}, Choices: []entities.HeroChoice{}},
+	}}
+	s := playerSheetOf(e, "Character", fields, plan)
+	if got := s.Picks["ancestry"]; len(got) != 1 || got[0] != "Human" {
+		t.Errorf("ancestry picks = %v, want only what needs no yes", got)
+	}
+	if got := s.Ask["ancestry"]; len(got) != 1 || got[0] != "Mothfolk" {
+		t.Errorf("ask = %v, want Mothfolk left to the Director", s.Ask)
+	}
+	if s.Own["ancestry"] {
+		t.Error("a limited identity step still offers the player's own text")
+	}
+	if s.Fixed["kit"] != "Mountain" || !s.Required["kit"] {
+		t.Errorf("kit fixed %q required %v", s.Fixed["kit"], s.Required["kit"])
+	}
+	if _, ok := s.Picks["class"]; !ok {
+		t.Error("a limited step with nothing offered is not a choice")
+	}
+	if len(s.Free) != 0 {
+		t.Errorf("free = %v, want no free-text steps once limited", s.Free)
+	}
+}

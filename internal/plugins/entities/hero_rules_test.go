@@ -291,3 +291,43 @@ func TestUpdateFieldsAPI_AskFirstNeverWritesTheField(t *testing.T) {
 		})
 	}
 }
+
+type notesRules struct{ recordingRules }
+
+func (notesRules) Breaks(context.Context, string, *Entity) ([]HeroBreak, error) {
+	return []HeroBreak{{FieldKey: "ancestry", Value: "Fury", Kind: "not_offered"}}, nil
+}
+
+func (notesRules) Waiting(context.Context, string, *Entity) ([]HeroWaitingPick, error) {
+	return []HeroWaitingPick{{ID: 1, FieldKey: "culture", EntryName: "Sea"}}, nil
+}
+
+// The hero page hears about broken rules and waiting blanks only for the
+// player it belongs to and the Directors, and only for a hero someone plays.
+func TestAddHeroRuleNotes(t *testing.T) {
+	owner := "u1"
+	played := &Entity{ID: "e", OwnerUserID: &owner}
+	tests := []struct {
+		name    string
+		h       *Handler
+		e       *Entity
+		allowed bool
+		want    bool
+	}{
+		{"the owner or a Director gets both", &Handler{heroRules: notesRules{}}, played, true, true},
+		{"anyone else gets neither", &Handler{heroRules: notesRules{}}, played, false, false},
+		{"a hero nobody plays has no player's rules", &Handler{heroRules: notesRules{}}, &Entity{ID: "e"}, true, false},
+		{"without rules wired nothing is added", &Handler{}, played, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := map[string]any{}
+			tt.h.addHeroRuleNotes(context.Background(), resp, "c1", tt.e, tt.allowed)
+			_, breaks := resp["choice_breaks"]
+			_, waiting := resp["choice_waiting"]
+			if breaks != tt.want || waiting != tt.want {
+				t.Fatalf("response = %v, want notes %v", resp, tt.want)
+			}
+		})
+	}
+}

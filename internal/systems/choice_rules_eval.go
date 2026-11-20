@@ -2,8 +2,8 @@ package systems
 
 import "strings"
 
-// This file is the one place the precedence of hero-choice rules is decided.
-// It is pure, so the plan, the picker, every write check, the Directors'
+// This file is the one place the precedence of hero-choice rules is decided
+// (ADR-075). It is pure, so the plan, the picker, every write check, the Directors'
 // "as this player" view and the "heroes that would break" count all call it
 // and cannot disagree.
 //

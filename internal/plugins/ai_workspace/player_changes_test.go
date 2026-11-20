@@ -226,3 +226,29 @@ func TestPlanPlayerChanges_KeepsWhatItMay(t *testing.T) {
 		t.Errorf("counts = %q", playerCounts(plan))
 	}
 }
+
+// A step the Directors fixed or sent through them is said so in the brief, so
+// the AI neither retypes it nor tries to place the pick itself.
+func TestPlayerInstructionsUnderRules(t *testing.T) {
+	sheet := PlayerSheet{
+		ID: "e1", Name: "Tyne", Values: map[string]string{"ancestry": "", "kit": ""},
+		Picks:    map[string][]string{"ancestry": {"Human"}, "kit": {"Mountain"}},
+		Own:      map[string]bool{},
+		Ask:      map[string][]string{"ancestry": {"Mothfolk"}},
+		Required: map[string]bool{"kit": true},
+		Fixed:    map[string]string{"kit": "Mountain"},
+	}
+	got := playerInstructions("Ashfall", "Director", []PlayerSheet{sheet})
+	for _, want := range []string{
+		"ancestry: (empty). Choose from: Human.",
+		"Ask your Director first for: Mothfolk",
+		"kit: (empty). It is fixed for everyone in this campaign: it must be Mountain",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("brief misses %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Choose from: Mountain") {
+		t.Error("a fixed step is offered as a choice")
+	}
+}

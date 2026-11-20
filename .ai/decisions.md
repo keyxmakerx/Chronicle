@@ -1222,3 +1222,20 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - The signed-in session stays, so a per-user grant made to the owner's own account on a page still matches where a signed-out visitor's would not.
 - The player preview stays a display cookie; moving it to the same downgrade is a separate change.
 - `tools/player-crawl` walks "owner previewing as a guest" and must see no page a stranger cannot open.
+
+## ADR-075: Hero-choice rules are rows with a fixed precedence, and a waiting pick is never a field
+
+**Status:** Accepted; operator picked marks on the entry list with Open, Ask first and Not here (#2392).
+
+**Context:** Directors want to limit what players pick for ancestry, class, kit and the other pick-list steps, require a pick, or make a player ask first, for everyone or one player, for the game's entries and the campaign's homebrew alike. Heroes store an entry's name, and Foundry and the sheet read the field as real.
+
+**Decision:**
+1. One row per (campaign, system, field, source, entry key, target) in `campaign_choice_rules`, state `open` (per-player exception only), `ask_first`, `not_offered` or `required`. Target `''` is everyone. The key is a package entry's slug or a campaign entry's id, or `*` for all of one source. No row means open.
+2. The most specific rule wins, never write order: the player's entry row, the player's group row, the row for everyone about the entry, the row for everyone about the group, open. An entry the viewer wrote (a grant) or that is kept to a character they play counts as open for them between the first two. If any entry resolves to required, the list is those entries plus the viewer's open-pinned ones, and a list of one is filled in.
+3. The filter sits at `CharacterChoiceList`, after sources merge, so every reader agrees. Directors are never limited; Scribes making a hero for the table are not; a hero already made is never changed, only flagged on read.
+4. A step a rule applies to takes only names from the list on every player write path, with one plain refusal whether or not an unreadable entry has the name.
+5. A pick that needs a Director's yes is a row in `campaign_choice_requests`, never in `fields_data`.
+
+**Consequences:**
+- Heroes store names, so renaming a campaign entry leaves a hero flagged as holding an unknown name until names carry the key (follow-up).
+- A new rule table or state needs the evaluator in `choice_rules_eval.go` changed first, and its tests, not a second copy of the precedence.
