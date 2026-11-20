@@ -21,6 +21,10 @@ import (
 // entry's own text and data for the creator's leaf; Source is "package" for
 // the system's entries and "campaign" for the Directors' own.
 type HeroChoice struct {
+	// Key is what a hero-choice rule names the entry by (a package entry's
+	// slug, a campaign entry's id), so a client can match a rule's entry
+	// without relying on a name that may be renamed.
+	Key         string         `json:"key,omitempty"`
 	Slug        string         `json:"slug"`
 	Name        string         `json:"name"`
 	Summary     string         `json:"summary"`
@@ -122,7 +126,6 @@ func (a heroAccess) refusalMessage() string {
 	}
 	return "you can't create a hero in this campaign"
 }
-
 
 // pickHeroType chooses the page type a new hero becomes, from the types the
 // owner listed as characters (charTypeIDs, already resolved). It prefers the

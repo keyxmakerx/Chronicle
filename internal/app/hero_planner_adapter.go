@@ -41,7 +41,7 @@ func heroChoices(in []systems.Choice) []entities.HeroChoice {
 	out := make([]entities.HeroChoice, 0, len(in))
 	for _, c := range in {
 		out = append(out, entities.HeroChoice{
-			Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
+			Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
 			Description: c.Description, Properties: c.Properties,
 			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State,
 		})
