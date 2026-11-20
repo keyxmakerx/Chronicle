@@ -22,6 +22,7 @@
     { keys: 'T', desc: 'Open or close the Table (in a campaign)' },
     { keys: 'R', desc: 'Roll dice at the Table' },
     { keys: '/', desc: 'Slash commands (in editor)' },
+    { keys: mod + '+Shift+S', desc: 'Mark the selection secret (in editor)' },
     { keys: '?', desc: 'Show this help' },
   ];
 

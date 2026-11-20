@@ -1,0 +1,192 @@
+{
+  "format": "chronicle-calendar-v1",
+  "version": 2,
+  "calendar": {
+    "name": "Calendar of the Two Courts",
+    "description": "A year kept by whim: months of every length, a five-day week, three moons that never agree, and one day the courts insist does not happen.",
+    "mode": "fantasy",
+    "epoch_name": "Turn of the Wheel",
+    "current_year": 77,
+    "current_month": 1,
+    "current_day": 1,
+    "current_hour": 0,
+    "current_minute": 0,
+    "hours_per_day": 24,
+    "minutes_per_hour": 60,
+    "seconds_per_minute": 60,
+    "leap_year_every": 0,
+    "leap_year_offset": 0,
+    "tracks_real_time": false,
+    "forecasts_enabled": false,
+    "month_starts_new_week": false,
+    "months": [
+      {
+        "name": "Promise",
+        "days": 26,
+        "sort_order": 0,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Dewfall",
+        "days": 29,
+        "sort_order": 1,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Petalreign",
+        "days": 31,
+        "sort_order": 2,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Hawthorn",
+        "days": 33,
+        "sort_order": 3,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Honeymoon",
+        "days": 28,
+        "sort_order": 4,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Revel",
+        "days": 35,
+        "sort_order": 5,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Gloaming",
+        "days": 30,
+        "sort_order": 6,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Goldleaf",
+        "days": 27,
+        "sort_order": 7,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Cobweb",
+        "days": 32,
+        "sort_order": 8,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Mistcall",
+        "days": 30,
+        "sort_order": 9,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Longnight",
+        "days": 29,
+        "sort_order": 10,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Rimecrown",
+        "days": 34,
+        "sort_order": 11,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "The Day That Isn’t",
+        "days": 1,
+        "sort_order": 12,
+        "is_intercalary": true,
+        "leap_year_days": 0
+      }
+    ],
+    "weekdays": [
+      {
+        "name": "Whimsday",
+        "sort_order": 0,
+        "is_rest_day": false
+      },
+      {
+        "name": "Bargainday",
+        "sort_order": 1,
+        "is_rest_day": false
+      },
+      {
+        "name": "Riddleday",
+        "sort_order": 2,
+        "is_rest_day": false
+      },
+      {
+        "name": "Danceday",
+        "sort_order": 3,
+        "is_rest_day": false
+      },
+      {
+        "name": "Feastday",
+        "sort_order": 4,
+        "is_rest_day": true
+      }
+    ],
+    "moons": [
+      {
+        "name": "The Lantern",
+        "cycle_days": 21,
+        "phase_offset": 4,
+        "color": "#f2e6a8"
+      },
+      {
+        "name": "The Mask",
+        "cycle_days": 34.5,
+        "phase_offset": 17,
+        "color": "#c9a8e0"
+      },
+      {
+        "name": "The Thief",
+        "cycle_days": 13.3,
+        "phase_offset": 9,
+        "color": "#8fd6c0"
+      }
+    ],
+    "seasons": [
+      {
+        "name": "The Bright Court",
+        "start_month": 1,
+        "start_day": 1,
+        "end_month": 6,
+        "end_day": 35,
+        "color": "oklch(0.80 0.13 110)"
+      },
+      {
+        "name": "The Dim Court",
+        "start_month": 7,
+        "start_day": 1,
+        "end_month": 13,
+        "end_day": 1,
+        "color": "oklch(0.55 0.10 300)"
+      }
+    ],
+    "eras": [
+      {
+        "name": "This Turn of the Wheel",
+        "start_year": 1,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.70 0.12 330)",
+        "sort_order": 0,
+        "description": "The courts count only since the last time they forgot."
+      }
+    ]
+  }
+}

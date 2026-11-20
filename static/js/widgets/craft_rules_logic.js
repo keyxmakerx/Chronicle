@@ -46,7 +46,16 @@
     ['Autumn Leaves', 'cloud'], ['Rolling Fog', 'fog'], ['Wildfire Smoke', 'fog'], ['Dust Devil', 'clear'], ['Black Sun', 'cloud'],
     ['Ley Surge', 'storm'], ['Aether Haze', 'fog'], ['Nullfront', 'cloud'], ['Permafrost Surge', 'snow'], ['Gravewind', 'cloud'],
     ['Veilfall', 'fog'], ['Arcane Winds', 'cloud'], ['Acid Rain', 'rain'], ['Blood Rain', 'rain'], ['Meteor Shower', 'clear'],
-    ['Spore Cloud', 'fog'], ['Divine Light', 'clear'], ['Plague Miasma', 'fog']];
+    ['Spore Cloud', 'fog'], ['Divine Light', 'clear'], ['Plague Miasma', 'fog'],
+    ['Showers', 'rain'], ['Flurries', 'snow'], ['Hard Frost', 'clear'], ['Ground Mist', 'fog'], ['Gloom', 'cloud'],
+    ['Sunbeams', 'clear'], ['Bitter Cold', 'clear'], ['Thaw', 'fog'], ['Gale', 'storm'], ['Squall', 'storm'],
+    ['Dry Lightning', 'storm'], ['Thundersnow', 'storm'], ['Freezing Rain', 'rain'], ['Waterspout', 'storm'], ['Firestorm', 'storm'],
+    ['Dust Wall', 'fog'], ['Rainbow', 'clear'], ['Red Sky', 'clear'], ['Sun Halo', 'clear'], ['Night-Shining Clouds', 'clear'],
+    ['Firefly Dusk', 'clear'], ['Pollen Haze', 'fog'], ['Thistledown', 'clear'], ['Gossamer', 'clear'], ['Sea Spray', 'cloud'],
+    ['Locust Swarm', 'cloud'], ['Smog', 'fog'], ['Butterfly Days', 'clear'], ['Wisp Lights', 'fog'], ['Dreamfog', 'fog'],
+    ['Shadowfall', 'cloud'], ['Sky Rift', 'storm'], ['Golden Rain', 'rain'], ['Ink Rain', 'rain'], ['Glass Rain', 'storm'],
+    ['Cinder Rain', 'storm'], ['Star Rain', 'clear'], ['Glimmersnow', 'snow'], ['Witchfire', 'storm'], ['Brimstone', 'fog'],
+    ['Featherfall', 'cloud'], ['Fey Lights', 'clear']];
   var WEATHER = WEATHER_TABLE.map(function (w) { return w[0]; });
   var GLYPHS = ['clear', 'cloud', 'rain', 'snow', 'storm', 'fog'];
   /* Conditions that are not about the day: the preview can't know them, so
