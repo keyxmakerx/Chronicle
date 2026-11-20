@@ -3481,7 +3481,7 @@ func (a *App) RegisterRoutes() {
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
 	// A campaign made from now on starts with the usual set of features on.
-	campaignService.SetFeatureEnabler(addonService)
+	campaignService.SetFeatureEnabler(starterFeatures{addons: addonService})
 	// A member's own sidebar pins are checked against the sidebar they see,
 	// which only this composition root can draw.
 	campaignService.SetNavSectionsSource(&navSectionsSource{entities: entityService, addons: addonService})

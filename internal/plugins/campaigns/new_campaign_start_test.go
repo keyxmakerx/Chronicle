@@ -2,82 +2,46 @@ package campaigns
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"testing"
 )
 
-// fakeFeatures records which features a new campaign had switched on.
-type fakeFeatures struct {
-	on     []string
-	failOn string
+// fakeFeatures records the campaigns it was asked to start features for.
+type fakeFeatures struct{ asked []string }
+
+func (f *fakeFeatures) EnableStarterFeatures(_ context.Context, campaignID, _ string) {
+	f.asked = append(f.asked, campaignID)
 }
 
-func (f *fakeFeatures) EnableForCampaignBySlug(_ context.Context, _, slug, _ string) error {
-	if slug == f.failOn {
-		return errors.New("boom")
-	}
-	f.on = append(f.on, slug)
-	return nil
-}
-
-// A campaign made now starts with the usual eleven features on and the four
-// that need setup off; an import keeps its own switches; one feature that
-// cannot be enabled does not stop the rest.
-func TestCreate_TurnsOnTheUsualFeatures(t *testing.T) {
-	usual := []string{
-		"calendar", "sessions", "notes", "jot-notes", "maps", "timeline",
-		"media-gallery", "npcs", "player-character-claiming", "attributes", "player-notes",
-	}
+// A campaign made now is handed to the feature enabler once; an import is not,
+// because its file carries its own switches; without an enabler creation still
+// works and turns nothing on.
+func TestCreate_StartsTheUsualFeatures(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  CreateCampaignInput
-		failOn string
-		want   []string
+		name      string
+		input     CreateCampaignInput
+		noEnabler bool
+		want      int
 	}{
-		{"usual set in order", CreateCampaignInput{Name: "A"}, "", usual},
-		{"import leaves features to the file", CreateCampaignInput{Name: "A", SkipDefaultFeatures: true}, "", nil},
-		{"one failure skips only that feature", CreateCampaignInput{Name: "A"}, "maps", without(usual, "maps")},
+		{"new campaign", CreateCampaignInput{Name: "A"}, false, 1},
+		{"import leaves features to the file", CreateCampaignInput{Name: "A", SkipDefaultFeatures: true}, false, 0},
+		{"no enabler wired", CreateCampaignInput{Name: "A"}, true, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &mockCampaignRepo{}
-			svc := newTestCampaignServiceFull(repo, &mockUserFinder{}, nil, &mockSeeder{})
-			f := &fakeFeatures{failOn: tt.failOn}
-			svc.SetFeatureEnabler(f)
+			svc := newTestCampaignServiceFull(&mockCampaignRepo{}, &mockUserFinder{}, nil, &mockSeeder{})
+			f := &fakeFeatures{}
+			if !tt.noEnabler {
+				svc.SetFeatureEnabler(f)
+			}
 			if _, err := svc.Create(context.Background(), "user-1", tt.input); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
-			if !reflect.DeepEqual(f.on, tt.want) {
-				t.Errorf("features on = %v, want %v", f.on, tt.want)
+			if len(f.asked) != tt.want {
+				t.Errorf("asked %d times, want %d", len(f.asked), tt.want)
 			}
 		})
 	}
-	for _, off := range []string{"armory", "crafting", "transformations", "sync-api"} {
-		for _, on := range usual {
-			if on == off {
-				t.Errorf("%s must stay off for a new campaign", off)
-			}
-		}
-	}
-}
-
-// Without an enabler wired, creation still works and turns nothing on.
-func TestCreate_WithoutFeatureEnabler(t *testing.T) {
-	svc := newTestCampaignServiceFull(&mockCampaignRepo{}, &mockUserFinder{}, nil, &mockSeeder{})
-	if _, err := svc.Create(context.Background(), "user-1", CreateCampaignInput{Name: "A"}); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-}
-
-func without(in []string, drop string) []string {
-	var out []string
-	for _, s := range in {
-		if s != drop {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 // Each step is worked out from what exists, two can be passed on, and the

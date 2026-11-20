@@ -238,22 +238,13 @@ type CampaignService interface {
 	SetSiteLookSource(src SiteLookSource)
 }
 
-// FeatureEnabler turns a feature on for a campaign by its addon slug. The
-// addons service implements it, so every enable runs the same checks and
-// enable effects as the owner's own switch.
+// FeatureEnabler turns on the features a campaign starts with. The list of
+// which ones lives with the composition root (internal/app), which knows the
+// add-ons by name; campaigns only says when. One feature that cannot be turned
+// on is skipped and logged by the implementation, never an error here, because
+// the campaign exists and the owner can switch it on in Game & features.
 type FeatureEnabler interface {
-	EnableForCampaignBySlug(ctx context.Context, campaignID, addonSlug, userID string) error
-}
-
-// newCampaignFeatures is the usual set a campaign made now starts with, in
-// the order they are turned on: the calendar comes before Game nights, which
-// needs it. Armory, Crafting, Transformations and the Sync API stay off
-// because each needs further setup or is only wanted by some tables. Existing
-// campaigns are never touched by this list.
-var newCampaignFeatures = []string{
-	"calendar", "sessions", "notes", "jot-notes", "maps", "timeline",
-	"media-gallery", "npcs", "player-character-claiming", "attributes",
-	"player-notes",
+	EnableStarterFeatures(ctx context.Context, campaignID, userID string)
 }
 
 // SiteLookSource reads the site-wide look an admin chose. The settings
@@ -771,18 +762,8 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 
 	// Turn on the usual features last: some run enable effects (the Player
 	// Characters page type) that need the campaign's page types to exist.
-	// One failing feature is logged and skipped; the owner can still switch
-	// it on in Game & features.
 	if s.features != nil && !input.SkipDefaultFeatures {
-		for _, slug := range newCampaignFeatures {
-			if err := s.features.EnableForCampaignBySlug(ctx, campaign.ID, slug, userID); err != nil {
-				slog.Warn("failed to turn on a feature for the new campaign",
-					slog.String("campaign_id", campaign.ID),
-					slog.String("addon_slug", slug),
-					slog.Any("error", err),
-				)
-			}
-		}
+		s.features.EnableStarterFeatures(ctx, campaign.ID, userID)
 	}
 
 	slog.Info("campaign created",
