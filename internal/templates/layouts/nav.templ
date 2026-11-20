@@ -351,9 +351,10 @@ templ navRow(row NavRowView) {
 // navRowInner is the inside of a row: icon, label, trailing text, marks and,
 // on the current row, the living ring.
 templ navRowInner(row NavRowView) {
-	// Every mark is the sidebar's one icon colour: a category's own colour
-	// tints neither its icon nor the dot that stands in for one.
-	<span class="nav-ic">
+	// A category's mark follows the campaign's icon colour theme (kind-themed);
+	// by default that is the sidebar's one icon colour, and the category's own
+	// colour is passed along only when the theme asks for it.
+	<span class={ "nav-ic", templ.KV("kind-themed", row.Kind == "category") } { navRowKindAttrs(ctx, row)... }>
 		if row.Icon != "" {
 			<i class={ "fa-solid " + row.Icon } aria-hidden="true"></i>
 		} else if row.Kind == "category" {
@@ -391,7 +392,7 @@ templ navSubRow(sub NavSubRowView, parentHidden bool) {
 			aria-current="page"
 		}
 	>
-		<span class="nav-ic"><span class="nav-dot"></span></span>
+		<span class="nav-ic kind-themed" { KindIconAttrs(ctx, sub.Color)... }><span class="nav-dot"></span></span>
 		<span class="nav-lb">{ sub.Label }</span>
 		@navTrail(sub.Key, navCount(sub.Count))
 		if NavHasRing(ctx, sub.Key) {

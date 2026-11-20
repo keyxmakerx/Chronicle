@@ -216,7 +216,7 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 						hx-swap="innerHTML"
 						hx-indicator="#dw-running"
 					>
-						<i class="fa-solid fa-play"></i> Approve &amp; run { fmt.Sprintf("%d", data.Plan.RunnableN) } call(s)
+						<i class="fa-solid fa-play word-ic"></i> Approve &amp; run { fmt.Sprintf("%d", data.Plan.RunnableN) } call(s)
 					</button>
 					<span id="dw-running" class="htmx-indicator text-xs text-fg-muted">
 						<i class="fa-solid fa-spinner fa-spin mr-1"></i> running…
@@ -246,7 +246,7 @@ templ DiagnosticsBatchResult(data DiagnosticsResultData) {
 				x-data="{ copied: false }"
 				@click="copied = true; setTimeout(() => copied = false, 2000)"
 			>
-				<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy result</span>
+				<span x-show="!copied"><i class="fa-solid fa-copy mr-1 word-ic"></i> Copy result</span>
 				<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
 			</button>
 		</div>

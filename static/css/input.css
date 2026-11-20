@@ -5520,6 +5520,40 @@ html[data-view-motion="calm"][data-cz-btn="keystone"] .btn:active { transform: n
   background-image: radial-gradient(90% 60% at 80% -10%, rgb(var(--color-accent-rgb, 99 102 241) / 0.08), transparent 60%);
 }
 
+/* Icons (Customize, Icons). Three parts: .kind-ic is a category's icon drawn
+   in front of a page's name, hidden until the campaign asks for icons beside
+   names; .kind-themed is any other icon that stands for a category and is
+   always drawn (the sidebar's, a card's). Both take the campaign's icon
+   colour. The category's saved colour arrives as --kind-colour, only when the
+   server or script has checked it is a plain hex, and is mixed toward the text
+   colour so every category reads with similar strength in light and dark.
+   Nothing is ever drawn behind an icon. */
+.kind-ic { display: none; flex: none; width: 1.25em; text-align: center; font-size: 0.8125em; line-height: 1; }
+:is([data-cz-icons="names"], [data-cz-icons="all"]) .kind-ic { display: inline-block; }
+.kind-ic, .kind-themed:not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) { color: var(--color-text-muted); }
+[data-cz-icon-colour="accent"] :is(.kind-ic, .kind-themed):not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) {
+  color: var(--color-accent-link, var(--color-accent));
+}
+[data-cz-icon-colour="category"] :is(.kind-ic, .kind-themed):not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) {
+  color: color-mix(in oklab, var(--kind-colour, var(--color-text-muted)) 52%, var(--color-text-body));
+}
+/* The sidebar is dark whatever the page is, so it mixes toward its own text.
+   The page you are on keeps its accent. */
+[data-cz-icon-colour="accent"] .nav-row:not([aria-current="page"]) .nav-ic.kind-themed,
+[data-cz-icon-colour="accent"] .nav-drill-ic.kind-themed,
+[data-cz-icon-colour="accent"] .nav-drill-sub-ic.kind-themed { color: var(--nav-accent-soft); }
+[data-cz-icon-colour="category"] .nav-row:not([aria-current="page"]) .nav-ic.kind-themed,
+[data-cz-icon-colour="category"] .nav-drill-ic.kind-themed,
+[data-cz-icon-colour="category"] .nav-drill-sub-ic.kind-themed {
+  color: color-mix(in oklab, var(--kind-colour, var(--nav-text-2)) 55%, var(--nav-text));
+}
+
+/* .word-ic is an icon on a button or a menu row that already says what it
+   does in words. It repeats the word, so it is drawn only when the campaign
+   asks for icons everywhere. Icons that are the control, point the way a fold
+   opens, or carry a meaning of their own never take this class. */
+:root:not([data-cz-icons="all"]) .word-ic { display: none; }
+
 /* Menu highlight on the page you are on. The living ring is drawn by
    .nav-ring itself; each other style shows some of its layers
    or styles the row. Strength: Lively is brighter and quicker. */

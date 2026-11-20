@@ -34,7 +34,7 @@ templ panelSettings(r PackageRow, site RetentionSettings, now time.Time, csrfTok
 				hx-headers={ csrfHeaders(csrfToken) }
 				class="btn-secondary btn-sm"
 			>
-				<i class="fa-solid fa-rotate"></i>
+				<i class="fa-solid fa-rotate word-ic"></i>
 				Check now
 			</button>
 			<p class="text-xs text-fg-muted">{ checkResultText(now, r.LastCheckedAt, len(r.Versions)) }</p>

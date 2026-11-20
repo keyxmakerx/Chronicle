@@ -6130,7 +6130,7 @@ func (a *App) RegisterRoutes() {
 					NavStyle: ap.EffectiveNavStyle(), NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
-					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
+					ButtonStyle: ap.ButtonStyle, IconAmount: ap.IconAmount, IconColour: ap.IconColour, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
 					ReduceMotion:  ap.ReduceMotion,
 					HeaderHeight:  ap.HeaderHeight,
 					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,

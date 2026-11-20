@@ -646,7 +646,9 @@
     fine: ['edge', 'points', 'extra', 'none'], poor: ['bane', 'points', 'none'], subCost: ['bane', 'points', 'none'],
     after: [2, 3, 5, 10], gives: ['skip', 'edge', 'points'], learnedBy: ['maker', 'party'], failedTry: ['used', 'half', 'kept'],
     tags: ['metal', 'remnant_part', 'body_part', 'bone', 'hide', 'liquid', 'herb', 'magic_item', 'magic_essence',
-      'fungus', 'wood', 'resin', 'scale', 'feather', 'venom', 'gem', 'stone', 'powder', 'cloth', 'paper'],
+      'fungus', 'wood', 'resin', 'scale', 'feather', 'venom', 'gem', 'stone', 'powder', 'cloth', 'paper',
+      'ore', 'salt', 'oil', 'ash', 'silk', 'ice', 'shadow', 'sand', 'glass', 'wax',
+      'coral', 'starmetal', 'fruit', 'grain', 'flower', 'blood', 'horn', 'shell', 'clay', 'spirit'],
     limits: {subs: 8, salvage: 4, days: 360, hint: 240, mishapMoments: 20, enchantName: 40, slots: 6}
   };
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }

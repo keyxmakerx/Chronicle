@@ -248,7 +248,7 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 						data-extension-setup-open
 						data-extension-slug={ addon.Slug }
 					>
-						<i class="fa-solid fa-wrench text-[10px] mr-1"></i>
+						<i class="fa-solid fa-wrench text-[10px] mr-1 word-ic"></i>
 						if addon.NeedsSetup {
 							Finish setup
 						} else {
@@ -264,7 +264,7 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 							data-extension-dashboard-page
 							data-extension-dashboard-slug={ addon.Slug }
 						>
-							<i class="fa-solid fa-table-columns text-[10px] mr-1"></i>
+							<i class="fa-solid fa-table-columns text-[10px] mr-1 word-ic"></i>
 							Open dashboard
 						</a>
 					}
@@ -316,7 +316,7 @@ templ extensionsHubToggle(cc *CampaignContext, addon PluginHubAddon, csrfToken s
 					class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-accent/10 text-accent border border-accent hover:bg-accent/20 transition-colors duration-micro"
 					title="Click to enable"
 				>
-					<i class="fa-solid fa-plus text-[10px]"></i>
+					<i class="fa-solid fa-plus text-[10px] word-ic"></i>
 					Enable
 				</button>
 			}

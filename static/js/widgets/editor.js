@@ -537,11 +537,11 @@
 
     if (isEditing) {
       btn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done';
-      btn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Done';
+      btn.innerHTML = '<i class="fa-solid fa-check word-ic" style="font-size:11px"></i> Done';
       btn.title = 'Exit edit mode';
     } else {
       btn.className = 'chronicle-editor__edit-btn';
-      btn.innerHTML = '<i class="fa-solid fa-pen" style="font-size:11px"></i> Edit';
+      btn.innerHTML = '<i class="fa-solid fa-pen word-ic" style="font-size:11px"></i> Edit';
       btn.title = 'Enter edit mode';
     }
 
@@ -740,7 +740,7 @@
     var saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'chronicle-editor__btn chronicle-editor__btn--save';
-    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk" style="font-size:11px" aria-hidden="true"></i> Save';
+    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk word-ic" style="font-size:11px" aria-hidden="true"></i> Save';
     saveBtn.title = 'Save (Ctrl+S)';
     saveBtn.setAttribute('data-cmd', 'save');
     toolbar.appendChild(saveBtn);
