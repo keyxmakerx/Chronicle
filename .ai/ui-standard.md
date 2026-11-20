@@ -552,7 +552,7 @@ second; the dice settle in under 480ms.
 | Fold | sections, groups, more details | to its real height; arrow turns | 200ms ease-out | opens at once |
 | Pull-down | a title's drawer, a small widget's full list | Drape from its edge over the page | 200ms ease-out, 150ms back up | fade |
 | Tab switch | changing tab or view | a fade, no rise | 90ms (`--dur-page`) | the same |
-| Another page | any link to a new page | thin accent progress line, then a fade with no rise; the menu stays. Under Annals a connection Pulls instead | 90ms (`--dur-page`) | line and fade |
+| Another page | any link to a new page in the same campaign: the menu, a link in a page's words, a home row, a card | thin accent progress line, then a fade with no rise; the menu stays and the new page opens at its top (`static/js/page_links.js`). A page arrives whole: its tags, connections, words and attributes come with it and it shows once they have drawn. Under Annals a connection Pulls instead | 90ms (`--dur-page`) | line and fade |
 | Adding to a list | a new page, a tag | the row Folds open, fades in, Glows | 200ms, glow fades over 1.2s | fade and glow |
 | Removing from a list | deleting, unlinking | the row fades and Folds closed | 160ms ease-in | fade, space closes at once |
 | Dragging | reordering, moving between groups | lifts to depth 3 with a slight tilt; drops into place | 120ms pick up, 200ms drop | lift shadow only |

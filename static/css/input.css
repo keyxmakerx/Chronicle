@@ -3089,6 +3089,20 @@
 }
 /* ============================================================ */
 
+/* A page that arrives whole: its frame keeps its room but stays unseen until
+   boot.js says the widgets the server filled have drawn (data-whole-ready),
+   then fades in like any other page. The animation is the release if that
+   script never runs, so the page can never stay hidden. */
+[data-whole] {
+  transition: opacity var(--dur-page) var(--ease-out);
+}
+[data-whole]:not([data-whole-ready]) {
+  opacity: 0;
+  animation: whole-release 1ms linear 2000ms forwards;
+}
+@keyframes whole-release { to { opacity: 1; } }
+html[data-motion="off"] [data-whole] { transition: none; }
+
 /* Settle: a new step of a form (the sign-in code step, the two-factor
    setup panel) fades in with a 6px rise. Calm keeps the fade only. */
 @layer components {

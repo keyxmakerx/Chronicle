@@ -179,6 +179,12 @@
     });
   }
 
+  // page_links.js asks whether a connection link is this file's to move, so it
+  // never turns the same click into an ordinary in-place page change too.
+  window.ChronicleAnnals = {
+    claims: function (link) { return !!link.closest(RAIL) && currentMode() !== ''; }
+  };
+
   document.addEventListener('click', function (e) {
     if (busy || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var link = e.target.closest && e.target.closest(LINK);
