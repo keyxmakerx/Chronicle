@@ -784,6 +784,55 @@ test('two exits are one curve through the point, three or more curves from the f
   assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, road: 1 | 2 | 8 }]), 'road', 0), `M${E}Q${P} ${SE}M${E}Q${P} ${W}`);
 });
 
+test('a road on a hex with no exit is a dot, with one exit a single straight run', () => {
+  const p = H.center(g60, 2, 2);
+  assert.equal(H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 0 }])), `M${f1(p[0])} ${f1(p[1])}h0.01`);
+  const east = mid(p, H.center(g60, 3, 2));
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 }]));
+  assert.equal(d, `M${f1(p[0])} ${f1(p[1])}L${f1(east[0])} ${f1(east[1])}`);
+  assert.ok(!d.includes('Q'));
+});
+
+test('a road with no value, or only other lines, draws nothing', () => {
+  assert.equal(H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: null }])), '');
+  assert.equal(H.roadLine(g60, cellsOf([{ col: 2, row: 2, river: 9, trail: 3 }])), '');
+});
+
+test('a road through two opposite exits lies on one straight line', () => {
+  const p = H.center(g60, 2, 2);
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 | 8 }]));
+  const pts = d.match(/-?\d+\.\d/g).map(Number);
+  const xy = [];
+  for (let i = 0; i < pts.length; i += 2) xy.push([pts[i], pts[i + 1]]);
+  const [a, b] = [xy[0], xy[xy.length - 1]];
+  for (const q of xy) {
+    const cross = (b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]);
+    assert.ok(Math.abs(cross) < 2, `${q} is off the line`);
+  }
+  assert.ok(Math.abs(xy[2][0] - p[0]) < 0.06 && Math.abs(xy[2][1] - p[1]) < 0.06, 'the control point is the middle');
+});
+
+test('a road through two exits that are not opposite turns in one corner at the middle', () => {
+  const p = H.center(g60, 2, 2);
+  const e = mid(p, H.center(g60, 3, 2)), se = mid(p, H.center(g60, 2, 3));
+  const P = `${f1(p[0])} ${f1(p[1])}`, E = `${f1(e[0])} ${f1(e[1])}`, SE = `${f1(se[0])} ${f1(se[1])}`;
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 | 2 }]));
+  assert.equal(d.split('Q').length - 1, 1);
+  assert.ok(d.startsWith(`M${E}L`), 'starts at the first edge middle');
+  assert.ok(d.includes(`Q${P} `), 'the control point is the hex middle');
+  assert.ok(d.endsWith(`L${SE}`), 'ends at the second edge middle');
+});
+
+test('a road through three exits is straight spokes with no curve', () => {
+  const p = H.center(g60, 2, 2);
+  const P = `${f1(p[0])} ${f1(p[1])}`;
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 | 2 | 8 }]));
+  assert.ok(!d.includes('Q'));
+  const spokes = d.split('M').filter(Boolean);
+  assert.equal(spokes.length, 3);
+  for (const s of spokes) assert.ok(/^-?\d+\.\d -?\d+\.\dL/.test(s) && s.endsWith(`L${P}`), s);
+});
+
 test('neighbours carrying the same line meet halfway between their points, others at the edge', () => {
   const both = cellsOf([{ col: 2, row: 2, river: 1 }, { col: 3, row: 2, river: 8 }]);
   const num = (d) => d.match(/-?\d+\.\d/g).map(Number);
