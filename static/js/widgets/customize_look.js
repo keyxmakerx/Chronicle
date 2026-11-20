@@ -2194,11 +2194,12 @@
     /* ---------- Rooms: brush the room's parts, soften the rest ----------
        The parts a room owns stay sharp; a blurred, slightly dimmed layer
        covers the rest of the example site. The layer is clipped with holes at
-       the room's parts, so nothing selected is ever blurred. */
+       the room's parts, so nothing selected is ever blurred. It works in
+       screen pixels (see .rm-blur), so its clip is scaled by the site's k. */
     function roomSecs(){ var r = ROOMS.filter(function(x){ return x[0] === ui.room; })[0]; return r[3].length ? r[3] : SHARE_SECS; }
     // The site minus the parts: cut along every part edge and keep the cells no
     // part covers. The cells never overlap, so one filled path draws them all.
-    function roomClip(rs){
+    function roomClip(rs, k){
       var pad = 4, R = rs.map(function(r){ return [Math.max(0, r.x - pad), Math.max(0, r.y - pad), Math.min(880, r.x + r.w + pad), Math.min(520, r.y + r.h + pad)]; });
       function edges(i, max){ var e = [0, max]; R.forEach(function(r){ e.push(r[i], r[i + 2]); }); return e.sort(function(a, b){ return a - b; }).filter(function(v, n, all){ return !n || v !== all[n - 1]; }); }
       var xs = edges(0, 880), ys = edges(1, 520), d = '';
@@ -2212,7 +2213,7 @@
           }
           if (out){ if (run === null) run = xs[i]; }
           else if (run !== null){
-            d += 'M' + run.toFixed(1) + ' ' + ys[j].toFixed(1) + 'H' + xs[i].toFixed(1) + 'V' + ys[j + 1].toFixed(1) + 'H' + run.toFixed(1) + 'Z';
+            d += 'M' + (run * k).toFixed(1) + ' ' + (ys[j] * k).toFixed(1) + 'H' + (xs[i] * k).toFixed(1) + 'V' + (ys[j + 1] * k).toFixed(1) + 'H' + (run * k).toFixed(1) + 'Z';
             run = null;
           }
         }
@@ -2235,7 +2236,10 @@
             IC('i-pencil') + (open ? IC('i-users') : '') + '</span>';
         });
       }
-      if (all.length){ blur.style.clipPath = 'path("' + roomClip(all) + '")'; blur.classList.add('on'); }
+      // Leaving for a zoomed part, the layer goes at once: its undoing of the
+      // scale does not follow the zoom, so a fade would show mirrored copies.
+      blur.classList.toggle('cut', !!ui.focus || ui.zoom !== 'site');
+      if (all.length){ blur.style.clipPath = 'path("' + roomClip(all, k) + '")'; blur.classList.add('on'); }
       else blur.classList.remove('on');
       setHTML(brush, marks);
     }

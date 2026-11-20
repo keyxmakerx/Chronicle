@@ -993,12 +993,20 @@
 .czp .pp-tag{ display:inline-flex; align-items:center; gap:5px; color:var(--muted); font-size:12.5px; }
 .czp .pp-tag .i{ width:13px; height:13px; }
 
-/* Blur layer: clipped with holes at the room's parts, set in JS. */
+/* Blur layer: clipped with holes at the room's parts, set in JS. It sits
+   inside the scaled site so the part marks stay above it, but undoes that
+   scale itself: a backdrop blur under a scaled parent samples the page at
+   the wrong size in Chromium and fills the rest with mirrored copies. Its
+   size, clip and blur are therefore in screen pixels; the blur keeps a
+   floor so the small phone example still reads as soft. */
 .czp .rm-blur{
-  position:absolute; left:0; top:0; width:880px; height:520px; z-index:25; pointer-events:none; opacity:0;
-  background:color-mix(in srgb, var(--p-bg) 28%, transparent); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+  position:absolute; left:0; top:0; width:calc(880px * var(--k, .6)); height:calc(520px * var(--k, .6)); z-index:25; pointer-events:none; opacity:0;
+  transform:scale(calc(1 / var(--k, .6))); transform-origin:0 0;
+  background:color-mix(in srgb, var(--p-bg) 28%, transparent);
+  backdrop-filter:blur(max(1.2px, calc(2px * var(--k, .6)))); -webkit-backdrop-filter:blur(max(1.2px, calc(2px * var(--k, .6))));
   transition:opacity 220ms ease;
 }
+.czp .rm-blur.cut{ transition:none; }
 .czp .rm-blur.on{ opacity:1; }
 .czp.rm .rm-blur{ transition:none; }
 @media (prefers-reduced-transparency:reduce){
