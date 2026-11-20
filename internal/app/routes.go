@@ -5825,8 +5825,19 @@ func (a *App) RegisterRoutes() {
 		}
 		return nil
 	})
-	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor),
-		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
+	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes
+	// editor, narrowed for each player by the Directors' hero-choice rules.
+	// Built ahead of the entries service, which tells the rules when an entry
+	// is deleted.
+	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
+	systemEntryRepo := systems.NewSystemEntryRepository(a.DB)
+	choiceRuleSvc := systems.NewChoiceRuleService(systems.NewChoiceRuleRepository(a.DB), systemEntryRepo,
+		characterChoiceSvc, systems.EntryManifestResolver(manifestFor),
+		systems.WithChoiceHeroes(choiceHeroesAdapter{entities: entityService, lists: characterListService, members: campaignService}))
+	characterChoiceSvc.SetChoiceLimiter(choiceRuleSvc)
+	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
+		systems.WithEntryRules(choiceRuleSvc))
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).
@@ -5845,10 +5856,10 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Foundry fills the items it makes for these entries from the player view.
 	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
-	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
-	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
+	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
 	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
@@ -6941,6 +6952,7 @@ func (a *App) RegisterRoutes() {
 		RollTables:      rollTablesSvc,
 		Sessions:        sessionsService,
 		SystemEntries:   systemEntrySvc,
+		ChoiceRules:     choiceRuleSvc,
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,

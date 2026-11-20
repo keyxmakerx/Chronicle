@@ -81,7 +81,8 @@ func (a aiPlayerSheets) Sheets(ctx context.Context, campaignID, userID string) (
 // rest of what the player can see on it.
 func playerSheetOf(e *entities.Entity, typeName string, typeFields []entities.FieldDefinition, plan *entities.HeroPlan) ai_workspace.PlayerSheet {
 	s := ai_workspace.PlayerSheet{ID: e.ID, Name: e.Name, Type: typeName, Values: map[string]string{},
-		Picks: map[string][]string{}, Own: map[string]bool{}, Buys: map[string]ai_workspace.PlayerBuy{}, Shown: map[string]string{}}
+		Picks: map[string][]string{}, Own: map[string]bool{}, Ask: map[string][]string{},
+		Required: map[string]bool{}, Fixed: map[string]string{}, Buys: map[string]ai_workspace.PlayerBuy{}, Shown: map[string]string{}}
 	steps := map[string]*entities.HeroStep{}
 	if plan != nil {
 		for i := range plan.Steps {
@@ -100,12 +101,25 @@ func playerSheetOf(e *entities.Entity, typeName string, typeFields []entities.Fi
 		case entities.OwnerFieldChoice:
 			st := steps[f.Key]
 			names := make([]string, 0, len(st.Choices))
+			var ask []string
 			for _, ch := range st.Choices {
+				if ch.State == entities.HeroChoiceStateAskFirst {
+					ask = append(ask, ch.Name)
+					continue
+				}
 				names = append(names, ch.Name)
 			}
 			sort.Strings(names)
+			sort.Strings(ask)
 			s.Picks[f.Key] = names
 			s.Own[f.Key] = own
+			if len(ask) > 0 {
+				s.Ask[f.Key] = ask
+			}
+			if st.Rules != nil {
+				s.Required[f.Key] = st.Rules.Required
+				s.Fixed[f.Key] = st.Rules.Prefilled
+			}
 			// What the hero's current entry lets them buy, if anything.
 			cur := strings.ToLower(strings.TrimSpace(s.Values[f.Key]))
 			for _, ch := range st.Choices {

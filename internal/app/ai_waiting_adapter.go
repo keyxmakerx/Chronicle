@@ -26,6 +26,12 @@ type aiEntryLister interface {
 	List(ctx context.Context, campaignID, fieldKey string, actor systems.EntryActor) ([]systems.SystemEntry, error)
 }
 
+// aiChoicePickLister is the picks waiting on a Director for an ask-first
+// entry, as the hero-choice rules service lists them.
+type aiChoicePickLister interface {
+	WaitingRequests(ctx context.Context, campaignID string, actor systems.EntryActor) ([]systems.WaitingChoiceRequest, error)
+}
+
 // aiMemberLister names the writers of players' entries.
 type aiMemberLister interface {
 	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
@@ -40,6 +46,7 @@ type aiWaitingAdapter struct {
 	entries  aiEntryLister
 	members  aiMemberLister
 	requests dmscreen.RequestSource
+	picks    aiChoicePickLister
 }
 
 func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a records.Actor) (records.WaitingList, error) {
@@ -75,6 +82,17 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 	if w.entries != nil {
 		if err := w.addEntries(ctx, campaignID, a.UserID, director, &out); err != nil {
 			missing("players' entries", err)
+		}
+	}
+	if w.picks != nil && director {
+		list, err := w.picks.WaitingRequests(ctx, campaignID, systems.EntryActor{UserID: a.UserID, IsDirector: true})
+		if err != nil {
+			missing("players' picks waiting for a yes", err)
+		}
+		for _, q := range list {
+			out.Picks = append(out.Picks, records.WaitingPick{
+				Entry: q.Name, Field: q.FieldLabel, Player: q.PlayerName, Hero: q.EntityName, At: q.CreatedAt,
+			})
 		}
 	}
 	if w.requests != nil {

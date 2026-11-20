@@ -670,6 +670,14 @@ GET	/campaigns/:id/characters/new/plan	session	plugins/entities.(*Handler).HeroP
 POST	/campaigns/:id/characters/owner	session	plugins/entities.(*Handler).SetCharacterOwner	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/characters/playable	session	plugins/entities.(*Handler).SetCharacterPlayable	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/characters/players/search	session	plugins/entities.(*Handler).SearchRosterFinder	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+GET	/campaigns/:id/choice-requests	session	systems.(*ChoiceRuleHandler).RequestsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/choice-requests/:requestId/allow	session	systems.(*ChoiceRuleHandler).AllowRequestAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/choice-requests/:requestId/suggest	session	systems.(*ChoiceRuleHandler).SuggestRequestAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/choice-rules	session	systems.(*ChoiceRuleHandler).RulesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/choice-rules	session	systems.(*ChoiceRuleHandler).SetMarksAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/choice-rules/check	session	systems.(*ChoiceRuleHandler).CheckMarksAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/choice-rules/count	session	systems.(*ChoiceRuleHandler).CountAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/choice-rules/entries	session	systems.(*ChoiceRuleHandler).EntriesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/coming-up	public-capable	app.(*comingUpHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/coming-up/waiting	public-capable	app.(*comingUpHandler).Waiting	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/content-templates	session	plugins/entities.(*ContentTemplateHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

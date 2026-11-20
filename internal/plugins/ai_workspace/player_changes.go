@@ -37,6 +37,15 @@ type PlayerSheet struct {
 	// their own.
 	Picks map[string][]string
 	Own   map[string]bool
+	// Ask maps a step's key to the entries the player may pick only with
+	// their Director's yes. The AI can't ask for them, so the brief says to
+	// leave them to the player, and the server refuses a write of one.
+	Ask map[string][]string
+	// Required marks a step whose list is a short list the Director set: it
+	// can't be emptied. Fixed holds the one entry such a step is filled in
+	// with, which can't be changed either.
+	Required map[string]bool
+	Fixed    map[string]string
 	// Story lists the keys that take the player's long text (a backstory).
 	Story []string
 	// Lists lists the keys that take a JSON list of short names (skills,
@@ -337,7 +346,18 @@ func playerInstructions(campaignName, gmTerm string, sheets []PlayerSheet) strin
 				if s.Own[k] {
 					own = ", or a short name of the player's own"
 				}
-				fmt.Fprintf(&b, "- %s: %s. Choose from: %s%s\n", k, currentText(s.Values[k]), strings.Join(s.Picks[k], ", "), own)
+				if fixed := s.Fixed[k]; fixed != "" {
+					fmt.Fprintf(&b, "- %s: %s. It is fixed for everyone in this campaign: it must be %s, so leave it alone.\n", k, currentText(s.Values[k]), fixed)
+					continue
+				}
+				extra := ""
+				if s.Required[k] {
+					extra += " Your Director set this short list, so the field can't be emptied."
+				}
+				if ask := s.Ask[k]; len(ask) > 0 {
+					extra += fmt.Sprintf(" Ask your Director first for: %s. Don't write those yourself; tell the player to ask their Director.", strings.Join(ask, ", "))
+				}
+				fmt.Fprintf(&b, "- %s: %s. Choose from: %s%s.%s\n", k, currentText(s.Values[k]), strings.Join(s.Picks[k], ", "), own, extra)
 			}
 		}
 		if len(s.Free) > 0 {

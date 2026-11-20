@@ -14,22 +14,58 @@ type heroPlannerAdapter struct {
 	choices systems.CharacterChoiceService
 }
 
+// HeroPlan reads the plan as the account userID gets it. The campaign's
+// hero-choice rules apply to that account unless the viewer is a Director, or
+// staff making a hero for the table (entities.WithUnlimitedPlan).
 func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID string, director bool) (*entities.HeroPlan, error) {
-	p, err := a.choices.CreatorPlan(systems.WithChoiceViewerUser(systems.WithChoiceViewer(ctx, director), userID), campaignID)
+	cctx := systems.WithChoiceFor(systems.WithChoiceViewerUser(systems.WithChoiceViewer(ctx, director), userID), userID)
+	if entities.PlanUnlimited(ctx) {
+		cctx = systems.WithChoiceUnlimited(cctx)
+	}
+	p, err := a.choices.CreatorPlan(cctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
 	out := &entities.HeroPlan{SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
 	for _, s := range p.Steps {
-		step := entities.HeroStep{FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake, Choices: make([]entities.HeroChoice, 0, len(s.Choices))}
-		for _, c := range s.Choices {
-			step.Choices = append(step.Choices, entities.HeroChoice{
-				Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
-				Description: c.Description, Properties: c.Properties,
-				Status: c.Status, Mine: c.Mine, EntryID: c.EntryID,
-			})
+		step := entities.HeroStep{
+			FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake,
+			Choices: heroChoices(s.Choices), Held: heroChoices(s.Excluded), Rules: heroStepRules(s.Rules),
 		}
 		out.Steps = append(out.Steps, step)
 	}
 	return out, nil
+}
+
+func heroChoices(in []systems.Choice) []entities.HeroChoice {
+	out := make([]entities.HeroChoice, 0, len(in))
+	for _, c := range in {
+		out = append(out, entities.HeroChoice{
+			Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
+			Description: c.Description, Properties: c.Properties,
+			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State,
+		})
+	}
+	return out
+}
+
+func heroStepRules(r *systems.FieldRules) *entities.HeroStepRules {
+	if r == nil {
+		return nil
+	}
+	out := &entities.HeroStepRules{
+		Limited: r.Limited, Required: r.Required, Prefilled: r.Prefilled, NotHereCount: r.NotHereCount,
+		Waiting: heroRequestView(r.Waiting), Suggested: heroRequestView(r.Suggested),
+	}
+	for _, n := range r.NotHere {
+		out.NotHere = append(out.NotHere, entities.HeroNotHere{Name: n.Name, Reason: n.Reason})
+	}
+	return out
+}
+
+func heroRequestView(v *systems.RequestView) *entities.HeroRequestView {
+	if v == nil {
+		return nil
+	}
+	return &entities.HeroRequestView{ID: v.ID, EntryName: v.EntryName, EntityID: v.EntityID, Message: v.Message, CreatedAt: v.CreatedAt}
 }
