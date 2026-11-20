@@ -51,9 +51,12 @@ type bookIndexSlice struct {
 
 // indexEntries is one category's entries in name order.
 type indexEntries struct {
-	items  []ReferenceItem
-	fields []FieldDef
-	label  string
+	items []ReferenceItem
+	// closing are the lines a kind's chapter ends with: the left-out
+	// entries that have a sentence, for the reader (book_reading.go).
+	closing []ReferenceItem
+	fields  []FieldDef
+	label   string
 }
 
 // maxBookIndexCacheFiles bounds the parsed-file cache: the provider already
@@ -219,7 +222,18 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 	if len(ie.items) == 0 {
 		return ch, fmt.Sprintf("%s: data/%s.json has no entries", file, cat)
 	}
+	pages, problem := indexPages(ch, cat, spec.Group, spec.Other, per, ie)
+	if problem != "" {
+		return ch, file + ": " + problem
+	}
+	ch.Pages = pages
+	ch.Generated = true
+	return ch, ""
+}
 
+// indexPages lays a category's entries out as a generated chapter's pages:
+// one page per value of group, or pages of per entries in name order.
+func indexPages(ch BookChapter, cat, group, other string, per int, ie *indexEntries) ([]BookPage, string) {
 	var pages []BookPage
 	add := func(title string, s bookIndexSlice, n int) {
 		pages = append(pages, BookPage{
@@ -249,14 +263,14 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 		}
 	}
 
-	if spec.Group != "" {
+	if group != "" {
 		counts := map[string]int{}
 		for _, it := range ie.items {
-			switch it.Properties[spec.Group].(type) {
+			switch it.Properties[group].(type) {
 			case []any, map[string]any:
-				return ch, fmt.Sprintf("%s: index group %q holds lists or sets on some entries; group by a property with one plain value", file, spec.Group)
+				return nil, fmt.Sprintf("index group %q holds lists or sets on some entries; group by a property with one plain value", group)
 			}
-			counts[groupValue(it, spec.Group)]++
+			counts[groupValue(it, group)]++
 		}
 		values := make([]string, 0, len(counts))
 		for v := range counts {
@@ -265,7 +279,7 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 			}
 		}
 		sort.Slice(values, func(i, j int) bool { return lessNatural(values[i], values[j]) })
-		label := ie.fieldLabel(spec.Group)
+		label := ie.fieldLabel(group)
 		for _, v := range values {
 			title := v
 			switch {
@@ -276,15 +290,15 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 				r := []rune(v)
 				title = string(unicode.ToUpper(r[0])) + string(r[1:])
 			}
-			addGroup(title, spec.Group, v, counts[v])
+			addGroup(title, group, v, counts[v])
 		}
 		// Entries without the property, or with a null, share one last page.
 		if n := counts[""]; n > 0 {
-			other := strings.TrimSpace(spec.Other)
+			other = strings.TrimSpace(other)
 			if other == "" {
 				other = "Other"
 			}
-			addGroup(other, spec.Group, "", n)
+			addGroup(other, group, "", n)
 		}
 	} else {
 		total := len(ie.items)
@@ -305,11 +319,9 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 		}
 	}
 	if len(pages) > maxBookPages {
-		return ch, fmt.Sprintf("%s: the index makes more than %d pages; raise per-page or pick another group", file, maxBookPages)
+		return nil, fmt.Sprintf("the index makes more than %d pages; raise per-page or pick another group", maxBookPages)
 	}
-	ch.Pages = pages
-	ch.Generated = true
-	return ch, ""
+	return pages, ""
 }
 
 // rangeTitle names a page of an ungrouped index by its first and last

@@ -92,6 +92,7 @@ type authoredItem struct {
 	Summary string `json:"summary,omitempty" yaml:"summary,omitempty"`
 	Text    string `json:"text,omitempty" yaml:"text,omitempty"`
 	Chapter string `json:"chapter,omitempty" yaml:"chapter,omitempty"`
+	Entry   string `json:"entry,omitempty" yaml:"entry,omitempty"`
 }
 
 type authoredStat struct {
@@ -120,7 +121,7 @@ func toAuthored(p bookPageYAML) authoredPage {
 			ab.Bands = append(ab.Bands, authoredBand{Max: x.Max, Label: x.Label, Text: x.Text})
 		}
 		for _, x := range b.Items {
-			ab.Items = append(ab.Items, authoredItem{Title: x.Title, Summary: x.Summary, Text: x.Text, Chapter: x.Chapter})
+			ab.Items = append(ab.Items, authoredItem{Title: x.Title, Summary: x.Summary, Text: x.Text, Chapter: x.Chapter, Entry: x.Entry})
 		}
 		for _, x := range b.Stats {
 			ab.Stats = append(ab.Stats, authoredStat{Label: x.Label, Value: x.Value})
