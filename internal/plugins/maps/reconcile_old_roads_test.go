@@ -120,6 +120,15 @@ func checkRoadGraph(t *testing.T, keys []HexKey) [][2]HexKey {
 			}
 		}
 	}
+	keptSet := map[[2]HexKey]bool{}
+	for _, e := range edges {
+		keptSet[e] = true
+	}
+	for _, e := range full {
+		if !keptSet[e] && !reachableWithin(kept, e[0], e[1], minRoadCycle-2) {
+			t.Fatalf("edge (%d,%d)-(%d,%d) was dropped but closes no small loop", e[0].Col, e[0].Row, e[1].Col, e[1].Row)
+		}
+	}
 	for _, e := range edges {
 		without := map[HexKey][]HexKey{}
 		for k, ns := range kept {
@@ -134,6 +143,19 @@ func checkRoadGraph(t *testing.T, keys []HexKey) [][2]HexKey {
 		}
 	}
 	return edges
+}
+
+// ring12 is the ring of hexes at distance two around centre.
+func ring12(centre HexKey) []HexKey {
+	var out []HexKey
+	for row := centre.Row - 3; row <= centre.Row+3; row++ {
+		for col := centre.Col - 4; col <= centre.Col+4; col++ {
+			if HexDistance(HexKey{col, row}, centre) == 2 {
+				out = append(out, HexKey{col, row})
+			}
+		}
+	}
+	return out
 }
 
 func TestPlanOldRoads_Shapes(t *testing.T) {
@@ -165,6 +187,7 @@ func TestPlanOldRoads_Shapes(t *testing.T) {
 		{"diamond of four", []HexKey{a, b, c, d}, 3},
 		{"ring of six around a non-road hex", ring[:], 6},
 		{"single isolated hex", []HexKey{{9, 9}}, 0},
+		{"ring of twelve at distance two", ring12(HexKey{6, 6}), 12},
 		{"two separate lines", []HexKey{{0, 0}, {1, 0}, {5, 5}, {6, 5}}, 2},
 	}
 	for _, tc := range tests {
@@ -194,8 +217,8 @@ func TestPlanOldRoads_Shapes(t *testing.T) {
 
 	t.Run("an isolated hex is a dot", func(t *testing.T) {
 		got := PlanOldRoadConversion(roadCells(HexKey{9, 9}))
-		if len(got) != 1 || got[0].Road != 0 {
-			t.Errorf("got %+v, want one conversion with road 0", got)
+		if len(got) != 1 || got[0].Road != 0 || got[0].Terrain != nil {
+			t.Errorf("got %+v, want one conversion with road 0 (a dot, never NULL) and no land", got)
 		}
 	})
 }
@@ -285,6 +308,68 @@ func TestPlanOldRoads_Land(t *testing.T) {
 	t.Run("a map with no old road plans nothing", func(t *testing.T) {
 		if got := PlanOldRoadConversion([]HexCell{landCell(h, TerrainForest)}); got != nil {
 			t.Errorf("got %+v, want nil", got)
+		}
+	})
+}
+
+// An explored road hex must not learn land from the fog, however it is spread.
+func TestPlanOldRoads_ExploredRoadReadsOnlyExploredLand(t *testing.T) {
+	h := HexKey{4, 4}
+	nb := Neighbors(h.Col, h.Row)
+	land := func(i int, terrain string, explored bool) HexCell {
+		c := landCell(nb[i], terrain)
+		c.Explored = explored
+		return c
+	}
+	road := func(explored bool) HexCell {
+		c := roadCells(h)[0]
+		c.Explored = explored
+		return c
+	}
+	tests := []struct {
+		name  string
+		cells []HexCell
+		want  string
+	}{
+		{"explored road beside only unexplored land gets none",
+			[]HexCell{road(true), land(0, "mountain", false), land(1, "mountain", false)}, ""},
+		{"explored road prefers the explored land over more unexplored land",
+			[]HexCell{road(true), land(0, "plains", true), land(1, "mountain", false), land(2, "mountain", false)}, TerrainPlains},
+		{"unexplored road reads every neighbour",
+			[]HexCell{road(false), land(0, "plains", true), land(1, "mountain", false), land(2, "mountain", false)}, TerrainMountain},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PlanOldRoadConversion(tc.cells)
+			if len(got) != 1 {
+				t.Fatalf("got %d conversions", len(got))
+			}
+			if tc.want == "" && got[0].Terrain != nil || tc.want != "" && (got[0].Terrain == nil || *got[0].Terrain != tc.want) {
+				t.Errorf("terrain %v, want %q", got[0].Terrain, tc.want)
+			}
+		})
+	}
+
+	t.Run("the spread does not carry land from an unexplored road into an explored one", func(t *testing.T) {
+		far := nb[0] // an unexplored road beside h, with unexplored forest next to it
+		cells := roadCells(h, far)
+		cells[0].Explored = true
+		for _, n := range Neighbors(far.Col, far.Row) {
+			if HexDistance(n, h) == 2 {
+				c := landCell(n, TerrainForest)
+				cells = append(cells, c)
+				break
+			}
+		}
+		got := map[HexKey]*string{}
+		for _, c := range PlanOldRoadConversion(cells) {
+			got[HexKey{c.Col, c.Row}] = c.Terrain
+		}
+		if got[far] == nil || *got[far] != TerrainForest {
+			t.Fatalf("the unexplored road should read the forest, got %v", got[far])
+		}
+		if got[h] != nil {
+			t.Errorf("explored road took %q from an unexplored road", *got[h])
 		}
 	})
 }

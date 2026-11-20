@@ -228,6 +228,12 @@ func reachableWithin(g map[HexKey][]HexKey, from, to HexKey, depth int) bool {
 // no usable neighbour takes land from already-decided road hexes beside it, one
 // snapshot per pass so the result does not depend on visiting order, until a
 // pass decides nothing; the rest get none.
+//
+// An explored road hex only reads explored neighbours, and only explored road
+// hexes pass their decided land on: a guessed land taken from an unexplored
+// hex would tell a player what lies in the fog. This holds whether or not fog
+// is on, since it can be switched on later and the explored flags are what a
+// player is then sent. An unexplored road hex reads every neighbour.
 func inferRoadLand(keys []HexKey, road map[HexKey]bool, byKey map[HexKey]HexCell) map[HexKey]*string {
 	rank := make(map[string]int, len(hexTerrains))
 	for i, t := range hexTerrains {
@@ -245,7 +251,11 @@ func inferRoadLand(keys []HexKey, road map[HexKey]bool, byKey map[HexKey]HexCell
 				continue
 			}
 			counts := make([]int, len(hexTerrains))
+			onlyExplored := byKey[k].Explored
 			for _, n := range Neighbors(k.Col, k.Row) {
+				if onlyExplored && !byKey[n].Explored {
+					continue
+				}
 				var t string
 				if road[n] {
 					d := snapshot[n]

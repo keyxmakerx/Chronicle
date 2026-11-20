@@ -559,6 +559,8 @@ func TestOldRoadReconcile_Integration(t *testing.T) {
 		{Col: 5, Row: 4, TerrainSet: true, Terrain: hexStrp("road"), NameSet: true, Name: "Crossing", NotesSet: true, Notes: hexStrp("toll")},
 		{Col: 6, Row: 4, TerrainSet: true, Terrain: hexStrp("road"), PieceSet: true, Piece: intp(2)},
 	}
+	// A lone road hex with no usable land must still read as a road (a dot).
+	writes = append(writes, HexCellWrite{Col: 30, Row: 30, TerrainSet: true, Terrain: hexStrp("road")})
 	for _, n := range Neighbors(5, 4) {
 		if n.Row == 3 {
 			writes = append(writes, HexCellWrite{Col: n.Col, Row: n.Row, TerrainSet: true, Terrain: hexStrp("forest")})
@@ -583,8 +585,8 @@ func TestOldRoadReconcile_Integration(t *testing.T) {
 	}
 
 	m, h, err := ReconcileOldRoadHexes(ctx, store)
-	if err != nil || m != 1 || h != 3 {
-		t.Fatalf("first run = %d maps, %d hexes, %v; want 1, 3, nil", m, h, err)
+	if err != nil || m != 1 || h != 4 {
+		t.Fatalf("first run = %d maps, %d hexes, %v; want 1, 4, nil", m, h, err)
 	}
 
 	after, _ := repo.GetLayer(ctx, roadMap)
@@ -605,6 +607,9 @@ func TestOldRoadReconcile_Integration(t *testing.T) {
 			t.Errorf("(%d,%d) = road %s terrain %v piece %s; want road %d terrain %v, no piece",
 				k.Col, k.Row, ptrStr(got.Road), deref(got.Terrain), ptrStr(got.Piece), w.Road, deref(w.Terrain))
 		}
+	}
+	if lone := byKey[HexKey{30, 30}]; lone.Road == nil || *lone.Road != 0 || lone.Terrain != nil {
+		t.Errorf("lone road hex = road %s terrain %v; want a dot (0) and no land", ptrStr(lone.Road), deref(lone.Terrain))
 	}
 	mid := byKey[HexKey{5, 4}]
 	if mid.Name != "Crossing" || deref(mid.Notes) != "toll" || !mid.Explored || deref(mid.UpdatedBy) != userID {
