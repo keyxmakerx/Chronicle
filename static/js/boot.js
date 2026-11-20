@@ -258,7 +258,7 @@
    *
    * @param {Element|Document} root - Where to look for frames.
    */
-  var WHOLE_WAIT = 900;
+  var WHOLE_WAIT = 1500;
   // A block that fills itself from the server the moment the page arrives
   // (hx-trigger="load") is as much a part of arriving whole as a widget the
   // server filled, so a frame waits for those too. Tracked from htmx's own
@@ -277,13 +277,16 @@
   });
   function holdWhole(root) {
     if (!root || !root.querySelectorAll) return;
-    var frames = root.querySelectorAll('[data-whole]:not([data-whole-ready])');
+    var frames = root.querySelectorAll('[data-whole]');
     Array.prototype.forEach.call(frames, function (frame) {
+      if (frame.hasAttribute('data-whole-ready')) return;
       var t0 = Date.now();
       (function check() {
         if (!frame.isConnected) return;
-        var waiting = frame.querySelector('[data-first-paint]:not([data-drawn])') ||
-          loadingBlocks.some(function (b) { return frame.contains(b); });
+        var undrawn = Array.prototype.some.call(frame.querySelectorAll('[data-first-paint]'), function (m) {
+          return !m.hasAttribute('data-drawn');
+        });
+        var waiting = undrawn || loadingBlocks.some(function (b) { return frame.contains(b); });
         if (!waiting || Date.now() - t0 > WHOLE_WAIT) {
           frame.setAttribute('data-whole-ready', '');
           return;

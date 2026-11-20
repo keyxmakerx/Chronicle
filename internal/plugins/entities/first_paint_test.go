@@ -6,7 +6,23 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
+
+// The page sends its text with itself and waits to show whole.
+func TestShowSendsTheTextWithThePage(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner, IsMember: true}
+	body := showEntryFor(t, cc, "u1", "")
+	for _, want := range []string{`data-whole`, `data-first-paint`, `<template data-first-paint-data>`, `&#34;rev&#34;`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page does not contain %s", want)
+		}
+	}
+	if n := strings.Count(body, `<template data-first-paint-data>`); n != 1 {
+		t.Errorf("only the text is on this layout, so one seed is expected, got %d", n)
+	}
+}
 
 func seeded(parts map[int]string) *firstPaint {
 	f := &firstPaint{}

@@ -3098,7 +3098,7 @@
 }
 [data-whole]:not([data-whole-ready]) {
   opacity: 0;
-  animation: whole-release 1ms linear 1200ms forwards;
+  animation: whole-release 1ms linear 2000ms forwards;
 }
 @keyframes whole-release { to { opacity: 1; } }
 html[data-motion="off"] [data-whole] { transition: none; }
