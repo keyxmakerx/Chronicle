@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/keyxmakerx/chronicle/internal/database"
 	"log/slog"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 )
 
 // RelationService defines the business logic contract for entity relation

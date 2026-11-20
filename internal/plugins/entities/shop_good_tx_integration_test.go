@@ -82,4 +82,21 @@ func TestShopGoods_AtomicBatch_Integration(t *testing.T) {
 	if hidden != 2 {
 		t.Errorf("%d of the pages are hidden, want both (they were made for hidden listings)", hidden)
 	}
+
+	// Two names that make the same slug in one batch: the slug check has to
+	// see the first page, still uncommitted, or the second insert collides.
+	err = database.RunInTx(ctx, db, func(ctx context.Context) error {
+		for _, n := range []string{"Torch", "Torch!"} {
+			if _, err := svc.EnsureShopGood(ctx, camp, userID, int(typeID), n, true); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("same-slug names in one batch: %v", err)
+	}
+	if got := count(); got != 4 {
+		t.Fatalf("after the same-slug batch: %d shop goods, want 4", got)
+	}
 }

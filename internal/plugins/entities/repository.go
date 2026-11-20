@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/keyxmakerx/chronicle/internal/database"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -1327,7 +1327,7 @@ func (r *entityRepository) Delete(ctx context.Context, id string) error {
 // SlugExists returns true if an entity with the given slug exists in the campaign.
 func (r *entityRepository) SlugExists(ctx context.Context, campaignID, slug string) (bool, error) {
 	var exists bool
-	err := r.db.QueryRowContext(ctx,
+	err := database.Q(ctx, r.db).QueryRowContext(ctx,
 		`SELECT EXISTS(SELECT 1 FROM entities WHERE campaign_id = ? AND slug = ?)`,
 		campaignID, slug,
 	).Scan(&exists)

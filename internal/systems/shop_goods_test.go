@@ -25,7 +25,7 @@ type goodsSystem struct {
 	dp   DataProvider
 }
 
-func (s goodsSystem) Info() *SystemManifest     { return s.info }
+func (s goodsSystem) Info() *SystemManifest      { return s.info }
 func (s goodsSystem) DataProvider() DataProvider { return s.dp }
 
 func TestValidateGoods(t *testing.T) {
