@@ -162,6 +162,16 @@
 .czp .fld > .lab{ padding-top:5px; font-size:12.5px; font-weight:600; line-height:1.35; color:var(--body); }
 .czp .fld > .lab small{ display:block; margin-top:2px; font-size:11.5px; font-weight:450; color:var(--muted); }
 .czp .ctl{ min-width:0; display:grid; grid-template-columns:minmax(0, 1fr); gap:8px; }
+/* The campaign colours: each row names what the colour paints, with a
+   hairline between rows. The phone rule for .fld folds the swatches under. */
+.czp .crows{ display:grid; }
+.czp .crow{ grid-template-columns:132px minmax(0, 1fr); padding:12px 0; }
+.czp .crow .sws{ column-gap:5px; }
+.czp .crow:first-child{ padding-top:0; }
+.czp .crow:last-child{ padding-bottom:0; }
+.czp .crow + .crow{ border-top:1px solid var(--line-2); }
+.czp .crow > .lab{ padding-top:2px; color:var(--text); }
+.czp .crow > .lab small{ margin-top:3px; line-height:1.4; }
 .czp .hint{ margin:0; font-size:11.5px; line-height:1.45; color:var(--muted); }
 .czp .note{ display:flex; align-items:flex-start; gap:7px; margin:0; padding:7px 9px; border-radius:8px; background:var(--surface-2); font-size:11.5px; line-height:1.45; color:var(--body); }
 .czp .note .i{ width:14px; height:14px; margin-top:1px; color:var(--muted); }

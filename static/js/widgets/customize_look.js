@@ -327,7 +327,7 @@
     var HDR_HEIGHTS = [['slim', 'Slim'], ['tall', 'Tall']];
     // Corners of the menu and the choices that go with them.
     var CORNERS = [['plain', 'Logo and name', 'As today'], ['subtitle', 'Logo, name and a subtitle', 'A short line under the name'], ['banner', 'Banner picture', 'A picture behind the name']];
-    var MENU_COLOURS = [['charcoal', 'Charcoal', 'Chronicle as it is today'], ['ink', 'Ink', 'A deep blue-black'], ['tinted', 'Tinted', 'A dark shade of your chrome accent'], ['own', 'Your own colour', 'Kept dark enough to read']];
+    var MENU_COLOURS = [['charcoal', 'Charcoal', 'Chronicle as it is today'], ['ink', 'Ink', 'A deep blue-black'], ['tinted', 'Tinted', 'A dark shade of your menus and links colour'], ['own', 'Your own colour', 'Kept dark enough to read']];
     var GLOWS = [['accent', 'Follow the accent colour', 'Changes with the look'], ['own', 'Its own colour', 'Pick any colour']];
     var HDR_DIRS = { r:['to right', 'Left to right'], br:['to bottom right', 'Diagonal'], b:['to bottom', 'Top to bottom'] };
     var SCRIMS = { light:[.32, 'Light'], medium:[.5, 'Medium'], strong:[.68, 'Strong'] };
@@ -409,7 +409,7 @@
       { id:'header', name:'Header', icon:'i-topbar', desc:'The bar across the top of every page: its background and the widgets in it.' },
       { id:'sidebar', name:'Sidebar', icon:'i-sidebar', desc:'The menu down the left of every page: its colour, what fills its top-left corner, and the glow that shows when it is hidden.' },
       { id:'nav', name:'Navigation', icon:'i-nav', desc:'How the menu shows the page you are on.' },
-      { id:'colours', name:'Colours', icon:'i-palette', desc:'The site’s own colour, the two colours your pages use, and the tones behind them.' },
+      { id:'colours', name:'Colours', icon:'i-palette', desc:'Three colours, each named for what it paints, and the tones behind them.' },
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
@@ -701,9 +701,9 @@
     /* ---------- Building the controls ---------- */
     // Swatch groups: which setting each writes, its list, and its extra option.
     var GROUPS = {
-      accent:{ k:'colours.accent', list:ACCENT_PRESETS, label:'Chrome accent' },
-      s1:    { k:'colours.s1', list:PRESETS, follow:true, label:'Surface A' },
-      s2:    { k:'colours.s2', list:PRESETS, follow:true, label:'Surface B' },
+      accent:{ k:'colours.accent', list:ACCENT_PRESETS, label:'Menus and links' },
+      s1:    { k:'colours.s1', list:PRESETS, follow:true, label:'Headers and events' },
+      s2:    { k:'colours.s2', list:PRESETS, follow:true, label:'Tags and marks' },
       hsolid:{ k:'header.solid', list:HDR_COLOURS, page:true, label:'Header colour', deep:true },
       hfrom: { k:'header.from', list:HDR_COLOURS, label:'Gradient start', deep:true },
       hto:   { k:'header.to', list:HDR_COLOURS, label:'Gradient end', deep:true },
@@ -714,6 +714,11 @@
     function fld(id, label, sub, body){
       return '<div class="fld"><div class="lab" id="' + id + '-l">' + esc(label) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div><div class="ctl">' + body + '</div></div>';
     }
+    // A campaign colour's row: named for what it paints, with one line on
+    // where it shows, the swatches beside it and a hairline between rows.
+    function crow(id, label, line, body){
+      return '<div class="fld crow"><div class="lab" id="' + id + '-l">' + esc(label) + '<small>' + esc(line) + '</small></div><div class="ctl">' + body + '</div></div>';
+    }
     function opts(name, k, labelledby, items){
       return '<div class="opts" role="radiogroup" aria-labelledby="' + labelledby + '">' + items.map(function(it){
         return '<label class="opt"' + (it[4] ? ' data-hc="' + it[4] + '"' : '') + '><input type="radio" name="' + name + '" value="' + it[0] + '" data-k="' + k + '"' + (it[3] ? ' disabled' : '') + '><span>' +
@@ -722,7 +727,7 @@
     }
     function swatches(g, labelledby){
       var G = GROUPS[g], name = 'sw-' + g, h = '<div class="sws" role="radiogroup" aria-labelledby="' + labelledby + '" data-swg="' + g + '">';
-      if (G.follow) h += '<label class="sw" data-hc="sw:' + g + ':follow"><input type="radio" name="' + name + '" value="__follow" data-k="' + G.k + '" data-g="' + g + '" aria-label="Same as the chrome accent"><span class="sw-follow">' + IC('i-link') + '</span></label>';
+      if (G.follow) h += '<label class="sw" data-hc="sw:' + g + ':follow"><input type="radio" name="' + name + '" value="__follow" data-k="' + G.k + '" data-g="' + g + '" aria-label="Same as menus and links"><span class="sw-follow">' + IC('i-link') + '</span></label>';
       if (G.page) h += '<label class="sw page" data-hc="sw:' + g + ':page"><input type="radio" name="' + name + '" value="page" data-k="' + G.k + '" data-g="' + g + '" aria-label="Match the page"><span class="sw-page"></span></label>';
       G.list.forEach(function(p){
         h += '<label class="sw" data-hc="sw:' + g + ':' + p[1] + '"><input type="radio" name="' + name + '" value="' + p[1] + '" data-k="' + G.k + '" data-g="' + g + '" aria-label="' + esc(p[0]) + '"><span style="--c:' + p[1] + '"></span></label>';
@@ -851,7 +856,7 @@
         fld('b-name', 'Name', 'Up to 40 characters',
           '<input class="inp" id="b-name" type="text" maxlength="40" data-k="brand.name" placeholder="' + esc(CAMPAIGN) + '" aria-labelledby="b-name-l" aria-describedby="b-name-h">' +
           '<div class="row-h"><span class="hint" id="b-name-h">Shown at the top of the menu. Leave it empty to use the campaign’s name.</span><span class="cnt" id="b-name-c"></span></div>') +
-        fld('brand-logo', 'Logo', 'Square works best', imgSlot('brand.logo', 'sq', 'Upload', 'Up to 1 MB. Without a logo, the menu shows your first letter on your chrome accent.')) +
+        fld('brand-logo', 'Logo', 'Square works best', imgSlot('brand.logo', 'sq', 'Upload', 'Up to 1 MB. Without a logo, the menu shows your first letter on your menus and links colour.')) +
         fld('b-welcome', 'Welcome message', 'Up to 500 characters',
           '<textarea class="inp" id="b-welcome" rows="3" maxlength="' + welcomeMax() + '" data-k="brand.welcome" aria-labelledby="b-welcome-l" aria-describedby="b-welcome-h"></textarea>' +
           '<div class="row-h"><span class="hint" id="b-welcome-h">Shown over the backdrop at the top of the campaign home.</span><span class="cnt" id="b-welcome-c"></span></div>') +
@@ -899,10 +904,11 @@
           '<p class="hint">Reorder, pin, hide and group them with the pencil beside your campaign’s name at the top of the menu.</p>') +
         '<p class="note"><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span>Members who ask their device for less motion always see the matching still style.</span></p>');
       if (id === 'colours') return (
-        '<p class="sec-lead">Chrome is Chronicle’s own colour: the menu highlight, links and anything selected. The two surface colours belong to your pages: character headers, calendar events, timeline marks and tags.</p>' +
-        fld('accent', 'Chrome accent', null, swatches('accent', 'accent-l')) +
-        fld('s1', 'Surface A', 'Primary', swatches('s1', 's1-l')) +
-        fld('s2', 'Surface B', 'Secondary', swatches('s2', 's2-l')) +
+        '<div class="crows">' +
+        crow('accent', GROUPS.accent.label, 'The menu highlight, links, buttons, anything selected', swatches('accent', 'accent-l')) +
+        crow('s1', GROUPS.s1.label, 'Character headers, calendar events', swatches('s1', 's1-l')) +
+        crow('s2', GROUPS.s2.label, 'Tags, badges, timeline marks', swatches('s2', 's2-l')) +
+        '</div>' +
         fld('c-page', 'Page tone', null, opts('c-page', 'colours.page', 'c-page-l', [['cool', 'Cool', '#eef0f4'], ['warm', 'Warm', '#f1ebe3'], ['paper', 'Paper', '#eadfc6']])) +
         fld('c-con', 'Text contrast', null, opts('c-con', 'colours.contrast', 'c-con-l', [['standard', 'Standard'], ['high', 'High']]) +
           '<p class="hint">High makes body text and small print darker, and borders firmer.</p>') +
@@ -1224,7 +1230,7 @@
         if (cv){ $('span', cus).style.setProperty('--c', cv); cus.dataset.hc = 'sw:' + g + ':' + cv; $('input', cus).setAttribute('aria-label', 'Your own colour, ' + cv.toUpperCase()); }
         if (G.follow) $('.sw-follow', wrap).style.setProperty('--c', d.colours.accent);
         if (G.page){ var pg = $('.sw-page', wrap); pg.style.setProperty('--c', T.card); pg.style.setProperty('--c2', T.line2); }
-        setText($('#' + g + '-name'), v == null ? 'Same as the chrome accent' : v === 'page' ? 'Matches the page' : colourName(v) + (inList(g, v) ? '' : ' · ' + v.toUpperCase()));
+        setText($('#' + g + '-name'), v == null ? 'Same as menus and links' : v === 'page' ? 'Matches the page' : colourName(v) + (inList(g, v) ? '' : ' · ' + v.toUpperCase()));
       });
       var adj = kitAccent(d), adjEl = $('#accent-adj');
       adjEl.hidden = !(adj.light || adj.dark);
@@ -1630,7 +1636,7 @@
       }
       if (t === 'sw'){
         var g = p[1], v = p.slice(2).join(':');
-        if (v === 'follow') return '<b>Same as the chrome accent</b><span>Changes whenever the chrome accent does.</span>';
+        if (v === 'follow') return '<b>Same as menus and links</b><span>Changes whenever that colour does.</span>';
         if (v === 'page') return '<b>Match the page</b><span>A light header on light pages and a dark one on dark pages.</span>';
         if (v === 'custom') return '';
         var n = '';
@@ -2072,7 +2078,7 @@
       header: { all:['.s-hdr'], tip:'The bar across the top' },
       sidebar:{ all:['.s-sb'], tip:'The menu’s colour and top-left corner' },
       nav:    { all:['.s-list'], tip:'How the menu shows where you are' },
-      colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
+      colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, headers, events, tags and marks' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
       motion: { all:['.pcard'], tip:'Cards and how they lift' },

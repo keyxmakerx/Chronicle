@@ -216,8 +216,8 @@ type AppearanceHeaderInput struct {
 	Text    string       `json:"text"`
 }
 
-// AppearanceColourInput is the Colours section. S1 and S2 empty follow the
-// chrome accent.
+// AppearanceColourInput is the Colours section: Accent is Menus and links,
+// S1 Headers and events, S2 Tags and marks. S1 and S2 empty follow Accent.
 type AppearanceColourInput struct {
 	Accent   string `json:"accent"`
 	S1       string `json:"s1"`
@@ -389,7 +389,7 @@ func accentColour(v, stored string) (string, error) {
 		return "", nil
 	}
 	if !isValidHexColor(v) {
-		return "", apperror.NewBadRequest("invalid chrome accent, expected #RRGGBB")
+		return "", apperror.NewBadRequest("invalid menus and links colour, expected #RRGGBB")
 	}
 	v = strings.ToLower(v)
 	if colour.NearAmber(v) && v != strings.ToLower(stored) {
@@ -544,16 +544,17 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		}
 	}
 
-	// Colours. Buttons follow the chrome accent and apps follow Surface A,
-	// so the older Action and App slots are cleared.
+	// Colours. Buttons follow the menus and links colour (the accent) and apps
+	// follow the headers and events colour (S1), so the older Action and App
+	// slots are cleared.
 	var accent, s1, s2 string
 	if accent, err = accentColour(in.Colours.Accent, s.AccentColor); err != nil {
 		return fail(err)
 	}
-	if s1, err = calmColour("surface A", in.Colours.S1, false); err != nil {
+	if s1, err = calmColour("headers and events colour", in.Colours.S1, false); err != nil {
 		return fail(err)
 	}
-	if s2, err = calmColour("surface B", in.Colours.S2, false); err != nil {
+	if s2, err = calmColour("tags and marks colour", in.Colours.S2, false); err != nil {
 		return fail(err)
 	}
 

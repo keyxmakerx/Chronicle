@@ -103,7 +103,7 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"header", "Header", "top bar background widgets links"},
 	{"sidebar", "Sidebar", "menu colour corner banner glow"},
 	{"nav", "Navigation", "menu highlight current page"},
-	{"colours", "Colours", "colour color accent theme contrast"},
+	{"colours", "Colours", "colour color accent theme contrast menus links buttons headers events tags badges marks"},
 	{"type", "Type", "font fonts text headings size"},
 	{"buttons", "Buttons", "button shape press"},
 	{"motion", "Motion and depth", "animation calm shadows elevation speed"},
