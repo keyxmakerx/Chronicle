@@ -50,7 +50,10 @@ test('a tab click crossfades to its scene', { skip }, async () => {
     await p.evaluate(() => document.addEventListener('click', (e) => e.preventDefault(), true));
     for (const [scene, door] of SCENES) {
       await p.click(`#doors-tab-${door}`);
-      await p.waitForTimeout(150);
+      // The crossfade is over when every scene reads its end opacity; a fixed
+      // wait is too short on a busy runner. The asserts below say what is wrong
+      // if it never gets there.
+      await p.waitForFunction((now) => [...document.querySelectorAll('.doors-set')].every((s) => getComputedStyle(s).opacity === (s.dataset.scene === now ? '1' : '0')), scene, { timeout: 5000 }).catch(() => {});
       const op = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.doors-set')].map((s) => [s.dataset.scene, getComputedStyle(s).opacity])));
       for (const [s] of SCENES) assert.equal(op[s], s === scene ? '1' : '0', `${door}: ${s}`);
     }
