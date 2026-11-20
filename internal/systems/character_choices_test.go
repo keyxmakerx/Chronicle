@@ -2,6 +2,7 @@ package systems
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -245,5 +246,62 @@ func TestChoicesAPIRequiresCampaignContext(t *testing.T) {
 	}
 	if stub.called {
 		t.Error("service must not be called without a campaign context")
+	}
+}
+
+// A campaign's overlay is what keeps a left-out or replaced standard entry
+// off the list; when it cannot run, no list is the only safe answer.
+func TestCharacterChoiceList_OverlayFailsClosed(t *testing.T) {
+	choiceSourcesMu.Lock()
+	saved := choiceOverlay
+	choiceSourcesMu.Unlock()
+	t.Cleanup(func() { RegisterChoiceOverlay(saved) })
+
+	ds := &SystemManifest{ID: "drawsteel", Name: "Draw Steel"}
+	files := map[string]string{"drawsteel/data/ancestries.json": `[{"slug":"orc","name":"Orc"},{"slug":"dwarf","name":"Dwarf"}]`}
+	leaveOutDwarf := func(_ context.Context, _, _, _ string, in []Choice) ([]Choice, error) {
+		var out []Choice
+		for _, c := range in {
+			if c.Name != "Dwarf" {
+				out = append(out, c)
+			}
+		}
+		return out, nil
+	}
+	broken := func(context.Context, string, string, string, []Choice) ([]Choice, error) {
+		return nil, errors.New("database unreachable")
+	}
+	cases := []struct {
+		name      string
+		overlay   ChoiceOverlay
+		wantErr   bool
+		wantNames []string
+	}{
+		{"no overlay keeps the package list", nil, false, []string{"Dwarf", "Orc"}},
+		{"overlay applies its choices", leaveOutDwarf, false, []string{"Orc"}},
+		{"failed overlay answers no list", broken, true, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			RegisterChoiceOverlay(tc.overlay)
+			svc := newTestChoiceService(t, files, []*SystemManifest{ds}, fakeAddons{"drawsteel": true})
+			l, err := svc.CharacterChoiceList(context.Background(), "c1", "ancestry")
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got the list %+v", l.Choices)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, c := range l.Choices {
+				got = append(got, c.Name)
+			}
+			if strings.Join(got, ",") != strings.Join(tc.wantNames, ",") {
+				t.Fatalf("choices = %v, want %v", got, tc.wantNames)
+			}
+		})
 	}
 }

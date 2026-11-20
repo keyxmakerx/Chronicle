@@ -3,6 +3,7 @@ package systems
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -12,10 +13,17 @@ import (
 // Old names and notes: what keeps a renamed entry reachable from what heroes
 // and links stored, and what the players were told about a change.
 
-// refuseOldName refuses a name that is an old name of another entry, saying
-// where it leads, so a hero who stored it is never silently moved. selfID is
-// the entry being renamed (0 for a new one): its own old names are free to it.
-func (s *systemEntryService) refuseOldName(ctx context.Context, campaignID, systemID, fieldKey, name string, selfID int64) error {
+// maxOldNamesPerEntry bounds how many old names one entry keeps. Past it
+// the oldest is let go, so a much-renamed entry cannot hold names without
+// end; heroes made under a name that old resolve as the name alone would.
+const maxOldNamesPerEntry = 20
+
+// refuseOldName refuses a name that is an old name of another entry, so a
+// hero who stored it is never silently moved. A Director is told which entry
+// it leads to; anyone else only that it is taken unless they may see that
+// entry, so a refusal never names a hidden one. selfID is the entry being
+// renamed (0 for a new one): its own old names are free to it.
+func (s *systemEntryService) refuseOldName(ctx context.Context, campaignID, systemID, fieldKey, name string, selfID int64, actor EntryActor) error {
 	old, err := s.repo.FindOldName(ctx, campaignID, systemID, fieldKey, name)
 	if err != nil || old == nil || old.EntryID == selfID {
 		return err
@@ -24,12 +32,26 @@ func (s *systemEntryService) refuseOldName(ctx context.Context, campaignID, syst
 	if err != nil {
 		return err
 	}
+	if !actor.IsDirector {
+		seen, err := s.visible(ctx, campaignID, []SystemEntry{*target}, actor)
+		if err != nil {
+			return err
+		}
+		if len(seen) == 0 {
+			return apperror.NewConflict("That name is already taken.")
+		}
+		target = &seen[0]
+	}
 	return apperror.NewConflict(fmt.Sprintf("%s is an old name of %s and still leads there. Free the old name first to use it again.", name, target.Name))
 }
 
-// recordRename keeps the name an entry gave up as an old name, and takes
-// back an old name the entry has just returned to.
-func (s *systemEntryService) recordRename(ctx context.Context, e *SystemEntry, prevName string) error {
+// recordRename keeps the name an accepted entry gave up as an old name, and
+// takes back an old name the entry has just returned to. wasAccepted is the
+// entry's status before the save. A draft or sent entry leaves nothing
+// behind: until a Director accepts it no hero can have been made from its
+// name that others rely on, and a player must not be able to reserve names
+// by renaming their draft.
+func (s *systemEntryService) recordRename(ctx context.Context, e *SystemEntry, prevName string, wasAccepted bool) error {
 	if back, err := s.repo.FindOldName(ctx, e.CampaignID, e.SystemID, e.FieldKey, e.Name); err != nil {
 		return err
 	} else if back != nil && back.EntryID == e.ID {
@@ -37,10 +59,33 @@ func (s *systemEntryService) recordRename(ctx context.Context, e *SystemEntry, p
 			return err
 		}
 	}
-	if strings.TrimSpace(prevName) == "" {
+	if strings.TrimSpace(prevName) == "" || !wasAccepted {
 		return nil
 	}
-	return s.repo.AddOldName(ctx, &EntryOldName{CampaignID: e.CampaignID, SystemID: e.SystemID, FieldKey: e.FieldKey, Name: prevName, EntryID: e.ID})
+	if err := s.repo.AddOldName(ctx, &EntryOldName{CampaignID: e.CampaignID, SystemID: e.SystemID, FieldKey: e.FieldKey, Name: prevName, EntryID: e.ID}); err != nil {
+		return err
+	}
+	all, err := s.repo.ListOldNames(ctx, e.CampaignID, e.SystemID, e.FieldKey)
+	if err != nil {
+		return err
+	}
+	var mine []EntryOldName
+	for _, n := range all {
+		if n.EntryID == e.ID {
+			mine = append(mine, n)
+		}
+	}
+	if len(mine) <= maxOldNamesPerEntry {
+		return nil
+	}
+	// Oldest first: ids grow with each name recorded.
+	sort.Slice(mine, func(i, j int) bool { return mine[i].ID < mine[j].ID })
+	for _, n := range mine[:len(mine)-maxOldNamesPerEntry] {
+		if _, err := s.repo.DeleteOldName(ctx, e.CampaignID, n.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *systemEntryService) OldNames(ctx context.Context, campaignID, fieldKey string, actor EntryActor) ([]EntryOldName, error) {

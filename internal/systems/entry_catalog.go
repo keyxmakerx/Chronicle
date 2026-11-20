@@ -9,8 +9,9 @@ import (
 )
 
 // The catalog is the one per-reader list of a rules category. The hero
-// creator, the category page, rules and global search, hover cards and the
-// Handbook all draw on it, so their counts always agree. For a reader it
+// creator draws on it through PickList; the category page, entry page and
+// peek, rules and global search, hover cards and the Handbook's kind lists
+// draw on it through RulesPages; so their counts always agree. For a reader it
 // holds the standard entries not replaced for them and not left out, plus
 // the campaign entries they may see (systemEntryService.visible decides,
 // secret spans already stripped for players). A tied campaign entry replaces
@@ -136,6 +137,10 @@ type EntryCatalog interface {
 	// stand-in a reader sees for a standard name, an old name's entry, or
 	// left out.
 	ResolveName(ctx context.Context, campaignID, category, name string, reader EntryActor) (*Resolution, error)
+	// ResolveNames resolves many names against one reading built once, so a
+	// page that resolves every hero's stored name costs the same few queries
+	// however many heroes there are. The answers are in the order of names.
+	ResolveNames(ctx context.Context, campaignID, category string, names []string, reader EntryActor) ([]*Resolution, error)
 	// PickList is the hero creator's list for a field: the package's
 	// choices merged with the campaign's for the viewer the context marks
 	// (ChoiceViewerIsDirector, ChoiceViewerUser), by the catalog's rules.
@@ -201,7 +206,9 @@ type readingState struct {
 	camp       []SystemEntry
 	leftOut    map[string]LeftOut
 	told       map[int64]bool
-	plan       readingPlan
+	// oldNames is the kind's old names, loaded only by the resolvers.
+	oldNames []EntryOldName
+	plan     readingPlan
 }
 
 func (s *systemEntryService) readingFor(ctx context.Context, campaignID, category string, reader EntryActor) (*readingState, error) {
@@ -384,68 +391,118 @@ func (s *systemEntryService) ResolveAddress(ctx context.Context, campaignID, cat
 		e := st.stdEntry(stdIdx)
 		return &Resolution{Kind: ResolvedEntry, Entry: &e}, nil
 	}
-	if st.fieldKey != "" {
-		m := s.manifestOrNil(ctx, campaignID)
-		names, err := s.repo.ListOldNames(ctx, campaignID, m.ID, st.fieldKey)
-		if err != nil {
-			return nil, err
+	// An old slug comes last, after the package: slugs never change on a
+	// rename, so a link made to this entry always used its own slug, and an
+	// old name's slug that a package entry holds was never this entry's
+	// address. (Names are different: see resolveName.)
+	if err := s.loadOldNames(ctx, campaignID, st); err != nil {
+		return nil, err
+	}
+	for _, n := range st.oldNames {
+		if slugFromName(n.Name) != slug {
+			continue
 		}
-		for _, n := range names {
-			if slugFromName(n.Name) != slug {
-				continue
-			}
-			if r := st.redirectTo(n.EntryID, ViaOldSlug); r != nil {
-				return r, nil
-			}
+		if r := st.redirectTo(n.EntryID, ViaOldSlug); r != nil {
+			return r, nil
 		}
 	}
 	return &Resolution{Kind: ResolvedNotFound}, nil
 }
 
 func (s *systemEntryService) ResolveName(ctx context.Context, campaignID, category, name string, reader EntryActor) (*Resolution, error) {
+	out, err := s.ResolveNames(ctx, campaignID, category, []string{name}, reader)
+	if err != nil {
+		return nil, err
+	}
+	return out[0], nil
+}
+
+func (s *systemEntryService) ResolveNames(ctx context.Context, campaignID, category string, names []string, reader EntryActor) ([]*Resolution, error) {
 	st, err := s.readingFor(ctx, campaignID, category, reader)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.loadOldNames(ctx, campaignID, st); err != nil {
+		return nil, err
+	}
+	out := make([]*Resolution, len(names))
+	for i, n := range names {
+		out[i] = st.resolveName(n)
+	}
+	return out, nil
+}
+
+// loadOldNames reads the kind's old names once for every resolution against
+// this reading. Categories that are not kinds have none.
+func (s *systemEntryService) loadOldNames(ctx context.Context, campaignID string, st *readingState) error {
+	if st.fieldKey == "" || st.hidden || st.oldNames != nil {
+		return nil
+	}
+	m := s.manifestOrNil(ctx, campaignID)
+	if m == nil {
+		return nil
+	}
+	names, err := s.repo.ListOldNames(ctx, campaignID, m.ID, st.fieldKey)
+	if err != nil {
+		return err
+	}
+	st.oldNames = names
+	if st.oldNames == nil {
+		st.oldNames = []EntryOldName{}
+	}
+	return nil
+}
+
+// resolveName answers one name, in this order:
+//  1. a campaign entry the reader sees with that name: in the campaign its
+//     words hold the plain name;
+//  2. a package entry of that name the reader reads rewritten: the tie is
+//     the Director's explicit word about that name;
+//  3. an old name of a campaign entry the reader sees: heroes store names,
+//     so a renamed entry keeps the heroes made under its old name even when
+//     a package entry has that name too (a Director who wants the printed
+//     one back under it frees the old name);
+//  4. the package entry of that name, left out or not.
+func (st *readingState) resolveName(name string) *Resolution {
 	name = strings.TrimSpace(name)
 	if st.hidden || name == "" {
-		return &Resolution{Kind: ResolvedNotFound}, nil
+		return &Resolution{Kind: ResolvedNotFound}
 	}
-	// The campaign's own entry answers its name first: in the campaign, its
-	// words hold the plain address.
 	for j := range st.camp {
 		if strings.EqualFold(st.camp[j].Name, name) {
 			e := st.campEntry(j)
-			return &Resolution{Kind: ResolvedEntry, Entry: &e}, nil
+			return &Resolution{Kind: ResolvedEntry, Entry: &e}
 		}
 	}
+	std := -1
 	for i := range st.std {
-		if !strings.EqualFold(st.std[i].Name, name) {
-			continue
+		if strings.EqualFold(st.std[i].Name, name) {
+			std = i
+			break
 		}
-		if j, replaced := st.plan.replacedBy[i]; replaced {
+	}
+	if std >= 0 {
+		if j, replaced := st.plan.replacedBy[std]; replaced {
 			e := st.campEntry(j)
-			return &Resolution{Kind: ResolvedRedirect, Entry: &e, Slug: e.Slug, Via: ViaRewritten}, nil
+			return &Resolution{Kind: ResolvedRedirect, Entry: &e, Slug: e.Slug, Via: ViaRewritten}
 		}
-		if _, out := st.leftOut[st.std[i].ID]; out {
-			return st.leftOutRes(i), nil
-		}
-		e := st.stdEntry(i)
-		return &Resolution{Kind: ResolvedEntry, Entry: &e}, nil
 	}
-	if st.fieldKey != "" {
-		m := s.manifestOrNil(ctx, campaignID)
-		old, err := s.repo.FindOldName(ctx, campaignID, m.ID, st.fieldKey, name)
-		if err != nil {
-			return nil, err
-		}
-		if old != nil {
-			if r := st.redirectTo(old.EntryID, ViaOldName); r != nil {
-				return r, nil
+	for _, n := range st.oldNames {
+		if strings.EqualFold(n.Name, name) {
+			if r := st.redirectTo(n.EntryID, ViaOldName); r != nil {
+				return r
 			}
+			break
 		}
 	}
-	return &Resolution{Kind: ResolvedNotFound}, nil
+	if std >= 0 {
+		if _, out := st.leftOut[st.std[std].ID]; out {
+			return st.leftOutRes(std)
+		}
+		e := st.stdEntry(std)
+		return &Resolution{Kind: ResolvedEntry, Entry: &e}
+	}
+	return &Resolution{Kind: ResolvedNotFound}
 }
 
 func (st *readingState) leftOutRes(i int) *Resolution {

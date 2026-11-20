@@ -264,7 +264,7 @@ func (s *systemEntryService) Rewrite(ctx context.Context, campaignID string, act
 	} else if dup != nil {
 		return nil, apperror.NewConflict(fmt.Sprintf("This campaign already has an entry called %s: tie that one, or give the copy another name.", e.Name))
 	}
-	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0); err != nil {
+	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0, actor); err != nil {
 		return nil, err
 	}
 	if e.Slug, err = s.uniqueSlug(ctx, campaignID, m.ID, e.FieldKey, e.Name); err != nil {

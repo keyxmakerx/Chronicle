@@ -441,12 +441,12 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 	if overlay != nil {
 		merged, err := overlay(ctx, campaignID, res.SystemID, fieldKey, res.Choices)
 		if err != nil {
-			// The package's own list still answers; the campaign's rows are
-			// left out rather than shown without their ties applied.
-			slog.Warn("choice overlay failed", slog.String("field", fieldKey), slog.Any("error", err))
-		} else {
-			res.Choices = merged
+			// No list rather than the package's own: that one still holds
+			// entries the Director left out or replaced, and a hero made from
+			// it would carry them. The picker and creator say to try again.
+			return nil, err
 		}
+		res.Choices = merged
 	}
 	for _, src := range sources {
 		extra, err := src(ctx, campaignID, fieldKey)

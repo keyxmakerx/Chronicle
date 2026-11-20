@@ -393,7 +393,7 @@ func (s *systemEntryService) prepareCreate(ctx context.Context, campaignID strin
 	} else if dup != nil {
 		return nil, nil, apperror.NewConflict("an entry called " + e.Name + " already exists")
 	}
-	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0); err != nil {
+	if err := s.refuseOldName(ctx, campaignID, m.ID, e.FieldKey, e.Name, 0, actor); err != nil {
 		return nil, nil, err
 	}
 	n, err := s.repo.Count(ctx, campaignID, m.ID, e.FieldKey)
@@ -516,6 +516,10 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if in.Visibility.IsNull() {
 		return nil, apperror.NewValidation("Visibility cannot be cleared.")
 	}
+	// Whether the name being given up was ever an accepted entry's, so one
+	// others may have built heroes on: a status change in the same save does
+	// not change what the old name was.
+	wasAccepted := e.Status == EntryStatusAccepted
 	if err := applyStatus(e, in, actor.IsDirector); err != nil {
 		return nil, err
 	}
@@ -576,7 +580,7 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 		} else if dup != nil && dup.ID != e.ID {
 			return nil, apperror.NewConflict("an entry called " + e.Name + " already exists")
 		}
-		if err := s.refuseOldName(ctx, campaignID, e.SystemID, e.FieldKey, e.Name, e.ID); err != nil {
+		if err := s.refuseOldName(ctx, campaignID, e.SystemID, e.FieldKey, e.Name, e.ID, actor); err != nil {
 			return nil, err
 		}
 	}
@@ -584,7 +588,7 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 		return nil, err
 	}
 	if renamed {
-		if err := s.recordRename(ctx, e, prevName); err != nil {
+		if err := s.recordRename(ctx, e, prevName, wasAccepted); err != nil {
 			return nil, err
 		}
 	}

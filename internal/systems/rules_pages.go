@@ -31,6 +31,7 @@ type RulesCatalog interface {
 	Catalog(ctx context.Context, campaignID, category string, reader EntryActor) (*CatalogList, error)
 	ResolveAddress(ctx context.Context, campaignID, category, slug string, printed bool, reader EntryActor) (*Resolution, error)
 	ResolveName(ctx context.Context, campaignID, category, name string, reader EntryActor) (*Resolution, error)
+	ResolveNames(ctx context.Context, campaignID, category string, names []string, reader EntryActor) ([]*Resolution, error)
 	Notes(ctx context.Context, campaignID string, actor EntryActor, entryID int64) ([]EntryNote, error)
 	OldNames(ctx context.Context, campaignID, fieldKey string, actor EntryActor) ([]EntryOldName, error)
 	LeftOutList(ctx context.Context, campaignID, fieldKey string) ([]LeftOut, error)
@@ -142,19 +143,34 @@ func (p *RulesPages) resolve(ctx context.Context, sys System, category, slug str
 }
 
 func (p *RulesPages) resolveName(ctx context.Context, sys System, category, name string, r RulesReader) (*Resolution, error) {
+	out, err := p.resolveNames(ctx, sys, category, []string{name}, r)
+	if err != nil {
+		return nil, err
+	}
+	return out[0], nil
+}
+
+// resolveNames resolves many names against one reading of the category, in
+// the order given.
+func (p *RulesPages) resolveNames(ctx context.Context, sys System, category string, names []string, r RulesReader) ([]*Resolution, error) {
 	if p.overlay(ctx, sys, r.CampaignID) {
-		return p.catalog.ResolveName(ctx, r.CampaignID, category, name, r.Actor)
+		return p.catalog.ResolveNames(ctx, r.CampaignID, category, names, r.Actor)
 	}
 	l, err := p.catalogList(ctx, sys, category, r)
 	if err != nil {
 		return nil, err
 	}
-	for i := range l.Entries {
-		if strings.EqualFold(l.Entries[i].Name, strings.TrimSpace(name)) {
-			return &Resolution{Kind: ResolvedEntry, Entry: &l.Entries[i]}, nil
+	out := make([]*Resolution, len(names))
+	for k, name := range names {
+		out[k] = &Resolution{Kind: ResolvedNotFound}
+		for i := range l.Entries {
+			if strings.EqualFold(l.Entries[i].Name, strings.TrimSpace(name)) {
+				out[k] = &Resolution{Kind: ResolvedEntry, Entry: &l.Entries[i]}
+				break
+			}
 		}
 	}
-	return &Resolution{Kind: ResolvedNotFound}, nil
+	return out, nil
 }
 
 // whoseWords is the line under an entry's name saying whose words these are.
@@ -444,20 +460,26 @@ func (p *RulesPages) matchPeople(ctx context.Context, sys System, category strin
 	if err != nil {
 		return nil, err
 	}
-	leads := map[string]bool{}
-	var out []EntryPerson
+	// Each distinct stored name is resolved once, all against one reading.
+	var names []string
+	index := map[string]int{}
 	for _, c := range all {
 		key := strings.ToLower(strings.TrimSpace(c.Value))
-		ok, seen := leads[key]
-		if !seen {
-			res, err := p.resolveName(ctx, sys, category, c.Value, r)
-			if err != nil {
-				return nil, err
-			}
-			ok = sameEntry(res, e)
-			leads[key] = ok
+		if _, seen := index[key]; !seen {
+			index[key] = len(names)
+			names = append(names, c.Value)
 		}
-		if ok {
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	res, err := p.resolveNames(ctx, sys, category, names, r)
+	if err != nil {
+		return nil, err
+	}
+	var out []EntryPerson
+	for _, c := range all {
+		if sameEntry(res[index[strings.ToLower(strings.TrimSpace(c.Value))]], e) {
 			out = append(out, c)
 		}
 	}

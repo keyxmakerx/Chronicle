@@ -134,6 +134,13 @@ func restrictedFieldKeys(entity *Entity, et *EntityType, canSeeGM, isOwner bool)
 	return keys
 }
 
+// RestrictedFieldKeys is restrictedFieldKeys for code outside this plugin
+// that reads a page's fields on a reader's behalf without the handler's
+// served copy, so it can leave out exactly what that copy leaves out.
+func RestrictedFieldKeys(entity *Entity, et *EntityType, canSeeGM, isOwner bool) map[string]struct{} {
+	return restrictedFieldKeys(entity, et, canSeeGM, isOwner)
+}
+
 // keepRestrictedFields is a whole-map save from a writer who was not served
 // the restricted fields: those keep their stored values, whatever the save
 // carries for them, and every other field is the writer's.

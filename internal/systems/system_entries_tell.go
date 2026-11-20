@@ -76,25 +76,31 @@ func (s *systemEntryService) tellQuestion(ctx context.Context, campaignID string
 		return nil, err
 	}
 	category := kindCategory(m, after.FieldKey)
-	leads := map[string]bool{}
+	// Each distinct stored name is resolved once, all against one reading.
+	var names []string
+	index := map[string]int{}
+	for _, c := range people {
+		key := strings.ToLower(strings.TrimSpace(c.Value))
+		if _, seen := index[key]; c.Hero && !seen {
+			index[key] = len(names)
+			names = append(names, c.Value)
+		}
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	res, err := s.ResolveNames(ctx, campaignID, category, names, actor)
+	if err != nil {
+		return nil, err
+	}
 	held := map[int]bool{}
 	var heroes []string
 	for _, c := range people {
 		if !c.Hero {
 			continue
 		}
-		key := strings.ToLower(strings.TrimSpace(c.Value))
-		ok, seen := leads[key]
-		if !seen {
-			res, err := s.ResolveName(ctx, campaignID, category, c.Value, actor)
-			if err != nil {
-				return nil, err
-			}
-			ok = res.Entry != nil && res.Entry.EntryID == after.ID &&
-				(res.Kind == ResolvedEntry || res.Kind == ResolvedRedirect)
-			leads[key] = ok
-		}
-		if !ok {
+		r := res[index[strings.ToLower(strings.TrimSpace(c.Value))]]
+		if r.Entry == nil || r.Entry.EntryID != after.ID || (r.Kind != ResolvedEntry && r.Kind != ResolvedRedirect) {
 			continue
 		}
 		holds := false
