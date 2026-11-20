@@ -2,6 +2,7 @@ package systems
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -19,6 +20,11 @@ func TestNamedAddress_PerReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.LeaveOut(ctx, "c1", dirActor, LeftOutInput{FieldKey: "ancestry", Slug: "polder", Sentence: "The halflings drowned."}); err != nil {
+		t.Fatal(err)
+	}
+	// A name at the cap in a script of three bytes a character.
+	long := strings.Repeat("竜", maxEntryName)
+	if _, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: long}); err != nil {
 		t.Fatal(err)
 	}
 	const base = "/campaigns/c1/systems/sys/ancestries/"
@@ -39,6 +45,8 @@ func TestNamedAddress_PerReader(t *testing.T) {
 		{"a field that is not a kind", "level", "3", playerActor, ""},
 		{"no such kind", "nonsense", "Elf", playerActor, ""},
 		{"a name too long", "ancestry", strings.Repeat("a", maxNamedLen+1), playerActor, ""},
+		{"a name at the cap counts characters, not bytes", "ancestry", long, playerActor, base + "entry"},
+		{"a name past the cap in characters", "ancestry", long + "竜", playerActor, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -108,5 +116,55 @@ func TestTold_PerReader(t *testing.T) {
 				t.Fatalf("told = %v, want %s", words, tt.want)
 			}
 		})
+	}
+}
+
+// A sheet's question about many names reads the campaign's entries a fixed
+// number of times: the names of a kind are resolved against one reading.
+func TestTold_ReadsDoNotGrowWithNames(t *testing.T) {
+	names := []string{"Ashborn", "Dwarf", "Elf", "Polder", "Devil", "Fairy", "Tideling", "Gnome", "Orc", "Emberkin"}
+	tests := []struct {
+		name string
+		refs int
+	}{
+		{"one name", 1},
+		{"twenty names", 20},
+	}
+	reads := make([]int, len(tests))
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := readingManifest()
+			data := readingData()
+			repo := &countingRepo{fakeEntryRepo: &fakeEntryRepo{}}
+			svc := NewSystemEntryService(repo, func(context.Context, string) *SystemManifest { return m },
+				WithEntryCharacters(testCharacters),
+				WithStandardSystem(func(context.Context, string) System { return fakeSystem{m: m, data: data} }),
+			).(*systemEntryService)
+			ctx := context.Background()
+			e, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "Ashborn"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := svc.AddNote(ctx, "c1", dirActor, e.ID, "Changed."); err != nil {
+				t.Fatal(err)
+			}
+			p := NewRulesPages(svc, func(context.Context, string) *SystemManifest { return m }, therinPeople())
+			var refs []NamedRef
+			for n := 0; n < tt.refs; n++ {
+				refs = append(refs, NamedRef{Kind: "ancestry", Name: fmt.Sprint(names[n%len(names)], strings.Repeat(" ", n/len(names)))})
+			}
+			repo.reads = 0
+			got, err := p.Told(ctx, fakeSystem{m: m, data: data}, refs, reader(playerActor))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) == 0 || got[0].Name != "Ashborn" {
+				t.Fatalf("told = %+v", got)
+			}
+			reads[i] = repo.reads
+		})
+	}
+	if reads[1] != reads[0] {
+		t.Fatalf("reads grew with names: %d for one, %d for twenty", reads[0], reads[1])
 	}
 }

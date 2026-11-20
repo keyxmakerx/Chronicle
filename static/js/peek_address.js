@@ -58,7 +58,9 @@
       if (kv.length !== 2) return null;
       if (kv[0] === 'name' && name === null && ENCODED.test(kv[1])) {
         try { name = decodeURIComponent(kv[1]); } catch (err) { return null; }
-        if (!name || name.length > 100) return null;
+        // Counted in characters, as the server counts entry names; a
+        // character outside the basic plane is two UTF-16 units.
+        if (!name || Array.from(name.trim()).length > 100) return null;
       } else if (kv[0] === 'hero' && !hero && ID.test(kv[1])) hero = kv[1];
       else return null;
     }

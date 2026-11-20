@@ -2,8 +2,8 @@ package systems
 
 import (
 	"context"
-	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -37,11 +37,23 @@ func namedCategory(m *SystemManifest, kind string) string {
 	return ""
 }
 
+// namedTarget checks a kind and a name from an address: the category the
+// kind names and the trimmed name, or ok false when either cannot lead to an
+// entry this reader may see. A name is measured in characters, as entry
+// names are capped, so a name in any script is allowed its full length.
+func namedTarget(m *SystemManifest, kind, name string, r RulesReader) (category, trimmed string, ok bool) {
+	category = namedCategory(m, kind)
+	trimmed = strings.TrimSpace(name)
+	if category == "" || hiddenCategory(m, category, r) || trimmed == "" || utf8.RuneCountInString(trimmed) > maxNamedLen {
+		return "", "", false
+	}
+	return category, trimmed, true
+}
+
 func (p *RulesPages) resolveNamed(ctx context.Context, sys System, kind, name string, r RulesReader) (*CategoryDef, *Resolution, error) {
 	m := sys.Info()
-	category := namedCategory(m, kind)
-	name = strings.TrimSpace(name)
-	if category == "" || hiddenCategory(m, category, r) || name == "" || len(name) > maxNamedLen {
+	category, name, ok := namedTarget(m, kind, name, r)
+	if !ok {
 		return nil, nil, apperror.NewNotFound("entry not found")
 	}
 	res, err := p.resolveName(ctx, sys, category, name, r)
@@ -81,28 +93,52 @@ type NamedRef struct {
 
 // Told returns the refs whose entry, for this reader, carries a change the
 // players were told about lately. A name the reader cannot reach is simply
-// not told, so the answer gives nothing away.
+// not told, so the answer gives nothing away. The names of one kind are
+// resolved against one reading, so a sheet's question costs the same few
+// reads however many names it asks about.
 func (p *RulesPages) Told(ctx context.Context, sys System, refs []NamedRef, r RulesReader) ([]NamedRef, error) {
 	if len(refs) > maxToldAsked {
 		refs = refs[:maxToldAsked]
 	}
-	out := []NamedRef{}
-	for _, ref := range refs {
-		_, res, err := p.resolveNamed(ctx, sys, ref.Kind, ref.Name, r)
+	type group struct {
+		at    []int
+		names []string
+	}
+	m := sys.Info()
+	groups := map[string]*group{}
+	var cats []string
+	for i, ref := range refs {
+		cat, name, ok := namedTarget(m, ref.Kind, ref.Name, r)
+		if !ok {
+			continue
+		}
+		g := groups[cat]
+		if g == nil {
+			g = &group{}
+			groups[cat] = g
+			cats = append(cats, cat)
+		}
+		g.at = append(g.at, i)
+		g.names = append(g.names, name)
+	}
+	told := make([]bool, len(refs))
+	for _, cat := range cats {
+		g := groups[cat]
+		res, err := p.resolveNames(ctx, sys, cat, g.names, r)
 		if err != nil {
-			if isAppNotFound(err) {
-				continue
-			}
 			return nil, err
 		}
-		if res.Kind != ResolvedLeftOut && res.Entry.ToldRecently {
+		for k, rr := range res {
+			if rr != nil && rr.Entry != nil && rr.Kind != ResolvedNotFound && rr.Kind != ResolvedLeftOut && rr.Entry.ToldRecently {
+				told[g.at[k]] = true
+			}
+		}
+	}
+	out := []NamedRef{}
+	for i, ref := range refs {
+		if told[i] {
 			out = append(out, ref)
 		}
 	}
 	return out, nil
-}
-
-func isAppNotFound(err error) bool {
-	var ae *apperror.AppError
-	return errors.As(err, &ae) && ae.Code == 404
 }

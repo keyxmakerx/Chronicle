@@ -88,6 +88,9 @@ test('peekAddress accepts an entry by kind and name', () => {
     ['a slash in the kind', '/campaigns/c1/systems/drawsteel/named/a/b?name=Orc', ''],
     ['named is never a category', '/campaigns/c1/systems/drawsteel/named/ancestry', ''],
     ['a name over 100', N + '?name=' + 'a'.repeat(101), ''],
+    // Entry names are capped at 100 characters, as the server counts them.
+    ['100 characters outside the basic plane', N + '?name=' + encodeURIComponent('𐌰'.repeat(100)), N + '/peek?name=' + encodeURIComponent('𐌰'.repeat(100))],
+    ['101 characters outside the basic plane', N + '?name=' + encodeURIComponent('𐌰'.repeat(101)), ''],
   ];
   for (const [name, input, want] of cases) {
     assert.equal(peekAddress(input), want, name);
