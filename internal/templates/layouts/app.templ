@@ -167,14 +167,19 @@ templ fullApp(title string) {
 					<div id="checkup-strip"></div>
 				}
 				if IsAuthenticated(ctx) {
+					{{ ctaSeed, ctaSeeded := CalloutSeed(ctx) }}
 					<div
 						class="cta-host"
 						data-widget="callout"
 						data-csrf={ GetCSRFToken(ctx) }
 						hx-get="/notifications/call-to-action"
-						hx-trigger="load, every 60s"
+						hx-trigger={ ctaTrigger(ctaSeeded) }
 						hx-swap="innerHTML"
-					></div>
+					>
+						if ctaSeeded && ctaSeed != "" {
+							@templ.Raw(ctaSeed)
+						}
+					</div>
 				}
 
 				<!-- Page content (scrollable). The row also holds the pages opened

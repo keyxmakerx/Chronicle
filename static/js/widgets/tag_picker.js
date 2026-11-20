@@ -22,18 +22,29 @@ Chronicle.register('tag-picker', {
 
     el._tagPickerState = state;
 
-    // Fetch both tag lists in parallel.
-    Promise.all([
-      Chronicle.apiFetch(config.tagsEndpoint).then(function (r) { return r.json(); }),
-      Chronicle.apiFetch(config.entityTagsEndpoint).then(function (r) { return r.json(); })
-    ]).then(function (results) {
-      state.allTags = results[0] || [];
-      state.entityTags = results[1] || [];
+    // The page may have sent both lists with itself; then there is nothing
+    // to wait for and nothing to land late. Otherwise fetch them in parallel.
+    var first = Chronicle.firstPaint(el);
+    if (first && Array.isArray(first.all) && Array.isArray(first.mine)) {
+      state.allTags = first.all;
+      state.entityTags = first.mine;
       render();
-    }).catch(function (err) {
-      console.error('[tag-picker] Failed to load tags:', err);
-      Chronicle.notify('Failed to load tags', 'error');
-    });
+      Chronicle.drawn(el);
+    } else {
+      Promise.all([
+        Chronicle.apiFetch(config.tagsEndpoint).then(function (r) { return r.json(); }),
+        Chronicle.apiFetch(config.entityTagsEndpoint).then(function (r) { return r.json(); })
+      ]).then(function (results) {
+        state.allTags = results[0] || [];
+        state.entityTags = results[1] || [];
+        render();
+        Chronicle.drawn(el);
+      }).catch(function (err) {
+        console.error('[tag-picker] Failed to load tags:', err);
+        Chronicle.notify('Failed to load tags', 'error');
+        Chronicle.drawn(el);
+      });
+    }
 
     function render() {
       el.innerHTML = '';

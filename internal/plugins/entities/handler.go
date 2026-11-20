@@ -115,6 +115,7 @@ type Handler struct {
 	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
+	pageParts          PageParts // Optional: first content of a page's tags and connections; see first_paint.go.
 	addonSvc           AddonChecker
 	timelineSearcher   TimelineSearcher
 	mapSearcher        MapSearcher
@@ -647,6 +648,11 @@ func (h *Handler) Show(c *echo.Context) error {
 	if c.QueryParam(startWritingParam) == "1" {
 		c.SetRequest(c.Request().WithContext(withStartWriting(c.Request().Context())))
 	}
+	// The page's tags, connections, words and attributes arrive with it, so
+	// nothing lands late and pushes the text down. Built from the viewer
+	// the page is drawn for.
+	c.SetRequest(c.Request().WithContext(withFirstPaint(c.Request().Context(),
+		h.newFirstPaint(c, p.cc, p.entity, p.userID, p.showAttributes))))
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }
 
@@ -2073,6 +2079,13 @@ func (h *Handler) GetEntry(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	return c.JSON(http.StatusOK, h.entryPayload(c, cc, entity))
+}
+
+// entryPayload is what the editor widget loads: the text as the viewer may
+// read it, and what its save is checked against. The entry endpoint and the
+// page itself (first_paint.go) both send it, so the two never differ.
+func (h *Handler) entryPayload(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity) map[string]any {
 	// Strip inline secrets for everyone but the owner and Co-DMs, so players
 	// and Scribes never receive GM-only text. The owner and Co-DMs see
 	// secrets with a visual indicator.
@@ -2093,7 +2106,7 @@ func (h *Handler) GetEntry(c *echo.Context) error {
 			response["locked"] = true
 		}
 	}
-	return c.JSON(http.StatusOK, response)
+	return response
 }
 
 // UpdateEntryAPI saves the entity's entry content from the editor widget.
@@ -2281,10 +2294,22 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	response, err := h.fieldsPayload(c, cc, entity, userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+// fieldsPayload is what the attributes widget loads: the field definitions and
+// the values the viewer may see. The fields endpoint and the page itself
+// (first_paint.go) both send it, so the two never differ. The caller has
+// already checked the viewer may see the entity.
+func (h *Handler) fieldsPayload(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity, userID string) (map[string]any, error) {
 	// Look up the entity type to get field definitions.
 	et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Merge type-level fields with per-entity overrides for effective field list.
@@ -2322,7 +2347,7 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 		response["owner_fields"] = keys
 	}
 	h.addHeroRuleNotes(c.Request().Context(), response, cc.Campaign.ID, entity, canSeeGM || isOwner)
-	return c.JSON(http.StatusOK, response)
+	return response, nil
 }
 
 // webWriteContext marks a field write as coming from the web UI, so observers

@@ -220,6 +220,80 @@
   }
 
   /**
+   * The first content a page sent with a widget's mount, or null when it sent
+   * none. The server puts it inside the mount as an inert <template> (a
+   * <script> would be stripped from a boosted swap). Reading it removes it, so
+   * a widget takes the page's words once and then owns its own box.
+   *
+   * @param {Element} el - The widget's mount.
+   * @returns {*} The parsed JSON the widget's endpoint would have answered.
+   */
+  Chronicle.firstPaint = function (el) {
+    var t = el.querySelector(':scope > template[data-first-paint-data]');
+    if (!t) return null;
+    var data = null;
+    try { data = JSON.parse(t.content.textContent); } catch (e) { data = null; }
+    t.parentNode.removeChild(t);
+    return data;
+  };
+
+  /**
+   * A widget says its first content is on screen. A page that sent first
+   * content with its widgets stays unseen until each has said so, so nothing
+   * it shows then moves (see holdWhole).
+   *
+   * @param {Element} el - The widget's mount.
+   */
+  Chronicle.drawn = function (el) {
+    el.setAttribute('data-drawn', '');
+  };
+
+  /**
+   * Show a page that arrives whole once its widgets have drawn. CSS keeps a
+   * [data-whole] frame unseen until data-whole-ready, with its own timed
+   * release in case this never runs; here that is set as soon as every mount
+   * the server filled has drawn, or after a short wait when one never does.
+   * The frame keeps its room the whole time, so the reveal is a fade, not a
+   * move.
+   *
+   * @param {Element|Document} root - Where to look for frames.
+   */
+  var WHOLE_WAIT = 900;
+  // A block that fills itself from the server the moment the page arrives
+  // (hx-trigger="load") is as much a part of arriving whole as a widget the
+  // server filled, so a frame waits for those too. Tracked from htmx's own
+  // request events, so a block that is slow keeps its room unseen rather
+  // than landing and pushing the page.
+  var loadingBlocks = [];
+  document.addEventListener('htmx:beforeRequest', function (event) {
+    var elt = event.detail && event.detail.elt;
+    if (elt && elt.closest && elt.closest('[data-whole]') && /(^|[\s,])load([\s,]|$)/.test(elt.getAttribute('hx-trigger') || '')) {
+      loadingBlocks.push(elt);
+    }
+  });
+  document.addEventListener('htmx:afterRequest', function (event) {
+    var i = loadingBlocks.indexOf(event.detail && event.detail.elt);
+    if (i !== -1) loadingBlocks.splice(i, 1);
+  });
+  function holdWhole(root) {
+    if (!root || !root.querySelectorAll) return;
+    var frames = root.querySelectorAll('[data-whole]:not([data-whole-ready])');
+    Array.prototype.forEach.call(frames, function (frame) {
+      var t0 = Date.now();
+      (function check() {
+        if (!frame.isConnected) return;
+        var waiting = frame.querySelector('[data-first-paint]:not([data-drawn])') ||
+          loadingBlocks.some(function (b) { return frame.contains(b); });
+        if (!waiting || Date.now() - t0 > WHOLE_WAIT) {
+          frame.setAttribute('data-whole-ready', '');
+          return;
+        }
+        setTimeout(check, 16);
+      })();
+    });
+  }
+
+  /**
    * Mount all widget elements within a root element.
    * If widgetName is provided, only mount widgets of that type.
    *
@@ -435,6 +509,7 @@
   // report any mount whose implementation never showed up.
   document.addEventListener('DOMContentLoaded', function () {
     mountWidgets(document);
+    holdWhole(document);
     scheduleUnmatchedWidgetScan(document);
   });
 
@@ -463,6 +538,7 @@
     if (event.detail && event.detail.target) {
       var root = event.detail.target.isConnected === false ? document.body : event.detail.target;
       mountWidgets(root);
+      holdWhole(root);
       scheduleUnmatchedWidgetScan(root);
     }
   });
@@ -475,6 +551,7 @@
       if (!el.isConnected) destroyElement(el);
     });
     mountWidgets(document.body);
+    holdWhole(document.body);
     scheduleUnmatchedWidgetScan(document.body);
     // The form of the page that was left is gone with it, and so is what it
     // had marked unsaved.
@@ -552,6 +629,24 @@
     if (!pageBuild || !xhr || !(d.boosted || cfg.boosted) || (cfg.verb && cfg.verb !== 'get')) return;
     var build = xhr.getResponseHeader('X-Chronicle-Build');
     if (!build || build === pageBuild || xhr.status >= 400) return;
+    var url = (d.pathInfo && (d.pathInfo.responsePath || d.pathInfo.finalRequestPath || d.pathInfo.requestPath)) || xhr.responseURL;
+    if (!url) return;
+    d.shouldSwap = false;
+    window.location.assign(url);
+  });
+
+  // A link followed in place must answer with a page that has a
+  // #main-content to take. A file, a bare view or a different frame would
+  // swap in as an empty page, so those load in full instead.
+  document.addEventListener('htmx:beforeSwap', function (event) {
+    var d = event.detail || {}, xhr = d.xhr, cfg = d.requestConfig || {};
+    if (!xhr || d.shouldSwap === false || !(d.boosted || cfg.boosted) || (cfg.verb && cfg.verb !== 'get')) return;
+    var main = document.getElementById('main-content');
+    if (!main || d.target !== main || xhr.status >= 400 || xhr.status === 204) return;
+    var type = xhr.getResponseHeader('Content-Type') || '';
+    var disp = xhr.getResponseHeader('Content-Disposition') || '';
+    var whole = /text\/html/i.test(type) && !/attachment/i.test(disp) && /id=["']main-content["']/.test(xhr.responseText || '');
+    if (whole) return;
     var url = (d.pathInfo && (d.pathInfo.responsePath || d.pathInfo.finalRequestPath || d.pathInfo.requestPath)) || xhr.responseURL;
     if (!url) return;
     d.shouldSwap = false;

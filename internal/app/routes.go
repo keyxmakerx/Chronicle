@@ -4991,6 +4991,7 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetExtensionEnableChecker(addonService)
 	timelineHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(tagFetcherAdapter)
+	entityHandler.SetPageParts(&entityPagePartsAdapter{tags: tagHandler, rels: relHandler})
 	entityHandler.SetTimelineSearcher(timelineSvc)
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
@@ -6063,6 +6064,12 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
 			ctx = layouts.SetIsGuest(ctx, session.GuestCampaignID != "")
+			// The notice bar is drawn with a full page, so it never arrives
+			// after the page and pushes it down. A boosted swap discards the
+			// strip, so it is not worked out for one.
+			if !middleware.IsHTMX(c) {
+				ctx = layouts.SetCalloutSeed(ctx, func() (string, bool) { return sessionsHandler.CalloutHTML(c) })
+			}
 
 			// The person's own look. HTMX swaps never replace <html>, so only
 			// full-page renders need it. A failed read leaves the default look

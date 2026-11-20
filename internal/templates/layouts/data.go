@@ -26,6 +26,7 @@ const (
 	keyIsGuest             ctxKey = "layout_is_guest"
 	keyVisitUntil          ctxKey = "layout_visit_until"
 	keyIsPane              ctxKey = "layout_is_pane"
+	keyCalloutSeed         ctxKey = "layout_callout_seed"
 	keyCampaignID          ctxKey = "layout_campaign_id"
 	keyCampaignName        ctxKey = "layout_campaign_name"
 	keyCampaignRole        ctxKey = "layout_campaign_role"
@@ -133,6 +134,31 @@ func SetVisitUntil(ctx context.Context, until *time.Time) context.Context {
 func VisitUntil(ctx context.Context) *time.Time {
 	v, _ := ctx.Value(keyVisitUntil).(*time.Time)
 	return v
+}
+
+// ctaTrigger is when the notice bar asks for itself: once on load, then every
+// minute, unless the page already drew it, in which case only the minute.
+func ctaTrigger(seeded bool) string {
+	if seeded {
+		return "every 60s"
+	}
+	return "load, every 60s"
+}
+
+// SetCalloutSeed gives the layout a way to draw the notice bar into the page,
+// so it has its height from the first paint. The function is only called when
+// a full page draws the bar; ok false means "ask for it after load instead".
+func SetCalloutSeed(ctx context.Context, f func() (string, bool)) context.Context {
+	return context.WithValue(ctx, keyCalloutSeed, f)
+}
+
+// CalloutSeed returns the notice bar's first content and whether it is known.
+func CalloutSeed(ctx context.Context) (string, bool) {
+	f, _ := ctx.Value(keyCalloutSeed).(func() (string, bool))
+	if f == nil {
+		return "", false
+	}
+	return f()
 }
 
 // SetIsPane marks a page drawn inside a pane beside another page: it gets
