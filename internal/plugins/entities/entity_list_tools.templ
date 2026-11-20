@@ -1,0 +1,84 @@
+// entity_list_tools.templ is the one line of tools above All pages: find,
+// the category picker, the order picker and the two views.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// entityListTools draws the tools. Find and order swap the list in place and
+// keep each other's value; the category picker goes to that category's own
+// list, as the tabs it replaces did. Category names carry their counts so the
+// picker still says how many pages each holds.
+templ entityListTools(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string) {
+	{{ listURL := fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }}
+	<div class="el-tools">
+		// Filters this list in place. The input keeps its id so htmx hands
+		// focus and the caret back after each swap; without JavaScript the
+		// form still lands on a full page.
+		<form
+			action={ templ.SafeURL(listURL) }
+			method="GET"
+			class="el-find"
+			role="search"
+			hx-get={ listURL }
+			hx-trigger="submit, input delay:300ms"
+			hx-target="#entity-list"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-include="#entity-list-sort"
+		>
+			<label for="entity-list-search" class="sr-only">Find a page</label>
+			<input
+				id="entity-list-search"
+				type="search"
+				name="q"
+				value={ opts.Query }
+				placeholder="Find a page"
+				autocomplete="off"
+				class="el-find-input"
+			/>
+			<i class="fa-solid fa-magnifying-glass el-find-ic" aria-hidden="true"></i>
+		</form>
+		<span class="el-pick-wrap">
+			<label for="entity-list-category" class="sr-only">Show pages of one category</label>
+			<select id="entity-list-category" class="el-picker" onchange={ allPagesCategoryJS() }>
+				<option value={ listURL } selected?={ activeTypeID == 0 && activeTypeSlug == "" }>All categories</option>
+				for _, et := range entityTypes {
+					if et.Enabled {
+						<option
+							value={ fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug) }
+							selected?={ activeTypeSlug == et.Slug || activeTypeID == et.ID }
+						>{ et.NamePlural } · { fmt.Sprintf("%d", counts[et.ID]) }</option>
+					}
+				}
+			</select>
+			<i class="fa-solid fa-chevron-down el-picker-ic" aria-hidden="true"></i>
+		</span>
+		<span class="el-pick-wrap">
+			<label for="entity-list-sort" class="sr-only">Order</label>
+			<select
+				id="entity-list-sort"
+				name="sort"
+				class="el-picker"
+				hx-get={ listURL }
+				hx-trigger="change"
+				hx-target="#entity-list"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				hx-include="#entity-list-search"
+			>
+				<option value="name" selected?={ opts.Sort == "name" || opts.Sort == "" }>A to Z</option>
+				<option value="updated" selected?={ opts.Sort == "updated" }>Last edited</option>
+				<option value="created" selected?={ opts.Sort == "created" }>Newest</option>
+			</select>
+			<i class="fa-solid fa-chevron-down el-picker-ic" aria-hidden="true"></i>
+		</span>
+		<div class="el-views" role="tablist" aria-label="How to show the pages">
+			<button type="button" role="tab" class="el-view" data-view-tab data-view="list" aria-selected="true" onclick={ allPagesViewJS("list") }>List</button>
+			<button type="button" role="tab" class="el-view" data-view-tab data-view="gallery" aria-selected="false" onclick={ allPagesViewJS("gallery") }>Gallery</button>
+		</div>
+	</div>
+}

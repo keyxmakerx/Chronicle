@@ -417,6 +417,8 @@ func (h *Handler) Index(c *echo.Context) error {
 		}
 	}
 
+	h.addOpenings(c, cc, entities)
+
 	csrfToken := middleware.GetCSRFToken(c)
 
 	// When viewing a specific category (type), render the category dashboard.
@@ -475,8 +477,34 @@ func (h *Handler) NewForm(c *echo.Context) error {
 		}
 	}
 
+	// The form opens on what the page will really be given, so its sentence
+	// about who sees it is true before the person touches anything.
+	draft := NewPageDraft{IsPrivate: cc.NewPagePrivacy(patch.Absent[bool]()), Return: openedFrom(c)}
+
+	// ?sheet=1 is the small sheet over the place the person is on: the form
+	// alone, for new_page_sheet.js to put in a dialog.
+	if c.QueryParam("sheet") == "1" {
+		draft.Sheet = true
+		return middleware.Render(c, http.StatusOK, EntityNewSheet(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, draft))
+	}
 	// ?name= comes from quick search's "Create a page named …" row.
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", NewPageDraft{Return: openedFrom(c)}))
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", draft))
+}
+
+// addOpenings gives each listed page with no picture its first words, for the
+// Gallery tile that stands in for the picture. The words go through
+// servedText first, so a reader never gets a secret or the name of a page
+// they can't open that a row would not have shown.
+func (h *Handler) addOpenings(c *echo.Context, cc *campaigns.CampaignContext, entities []Entity) {
+	for i := range entities {
+		e := &entities[i]
+		if (e.ImagePath != nil && *e.ImagePath != "") || e.EntryHTML == nil || *e.EntryHTML == "" {
+			continue
+		}
+		if _, served, _ := h.servedText(c, cc, nil, e.EntryHTML); served != nil {
+			e.Opening = previewExcerpt(*served)
+		}
+	}
 }
 
 // prefillName is a name to start the create form with, trimmed and cut to the
@@ -547,13 +575,15 @@ func (h *Handler) Create(c *echo.Context) error {
 
 	// Resolve visibility against the campaign's DefaultVisibility setting.
 	//
-	// An unchecked HTML checkbox submits NOTHING, so a false here IS the
-	// absent case — this form has no way to say "explicitly public". The
-	// merge itself lives in CampaignSettings.ResolveNewEntityPrivacy, the
-	// single implementation every creation path shares.
+	// The form always sends is_private ("true" or "false") because it tells
+	// the person which one it will save. An explicit false has to reach the
+	// resolver as false, not as absent, or a campaign whose pages start
+	// hidden would hide a page the person chose to show. The merge itself
+	// lives in CampaignSettings.ResolveNewEntityPrivacy, the single
+	// implementation every creation path shares.
 	requestedPrivacy := patch.Absent[bool]()
-	if req.IsPrivate {
-		requestedPrivacy = patch.Of(true)
+	if req.IsPrivate != nil {
+		requestedPrivacy = patch.Of(*req.IsPrivate)
 	}
 	isPrivate := cc.NewPagePrivacy(requestedPrivacy)
 	if err := h.requireCreatableType(c, cc, req.EntityTypeID); err != nil {
@@ -586,7 +616,14 @@ func (h *Handler) Create(c *echo.Context) error {
 				parentEntity = parent
 			}
 		}
-		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: req.IsPrivate, Return: openedFrom(c)}
+		// The mark on the redrawn form is what the page would have been given,
+		// so it stays true after a refusal.
+		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: isPrivate, Return: openedFrom(c), Sheet: req.Sheet}
+		// A form posted by htmx replaces only itself; the page around it is
+		// already on screen.
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, EntityCreateFormComponent(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
+		}
 		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
 	}
 

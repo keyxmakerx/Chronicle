@@ -594,6 +594,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
 				class="nav-drill-new"
+				onclick={ NewPageOpenJS() }
 				title={ fmt.Sprintf("New %s", et.Slug) }
 				aria-label={ fmt.Sprintf("New %s", et.Slug) }
 				hx-boost="false"

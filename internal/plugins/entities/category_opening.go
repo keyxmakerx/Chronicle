@@ -32,6 +32,7 @@ func categoryOpening(ctx context.Context, cc *campaigns.CampaignContext, et *Ent
 			Label: "New page",
 			Icon:  "fa-plus",
 			Href:  fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID),
+			Attrs: layouts.NewPageOpenAttrs(),
 		}
 	}
 	return d
