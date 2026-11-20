@@ -351,7 +351,7 @@ templ heldCopies(copies []Copy, total int) {
 // written, newest first under each game night. The panel reloads itself after
 // a line is added or removed (armory-moved), so the form only posts.
 templ heroLog(v *CharacterPanelView) {
-	<div class="hl" data-hero-log>
+	<div class="hero-log" data-hero-log>
 		<h4 class="hl-lab">{ v.Character.Name }'s log</h4>
 		<form
 			class="hl-write"
