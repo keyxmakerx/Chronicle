@@ -27,6 +27,9 @@ type ShopLooksAPI interface {
 	// CounterStarter is the counter theme a room of this type is drawn with
 	// until one is saved: the base of an edit when the room has none.
 	CounterStarter(roomType string) json.RawMessage
+	// CounterStarterNamed is the starter theme with this name, nil when the
+	// armory has none: the starters no shop type begins from.
+	CounterStarterNamed(name string) json.RawMessage
 }
 
 // shopLook is what the shop-room and storefront kinds share: the shop page

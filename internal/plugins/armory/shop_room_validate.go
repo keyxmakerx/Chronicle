@@ -77,16 +77,41 @@ var (
 )
 
 // The counter look's layers; must match CM_OPT and CM_PROPS in
-// static/js/widgets/shop_room_counter.js.
+// static/js/widgets/shop_room_counter.js once its parts packs
+// (shop_room_parts_*.js) have loaded.
 var (
-	shopRoomCounterShapes   = setOf("square", "round", "open-air", "alcove")
-	shopRoomCounterOpenings = setOf("none", "window-left", "window-right", "window-centre", "round-window", "doorway")
-	shopRoomCounterDisplays = setOf("shelves", "pegboard", "drawers", "pigeonholes", "domes")
-	shopRoomCounterCounters = setOf("straight", "curved", "stall-table")
-	shopRoomCounterWalls    = setOf("plaster", "stone", "timber", "brick", "canvas", "night-sky")
-	shopRoomCounterLights   = setOf("lamp", "forge", "candles", "lanterns", "moonlight")
+	shopRoomCounterShapes = setOf("square", "round", "open-air", "alcove",
+		"cavern", "hold", "hollow", "tunnel", "glade", "void", "ribs", "taproom", "parlour", "study",
+		"barn", "chapel", "cabin", "ice-cave", "reef", "tent", "gondola", "hut", "works", "colonnade",
+		"conservatory")
+	shopRoomCounterOpenings = setOf("none", "window-left", "window-right", "window-centre", "round-window", "doorway",
+		"porthole", "grate", "knothole", "lava-fall", "planet", "lone-door", "rift", "portal", "hearth", "bay-window",
+		"harbour-window", "stable-door", "rose-window", "frost-window", "aurora", "sea-arch", "tent-flap", "cloud-sea", "bog-window", "clock-face",
+		"dragon-eye", "sun-disc", "tall-mirror", "garden-door")
+	shopRoomCounterDisplays = setOf("shelves", "pegboard", "drawers", "pigeonholes", "domes",
+		"roots", "adrift", "orbits", "columns", "tendrils", "circles", "casks", "bolts", "scroll-rack", "hutches",
+		"niches", "gear-wall", "ice-ledges", "shells", "carpet-wall", "cargo-nets", "crooked-shelves", "cogs", "hoard", "clouds",
+		"curio", "plant-stand")
+	shopRoomCounterCounters = setOf("straight", "curved", "stall-table",
+		"log", "slab", "adrift", "bar", "cutting", "plan-chest", "feed-stall", "altar", "woodpile", "ice-block",
+		"wreck", "carpet", "gunwale", "driftwood", "engine", "coin-drift", "marble-slab", "sheeted", "potting-bench")
+	shopRoomCounterWalls = setOf("plaster", "stone", "timber", "brick", "canvas", "night-sky",
+		"rock", "hull", "bark", "glade", "basalt", "nebula", "white", "obsidian", "runestone", "daub",
+		"damask", "chart", "barnboard", "ashlar", "logs", "glacier", "deepwater", "tent-stripes", "open-sky", "wattle",
+		"brass-plate", "lair", "marble", "faded-paper", "glazing")
+	shopRoomCounterLights = setOf("lamp", "forge", "candles", "lanterns", "moonlight",
+		"crystals", "brazier", "wisps", "star", "halo", "witchfire", "orb", "firelight", "votives", "frostfire",
+		"jellyfish", "pierced-lamp", "cauldron", "filament", "sunlight", "candelabra")
 	shopRoomCounterOutsides = setOf("day", "dusk", "night", "rain")
-	shopRoomCounterProps    = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes")
+	shopRoomCounterProps    = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
+		"fireflies", "drips", "cobwebs", "nets", "chains", "mushrooms", "tentacle", "petals", "butterflies", "embers",
+		"smoke", "comets", "floating-stones", "eyes", "glyphs", "magic-circle", "dew", "beads", "rune-chase", "arcs",
+		"bubbles", "ghostlights", "crumbs", "dust", "tankards", "keg", "antlers", "mannequin", "ribbons", "shears",
+		"globe", "charts", "inkwell", "birdcages", "perch", "feathers", "haybale", "critters", "censer", "casket",
+		"stove", "pelts", "sacks", "snowfall", "ice-swan", "fish", "kelp", "caustics", "crab", "glass-lamps",
+		"hookah", "cobra", "pennants", "propeller", "grapnel", "toad", "bottle-tree", "gears", "steam-puffs", "automaton",
+		"gauge", "glints", "dragon-tail", "doves", "laurel", "lyre", "ghost", "portrait", "phonograph", "hanging-baskets",
+		"palm", "watering-can")
 )
 
 // NormalizeShopRoomLayout validates a client-supplied layout and returns the

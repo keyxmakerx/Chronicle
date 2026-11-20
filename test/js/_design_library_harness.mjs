@@ -89,7 +89,7 @@ export async function openArranged(browser, { width = 1200, height = 800, seed =
   page.on('pageerror', (e) => errors.push(e.message));
   await page.setContent(HOST);
   await page.addScriptTag({ content: FAKE + '\nObject.assign(window.__srv, ' + JSON.stringify(seed) + ');' });
-  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'design_library.js', 'design_library_gallery.js', 'design_library_suggest.js', 'shop_room_builder.js', 'shop_room.js']) await page.addScriptTag({ content: read(f) });
+  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'shop_room_parts_strange.js', 'shop_room_parts_trades.js', 'shop_room_parts_places.js', 'design_library.js', 'design_library_gallery.js', 'design_library_suggest.js', 'shop_room_builder.js', 'shop_room.js']) await page.addScriptTag({ content: read(f) });
   await page.waitForSelector('#w:not([hidden]) .shr-front');
   await page.click('.shr-front');
   await page.waitForSelector('.src-svg [data-k="keeper"]');
