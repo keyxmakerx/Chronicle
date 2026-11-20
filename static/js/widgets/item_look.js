@@ -44,7 +44,7 @@
     '.ilk-gal{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}',
     '.ilk-tile{font:inherit;text-align:left;display:flex;flex-direction:column;gap:3px;padding:0 0 6px;border-radius:10px;border:1px solid transparent;background:var(--color-bg-tertiary);color:var(--color-text-body);cursor:pointer;overflow:hidden;min-width:0}',
     '.ilk-tile canvas{display:block;width:100%;height:52px}',
-    '.ilk-tile b{font-size:.78rem;font-weight:600;color:var(--color-text-primary);padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.ilk-tile b{font-size:.78rem;font-weight:600;line-height:1.2;color:var(--color-text-primary);padding:0 8px;overflow-wrap:anywhere}',
     '.ilk-tile:hover{border-color:var(--color-border)}',
     '.ilk-tile[aria-pressed="true"]{border-color:var(--color-accent);box-shadow:inset 2px 0 0 var(--color-accent)}',
     '.ilk-sw{display:flex;flex-wrap:wrap;gap:6px}',
