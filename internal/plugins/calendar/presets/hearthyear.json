@@ -1,0 +1,199 @@
+{
+  "format": "chronicle-calendar-v1",
+  "version": 2,
+  "calendar": {
+    "name": "Hearthyear Almanac",
+    "description": "A farming year that begins with the lambs: twelve months named for the work of the season, a seven-day week, and one moon to plant by.",
+    "mode": "fantasy",
+    "epoch_name": "Year of the Charter",
+    "current_year": 431,
+    "current_month": 1,
+    "current_day": 1,
+    "current_hour": 0,
+    "current_minute": 0,
+    "hours_per_day": 24,
+    "minutes_per_hour": 60,
+    "seconds_per_minute": 60,
+    "leap_year_every": 4,
+    "leap_year_offset": 0,
+    "tracks_real_time": false,
+    "forecasts_enabled": false,
+    "month_starts_new_week": false,
+    "months": [
+      {
+        "name": "Lambing",
+        "days": 31,
+        "sort_order": 0,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Seedtime",
+        "days": 30,
+        "sort_order": 1,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Greengrass",
+        "days": 31,
+        "sort_order": 2,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Shearing",
+        "days": 30,
+        "sort_order": 3,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Haymaking",
+        "days": 31,
+        "sort_order": 4,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Honeyflow",
+        "days": 30,
+        "sort_order": 5,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Firstsheaf",
+        "days": 31,
+        "sort_order": 6,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Harvest-home",
+        "days": 30,
+        "sort_order": 7,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Applefall",
+        "days": 31,
+        "sort_order": 8,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Woodsmoke",
+        "days": 30,
+        "sort_order": 9,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Larderfill",
+        "days": 30,
+        "sort_order": 10,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Deepwinter",
+        "days": 30,
+        "sort_order": 11,
+        "is_intercalary": false,
+        "leap_year_days": 1
+      }
+    ],
+    "weekdays": [
+      {
+        "name": "Plowday",
+        "sort_order": 0,
+        "is_rest_day": false
+      },
+      {
+        "name": "Milkday",
+        "sort_order": 1,
+        "is_rest_day": false
+      },
+      {
+        "name": "Bakeday",
+        "sort_order": 2,
+        "is_rest_day": false
+      },
+      {
+        "name": "Marketday",
+        "sort_order": 3,
+        "is_rest_day": false
+      },
+      {
+        "name": "Mendday",
+        "sort_order": 4,
+        "is_rest_day": false
+      },
+      {
+        "name": "Fairday",
+        "sort_order": 5,
+        "is_rest_day": false
+      },
+      {
+        "name": "Hearthday",
+        "sort_order": 6,
+        "is_rest_day": true
+      }
+    ],
+    "moons": [
+      {
+        "name": "The Shepherd",
+        "cycle_days": 29.5,
+        "phase_offset": 13,
+        "color": "#e8e2d0"
+      }
+    ],
+    "seasons": [
+      {
+        "name": "Spring",
+        "start_month": 1,
+        "start_day": 1,
+        "end_month": 3,
+        "end_day": 31,
+        "color": "oklch(0.76 0.12 140)"
+      },
+      {
+        "name": "Summer",
+        "start_month": 4,
+        "start_day": 1,
+        "end_month": 6,
+        "end_day": 30,
+        "color": "oklch(0.80 0.13 95)"
+      },
+      {
+        "name": "Autumn",
+        "start_month": 7,
+        "start_day": 1,
+        "end_month": 9,
+        "end_day": 31,
+        "color": "oklch(0.66 0.13 55)"
+      },
+      {
+        "name": "Winter",
+        "start_month": 10,
+        "start_day": 1,
+        "end_month": 12,
+        "end_day": 30,
+        "color": "oklch(0.72 0.04 240)"
+      }
+    ],
+    "eras": [
+      {
+        "name": "The Charter Years",
+        "start_year": 1,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.62 0.09 130)",
+        "sort_order": 0,
+        "description": "Counted from the granting of the valley’s charter."
+      }
+    ]
+  }
+}

@@ -292,7 +292,7 @@
   // motion.
   function motionOf(st) {
     if (st.rm) return 0;
-    var lk = st.look, moving = !!(st.met.length || st.aur.length || st.bleed || st.fxItems.length || st.airs.length ||
+    var lk = st.look, moving = !!(st.met.length || st.aur.length || st.bleed || st.fxItems.some(function (f) { return !f.still; }) || st.airs.length ||
       st.moons.some(function (M) { return M.conj && M.up; }) ||
       (lk && (lk.parts.length || lk.rain + lk.snow + lk.hail > .04 || lk.storm > .1 || lk.air.length || lk.fire.length || lk.sigils.length || lk.funnel)));
     return moving ? 2 : 1;
