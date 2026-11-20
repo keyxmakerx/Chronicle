@@ -83,12 +83,12 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 					<div class="empty-state__description">Try a different search term or change the type filter.</div>
 				</div>
 				<!-- Pagination -->
-				<div class="flex items-center justify-center gap-3 mt-6" x-show="total > 24">
+				<div class="flex items-center justify-center gap-3 mt-6" x-show="hasPager()">
 					<button class="btn-secondary btn-sm" @click="prevPage()" x-bind:disabled="page <= 1">
 						<i class="fa-solid fa-chevron-left text-xs"></i> Previous
 					</button>
 					<span class="text-sm text-fg-secondary">Page <span x-text="page"></span></span>
-					<button class="btn-secondary btn-sm" @click="nextPage()" x-bind:disabled="page * 24 >= total">
+					<button class="btn-secondary btn-sm" @click="nextPage()" x-bind:disabled="!hasNext()">
 						Next <i class="fa-solid fa-chevron-right text-xs"></i>
 					</button>
 				</div>

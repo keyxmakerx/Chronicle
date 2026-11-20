@@ -65,6 +65,48 @@ func TestSearchAPI_PagesOnlyForThePicker(t *testing.T) {
 	}
 }
 
+// TestSearchAPI_UnpagedHitsAnswerOnce: timelines, maps and the rest are not
+// paged, so they come with page 1 only; page 2 lists the next pages and not
+// the same hits again. entity_total is the pages' own count, what a pager
+// steps through, while total also holds the unpaged hits.
+func TestSearchAPI_UnpagedHitsAnswerOnce(t *testing.T) {
+	repo := &mockEntityRepo{
+		searchFn: func(_ context.Context, _ string, _ string, _ []int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
+			return []Entity{{ID: "e-" + strings.Repeat("x", opts.Page), Name: "Guild", CampaignID: "camp-1"}}, 21, nil
+		},
+	}
+	tl := &stubTimelineSearcher{}
+	h := NewHandler(NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{}))
+	h.SetTimelineSearcher(tl)
+
+	tests := []struct {
+		name         string
+		query        string
+		wantResults  int
+		wantTotal    float64
+		wantEntities float64
+		wantAsked    bool
+	}{
+		{"page 1 carries the timeline hit", "q=guild", 2, 22, 21, true},
+		{"page 2 repeats nothing", "q=guild&page=2", 1, 21, 21, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tl.called = false
+			out, _ := searchJSON(t, h, tt.query)
+			if got := len(out["results"].([]any)); got != tt.wantResults {
+				t.Errorf("results = %d, want %d", got, tt.wantResults)
+			}
+			if out["total"] != tt.wantTotal || out["entity_total"] != tt.wantEntities {
+				t.Errorf("total = %v, entity_total = %v, want %v and %v", out["total"], out["entity_total"], tt.wantTotal, tt.wantEntities)
+			}
+			if tl.called != tt.wantAsked {
+				t.Errorf("timeline searcher asked = %v, want %v", tl.called, tt.wantAsked)
+			}
+		})
+	}
+}
+
 // TestSearchAPI_PeekIsTheNewestFive: the sidebar's hover peek gets a
 // category's five most recently changed pages, and nothing else.
 func TestSearchAPI_PeekIsTheNewestFive(t *testing.T) {

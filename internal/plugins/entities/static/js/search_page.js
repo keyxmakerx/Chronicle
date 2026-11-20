@@ -8,6 +8,19 @@
  * off until the component exists, and init hands the page to Alpine.
  */
 (function () {
+  // The size of a page of results as SearchAPI answers it. The server ignores
+  // a per_page request, so paging counts in this and asks for nothing else.
+  var PER_PAGE = 20;
+
+  // resultUrl is where a result opens: its own url when that is a same-site
+  // path (maps, timelines, events and rules are not pages), else the page
+  // route. Same rule as topbar_search.js, so both screens open the same thing.
+  function resultUrl(e, campaignId) {
+    var u = typeof e.url === 'string' ? e.url : '';
+    if (u.charAt(0) === '/' && u.charAt(1) !== '/' && u.charAt(1) !== '\\') return u;
+    return '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(e.id);
+  }
+
   function searchPageData(campaignId) {
     return {
       query: new URLSearchParams(window.location.search).get('q') || '',
@@ -16,6 +29,12 @@
       allTags: [],
       results: [],
       total: 0,
+      // How many of total are pages, which is what the pager steps through;
+      // total also holds the hits that are not pages and are not paged.
+      entityTotal: 0,
+      // The non-page hits the first page reported, kept so the count line
+      // does not change when a later page (which omits them) is read.
+      extras: 0,
       page: 1,
       loading: false,
       debounceTimer: null,
@@ -56,7 +75,7 @@
         var self = this;
         if (self.query.length > 0 && self.query.length < 2) return;
         self.loading = true;
-        var url = '/campaigns/' + campaignId + '/entities/search?per_page=24&page=' + self.page;
+        var url = '/campaigns/' + campaignId + '/entities/search?page=' + self.page;
         if (self.query) url += '&q=' + encodeURIComponent(self.query);
         if (self.typeFilter) url += '&type=' + self.typeFilter;
         if (self.activeTags.length > 0) url += '&tags=' + self.activeTags.join(',');
@@ -64,7 +83,9 @@
           .then(function (r) { return r.json(); })
           .then(function (data) {
             self.results = data.results || [];
-            self.total = data.total || 0;
+            self.entityTotal = typeof data.entity_total === 'number' ? data.entity_total : (data.total || 0);
+            if (self.page === 1) self.extras = Math.max(0, (data.total || 0) - self.entityTotal);
+            self.total = self.entityTotal + self.extras;
             self.loading = false;
             self.renderGrid();
             // Update URL without reload.
@@ -76,6 +97,8 @@
           .catch(function () {
             self.results = [];
             self.total = 0;
+            self.entityTotal = 0;
+            self.extras = 0;
             self.loading = false;
             self.renderGrid();
           });
@@ -90,7 +113,7 @@
           var e = this.results[i];
           var color = Chronicle.escapeAttr(e.type_color || '#6b7280');
           var icon = Chronicle.escapeAttr(e.type_icon || 'fa-file');
-          html += '<a href="/campaigns/' + campaignId + '/entities/' + e.id + '" class="card hover:border-accent/30 hover:shadow-sm transition-all group">' +
+          html += '<a href="' + Chronicle.escapeAttr(resultUrl(e, campaignId)) + '" class="card hover:border-accent/30 hover:shadow-sm transition-all group">' +
             '<div class="flex items-start gap-3">' +
             '<div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs" style="background-color:' + color + '20;color:' + color + '">' +
             '<i class="fa-solid ' + icon + '"></i></div>' +
@@ -98,7 +121,7 @@
             '<div class="text-sm font-medium text-fg group-hover:text-accent transition-colors truncate">' + Chronicle.escapeHtml(e.name) + '</div>' +
             '<div class="text-xs text-fg-muted mt-0.5">' + Chronicle.escapeHtml(e.type_name || '') + '</div>' +
             '</div>' +
-            (e.is_private ? '<i class="fa-solid fa-eye-slash text-[10px] text-fg-muted mt-1 shrink-0" title="Private"></i>' : '') +
+            (e.restricted === 'dm_only' ? '<i class="fa-solid fa-lock text-[10px] text-fg-muted mt-1 shrink-0" title="Hidden from players"></i>' : '') +
             '</div></a>';
         }
         grid.innerHTML = html;
@@ -108,6 +131,11 @@
       resultsLabel: function () {
         return this.total === 1 ? '1 result' : this.total + ' results';
       },
+
+      // The pager shows when the pages run past one answer, and Next stops
+      // at the last of them.
+      hasPager: function () { return this.entityTotal > PER_PAGE; },
+      hasNext: function () { return this.page * PER_PAGE < this.entityTotal; },
 
       nextPage: function () { this.page++; this.search(); },
       prevPage: function () { if (this.page > 1) { this.page--; this.search(); } }
