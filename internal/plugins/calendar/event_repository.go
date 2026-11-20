@@ -45,7 +45,9 @@ type EventRepository interface {
 	// event in the given calendars in one query, role-filtered.
 	EventDatesForCalendars(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error)
 
-	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
+	// UpdateEventVisibility sets visibility and rules; a non-nil announced
+	// sets the announce setting in the same statement, nil keeps it.
+	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string, announced *string) error
 
 	// ListRuleEvents returns a calendar's RecurrenceByRule events, unfiltered,
 	// for the anchor-cycle check (an event other rules repeat relative to may
@@ -658,11 +660,13 @@ func (r *eventRepo) EventDatesForCalendars(ctx context.Context, calIDs []string,
 	return out, rows.Err()
 }
 
-// UpdateEventVisibility sets the visibility and per-user rules on an event.
-func (r *eventRepo) UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error {
+// UpdateEventVisibility sets the visibility and per-user rules on an event,
+// and its announce setting when announced is non-nil. One statement, so a
+// concurrent read never sees the new visibility with the old announce rule.
+func (r *eventRepo) UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string, announced *string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE calendar_events SET visibility = ?, visibility_rules = ? WHERE id = ?`,
-		visibility, visRules, eventID,
+		`UPDATE calendar_events SET visibility = ?, visibility_rules = ?, announced = COALESCE(?, announced) WHERE id = ?`,
+		visibility, visRules, announced, eventID,
 	)
 	return err
 }
