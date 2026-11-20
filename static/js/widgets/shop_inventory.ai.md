@@ -21,6 +21,7 @@ Its `.shop-inv*` styles live in `static/css/input.css`, not in the script.
 | `data-quick-create-endpoint` | `/campaigns/:id/entities/quick-create` |
 | `data-campaign-url` | `/campaigns/:id`, base for armory calls |
 | `data-editable` | Set when the viewer is Scribe or above |
+| `data-director` | Set for the Director (Owner or co-DM): shows Fill the shelves, the Shop good tag and the Kept line with Undo |
 | `data-owner` | Set for the campaign Owner, who sets the places on today's shelf |
 | `data-csrf-token` | Read into a variable, unused; `apiFetch` attaches the header |
 
@@ -41,6 +42,12 @@ Its `.shop-inv*` styles live in `static/css/input.css`, not in the script.
 
 All exist in `routes_snapshot.txt`.
 
+- Director only: `static/js/widgets/shop_stock_fill.js` (the draft sheet,
+  `Chronicle.shopFill.open`) and `shop_stock_gen.js` (the pure draft, seeded)
+  load with this widget. See `shop_stock_fill.ai.md`.
+- A relation row carries `targetEntityShopGood`; the Director sees a "Shop
+  good" tag for it, everyone else the page type as before.
+
 ## Events
 
 None emitted or listened to.
@@ -54,4 +61,6 @@ None emitted or listened to.
   but are not out today; editors see every good with a note saying which.
 - A failed inventory load shows an error with Try again, never the empty
   "no items" state.
+- A good with no price is flagged "Set a price" for editors; buying already
+  refuses it until one is set.
 - Shop-room and transaction-log widgets are separate mounts on the same page.
