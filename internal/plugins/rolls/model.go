@@ -172,7 +172,7 @@ const (
 // DiceSetKeys and the two crit lists name what the browser's dice engine can
 // draw (static/js/dice/engine.js, SET_KEYS and CRIT_KEYS). The names live in
 // both places because the server must refuse a name the engine would never
-// load; dice_keys_test.go keeps the two lists equal.
+// load; TestDiceKeysMatchEngine in service_test.go keeps the two lists equal.
 var (
 	DiceSetKeys  = []string{"jewelled", "confetti", "acrylic", "cage", "heartlight", "gothic", "obsidian", "moonstone", "oak", "nebula", "bone", "scale"}
 	CritSuccKeys = []string{"storm", "phoenix", "dawn", "starfall", "bloom", "hoard"}
