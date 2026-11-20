@@ -60,6 +60,8 @@
 .air-what b { font-weight: 600; }
 .air-line { font-size: 0.84rem; color: var(--color-text-secondary); overflow-wrap: anywhere; }
 .air-line i { font-style: normal; color: var(--color-text-body); }
+/* In a sheet check each line is its own row, so a plain line never runs on from the note. */
+.air-sheet > .air-line { display: block; }
 .air-line.air-bad { color: rgb(var(--color-bad-rgb)); }
 .air-row:has(.air-n input:checked) .air-what { color: var(--color-text-secondary); text-decoration: line-through; }
 
