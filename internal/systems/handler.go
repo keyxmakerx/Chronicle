@@ -542,9 +542,20 @@ func (h *SystemHandler) SystemDataAPI(c *echo.Context) error {
 	if err != nil {
 		return apperror.NewNotFound("data file not found")
 	}
+	// A kind's file is the reader's own (rules_data.go), so it is never kept.
+	cache := "private, max-age=3600"
+	if cc := campaigns.GetCampaignContext(c); cc != nil {
+		out, handled, err := h.rulesPages().KindData(c.Request().Context(), mod, strings.TrimSuffix(file, ".json"), data, rulesReader(c, cc))
+		if err != nil {
+			return err
+		}
+		if handled {
+			data, cache = out, "private, no-store"
+		}
+	}
 
 	// Private: the answer depends on the viewer's role and membership.
-	c.Response().Header().Set("Cache-Control", "private, max-age=3600")
+	c.Response().Header().Set("Cache-Control", cache)
 	return c.Blob(http.StatusOK, "application/json", data)
 }
 
@@ -603,8 +614,13 @@ func (h *SystemHandler) BookAPI(c *echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	// ?view=player asks a Director for the player's book (the campaign home's
 	// leaves when the Director is viewing as a player); it can only narrow.
-	out := FilterBook(book, bookViewerIsDirector(cc) && c.QueryParam("view") != "player").
-		WithAssetBase("/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book/files")
+	director := bookViewerIsDirector(cc) && c.QueryParam("view") != "player"
+	// A chapter listing a kind lists what this reader has (book_reading.go).
+	filtered, err := h.forReader(c, FilterBook(book, director), manifest, director)
+	if err != nil {
+		return err
+	}
+	out := filtered.WithAssetBase("/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book/files")
 	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
 	return c.JSON(http.StatusOK, out)
 }
@@ -644,7 +660,11 @@ func (h *SystemHandler) viewerBook(c *echo.Context) (*Book, string, *SystemManif
 	if err != nil {
 		return nil, "", nil, false, apperror.NewNotFound("the rulebook could not be opened")
 	}
-	return FilterBook(b, director), sysDir, manifest, director, nil
+	rb, err := h.forReader(c, FilterBook(b, director), manifest, director)
+	if err != nil {
+		return nil, "", nil, false, err
+	}
+	return rb, sysDir, manifest, director, nil
 }
 
 // viewerBookTarget resolves which book a request reads and as whom, without
@@ -683,12 +703,15 @@ func (h *SystemHandler) BookIndexAPI(c *echo.Context) error {
 	if !bookShowsSlice(b, cat, want) {
 		return apperror.NewNotFound("this book has no such index page")
 	}
-	ie, err := loadIndexEntries(sysDir, manifest, cat)
+	ie, err := h.readerIndex(c, sysDir, manifest, cat, director)
 	if err != nil {
 		return apperror.NewNotFound("this index could not be read")
 	}
 	// Chapters are built so no page lists more than maxBookIndexItems.
 	items := ie.slice(want)
+	if sliceIsLast(b, cat, want) {
+		items = append(items, ie.closing...)
+	}
 	out := make([]BookIndexEntry, 0, len(items))
 	for _, it := range items {
 		out = append(out, ie.indexEntry(it, director, want.Key))
@@ -705,6 +728,9 @@ func (h *SystemHandler) BookFindAPI(c *echo.Context) error {
 		return err
 	}
 	idx, err := cachedBookFindIndex(sysDir, manifest, director)
+	if err == nil {
+		idx, err = h.readerFind(c, sysDir, manifest, director, idx)
+	}
 	if err != nil {
 		return apperror.NewNotFound("the rulebook could not be opened")
 	}
