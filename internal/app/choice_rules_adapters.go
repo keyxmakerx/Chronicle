@@ -149,4 +149,3 @@ func (a heroRulesAdapter) Waiting(ctx context.Context, campaignID string, e *ent
 	}
 	return out, nil
 }
-

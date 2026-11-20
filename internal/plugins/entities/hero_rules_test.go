@@ -218,7 +218,9 @@ func (r *recordingRules) RequestChoice(_ context.Context, in HeroAsk) (*HeroAskO
 	return &HeroAskOutcome{ID: 5, FieldKey: in.FieldKey, EntryName: in.EntryName, Status: "waiting"}, nil
 }
 
-func (r *recordingRules) Breaks(context.Context, string, *Entity) ([]HeroBreak, error) { return nil, nil }
+func (r *recordingRules) Breaks(context.Context, string, *Entity) ([]HeroBreak, error) {
+	return nil, nil
+}
 
 func (r *recordingRules) Waiting(context.Context, string, *Entity) ([]HeroWaitingPick, error) {
 	return nil, nil
@@ -314,9 +316,9 @@ func TestAddHeroRuleNotes(t *testing.T) {
 		allowed bool
 		want    bool
 	}{
-		{"the owner or a Director gets both", &Handler{heroRules: notesRules{}}, played, true, true},
-		{"anyone else gets neither", &Handler{heroRules: notesRules{}}, played, false, false},
-		{"a hero nobody plays has no player's rules", &Handler{heroRules: notesRules{}}, &Entity{ID: "e"}, true, false},
+		{"the owner or a Director gets both", &Handler{heroRules: &notesRules{}}, played, true, true},
+		{"anyone else gets neither", &Handler{heroRules: &notesRules{}}, played, false, false},
+		{"a hero nobody plays has no player's rules", &Handler{heroRules: &notesRules{}}, &Entity{ID: "e"}, true, false},
 		{"without rules wired nothing is added", &Handler{}, played, true, false},
 	}
 	for _, tt := range tests {

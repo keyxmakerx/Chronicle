@@ -7,7 +7,7 @@ import (
 )
 
 // TestChoiceRuleRepository_Integration runs the hand-written SQL against a
-// real MariaDB: one row per (entry, target) with '' for everyone, the viewer
+// real MariaDB: one row per (entry, target) with ” for everyone, the viewer
 // filter, atomic batches, deleting an entry's rules while withdrawing its
 // waiting requests, one waiting request per hero and field, and the cascade on
 // campaign delete. Skipped under -short or when no server answers.
