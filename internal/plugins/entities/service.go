@@ -30,6 +30,13 @@ type EntityService interface {
 	// Entity CRUD
 	Create(ctx context.Context, campaignID, userID string, input CreateEntityInput) (*Entity, error)
 	Clone(ctx context.Context, campaignID, userID, sourceEntityID string) (*Entity, error)
+	// EnsureShopGood returns the shop good page of that name (case-ignored)
+	// in the campaign, making it in the given item type when there is none.
+	// A good for sale to players is never left on a page hidden from them,
+	// since the shop drops listings whose page a player cannot see.
+	EnsureShopGood(ctx context.Context, campaignID, userID string, typeID int, name string, hiddenFromPlayers bool) (*Entity, error)
+	// SetShopGood marks a page as a shop good or, with false, makes it a full page.
+	SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error
 	GetByID(ctx context.Context, id string) (*Entity, error)
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
@@ -615,6 +622,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		TypeLabel:    typeLabelPtr,
 		IsPrivate:    input.IsPrivate,
 		IsTemplate:   false,
+		ShopGood:     input.ShopGood,
 		FieldsData:   fieldsData,
 		CreatedBy:    userID,
 		OwnerUserID:  ownerUserIDPtr,
@@ -684,6 +692,7 @@ func (s *entityService) Clone(ctx context.Context, campaignID, userID, sourceEnt
 		TypeLabel:      source.TypeLabel,
 		IsPrivate:      source.IsPrivate,
 		IsTemplate:     source.IsTemplate,
+		ShopGood:       source.ShopGood,
 		FieldsData:     fieldsData,
 		FieldOverrides: source.FieldOverrides,
 		PopupConfig:    source.PopupConfig,
@@ -3925,4 +3934,48 @@ func (s *entityService) syncFieldFlag(
 // text, not a document.
 func isEditorDoc(entry string) bool {
 	return strings.HasPrefix(entry, "{") && json.Valid([]byte(entry))
+}
+
+// maxShopGoodName is the longest name a shop good page is made with.
+const maxShopGoodName = 200
+
+// EnsureShopGood finds or makes the shop good page for a name. Two shops
+// selling the same good share one page, found by name within the campaign's
+// shop goods only: an ordinary page with the same name is never taken over,
+// so a Director's own "Healing Potion" page is never turned into a good.
+func (s *entityService) EnsureShopGood(ctx context.Context, campaignID, userID string, typeID int, name string, hiddenFromPlayers bool) (*Entity, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, apperror.NewBadRequest("A good needs a name.")
+	}
+	if len(name) > maxShopGoodName {
+		return nil, apperror.NewBadRequest("A good's name can be at most 200 characters.")
+	}
+	existing, err := s.entities.FindShopGoodByName(ctx, campaignID, name)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	if existing != nil {
+		if existing.IsPrivate && !hiddenFromPlayers {
+			if err := s.entities.UpdatePrivate(ctx, existing.ID, false); err != nil {
+				return nil, apperror.NewInternal(err)
+			}
+			existing.IsPrivate = false
+		}
+		return existing, nil
+	}
+	return s.Create(ctx, campaignID, userID, CreateEntityInput{
+		Name: name, EntityTypeID: typeID, IsPrivate: hiddenFromPlayers, ShopGood: true,
+	})
+}
+
+// SetShopGood changes the shop good mark. Who may is decided by the route.
+func (s *entityService) SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error {
+	if err := s.entities.SetShopGood(ctx, campaignID, entityID, shopGood); err != nil {
+		return err
+	}
+	if e, err := s.entities.FindByID(ctx, entityID); err == nil {
+		s.publishEntity(ctx, "updated", campaignID, entityID, e)
+	}
+	return nil
 }

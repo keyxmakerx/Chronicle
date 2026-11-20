@@ -44,7 +44,7 @@ func NewPagesSinceReader(db *sql.DB) *PagesSinceReader { return &PagesSinceReade
 // idx_entities_campaign_created for the campaign and time bound.
 func (r *PagesSinceReader) Since(ctx context.Context, campaignID string, since time.Time, role int, userID string, nameLimit int) (PagesSince, error) {
 	visFilter, visArgs := visibilityFilter(role, userID)
-	where := ` FROM entities e WHERE e.campaign_id = ? AND e.created_at > ? AND e.is_template = 0` + visFilter
+	where := ` FROM entities e WHERE e.campaign_id = ? AND e.created_at > ? AND e.is_template = 0 AND e.shop_good = 0` + visFilter
 	args := append([]any{campaignID, since}, visArgs...)
 
 	var out PagesSince

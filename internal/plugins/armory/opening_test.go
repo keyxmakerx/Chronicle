@@ -15,7 +15,7 @@ func TestArmoryOpening(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1", Name: "Ashen"}, MemberRole: campaigns.RolePlayer}
 	render := func(total int, opts ItemListOptions) string {
 		var buf bytes.Buffer
-		if err := ArmoryGalleryContent(cc, nil, total, opts, nil, nil, nil, nil, "").Render(context.Background(), &buf); err != nil {
+		if err := ArmoryGalleryContent(cc, nil, total, opts, nil, nil, nil, nil, false, 0, "").Render(context.Background(), &buf); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()

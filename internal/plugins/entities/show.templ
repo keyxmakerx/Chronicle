@@ -322,6 +322,15 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				@pageMoonChips(cc)
 				// Aliases ("aka") sit under the name they are alternatives to.
 				// In the page editor they are changed on the header's sheet.
+				if entity.ShopGood {
+					<div
+						data-widget="shop_good_note"
+						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/full-page", cc.Campaign.ID, entity.ID) }
+						if cc.CanAuthorDmOnly() {
+							data-director="true"
+						}
+					></div>
+				}
 				<div
 					data-widget="aliases"
 					data-entity-id={ entity.ID }
@@ -607,6 +616,9 @@ templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToke
 		}
 		if cc.MemberRole >= campaigns.RoleOwner {
 			data-owner="true"
+		}
+		if cc.CanAuthorDmOnly() {
+			data-director="true"
 		}
 		data-csrf-token={ csrfToken }
 	></div>
