@@ -80,6 +80,10 @@ Chronicle.register('attributes', {
           state.shown = data.shown || {};
           state.calendar = data.dateBook || null;
           state.ownerFields = data.owner_fields || null;
+          // The Director's hero-choice rules, for the player's page: what the
+          // hero keeps that is no longer offered, and picks waiting for an answer.
+          state.choiceBreaks = data.choice_breaks || [];
+          state.choiceWaiting = data.choice_waiting || [];
           render();
         })
         .catch(function (err) {
@@ -186,6 +190,7 @@ Chronicle.register('attributes', {
       }
 
       card.appendChild(header);
+      renderChoiceNotes(card);
 
       // Error display.
       if (state.error) {
@@ -209,6 +214,41 @@ Chronicle.register('attributes', {
 
       card.appendChild(content);
       el.appendChild(card);
+    }
+
+    // --- The Director's hero-choice rules, as the hero's player reads them ---
+
+    function labelOf(key) {
+      var f = state.fields.filter(function (x) { return x.key === key; })[0];
+      return f ? f.label : key;
+    }
+    function failedNote(b) {
+      var keys = (b && b.requestFailed) || [];
+      if (!keys.length) return '';
+      return 'Your pick for ' + keys.map(function (k) { return labelOf(k).toLowerCase(); }).join(', ') +
+        ' could not be sent to your Director. Pick it again.';
+    }
+    function renderChoiceNotes(card) {
+      var lines = [];
+      (state.choiceBreaks || []).forEach(function (b) {
+        lines.push((b.value || 'That') + (b.kind === 'off_list' ? ' isn\u2019t on the ' + labelOf(b.fieldKey).toLowerCase() + ' list any more.' : ' isn\u2019t offered any more.') +
+          ' You keep it; a new pick must be on the list.' + (b.reason ? ' Your Director says: \u201c' + b.reason + '\u201d' : ''));
+      });
+      (state.choiceWaiting || []).forEach(function (w) {
+        lines.push((w.entryName || 'Your pick') + ' is waiting for your Director, for ' + labelOf(w.fieldKey).toLowerCase() + '.');
+      });
+      if (state.notice) lines.push(state.notice);
+      if (!lines.length) return;
+      var box = document.createElement('div');
+      box.className = 'ag-rules';
+      box.setAttribute('role', 'status');
+      lines.forEach(function (t) {
+        var p = document.createElement('p');
+        p.className = 'ag-note';
+        p.textContent = t;
+        box.appendChild(p);
+      });
+      card.appendChild(box);
     }
 
     // --- Read-only view ---
@@ -1111,12 +1151,16 @@ Chronicle.register('attributes', {
               throw e;
             });
           }
-          state.draft = null;
-          state.isEditing = false;
-          state.isSaving = false;
-          // Changing a pick can clear what was bought with the old one, so
-          // read the page back rather than guess.
-          return reload();
+          return r.json().catch(function () { return {}; }).then(function (b) {
+            state.draft = null;
+            state.isEditing = false;
+            state.isSaving = false;
+            state.notice = failedNote(b);
+            // Changing a pick can clear what was bought with the old one, and
+            // an Ask first pick is held for the Director, so read the page
+            // back rather than guess.
+            return reload();
+          });
         })
         .catch(function (err) {
           console.error('[attributes] Save failed:', err);
@@ -1164,10 +1208,13 @@ Chronicle.register('attributes', {
               throw e;
             });
           }
+          return r.json().catch(function () { return {}; }).then(function (b) {
           state.fieldsData = newData;
           state.draft = null;
           state.isEditing = false;
           state.isSaving = false;
+          state.notice = failedNote(b);
+          if (b.requests && b.requests.length) { reload(); return; }
           render();
           // An era version keeps only what differs from the usual page, so
           // read back which fields it now changes.
@@ -1175,6 +1222,7 @@ Chronicle.register('attributes', {
           // they are read back too.
           if (config.era || Object.keys(state.shown || {}).length ||
             state.fields.some(function (f) { return f.type === 'link' || f.type === 'rule' || f.type === 'calendar_date'; })) reload();
+          });
         })
         .catch(function (err) {
           console.error('[attributes] Save failed:', err);

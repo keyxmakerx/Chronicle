@@ -189,6 +189,7 @@
       return '<li><button type="button" class="hc-row" data-open="' + i + '" aria-expanded="false"><b>' + esc(c.name) +
         (c.mine && c.status ? ' <span class="hc-seal">Yours · ' + (c.status === 'sent' ? 'handed in' : 'draft') + '</span>'
           : c.source === 'campaign' ? ' <span class="hc-seal">Campaign</span>' : '') +
+        (c.state === 'ask_first' ? ' <span class="hc-seal">Ask first</span>' : '') +
         (picked ? ' <span class="hc-row__pick" aria-label="chosen">✓</span>' : '') +
         '</b><span class="hc-row__go" aria-hidden="true">Read ›</span><small>' + esc(c.summary) + '</small></button></li>';
     }).join('');
@@ -427,6 +428,15 @@
     }).then(function (res) {
       if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
       self.clearDraft();
+      // A pick the Director has to allow could not be sent: say so, with a
+      // way on, instead of moving past it.
+      var failed = res.body.requestFailed || [];
+      if (failed.length) {
+        err.textContent = 'Your hero is made, but a pick for ' + failed.map(function (k) { var s2 = self.stepByKey(k); return s2 ? lower(s2.label) : k; }).join(', ') +
+          ' could not be sent to your Director. Open the hero and pick it again: ' + res.body.url;
+        err.hidden = false;
+        return;
+      }
       var go = function () { if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.href = res.body.url; };
       self.keepDraftsTo(res.body.id).then(go, go);
     }).catch(function () { fail('The hero could not be made. Check your connection and try again.'); });

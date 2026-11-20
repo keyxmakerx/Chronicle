@@ -13,6 +13,12 @@
  * Campaign descriptions arrive as HTML the server sanitized; package text is
  * plain and escaped here.
  *
+ * A Director's rules shape the lists: entries marked Not here are gone (a
+ * quiet foot line names them), Ask first entries carry a mark, are skipped
+ * by the dice, and when picked wait for the Director beside the blank while
+ * the rest of the hero is filled in; a required step with one entry left is
+ * filled in and locked.
+ *
  * Loaded on sight for data-widget="hero-builder" (ADR-063).
  */
 (function () {
@@ -81,7 +87,9 @@
       return 1 + (a[0] % sides);
     } catch (e) { return 1 + Math.floor(Math.random() * sides); }
   }
-  // One roll against a list of n: the face and the entry it lands on.
+  // The entries the dice can land on: Ask first ones are skipped, so the
+  // numbers run over what a player may simply take.
+  function rollable(st) { return st.choices.filter(function (c) { return c.state !== 'ask_first'; }); }
 
   // Throws one roll per list ([{label, n}]) and resolves to each list's
   // face. Chronicle's dice engine throws them on screen when the site has
@@ -142,9 +150,18 @@
       self.plan = plan || {};
       self.plan.steps = (self.plan.steps || []).filter(function (s) { return s.choices && s.choices.length; });
       self.restore();
+      self.prefill();
       self.render();
     }).catch(function () {
       self.el.innerHTML = '<p class="hb-wait">The hero builder could not open. Reload the page to try again.</p>';
+    });
+  };
+  // A required step left with one entry starts filled in on a new hero.
+  Builder.prototype.prefill = function () {
+    var self = this;
+    this.plan.steps.forEach(function (st) {
+      var p = st.rules && st.rules.prefilled, c = p && self.choiceByName(st, p);
+      if (c) self.fresh.values[st.fieldKey] = c.name;
     });
   };
   Builder.prototype.restore = function () {
@@ -190,8 +207,27 @@
   Builder.prototype.stepsFor = function (h) {
     return this.plan.steps.filter(function (s) { return h.hidden.indexOf(s.fieldKey) < 0; });
   };
+  // The pick of this step that waits for a Director: a saved hero's request
+  // from the plan, or, on a hero not made yet, an Ask first entry just picked.
+  Builder.prototype.waitingName = function (h, st) {
+    if (h.isNew) {
+      var c = h.values[st.fieldKey] && this.choiceByName(st, h.values[st.fieldKey]);
+      return c && c.state === 'ask_first' ? c.name : '';
+    }
+    var w = st.rules && st.rules.waiting;
+    return w && String(w.entityId) === String(h.id) ? w.entryName : '';
+  };
+  // A step the Director's rules leave one entry on: filled in on a new hero.
+  Builder.prototype.lockedFor = function (h, st) {
+    return !!(h.isNew && st.rules && st.rules.prefilled && lower(h.values[st.fieldKey]) === lower(st.rules.prefilled));
+  };
   Builder.prototype.left = function (h) {
-    return this.stepsFor(h).filter(function (s) { return !h.values[s.fieldKey]; });
+    var self = this;
+    return this.stepsFor(h).filter(function (s) { return !h.values[s.fieldKey] && !self.waitingName(h, s); });
+  };
+  Builder.prototype.waiting = function (h) {
+    var self = this;
+    return this.stepsFor(h).filter(function (s) { return self.waitingName(h, s); });
   };
 
   // --- The sentences ---
@@ -213,7 +249,16 @@
 
   Builder.prototype.blankHtml = function (h, st) {
     var v = h.values[st.fieldKey], on = this.panel && this.panel.hero === h.id && this.panel.key === st.fieldKey;
-    var c = v && this.choiceByName(st, v);
+    var c = v && this.choiceByName(st, v), wait = this.waitingName(h, st);
+    if (this.lockedFor(h, st)) {
+      return '<span class="hb-blank is-locked" aria-label="' + esc(st.label + ': ' + v + ', everyone starts with this') + '">' + esc(v) + '</span>' +
+        ' <span class="hb-lock">everyone starts with this</span>';
+    }
+    if (wait) {
+      return '<button type="button" class="hb-blank is-wait' + (on ? ' is-cur' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
+        ' aria-label="' + esc(st.label + ': ' + wait + ', waiting for your Director. Show every choice') + '" aria-expanded="' + !!on + '">' +
+        esc(wait) + '</button> <span class="hb-waiting">waiting for your Director</span>';
+    }
     return '<button type="button" class="hb-blank' + (v ? '' : ' is-empty') + (on ? ' is-cur' : '') +
       (c && c.source === 'campaign' ? ' is-own' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
       ' aria-label="' + esc(st.label + ': ' + (v || 'not chosen') + '. Show every choice') + '" aria-expanded="' + !!on + '">' +
@@ -231,11 +276,23 @@
   };
 
   Builder.prototype.progressHtml = function (h) {
-    var all = this.stepsFor(h).length, left = this.left(h).length;
+    var all = this.stepsFor(h).length, left = this.left(h).length, w = this.waiting(h).length;
     if (!all) return '';
-    return '<div class="hb-below"><span class="hb-progress">' + (left ? left + ' of ' + all + ' left' : 'Every choice made') +
+    var said = left ? left + ' of ' + all + ' left' + (w ? ' · ' + w + ' waiting' : '') : (w ? w + ' waiting for your Director' : 'Every choice made');
+    return '<div class="hb-below"><span class="hb-progress">' + said +
       '<span class="hb-bar" aria-hidden="true"><i style="width:' + Math.round((all - left) / all * 100) + '%"></i></span></span>' +
-      (left ? '<span class="hb-hint">Pick a blank to read every choice first.</span>' : '') + '</div>';
+      (left ? '<span class="hb-hint">Pick a blank to read every choice first.</span>' : '') + this.suggestedHtml(h) + '</div>';
+  };
+
+  // A Director's note asking for another pick, shown under the sentence.
+  Builder.prototype.suggestedHtml = function (h) {
+    var self = this;
+    return this.stepsFor(h).map(function (st) {
+      var g = st.rules && st.rules.suggested;
+      if (!g || self.waitingName(h, st) || (h.values[st.fieldKey] && !h.isNew)) return '';
+      return '<span class="hb-note hb-suggest">Your Director asked for another ' + esc(lower(st.label)) + ' instead of ' + esc(g.entryName) +
+        (g.message ? ': “' + esc(g.message) + '”' : '.') + '</span>';
+    }).join('');
   };
 
   Builder.prototype.heroHtml = function (h) {
@@ -274,30 +331,58 @@
     if (!p) return '';
     var h = this.heroById(p.hero), st = this.stepByKey(p.key);
     if (!h || !st) return '';
-    var steps = this.stepsFor(h), idx = steps.indexOf(st), list = st.choices, n = list.length;
+    var steps = this.stepsFor(h), idx = steps.indexOf(st), list = st.choices, n = list.length, rl = rollable(st), nr = rl.length;
+    var rules = st.rules || {}, waitName = this.waitingName(h, st);
     var cur = h.values[st.fieldKey], fo = (p.focus != null && list[p.focus]) || (cur && this.choiceByName(st, cur)) || list[0];
     var whose = h.isNew ? (h.name.trim() ? esc(possessive(h.name.trim())) : 'the new hero’s') : esc(possessive(h.name));
     var html = '<div class="hb-ph"><div class="hb-ph1"><span class="hb-kicker">' + (idx + 1) + ' of ' + steps.length + '</span>' +
       '<button type="button" class="hb-x" data-act="close" aria-label="Close the choices"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
       '<h3 class="hb-pt">Choose ' + whose + ' ' + esc(lower(st.label)) + '</h3>' +
       (n > 6 ? '<input type="search" class="hb-q" data-hb-q placeholder="Search ' + n + ' entries" aria-label="Search the ' + esc(lower(st.label)) + ' list" autocomplete="off">' : '') +
-      '<span class="hb-die">' + (sidesFor(n) === 10 ? 'Rolling uses a d10' : 'Rolling uses percentile dice, tens and ones') + ' against the numbers on the left.</span></div>';
+      '<span class="hb-die">' + (sidesFor(nr) === 10 ? 'Rolling uses a d10' : 'Rolling uses percentile dice, tens and ones') + ' against the numbers on the left' +
+      (nr < n ? ' and skips Ask first' : '') + '.</span>' + this.panelNotes(st, h, waitName) + '</div>';
     html += '<div class="hb-list" role="listbox" aria-label="' + esc(st.label) + '">' + list.map(function (c, i) {
+      var ask = c.state === 'ask_first', at = rl.indexOf(c);
       return '<button type="button" class="hb-opt" role="option" data-focus="' + i + '" aria-selected="' + (c === fo) + '">' +
-        '<span class="hb-rg">' + fmtRange(n, rangeOf(n, i)) + '</span><b>' + esc(c.name) +
+        '<span class="hb-rg">' + (ask ? '' : fmtRange(nr, rangeOf(nr, at))) + '</span><b>' + esc(c.name) +
         (c.source === 'campaign' ? ' <span class="hb-tag">this campaign</span>' : '') + '</b>' +
-        (cur && lower(cur) === lower(c.name) ? '<span class="hb-cur">chosen</span>' : '<span></span>') + '</button>';
-    }).join('') + '<p class="hb-none" data-hb-none hidden>Nothing on this list matches.</p></div>';
+        (ask ? '<span class="hb-ask">Ask first</span>' : cur && lower(cur) === lower(c.name) ? '<span class="hb-cur">chosen</span>' : '<span></span>') + '</button>';
+    }).join('') + '<p class="hb-none" data-hb-none hidden>Nothing on this list matches.</p></div>' + this.notHereHtml(rules);
     html += '<div class="hb-detail" data-hb-detail>' + this.detailHtml(st, fo, h) + '</div>';
     var chosen = cur && lower(cur) === lower(fo.name);
     html += '<div class="hb-pf"><button type="button" class="hb-btn hb-go" data-choose' + (chosen ? ' aria-pressed="true"' : '') + '>' +
-      (chosen ? 'Keep ' : 'Choose ') + esc(fo.name) + '</button>' +
-      '<button type="button" class="hb-btn" data-rollone>Roll for me</button></div>';
+      this.chooseText(fo, chosen, waitName) + '</button>' +
+      (nr ? '<button type="button" class="hb-btn" data-rollone>Roll for me</button>' : '') + '</div>';
     var prev = steps[idx - 1], next = steps[idx + 1];
     html += '<div class="hb-pf hb-steps">' +
       (prev ? '<button type="button" class="hb-link" data-go="' + esc(prev.fieldKey) + '">Back to ' + esc(lower(prev.label)) + '</button>' : '<span></span>') +
       (next ? '<button type="button" class="hb-link" data-go="' + esc(next.fieldKey) + '">On to ' + esc(lower(next.label)) + '</button>' : '<span></span>') + '</div>';
     return html;
+  };
+
+  Builder.prototype.chooseText = function (c, chosen, waitName) {
+    if (c.state === 'ask_first') return (waitName && lower(waitName) === lower(c.name) ? 'Asking for ' : 'Ask for ') + c.name;
+    return (chosen ? 'Keep ' : 'Choose ') + c.name;
+  };
+
+  // What the Director's rules say about this list, above the entries.
+  Builder.prototype.panelNotes = function (st, h, waitName) {
+    var r = st.rules || {}, out = '';
+    if (waitName) out += '<p class="hb-note">' + esc(waitName) + ' is waiting for your Director. Pick another to replace it.</p>';
+    else if (r.suggested) out += '<p class="hb-note">Your Director asked for another ' + esc(lower(st.label)) + ' instead of ' + esc(r.suggested.entryName) +
+      (r.suggested.message ? ': “' + esc(r.suggested.message) + '”' : '.') + '</p>';
+    if (r.required && !r.prefilled) out += '<p class="hb-note">Your Director has set a short list for this.</p>';
+    return out;
+  };
+
+  // "1 not here" at the list's foot, folding open the names and the reasons.
+  Builder.prototype.notHereHtml = function (r) {
+    if (!r || !r.notHereCount) return '';
+    var open = !!(this.panel && this.panel.nh), names = r.notHere || [];
+    var body = open ? '<ul class="hb-nh-list">' + names.map(function (n) {
+      return '<li><b>' + esc(n.name) + '</b> isn’t here.' + (n.reason ? ' Your Director says: “' + esc(n.reason) + '”' : '') + '</li>';
+    }).join('') + (r.notHereCount > names.length ? '<li>and ' + (r.notHereCount - names.length) + ' more</li>' : '') + '</ul>' : '';
+    return '<div class="hb-nh"><button type="button" class="hb-link" data-act="nothere" aria-expanded="' + open + '">' + r.notHereCount + ' not here</button>' + body + '</div>';
   };
 
   Builder.prototype.detailHtml = function (st, c, h) {
@@ -309,7 +394,8 @@
       body = c.source === 'campaign' ? '<div class="hb-text">' + c.description + '</div>'
         : (c.description.trim() !== (c.summary || '').trim() ? '<div class="hb-text">' + prose(c.description) + '</div>' : '');
     }
-    return '<h4 class="hb-dn">' + esc(c.name) + '</h4>' + (c.summary ? '<p class="hb-lede">' + esc(c.summary) + '</p>' : '') +
+    return '<h4 class="hb-dn">' + esc(c.name) + '</h4>' + (c.state === 'ask_first' ? '<p class="hb-note">Ask first: your Director allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
+      (c.summary ? '<p class="hb-lede">' + esc(c.summary) + '</p>' : '') +
       (facts.length ? '<dl class="hb-facts">' + facts.map(function (k) {
         return '<div class="hb-f"><dt>' + esc(words(k)) + '</dt><dd>' + esc(props[k]) + '</dd></div>';
       }).join('') + '</dl>' : '') + (chosen ? this.buyHtml(st, c, h) : '') + this.grantsNote(c, h) + body;
@@ -439,7 +525,7 @@
     d.innerHTML = this.detailHtml(st, c, h);
     d.scrollTop = 0;
     var btn = aside.querySelector('[data-choose]');
-    btn.textContent = (chosen ? 'Keep ' : 'Choose ') + c.name;
+    btn.textContent = this.chooseText(c, chosen, this.waitingName(h, st));
     if (chosen) btn.setAttribute('aria-pressed', 'true'); else btn.removeAttribute('aria-pressed');
   };
 
@@ -517,9 +603,44 @@
     this.toastTimer = setTimeout(function () { t.hidden = true; self.undo = null; }, undo ? 6000 : 3500);
   };
 
+  // Picking an Ask first entry on a saved hero sends a request instead of
+  // saving the pick: the hero's field stays as it was, and the blank reads
+  // that the pick waits for the Director. A hero that already holds the
+  // entry just keeps it, which the server tells apart.
+  Builder.prototype.askPick = function (h, st, c) {
+    var self = this, patch = {}, steps = this.stepsFor(h), at = steps.indexOf(st);
+    patch[st.fieldKey] = c.name;
+    var rest = this.left(h).filter(function (s) { return s.fieldKey !== st.fieldKey; });
+    var next = rest.filter(function (s) { return steps.indexOf(s) > at; })[0] || rest[0];
+    this.panel = next ? { hero: h.id, key: next.fieldKey, focus: null } : null;
+    var url = this.fieldsBase.replace(/\/$/, '') + '/' + encodeURIComponent(h.id) + '/fields';
+    var opts = { method: 'PUT', body: { fields_patch: patch }, csrfToken: this.csrf };
+    var req = (window.Chronicle && Chronicle.apiFetch) ? Chronicle.apiFetch(url, opts)
+      : fetch(url, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf }, body: JSON.stringify({ fields_patch: patch }) });
+    return req.then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (b) {
+        if (!r.ok) throw new Error(b.message || b.error || 'That choice could not be sent. Try again.');
+        if (b.requestFailed && b.requestFailed.indexOf(st.fieldKey) >= 0) throw new Error('Your pick of ' + c.name + ' could not be sent to your Director. Try again.');
+        var q = (b.requests || []).filter(function (x) { return x.fieldKey === st.fieldKey; })[0];
+        if (q) {
+          st.rules = st.rules || {};
+          st.rules.waiting = { id: q.id, entryName: q.entryName || c.name, entityId: h.id };
+          delete st.rules.suggested;
+          self.toast(c.name + ' is waiting for your Director. Carry on with the rest of your hero.');
+        } else {
+          h.values[st.fieldKey] = c.name;
+          self.tick(h, st.fieldKey);
+        }
+        self.redrawHero(h);
+      });
+    }).catch(function (err) { self.redrawHero(h); self.toast(err.message); });
+  };
+
   Builder.prototype.pick = function (heroId, key, name, note) {
     var h = this.heroById(heroId), self = this, v = {};
     v[key] = name;
+    var pc = this.choiceByName(this.stepByKey(key), name);
+    if (pc && pc.state === 'ask_first' && !h.isNew && !note) return this.askPick(h, this.stepByKey(key), pc);
     // Choosing moves the panel on to the next blank, so filling in a hero is
     // one choice after another; with nothing left it closes.
     var rest = this.left(h).filter(function (s) { return s.fieldKey !== key; });
@@ -557,27 +678,28 @@
   };
 
   Builder.prototype.rollOne = function (btn) {
-    var self = this, heroId = this.panel.hero, st = this.stepByKey(this.panel.key), n = st.choices.length;
-    if (this.rolling) return;
+    var self = this, heroId = this.panel.hero, st = this.stepByKey(this.panel.key), rl = rollable(st), n = rl.length;
+    if (this.rolling || !n) return;
     this.rolling = true;
     throwFor([{ label: st.label, n: n }], btn).then(function (faces) {
       self.rolling = false;
-      var c = st.choices[indexFor(n, faces[0])];
+      var c = rl[indexFor(n, faces[0])];
       self.pick(heroId, st.fieldKey, c.name, 'Rolled ' + fmtFace(n, faces[0]) + ' for ' + lower(st.label) + ': ' + c.name + '.');
     });
   };
 
   Builder.prototype.rollAll = function (id, btn) {
     var h = this.heroById(id), self = this;
-    var left = this.left(h);
+    var left = this.left(h).filter(function (st) { return rollable(st).length; });
     if (!left.length || this.rolling) return;
     this.rolling = true;
-    throwFor(left.map(function (st) { return { label: st.label, n: st.choices.length }; }), btn).then(function (faces) {
+    throwFor(left.map(function (st) { return { label: st.label, n: rollable(st).length }; }), btn).then(function (faces) {
       self.rolling = false;
       var v = {};
       // Only blanks still empty when the dice land are filled.
       left.forEach(function (st, i) {
-        if (!h.values[st.fieldKey]) v[st.fieldKey] = st.choices[indexFor(st.choices.length, faces[i])].name;
+        var rl = rollable(st);
+        if (!h.values[st.fieldKey]) v[st.fieldKey] = rl[indexFor(rl.length, faces[i])].name;
       });
       var keys = Object.keys(v);
       if (!keys.length) return;
@@ -624,6 +746,17 @@
       self.busy = false;
       if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
       self.clearDraft();
+      // A pick that could not be sent to the Director is said plainly, with a
+      // way on, rather than lost behind the page change.
+      var failed = res.body.requestFailed || [];
+      if (failed.length) {
+        var labels = failed.map(function (k) { var st = self.stepByKey(k); return st ? lower(st.label) : k; }).join(', ');
+        err.innerHTML = esc('Your hero is made, but your pick for ' + labels + ' could not be sent to your Director. Open the hero and pick it again.') +
+          ' <a class="hb-link" href="' + esc(res.body.url) + '">Open the hero</a>';
+        err.hidden = false;
+        btn.disabled = true;
+        return;
+      }
       // The new hero's sheet opens, where the rest of them is filled in.
       if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.assign(res.body.url);
     }).catch(function () { self.busy = false; fail('The hero could not be made. Check your connection and try again.'); });
@@ -655,6 +788,13 @@
         self.el.querySelector('.hb-toast').hidden = true;
         self.undo = null;
         if (u) u();
+      } else if (t.getAttribute('data-act') === 'nothere') {
+        if (self.panel) {
+          self.panel.nh = !self.panel.nh;
+          self.drawPanel();
+          var nb = el.querySelector('[data-act="nothere"]');
+          if (nb) nb.focus({ preventScroll: true });
+        }
       } else if (t.getAttribute('data-act') === 'close') {
         self.closePanel();
       } else if (t.getAttribute('data-act') === 'fold') {
