@@ -2253,31 +2253,31 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 	for _, b := range []entities.BlockMeta{
 		{
-			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
+			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn", Picture: entities.PictureQuote,
 			Description: "Boxed text the DM reads to the table",
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"2x1", "2x2", "4x1", "4x2"},
 		},
 		{
-			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
+			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table", Picture: entities.PictureTable,
 			Description: "Rows and columns typed in place, with columns only the DM sees",
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"2x2", "4x2"},
 		},
 		{
-			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
+			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol", Picture: entities.PictureSteps,
 			Description: "Numbered beats with a tick for each, for use during play",
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
 		{
-			Type: pageblocks.KindChecklist, Label: "Checklist", Icon: "fa-circle-half-stroke",
+			Type: pageblocks.KindChecklist, Label: "Checklist", Icon: "fa-circle-half-stroke", Picture: entities.PictureSteps,
 			Description: "Named things each held by one of two sides you name, with notes for you when a side reaches a count",
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"2x1", "2x2", "4x2"},
 		},
 		{
-			Type: pageblocks.KindPageMap, Label: "Page map", Icon: "fa-map-location-dot",
+			Type: pageblocks.KindPageMap, Label: "Page map", Icon: "fa-map-location-dot", Picture: entities.PictureMap,
 			Description: "A map drawn in place from rooms, walls and markers, with hover cards for linked pages",
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"2x2", "4x2", "4x3"},
@@ -2305,7 +2305,7 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 // draws only for the DM; the service refuses everyone else as well.
 func registerEncountersBlock(blockRegistry *entities.BlockRegistry) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: encounters.BlockType, Label: "Encounters", Icon: "fa-khanda",
+		Type: encounters.BlockType, Label: "Encounters", Icon: "fa-khanda", Picture: entities.PictureLinks,
 		Description: "Fights planned on this page, ready to load in Foundry",
 		Contexts:    []string{"template"},
 		TileSizes:   []string{"1x2", "2x2", "4x2"},
@@ -2324,7 +2324,7 @@ func registerEncountersBlock(blockRegistry *entities.BlockRegistry) {
 // maps service from the pins they can see; the block adds no rule of its own.
 func registerWhereItIsBlock(blockRegistry *entities.BlockRegistry, mapsService maps.MapService) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: maps.WhereItIsBlockType, Label: "Where it is", Icon: "fa-map-location-dot",
+		Type: maps.WhereItIsBlockType, Label: "Where it is", Icon: "fa-map-location-dot", Picture: entities.PictureMap,
 		Description: "The maps this page is pinned on, closest first, zooming out",
 		Addon:       "maps", Contexts: []string{"template"},
 		TileSizes: []string{"4x2", "2x2"},
@@ -2353,7 +2353,7 @@ func registerWhereItIsBlock(blockRegistry *entities.BlockRegistry, mapsService m
 // seen gets no block at all.
 func registerLastSeenBlock(blockRegistry *entities.BlockRegistry, sightings sessions.SightingService) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: sessions.LastSeenBlockType, Label: "Last seen", Icon: "fa-eye",
+		Type: sessions.LastSeenBlockType, Label: "Last seen", Icon: "fa-eye", Picture: entities.PictureTimeline,
 		Description: "When the party last met this page, and every game night they did",
 		Addon:       sessions.SessionsAddonSlug, Contexts: []string{"template"},
 		TileSizes: []string{"4x1", "2x1"},
@@ -2388,7 +2388,7 @@ func registerLastSeenBlock(blockRegistry *entities.BlockRegistry, sightings sess
 // nothing.
 func registerStandingBlock(blockRegistry *entities.BlockRegistry, standing entities.StandingService) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: entities.StandingBlockType, Label: "Standing", Icon: "fa-scale-balanced",
+		Type: entities.StandingBlockType, Label: "Standing", Icon: "fa-scale-balanced", Picture: entities.PictureCounter,
 		Description: "How this page feels about the party, and why",
 		Contexts:    []string{"template"},
 		TileSizes:   []string{"4x1", "2x1"},
@@ -2417,7 +2417,7 @@ func registerStandingBlock(blockRegistry *entities.BlockRegistry, standing entit
 // family tree service for that viewer; the block adds no rule of its own.
 func registerFamilyTreeBlock(blockRegistry *entities.BlockRegistry, family entities.FamilyTreeService) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: entities.FamilyTreeBlockType, Label: "Family tree", Icon: "fa-sitemap",
+		Type: entities.FamilyTreeBlockType, Label: "Family tree", Icon: "fa-sitemap", Picture: entities.PictureTree,
 		Description: "Parents, children and partners drawn from this page's relations",
 		Contexts:    []string{"template"},
 		TileSizes:   []string{"4x1", "2x1"},
@@ -5114,7 +5114,7 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("standing tables degraded — the Standing block is not available")
 	}
 	blockRegistry.Register(entities.BlockMeta{
-		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
+		Type: entities.BlockCharacterItems, Label: "Items and money", Icon: "fa-sack-dollar", Picture: entities.PictureTable,
 		Description: "What a character carries, their money and recent moves",
 		Addon:       armory.AddonSlug, Contexts: []string{"template"},
 	}, entities.RenderCharacterItemsBlock)
@@ -5203,7 +5203,7 @@ func (a *App) RegisterRoutes() {
 
 	// Calendar plugin blocks (requires "calendar" addon).
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "upcoming_events", Label: "Upcoming Events", Icon: "fa-calendar-check",
+		Type: "upcoming_events", Label: "Upcoming events", Icon: "fa-calendar-check", Picture: entities.PictureCalendar,
 		Description: "Upcoming calendar events list", Addon: "calendar",
 		Contexts: []string{"template"},
 		ConfigFields: []entities.ConfigFieldMeta{
@@ -5224,7 +5224,7 @@ func (a *App) RegisterRoutes() {
 	// entity's linked events" engine. Distinct from calendar_preview
 	// (dashboard upcoming-events card) by design.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_calendar", Label: "Calendar (this page)", Icon: "fa-calendar-days",
+		Type: "entity_calendar", Label: "Calendar (this page)", Icon: "fa-calendar-days", Picture: entities.PictureCalendar,
 		Description: "Upcoming events for a bound calendar",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5237,7 +5237,7 @@ func (a *App) RegisterRoutes() {
 	// this renders sky only, not yet the hourglass shelf (real UI work of
 	// its own).
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_worldstate", Label: "World sky", Icon: "fa-hourglass-half",
+		Type: "entity_worldstate", Label: "World sky", Icon: "fa-hourglass-half", Picture: entities.PictureImage,
 		Description: "Ambient sky for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5249,7 +5249,7 @@ func (a *App) RegisterRoutes() {
 	// entity_worldstate, so it works on both the entity page and the
 	// campaign dashboard.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "skybox", Label: "Sky", Icon: "fa-cloud-sun",
+		Type: "skybox", Label: "Sky", Icon: "fa-cloud-sun", Picture: entities.PictureImage,
 		Description: "Ambient sky only — moons, stars, weather + celestial events for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5262,7 +5262,7 @@ func (a *App) RegisterRoutes() {
 	// calendar shows. show_dm "hide" leaves Director-only events off for
 	// everyone.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "page_timeline", Label: "Page events", Icon: "fa-timeline",
+		Type: "page_timeline", Label: "Page events", Icon: "fa-timeline", Picture: entities.PictureTimeline,
 		Description: "A line of this page's own dated events on the campaign calendar, up to today",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 		ConfigFields: []entities.ConfigFieldMeta{
@@ -5277,7 +5277,7 @@ func (a *App) RegisterRoutes() {
 	// place pages. Always available (no addon); the widgets fetch their own
 	// data, so these only emit the mount point.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "quest_board", Label: "Quest board", Icon: "fa-scroll",
+		Type: "quest_board", Label: "Quest board", Icon: "fa-scroll", Picture: entities.PictureCard,
 		Description: "Cork board with the quest's notice, a map scrap and a reward tag, plus a DM-only ledger",
 		Contexts:    []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5287,7 +5287,7 @@ func (a *App) RegisterRoutes() {
 		return quests.QuestBoardMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState())
 	})
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack",
+		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack", Picture: entities.PictureGrid,
 		Description: "Boards players can cycle through, with quest notices, notes, pinned pages and maps",
 		Contexts:    []string{"template", "category"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5318,7 +5318,7 @@ func (a *App) RegisterRoutes() {
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "timeline", Label: "Campaign timeline", Icon: "fa-timeline",
+		Type: "timeline", Label: "Campaign timeline", Icon: "fa-timeline", Picture: entities.PictureTimeline,
 		Description: "One of the campaign's timelines, or a list of them", Addon: "timeline",
 		Contexts: []string{"template"},
 	}, func(rc entities.BlockRenderContext) templ.Component {
@@ -5337,7 +5337,7 @@ func (a *App) RegisterRoutes() {
 	// it); none + Scribe+ → create-or-pick prompt; none + Player → friendly
 	// empty state.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "map_editor", Label: "Map", Icon: "fa-map-location-dot",
+		Type: "map_editor", Label: "Map", Icon: "fa-map-location-dot", Picture: entities.PictureMap,
 		Description: "Framed map preview that opens the full map",
 		Addon:       "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
@@ -5362,7 +5362,7 @@ func (a *App) RegisterRoutes() {
 
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "npc_gallery", Label: "NPC Gallery", Icon: "fa-users",
+		Type: "npc_gallery", Label: "NPC gallery", Icon: "fa-users", Picture: entities.PictureGrid,
 		Description: "Grid of revealed NPCs", Addon: "npcs",
 		Contexts: []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
@@ -5378,7 +5378,7 @@ func (a *App) RegisterRoutes() {
 
 	// Armory preview block — embeds a compact item grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "armory_preview", Label: "Armory Preview", Icon: "fa-shield-halved",
+		Type: "armory_preview", Label: "Armory preview", Icon: "fa-shield-halved", Picture: entities.PictureGrid,
 		Description: "Grid of campaign items", Addon: "armory",
 		Contexts: []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
@@ -5394,7 +5394,7 @@ func (a *App) RegisterRoutes() {
 
 	// Entity manager block — sortable, filterable entity list with visibility controls.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "entity_manager", Label: "Page manager", Icon: "fa-list-check",
+		Type: "entity_manager", Label: "Page manager", Icon: "fa-list-check", Picture: entities.PictureTable,
 		Description: "Sortable, filterable page list with visibility controls",
 		Contexts:    []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
@@ -7198,7 +7198,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-shell", Scripts: []string{"/static/js/find_palette.js", "/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "customize-templates", Scripts: []string{"/static/js/widgets/customize_templates.js"}},
-	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
+	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/widget_pictures.js", "/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},

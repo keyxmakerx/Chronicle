@@ -554,7 +554,7 @@ func (g armoryCraftGate) CanCraft(ctx context.Context, campaignID, characterID s
 // else, so a stranger's page shows no empty block.
 func registerCraftingBlock(blockRegistry *entities.BlockRegistry, svc crafting.Service) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: crafting.BlockType, Label: "Crafting", Icon: "fa-flask",
+		Type: crafting.BlockType, Label: "Crafting", Icon: "fa-flask", Picture: entities.PictureCounter,
 		Description: "The hero's crafting projects and the recipes they know",
 		Addon:       crafting.AddonSlug,
 		Contexts:    []string{"template"},

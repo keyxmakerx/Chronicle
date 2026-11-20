@@ -41,7 +41,7 @@ var recipeBlockSizes = []string{"1x1", "2x1", "2x2", "4x1"}
 // recipeBlockMetas.
 func registerRecipeBlock(blockRegistry *entities.BlockRegistry) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: recipeBlockType, Label: "Homebrew recipe", Icon: "fa-beer-mug-empty",
+		Type: recipeBlockType, Label: "Homebrew recipe", Icon: "fa-beer-mug-empty", Picture: entities.PictureCounter,
 		Description: "A homebrew recipe's trackers and clocks",
 		Contexts:    []string{"template"},
 		TileSizes:   recipeBlockSizes,
@@ -76,7 +76,7 @@ func recipeBlockMetas(ctx context.Context, svc homebrew.Service, campaignID stri
 			continue
 		}
 		out = append(out, entities.BlockMeta{
-			Type: recipeBlockType, Label: r.Name, Icon: "fa-beer-mug-empty",
+			Type: recipeBlockType, Label: r.Name, Icon: "fa-beer-mug-empty", Picture: entities.PictureCounter,
 			Description: "Trackers and clocks from this homebrew recipe",
 			Contexts:    []string{"template"},
 			TileSizes:   recipeBlockSizes,
