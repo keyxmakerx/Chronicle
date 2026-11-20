@@ -14,6 +14,7 @@ package campaigns
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -148,5 +149,19 @@ func (h *Handler) ExtensionsHubFragmentAPI(c *echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK,
-		ExtensionsHubFragment(cc, addons, csrfToken))
+		h.hubFragmentWithFigure(cc, addons, csrfToken))
+}
+
+// hubFragmentWithFigure is the feature list plus the frame's "N of M on"
+// figure as an out-of-band swap. The figure sits in the page header, outside
+// #extensions-hub-list, so a toggle that only re-fetches the list would leave
+// its count stale until a reload. The figure is read when the response is
+// drawn, after the toggle has committed.
+func (h *Handler) hubFragmentWithFigure(cc *CampaignContext, addons []PluginHubAddon, csrfToken string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := ExtensionsHubFragment(cc, addons, csrfToken).Render(ctx, w); err != nil {
+			return err
+		}
+		return h.manageFigureSwap("game").Render(ctx, w)
+	})
 }

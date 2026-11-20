@@ -1296,6 +1296,12 @@
     });
   }
 
+  // A feature switched on or off from Game & features changes the Apps rows
+  // and the counts beside them, which the server drew with the page. The hub
+  // announces every toggle with this event, so follow it rather than leave the
+  // sidebar stale until a reload.
+  document.addEventListener('extensions-hub-refresh', function () { refresh(); });
+
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('#sidebar [data-nav-pin]');
     if (!btn) return;
