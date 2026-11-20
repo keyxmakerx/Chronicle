@@ -7044,6 +7044,7 @@ func (a *App) RegisterRoutes() {
 		CharacterChoice: characterChoiceSvc,
 		DMScreen:        dmScreenSvc,
 		Drawings:        drawingService,
+		Hexes:           hexService,
 		Encounters:      encounterAPI.svc,
 		Entities:        entityService,
 		FieldRules:      fieldRulesSvc,
@@ -7836,6 +7837,80 @@ func (m aiMapSketchAdapter) ClearSketch(ctx context.Context, mapID, layerID stri
 		n++
 	}
 	return n, nil
+}
+
+// aiHexMapAdapter makes the blank hex map and paints it through the same
+// services, and checks, as the map page's Paint tools.
+type aiHexMapAdapter struct {
+	maps  maps.MapService
+	hexes maps.HexService
+}
+
+func (m aiHexMapAdapter) CreateHexMap(ctx context.Context, campaignID, name string, cols, rows int) (string, error) {
+	width, height, gridSize := maps.HexMapSize(cols, rows)
+	mp, err := m.maps.CreateMap(ctx, maps.CreateMapInput{CampaignID: campaignID, Name: name, ImageWidth: width, ImageHeight: height})
+	if err != nil {
+		return "", err
+	}
+	// picture.blank is the owner's "no picture, keep it blank" answer, so the
+	// map page does not ask for one.
+	settings, err := json.Marshal(map[string]any{
+		"grid":    map[string]any{"type": maps.GridHex, "size": gridSize},
+		"picture": map[string]any{"blank": true},
+	})
+	if err != nil {
+		return "", err
+	}
+	return mp.ID, m.maps.UpdateMap(ctx, mp.ID, maps.UpdateMapInput{Name: mp.Name, DisplaySettings: patch.Of(json.RawMessage(settings))})
+}
+
+func (m aiHexMapAdapter) UsesHexGrid(ctx context.Context, mapID string) (bool, error) {
+	mp, err := m.maps.GetMap(ctx, mapID)
+	if err != nil {
+		return false, err
+	}
+	return maps.ResolveDisplay(mp, "").GridType == maps.GridHex, nil
+}
+
+func (m aiHexMapAdapter) Cells(ctx context.Context, campaignID, mapID string, a records.Actor) ([]records.HexCellState, error) {
+	layer, err := m.hexes.GetLayer(ctx, campaignID, mapID, a.Role)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]records.HexCellState, len(layer.Cells))
+	for i, c := range layer.Cells {
+		out[i] = records.HexCellState{Col: c.Col, Row: c.Row, Road: c.Road, River: c.River, Trail: c.Trail}
+	}
+	return out, nil
+}
+
+func (m aiHexMapAdapter) PaintCells(ctx context.Context, campaignID, mapID string, a records.Actor, cells []records.HexWrite) error {
+	entries := make([]maps.UpdateHexCellInput, len(cells))
+	for i, c := range cells {
+		e := maps.UpdateHexCellInput{Col: c.Col, Row: c.Row}
+		if c.Terrain != "" {
+			e.Terrain = patch.Of(c.Terrain)
+		}
+		for _, l := range []struct {
+			to   *patch.Field[int]
+			mask *int
+		}{{&e.Road, c.Road}, {&e.River, c.River}, {&e.Trail, c.Trail}} {
+			if l.mask != nil {
+				*l.to = patch.Of(*l.mask)
+			}
+		}
+		if c.Place {
+			e.Name = patch.Of(c.Name)
+			if c.Notes != "" {
+				e.Notes = patch.Of(c.Notes)
+			} else {
+				e.Notes = patch.Null[string]()
+			}
+		}
+		entries[i] = e
+	}
+	_, err := m.hexes.PatchCells(ctx, campaignID, mapID, maps.HexActor{UserID: a.UserID, Role: a.Role, IsDM: a.CanAuthorDmOnly()}, entries)
+	return err
 }
 
 // aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,
