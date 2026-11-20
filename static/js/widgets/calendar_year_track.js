@@ -41,6 +41,8 @@
   // How many event writes are in flight at once: enough to be quick, few
   // enough not to flood the server with a year of events.
   var WRITE_AT_ONCE = 4;
+  // How often, and for how long at most, a long save waits when the server asks it to.
+  var MAX_PAUSES = 4, MAX_PAUSE_S = 65;
   var WEATHER_BATCH = 1000;
   var WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 
@@ -191,6 +193,16 @@
     return p.sig === sigOf(e.name, e.year, e.month, e.day, e.description) ? p.lane : null;
   }
   function isHandMade(e) { return generatedLane(e) === null; }
+  // What a new fill replaces: the happenings and sky events an earlier fill
+  // put on or after today in this year that nobody has changed since, so
+  // filling twice does not stack two years on top of each other.
+  function fillReplaces(saved, now) {
+    var from = stamp(now.year, now.month, now.day);
+    return saved.filter(function (e) {
+      var l = generatedLane(e);
+      return (l === 'events' || l === 'sky') && e.year === now.year && stamp(e.year, e.month, e.day) >= from;
+    });
+  }
 
   // ------------------------------------------------------------------
   // Weather that may be written
@@ -242,6 +254,13 @@
     return D.ev.filter(function (e) { return (D.kind !== 'fill' || D.on[e._lane]) && !D.dropped[keyOf(e)]; });
   }
   // One reading per day: the server refuses a day named twice in one call.
+  // The saved events Keep would remove. A fill removes an earlier fill's
+  // events only for the parts that are switched on.
+  function removalsOf(D) {
+    if (!D) return [];
+    if (D.kind !== 'fill') return D.remove;
+    return D.remove.filter(function (e) { return D.on[generatedLane(e)]; });
+  }
   function activeWeather(D) {
     if (!D || (D.kind === 'fill' && !D.on.weather)) return [];
     var seen = {};
@@ -264,9 +283,12 @@
       var parts = [];
       if (D.on.events) parts.push(count(c.events, 'happening'));
       if (D.on.sky) parts.push(count(c.sky, 'sky event'));
-      if (D.on.weather) parts.push(count(c.weather, 'day') + ' of weather');
+      // Weather is only drawn for days that have none.
+      var wxSet = D.on.weather && !c.weather && (D.on.events || D.on.sky);
+      if (D.on.weather && !wxSet) parts.push(count(c.weather, 'day') + ' of weather');
       if (!parts.length) return 'Every part of this draft is switched off.';
-      return 'From ' + ctx.now + ' to the end of ' + ctx.year + ': ' + listWords(parts) + '.';
+      var old = removalsOf(D).length;
+      return 'From ' + ctx.now + ' to the end of ' + ctx.year + ': ' + listWords(parts) + '.' + (wxSet ? ' Every day already has its weather.' : '') + (old ? ' It replaces ' + count(old, 'event') + ' from an earlier fill.' : '');
     }
     if (D.kind === 'history') {
       var ys = activeEvents(D).map(function (e) { return e.year; });
@@ -285,6 +307,8 @@
   }
   // The sentence for a partly saved draft.
   function partialWords(kept, total) { return 'Kept ' + kept + ' of ' + total + '. The rest are still a draft.'; }
+  // The events went in and the weather did not; with no events there is nothing kept to name.
+  function weatherLeftWords(kept) { return (kept ? 'Kept ' + count(kept, 'event') + '. ' : '') + 'The weather could not be saved and is still a draft.'; }
 
   // ------------------------------------------------------------------
   // What an event is saved as
@@ -507,7 +531,7 @@
     var self = this, v = this.view, y = this.now().year, g = this.geo(y), cal = this.cal();
     var pct = function (n) { return (n / g.total * 100).toFixed(4) + '%'; };
     var gone = {};
-    if (D) D.remove.forEach(function (e) { gone[e.id] = true; });
+    removalsOf(D).forEach(function (e) { gone[e.id] = true; });
     // Months: every one a button; only the month on show carries its name.
     var months = g.days.map(function (n, i) {
       if (!n) return '';
@@ -769,7 +793,7 @@
     activeWeather(D).forEach(function (w) { pv[dkey(w.year, w.month, w.day)] = w; });
     v.wxPreview = Object.keys(pv).length ? pv : null;
     var hide = {};
-    D.remove.forEach(function (e) { hide[e.id] = true; });
+    removalsOf(D).forEach(function (e) { hide[e.id] = true; });
     v.evPreview = {
       events: activeEvents(D).map(function (e) { return previewEvent(e, D); }),
       hide: hide
@@ -959,6 +983,7 @@
     this.prepare([y]).then(function (settings) {
       var G = window.ChronicleGen, cal = self.cal(), D = blankDraft('fill', randomSeed()), setup = self.setup(settings);
       D.setup = setup;
+      D.remove = fillReplaces(self.savedEvents(y), now);
       rollFillLane(G, cal, D, 'events'); rollFillLane(G, cal, D, 'sky');
       rollFillWeather(G, cal, D, y, self.view.weatherByYear[y] || {}, setup);
       self.goTo(y, now.month);
@@ -1126,7 +1151,7 @@
       row('Weather', segHTML('Weather', 'recipe:weather', none.concat([['climate', 'From your climate']]), D.on.weather ? 'climate' : 'none'));
   };
   P.actsHTML = function (D) {
-    var canRoll = D.kind === 'fill' || D.kind === 'history', c = counts(D), none = !c.all && !c.weather && !D.remove.length;
+    var canRoll = D.kind === 'fill' || D.kind === 'history', c = counts(D), none = !c.all && !c.weather && !removalsOf(D).length;
     return (canRoll ? '<button type="button" class="btn sm" data-yt="roll">Roll again</button>' : '') +
       '<button type="button" class="btn sm quiet" data-yt="discard">Discard</button>' +
       '<button type="button" class="btn sm primary" data-yt="keep"' + (none ? ' disabled title="There is nothing in this draft to keep"' : '') + '>' + esc(keepLabel(D)) + '</button>';
@@ -1164,6 +1189,7 @@
     }
     var list = $('.yt-list', this.barNode), top = list ? list.scrollTop : 0;
     var focus = document.activeElement && this.barNode.contains(document.activeElement) ? document.activeElement.dataset.yt : null;
+    this.barNode.classList.remove('yt-working');
     this.barNode.innerHTML = this.barHTMLOf(D);
     list = $('.yt-list', this.barNode); if (list) list.scrollTop = top;
     if (focus) { var f = $('[data-yt="' + focus + '"]', this.barNode); if (f) f.focus({ preventScroll: true }); }
@@ -1206,34 +1232,68 @@
   // Keeping a draft, and undoing it
   // ==================================================================
   function laneOf(e) { return e._lane === 'copy' ? null : e._lane; }
+  // A refused write, with what the server said about trying again.
+  function refused(resp, what) {
+    var e = new Error(what);
+    e.status = resp.status;
+    e.retryAfter = resp.headers && resp.headers.get ? +resp.headers.get('Retry-After') || 0 : 0;
+    return e;
+  }
   // Runs fn over the items a few at a time and stops after the first group
   // that had a failure; resolves {results: [{it, r}] of those that worked, stopped}.
-  function writeEach(items, fn) {
-    var at = 0, results = [];
+  // The server allows each person a number of writes a minute, and a busy
+  // year can pass it: a write refused for that reason (429) is not a failure.
+  // The run waits as long as the server asks, then tries those items again.
+  // o: {onPause(seconds), onResume(), sleep(ms)}.
+  function writeEach(items, fn, o) {
+    o = o || {};
+    var at = 0, results = [], pauses = 0;
+    var sleep = o.sleep || function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var run = function (group) {
+      return Promise.all(group.map(function (it) {
+        return fn(it).then(function (r) { return { ok: true, it: it, r: r }; }, function (err) { return { ok: false, it: it, err: err }; });
+      })).then(function (rs) {
+        var failed = [];
+        rs.forEach(function (x) { if (x.ok) results.push(x); else failed.push(x); });
+        if (!failed.length) return false;
+        var asked = failed.every(function (x) { return x.err && x.err.status === 429; });
+        if (!asked || pauses >= MAX_PAUSES) return true;
+        pauses++;
+        var secs = failed.reduce(function (m, x) { return Math.max(m, x.err.retryAfter || 0); }, 0) || 5;
+        secs = Math.min(MAX_PAUSE_S, Math.max(1, secs));
+        if (o.onPause) o.onPause(secs);
+        return sleep(secs * 1000 + 250).then(function () {
+          if (o.onResume) o.onResume();
+          return run(failed.map(function (x) { return x.it; }));
+        });
+      });
+    };
     var next = function () {
       if (at >= items.length) return Promise.resolve(false);
       var group = items.slice(at, at + WRITE_AT_ONCE);
       at += WRITE_AT_ONCE;
-      return Promise.all(group.map(function (it) {
-        return fn(it).then(function (r) { return { ok: true, it: it, r: r }; }, function () { return { ok: false, it: it }; });
-      })).then(function (rs) {
-        var bad = false;
-        rs.forEach(function (x) { if (x.ok) results.push(x); else bad = true; });
-        return bad ? true : next();
-      });
+      return run(group).then(function (stopped) { return stopped ? true : next(); });
     };
     return next().then(function (stopped) { return { results: results, stopped: stopped }; });
   }
   P.api = function (path, method, body) { return Chronicle.apiFetch(this.view.apiBase + path, { method: method, body: body }); };
   P.postEvent = function (body) {
-    return this.api('/events', 'POST', body).then(function (resp) { if (!resp.ok) throw new Error('save'); return resp.json(); });
+    return this.api('/events', 'POST', body).then(function (resp) { if (!resp.ok) throw refused(resp, 'save'); return resp.json(); });
   };
   P.deleteEvent = function (id) {
     return this.api('/events/' + encodeURIComponent(id), 'DELETE').then(function (resp) {
       // Already gone is the state delete asks for.
-      if (!resp.ok && resp.status !== 404) throw new Error('delete');
+      if (!resp.ok && resp.status !== 404) throw refused(resp, 'delete');
       return id;
     });
+  };
+  // What a long save says while the server makes it wait, and when it goes on.
+  P.pacing = function (going) {
+    var v = this.view;
+    return {
+      onPause: function (secs) { v.say('The server asked for a short pause. Carrying on in about ' + count(secs, 'second') + '.'); },
+      onResume: function () { v.say(going); }
+    };
   };
   P.weatherCall = function (path, method, list) {
     return this.editor.kit().weatherBatches(function (u, o) { return Chronicle.apiFetch(u, o); }, this.view.apiBase, path, method, list);
@@ -1262,7 +1322,7 @@
   P.keep = function () {
     var self = this, D = this.D, v = this.view, G = window.ChronicleGen;
     if (!D || this.busy) return;
-    var evs = activeEvents(D), wx = activeWeather(D), removed = D.remove.slice();
+    var evs = activeEvents(D), wx = activeWeather(D), removed = removalsOf(D).slice();
     if (!evs.length && !wx.length && !removed.length) return;
     this.busy = true;
     this.workingBar();
@@ -1270,12 +1330,13 @@
     var items = evs.map(function (e) { return { e: e, body: createBody(e, { lane: laneOf(e) }) }; });
     // The new events first, then the old ones they replace, then the weather:
     // a failure part way never leaves less than there was.
-    writeEach(items, function (it) { return self.postEvent(it.body); }).then(function (w) {
+    var pace = this.pacing('Keeping…');
+    writeEach(items, function (it) { return self.postEvent(it.body); }, pace).then(function (w) {
       w.results.forEach(function (x) {
         rec.created.push({ id: x.r.id, key: keyOf(x.it.e), year: x.it.body.year, month: x.it.body.month, day: x.it.body.day });
       });
       if (w.stopped) { stop = 'events'; return null; }
-      return writeEach(removed, function (e) { return self.deleteEvent(e.id); }).then(function (dr) {
+      return writeEach(removed, function (e) { return self.deleteEvent(e.id); }, pace).then(function (dr) {
         dr.results.forEach(function (x) { rec.removed.push(x.it); });
         if (dr.stopped) { stop = 'remove'; return null; }
         if (!wx.length) return null;
@@ -1308,7 +1369,13 @@
       if (!moreWx) D.wx = [];
       if (stop === 'events') msg = rec.created.length ? partialWords(rec.created.length, evs.length) : 'Nothing could be saved. The draft is still here.';
       else if (stop === 'remove') msg = 'Kept ' + count(rec.created.length, 'event') + ', but ' + (removed.length - rec.removed.length) + ' of the old events' + ' could not be removed. They are still in the draft.';
-      else msg = 'Kept ' + count(rec.created.length, 'event') + '. The weather could not be saved and is still a draft.';
+      else {
+        msg = weatherLeftWords(rec.created.length);
+        // The events are saved now, so what is left is a weather draft: a
+        // re-roll must not draw the year's events a second time, and
+        // switching them back on replaces the ones just kept.
+        if (D.kind === 'fill') { D.on.events = false; D.on.sky = false; D.remove = fillReplaces(this.savedEvents(this.now().year), this.now()); }
+      }
     }
     var glow = { ids: {}, wx: {}, days: {} };
     rec.created.forEach(function (c) { glow.ids[c.id] = 1; glow.days[dkey(c.year, c.month, c.day)] = 1; });
@@ -1330,9 +1397,10 @@
     if (this.busy) { v.say('Wait a moment, then press Undo again.'); return; }
     this.busy = true;
     var failed = false;
-    writeEach(rec.created, function (c) { return self.deleteEvent(c.id); }).then(function (d) {
+    var pace = this.pacing('Undoing…');
+    writeEach(rec.created, function (c) { return self.deleteEvent(c.id); }, pace).then(function (d) {
       if (d.stopped) { failed = true; return null; }
-      return writeEach(rec.removed, function (e) { return self.postEvent(createBody(e, { keepPayload: true })); }).then(function (r) {
+      return writeEach(rec.removed, function (e) { return self.postEvent(createBody(e, { keepPayload: true })); }, pace).then(function (r) {
         if (r.stopped) { failed = true; return null; }
         if (!rec.wx.length) return null;
         var back = [];
@@ -1363,13 +1431,13 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       geometry: geometry, windowFor: windowFor, nowAt: nowAt, seasonSpans: seasonSpans, runsOf: runsOf, yearEventsFrom: yearEventsFrom,
-      hash: hash, sigOf: sigOf, markerFor: markerFor, generatedLane: generatedLane, isHandMade: isHandMade,
+      hash: hash, sigOf: sigOf, markerFor: markerFor, generatedLane: generatedLane, isHandMade: isHandMade, fillReplaces: fillReplaces, removalsOf: removalsOf,
       protectedDay: protectedDay, emptyDays: emptyDays, redrawable: redrawable, asEngineDay: asEngineDay,
       blankDraft: blankDraft, activeEvents: activeEvents, activeWeather: activeWeather, counts: counts, sentence: sentence, keepLabel: keepLabel,
-      keptWords: keptWords, partialWords: partialWords, createBody: createBody, chosenActions: chosenActions, mayGenerate: mayGenerate,
+      keptWords: keptWords, partialWords: partialWords, weatherLeftWords: weatherLeftWords, createBody: createBody, chosenActions: chosenActions, mayGenerate: mayGenerate,
       weatherSetup: weatherSetup, rollFillLane: rollFillLane, rollFillWeather: rollFillWeather, rollHistory: rollHistory,
       buildCopy: buildCopy, buildEvery: buildEvery, buildReroll: buildReroll, buildWeatherReroll: buildWeatherReroll,
-      contiguous: contiguous, rerollNote: rerollNote, writeEach: writeEach, WRITE_AT_ONCE: WRITE_AT_ONCE, YearTrack: YearTrack
+      contiguous: contiguous, rerollNote: rerollNote, writeEach: writeEach, WRITE_AT_ONCE: WRITE_AT_ONCE, MAX_PAUSES: MAX_PAUSES, YearTrack: YearTrack
     };
   }
 })();

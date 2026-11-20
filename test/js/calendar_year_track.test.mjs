@@ -78,6 +78,8 @@ test('what Keep says it did, whole and partial', () => {
   assert.equal(YT.keptWords(1, 0), 'Kept 1 event.');
   assert.equal(YT.keptWords(0, 1), 'Kept 1 day of weather.');
   assert.equal(YT.partialWords(12, 31), 'Kept 12 of 31. The rest are still a draft.');
+  assert.equal(YT.weatherLeftWords(3), 'Kept 3 events. The weather could not be saved and is still a draft.');
+  assert.equal(YT.weatherLeftWords(0), 'The weather could not be saved and is still a draft.');
 });
 
 // ---- The generated marker ----
@@ -131,6 +133,30 @@ test('a re-roll leaves a generated event on a day that was not chosen', () => {
 });
 
 // ---- Weather a draw may not touch ----
+test('a new fill replaces an earlier fill from today on, and nothing a person made or changed', () => {
+  const now = { year: 100, month: 2, day: 10 };
+  const later = made('events', { id: 'g1', month: 3, day: 4 }), today = made('sky', { id: 'g2', month: 2, day: 10 });
+  const past = made('events', { id: 'g3', month: 1, day: 9 }), otherYear = made('events', { id: 'g4', year: 101, month: 3, day: 4 });
+  const edited = Object.assign(made('events', { id: 'g5', month: 4, day: 2 }), { name: 'Renamed by hand' });
+  const hand = { id: 'h1', name: 'Coronation', year: 100, month: 5, day: 1 }, old = made('history', { id: 'g6', month: 5, day: 2 });
+  const ids = YT.fillReplaces([later, today, past, otherYear, edited, hand, old], now).map((e) => e.id);
+  assert.deepEqual(ids, ['g1', 'g2']);
+});
+
+test('a fill removes an earlier fill only for the parts switched on, and says so', () => {
+  const D = YT.blankDraft('fill', 's');
+  D.remove = [made('events', { id: 'g1' }), made('sky', { id: 'g2', day: 5 })];
+  const ctx = { now: 'M2 10', year: '100', yearOf: String };
+  assert.equal(YT.removalsOf(D).length, 2);
+  assert.match(YT.sentence(D, ctx), /It replaces 2 events from an earlier fill\.$/);
+  D.on.sky = false;
+  assert.deepEqual(YT.removalsOf(D).map((e) => e.id), ['g1']);
+  assert.match(YT.sentence(D, ctx), /It replaces 1 event from an earlier fill\.$/);
+  D.on.events = false;
+  assert.equal(YT.removalsOf(D).length, 0);
+  assert.doesNotMatch(YT.sentence(D, ctx), /replaces/);
+});
+
 test('painted and locked days are protected, an unlocked generated one is not', () => {
   assert.equal(YT.protectedDay(null), false);
   assert.equal(YT.protectedDay({ source: 'manual' }), true);
@@ -283,4 +309,36 @@ test('writeEach with no failure writes all, in groups of WRITE_AT_ONCE', async (
   assert.equal(r.stopped, false);
   assert.equal(r.results.length, 9);
   assert.ok(most <= YT.WRITE_AT_ONCE);
+});
+
+test('a write the server asks to wait on is tried again after the wait, not counted as failed', async () => {
+  const limit = () => Object.assign(new Error('save'), { status: 429, retryAfter: 7 });
+  const tries = {}, waits = [], said = [];
+  const r = await YT.writeEach([0, 1, 2, 3, 4, 5], (n) => {
+    tries[n] = (tries[n] || 0) + 1;
+    return (n === 2 || n === 3) && tries[n] === 1 ? Promise.reject(limit()) : Promise.resolve(n);
+  }, { sleep: (ms) => { waits.push(ms); return Promise.resolve(); }, onPause: (s) => said.push('pause ' + s), onResume: () => said.push('on') });
+  assert.equal(r.stopped, false);
+  assert.deepEqual(Array.from(r.results.map((x) => x.it)).sort(), [0, 1, 2, 3, 4, 5]);
+  assert.equal(tries[2], 2);
+  assert.deepEqual(waits, [7250]);
+  assert.deepEqual(said, ['pause 7', 'on']);
+});
+
+test('a server that keeps asking to wait stops the run after MAX_PAUSES, with what was saved', async () => {
+  const limit = () => Object.assign(new Error('save'), { status: 429, retryAfter: 1 });
+  let waits = 0;
+  const r = await YT.writeEach([0, 1], (n) => (n === 1 ? Promise.reject(limit()) : Promise.resolve(n)), { sleep: () => { waits++; return Promise.resolve(); } });
+  assert.equal(r.stopped, true);
+  assert.equal(waits, YT.MAX_PAUSES);
+  assert.deepEqual(Array.from(r.results.map((x) => x.it)), [0]);
+});
+
+test('a refill on a year whose weather is all set says so instead of counting zero days', () => {
+  const D = YT.blankDraft('fill', 's');
+  D.ev = [{ _lane: 'events', gen: { key: 'a' }, year: 100 }];
+  const ctx = { now: 'M2 10', year: '100', yearOf: String };
+  assert.equal(YT.sentence(D, ctx), 'From M2 10 to the end of 100: 1 happening and 0 sky events. Every day already has its weather.');
+  D.on.events = false; D.on.sky = false;
+  assert.equal(YT.sentence(D, ctx), 'From M2 10 to the end of 100: 0 days of weather.');
 });

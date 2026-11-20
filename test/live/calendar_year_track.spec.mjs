@@ -1,6 +1,7 @@
 // calendar_year_track.spec.mjs — the Edit drawer's year track: an owner fills
 // the rest of the year and keeps it, what is saved is director-only and marked
-// as generated, a player sees none of it, and Undo takes it all away again.
+// as generated, a player sees none of it, Undo takes it all away again, and a
+// second fill replaces the first instead of stacking on it.
 //
 // RUN: tools/live-checks.sh test/live/calendar_year_track.spec.mjs
 
@@ -12,14 +13,20 @@ after(done);
 
 const listOf = (body) => (Array.isArray(body) ? body : (body && body.data) || []);
 
+// This check writes several hundred events inside a minute, which is more
+// than the server lets one person write. The page then waits, as it would
+// for anyone, so the later steps allow for one such wait.
+const LONG = { timeout: 150000 };
+
 // Every event of the calendar's current year as `who` is allowed to read it.
 async function yearEvents(who, base, year, months) {
-  const out = [];
+  // A repeating event is listed under every month it lands in, so each is counted once.
+  const byId = new Map();
   for (let m = 1; m <= months; m++) {
     const r = await who.api(`${base}/events?year=${year}&month=${m}`);
-    if (r.ok) out.push(...listOf(r.body));
+    if (r.ok) listOf(r.body).forEach((e) => byId.set(e.id, e));
   }
-  return out;
+  return [...byId.values()];
 }
 
 test('fill the rest of the year, keep it, see it director-only, and undo it', async () => {
@@ -51,7 +58,7 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   const keep = page.locator('[data-yt="keep"]');
   await keep.waitFor();
   assert.match(await page.locator('.yt-barwrap').innerText(), /Nothing is saved until you keep it\./);
-  assert.equal(await page.locator('[data-deck-year]').isDisabled(), true, 'The year stays enabled while a draft exists');
+  assert.equal(await page.locator('[data-deck-year]').isDisabled(), true, 'The year can still be pressed while a draft exists');
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'the draft was saved before Keep');
   await picture(page, 'year-track-draft', { check: '#2222', about: 'Edit drawer with a fill draft', mask: ['header'] });
 
@@ -75,5 +82,39 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   await undo.click();
   await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor();
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'Undo left events behind');
+
+  // A second fill replaces the first one's events instead of stacking on them.
+  const fill = page.getByRole('button', { name: 'Fill the rest of the year' });
+  await fill.click();
+  await keep.waitFor();
+  await keep.click();
+  await undo.waitFor(LONG);
+  const first = await yearEvents(owner, base, cal.current_year, months);
+  assert.ok(first.length > 0, 'the first fill saved no events');
+  await page.locator('#cal5-live').filter({ hasText: /^Kept/ }).waitFor();
+  await fill.click();
+  await keep.waitFor();
+  const said = await page.locator('.yt-barwrap').innerText();
+  const m = /It replaces (\d+) events? from an earlier fill\./.exec(said);
+  assert.ok(m, `the second fill does not say what it replaces: ${said}`);
+  assert.equal(Number(m[1]), first.length, 'the second fill does not replace all of the first');
+  assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, first.length, 'the second draft changed what is saved before Keep');
+  await keep.click();
+  await undo.waitFor(LONG);
+  const second = await yearEvents(owner, base, cal.current_year, months);
+  const firstIds = new Set(first.map((e) => e.id));
+  assert.equal(second.filter((e) => firstIds.has(e.id)).length, 0, 'events of the first fill are still there after the second');
+  assert.ok(second.length > 0, 'the second fill saved no events');
+
+  // Undoing the second fill puts the first back, still director-only and still marked.
+  await undo.click();
+  await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor(LONG);
+  const back = await yearEvents(owner, base, cal.current_year, months);
+  assert.equal(back.length, first.length, 'Undo did not put the first fill back');
+  for (const e of back) {
+    assert.equal(e.visibility, 'dm_only', `${e.name} came back visible to players`);
+    assert.equal(JSON.parse(e.payload).type, 'generated');
+  }
+  assert.equal((await yearEvents(player, base, cal.current_year, months)).length, 0, 'a player can read generated events after Undo');
   owner.assertClean();
 });
