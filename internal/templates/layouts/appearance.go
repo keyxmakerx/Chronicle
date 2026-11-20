@@ -19,15 +19,19 @@ import (
 // layout. Empty fields are the Classic look and emit nothing, so a campaign
 // that never saved Customize renders byte-identical to before.
 type AppearanceData struct {
-	NavStyle     string
-	NavStrength  string
-	NavPageName  string
-	PageTone     string
-	Contrast     string
-	BodyFont     string
-	HeadingFont  string
-	TypeScale    string
-	ButtonStyle  string
+	NavStyle    string
+	NavStrength string
+	NavPageName string
+	PageTone    string
+	Contrast    string
+	BodyFont    string
+	HeadingFont string
+	TypeScale   string
+	ButtonStyle string
+	// IconAmount is "names" or "all"; IconColour is "accent" or "category".
+	// Empty is the default (few icons, ink) and emits nothing.
+	IconAmount   string
+	IconColour   string
 	Elevation    string
 	MotionSpeed  string
 	ReduceMotion bool
@@ -128,6 +132,14 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-strength", a.NavStrength)
 	set("data-cz-pagename", a.NavPageName)
 	set("data-cz-btn", a.ButtonStyle)
+	switch a.IconAmount {
+	case "names", "all":
+		attrs["data-cz-icons"] = a.IconAmount
+	}
+	switch a.IconColour {
+	case "accent", "category":
+		attrs["data-cz-icon-colour"] = a.IconColour
+	}
 	set("data-cz-elev", a.Elevation)
 	set("data-cz-scale", a.TypeScale)
 	set("data-cz-hover", a.HoverCard)

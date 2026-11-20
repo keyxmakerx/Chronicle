@@ -88,6 +88,7 @@ type NavCategory struct {
 	TypeID int
 	Label  string
 	Icon   string
+	Color  string // the category's saved colour, for the Category icon colour theme
 	URL    string
 	Count  int
 	Subs   []NavSubcategory
@@ -97,6 +98,7 @@ type NavCategory struct {
 type NavSubcategory struct {
 	TypeID int
 	Label  string
+	Color  string
 	URL    string
 	Count  int
 }
@@ -156,6 +158,7 @@ type NavRow struct {
 	Kind     string
 	Label    string
 	Icon     string
+	Color    string // a category's saved colour; empty for other rows
 	URL      string
 	Caption  string
 	External bool // a link leaving Chronicle; opens in a new tab
@@ -664,7 +667,7 @@ func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategor
 		}
 		return NavRow{
 			Key: it.Key, Kind: NavRowCategory, Label: c.Label, Icon: c.Icon,
-			URL: c.URL, Count: c.Count, Subs: c.Subs,
+			Color: c.Color, URL: c.URL, Count: c.Count, Subs: c.Subs,
 		}, true
 	case NavRowLink:
 		target, safe := sanitize.SafeLinkURL(it.URL)

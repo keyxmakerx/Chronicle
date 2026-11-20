@@ -26,7 +26,7 @@ const sections = [...src.slice(src.indexOf('var SECTIONS = ['), src.indexOf('var
 test('the rooms are the four signed ones, in order', () => {
   assert.deepEqual(rooms.map((r) => r[1]), ['Site frame', 'Colours and type', 'Pages and sheets', 'People']);
   assert.deepEqual(rooms[0][3], ['brand', 'header', 'sidebar', 'nav']);
-  assert.deepEqual(rooms[1][3], ['colours', 'type', 'buttons', 'motion']);
+  assert.deepEqual(rooms[1][3], ['colours', 'type', 'buttons', 'icons', 'motion']);
   assert.deepEqual(rooms[2][3], ['page', 'hover', 'sheet', 'email']);
   assert.deepEqual(rooms[3][3], []);
 });

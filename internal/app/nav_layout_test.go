@@ -145,6 +145,29 @@ func TestNavCategoriesFor(t *testing.T) {
 	if cats[1].Icon != "" {
 		t.Errorf("an icon that is not a Font Awesome name must be dropped, got %q", cats[1].Icon)
 	}
+	if loc.Color != "#f87171" || loc.Subs[1].Color != "#f87171" || cats[1].Color != "#fbbf24" {
+		t.Errorf("a category's saved colour must reach its row for the Category icon theme: %+v", cats)
+	}
+}
+
+// The saved colour travels from the category to the view the sidebar draws,
+// and only a category's row carries one.
+func TestNavSectionViews_CarryTheCategoryColour(t *testing.T) {
+	cats := navCategoriesFor("camp-1", navTestTypes(), nil)
+	byID := map[int]campaigns.NavCategory{}
+	for _, c := range cats {
+		byID[c.TypeID] = c
+	}
+	rows := navSectionViews([]campaigns.NavSection{{ID: "categories", Kind: "categories", Rows: []campaigns.NavRow{
+		{Key: "cat:1", Kind: campaigns.NavRowCategory, Label: "Locations", Color: byID[1].Color, Subs: byID[1].Subs},
+		{Key: "app:maps", Kind: "app", Label: "Maps"},
+	}}})[0].Rows
+	if rows[0].Color != "#f87171" || rows[0].Subs[0].Color != "#f87171" {
+		t.Errorf("the category's row and its sub-category lose the colour: %+v", rows[0])
+	}
+	if rows[1].Color != "" {
+		t.Errorf("an app row carries a category colour: %+v", rows[1])
+	}
 }
 
 func TestBuildNavSections_HiddenRowsReachOnlyTheOwner(t *testing.T) {

@@ -35,6 +35,9 @@ func TestBuildCustomizeState(t *testing.T) {
 			if d.Type.Body != "inter" || d.Type.Heading != "same" || d.Nav.Style != "rail" || d.Buttons.Style != "lift" || d.Motion.Speed != "standard" {
 				t.Errorf("unset choices must be Classic's, got %+v %+v", d.Type, d.Nav)
 			}
+			if d.Icons.Amount != "few" || d.Icons.Colour != "ink" {
+				t.Errorf("unset icon choices must be few icons in ink, got %+v", d.Icons)
+			}
 			if d.Header.Widgets == nil || d.Header.Links == nil {
 				t.Error("widgets and links must be empty lists, never null")
 			}
@@ -48,6 +51,11 @@ func TestBuildCustomizeState(t *testing.T) {
 		{"email layout reads back", `{"appearance":{"email_layout":"chat"}}`, nil, func(t *testing.T, st customizeState) {
 			if st.Draft.Email.Layout != "chat" {
 				t.Errorf("email layout = %q, want chat", st.Draft.Email.Layout)
+			}
+		}},
+		{"icon choices read back", `{"appearance":{"icon_amount":"all","icon_colour":"accent"}}`, nil, func(t *testing.T, st customizeState) {
+			if st.Draft.Icons.Amount != "all" || st.Draft.Icons.Colour != "accent" {
+				t.Errorf("icons = %+v, want all and accent", st.Draft.Icons)
 			}
 		}},
 		{"time line popup reads back", `{"appearance":{"timeline_popup":"corner"}}`, nil, func(t *testing.T, st customizeState) {

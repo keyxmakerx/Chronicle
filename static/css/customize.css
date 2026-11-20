@@ -185,6 +185,9 @@
 .czp .opt > input:disabled + span{ opacity:.5; cursor:not-allowed; }
 .czp .opt:has(> input:disabled):active > span{ transform:none; }
 .czp .opt .chip{ width:12px; height:12px; border-radius:4px; background:var(--c); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .18); }
+.czp .opt .dots{ display:inline-flex; gap:3px; }
+.czp .opt .dotc{ width:9px; height:9px; border-radius:50%; background:var(--c); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .18); }
+.czp .opt .dotc.ink{ background:var(--muted); }
 .czp .opt .soon{ font-size:9.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:1px 6px; border-radius:99px; background:var(--surface-2); color:var(--muted); }
 
 /* Colour swatches (native radios) */
@@ -714,6 +717,21 @@
 .czp .chipe.a{ background:var(--p-s1-fill); color:var(--p-on-s1); }
 .czp .chipe.b{ background:rgb(var(--p-s2-rgb) / .16); color:var(--p-s2-text); }
 .czp .links{ display:grid; gap:4px; font-size:calc(var(--p-fs) * .9); }
+/* Icons. A page's category icon stands in front of its name only at Beside
+   names and Everywhere; the colour theme reaches it and the menu's category
+   icons alike, mixed toward the text so every category has a similar
+   strength. Nothing sits behind an icon. */
+.czp .prow{ display:flex; align-items:center; gap:8px; min-width:0; }
+.czp .prow .pk{ margin-left:auto; flex:none; font-size:calc(var(--p-fs) * .78); color:var(--p-muted); }
+.czp .pv-ic{ display:none; width:14px; height:14px; flex:none; place-items:center; color:var(--p-muted); }
+.czp .pv-ic .i{ width:14px; height:14px; }
+.czp [data-icons="names"] .pv-ic, .czp [data-icons="all"] .pv-ic{ display:grid; }
+.czp [data-icolour="accent"] .pv-ic{ color:var(--p-link); }
+.czp [data-icolour="category"] .pv-ic{ color:color-mix(in oklab, var(--c) 52%, var(--p-text)); }
+.czp .s-row:not(.on) .ic.kic, .czp .s-row .dot.kic{ color:var(--p-sb-text-2); }
+.czp .s-row .dot.kic{ background:currentColor; }
+.czp [data-icolour="accent"] .s-row:not(.on) .ic.kic, .czp [data-icolour="accent"] .s-row .dot.kic{ color:var(--p-sb-accent); }
+.czp [data-icolour="category"] .s-row:not(.on) .ic.kic, .czp [data-icolour="category"] .s-row .dot.kic{ color:color-mix(in oklab, var(--c) 55%, var(--p-sb-text)); }
 .czp .tags{ display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
 .czp .tag{ display:inline-flex; align-items:center; padding:1px 8px; border-radius:99px; font-size:calc(var(--p-fs) * .78); font-weight:600; background:rgb(var(--p-s2-rgb) / .16); color:var(--p-s2-text); }
 .czp .tline{ display:flex; align-items:flex-start; gap:0; margin-top:2px; }

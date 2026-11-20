@@ -274,12 +274,9 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 						class="w-8 h-8 rounded object-cover shrink-0"
 					/>
 				} else {
-					<span
-						class="w-8 h-8 rounded flex items-center justify-center shrink-0"
-						style={ fmt.Sprintf("background-color: %s15; color: %s", entity.TypeColor, entity.TypeColor) }
-					>
+					<span class="w-8 h-8 flex items-center justify-center shrink-0">
 						if entity.TypeIcon != "" {
-							<i class={ "fa-solid " + entity.TypeIcon, "text-xs" }></i>
+							<i class={ "fa-solid " + entity.TypeIcon, "text-xs", "kind-themed" } { layouts.KindIconAttrs(ctx, entity.TypeColor)... } aria-hidden="true"></i>
 						}
 					</span>
 				}

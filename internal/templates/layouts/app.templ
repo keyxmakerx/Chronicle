@@ -580,7 +580,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 		Categories
 	</button>
 	<div class="nav-drill-head">
-		<span class="nav-drill-ic">
+		<span class="nav-drill-ic kind-themed" { KindIconAttrs(ctx, et.Color)... }>
 			if et.Icon != "" {
 				<i class={ "fa-solid " + et.Icon } aria-hidden="true"></i>
 			} else {
@@ -638,7 +638,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 						aria-current="page"
 					}
 				>
-					<span class="nav-drill-sub-ic">
+					<span class="nav-drill-sub-ic kind-themed" { KindIconAttrs(ctx, s.Color)... }>
 						if s.Icon != "" {
 							<i class={ "fa-solid " + s.Icon } aria-hidden="true"></i>
 						} else {

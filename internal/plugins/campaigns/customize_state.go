@@ -61,6 +61,10 @@ type customizeDraft struct {
 	Buttons struct {
 		Style string `json:"style"`
 	} `json:"buttons"`
+	Icons struct {
+		Amount string `json:"amount"`
+		Colour string `json:"colour"`
+	} `json:"icons"`
 	Motion struct {
 		Elevation string `json:"elevation"`
 		Speed     string `json:"speed"`
@@ -241,6 +245,8 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Type.Heading = orDefault(a.HeadingFont, AppearanceHeadingFonts)
 	d.Type.Scale = orDefault(a.TypeScale, AppearanceTypeScales)
 	d.Buttons.Style = orDefault(a.ButtonStyle, AppearanceButtonStyles)
+	d.Icons.Amount = orDefault(a.IconAmount, AppearanceIconAmounts)
+	d.Icons.Colour = orDefault(a.IconColour, AppearanceIconColours)
 	d.Motion.Elevation = orDefault(a.Elevation, AppearanceElevations)
 	d.Motion.Speed = orDefault(a.MotionSpeed, AppearanceSpeeds)
 	d.Motion.ReduceAll = a.ReduceMotion
