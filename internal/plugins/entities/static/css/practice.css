@@ -1,0 +1,66 @@
+/* practice.css — practice heroes on the Characters page and on their own
+   page. A page, so the quiet look (.ai/ui-standard.md): rows on hairlines with
+   no cards, one underlined word for each quiet action, and only theme tokens,
+   so light, dark and the owner's Customize choices all apply. No motion. */
+
+.pr { color: var(--color-text-body); }
+.pr :is(h2, p, ul) { margin: 0; }
+.pr-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.pr-count { font-size: 12.5px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+/* The list: hairlines between rows, a soft fill on hover, no box. */
+.pr-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--color-border-light); }
+.pr-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--color-border-light); }
+.pr-row:hover { background: var(--color-bg-tertiary); }
+.pr-row--stack { flex-direction: column; align-items: stretch; gap: 0; padding-bottom: 12px; }
+.pr-row--stack:hover { background: none; }
+.pr-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pr-main { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; min-height: 44px; justify-content: center; padding: 8px 4px; color: inherit; text-decoration: none; }
+.pr-main b { font-weight: 600; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.pr-main small { font-size: 12.5px; color: var(--color-text-muted); overflow-wrap: anywhere; }
+.pr-main:hover b { color: var(--color-accent-link, var(--color-accent)); }
+.pr-main:active { background: var(--color-bg-tertiary); }
+.pr-main:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: var(--shape-r-ctl, 8px); }
+
+/* "Practice" at a row's end: a small-caps word, not a pill. */
+.pr-mark { flex: none; padding-right: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-text-muted); white-space: nowrap; }
+
+/* Quiet actions: a plain underlined word with no border and no icon. */
+.pr-words { display: flex; flex-wrap: wrap; gap: 0 16px; margin-top: 4px; }
+.pr-word { display: inline-flex; align-items: center; min-height: 32px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 500; color: var(--color-accent-link, var(--color-accent));
+  text-decoration: underline; text-decoration-color: rgb(var(--color-accent-rgb) / 0.4); text-underline-offset: 3px; }
+.pr-word:hover { text-decoration-color: currentColor; }
+.pr-word:active { opacity: 0.75; }
+.pr-word:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--shape-r-tag, 4px); }
+.pr-word:disabled { opacity: 0.5; cursor: default; }
+.pr-note { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--color-text-muted); max-width: 70ch; }
+
+/* A Director's answers. */
+.pr-ask { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.pr-answers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 8px 4px 0; }
+.pr-yes { display: contents; }
+.pr-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; color: var(--color-text-primary); }
+.pr-no { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; padding: 8px 4px 0; }
+.pr-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; min-width: 0; }
+.pr-k { font-size: 12px; color: var(--color-text-secondary); }
+
+/* A practice hero's own page. */
+.pr-page { max-width: 44rem; }
+.pr-band { margin-bottom: 16px; padding: 8px 14px; border-radius: var(--shape-r-ctl, 8px); background: rgb(var(--color-accent-rgb) / 0.12);
+  color: var(--color-text-primary); font-size: 13px; line-height: 1.45; }
+.pr-band b { font-weight: 600; }
+.pr-title { font-family: var(--font-heading, inherit); font-size: clamp(24px, 4vw, 32px); font-weight: 600; line-height: 1.15; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.pr-sub { margin-top: 4px; font-size: 14px; color: var(--color-text-secondary); }
+.pr-picks { margin: 16px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--color-border-light); }
+.pr-pick { display: flex; flex-direction: column; gap: 2px; padding: 10px 4px; border-bottom: 1px solid var(--color-border-light); }
+.pr-pick b { font-weight: 600; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.pr-pick small { font-size: 12.5px; color: var(--color-text-muted); }
+.pr-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 16px; }
+
+/* Phones: controls are 44px to touch and the rows keep their words whole. */
+@media (max-width: 640px) {
+  .pr-word { min-height: 44px; }
+  .pr-acts .btn-primary, .pr-answers .btn-primary, .pr-confirm .btn-primary, .pr-confirm .btn-danger, .pr-no .btn-secondary { min-height: 44px; }
+  .pr-answers, .pr-acts { gap: 4px 16px; }
+}

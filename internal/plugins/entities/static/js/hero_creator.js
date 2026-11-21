@@ -27,6 +27,13 @@
  * entries"; the player's draft then shows in the list, and once the hero is
  * made the draft is kept to that hero.
  *
+ * Practice mode (data-practice="true"): the same pages make a practice hero
+ * instead of a real one. The plan puts back the entries the rules keep from
+ * the player, marked "Not offered here"; nothing is locked, forced or asked
+ * for; the hero is saved with its own draft key, from a preload for a copy or
+ * a change, and the maker lands on the practice hero's page. Saving goes
+ * through persist() alone, so another place to keep the result can replace it.
+ *
  * Served per-plugin at /static/plugins/entities/js/hero_creator.js from the
  * body-script registry, so it survives boosted navigation. Re-wires after
  * HTMX swaps.
@@ -95,7 +102,11 @@
     this.csrf = root.getAttribute('data-csrf');
     this.typeName = root.getAttribute('data-type-name') || 'character';
     this.forSelf = root.getAttribute('data-for-self') === 'true';
-    this.draftKey = 'chronicle:hero-draft:' + this.campaignId;
+    this.practice = root.getAttribute('data-practice') === 'true';
+    this.updateUrl = root.getAttribute('data-update-url') || '';
+    this.preload = null;
+    try { var pre = root.getAttribute('data-preload'); if (pre) this.preload = JSON.parse(pre); } catch (e) { /* start blank */ }
+    this.draftKey = (this.practice ? 'chronicle:hero-practice:' : 'chronicle:hero-draft:') + this.campaignId;
     this.step = 0;
     this.open = null;
     this.tab = 'overview';
@@ -113,7 +124,7 @@
     }).then(function (plan) {
       self.plan = plan || { steps: [] };
       self.plan.steps = self.plan.steps || [];
-      self.restore();
+      if (self.preload) self.adopt(self.preload); else self.restore();
       self.prefill();
       self.render();
     }).catch(function () {
@@ -126,19 +137,26 @@
   Creator.prototype.restore = function () {
     try {
       var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null');
-      if (!d) return;
-      var self = this;
-      Object.keys(d.picks || {}).forEach(function (k) {
-        var c = self.stepByKey(k) && self.choice(k, d.picks[k].name);
-        if (!c) return;
-        // Keep only options the entry still offers, in case the system changed.
-        var bl = buyList(c.properties), opts = Array.isArray(d.picks[k].options) ? d.picks[k].options : [];
-        self.picks[k] = { name: c.name, options: bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [] };
-      });
-      this.name = typeof d.name === 'string' ? d.name : '';
+      if (d) this.adopt(d);
     } catch (e) { /* no storage: start fresh */ }
   };
+  // Takes a draft or a preload ({picks, name}) as the starting point, keeping
+  // only what the plan still offers.
+  Creator.prototype.adopt = function (d) {
+    var self = this;
+    Object.keys(d.picks || {}).forEach(function (k) {
+      var c = self.stepByKey(k) && self.choice(k, d.picks[k].name);
+      if (!c) return;
+      // Keep only options the entry still offers, in case the system changed.
+      var bl = buyList(c.properties), opts = Array.isArray(d.picks[k].options) ? d.picks[k].options : [];
+      self.picks[k] = { name: c.name, options: bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [] };
+    });
+    this.name = typeof d.name === 'string' ? d.name : '';
+  };
   Creator.prototype.save = function () {
+    // A copy or a change starts from the server's hero, so it keeps no draft
+    // that a later blank start would pick up.
+    if (this.preload) return;
     try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name })); } catch (e) { /* ignore */ }
   };
   Creator.prototype.clearDraft = function () {
@@ -174,11 +192,16 @@
   };
   // The pick of a step that waits for the Director's yes: an Ask first entry.
   Creator.prototype.waitName = function (st) {
+    if (this.practice) return '';
     var p = this.picks[st.fieldKey], c = p && p.name && this.choice(st.fieldKey, p.name);
     return c && c.state === 'ask_first' ? c.name : '';
   };
   // What a pick still needs from the Director or the rules, as a short phrase.
   Creator.prototype.pickNote = function (st) {
+    if (this.practice) {
+      var pk = this.picks[st.fieldKey], pc = pk && pk.name && this.choice(st.fieldKey, pk.name);
+      return pc && pc.state === 'not_offered' ? 'not offered here' : pc && pc.state === 'ask_first' ? 'ask first' : '';
+    }
     if (this.waitName(st)) return 'waiting for your ' + gm();
     return this.locked(st) ? window.ChronicleHeroRules.LOCK : '';
   };
@@ -199,8 +222,13 @@
     var html = '<div class="hc-wrap"><section class="hc-page paper paper-stack" aria-label="Hero creator">' +
       this.trailHTML() + (this.isDetails() ? this.detailsHTML() : this.stepHTML()) + this.footHTML() +
       '</section>' + (this.isDetails() ? '' : '<aside class="hc-leaf paper" aria-hidden="true"></aside>') + '</div>';
-    this.root.innerHTML = html;
+    this.root.innerHTML = this.bandHTML() + html;
     this.open = null;
+  };
+
+  // Practice mode says what it is above the steps, in the page's own words.
+  Creator.prototype.bandHTML = function () {
+    return this.practice ? '<p class="hc-band"><b>Practice hero.</b> Not in the party, not sent to Foundry.</p>' : '';
   };
 
   Creator.prototype.trailHTML = function () {
@@ -227,11 +255,12 @@
         (c.mine && c.status ? ' <span class="hc-seal">Yours · ' + (c.status === 'sent' ? 'handed in' : 'draft') + '</span>'
           : c.source === 'campaign' ? ' <span class="hc-seal">Campaign</span>' : '') +
         (c.state === 'ask_first' ? ' <span class="hc-seal">Ask first</span>' : '') +
+        (c.state === 'not_offered' ? ' <span class="hc-seal">Not offered here</span>' : '') +
         (picked && self.locked(st) ? ' <span class="hc-seal">Everyone starts with this</span>' : '') +
         (picked ? ' <span class="hc-row__pick" aria-label="chosen">✓</span>' : '') +
         '</b><span class="hc-row__go" aria-hidden="true">Read ›</span><small>' + esc(c.summary) + '</small></button></li>';
     }).join('');
-    var make = st.canMake ? '<p class="hc-make">Your ' + gm() + ' lets you make your own ' + esc(lower(st.label)) + '. ' +
+    var make = st.canMake && !this.practice ? '<p class="hc-make">Your ' + gm() + ' lets you make your own ' + esc(lower(st.label)) + '. ' +
       '<a class="hc-link" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/characters/entries?field=' + encodeURIComponent(st.fieldKey) + '&back=new">Make yours ›</a> ' +
       'Your picks here are kept while you do.</p>' : '';
     var none = !rows && st.rules ? '<p class="hc-empty">Nothing is on this list for you right now.</p>' : '';
@@ -246,7 +275,7 @@
     var back = this.step > 0 ? '<button type="button" class="hc-btn hc-btn--ghost" data-act="back">← Back</button>' : '';
     if (this.isDetails()) {
       return '<div class="hc-foot"><span class="hc-foot__sp"></span>' + back +
-        '<button type="button" class="hc-btn" data-act="create">Create hero</button></div>';
+        '<button type="button" class="hc-btn" data-act="create">' + (this.practice ? (this.updateUrl ? 'Save changes' : 'Keep this practice hero') : 'Create hero') + '</button></div>';
     }
     var st = this.cur(), p = this.picks[st.fieldKey];
     var note = this.pickNote(st);
@@ -268,14 +297,14 @@
         : '<dd class="is-none">Not chosen</dd>') +
         '<dd>' + (self.locked(s) ? '' : '<button type="button" class="hc-link" data-step="' + i + '">Change</button>') + '</dd>';
     }).join('');
-    var whose = this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
+    var whose = this.practice ? 'This stays a practice hero: only you and the Directors see it, and it never joins the party.' : this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
     var none = this.plan.steps.length ? '' : '<p class="hc-empty">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
       ' choices for heroes yet, so the creator only asks for a name. ' + gm() + 's can add their own entries.</p>';
     return '<div class="hc-head"><p class="paper-kind">Step ' + this.stepCount() + ' of ' + this.stepCount() + '</p>' +
-      '<h1 tabindex="-1">Name your hero</h1></div>' + none +
+      '<h1 tabindex="-1">Name your ' + (this.practice ? 'practice ' : '') + 'hero</h1></div>' + none +
       '<label class="hc-field"><span class="hc-k">Name</span><input type="text" maxlength="200" autocomplete="off" data-name value="' + esc(this.name) + '" required></label>' +
-      (rows ? '<dl class="hc-sum">' + rows + '</dl>' : '') + '<p class="hc-note">' + whose + ' You can change any of it on the sheet later.</p>' +
+      (rows ? '<dl class="hc-sum">' + rows + '</dl>' : '') + '<p class="hc-note">' + whose + (this.practice ? '' : ' You can change any of it on the sheet later.') + '</p>' +
       '<p class="hc-error" role="alert" hidden data-error></p>';
   };
 
@@ -303,7 +332,9 @@
     return '<div class="hc-kind"><span class="paper-kind">' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
       (c.source === 'campaign' ? '<span class="hc-seal">Campaign</span>' : '') + '</div>' +
       '<h2 class="hc-name" tabindex="-1">' + esc(c.name) + '</h2>' + (c.summary ? '<p class="hc-lede">' + esc(c.summary) + '</p>' : '') +
-      (c.state === 'ask_first' ? '<p class="hc-note">Ask first: your ' + gm() + ' allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>' : '') +
+      (c.state === 'ask_first' ? (this.practice ? '<p class="hc-note">Ask first at this table. Picking it here is only practice.</p>'
+        : '<p class="hc-note">Ask first: your ' + gm() + ' allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>') : '') +
+      (c.state === 'not_offered' ? '<p class="hc-note">Not offered at this table. It stays a practice pick, and needs your ' + gm() + '’s yes to play.</p>' : '') +
       (facts ? '<div class="hc-facts">' + facts + '</div>' : '') + body;
   };
 
@@ -343,7 +374,7 @@
       '<div class="hc-leaf__body"><div class="hc-pane" role="tabpanel">' + pane + '</div></div>' +
       '<div class="hc-leaf__foot">' + toBuy + '<span class="hc-foot__sp"></span>' +
       '<button type="button" class="hc-btn" data-act="choose"' + (isPicked ? ' aria-pressed="true"' : '') + (isPicked && this.locked(st) ? ' disabled' : '') + '>' +
-      (c.state === 'ask_first' ? (isPicked ? '✓ Asking for ' : 'Ask for ') + esc(c.name)
+      (c.state === 'ask_first' && !this.practice ? (isPicked ? '✓ Asking for ' : 'Ask for ') + esc(c.name)
         : isPicked ? '✓ ' + esc(c.name) + (this.locked(st) ? ', everyone starts with this' : ' chosen') : 'Choose ' + esc(c.name)) + '</button></div>';
   };
 
@@ -470,14 +501,14 @@
     err.hidden = true;
     var picks = {};
     Object.keys(this.picks).forEach(function (k) { if (self.picks[k].name) picks[k] = self.picks[k]; });
-    var send = window.Chronicle && Chronicle.apiFetch
-      ? Chronicle.apiFetch(this.createUrl, { method: 'POST', body: { name: name, picks: picks }, csrfToken: this.csrf })
-      : fetch(this.createUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf }, body: JSON.stringify({ name: name, picks: picks }) });
+    var send = this.persist(name, picks);
     send.then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, body: body }; });
     }).then(function (res) {
       if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
       self.clearDraft();
+      var go = function () { if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.href = res.body.url; };
+      if (self.practice) { go(); return; }
       // A pick the Director has to allow could not be sent: say so, with a
       // way on, instead of moving past it.
       var failed = res.body.requestFailed || [];
@@ -488,9 +519,20 @@
         err.hidden = false;
         return;
       }
-      var go = function () { if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.href = res.body.url; };
       self.keepDraftsTo(res.body.id).then(go, go);
     }).catch(function () { fail('The hero could not be made. Check your connection and try again.'); });
+  };
+
+  // Sends the finished hero to the server: a new one, or in practice mode a
+  // change to the practice hero being edited. The one place a hero is kept.
+  Creator.prototype.persist = function (name, picks) {
+    var edit = this.practice && this.updateUrl, url = edit ? this.updateUrl : this.createUrl, method = edit ? 'PUT' : 'POST';
+    var body = { name: name, picks: picks };
+    // A copy of the player's own hero: the server reads that hero again.
+    if (this.practice && !edit && this.preload && this.preload.copy) body.copy = true;
+    return window.Chronicle && Chronicle.apiFetch
+      ? Chronicle.apiFetch(url, { method: method, body: body, csrfToken: this.csrf })
+      : fetch(url, { method: method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf }, body: JSON.stringify(body) });
   };
 
   // The player's own draft entries they picked are kept to the hero just
