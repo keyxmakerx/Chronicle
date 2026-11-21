@@ -62,15 +62,25 @@ func normalizeNightName(s string) string {
 }
 
 // eventHasNight reports whether a game night already stands for the event.
-// Nights carry no link to an event (there is no column for one), so the match
-// is by what the two share: the same name, or the same day on the same
-// calendar, or, on a real-life calendar, the same real date. Cancelled and
-// played nights count too: the strip is for events that were never given a
-// night, not for ones whose night was dealt with.
-func eventHasNight(ev SessionEvent, nights []Session) bool {
+// A night made from the event carries its id, so that link is the answer, and
+// it counts a night in the Trash (linked holds every linked event id). Nights
+// made before the link existed, or by hand, have none; those are matched by
+// what they share with the event: the same name, or the same day on the same
+// calendar, or, on a real-life calendar, the same real date. A night that is
+// linked to some event is never matched this way, since it already says which
+// event it is for. Cancelled and played nights count too: the strip is for
+// events that were never given a night, not for ones whose night was dealt
+// with.
+func eventHasNight(ev SessionEvent, nights []Session, linked map[string]bool) bool {
+	if linked[ev.ID] {
+		return true
+	}
 	name := normalizeNightName(ev.Name)
 	for i := range nights {
 		n := &nights[i]
+		if n.CalendarEventID != nil {
+			continue
+		}
 		if name != "" && normalizeNightName(n.Name) == name {
 			return true
 		}
@@ -85,23 +95,33 @@ func eventHasNight(ev SessionEvent, nights []Session) bool {
 	return false
 }
 
-// eventsWithoutNight keeps the events no game night stands for, in the order
-// given.
-func eventsWithoutNight(events []SessionEvent, nights []Session) []SessionEvent {
+// idSet turns a list of ids into a lookup.
+func idSet(ids []string) map[string]bool {
+	m := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		m[id] = true
+	}
+	return m
+}
+
+// eventsWithoutNight keeps the events no game night stands for and nobody set
+// aside with "Not this one", in the order given.
+func eventsWithoutNight(events []SessionEvent, nights []Session, linked, dismissed map[string]bool) []SessionEvent {
 	out := make([]SessionEvent, 0, len(events))
 	for _, ev := range events {
-		if !eventHasNight(ev, nights) {
+		if !dismissed[ev.ID] && !eventHasNight(ev, nights, linked) {
 			out = append(out, ev)
 		}
 	}
 	return out
 }
 
-// eventNightInput is the night an event becomes: its name, its page, and the
-// date the data supports. A story calendar's date is the night's in-world
+// eventNightInput is the night an event becomes: its name, its link back to
+// the event, and the date the data supports. A story calendar's date is the night's in-world
 // date and no real date is invented; a real-life calendar's is the real date.
 func eventNightInput(ev SessionEvent, createdBy string) CreateSessionInput {
-	in := CreateSessionInput{Name: ev.Name, CreatedBy: createdBy}
+	id := ev.ID
+	in := CreateSessionInput{Name: ev.Name, CreatedBy: createdBy, CalendarEventID: &id}
 	if ev.RealDate != "" {
 		d := ev.RealDate
 		in.ScheduledDate = &d
@@ -116,17 +136,20 @@ func eventNightInput(ev SessionEvent, createdBy string) CreateSessionInput {
 // service a night made by hand or by an AI goes through: planned, every member
 // invited, the event's page linked. It sends no email and no bell: the night
 // has no real date yet, and the owner's own press is not an announcement to
-// the table. The "no night yet" check is repeated here, but it is a read then
-// a write with no unique key behind it, so simultaneous requests can each pass
-// it and each make a night. The button disables while a press is in flight, so
-// one person cannot double-submit; two tabs or a scripted burst can still make
-// duplicates. TODO(#2522): a unique key on a stored event link would close it.
+// the table. The "no night yet" check is repeated here as a read, but the
+// unique key on the stored event link is what actually decides: simultaneous
+// requests can each pass the read, and every insert after the first is refused
+// with a conflict, so one event never ends up with two nights.
 func makeNightFromEvent(ctx context.Context, svc SessionService, members campaigns.MemberLister, campaignID, userID string, ev SessionEvent) (*Session, error) {
 	existing, err := svc.ListSessions(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
-	if eventHasNight(ev, existing) {
+	linked, err := svc.ListLinkedEventIDs(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if eventHasNight(ev, existing, idSet(linked)) {
 		return nil, apperror.NewConflict("this event already has a game night")
 	}
 	s, err := svc.CreateSession(ctx, campaignID, eventNightInput(ev, userID))
@@ -159,7 +182,7 @@ type eventNightRow struct {
 }
 
 // EventsWithoutNightAPI lists Session-kind calendar events that have no game
-// night, for the strip at the top of the calendar's Game nights panel.
+// night and were not set aside with "Not this one", for the strip at the top of the calendar's Game nights panel.
 // GET /campaigns/:id/sessions/event-candidates
 func (h *Handler) EventsWithoutNightAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -175,8 +198,16 @@ func (h *Handler) EventsWithoutNightAPI(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	linked, err := h.svc.ListLinkedEventIDs(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	dismissed, err := h.svc.ListDismissedEventIDs(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
 	rows := []eventNightRow{}
-	for _, ev := range eventsWithoutNight(events, nights) {
+	for _, ev := range eventsWithoutNight(events, nights, idSet(linked), idSet(dismissed)) {
 		rows = append(rows, eventNightRow{EventID: ev.ID, Name: ev.Name, When: ev.When, Page: ev.EntityName})
 	}
 	return c.JSON(http.StatusOK, rows)
@@ -217,6 +248,50 @@ func (h *Handler) MakeNightFromEventAPI(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusCreated, madeNightBody(s))
+}
+
+// DismissEventAPI is "Not this one": the event stops being offered on the
+// strip for everyone in the campaign. The event is read again from the
+// calendar, so only a Session event this viewer may see can be stored, never
+// an arbitrary id. A second press changes nothing.
+// PUT /campaigns/:id/sessions/event-dismissals/:eid
+func (h *Handler) DismissEventAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	if h.eventSource == nil {
+		return apperror.NewInternal(errors.New("sessions: event source not wired"))
+	}
+	events, err := h.eventSource.SessionEvents(ctx, cc.Campaign.ID, cc.VisibilityRole())
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	eid := c.Param("eid")
+	found := false
+	for i := range events {
+		if events[i].ID == eid {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return apperror.NewNotFound("that event is not a Session event on the calendar")
+	}
+	if err := h.svc.DismissEvent(ctx, cc.Campaign.ID, eid, auth.GetUserID(c)); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// RestoreEventAPI is the Undo of "Not this one": the event is offered on the
+// strip again. It never reads the calendar: an event that was deleted has no
+// dismissal left to remove, and removing nothing is still a success.
+// DELETE /campaigns/:id/sessions/event-dismissals/:eid
+func (h *Handler) RestoreEventAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if err := h.svc.RestoreEvent(c.Request().Context(), cc.Campaign.ID, c.Param("eid")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // madeNightBody is the reply to making a night from an event. scheduledDate

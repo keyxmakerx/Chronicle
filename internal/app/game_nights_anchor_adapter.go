@@ -189,6 +189,51 @@ func sessionEventsOf(cal *calendar.Calendar, events []calendar.Event) []sessions
 	return out
 }
 
+// worldDateWorderAdapter satisfies sessions.WorldDateWorder: a date-less
+// night's in-world day, worded in its own calendar's months. Read at Owner
+// level, which skips per-user rules: month names are not secret and the day
+// belongs to a night the viewer is already allowed to see.
+type worldDateWorderAdapter struct {
+	svc calendar.CalendarService
+}
+
+// WorldDateWordsFor loads each calendar fully, once per distinct calendar for
+// the returned function's lifetime. ListCalendars is not used: it returns
+// calendars without their months, and a month-less calendar words every date
+// as a bare number ("22 1, 1523").
+func (a *worldDateWorderAdapter) WorldDateWordsFor(ctx context.Context, campaignID string) func(calendarID string, year, month, day int) string {
+	viewer := permissions.RequestViewer(permissions.RoleOwner, "")
+	loaded := map[string]*calendar.Calendar{}
+	return func(calendarID string, year, month, day int) string {
+		cal, seen := loaded[calendarID]
+		if !seen {
+			cal = a.loadCalendar(ctx, campaignID, calendarID, viewer)
+			loaded[calendarID] = cal
+		}
+		if cal == nil {
+			return ""
+		}
+		return storyDateWords(cal, year, month, day)
+	}
+}
+
+// loadCalendar is the night's own calendar; a night with no recorded
+// calendar, or one that was deleted, falls back to the campaign's primary
+// calendar (the default), which is where a session's date is recorded by
+// default. nil when the campaign has none.
+func (a *worldDateWorderAdapter) loadCalendar(ctx context.Context, campaignID, calendarID string, v permissions.Viewer) *calendar.Calendar {
+	if calendarID != "" {
+		if cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, v); err == nil && cal != nil {
+			return cal
+		}
+	}
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, v)
+	if err != nil {
+		return nil
+	}
+	return cal
+}
+
 // storyDateWords words a story calendar's date, "14 Hammer, 1492", with the
 // month's number when the calendar has no month at that position.
 func storyDateWords(cal *calendar.Calendar, year, month, day int) string {

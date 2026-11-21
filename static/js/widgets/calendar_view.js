@@ -2442,16 +2442,93 @@
     // The strip at the top of the panel: Session-kind calendar events that
     // have no game night, for whoever may make one. It is quiet words, not
     // buttons, and nothing is made until one is pressed. "Not this one" is
-    // remembered in this browser only; the server holds no such list. At
-    // most three show at once so the strip never pushes the nights away.
-    _gnSkipKey: function () { return 'chronicle:gn-skip:' + this.campaignId; },
-    _gnSkipped: function () {
-      try { var v = JSON.parse(localStorage.getItem(this._gnSkipKey()) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
-    },
+    // kept on the server per campaign (the list already leaves those out), so
+    // it holds for everyone and on every device. At most three show at once so
+    // the strip never pushes the nights away.
+    //
+    // _gnSkip swaps the row for a quiet "Hidden for everyone. Undo" line in the
+    // panel, where the press happened: a toast sits in the calendar card, outside
+    // the panel, so pressing it closes the panel and can be off-screen. The line
+    // folds away after three seconds. A refused press brings the row back and
+    // says so. Resolves true when stored.
     _gnSkip: function (id) {
-      var list = this._gnSkipped();
-      if (list.indexOf(id) < 0) list.push(id);
-      try { localStorage.setItem(this._gnSkipKey(), JSON.stringify(list.slice(-200))); } catch (e) { /* the strip just comes back next time */ }
+      var self = this, row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
+      if (!row) return Promise.resolve(false);
+      row._hid = true;
+      this._gnRepaint('[data-gn-undo="' + id + '"]');
+      return Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'PUT' })
+        .then(function (r) { if (!r.ok) throw new Error('dismiss ' + r.status); return true; })
+        .then(function () {
+          self._announce('Hidden for everyone. Undo is available for a few seconds.');
+          self._gnUndoTimer(row, 3000);
+          return true;
+        }, function () {
+          row._hid = false;
+          self._gnRepaint('[data-gn-skip="' + id + '"]');
+          self.say('Could not hide that one. Try again.');
+          return false;
+        });
+    },
+    _gnDismissUrl: function (id) {
+      return '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-dismissals/' + encodeURIComponent(id);
+    },
+    // Repaints the open panel and puts focus on the first match of focusSel,
+    // else on the next strip link or row, so focus never lands on a removed node.
+    _gnRepaint: function (focusSel) {
+      var pop = $('#cal5-gnpop', this.el);
+      if (!pop || pop.hidden) return;
+      pop.innerHTML = this._gnListHTML(this._gnNext || []);
+      var f = (focusSel && $(focusSel, pop)) || $('.gnstrip .lnk', pop) || $('.wrow', pop);
+      if (f) f.focus();
+    },
+    _gnUndoTimer: function (row, ms) {
+      var self = this;
+      clearTimeout(row._t);
+      row._t = setTimeout(function () { self._gnFold(row); }, ms);
+    },
+    // The line leaves the way a removed row does: it folds to nothing under Full
+    // motion, only fades under Calm or reduced motion, and goes at once when
+    // motion is Off. Focus moves on only if it was inside the line.
+    _gnFold: function (row) {
+      var self = this, pop = $('#cal5-gnpop', this.el);
+      if (!row._hid) return;
+      var el = pop && !pop.hidden ? $('[data-gn-undo-row="' + row.eventId + '"]', pop) : null;
+      var done = function () {
+        if (!row._hid) return;
+        var held = el && el.contains(document.activeElement);
+        self._gnCands = (self._gnCands || []).filter(function (r) { return r !== row; });
+        if (pop && !pop.hidden) {
+          pop.innerHTML = self._gnListHTML(self._gnNext || []);
+          var f = held && ($('.gnstrip .lnk', pop) || $('.wrow', pop));
+          if (f) f.focus();
+        }
+      };
+      var mode = document.documentElement.getAttribute('data-motion');
+      var calm = mode === 'calm' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (!el || mode === 'off') return done();
+      if (!calm) el.style.height = el.offsetHeight + 'px';
+      void el.offsetHeight;
+      el.classList.add(calm ? 'gn-fade' : 'gn-fold');
+      setTimeout(done, 170);
+    },
+    _gnUnskip: function (id) {
+      var self = this, row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
+      if (!row) return;
+      clearTimeout(row._t);
+      Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'DELETE' })
+        .then(function (r) { if (!r.ok) throw new Error('restore ' + r.status); })
+        .then(function () {
+          row._hid = false;
+          self._gnRepaint('[data-gn-make="' + id + '"]');
+          self._announce('Back on the list.');
+        })
+        .catch(function () {
+          // Still hidden on the server: say so in the line and keep Undo for another try.
+          row._err = true;
+          self._gnRepaint('[data-gn-undo="' + id + '"]');
+          self._announce('That couldn’t be undone. Try again.');
+          self._gnUndoTimer(row, 6000);
+        });
     },
     _gnLoadCands: function () {
       if (this.role < 2) return Promise.resolve([]);
@@ -2460,10 +2537,15 @@
         .then(function (rows) { return Array.isArray(rows) ? rows : []; }, function () { return []; });
     },
     _gnStripHTML: function () {
-      var skipped = this._gnSkipped(), rows = (this._gnCands || []).filter(function (r) { return skipped.indexOf(r.eventId) < 0; });
+      var rows = this._gnCands || [];
       if (!rows.length) return '';
       var h = rows.slice(0, 3).map(function (r) {
         var sub = [r.when, r.page].filter(Boolean).join(' · ');
+        if (r._hid) {
+          return '<div class="gnstrip gnstrip-undo" data-gn-undo-row="' + esc(r.eventId) + '"><p class="gnstrip-t">' +
+            (r._err ? 'Could not undo that. ' : 'Hidden for everyone. ') +
+            '<button type="button" class="lnk" data-gn-undo="' + esc(r.eventId) + '">Undo</button></p></div>';
+        }
         return '<div class="gnstrip" role="group" aria-label="' + esc(r.name) + ' has no game night">' +
           '<p class="gnstrip-t"><b>' + esc(r.name) + '</b> is on your calendar with no game night.</p>' +
           (sub ? '<p class="gnstrip-s">' + esc(sub) + '</p>' : '') +
@@ -2498,7 +2580,7 @@
           self.say(res.ok
             ? 'Made a game night for ' + (row ? row.name : 'the event') + '.' +
               // Only a story calendar's night lacks a real date; the server says which.
-              (res.body && res.body.scheduledDate ? '' : ' It has no real date yet: find it under All game nights.')
+              (res.body && res.body.scheduledDate ? '' : ' It has no real date yet: open it under All game nights to set one.')
             : (row ? row.name : 'That event') + ' already has a game night.');
         })
         .catch(function (err) { btn.disabled = false; self.say(err && err.message ? err.message : 'Could not make the game night. Try again.'); });
@@ -2549,7 +2631,13 @@
         var day = n.date || n.day, dt = day ? new Date(day + 'T12:00:00Z') : null;
         var mon = !dt || isNaN(dt) ? '' : dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
         var sub = (n.repeat && n.date ? ['Next ' + realDateWords(n.date), n.repeat] : [n.when]).filter(Boolean).join(' · ');
-        var inner = '<span class="wtile" aria-hidden="true"><small>' + esc(mon) + '</small><b>' + esc(day ? String(+day.slice(8)) : '–') + '</b></span>' +
+        // A night with only an in-world day has no real date to put on the tile:
+        // the server words it ("No real date yet · 14 Hammer, 1492") and the tile
+        // shows a calendar rather than a dash.
+        var tile = n.noRealDate || !day
+          ? '<i class="fa-regular fa-calendar"></i>'
+          : '<small>' + esc(mon) + '</small><b>' + esc(String(+day.slice(8))) + '</b>';
+        var inner = '<span class="wtile" aria-hidden="true">' + tile + '</span>' +
           '<span class="wmain"><span class="wt">' + esc(n.name) + '</span><span class="ws">' + esc(sub) + '</span></span>' +
           (word[key] ? '<span class="gnans">' + esc(word[key]) + '</span>' : '');
         return '<li>' + (n.date
@@ -5521,13 +5609,9 @@
           var mk = t.closest('[data-gn-make]');
           if (mk) { self._gnMake(mk); return; }
           var sk = t.closest('[data-gn-skip]');
-          if (sk) {
-            self._gnSkip(sk.getAttribute('data-gn-skip'));
-            pop.innerHTML = self._gnListHTML(self._gnNext || []);
-            var nx = $('.gnstrip .lnk', pop) || $('.wrow', pop);
-            if (nx) nx.focus();
-            return;
-          }
+          if (sk) { self._gnSkip(sk.getAttribute('data-gn-skip')); return; }
+          var un = t.closest('[data-gn-undo]');
+          if (un) { self._gnUnskip(un.getAttribute('data-gn-undo')); return; }
           if (t.closest('[data-gn-next]')) { pop.innerHTML = self._gnListHTML(self._gnNext || []); return; }
           var fb = t.closest('[data-gn-feed]');
           if (fb) { self.toggleGnFeed(fb); return; }

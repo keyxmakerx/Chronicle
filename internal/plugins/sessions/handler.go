@@ -36,6 +36,7 @@ type Handler struct {
 	svc          SessionService
 	memberLister campaigns.MemberLister
 	eventSource  SessionEventSource
+	worldWords   WorldDateWorder
 	// calendarFinder sends game-night links to the real-world calendar.
 	calendarFinder RealWorldCalendarFinder
 	mailer         MailSender
@@ -133,7 +134,7 @@ func (h *Handler) ShowSession(c *echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, recap, h.storedTZ(c.Request().Context(), userID)))
+		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, recap, h.storedTZ(c.Request().Context(), userID), h.nightDateNote(ctx, cc, session)))
 }
 
 // CreateSession creates a new session.
