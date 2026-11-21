@@ -4852,8 +4852,6 @@
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
       this.calEl.style.setProperty('--cols', weekdays.length || 7);
-      // The moons' row reads this: phone cells of a long week are too narrow for one line.
-      this.calEl.classList.toggle('manycols', weekdays.length > 7);
     },
 
     renderToday: function (bump) {
@@ -5146,12 +5144,12 @@
       });
     },
 
-    // A day's moons: one moon is its phase silhouette; two or more are a row
-    // of silhouettes in calendar order, the lit part tinted toward each
-    // moon's own colour. The row shows four moons (three on phones, by CSS)
-    // and a count for the rest; the title and glance name them all.
+    // A day's moons: one moon is its phase silhouette; two or more share one
+    // disc, each moon's lit shape laid over it in its own colour and
+    // screen-blended so overlap reads brighter. Three moons are laid on the
+    // disc and a count stands for the rest; the title and glance name them all.
     _dayMoonsHTML: function (key, abs) {
-      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly, self = this;
+      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly;
       if (!moons.length) return '';
       var unshown = function (mo) { var k = dm && MoonMath.manual(mo) ? MoonMath.markOn(mo, abs) : null; return !!(k && !k.shown); };
       var title = moons.map(function (mo) {
@@ -5159,13 +5157,20 @@
       }).join('; ');
       var attrs = ' data-moon-day="' + key + '" title="' + esc(title) + '">';
       if (moons.length === 1) return '<span class="msil' + (unshown(moons[0]) ? ' dim' : '') + '"' + attrs + this._moonSilFor(moons[0], abs) + '</span>';
-      var row = moons.slice(0, 4).map(function (mo, i) {
+      var drawn = moons.slice(0, 3);
+      var shapes = drawn.map(function (mo) {
+        if (MoonMath.unseen(mo, abs)) return '';
+        var path = MoonMath.litPath(MoonMath.phase(mo, abs), 6);
+        if (!path) return '';
         var tint = sanitizeColor(mo.color);
-        return '<span class="m1' + (i === 3 ? ' m4' : '') + (unshown(mo) ? ' dim' : '') + '"' + (tint ? ' style="--mc:' + tint + '"' : '') + '>' + self._moonSilFor(mo, abs) + '</span>';
+        return '<path class="dl' + (unshown(mo) ? ' dim' : '') + '"' + (tint ? ' style="--mc:' + tint + '"' : '') + ' d="' + path + '"/>';
       }).join('');
-      if (moons.length > 3) row += '<span class="mn mn-p" aria-hidden="true">+' + (moons.length - 3) + '</span>';
-      if (moons.length > 4) row += '<span class="mn mn-d" aria-hidden="true">+' + (moons.length - 4) + '</span>';
-      return '<span class="msil several"' + attrs + row + '</span>';
+      var allGone = drawn.every(function (mo) { return MoonMath.unseen(mo, abs); });
+      var disc = allGone
+        ? this._moonSilFor(drawn[0], abs)
+        : '<svg class="sil ov" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/><g class="ol">' + shapes + '</g></svg>';
+      var more = moons.length > 3 ? '<span class="mn" aria-hidden="true">+' + (moons.length - 3) + '</span>' : '';
+      return '<span class="msil over"' + attrs + disc + more + '</span>';
     },
 
     _moonSilSVG: function (phase) {
