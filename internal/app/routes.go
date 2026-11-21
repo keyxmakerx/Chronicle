@@ -3165,6 +3165,12 @@ func (a *App) RegisterRoutes() {
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
+	// A practice hero's table comes from the entities plugin's own migrations;
+	// when they did not apply the repository is nil and every hook skips it.
+	var practiceRepo entities.PracticeRepository
+	if a.PluginHealth.IsHealthy(entities.StandingPluginSlug) {
+		practiceRepo = entities.NewPracticeRepository(a.DB)
+	}
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
 	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB))
 	entityHandler.SetFolderService(folderService)
@@ -4892,11 +4898,23 @@ func (a *App) RegisterRoutes() {
 	auth.ConfigureAccountDeletion(authService, &accountDeletionAdapter{campaigns: campaignService})
 	auth.OnAccountDeleted(authService, func(ctx context.Context, userID string) {
 		forgetDeletedAccount(ctx, userID, entityRepo, entityNotesRepo, noteRepo, syncService)
+		if practiceRepo != nil {
+			if _, err := practiceRepo.DeleteForUserEverywhere(ctx, userID); err != nil {
+				slog.Error("clearing deleted account's practice heroes failed", slog.String("user_id", userID), slog.Any("error", err))
+			}
+		}
 	})
 	// Merging a guest: their characters and notes in the campaign go to the
 	// account they merged into, before the guest account is emptied.
 	auth.OnGuestMerged(authService, func(ctx context.Context, campaignID, guestID, targetID string) error {
-		return moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo)
+		if err := moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo); err != nil {
+			return err
+		}
+		if practiceRepo == nil {
+			return nil
+		}
+		// The newest few stay, so the receiver never ends up past the cap.
+		return practiceRepo.MoveUser(ctx, campaignID, guestID, targetID, entities.MaxPracticeHeroes)
 	})
 	// Removing a player from a campaign ends their grants there, so a later
 	// re-invite starts with none.
@@ -4905,6 +4923,16 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// A member who leaves or is removed takes their practice heroes with them;
+	// they were only ever theirs to try things on.
+	if practiceRepo != nil {
+		campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+			if _, err := practiceRepo.DeleteForUser(ctx, campaignID, userID); err != nil {
+				slog.Error("clearing a former member's practice heroes failed",
+					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
+	}
 	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
 	// the owner gets one bell note.
 	campaigns.ConfigureLeaving(campaignService,
@@ -5951,6 +5979,12 @@ func (a *App) RegisterRoutes() {
 	// A player's Foundry edit is judged with the same plan the web door uses.
 	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
+	// Practice heroes live in the standing migrations' table set, so they
+	// exist only while that schema migrated; without it the shelf is absent.
+	if practiceRepo != nil {
+		entityHandler.SetPracticeService(entities.NewPracticeService(practiceRepo, heroPlannerAdapter{choices: characterChoiceSvc}))
+		entityHandler.SetHeroReleaser(entityRepo.(entities.HeroReleaser))
+	}
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
 	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},

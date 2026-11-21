@@ -56,6 +56,12 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				</div>
 			</section>
 		}
+		if view.Practice != nil {
+			@practiceShelf(view.Practice)
+		}
+		if view.PracticeDirector != nil {
+			@practiceDirectorList(view.PracticeDirector)
+		}
 		if len(view.Pickable) > 0 {
 			@castPickBox(cc.Campaign.ID, view.CSRFToken, view.Pickable)
 		}

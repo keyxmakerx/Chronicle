@@ -1,0 +1,83 @@
+// practice_director.templ — the Directors' list of every practice hero in the
+// campaign. A hero whose maker asked to play it sits first with its two
+// answers; the yes names the hero it sends back to Free to pick, and asks
+// first when there is one.
+
+package entities
+
+import "fmt"
+
+// practiceDirectorList is the section. Each answer refreshes the page body
+// (#cast-content) like the page's other controls.
+templ practiceDirectorList(v *PracticeDirectorView) {
+	<link rel="stylesheet" href={ practiceCSS() }/>
+	<section class="pr mb-8" data-practice-directors="true" aria-labelledby="pr-dir-h">
+		<div class="pr-head">
+			<h2 id="pr-dir-h" class="section-header">Practice heroes</h2>
+		</div>
+		<ul class="pr-list">
+			for _, r := range v.Rows {
+				<li class="pr-row pr-row--stack" data-pr-row="true">
+					<div class="pr-line">
+						<a class="pr-main" href={ templ.SafeURL(practiceURL(v.CampaignID, r.ID)) }>
+							<b>{ r.Name }</b>
+							<small>
+								if r.Summary != "" {
+									{ r.Summary + ", made by " + r.Maker }
+								} else {
+									{ "Made by " + r.Maker }
+								}
+							</small>
+						</a>
+						<span class="pr-mark">Practice</span>
+					</div>
+					if r.Waiting {
+						<p class="pr-ask">{ r.Maker } asks to play this one.</p>
+						<div class="pr-answers">
+							<form
+								class="pr-yes"
+								method="post"
+								action={ templ.SafeURL(practiceURL(v.CampaignID, r.ID) + "/allow") }
+								hx-post={ practiceURL(v.CampaignID, r.ID) + "/allow" }
+								hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, v.CSRFToken) }
+								hx-target="#cast-content"
+								hx-swap="outerHTML"
+							>
+								<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+								if r.OldHero != "" {
+									<button type="button" class="btn-primary btn-sm" data-pr-opens="yes" data-pr-hide="true" aria-expanded="false" onclick={ practiceRevealCall("yes") }>Say yes</button>
+									<span class="pr-confirm" data-pr-box="yes" hidden>
+										<span>{ r.OldHero } goes back to Free to pick.</span>
+										<button type="submit" class="btn-primary btn-sm" data-working-label="Saying yes…">Say yes</button>
+										<button type="button" class="pr-word" onclick={ practiceRevealCall("yes") }>Keep waiting</button>
+									</span>
+								} else {
+									<button type="submit" class="btn-primary btn-sm" data-working-label="Saying yes…">Say yes</button>
+								}
+							</form>
+							<button type="button" class="pr-word" data-pr-opens="no" aria-expanded="false" onclick={ practiceRevealCall("no") }>Not now</button>
+						</div>
+						<form
+							class="pr-no"
+							data-pr-box="no"
+							hidden
+							method="post"
+							action={ templ.SafeURL(practiceURL(v.CampaignID, r.ID) + "/decline") }
+							hx-post={ practiceURL(v.CampaignID, r.ID) + "/decline" }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, v.CSRFToken) }
+							hx-target="#cast-content"
+							hx-swap="outerHTML"
+						>
+							<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+							<label class="pr-field">
+								<span class="pr-k">A word for them (optional)</span>
+								<input type="text" name="note" maxlength="500" class="input text-sm" autocomplete="off"/>
+							</label>
+							<button type="submit" class="btn-secondary btn-sm" data-working-label="Sending…">Not now</button>
+						</form>
+					}
+				</li>
+			}
+		</ul>
+	</section>
+}

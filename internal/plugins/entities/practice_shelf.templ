@@ -1,0 +1,47 @@
+// practice_shelf.templ — the Practice shelf on the Characters page, under the
+// player's own hero: a hairline list of up to three practice heroes and a
+// quiet way to start another. Plain words and rows, no cards and no icons.
+
+package entities
+
+import "fmt"
+
+// practiceShelf is the shelf. It shows even when empty, so the way in is
+// always where the player looks for it.
+templ practiceShelf(v *PracticeShelfView) {
+	<link rel="stylesheet" href={ practiceCSS() }/>
+	<section class="pr mb-8" data-practice-shelf="true" aria-labelledby="pr-shelf-h">
+		<div class="pr-head">
+			<h2 id="pr-shelf-h" class="section-header">Practice</h2>
+			<span class="pr-count">{ fmt.Sprintf("%d of %d", len(v.Rows), v.Max) }</span>
+		</div>
+		if len(v.Rows) > 0 {
+			<ul class="pr-list">
+				for _, r := range v.Rows {
+					<li class="pr-row">
+						<a class="pr-main" href={ templ.SafeURL(practiceURL(v.CampaignID, r.ID)) }>
+							<b>{ r.Name }</b>
+							if r.Line != "" {
+								<small>{ r.Line }</small>
+							}
+						</a>
+						<span class="pr-mark">Practice</span>
+					</li>
+				}
+			</ul>
+		}
+		if v.Full() {
+			<p class="pr-note">{ practiceFullMessage }</p>
+		} else {
+			<p class="pr-words">
+				if v.HeroName != "" {
+					<a class="pr-word" href={ templ.SafeURL(practiceNewURL(v.CampaignID, "")) }>Start blank</a>
+					<a class="pr-word" href={ templ.SafeURL(practiceNewURL(v.CampaignID, "?from=hero")) }>Start as a copy of { v.HeroName }</a>
+				} else {
+					<a class="pr-word" href={ templ.SafeURL(practiceNewURL(v.CampaignID, "")) }>Start a practice hero</a>
+				}
+			</p>
+		}
+		<p class="pr-note">Only you and the Directors see these. They never join the party.</p>
+	</section>
+}

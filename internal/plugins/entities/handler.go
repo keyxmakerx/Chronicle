@@ -130,6 +130,8 @@ type Handler struct {
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
 	heroRules          HeroRules
+	practice           PracticeService // Optional: practice heroes; see practice_handler.go.
+	heroReleaser       HeroReleaser    // Optional: frees a hero on a Director's yes to a practice hero.
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -4177,6 +4179,10 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 	view.Yours = h.buildYours(ctx, campaignID, userID)
 	if h.heroPlanner != nil && view.IsMember {
 		view.Builder = h.buildHeroBuilder(c, cc, view.Yours, charTypes, heroType, heroAcc)
+	}
+	if pcOn && view.IsMember {
+		view.Practice = h.practiceShelf(c, cc, view.Yours)
+		view.PracticeDirector = h.practiceDirectorList(c, cc)
 	}
 	if pcOn {
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID, int(cc.VisibilityRole())), charTypes)

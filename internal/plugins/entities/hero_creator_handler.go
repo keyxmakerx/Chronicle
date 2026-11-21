@@ -11,7 +11,6 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -235,17 +234,11 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	input := CreateEntityInput{
-		Name:         req.Name,
-		EntityTypeID: target.ID,
-		IsPrivate:    cc.NewPagePrivacy(patch.Absent[bool]()),
-		FieldsData:   fields,
-		Playable:     true,
-	}
+	var owner *string
 	if access.ForSelf {
-		input.OwnerUserID = &userID
+		owner = &userID
 	}
-	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
+	entity, err := h.makeHero(c.Request().Context(), cc, userID, req.Name, target, fields, owner)
 	if err != nil {
 		return err
 	}
