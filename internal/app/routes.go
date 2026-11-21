@@ -4163,6 +4163,12 @@ func (a *App) RegisterRoutes() {
 		rolls.SetEventRollRepository(calendar.NewEventRollRepository(a.DB))
 		rolls.SetRollTableSource(calendarRollTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))})
 	}
+	// A kept year-track draft saves in one transaction, over events and weather.
+	if batch, ok := calendarService.(interface {
+		SetEventBatchRepository(calendar.EventBatchRepository)
+	}); ok {
+		batch.SetEventBatchRepository(calendar.NewEventBatchRepository(a.DB))
+	}
 	// Moons the Director sets by hand: their marks' storage.
 	if marks, ok := calendarService.(interface {
 		SetMoonMarkRepository(calendar.MoonMarkRepository)

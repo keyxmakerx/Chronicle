@@ -39,12 +39,10 @@
 
   var ROLE_OWNER = 3;
   var LANES = ['events', 'sky', 'history'];
-  // How many event writes are in flight at once: enough to be quick, few
-  // enough not to flood the server with a year of events.
-  var WRITE_AT_ONCE = 4;
-  // How often, and for how long at most, a long save waits when the server asks it to.
-  var MAX_PAUSES = 4, MAX_PAUSE_S = 65;
-  var WEATHER_BATCH = 1000;
+  // What one batch may carry; the server refuses more (event_batch.go).
+  var BATCH_MAX_EVENTS = 2000, BATCH_MAX_DAYS = 2000;
+  // The server refuses a request body over 2 MB; stay under it.
+  var BATCH_MAX_BYTES = 1900000;
   var WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 
   // ------------------------------------------------------------------
@@ -310,10 +308,17 @@
     if (wxCount) parts.push(count(wxCount, 'day') + ' of weather');
     return 'Kept ' + (listWords(parts) || 'nothing') + '.';
   }
-  // The sentence for a partly saved draft.
-  function partialWords(kept, total) { return 'Kept ' + kept + ' of ' + total + '. The rest are still a draft.'; }
-  // The events went in and the weather did not; with no events there is nothing kept to name.
-  function weatherLeftWords(kept) { return (kept ? 'Kept ' + count(kept, 'event') + '. ' : '') + 'The weather could not be saved and is still a draft.'; }
+  // Keep is all or nothing, so a failed one says what is still true.
+  function notKeptWords(status) {
+    if (!status) return 'The server did not answer, so the draft may or may not have been saved. The calendar shows what is saved now. Check it, then fill again if it is not there.';
+    if (status === 429) return 'The server is busy. Nothing was saved and the draft is still here. Try Keep again in a moment.';
+    return 'Nothing was saved. The draft is still here.';
+  }
+  function notUndoneWords(status) {
+    if (!status) return 'The server did not answer, so the undo may or may not have happened. The calendar shows what is saved now.';
+    if (status === 429) return 'The server is busy. Nothing was undone. Press Undo again in a moment.';
+    return 'Couldn’t undo. Nothing was changed. The calendar shows what is saved now.';
+  }
 
   // ------------------------------------------------------------------
   // What an event is saved as
@@ -1241,71 +1246,37 @@
   // Keeping a draft, and undoing it
   // ==================================================================
   function laneOf(e) { return e._lane === 'copy' ? null : e._lane; }
-  // A refused write, with what the server said about trying again.
-  function refused(resp, what) {
-    var e = new Error(what);
+  // The batch route takes a whole draft, or an Undo, and saves it in one
+  // transaction: all of it or none. It counts as one write against the
+  // server's per-minute budget.
+  function batchError(resp) {
+    var e = new Error('batch');
     e.status = resp.status;
-    e.retryAfter = resp.headers && resp.headers.get ? +resp.headers.get('Retry-After') || 0 : 0;
     return e;
   }
-  // Runs fn over the items a few at a time and stops after the first group
-  // that had a failure; resolves {results: [{it, r}] of those that worked, stopped}.
-  // The server allows each person a number of writes a minute, and a busy
-  // year can pass it: a write refused for that reason (429) is not a failure.
-  // The run waits as long as the server asks, then tries those items again.
-  // o: {onPause(seconds), onResume(), sleep(ms)}.
-  function writeEach(items, fn, o) {
-    o = o || {};
-    var at = 0, results = [], pauses = 0;
-    var sleep = o.sleep || function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
-    var run = function (group) {
-      return Promise.all(group.map(function (it) {
-        return fn(it).then(function (r) { return { ok: true, it: it, r: r }; }, function (err) { return { ok: false, it: it, err: err }; });
-      })).then(function (rs) {
-        var failed = [];
-        rs.forEach(function (x) { if (x.ok) results.push(x); else failed.push(x); });
-        if (!failed.length) return false;
-        var asked = failed.every(function (x) { return x.err && x.err.status === 429; });
-        if (!asked || pauses >= MAX_PAUSES) return true;
-        pauses++;
-        var secs = failed.reduce(function (m, x) { return Math.max(m, x.err.retryAfter || 0); }, 0) || 5;
-        secs = Math.min(MAX_PAUSE_S, Math.max(1, secs));
-        if (o.onPause) o.onPause(secs);
-        return sleep(secs * 1000 + 250).then(function () {
-          if (o.onResume) o.onResume();
-          return run(failed.map(function (x) { return x.it; }));
-        });
-      });
+  // What Keep sends: the new events, the old ones they replace, the weather.
+  function keepBatchBody(items, removed, wxPut) {
+    var b = { create: items.map(function (it) { return it.body; }), delete: removed.map(function (e) { return e.id; }) };
+    if (wxPut.length) b.weather = { set: wxPut };
+    return b;
+  }
+  // What Undo sends: take away what Keep made, put back what it replaced, and
+  // clear then restore the weather days it wrote.
+  function undoBatchBody(rec) {
+    var b = {
+      create: rec.removed.map(function (e) { return createBody(e, { keepPayload: true }); }),
+      delete: rec.created.map(function (c) { return c.id; })
     };
-    var next = function () {
-      if (at >= items.length) return Promise.resolve(false);
-      var group = items.slice(at, at + WRITE_AT_ONCE);
-      at += WRITE_AT_ONCE;
-      return run(group).then(function (stopped) { return stopped ? true : next(); });
-    };
-    return next().then(function (stopped) { return { results: results, stopped: stopped }; });
+    if (rec.wx.length) {
+      var back = [];
+      rec.wx.forEach(function (d) { var p = rec.prev[dkey(d.year, d.month, d.day)]; if (p) back.push(p); });
+      b.weather = { clear: rec.wx, set: back };
+    }
+    return b;
   }
   P.api = function (path, method, body) { return Chronicle.apiFetch(this.view.apiBase + path, { method: method, body: body }); };
-  P.postEvent = function (body) {
-    return this.api('/events', 'POST', body).then(function (resp) { if (!resp.ok) throw refused(resp, 'save'); return resp.json(); });
-  };
-  P.deleteEvent = function (id) {
-    return this.api('/events/' + encodeURIComponent(id), 'DELETE').then(function (resp) {
-      // Already gone is the state delete asks for.
-      if (!resp.ok && resp.status !== 404) throw refused(resp, 'delete');
-      return id;
-    });
-  };
-  // What a long save says while the server makes it wait, and when it goes on.
-  P.pacing = function (going) {
-    var v = this.view;
-    return {
-      onPause: function (secs) { v.say('The server asked for a short pause. Carrying on in about ' + count(secs, 'second') + '.'); },
-      onResume: function () { v.say(going); }
-    };
-  };
-  P.weatherCall = function (path, method, list) {
-    return this.editor.kit().weatherBatches(function (u, o) { return Chronicle.apiFetch(u, o); }, this.view.apiBase, path, method, list);
+  P.batch = function (body) {
+    return this.api('/events/batch', 'POST', body).then(function (resp) { if (!resp.ok) throw batchError(resp); return resp.json(); });
   };
   // Keep shows it is working at once: every control holds still and the button says so.
   P.workingBar = function () {
@@ -1333,58 +1304,50 @@
     if (!D || this.busy) return;
     var evs = activeEvents(D), wx = activeWeather(D), removed = removalsOf(D).slice();
     if (!evs.length && !wx.length && !removed.length) return;
+    if (evs.length + removed.length > BATCH_MAX_EVENTS || wx.length > BATCH_MAX_DAYS) {
+      v.say('This draft is too big to keep in one go. Switch a part off, or discard it and start smaller.');
+      return;
+    }
     this.busy = true;
     this.workingBar();
-    var rec = { created: [], removed: [], wx: [], prev: D.wxPrev || {} }, stop = null;
+    var rec = { created: [], removed: removed, wx: [], prev: D.wxPrev || {} }, ok = false, status = 0;
     var items = evs.map(function (e) { return { e: e, body: createBody(e, { lane: laneOf(e), onDay: D.see === 'day' }) }; });
-    // The new events first, then the old ones they replace, then the weather:
-    // a failure part way never leaves less than there was.
-    var pace = this.pacing('Keeping…');
-    writeEach(items, function (it) { return self.postEvent(it.body); }, pace).then(function (w) {
-      w.results.forEach(function (x) {
-        rec.created.push({ id: x.r.id, key: keyOf(x.it.e), year: x.it.body.year, month: x.it.body.month, day: x.it.body.day });
+    var put = wx.map(function (w2) {
+      var b = G.weather.toWeatherInput(w2);
+      b.year = w2.year; b.month = w2.month; b.day = w2.day; b.source = 'generated';
+      return b;
+    });
+    var body = keepBatchBody(items, removed, put);
+    if (JSON.stringify(body).length > BATCH_MAX_BYTES) {
+      this.busy = false;
+      this.refresh({ soft: true });
+      v.say('This draft is too big to keep in one go. Switch a part off, or discard it and start smaller.');
+      return;
+    }
+    this.batch(body).then(function (res) {
+      ok = true;
+      (res.created || []).forEach(function (id, i) {
+        var it = items[i];
+        rec.created.push({ id: id, key: keyOf(it.e), year: it.body.year, month: it.body.month, day: it.body.day });
       });
-      if (w.stopped) { stop = 'events'; return null; }
-      return writeEach(removed, function (e) { return self.deleteEvent(e.id); }, pace).then(function (dr) {
-        dr.results.forEach(function (x) { rec.removed.push(x.it); });
-        if (dr.stopped) { stop = 'remove'; return null; }
-        if (!wx.length) return null;
-        var put = wx.map(function (w2) {
-          var b = G.weather.toWeatherInput(w2);
-          b.year = w2.year; b.month = w2.month; b.day = w2.day; b.source = 'generated';
-          return b;
-        });
-        return self.weatherCall('/weather/days', 'PUT', put).then(function () {
-          rec.wx = wx.map(function (w2) { return { year: w2.year, month: w2.month, day: w2.day }; });
-        }, function () { stop = 'weather'; });
-      });
-    }).catch(function () { stop = stop || 'events'; })
+      rec.wx = wx.map(function (w2) { return { year: w2.year, month: w2.month, day: w2.day }; });
+    }, function (err) { status = err && err.status || 0; })
       .then(function () { return self.reload(); })
-      .then(function () { self.afterKeep(D, evs, wx, removed, rec, stop); });
+      .then(function () { self.afterKeep(rec, ok, status); });
   };
-  // What is left of the draft after Keep, and what to tell the owner.
-  P.afterKeep = function (D, evs, wx, removed, rec, stop) {
+  // What is left of the draft after Keep, and what to tell the owner. A kept
+  // draft is gone; one that did not save is untouched.
+  P.afterKeep = function (rec, ok, status) {
     var self = this, v = this.view;
-    var made = {}; rec.created.forEach(function (c) { made[c.key] = true; });
-    var gone = {}; rec.removed.forEach(function (e) { gone[e.id] = true; });
-    var moreWx = wx.length && !rec.wx.length, more = rec.created.length < evs.length || rec.removed.length < removed.length || moreWx;
     var msg;
-    if (!more) {
+    if (ok) {
       msg = keptWords(rec.created.length, rec.wx.length);
       this.D = null;
     } else {
-      D.ev = D.ev.filter(function (e) { return !made[keyOf(e)]; });
-      D.remove = D.remove.filter(function (e) { return !gone[e.id]; });
-      if (!moreWx) D.wx = [];
-      if (stop === 'events') msg = rec.created.length ? partialWords(rec.created.length, evs.length) : 'Nothing could be saved. The draft is still here.';
-      else if (stop === 'remove') msg = 'Kept ' + count(rec.created.length, 'event') + ', but ' + (removed.length - rec.removed.length) + ' of the old events' + ' could not be removed. They are still in the draft.';
-      else {
-        msg = weatherLeftWords(rec.created.length);
-        // The events are saved now, so what is left is a weather draft: a
-        // re-roll must not draw the year's events a second time, and
-        // switching them back on replaces the ones just kept.
-        if (D.kind === 'fill') { D.on.events = false; D.on.sky = false; D.remove = fillReplaces(this.savedEvents(this.now().year), this.now()); }
-      }
+      msg = notKeptWords(status);
+      // With no answer from the server the draft may be saved already, and
+      // keeping it again would save it twice; the calendar now shows the truth.
+      if (!status) this.D = null;
     }
     var glow = { ids: {}, wx: {}, days: {} };
     rec.created.forEach(function (c) { glow.ids[c.id] = 1; glow.days[dkey(c.year, c.month, c.day)] = 1; });
@@ -1393,37 +1356,27 @@
     setTimeout(function () { if (self.glow === glow) self.glow = null; }, 1700);
     this.busy = false;
     this.setPreview();
-    this.render({ kept: true });
+    this.render({ kept: ok });
     v.renderMonth();
-    var did = rec.created.length || rec.removed.length || rec.wx.length;
+    var did = ok && (rec.created.length || rec.removed.length || rec.wx.length);
     v.say(msg, did ? { label: 'Undo', run: function () { self.undo(rec); } } : null);
   };
 
-  // Undo deletes what Keep created, puts back what it replaced, and clears or
-  // restores the weather days it wrote.
+  // Undo takes away what Keep created, puts back what it replaced, and clears
+  // or restores the weather days it wrote, in one request.
   P.undo = function (rec) {
     var self = this, v = this.view;
     if (this.busy) { v.say('Wait a moment, then press Undo again.'); return; }
     this.busy = true;
-    var failed = false;
-    var pace = this.pacing('Undoing…');
-    writeEach(rec.created, function (c) { return self.deleteEvent(c.id); }, pace).then(function (d) {
-      if (d.stopped) { failed = true; return null; }
-      return writeEach(rec.removed, function (e) { return self.postEvent(createBody(e, { keepPayload: true })); }, pace).then(function (r) {
-        if (r.stopped) { failed = true; return null; }
-        if (!rec.wx.length) return null;
-        var back = [];
-        rec.wx.forEach(function (d2) { var p = rec.prev[dkey(d2.year, d2.month, d2.day)]; if (p) back.push(p); });
-        return self.weatherCall('/weather/days/clear', 'POST', rec.wx).then(function () { return self.weatherCall('/weather/days', 'PUT', back); });
-      });
-    }).catch(function () { failed = true; })
+    var failed = false, status = 0;
+    this.batch(undoBatchBody(rec)).catch(function (err) { failed = true; status = err && err.status || 0; })
       .then(function () { return self.reload(); })
       .then(function () {
         self.busy = false;
         self.setPreview();
         self.render({});
         v.renderMonth();
-        v.say(failed ? 'Couldn’t undo everything. The calendar shows what is saved now.' : 'Undone. The calendar is as it was.');
+        v.say(failed ? notUndoneWords(status) : 'Undone. The calendar is as it was.');
       });
   };
 
@@ -1443,10 +1396,10 @@
       hash: hash, sigOf: sigOf, markerFor: markerFor, generatedLane: generatedLane, isHandMade: isHandMade, fillReplaces: fillReplaces, removalsOf: removalsOf,
       protectedDay: protectedDay, emptyDays: emptyDays, redrawable: redrawable, asEngineDay: asEngineDay,
       blankDraft: blankDraft, activeEvents: activeEvents, activeWeather: activeWeather, counts: counts, sentence: sentence, keepLabel: keepLabel,
-      keptWords: keptWords, partialWords: partialWords, weatherLeftWords: weatherLeftWords, createBody: createBody, chosenActions: chosenActions, mayGenerate: mayGenerate,
+      keptWords: keptWords, notKeptWords: notKeptWords, notUndoneWords: notUndoneWords, keepBatchBody: keepBatchBody, undoBatchBody: undoBatchBody, createBody: createBody, chosenActions: chosenActions, mayGenerate: mayGenerate,
       weatherSetup: weatherSetup, rollFillLane: rollFillLane, rollFillWeather: rollFillWeather, rollHistory: rollHistory,
       buildCopy: buildCopy, buildEvery: buildEvery, buildReroll: buildReroll, buildWeatherReroll: buildWeatherReroll,
-      contiguous: contiguous, rerollNote: rerollNote, writeEach: writeEach, WRITE_AT_ONCE: WRITE_AT_ONCE, MAX_PAUSES: MAX_PAUSES, YearTrack: YearTrack
+      contiguous: contiguous, rerollNote: rerollNote, BATCH_MAX_EVENTS: BATCH_MAX_EVENTS, BATCH_MAX_DAYS: BATCH_MAX_DAYS, YearTrack: YearTrack
     };
   }
 })();

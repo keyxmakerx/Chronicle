@@ -77,9 +77,12 @@ test('what Keep says it did, whole and partial', () => {
   assert.equal(YT.keptWords(19, 120), 'Kept 19 events and 120 days of weather.');
   assert.equal(YT.keptWords(1, 0), 'Kept 1 event.');
   assert.equal(YT.keptWords(0, 1), 'Kept 1 day of weather.');
-  assert.equal(YT.partialWords(12, 31), 'Kept 12 of 31. The rest are still a draft.');
-  assert.equal(YT.weatherLeftWords(3), 'Kept 3 events. The weather could not be saved and is still a draft.');
-  assert.equal(YT.weatherLeftWords(0), 'The weather could not be saved and is still a draft.');
+  assert.equal(YT.notKeptWords(500), 'Nothing was saved. The draft is still here.');
+  assert.match(YT.notKeptWords(429), /^The server is busy\. Nothing was saved/);
+  assert.match(YT.notKeptWords(0), /may or may not have been saved/, 'no answer is not a refusal');
+  assert.match(YT.notUndoneWords(0), /may or may not have happened/);
+  assert.match(YT.notUndoneWords(500), /Nothing was changed/);
+  assert.match(YT.notUndoneWords(429), /^The server is busy\. Nothing was undone/);
 });
 
 // ---- The generated marker ----
@@ -290,48 +293,42 @@ test('only an owner who may write director-only content may generate', () => {
   assert.equal(YT.mayGenerate(null), false);
 });
 
-// ---- Writing a few at a time ----
-test('writeEach stops after the first group with a failure and reports what was saved', async () => {
-  const seen = [];
-  const items = Array.from({ length: 10 }, (_, i) => i);
-  const r = await YT.writeEach(items, (n) => { seen.push(n); return n === 5 ? Promise.reject(new Error('x')) : Promise.resolve(n * 2); });
-  assert.equal(r.stopped, true);
-  assert.equal(seen.length, 8);
-  assert.deepEqual(Array.from(r.results.map((x) => x.it)), [0, 1, 2, 3, 4, 6, 7]);
-});
-
-test('writeEach with no failure writes all, in groups of WRITE_AT_ONCE', async () => {
-  let inFlight = 0, most = 0;
-  const r = await YT.writeEach(Array.from({ length: 9 }, (_, i) => i), () => {
-    inFlight++; most = Math.max(most, inFlight);
-    return new Promise((res) => setTimeout(() => { inFlight--; res(1); }, 1));
+// ---- One batch, all or nothing ----
+test('Keep sends the new events, the ids they replace and the weather in one body', () => {
+  const items = [{ body: { name: 'a' } }, { body: { name: 'b' } }];
+  const removed = [{ id: 'old1' }, { id: 'old2' }];
+  const put = [{ year: 100, month: 2, day: 11, source: 'generated' }];
+  assert.deepEqual(JSON.parse(JSON.stringify(YT.keepBatchBody(items, removed, put))), {
+    create: [{ name: 'a' }, { name: 'b' }], delete: ['old1', 'old2'], weather: { set: put },
   });
-  assert.equal(r.stopped, false);
-  assert.equal(r.results.length, 9);
-  assert.ok(most <= YT.WRITE_AT_ONCE);
+  assert.equal('weather' in YT.keepBatchBody(items, [], []), false, 'a draft with no weather sends no weather key');
 });
 
-test('a write the server asks to wait on is tried again after the wait, not counted as failed', async () => {
-  const limit = () => Object.assign(new Error('save'), { status: 429, retryAfter: 7 });
-  const tries = {}, waits = [], said = [];
-  const r = await YT.writeEach([0, 1, 2, 3, 4, 5], (n) => {
-    tries[n] = (tries[n] || 0) + 1;
-    return (n === 2 || n === 3) && tries[n] === 1 ? Promise.reject(limit()) : Promise.resolve(n);
-  }, { sleep: (ms) => { waits.push(ms); return Promise.resolve(); }, onPause: (s) => said.push('pause ' + s), onResume: () => said.push('on') });
-  assert.equal(r.stopped, false);
-  assert.deepEqual(Array.from(r.results.map((x) => x.it)).sort(), [0, 1, 2, 3, 4, 5]);
-  assert.equal(tries[2], 2);
-  assert.deepEqual(waits, [7250]);
-  assert.deepEqual(said, ['pause 7', 'on']);
+test('Undo deletes what Keep made, puts the replaced events back with their marker, and restores weather', () => {
+  const old = made('events', { id: 'old1' });
+  const prev = { year: 100, month: 2, day: 11, preset_id: 'rain' };
+  const rec = {
+    created: [{ id: 'new1' }, { id: 'new2' }], removed: [old],
+    wx: [{ year: 100, month: 2, day: 11 }, { year: 100, month: 2, day: 12 }], prev: { '100_2_11': prev },
+  };
+  const b = JSON.parse(JSON.stringify(YT.undoBatchBody(rec)));
+  assert.deepEqual(b.delete, ['new1', 'new2']);
+  assert.equal(b.create.length, 1);
+  assert.equal(b.create[0].payload, old.payload, 'an Undo puts the generated marker back');
+  assert.deepEqual(b.weather, { clear: rec.wx, set: [prev] });
+  rec.wx = [];
+  assert.equal('weather' in YT.undoBatchBody(rec), false);
 });
 
-test('a server that keeps asking to wait stops the run after MAX_PAUSES, with what was saved', async () => {
-  const limit = () => Object.assign(new Error('save'), { status: 429, retryAfter: 1 });
-  let waits = 0;
-  const r = await YT.writeEach([0, 1], (n) => (n === 1 ? Promise.reject(limit()) : Promise.resolve(n)), { sleep: () => { waits++; return Promise.resolve(); } });
-  assert.equal(r.stopped, true);
-  assert.equal(waits, YT.MAX_PAUSES);
-  assert.deepEqual(Array.from(r.results.map((x) => x.it)), [0]);
+test('the batch caps match the server', () => {
+  const go = readFileSync(path.join(here, '..', '..', 'internal', 'plugins', 'calendar', 'event_batch.go'), 'utf8');
+  assert.equal(+/maxBatchEventWrites = (\d+)/.exec(go)[1], YT.BATCH_MAX_EVENTS);
+  assert.equal(+/maxBatchWeatherDays = (\d+)/.exec(go)[1], YT.BATCH_MAX_DAYS);
+});
+
+test('the year track no longer carries the pause-and-retry write loop', () => {
+  const src = read('calendar_year_track.js');
+  assert.doesNotMatch(src, /writeEach|MAX_PAUSES|retryAfter|WRITE_AT_ONCE/);
 });
 
 test('a refill on a year whose weather is all set says so instead of counting zero days', () => {
