@@ -2579,6 +2579,9 @@ html[data-motion="off"] .cal-v5 .yt-tk.kept::before, html[data-motion="off"] .ca
   .cal-v5 .yt-now{top:44px}
   .cal-v5 .yt-rd{height:44px;line-height:44px}
   .cal-v5 .yt-rd small{line-height:44px}
+  /* The Edit drawer's buttons and the chosen days' actions. min-height, so
+     the phone layout's taller action tiles keep their 48. */
+  .cal-v5 .dkr .btn, .cal-v5 .bbb{min-height:44px}
 }
 /* Keep and the tools that load the generator hold still while they work. */
 .cal-v5 .yt-word[aria-busy="true"], .cal-v5 .yt-working .btn:disabled{opacity:.55}
