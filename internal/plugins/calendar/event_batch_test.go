@@ -265,3 +265,36 @@ func TestEventBatchRequestKeepsPartialUpdateSemantics(t *testing.T) {
 		t.Errorf("weather = %+v", req.Weather)
 	}
 }
+
+// A fill ends an earlier repeat by setting its repeat-until date to the day
+// before today (the repeat's own end, not the first occurrence's span end), so
+// the days already marked stay and nothing from today on is left to double up
+// with the new fill's own repeat.
+func TestRepeatEndedTheDayBeforeTodayKeepsThePastAndDropsTheFuture(t *testing.T) {
+	cal := recurrenceCal()
+	weekly := RecurrenceWeekly
+	market := Event{Year: 1, Month: 1, Day: 2, IsRecurring: true, RecurrenceType: &weekly,
+		RecurrenceEndYear: intp(1), RecurrenceEndMonth: intp(2), RecurrenceEndDay: intp(13)}
+	tests := []struct {
+		name    string
+		y, m, d int
+		want    bool
+	}{
+		{"its first day", 1, 1, 2, true},
+		{"a marked day before today", 1, 1, 30, true},
+		{"the last marked day", 1, 2, 7, true},
+		{"today, a market day", 1, 2, 14, false},
+		{"a later market day", 1, 3, 7, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := market.OccursOn(cal, tt.y, tt.m, tt.d); got != tt.want {
+				t.Errorf("OccursOn(%d-%d-%d) = %v, want %v", tt.y, tt.m, tt.d, got, tt.want)
+			}
+		})
+	}
+	market.RecurrenceEndYear, market.RecurrenceEndMonth, market.RecurrenceEndDay = nil, nil, nil
+	if !market.OccursOn(cal, 1, 3, 7) {
+		t.Error("clearing the end (an Undo) did not bring the later days back")
+	}
+}

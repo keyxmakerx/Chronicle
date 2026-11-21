@@ -203,6 +203,38 @@
     });
   }
 
+  // The repeats a fill makes and a later fill can end: a market that comes
+  // every week, two weeks or month, with no cap on how many times. A yearly
+  // event is left out because its next day is next year, past the stretch a
+  // fill covers, so ending it would take that day away with nothing new put
+  // in its place.
+  var ENDABLE_REPEATS = ['weekly', 'biweekly', 'monthly'];
+  // The day before `now`, within its year, or null on the year's first day.
+  // monthDays(monthIndex, year) is the calendar's own count, so unequal and
+  // intercalary months are right.
+  function dayBefore(now, monthDays) {
+    if (now.day > 1) return { year: now.year, month: now.month, day: now.day - 1 };
+    for (var m = now.month - 1; m >= 1; m--) {
+      var n = monthDays(m - 1, now.year);
+      if (n > 0) return { year: now.year, month: m, day: n };
+    }
+    return null;
+  }
+  // What a new fill ends rather than deletes: an earlier fill's repeating
+  // event that began before today and still has days ahead, untouched since.
+  // Its first days stay as they were; the new fill starts its own repeat.
+  function fillRetires(saved, now) {
+    var from = stamp(now.year, now.month, now.day);
+    return saved.filter(function (e) {
+      var l = generatedLane(e);
+      if ((l !== 'events' && l !== 'sky') || e.year !== now.year || !e.is_recurring) return false;
+      if (ENDABLE_REPEATS.indexOf(e.recurrence_type) < 0 || e.recurrence_max_occurrences != null) return false;
+      if (stamp(e.year, e.month, e.day) >= from) return false;
+      var ended = e.recurrence_end_year != null && e.recurrence_end_month != null && e.recurrence_end_day != null;
+      return !ended || stamp(e.recurrence_end_year, e.recurrence_end_month, e.recurrence_end_day) >= from;
+    });
+  }
+
   // ------------------------------------------------------------------
   // Weather that may be written
   // ------------------------------------------------------------------
@@ -240,7 +272,7 @@
 
   function blankDraft(kind, seed) {
     return {
-      kind: kind, seed: seed, ev: [], wx: [], remove: [], pinned: {}, dropped: {}, note: '',
+      kind: kind, seed: seed, ev: [], wx: [], remove: [], retire: [], pinned: {}, dropped: {}, note: '',
       on: { events: true, sky: true, weather: true },
       recipe: { events: 'events.frontier', sky: 'sky.classic', history: 'history.kingdom' }, busy: '0.5',
       // When players learn of what a fill keeps: 'later' (a Director reveals each) or 'day' (each shows on its day).
@@ -262,6 +294,11 @@
     if (!D) return [];
     if (D.kind !== 'fill') return D.remove;
     return D.remove.filter(function (e) { return D.on[generatedLane(e)]; });
+  }
+  // The repeating events a fill ends, by the same parts-switched-on rule.
+  function retiresOf(D) {
+    if (!D || D.kind !== 'fill') return [];
+    return (D.retire || []).filter(function (e) { return D.on[generatedLane(e)]; });
   }
   function activeWeather(D) {
     if (!D || (D.kind === 'fill' && !D.on.weather)) return [];
@@ -289,7 +326,7 @@
       var wxSet = D.on.weather && !c.weather && (D.on.events || D.on.sky);
       if (D.on.weather && !wxSet) parts.push(count(c.weather, 'day') + ' of weather');
       if (!parts.length) return 'Every part of this draft is switched off.';
-      var old = removalsOf(D).length;
+      var old = removalsOf(D).length + retiresOf(D).length;
       var onDay = D.see === 'day' && (D.on.events || D.on.sky);
       return 'From ' + ctx.now + ' to the end of ' + ctx.year + ': ' + listWords(parts) + '.' + (onDay ? ' Players see each event on its day.' : '') + (wxSet ? ' Every day already has its weather.' : '') + (old ? ' It replaces ' + count(old, 'event') + ' from an earlier fill.' : '');
     }
@@ -996,6 +1033,7 @@
       var G = window.ChronicleGen, cal = self.cal(), D = blankDraft('fill', randomSeed()), setup = self.setup(settings);
       D.setup = setup;
       D.remove = fillReplaces(self.savedEvents(y), now);
+      D.retire = fillRetires(self.savedEvents(y), now);
       rollFillLane(G, cal, D, 'events'); rollFillLane(G, cal, D, 'sky');
       rollFillWeather(G, cal, D, y, self.view.weatherByYear[y] || {}, setup);
       self.goTo(y, now.month);
@@ -1164,7 +1202,7 @@
       (D.on.events || D.on.sky ? row('Players see them', segHTML('Players see them', 'see', SEE, D.see)) : '');
   };
   P.actsHTML = function (D) {
-    var canRoll = D.kind === 'fill' || D.kind === 'history', c = counts(D), none = !c.all && !c.weather && !removalsOf(D).length;
+    var canRoll = D.kind === 'fill' || D.kind === 'history', c = counts(D), none = !c.all && !c.weather && !removalsOf(D).length && !retiresOf(D).length;
     return (canRoll ? '<button type="button" class="btn sm" data-yt="roll">Roll again</button>' : '') +
       '<button type="button" class="btn sm quiet" data-yt="discard">Discard</button>' +
       '<button type="button" class="btn sm primary" data-yt="keep"' + (none ? ' disabled title="There is nothing in this draft to keep"' : '') + '>' + esc(keepLabel(D)) + '</button>';
@@ -1254,19 +1292,33 @@
     e.status = resp.status;
     return e;
   }
-  // What Keep sends: the new events, the old ones they replace, the weather.
-  function keepBatchBody(items, removed, wxPut) {
+  // What Keep sends: the new events, the repeating events a fill ends (each
+  // is an update that sets its repeat-until date), the ones it replaces and
+  // the weather.
+  function repeatEnd(id, d) {
+    return { id: id, changes: { recurrence_end_year: d ? d.year : null, recurrence_end_month: d ? d.month : null, recurrence_end_day: d ? d.day : null } };
+  }
+  function keepBatchBody(items, removed, wxPut, retired, endOn) {
     var b = { create: items.map(function (it) { return it.body; }), delete: removed.map(function (e) { return e.id; }) };
+    if (retired && retired.length && endOn) b.update = retired.map(function (e) { return repeatEnd(e.id, endOn); });
     if (wxPut.length) b.weather = { set: wxPut };
     return b;
   }
-  // What Undo sends: take away what Keep made, put back what it replaced, and
-  // clear then restore the weather days it wrote.
+  // What an Undo needs to put a retired event's repeat back: the end it had
+  // (null where it had none, which the server reads as clearing it).
+  function endOf(e) {
+    return e.recurrence_end_year != null && e.recurrence_end_month != null && e.recurrence_end_day != null
+      ? { year: e.recurrence_end_year, month: e.recurrence_end_month, day: e.recurrence_end_day } : null;
+  }
+  // What Undo sends: take away what Keep made, put back what it replaced,
+  // give an ended repeat its old end again, and clear then restore the
+  // weather days it wrote.
   function undoBatchBody(rec) {
     var b = {
       create: rec.removed.map(function (e) { return createBody(e, { keepPayload: true }); }),
       delete: rec.created.map(function (c) { return c.id; })
     };
+    if (rec.retired && rec.retired.length) b.update = rec.retired.map(function (r) { return repeatEnd(r.id, r.was); });
     if (rec.wx.length) {
       var back = [];
       rec.wx.forEach(function (d) { var p = rec.prev[dkey(d.year, d.month, d.day)]; if (p) back.push(p); });
@@ -1303,21 +1355,25 @@
     var self = this, D = this.D, v = this.view, G = window.ChronicleGen;
     if (!D || this.busy) return;
     var evs = activeEvents(D), wx = activeWeather(D), removed = removalsOf(D).slice();
-    if (!evs.length && !wx.length && !removed.length) return;
-    if (evs.length + removed.length > BATCH_MAX_EVENTS || wx.length > BATCH_MAX_DAYS) {
+    // A repeat is ended the day before today; with no such day (today is the
+    // year's first) nothing before today can be repeating, so none is ended.
+    var now = this.now(), c = this.cal(), endOn = dayBefore(now, function (i, yr) { return CD().monthDays(c, i, yr); });
+    var retired = endOn ? retiresOf(D).slice() : [];
+    if (!evs.length && !wx.length && !removed.length && !retired.length) return;
+    if (evs.length + removed.length + retired.length > BATCH_MAX_EVENTS || wx.length > BATCH_MAX_DAYS) {
       v.say('This draft is too big to keep in one go. Switch a part off, or discard it and start smaller.');
       return;
     }
     this.busy = true;
     this.workingBar();
-    var rec = { created: [], removed: removed, wx: [], prev: D.wxPrev || {} }, ok = false, status = 0;
+    var rec = { created: [], removed: removed, retired: retired.map(function (e) { return { id: e.id, was: endOf(e) }; }), wx: [], prev: D.wxPrev || {} }, ok = false, status = 0;
     var items = evs.map(function (e) { return { e: e, body: createBody(e, { lane: laneOf(e), onDay: D.see === 'day' }) }; });
     var put = wx.map(function (w2) {
       var b = G.weather.toWeatherInput(w2);
       b.year = w2.year; b.month = w2.month; b.day = w2.day; b.source = 'generated';
       return b;
     });
-    var body = keepBatchBody(items, removed, put);
+    var body = keepBatchBody(items, removed, put, retired, endOn);
     if (JSON.stringify(body).length > BATCH_MAX_BYTES) {
       this.busy = false;
       this.refresh({ soft: true });
@@ -1358,7 +1414,7 @@
     this.setPreview();
     this.render({ kept: ok });
     v.renderMonth();
-    var did = ok && (rec.created.length || rec.removed.length || rec.wx.length);
+    var did = ok && (rec.created.length || rec.removed.length || rec.retired.length || rec.wx.length);
     v.say(msg, did ? { label: 'Undo', run: function () { self.undo(rec); } } : null);
   };
 
@@ -1393,7 +1449,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       geometry: geometry, windowFor: windowFor, nowAt: nowAt, seasonSpans: seasonSpans, runsOf: runsOf, yearEventsFrom: yearEventsFrom,
-      hash: hash, sigOf: sigOf, markerFor: markerFor, generatedLane: generatedLane, isHandMade: isHandMade, fillReplaces: fillReplaces, removalsOf: removalsOf,
+      hash: hash, sigOf: sigOf, markerFor: markerFor, generatedLane: generatedLane, isHandMade: isHandMade, fillReplaces: fillReplaces, fillRetires: fillRetires, dayBefore: dayBefore, retiresOf: retiresOf, removalsOf: removalsOf,
       protectedDay: protectedDay, emptyDays: emptyDays, redrawable: redrawable, asEngineDay: asEngineDay,
       blankDraft: blankDraft, activeEvents: activeEvents, activeWeather: activeWeather, counts: counts, sentence: sentence, keepLabel: keepLabel,
       keptWords: keptWords, notKeptWords: notKeptWords, notUndoneWords: notUndoneWords, keepBatchBody: keepBatchBody, undoBatchBody: undoBatchBody, createBody: createBody, chosenActions: chosenActions, mayGenerate: mayGenerate,

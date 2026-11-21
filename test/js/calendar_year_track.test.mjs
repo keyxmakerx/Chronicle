@@ -146,6 +146,84 @@ test('a new fill replaces an earlier fill from today on, and nothing a person ma
   assert.deepEqual(ids, ['g1', 'g2']);
 });
 
+// A weekly market is stored once, on its first day. When the date has moved
+// on, a new fill ends it the day before today and starts its own.
+test('a new fill ends an earlier fill\'s repeat that began before today and still runs', () => {
+  const now = { year: 100, month: 2, day: 10 };
+  const weekly = (id, over) => made('events', Object.assign({ id, month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' }, over));
+  const tests = [
+    ['weekly, no end', weekly('a'), true],
+    ['biweekly', weekly('a', { recurrence_type: 'biweekly' }), true],
+    ['monthly', weekly('a', { recurrence_type: 'monthly' }), true],
+    ['ends today or later', weekly('a', { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 10 }), true],
+    ['already ended before today', weekly('a', { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 9 }), false],
+    ['an every-N-weeks repeat is not one a fill makes', weekly('a', { recurrence_type: 'custom' }), false],
+    ['yearly: its next day is next year', weekly('a', { recurrence_type: 'yearly' }), false],
+    ['capped by a count', weekly('a', { recurrence_max_occurrences: 8 }), false],
+    ['begins today or later: that one is deleted instead', weekly('a', { month: 2, day: 10 }), false],
+    ['does not repeat', weekly('a', { is_recurring: false, recurrence_type: null }), false],
+    ['begun in another year', weekly('a', { year: 99 }), false],
+    ['a sky event counts too', Object.assign(made('sky', { id: 'a', month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' })), true],
+    ['edited by hand', Object.assign(weekly('a'), { name: 'Renamed by hand' }), false],
+    ['made by hand', { id: 'a', name: 'Market', year: 100, month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' }, false],
+    ['a history event', made('history', { id: 'a', month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' }), false],
+  ];
+  for (const [name, e, want] of tests) {
+    assert.equal(YT.fillRetires([e], now).length === 1, want, name);
+  }
+  // Nothing is both deleted and ended.
+  const mixed = [weekly('w'), made('events', { id: 'later', month: 3, day: 4 }), weekly('w2', { month: 4, day: 1 })];
+  const gone = YT.fillReplaces(mixed, now).map((e) => e.id), ended = YT.fillRetires(mixed, now).map((e) => e.id);
+  assert.deepEqual(gone, ['later', 'w2']);
+  assert.deepEqual(ended, ['w']);
+});
+
+test('the day before today follows the calendar\'s own months', () => {
+  const md = (i) => DAYS[i];
+  const tests = [
+    [{ year: 100, month: 2, day: 10 }, { year: 100, month: 2, day: 9 }],
+    [{ year: 100, month: 3, day: 1 }, { year: 100, month: 2, day: 28 }],
+    [{ year: 100, month: 5, day: 1 }, { year: 100, month: 4, day: 12 }],
+    [{ year: 100, month: 1, day: 1 }, null],
+  ];
+  for (const [now, want] of tests) assert.deepEqual(YT.dayBefore(now, md) && { ...YT.dayBefore(now, md) }, want);
+  assert.deepEqual({ ...YT.dayBefore({ year: 100, month: 3, day: 1 }, (i) => (i === 1 ? 0 : 5)) }, { year: 100, month: 1, day: 5 }, 'a month with no days is stepped over');
+});
+
+test('Keep ends a repeat with an update item, and Undo gives it its old end back', () => {
+  const end = { year: 100, month: 2, day: 9 };
+  const items = [{ body: { name: 'new market' } }];
+  const open = made('events', { id: 'm1', is_recurring: true, recurrence_type: 'weekly' });
+  const capped = made('events', { id: 'm2', is_recurring: true, recurrence_type: 'weekly', recurrence_end_year: 100, recurrence_end_month: 11, recurrence_end_day: 30 });
+  const body = JSON.parse(JSON.stringify(YT.keepBatchBody(items, [{ id: 'old' }], [], [open, capped], end)));
+  assert.deepEqual(body.update, [
+    { id: 'm1', changes: { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 9 } },
+    { id: 'm2', changes: { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 9 } },
+  ]);
+  assert.equal('update' in YT.keepBatchBody(items, [], [], [], end), false, 'nothing to end sends no update');
+  assert.equal('update' in YT.keepBatchBody(items, [], [], [open], null), false, 'no day before today ends nothing');
+
+  const rec = { created: [{ id: 'n1' }], removed: [], wx: [], prev: {}, retired: [{ id: 'm1', was: null }, { id: 'm2', was: { year: 100, month: 11, day: 30 } }] };
+  assert.deepEqual(JSON.parse(JSON.stringify(YT.undoBatchBody(rec).update)), [
+    { id: 'm1', changes: { recurrence_end_year: null, recurrence_end_month: null, recurrence_end_day: null } },
+    { id: 'm2', changes: { recurrence_end_year: 100, recurrence_end_month: 11, recurrence_end_day: 30 } },
+  ]);
+});
+
+test('a fill that ends repeats counts them among what it replaces', () => {
+  const D = YT.blankDraft('fill', 's');
+  D.ev = [{ _lane: 'events', gen: { key: 'a' }, year: 100 }];
+  D.remove = [made('events', { id: 'g1' })];
+  D.retire = [made('events', { id: 'm1', is_recurring: true, recurrence_type: 'weekly' }), made('sky', { id: 'm2', is_recurring: true, recurrence_type: 'monthly' })];
+  const ctx = { now: 'M2 10', year: '100', yearOf: String };
+  assert.match(YT.sentence(D, ctx), /It replaces 3 events from an earlier fill\.$/);
+  D.on.sky = false;
+  assert.deepEqual(YT.retiresOf(D).map((e) => e.id), ['m1']);
+  D.on.events = false;
+  assert.equal(YT.retiresOf(D).length, 0);
+  assert.equal(YT.retiresOf(YT.blankDraft('history', 's')).length, 0);
+});
+
 test('a fill removes an earlier fill only for the parts switched on, and says so', () => {
   const D = YT.blankDraft('fill', 's');
   D.remove = [made('events', { id: 'g1' }), made('sky', { id: 'g2', day: 5 })];
