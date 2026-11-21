@@ -43,6 +43,9 @@ type SessionService interface {
 	// answering not-found for a soft-deleted session everywhere else.
 	GetSessionIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
+	// ListLinkedEventIDs backs the Game nights strip of calendar Session
+	// events: which events already have a night (in the Trash too).
+	ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error)
 	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
@@ -367,6 +370,7 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		CalendarYear:        input.CalendarYear,
 		CalendarMonth:       input.CalendarMonth,
 		CalendarDay:         input.CalendarDay,
+		CalendarEventID:     input.CalendarEventID,
 		Status:              StatusPlanned,
 		IsRecurring:         input.IsRecurring,
 		RecurrenceType:      input.RecurrenceType,
@@ -381,10 +385,25 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 	s.stampWorldDateCalendar(ctx, session)
 
 	if err := s.repo.Create(ctx, campaignID, session); err != nil {
+		// A refusal the repository already worded (the event's night exists)
+		// reaches the caller as it is, not as a server fault.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) {
+			return nil, err
+		}
 		return nil, apperror.NewInternal(fmt.Errorf("creating session: %w", err))
 	}
 
 	return session, nil
+}
+
+// ListLinkedEventIDs implements SessionService.
+func (s *sessionService) ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error) {
+	ids, err := s.repo.ListLinkedEventIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return ids, nil
 }
 
 // GetSession retrieves a session by ID with attendees and entities.

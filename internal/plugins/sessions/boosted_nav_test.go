@@ -16,7 +16,7 @@ func TestSessionPageHasNoScriptInsideTheSwappedRegion(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp1", Name: "Test Campaign"}}
 	s := &Session{ID: "s1", CampaignID: "camp1", Name: "Night one", Status: "completed"}
 	var sb strings.Builder
-	if err := SessionDetailPage(cc, s, "tok", true, true, "u1", RecapView{}, "UTC").Render(context.Background(), &sb); err != nil {
+	if err := SessionDetailPage(cc, s, "tok", true, true, "u1", RecapView{}, "UTC", NightDateNote{}).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	page := sb.String()

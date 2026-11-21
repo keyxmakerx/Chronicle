@@ -16,7 +16,7 @@ func TestAllNightsGroups(t *testing.T) {
 		{ID: "done", Name: "Done", Status: StatusCompleted, ScheduledDate: strp("2026-09-01")},
 		{ID: "off", Name: "Off", Status: StatusCancelled},
 	}
-	groups := allNightsGroups("c 1", groupSessions(list, "2026-10-31"), "2026-10-31", "")
+	groups := allNightsGroups("c 1", groupSessions(list, "2026-10-31"), "2026-10-31", "", func(*Session) string { return NoRealDateWords })
 	var got []string
 	for _, g := range groups {
 		for _, n := range g.Nights {

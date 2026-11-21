@@ -22,6 +22,7 @@ type mockSessionRepo struct {
 	findByIDFn                 func(ctx context.Context, id string) (*Session, error)
 	findByIDIncludingDeletedFn func(ctx context.Context, id string) (*Session, error)
 	listByCampaignFn           func(ctx context.Context, campaignID string) ([]Session, error)
+	listLinkedEventIDsFn       func(ctx context.Context, campaignID string) ([]string, error)
 	listPlannedByWorldDateFn   func(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error)
 	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	listUnstampedCampaignsFn   func(ctx context.Context) ([]string, error)
@@ -274,6 +275,13 @@ func (m *mockSessionRepo) FindByIDIncludingDeleted(ctx context.Context, id strin
 func (m *mockSessionRepo) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
 	if m.listByCampaignFn != nil {
 		return m.listByCampaignFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error) {
+	if m.listLinkedEventIDsFn != nil {
+		return m.listLinkedEventIDsFn(ctx, campaignID)
 	}
 	return nil, nil
 }

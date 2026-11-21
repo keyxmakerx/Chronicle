@@ -62,15 +62,25 @@ func normalizeNightName(s string) string {
 }
 
 // eventHasNight reports whether a game night already stands for the event.
-// Nights carry no link to an event (there is no column for one), so the match
-// is by what the two share: the same name, or the same day on the same
-// calendar, or, on a real-life calendar, the same real date. Cancelled and
-// played nights count too: the strip is for events that were never given a
-// night, not for ones whose night was dealt with.
-func eventHasNight(ev SessionEvent, nights []Session) bool {
+// A night made from the event carries its id, so that link is the answer, and
+// it counts a night in the Trash (linked holds every linked event id). Nights
+// made before the link existed, or by hand, have none; those are matched by
+// what they share with the event: the same name, or the same day on the same
+// calendar, or, on a real-life calendar, the same real date. A night that is
+// linked to some event is never matched this way, since it already says which
+// event it is for. Cancelled and played nights count too: the strip is for
+// events that were never given a night, not for ones whose night was dealt
+// with.
+func eventHasNight(ev SessionEvent, nights []Session, linked map[string]bool) bool {
+	if linked[ev.ID] {
+		return true
+	}
 	name := normalizeNightName(ev.Name)
 	for i := range nights {
 		n := &nights[i]
+		if n.CalendarEventID != nil {
+			continue
+		}
 		if name != "" && normalizeNightName(n.Name) == name {
 			return true
 		}
@@ -85,23 +95,33 @@ func eventHasNight(ev SessionEvent, nights []Session) bool {
 	return false
 }
 
+// idSet turns a list of ids into a lookup.
+func idSet(ids []string) map[string]bool {
+	m := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		m[id] = true
+	}
+	return m
+}
+
 // eventsWithoutNight keeps the events no game night stands for, in the order
 // given.
-func eventsWithoutNight(events []SessionEvent, nights []Session) []SessionEvent {
+func eventsWithoutNight(events []SessionEvent, nights []Session, linked map[string]bool) []SessionEvent {
 	out := make([]SessionEvent, 0, len(events))
 	for _, ev := range events {
-		if !eventHasNight(ev, nights) {
+		if !eventHasNight(ev, nights, linked) {
 			out = append(out, ev)
 		}
 	}
 	return out
 }
 
-// eventNightInput is the night an event becomes: its name, its page, and the
-// date the data supports. A story calendar's date is the night's in-world
+// eventNightInput is the night an event becomes: its name, its link back to
+// the event, and the date the data supports. A story calendar's date is the night's in-world
 // date and no real date is invented; a real-life calendar's is the real date.
 func eventNightInput(ev SessionEvent, createdBy string) CreateSessionInput {
-	in := CreateSessionInput{Name: ev.Name, CreatedBy: createdBy}
+	id := ev.ID
+	in := CreateSessionInput{Name: ev.Name, CreatedBy: createdBy, CalendarEventID: &id}
 	if ev.RealDate != "" {
 		d := ev.RealDate
 		in.ScheduledDate = &d
@@ -116,17 +136,20 @@ func eventNightInput(ev SessionEvent, createdBy string) CreateSessionInput {
 // service a night made by hand or by an AI goes through: planned, every member
 // invited, the event's page linked. It sends no email and no bell: the night
 // has no real date yet, and the owner's own press is not an announcement to
-// the table. The "no night yet" check is repeated here, but it is a read then
-// a write with no unique key behind it, so simultaneous requests can each pass
-// it and each make a night. The button disables while a press is in flight, so
-// one person cannot double-submit; two tabs or a scripted burst can still make
-// duplicates. TODO(#2522): a unique key on a stored event link would close it.
+// the table. The "no night yet" check is repeated here as a read, but the
+// unique key on the stored event link is what actually decides: simultaneous
+// requests can each pass the read, and every insert after the first is refused
+// with a conflict, so one event never ends up with two nights.
 func makeNightFromEvent(ctx context.Context, svc SessionService, members campaigns.MemberLister, campaignID, userID string, ev SessionEvent) (*Session, error) {
 	existing, err := svc.ListSessions(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
-	if eventHasNight(ev, existing) {
+	linked, err := svc.ListLinkedEventIDs(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if eventHasNight(ev, existing, idSet(linked)) {
 		return nil, apperror.NewConflict("this event already has a game night")
 	}
 	s, err := svc.CreateSession(ctx, campaignID, eventNightInput(ev, userID))
@@ -175,8 +198,12 @@ func (h *Handler) EventsWithoutNightAPI(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	linked, err := h.svc.ListLinkedEventIDs(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
 	rows := []eventNightRow{}
-	for _, ev := range eventsWithoutNight(events, nights) {
+	for _, ev := range eventsWithoutNight(events, nights, idSet(linked)) {
 		rows = append(rows, eventNightRow{EventID: ev.ID, Name: ev.Name, When: ev.When, Page: ev.EntityName})
 	}
 	return c.JSON(http.StatusOK, rows)

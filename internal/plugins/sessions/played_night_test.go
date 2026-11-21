@@ -42,7 +42,7 @@ func TestSessionDetailPage_APlayedNightOffersNoAnswerButtons(t *testing.T) {
 				Attendees: []Attendee{{UserID: "u1", DisplayName: "Tobin", Status: RSVPInvited}, {UserID: "u2", DisplayName: "Ilse", Status: RSVPAccepted}},
 			}
 			var sb strings.Builder
-			if err := SessionDetailPage(cc, s, "csrf", false, false, "u1", RecapView{Played: tt.played}, "").Render(context.Background(), &sb); err != nil {
+			if err := SessionDetailPage(cc, s, "csrf", false, false, "u1", RecapView{Played: tt.played}, "", NightDateNote{}).Render(context.Background(), &sb); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			out := sb.String()

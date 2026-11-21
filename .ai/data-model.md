@@ -261,7 +261,7 @@ core migrations cannot reference a plugin table on a fresh DB).
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `sessions` | A scheduled game session | `calendar_id` FK→`calendars` SET NULL ; `notes`/`notes_html`, `recap`/`recap_html`; `scheduled_date`/`scheduled_time`/`scheduled_tz` (organizer's IANA zone, nullable); `deleted_at` (soft delete); `recap_posted_at` (set when the recap first goes from empty to written, never moved by later edits; NULL for older recaps); `is_recurring`+`recurrence_*` |
+| `sessions` | A scheduled game session | `calendar_id` FK→`calendars` SET NULL ; `notes`/`notes_html`, `recap`/`recap_html`; `scheduled_date`/`scheduled_time`/`scheduled_tz` (organizer's IANA zone, nullable); `deleted_at` (soft delete); `recap_posted_at` (set when the recap first goes from empty to written, never moved by later edits; NULL for older recaps); `calendar_event_id` UNIQUE, FK→`calendar_events` SET NULL (the Session event a night was made from; NULL for any other night; set at creation only); `is_recurring`+`recurrence_*` |
 | `session_entities` | Entities linked to a session | `UNIQUE(session_id, entity_id)`; `role` (mentioned/encountered/key) |
 | `session_attendees` | Per-user RSVP status | `UNIQUE(session_id, user_id)`; `status` (invited/accepted/declined/tentative); `note` (≤140), `excluded_from_count`, `needs_recheck` |
 | `session_occurrence_rsvps` | Per-night RSVPs for a repeating session (a non-recurring session uses `session_attendees`) | `UNIQUE(session_id, user_id, occurrence_date)`; `status` (default `invited`), `note`, `excluded_from_count`, `needs_recheck`, `responded_at` |

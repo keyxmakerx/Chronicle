@@ -2498,7 +2498,7 @@
           self.say(res.ok
             ? 'Made a game night for ' + (row ? row.name : 'the event') + '.' +
               // Only a story calendar's night lacks a real date; the server says which.
-              (res.body && res.body.scheduledDate ? '' : ' It has no real date yet: find it under All game nights.')
+              (res.body && res.body.scheduledDate ? '' : ' It has no real date yet: open it under All game nights to set one.')
             : (row ? row.name : 'That event') + ' already has a game night.');
         })
         .catch(function (err) { btn.disabled = false; self.say(err && err.message ? err.message : 'Could not make the game night. Try again.'); });
@@ -2549,7 +2549,13 @@
         var day = n.date || n.day, dt = day ? new Date(day + 'T12:00:00Z') : null;
         var mon = !dt || isNaN(dt) ? '' : dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
         var sub = (n.repeat && n.date ? ['Next ' + realDateWords(n.date), n.repeat] : [n.when]).filter(Boolean).join(' · ');
-        var inner = '<span class="wtile" aria-hidden="true"><small>' + esc(mon) + '</small><b>' + esc(day ? String(+day.slice(8)) : '–') + '</b></span>' +
+        // A night with only an in-world day has no real date to put on the tile:
+        // the server words it ("No real date yet · 14 Hammer, 1492") and the tile
+        // shows a calendar rather than a dash.
+        var tile = n.noRealDate || !day
+          ? '<i class="fa-regular fa-calendar"></i>'
+          : '<small>' + esc(mon) + '</small><b>' + esc(String(+day.slice(8))) + '</b>';
+        var inner = '<span class="wtile" aria-hidden="true">' + tile + '</span>' +
           '<span class="wmain"><span class="wt">' + esc(n.name) + '</span><span class="ws">' + esc(sub) + '</span></span>' +
           (word[key] ? '<span class="gnans">' + esc(word[key]) + '</span>' : '');
         return '<li>' + (n.date

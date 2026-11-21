@@ -52,3 +52,27 @@ func TestSessionEventsOf(t *testing.T) {
 		t.Fatalf("the event's page is not carried: %+v", got[0])
 	}
 }
+
+// A date-less night's in-world day is worded in the months of the calendar it
+// was recorded against, and falls back to the first calendar when that one is
+// gone or was never recorded.
+func TestWorldDateWordsIn(t *testing.T) {
+	cal := func(id, month string) calendar.Calendar {
+		return calendar.Calendar{ID: id, Months: []calendar.Month{{Name: month}, {Name: month + "2"}, {Name: month + "3"}}}
+	}
+	cals := []calendar.Calendar{cal("a", "Hammer"), cal("b", "Frost")}
+	tests := []struct {
+		name, calID, want string
+	}{
+		{"its own calendar", "b", "14 Frost3, 1492"},
+		{"no calendar recorded", "", "14 Hammer3, 1492"},
+		{"a calendar that is gone", "zzz", "14 Hammer3, 1492"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := worldDateWordsIn(cals, tt.calID, 1492, 3, 14); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

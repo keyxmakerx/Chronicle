@@ -189,6 +189,36 @@ func sessionEventsOf(cal *calendar.Calendar, events []calendar.Event) []sessions
 	return out
 }
 
+// worldDateWorderAdapter satisfies sessions.WorldDateWorder: a date-less
+// night's in-world day, worded in its own calendar's months. Read at Owner
+// level, which skips per-user rules: month names are not secret and the day
+// belongs to a night the viewer is already allowed to see.
+type worldDateWorderAdapter struct {
+	svc calendar.CalendarService
+}
+
+func (a *worldDateWorderAdapter) WorldDateWords(ctx context.Context, campaignID, calendarID string, year, month, day int) string {
+	cals, err := a.svc.ListCalendars(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	if err != nil || len(cals) == 0 {
+		return ""
+	}
+	return worldDateWordsIn(cals, calendarID, year, month, day)
+}
+
+// worldDateWordsIn words the date on the calendar with that id; a night with
+// no recorded calendar, or one that was deleted, falls back to the first, the
+// calendar a session's date is recorded against by default.
+func worldDateWordsIn(cals []calendar.Calendar, calendarID string, year, month, day int) string {
+	cal := &cals[0]
+	for i := range cals {
+		if cals[i].ID == calendarID {
+			cal = &cals[i]
+			break
+		}
+	}
+	return storyDateWords(cal, year, month, day)
+}
+
 // storyDateWords words a story calendar's date, "14 Hammer, 1492", with the
 // month's number when the calendar has no month at that position.
 func storyDateWords(cal *calendar.Calendar, year, month, day int) string {

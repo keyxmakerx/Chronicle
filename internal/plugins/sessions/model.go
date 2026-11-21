@@ -93,7 +93,12 @@ type Session struct {
 	// when the date is cleared; no request body carries it. Only FindByID
 	// loads it (the load-merge-write path needs it); list queries leave it nil.
 	CalendarID *string `json:"calendar_id,omitempty"`
-	Status     string  `json:"status"`
+	// CalendarEventID is the calendar Session event this night was made from,
+	// nil for any other night. Set at creation only and never by a request
+	// body, so an update cannot move or clear it; the unique index behind it
+	// is what keeps one event to one night.
+	CalendarEventID *string `json:"calendar_event_id,omitempty"`
+	Status          string  `json:"status"`
 
 	// Recurrence fields for repeating sessions (e.g. "every other Saturday").
 	IsRecurring         bool    `json:"is_recurring"`
@@ -248,6 +253,9 @@ type CreateSessionInput struct {
 	RecurrenceDayOfWeek *int
 	RecurrenceEndDate   *string
 	CreatedBy           string
+	// CalendarEventID links the new night to the calendar event it was made
+	// from. Only the make-from-event path sets it.
+	CalendarEventID *string
 }
 
 // UpdateSessionInput is the validated input for updating a session.

@@ -4494,6 +4494,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		sessionsHandler.SetCalendarFinder(&realWorldCalendarFinderAdapter{svc: calendarService})
 		sessionsHandler.SetSessionEventSource(&sessionEventSourceAdapter{svc: calendarService})
+		sessionsHandler.SetWorldDateWorder(&worldDateWorderAdapter{svc: calendarService})
 	}
 	// CALV5-PLACEHOLDER: V5 must restore three post-construction setters —
 	// SetAvailabilityWriter (member zones + exception dates),

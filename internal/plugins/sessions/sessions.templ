@@ -38,7 +38,7 @@ templ sessionStatusBadge(status string) {
 }
 
 // SessionDetailPage renders the full session detail view.
-templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string, recap RecapView, viewerTZ string) {
+templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string, recap RecapView, viewerTZ string, dateNote NightDateNote) {
 	@layouts.App(session.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
@@ -58,11 +58,22 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						<h1 class="text-2xl font-bold text-fg">{ session.Name }</h1>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-fg-secondary">
-						if session.ScheduledDate != nil {
+						if session.hasRealDate() {
 							<span>
 								<i class="fa-regular fa-calendar mr-0.5"></i>
 								{ session.FormatScheduledFor(viewerTZ) }
 							</span>
+						} else if dateNote.NoRealDate {
+							<span data-testid="no-real-date">
+								<i class="fa-regular fa-calendar mr-0.5"></i>
+								{ dateNote.Words }
+							</span>
+						}
+						if dateNote.EventName != "" {
+							<a href={ templ.SafeURL(dateNote.EventHref) } class="text-accent hover:underline">
+								<i class="fa-solid fa-link mr-0.5"></i>
+								On the calendar: { dateNote.EventName }
+							</a>
 						}
 						if session.IsRecurring {
 							<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-surface-alt text-fg-secondary border border-edge">
@@ -117,6 +128,22 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 					</div>
 				}
 			</div>
+			if isScribe && dateNote.NoRealDate {
+				<div class="card p-4 mb-6 flex flex-wrap items-end gap-3" data-testid="set-real-date">
+					<div>
+						<label for="night-real-date" class="block text-sm font-medium text-fg-body mb-1">Real date</label>
+						<input type="date" id="night-real-date" class="input"/>
+					</div>
+					<button
+						type="button"
+						class="btn-secondary text-sm"
+						data-url={ fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, session.ID) }
+						onclick={ setNightDateScript() }
+					>
+						Set the date
+					</button>
+				</div>
+			}
 			<!-- Summary -->
 			if session.Summary != nil && *session.Summary != "" {
 				<div class="card p-4 mb-6">
@@ -478,8 +505,10 @@ templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string
 				</div>
 				<div class="flex-1 min-w-0">
 					<div class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ s.Name }</div>
-					if s.ScheduledDate != nil && *s.ScheduledDate != "" {
+					if s.hasRealDate() {
 						<div class="text-xs text-fg-muted">{ s.FormatScheduledFor(viewerTZ) }</div>
+					} else {
+						<div class="text-xs text-fg-muted">{ NoRealDateWords }</div>
 					}
 				</div>
 				<div class="shrink-0 text-xs text-fg-muted">

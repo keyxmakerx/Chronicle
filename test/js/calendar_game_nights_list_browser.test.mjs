@@ -73,7 +73,7 @@ async function page(t, width, o = {}) {
     if (u.pathname === '/campaigns/c1/sessions/nights') {
       const from = u.searchParams.get('from'), to = u.searchParams.get('to');
       body = (o.nights || NIGHTS).filter((n) => n.date >= from && n.date <= to);
-    } else if (u.pathname === '/campaigns/c1/sessions/all') body = ALL;
+    } else if (u.pathname === '/campaigns/c1/sessions/all') body = o.all || ALL;
     else if (u.pathname === '/campaigns/c1/sessions/feed-settings') body = { enabled: !!o.feed };
     else if (u.pathname.startsWith('/campaigns/c1/sessions/feed/token')) {
       (o.posts || []).push(u.pathname);
@@ -217,6 +217,21 @@ test('Not this one hides the event here and keeps it hidden', { skip }, async (t
   await p.waitForSelector('#cal5-gnpop .wrow');
   assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Session 1 is on your calendar/);
   assert.match(await p.textContent('#cal5-gnpop'), /Session 2 is on your calendar/);
+});
+
+test('a night with no real date says so, with its in-world day, instead of a dash', { skip }, async (t) => {
+  const all = [{ key: 'upcoming', label: 'Upcoming', nights: [
+    { sessionId: 's-story', name: 'Session 1', noRealDate: true, when: 'No real date yet · 14 Hammer, 1492', href: '/campaigns/c1/sessions/s-story' },
+    { sessionId: 's-real', name: 'Friday', day: '2026-10-30', date: '2026-10-30', when: 'Fri, Oct 30' }] }];
+  const p = await page(t, 1280, { all });
+  await p.click('#cal5-gnbtn');
+  await p.click('#cal5-gnpop [data-gn-all]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-next]');
+  const row = await p.$eval('#cal5-gnpop a.wrow', (a) => ({ text: a.innerText.replace(/\s+/g, ' ').trim(), tile: a.querySelector('.wtile').textContent.trim(), href: a.getAttribute('href') }));
+  assert.match(row.text, /Session 1 No real date yet · 14 Hammer, 1492/);
+  assert.notEqual(row.tile, '–', 'no bare dash');
+  assert.equal(row.href, '/campaigns/c1/sessions/s-story', 'it opens its own page, where the owner sets the date');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /–/);
 });
 
 test('a refused make says why and keeps the strip', { skip }, async (t) => {

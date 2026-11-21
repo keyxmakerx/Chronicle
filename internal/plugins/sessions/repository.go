@@ -3,9 +3,12 @@ package sessions
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -19,6 +22,10 @@ type SessionRepository interface {
 	// restoring it.
 	FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Session, error)
+	// ListLinkedEventIDs is every calendar event that has a night in the
+	// campaign, a night in the Trash included: its link outlives deleting it,
+	// so the event is not offered for a second night.
+	ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error)
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	// ListPlannedByWorldDateRange returns planned sessions whose in-world
 	// date (calendar_year/month/day) lies in [from, to] inclusive, soonest
@@ -195,17 +202,23 @@ func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Se
 	query := `INSERT INTO sessions
 		(id, campaign_id, name, summary, scheduled_date, scheduled_time, scheduled_tz, calendar_id, calendar_year, calendar_month,
 		 calendar_day, status, is_recurring, recurrence_type, recurrence_interval,
-		 recurrence_day_of_week, recurrence_end_date, sort_order, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		 recurrence_day_of_week, recurrence_end_date, sort_order, created_by, created_at, updated_at, calendar_event_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		s.ID, campaignID, s.Name, s.Summary, s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ,
 		s.CalendarID, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
 		s.RecurrenceDayOfWeek, s.RecurrenceEndDate,
-		s.SortOrder, s.CreatedBy, s.CreatedAt, s.UpdatedAt,
+		s.SortOrder, s.CreatedBy, s.CreatedAt, s.UpdatedAt, s.CalendarEventID,
 	)
 	if err != nil {
+		// The unique key on the event link is the only thing that can refuse
+		// a fresh id, and it means another request just made this event's night.
+		var me *mysql.MySQLError
+		if errors.As(err, &me) && me.Number == 1062 && strings.Contains(me.Message, "uq_sessions_calendar_event") {
+			return apperror.NewConflict("this event already has a game night")
+		}
 		return fmt.Errorf("inserting session: %w", err)
 	}
 	return nil
@@ -225,7 +238,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
-	                 u.display_name
+	                 u.display_name, s.calendar_event_id
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
 	          WHERE s.id = ? AND s.deleted_at IS NULL`
@@ -238,7 +251,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
-		&s.CreatorName,
+		&s.CreatorName, &s.CalendarEventID,
 	)
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("session not found")
@@ -261,7 +274,7 @@ func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
-	                 u.display_name
+	                 u.display_name, s.calendar_event_id
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
 	          WHERE s.id = ?`
@@ -274,7 +287,7 @@ func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
-		&s.CreatorName,
+		&s.CreatorName, &s.CalendarEventID,
 	)
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("session not found")
@@ -296,7 +309,7 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
-	                 u.display_name
+	                 u.display_name, s.calendar_event_id
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
 	          WHERE s.campaign_id = ? AND s.deleted_at IS NULL
@@ -325,7 +338,7 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
-			&s.CreatorName,
+			&s.CreatorName, &s.CalendarEventID,
 		); err != nil {
 			return nil, fmt.Errorf("scanning session row: %w", err)
 		}

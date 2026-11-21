@@ -29,8 +29,11 @@ type allNightsItem struct {
 	Day       string `json:"day,omitempty"`
 	Date      string `json:"date,omitempty"`
 	When      string `json:"when"`
-	Repeat    string `json:"repeat,omitempty"`
-	Href      string `json:"href,omitempty"`
+	// NoRealDate is true for a night with only an in-world day (made from a
+	// story calendar's event); When then says so rather than being blank.
+	NoRealDate bool   `json:"noRealDate,omitempty"`
+	Repeat     string `json:"repeat,omitempty"`
+	Href       string `json:"href,omitempty"`
 }
 
 // AllGameNightsAPI is every game night in the campaign, grouped as
@@ -48,21 +51,26 @@ func (h *Handler) AllGameNightsAPI(c *echo.Context) error {
 	// stays upcoming until their midnight.
 	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
 	viewerTZ := h.storedTZ(c.Request().Context(), userID)
-	return c.JSON(http.StatusOK, allNightsGroups(cc.Campaign.ID, groupSessions(list, today), today, viewerTZ))
+	return c.JSON(http.StatusOK, allNightsGroups(cc.Campaign.ID, groupSessions(list, today), today, viewerTZ,
+		func(s *Session) string { return h.noRealDateWhen(c.Request().Context(), s) }))
 }
 
 // allNightsGroups shapes the grouped sessions for the calendar. Only planned
 // nights are on the calendar's grid, so only those carry a date to open.
-func allNightsGroups(campaignID string, groups []SessionGroup, today, viewerTZ string) []allNightsGroup {
+// noDateWhen words a night that has no real date, so its row is never blank.
+func allNightsGroups(campaignID string, groups []SessionGroup, today, viewerTZ string, noDateWhen func(*Session) string) []allNightsGroup {
 	out := make([]allNightsGroup, 0, len(groups))
 	for _, g := range groups {
 		ag := allNightsGroup{Key: g.Key, Label: g.Label, Nights: make([]allNightsItem, 0, len(g.Sessions))}
 		for i := range g.Sessions {
 			s := &g.Sessions[i]
 			it := allNightsItem{SessionID: s.ID, Name: s.Name}
-			if s.ScheduledDate != nil {
+			if s.hasRealDate() {
 				it.Day = *s.ScheduledDate
 				it.When = s.FormatScheduledFor(viewerTZ)
+			} else {
+				it.NoRealDate = true
+				it.When = noDateWhen(s)
 			}
 			if s.IsRecurring {
 				it.Repeat = s.RecurrenceLabel()
