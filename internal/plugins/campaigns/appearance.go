@@ -53,6 +53,7 @@ type Appearance struct {
 	MomentSpark     bool   `json:"moment_spark,omitempty"`     // Moments: dots radiate from a save.
 	DmScreenKit     string `json:"dmscreen_kit,omitempty"`     // The DM Screen's own style kit (AppearanceStyleKits); empty wears the pages' kit.
 	EmailLayout     string `json:"email_layout,omitempty"`     // The campaign's emails (AppearanceEmailLayouts); empty is Note.
+	BuilderLook     string `json:"builder_look,omitempty"`     // How the hero builder looks (AppearanceBuilderLooks); empty is "plain".
 
 	// Who may pick their own version of a part (look_access.go); empty is the
 	// part's default.
@@ -108,6 +109,10 @@ var (
 	// AppearanceStyleKits are the signed style kits style_kits.css draws
 	// (ui-standard.md, "Style kits"); "material" is the base and adds nothing.
 	AppearanceStyleKits = []string{"material", "sharp", "ornate", "flowing", "lumen", "sketchbook"}
+	// AppearanceBuilderLooks are the skins the hero builder wears, written to
+	// its mount as data-skin: plain is the base, paper the printed-page feel,
+	// ornate the bound-volume one.
+	AppearanceBuilderLooks = []string{"plain", "paper", "ornate"}
 	// AppearanceEmailLayouts are the layouts internal/email draws the
 	// campaign's emails in, Note first as the default.
 	AppearanceEmailLayouts = emailLayoutIDs()
@@ -184,6 +189,9 @@ type AppearanceInput struct {
 	Email struct {
 		Layout string `json:"layout"`
 	} `json:"email"`
+	Builder struct {
+		Look string `json:"look"` // One of AppearanceBuilderLooks; empty keeps the stored one.
+	} `json:"builder"`
 	// Access is who may change each part for themselves. Nil keeps what the
 	// campaign has stored.
 	Access *LookAccessInput `json:"access,omitempty"`
@@ -312,6 +320,19 @@ func timelinePopupChoice(v string, prev *Appearance) (string, error) {
 		return "", nil
 	}
 	return oneOf("time line popup", v, AppearanceTimelinePopups)
+}
+
+// builderLookChoice is the hero builder look a save stores, Plain as unset. A
+// save that sends no look keeps the stored one, so an editor that predates the
+// setting can't quietly reset the owner's choice.
+func builderLookChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.BuilderLook, nil
+		}
+		return "", nil
+	}
+	return oneOf("hero builder look", v, AppearanceBuilderLooks)
 }
 
 // emailLayoutChoice is the email layout a save stores, Note as unset. A save
@@ -619,6 +640,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(err)
 	}
 	if a.EmailLayout, err = emailLayoutChoice(in.Email.Layout, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.BuilderLook, err = builderLookChoice(in.Builder.Look, s.Appearance); err != nil {
 		return fail(err)
 	}
 	if a.DmScreenKit, err = dmScreenKitChoice(in.Page.DmKit, s.Appearance); err != nil {

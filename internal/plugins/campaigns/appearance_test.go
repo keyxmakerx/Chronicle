@@ -117,6 +117,7 @@ func appearanceFieldCases() []fieldCase {
 		{"time line popup", func(in *AppearanceInput, v string) { in.Hover.TimelinePopup = v }, func(a *Appearance) string { return a.TimelinePopup }, "corner"},
 		{"style kit", func(in *AppearanceInput, v string) { in.Page.Kit = v }, func(a *Appearance) string { return a.StyleKit }, "ornate"},
 		{"email layout", func(in *AppearanceInput, v string) { in.Email.Layout = v }, func(a *Appearance) string { return a.EmailLayout }, "poster"},
+		{"hero builder look", func(in *AppearanceInput, v string) { in.Builder.Look = v }, func(a *Appearance) string { return a.BuilderLook }, "ornate"},
 	}
 }
 
@@ -206,7 +207,7 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 		"button style": AppearanceButtonStyles, "icon amount": AppearanceIconAmounts, "icon colour": AppearanceIconColours, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
 		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles, "made item pictures": AppearanceCraftArts,
 		"page look": AppearancePageLooks, "style kit": AppearanceStyleKits, "time line popup": AppearanceTimelinePopups,
-		"email layout": AppearanceEmailLayouts,
+		"email layout": AppearanceEmailLayouts, "hero builder look": AppearanceBuilderLooks,
 	}
 	for _, fc := range appearanceFieldCases() {
 		for _, v := range lists[fc.name] {
@@ -899,6 +900,44 @@ func TestStyleKitChoice(t *testing.T) {
 				t.Errorf("styleKitChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuilderLookChoice(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       string
+		prev    *Appearance
+		want    string
+		wantErr bool
+	}{
+		{"not sent, nothing stored", "", nil, "", false},
+		{"not sent keeps the look", "", &Appearance{BuilderLook: "paper"}, "paper", false},
+		{"Plain is stored as unset", "plain", &Appearance{BuilderLook: "paper"}, "", false},
+		{"paper", "paper", nil, "paper", false},
+		{"ornate", "ornate", &Appearance{BuilderLook: "paper"}, "ornate", false},
+		{"unknown refused", "neon", nil, "", true},
+		{"wrong case refused", "Paper", nil, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := builderLookChoice(tt.v, tt.prev)
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("builderLookChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
+			}
+		})
+	}
+}
+
+// A save that never mentions the hero builder look keeps the stored one: only
+// the owner's explicit pick changes it.
+func TestApplyAppearance_KeepsBuilderLookWhenNotSent(t *testing.T) {
+	s := CampaignSettings{Appearance: &Appearance{BuilderLook: "ornate"}}
+	if _, err := applyAppearance(&s, AppearanceInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if s.Appearance == nil || s.Appearance.BuilderLook != "ornate" {
+		t.Errorf("appearance = %+v, want the builder look kept", s.Appearance)
 	}
 }
 

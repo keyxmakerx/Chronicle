@@ -344,6 +344,10 @@ leaving the list for another page.
 - **The character sheet style is the owner's choice** (Customize › Character
   sheets; Modern by default). The choice reaches the page as `data-cz-sheet`
   on `<html>`, which `static/css/sheet_styles.css` and `sheet_motion.js` read.
+- **The hero builder's look is the owner's choice** (Customize › Character
+  sheets › Hero builder look; Plain by default, or Paper or Ornate). The
+  choice reaches the builder as `data-skin` on its own mount, not on `<html>`.
+  Light and dark still follow the site theme.
 - **A rulebook always wears its game system's look.** Its colours, `look`
   and fonts come from the book, and Customize has no setting that changes
   them. The book editor's own panels always use the standard dark colours, so

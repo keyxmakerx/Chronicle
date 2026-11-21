@@ -28,6 +28,10 @@ templ TryoutCreatorPage(cc *campaigns.CampaignContext, view TryoutCreatorView) {
 				data-back-url={ fmt.Sprintf("/campaigns/%s/characters", view.CampaignID) }
 				data-type-name="practice hero"
 				data-for-self="false"
+				data-skin={ layouts.BuilderSkin(ctx) }
+				if view.TermsURL != "" {
+					data-terms-url={ view.TermsURL }
+				}
 			>
 				<div class="hc-loading" role="status">
 					<p class="hc-loading__text">Opening the creator…</p>
