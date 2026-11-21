@@ -150,3 +150,20 @@ button.air-stat:focus-visible { outline: 2px solid var(--color-accent); outline-
   .air-row { grid-template-columns: auto minmax(0, 1fr); }
   .air-row .air-yn { grid-column: 2; justify-self: start; }
 }
+
+/* A request to add a page that is much like one the campaign has: one quiet
+   line, two quiet words, and the two texts side by side on demand. Amber is
+   mixed toward the text colour so the lead stays readable in light and dark. */
+.air-sim { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.air-sim [hidden] { display: none; }
+.air-sim-lead { font-weight: 600; color: color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, var(--color-text-primary)); }
+.air-sim-qs { display: flex; flex-wrap: wrap; gap: 0 14px; }
+.air-sim-both { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; margin-top: 6px; }
+.air-sim-both[hidden] { display: none; }
+.air-sim-col { min-width: 0; }
+.air-sim-col h5 { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); padding-bottom: 4px; border-bottom: 1px solid var(--color-border-light); }
+.air-sim-col p { font-size: 0.84rem; color: var(--color-text-secondary); padding: 5px 0 5px 8px; border-bottom: 1px solid var(--color-border-light); overflow-wrap: anywhere; }
+.air-sim-col p.is-only { color: var(--color-text-primary); box-shadow: inset 2px 0 0 rgb(var(--color-warn-rgb)); }
+.air-sim-only { font-size: 0.7rem; font-weight: 600; margin-right: 6px; color: var(--color-text-secondary); }
+@media (max-width: 640px) { .air-sim-both { grid-template-columns: minmax(0, 1fr); } }
+@media (pointer: coarse) { .air-sim-qs .air-quiet { min-height: 44px; } }
