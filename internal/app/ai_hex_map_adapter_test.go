@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -186,5 +187,69 @@ func TestAIHexMapAdapter_ReadAsTheActor(t *testing.T) {
 				t.Errorf("a pinned layer reported a field %d x %d", got.Cols, got.Rows)
 			}
 		})
+	}
+}
+
+// foggedLayerStub answers GetLayer the way the hex service does: through
+// maps.VisibleCells, with fog on.
+type foggedLayerStub struct {
+	maps.HexService
+	cells []maps.HexCell
+}
+
+func (s foggedLayerStub) GetLayer(_ context.Context, _, mapID string, role int) (*maps.HexLayerView, error) {
+	layer := maps.DefaultHexLayer(mapID)
+	layer.FogEnabled = true
+	return &maps.HexLayerView{Layer: layer, Cells: maps.VisibleCells(layer, s.cells, role)}, nil
+}
+
+type oneHexMap struct{ records.MapsAPI }
+
+func (oneHexMap) ListMaps(context.Context, string) ([]records.MapRef, error) {
+	return []records.MapRef{{ID: "m", CampaignID: "camp", Name: "Imix"}}, nil
+}
+
+func (oneHexMap) ListPins(context.Context, string, string, int, string) ([]records.PinRef, error) {
+	return nil, nil
+}
+
+func TestAIHexRead_APlayerUnderFogReadsOnlyExploredHexes(t *testing.T) {
+	forest, swamp := "forest", "swamp"
+	east, both, west := 1, 1|8, 8
+	secret := "The lich sleeps here."
+	// A river runs 1,2 to 2,2 to 3,2. Only the first two hexes are explored.
+	cells := []maps.HexCell{
+		{Col: 1, Row: 2, Terrain: &forest, River: &east, Explored: true},
+		{Col: 2, Row: 2, Terrain: &forest, River: &both, Explored: true},
+		{Col: 3, Row: 2, Terrain: &swamp, River: &west, Name: "Lich Fen", Notes: &secret},
+	}
+	display, err := json.Marshal(map[string]any{"grid": map[string]any{"type": maps.GridHex, "size": 40}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := maps.MergeDisplaySettings(nil, display)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &records.Lookups{Maps: oneHexMap{}, Hexes: aiHexMapAdapter{
+		hexes: foggedLayerStub{cells: cells},
+		maps:  &hexMapsStub{stored: &maps.Map{ImageWidth: 1000, ImageHeight: 600, Display: next}},
+	}}
+	ask := []records.Record{{Kind: records.KindLookup, Fields: map[string]any{"what": "pins", "map": "Imix"}}}
+
+	for _, role := range []int{1, 2} {
+		got := l.Answer(context.Background(), "camp", records.Actor{UserID: "u", Role: role}, ask)[0].Text
+		if !strings.Contains(got, "forest 1,2 to 2,2") || !strings.Contains(got, "river 1,2 2,2\n") {
+			t.Fatalf("role %d: the explored hexes are missing:\n%s", role, got)
+		}
+		for _, hidden := range []string{"3,2", "swamp", "Lich", "lich"} {
+			if strings.Contains(got, hidden) {
+				t.Fatalf("role %d: the answer gives away %q from an unexplored hex:\n%s", role, hidden, got)
+			}
+		}
+	}
+	got := l.Answer(context.Background(), "camp", records.Actor{UserID: "o", Role: 3}, ask)[0].Text
+	if !strings.Contains(got, "river 1,2 2,2 3,2\n") || !strings.Contains(got, `place "Lich Fen" 3,2: The lich sleeps here.`) {
+		t.Fatalf("the owner does not read the whole map:\n%s", got)
 	}
 }

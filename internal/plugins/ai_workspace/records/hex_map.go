@@ -73,7 +73,7 @@ var _ aiplug.Staged = HexMapKind{}
 func (HexMapKind) Name() string  { return "hex-map" }
 func (HexMapKind) Label() string { return "Hex map" }
 func (HexMapKind) Doc() string {
-	return "A hex map painted hex by hex: a new blank map (`action: create`), or paint added onto a map that already uses a hex grid (`action: update`, the map named in `name` or `map`; a map on a square grid is refused). Keys: `name`, `size` (hexes across x down, 4 to 100 each way, like `30 x 20`). On an update `size` is only the bounds for the lines in this block: hexes it does not mention are left alone, a road, river or trail is added to the ones already on a hex, land replaces land, and a `place` renames the hex and, when it carries notes, replaces its notes.\n\n" +
+	return "A hex map painted hex by hex: a new blank map (`action: create`), or paint added onto a map that already uses a hex grid (`action: update`, the map named in `name` or `map`; a map on a square grid is refused). Keys: `name`, `size` (hexes across x down, 4 to 100 each way, like `30 x 20`). On an update `size` is only the bounds for the lines in this block: hexes it does not mention are left alone, a road, river or trail is added to the ones already on a hex, land replaces land, and a `place` renames the hex and, when it carries notes, replaces its notes. Before an update, look the map up (`what: pins` with `map`) to read its hexes as they are now.\n\n" +
 		"Hexes are written `col,row`, 0,0 at the top-left. They are pointy-top and odd rows sit half a hex to the right, so neighbours differ by row: 4,2 touches 3,2 5,2 3,1 4,1 3,3 4,3 but 4,3 touches 3,3 5,3 4,2 5,2 4,4 5,4; lean on `to`, `around` and `along` instead of counting. One thing per line, `#` lines are skipped, later lines paint over earlier ones:\n\n" +
 		"- `fill <land>`: every hex\n" +
 		"- `<land> [\"Name\"] c,r`: one hex; `<land> c,r to c,r`: a box between two corners; `<land> around c,r radius n` (n 0 to 30); `<land> along c,r c,r c,r …`: the hexes on the straight runs between the points, such as a mountain range\n" +
@@ -385,5 +385,6 @@ func (k HexMapKind) Apply(ctx context.Context, campaignID string, a Actor, r Rec
 	return nil
 }
 
-// Export lists nothing: hex maps are written, not read back.
+// Export lists nothing: a hex map is read one at a time, through the `pins`
+// lookup, since every map's hexes together would swamp the prompt.
 func (HexMapKind) Export(context.Context, string, Actor) (string, error) { return "", nil }

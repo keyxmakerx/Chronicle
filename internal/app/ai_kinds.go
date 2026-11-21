@@ -162,6 +162,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	l := &records.Lookups{
 		Folders:  aiFolderNames{folders: d.Folders},
 		Maps:     aiMapsAdapter{d.Maps},
+		Hexes:    aiHexMapAdapter{maps: d.Maps, hexes: d.Hexes},
 		Pages:    d.Entities,
 		Rels:     d.Relations,
 		Notes:    d.Notes,
