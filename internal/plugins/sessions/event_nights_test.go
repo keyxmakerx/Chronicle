@@ -61,9 +61,9 @@ func TestEventHasNightByStoredLink(t *testing.T) {
 
 func TestEventsWithoutNightKeepsOrder(t *testing.T) {
 	events := []SessionEvent{{ID: "a", Name: "One"}, {ID: "b", Name: "Two"}, {ID: "c", Name: "Three"}, {ID: "d", Name: "Four"}}
-	got := eventsWithoutNight(events, []Session{{Name: "two"}}, map[string]bool{"d": true})
+	got := eventsWithoutNight(events, []Session{{Name: "two"}}, nil, map[string]bool{"d": true})
 	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "c" {
-		t.Fatalf("got %+v: the events that have a night are left out", got)
+		t.Fatalf("got %+v: the night's event and the dismissed one are left out", got)
 	}
 }
 

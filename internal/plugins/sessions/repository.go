@@ -26,6 +26,10 @@ type SessionRepository interface {
 	// campaign, a night in the Trash included: its link outlives deleting it,
 	// so the event is not offered for a second night.
 	ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error)
+	// ListDismissedEventIDs is the events whose "Not this one" was pressed.
+	ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error)
+	// DismissEvent records "Not this one" for an event. Idempotent.
+	DismissEvent(ctx context.Context, campaignID, eventID, userID string) error
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	// ListPlannedByWorldDateRange returns planned sessions whose in-world
 	// date (calendar_year/month/day) lies in [from, to] inclusive, soonest

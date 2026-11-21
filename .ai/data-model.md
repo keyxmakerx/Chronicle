@@ -279,6 +279,7 @@ core migrations cannot reference a plugin table on a fresh DB).
 | `session_night_sightings` | Who the party saw on which game night | `UNIQUE(session_id, occurrence_date, entity_id)`; `state`; `source`; a `not_seen` row keeps a dismissed suggestion dismissed |
 | `session_night_entries` | Which Journal note is a member's entry for a night | PK `(session_id, occurrence_date, user_id)`; `note_id` UNIQUE, no FK so a deleted entry is not remade |
 | `session_night_bells` | Game-night bell items already sent (claimed before writing, so no double send) | PK `(session_id, occurrence_date, user_id, kind)` |
+| `session_event_dismissals` | Calendar Session events hidden from the Game nights strip with "Not this one" | PK `(campaign_id, calendar_event_id)`; `dismissed_by` SET NULL; rows cascade from the campaign and the event |
 | `notifications` | Generic in-app notification store | `user_id`; `campaign_id` nullable; `type`/`payload`/`link`; `read_at` NULL = unread |
 
 ### timeline (`internal/plugins/timeline/migrations/`)

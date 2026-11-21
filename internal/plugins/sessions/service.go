@@ -43,9 +43,12 @@ type SessionService interface {
 	// answering not-found for a soft-deleted session everywhere else.
 	GetSessionIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
-	// ListLinkedEventIDs backs the Game nights strip of calendar Session
-	// events: which events already have a night (in the Trash too).
+	// ListLinkedEventIDs, ListDismissedEventIDs and DismissEvent back the
+	// Game nights strip of calendar Session events: which events already have
+	// a night (in the Trash too), and which were set aside with "Not this one".
 	ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error)
+	ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error)
+	DismissEvent(ctx context.Context, campaignID, eventID, userID string) error
 	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
@@ -404,6 +407,23 @@ func (s *sessionService) ListLinkedEventIDs(ctx context.Context, campaignID stri
 		return nil, apperror.NewInternal(err)
 	}
 	return ids, nil
+}
+
+// ListDismissedEventIDs implements SessionService.
+func (s *sessionService) ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error) {
+	ids, err := s.repo.ListDismissedEventIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return ids, nil
+}
+
+// DismissEvent implements SessionService.
+func (s *sessionService) DismissEvent(ctx context.Context, campaignID, eventID, userID string) error {
+	if err := s.repo.DismissEvent(ctx, campaignID, eventID, userID); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
 }
 
 // GetSession retrieves a session by ID with attendees and entities.

@@ -44,7 +44,7 @@ func TestDB_EventNightSurvivesRename(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListByCampaign: %v", err)
 		}
-		return eventsWithoutNight([]SessionEvent{ev}, nights, nil)
+		return eventsWithoutNight([]SessionEvent{ev}, nights, nil, nil)
 	}
 
 	if got := candidates(); len(got) != 0 {

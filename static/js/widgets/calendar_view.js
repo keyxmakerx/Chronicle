@@ -2442,16 +2442,23 @@
     // The strip at the top of the panel: Session-kind calendar events that
     // have no game night, for whoever may make one. It is quiet words, not
     // buttons, and nothing is made until one is pressed. "Not this one" is
-    // remembered in this browser only; the server holds no such list. At
-    // most three show at once so the strip never pushes the nights away.
-    _gnSkipKey: function () { return 'chronicle:gn-skip:' + this.campaignId; },
-    _gnSkipped: function () {
-      try { var v = JSON.parse(localStorage.getItem(this._gnSkipKey()) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
-    },
+    // kept on the server per campaign (the list already leaves those out), so
+    // it holds for everyone and on every device. At most three show at once so
+    // the strip never pushes the nights away.
+    //
+    // _gnSkip drops the row at once and tells the server; when that fails the
+    // row comes back and the owner is told, so a press is never silently lost.
+    // Resolves true when the server has it.
     _gnSkip: function (id) {
-      var list = this._gnSkipped();
-      if (list.indexOf(id) < 0) list.push(id);
-      try { localStorage.setItem(this._gnSkipKey(), JSON.stringify(list.slice(-200))); } catch (e) { /* the strip just comes back next time */ }
+      var self = this, kept = this._gnCands || [];
+      this._gnCands = kept.filter(function (r) { return r.eventId !== id; });
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-dismissals/' + encodeURIComponent(id), { method: 'PUT' })
+        .then(function (r) { if (!r.ok) throw new Error('dismiss ' + r.status); return true; })
+        .catch(function () {
+          self._gnCands = kept;
+          self.say('Could not hide that one. Try again.');
+          return false;
+        });
     },
     _gnLoadCands: function () {
       if (this.role < 2) return Promise.resolve([]);
@@ -2460,7 +2467,7 @@
         .then(function (rows) { return Array.isArray(rows) ? rows : []; }, function () { return []; });
     },
     _gnStripHTML: function () {
-      var skipped = this._gnSkipped(), rows = (this._gnCands || []).filter(function (r) { return skipped.indexOf(r.eventId) < 0; });
+      var rows = this._gnCands || [];
       if (!rows.length) return '';
       var h = rows.slice(0, 3).map(function (r) {
         var sub = [r.when, r.page].filter(Boolean).join(' · ');
@@ -5528,10 +5535,12 @@
           if (mk) { self._gnMake(mk); return; }
           var sk = t.closest('[data-gn-skip]');
           if (sk) {
-            self._gnSkip(sk.getAttribute('data-gn-skip'));
+            var gone = self._gnSkip(sk.getAttribute('data-gn-skip'));
             pop.innerHTML = self._gnListHTML(self._gnNext || []);
             var nx = $('.gnstrip .lnk', pop) || $('.wrow', pop);
             if (nx) nx.focus();
+            // A refused press puts the row back where the owner can see it.
+            gone.then(function (ok) { if (!ok && !pop.hidden) pop.innerHTML = self._gnListHTML(self._gnNext || []); });
             return;
           }
           if (t.closest('[data-gn-next]')) { pop.innerHTML = self._gnListHTML(self._gnNext || []); return; }

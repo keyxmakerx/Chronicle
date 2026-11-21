@@ -81,6 +81,13 @@ async function page(t, width, o = {}) {
     } else if (u.pathname === '/campaigns/c1/sessions/event-candidates') {
       (o.asked || []).push(u.pathname);
       body = o.candidates || [];
+    } else if (u.pathname.startsWith('/campaigns/c1/sessions/event-dismissals/')) {
+      const id = decodeURIComponent(u.pathname.split('/').pop());
+      (o.dismissed || []).push(route.request().method() + ' ' + id);
+      if (o.dismissStatus) return route.fulfill({ status: o.dismissStatus, contentType: 'application/json', body: '{"error":"no"}' });
+      // The server keeps it: the next read of the strip leaves it out.
+      if (o.candidates) o.candidates = o.candidates.filter((r) => r.eventId !== id);
+      return route.fulfill({ status: 204, body: '' });
     } else if (u.pathname === '/campaigns/c1/sessions/from-event') {
       (o.made || []).push(route.request().postDataJSON());
       if (o.makeStatus) return route.fulfill({ status: o.makeStatus, contentType: 'application/json', body: JSON.stringify({ error: o.makeError || 'no' }) });
@@ -206,17 +213,41 @@ test('the strip names Session events with no game night, and makes one on a pres
   assert.equal(await p.evaluate(() => document.activeElement.hasAttribute('data-gn-make')), true, 'focus moves to the next control');
 });
 
-test('Not this one hides the event here and keeps it hidden', { skip }, async (t) => {
-  const p = await page(t, 1280, { role: 2, candidates: CANDS });
+test('Not this one is kept on the server, not in this browser', { skip }, async (t) => {
+  const dismissed = [];
+  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed });
   await p.click('#cal5-gnbtn');
   await p.waitForSelector('#cal5-gnpop .gnstrip');
   await p.click('#cal5-gnpop [data-gn-skip="e1"]');
-  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 1);
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 1, 'the row goes at once');
+  for (let i = 0; i < 50 && !dismissed.length; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(dismissed, ['PUT e1'], 'the press is sent to the server');
+  // Reopening reads the strip from the server again, which now leaves it out.
   await p.click('#cal5-gnbtn');
   await p.click('#cal5-gnbtn');
   await p.waitForSelector('#cal5-gnpop .wrow');
   assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Session 1 is on your calendar/);
   assert.match(await p.textContent('#cal5-gnpop'), /Session 2 is on your calendar/);
+  assert.equal(await p.evaluate(() => Object.keys(localStorage).filter((k) => /gn-skip/.test(k)).length), 0, 'nothing is remembered in the browser');
+});
+
+test('an old browser-only skip no longer hides anything, so every device agrees', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS });
+  await p.evaluate(() => localStorage.setItem('chronicle:gn-skip:c1', JSON.stringify(['e1'])));
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 2);
+});
+
+test('a refused Not this one puts the row back and says so', { skip }, async (t) => {
+  const dismissed = [];
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, dismissed, dismissStatus: 500 });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('.toast.on');
+  assert.match(await p.textContent('.toast'), /Could not hide that one/);
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 2, 'the row is back');
 });
 
 test('a night with no real date says so, with its in-world day, instead of a dash', { skip }, async (t) => {

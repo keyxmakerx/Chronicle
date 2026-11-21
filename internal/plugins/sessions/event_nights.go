@@ -104,12 +104,12 @@ func idSet(ids []string) map[string]bool {
 	return m
 }
 
-// eventsWithoutNight keeps the events no game night stands for, in the order
-// given.
-func eventsWithoutNight(events []SessionEvent, nights []Session, linked map[string]bool) []SessionEvent {
+// eventsWithoutNight keeps the events no game night stands for and nobody set
+// aside with "Not this one", in the order given.
+func eventsWithoutNight(events []SessionEvent, nights []Session, linked, dismissed map[string]bool) []SessionEvent {
 	out := make([]SessionEvent, 0, len(events))
 	for _, ev := range events {
-		if !eventHasNight(ev, nights, linked) {
+		if !dismissed[ev.ID] && !eventHasNight(ev, nights, linked) {
 			out = append(out, ev)
 		}
 	}
@@ -182,7 +182,7 @@ type eventNightRow struct {
 }
 
 // EventsWithoutNightAPI lists Session-kind calendar events that have no game
-// night, for the strip at the top of the calendar's Game nights panel.
+// night and were not set aside with "Not this one", for the strip at the top of the calendar's Game nights panel.
 // GET /campaigns/:id/sessions/event-candidates
 func (h *Handler) EventsWithoutNightAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -202,8 +202,12 @@ func (h *Handler) EventsWithoutNightAPI(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	dismissed, err := h.svc.ListDismissedEventIDs(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
 	rows := []eventNightRow{}
-	for _, ev := range eventsWithoutNight(events, nights, idSet(linked)) {
+	for _, ev := range eventsWithoutNight(events, nights, idSet(linked), idSet(dismissed)) {
 		rows = append(rows, eventNightRow{EventID: ev.ID, Name: ev.Name, When: ev.When, Page: ev.EntityName})
 	}
 	return c.JSON(http.StatusOK, rows)
@@ -244,6 +248,38 @@ func (h *Handler) MakeNightFromEventAPI(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusCreated, madeNightBody(s))
+}
+
+// DismissEventAPI is "Not this one": the event stops being offered on the
+// strip for everyone in the campaign. The event is read again from the
+// calendar, so only a Session event this viewer may see can be stored, never
+// an arbitrary id. A second press changes nothing.
+// PUT /campaigns/:id/sessions/event-dismissals/:eid
+func (h *Handler) DismissEventAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	if h.eventSource == nil {
+		return apperror.NewInternal(errors.New("sessions: event source not wired"))
+	}
+	events, err := h.eventSource.SessionEvents(ctx, cc.Campaign.ID, cc.VisibilityRole())
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	eid := c.Param("eid")
+	found := false
+	for i := range events {
+		if events[i].ID == eid {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return apperror.NewNotFound("that event is not a Session event on the calendar")
+	}
+	if err := h.svc.DismissEvent(ctx, cc.Campaign.ID, eid, auth.GetUserID(c)); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // madeNightBody is the reply to making a night from an event. scheduledDate
