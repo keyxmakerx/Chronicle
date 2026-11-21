@@ -32,6 +32,10 @@ async function open(t) {
   await p.setContent('<!doctype html><html><body>' + BODY + '</body></html>');
   await p.addScriptTag({ content: 'window.Chronicle = { register: function () {} };' });
   await p.addScriptTag({ content: read('static/js/hovercard.js') });
+  await p.addScriptTag({ content: read('static/js/peek_address.js') });
+  await p.addScriptTag({ content: read('static/js/peek_panel.js') });
+  // The panel's own placement rules, as input.css gives them.
+  await p.addStyleTag({ content: '.peek-panel{position:fixed;z-index:70;top:0;right:0;bottom:0;width:30rem;background:#fff}.peek-panel[hidden]{display:none}' });
   await p.addScriptTag({ content: read('internal/plugins/entities/static/js/brochure.js') });
   await p.evaluate(() => Chronicle.brochure.open(document.querySelector('[data-box]')));
   return p;
@@ -88,4 +92,34 @@ test('a hover card for a link inside an open modal dialog is seated in the dialo
   assert.equal(await p.evaluate(() => { Chronicle.hovercard.open(document.getElementById('in'), { title: 'T' }); return document.getElementById('chc').parentNode.nodeName; }), 'DIALOG');
   // dialog closed: a link outside it puts the card back on the page
   assert.equal(await p.evaluate(() => { Chronicle.hovercard.close(); document.querySelector('dialog').close(); Chronicle.hovercard.open(document.getElementById('out'), { title: 'T' }); return document.getElementById('chc').parentNode.nodeName; }), 'BODY');
+});
+
+test('a page peek opened from inside an open brochure is seated in it, on top and reachable, and goes back to the body after', { skip }, async (t) => {
+  const p = await open(t);
+  await p.evaluate(() => {
+    window.fetch = () => Promise.resolve({ ok: true, text: () => Promise.resolve('<div data-peek-root><p id="pk">Peeked</p></div>') });
+    const a = document.createElement('a');
+    a.href = '/campaigns/c1/entities/e1'; a.id = 'in'; a.textContent = 'in';
+    document.querySelector('.cb-bro-panel').appendChild(a);
+  });
+  await p.evaluate(() => Chronicle.peek.open(document.getElementById('in')));
+  await p.waitForSelector('#pk');
+  assert.equal(await p.evaluate(() => document.getElementById('peek-panel').parentNode.nodeName), 'DIALOG');
+  // The proof it is not behind the dialog: a point inside the panel lands on the panel.
+  assert.equal(await p.evaluate(() => {
+    const r = document.getElementById('peek-panel').getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && document.getElementById('peek-panel').contains(hit);
+  }), true);
+  // The same key that closes the peek must not also close the brochure.
+  await p.keyboard.press('Escape');
+  assert.equal(await p.evaluate(() => document.querySelector('dialog').open), true, 'Escape closed the brochure with the peek');
+  assert.equal(await p.evaluate(() => Chronicle.peek.isOpen()), false);
+  // A peek opened from the hover card (an address, no link) takes the open dialog too.
+  await p.evaluate(() => Chronicle.peek.open('/campaigns/c1/entities/e2'));
+  assert.equal(await p.evaluate(() => document.getElementById('peek-panel').parentNode.nodeName), 'DIALOG');
+  await p.evaluate(() => document.querySelector('dialog').close());
+  // The dialog's close event arrives a task later.
+  await p.waitForFunction(() => document.getElementById('peek-panel').parentNode.nodeName === 'BODY');
+  assert.equal(await p.evaluate(() => Chronicle.peek.isOpen()), false);
 });
