@@ -332,6 +332,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						}
 					></div>
 				}
+				<div hidden data-widget="page-live" data-entity-id={ entity.ID } data-campaign-id={ cc.Campaign.ID }></div>
 				<div
 					data-widget="aliases"
 					data-entity-id={ entity.ID }

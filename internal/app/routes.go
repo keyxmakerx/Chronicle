@@ -1246,9 +1246,25 @@ func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, 
 	// and secret text included, none of the per-viewer filtering the HTTP
 	// reads apply. So it only goes to DM-equivalent sockets; anyone else
 	// reads entities over HTTP, where that filtering happens.
+	// Readers' open pages get a content-free nudge to fetch again, sent
+	// first so the full-entity message stays the last one published. Only a
+	// page everyone may read announces itself; a private, custom-access or
+	// DM-category page stays silent to players.
+	if eventType == "updated" && entity != nil && entityReadableByAll(entity) {
+		nudge := ws.NewMessage(ws.MsgPageChanged, campaignID, entityID, nil)
+		nudge.Public = true
+		a.bus.Publish(nudge)
+	}
 	msg := ws.NewMessage(msgType, campaignID, entityID, entity)
 	msg.RequiresDM = true
 	a.bus.Publish(msg)
+}
+
+// entityReadableByAll reports whether every member may read the page: shared
+// by default (not private), not on per-person access, and not in a DM-only
+// category. Tag grants only widen access, so ignoring them errs silent.
+func entityReadableByAll(e *entities.Entity) bool {
+	return !e.IsPrivate && e.Visibility != entities.VisibilityCustom && !e.TypeDMOnly
 }
 
 // PublishEntityTypeEvent translates entity type domain events into WebSocket messages.
@@ -7309,6 +7325,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "relation-graph", Scripts: []string{"/static/js/widgets/relation_graph.js"}},
 	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
 	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
+	{Name: "page-live", Scripts: []string{"/static/js/widgets/page_live.js"}},
 	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
 	{Name: "entity_manager", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/entity_manager.js"}},
 	{Name: "tag-picker", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/tag_picker.js"}},
