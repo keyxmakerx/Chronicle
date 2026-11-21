@@ -1048,8 +1048,11 @@
     function prow(icon, colour, name, kind){
       return '<span class="prow"><span class="pv-ic" style="--c:' + colour + '">' + IC(icon) + '</span><span class="p-link">' + name + '</span><span class="pk">' + kind + '</span></span>';
     }
-    function pbtn(kind, label, real){
-      return real ? '<button type="button" class="pbtn ' + kind + '"><span class="f">' + label + '</span></button>' : '<span class="pbtn ' + kind + '"><span class="f">' + label + '</span></span>';
+    // A button's icon is drawn only while the Icons part is on Everywhere
+    // (.wic, as .word-ic on the real pages), so that step of the choice shows.
+    function pbtn(kind, label, real, icon){
+      var f = '<span class="f">' + (icon ? IC(icon, 'wic') : '') + label + '</span>';
+      return real ? '<button type="button" class="pbtn ' + kind + '">' + f + '</button>' : '<span class="pbtn ' + kind + '">' + f + '</span>';
     }
     function siteHTML(){
       var sb = '<div class="s-sb"><div class="s-brand"><span class="s-bnr" id="d-bnr"></span><span class="s-logo" id="d-logo"></span><span class="s-btext"><span class="s-bname" id="d-bname"></span><span class="s-bsub" id="d-bsub"></span></span><span class="s-bchev">' + IC('i-chev') + '</span><span class="s-pen" id="d-pen">' + IC('i-pencil') + '</span></div><div class="s-list">' +
@@ -1066,7 +1069,7 @@
         '<div class="s-hdr-sky" id="d-sky"><canvas></canvas></div><div class="s-hdr-skyscrim"></div></div>' +
         '<div class="s-path" id="d-path"></div><div class="s-rail" id="d-rail"></div><div class="s-tools" id="d-tools"></div></div>';
       var dash = '<div class="s-page" data-page="dash"><div class="d-banner" id="d-banner"><div class="d-img" id="d-img"></div><div class="d-scrim"></div><p class="d-welcome" id="d-welcome"></p></div>' +
-        '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page') + pbtn('sec', 'Invite players') + '</div></div>' +
+        '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page', false, 'i-plus') + pbtn('sec', 'Invite players', false, 'i-users') + '</div></div>' +
         '<div class="d-grid">' +
           '<div class="pcard lifts"><p class="c-h">The party</p><div class="band"><b>Sera Windrose</b><span class="czbadge">Level 6 · Ranger</span></div>' +
             '<div class="who"><span class="av">KV</span>Kaelen Voss<span>Rogue</span></div><div class="who"><span class="av b">BA</span>Brother Aldric<span>Cleric</span></div></div>' +
@@ -1080,7 +1083,7 @@
         '<div class="e-head"><span class="kind">' + IC('i-mappin') + 'City</span><div class="h1">Emberfall</div><p class="lede">Capital of the Cinder Reach, built in the lee of Mount Varn where the ash falls warm.</p></div>' +
         '<div class="e-grid"><div class="e-body"><p>Emberfall grew from a waystation on the old salt road into the largest city north of the Glass Wastes. Its walls are cut from black basalt.</p>' +
           '<p>Margravine Ysolde Vane rules from <span class="p-link">Cinder Keep</span>. Her treaty with the <span class="p-link">Ashwright Guild</span> keeps the forges lit.</p>' +
-          '<div class="d-act">' + pbtn('pri', 'Edit page') + pbtn('sec', 'Share with players') + '</div></div>' +
+          '<div class="d-act">' + pbtn('pri', 'Edit page', false, 'i-pencil') + pbtn('sec', 'Share with players', false, 'i-users') + '</div></div>' +
           '<div class="pcard lifts e-info"><p class="c-h">At a glance</p><dl><dt>Population</dt><dd>18,400</dd><dt>Ruler</dt><dd>Ysolde Vane</dd><dt>Founded</dt><dd>212 AF</dd></dl>' +
           '<div class="tags"><span class="tag">#cinder-reach</span><span class="tag">#capital</span></div></div></div>' + hoverSampleHTML() + '</div>';
       return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + sheetHTML() + '</div></div>';
@@ -1121,7 +1124,7 @@
       return '<div class="pieces">' +
         pc('Card · point at it', '<div class="pcard lifts pc-card" tabindex="0" role="group" aria-label="Sample card"><div class="h3">The Warm Ash</div><p>A tavern in the lower wards of Emberfall, linked from <span class="p-link">Cinder Keep</span>.</p><div class="tags"><span class="tag">#tavern</span><span class="tag">#emberfall</span></div></div>') +
         pc('Calendar day', '<div class="day big"><span class="day-n">12</span><div class="day-t"><b>Harvestwane, Starday</b><span class="chipe a">Session 14 · The Warm Ash</span><span class="chipe b">Festival of Embers</span></div></div>') +
-        pc('Buttons · point and press', '<div class="pc-btns" id="pc-btns">' + pbtn('pri', 'Save page', true) + pbtn('sec', 'Share', true) + pbtn('qui', 'Cancel', true) + '</div>') +
+        pc('Buttons · point and press', '<div class="pc-btns" id="pc-btns">' + pbtn('pri', 'Save page', true, 'i-check') + pbtn('sec', 'Share', true, 'i-users') + pbtn('qui', 'Cancel', true) + '</div>') +
         pc('Timeline event', '<div class="tl-ev"><span class="mk-dot"></span><div><span class="y">412 AF · Age of Ash</span><div class="h3">The Warm Ash opens</div><p>Old Brannoc pours the first ale.</p></div></div>') +
         '<div class="pc wide"><div class="pc-l">Menu rows · rest, hover, the page you are on</div><div class="mini-sb" aria-hidden="true">' +
           '<div class="s-row"><span class="ic">' + IC('i-map') + '</span><span class="lb">Maps</span></div>' +
@@ -1836,7 +1839,16 @@
       var ch = changedSections();
       if (!ch.length) return null;
       var base = '/campaigns/' + encodeURIComponent(CID) + '/customize/look#';
-      return { draft:draft, input:toInput(draft), _changes:ch.map(function(id){ return { label:'Look: ' + sectionName(id), href:base + id }; }) };
+      var lines = ch.map(function(id){ return { label:'Look: ' + sectionName(id), href:base + id }; });
+      // Picking a whole look sets many sections at once; until something is
+      // changed by hand it is one change, named for the look.
+      if (draft.look !== saved.look && matchesLook(draft, draft.look)){
+        var own = ch.filter(function(id){ return SEC_KEYS[id].some(function(k){ return LOOK_KEYS.indexOf(k) >= 0; }); });
+        if (own.length){
+          lines = [{ label:'the ' + look(draft.look).name + ' look', href:base + own[0] }].concat(lines.filter(function(l, i){ return own.indexOf(ch[i]) < 0; }));
+        }
+      }
+      return { draft:draft, input:toInput(draft), _changes:lines };
     }
     function toShell(){
       var v = shellValue(), sig = JSON.stringify(v);
@@ -2056,7 +2068,14 @@
       if (t.dataset.sec){ selectSection(t.dataset.sec); return; }
       if (t.dataset.quick){ quickSetup(t.dataset.quick); return; }
       if (t.dataset.viewas){ ui.viewAs = t.dataset.viewas; update(); return; }
-      if (t.dataset.open){ selectSection(t.dataset.open, true); return; }
+      if (t.dataset.open){
+        // A People row opens the part that holds its setting; say so, since the
+        // room changes under the pointer.
+        var to = t.dataset.open, rm = ROOMS.filter(function(r){ return r[0] === ROOM_OF[to]; })[0];
+        selectSection(to, true);
+        if (rm) toast('Opened ' + sectionName(to) + ' in ' + rm[1] + '.');
+        return;
+      }
       if (t.dataset.reset){ resetSection(t.dataset.reset); return; }
       if (t.dataset.pick){ if (pick && pick.btn === t) closePicker(true); else { if (pick) closePicker(false); openPicker(t); } return; }
       if (t.dataset.up){ upKey = t.dataset.up; $('#file').value = ''; $('#file').click(); return; }

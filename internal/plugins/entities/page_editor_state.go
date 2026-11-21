@@ -26,6 +26,7 @@ func pageEditorState(ctx context.Context, cc *campaigns.CampaignContext, et *Ent
 		"plural":      et.NamePlural,
 		"layout":      layout,
 		"fields":      len(et.Fields),
+		"exFields":    exampleFields(et.Fields),
 		"systemDrawn": hasEntityShowRenderer(ctx, et),
 		"blockTypes":  fmt.Sprintf("%s/entity-types/block-types?context=template", base),
 		"preview":     fmt.Sprintf("%s/entity-types/%d/layout-preview", base, et.ID),
@@ -37,6 +38,56 @@ func pageEditorState(ctx context.Context, cc *campaigns.CampaignContext, et *Ent
 	}
 	b, _ := json.Marshal(state)
 	return string(b)
+}
+
+// maxExampleFields is how many of a category's fields the Attributes example
+// shows; the block on a real page lists them all, the example only has to
+// read as a page.
+const maxExampleFields = 6
+
+// exampleFields is the category's own fields as the layout example draws them:
+// each label with a made-up value of the field's kind, so the Attributes block
+// shows what the category asks for and not another category's. The script
+// escapes both parts; nothing here comes from a page's own values.
+func exampleFields(fields []FieldDefinition) [][2]string {
+	out := make([][2]string, 0, maxExampleFields)
+	for _, f := range fields {
+		if len(out) == maxExampleFields {
+			break
+		}
+		if f.Label == "" {
+			continue
+		}
+		out = append(out, [2]string{f.Label, exampleFieldValue(f)})
+	}
+	return out
+}
+
+// exampleFieldValue is a made-up value that reads as the field's kind: its
+// first option for a pick list, a plain word or figure for the rest.
+func exampleFieldValue(f FieldDefinition) string {
+	switch f.Type {
+	case "number":
+		return "12"
+	case "textarea":
+		return "A few lines of notes"
+	case "select":
+		if len(f.Options) > 0 {
+			return f.Options[0]
+		}
+		return "One of the options"
+	case "checkbox":
+		return "Yes"
+	case "url":
+		return "example.org"
+	case "link":
+		return "A linked page"
+	case "rule":
+		return "Worked out"
+	case "calendar_date":
+		return "14 Frost, 1492"
+	}
+	return "Example"
 }
 
 // pageLayoutsEditorState is the layout strip's starting point: the named

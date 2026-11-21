@@ -173,6 +173,8 @@
   }
   var EX_SCENE = '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path d="M0 120 L60 70 L110 105 L170 45 L230 95 L280 60 L320 85 V180 H0Z" fill="rgb(255 255 255 / 0.16)"/><path d="M0 150 L80 115 L150 140 L220 110 L320 135 V180 H0Z" fill="rgb(0 0 0 / 0.25)"/><circle cx="252" cy="38" r="16" fill="rgb(255 236 179 / 0.85)"/></svg>';
   var EX_MAP = '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="#e8dfc4"/><path d="M0 120 C60 100 90 140 160 118 S260 90 320 104" stroke="#8fb3c9" stroke-width="10" fill="none"/><circle cx="160" cy="70" r="34" fill="none" stroke="#5b5146" stroke-width="5"/><rect x="148" y="58" width="24" height="24" fill="#fff" stroke="#5b5146" stroke-width="2"/><circle cx="96" cy="44" r="7" fill="#6366f1"/><circle cx="236" cy="132" r="7" fill="#6366f1"/><circle cx="160" cy="104" r="7" fill="#dc2626"/></svg>';
+  // The open category's fields, set when the editor starts, for the Attributes example.
+  var exFields = [];
   var EX = {
     title: function () { return '<div class="cpe-ex-title cb-title">Saltreach</div><div class="cpe-ex-sub"><span class="cpe-ex-chip">Location</span><span>Port city on the Grey Coast</span></div>'; },
     image: function () { return '<div class="cpe-ex-img">' + EX_SCENE + '</div>'; },
@@ -181,7 +183,13 @@
       return exHead('fa-align-left', 'Story') + '<p class="cpe-ex-p">Saltreach clings to the cliffs above the harbour, its streets stacked like shelves. Every ship that comes in pays the tide-toll, and the Harbour Watch decides who pays twice.</p>' +
         (h > 1 || w > 2 ? '<p class="cpe-ex-p">Under the old lighthouse, the smugglers keep a door the Watch pretends not to see.</p>' : '');
     },
-    attributes: function () { return exHead('fa-list', 'Attributes') + exRows([['Population', '12,400'], ['Ruler', 'Harbourmaster Vell'], ['Danger', 'Moderate']]); },
+    // The category's own fields with made-up values, escaped since the labels are
+    // the owner's; a category with none says so rather than showing another's.
+    attributes: function () {
+      var f = exFields;
+      var rows = f.length ? f.map(function (r) { return [esc(r[0]), esc(r[1])]; }) : [['No fields yet', 'Add them in Fields']];
+      return exHead('fa-list', 'Attributes') + exRows(rows);
+    },
     details: function () { return exHead('fa-info-circle', 'Details') + exRows([['Created', '3 days ago'], ['Updated', 'Today'], ['Category', 'Locations']]); },
     tags: function () { return '<div class="cpe-ex-tags"><span>coast</span><span>trade</span><span>smugglers</span><span>session 4</span></div>'; },
     relations: function () { return exHead('fa-link', 'Relations') + exList([['Harbourmaster Vell', 'rules', '#6366f1'], ['The Tide Guild', 'based here', '#0d9488'], ['Brother Halvard', 'was born here', '#b45309']]); },
@@ -283,6 +291,7 @@
 
   function mount(el) {
     var S = parse(el.getAttribute('data-state'), {});
+    exFields = Array.isArray(S.exFields) ? S.exFields : [];
     var KEY = String(S.key || '');
     var CID = String(S.campaignId || '');
     // A campaign home has no category and no page to pick: it is drawn as

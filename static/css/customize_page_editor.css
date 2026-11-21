@@ -199,7 +199,7 @@ body.cpe-dragging, body.cpe-dragging * { user-select: none !important; -webkit-u
 .cpe-gw:focus-visible { outline: 2px solid var(--cpe-accent); outline-offset: -2px; }
 .cpe-gw:disabled { opacity: 0.5; cursor: not-allowed; }
 .cpe-gw-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.cpe-gw-nm { font-size: 13px; font-weight: 500; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpe-gw-nm { font-size: 13px; font-weight: 500; color: var(--color-text-primary); overflow-wrap: anywhere; }
 .cpe-gw-sz { font-size: 11.5px; color: var(--color-text-secondary); }
 
 /* A widget's drawing (widget_pictures.js): one ink, one accent, in a frame. */
