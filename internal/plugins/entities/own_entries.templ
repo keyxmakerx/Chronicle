@@ -45,8 +45,8 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
 		<div class="max-w-7xl mx-auto px-4 py-6">
 			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				if v.Director {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="hover:text-fg">Campaign settings</a>
+				if v.Director && cc.MemberRole >= campaigns.RoleOwner {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", cc.Campaign.ID)) } class="hover:text-fg">Campaign settings</a>
 				} else if sys, ok := layouts.GetEnabledSystem(ctx); ok {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ rulesCrumb(sys) }</a>
 				} else {
