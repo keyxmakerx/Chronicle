@@ -131,9 +131,7 @@
     return Math.max(Math.round(need), Math.round(rel - partRight - 8));
   }
 
-  // The tallest a paper beside the sheet may be. It opens no higher than the sheet's top (sheetTop, on screen) and keeps
-  // 24px clear of the window's bottom, so with the sheet low in the window it is shorter rather than running off the
-  // bottom; it is never shorter than 320px, where the page is scrolled instead.
+  // A side paper's tallest: from the sheet's top (on screen) to 24px above the window's bottom, at least 320px.
   function sideMaxHeight(vh, sheetTop) {
     return Math.round(Math.max(320, Math.min(vh - 120, vh - 24 - Math.max(0, sheetTop))));
   }
@@ -599,7 +597,6 @@
       var p = drawer(id, title, kind, body, false), w = makeWell(folio, 'right', p, move);
       p.style.width = WD + 'px';
       // A panel is as tall as what it holds, up to the window: past a short sheet it lies over the page below rather than cutting off.
-      // It never starts above the sheet, so its height leaves room below the sheet's top too; past that it scrolls inside.
       p.style.maxHeight = sideMaxHeight(innerHeight, sr.top) + 'px';
       var ph = p.offsetHeight, rel = sr.right - fr.left, T = pr.top - fr.top - 18;
       var over = sideOver(fit, rel, pr.right - fr.left);
@@ -612,8 +609,7 @@
         w.style.height = (ph + 42) + 'px';
       }
       place();
-      // The well clips while the panel slides, so it must follow the panel when an open fold or editor makes it taller;
-      // a well frozen at the opening height cuts the rest off with no scroll to reach it.
+      // The well clips, so it follows the panel as a fold or editor grows it; frozen, it cut the rest off.
       if (window.ResizeObserver) {
         w._ro = new ResizeObserver(function () {
           var h = p.offsetHeight;
