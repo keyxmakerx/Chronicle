@@ -2335,6 +2335,7 @@
     // phone sit well inside the screen, so a full-width panel would start left
     // of it. Shift it sideways just enough to sit 12px inside both edges.
     _fitPop: function (pop) {
+      if (!pop || !pop.style) return;
       var host = pop.offsetParent;
       pop.style.right = '';
       if (!host) return;
