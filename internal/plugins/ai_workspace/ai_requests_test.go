@@ -108,6 +108,10 @@ func (r *reqRepo) Requests(_ context.Context, campaignID, userID, status string,
 	return out, nil
 }
 
+func (r *reqRepo) DecidedRequests(context.Context, string, string, time.Time, time.Time, int) ([]connector.Request, error) {
+	return nil, nil
+}
+
 func (r *reqRepo) Request(_ context.Context, campaignID, userID string, id int64) (*connector.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

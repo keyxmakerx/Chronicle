@@ -12,13 +12,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
-// aiDecidedShown is how many of the AI's answered requests the lookup shows.
-const aiDecidedShown = 5
-
 // aiAskLister is the connector's request queue as the lookup reads it.
 type aiAskLister interface {
 	Waiting(ctx context.Context, campaignID, userID string) ([]connector.Request, error)
-	Decided(ctx context.Context, campaignID, userID string, n int) ([]connector.Request, error)
+	Decided(ctx context.Context, campaignID, userID string, olderDays int) ([]connector.Request, error)
 }
 
 // aiEntryLister is the system entries service's list.
@@ -49,7 +46,7 @@ type aiWaitingAdapter struct {
 	picks    aiChoicePickLister
 }
 
-func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a records.Actor) (records.WaitingList, error) {
+func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a records.Actor, olderDays int) (records.WaitingList, error) {
 	var out records.WaitingList
 	missing := func(what string, err error) {
 		slog.Warn("ai waiting lookup", slog.String("campaign_id", campaignID), slog.String("queue", what), slog.Any("error", err))
@@ -62,7 +59,7 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 			for _, q := range l {
 				out.Asks = append(out.Asks, records.WaitingAsk{Summary: q.Summary, Counts: q.Counts, At: q.CreatedAt})
 			}
-			if d, err := w.asks.Decided(ctx, campaignID, a.UserID, aiDecidedShown); err != nil {
+			if d, err := w.asks.Decided(ctx, campaignID, a.UserID, olderDays); err != nil {
 				missing("the AI's answered requests", err)
 			} else {
 				for _, q := range d {

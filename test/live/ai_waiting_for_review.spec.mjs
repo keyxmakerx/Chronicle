@@ -106,7 +106,7 @@ test('the lookup lists what waits, what was answered, and cannot approve anythin
   const after = (await ai.call('waiting_for_review')).out;
   assert.match(after, /waiting on the owner \(1\)/);
   assert.match(after, /Keep me waiting/);
-  assert.match(after, /### Your AI's requests the owner answered lately/);
+  assert.match(after, /### Your AI's requests the owner answered, in the last 7 days/);
   assert.match(after, /"?Apply me"?.*applied/);
   assert.match(after, /"?Turn me down"?.*turned down by the owner, nothing changed/);
 

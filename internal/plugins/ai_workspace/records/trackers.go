@@ -128,7 +128,7 @@ func (TrackerKind) Name() string  { return "tracker" }
 func (TrackerKind) Label() string { return "Tracker" }
 func (TrackerKind) Doc() string {
 	return "A tracker (owner or co-DM only): a number, named steps or a clock kept on pages, with a dated log of every change. Matched by `name`. Keys: `shape` (`count`, the default; `steps`; or `clock`), `min` and `max` (a count's ends, either optional; a clock's `max` is its segments, 2 to 24), `steps` (2 to 20, in order, each `Name: what it means`), `bands` (a count's or clock's meanings from a value up, each `3: what it means`), `players_see` (false, the default, keeps it hidden from players: a secret counter; true shows it on the page), `every` (a category's name: the tracker is on every page of it), and `pages` (page names to put it on). " +
-		"To change its value on one page, add `page` with `add` (a step up or down, such as 1 or -1) or `set` (the new value), and a `note` saying why; a page that doesn't have the tracker yet gets it. On update a key you leave out keeps what is there and `pages` adds pages. A tracker kept by a Homebrew recipe is changed through its recipe, not here. Removing one is refused while it is still on pages. A tracker shows only on pages whose layout has a Trackers block. Read today's values with `what: trackers`.\n\n" +
+		"To change its value on one page, add `page` with `add` (a step up or down, such as 1 or -1) or `set` (the new value), and a `note` saying why; a page that doesn't have the tracker yet gets it. A new tracker (`action: create`) can instead take `start` with `page`: the number it begins at on that page, which must fit its `min` and `max`, its steps (0 is the first step) or its clock's segments; it is logged as a change, noted \"Starting value\" unless a `note` says otherwise, and can't be combined with `add` or `set`. On update a key you leave out keeps what is there and `pages` adds pages. A tracker kept by a Homebrew recipe is changed through its recipe, not here. Removing one is refused while it is still on pages. A tracker shows only on pages whose layout has a Trackers block. Read today's values with `what: trackers`.\n\n" +
 		"```\n---\nkind: tracker\nname: Counsel\nmin: 0\nmax: 5\nbands:\n  - \"0: Orrin has no counsel to give\"\n  - \"3: Orrin's advice comes unbidden\"\npages: [Orrin]\n---\n\n---\nkind: tracker\naction: update\nname: Counsel\npage: Orrin\nadd: 1\nnote: Counselled Saatraaol at the Lastwell gate\n---\n```"
 }
 
@@ -157,6 +157,9 @@ type trackerDraft struct {
 	logName  string
 	log      *TrackerChange
 	every    string
+	// start is true when log is a new tracker's first value (`start:`) rather
+	// than a later `set`, which only changes how the plan words it.
+	start bool
 }
 
 func (k TrackerKind) page(ctx context.Context, campaignID, name string) *entities.Entity {
@@ -325,7 +328,11 @@ func (k TrackerKind) read(ctx context.Context, campaignID string, a Actor, r Rec
 
 	_, hasAdd := r.Fields["add"]
 	_, hasSet := r.Fields["set"]
-	if hasAdd || hasSet {
+	if r.Has("start") {
+		if err := k.readStart(ctx, campaignID, r, hasAdd || hasSet, &d); err != nil {
+			return d, err
+		}
+	} else if hasAdd || hasSet {
 		if hasAdd && hasSet {
 			return d, apperror.NewBadRequest("a change is `add` or `set`, not both")
 		}
@@ -350,6 +357,80 @@ func (k TrackerKind) read(ctx context.Context, campaignID string, a Actor, r Rec
 		return d, apperror.NewBadRequest("to change a value on `page`, add `add` or `set`; to put the tracker on pages, use `pages`")
 	}
 	return d, nil
+}
+
+// readStart reads `start`: a new tracker's first value on `page`, logged as a
+// set. It is read like `set` (a whole number, a page that must be named), and
+// then held to the tracker's own ends, so a start the tracker would silently
+// pull back inside them is refused instead.
+func (k TrackerKind) readStart(ctx context.Context, campaignID string, r Record, changes bool, d *trackerDraft) error {
+	if r.Action != ActionCreate {
+		return apperror.NewBadRequest("`start` is the first value of a new tracker (action: create); to change an existing one's value use `add` or `set` with `page`")
+	}
+	if changes {
+		return apperror.NewBadRequest("`start` can't be combined with `add` or `set`; start is the first value")
+	}
+	d.logName = r.Str("page")
+	if d.logName == "" {
+		return apperror.NewBadRequest("say which page the tracker starts on with `page`")
+	}
+	n, ok, err := r.Int("start")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperror.NewBadRequest("`start` is the number the tracker begins at")
+	}
+	if lo, hi, hasLo, hasHi := trackerEnds(d.in); (hasLo && n < lo) || (hasHi && n > hi) {
+		return badRequestf("`start: %d` is outside what %s allows (%s)", n, quote(r.Name), trackerEndsLine(d.in, lo, hi, hasLo, hasHi))
+	}
+	d.logPage = k.page(ctx, campaignID, d.logName)
+	d.start = true
+	note := r.Str("note")
+	if note == "" {
+		note = "Starting value"
+	}
+	d.log = &TrackerChange{Op: trackerSet, Amount: n, Note: note}
+	return nil
+}
+
+// trackerEnds are the lowest and highest value a tracker allows, as the
+// plugin bounds them: steps run from 0 to the last step, a clock from 0 to
+// its segments, a count between its own min and max, either of which may be
+// open.
+func trackerEnds(in TrackerSetup) (lo, hi int, hasLo, hasHi bool) {
+	switch in.Shape {
+	case trackerSteps:
+		return 0, len(in.Steps) - 1, true, true
+	case trackerClock:
+		if in.Max != nil {
+			return 0, *in.Max, true, true
+		}
+		return 0, 0, true, true
+	}
+	if in.Min != nil {
+		lo, hasLo = *in.Min, true
+	}
+	if in.Max != nil {
+		hi, hasHi = *in.Max, true
+	}
+	return lo, hi, hasLo, hasHi
+}
+
+func trackerEndsLine(in TrackerSetup, lo, hi int, hasLo, hasHi bool) string {
+	switch in.Shape {
+	case trackerSteps:
+		return fmt.Sprintf("%d to %d, one per step", lo, hi)
+	case trackerClock:
+		return fmt.Sprintf("%d to %d segments", lo, hi)
+	}
+	switch {
+	case hasLo && hasHi:
+		return fmt.Sprintf("%d to %d", lo, hi)
+	case hasLo:
+		return fmt.Sprintf("%d or more", lo)
+	}
+	return fmt.Sprintf("%d or less", hi)
 }
 
 func trackerShapeLine(in TrackerSetup) string {
@@ -428,6 +509,9 @@ func (k TrackerKind) Plan(ctx context.Context, campaignID string, a Actor, r Rec
 		line := fmt.Sprintf("%s %+d", d.logName, d.log.Amount)
 		if d.log.Op == trackerSet {
 			line = fmt.Sprintf("%s set to %d", d.logName, d.log.Amount)
+		}
+		if d.start {
+			line = fmt.Sprintf("%s starts at %d", d.logName, d.log.Amount)
 		}
 		if d.log.Note != "" {
 			line += " (" + d.log.Note + ")"

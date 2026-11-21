@@ -29,10 +29,13 @@ type HomeAPI interface {
 }
 
 // HomeLayout is a home as rows of columns of blocks. Tiles is set when the
-// home holds a tile section, which only the Customizer arranges.
+// home holds a tile section, which only the Customizer arranges; TileBlocks
+// names the widgets in it, so a lookup can say what the section holds without
+// being able to write it back.
 type HomeLayout struct {
-	Rows  []HomeRow
-	Tiles bool
+	Rows       []HomeRow
+	Tiles      bool
+	TileBlocks []string
 }
 
 // HomeRow is one row of columns.
@@ -87,14 +90,14 @@ type HomePages interface {
 func (HomeKind) Name() string  { return "home" }
 func (HomeKind) Label() string { return "Home page" }
 func (HomeKind) Brief() string {
-	return "the home page each audience sees: which blocks it holds and where, and the words in its Text Blocks (owner only)"
+	return "the home page each audience sees: which blocks it holds and where, and the words in its Text, Table agreement and Making a hero blocks and its Where we play address (owner only)"
 }
 func (k HomeKind) Doc() string {
 	types := "the Customizer's blocks"
 	if k.Svc != nil {
 		types = "`" + strings.Join(k.Svc.BlockTypes(), "`, `") + "`"
 	}
-	return "The home page one audience sees, matched by `audience`: `everyone`, `players`, `scribes`, `directors` or `guests`. Key: `rows`, a list of rows, each a list of `columns`; a column has a `width` (1 to 12, a row's widths add to 12 at most) and `blocks`, in the order shown. A block is its type written alone, `{type: text_block, text: \"words\"}` to write a Text Block's words in markdown, or `{type: brochure, page: \"Page name\", text: \"words on the box\"}` to point a Brochure block at the campaign page that is the new-player brochure (the page must exist; `text` is optional, and without it the box shows the page's first line). A brochure written without `page` or `text` keeps the ones it has. Block types: " + types + ". A block already on the home keeps its settings when listed again, so list every block the home should keep; one left out is removed. `create` and `update` replace the whole arrangement; `delete` takes the audience's own home away so it shows the Everyone home again. Only the campaign's owner can change a home. Some blocks show only what that audience may see, or only to the DM team, and the review says when a block is placed where it can't draw. A home with a tile section can only be arranged in Customize.\n\n```\n---\nkind: home\naudience: players\nrows:\n  - columns:\n      - width: 12\n        blocks: [welcome_banner]\n  - columns:\n      - width: 7\n        blocks:\n          - start_here\n          - {type: text_block, text: \"Bring dice and snacks.\"}\n          - {type: brochure, page: \"New player brochure\", text: \"Read this before your first night.\"}\n          - recent_pages\n      - width: 5\n        blocks: [coming_up, party]\n---\n```"
+	return "The home page one audience sees, matched by `audience`: `everyone`, `players`, `scribes`, `directors` or `guests`. Key: `rows`, a list of rows, each a list of `columns`; a column has a `width` (1 to 12, a row's widths add to 12 at most) and `blocks`, in the order shown. A block is its type written alone, `{type: text_block, text: \"words\"}` to write a Text Block's words in markdown, `{type: table_agreement, text: \"words\"}` or `{type: making_a_hero, text: \"words\"}` to write those blocks' words the same way, `{type: where_we_play, foundry_url: \"foundry.example.com\", voice: \"Discord, the Ember Coast channel\"}` to set the Foundry address and voice channel (each optional; an empty one clears it), or `{type: brochure, page: \"Page name\", text: \"words on the box\"}` to point a Brochure block at the campaign page that is the new-player brochure (the page must exist; `text` is optional, and without it the box shows the page's first line). A brochure written without `page` or `text` keeps the ones it has, and so does any block written without the words it takes. Block types: " + types + ". A block already on the home keeps its settings when listed again, so list every block the home should keep; one left out is removed. `create` and `update` replace the whole arrangement; `delete` takes the audience's own home away so it shows the Everyone home again. Only the campaign's owner can change a home. Some blocks show only what that audience may see, or only to the DM team, and the review says when a block is placed where it can't draw. A home with a tile section can only be arranged in Customize. `what: home` lists every audience's home as it is now, including the ones that borrow the Everyone home, written so it can be sent back changed.\n\n```\n---\nkind: home\naudience: players\nrows:\n  - columns:\n      - width: 12\n        blocks: [welcome_banner]\n  - columns:\n      - width: 7\n        blocks:\n          - start_here\n          - {type: text_block, text: \"Bring dice and snacks.\"}\n          - {type: brochure, page: \"New player brochure\", text: \"Read this before your first night.\"}\n          - recent_pages\n      - width: 5\n        blocks: [coming_up, party]\n---\n```"
 }
 
 // homeBlocks that draw nothing for anyone but the DM team.
@@ -106,7 +109,12 @@ type homeTarget struct {
 	was       HomeLayout
 	saved     bool
 	next      HomeLayout
+	// words are the written blocks whose words really change, for the review.
+	words []homeWordsChange
 }
+
+// homeWordsChange is one written block's words before and after, as markdown.
+type homeWordsChange struct{ typ, was, now string }
 
 func audienceKey(word string) (key, canonical string, ok bool) {
 	w := strings.ToLower(strings.TrimSpace(word))
@@ -148,15 +156,15 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 	}
 	// Blocks already on the home, by type in the order found, so a listed
 	// block takes over the settings of the one it stands for.
-	pool := map[string][]HomeBlock{}
+	pool := map[string][]*poolBlock{}
 	for _, row := range t.was.Rows {
 		for _, col := range row.Columns {
 			for _, b := range col.Blocks {
-				pool[b.Type] = append(pool[b.Type], b)
+				pool[b.Type] = append(pool[b.Type], &poolBlock{block: b})
 			}
 		}
 	}
-	used := map[string]int{}
+	claimWordMatches(rows, pool)
 	for ri, rv := range rows {
 		rm, ok := rv.(map[string]any)
 		if !ok {
@@ -188,29 +196,42 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 					return t, badRequestf("row %d, column %d: %s is not a home block", ri+1, ci+1, quote(typ))
 				}
 				b := HomeBlock{ID: fmt.Sprintf("blk-ai-%d-%d-%d", ri+1, ci+1, bi+1), Type: typ}
-				if old := pool[typ]; used[typ] < len(old) {
-					b.ID, b.Config = old[used[typ]].ID, cloneConfig(old[used[typ]].Config)
+				if old := takePoolBlock(pool[typ], blockKey(ri, ci, bi)); old != nil {
+					b.ID, b.Config = old.ID, cloneConfig(old.Config)
 				}
-				used[typ]++
-				if spec.hasText && typ != "text_block" && typ != "brochure" {
-					return t, badRequestf("only a text_block or a brochure takes `text`; %s does not", quote(typ))
+				if spec.hasText && !homeWordsBlocks[typ] && typ != "brochure" {
+					return t, badRequestf("only a text_block, a brochure, a table_agreement or a making_a_hero takes `text`; %s does not", quote(typ))
 				}
 				if spec.hasPage && typ != "brochure" {
 					return t, badRequestf("only a brochure takes `page`; %s does not", quote(typ))
 				}
-				switch typ {
-				case "text_block":
+				if (spec.hasFoundryURL || spec.hasVoice) && typ != "where_we_play" {
+					return t, badRequestf("only a where_we_play takes `foundry_url` and `voice`; %s does not", quote(typ))
+				}
+				switch {
+				case homeWordsBlocks[typ]:
 					if spec.hasText {
 						if len([]rune(spec.text)) > maxHomeText {
-							return t, badRequestf("a text block's words run over %d characters", maxHomeText)
+							return t, badRequestf("the words in a %s block run over %d characters", typ, maxHomeText)
 						}
-						if b.Config == nil {
-							b.Config = map[string]any{}
+						// Words sent back as they were read leave the stored
+						// block alone, so a lookup sent back never re-renders
+						// (and so never reshapes) what the owner wrote.
+						was := storedWords(b.Config)
+						if now := normalizeWords(spec.text); now != was {
+							if b.Config == nil {
+								b.Config = map[string]any{}
+							}
+							b.Config["_md"] = spec.text // turned into HTML at Apply
+							t.words = append(t.words, homeWordsChange{typ: typ, was: was, now: now})
 						}
-						b.Config["_md"] = spec.text // turned into HTML at Apply
 					}
-				case "brochure":
+				case typ == "brochure":
 					if err := k.setBrochure(ctx, campaignID, &b, spec); err != nil {
+						return t, badRequestf("row %d, column %d: %v", ri+1, ci+1, err)
+					}
+				case typ == "where_we_play":
+					if err := setWhereWePlay(&b, spec); err != nil {
 						return t, badRequestf("row %d, column %d: %v", ri+1, ci+1, err)
 					}
 				}
@@ -229,7 +250,90 @@ type homeSpec struct {
 	text             string
 	hasText, hasPage bool
 	page             string
+	// foundryURL and voice are a where_we_play block's two typed lines; has*
+	// tells "left out, keep it" from "empty, clear it".
+	foundryURL, voice       string
+	hasFoundryURL, hasVoice bool
 }
+
+// poolBlock is a block already on the home, waiting to be taken over by the
+// listed block that stands for it.
+type poolBlock struct {
+	block HomeBlock
+	// claim is the listed block that wrote this block's own words back, and
+	// used says it has been taken.
+	claim string
+	used  bool
+}
+
+func blockKey(ri, ci, bi int) string { return fmt.Sprintf("%d.%d.%d", ri, ci, bi) }
+
+// claimWordMatches pairs each listed written block that carries words with the
+// block on the home holding exactly those words, wherever it now sits. Pairing
+// by position alone would hand a moved column's words to another block of the
+// same type, so a lookup sent back with a column moved would rewrite them.
+func claimWordMatches(rows []any, pool map[string][]*poolBlock) {
+	for ri, rv := range rows {
+		rm, _ := rv.(map[string]any)
+		cols, _ := rm["columns"].([]any)
+		for ci, cv := range cols {
+			cm, _ := cv.(map[string]any)
+			blocks, _ := cm["blocks"].([]any)
+			for bi, bv := range blocks {
+				spec, err := homeBlockSpec(bv)
+				if err != nil || !spec.hasText || !homeWordsBlocks[spec.typ] {
+					continue
+				}
+				want := normalizeWords(spec.text)
+				for _, pb := range pool[spec.typ] {
+					if pb.claim == "" && storedWords(pb.block.Config) == want {
+						pb.claim = blockKey(ri, ci, bi)
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+// takePoolBlock gives the listed block at key the block it claimed, else the
+// next block of its type nobody claimed, in the order found.
+func takePoolBlock(blocks []*poolBlock, key string) *HomeBlock {
+	for _, pb := range blocks {
+		if !pb.used && pb.claim == key {
+			pb.used = true
+			return &pb.block
+		}
+	}
+	for _, pb := range blocks {
+		if !pb.used && pb.claim == "" {
+			pb.used = true
+			return &pb.block
+		}
+	}
+	return nil
+}
+
+// storedWords is a written block's stored words in the markdown a lookup
+// writes, so words sent back can be compared with what is there.
+func storedWords(cfg map[string]any) string {
+	content, _ := cfg["content"].(string)
+	return normalizeWords(writtenMarkdown(content))
+}
+
+// normalizeWords makes line endings and outer blank space irrelevant to
+// whether words changed.
+func normalizeWords(s string) string {
+	return strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n"))
+}
+
+// homeWordsBlocks are the blocks whose words are one markdown `text`, kept as
+// sanitized HTML in config["content"].
+var homeWordsBlocks = map[string]bool{"text_block": true, "table_agreement": true, "making_a_hero": true}
+
+// maxWhereWePlayLine bounds the Foundry address and the voice line a
+// where_we_play block holds; the block shows an address cut to 300 anyway.
+const maxWhereWePlayLine = 300
 
 // maxBrochureWords bounds the words on a brochure's box, which the box
 // shortens anyway.
@@ -269,7 +373,34 @@ func (k HomeKind) setBrochure(ctx context.Context, campaignID string, b *HomeBlo
 	return nil
 }
 
-// homeBlockSpec reads a block written as its type or as {type, text, page}.
+// setWhereWePlay writes a where_we_play block's address and voice line into
+// its config. A line the record leaves out keeps the block's existing one,
+// and an empty one clears it, as for a brochure's words.
+func setWhereWePlay(b *HomeBlock, spec homeSpec) error {
+	if b.Config == nil {
+		b.Config = map[string]any{}
+	}
+	for _, f := range []struct {
+		key, val string
+		has      bool
+	}{{"foundry_url", spec.foundryURL, spec.hasFoundryURL}, {"voice", spec.voice, spec.hasVoice}} {
+		if !f.has {
+			continue
+		}
+		if len([]rune(f.val)) > maxWhereWePlayLine {
+			return fmt.Errorf("`%s` runs over %d characters", f.key, maxWhereWePlayLine)
+		}
+		if f.val == "" {
+			delete(b.Config, f.key)
+		} else {
+			b.Config[f.key] = f.val
+		}
+	}
+	return nil
+}
+
+// homeBlockSpec reads a block written as its type or as {type, text, page,
+// foundry_url, voice}.
 func homeBlockSpec(v any) (homeSpec, error) {
 	switch b := v.(type) {
 	case string:
@@ -277,7 +408,7 @@ func homeBlockSpec(v any) (homeSpec, error) {
 	case map[string]any:
 		typ, _ := b["type"].(string)
 		if strings.TrimSpace(typ) == "" {
-			return homeSpec{}, fmt.Errorf("a block with `text` or `page` needs a `type`")
+			return homeSpec{}, fmt.Errorf("a block with `text`, `page`, `foundry_url` or `voice` needs a `type`")
 		}
 		spec := homeSpec{typ: strings.TrimSpace(typ)}
 		if tv, ok := b["text"]; ok {
@@ -285,6 +416,12 @@ func homeBlockSpec(v any) (homeSpec, error) {
 		}
 		if pv, ok := b["page"]; ok {
 			spec.page, spec.hasPage = fmt.Sprint(pv), true
+		}
+		if fv, ok := b["foundry_url"]; ok {
+			spec.foundryURL, spec.hasFoundryURL = strings.TrimSpace(fmt.Sprint(fv)), true
+		}
+		if vv, ok := b["voice"]; ok {
+			spec.voice, spec.hasVoice = strings.TrimSpace(fmt.Sprint(vv)), true
 		}
 		return spec, nil
 	}
@@ -345,10 +482,18 @@ func (k HomeKind) Plan(ctx context.Context, campaignID string, a Actor, r Record
 	if err := k.Svc.Check(ctx, campaignID, stripMarkdown(probe)); err != nil {
 		return Plan{Error: planError(err)}
 	}
-	if homeShape(t.next) == homeShape(t.was) && !homeHasText(t.next) {
+	if homeShape(t.next) == homeShape(t.was) && len(t.words) == 0 {
 		return Plan{Error: "the " + t.word + " home already has these blocks in these places"}
 	}
 	p := Plan{Summary: "the " + t.word + " home becomes: " + homeSummary(t.next) + " (now: " + homeSummary(t.was) + ")"}
+	for _, w := range t.words {
+		// Only words that really change are shown; the rest stay as written.
+		if w.was == "" {
+			p.Summary += "; " + w.typ + " words: " + quoted(w.now)
+		} else {
+			p.Summary += "; " + w.typ + " words: " + quoted(w.now) + " (was " + quoted(w.was) + ")"
+		}
+	}
 	if dropped := droppedBlocks(t.was, t.next); len(dropped) > 0 {
 		p.Warnings = append(p.Warnings, "left out, so removed: "+strings.Join(dropped, ", "))
 	}
@@ -427,19 +572,6 @@ func stripMarkdown(l HomeLayout) HomeLayout {
 	return out
 }
 
-func homeHasText(l HomeLayout) bool {
-	for _, row := range l.Rows {
-		for _, c := range row.Columns {
-			for _, b := range c.Blocks {
-				if _, ok := b.Config["_md"]; ok {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // homeShape is every column's width and blocks, to tell a change from none.
 func homeShape(l HomeLayout) string {
 	var b strings.Builder
@@ -449,10 +581,13 @@ func homeShape(l HomeLayout) string {
 			fmt.Fprintf(&b, "|%d:", c.Width)
 			for _, bl := range c.Blocks {
 				b.WriteString(bl.Type)
-				if bl.Type == "brochure" {
+				switch bl.Type {
+				case "brochure":
 					// Its page and words are the block's whole content, so a
 					// change to them is a change to the home.
 					fmt.Fprintf(&b, "(%v,%v)", bl.Config["entity_id"], bl.Config["content"])
+				case "where_we_play":
+					fmt.Fprintf(&b, "(%v,%v)", bl.Config["foundry_url"], bl.Config["voice"])
 				}
 				b.WriteString(",")
 			}
@@ -521,29 +656,54 @@ func (k HomeKind) Export(ctx context.Context, campaignID string, a Actor) (strin
 		if !saved || l.Tiles || len(l.Rows) == 0 {
 			continue
 		}
-		b.WriteString("---\nkind: home\naudience: " + aud.word + "\nrows:\n")
-		for _, row := range l.Rows {
-			b.WriteString("  - columns:\n")
-			for _, c := range row.Columns {
-				fmt.Fprintf(&b, "      - width: %d\n        blocks:\n", c.Width)
-				for _, bl := range c.Blocks {
-					if bl.Type == "text_block" {
-						if content, _ := bl.Config["content"].(string); content != "" {
-							b.WriteString("          - {type: text_block, text: " + quote(textOf(content)) + "}\n")
-							continue
-						}
-					}
-					if bl.Type == "brochure" {
-						b.WriteString("          - " + k.brochureSpec(ctx, campaignID, bl) + "\n")
-						continue
-					}
-					b.WriteString("          - " + bl.Type + "\n")
-				}
-			}
-		}
-		b.WriteString("---\n\n")
+		k.writeHome(ctx, campaignID, &b, aud.word, l)
 	}
 	return b.String(), nil
+}
+
+// writeHome writes one home as the `kind: home` block that sends it back.
+func (k HomeKind) writeHome(ctx context.Context, campaignID string, b *strings.Builder, audience string, l HomeLayout) {
+	b.WriteString("---\nkind: home\naudience: " + audience + "\nrows:\n")
+	for _, row := range l.Rows {
+		b.WriteString("  - columns:\n")
+		for _, c := range row.Columns {
+			fmt.Fprintf(b, "      - width: %d\n        blocks:\n", c.Width)
+			for _, bl := range c.Blocks {
+				b.WriteString("          - " + k.blockSpec(ctx, campaignID, bl) + "\n")
+			}
+		}
+	}
+	b.WriteString("---\n\n")
+}
+
+// blockSpec writes one block in the form a record reads: its bare type, or
+// the type with the words and settings the record can change. A block with
+// none of them is written bare, which keeps whatever it holds.
+func (k HomeKind) blockSpec(ctx context.Context, campaignID string, bl HomeBlock) string {
+	switch bl.Type {
+	case "text_block":
+		if content, _ := bl.Config["content"].(string); content != "" {
+			return "{type: text_block, text: " + quote(writtenMarkdown(content)) + "}"
+		}
+	case "table_agreement", "making_a_hero":
+		if content, _ := bl.Config["content"].(string); strings.TrimSpace(content) != "" {
+			return "{type: " + bl.Type + ", text: " + quote(writtenMarkdown(content)) + "}"
+		}
+	case "where_we_play":
+		var parts []string
+		if v, _ := bl.Config["foundry_url"].(string); strings.TrimSpace(v) != "" {
+			parts = append(parts, "foundry_url: "+quote(strings.TrimSpace(v)))
+		}
+		if v, _ := bl.Config["voice"].(string); strings.TrimSpace(v) != "" {
+			parts = append(parts, "voice: "+quote(strings.TrimSpace(v)))
+		}
+		if len(parts) > 0 {
+			return "{type: where_we_play, " + strings.Join(parts, ", ") + "}"
+		}
+	case "brochure":
+		return k.brochureSpec(ctx, campaignID, bl)
+	}
+	return bl.Type
 }
 
 // brochureSpec writes a brochure block in the form a record reads: the page by
@@ -563,23 +723,4 @@ func (k HomeKind) brochureSpec(ctx context.Context, campaignID string, b HomeBlo
 		return "brochure"
 	}
 	return "{type: brochure, " + strings.Join(parts, ", ") + "}"
-}
-
-// textOf is a Text Block's HTML as plain words, tags dropped, for an export an
-// AI can rewrite.
-func textOf(html string) string {
-	var out strings.Builder
-	in := false
-	for _, r := range html {
-		switch {
-		case r == '<':
-			in = true
-			out.WriteByte(' ')
-		case r == '>':
-			in = false
-		case !in:
-			out.WriteRune(r)
-		}
-	}
-	return strings.Join(strings.Fields(out.String()), " ")
 }

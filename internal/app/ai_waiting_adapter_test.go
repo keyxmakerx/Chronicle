@@ -16,12 +16,17 @@ import (
 type waitingAsksStub struct {
 	waiting, decided []connector.Request
 	err              error
+	// older records the window the adapter asked for.
+	older *int
 }
 
 func (s waitingAsksStub) Waiting(context.Context, string, string) ([]connector.Request, error) {
 	return s.waiting, s.err
 }
-func (s waitingAsksStub) Decided(context.Context, string, string, int) ([]connector.Request, error) {
+func (s waitingAsksStub) Decided(_ context.Context, _, _ string, older int) ([]connector.Request, error) {
+	if s.older != nil {
+		*s.older = older
+	}
 	return s.decided, s.err
 }
 
@@ -106,7 +111,7 @@ func TestAIWaitingAdapter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.w.Waiting(context.Background(), "c1", owner)
+			got, err := tt.w.Waiting(context.Background(), "c1", owner, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -146,8 +151,24 @@ func TestAIWaitingAdapter(t *testing.T) {
 
 	// The entries are read as a Director, so players' drafts are included.
 	var seen systems.EntryActor
-	_, _ = aiWaitingAdapter{entries: waitingEntriesStub{seen: &seen}}.Waiting(context.Background(), "c1", owner)
+	_, _ = aiWaitingAdapter{entries: waitingEntriesStub{seen: &seen}}.Waiting(context.Background(), "c1", owner, 0)
 	if !seen.IsDirector || seen.UserID != "u-owner" {
 		t.Errorf("entries read as %+v", seen)
+	}
+}
+
+// The window the lookup asked for reaches the connector's answered-requests
+// query as it was asked, and the asking person's id scopes it.
+func TestAIWaitingAdapter_PassesTheWindow(t *testing.T) {
+	owner := records.Actor{UserID: "u-owner", Role: int(campaigns.RoleOwner)}
+	for _, older := range []int{0, 7, 21} {
+		got := -1
+		_, err := aiWaitingAdapter{asks: waitingAsksStub{older: &got}}.Waiting(context.Background(), "c1", owner, older)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != older {
+			t.Errorf("connector asked for older = %d, want %d", got, older)
+		}
 	}
 }

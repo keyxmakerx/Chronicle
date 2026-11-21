@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -239,6 +240,39 @@ func (r *memRepo) Requests(_ context.Context, campaignID, userID, status string,
 		}
 	}
 	return out, nil
+}
+
+func (r *memRepo) DecidedRequests(_ context.Context, campaignID, userID string, from, to time.Time, limit int) ([]Request, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Request
+	for _, q := range r.reqs {
+		if q.CampaignID != campaignID || r.userOf(q.ConnectionID) != userID || (q.Status != RequestAnswered && q.Status != RequestTurnedDown) {
+			continue
+		}
+		at := q.CreatedAt
+		if q.DecidedAt != nil {
+			at = *q.DecidedAt
+		}
+		if at.Before(from) || !at.Before(to) {
+			continue
+		}
+		cp := *q
+		cp.Body = ""
+		out = append(out, cp)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return answerTime(out[i]).After(answerTime(out[j])) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func answerTime(q Request) time.Time {
+	if q.DecidedAt != nil {
+		return *q.DecidedAt
+	}
+	return q.CreatedAt
 }
 
 func (r *memRepo) Request(_ context.Context, campaignID, userID string, id int64) (*Request, error) {

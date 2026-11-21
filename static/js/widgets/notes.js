@@ -923,10 +923,11 @@ Chronicle.register('notes', {
       updateTabCount();
     }
 
-    function updateNote(id, data) {
+    function updateNote(id, data, keepalive) {
       return Chronicle.apiFetch(apiUrl('/' + id), {
         method: 'PUT',
-        body: data
+        body: data,
+        keepalive: !!keepalive
       }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -1720,7 +1721,7 @@ Chronicle.register('notes', {
      * (kept in state by keepEditingInputs, so this works while the card is
      * off screen) and the editor's text. Returns the save.
      */
-    function saveEditingNote(noteId) {
+    function saveEditingNote(noteId, keepalive) {
       var note = findNote(noteId);
       if (!note) return Promise.resolve(null);
       if (noteId === state.editingId) keepEditingInputs();
@@ -1741,7 +1742,16 @@ Chronicle.register('notes', {
         updateData.content = note.content;
       }
 
-      return updateNote(noteId, updateData).catch(function () {
+      return updateNote(noteId, updateData, keepalive).catch(function (err) {
+        // A keepalive request is capped (about 64 KB) and fails with a
+        // TypeError beyond that; a plain retry still works on a page that
+        // is only hidden, so the text is not lost to the cap.
+        if (keepalive && err instanceof TypeError) {
+          return updateNote(noteId, updateData, false).catch(function () {
+            Chronicle.notify('Could not save the jot.', 'error');
+            return null;
+          });
+        }
         Chronicle.notify('Could not save the jot.', 'error');
         return null;
       });
@@ -1765,12 +1775,26 @@ Chronicle.register('notes', {
      * nothing is being edited or nothing changed, so it never double-saves.
      */
     function flushAutosave() {
+      flushNow(false);
+    }
+
+    /**
+     * Flush for a page that is going away or being hidden: the same save,
+     * sent with keepalive so the browser finishes it after the page is gone.
+     * Separate from flushAutosave because that one is also an event handler,
+     * and an Event argument must never be read as the keepalive flag.
+     */
+    function flushOnHide() {
+      flushNow(true);
+    }
+
+    function flushNow(keepalive) {
       if (autosaveTimer) {
         clearTimeout(autosaveTimer);
         autosaveTimer = null;
       }
       if (!notesDirty || !state.editingId) return;
-      saveEditingNote(state.editingId);
+      saveEditingNote(state.editingId, keepalive);
       notesDirty = false;
     }
 
@@ -2006,7 +2030,15 @@ Chronicle.register('notes', {
     // Best-effort save if the tab is closed / reloaded mid-edit. The PUT
     // may not complete during unload (same caveat as the lock release
     // below), but it costs nothing and rescues the common case.
-    window.addEventListener('beforeunload', flushAutosave);
+    // Handlers are named so destroy() can remove every one of them.
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') flushOnHide();
+    }
+    window.addEventListener('beforeunload', flushOnHide);
+    // beforeunload does not fire reliably on mobile; hiding the page does.
+    window.addEventListener('pagehide', flushOnHide);
+    el._notesOnVisibility = onVisibilityChange;
+    document.addEventListener('visibilitychange', el._notesOnVisibility);
 
     // A panel kept open reopens on the next page; otherwise just count this page.
     if (embedded || isPinnedOpen()) openPanel(); else loadCount();
@@ -2017,7 +2049,7 @@ Chronicle.register('notes', {
     el._notesPanel = panel;
     el._notesMiniEditors = miniEditors;
     el._notesNavHandler = onNavigated;
-    el._notesBeforeUnload = flushAutosave;
+    el._notesBeforeUnload = flushOnHide;
     el._notesOnCreated = _onNoteCreated;
     el._notesOnOpenNote = _onOpenNote;
     el._notesViewport = window.visualViewport ? onViewport : null;
@@ -2039,7 +2071,12 @@ Chronicle.register('notes', {
     if (el._notesBeforeUnload) {
       el._notesBeforeUnload();
       window.removeEventListener('beforeunload', el._notesBeforeUnload);
+      window.removeEventListener('pagehide', el._notesBeforeUnload);
       delete el._notesBeforeUnload;
+    }
+    if (el._notesOnVisibility) {
+      document.removeEventListener('visibilitychange', el._notesOnVisibility);
+      delete el._notesOnVisibility;
     }
     document.removeEventListener('pointermove', el._notesPointerMove);
     document.removeEventListener('pointerup', el._notesPointerUp);

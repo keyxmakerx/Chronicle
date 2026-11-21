@@ -22,6 +22,9 @@ type CalendarStructureAPI interface {
 	GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
 	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *calendar.ImportResult, opts calendar.CreateCalendarFromImportOptions) (*calendar.Calendar, error)
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
+	// DeleteCalendar takes back a calendar a create made when a later step
+	// of the same create fails.
+	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	UpdateCalendar(ctx context.Context, calendarID, campaignID string, input calendar.UpdateCalendarInput) error
 	SetCurrentDate(ctx context.Context, calendarID, campaignID string, year, month, day, hour, minute int) error
 	PreviewStructureEdit(ctx context.Context, calendarID, campaignID string, edit calendar.StructureEdit) (*calendar.StructurePreview, error)
@@ -214,6 +217,9 @@ type CalendarKind struct {
 	// Pages resolves a moon's or an era's `page:`. Without it a block that
 	// names a page is refused rather than guessed at.
 	Pages PageResolver
+	// Marks switches a moon between its cycle and the Director's hand, for a
+	// moon's `moves:`. Without it a block that names `moves` is refused.
+	Marks calendar.MoonMarkService
 }
 
 func (CalendarKind) Name() string  { return KindCalendar }
@@ -227,7 +233,7 @@ func (CalendarKind) Doc() string {
 		"- `months`: a list of `name`, `days`, optional `season`, `intercalary` (true for festival days outside the weeks), `leap_days`. Needed on create.\n" +
 		"- `weekdays`: a list of names, or of `name` with `rest_day: true`. Needed on create.\n" +
 		"- `seasons`: a list of `name`, `start_month`, `start_day`, `end_month`, `end_day`, `color`. Without it, seasons are made from the months' `season`.\n" +
-		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`, optionally `strength` (how strongly the sky shows the colour, 0 to 1; `default` for the sky's own), `hidden` (true hides the moon from players, false shows it) and `page` (the name of a page that tells of the moon; `none` clears it, leaving it out keeps it).\n" +
+		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`, optionally `strength` (how strongly the sky shows the colour, 0 to 1; `default` for the sky's own), `hidden` (true hides the moon from players, false shows it), `page` (the name of a page that tells of the moon; `none` clears it, leaving it out keeps it) and `moves` (`by_hand`: the Director sets the moon's phases by hand instead of following its cycle; `cycle`: follows its cycle; not for a real-world calendar). A new moon that moves `by_hand` may leave out `cycle`, since a moon set by hand ignores it (30 days is stored); any other moon needs one. Its marks are written in a `kind: moon` block once the moon exists.\n" +
 		"- `sun`: the kind of star the sun is, `red` (a red ember), `orange`, `yellow` (the usual sun), `white` or `blue` (blue-white); its daylight and sky follow. Or a map of `kind` and `color` (an exact colour that overrides the kind's; `none` clears it).\n" +
 		"- `eras`: a list of `name`, `start_year` (optional `start_month`, `start_day`), optional `end_year`/`end_month`/`end_day`, `color`, `description`, and optionally `page` (the name of a page that tells of the era; `none` clears it, leaving it out keeps it).\n" +
 		"- `leap_year_every`: years between leap years (0 for none).\n" +
@@ -244,6 +250,7 @@ type calSpec struct {
 	moons     []calendar.MoonInput
 	moonPages []pageRef  // one per moon, what its `page:` said
 	moonLooks []moonLook // one per moon, its strength and hidden keys
+	moonModes []string   // one per moon: "" keeps how it moves, else calendar.MoonManual or MoonCycle
 	sun       *sunSpec   // nil when the block has no `sun`
 	eras      []eraSpec
 	leapEvery *int
@@ -440,16 +447,30 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 		s.moons = make([]calendar.MoonInput, len(items))
 		s.moonPages = make([]pageRef, len(items))
 		s.moonLooks = make([]moonLook, len(items))
+		s.moonModes = make([]string, len(items))
 		for i, it := range items {
 			cycle, ok, err := firstNum(it, "cycle", "cycle_days", "cycle_length")
 			if err != nil {
 				return nil, err
 			}
+			if it.Has("moves") {
+				if s.moonModes[i], err = readMoves(it.Str("moves")); err != nil {
+					return nil, badRequestf("moon %q: %s", it.Name, planError(err))
+				}
+				if s.moonModes[i] == calendar.MoonManual && base != nil && base.IsRealLife() {
+					return nil, badRequestf("moon %q follows the real Moon and cannot be set by hand", it.Name)
+				}
+			}
 			old := baseMoon(base, it.Name)
-			if !ok && old != nil {
+			switch {
+			case !ok && old != nil:
 				cycle = old.CycleDays
-			} else if !ok || cycle <= 0 {
-				return nil, badRequestf("moon %q needs a cycle in days", it.Name)
+			case !ok && s.moonModes[i] == calendar.MoonManual:
+				// A moon set by hand is drawn from its marks, never its cycle;
+				// the field still needs a positive number to store.
+				cycle = byHandCycleDays
+			case !ok || cycle <= 0:
+				return nil, badRequestf("moon %q needs a cycle in days (only a moon that moves `by_hand` may leave it out)", it.Name)
 			}
 			offset, ok, err := firstNum(it, "phase_offset", "offset")
 			if err != nil {
@@ -525,6 +546,11 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 	}
 	return s, nil
 }
+
+// byHandCycleDays is the cycle stored for a new moon set by hand that gave
+// none: a moon moving by hand ignores it when drawn, and switching it back to
+// its cycle then starts from an ordinary month.
+const byHandCycleDays = 30
 
 func baseMoon(base *calendar.Calendar, name string) *calendar.Moon {
 	if base == nil {
@@ -766,6 +792,9 @@ func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor
 	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
 		return Plan{Error: planError(err)}, nil
 	}
+	if err := k.checkMoves(s); err != nil {
+		return Plan{Error: planError(err)}, nil
+	}
 	switch {
 	case s.months == nil:
 		return Plan{Error: "a new calendar needs months"}, nil
@@ -807,7 +836,11 @@ func createSummary(s *calSpec, ir *calendar.ImportResult) string {
 		parts = append(parts, plural(n, "season", "seasons"))
 	}
 	if n := len(ir.Moons); n > 0 {
-		parts = append(parts, plural(n, "moon", "moons"))
+		moons := plural(n, "moon", "moons")
+		if hand, _ := s.moonModeChanges(nil); hand > 0 {
+			moons += fmt.Sprintf(" (%d set by hand)", hand)
+		}
+		parts = append(parts, moons)
 	}
 	if n := len(ir.Eras); n > 0 {
 		parts = append(parts, plural(n, "era", "eras"))
@@ -940,6 +973,9 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor
 	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
 		return Plan{Error: planError(err)}
 	}
+	if err := k.checkMoves(s); err != nil {
+		return Plan{Error: planError(err)}
+	}
 	var did []string
 	warn := s.warnings
 	if cal != main {
@@ -981,6 +1017,14 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor
 	}
 	if n := s.pageChanges(); n > 0 {
 		did = append(did, "changes "+plural(n, "lore page", "lore pages"))
+	}
+	if hand, cycle := s.moonModeChanges(cal); hand+cycle > 0 {
+		if hand > 0 {
+			did = append(did, "sets "+plural(hand, "moon", "moons")+" by hand")
+		}
+		if cycle > 0 {
+			did = append(did, "has "+plural(cycle, "moon", "moons")+" follow their cycle")
+		}
 	}
 	if n := s.moonPhaseChanges(cal); n > 0 {
 		did = append(did, "changes the phase offset or colour of "+plural(n, "moon", "moons"))
@@ -1101,13 +1145,34 @@ func (k CalendarKind) applyCreate(ctx context.Context, campaignID string, a Acto
 	for i := range s.eras {
 		ir.Eras[i].LoreEntityID = s.eras[i].in.LoreEntityID
 	}
+	if err := k.checkMoves(s); err != nil {
+		return err
+	}
 	cal, err := k.Svc.CreateCalendarFromImport(ctx, campaignID, ir, calendar.CreateCalendarFromImportOptions{})
 	if err != nil {
 		return err
 	}
+	// A moon set by hand is stored on an ordinary 30-day cycle until it is
+	// switched, so the calendar must not become the main one (the one the
+	// calendar page and players read) before that is done. Everything the
+	// switch needs was checked above (the Marks service, a valid mode, a
+	// fantasy calendar), so only a storage failure can still land here; then
+	// the new calendar is taken back, leaving the campaign as it was.
+	if err := k.setMoonModes(ctx, campaignID, a, s, cal.ID); err != nil {
+		if delErr := k.Svc.DeleteCalendar(ctx, cal.ID, campaignID); delErr != nil {
+			return fmt.Errorf("%w; the new calendar %q could not be taken back either: it exists but is not the main calendar, so players do not see it; delete it in the calendar settings and run the block again", err, r.Name)
+		}
+		return err
+	}
 	// The service never marks a new calendar as the main one, and every
 	// other block (and the calendar page) reads the main one.
-	return k.Svc.SetDefaultCalendar(ctx, campaignID, cal.ID)
+	if err := k.Svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
+		if delErr := k.Svc.DeleteCalendar(ctx, cal.ID, campaignID); delErr != nil {
+			return fmt.Errorf("%w; the new calendar %q exists but is not the main calendar: make it the main one in the calendar settings", err, r.Name)
+		}
+		return err
+	}
+	return nil
 }
 
 // applyUpdate writes the structure first, so the current date and eras
@@ -1118,6 +1183,9 @@ func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, a Acto
 		return err
 	}
 	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
+		return err
+	}
+	if err := k.checkMoves(s); err != nil {
 		return err
 	}
 	edit, err := structureEdit(s, cal)
@@ -1134,6 +1202,9 @@ func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, a Acto
 		}
 	}
 	if err := k.setMoonLooks(ctx, campaignID, s, cal); err != nil {
+		return err
+	}
+	if err := k.setMoonModes(ctx, campaignID, a, s, cal.ID); err != nil {
 		return err
 	}
 	if s.sun != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
@@ -165,6 +166,20 @@ type Lookups struct {
 	// enchanted, who made them) to the `inventory` and `players` answers;
 	// nil leaves every count plain.
 	Copies CopiesAPI
+	// Homes answers `what: home`, for the campaign's owner only; nil says it
+	// can't be looked up.
+	Homes *HomeKind
+	// Now is the clock for answers that say how old something is; nil reads
+	// the real one. Tests set it so an age doesn't drift.
+	Now func() time.Time
+}
+
+// now is the lookup's clock.
+func (run *lookupRun) now() time.Time {
+	if run.l.Now != nil {
+		return run.l.Now()
+	}
+	return time.Now()
 }
 
 // ShopShelfAPI is today's shelf of a shop, which a ShopLooksAPI may also
@@ -276,9 +291,10 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
 	{"trackers", "optional `page`", "the counters, steps and clocks kept on pages, hidden ones included: each one's value, what it means now and its latest changes (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
-	{"waiting", "none", "what is waiting for a Director's review: the changes this AI asked for (and how the owner answered the latest), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
+	{"waiting", "optional `older` (days back to start from, like 7)", "what is waiting for a Director's review: the changes this AI asked for (and every answer the owner gave in the last 7 days, newest first; `older: 7` pages to the 7 days before), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
 	{"crafting", "optional `part` (recipes, materials, drops, benches or looks) and `name` (one recipe, material, bench or page)", "crafting: the system's rules, every recipe, material (with the pages that drop it and the recipes that use it), drop list, the spoils tray, heroes' projects and benches; a `part` writes that part as blocks to send back changed, and `looks` lists every item look. A connection that sees what players see reads the recipe book"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
+	{"home", "optional `audience` (everyone, players, scribes, directors or guests)", "the home page each audience sees, written as `home` blocks to send back changed: its rows, columns and blocks, the words in its Text, Table agreement and Making a hero blocks and its Where we play address; says which audiences use the Everyone home instead of their own and which are arranged in Customize and can't be written back (owner only)"},
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
 
@@ -443,9 +459,11 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	case "foundry-monsters", "monsters", "foundry-monster":
 		ans, err = run.foundryMonsters(r)
 	case "waiting", "pending", "queue", "review":
-		ans, err = run.waiting()
+		ans, err = run.waiting(r)
 	case "players", "party":
 		ans, err = run.players()
+	case "home", "homes", "home-page", "home-pages":
+		ans, err = run.home(r.Str("audience"))
 	case "crafting", "recipes", "materials", "drops", "drop-lists", "benches", "item-looks", "looks":
 		part := r.Str("part")
 		switch what {

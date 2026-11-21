@@ -67,6 +67,10 @@ type Repository interface {
 	// theirs alone: a player's wait for that player, the owner's for the
 	// owner.
 	Requests(ctx context.Context, campaignID, userID, status string, limit int) ([]Request, error)
+	// DecidedRequests lists userID's answered and turned-down requests whose
+	// answer (or, for one with no answer time, its creation) falls in
+	// [from, to), newest answer first, without the blocks.
+	DecidedRequests(ctx context.Context, campaignID, userID string, from, to time.Time, limit int) ([]Request, error)
 	// Request is one of userID's requests with its blocks, or nil.
 	Request(ctx context.Context, campaignID, userID string, id int64) (*Request, error)
 	// MoveRequest moves one of userID's requests from one status to another
@@ -448,6 +452,33 @@ func (r *repository) Requests(ctx context.Context, campaignID, userID, status st
 	}
 	if err := rows.Err(); err != nil {
 		return nil, dbError("listing requests", err)
+	}
+	return out, nil
+}
+
+// answeredAt is when a request was answered; a row that never got an answer
+// time sorts by when it was asked.
+const answeredAt = `COALESCE(q.decided_at, q.created_at)`
+
+func (r *repository) DecidedRequests(ctx context.Context, campaignID, userID string, from, to time.Time, limit int) ([]Request, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+requestColumns+ofPerson+` AND q.status IN (?, ?) AND `+answeredAt+` >= ? AND `+answeredAt+` < ?
+		 ORDER BY `+answeredAt+` DESC, q.id DESC LIMIT ?`,
+		campaignID, userID, RequestAnswered, RequestTurnedDown, from.UTC(), to.UTC(), limit)
+	if err != nil {
+		return nil, dbError("listing answered requests", err)
+	}
+	defer rows.Close()
+	var out []Request
+	for rows.Next() {
+		q, err := scanRequest(rows, nil)
+		if err != nil {
+			return nil, dbError("reading request", err)
+		}
+		out = append(out, *q)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, dbError("listing answered requests", err)
 	}
 	return out, nil
 }

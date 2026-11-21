@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -203,6 +204,89 @@ func (k CalendarKind) setMoonLooks(ctx context.Context, campaignID string, s *ca
 		}
 	}
 	return nil
+}
+
+// moonModeChanges counts the moons the block switches to moving by hand and
+// to following their cycle; a moon already moving that way, or a block that
+// says nothing about it, counts for neither. cal is nil on create, where every
+// moon is new.
+func (s *calSpec) moonModeChanges(cal *calendar.Calendar) (hand, cycle int) {
+	for i, m := range s.moons {
+		mode := s.moonModes[i]
+		if mode == "" {
+			continue
+		}
+		now := calendar.MoonCycle
+		if old := baseMoon(cal, m.Name); old != nil && old.PhaseMode != "" {
+			now = old.PhaseMode
+		}
+		switch mode {
+		case now:
+		case calendar.MoonManual:
+			hand++
+		default:
+			cycle++
+		}
+	}
+	return hand, cycle
+}
+
+// checkMoves refuses a `moves:` the server can't carry out, at review rather
+// than after the structure is saved.
+func (k CalendarKind) checkMoves(s *calSpec) error {
+	if k.Marks != nil {
+		return nil
+	}
+	for _, mode := range s.moonModes {
+		if mode != "" {
+			return apperror.NewBadRequest("moons set by hand aren't available on this server, so `moves` can't be used")
+		}
+	}
+	return nil
+}
+
+// setMoonModes switches the moons the block gave a `moves:`. It reads the
+// calendar again because a moon new to the structure has its id only now, and
+// it passes the moon's own words back, since a mode change replaces them.
+func (k CalendarKind) setMoonModes(ctx context.Context, campaignID string, a Actor, s *calSpec, calendarID string) error {
+	if !s.movesNamed() {
+		return nil
+	}
+	cal, err := k.Svc.GetCalendarForViewer(ctx, calendarID, campaignID, a.Viewer())
+	if err != nil || cal == nil {
+		return apperror.NewBadRequest("the calendar was saved, but its moons' setting could not be read back; set them with a moon block")
+	}
+	for i, m := range s.moons {
+		mode := s.moonModes[i]
+		if mode == "" {
+			continue
+		}
+		now := baseMoon(cal, m.Name)
+		if now == nil {
+			continue
+		}
+		cur := now.PhaseMode
+		if cur == "" {
+			cur = calendar.MoonCycle
+		}
+		if cur == mode {
+			continue
+		}
+		if _, err := k.Marks.SetMoonMode(ctx, cal.ID, campaignID, now.ID, mode, now.StateNames, a.Viewer()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// movesNamed reports whether any moon in the block has a `moves:`.
+func (s *calSpec) movesNamed() bool {
+	for _, m := range s.moonModes {
+		if m != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // moonLookKeys is an exported moon's strength and hidden keys.

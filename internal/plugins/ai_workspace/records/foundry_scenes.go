@@ -28,6 +28,23 @@ type FoundrySceneRef struct {
 	Active, Nav  bool
 }
 
+// scenesStaleAfter is how old a report may be before the answer warns that it
+// may no longer match the Foundry world.
+const scenesStaleAfter = 3 * 24 * time.Hour
+
+// daysAgo words an age in whole days; a report from the future (clock skew
+// between servers) reads as new.
+func daysAgo(age time.Duration) string {
+	switch d := int(age / (24 * time.Hour)); {
+	case d <= 0:
+		return "less than a day ago"
+	case d == 1:
+		return "1 day ago"
+	default:
+		return fmt.Sprintf("%d days ago", d)
+	}
+}
+
 // scenes answers `what: scenes`: which maps already exist as Foundry
 // scenes, optionally only those whose name or folder holds match. Director
 // only, since scene names can give away what is coming.
@@ -75,7 +92,14 @@ func (run *lookupRun) scenes(match string) (LookupAnswer, error) {
 		ans.Chip = fmt.Sprintf("Foundry scenes · %d", len(lines))
 		fmt.Fprintf(&b, "## Foundry scenes (%d)\n\n", len(lines))
 	}
-	fmt.Fprintf(&b, "As Foundry last reported them, %s UTC. A scene listed here is a map that already exists in Foundry.\n\n", rep.ReportedAt.UTC().Format("2006-01-02 15:04"))
+	age := run.now().Sub(rep.ReportedAt)
+	fmt.Fprintf(&b, "As Foundry last reported them, %s UTC (%s). A scene listed here is a map that already exists in Foundry.\n\n", rep.ReportedAt.UTC().Format("2006-01-02 15:04"), daysAgo(age))
+	if age > scenesStaleAfter {
+		// The stamp moves on every GM connect and scene change, so it says
+		// when Foundry last spoke, never that it is connected now; say both
+		// so an old list isn't read as the world's current scenes.
+		fmt.Fprintf(&b, "Warning: Foundry hasn't connected or synced in %d days, so this list may be out of date. The time above updates each time the GM connects and whenever scenes change; it does not mean Foundry is connected now.\n\n", int(age/(24*time.Hour)))
+	}
 	if len(lines) == 0 {
 		if needle != "" {
 			b.WriteString("No scene matches, so Foundry has no map of that yet.\n")
