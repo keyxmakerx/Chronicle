@@ -61,6 +61,7 @@ type fakeAdventures struct {
 	noCategory  bool
 	lastViewer  Viewer
 	searchQuery string
+	searchLimit int
 }
 
 func (f *fakeAdventures) Pages(_ context.Context, _ string, ids []string, v Viewer) (map[string]AdventurePage, error) {
@@ -74,8 +75,9 @@ func (f *fakeAdventures) Pages(_ context.Context, _ string, ids []string, v View
 	return out, nil
 }
 
-func (f *fakeAdventures) Search(_ context.Context, _, query string, _ Viewer, _ int) ([]AdventurePage, bool, error) {
+func (f *fakeAdventures) Search(_ context.Context, _, query string, _ Viewer, limit int) ([]AdventurePage, bool, error) {
 	f.searchQuery = query
+	f.searchLimit = limit
 	if f.noCategory {
 		return nil, false, nil
 	}
@@ -344,6 +346,9 @@ func TestPickPages(t *testing.T) {
 	res, err := svc.PickPages(context.Background(), "c1", dmViewer, "  last ")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if adv.searchLimit > 0 {
+		t.Fatalf("limit = %d: the chooser must be offered every adventure, not a capped few", adv.searchLimit)
 	}
 	if adv.searchQuery != "last" {
 		t.Fatalf("query = %q, want it trimmed", adv.searchQuery)
