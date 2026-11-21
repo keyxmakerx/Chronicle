@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -80,13 +81,15 @@ type hexLayerStub struct {
 	maps.HexService
 	role    int
 	cells   []maps.HexCell
+	anchor  *string
+	art     string
 	actor   maps.HexActor
 	entries []maps.UpdateHexCellInput
 }
 
 func (s *hexLayerStub) GetLayer(_ context.Context, _, _ string, role int) (*maps.HexLayerView, error) {
 	s.role = role
-	return &maps.HexLayerView{Cells: s.cells}, nil
+	return &maps.HexLayerView{Layer: maps.HexLayer{AnchorDrawingID: s.anchor}, Cells: s.cells, Art: s.art}, nil
 }
 
 func (s *hexLayerStub) PatchCells(_ context.Context, _, _ string, a maps.HexActor, e []maps.UpdateHexCellInput) (*maps.HexWriteResult, error) {
@@ -135,11 +138,53 @@ func TestAIHexMapAdapter_PaintCellsKeepsPartialUpdateSemantics(t *testing.T) {
 	}
 }
 
-func TestAIHexMapAdapter_CellsReadAsTheActor(t *testing.T) {
+func TestAIHexMapAdapter_ReadAsTheActor(t *testing.T) {
 	two := 2
-	hs := &hexLayerStub{cells: []maps.HexCell{{Col: 1, Row: 2, Road: &two}}}
-	got, err := aiHexMapAdapter{hexes: hs}.Cells(context.Background(), "camp", "m", records.Actor{Role: 3})
-	if err != nil || hs.role != 3 || len(got) != 1 || got[0].Col != 1 || got[0].Row != 2 || got[0].Road != &two {
-		t.Fatalf("got %+v, role %d, err %v", got, hs.role, err)
+	land, notes := "forest", "Candles."
+	w, h, g := maps.HexMapSize(30, 20)
+	display, err := json.Marshal(map[string]any{"grid": map[string]any{"type": maps.GridHex, "size": g}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := maps.MergeDisplaySettings(nil, display)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := &maps.Map{ImageWidth: w, ImageHeight: h, Display: next}
+	cells := []maps.HexCell{{Col: 1, Row: 2, Road: &two, Terrain: &land, Name: "Shrine", Notes: &notes}}
+	anchor := "pic"
+
+	tests := []struct {
+		name      string
+		anchor    *string
+		wantCols  bool
+		wantArt   string
+		storedArt string
+	}{
+		{name: "whole map has its field", wantCols: true, wantArt: "simple", storedArt: "simple"},
+		{name: "a layer pinned to a picture has no known field", anchor: &anchor, wantArt: "real", storedArt: "real"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hs := &hexLayerStub{cells: cells, anchor: tt.anchor, art: tt.storedArt}
+			got, err := aiHexMapAdapter{hexes: hs, maps: &hexMapsStub{stored: stored}}.Read(context.Background(), "camp", "m", records.Actor{Role: 3})
+			if err != nil || hs.role != 3 || len(got.Cells) != 1 {
+				t.Fatalf("got %+v, role %d, err %v", got, hs.role, err)
+			}
+			c := got.Cells[0]
+			if c.Col != 1 || c.Row != 2 || c.Road != &two || c.Terrain != "forest" || c.Name != "Shrine" || c.Notes != "Candles." {
+				t.Errorf("cell = %+v", c)
+			}
+			if got.Art != tt.wantArt {
+				t.Errorf("art = %q, want %q", got.Art, tt.wantArt)
+			}
+			geo := maps.NewHexGeometry(float64(g), float64(w), float64(h))
+			if tt.wantCols && (got.Cols != geo.Cols || got.Rows != geo.Rows || got.Cols < 30 || got.Rows < 20) {
+				t.Errorf("field = %d x %d, want %d x %d (at least 30 x 20)", got.Cols, got.Rows, geo.Cols, geo.Rows)
+			}
+			if !tt.wantCols && (got.Cols != 0 || got.Rows != 0) {
+				t.Errorf("a pinned layer reported a field %d x %d", got.Cols, got.Rows)
+			}
+		})
 	}
 }

@@ -14,6 +14,9 @@ type fakeHexMaps struct {
 	size    [2]int
 	notHex  map[string]bool
 	cells   []HexCellState
+	cols    int
+	rows    int
+	art     string
 	batches [][]HexWrite
 	actors  []Actor
 	// failBatch is the 1-based batch that fails; 0 never fails.
@@ -30,9 +33,9 @@ func (f *fakeHexMaps) UsesHexGrid(_ context.Context, id string) (bool, error) {
 	return !f.notHex[id], nil
 }
 
-func (f *fakeHexMaps) Cells(_ context.Context, _, _ string, a Actor) ([]HexCellState, error) {
+func (f *fakeHexMaps) Read(_ context.Context, _, _ string, a Actor) (HexMapState, error) {
 	f.actors = append(f.actors, a)
-	return f.cells, nil
+	return HexMapState{Cells: f.cells, Cols: f.cols, Rows: f.rows, Art: f.art}, nil
 }
 
 func (f *fakeHexMaps) PaintCells(_ context.Context, _, mapID string, a Actor, cells []HexWrite) error {
@@ -99,7 +102,7 @@ func TestHexMapKind_Plan(t *testing.T) {
 		{name: "update new and painted over",
 			r:           hexRec(ActionUpdate, "imix", "6 x 5", "forest 1,1 to 3,1\nriver 0,0 4,0\nplace \"X\" 1,1\nplace \"Y\" 2,0"),
 			cells:       []HexCellState{{Col: 1, Row: 1}, {Col: 0, Row: 0}, {Col: 5, Row: 4}},
-			wantSummary: "paints 8 hexes on the Imix map: 6 new, 2 painted over; adds 1 river; names 2 places"},
+			wantSummary: "paints 8 hexes on the Imix map: 6 new, 2 painted over, of which 0 would change; adds 1 river; names 2 places"},
 		{name: "update of one hex says hex",
 			r:           hexRec(ActionUpdate, "Imix", "6 x 5", "water 1,1"),
 			wantSummary: "paints 1 hex on the Imix map: 1 new, 0 painted over"},

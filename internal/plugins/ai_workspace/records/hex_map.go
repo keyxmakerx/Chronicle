@@ -19,18 +19,30 @@ type HexMapAPI interface {
 	CreateHexMap(ctx context.Context, campaignID, name string, cols, rows int) (string, error)
 	// UsesHexGrid reports whether the map's grid is hexes.
 	UsesHexGrid(ctx context.Context, mapID string) (bool, error)
-	// Cells reads the hexes stored on the map as the actor sees them; the
-	// import's actor is the owner, who sees every hex.
-	Cells(ctx context.Context, campaignID, mapID string, a Actor) ([]HexCellState, error)
+	// Read reads the hexes stored on the map, and the field they sit in, as the
+	// actor sees them; the import's actor is the owner, who sees every hex.
+	Read(ctx context.Context, campaignID, mapID string, a Actor) (HexMapState, error)
 	// PaintCells writes one batch through the hex layer's own checks.
 	PaintCells(ctx context.Context, campaignID, mapID string, a Actor, cells []HexWrite) error
 }
 
 // HexCellState is a stored hex, as far as an update needs it: that it exists,
-// and the exits of its lines.
+// its land, the exits of its lines, and its name and notes.
 type HexCellState struct {
 	Col, Row           int
+	Terrain            string
 	Road, River, Trail *int
+	Name, Notes        string
+}
+
+// HexMapState is what a map holds now. Cols and Rows are the map's own hex
+// field; both are 0 when it cannot be worked out here (a layer pinned to a
+// picture), and then nothing is said about hexes outside it. Art is the map's
+// terrain art: "simple", "detailed" or "real".
+type HexMapState struct {
+	Cells      []HexCellState
+	Cols, Rows int
+	Art        string
 }
 
 // HexWrite is one hex a block paints. Unset fields leave what is stored: an
@@ -142,17 +154,17 @@ func (k HexMapKind) findTarget(ctx context.Context, campaignID string, r Record)
 	return hits[0], nil
 }
 
-// stored reads the hexes already on the map, by position.
-func (k HexMapKind) stored(ctx context.Context, campaignID string, m MapRef, a Actor) (map[hexsketch.Hex]HexCellState, error) {
-	cells, err := k.Svc.Cells(ctx, campaignID, m.ID, a)
+// stored reads the hexes already on the map, by position, and the map's field.
+func (k HexMapKind) stored(ctx context.Context, campaignID string, m MapRef, a Actor) (map[hexsketch.Hex]HexCellState, HexMapState, error) {
+	st, err := k.Svc.Read(ctx, campaignID, m.ID, a)
 	if err != nil {
-		return nil, badRequestf("could not read the hexes on the %s map", m.Name)
+		return nil, HexMapState{}, badRequestf("could not read the hexes on the %s map", m.Name)
 	}
-	out := make(map[hexsketch.Hex]HexCellState, len(cells))
-	for _, c := range cells {
+	out := make(map[hexsketch.Hex]HexCellState, len(st.Cells))
+	for _, c := range st.Cells {
 		out[hexsketch.Hex{Col: c.Col, Row: c.Row}] = c
 	}
-	return out, nil
+	return out, st, nil
 }
 
 // Stage notes a map this row creates, so a pin after it may name it.
@@ -174,25 +186,37 @@ func (k HexMapKind) Plan(ctx context.Context, campaignID string, a Actor, r Reco
 		if err != nil {
 			return Plan{Error: planError(err), Warnings: warnings}
 		}
-		have, err := k.stored(ctx, campaignID, m, a)
+		have, state, err := k.stored(ctx, campaignID, m, a)
 		if err != nil {
 			return Plan{Error: planError(err), Warnings: warnings}
 		}
-		over := 0
+		over, change := 0, 0
 		for _, c := range res.Cells {
-			if _, ok := have[hexsketch.Hex{Col: c.Col, Row: c.Row}]; ok {
+			if old, ok := have[hexsketch.Hex{Col: c.Col, Row: c.Row}]; ok {
 				over++
+				if wouldChange(old, c) {
+					change++
+				}
 			}
 		}
 		sum := fmt.Sprintf("paints %s on the %s map: %d new, %d painted over",
 			plural(len(res.Cells), "hex", "hexes"), m.Name, len(res.Cells)-over, over)
+		if over > 0 {
+			sum += fmt.Sprintf(", of which %d would change", change)
+		}
 		if l := lineSummary(res); l != "" {
 			sum += "; adds " + l
 		}
 		if n := namedPlaces(res); n > 0 {
 			sum += "; names " + plural(n, "place", "places")
 		}
-		return Plan{Summary: sum, Warnings: warnings}
+		if change > 0 {
+			warnings = append(warnings, ringedLine(change))
+		}
+		if w := outsideField(res, state); w != "" {
+			warnings = append(warnings, w)
+		}
+		return Plan{Summary: sum, Warnings: warnings, HexMap: updatePreview(res, have, state)}
 	}
 
 	items := []string{}
@@ -207,7 +231,7 @@ func (k HexMapKind) Plan(ctx context.Context, campaignID string, a Actor, r Reco
 	if len(items) > 0 {
 		sum += " with " + joinAnd(items)
 	}
-	out := Plan{Summary: sum, Warnings: warnings}
+	out := Plan{Summary: sum, Warnings: warnings, HexMap: createPreview(res)}
 	if ms, err := k.Maps.ListMaps(ctx, campaignID); err == nil {
 		for _, m := range ms {
 			if m.CampaignID == campaignID && sameName(m.Name, r.Name) {
@@ -332,7 +356,7 @@ func (k HexMapKind) Apply(ctx context.Context, campaignID string, a Actor, r Rec
 		if err != nil {
 			return err
 		}
-		if have, err = k.stored(ctx, campaignID, m, a); err != nil {
+		if have, _, err = k.stored(ctx, campaignID, m, a); err != nil {
 			return err
 		}
 		mapID, name = m.ID, m.Name

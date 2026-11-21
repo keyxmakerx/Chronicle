@@ -7196,6 +7196,13 @@ var coreWidgets = []PluginWidget{
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	// The picture of a hex map on the review is drawn with the map page's own
+	// art and line code, so its widget loads them first.
+	{Name: "hex-map-preview", Scripts: []string{
+		"/static/plugins/" + maps.PluginSlug + "/js/map_hex_look.js",
+		"/static/plugins/" + maps.PluginSlug + "/js/map_hex_art.js",
+		"/static/js/widgets/hex_map_preview.js",
+	}},
 	{Name: "ai-chip", Scripts: []string{"/static/js/widgets/ai_chip.js"}},
 	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
 	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
@@ -7872,16 +7879,37 @@ func (m aiHexMapAdapter) UsesHexGrid(ctx context.Context, mapID string) (bool, e
 	return maps.ResolveDisplay(mp, "").GridType == maps.GridHex, nil
 }
 
-func (m aiHexMapAdapter) Cells(ctx context.Context, campaignID, mapID string, a records.Actor) ([]records.HexCellState, error) {
+// Read gives the hexes the actor may see, the map's art, and the map's own
+// hex field laid over its whole picture the way the hex layer lays it. A layer
+// pinned to a picture has a field this does not work out, so it reports none.
+func (m aiHexMapAdapter) Read(ctx context.Context, campaignID, mapID string, a records.Actor) (records.HexMapState, error) {
 	layer, err := m.hexes.GetLayer(ctx, campaignID, mapID, a.Role)
 	if err != nil {
-		return nil, err
+		return records.HexMapState{}, err
 	}
-	out := make([]records.HexCellState, len(layer.Cells))
+	st := records.HexMapState{Cells: make([]records.HexCellState, len(layer.Cells)), Art: layer.Art}
 	for i, c := range layer.Cells {
-		out[i] = records.HexCellState{Col: c.Col, Row: c.Row, Road: c.Road, River: c.River, Trail: c.Trail}
+		cs := records.HexCellState{Col: c.Col, Row: c.Row, Road: c.Road, River: c.River, Trail: c.Trail, Name: c.Name}
+		if c.Terrain != nil {
+			cs.Terrain = *c.Terrain
+		}
+		if c.Notes != nil {
+			cs.Notes = *c.Notes
+		}
+		st.Cells[i] = cs
 	}
-	return out, nil
+	if layer.Layer.AnchorDrawingID != nil {
+		return st, nil
+	}
+	mp, err := m.maps.GetMap(ctx, mapID)
+	if err != nil {
+		return records.HexMapState{}, err
+	}
+	if mp.ImageWidth > 0 && mp.ImageHeight > 0 {
+		g := maps.NewHexGeometry(float64(maps.ResolveDisplay(mp, "").GridSize), float64(mp.ImageWidth), float64(mp.ImageHeight))
+		st.Cols, st.Rows = min(g.Cols, maps.MaxHexCoord+1), min(g.Rows, maps.MaxHexCoord+1)
+	}
+	return st, nil
 }
 
 func (m aiHexMapAdapter) PaintCells(ctx context.Context, campaignID, mapID string, a records.Actor, cells []records.HexWrite) error {
