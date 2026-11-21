@@ -171,6 +171,57 @@ func TestShopToday_View(t *testing.T) {
 	})
 }
 
+func TestShopToday_SoldOutNeverPicked(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		meta string
+	}{
+		{"quantity zero", `{"today":true,"quantity":0}`},
+		{"marked out of stock", `{"today":true,"in_stock":false}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			svc, _, ls, _, _ := todayFx()
+			// Every day's pick, so a sold-out good cannot hide behind luck.
+			for d := int64(0); d < 40; d++ {
+				ls.rows[1] = listing(2, "i2", c.meta)
+				svc.days = &fakeShelfDays{day: &ShelfDay{Index: d, HoursToDawn: 6}}
+				v, err := svc.Today(ctx, "camp", "shop-1", owner)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, id := range v.Today {
+					if id == 2 {
+						t.Fatalf("day %d: sold-out good picked: %v", d, v.Today)
+					}
+				}
+				if len(v.Today) != defaultTodaySpots {
+					t.Fatalf("day %d: spot not given to the next good: %v", d, v.Today)
+				}
+				if !reflect.DeepEqual(v.Pool, []int{2, 3, 4, 5}) {
+					t.Fatalf("pool = %v; a sold-out good stays flagged", v.Pool)
+				}
+			}
+		})
+	}
+	t.Run("restocked good rejoins the pool", func(t *testing.T) {
+		svc, _, ls, _, _ := todayFx()
+		ls.rows[1] = listing(2, "i2", `{"today":true,"quantity":3}`)
+		seen := false
+		for d := int64(0); d < 40 && !seen; d++ {
+			svc.days = &fakeShelfDays{day: &ShelfDay{Index: d, HoursToDawn: 6}}
+			v, _ := svc.Today(ctx, "camp", "shop-1", owner)
+			for _, id := range v.Today {
+				seen = seen || id == 2
+			}
+		}
+		if !seen {
+			t.Error("in-stock good never picked")
+		}
+	})
+}
+
 func TestShopToday_SaveSpots(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct{ in, want int }{{3, 3}, {0, minTodaySpots}, {-4, minTodaySpots}, {99, maxTodaySpots}} {

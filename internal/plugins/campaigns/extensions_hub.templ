@@ -30,7 +30,7 @@ import (
 // `contentPacksCard` is nil if the extensions plugin is not wired in
 // this build; the hub renders cleanly without it (graceful
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
-templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component) {
+templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component, placeable func(block string) bool) {
 	@layouts.App(cc.Campaign.Name + " - Game & features") {
 		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features", Line: "game"}) {
 		<div data-extensions-hub>
@@ -57,7 +57,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 					>
 						@ExtensionsHubFragment(cc, addons, csrfToken)
 					</div>
-					@hubPagePieces(cc)
+					@hubPagePieces(cc, placeable)
 				</div>
 				// Extension settings overlay target. An "Open setup" button on a
 				// card hx-gets the extension's settings page here; the GET returns a
@@ -364,9 +364,17 @@ var hubPieces = []hubPiece{
 	{ID: "tests", Name: "Tests", Line: "Montages and chases, scored as you go.", Block: "page_tests"},
 }
 
+// pieceAvailable reports whether a row's block can be put on a page. A nil
+// check means the host did not say, so every row is on offer. A block is
+// missing when its plugin failed to start; offering it would only end in an
+// error from the chooser.
+func pieceAvailable(placeable func(block string) bool, block string) bool {
+	return placeable == nil || placeable(block)
+}
+
 // hubPagePieces is the "For your pages" section of Game & features. Each
 // button opens the shared "Put on a page" chooser (put_on_page.js).
-templ hubPagePieces(cc *CampaignContext) {
+templ hubPagePieces(cc *CampaignContext, placeable func(block string) bool) {
 	<section
 		class="mt-8"
 		aria-labelledby="for-your-pages"
@@ -385,14 +393,18 @@ templ hubPagePieces(cc *CampaignContext) {
 						<p class="text-sm font-semibold text-fg">{ p.Name }</p>
 						<p class="text-sm text-fg-muted mt-0.5">{ p.Line }</p>
 					</div>
+					if pieceAvailable(placeable, p.Block) {
 					<button
-						type="button"
-						class="btn-secondary btn-sm shrink-0"
-						data-put-block={ p.Block }
-						aria-haspopup="dialog"
-						aria-expanded="false"
-						aria-label={ "Put on a page: " + p.Name }
-					>Put on a page</button>
+							type="button"
+							class="btn-secondary btn-sm shrink-0"
+							data-put-block={ p.Block }
+							aria-haspopup="dialog"
+							aria-expanded="false"
+							aria-label={ "Put on a page: " + p.Name }
+						>Put on a page</button>
+					} else {
+						<p class="text-sm text-fg-muted shrink-0" data-piece-unavailable>Not available right now</p>
+					}
 				</li>
 			}
 		</ul>

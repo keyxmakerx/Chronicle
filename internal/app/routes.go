@@ -5588,6 +5588,9 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetSMTPChecker(smtpService)
 	campaignHandler.SetTestMailer(smtpService)
 	campaignHandler.SetSystemLister(&systemListerAdapter{})
+	campaignHandler.SetPiecePlaceable(func(block string) bool {
+		return blockRegistry.IsValidForContext(block, "template")
+	})
 	tagHandler.SetAuditService(auditService)
 
 	// --- AI Workspace ---

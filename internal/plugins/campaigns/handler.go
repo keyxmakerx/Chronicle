@@ -151,6 +151,9 @@ type Handler struct {
 	// box is the People page's Invite someone box (SetInviteBox).
 	box          inviteBoxDeps
 	systemLister SystemLister
+	// piecePlaceable says whether a page-piece block is registered right now;
+	// nil means every piece is offered.
+	piecePlaceable func(block string) bool
 	// desk draws the owner's home page and holds the providers other plugins
 	// register for their lines (RegisterDeskProvider).
 	desk DeskService
@@ -266,6 +269,13 @@ func (h *Handler) SetSMTPChecker(checker SMTPChecker) {
 // SetSystemLister sets the system lister for the game system dropdown.
 func (h *Handler) SetSystemLister(lister SystemLister) {
 	h.systemLister = lister
+}
+
+// SetPiecePlaceable sets the check "For your pages" uses to leave out a piece
+// whose block is not registered (its plugin failed to start). Injected so
+// campaigns need not import the entities block registry.
+func (h *Handler) SetPiecePlaceable(fn func(block string) bool) {
+	h.piecePlaceable = fn
 }
 
 // AI-export state (SetAIExportService, GenerateAIExport) lives in

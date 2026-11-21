@@ -29,8 +29,6 @@ const (
 	maxBoardItems = 60
 	// maxBoardNote is the loose note's length in characters.
 	maxBoardNote = 500
-	// pickLimit is how many pages the pin picker offers at once.
-	pickLimit = 12
 )
 
 // BoardItem is one stored item.
@@ -77,7 +75,8 @@ type AdventureSource interface {
 	// Adventures category and viewable by v; anything else is simply absent.
 	Pages(ctx context.Context, campaignID string, ids []string, v Viewer) (map[string]AdventurePage, error)
 	// Search lists Adventures pages matching query (all, newest first, when
-	// empty). hasCategory is false when the campaign has no Adventures
+	// empty). A limit of 0 or less lists every match: the picker feeds a
+	// chooser that must offer each adventure. hasCategory is false when the campaign has no Adventures
 	// category, so the picker can say where to add it.
 	Search(ctx context.Context, campaignID, query string, v Viewer, limit int) (pages []AdventurePage, hasCategory bool, err error)
 	// CategoryID is the Adventures category a new page is made in, or 0 when
@@ -270,7 +269,7 @@ func (s *service) PickPages(ctx context.Context, campaignID string, v Viewer, qu
 	if err := s.boardReady(); err != nil {
 		return nil, err
 	}
-	pages, hasCat, err := s.src.Adventures.Search(ctx, campaignID, strings.TrimSpace(query), v, pickLimit)
+	pages, hasCat, err := s.src.Adventures.Search(ctx, campaignID, strings.TrimSpace(query), v, 0)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}

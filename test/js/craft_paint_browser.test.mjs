@@ -33,6 +33,19 @@ ${SCRIPTS.map((f) => `<script src="/static/js/widgets/${f}.js"></script>`).join(
 </body></html>`;
 }
 
+// A clock the test turns by hand: frames run only when asked, 1/60 s apart, and Math.random repeats from a seed.
+// A measurement then depends on the scene and not on how busy the machine is.
+function handClock() {
+  var q = new Map(), id = 0, t = 0, seed = 1;
+  window.requestAnimationFrame = function (cb) { q.set(++id, cb); return id; };
+  window.cancelAnimationFrame = function (i) { q.delete(i); };
+  window.__step = function (n) {
+    for (; n > 0; n--) { t += 1000 / 60; var run = [...q.values()]; q.clear(); run.forEach(function (cb) { cb(t); }); }
+  };
+  window.__seed = function (s) { seed = s; };
+  Math.random = function () { seed = (seed + 0x6D2B79F5) | 0; var x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+}
+
 async function open(t, { mounts = ['data-level="canvas"'], htmlAttrs = '', api = null, init = null } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
@@ -74,16 +87,22 @@ const state = (page, n = 0) => page.evaluate((n) => {
 const frames = (page, n) => page.evaluate((n) => new Promise((r) => { let k = 0; (function f() { if (++k > n) r(); else requestAnimationFrame(f); })(); }), n);
 
 test('every level paints the lit forge, and the richer levels add light', { skip, timeout: 240000 }, async (t) => {
-  const { page, errors } = await open(t, { mounts: ['data-level="basic" data-lab'] });
+  const { page, errors } = await open(t, { mounts: ['data-level="basic" data-lab'], init: handClock });
   const seen = {};
+  const step = (n) => page.evaluate((n) => window.__step(n), n);
   for (const level of ['basic', 'canvas', 'gpu', 'still']) {
-    await page.evaluate((l) => { const el = document.querySelector('[data-widget="craft_paint"]'); el._paint.setLevel(l); if (l !== 'still') el._paint.play(); }, level);
-    await frames(page, 20);
+    await page.evaluate((l) => {
+      const el = document.querySelector('[data-widget="craft_paint"]'); el._paint.setLevel(l); if (l !== 'still') el._paint.play();
+      // Every level starts the strikes from the same beat with the same random sparks.
+      window.__seed(7); el._paint.poke();
+    }, level);
+    // The fire flickers and each blow flashes, so one frame can be brighter than the next level's. Each level runs the
+    // same frames from the same beat (long enough for the last level's sparks to die), then an average over several
+    // frames compares the levels, not the moment.
+    if (level !== 'still') await step(100);
     const s = await state(page);
-    // The fire flickers and each blow flashes, so one frame can be brighter than the next level's; an average over
-    // several frames compares the levels, not the moment.
     let sum = 0;
-    for (let i = 0; i < 8; i++) { sum += await brightness(page); await frames(page, 4); }
+    for (let i = 0; i < 8; i++) { sum += await brightness(page); if (level !== 'still') await step(4); }
     seen[level] = { level: s.level, light: sum / 8 };
   }
   assert.equal(seen.basic.level, 'basic');

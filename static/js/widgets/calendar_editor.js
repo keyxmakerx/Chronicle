@@ -287,6 +287,12 @@
   // own stage click handler and can stop it with stopPropagation; a
   // click that ends a drag is swallowed so it does not re-select.
   // ------------------------------------------------------------------
+  // soleChosen says whether `key` is the one and only chosen day.
+  function soleChosen(selection, key) {
+    var on = Object.keys(selection || {}).filter(function (k) { return selection[k]; });
+    return on.length === 1 && on[0] === key;
+  }
+
   var HOLD_MS = 350;
   var HOLD_SLOP = 10;
 
@@ -327,6 +333,25 @@
       self.anchorKey = key;
       self._syncPicks();
       self._renderBar();
+    }, true);
+
+    // A double click is the same door as the Open day button: the card is the
+    // only place the day roller lives while editing.
+    stage.addEventListener('dblclick', function (e) {
+      if (!self.editing) return;
+      var day = e.target.closest('.day');
+      if (!day || !day.dataset.key) return;
+      e.stopPropagation();
+      self._swallowClick = false;
+      var key = day.dataset.key;
+      if (!soleChosen(self.selection, key)) {
+        self.selection = {};
+        self.selection[key] = true;
+        self.anchorKey = key;
+        self._syncPicks();
+        self._renderBar();
+      }
+      self.view.openWing(key);
     }, true);
 
     stage.addEventListener('pointerdown', function (e) {
@@ -530,6 +555,13 @@
       if (!self.editing) return;
       var day = e.target.closest ? e.target.closest('.day[data-key]') : null;
       if (!day) return;
+      // Enter on the only chosen day opens its card, like Open day; on any
+      // other day it keeps choosing it, as the button's own click does.
+      if (e.key === 'Enter' && soleChosen(self.selection, day.dataset.key)) {
+        e.preventDefault();
+        view.openWing(day.dataset.key);
+        return;
+      }
       if (e.key === ' ' || e.key === 'Spacebar') {
         e.preventDefault();
         self._spaceDown = true; // the button's own Space click follows keyup and must not re-select
@@ -1854,7 +1886,7 @@
   // not a function" the instant a canEdit viewer loads the page.
   // Pure helpers, exposed for test/js/calendar_paint_weather.test.mjs.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { dayInput: dayInput, lockState: lockState, lockButtonHTML: lockButtonHTML, weatherBatches: weatherBatches, WEATHER_BATCH: WEATHER_BATCH };
+    module.exports = { soleChosen: soleChosen, dayInput: dayInput, lockState: lockState, lockButtonHTML: lockButtonHTML, weatherBatches: weatherBatches, WEATHER_BATCH: WEATHER_BATCH };
   }
 
   var mount = document.querySelector('[data-widget="calendar_view"]');

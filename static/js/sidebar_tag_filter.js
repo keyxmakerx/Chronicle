@@ -33,7 +33,13 @@
       .catch(function () { return []; });
   }
 
+  /** Saved presets are a member's; a visitor's request would only be refused. */
+  function isMember() {
+    return document.documentElement.hasAttribute('data-campaign-member');
+  }
+
   function fetchSavedFilters(campaignId) {
+    if (!isMember()) return Promise.resolve([]);
     return Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters')
       .then(function (res) { return res.ok ? res.json() : []; })
       .then(function (filters) { savedFiltersCache = filters || []; return savedFiltersCache; })

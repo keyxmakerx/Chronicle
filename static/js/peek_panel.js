@@ -50,6 +50,23 @@
       C.peekAddress((a.getAttribute('href') || '').split(/[?#]/)[0]);
   }
 
+  // A modal dialog sits in the top layer above every z-index, and the page
+  // behind it is inert; a peek opened from inside one has to live in it to be
+  // seen and used. It goes back to the body when that dialog closes.
+  function seat(el, from) {
+    var dlg = (from && from.closest && from.closest('dialog[open]')) || document.querySelector('dialog[open]:modal');
+    var host = dlg || document.body;
+    if (el.parentNode !== host) host.appendChild(el);
+    if (dlg && !dlg.hasAttribute('data-peek-seat')) {
+      dlg.setAttribute('data-peek-seat', '1');
+      dlg.addEventListener('close', function () {
+        close(false);
+        hideIcon();
+        [panel, icon].forEach(function (e) { if (e && e.parentNode === dlg) document.body.appendChild(e); });
+      });
+    }
+  }
+
   function build() {
     if (panel && panel.isConnected) return;
     panel = document.createElement('aside');
@@ -103,6 +120,7 @@
     var url = typeof target === 'string' ? C.peekAddress(target) : (a ? peekURL(a) : '');
     if (!url) return false;
     build();
+    seat(panel, a);
     if (a) opener = a;
     var mine = ++token;
     var wasOpen = panel.classList.contains('is-open');
@@ -182,6 +200,7 @@
     if (!peekURL(a)) return;
     clearTimeout(iconTimer);
     ensureIcon();
+    seat(icon, a);
     iconFor = a;
     var r = a.getBoundingClientRect();
     var size = 20;
@@ -242,6 +261,8 @@
   // Escape closes; Shift+Enter on a focused link peeks, for the keyboard.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && isOpen() && !e.defaultPrevented) {
+      // Inside a dialog the same key would close the dialog too.
+      e.preventDefault();
       close(true);
       return;
     }

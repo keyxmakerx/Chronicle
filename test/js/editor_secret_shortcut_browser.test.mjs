@@ -37,6 +37,8 @@ async function editorPage(t) {
     });
     window.__ed.commands.focus('all');
   });
+  // TipTap hands DOM focus over a frame later; a key pressed before then goes to the body, not the editor.
+  await p.waitForFunction(() => window.__ed.isFocused && document.activeElement === window.__ed.view.dom);
   return { p, errors };
 }
 

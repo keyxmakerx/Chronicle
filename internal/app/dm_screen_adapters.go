@@ -599,6 +599,10 @@ func (a *dmAdventuresAdapter) Pages(ctx context.Context, campaignID string, ids 
 	return out, nil
 }
 
+// adventureSearchPage is the page size when Search walks every adventure; it
+// is the entities listing's largest accepted page.
+const adventureSearchPage = 100
+
 func (a *dmAdventuresAdapter) Search(ctx context.Context, campaignID, query string, v dmscreen.Viewer, limit int) ([]dmscreen.AdventurePage, bool, error) {
 	types, err := a.adventureTypes(ctx, campaignID)
 	if err != nil {
@@ -610,30 +614,42 @@ func (a *dmAdventuresAdapter) Search(ctx context.Context, campaignID, query stri
 	seen := map[string]bool{}
 	var pages []dmscreen.AdventurePage
 	for typeID := range types {
-		var list []entities.Entity
-		opts := entities.ListOptions{Page: 1, PerPage: limit, Sort: "updated"}
-		// Search wants two characters; a shorter query lists everything
-		// instead of failing, since the picker searches as you type.
-		if len(strings.TrimSpace(query)) >= 2 {
-			list, _, err = a.entities.Search(ctx, campaignID, query, typeID, v.Role, v.UserID, opts)
-		} else {
-			list, _, err = a.entities.List(ctx, campaignID, typeID, v.Role, v.UserID, opts)
+		// Walk every page of the type when there is no limit, so a chooser
+		// that must show all adventures is never cut at one page.
+		perPage := limit
+		if limit <= 0 {
+			perPage = adventureSearchPage
 		}
-		if err != nil {
-			return nil, true, err
-		}
-		for i := range list {
-			if seen[list[i].ID] || list[i].CampaignID != campaignID {
-				continue
+		for page := 1; ; page++ {
+			opts := entities.ListOptions{Page: page, PerPage: perPage, Sort: "updated"}
+			var list []entities.Entity
+			var total int
+			// Search wants two characters; a shorter query lists everything
+			// instead of failing, since the picker searches as you type.
+			if len(strings.TrimSpace(query)) >= 2 {
+				list, total, err = a.entities.Search(ctx, campaignID, query, typeID, v.Role, v.UserID, opts)
+			} else {
+				list, total, err = a.entities.List(ctx, campaignID, typeID, v.Role, v.UserID, opts)
 			}
-			if _, ok := types[list[i].EntityTypeID]; !ok {
-				continue
+			if err != nil {
+				return nil, true, err
 			}
-			seen[list[i].ID] = true
-			pages = append(pages, adventurePage(&list[i]))
+			for i := range list {
+				if seen[list[i].ID] || list[i].CampaignID != campaignID {
+					continue
+				}
+				if _, ok := types[list[i].EntityTypeID]; !ok {
+					continue
+				}
+				seen[list[i].ID] = true
+				pages = append(pages, adventurePage(&list[i]))
+			}
+			if limit > 0 || len(list) < perPage || page*perPage >= total {
+				break
+			}
 		}
 	}
-	if len(pages) > limit {
+	if limit > 0 && len(pages) > limit {
 		pages = pages[:limit]
 	}
 	return pages, true, nil
