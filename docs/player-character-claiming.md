@@ -20,8 +20,7 @@ Enabling creates a **Player Characters** category nested under the default
 **Characters** category, claimable by default. It is not created if the
 campaign already has one or has a game system; then the system's character sheet
 and fields live on **Characters** itself, which is the claimable type. See it
-under **Customize** > **Manage Categories** (or **Manage** beside **Categories**
-on the campaign page).
+in the Customizer under **Customize** > **Categories**.
 
 A campaign with a separate system character category (e.g. **Heroes**) beside
 **Characters** shows "Your characters are split between ..." on the addon's
@@ -30,11 +29,16 @@ which takes over the sheet and fields. The old category is turned off, not
 deleted, and claims stay.
 
 A category with no explicit claimable setting counts as claimable when its
-preset is a character or its slug ends in `-character`. The checkbox below
-overrides that either way.
+preset is a character, its slug is `character` or ends in `-character`. The
+switch below overrides that either way. A category only the Director team sees
+is never claimable.
 
-Scribes and the owner create characters with **New Page** in the Player
-Characters category, or in any category marked claimable.
+Scribes and the owner create characters with **New page** in the Player
+Characters category, or in any category marked claimable. With a game system,
+**Create hero** on the **Characters** page opens the hero creator; a player may
+use it too to make their own hero, one at a time, and owns what they make. The
+Director adds the campaign's own entries to its pick lists on the **Own entries**
+page (`/campaigns/<id>/characters/entries`).
 
 ## Player workflow
 
@@ -65,14 +69,15 @@ the Party head:
 
 ## Claimable categories
 
-Under **Customize** > **Manage Categories**:
+Under **Customize** > **Categories**, with the addon on:
 
-- **Enable on an existing category:** **Edit** its card, check **Players can
-  claim entities of this type**, save.
-- **Disable:** uncheck it and save. The claim button disappears and its
-  characters leave the Players box.
-- **New claimable category:** in the add-category form, check the same box
-  (visible when the addon is on) and click **Add Category**.
+- **Enable on an existing category:** open the category, go to its
+  **Settings** tab, turn on **Players can claim a page**, then **Save
+  changes**.
+- **Disable:** turn the same switch off and **Save changes**. The claim button
+  disappears and its characters leave the Players box.
+- **New claimable category:** **New category**, **Create category**, then turn
+  the switch on in its **Settings** tab and **Save changes**.
 
 ## Audit
 
@@ -103,10 +108,10 @@ the Players box before disabling, or have the server administrator clear
 
 | Message or symptom | Cause and fix |
 |---|---|
-| "only character entities can be claimed" | The entity's type is not claimable. Check the category's claim checkbox. |
+| "only character entities can be claimed" | The entity's type is not claimable. Check the category's claim switch. |
 | "entity is already claimed by another player" | Ask a Scribe or the owner to reassign it from the Players box. |
 | "player character claiming is not enabled for this campaign" | The addon is off. |
-| No claim button | Check, in order: addon shows **On**; the category's claim checkbox; the character is not already claimed (the banner shows the owner); the player can see the page. |
+| No claim button | Check, in order: addon shows **On**; the category's claim switch; the character is not already claimed (the banner shows the owner); the player can see the page. |
 | Owner shows as "a player" | The owner's account was deleted or left the campaign; the user ID has no name. Reassign from the Players box. |
 
 Enable the addon at campaign start so players are not surprised by new UI, and

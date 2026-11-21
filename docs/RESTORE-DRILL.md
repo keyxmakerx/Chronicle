@@ -65,10 +65,10 @@ This stops the live app and replaces the live database.
 
 ```sh
 docker compose stop chronicle
-make restore RESTORE_ARGS="--manifest=/app/data/backups/chronicle_manifest_<TS>.txt"
+docker compose run --rm chronicle sh /app/scripts/restore.sh \
+  --manifest /app/data/backups/chronicle_manifest_<TS>.txt --force
 # Type RESTORE when prompted.
 docker compose start chronicle
 ```
 
-`make restore` runs `scripts/restore.sh`; flags and post-restore checks are in
-`docs/deployment.md` §9. Drill the same manifest first.
+Flags and post-restore checks are in `docs/deployment.md` §9. Drill the same manifest first.

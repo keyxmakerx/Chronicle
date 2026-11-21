@@ -17,7 +17,8 @@ my-game/
 ```
 
 Executables and scripts other than `.js` (`.sh`, `.py`, `.exe`, …) and
-symlinks are rejected at install.
+symlinks are rejected at install while **Scan the files** is on (Site admin >
+Package rules; on by default).
 
 ## Minimal manifest
 

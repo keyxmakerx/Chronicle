@@ -12,7 +12,7 @@ As the campaign owner:
 1. Campaign settings > Game & features (`/campaigns/:id/extensions`): make sure the
    **Sync API** feature is on. With it off, every key is refused with
    `sync_api_disabled`.
-2. Settings > API keys (`/campaigns/:id/settings?tab=api-keys`) > create a key.
+2. **Details and data** > **Keys** (`/campaigns/:id/settings?tab=api-keys`) > create a key.
    Pick permissions: **read** (GETs), **write** (create, update, delete),
    **sync** (`/sync` endpoints). Optional: rate limit (default 300 requests a
    minute), expiry date, IP allowlist (IPs or CIDRs).

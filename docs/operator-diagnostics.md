@@ -2,8 +2,9 @@
 
 Admin-gated, read-only endpoints that report what a running instance actually
 serves: the loaded version of each system, the directory it serves from, and a
-content fingerprint of every served file. They answer "Admin > Packages says
-v0.13.0, so why does the old widget render?" without shell access.
+content fingerprint of every served file. They answer "Site admin > Game
+systems & modules says v0.13.0, so why does the old widget render?" without
+shell access.
 
 They are a catalog of small named checks. Run one at a time and paste the
 result to an AI assistant, or use the in-app
@@ -18,8 +19,8 @@ and `diagnostics_picker.templ`; routes in
 
 A package install needs three things to line up: the new version is extracted
 to disk, the in-memory registry picks it up on rescan, and the browser fetches
-the new bytes. Admin > Packages only knows what it installed, not what the
-loader serves.
+the new bytes. Site admin > Game systems & modules only knows what it
+installed, not what the loader serves.
 
 - `loaded_version` differs from the installed version: the registry never
   picked up the install; rescan or restart.
@@ -62,7 +63,7 @@ Health of every loaded system, for tooling or comparing two installs.
 |---|---|
 | `id` / `name` | Loaded system id and display name. |
 | `loaded_version` | Version the loader serves; may differ from the installed version. |
-| `source` | `package` (Admin > Packages) or `bundled` (found in the server's own systems directory at startup; usually absent). |
+| `source` | `package` (Site admin > Game systems & modules) or `bundled` (found in the server's own systems directory at startup; usually absent). |
 | `dir` | Directory the loader serves from. |
 | `files[]` | One per served file: manifest, declared widget scripts, text-renderer files. |
 | `files[].exists` | `false`: the served dir lacks the file. |
@@ -191,7 +192,7 @@ answers better.
 | `plugin-asset-grep` | docker | **TRAP.** Greps the container filesystem for a plugin asset; empty for every `//go:embed` asset, so it proves nothing. Prefer `host.embedded` / `host.embedded-contains`. |
 | `container-restart-time` | docker | Whether the container was recreated for this deploy; a new image changes nothing until the container is. |
 | `binary-in-container` | docker | Executable mtime and container clock from outside the process: cross-checks `host.build` and rules out clock skew. |
-| `served-widget-version` | browser-console | `?v=` on each served widget URL. If it lags Admin > Packages, the registry never picked up the install. |
+| `served-widget-version` | browser-console | `?v=` on each served widget URL. If it lags Site admin > Game systems & modules, the registry never picked up the install. |
 | `page-asset-tokens` | browser-console | Every versioned asset URL on the page, i.e. what the browser holds. |
 | `served-widget-content` | browser-console | Fetches a served widget and checks for a marker: new build or cached copy. |
 | `package-version-dirs` | docker | Every installed version folder; several means a stale one may shadow the newest. |
@@ -275,7 +276,7 @@ it. Go cheapest first; paste back only the step that surprises you.
 
 ## The in-app AI helper (batch)
 
-`GET /admin/diagnostics/workspace` (Site admin ▸ Health ▸ AI helper) turns
+`GET /admin/diagnostics/workspace` (Site admin > Health & diagnostics > AI helper) turns
 "request a diagnostic, run it, paste it back" into one batch round-trip with a
 human approval gate. A request comes from one of three places:
 
