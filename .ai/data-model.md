@@ -362,6 +362,12 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `entity_standing_reasons` | The Director's explanations, newest first: `direction` (`up`/`down`/`none`, checked by the service), `reason` (90 characters), `when_label` (30), `dm_only`; FK cascade to `entity_standings`; at most 300 per standing; `created_by` carries no FK |
 | `entity_standing_settings` | Whether players see a page's standing at all: PK `entity_id`, `players_see` (a page with no row lets them); FK cascade to `entities` and `campaigns` |
 
+### practice heroes (`internal/plugins/entities/practiceschema/migrations/`, registry slug `entity_practice`)
+
+| Table | Notes |
+|---|---|
+| `practice_heroes` | A player's practice heroes (`001_practice_heroes`): `user_id` is the maker (no FK, so removal hooks delete a person's rows without being blocked); `name`, `picks_json` (the creator's `{fieldKey: {name, options}}` map as validated, never derived fields), `level` (carried from a copied hero, else NULL), `copied_from_name`; `ask_status` `''`/`waiting`/`declined` (checked by the service), `ask_note` (a Director's note when declining), `asked_at`; at most 3 per `(campaign_id, user_id)`, enforced by the repository's conditional insert; FK cascade to `campaigns`. Not an `entities` row on purpose |
+
 ### page layouts (`internal/plugins/entities/layoutschema/migrations/`, registry slug `page_layouts`)
 
 | Table | Notes |

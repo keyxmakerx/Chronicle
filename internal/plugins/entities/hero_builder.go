@@ -55,20 +55,7 @@ func builderHeroes(ctx context.Context, mine []CastMember, charTypeIDs []int, ty
 		if !slices.Contains(charTypeIDs, e.EntityTypeID) {
 			continue
 		}
-		hidden := map[string]bool{}
-		if !canSeeGM {
-			var typeFields []FieldDefinition
-			if t := byType[e.EntityTypeID]; t != nil {
-				typeFields = t.Fields
-			}
-			// RestrictionDefs, not MergeFields: a field hidden on this page
-			// is still GM-only.
-			for _, f := range RestrictionDefs(typeFields, e.FieldOverrides) {
-				if f.GMOnly {
-					hidden[f.Key] = true
-				}
-			}
-		}
+		hidden := heroHiddenKeys(&e, types, canSeeGM)
 		h := BuilderHero{ID: e.ID, Name: e.Name, Values: map[string]string{}, Hidden: []string{}, Sheet: hasEntityShowRenderer(ctx, byType[e.EntityTypeID])}
 		for k, v := range e.FieldsData {
 			if hidden[k] {

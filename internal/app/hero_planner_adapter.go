@@ -37,6 +37,23 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 	return out, nil
 }
 
+// VisitorPlan reads the plan as a look-around visitor gets it: the list a
+// brand-new player with no rules or grants of their own is offered, built from
+// what the public can read (systems.WithChoiceVisitor). Rule details, held
+// entries and asks are never copied across, so the plan has no way to carry
+// them.
+func (a heroPlannerAdapter) VisitorPlan(ctx context.Context, campaignID string) (*entities.HeroPlan, error) {
+	p, err := a.choices.CreatorPlan(systems.WithChoiceVisitor(ctx), campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
+	for _, s := range p.Steps {
+		out.Steps = append(out.Steps, entities.HeroStep{FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(s.Choices)})
+	}
+	return out, nil
+}
+
 func heroChoices(in []systems.Choice) []entities.HeroChoice {
 	out := make([]entities.HeroChoice, 0, len(in))
 	for _, c := range in {

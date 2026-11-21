@@ -130,3 +130,64 @@ func nullable(s string) any {
 	}
 	return s
 }
+
+// ReleaseOne frees one page the way ReleaseOwned frees all of a leaver's: the
+// owner is cleared and the page is marked playable. It matches the owner and
+// the campaign, so a page that changed hands, or one of another table, stays.
+func TestEntityRepository_ReleaseOne_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openTestDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	tam, bob, camp, other := testUUID(t), testUUID(t), testUUID(t), testUUID(t)
+	for _, u := range []string{tam, bob} {
+		mustExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+			u, "release-one-"+u+"@example.test", "Release One Test", "x")
+	}
+	for _, c := range []string{camp, other} {
+		mustExec(t, db, `INSERT INTO campaigns (id, name, slug, created_by) VALUES (?, ?, ?, ?)`, c, "Release One", "release-one-"+c[:8], tam)
+	}
+	defer func() {
+		mustExec(t, db, `DELETE FROM campaigns WHERE id IN (?, ?)`, camp, other)
+		mustExec(t, db, `DELETE FROM users WHERE id IN (?, ?)`, tam, bob)
+	}()
+	et := &EntityType{CampaignID: camp, Slug: "release-one", Name: "Party", NamePlural: "Party", Icon: "fa-user", Color: "#111111",
+		Fields: []FieldDefinition{}, Layout: DefaultLayout(), Enabled: true}
+	mustCreate(t, NewEntityTypeRepository(db), ctx, et)
+	mk := func(name, owner string) string {
+		id := testUUID(t)
+		mustExec(t, db, `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, created_by, owner_user_id, playable, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW(), NOW())`, id, camp, et.ID, name, id[:8], tam, nullable(owner))
+		return id
+	}
+	tess, vex, sela := mk("Tess", tam), mk("Vex", tam), mk("Sela", bob)
+	repo := NewEntityRepository(db).(*entityRepository)
+
+	if ok, err := repo.ReleaseOne(ctx, other, tess, tam); err != nil || ok {
+		t.Errorf("another campaign: %v %v", ok, err)
+	}
+	if ok, err := repo.ReleaseOne(ctx, camp, sela, tam); err != nil || ok {
+		t.Errorf("someone else's page: %v %v", ok, err)
+	}
+	if ok, err := repo.ReleaseOne(ctx, camp, tess, tam); err != nil || !ok {
+		t.Fatalf("release: %v %v", ok, err)
+	}
+	var owner *string
+	var playable bool
+	if err := db.QueryRow(`SELECT owner_user_id, playable FROM entities WHERE id = ?`, tess).Scan(&owner, &playable); err != nil {
+		t.Fatal(err)
+	}
+	if owner != nil || !playable {
+		t.Errorf("released page: owner=%v playable=%v", owner, playable)
+	}
+	var vexOwner *string
+	if err := db.QueryRow(`SELECT owner_user_id FROM entities WHERE id = ?`, vex).Scan(&vexOwner); err != nil || vexOwner == nil || *vexOwner != tam {
+		t.Errorf("their other page was touched: %v %v", vexOwner, err)
+	}
+	if ok, _ := repo.ReleaseOne(ctx, camp, tess, tam); ok {
+		t.Error("releasing twice should report nothing released")
+	}
+}

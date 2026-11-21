@@ -1,0 +1,63 @@
+// practice_creator.templ — the hero creator page in practice mode. The same
+// creator script mounts; data attributes switch it to practice: the plan that
+// puts what the rules keep back in, a different save, and its own draft.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// practiceCSS is the practice stylesheet's address.
+func practiceCSS() string {
+	return layouts.AssetURL("/static/plugins/entities/css/practice.css")
+}
+
+// practiceNewURL is the creator's address in practice mode, with an optional
+// query string.
+func practiceNewURL(campaignID, query string) string {
+	return fmt.Sprintf("/campaigns/%s/characters/practice/new%s", campaignID, query)
+}
+
+// PracticeCreatorPage renders the creator in practice mode inside the App shell.
+templ PracticeCreatorPage(cc *campaigns.CampaignContext, view PracticeCreatorView) {
+	@layouts.App("Practice hero - " + cc.Campaign.Name) {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		<div class="max-w-7xl mx-auto px-4 py-6">
+			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
+				<span aria-hidden="true">/</span>
+				if view.Editing {
+					<span class="text-fg">Change practice hero</span>
+				} else {
+					<span class="text-fg">New practice hero</span>
+				}
+			</nav>
+			<div
+				class="hc"
+				data-widget="hero-creator"
+				data-hero-creator="true"
+				data-practice="true"
+				data-campaign-id={ cc.Campaign.ID }
+				data-plan-url={ view.PlanURL }
+				data-create-url={ view.CreateURL }
+				data-update-url={ view.UpdateURL }
+				data-preload={ view.Preload }
+				data-csrf={ view.CSRFToken }
+				data-type-name="practice hero"
+				data-for-self="false"
+			>
+				<div class="hc-page paper paper-stack hc-loading" role="status">
+					<p class="paper-kind">Practice hero</p>
+					<p class="hc-loading__text">Opening the creator…</p>
+				</div>
+				<noscript>
+					<p class="text-sm text-fg-muted">The hero creator needs JavaScript.</p>
+				</noscript>
+			</div>
+		</div>
+	}
+}

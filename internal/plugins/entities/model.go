@@ -844,7 +844,10 @@ type CastView struct {
 	// Landed is the type just added, flashed once on its chip.
 	Landed int
 	// Notice is a one-line confirmation shown as a toast after a change.
-	Notice    string
+	Notice string
+	// Alert is a lasting line shown above the page when something needs the
+	// reader's action; unlike Notice it does not fade.
+	Alert     string
 	CSRFToken string
 	// CanCreateHero shows the Create hero button: staff always, a player when
 	// the owner lets players claim the hero's page type.
@@ -861,6 +864,14 @@ type CastView struct {
 	// Builder is the hero builder for the viewer's own heroes and a new
 	// one; nil hides it.
 	Builder *HeroBuilderView
+	// Practice is the player's Practice shelf; nil for anyone who may not
+	// make practice heroes. PracticeDirector is every practice hero of the
+	// campaign for the Directors; nil for everyone else, or when none exist.
+	Practice         *PracticeShelfView
+	PracticeDirector *PracticeDirectorView
+	// Tryout is the mount for a try-out kept in the viewer's browser: a
+	// visitor's Practice section or a player's offer to keep it. nil otherwise.
+	Tryout *TryoutView
 }
 
 // --- Slug Generation ---
