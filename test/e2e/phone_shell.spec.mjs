@@ -128,6 +128,8 @@ async function open(html, { width = 390, touch = true } = {}) {
   });
   const p = await ctx.newPage();
   await p.setContent(html);
+  // A banner slides in over 200 ms; measured mid-slide it is a few px off, which moves the tap strip's hit tests.
+  await p.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
   return { p, close: () => ctx.close() };
 }
 
