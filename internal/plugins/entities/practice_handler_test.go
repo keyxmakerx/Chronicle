@@ -13,11 +13,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v5"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -37,7 +39,9 @@ type heroSvc struct {
 func (s *heroSvc) ListByOwner(_ context.Context, _, userID string) ([]Entity, error) {
 	return s.owned[userID], nil
 }
-func (s *heroSvc) ListClaimed(context.Context, string, int, string) ([]Entity, error) { return nil, nil }
+func (s *heroSvc) ListClaimed(context.Context, string, int, string) ([]Entity, error) {
+	return nil, nil
+}
 func (s *heroSvc) ListRoster(context.Context, string, []int, int, string) ([]Entity, error) {
 	return nil, nil
 }
@@ -98,8 +102,8 @@ func newPracticeRig() *practiceRig {
 	h.SetMemberLister(rosterMembers{})
 	h.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
 	h.SetHeroPlanner(planner)
-	h.SetPracticeService(NewPracticeService(repo, planner))
-	h.SetHeroReleaser(rel)
+	lists := &fakeCastLists{chars: []int{practiceChar}, chosen: CharacterLists{CharacterTypeIDs: []int{practiceChar}}}
+	h.SetPracticeService(NewPracticeService(repo, planner, PracticeDeps{Pages: svc, Types: lists, Members: rosterMembers{}, Releaser: rel}))
 	return &practiceRig{h: h, svc: svc, repo: repo, planner: planner, releaser: rel, events: events}
 }
 
@@ -116,7 +120,16 @@ var (
 	vDirector = viewer{"dm", campaigns.RoleOwner, true}
 )
 
+// privateByDefault is a campaign whose new pages start hidden from players.
+const privateByDefault = `{"default_visibility":"dm_only"}`
+
 func (r *practiceRig) call(t *testing.T, v viewer, method, target string, body any, pid string, fn func(*Handler, *echo.Context) error) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	return r.callIn(t, "", v, method, target, body, pid, fn)
+}
+
+// callIn is call in a campaign with the given settings JSON.
+func (r *practiceRig) callIn(t *testing.T, settings string, v viewer, method, target string, body any, pid string, fn func(*Handler, *echo.Context) error) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	var rd *strings.Reader
 	ctype := echo.MIMEApplicationJSON
@@ -139,7 +152,7 @@ func (r *practiceRig) call(t *testing.T, v viewer, method, target string, body a
 		pv = append(pv, echo.PathValue{Name: "pid", Value: pid})
 	}
 	c.SetPathValues(pv)
-	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}, MemberRole: v.role, IsMember: true, IsDmGranted: v.dm}
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test", Settings: settings}, MemberRole: v.role, IsMember: true, IsDmGranted: v.dm}
 	c.Set("campaign_context", cc)
 	c.Set("auth_user_id", v.id)
 	return rec, fn(r.h, c)
@@ -150,6 +163,11 @@ func (r *practiceRig) seed(maker, name string, picks map[string]HeroPick, status
 	id := generateUUID()
 	r.repo.rows[id] = PracticeHero{ID: id, CampaignID: "camp-1", UserID: maker, Name: name, Picks: picks, AskStatus: status}
 	return id
+}
+
+// yes is the body of a Director's yes to what is on the shelf now.
+func (r *practiceRig) yes(id string) url.Values {
+	return url.Values{"seen": {strconv.FormatInt(r.repo.rows[id].Version(), 10)}}
 }
 
 func TestPractice_MakingThemNeverTouchesTheOneHeroRule(t *testing.T) {
@@ -284,7 +302,7 @@ func TestPractice_DirectorsYes(t *testing.T) {
 		h.Level = &lvl
 		r.repo.rows[id] = h
 
-		rec, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		rec, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
 		if err != nil {
 			t.Fatalf("allow: %v", err)
 		}
@@ -323,7 +341,7 @@ func TestPractice_DirectorsYes(t *testing.T) {
 	t.Run("a player with no hero has nothing to release", func(t *testing.T) {
 		r := newPracticeRig()
 		id := r.seed("u1", "New", nil, PracticeAskWaiting)
-		if _, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) }); err != nil {
+		if _, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) }); err != nil {
 			t.Fatal(err)
 		}
 		if len(r.releaser.freed) != 0 || len(r.svc.created) != 1 {
@@ -349,7 +367,7 @@ func TestPractice_DirectorsYes(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				r := newPracticeRig()
 				id := r.seed(tc.maker, "X", nil, tc.status)
-				_, err := r.call(t, tc.v, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+				_, err := r.call(t, tc.v, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
 				assertAppError(t, err, tc.code)
 				if len(r.svc.created) != 0 || len(r.releaser.freed) != 0 {
 					t.Error("a refused yes changed something")
@@ -364,7 +382,7 @@ func TestPractice_DirectorsYes(t *testing.T) {
 	t.Run("an entry no longer on the list refuses before anything changes", func(t *testing.T) {
 		r := newPracticeRig()
 		id := r.seed("u1", "X", map[string]HeroPick{"class": {Name: "Removed Class"}}, PracticeAskWaiting)
-		_, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		_, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
 		assertAppError(t, err, 400)
 		if _, ok := r.repo.rows[id]; !ok || len(r.svc.created) != 0 {
 			t.Error("practice hero lost or page made")
@@ -375,7 +393,7 @@ func TestPractice_DirectorsYes(t *testing.T) {
 		r := newPracticeRig()
 		r.svc.failNew = errors.New("db down")
 		id := r.seed("u1", "X", map[string]HeroPick{"class": {Name: "Fury"}}, PracticeAskWaiting)
-		_, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		_, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
 		if err == nil {
 			t.Fatal("expected an error")
 		}
@@ -385,28 +403,96 @@ func TestPractice_DirectorsYes(t *testing.T) {
 		}
 	})
 
-	t.Run("a failed release is loud and keeps the new hero", func(t *testing.T) {
+	t.Run("a failed release keeps the new hero, is on the record, and names both pages", func(t *testing.T) {
 		r := newPracticeRig()
+		log := &loggedAudit{}
+		r.h.SetAuditService(log)
 		r.svc.owned["u1"] = []Entity{{ID: "tess", CampaignID: "camp-1", Name: "Tess", EntityTypeID: practiceChar}}
 		r.releaser.fail = errors.New("db down")
-		id := r.seed("u1", "X", map[string]HeroPick{"class": {Name: "Fury"}}, PracticeAskWaiting)
-		_, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
-		assertAppError(t, err, 500)
-		if !strings.Contains(err.Error(), "Tess") {
-			t.Errorf("error should name the page left over: %v", err)
+		id := r.seed("u1", "Marrow", map[string]HeroPick{"class": {Name: "Fury"}}, PracticeAskWaiting)
+		rec, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		if err != nil {
+			t.Fatalf("a failed release should draw the page, not fail: %v", err)
 		}
 		if len(r.svc.created) != 1 {
 			t.Error("the new hero should stand")
+		}
+		if len(log.entries) != 1 || log.entries[0].Action != audit.ActionEntityCreated || log.entries[0].EntityID != "new-hero" {
+			t.Errorf("audit before the release step: %+v", log.entries)
+		}
+		body := rec.Body.String()
+		want := "Marrow is now Ana&#39;s hero, but Tess couldn&#39;t be freed. Open Tess and free it."
+		if rec.Code != http.StatusOK || !strings.Contains(body, want) || !strings.Contains(body, `role="alert"`) {
+			t.Errorf("response %d lacks %q: %s", rec.Code, want, body)
+		}
+		if _, still := r.repo.rows[id]; still {
+			t.Error("the practice hero should be gone: the new hero was made")
+		}
+	})
+
+	t.Run("a maker's change and re-ask after the Director looked is not approved unseen", func(t *testing.T) {
+		r := newPracticeRig()
+		id := r.seed("u1", "Marrow", map[string]HeroPick{"class": {Name: "Conduit"}}, PracticeAskWaiting)
+		body := r.yes(id) // the Director's page was drawn here
+		// The maker changes it (which clears the ask) and asks again.
+		if _, err := r.call(t, vPat, http.MethodPut, "/x", map[string]any{"name": "Marrow", "picks": map[string]any{"class": map[string]any{"name": "Fury"}}}, id,
+			func(h *Handler, c *echo.Context) error { return h.PracticeUpdate(c) }); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.call(t, vPat, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAsk(c) }); err != nil {
+			t.Fatal(err)
+		}
+		_, err := r.call(t, vDirector, http.MethodPost, "/x", body, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		assertAppError(t, err, 409)
+		if !strings.Contains(err.Error(), "This practice hero changed. Look again before saying yes.") {
+			t.Errorf("words: %v", err)
+		}
+		if len(r.svc.created) != 0 {
+			t.Error("a hero was made from picks the Director never saw")
+		}
+		if got, ok := r.repo.rows[id]; !ok || got.AskStatus != PracticeAskWaiting {
+			t.Errorf("the changed practice hero should stay waiting: %+v ok=%v", got, ok)
+		}
+		// Looking again and saying yes then builds what is there now.
+		if _, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) }); err != nil {
+			t.Fatal(err)
+		}
+		if len(r.svc.created) != 1 || r.svc.created[0].FieldsData["class"] != "Fury" {
+			t.Errorf("created = %+v", r.svc.created)
+		}
+	})
+
+	t.Run("a yes that does not say what it looked at is refused", func(t *testing.T) {
+		r := newPracticeRig()
+		id := r.seed("u1", "X", nil, PracticeAskWaiting)
+		_, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		assertAppError(t, err, 409)
+		if len(r.svc.created) != 0 {
+			t.Error("a hero was made")
+		}
+	})
+
+	t.Run("the new hero is as open as the maker's own creation, not the Director's default", func(t *testing.T) {
+		r := newPracticeRig()
+		id := r.seed("u1", "X", map[string]HeroPick{"class": {Name: "Conduit"}}, PracticeAskWaiting)
+		// A campaign where new pages start hidden: a Director's own pages would
+		// be private, a player's never are.
+		_, err := r.callIn(t, privateByDefault, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.svc.created) != 1 || r.svc.created[0].IsPrivate {
+			t.Errorf("the player's new hero was made private: %+v", r.svc.created)
 		}
 	})
 
 	t.Run("two yes answers at once make one hero", func(t *testing.T) {
 		r := newPracticeRig()
 		id := r.seed("u1", "X", nil, PracticeAskWaiting)
-		if _, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) }); err != nil {
+		if _, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) }); err != nil {
 			t.Fatal(err)
 		}
-		_, err := r.call(t, vDirector, http.MethodPost, "/x", nil, id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+		_, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
 		assertAppError(t, err, 404)
 		if len(r.svc.created) != 1 {
 			t.Errorf("created %d heroes", len(r.svc.created))
@@ -486,10 +572,12 @@ func TestPractice_ShelfAndDirectorList(t *testing.T) {
 	}
 
 	dir := &PracticeDirectorView{CampaignID: "camp-1", Rows: []PracticeDirectorRow{
-		{ID: "a", Name: "Tess as a Fury", Summary: "Polder Fury, level 3", Maker: "Pat", Waiting: true, OldHero: "Tess"},
+		{ID: "a", Name: "Tess as a Fury", Summary: "Polder Fury, level 3", Maker: "Pat", Waiting: true, OldHero: "Tess",
+			Version: "1700000000123", Holds: "Holds picks you don't offer Pat: Fury."},
 		{ID: "b", Name: "Old Marrow", Maker: "Sam"}}}
 	got = renderCastContent(t, CastView{PracticeDirector: dir})
-	for _, want := range []string{"Practice heroes", "made by Pat", "Pat asks to play this one.", "Say yes", "Not now", "Tess goes back to Free to pick.", "Made by Sam"} {
+	for _, want := range []string{"Practice heroes", "made by Pat", "Pat asks to play this one.", "Say yes", "Not now", "Tess goes back to Free to pick.", "Made by Sam",
+		"Holds picks you don&#39;t offer Pat: Fury.", `name="seen" value="1700000000123"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("director list lacks %q", want)
 		}
@@ -509,5 +597,151 @@ func TestPractice_ShelfAndDirectorList(t *testing.T) {
 		Rows: []PracticeDirectorRow{{ID: "a", Name: "X", Maker: "Pat", Waiting: true}}}})
 	if strings.Contains(noOld, "goes back to Free to pick") {
 		t.Error("no confirm when the player has no hero")
+	}
+}
+
+// Making, changing, asking and the shelf are for Players exactly: a Scribe, a
+// Director and a stranger are all told it is not there, while the Directors
+// keep opening and answering.
+func TestPractice_MakerRoutesArePlayersOnly(t *testing.T) {
+	scribeDM := viewer{"co", campaigns.RoleScribe, true}
+	stranger := viewer{"nobody", campaigns.RoleNone, false}
+	body := map[string]any{"name": "Try", "picks": map[string]any{"class": map[string]any{"name": "Fury"}}}
+	routes := []struct {
+		name   string
+		method string
+		body   any
+		fn     func(*Handler, *echo.Context) error
+	}{
+		{"the creator page", http.MethodGet, nil, (*Handler).PracticeNew},
+		{"the plan", http.MethodGet, nil, (*Handler).PracticePlanAPI},
+		{"saving a new one", http.MethodPost, body, (*Handler).PracticeCreate},
+		{"changing one", http.MethodPut, body, (*Handler).PracticeUpdate},
+		{"asking", http.MethodPost, nil, (*Handler).PracticeAsk},
+		{"throwing one away", http.MethodDelete, nil, (*Handler).PracticeDelete},
+	}
+	viewers := []struct {
+		name string
+		v    viewer
+		ok   bool
+	}{
+		{"a Player", vPat, true},
+		{"a Scribe", vScribe, false},
+		{"a Scribe who is a co-Director", scribeDM, false},
+		{"the Director", vDirector, false},
+		{"a stranger", stranger, false},
+	}
+	for _, rt := range routes {
+		for _, vw := range viewers {
+			t.Run(rt.name+" as "+vw.name, func(t *testing.T) {
+				r := newPracticeRig()
+				// The maker's own row, so a Player's change, ask and delete have something.
+				id := r.seed("u1", "Mine", map[string]HeroPick{"class": {Name: "Conduit"}}, "")
+				v := vw.v
+				if vw.ok {
+					v.id = "u1"
+				}
+				_, err := r.call(t, v, rt.method, "/x", rt.body, id, rt.fn)
+				if vw.ok {
+					if err != nil {
+						t.Fatalf("a Player was refused: %v", err)
+					}
+					return
+				}
+				assertAppError(t, err, 404)
+				if got, ok := r.repo.rows[id]; !ok || got.Name != "Mine" || got.AskStatus != "" {
+					t.Errorf("a refused request changed the row: %+v ok=%v", got, ok)
+				}
+			})
+		}
+	}
+
+	t.Run("the shelf is drawn for Players only", func(t *testing.T) {
+		for _, vw := range viewers {
+			r := newPracticeRig()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/x", nil), httptest.NewRecorder())
+			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: vw.v.role, IsMember: vw.v.role > 0, IsDmGranted: vw.v.dm}
+			c.Set("campaign_context", cc)
+			c.Set("auth_user_id", vw.v.id)
+			if got := r.h.practiceShelf(c, cc, nil) != nil; got != vw.ok {
+				t.Errorf("%s: shelf drawn = %v, want %v", vw.name, got, vw.ok)
+			}
+		}
+	})
+}
+
+// A maker who has since become a Scribe is no longer someone a yes can make a
+// hero for.
+func TestPractice_YesRefusedWhenMakerIsNoLongerAPlayer(t *testing.T) {
+	r := newPracticeRig()
+	r.h.SetPracticeService(NewPracticeService(r.repo, r.planner, PracticeDeps{Pages: r.svc, Types: &fakeCastLists{chars: []int{practiceChar}},
+		Members: membersList{{UserID: "u1", DisplayName: "Ana", Role: campaigns.RoleScribe}}, Releaser: r.releaser}))
+	id := r.seed("u1", "X", nil, PracticeAskWaiting)
+	_, err := r.call(t, vDirector, http.MethodPost, "/x", r.yes(id), id, func(h *Handler, c *echo.Context) error { return h.PracticeAllow(c) })
+	assertAppError(t, err, 409)
+	if len(r.svc.created) != 0 {
+		t.Error("a hero was made for a Scribe")
+	}
+}
+
+type membersList []campaigns.CampaignMember
+
+func (m membersList) ListMembers(context.Context, string) ([]campaigns.CampaignMember, error) {
+	return m, nil
+}
+
+// The Directors' list says, on a waiting row only, which picks a yes would
+// approve that the maker's rules do not offer them.
+func TestPractice_DirectorListNamesHeldPicks(t *testing.T) {
+	r := newPracticeRig()
+	waiting := r.seed("u1", "Marrow", map[string]HeroPick{"ancestry": {Name: "Human"}, "class": {Name: "Fury"}}, PracticeAskWaiting)
+	r.seed("u1", "Quiet", map[string]HeroPick{"class": {Name: "Fury"}}, "")
+	ok := r.seed("u2", "Fine", map[string]HeroPick{"class": {Name: "Conduit"}}, PracticeAskWaiting)
+
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/x", nil), httptest.NewRecorder())
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner, IsMember: true, IsDmGranted: true}
+	c.Set("campaign_context", cc)
+	c.Set("auth_user_id", "dm")
+	view := r.h.practiceDirectorList(c, cc)
+	if view == nil {
+		t.Fatal("no list")
+	}
+	holds := map[string]string{}
+	for _, row := range view.Rows {
+		holds[row.ID] = row.Holds
+	}
+	if holds[waiting] != "Holds picks you don't offer Ana: Fury." {
+		t.Errorf("waiting row line = %q", holds[waiting])
+	}
+	if holds[ok] != "" {
+		t.Errorf("a hero within the rules carries a line: %q", holds[ok])
+	}
+	for id, line := range holds {
+		if id != waiting && line != "" {
+			t.Errorf("row %s carries a line: %q", id, line)
+		}
+	}
+	// One plan per waiting maker, never one per row of the table.
+	if len(r.planner.users) > 2 {
+		t.Errorf("planner asked %d times for 2 waiting makers", len(r.planner.users))
+	}
+}
+
+func TestPracticeHoldsLine(t *testing.T) {
+	tests := []struct {
+		names []string
+		want  string
+	}{
+		{nil, ""},
+		{[]string{"Fury"}, "Holds picks you don't offer Pat: Fury."},
+		{[]string{"Fury", "Troubadour"}, "Holds picks you don't offer Pat: Fury, Troubadour."},
+		{[]string{"A", "B", "C"}, "Holds picks you don't offer Pat: A, B, C."},
+		{[]string{"A", "B", "C", "D"}, "Holds picks you don't offer Pat: A, B, C and 1 more."},
+		{[]string{"A", "B", "C", "D", "E", "F"}, "Holds picks you don't offer Pat: A, B, C and 3 more."},
+	}
+	for _, tc := range tests {
+		if got := practiceHoldsLine("Pat", tc.names); got != tc.want {
+			t.Errorf("practiceHoldsLine(%v) = %q, want %q", tc.names, got, tc.want)
+		}
 	}
 }

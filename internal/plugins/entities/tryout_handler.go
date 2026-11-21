@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -38,7 +39,7 @@ func (h *Handler) tryoutReady(c *echo.Context, cc *campaigns.CampaignContext) er
 	if !h.isAddonEnabled(ctx, cc.Campaign.ID, AddonPlayerCharacterClaiming) {
 		return apperror.NewNotFound("the try-out is not available here")
 	}
-	target, _, err := h.practiceTarget(ctx, cc.Campaign.ID)
+	target, _, err := h.tryoutTarget(ctx, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
@@ -46,6 +47,15 @@ func (h *Handler) tryoutReady(c *echo.Context, cc *campaigns.CampaignContext) er
 		return apperror.NewNotFound("the try-out is not available here")
 	}
 	return nil
+}
+
+// tryoutTarget is the hero page type a try-out would become, nil when players
+// may claim none.
+func (h *Handler) tryoutTarget(ctx context.Context, campaignID string) (*EntityType, []int, error) {
+	if h.charLists == nil {
+		return nil, nil, nil
+	}
+	return practiceTargetType(ctx, h.charLists, h.service, campaignID)
 }
 
 // TryoutNew renders the hero creator in try-out mode
@@ -108,7 +118,7 @@ func (h *Handler) tryoutMount(c *echo.Context, cc *campaigns.CampaignContext) *T
 		if !h.isAddonEnabled(ctx, cc.Campaign.ID, AddonPlayerCharacterClaiming) {
 			return nil
 		}
-		target, charTypes, err := h.practiceTarget(ctx, cc.Campaign.ID)
+		target, charTypes, err := h.tryoutTarget(ctx, cc.Campaign.ID)
 		if err != nil || target == nil {
 			return nil
 		}

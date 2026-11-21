@@ -3,9 +3,11 @@ package entities
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"io/fs"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/database/dbtest"
@@ -87,20 +89,71 @@ func TestPracticeRepository_Integration(t *testing.T) {
 		}
 		_, _ = repo.DeleteForUser(ctx, camp, sam)
 
-		var wg sync.WaitGroup
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, _ = repo.Insert(ctx, mk(camp, pat, "R"), 3)
-			}()
+		// Every racer is released at once and each must get a clean answer:
+		// exactly the cap saved, the rest told it is full, nobody an error.
+		raceInserts := func(t *testing.T, racers int) {
+			t.Helper()
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			var mu sync.Mutex
+			saved, full, failed := 0, 0, 0
+			for i := 0; i < racers; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-start
+					ok, err := repo.Insert(ctx, mk(camp, pat, "R"), 3)
+					mu.Lock()
+					defer mu.Unlock()
+					switch {
+					case err != nil:
+						failed++
+						t.Errorf("a racing insert failed: %v", err)
+					case ok:
+						saved++
+					default:
+						full++
+					}
+				}()
+			}
+			close(start)
+			wg.Wait()
+			if saved != 3 || full != racers-3 || failed != 0 {
+				t.Errorf("saved %d, told full %d, failed %d of %d racers; want 3 saved and the rest full", saved, full, failed, racers)
+			}
+			if list, err := repo.ListByUser(ctx, camp, pat); err != nil || len(list) != 3 {
+				t.Errorf("after the race: %d heroes, %v", len(list), err)
+			}
+			_, _ = repo.DeleteForUser(ctx, camp, pat)
 		}
-		wg.Wait()
-		list, err := repo.ListByUser(ctx, camp, pat)
-		if err != nil || len(list) > 3 || len(list) == 0 {
-			t.Errorf("after the race: %d heroes, %v", len(list), err)
-		}
-		_, _ = repo.DeleteForUser(ctx, camp, pat)
+		raceInserts(t, 12)
+
+		// The same race with every pooled connection at READ COMMITTED, where a
+		// plain count-then-insert would let two racers both see two rows.
+		t.Run("under READ COMMITTED", func(t *testing.T) {
+			const conns = 14
+			db.SetMaxOpenConns(conns)
+			db.SetMaxIdleConns(conns)
+			held := make([]*sql.Conn, 0, conns)
+			for i := 0; i < conns; i++ {
+				c, err := db.Conn(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := c.ExecContext(ctx, `SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED`); err != nil {
+					t.Fatal(err)
+				}
+				held = append(held, c)
+			}
+			for _, c := range held {
+				c.Close()
+			}
+			var level string
+			if err := db.QueryRowContext(ctx, `SELECT @@SESSION.tx_isolation`).Scan(&level); err != nil || level != "READ-COMMITTED" {
+				t.Skipf("could not set the pool to READ COMMITTED (%q, %v)", level, err)
+			}
+			raceInserts(t, 12)
+		})
 	})
 
 	t.Run("ask, decline, replace and taking a waiting hero", func(t *testing.T) {
@@ -138,16 +191,21 @@ func TestPracticeRepository_Integration(t *testing.T) {
 		}
 		_, _ = repo.SetAsk(ctx, camp, h.ID, pat)
 
+		waiting, _ := repo.Find(ctx, camp, h.ID)
+		seen := waiting.Version()
+
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 		won := 0
+		var gotRow *PracticeHero
 		for i := 0; i < 6; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if ok, _ := repo.TakeWaiting(ctx, camp, h.ID); ok {
+				if row, err := repo.TakeWaiting(ctx, camp, h.ID, seen); err == nil && row != nil {
 					mu.Lock()
 					won++
+					gotRow = row
 					mu.Unlock()
 				}
 			}()
@@ -155,6 +213,9 @@ func TestPracticeRepository_Integration(t *testing.T) {
 		wg.Wait()
 		if won != 1 {
 			t.Errorf("%d callers took the same hero", won)
+		}
+		if gotRow == nil || gotRow.Name != "Renamed" || gotRow.Picks["class"].Name != "Fury" || gotRow.AskStatus != PracticeAskWaiting {
+			t.Errorf("the taken row is not the claimed one: %+v", gotRow)
 		}
 		if got, _ := repo.Find(ctx, camp, h.ID); got != nil {
 			t.Error("a taken hero is still there")
@@ -164,6 +225,56 @@ func TestPracticeRepository_Integration(t *testing.T) {
 		}
 		if got, _ := repo.Find(ctx, camp, h.ID); got == nil || got.AskStatus != "" {
 			t.Errorf("restored = %+v", got)
+		}
+		_, _ = repo.DeleteForUser(ctx, camp, pat)
+	})
+
+	t.Run("a hero changed after it was looked at is not taken", func(t *testing.T) {
+		h := mk(camp, pat, "Looked at")
+		_, _ = repo.Insert(ctx, h, 3)
+		_, _ = repo.SetAsk(ctx, camp, h.ID, pat)
+		seen, _ := repo.Find(ctx, camp, h.ID)
+		// The maker changes it and asks again.
+		h.Picks = map[string]HeroPick{"class": {Name: "Conduit"}}
+		_, _ = repo.Replace(ctx, h)
+		time.Sleep(5 * time.Millisecond)
+		_, _ = repo.SetAsk(ctx, camp, h.ID, pat)
+		if row, err := repo.TakeWaiting(ctx, camp, h.ID, seen.Version()); !errors.Is(err, ErrPracticeChanged) || row != nil {
+			t.Fatalf("took a changed hero: %v %v", row, err)
+		}
+		now, _ := repo.Find(ctx, camp, h.ID)
+		if now == nil || now.Picks["class"].Name != "Conduit" {
+			t.Fatalf("a refused take altered the row: %+v", now)
+		}
+		row, err := repo.TakeWaiting(ctx, camp, h.ID, now.Version())
+		if err != nil || row == nil || row.Picks["class"].Name != "Conduit" {
+			t.Fatalf("taking what is there now: %v %v", row, err)
+		}
+		// Put back as it was, the version still matches what a Director saw.
+		if err := repo.Restore(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+		if back, _ := repo.Find(ctx, camp, h.ID); back == nil || back.Version() != now.Version() {
+			t.Errorf("restore moved the version: %+v vs %d", back, now.Version())
+		}
+		_, _ = repo.DeleteForUser(ctx, camp, pat)
+	})
+
+	t.Run("waiting asks of a former player are cleared, answered ones are not", func(t *testing.T) {
+		a, b := mk(camp, pat, "A"), mk(camp, pat, "B")
+		_, _ = repo.Insert(ctx, a, 3)
+		_, _ = repo.Insert(ctx, b, 3)
+		_, _ = repo.SetAsk(ctx, camp, a.ID, pat)
+		_, _ = repo.SetAsk(ctx, camp, b.ID, pat)
+		_, _ = repo.Decline(ctx, camp, b.ID, "No.")
+		n, err := repo.ClearWaitingForUser(ctx, camp, pat)
+		if err != nil || n != 1 {
+			t.Fatalf("cleared %d, %v", n, err)
+		}
+		ga, _ := repo.Find(ctx, camp, a.ID)
+		gb, _ := repo.Find(ctx, camp, b.ID)
+		if ga.AskStatus != "" || gb.AskStatus != PracticeAskDeclined {
+			t.Errorf("a=%q b=%q", ga.AskStatus, gb.AskStatus)
 		}
 		_, _ = repo.DeleteForUser(ctx, camp, pat)
 	})

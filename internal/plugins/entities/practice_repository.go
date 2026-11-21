@@ -2,7 +2,9 @@ package entities
 
 import (
 	"context"
+	"crypto/sha1" //nolint:gosec // a short stable lock name, not a security use
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,15 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 )
+
+// ErrPracticeChanged says the practice hero is no longer the one the caller
+// looked at: its maker changed it, or asked again, after the page was drawn.
+var ErrPracticeChanged = errors.New("practice hero changed since it was read")
+
+// practiceLockSeconds is how long an insert waits its turn for the same
+// maker's other inserts. The critical section is two short statements, so
+// waiting this long only happens when something is badly wrong.
+const practiceLockSeconds = 10
 
 // mysqlDeadlock is the server's error number for a transaction it chose to
 // roll back to break a lock cycle; the statement is safe to try again.
@@ -20,11 +31,12 @@ const mysqlDeadlock = 1213
 // decides nothing about who may act; the service does.
 type PracticeRepository interface {
 	// Insert saves a new practice hero unless the maker already holds max in
-	// the campaign, and reports whether it was saved. The count and the insert
-	// are one statement, so two requests cannot both slip past the cap.
+	// the campaign, and reports whether it was saved. Inserts for one maker
+	// are serialised by a named lock, so the count and the insert are never
+	// interleaved with another's whatever the isolation level.
 	Insert(ctx context.Context, h *PracticeHero, max int) (bool, error)
-	// Restore puts a practice hero back without the cap, for a promotion that
-	// failed after the row was taken.
+	// Restore puts a practice hero back exactly as it was taken, for a
+	// promotion that failed after the row was claimed. No cap applies.
 	Restore(ctx context.Context, h *PracticeHero) error
 	// Find returns one practice hero, or nil when the campaign has none by
 	// that id.
@@ -45,9 +57,15 @@ type PracticeRepository interface {
 	// Decline marks a waiting practice hero declined with the Director's note;
 	// false when it was not waiting.
 	Decline(ctx context.Context, campaignID, id, note string) (bool, error)
-	// TakeWaiting removes a waiting practice hero and reports whether this
-	// call took it, so two Directors saying yes cannot both promote it.
-	TakeWaiting(ctx context.Context, campaignID, id string) (bool, error)
+	// TakeWaiting removes a waiting practice hero and returns the row it
+	// removed, so the real hero is built from exactly what was claimed. It
+	// returns nil when the hero is not waiting (gone, or already taken), so two
+	// Directors saying yes cannot both promote it, and ErrPracticeChanged,
+	// leaving the row alone, when its version is not the one the Director saw.
+	TakeWaiting(ctx context.Context, campaignID, id string, version int64) (*PracticeHero, error)
+	// ClearWaitingForUser sets every waiting ask of the person's in the
+	// campaign back to not asked, for a member who is no longer a player.
+	ClearWaitingForUser(ctx context.Context, campaignID, userID string) (int64, error)
 	// DeleteForUser removes everything the person made in one campaign.
 	DeleteForUser(ctx context.Context, campaignID, userID string) (int64, error)
 	// DeleteForUserEverywhere removes everything an account made, for an
@@ -114,20 +132,51 @@ func nullableLevel(l *int) any {
 	return *l
 }
 
+// practiceLockName is the named lock one maker's inserts in one campaign take.
+// Hashed because a lock name is limited to 64 characters and two UUIDs are
+// longer.
+func practiceLockName(campaignID, userID string) string {
+	sum := sha1.Sum([]byte(campaignID + "/" + userID)) //nolint:gosec // see import
+	return "practice:" + hex.EncodeToString(sum[:])
+}
+
 func (r *practiceRepository) Insert(ctx context.Context, h *PracticeHero, max int) (bool, error) {
 	raw, err := json.Marshal(h.Picks)
 	if err != nil {
 		return false, fmt.Errorf("encoding picks: %w", err)
 	}
+	// A named lock on a dedicated connection, not the isolation level, is what
+	// makes the count and the insert one step: under READ COMMITTED two
+	// requests would both count two rows and both insert. The lock belongs to
+	// the connection, so it is taken and released on this one.
+	conn, err := r.db.Conn(ctx)
+	if err != nil {
+		return false, fmt.Errorf("saving practice hero: %w", err)
+	}
+	defer conn.Close()
+	name := practiceLockName(h.CampaignID, h.UserID)
+	var got sql.NullInt64
+	if err := conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, ?)`, name, practiceLockSeconds).Scan(&got); err != nil {
+		return false, fmt.Errorf("saving practice hero: taking the maker's lock: %w", err)
+	}
+	if !got.Valid || got.Int64 != 1 {
+		return false, fmt.Errorf("saving practice hero: the maker's lock was not free in %ds", practiceLockSeconds)
+	}
+	// Released even when the request was cancelled, or the connection would
+	// go back to the pool still holding it.
+	defer func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT RELEASE_LOCK(?)`, name)
+	}()
+
 	const q = `INSERT INTO practice_heroes (id, campaign_id, user_id, name, picks_json, level, copied_from_name)
 		SELECT ?, ?, ?, ?, ?, ?, ? FROM DUAL
 		WHERE (SELECT COUNT(*) FROM practice_heroes WHERE campaign_id = ? AND user_id = ?) < ?`
 	args := []any{h.ID, h.CampaignID, h.UserID, h.Name, string(raw), nullableLevel(h.Level), nullableText(h.CopiedFromName),
 		h.CampaignID, h.UserID, max}
-	// Two requests counting at once can lock each other out; the server
-	// rolls one back and the retry then sees the other's row.
+	// Statements of different makers can still collide on index gaps; the
+	// server rolls one back and the retry is safe.
 	for attempt := 0; ; attempt++ {
-		res, err := r.db.ExecContext(ctx, q, args...)
+		res, err := conn.ExecContext(ctx, q, args...)
 		if err != nil {
 			var me *mysql.MySQLError
 			if errors.As(err, &me) && me.Number == mysqlDeadlock && attempt < 2 {
@@ -149,11 +198,11 @@ func (r *practiceRepository) Restore(ctx context.Context, h *PracticeHero) error
 		return fmt.Errorf("encoding picks: %w", err)
 	}
 	_, err = r.db.ExecContext(ctx,
-		`INSERT INTO practice_heroes (id, campaign_id, user_id, name, picks_json, level, copied_from_name, ask_status, ask_note, asked_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO practice_heroes (id, campaign_id, user_id, name, picks_json, level, copied_from_name, ask_status, ask_note, asked_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE id = id`,
 		h.ID, h.CampaignID, h.UserID, h.Name, string(raw), nullableLevel(h.Level), nullableText(h.CopiedFromName),
-		h.AskStatus, nullableText(h.AskNote), h.AskedAt, h.CreatedAt)
+		h.AskStatus, nullableText(h.AskNote), h.AskedAt, h.CreatedAt, h.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("restoring practice hero: %w", err)
 	}
@@ -247,10 +296,42 @@ func (r *practiceRepository) Decline(ctx context.Context, campaignID, id, note s
 	return affected(res, err, "declining practice hero")
 }
 
-func (r *practiceRepository) TakeWaiting(ctx context.Context, campaignID, id string) (bool, error) {
+func (r *practiceRepository) TakeWaiting(ctx context.Context, campaignID, id string, version int64) (*PracticeHero, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("taking practice hero: %w", err)
+	}
+	defer tx.Rollback()
+	// FOR UPDATE reads the latest committed row and holds it, so what is
+	// checked, returned and deleted is one and the same row.
+	h, err := scanPractice(tx.QueryRowContext(ctx,
+		practiceSelect+` WHERE id = ? AND campaign_id = ? AND ask_status = 'waiting' FOR UPDATE`, id, campaignID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("taking practice hero: %w", err)
+	}
+	if h.Version() != version {
+		return nil, ErrPracticeChanged
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM practice_heroes WHERE id = ? AND campaign_id = ?`, id, campaignID); err != nil {
+		return nil, fmt.Errorf("taking practice hero: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("taking practice hero: %w", err)
+	}
+	return &h, nil
+}
+
+func (r *practiceRepository) ClearWaitingForUser(ctx context.Context, campaignID, userID string) (int64, error) {
 	res, err := r.db.ExecContext(ctx,
-		`DELETE FROM practice_heroes WHERE id = ? AND campaign_id = ? AND ask_status = 'waiting'`, id, campaignID)
-	return affected(res, err, "taking practice hero")
+		`UPDATE practice_heroes SET ask_status = '', ask_note = NULL, asked_at = NULL
+		 WHERE campaign_id = ? AND user_id = ? AND ask_status = 'waiting'`, campaignID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("clearing a member's waiting asks: %w", err)
+	}
+	return res.RowsAffected()
 }
 
 func (r *practiceRepository) DeleteForUser(ctx context.Context, campaignID, userID string) (int64, error) {

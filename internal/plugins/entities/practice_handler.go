@@ -14,7 +14,6 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -25,20 +24,9 @@ import (
 // entities rows; the only place they meet one is a Director's yes, which makes
 // the real hero through the same function the hero creator uses.
 
-// HeroReleaser lets a hero go back to "Free to pick" for one page, the way a
-// leaver's heroes do. Wired at the composition root from the entity
-// repository, which owns that SQL.
-type HeroReleaser interface {
-	ReleaseOne(ctx context.Context, campaignID, entityID, userID string) (bool, error)
-}
-
 // SetPracticeService wires practice heroes. Without it every practice route
 // answers not found and the Characters page shows no shelf.
 func (h *Handler) SetPracticeService(s PracticeService) { h.practice = s }
-
-// SetHeroReleaser wires the release of a player's current hero on a
-// Director's yes.
-func (h *Handler) SetHeroReleaser(r HeroReleaser) { h.heroReleaser = r }
 
 // practiceBodyLimit bounds a creator body before it is read. A practice hero's
 // stored picks are limited further, in the service.
@@ -54,44 +42,25 @@ func (h *Handler) practiceOn(c *echo.Context, cc *campaigns.CampaignContext) err
 	return nil
 }
 
-// practiceTarget is the page type a player's real hero would be, when one may
-// be made at all. A practice hero is for someone who could have a hero, so
-// the same rule decides: a type players may claim, among the campaign's
-// character types.
-func (h *Handler) practiceTarget(ctx context.Context, campaignID string) (*EntityType, []int, error) {
-	if h.charLists == nil {
-		return nil, nil, nil
-	}
-	ids, err := h.charLists.CharacterTypeIDs(ctx, campaignID)
-	if err != nil {
-		return nil, nil, err
-	}
-	types, err := h.service.GetEntityTypes(ctx, campaignID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return pickHeroType(types, ids, true), ids, nil
-}
-
 // practiceMaker checks that this viewer may make and change practice heroes:
-// a member of at least Player, with the practice feature on and a hero type
-// players may claim. A player who already has a hero qualifies; that is the
-// point. Everything else is not found.
-func (h *Handler) practiceMaker(c *echo.Context, cc *campaigns.CampaignContext) (PracticeActor, []int, error) {
+// a Player exactly (a Scribe or Director gets the same 404 a stranger does),
+// with the practice feature on and a hero type players may claim. A player who
+// already has a hero qualifies; that is the point.
+func (h *Handler) practiceMaker(c *echo.Context, cc *campaigns.CampaignContext) (PracticeActor, error) {
 	if err := h.practiceOn(c, cc); err != nil {
-		return PracticeActor{}, nil, err
+		return PracticeActor{}, err
 	}
-	if cc.MemberRole < campaigns.RolePlayer {
-		return PracticeActor{}, nil, apperror.NewNotFound("practice heroes are not available here")
+	if cc.MemberRole != campaigns.RolePlayer {
+		return PracticeActor{}, apperror.NewNotFound("practice heroes are not available here")
 	}
-	target, ids, err := h.practiceTarget(c.Request().Context(), cc.Campaign.ID)
+	target, _, err := h.practice.Target(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
-		return PracticeActor{}, nil, err
+		return PracticeActor{}, err
 	}
 	if target == nil {
-		return PracticeActor{}, nil, apperror.NewNotFound("practice heroes are not available here")
+		return PracticeActor{}, apperror.NewNotFound("practice heroes are not available here")
 	}
-	return h.practiceActor(c, cc), ids, nil
+	return h.practiceActor(c, cc), nil
 }
 
 func (h *Handler) practiceActor(c *echo.Context, cc *campaigns.CampaignContext) PracticeActor {
@@ -116,29 +85,6 @@ func (h *Handler) bindPractice(c *echo.Context) (practiceBody, error) {
 	return b, nil
 }
 
-// practiceCopySource reads the player's own hero as picks, through the same
-// field filtering a player gets: fields marked GM-only are left out.
-func (h *Handler) practiceCopySource(c *echo.Context, cc *campaigns.CampaignContext, charTypes []int) (hero *Entity, picks map[string]HeroPick, level *int, err error) {
-	ctx := c.Request().Context()
-	hero, err = h.ownedCharacter(ctx, cc.Campaign.ID, auth.GetUserID(c), charTypes)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if hero == nil {
-		return nil, nil, nil, apperror.NewBadRequest("you have no hero to copy")
-	}
-	types, err := h.service.GetEntityTypes(ctx, cc.Campaign.ID)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	plan, err := h.practice.Plan(ctx, cc.Campaign.ID, auth.GetUserID(c))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	picks, level = practiceCopyFields(plan, hero.FieldsData, heroHiddenKeys(hero, types, cc.CanAuthorDmOnly()))
-	return hero, picks, level, nil
-}
-
 // PracticeNew renders the hero creator in practice mode
 // (GET /campaigns/:id/characters/practice/new). ?from=hero starts as a copy of
 // the player's own hero and ?edit=<id> loads one of their practice heroes.
@@ -147,7 +93,7 @@ func (h *Handler) PracticeNew(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	actor, charTypes, err := h.practiceMaker(c, cc)
+	actor, err := h.practiceMaker(c, cc)
 	if err != nil {
 		return err
 	}
@@ -171,11 +117,11 @@ func (h *Handler) PracticeNew(c *echo.Context) error {
 		view.Editing = true
 		preload = &practicePreload{Name: hero.Name, Picks: hero.Picks}
 	case c.QueryParam("from") == "hero":
-		hero, picks, _, err := h.practiceCopySource(c, cc, charTypes)
+		src, err := h.practice.CopySource(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly())
 		if err != nil {
 			return err
 		}
-		preload = &practicePreload{Name: hero.Name, Picks: picks, Copy: true}
+		preload = &practicePreload{Name: src.Hero.Name, Picks: src.Picks, Copy: true}
 	}
 	if preload != nil {
 		raw, err := json.Marshal(preload)
@@ -201,7 +147,7 @@ func (h *Handler) PracticePlanAPI(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	if _, _, err := h.practiceMaker(c, cc); err != nil {
+	if _, err := h.practiceMaker(c, cc); err != nil {
 		return err
 	}
 	plan, err := h.practice.Plan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c))
@@ -217,7 +163,7 @@ func (h *Handler) PracticeCreate(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	actor, charTypes, err := h.practiceMaker(c, cc)
+	actor, err := h.practiceMaker(c, cc)
 	if err != nil {
 		return err
 	}
@@ -227,11 +173,11 @@ func (h *Handler) PracticeCreate(c *echo.Context) error {
 	}
 	in := PracticeInput{Name: body.Name, Picks: body.Picks}
 	if body.Copy {
-		hero, _, level, err := h.practiceCopySource(c, cc, charTypes)
+		src, err := h.practice.CopySource(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly())
 		if err != nil {
 			return err
 		}
-		in.CopiedFrom, in.Level = hero.Name, level
+		in.CopiedFrom, in.Level = src.Hero.Name, src.Level
 	}
 	saved, err := h.practice.Create(c.Request().Context(), cc.Campaign.ID, actor, in)
 	if err != nil {
@@ -247,7 +193,7 @@ func (h *Handler) PracticeUpdate(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	actor, _, err := h.practiceMaker(c, cc)
+	actor, err := h.practiceMaker(c, cc)
 	if err != nil {
 		return err
 	}
@@ -309,7 +255,6 @@ func (h *Handler) practicePage(c *echo.Context, cc *campaigns.CampaignContext, i
 	return middleware.Render(c, http.StatusOK, PracticePage(cc, view))
 }
 
-
 // practiceMakerName is a maker's display name, "a player" when unknown.
 func (h *Handler) practiceMakerName(ctx context.Context, campaignID, userID string) string {
 	if h.memberLister != nil {
@@ -332,7 +277,7 @@ func (h *Handler) PracticeDelete(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	actor, _, err := h.practiceMaker(c, cc)
+	actor, err := h.practiceMaker(c, cc)
 	if err != nil {
 		return err
 	}
@@ -354,7 +299,7 @@ func (h *Handler) PracticeAsk(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	actor, _, err := h.practiceMaker(c, cc)
+	actor, err := h.practiceMaker(c, cc)
 	if err != nil {
 		return err
 	}
@@ -393,8 +338,9 @@ func (h *Handler) PracticeDecline(c *echo.Context) error {
 }
 
 // PracticeAllow is a Director's yes
-// (POST /campaigns/:id/characters/practice/:pid/allow): the maker's practice
-// hero becomes their real hero.
+// (POST /campaigns/:id/characters/practice/:pid/allow, with `seen`: the
+// version of the hero the Director looked at): the maker's practice hero
+// becomes their real hero.
 func (h *Handler) PracticeAllow(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -403,140 +349,27 @@ func (h *Handler) PracticeAllow(c *echo.Context) error {
 	if err := h.practiceOn(c, cc); err != nil {
 		return err
 	}
-	hero, made, err := h.promotePractice(c, cc, c.Param("pid"))
+	var req struct {
+		Seen string `form:"seen" json:"seen"`
+	}
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, 8*1024)
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	ctx := c.Request().Context()
+	res, err := h.practice.Promote(ctx, cc.Campaign.ID, c.Param("pid"), h.practiceActor(c, cc), req.Seen)
 	if err != nil {
 		return err
 	}
-	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, made.ID, made.Name)
-	return h.castClaimedPage(c, cc, made.Name+" is now "+h.practiceMakerName(c.Request().Context(), cc.Campaign.ID, hero.UserID)+"'s hero.")
-}
-
-// promotePractice makes the real hero from a practice hero a Director said
-// yes to.
-//
-// The Director's yes covers every entry the rules keep from the maker, so the
-// hero is checked against the unlimited plan as that maker sees it (never
-// reading anything Directors alone may read). The row is taken from the shelf
-// before the page is made, so two Directors answering at once cannot make two
-// heroes; if making the page fails it is put back untouched. The one-hero rule
-// holds because the maker's current hero is released afterwards, the way a
-// leaver's is. If that release fails the new hero stands and the error is
-// loud, since both pages are then theirs and a Director must free one.
-func (h *Handler) promotePractice(c *echo.Context, cc *campaigns.CampaignContext, id string) (*PracticeHero, *Entity, error) {
-	ctx := c.Request().Context()
-	campaignID := cc.Campaign.ID
-	actor := h.practiceActor(c, cc)
-	hero, err := h.practice.Open(ctx, campaignID, id, actor)
-	if err != nil {
-		return nil, nil, err
+	// The hero exists from here on, so it is on record before anything about
+	// the old hero can go wrong.
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, res.Hero.ID, res.Hero.Name)
+	maker := h.practiceMakerName(ctx, cc.Campaign.ID, res.Practice.UserID)
+	if res.ReleaseErr != nil {
+		return h.castClaimedPageAlert(c, cc, fmt.Sprintf("%s is now %s's hero, but %s couldn't be freed. Open %s and free it.",
+			res.Hero.Name, maker, res.Previous.Name, res.Previous.Name))
 	}
-	if !actor.Director {
-		return nil, nil, apperror.NewForbidden("only the Directors answer this")
-	}
-	if hero.AskStatus != PracticeAskWaiting {
-		return nil, nil, apperror.NewConflict("Nobody is asking to play this one now.")
-	}
-	target, charTypes, err := h.practiceTarget(ctx, campaignID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if target == nil {
-		return nil, nil, apperror.NewConflict("Players can't have a hero of that kind in this campaign now.")
-	}
-	if err := h.makerStillPlays(ctx, campaignID, hero.UserID); err != nil {
-		return nil, nil, err
-	}
-	if h.heroPlanner == nil {
-		return nil, nil, apperror.NewNotFound("practice heroes are not available here")
-	}
-	plan, err := h.heroPlanner.HeroPlan(WithUnlimitedPlan(ctx), campaignID, hero.UserID, false)
-	if err != nil {
-		return nil, nil, err
-	}
-	fields, _, err := buildHeroFields(plan, hero.Picks)
-	if err != nil {
-		return nil, nil, err
-	}
-	h.carryLevel(fields, hero, target)
-	old, err := h.ownedCharacter(ctx, campaignID, hero.UserID, charTypes)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	taken, err := h.practice.Claim(ctx, campaignID, id, actor)
-	if err != nil {
-		return nil, nil, err
-	}
-	owner := hero.UserID
-	made, err := h.makeHero(ctx, cc, hero.UserID, hero.Name, target, fields, &owner)
-	if err != nil {
-		if rerr := h.practice.Restore(ctx, taken); rerr != nil {
-			slog.Error("practice hero lost after a failed yes", slog.String("practice_id", id), slog.Any("error", rerr))
-		}
-		return nil, nil, err
-	}
-	if old != nil && h.heroReleaser != nil {
-		if _, err := h.heroReleaser.ReleaseOne(ctx, campaignID, old.ID, hero.UserID); err != nil {
-			slog.Error("releasing the old hero after a Director's yes failed; the player now owns both pages",
-				slog.String("campaign_id", campaignID), slog.String("old_entity_id", old.ID),
-				slog.String("new_entity_id", made.ID), slog.Any("error", err))
-			return nil, nil, apperror.NewInternalMessage(
-				fmt.Sprintf("%s was made, but %s could not be sent back to Free to pick. Free it from the Players list.", made.Name, old.Name), err)
-		}
-	}
-	return taken, made, nil
-}
-
-// makerStillPlays checks the practice hero's maker is still a player here:
-// the row outlives nothing but the hooks that delete it are best effort.
-func (h *Handler) makerStillPlays(ctx context.Context, campaignID, userID string) error {
-	if h.memberLister == nil {
-		return nil
-	}
-	members, err := h.memberLister.ListMembers(ctx, campaignID)
-	if err != nil {
-		return apperror.NewInternal(err)
-	}
-	for _, m := range members {
-		if m.UserID == userID && m.Role >= campaigns.RolePlayer {
-			return nil
-		}
-	}
-	return apperror.NewConflict("That player is no longer in this campaign.")
-}
-
-// carryLevel sets a copied hero's level on the real hero when the page type
-// has a level field to put it in.
-func (h *Handler) carryLevel(fields map[string]any, hero *PracticeHero, target *EntityType) {
-	if hero.Level == nil {
-		return
-	}
-	for _, f := range target.Fields {
-		if f.Key != "level" {
-			continue
-		}
-		if f.Type == "number" {
-			fields["level"] = float64(*hero.Level)
-		} else {
-			fields["level"] = strconv.Itoa(*hero.Level)
-		}
-		return
-	}
-}
-
-// makeHero creates a hero page. The hero creator and a Director's yes to a
-// practice hero both come through here, so a hero is the same page either way.
-// createdBy is who made it; owner is who plays it, nil for a hero made for the
-// table.
-func (h *Handler) makeHero(ctx context.Context, cc *campaigns.CampaignContext, createdBy, name string, target *EntityType, fields map[string]any, owner *string) (*Entity, error) {
-	return h.service.Create(ctx, cc.Campaign.ID, createdBy, CreateEntityInput{
-		Name:         name,
-		EntityTypeID: target.ID,
-		IsPrivate:    cc.NewPagePrivacy(patch.Absent[bool]()),
-		FieldsData:   fields,
-		Playable:     true,
-		OwnerUserID:  owner,
-	})
+	return h.castClaimedPage(c, cc, res.Hero.Name+" is now "+maker+"'s hero.")
 }
 
 // heroHiddenKeys are the field keys of a hero the viewer may not read: the
@@ -570,7 +403,7 @@ func (h *Handler) practiceShelf(c *echo.Context, cc *campaigns.CampaignContext, 
 		return nil
 	}
 	ctx := c.Request().Context()
-	target, charTypes, err := h.practiceTarget(ctx, cc.Campaign.ID)
+	target, charTypes, err := h.practice.Target(ctx, cc.Campaign.ID)
 	if err != nil || target == nil {
 		return nil
 	}
@@ -620,18 +453,26 @@ func (h *Handler) practiceDirectorList(c *echo.Context, cc *campaigns.CampaignCo
 			}
 		}
 	}
-	_, charTypes, _ := h.practiceTarget(ctx, cc.Campaign.ID)
+	var waiting []PracticeHero
+	for _, p := range all {
+		if p.AskStatus == PracticeAskWaiting {
+			waiting = append(waiting, p)
+		}
+	}
+	held := h.practice.HeldPicks(ctx, cc.Campaign.ID, waiting)
 	v := &PracticeDirectorView{CampaignID: cc.Campaign.ID, CSRFToken: middleware.GetCSRFToken(c)}
 	for _, p := range all {
 		maker := strings.TrimSpace(names[p.UserID])
 		if maker == "" {
 			maker = "a player"
 		}
-		row := PracticeDirectorRow{ID: p.ID, Name: p.Name, Summary: practiceSummary(p.Picks, p.Level), Maker: maker, Waiting: p.AskStatus == PracticeAskWaiting}
+		row := PracticeDirectorRow{ID: p.ID, Name: p.Name, Summary: practiceSummary(p.Picks, p.Level), Maker: maker,
+			Waiting: p.AskStatus == PracticeAskWaiting, Version: strconv.FormatInt(p.Version(), 10)}
 		if row.Waiting {
-			if old, err := h.ownedCharacter(ctx, cc.Campaign.ID, p.UserID, charTypes); err == nil && old != nil {
+			if old, err := h.practice.CurrentHero(ctx, cc.Campaign.ID, p.UserID); err == nil && old != nil {
 				row.OldHero = old.Name
 			}
+			row.Holds = practiceHoldsLine(maker, held[p.ID])
 		}
 		v.Rows = append(v.Rows, row)
 	}

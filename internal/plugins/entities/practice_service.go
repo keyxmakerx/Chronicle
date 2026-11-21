@@ -3,8 +3,10 @@ package entities
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,13 +14,18 @@ import (
 )
 
 // practice_service.go is the rules of practice heroes: the cap, who may open
-// or change one, the ask-and-answer, and what a valid pick is. It sees no
-// request types. Whether someone may make practice heroes at all (their role,
-// the claiming addon, a claimable hero type) is decided by the handler, which
-// already knows the campaign's character types.
+// or change one, the ask-and-answer, what a valid pick is, and what a
+// Director's yes does (practice_promote.go). It sees no request types. Whether
+// the claiming addon is on and the maker's role are decided by the handler,
+// which holds the campaign context; everything about hero types, the plan and
+// making the real hero is here.
 
 // practiceFullMessage is the refusal when the maker already holds the most.
 const practiceFullMessage = "You have three practice heroes. Throw one away to start another."
+
+// practiceChangedMessage is the refusal when a Director answers a practice hero
+// that is not the one they looked at.
+const practiceChangedMessage = "This practice hero changed. Look again before saying yes."
 
 // maxAskNoteLength bounds a Director's reason for declining.
 const maxAskNoteLength = 500
@@ -44,22 +51,32 @@ type PracticeService interface {
 	Ask(ctx context.Context, campaignID, id string, actor PracticeActor) error
 	// Decline is a Director's "not now", with an optional note.
 	Decline(ctx context.Context, campaignID, id string, actor PracticeActor, note string) (*PracticeHero, error)
-	// Claim is a Director's yes: it takes the waiting practice hero out so it
-	// can become the real hero, and returns it. Restore puts it back if making
-	// the real hero failed.
-	Claim(ctx context.Context, campaignID, id string, actor PracticeActor) (*PracticeHero, error)
-	Restore(ctx context.Context, h *PracticeHero) error
+	// Promote is a Director's yes (see practice_promote.go).
+	Promote(ctx context.Context, campaignID, id string, actor PracticeActor, seen string) (*PracticePromotion, error)
+	// Target is the page type a player's real hero would be, with the
+	// campaign's character type ids; nil when no hero may be made at all.
+	Target(ctx context.Context, campaignID string) (*EntityType, []int, error)
+	// CurrentHero is the person's own hero page, nil when they have none.
+	CurrentHero(ctx context.Context, campaignID, userID string) (*Entity, error)
+	// CopySource reads the person's own hero as picks, for "start as a copy".
+	CopySource(ctx context.Context, campaignID, userID string, canSeeGM bool) (*PracticeCopy, error)
+	// HeldPicks names, for each waiting hero, the picks it holds that the
+	// maker's rules do not offer (or hold for a word), keyed by hero id.
+	HeldPicks(ctx context.Context, campaignID string, waiting []PracticeHero) map[string][]string
 }
 
 type practiceService struct {
 	repo    PracticeRepository
 	planner HeroPlanner
+	deps    PracticeDeps
 }
 
 // NewPracticeService creates the practice hero service. planner may be nil,
-// in which case a practice hero has only a name.
-func NewPracticeService(repo PracticeRepository, planner HeroPlanner) PracticeService {
-	return &practiceService{repo: repo, planner: planner}
+// in which case a practice hero has only a name. deps carries what the
+// service needs of the page system for a Director's yes; without it Promote
+// answers not found.
+func NewPracticeService(repo PracticeRepository, planner HeroPlanner, deps PracticeDeps) PracticeService {
+	return &practiceService{repo: repo, planner: planner, deps: deps}
 }
 
 func (s *practiceService) Plan(ctx context.Context, campaignID, userID string) (*HeroPlan, error) {
@@ -261,28 +278,39 @@ func (s *practiceService) Decline(ctx context.Context, campaignID, id string, ac
 	return h, nil
 }
 
-func (s *practiceService) Claim(ctx context.Context, campaignID, id string, actor PracticeActor) (*PracticeHero, error) {
-	h, err := s.waitingFor(ctx, campaignID, id, actor)
-	if err != nil {
+// claim is the Director's half of a yes: it takes the waiting practice hero
+// off the shelf and returns the row it took, so the hero is built from exactly
+// that. version is the state the Director looked at; a maker who changed the
+// hero and asked again since has moved it, and the yes is refused untouched.
+func (s *practiceService) claim(ctx context.Context, campaignID, id string, actor PracticeActor, seen string) (*PracticeHero, error) {
+	if _, err := s.waitingFor(ctx, campaignID, id, actor); err != nil {
 		return nil, err
 	}
-	took, err := s.repo.TakeWaiting(ctx, campaignID, id)
+	version, err := strconv.ParseInt(strings.TrimSpace(seen), 10, 64)
 	if err != nil {
-		return nil, apperror.NewInternal(err)
+		// A yes that does not say what it looked at cannot be checked, so it
+		// is treated as stale rather than trusted.
+		return nil, apperror.NewConflict(practiceChangedMessage)
 	}
-	if !took {
+	taken, err := s.repo.TakeWaiting(ctx, campaignID, id, version)
+	switch {
+	case errors.Is(err, ErrPracticeChanged):
+		return nil, apperror.NewConflict(practiceChangedMessage)
+	case err != nil:
+		return nil, apperror.NewInternal(err)
+	case taken == nil:
 		return nil, apperror.NewConflict("Nobody is asking to play this one now.")
 	}
-	return h, nil
+	return taken, nil
 }
 
-func (s *practiceService) Restore(ctx context.Context, h *PracticeHero) error {
+// restore puts a claimed practice hero back as it was when making the real
+// hero failed.
+func (s *practiceService) restore(ctx context.Context, h *PracticeHero) {
 	if err := s.repo.Restore(ctx, h); err != nil {
-		slog.Error("putting a practice hero back failed",
+		slog.Error("practice hero lost after a failed yes",
 			slog.String("campaign_id", h.CampaignID), slog.String("practice_id", h.ID), slog.Any("error", err))
-		return apperror.NewInternal(fmt.Errorf("restoring practice hero: %w", err))
 	}
-	return nil
 }
 
 // practiceAge words how long ago a practice hero changed, for the shelf's

@@ -3,6 +3,7 @@ package entities
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -14,9 +15,18 @@ import (
 type fakePracticeRepo struct {
 	mu   sync.Mutex
 	rows map[string]PracticeHero
+	tick int
 }
 
-func newFakePracticeRepo() *fakePracticeRepo { return &fakePracticeRepo{rows: map[string]PracticeHero{}} }
+// touch moves a row's version the way the table's ON UPDATE does.
+func (f *fakePracticeRepo) touch(h *PracticeHero) {
+	f.tick++
+	h.UpdatedAt = time.Unix(1_700_000_000, 0).Add(time.Duration(f.tick) * time.Millisecond)
+}
+
+func newFakePracticeRepo() *fakePracticeRepo {
+	return &fakePracticeRepo{rows: map[string]PracticeHero{}}
+}
 
 func (f *fakePracticeRepo) count(campaignID, userID string) int {
 	n := 0
@@ -36,6 +46,7 @@ func (f *fakePracticeRepo) Insert(_ context.Context, h *PracticeHero, max int) (
 	}
 	c := *h
 	c.CreatedAt = time.Now()
+	f.touch(&c)
 	f.rows[h.ID] = c
 	return true, nil
 }
@@ -87,6 +98,7 @@ func (f *fakePracticeRepo) Replace(_ context.Context, h *PracticeHero) (bool, er
 	}
 	cur.Name, cur.Picks, cur.Level = h.Name, h.Picks, h.Level
 	cur.AskStatus, cur.AskNote, cur.AskedAt = "", "", nil
+	f.touch(&cur)
 	f.rows[h.ID] = cur
 	return true, nil
 }
@@ -108,6 +120,7 @@ func (f *fakePracticeRepo) SetAsk(_ context.Context, campaignID, id, userID stri
 		return false, nil
 	}
 	cur.AskStatus, cur.AskNote = PracticeAskWaiting, ""
+	f.touch(&cur)
 	f.rows[id] = cur
 	return true, nil
 }
@@ -119,20 +132,39 @@ func (f *fakePracticeRepo) Decline(_ context.Context, campaignID, id, note strin
 		return false, nil
 	}
 	cur.AskStatus, cur.AskNote = PracticeAskDeclined, note
+	f.touch(&cur)
 	f.rows[id] = cur
 	return true, nil
 }
-func (f *fakePracticeRepo) TakeWaiting(_ context.Context, campaignID, id string) (bool, error) {
+func (f *fakePracticeRepo) TakeWaiting(_ context.Context, campaignID, id string, version int64) (*PracticeHero, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	cur, ok := f.rows[id]
 	if !ok || cur.CampaignID != campaignID || cur.AskStatus != PracticeAskWaiting {
-		return false, nil
+		return nil, nil
+	}
+	if cur.Version() != version {
+		return nil, ErrPracticeChanged
 	}
 	delete(f.rows, id)
-	return true, nil
+	return &cur, nil
 }
-func (f *fakePracticeRepo) DeleteForUser(context.Context, string, string) (int64, error) { return 0, nil }
+func (f *fakePracticeRepo) ClearWaitingForUser(_ context.Context, campaignID, userID string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var n int64
+	for id, h := range f.rows {
+		if h.CampaignID == campaignID && h.UserID == userID && h.AskStatus == PracticeAskWaiting {
+			h.AskStatus, h.AskNote, h.AskedAt = "", "", nil
+			f.rows[id] = h
+			n++
+		}
+	}
+	return n, nil
+}
+func (f *fakePracticeRepo) DeleteForUser(context.Context, string, string) (int64, error) {
+	return 0, nil
+}
 func (f *fakePracticeRepo) DeleteForUserEverywhere(context.Context, string) (int64, error) {
 	return 0, nil
 }
@@ -182,7 +214,16 @@ func testHeroPlan() *HeroPlan {
 
 func newPracticeSvc() (PracticeService, *fakePracticeRepo, *fakePlanner) {
 	repo, planner := newFakePracticeRepo(), &fakePlanner{plan: testHeroPlan()}
-	return NewPracticeService(repo, planner), repo, planner
+	return NewPracticeService(repo, planner, PracticeDeps{}), repo, planner
+}
+
+// claimFor claims a practice hero as a Director who looked at its current state.
+func claimFor(svc PracticeService, ctx context.Context, campaignID, id string, actor PracticeActor) (*PracticeHero, error) {
+	seen := "0"
+	if h, err := svc.Open(ctx, campaignID, id, PracticeActor{UserID: "dm", Director: true}); err == nil {
+		seen = strconv.FormatInt(h.Version(), 10)
+	}
+	return svc.(*practiceService).claim(ctx, campaignID, id, actor, seen)
 }
 
 var (
@@ -345,10 +386,10 @@ func TestPracticeService_Access(t *testing.T) {
 		{"another player cannot ask for it", func() error { return svc.Ask(ctx, "c1", h.ID, sam) }, 404},
 		{"a player cannot list everyone's", func() error { _, e := svc.ListAll(ctx, "c1", pat); return e }, 403},
 		{"a Director lists everyone's", func() error { _, e := svc.ListAll(ctx, "c1", director); return e }, 0},
-		{"a player cannot say yes", func() error { _, e := svc.Claim(ctx, "c1", h.ID, pat); return e }, 403},
+		{"a player cannot say yes", func() error { _, e := claimFor(svc, ctx, "c1", h.ID, pat); return e }, 403},
 		{"a player cannot say not now", func() error { _, e := svc.Decline(ctx, "c1", h.ID, pat, ""); return e }, 403},
 		{"nothing to answer before an ask", func() error { _, e := svc.Decline(ctx, "c1", h.ID, director, ""); return e }, 409},
-		{"nothing to claim before an ask", func() error { _, e := svc.Claim(ctx, "c1", h.ID, director); return e }, 409},
+		{"nothing to claim before an ask", func() error { _, e := claimFor(svc, ctx, "c1", h.ID, director); return e }, 409},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -404,10 +445,10 @@ func TestPracticeService_AskAndAnswer(t *testing.T) {
 	if err := svc.Ask(ctx, "c1", h.ID, pat); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Claim(ctx, "c1", h.ID, director); err != nil {
+	if _, err := claimFor(svc, ctx, "c1", h.ID, director); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	_, err = svc.Claim(ctx, "c1", h.ID, director)
+	_, err = claimFor(svc, ctx, "c1", h.ID, director)
 	assertAppError(t, err, 404)
 	if repo.count("c1", "pat") != 0 {
 		t.Error("a claimed practice hero is still on the shelf")
@@ -419,16 +460,19 @@ func TestPracticeService_RestoreAfterFailedYes(t *testing.T) {
 	svc, _, _ := newPracticeSvc()
 	h, _ := svc.Create(ctx, "c1", pat, PracticeInput{Name: "Mine"})
 	_ = svc.Ask(ctx, "c1", h.ID, pat)
-	taken, err := svc.Claim(ctx, "c1", h.ID, director)
+	before, _ := svc.Open(ctx, "c1", h.ID, pat)
+	taken, err := claimFor(svc, ctx, "c1", h.ID, director)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Restore(ctx, taken); err != nil {
-		t.Fatal(err)
-	}
+	svc.(*practiceService).restore(ctx, taken)
 	got, err := svc.Open(ctx, "c1", h.ID, pat)
 	if err != nil || got.AskStatus != PracticeAskWaiting || got.Name != "Mine" {
 		t.Errorf("restored hero = %+v, %v", got, err)
+	}
+	// Put back as it was, the version a Director saw still matches.
+	if got.Version() != before.Version() {
+		t.Errorf("restored version %d, was %d", got.Version(), before.Version())
 	}
 }
 

@@ -148,4 +148,3 @@ func TestPracticeCopyFields(t *testing.T) {
 		})
 	}
 }
-

@@ -132,7 +132,6 @@ type Handler struct {
 	visitorPlanner     VisitorPlanner
 	heroRules          HeroRules
 	practice           PracticeService // Optional: practice heroes; see practice_handler.go.
-	heroReleaser       HeroReleaser    // Optional: frees a hero on a Director's yes to a practice hero.
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -4410,6 +4409,18 @@ func (h *Handler) castClaimedPage(c *echo.Context, cc *campaigns.CampaignContext
 		return err
 	}
 	view.Notice = notice
+	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+}
+
+// castClaimedPageAlert is castClaimedPage for a result that needs the reader to
+// act, shown as a lasting line in the page instead of a toast that fades. It
+// always draws the page, since a redirect would lose the sentence.
+func (h *Handler) castClaimedPageAlert(c *echo.Context, cc *campaigns.CampaignContext, alert string) error {
+	view, err := h.buildCastView(c, cc)
+	if err != nil {
+		return err
+	}
+	view.Alert = alert
 	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
 }
 

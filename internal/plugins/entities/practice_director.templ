@@ -33,6 +33,9 @@ templ practiceDirectorList(v *PracticeDirectorView) {
 					</div>
 					if r.Waiting {
 						<p class="pr-ask">{ r.Maker } asks to play this one.</p>
+						if r.Holds != "" {
+							<p class="pr-holds">{ r.Holds }</p>
+						}
 						<div class="pr-answers">
 							<form
 								class="pr-yes"
@@ -44,6 +47,7 @@ templ practiceDirectorList(v *PracticeDirectorView) {
 								hx-swap="outerHTML"
 							>
 								<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+								<input type="hidden" name="seen" value={ r.Version }/>
 								if r.OldHero != "" {
 									<button type="button" class="btn-primary btn-sm" data-pr-opens="yes" data-pr-hide="true" aria-expanded="false" onclick={ practiceRevealCall("yes") }>Say yes</button>
 									<span class="pr-confirm" data-pr-box="yes" hidden>

@@ -47,6 +47,10 @@ type PracticeHero struct {
 	UpdatedAt      time.Time
 }
 
+// Version is what a Director's yes carries back to say which state of the
+// hero they looked at; any change to the row, including asking again, moves it.
+func (h PracticeHero) Version() int64 { return h.UpdatedAt.UnixMilli() }
+
 // PracticeActor is who is acting on a practice hero. Director is the owner or
 // a co-Director (campaigns.CampaignContext.CanAuthorDmOnly), decided by the
 // caller so the service never sees a request type.
@@ -127,6 +131,12 @@ type PracticeDirectorRow struct {
 	// have none.
 	Waiting bool
 	OldHero string
+	// Version is what the yes carries back, so it is refused when the maker
+	// changed the hero after the Director looked.
+	Version string
+	// Holds is the muted line naming picks the rules do not offer the maker;
+	// empty when there are none.
+	Holds string
 }
 
 // PracticeCreatorView is what the creator page needs in practice mode.

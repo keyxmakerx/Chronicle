@@ -4935,6 +4935,18 @@ func (a *App) RegisterRoutes() {
 					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 			}
 		})
+		// Practice heroes are for Players. Someone who stops being one has
+		// nothing a Director could say yes to, so a waiting ask would only sit
+		// in the list; the hero itself stays on their shelf.
+		campaigns.OnMemberRoleChanged(campaignService, func(ctx context.Context, campaignID, userID string, from, to campaigns.Role) {
+			if to == campaigns.RolePlayer {
+				return
+			}
+			if _, err := practiceRepo.ClearWaitingForUser(ctx, campaignID, userID); err != nil {
+				slog.Error("clearing a former player's waiting practice ask failed",
+					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
 	}
 	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
 	// the owner gets one bell note.
@@ -5986,8 +5998,10 @@ func (a *App) RegisterRoutes() {
 	// Practice heroes exist only while their own schema migrated; without it
 	// the shelf is absent.
 	if practiceRepo != nil {
-		entityHandler.SetPracticeService(entities.NewPracticeService(practiceRepo, heroPlannerAdapter{choices: characterChoiceSvc}))
-		entityHandler.SetHeroReleaser(entityRepo.(entities.HeroReleaser))
+		entityHandler.SetPracticeService(entities.NewPracticeService(practiceRepo, heroPlannerAdapter{choices: characterChoiceSvc}, entities.PracticeDeps{
+			Pages: entityService, Types: characterListService, Members: campaignService,
+			Releaser: entityRepo.(entities.HeroReleaser),
+		}))
 	}
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.

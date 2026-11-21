@@ -11,6 +11,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -238,7 +239,10 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 	if access.ForSelf {
 		owner = &userID
 	}
-	entity, err := h.makeHero(c.Request().Context(), cc, userID, req.Name, target, fields, owner)
+	// A Director's own creation follows the campaign's default for new pages;
+	// a player's is never private.
+	entity, err := createHeroPage(c.Request().Context(), h.service, cc.Campaign.ID, userID, req.Name, target, fields, owner,
+		cc.NewPagePrivacy(patch.Absent[bool]()))
 	if err != nil {
 		return err
 	}

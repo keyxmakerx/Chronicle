@@ -773,7 +773,10 @@ type CastView struct {
 	// Landed is the type just added, flashed once on its chip.
 	Landed int
 	// Notice is a one-line confirmation shown as a toast after a change.
-	Notice    string
+	Notice string
+	// Alert is a lasting line shown above the page when something needs the
+	// reader's action; unlike Notice it does not fade.
+	Alert     string
 	CSRFToken string
 	// CanCreateHero shows the Create hero button: staff always, a player when
 	// the owner lets players claim the hero's page type.

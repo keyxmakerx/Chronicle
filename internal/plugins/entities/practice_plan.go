@@ -114,6 +114,24 @@ func practiceNeedsYes(plan *HeroPlan, picks map[string]HeroPick) bool {
 	return false
 }
 
+// practiceHoldsLine is the muted second line under a waiting ask: the picks a
+// yes would approve that the maker's rules do not offer them. It names at most
+// three and counts the rest; empty when there is nothing to say.
+func practiceHoldsLine(maker string, names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	shown := names
+	if len(shown) > maxHeldNames {
+		shown = shown[:maxHeldNames]
+	}
+	line := "Holds picks you don't offer " + maker + ": " + strings.Join(shown, ", ")
+	if more := len(names) - len(shown); more > 0 {
+		line += " and " + strconv.Itoa(more) + " more"
+	}
+	return line + "."
+}
+
 // practiceCopyFields reads a hero's field values into picks for each step of
 // the plan: the step's current value when it names an entry the plan offers,
 // and the options bought from it. hidden holds keys the viewer may not read,

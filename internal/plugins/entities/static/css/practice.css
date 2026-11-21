@@ -50,6 +50,13 @@
 
 /* A Director's answers. */
 .pr-ask { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.pr-holds { padding: 0 4px; margin-top: 2px; font-size: 12.5px; line-height: 1.45; color: var(--color-text-muted); overflow-wrap: anywhere; }
+
+/* Something went half-way and needs a person to finish it: a lasting line,
+   not a toast that fades before it is read. */
+.pr-alert { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--shape-r-ctl, 8px); border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent); background: var(--color-bg-tertiary); color: var(--color-text-primary);
+  font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .pr-answers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 8px 4px 0; }
 .pr-yes { display: contents; }
 .pr-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; color: var(--color-text-primary); }
