@@ -64,7 +64,31 @@
     return /^\/campaigns\/[^/]+\/./.test(u.pathname);
   }
 
-  C.Beside = { pagesFit: pagesFit, plan: plan, beside: beside };
+  // onSite reports whether an address is a plain path on this site: one
+  // leading slash, so never another site and never a scheme of its own.
+  function onSite(url) {
+    return typeof url === 'string' && url.startsWith('/') && !url.startsWith('//');
+  }
+
+  // samePath rebuilds an address on this site from its parts, each one
+  // re-encoded, so a link or a frame source only ever gets a path that was
+  // made here: never another site, a scheme, or markup. null for anything
+  // that is not a plain path.
+  function samePath(url) {
+    if (!onSite(url)) return null;
+    var u;
+    try { u = new URL(url, 'https://x.invalid'); } catch (e) { return null; }
+    if (u.origin !== 'https://x.invalid') return null;
+    function enc(part) {
+      try { return encodeURIComponent(decodeURIComponent(part)); } catch (e) { return encodeURIComponent(part); }
+    }
+    var path = u.pathname.split('/').map(enc).join('/');
+    var query = [];
+    u.searchParams.forEach(function (v, k) { query.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); });
+    return path + (query.length ? '?' + query.join('&') : '') + (u.hash.length > 1 ? '#' + enc(u.hash.slice(1)) : '');
+  }
+
+  C.Beside = { pagesFit: pagesFit, plan: plan, beside: beside, onSite: onSite, samePath: samePath };
   if (!window.document || !document.documentElement) return;
 
   function linkOf(t) {
@@ -116,6 +140,10 @@
   var HERE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3.5h3v3M12.5 3.5L7 9M7 4H4a.5.5 0 0 0-.5.5v7.5a.5.5 0 0 0 .5.5h7.5a.5.5 0 0 0 .5-.5V9"/></svg>';
 
   function makePane(url) {
+    // The address becomes a link and a frame's source just below, so it is
+    // checked here as well, whatever handed it over.
+    url = samePath(url);
+    if (url === null) return null;
     var el = document.createElement('section');
     el.className = 'beside-pane';
     el.innerHTML = '<header class="beside-head"><button type="button" class="beside-earlier" hidden></button>' +
@@ -128,7 +156,7 @@
     p.frame.addEventListener('load', function () {
       try {
         var d = p.frame.contentDocument;
-        p.url = p.frame.contentWindow.location.pathname + p.frame.contentWindow.location.search;
+        p.url = samePath(p.frame.contentWindow.location.pathname + p.frame.contentWindow.location.search) || p.url;
         var name = (d.title || '').split(' - ')[0] || 'Page';
         p.title.textContent = name;
         el.setAttribute('aria-label', name);
@@ -147,11 +175,14 @@
   // so a pane already open never reloads.
   function render(fresh) {
     if (!row) return;
+    state.panes = state.panes.filter(onSite);
+    state.earlier = state.earlier.filter(onSite);
     var keep = [];
     state.panes.forEach(function (url, i) {
       var p = els[i] && els[i].url === url ? els[i] : null;
       if (!p) {
         p = els.filter(function (q) { return q.url === url && keep.indexOf(q) < 0; })[0] || makePane(url);
+        if (!p) return;
         if (url === fresh) p.el.classList.add('is-fresh');
       }
       keep.push(p);
@@ -172,6 +203,7 @@
 
   function open(url, from) {
     if (fit() < 2) { return false; }
+    if (!onSite(url)) { return false; }
     from = Math.max(0, Math.min(from || 0, state.panes.length));
     var r = plan(state.panes, state.earlier, from, url, fit());
     state = { panes: r.panes, earlier: r.earlier };

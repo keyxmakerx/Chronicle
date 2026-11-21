@@ -418,6 +418,26 @@ func customizeFonts() map[string][]czFontFace {
 	return czFonts
 }
 
+// surfaceSlotCSS writes the readable forms of the Headers and events colour
+// (slot 1) after the accent: an ink that reads as words or a mark on the
+// page, card and alt-row fills in each theme, and a fill with the colour of
+// what sits on it. Tags and marks (slot 2) paints only shapes, never words,
+// so its base colour from AccentColorCSS is all it needs. An unset slot
+// writes nothing, so its elements fall back to exactly what they drew before.
+func surfaceSlotCSS(ctx context.Context, a *AppearanceData, root, dark *strings.Builder) {
+	c := GetAccentSurface(ctx, 1)
+	if !colour.ValidHex(c) {
+		return
+	}
+	light, night := a.tones(0), a.tones(1)
+	f := colour.FillFor(c)
+	fmt.Fprintf(root, "--color-accent-surface-1-fill:%s;--color-accent-surface-1-on-fill:%s;", f.Fill, f.On)
+	fmt.Fprintf(root, "--color-accent-surface-1-ink:%s;", colour.Readable(c, []string{light.bg, light.card, light.alt}, 4.5, true).Hex)
+	fmt.Fprintf(dark, "--color-accent-surface-1-ink:%s;", colour.Readable(c, []string{night.bg, night.card, night.alt}, 4.5, false).Hex)
+	// A quiet grey event dot is faded; one in this colour is not.
+	root.WriteString("--cz-s1-dot-opacity:1;")
+}
+
 // fontFaceCSS returns @font-face rules for one face id, served from Chronicle.
 func fontFaceCSS(id string) string {
 	var b strings.Builder
@@ -464,6 +484,7 @@ func AppearanceCSS(ctx context.Context) string {
 		fmt.Fprintf(&root, "--color-accent-link:%s;", colour.Readable(readable, []string{light.bg, light.card}, 4.5, true).Hex)
 		fmt.Fprintf(&dark, "--color-accent-link:%s;", colour.Readable(readable, []string{night.bg, night.card}, 4.5, false).Hex)
 	}
+	surfaceSlotCSS(ctx, a, &root, &dark)
 
 	// The menu is dark in both themes, so its tokens go in both blocks: the
 	// stylesheet's own dark-theme rule would otherwise out-rank :root.

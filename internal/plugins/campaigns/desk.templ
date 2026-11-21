@@ -132,9 +132,16 @@ templ deskValueFace(v DeskValue) {
 	if v.Swatch {
 		<i class="desk-sw" aria-hidden="true"></i>
 	}
-	<span class="set-t">{ v.Text }</span>
-	if v.Sub != "" {
-		<span class="set-sub">{ v.Sub }</span>
+	if v.Text != "" {
+		<span class="set-t">{ v.Text }</span>
+	}
+	if v.Sub != "" || v.SubSwatch {
+		<span class={ "set-sub", templ.KV("set-joined", v.Joined) }>
+			if v.SubSwatch {
+				<i class="desk-sw" aria-hidden="true"></i>
+			}
+			{ v.Sub }
+		</span>
 	}
 	if v.Href != "" && !v.Word {
 		<svg class="set-chev" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>

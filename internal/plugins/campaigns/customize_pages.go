@@ -41,6 +41,10 @@ type CustomizeArea struct {
 	Parts []CustomizePart `json:"-"`
 	// Part names the part open now, shown after the tab's label.
 	Part string `json:"-"`
+	// Blurb is what the area holds, for its Overview card, and Finds are the
+	// named things inside it for Find. Both come from a plugin's tab.
+	Blurb string          `json:"-"`
+	Finds []CustomizeFind `json:"-"`
 }
 
 // CustomizePart is one line in a tab's drawer.
@@ -94,6 +98,33 @@ type customizeShellData struct {
 	Version    int
 	Draft      string // The draft as JSON, never empty ("{}" when there is none).
 	Find       string // The Find palette's entries as JSON.
+	// Cat is set inside a category: its one bar then takes the place of
+	// the area tabs.
+	Cat *customizeCatBar
+}
+
+// customizeCatBar is a category's bar: the way back to Categories, its name
+// (which opens the Categories drawer to switch to another), and its tabs.
+// customize_categories.js keeps the name and the tabs' marks in step with the
+// draft.
+type customizeCatBar struct {
+	Key  string
+	Name string
+	Tab  string
+	New  bool // made in the draft: only Settings opens until it is saved
+	Base string
+}
+
+// customizeCatTab is one of a category's tabs in its bar.
+type customizeCatTab struct{ ID, Label string }
+
+// catBarTabs lists a category's tabs for its bar.
+func catBarTabs() []customizeCatTab {
+	out := make([]customizeCatTab, 0, len(categoryTabs))
+	for _, t := range categoryTabs {
+		out = append(out, customizeCatTab{ID: t.ID, Label: t.Label})
+	}
+	return out
 }
 
 // lookSections are the Look editor's sections, in its own order, so Find
@@ -103,7 +134,7 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"header", "Header", "top bar background widgets links"},
 	{"sidebar", "Sidebar", "menu colour corner banner glow"},
 	{"nav", "Navigation", "menu highlight current page"},
-	{"colours", "Colours", "colour color accent theme contrast"},
+	{"colours", "Colours", "colour color accent theme contrast menus links buttons headers events tags badges marks"},
 	{"type", "Type", "font fonts text headings size"},
 	{"buttons", "Buttons", "button shape press"},
 	{"icons", "Icons", "icon icons category colour accent ink names search list"},
@@ -145,7 +176,7 @@ func (h *Handler) customizeBase(cc *CampaignContext) string {
 
 // customizeAreas is the rail: Customize's own areas, then any a plugin
 // contributes.
-func (h *Handler) customizeAreas(cc *CampaignContext) []CustomizeArea {
+func (h *Handler) customizeAreas(ctx context.Context, cc *CampaignContext) []CustomizeArea {
 	base := h.customizeBase(cc)
 	areas := []CustomizeArea{
 		{ID: "overview", Label: "Overview", Icon: "fa-compass", Href: base},
@@ -153,10 +184,10 @@ func (h *Handler) customizeAreas(cc *CampaignContext) []CustomizeArea {
 		{ID: "categories", Label: "Categories", Icon: "fa-shapes", Href: base + "/categories", Section: "categories"},
 		{ID: "home", Label: "Home pages", Icon: "fa-table-cells-large", Href: base + "/home"},
 	}
-	for _, t := range h.customizeTabs(cc) {
+	for _, t := range h.shownCustomizeTabs(ctx, cc) {
 		// A tab's icon may carry its own style class; the rail adds fa-solid.
 		icon := strings.TrimSpace(strings.TrimPrefix(t.Icon, "fa-solid "))
-		areas = append(areas, CustomizeArea{ID: "x-" + t.ID, Label: t.Label, Icon: icon, Href: base + "/x/" + t.ID})
+		areas = append(areas, CustomizeArea{ID: "x-" + t.ID, Label: t.Label, Icon: icon, Href: base + "/x/" + t.ID, Blurb: t.Blurb, Finds: t.Finds})
 	}
 	return areas
 }
@@ -236,6 +267,9 @@ func (h *Handler) customizeFindEntries(cc *CampaignContext, areas []CustomizeAre
 	out := make([]customizeFindEntry, 0, len(areas)+len(lookSections)+len(cats)*2+1)
 	for _, a := range areas {
 		out = append(out, customizeFindEntry{Label: a.Label, Path: "Customize", Href: a.Href, Icon: a.Icon})
+		for _, f := range a.Finds {
+			out = append(out, customizeFindEntry{Label: f.Label, Path: a.Label, Href: a.Href, Icon: a.Icon, Words: f.Words})
+		}
 	}
 	for _, s := range lookSections {
 		out = append(out, customizeFindEntry{Label: s.Name, Path: "Look", Href: base + "/look#" + s.ID, Icon: "fa-palette", Words: s.Words})
@@ -253,9 +287,15 @@ func (h *Handler) customizeFindEntries(cc *CampaignContext, areas []CustomizeAre
 
 // renderCustomize draws an area inside the frame.
 func (h *Handler) renderCustomize(c *echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, body templ.Component) error {
+	return h.renderCustomizeIn(c, cc, area, title, crumbs, cats, nil, body)
+}
+
+// renderCustomizeIn draws an area inside the frame, inside a category when
+// cat is set.
+func (h *Handler) renderCustomizeIn(c *echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, cat *customizeCatBar, body templ.Component) error {
 	ctx := c.Request().Context()
 	version, draft := h.CustomizeDraftFor(ctx, cc.Campaign.ID, auth.GetUserID(c))
-	areas := h.customizeAreas(cc)
+	areas := h.customizeAreas(ctx, cc)
 	if cats == nil {
 		cats = h.CustomizeCategories(ctx, cc.Campaign.ID)
 	}
@@ -270,6 +310,7 @@ func (h *Handler) renderCustomize(c *echo.Context, cc *CampaignContext, area, ti
 		Version:    version,
 		Draft:      string(draft),
 		Find:       h.customizeFind(cc, areas, cats),
+		Cat:        cat,
 	}
 	if d.Draft == "" {
 		d.Draft = "{}"
@@ -283,8 +324,12 @@ func (h *Handler) Customize(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	areas := h.customizeAreas(cc)
-	return h.renderCustomize(c, cc, "overview", "Customize", nil, nil, customizeOverview(areas))
+	areas := h.customizeAreas(c.Request().Context(), cc)
+	sums := map[string]CustomizeSummary{}
+	for _, t := range h.shownCustomizeTabs(c.Request().Context(), cc) {
+		sums["x-"+t.ID] = t.summary(c.Request().Context())
+	}
+	return h.renderCustomize(c, cc, "overview", "Customize", nil, nil, customizeOverview(areas, sums))
 }
 
 // CustomizeLook is the signed Look editor: GET /campaigns/:id/customize/look.
@@ -433,7 +478,8 @@ func (h *Handler) CustomizeCategory(c *echo.Context) error {
 		{Label: name, Href: base + "/categories/" + key + "/layout"},
 		{Label: label},
 	}
-	return h.renderCustomize(c, cc, "categories", name+" - "+label, crumbs, cats,
+	cat := &customizeCatBar{Key: key, Name: name, Tab: tab, New: etID == 0, Base: base}
+	return h.renderCustomizeIn(c, cc, "categories", name+" - "+label, crumbs, cats, cat,
 		customizeCategoryWorkspace(cc, h.categoriesData(ctx, cc, cats, key, tab), key, tab, etID))
 }
 

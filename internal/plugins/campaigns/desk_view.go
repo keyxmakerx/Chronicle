@@ -52,12 +52,18 @@ func deskAnyOff(l DeskLine) bool {
 // so a screen reader hears "Campaign: Private" or "Members: 5". A warning dot
 // is said in words, since the dot itself is hidden from it.
 func deskValueLabel(name string, v DeskValue) string {
+	if v.Text == "" && v.Sub == "" {
+		return name
+	}
 	s := name + ": "
 	if v.State == "warn" {
 		s += "warning, "
 	}
 	s += v.Text
 	if v.Sub != "" {
+		if v.Joined {
+			s += ","
+		}
 		s += " " + v.Sub
 	}
 	return s

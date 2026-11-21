@@ -65,11 +65,16 @@ templ UpcomingEventsEmbed(cc *campaigns.CampaignContext, cal *Calendar, events [
 }
 
 // eventDotStyle returns the inline background/text color for the event's
-// kind badge, falling back to a neutral color for an event with no kind.
+// kind badge. An event with neither a kind nor a colour of its own takes the
+// campaign's Headers and events colour when one is picked; otherwise, and for
+// an event whose own colour this list does not show, a faded neutral.
 func eventDotStyle(evt Event) string {
 	color := evt.KindColor
 	if color == "" {
-		return "background-color: var(--color-text-secondary, #6b7280); opacity: 0.6; color: white"
+		if evt.Color != nil && *evt.Color != "" {
+			return "background-color: var(--color-text-secondary, #6b7280); opacity: 0.6; color: white"
+		}
+		return "background-color: var(--color-accent-surface-1-fill, var(--color-text-secondary, #6b7280)); opacity: var(--cz-s1-dot-opacity, 0.6); color: var(--color-accent-surface-1-on-fill, white)"
 	}
 	return fmt.Sprintf("background-color: %s; color: white", color)
 }

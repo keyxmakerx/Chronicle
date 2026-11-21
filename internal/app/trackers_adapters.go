@@ -129,7 +129,7 @@ func (a *trackersClockAdapter) Today(ctx context.Context, campaignID string, v t
 // fetches the page's trackers itself, so the block only emits its mount.
 func registerTrackersBlock(blockRegistry *entities.BlockRegistry) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: trackers.BlockType, Label: "Trackers", Icon: "fa-gauge",
+		Type: trackers.BlockType, Label: "Trackers", Icon: "fa-gauge", Picture: entities.PictureCounter,
 		Description: "Counters, named steps and clocks on this page, each with a dated log",
 		Contexts:    []string{"template"},
 		Singleton:   true,

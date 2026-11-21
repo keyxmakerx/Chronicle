@@ -46,6 +46,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.GET("/account", h.AccountPage, RequireAuth(h.service))
 	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
 	e.PUT("/account/view-prefs", h.UpdateViewPrefsAPI, RequireAuth(h.service))
+	e.PUT("/account/brush/:campaignID", h.SetBrushAPI, RequireAuth(h.service))
 	e.PUT("/account/notifications", h.UpdateNotifyPrefsAPI, RequireAuth(h.service))
 	// Deleting your account checks your password, so it is rate-limited like
 	// the other password checks.

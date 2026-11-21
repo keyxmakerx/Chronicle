@@ -404,7 +404,8 @@
       function makeTag(name) {
         return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) + '/tags', {
           method: 'POST',
-          body: { name: name, color: '#6b7280' }
+          // No colour: the tag follows the campaign's Tags and marks colour.
+          body: { name: name }
         }).then(function (res) {
           if (!res.ok) throw new Error('tag ' + res.status);
           return res.json();

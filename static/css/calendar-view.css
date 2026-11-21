@@ -280,7 +280,7 @@
 @keyframes cal5-todayPop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
 /* Events are marks: their category's line icon in its muted hue. An event may carry its own icon instead. */
 .cal-v5 .marks{display:flex;flex-wrap:wrap;gap:3px 4px;min-width:0;max-width:100%}
-.cal-v5 .mk{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .mk{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:var(--color-accent-surface-1-ink, oklch(var(--icL) var(--icC) var(--h,260)))}
 .cal-v5 .mk>.ci{width:16px;height:16px}
 .cal-v5 .edot{display:block;width:7px;height:7px;border-radius:50%;background:currentColor}
 .cal-v5 .mk::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity var(--dur-micro,120ms)}
@@ -298,7 +298,7 @@
 .cal-v5 .day.packed .more{opacity:0}
 .cal-v5 .wing:focus, .cal-v5 .flap:focus, .cal-v5 .pop:focus, .cal-v5 .drawer:focus, .cal-v5 .evp:focus{outline:none}
 /* Multi-day: a hairline along the cell bottoms. Each week row's piece starts with the event's mark; in name mode the name rides on the line too. */
-.cal-v5 .span{position:absolute;left:0;right:0;bottom:calc(10px + var(--lane) * var(--laneGap,18px));height:1.5px;z-index:1;pointer-events:none;background:oklch(var(--mkL) var(--mkC) var(--h,260))}
+.cal-v5 .span{position:absolute;left:0;right:0;bottom:calc(10px + var(--lane) * var(--laneGap,18px));height:1.5px;z-index:1;pointer-events:none;background:var(--color-accent-surface-1-ink, oklch(var(--mkL) var(--mkC) var(--h,260)))}
 .cal-v5 .span.s{left:10px}
 .cal-v5 .span.e{right:10px}
 .cal-v5 .span.hm{left:31px}
@@ -334,7 +334,7 @@
 .cal-v5 .gt span{display:inline-flex;align-items:center;gap:4px}
 .cal-v5 .gt .i{width:12px;height:12px}
 /* An event's icon in the cards: the same mark as the grid, a little larger. */
-.cal-v5 .ric{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .ric{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:var(--color-accent-surface-1-ink, oklch(var(--icL) var(--icC) var(--h,260)))}
 .cal-v5 .ric .ci{width:16px;height:16px}
 .cal-v5 .ric.sm{width:18px;height:18px}
 .cal-v5 .ric.sm .ci{width:13px;height:13px}
@@ -405,7 +405,7 @@
 }
 /* A day's marks in flight between its cell and its card: the mark itself travels, and nothing is left behind. */
 .cal-v5 .carry{position:absolute;inset:0;z-index:45;pointer-events:none}
-.cal-v5 .flyer{position:absolute;left:0;top:0;display:grid;place-items:center;transform-origin:0 0;color:oklch(var(--icL) var(--icC) var(--h,260));will-change:transform}
+.cal-v5 .flyer{position:absolute;left:0;top:0;display:grid;place-items:center;transform-origin:0 0;color:var(--color-accent-surface-1-ink, oklch(var(--icL) var(--icC) var(--h,260)));will-change:transform}
 .cal-v5 .flyer .ci{display:block;width:100%;height:100%}
 .cal-v5 .flyer.dir::after, .cal-v5 .flyer.wait::after{inset:-3px}
 .cal-v5 .crease{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 8px 6px 16px;border-bottom:1px dashed var(--edge);background:inherit;
@@ -1333,7 +1333,7 @@
 .cal-v5 .mk.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
 @keyframes cal5-ghostIn{from{opacity:0}}
 .cal-v5 .mk.moving{opacity:.3}
-.cal-v5 .span.ghost{background:none;border-top:1.5px dashed oklch(var(--mkL) var(--mkC) var(--h,260));height:0}
+.cal-v5 .span.ghost{background:none;border-top:1.5px dashed var(--color-accent-surface-1-ink, oklch(var(--mkL) var(--mkC) var(--h,260)));height:0}
 .cal-v5 .span.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
 /* ── The chosen days' actions: a row in the deck's drawer whenever days are selected. ── */
 .cal-v5 .bbw{position:static}

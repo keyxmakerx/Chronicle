@@ -33,8 +33,8 @@ var deskFindWords = map[string]string{
 var deskFindGroups = map[string]string{
 	"manage:members":        "People",
 	"manage:player-changes": "People",
-	"manage:media":          "Look",
-	"manage:customize":      "Look",
+	"manage:media":          "Data",
+	"manage:customize":      "Customize",
 	"manage:extensions":     "Game",
 	"manage:roll-tables":    "Game",
 	"manage:foundry":        "Connections",
@@ -145,7 +145,7 @@ func (h *Handler) DeskFind(c *echo.Context) error {
 	}
 	ctx := c.Request().Context()
 	in := h.deskInputsFor(ctx, cc.Campaign, deskAddons)
-	areas := h.customizeAreas(cc)
+	areas := h.customizeAreas(ctx, cc)
 	entries := buildDeskFind(deskFindInput{
 		Base:         "/campaigns/" + cc.Campaign.ID,
 		Media:        in.Addons["media-gallery"],

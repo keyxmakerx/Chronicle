@@ -37,7 +37,8 @@
   text-transform: none;
 }
 
-/* The page title, with the accent rule under it. */
+/* The page title, with the accent rule under it. The rule is a page header,
+   so it takes the campaign's Headers and events colour when one is picked. */
 [data-cz-page="annals"] .cb-title {
   position: relative;
   padding-bottom: 8px;
@@ -56,7 +57,7 @@
   content: "";
   position: absolute; left: 0; right: 0; bottom: 0;
   height: 3px; border-radius: 2px;
-  background: linear-gradient(90deg, var(--annals-acc), color-mix(in srgb, var(--annals-acc) 30%, transparent));
+  background: linear-gradient(90deg, var(--color-accent-surface-1, var(--annals-acc)), color-mix(in srgb, var(--color-accent-surface-1, var(--annals-acc)) 30%, transparent));
   transform-origin: left;
 }
 [data-cz-page="annals"]:not([data-motion]):not([data-cz-reduce]) .cb-title::after {

@@ -43,7 +43,7 @@ func (a *rumoursPagesAdapter) Open(ctx context.Context, campaignID, entityID str
 // service hides for the viewer draws nothing.
 func registerRumoursBlock(blockRegistry *entities.BlockRegistry, svc rumours.Service) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: rumours.BlockType, Label: "Rumours", Icon: "fa-ear-listen",
+		Type: rumours.BlockType, Label: "Rumours", Icon: "fa-ear-listen", Picture: entities.PictureFeed,
 		Description: "What the party has heard about this page, and whether it is true",
 		Contexts:    []string{"template"},
 		Singleton:   true,

@@ -132,7 +132,7 @@ test('4. a tag record renames the tag everywhere and a lookup lists the tags wit
   const { owner, cid } = await world();
   await paste(owner, cid, `---\nkind: tag\naction: update\nname: Old Tag\nrename_to: New Tag\n---\n`);
   const { review } = await paste(owner, cid, `---\nkind: lookup\nwhat: tags\n---\n`, { apply: false });
-  assert.match(review, /New Tag, #[0-9a-f]{6}, 1 page/, 'the lookup does not list the renamed tag with its count:\n' + review);
+  assert.match(review, /New Tag, campaign colour, 1 page/, 'the lookup does not list the renamed tag with its count:\n' + review);
   assert.doesNotMatch(review, /Old Tag/, 'the old tag name is still listed');
   const page = owner.page;
   await owner.go(`/campaigns/${cid}/entities?q=Sun%20Hymn`);

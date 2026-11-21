@@ -25,7 +25,7 @@ const ContentsWidgetName = "page-contents"
 // tile would leave an empty cell.
 func registerContentsBlock(r *BlockRegistry) {
 	r.Register(BlockMeta{
-		Type: ContentsBlockType, Label: "Contents", Icon: "fa-list-ul",
+		Type: ContentsBlockType, Label: "Contents", Icon: "fa-list-ul", Picture: PictureLinks,
 		Description: "The page's headings as a rail in the margin, each a jump link",
 		Contexts:    []string{"template"},
 		Singleton:   true,

@@ -354,3 +354,17 @@ func TestCustomizeTabFactory(t *testing.T) {
 		t.Error("the campaign's stored frame (gilded) should be marked In use")
 	}
 }
+
+// The Maps tab tells Find about its section and each frame, so "map frame" and
+// a frame's own name both open the tab.
+func TestFrameFinds_NameTheSectionAndEveryFrame(t *testing.T) {
+	finds := frameFinds()
+	if len(finds) != len(FrameStyles)+1 || finds[0].Label != "Map frame" {
+		t.Fatalf("finds = %+v", finds)
+	}
+	for i, f := range FrameStyles {
+		if finds[i+1].Label != f.Label+" frame" {
+			t.Errorf("find %d = %q, want %q", i+1, finds[i+1].Label, f.Label+" frame")
+		}
+	}
+}

@@ -1417,7 +1417,9 @@ function makeStage(T, host, fixed, FX, q) {
   scene.add(new T.HemisphereLight(0xffffff, 0x6a7080, 0.55));
   // The key light sits about 45 degrees up, not overhead: overhead, its glare sits on every top face,
   // right where the number is read.
-  var sun = new T.DirectionalLight(0xfff6ea, 2.6); sun.position.set(-hw * 0.6, dist * 0.3, -hh * 0.6); sun.castShadow = true;
+  // In a small host the camera sits close, so the same angle would cast a shadow several dice long:
+  // the light is raised there to keep the shadow the length it has on the page.
+  var sun = new T.DirectionalLight(0xfff6ea, 2.6); sun.position.set(-hw * 0.6, dist * (fixed ? 0.3 : 0.9), -hh * 0.6); sun.castShadow = true;
   var sc = sun.shadow.camera; sc.left = -hw * 1.3; sc.right = hw * 1.3; sc.top = hh * 1.3; sc.bottom = -hh * 1.3; sc.near = 1; sc.far = dist * 2;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   scene.add(sun);
@@ -2646,7 +2648,8 @@ function roll(o) {
 }
 function throwOn(T, C, st, host, qp, o) {
   var q = qp.q, fixed = !o.host;
-  var n = o.dice.length, base = Math.max(0.55, Math.min(1.05, Math.min(st.hw, st.hh) / (fixed ? 7 : 3.3)));
+  // Inside a host (a tray) the die is the point of the picture, so it is drawn larger for the space.
+  var n = o.dice.length, base = Math.max(0.55, Math.min(fixed ? 1.05 : 1.5, Math.min(st.hw, st.hh) / (fixed ? 7 : 2.5)));
   var size = o.size || base * (n > 4 ? Math.max(0.72, 1 - 0.035 * (n - 4)) : 1);
   var want = o.dice.map(function (d) { return d.value; });
   var dice = o.dice.map(function (d) {
@@ -2839,6 +2842,59 @@ function echoPlain(st, die, fi, th) {
   return { update: function (dt) { t += dt; fc.mat.emissiveIntensity = 2.2 * env4(t, 0, 0.15, 0.5, 1.4); return t < 1.4; } };
 }
 
+// ---------- Portraits: a still picture of one die, for pickers ----------
+// Drawn by the same code that throws the die, so a picker shows the die people will see. Every
+// portrait on the page comes from one small hidden table that is kept, so a picker of two dozen sets
+// holds one WebGL context rather than two dozen; requests wait their turn on it. The die rests with
+// the asked-for number up, seen from straight above as it lands on a throw.
+var SNAP_PX = 200, SNAP_SIZE = 1.5, SNAP = null, SNAP_TURN = Promise.resolve(), SIDES_OK = [4, 6, 8, 10, 12, 20];
+function snapStage(T) {
+  if (SNAP && !SNAP.st.dead) return SNAP;
+  var host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  host.style.cssText = 'position:fixed;left:0;top:0;width:' + SNAP_PX + 'px;height:' + SNAP_PX + 'px;opacity:0;pointer-events:none;z-index:-1';
+  document.body.appendChild(host);
+  // No glow: bloom spreads past the die and would be cut off at the picture's edge.
+  var q = Object.assign(qualityPreset('hd'), { glow: false, contact: false });
+  var st = makeStage(T, host, false, T, q);
+  // No shadows: on a picture this small they run off its edge and end in a hard line.
+  st.sun.castShadow = false;
+  SNAP = { host: host, st: st };
+  return SNAP;
+}
+// portrait({ kind, colour, value, px }) -> Promise<data URL>: a PNG px wide (in CSS pixels, drawn at
+// the screen's density). value is the number on the top face (default the die's highest). Rejects
+// when there is no WebGL or the files can't load; the caller draws its own stand-in then.
+function portrait(o) {
+  o = o || {};
+  if (!QUALITY.gl) return Promise.reject(new Error('no WebGL'));
+  var kind = hasSet(o.kind) ? o.kind : 'jewelled', sides = SIDES_OK.indexOf(o.sides) >= 0 ? o.sides : 20;
+  var px = Math.max(24, Math.min(SNAP_PX, Math.round(o.px || 96)));
+  var job = SNAP_TURN.then(function () { return Promise.all([libs(), loadSets([kind])]); }).then(function (v) {
+    var L = v[0], T = L.T, C = L.C, S = snapStage(T), st = S.st, had = ATLAS_KEPT.slice();
+    var die = makeDie(T, C, sides, SNAP_SIZE, kind, coloursOf(kind, o.colour), 'rune', 256, { detail: 'hd', gems: true, env: st.env3 });
+    try {
+      addDie(st, die);
+      st.contact.forEach(function (c) { c.m.visible = false; if (c.tint) c.tint.visible = false; });
+      var want = typeof o.value === 'number' && die.faces.some(function (f) { return f.value === o.value; }) ? o.value : sides;
+      setDown(T, st, [die], [want], null);
+      // A set whose insides move (an orb, a swirl) is shown a moment into its motion, not at its first frame.
+      if (die.tick) for (var i = 0; i < 20; i++) die.tick(1 / 30, 0);
+      updateContact(st); st.draw();
+      // Read back in the same task as the draw, while the canvas still holds the frame.
+      var dpr = Math.min(window.devicePixelRatio || 1, 2), out = canvas(Math.round(px * dpr));
+      out.getContext('2d').drawImage(st.canvas, 0, 0, out.width, out.height);
+      return out.toDataURL('image/png');
+    } finally {
+      removeDie(st, die);
+      // The face images are megabytes each; the picture is all that is kept.
+      ATLAS_KEPT.filter(function (k) { return had.indexOf(k) < 0; }).forEach(dropAtlas);
+    }
+  });
+  // A failure frees the turn for the next request.
+  SNAP_TURN = job.catch(function () {});
+  return job;
+}
 // ---------- Sets and crits, imported when first needed ----------
 // Every set in the order a picker lists them; the first three are built in above.
 var SET_KEYS = ['jewelled', 'confetti', 'acrylic', 'cage', 'heartlight', 'gothic', 'obsidian', 'moonstone', 'oak', 'nebula', 'bone', 'scale',
@@ -2892,7 +2948,7 @@ export {
   dimmer, dot, drawBurn, drop, env4, faceOf, faceToLocal, flakeLayout, forgetQuality, fxLight,
   gemMat, glow, glowFace, glowLayer, glowNumeral, glowStrokes, hasCrit, hasSet, heightToNormal,
   hexA, in3, inout, isLight, kindOf, landedFace, len, loadCrits, loadSets, mix, mul, mulberry,
-  norm, numberOnto, out3, paintNumeral, polyLen, polyPath, qualityFor, ready, registerCrit,
+  norm, numberOnto, out3, paintNumeral, polyLen, polyPath, portrait, qualityFor, ready, registerCrit,
   registerSet, roll, setDown, shadeDie, share, simulate, smooth, solid, splitDie, spray, spriteTex,
   starTex, stop, strokePaths, strokeW, strokesFor, sub, symmetry, tintDie, wave, wholeDie, worldOf, writhe
 };

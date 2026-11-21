@@ -55,6 +55,10 @@ type BlockMeta struct {
 	// Group names the palette heading an entry goes under; empty lets the
 	// editor choose from the type.
 	Group string `json:"group,omitempty"`
+	// Picture names the small drawing of what the type puts on a page that
+	// the Customizer's widget list shows beside its name: one of
+	// PictureKinds. Empty draws PictureLines, as a package widget does.
+	Picture string `json:"picture,omitempty"`
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.

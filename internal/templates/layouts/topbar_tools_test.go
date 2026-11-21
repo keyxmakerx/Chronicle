@@ -41,7 +41,7 @@ func TestTopbarToolsShelf_EntriesPerViewer(t *testing.T) {
 		want []string // "id:name", in shelf order
 		tab  bool
 	}{
-		{"owner", viewer(3, true, false, false, false), []string{"ai:Your AI", "table:The table", "dms:Director Screen", "pv:View as player", "bell:Notifications", "find:Find"}, true},
+		{"owner", viewer(3, true, false, false, false), []string{"ai:Your AI", "brush:Customize", "table:The table", "dms:Director Screen", "pv:View as player", "bell:Notifications", "find:Find"}, true},
 		{"owner viewing as a player", viewer(1, true, false, true, false), []string{"table:The table", "pv:Back to your view", "bell:Notifications", "find:Find"}, true},
 		{"co-DM", viewer(1, false, true, false, false), []string{"ai:Your AI", "table:The table", "dms:Director Screen", "pv:View as player", "bell:Notifications", "find:Find"}, true},
 		{"player", viewer(1, false, false, false, false), []string{"ai:Your AI", "table:The table", "bell:Notifications", "find:Find"}, true},

@@ -60,20 +60,25 @@ test('page layout editor: place, size, player view, tiles, draft, save', async (
   assert.match(await page.locator('.cpe-page').innerText(), /highmoor|saltreach/i, 'the editor does not draw a real location');
   assert.ok(await page.locator('.cpe-live:not(:has(.cpe-wait))').count(), 'the widgets are still grey boxes');
   assert.ok(await page.locator('.cpe-gw').count() > 5, 'no widget gallery');
-  await page.locator('#cpe-page').waitFor();
+  await page.locator('#cpe-dk-page').waitFor();
   const layoutUrl = page.url();
-  await picture(page, 'page-editor-layout', { check: '#1383', about: 'Locations page layout: a real page with the widget gallery', mask: ['.cpe-page', '.sidebar', '[data-sidebar]', '#cpe-page'] });
+  await picture(page, 'page-editor-layout', { check: '#1383', about: 'Locations page layout: a real page with the widget gallery', mask: ['.cpe-page', '.sidebar', '[data-sidebar]', '#cpe-dk-page'] });
 
   const before = await layoutOf(page);
   assert.equal(before[0].parts.length, 2, 'the first section is not two columns');
 
   // 2. Drag a widget from the gallery, move one, drag a divider; Undo.
+  // "+ Widget" in the tools slides the widget panel out over the page.
+  await page.locator('#cpe-dk-main').click();
   const col2 = page.locator('.cpe-page .cpe-sec').first().locator('.cpe-col').nth(1);
   await drag(page, page.locator('.cpe-gw[data-gw="text_block"]'), col2);
   let now = await layoutOf(page);
   assert.ok(now[0].parts[1].includes('text_block'), 'the gallery widget did not land in the second column: ' + JSON.stringify(now[0]));
   await page.locator('[data-czs-what]').filter({ hasText: 'Locations page layout' }).waitFor();
 
+  // The drop opened the panel on the new widget; Escape puts it away so it
+  // covers nothing.
+  await page.keyboard.press('Escape');
   const col1 = page.locator('.cpe-page .cpe-sec').first().locator('.cpe-col').first();
   await drag(page, ofType(page, 'details'), col1.locator('.cpe-blk').first(), { x: 0, y: 4 });
   now = await layoutOf(page);
@@ -100,9 +105,9 @@ test('page layout editor: place, size, player view, tiles, draft, save', async (
   await page.getByRole('button', { name: 'Tall', exact: true }).click();
   await page.getByRole('button', { name: /GM team only/ }).last().click();
   assert.ok(await ofType(page, 'text_block').isVisible());
-  await page.locator('[data-act="as"][data-v="player"]').click();
+  await page.locator('#cpe-dk-as').click();
   await page.waitForFunction(() => !document.querySelector('.cpe-page .cpe-blk [data-type="text_block"]'));
-  await page.locator('[data-act="as"][data-v="dm"]').click();
+  await page.locator('#cpe-dk-as').click();
   await ofType(page, 'text_block').waitFor();
 
   // 4. A Tiles section with two widgets, one resized; Phone shows two across.
@@ -133,9 +138,11 @@ test('page layout editor: place, size, player view, tiles, draft, save', async (
   const sizeAfter = await tile.locator('.cpe-tbar-s').innerText();
   assert.match(sizeAfter, /^\d×\d$/, 'tile sizes are not set sizes');
   assert.notEqual(sizeAfter, sizeBefore, 'pulling the corner did not resize the tile');
+  await page.locator('#cpe-dk-dev').click();
   await page.locator('[data-act="dev"][data-v="phone"]').click();
   const across = await page.locator('.cpe-page .cpe-tiles').first().evaluate((e) => getComputedStyle(e).gridTemplateColumns.split(' ').length);
   assert.equal(across, 2, 'on Phone the tiles are not two across');
+  await page.locator('#cpe-dk-dev').click();
   await page.locator('[data-act="dev"][data-v="desktop"]').click();
 
   // 5. Reload before saving: the draft is still there.

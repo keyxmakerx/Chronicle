@@ -964,6 +964,31 @@ func (h *Handler) UpdateViewPrefsAPI(c *echo.Context) error {
 	return c.JSON(http.StatusOK, prefs)
 }
 
+// SetBrushAPI saves whether the signed-in person sees the header's Customize
+// brush in one campaign (PUT /account/brush/:campaignID, {"brush":"shown"|
+// "hidden"}). It writes only the caller's own row and no other campaign's
+// choice.
+func (h *Handler) SetBrushAPI(c *echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	var req struct {
+		Brush string `json:"brush"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if req.Brush != "shown" && req.Brush != "hidden" {
+		return apperror.NewBadRequest("invalid brush choice")
+	}
+	prefs, err := h.service.SetBrushHidden(c.Request().Context(), userID, c.Param("campaignID"), req.Brush == "hidden")
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, prefs)
+}
+
 // UpdateTimezoneAPI updates the user's timezone preference (PUT /account/timezone).
 func (h *Handler) UpdateTimezoneAPI(c *echo.Context) error {
 	userID := GetUserID(c)

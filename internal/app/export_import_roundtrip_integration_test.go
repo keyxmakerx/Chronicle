@@ -624,3 +624,34 @@ func TestCampaignExportImport_PinPlayerRules_DBRoundTrip(t *testing.T) {
 		t.Errorf("Ghost pin visibility = %q, want dm_only", vis)
 	}
 }
+
+// A tag that follows the campaign's colour is exported without one and
+// follows the importing campaign's colour; a tag with its own keeps it.
+func TestCampaignExportImport_TagColours_DBRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	h := newRoundTripHarness(t)
+	ctx := context.Background()
+	owner := h.newUser("owner")
+	src, _ := h.sourceWithPlayerCharacter(owner)
+	tagSvc := tags.NewTagService(tags.NewTagRepository(h.db))
+	if _, err := tagSvc.Create(ctx, src.ID, "Harbour", "#0d9488", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tagSvc.Create(ctx, src.ID, "Salt road", "", false); err != nil {
+		t.Fatal(err)
+	}
+
+	newID, body := h.importBlob(h.newUser("importer"), "campaign.zip", h.exportZip(src, owner))
+	want := map[string]string{"Harbour": "#0d9488", "Salt road": ""}
+	for name, colour := range want {
+		var got string
+		if err := h.db.QueryRow(`SELECT color FROM tags WHERE campaign_id = ? AND name = ?`, newID, name).Scan(&got); err != nil {
+			t.Fatalf("imported tag %q not found (response: %s): %v", name, body, err)
+		}
+		if got != colour {
+			t.Errorf("tag %q stores %q after the round trip, want %q", name, got, colour)
+		}
+	}
+}

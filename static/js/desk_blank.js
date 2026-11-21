@@ -263,12 +263,40 @@
     });
   }
 
+  // The header's brush is the person's own: a pick on its row puts it away or
+  // brings it back in the header on this very page, from the inert template
+  // the header keeps (layouts/customize_brush.templ).
+  function syncBrush(btn, value) {
+    if (btn.getAttribute('data-id') !== 'brush') return;
+    if (value === 'shown') {
+      var kept = document.querySelector('template[data-brush-kept]');
+      if (!kept) return;
+      var host = kept.content.firstElementChild;
+      if (!host) return;
+      host = document.importNode(host, true);
+      kept.replaceWith(host);
+      if (C.mountWidget) C.mountWidget(host);
+      if (window.htmx && htmx.process) htmx.process(host);
+    } else {
+      var live = document.querySelector('[data-widget="customize-brush"]');
+      if (!live) return;
+      if (C.destroyWidget) C.destroyWidget(live);
+      else if (live._brushDestroy) live._brushDestroy();
+      var t = document.createElement('template');
+      t.setAttribute('data-brush-kept', '');
+      t.content.appendChild(live.cloneNode(true));
+      live.replaceWith(t);
+    }
+    document.dispatchEvent(new CustomEvent('chronicle:brush', { detail: { shown: value === 'shown' } }));
+  }
+
   function saved(btn, value) {
     var line = btn.closest('[data-line]');
     btn.setAttribute('data-value', value);
     btn.removeAttribute('data-state');
     btn.removeAttribute('aria-busy');
     syncGuest(btn, value);
+    syncBrush(btn, value);
     tick(line);
     glow(line);
   }

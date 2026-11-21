@@ -3,11 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -37,6 +40,48 @@ func (a *customizeCategoryAdapter) ListCustomizeCategories(ctx context.Context, 
 		}
 	}
 	return out, nil
+}
+
+// pageCategoryAdapter tells the header's Customize brush which category a
+// page is in, without the campaigns plugin importing entities. A page of
+// another campaign, or none, has no category.
+type pageCategoryAdapter struct {
+	svc interface {
+		GetByID(ctx context.Context, id string) (*entities.Entity, error)
+	}
+}
+
+// PageCategory returns the category id of a page of this campaign.
+func (a *pageCategoryAdapter) PageCategory(ctx context.Context, campaignID, entityID string) (int, bool, error) {
+	e, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	if e == nil || e.CampaignID != campaignID {
+		return 0, false, nil
+	}
+	return e.EntityTypeID, true, nil
+}
+
+// brushPrefsAdapter reads the person's choice to hide the header's brush from
+// their display choices, which the auth service keeps.
+type brushPrefsAdapter struct {
+	svc interface {
+		GetViewPrefs(ctx context.Context, userID string) (auth.ViewPrefs, error)
+	}
+}
+
+// BrushHidden reports whether the person put the brush away in this campaign.
+func (a *brushPrefsAdapter) BrushHidden(ctx context.Context, userID, campaignID string) (bool, error) {
+	vp, err := a.svc.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return vp.HidesBrushIn(campaignID), nil
 }
 
 // categoriesApplier is the slice of the entity service the section needs.

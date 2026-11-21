@@ -41,6 +41,10 @@ type TagGrantService interface {
 	// GrantsForEntity returns the entity's tag-derived grants with resolved
 	// human subject labels, for the effective-visibility glance.
 	GrantsForEntity(ctx context.Context, campaignID, entityID string) ([]EntityTagGrant, error)
+
+	// SetCampaignColours wires where a following tag's colour comes from,
+	// so a grant names the colour the tag is shown in.
+	SetCampaignColours(c CampaignColours)
 }
 
 // tagGrantService implements TagGrantService.
@@ -49,6 +53,7 @@ type tagGrantService struct {
 	tags    TagRepository
 	members MemberChecker
 	groups  GroupChecker
+	colours CampaignColours // nil: following tags wear DefaultTagColour
 }
 
 // NewTagGrantService creates a TagGrantService. members/groups validate +
@@ -165,10 +170,19 @@ func (s *tagGrantService) GrantsForEntity(ctx context.Context, campaignID, entit
 	if err != nil {
 		return nil, err
 	}
+	p := newTagPainter(s.colours)
 	for i := range grants {
 		grants[i].SubjectLabel = s.subjectLabel(ctx, campaignID, grants[i].SubjectType, grants[i].SubjectID)
+		if grants[i].TagColor == "" {
+			grants[i].TagColor = p.colourOf(ctx, campaignID)
+		}
 	}
 	return grants, nil
+}
+
+// SetCampaignColours wires the campaign colour lookup.
+func (s *tagGrantService) SetCampaignColours(c CampaignColours) {
+	s.colours = c
 }
 
 // subjectLabel resolves a grant subject to a human label for the glance

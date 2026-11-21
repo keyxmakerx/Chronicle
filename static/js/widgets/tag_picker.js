@@ -294,13 +294,11 @@ Chronicle.register('tag-picker', {
       if (state.creating) return;
       state.creating = true;
 
-      // Pick a random muted color.
-      var colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6'];
-      var color = colors[Math.floor(Math.random() * colors.length)];
-
+      // No colour: a new tag follows the campaign's Tags and marks colour,
+      // and the server answers with that colour filled in.
       Chronicle.apiFetch(config.tagsEndpoint, {
         method: 'POST',
-        body: { name: name, color: color, dmOnly: !!dmOnly }
+        body: { name: name, dmOnly: !!dmOnly }
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to create tag');

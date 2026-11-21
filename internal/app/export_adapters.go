@@ -233,8 +233,10 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			OriginalID: t.ID,
 			Name:       t.Name,
 			Slug:       t.Slug,
-			Color:      t.Color,
-			DmOnly:     t.DmOnly,
+			// The stored colour, so a tag that follows this campaign's
+			// colour follows the importing campaign's.
+			Color:  t.StoredColor(),
+			DmOnly: t.DmOnly,
 		})
 	}
 

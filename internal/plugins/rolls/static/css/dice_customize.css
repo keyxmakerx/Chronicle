@@ -1,13 +1,8 @@
-/* The Dice tab on the Customize page. Colours and depth come from the style
-   kit's tokens, so light, dark and every kit follow; the control corner
-   follows the kit the way the Table tab's does. */
-:root { --dcz-r: 8px; }
-[data-cz-kit="sharp"] { --dcz-r: 2px; }
-[data-cz-kit="ornate"] { --dcz-r: 10px; }
-
-.dcz { display: flex; flex-direction: column; gap: 28px; max-width: 720px; min-width: 0; }
+/* The Dice tab on the Customize page. Colours, corners and depth come from
+   the style kit's tokens, so light, dark and every kit follow. */
+.dcz { --dcz-r: var(--shape-r-ctl, 8px); --dcz-rp: var(--shape-r-panel, 12px); display: flex; flex-direction: column; gap: 20px; max-width: 1120px; min-width: 0; }
 .dcz p { margin: 0; }
-.dcz-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dcz-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; max-width: 760px; }
 .dcz-lede { color: var(--color-text-secondary); font-size: 14px; max-width: 60ch; }
 .dcz-status { min-height: 20px; font-size: 12.5px; white-space: nowrap; }
 .dcz-ok { color: rgb(var(--color-ok-rgb)); font-weight: 600; }
@@ -15,10 +10,63 @@
 .dcz-sec { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dcz-h { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text-primary); }
 .dcz-hint { font-size: 12.5px; color: var(--color-text-secondary); }
+.dcz-strong { color: var(--color-text-primary); font-weight: 600; }
 .dcz-lab { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); }
+/* A group label: small tracked capitals in the accent. */
+.dcz-cap { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
 .dcz-what { display: block; font-size: 12.5px; color: var(--color-text-secondary); font-weight: 400; }
 .dcz-nm { display: block; font-size: 14px; font-weight: 500; color: var(--color-text-primary); overflow-wrap: anywhere; }
 .dcz-main { flex: 1; min-width: 0; }
+
+/* The die and the other settings on the left, the tray beside them; on a
+   narrow screen the tray folds in under the colours. */
+.dcz-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; min-width: 0; }
+.dcz-rest { display: flex; flex-direction: column; gap: 28px; min-width: 0; max-width: 720px; }
+@media (min-width: 1024px) {
+  .dcz-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); column-gap: 32px; }
+  .dcz-die { grid-column: 1; grid-row: 1; }
+  .dcz-rest { grid-column: 1; grid-row: 2; }
+  .dcz-tray { grid-column: 2; grid-row: 1 / span 2; align-self: start; position: sticky; top: calc(var(--dcz-stick, 0px) + 16px); }
+}
+
+/* A set is a tile: its own die and its name. The radio inside stays real, so
+   arrow keys and screen readers work as on any radio group. */
+.dcz-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.dcz-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 44px; padding: 12px 8px 10px; border: 1px solid var(--color-border); border-radius: var(--dcz-r); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); cursor: pointer; text-align: center; transition: background-color var(--dur-micro), box-shadow var(--dur-standard) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+.dcz-tile:hover { background: var(--color-bg-tertiary); box-shadow: var(--elev-hover); }
+.dcz-tile:active { transform: scale(0.97); }
+.dcz-tile.is-on { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent), var(--elev-resting); }
+.dcz-tile:has(.dcz-tile-in:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dcz-tile-in { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.dcz-pic { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; }
+.dcz-pic:not(:has(.is-in)) { background: var(--color-bg-tertiary); }
+.dcz-pic-img, .dcz-still { display: block; opacity: 0; transition: opacity var(--dur-standard) var(--ease-out); user-select: none; }
+.dcz-pic-img { width: 72px; height: 72px; }
+.dcz-pic-img.is-in, .dcz-still.is-in { opacity: 1; }
+.dcz-tile-nm { font-size: 13px; font-weight: 500; line-height: 1.25; color: var(--color-text-primary); overflow-wrap: anywhere; }
+
+/* The colourways of the chosen set. Each swatch has a ring of the text
+   colour so a dark one still shows on a dark page. */
+.dcz-colours { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.dcz-cols { display: flex; flex-wrap: wrap; gap: 4px; }
+.dcz-sw { display: inline-block; width: 28px; height: 28px; border-radius: var(--shape-r-small, 6px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text-primary) 28%, transparent), var(--elev-resting); }
+.dcz-col { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 2px solid transparent; border-radius: var(--dcz-r); background: none; cursor: pointer; transition: border-color var(--dur-micro), transform var(--dur-micro) var(--ease-out); }
+.dcz-col:hover { border-color: var(--color-border); }
+.dcz-col:active { transform: scale(0.94); }
+.dcz-col[aria-pressed="true"] { border-color: var(--color-accent); }
+.dcz-col:focus-visible, .dcz-seg button:focus-visible, .dcz-word:focus-visible, .dcz-switch:has(input:focus-visible) .dcz-track { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* The tray: a sheet holding the chosen die, which is thrown inside it. */
+.dcz-tray { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 12px 10px; border: 1px solid var(--color-border); border-radius: var(--dcz-rp); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); min-width: 0; }
+.dcz-stage { position: relative; width: 100%; height: 240px; border-radius: var(--dcz-r); overflow: hidden; display: grid; place-items: center; }
+.dcz-still { width: 140px; height: 140px; }
+.dcz-still[hidden] { display: none; }
+.dcz-tray-lab { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); text-align: center; overflow-wrap: anywhere; }
+.dcz-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; }
+/* Quiet words: accent text, underlined at 40%, fully on hover. */
+.dcz-word { border: 0; background: none; padding: 4px 2px; min-height: 32px; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--color-accent-link, var(--color-accent)); text-decoration: underline; text-decoration-color: rgb(var(--color-accent-rgb) / 0.4); text-underline-offset: 3px; border-radius: var(--shape-r-tag, 4px); transition: text-decoration-color var(--dur-micro), opacity var(--dur-micro); }
+.dcz-word:hover { text-decoration-color: currentColor; }
+.dcz-word:active { opacity: 0.7; }
 
 /* A pick from a list: the whole row is the control. */
 .dcz-rows { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--dcz-r); background: var(--color-bg-secondary); overflow: hidden; }
@@ -27,18 +75,12 @@
 .dcz-row:hover { background: var(--color-bg-tertiary); }
 .dcz-row.is-on { background: rgb(var(--color-accent-rgb) / 0.1); }
 .dcz-row:has(input:focus-visible), .dcz-chk:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.dcz-row input[type="radio"], .dcz-chk input { accent-color: var(--color-accent); width: 18px; height: 18px; flex: none; margin: 0; }
-.dcz-sws { display: inline-flex; gap: 4px; flex: none; }
-
-.dcz-sw { display: inline-block; width: 28px; height: 28px; border-radius: var(--dcz-r); box-shadow: inset 0 0 0 1px var(--color-border), var(--elev-resting); }
-.dcz-sw-s { width: 16px; height: 16px; }
-.dcz-colours { display: flex; flex-direction: column; gap: 8px; }
-.dcz-cols { display: flex; flex-wrap: wrap; gap: 6px; }
-.dcz-col { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 2px solid transparent; border-radius: var(--dcz-r); background: none; cursor: pointer; transition: border-color var(--dur-micro); }
-.dcz-col:hover { border-color: var(--color-border); }
-.dcz-col[aria-pressed="true"] { border-color: var(--color-text-primary); }
-.dcz-col:focus-visible, .dcz-seg button:focus-visible, .dcz-switch:has(input:focus-visible) .dcz-track { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.dcz-col .dcz-sw { width: 30px; height: 30px; }
+/* The forms plugin paints a checked radio or box in its own blue (its colour,
+   not accent-color): both are set to the campaign's accent. */
+.dcz-row input[type="radio"], .dcz-chk input { accent-color: var(--color-accent); color: var(--color-accent-link, var(--color-accent)); width: 18px; height: 18px; flex: none; margin: 0; background-color: var(--color-bg-primary); border-color: var(--color-text-muted, var(--color-border)); }
+.dcz-row input[type="radio"]:checked, .dcz-chk input:checked { background-color: currentColor; border-color: transparent; }
+.dcz-chk input:disabled:checked { background-color: var(--color-text-muted, currentColor); }
+.dcz-row input[type="radio"]:focus, .dcz-chk input:focus { --tw-ring-color: transparent; box-shadow: none; }
 
 .dcz-seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; border: 1px solid var(--color-border); border-radius: var(--dcz-r); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); overflow: hidden; }
 .dcz-seg button { border: 0; border-left: 1px solid var(--color-border); background: none; padding: 8px 14px; min-height: 44px; cursor: pointer; font: inherit; font-size: 13.5px; color: var(--color-text-body); transition: background-color var(--dur-micro); }
@@ -56,17 +98,22 @@
 .dcz-offer { display: flex; flex-direction: column; gap: 6px; padding-left: 52px; }
 .dcz-chks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; }
 .dcz-chk { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; color: var(--color-text-primary); cursor: pointer; }
-.dcz-chk input:disabled { cursor: not-allowed; }
-.dcz-try { display: flex; flex-wrap: wrap; gap: 8px; }
-.dcz-try button { min-height: 44px; }
+.dcz-chk input:disabled { cursor: not-allowed; opacity: 0.6; }
 
 @media (max-width: 639px) {
   .dcz-head { flex-direction: column; gap: 4px; }
   .dcz-offer { padding-left: 0; }
-  .dcz-sws { display: none; }
   .dcz-seg { max-width: 100%; }
+  .dcz-tiles { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .dcz-pic, .dcz-pic-img { width: 60px; height: 60px; }
+  .dcz-stage { height: 200px; }
+  .dcz-still { width: 120px; height: 120px; }
 }
+@media (pointer: coarse) { .dcz-word { min-height: 44px; padding-inline: 6px; } }
 
-/* Calm and Off: the switch and the rows change at once. */
+/* Calm: colours and fades only. Off: everything changes at once. */
 html[data-motion="calm"] .dcz-track::after, html[data-motion="off"] .dcz-track::after { transition: none; }
-html[data-motion="off"] .dcz-row, html[data-motion="off"] .dcz-col, html[data-motion="off"] .dcz-seg button, html[data-motion="off"] .dcz-track { transition: none; }
+html[data-motion="calm"] .dcz-tile:active, html[data-motion="calm"] .dcz-col:active { transform: none; }
+html[data-motion="off"] .dcz-row, html[data-motion="off"] .dcz-col, html[data-motion="off"] .dcz-seg button, html[data-motion="off"] .dcz-track,
+html[data-motion="off"] .dcz-tile, html[data-motion="off"] .dcz-pic-img, html[data-motion="off"] .dcz-still, html[data-motion="off"] .dcz-word { transition: none; }
+html[data-motion="off"] .dcz-tile:active, html[data-motion="off"] .dcz-col:active { transform: none; }

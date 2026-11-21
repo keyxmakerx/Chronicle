@@ -3,6 +3,7 @@ GET	/about	optional-session	app.(*App).RegisterRoutes	plugins/auth.OptionalAuth
 GET	/account	session	plugins/auth.(*Handler).AccountPage	plugins/auth.RequireAuth
 DELETE	/account/avatar	session	plugins/auth.(*Handler).ClearAvatarAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/avatar	session	plugins/auth.(*Handler).UploadAvatarAPI	plugins/auth.RequireAuth > middleware.RateLimit
+PUT	/account/brush/:campaignID	session	plugins/auth.(*Handler).SetBrushAPI	plugins/auth.RequireAuth
 POST	/account/delete	session	plugins/auth.(*Handler).DeleteAccountAPI	plugins/auth.RequireAuth > middleware.RateLimit
 PUT	/account/display-name	session	plugins/auth.(*Handler).UpdateDisplayNameAPI	plugins/auth.RequireAuth
 PUT	/account/email	session	plugins/auth.(*Handler).RequestEmailChangeAPI	plugins/auth.RequireAuth > middleware.RateLimit
@@ -767,9 +768,12 @@ GET	/campaigns/:id/customize/categories/:key/:tab	session	plugins/campaigns.(*Ha
 DELETE	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).DeleteCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).GetCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).PutCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/customize/here	session	plugins/campaigns.(*Handler).CustomizeHere	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/home	session	plugins/campaigns.(*Handler).CustomizeHome	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/customize/home-preview	session	plugins/campaigns.(*Handler).HomePreview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/home/:who	session	plugins/campaigns.(*Handler).CustomizeHome	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/customize/kit-try	session	plugins/campaigns.(*Handler).CustomizeKitTry	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/customize/kit-try/keep	session	plugins/campaigns.(*Handler).CustomizeKitKeep	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/look	session	plugins/campaigns.(*Handler).CustomizeLook	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/customize/publish	session	plugins/campaigns.(*Handler).PublishCustomizeAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/x/:tab	session	plugins/campaigns.(*Handler).CustomizePluginArea	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

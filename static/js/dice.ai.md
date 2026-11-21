@@ -60,7 +60,20 @@ together). The Foundry module lists the same keys for Dice So Nice
 - `catalogue()` lists every set with its colours (swatch and glow), every crit
   (`what`, `echoWhat`) and `defaults`, for pickers. `defaults` is also on the
   loaded `Chronicle.dice`; the stub only has `catalogue()`.
-- `stop()` clears the table. Called before the files arrive, it still stops the
+- `portrait({ set, colour, value, px })` resolves a PNG data URL: one d20 of
+  that set and colour resting with `value` up (default 20), seen from above, drawn
+  by the engine itself so a picker shows the real die. Every portrait comes from
+  one small hidden table that is kept for the page (one WebGL context however many
+  sets), one at a time; each is cached per set, colour, value and size, and its
+  face images are dropped once the picture is taken. It rejects without WebGL, and
+  the caller draws its own stand-in. The stub doesn't have it: call `catalogue()`
+  first.
+- `opts.host` throws inside an element (positioned) instead of over the page: the
+  start point is read in the host's pixels, nothing is kept clear for the top bar,
+  the die is drawn larger for the space and the light sits higher so its shadow
+  keeps its length. With `opts.keep` the dice stay resting there until the next
+  roll on that host or `stop(host)`.
+- `stop(host)` clears the dice thrown into `host`; `stop()` clears the page's table. Called before the files arrive, it still stops the
   rolls already asked for.
 - `roll()` rejects only when a roll is refused (an unknown die, an impossible
   value) or `dice.js` itself can't load (the stub gives up after 10 s).

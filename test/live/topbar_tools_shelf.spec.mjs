@@ -17,6 +17,7 @@ const NAME = 'Saltreach of the Shattered Isles';
 // The bar's own tool buttons, by the label each one carries on the bar.
 const BAR_TOOLS = {
   ai: '#app-topbar [data-ai-chip]',
+  brush: '#app-topbar [data-brush-toggle]',
   table: '#app-topbar [data-tt-tab]',
   dms: '#app-topbar [data-dms-toggle]',
   eye: '#app-topbar button[data-pv-toggle]',
@@ -88,7 +89,7 @@ test('phone: the Tools tab opens the shelf, the DM Screen entry opens the DM Scr
   assert.equal(await tab.getAttribute('aria-controls'), 'tb-shelf');
   await openShelf(page);
   assert.equal(await tab.getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(await shelfNames(page), ['Your AI', 'The table', 'GM Screen', 'View as player', 'Notifications', 'Find']);
+  assert.deepEqual(await shelfNames(page), ['Your AI', 'Customize', 'The table', 'GM Screen', 'View as player', 'Notifications', 'Find']);
 
   // Every entry is a real button a finger can hit, and the shelf lies over the page.
   const sizes = await page.locator('#tb-shelf .tb-tool:not([hidden])').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));

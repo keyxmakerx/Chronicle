@@ -143,10 +143,11 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 	c := in.Campaign
 	facts := s.gather(ctx, req)
 
-	look := []DeskLine{styleLine(c), colourLine(c)}
+	data := []DeskLine{copyLine(c), activityLine(c)}
 	if in.Addons["media-gallery"] {
-		look = append(look, mediaLine(c, facts.Media))
+		data = append(data, mediaLine(c, facts.Media))
 	}
+	data = append(data, trashLine(c, facts.Trash))
 	var conns []DeskLine
 	if in.Addons["sync-api"] {
 		conns = append(conns, foundryLine(c, facts.Foundry, req.Now))
@@ -163,9 +164,9 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in), tablesLine(c)}},
 		},
 		Right: []DeskGroup{
-			{Name: "Look", Lines: look},
+			{Name: "Customize", Lines: customizeLines(c, in)},
 			{Name: "Connections", Lines: conns},
-			{Name: "Data", Lines: []DeskLine{copyLine(c), activityLine(c), trashLine(c, facts.Trash)}},
+			{Name: "Data", Lines: data},
 			{Name: "Danger zone", Danger: true, Lines: []DeskLine{endLine(c)}},
 		},
 	}

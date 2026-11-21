@@ -971,6 +971,9 @@ templ Topbar() {
 
 			}
 
+			<!-- The Customize brush, for the owner: a menu that knows where they are. -->
+			@topbarBrush()
+
 			<!-- Dark mode toggle for signed-out visitors; signed-in people find
 			     it in the account menu. Site admin is always dark, so it has none. -->
 			if !InSiteAdmin(ctx) && !IsAuthenticated(ctx) {

@@ -1,7 +1,8 @@
-/* The Customizer's page layout (customize_page_editor.js): the canvas a category's
-   page layout is arranged on, and its panel. Tool chrome, so theme tokens
-   only (ui-standard: the tools are never paper); the page inside the frame
-   is the real page's own markup and keeps the real page's styles. */
+/* The Customizer's page layout (customize_page_editor.js): the workshop a
+   category's page layout or a home is arranged in, the tools that float at
+   its foot, and the widget panel that slides out over it. Tool chrome, so
+   theme tokens only (ui-standard: the tools are never paper); the page inside
+   the frame is the real page's own markup and keeps the real page's styles. */
 
 .cpe, .cpe-pop, .cpe-ghost {
   --cpe-accent: var(--color-accent);
@@ -9,33 +10,16 @@
   --cpe-ghost: rgb(var(--color-accent-rgb) / 0.06);
   --cpe-warn: rgb(var(--color-warn-rgb));
   --cpe-bad: rgb(var(--color-bad-rgb));
+  --cpe-panel-w: 360px;
 }
 .cpe { color: var(--color-text-body); }
 .cpe-banner { display: flex; gap: 10px; align-items: flex-start; margin: 0 24px 12px; padding: 10px 14px; border-radius: 10px; background: rgb(var(--color-warn-rgb) / 0.12); color: var(--color-text-primary); font-size: 13px; }
 .cpe-banner i { color: var(--cpe-warn); margin-top: 2px; }
 
-/* ---------- Layouts: the category's main layout and its named ones ---------- */
-.cpe-layouts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 24px 12px; }
-.cpe-layouts-lab { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
-.cpe-lays { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; border-radius: 9px; background: var(--color-bg-tertiary); max-width: 100%; }
-.cpe-lay { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--color-text-secondary); font-size: 12.5px; font-weight: 500; padding: 5px 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; transition: background var(--dur-micro), color var(--dur-micro); }
-.cpe-lay:hover:not(:disabled) { color: var(--color-text-primary); }
-.cpe-lay[aria-pressed="true"] { background: var(--color-bg-secondary); color: var(--color-text-primary); box-shadow: var(--elev-resting); }
-.cpe-lay.add { color: var(--color-accent-link, var(--cpe-accent)); }
-.cpe-lay:disabled { opacity: 0.45; cursor: default; }
-.cpe-lay-acts { display: inline-flex; gap: 6px; }
-.cpe-lay-acts .btn-sm i { margin-right: 6px; }
-.cpe-lay-claim { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12.5px; color: var(--color-text-secondary); }
-.cpe-lay-claim select.cpe-inp { width: auto; max-width: 200px; padding: 4px 8px; font-size: 12.5px; }
-.cpe-lay-hint { flex-basis: 100%; }
-
-/* ---------- Frame: canvas and panel ---------- */
-.cpe-editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 520px; border-top: 1px solid var(--color-border); position: relative; overflow: hidden; }
-.cpe-main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
-.cpe-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--color-border); background: var(--color-bg-secondary); flex-wrap: wrap; min-width: 0; }
-.cpe-toolbar .btn-sm i { margin-right: 6px; }
-.cpe-sp { flex: 1; }
-.cpe-vr { width: 1px; height: 22px; background: var(--color-border); }
+/* ---------- The workshop ----------
+   The page is as wide as the workshop; the panel and the tools float over it. */
+.cpe-editor { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 520px; border-top: 1px solid var(--color-border); position: relative; overflow: hidden; }
+.cpe-main { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .cpe-icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-body); display: inline-grid; place-items: center; cursor: pointer; transition: background var(--dur-micro); }
 .cpe-icon-btn:hover:not(:disabled) { background: var(--color-bg-tertiary); }
 .cpe-icon-btn:disabled { opacity: 0.4; cursor: default; }
@@ -48,7 +32,6 @@
 .cpe-lab { font-size: 12.5px; font-weight: 600; color: var(--color-text-secondary); }
 .cpe-inp { width: 100%; border: 1px solid var(--color-input-border, var(--color-border)); background: var(--color-bg-primary); color: var(--color-text-primary); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
 .cpe-inp:focus { outline: 2px solid rgb(var(--color-accent-rgb) / 0.5); outline-offset: 1px; }
-.cpe-toolbar select.cpe-inp { width: auto; max-width: 220px; padding: 4px 8px; font-size: 12.5px; }
 .cpe-hint { font-size: 12px; color: var(--color-text-secondary); margin: 0; }
 .cpe-hint kbd { font-size: 11px; padding: 0 4px; border: 1px solid var(--color-border); border-radius: 4px; }
 .cpe-full { text-align: center; padding: 10px; }
@@ -68,7 +51,10 @@
 .cpe-pill.dm { background: rgb(var(--color-warn-rgb) / 0.15); color: var(--cpe-warn); }
 
 .cpe-canvas { overflow: auto; overscroll-behavior: contain; background-color: var(--color-bg-tertiary); background-image: radial-gradient(rgb(var(--color-accent-rgb) / 0.12) 1px, transparent 1px); background-size: 16px 16px; padding: 28px 28px 140px; min-width: 0; min-height: 0; }
-.cpe-frame { margin: 0 auto; transition: max-width var(--dur-standard) var(--ease-out); }
+/* The sheet slides aside (transform only) to clear the floating panel of
+   what is selected; Calm places it and Off jumps by the global rules. */
+.cpe-frame { margin: 0 auto; transition: max-width var(--dur-standard) var(--ease-out), transform var(--dur-slide) var(--ease-slide); }
+@media (prefers-reduced-motion: reduce) { .cpe-frame { transition: none; } }
 .cpe-frame.desktop { max-width: 1180px; }
 .cpe-frame.tablet { max-width: 780px; }
 .cpe-frame.phone { max-width: 392px; border-radius: 28px; padding: 14px 10px; background: var(--color-bg-secondary); box-shadow: var(--elev-dragged); }
@@ -147,11 +133,30 @@
 .cpe-ghost { position: fixed; z-index: 100; pointer-events: none; box-shadow: var(--elev-dragged) !important; transform: rotate(1.5deg) scale(1.02); opacity: 0.96; overflow: hidden; outline: 2px solid var(--cpe-accent); border-radius: 12px; background: var(--color-bg-primary); }
 body.cpe-dragging, body.cpe-dragging * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
 
-/* ---------- Panel ---------- */
-.cpe-insp { border-left: 1px solid var(--color-border); background: var(--color-bg-secondary); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
-.cpe-insp-tabs { padding: 10px 12px; border-bottom: 1px solid var(--color-border); }
-.cpe-insp-tabs .cpe-seg { display: flex; }
-.cpe-insp-tabs .cpe-seg button { flex: 1; justify-content: center; }
+/* ---------- The widget panel ----------
+   The Slide-out move: it travels in from the right edge and fades as it
+   comes, slowing to a stop; it leaves quicker than it came. Calm keeps the
+   fade alone, Off and a device asking for less motion show the end state. */
+.cpe-insp {
+  position: absolute; top: 12px; right: 12px; bottom: 12px; width: var(--cpe-panel-w); max-width: calc(100% - 24px);
+  z-index: calc(var(--z-raised) + 2);
+  display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0;
+  background: var(--color-bg-secondary); border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-panel); box-shadow: var(--elev-dragged);
+  transform: translateX(calc(100% + 24px)); opacity: 0; visibility: hidden;
+  transition: transform var(--dur-standard) var(--ease-in), opacity var(--dur-standard) var(--ease-in), visibility 0s linear var(--dur-standard);
+}
+.cpe-insp.open {
+  transform: none; opacity: 1; visibility: visible;
+  transition: transform var(--dur-slide) var(--ease-slide), opacity var(--dur-slide) var(--ease-slide), visibility 0s;
+}
+.cpe-insp-tabs { padding: 10px 10px 10px 12px; border-bottom: var(--shape-rule) solid var(--color-border); }
+.cpe-insp-head { display: flex; align-items: center; gap: 8px; }
+.cpe-insp-head .cpe-seg { display: flex; flex: 1; min-width: 0; }
+.cpe-insp-head .cpe-seg button { flex: 1; justify-content: center; min-height: 32px; }
+.cpe-insp-x { flex: none; width: 36px; height: 36px; display: inline-grid; place-items: center; border: 0; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-secondary); cursor: pointer; transition: background-color var(--dur-micro), color var(--dur-micro); }
+.cpe-insp-x:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+.cpe-insp-x:active { background: color-mix(in srgb, var(--color-text-primary) 14%, transparent); }
+.cpe-insp-x:focus-visible { outline: 2px solid var(--cpe-accent); outline-offset: 1px; }
 .cpe-handle { display: none; }
 .cpe-insp-body { overflow-y: auto; overscroll-behavior: contain; padding: 16px 16px 88px; display: flex; flex-direction: column; gap: 18px; }
 .cpe-title { display: flex; gap: 12px; align-items: flex-start; }
@@ -181,14 +186,37 @@ body.cpe-dragging, body.cpe-dragging * { user-select: none !important; -webkit-u
 .cpe-search i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--color-text-secondary); font-size: 12px; }
 .cpe-search .cpe-inp { padding-left: 32px; }
 .cpe-row-set { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.cpe-gal-group h4 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); margin: 0 0 8px; font-weight: 600; }
-.cpe-gal { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.cpe-gw { border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-primary); padding: 10px; text-align: left; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; cursor: grab; touch-action: none; transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out), border-color var(--dur-micro); min-width: 0; user-select: none; -webkit-user-select: none; }
-.cpe-gw:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--elev-hover); border-color: rgb(var(--color-accent-rgb) / 0.45); }
+.cpe-gal-group h4 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); margin: 0 0 2px; font-weight: 600; }
+.cpe-gal { display: flex; flex-direction: column; }
+.cpe-gw {
+  width: 100%; min-width: 0; min-height: 58px; display: flex; align-items: center; gap: 12px;
+  padding: 7px 44px 7px 4px; border: 0; border-radius: var(--shape-r-ctl); background: none; color: inherit; text-align: left;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  transition: background-color var(--dur-micro);
+}
+.cpe-gw:hover:not(:disabled) { background: var(--color-bg-tertiary); }
+.cpe-gw:active:not(:disabled) { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.cpe-gw:focus-visible { outline: 2px solid var(--cpe-accent); outline-offset: -2px; }
 .cpe-gw:disabled { opacity: 0.5; cursor: not-allowed; }
-.cpe-gw-ic { grid-row: span 2; width: 30px; height: 30px; border-radius: 8px; background: var(--cpe-accent-soft); color: var(--color-accent-link, var(--cpe-accent)); display: grid; place-items: center; font-size: 13px; }
-.cpe-gw-nm { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cpe-gw-sz { font-size: 11px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpe-gw-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cpe-gw-nm { font-size: 13px; font-weight: 500; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.cpe-gw-sz { font-size: 11.5px; color: var(--color-text-secondary); }
+
+/* A widget's drawing (widget_pictures.js): one ink, one accent, in a frame. */
+.cpe-gw-pic { flex: none; width: 58px; height: 42px; display: grid; place-items: center; border: var(--shape-edge) solid var(--color-border); border-radius: var(--shape-r-small); background: var(--color-bg-tertiary); overflow: hidden; }
+.cpe-gw-pic .wpic { display: block; width: 56px; height: 40px; }
+.wpic .i { fill: var(--color-text-muted, var(--color-text-secondary)); }
+.wpic .f { fill: color-mix(in srgb, var(--color-text-muted, var(--color-text-secondary)) 38%, transparent); }
+.wpic .a { fill: var(--cpe-accent, var(--color-accent)); }
+.wpic .b { fill: var(--color-bg-tertiary); }
+.wpic .s, .wpic .sa, .wpic .b-s { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.wpic .s { stroke: var(--color-text-muted, var(--color-text-secondary)); }
+.wpic .sa { stroke: var(--cpe-accent, var(--color-accent)); }
+.wpic .b-s { stroke: var(--color-bg-tertiary); stroke-width: 1.6; }
+.wpic .thin { stroke-width: 1; opacity: 0.55; }
+.wpic .ring { stroke-width: 2.5; }
+.cpe-title .cpe-gw-pic, .cpe-peek-h .cpe-gw-pic { margin-top: 1px; }
+.cpe-ghost .cpe-gw-pic { margin: -4px 0; }
 
 /* ---------- Menus ---------- */
 .cpe-pop { position: fixed; z-index: 80; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--elev-dragged); padding: 8px; max-width: calc(100vw - 24px); color: var(--color-text-body); }
@@ -200,6 +228,28 @@ body.cpe-dragging, body.cpe-dragging * { user-select: none !important; -webkit-u
 .cpe-pop-list button span span { display: block; font-size: 12px; color: var(--color-text-secondary); }
 .cpe-pop-list .cpe-hint { padding: 8px 10px; }
 .cpe-keep { display: flex; flex-direction: column; gap: 8px; width: 290px; max-width: 100%; padding: 4px; }
+.cpe-menu { display: flex; flex-direction: column; gap: 1px; min-width: 200px; max-width: min(320px, calc(100vw - 48px)); }
+.cpe-menu-wide { width: 300px; }
+.cpe-menu-h { margin: 0; padding: 6px 10px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.cpe-menu [role^="menuitem"] {
+  position: relative; display: flex; align-items: center; min-height: 36px; padding: 7px 10px 7px 30px;
+  border: 0; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-primary); font-size: 13px; text-align: left; cursor: pointer;
+  transition: background-color var(--dur-micro);
+}
+.cpe-menu [role^="menuitem"]:hover:not(:disabled), .cpe-menu [role^="menuitem"]:focus-visible { background: var(--color-bg-tertiary); outline: none; }
+.cpe-menu [role^="menuitem"]:active:not(:disabled) { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.cpe-menu [role^="menuitem"]:focus-visible { box-shadow: inset 0 0 0 2px var(--cpe-accent); }
+.cpe-menu [role^="menuitem"]:disabled { opacity: 0.45; cursor: default; }
+.cpe-menu [role^="menuitem"][hidden] { display: none; }
+/* The current choice carries a check, drawn, beside its word. */
+.cpe-menu [aria-checked="true"]::before { content: ""; position: absolute; left: 12px; top: 50%; width: 9px; height: 5px; margin-top: -4px; border-left: 2px solid var(--cpe-accent); border-bottom: 2px solid var(--cpe-accent); transform: rotate(-45deg); }
+.cpe-menu [role^="menuitem"] > span { display: flex; flex-direction: column; min-width: 0; }
+.cpe-menu [role^="menuitem"] small { font-size: 11.5px; color: var(--color-text-secondary); line-height: 1.35; }
+.cpe-menu hr { border: 0; border-top: var(--shape-rule) solid var(--color-border); margin: 6px 0; }
+.cpe-menu-list { display: flex; flex-direction: column; gap: 1px; max-height: min(50vh, 360px); overflow-y: auto; }
+.cpe-menu-q { margin: 2px 0 6px; }
+.cpe-menu-note { padding: 4px 10px 6px; }
+.cpe-menu-field { display: flex; flex-direction: column; gap: 6px; padding: 4px 10px 6px; font-size: 12.5px; color: var(--color-text-secondary); }
 
 /* ---------- Tiles are arranged where they sit ----------
    Each tile carries its own handle (name, size, move, remove) and resize
@@ -241,7 +291,8 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
 
 /* The gallery's eye opens a widget's example. */
 .cpe-gwrap { position: relative; min-width: 0; display: grid; }
-.cpe-eye { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 11px; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity var(--dur-micro), background var(--dur-micro), color var(--dur-micro); }
+.cpe-gwrap + .cpe-gwrap { border-top: var(--shape-rule) solid var(--color-border-light, var(--color-border)); }
+.cpe-eye { position: absolute; top: 50%; right: 4px; margin-top: -16px; width: 32px; height: 32px; border: 0; border-radius: var(--shape-r-ctl); background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 11px; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity var(--dur-micro), background var(--dur-micro), color var(--dur-micro); }
 .cpe-gwrap:hover .cpe-eye, .cpe-eye:focus-visible { opacity: 1; }
 .cpe-eye:hover { background: var(--cpe-accent-soft); color: var(--color-accent-link, var(--cpe-accent)); }
 @media (pointer: coarse) { .cpe-eye { opacity: 1; } }
@@ -259,7 +310,6 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
 
 /* The toolbar's reader-view switch, and reader view itself: the page as its
    readers get it, with no frames, labels, handles or panel. */
-.cpe-read { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; color: var(--color-text-secondary); white-space: nowrap; }
 .cpe.reading .cpe-editor { grid-template-columns: minmax(0, 1fr); }
 .cpe.reading :is(.cpe-sec-tag, .cpe-tbar, .cpe-rsz, .cpe-badge, .cpe-dm, .cpe-pagehead, .cpe-ex-tag, .cpe-div) { display: none !important; }
 .cpe.reading .cpe-sec, .cpe.reading .cpe-sec:hover, .cpe.reading .cpe-sec.sel { border-color: transparent; background: none; padding: 0; }
@@ -320,30 +370,26 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
 .cpe-ex-skel i { display: block; height: 9px; border-radius: 5px; background: var(--color-bg-tertiary); }
 .cpe-ex-skel i:nth-child(2) { width: 82%; } .cpe-ex-skel i:nth-child(3) { width: 58%; }
 
-/* ---------- Narrow screens: the panel becomes a sheet ---------- */
-@media (max-width: 1600px) {
-  .cpe-hide-md { display: none; }
-  .cpe-toolbar .btn-sm i { margin-right: 0; }
-}
-@media (max-width: 1100px) {
-  .cpe-editor { grid-template-columns: minmax(0, 1fr); }
-  .cpe-insp { position: absolute; left: 0; right: 0; bottom: 0; height: 52%; border-left: 0; border-top: 1px solid var(--color-border); border-radius: 16px 16px 0 0; box-shadow: var(--elev-dragged); z-index: 30; transform: translateY(calc(100% - 56px)); transition: transform var(--dur-large) var(--ease-out); }
-  .cpe-insp.open { transform: none; }
-  .cpe-handle { display: block; width: 40px; height: 4px; border: 0; padding: 0; border-radius: 2px; background: var(--color-input-border, var(--color-border)); margin: 0 auto 8px; cursor: pointer; }
-  .cpe-main { padding-bottom: 56px; }
+/* ---------- Phones: the panel is a sheet, the tools a swipeable row ---------- */
+@media (max-width: 640px) {
+  .cpe-canvas { padding: 16px 10px 168px; }
+  .cpe-frame.phone { background: none; box-shadow: none; padding: 0; border-radius: 0; }
+  .cpe-banner { margin: 0 12px 12px; }
+  .cpe-insp {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; height: 72%;
+    border-width: var(--shape-edge) 0 0; border-radius: var(--shape-r-panel) var(--shape-r-panel) 0 0;
+    transform: translateY(calc(100% + 24px));
+  }
+  .cpe-handle { display: block; width: 40px; height: 4px; border: 0; padding: 0; border-radius: 2px; background: var(--color-input-border, var(--color-border)); margin: 0 auto 8px; }
+  .cpe-insp-x { width: 44px; height: 44px; }
+  .cpe-insp-head .cpe-seg button { min-height: 40px; }
+  .cpe-gw { min-height: 60px; }
+  .cpe-eye { width: 44px; height: 44px; margin-top: -22px; right: 0; }
   /* The strip with the handle is swiped, so the browser must not take the
      gesture for pull-to-refresh; while the editor is open the page itself
      doesn't pull to refresh either. */
   .cpe-insp-tabs { touch-action: none; }
   html.cpe-open { overscroll-behavior-y: none; }
-}
-@media (max-width: 640px) {
-  .cpe-canvas { padding: 16px 10px 160px; }
-  .cpe-hide-sm { display: none; }
-  .cpe-frame.phone { background: none; box-shadow: none; padding: 0; border-radius: 0; }
-  .cpe-banner { margin: 0 12px 12px; }
-  .cpe-layouts { margin: 0 12px 12px; }
-  .cpe-lay-claim { margin-left: 0; flex-wrap: wrap; }
 }
 @media (pointer: coarse) {
   .cpe-blk, .cpe-tile, .cpe-gw { touch-action: pan-y; }
@@ -366,3 +412,55 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
 .cpe-sug-keep, .cpe-draft-q { border: 0; background: none; padding: 2px 4px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--color-accent-link, var(--cpe-accent)); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .cpe-draft-q { color: var(--color-text-secondary); font-weight: 500; }
 .cpe-draft-acts { margin: 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- The tools ----------
+   One small bar floats at the foot of the workshop, centred, on the inverse
+   surface (the theme's own ink as ground and its ground as ink), so it reads
+   as a tool over the page in light and dark alike. It sits above the save bar
+   when that shows, and steps left of the panel while the panel is out. */
+.cpe-dock-wrap {
+  position: absolute; left: 0; right: 0; bottom: 16px; z-index: calc(var(--z-raised) + 1);
+  display: flex; justify-content: center; padding: 0 16px; pointer-events: none;
+  transition: transform var(--dur-slide) var(--ease-slide);
+}
+.czs-stage:has(> [data-czs-savebar]:not([hidden])) .cpe-dock-wrap { bottom: 76px; }
+.cpe-editor.panel-open .cpe-dock-wrap { transform: translateX(calc(var(--cpe-panel-w) / -2 - 6px)); }
+.cpe-dock {
+  pointer-events: auto; display: flex; align-items: center; gap: 2px; padding: 5px; max-width: 100%;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+  background: var(--color-text-primary); color: var(--color-bg-primary);
+  border-radius: var(--shape-r-panel); box-shadow: var(--elev-dragged);
+}
+.cpe-dock::-webkit-scrollbar { display: none; }
+.cpe-editor.panel-open .cpe-dock { max-width: calc(100% - var(--cpe-panel-w) - 12px); }
+.cpe-dk {
+  flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px;
+  border: 0; border-radius: var(--shape-r-ctl); background: transparent; color: inherit;
+  font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-micro), opacity var(--dur-micro);
+}
+.cpe-dk:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); }
+.cpe-dk:active:not(:disabled) { background: color-mix(in srgb, currentColor 24%, transparent); }
+.cpe-dk[aria-pressed="true"], .cpe-dk[aria-expanded="true"] { background: color-mix(in srgb, currentColor 20%, transparent); }
+.cpe-dk:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+.cpe-dk:disabled { opacity: 0.4; cursor: default; }
+.cpe-dk[data-working] { opacity: 0.7; cursor: progress; }
+.cpe-dk-v { display: block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; }
+.cpe-dk-main { font-weight: 700; }
+.cpe-dk-sep { flex: none; width: 1px; height: 18px; margin: 0 4px; background: color-mix(in srgb, currentColor 22%, transparent); }
+.cpe.reading .cpe-dock-wrap { transform: none; }
+/* Toasts rise above the tools. */
+html.cpe-open .czs-toasts { bottom: 92px; }
+html.cpe-open .czs-stage:has(> [data-czs-savebar]:not([hidden])) ~ .czs-toasts { bottom: 152px; }
+@media (max-width: 640px) {
+  .cpe-dock-wrap { bottom: 8px; padding: 0 8px; }
+  .czs-stage:has(> [data-czs-savebar]:not([hidden])) .cpe-dock-wrap { bottom: 72px; }
+  .cpe-editor.panel-open .cpe-dock-wrap { transform: none; }
+  .cpe-editor.panel-open .cpe-dock { max-width: 100%; }
+  .cpe-dock { width: 100%; padding: 4px; }
+  .cpe-dk { min-height: 44px; padding: 0 12px; }
+  .cpe-dk-v { max-width: 16ch; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cpe-insp, .cpe-insp.open, .cpe-dock-wrap { transition: none; }
+}

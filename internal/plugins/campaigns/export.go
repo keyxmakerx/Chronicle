@@ -131,8 +131,10 @@ type ExportTag struct {
 	OriginalID int    `json:"original_id"`
 	Name       string `json:"name"`
 	Slug       string `json:"slug"`
-	Color      string `json:"color"`
-	DmOnly     bool   `json:"dm_only"`
+	// Color is the tag's own #rrggbb, or "" for a tag that follows the
+	// campaign's Tags and marks colour (and follows it again on import).
+	Color  string `json:"color"`
+	DmOnly bool   `json:"dm_only"`
 }
 
 // ExportEntityTag captures a tag assignment to an entity.

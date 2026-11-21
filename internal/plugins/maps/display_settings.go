@@ -45,6 +45,17 @@ var FrameStyles = []FrameStyle{
 // DefaultFrame is what a campaign uses until its owner picks another.
 const DefaultFrame = "atlas"
 
+// frameSummary names a campaign's frame the way its Customize row says it:
+// "Atlas frame". An unknown id reads as the default.
+func frameSummary(id string) string {
+	for _, f := range FrameStyles {
+		if f.ID == id {
+			return f.Label + " frame"
+		}
+	}
+	return frameSummary(DefaultFrame)
+}
+
 // IsValidFrame reports whether id names one of the frames.
 func IsValidFrame(id string) bool {
 	for _, f := range FrameStyles {

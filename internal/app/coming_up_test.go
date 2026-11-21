@@ -444,6 +444,37 @@ func TestBuildComingUp_NightsNeverReadForNonMembers(t *testing.T) {
 	}
 }
 
+// TestComingUpTileStyle pins which tiles take the Headers and events colour:
+// only a calendar event with no colour of its own.
+func TestComingUpTileStyle(t *testing.T) {
+	cases := []struct {
+		name string
+		row  comingUpRow
+		want bool
+	}{
+		{"plain event", comingUpRow{TileBig: "3"}, true},
+		{"event with its own colour", comingUpRow{TileBig: "3", OwnColour: true}, false},
+		{"game night", comingUpRow{TileBig: "3", SessionID: "s1"}, false},
+		{"waiting item", comingUpRow{TileIcon: "fa-solid fa-hand"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Contains(tileStyle(tc.row), "--color-accent-surface-1")
+			if got != tc.want {
+				t.Errorf("tileStyle reads the campaign colour = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	own := "#0d9488"
+	for _, e := range []calendar.Event{{Color: &own}, {KindColor: "#be185d"}} {
+		cal := &calendar.Calendar{ID: "c", CurrentYear: 1, CurrentMonth: 1, CurrentDay: 1}
+		_, rows, _ := comingUpWorld(context.Background(), &fakeComingUpCalendar{cal: cal, events: []calendar.Event{e}}, comingUpRequest{CampaignID: "c1", Viewer: permissions.RequestViewer(int(campaigns.RoleOwner), "")})
+		if len(rows) != 1 || !rows[0].OwnColour {
+			t.Errorf("event %+v: rows = %+v, want one row with OwnColour", e, rows)
+		}
+	}
+}
+
 func TestComingUpWording(t *testing.T) {
 	t.Run("inDaysLabel", func(t *testing.T) {
 		for in, want := range map[int]string{-1: "Today", 0: "Today", 1: "Tomorrow", 2: "In 2 days", 21: "In 21 days"} {

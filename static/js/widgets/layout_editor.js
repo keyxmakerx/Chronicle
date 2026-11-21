@@ -9,8 +9,11 @@
  * Mount: data-widget="layout-editor". Config: data-endpoint (GET/PUT/DELETE
  * layout JSON), data-campaign-id, data-csrf-token, data-context
  * ("dashboard"|"template"), data-features, and optional data-layout,
- * data-block-types, data-fields, data-role, data-scope ("category" on a
- * category dashboard, which widens the palette).
+ * data-fields, data-role, data-scope ("category" on a category dashboard,
+ * which widens the palette). The palette always comes from the block
+ * registry (GET .../entity-types/block-types); the lists below stand in only
+ * when that fails, under the registry's own names (pinned by
+ * block_pictures_test.go in the entities plugin).
  */
 (function () {
   'use strict';
@@ -50,41 +53,41 @@
 
   /** Fallback block types when the API is unavailable. */
   var FALLBACK_DASHBOARD_BLOCKS = [
-    { type: 'welcome_banner',   label: 'Welcome Banner',   icon: 'fa-flag',              desc: 'Campaign name & description' },
-    { type: 'quick_actions',    label: 'Quick Actions',    icon: 'fa-bolt',              desc: 'All pages / Members / Categories cards' },
-    { type: 'category_grid',    label: 'Category Grid',    icon: 'fa-table-cells-large',            desc: 'Quick-nav entity type grid' },
-    { type: 'recent_pages',     label: 'Recent Pages',     icon: 'fa-clock',             desc: 'Recently updated entities' },
-    { type: 'entity_list',      label: 'Entity List',      icon: 'fa-list',              desc: 'Filtered list by category' },
-    { type: 'text_block',       label: 'Text Block',       icon: 'fa-align-left',        desc: 'Custom rich text / HTML' },
-    { type: 'pinned_pages',     label: 'Pinned Pages',     icon: 'fa-thumbtack',         desc: 'GM pins, then each viewer\'s starred pages' },
+    { type: 'welcome_banner',   label: 'Welcome banner',   icon: 'fa-flag',              desc: 'Campaign name & description' },
+    { type: 'quick_actions',    label: 'Quick actions',    icon: 'fa-bolt',              desc: 'All pages / Members / Categories cards' },
+    { type: 'category_grid',    label: 'Category grid',    icon: 'fa-table-cells-large',            desc: 'Quick-nav entity type grid' },
+    { type: 'recent_pages',     label: 'Recent pages',     icon: 'fa-clock',             desc: 'Recently updated entities' },
+    { type: 'entity_list',      label: 'Page list',      icon: 'fa-list',              desc: 'Filtered list by category' },
+    { type: 'text_block',       label: 'Text block',       icon: 'fa-align-left',        desc: 'Custom rich text / HTML' },
+    { type: 'pinned_pages',     label: 'Pinned pages',     icon: 'fa-thumbtack',         desc: 'GM pins, then each viewer\'s starred pages' },
     { type: 'calendar_preview', label: 'Calendar',         icon: 'fa-calendar-days',     desc: 'Upcoming calendar events',       addon: 'calendar' },
     { type: 'timeline_preview', label: 'Timeline',         icon: 'fa-timeline',          desc: 'Timeline list with event counts', addon: 'timeline' },
     // map_preview retired — superseded by map_editor (entity templates)
     // and map_full (dashboards). See PR notes / routes.go map_editor block.
-    { type: 'calendar_full',    label: 'Full Calendar',    icon: 'fa-calendar',          desc: 'Full interactive calendar grid', addon: 'calendar' },
-    { type: 'timeline_full',    label: 'Full Timeline',    icon: 'fa-timeline',          desc: 'Full timeline D3 visualization', addon: 'timeline' },
-    { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
-    { type: 'map_full',         label: 'Full Map',         icon: 'fa-map-location-dot',  desc: 'Full map with drawings & tokens', addon: 'maps' },
+    { type: 'calendar_full',    label: 'Full calendar',    icon: 'fa-calendar',          desc: 'Full interactive calendar grid', addon: 'calendar' },
+    { type: 'timeline_full',    label: 'Full timeline',    icon: 'fa-timeline',          desc: 'Full timeline D3 visualization', addon: 'timeline' },
+    { type: 'relations_graph_full', label: 'Full relations graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
+    { type: 'map_full',         label: 'Full map',         icon: 'fa-map-location-dot',  desc: 'Full map with drawings & tokens', addon: 'maps' },
     { type: 'session_tracker',  label: 'Coming up',        icon: 'fa-dice-d20',          desc: 'Replaced by Coming up',          addon: 'sessions', retired: true },
     { type: 'coming_up',        label: 'Coming up',        icon: 'fa-dice-d20',          desc: 'Game nights, what you owe the table, next events' },
-    { type: 'activity_feed',    label: 'Activity Feed',    icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
-    { type: 'sync_status',      label: 'Foundry Sync',     icon: 'fa-plug',              desc: 'Foundry VTT sync status',        addon: 'foundry' },
+    { type: 'activity_feed',    label: 'Activity feed',    icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
+    { type: 'sync_status',      label: 'Foundry sync',     icon: 'fa-plug',              desc: 'Foundry VTT sync status',        addon: 'foundry' },
   ];
 
   var FALLBACK_TEMPLATE_BLOCKS = [
     { type: 'title',        label: 'Title',          icon: 'fa-heading',       desc: 'Entity name and actions' },
     { type: 'image',        label: 'Image',          icon: 'fa-image',         desc: 'Header image with upload' },
-    { type: 'entry',        label: 'Rich Text',      icon: 'fa-align-left',    desc: 'Main content editor' },
+    { type: 'entry',        label: 'Rich text',      icon: 'fa-align-left',    desc: 'Main content editor' },
     { type: 'attributes',   label: 'Attributes',     icon: 'fa-list',          desc: 'Custom field values' },
     { type: 'details',      label: 'Details',        icon: 'fa-info-circle',   desc: 'Metadata and dates' },
     { type: 'tags',         label: 'Tags',           icon: 'fa-tags',          desc: 'Tag picker widget' },
     { type: 'relations',    label: 'Relations',      icon: 'fa-link',          desc: 'Entity relation links' },
     { type: 'divider',      label: 'Divider',        icon: 'fa-minus',         desc: 'Horizontal separator' },
-    { type: 'shop_inventory', label: 'Shop Inventory', icon: 'fa-store',       desc: 'Shop items with prices' },
+    { type: 'shop_inventory', label: 'Shop', icon: 'fa-store',       desc: 'Shop items with prices' },
     { type: 'posts',        label: 'Posts',           icon: 'fa-layer-group',   desc: 'Sub-notes and additional content sections' },
-    { type: 'text_block',   label: 'Text Block',      icon: 'fa-align-left',   desc: 'Your own words: notes, links or instructions' },
-    { type: 'two_column',   label: '2 Columns',       icon: 'fa-columns',      desc: 'Side-by-side columns',       container: true },
-    { type: 'three_column', label: '3 Columns',       icon: 'fa-table-columns', desc: 'Three equal columns',       container: true },
+    { type: 'text_block',   label: 'Text block',      icon: 'fa-align-left',   desc: 'Your own words: notes, links or instructions' },
+    { type: 'two_column',   label: 'Two columns',       icon: 'fa-columns',      desc: 'Side-by-side columns',       container: true },
+    { type: 'three_column', label: 'Three columns',       icon: 'fa-table-columns', desc: 'Three equal columns',       container: true },
     { type: 'tabs',         label: 'Tabs',            icon: 'fa-folder',        desc: 'Tabbed content sections',   container: true },
     { type: 'section',      label: 'Section',         icon: 'fa-caret-down',    desc: 'Collapsible accordion',     container: true },
   ];

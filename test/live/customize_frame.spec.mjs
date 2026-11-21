@@ -46,7 +46,8 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   await page.waitForTimeout(600);
   await page.reload({ waitUntil: 'networkidle' });
   await bar(page).filter({ hasText: '1 change' }).waitFor();
-  assert.ok(await page.locator('.czs-tab[data-czs-area="categories"] .czs-dot:not([hidden])').count(), 'the rail shows no dot for the changed area');
+  // Inside a category the bar's back mark carries the Categories dot.
+  assert.ok(await page.locator('[data-czs-area="categories"] .czs-dot:not([hidden])').count(), 'the bar shows no dot for the changed area');
   await picture(page, 'customize-draft-bar', { check: '#1366', about: 'Save bar with one change waiting', mask: ['.sidebar', '[data-sidebar]'] });
 
   // 3. Save: a Saved note, the bar goes, the sidebar shows the new name.
