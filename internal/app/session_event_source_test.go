@@ -1,8 +1,11 @@
 package app
 
 import (
+	"context"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -50,5 +53,72 @@ func TestSessionEventsOf(t *testing.T) {
 	}
 	if got := sessionEventsOf(story, []calendar.Event{linked}); got[0].EntityID != "page-1" || got[0].EntityName != "The Sunken Chapel" {
 		t.Fatalf("the event's page is not carried: %+v", got[0])
+	}
+}
+
+// fakeWorldCalendars serves calendars the way the real service does:
+// ListCalendars returns them WITHOUT months, and only the by-id and primary
+// reads carry months. Any use of ListCalendars (nil-embedded here) panics.
+type fakeWorldCalendars struct {
+	calendar.CalendarService
+	full    map[string]calendar.Calendar
+	primary string
+	reads   int
+}
+
+func (f *fakeWorldCalendars) GetCalendarForViewer(_ context.Context, id, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
+	f.reads++
+	c, ok := f.full[id]
+	if !ok {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return &c, nil
+}
+
+func (f *fakeWorldCalendars) GetPrimaryCalendarForViewer(_ context.Context, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
+	f.reads++
+	c, ok := f.full[f.primary]
+	if !ok {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return &c, nil
+}
+
+// A date-less night's in-world day is worded in the months of the calendar it
+// was recorded against ("22 Hammer, 1523", never "22 1, 1523"), and falls back
+// to the primary calendar when that one is gone or was never recorded.
+func TestWorldDateWordsUsesLoadedMonths(t *testing.T) {
+	cal := func(id, month string) calendar.Calendar {
+		return calendar.Calendar{ID: id, Months: []calendar.Month{{Name: month}, {Name: month + "2"}, {Name: month + "3"}}}
+	}
+	tests := []struct {
+		name, calID, want string
+	}{
+		{"its own calendar", "b", "14 Frost3, 1492"},
+		{"no calendar recorded", "", "14 Hammer3, 1492"},
+		{"a calendar that is gone", "zzz", "14 Hammer3, 1492"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeWorldCalendars{full: map[string]calendar.Calendar{"a": cal("a", "Hammer"), "b": cal("b", "Frost")}, primary: "a"}
+			words := (&worldDateWorderAdapter{svc: f}).WorldDateWordsFor(context.Background(), "camp")
+			if got := words(tt.calID, 1492, 3, 14); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Many nights on one calendar load it once.
+func TestWorldDateWordsLoadsEachCalendarOnce(t *testing.T) {
+	f := &fakeWorldCalendars{full: map[string]calendar.Calendar{"a": {ID: "a", Months: []calendar.Month{{Name: "Hammer"}}}}, primary: "a"}
+	words := (&worldDateWorderAdapter{svc: f}).WorldDateWordsFor(context.Background(), "camp")
+	for i := 0; i < 5; i++ {
+		if got := words("a", 1523, 1, 22); got != "22 Hammer, 1523" {
+			t.Fatalf("got %q", got)
+		}
+	}
+	if f.reads != 1 {
+		t.Fatalf("calendar reads = %d, want 1", f.reads)
 	}
 }

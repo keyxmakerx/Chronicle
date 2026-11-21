@@ -261,7 +261,7 @@ core migrations cannot reference a plugin table on a fresh DB).
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `sessions` | A scheduled game session | `calendar_id` FK→`calendars` SET NULL ; `notes`/`notes_html`, `recap`/`recap_html`; `scheduled_date`/`scheduled_time`/`scheduled_tz` (organizer's IANA zone, nullable); `deleted_at` (soft delete); `recap_posted_at` (set when the recap first goes from empty to written, never moved by later edits; NULL for older recaps); `is_recurring`+`recurrence_*` |
+| `sessions` | A scheduled game session | `calendar_id` FK→`calendars` SET NULL ; `notes`/`notes_html`, `recap`/`recap_html`; `scheduled_date`/`scheduled_time`/`scheduled_tz` (organizer's IANA zone, nullable); `deleted_at` (soft delete); `recap_posted_at` (set when the recap first goes from empty to written, never moved by later edits; NULL for older recaps); `calendar_event_id` UNIQUE, FK→`calendar_events` SET NULL (the Session event a night was made from; NULL for any other night; set at creation only); `is_recurring`+`recurrence_*` |
 | `session_entities` | Entities linked to a session | `UNIQUE(session_id, entity_id)`; `role` (mentioned/encountered/key) |
 | `session_attendees` | Per-user RSVP status | `UNIQUE(session_id, user_id)`; `status` (invited/accepted/declined/tentative); `note` (≤140), `excluded_from_count`, `needs_recheck` |
 | `session_occurrence_rsvps` | Per-night RSVPs for a repeating session (a non-recurring session uses `session_attendees`) | `UNIQUE(session_id, user_id, occurrence_date)`; `status` (default `invited`), `note`, `excluded_from_count`, `needs_recheck`, `responded_at` |
@@ -279,6 +279,7 @@ core migrations cannot reference a plugin table on a fresh DB).
 | `session_night_sightings` | Who the party saw on which game night | `UNIQUE(session_id, occurrence_date, entity_id)`; `state`; `source`; a `not_seen` row keeps a dismissed suggestion dismissed |
 | `session_night_entries` | Which Journal note is a member's entry for a night | PK `(session_id, occurrence_date, user_id)`; `note_id` UNIQUE, no FK so a deleted entry is not remade |
 | `session_night_bells` | Game-night bell items already sent (claimed before writing, so no double send) | PK `(session_id, occurrence_date, user_id, kind)` |
+| `session_event_dismissals` | Calendar Session events hidden from the Game nights strip with "Not this one" | PK `(campaign_id, calendar_event_id)`; `dismissed_by` SET NULL; rows cascade from the campaign and the event |
 | `notifications` | Generic in-app notification store | `user_id`; `campaign_id` nullable; `type`/`payload`/`link`; `read_at` NULL = unread |
 
 ### timeline (`internal/plugins/timeline/migrations/`)

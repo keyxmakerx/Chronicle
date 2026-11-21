@@ -73,7 +73,7 @@ async function page(t, width, o = {}) {
     if (u.pathname === '/campaigns/c1/sessions/nights') {
       const from = u.searchParams.get('from'), to = u.searchParams.get('to');
       body = (o.nights || NIGHTS).filter((n) => n.date >= from && n.date <= to);
-    } else if (u.pathname === '/campaigns/c1/sessions/all') body = ALL;
+    } else if (u.pathname === '/campaigns/c1/sessions/all') body = o.all || ALL;
     else if (u.pathname === '/campaigns/c1/sessions/feed-settings') body = { enabled: !!o.feed };
     else if (u.pathname.startsWith('/campaigns/c1/sessions/feed/token')) {
       (o.posts || []).push(u.pathname);
@@ -81,6 +81,19 @@ async function page(t, width, o = {}) {
     } else if (u.pathname === '/campaigns/c1/sessions/event-candidates') {
       (o.asked || []).push(u.pathname);
       body = o.candidates || [];
+    } else if (u.pathname.startsWith('/campaigns/c1/sessions/event-dismissals/')) {
+      const id = decodeURIComponent(u.pathname.split('/').pop());
+      (o.dismissed || []).push(route.request().method() + ' ' + id);
+      if (route.request().method() === 'DELETE') {
+        if (o.restoreStatus) return route.fulfill({ status: o.restoreStatus, contentType: 'application/json', body: '{"error":"no"}' });
+        // The server puts it back: the next read of the strip lists it again.
+        if (o.candidates && o.original) o.candidates = o.original.filter((r) => o.candidates.some((c) => c.eventId === r.eventId) || r.eventId === id);
+        return route.fulfill({ status: 204, body: '' });
+      }
+      if (o.dismissStatus) return route.fulfill({ status: o.dismissStatus, contentType: 'application/json', body: '{"error":"no"}' });
+      // The server keeps it: the next read of the strip leaves it out.
+      if (o.candidates) o.candidates = o.candidates.filter((r) => r.eventId !== id);
+      return route.fulfill({ status: 204, body: '' });
     } else if (u.pathname === '/campaigns/c1/sessions/from-event') {
       (o.made || []).push(route.request().postDataJSON());
       if (o.makeStatus) return route.fulfill({ status: o.makeStatus, contentType: 'application/json', body: JSON.stringify({ error: o.makeError || 'no' }) });
@@ -206,17 +219,123 @@ test('the strip names Session events with no game night, and makes one on a pres
   assert.equal(await p.evaluate(() => document.activeElement.hasAttribute('data-gn-make')), true, 'focus moves to the next control');
 });
 
-test('Not this one hides the event here and keeps it hidden', { skip }, async (t) => {
-  const p = await page(t, 1280, { role: 2, candidates: CANDS });
+test('Not this one is kept on the server, not in this browser', { skip }, async (t) => {
+  const dismissed = [];
+  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed });
   await p.click('#cal5-gnbtn');
   await p.waitForSelector('#cal5-gnpop .gnstrip');
   await p.click('#cal5-gnpop [data-gn-skip="e1"]');
-  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 1);
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1, 'the row goes at once');
+  for (let i = 0; i < 50 && !dismissed.length; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(dismissed, ['PUT e1'], 'the press is sent to the server');
+  // Reopening reads the strip from the server again, which now leaves it out.
   await p.click('#cal5-gnbtn');
   await p.click('#cal5-gnbtn');
   await p.waitForSelector('#cal5-gnpop .wrow');
   assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Session 1 is on your calendar/);
   assert.match(await p.textContent('#cal5-gnpop'), /Session 2 is on your calendar/);
+  assert.equal(await p.evaluate(() => Object.keys(localStorage).filter((k) => /gn-skip/.test(k)).length), 0, 'nothing is remembered in the browser');
+});
+
+const ROW = '#cal5-gnpop .gnstrip:not(.gnstrip-undo)';
+
+for (const [w, h] of [[1280, 900], [360, 800]]) {
+  test(`Not this one leaves Undo in the panel, in the window at ${w}x${h}, and Undo keeps the panel open`, { skip }, async (t) => {
+    const dismissed = [];
+    const p = await page(t, w, { role: 2, candidates: CANDS.slice(), original: CANDS, dismissed });
+    await p.setViewportSize({ width: w, height: h });
+    await p.click('#cal5-gnbtn');
+    await p.waitForSelector(ROW);
+    await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+    await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+    assert.match(await p.textContent('#cal5-gnpop [data-gn-undo-row="e1"]'), /Hidden for everyone\. Undo/);
+    assert.equal(await p.$('.toast.on'), null, 'no toast for this action');
+    const box = await p.$eval('#cal5-gnpop [data-gn-undo="e1"]', (b) => {
+      const r = b.getBoundingClientRect();
+      return { t: r.top, b: r.bottom, l: r.left, r: r.right, vw: innerWidth, vh: innerHeight };
+    });
+    assert.ok(box.t >= 0 && box.b <= box.vh && box.l >= 0 && box.r <= box.vw, 'Undo is inside the window: ' + JSON.stringify(box));
+    assert.equal(await p.evaluate(() => document.activeElement.getAttribute('data-gn-undo')), 'e1', 'focus moves to Undo');
+    await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+    await p.waitForFunction(() => document.querySelectorAll('#cal5-gnpop .gnstrip:not(.gnstrip-undo)').length === 2);
+    assert.equal(await p.$eval('#cal5-gnpop', (el) => el.hidden), false, 'the panel stays open');
+    assert.deepEqual(dismissed, ['PUT e1', 'DELETE e1']);
+    assert.equal(await p.$('#cal5-gnpop .gnstrip-undo'), null);
+    const names = await p.$$eval(ROW + ' b', (els) => els.map((e) => e.textContent));
+    assert.equal(names[0], 'Session 1', 'back in its old place');
+    assert.equal(await p.evaluate(() => document.activeElement.getAttribute('data-gn-make')), 'e1', 'focus returns to the row');
+  });
+}
+
+test('the Undo line folds away after about three seconds and focus moves to the next row', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed: [] });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+  const t0 = Date.now();
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo-row="e1"]', { state: 'detached', timeout: 6000 });
+  const took = Date.now() - t0;
+  assert.ok(took > 2000 && took < 4500, 'the line lasted about three seconds, took ' + took);
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1);
+  assert.equal(await p.evaluate(() => !!document.activeElement.closest('.gnstrip') && document.activeElement.closest('.gnstrip').textContent.includes('Session 2')), true);
+});
+
+test('with motion Off the Undo line still waits three seconds, then goes without a fold', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed: [] });
+  await p.evaluate(() => document.documentElement.setAttribute('data-motion', 'off'));
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo-row="e1"]', { state: 'detached', timeout: 6000 });
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1);
+});
+
+test('an Undo the server refuses says so in the line and leaves the row hidden', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed: [], restoreStatus: 500 });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.waitForFunction(() => /Could not undo that/.test(document.querySelector('#cal5-gnpop [data-gn-undo-row="e1"]').textContent));
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1, 'Session 1 is not shown as restored');
+  assert.ok(await p.$('#cal5-gnpop [data-gn-undo="e1"]'), 'Undo can be tried again');
+  assert.equal(await p.$eval('#cal5-gnpop', (el) => el.hidden), false);
+});
+
+test('an old browser-only skip no longer hides anything, so every device agrees', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS });
+  await p.evaluate(() => localStorage.setItem('chronicle:gn-skip:c1', JSON.stringify(['e1'])));
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 2);
+});
+
+test('a refused Not this one puts the row back and says so', { skip }, async (t) => {
+  const dismissed = [];
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, dismissed, dismissStatus: 500 });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('.toast.on');
+  assert.match(await p.textContent('.toast'), /Could not hide that one/);
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 2, 'the row is back');
+});
+
+test('a night with no real date says so, with its in-world day, instead of a dash', { skip }, async (t) => {
+  const all = [{ key: 'upcoming', label: 'Upcoming', nights: [
+    { sessionId: 's-story', name: 'Session 1', noRealDate: true, when: 'No real date yet · 14 Hammer, 1492', href: '/campaigns/c1/sessions/s-story' },
+    { sessionId: 's-real', name: 'Friday', day: '2026-10-30', date: '2026-10-30', when: 'Fri, Oct 30' }] }];
+  const p = await page(t, 1280, { all });
+  await p.click('#cal5-gnbtn');
+  await p.click('#cal5-gnpop [data-gn-all]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-next]');
+  const row = await p.$eval('#cal5-gnpop a.wrow', (a) => ({ text: a.innerText.replace(/\s+/g, ' ').trim(), tile: a.querySelector('.wtile').textContent.trim(), href: a.getAttribute('href') }));
+  assert.match(row.text, /Session 1 No real date yet · 14 Hammer, 1492/);
+  assert.notEqual(row.tile, '–', 'no bare dash');
+  assert.equal(row.href, '/campaigns/c1/sessions/s-story', 'it opens its own page, where the owner sets the date');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /–/);
 });
 
 test('a refused make says why and keeps the strip', { skip }, async (t) => {

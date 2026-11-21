@@ -856,16 +856,16 @@
 .cal-v5 .band{min-height:38px;padding:0 10px}
 .cal-v5 .band .dc{gap:8px}
 .cal-v5 .hc{display:none}
-.cal-v5 .wing, .cal-v5 .flap, .cal-v5 .evp{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;border-radius:18px 18px 0 0}
-.cal-v5 .wing, .cal-v5 .flap{height:auto!important;max-height:82vh!important;border-left:0;border-right:0;border-bottom:0;overflow:auto;--hg:linear-gradient(transparent,transparent)!important}
+.cal-v5 .wing, .cal-v5 .flap, .cal-v5 .evp{position:fixed;left:0!important;right:0;top:auto!important;bottom:var(--bottom-bar,0px);width:auto!important;border-radius:18px 18px 0 0}
+.cal-v5 .wing, .cal-v5 .flap{height:auto!important;max-height:calc(82vh - var(--bottom-bar,0px))!important;max-height:calc(82dvh - var(--bottom-bar,0px))!important;border-left:0;border-right:0;border-bottom:0;overflow:auto;-webkit-overflow-scrolling:touch;--hg:linear-gradient(transparent,transparent)!important}
 /* A phone's sheet grows whole, so its leaves are only groupings and the sheet itself scrolls. */
 .cal-v5 .leaf, .cal-v5 .lscroll{display:contents}
-.cal-v5 .evp{max-height:86vh!important}
+.cal-v5 .evp{max-height:calc(86vh - var(--bottom-bar,0px))!important;max-height:calc(86dvh - var(--bottom-bar,0px))!important}
 .cal-v5 .evp::before{box-shadow:inset 0 1px 0 var(--edge)}
 .cal-v5 .evp .crease{border-radius:18px 18px 0 0}
 .cal-v5 .dock{overflow:visible}
 .cal-v5 .dscrim{display:none}
-.cal-v5 .drawer{position:fixed;top:auto;left:0;right:0;bottom:-28px;width:auto;max-height:calc(86vh + 28px);padding:0 0 28px;border:0;border-top:1px solid var(--edge);border-radius:18px 18px 0 0;transform:translate3d(0,105%,0)}
+.cal-v5 .drawer{position:fixed;top:auto;left:0;right:0;bottom:calc(var(--bottom-bar,0px) - 28px);width:auto;max-height:calc(86vh + 28px - var(--bottom-bar,0px));padding:0 0 28px;border:0;border-top:1px solid var(--edge);border-radius:18px 18px 0 0;transform:translate3d(0,105%,0)}
 .cal-v5 .drawer.open{transform:none}
 .cal-v5 .scrim{display:block}
 .cal-v5 .scrim.on{opacity:1;pointer-events:auto}
@@ -2170,7 +2170,7 @@
 .cal-v5 .wtile{flex:none;width:38px;height:38px;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink)}
 .cal-v5 .wtile small{font:650 8.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
 .cal-v5 .wtile b{font:600 15px/1 var(--sans);margin-top:2px}
-.cal-v5 .wtile i{font-size:13px;margin-top:3px;color:var(--ink2)}
+.cal-v5 .wtile i{font-size:17px;line-height:1;color:var(--ink2)}
 .cal-v5 .wmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .cal-v5 .wt{font:600 13px/1.3 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .ws{font:500 11.5px/1.35 var(--sans);color:var(--mut)}
@@ -2190,6 +2190,12 @@
 .cal-v5 .gnstrip-q{display:flex;flex-wrap:wrap;gap:0 10px;margin-top:2px!important}
 .cal-v5 .gnstrip-q .lnk{margin-left:-6px;min-height:32px}
 @media (pointer:coarse){.cal-v5 .gnstrip-q .lnk{min-height:44px}}
+/* "Hidden for everyone. Undo" stands where the row was and folds away: to nothing under Full motion, a fade under Calm or reduced motion. */
+.cal-v5 .gnstrip-undo{overflow:hidden;display:flex;align-items:center;min-height:32px}
+.cal-v5 .gnstrip-undo .lnk{min-height:32px;margin-left:2px}
+@media (pointer:coarse){.cal-v5 .gnstrip-undo{min-height:44px}.cal-v5 .gnstrip-undo .lnk{min-height:44px;min-width:44px}}
+.cal-v5 .gnstrip-undo.gn-fold{height:0!important;min-height:0;opacity:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-bottom-width:0;transition:height var(--dur-micro,120ms) var(--ease-in,ease-in) 40ms,opacity var(--dur-micro,120ms) ease-in,margin var(--dur-micro,120ms) ease-in,padding var(--dur-micro,120ms) ease-in}
+.cal-v5 .gnstrip-undo.gn-fade{opacity:0;transition:opacity var(--dur-micro,120ms) ease-in}
 .cal-v5 .gnans{flex:none;font:550 11.5px/1 var(--sans);color:var(--mut)}
 .cal-v5 .gnans.y{color:var(--free)}
 .cal-v5 .gnans.m{color:var(--best)}

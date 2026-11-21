@@ -43,6 +43,14 @@ type SessionService interface {
 	// answering not-found for a soft-deleted session everywhere else.
 	GetSessionIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
+	// ListLinkedEventIDs, ListDismissedEventIDs and DismissEvent back the
+	// Game nights strip of calendar Session events: which events already have
+	// a night (in the Trash too), and which were set aside with "Not this one".
+	ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error)
+	ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error)
+	DismissEvent(ctx context.Context, campaignID, eventID, userID string) error
+	// RestoreEvent puts a dismissed event back on the strip. Idempotent.
+	RestoreEvent(ctx context.Context, campaignID, eventID string) error
 	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
@@ -367,6 +375,7 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		CalendarYear:        input.CalendarYear,
 		CalendarMonth:       input.CalendarMonth,
 		CalendarDay:         input.CalendarDay,
+		CalendarEventID:     input.CalendarEventID,
 		Status:              StatusPlanned,
 		IsRecurring:         input.IsRecurring,
 		RecurrenceType:      input.RecurrenceType,
@@ -381,10 +390,55 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 	s.stampWorldDateCalendar(ctx, session)
 
 	if err := s.repo.Create(ctx, campaignID, session); err != nil {
+		// A refusal the repository already worded (the event's night exists)
+		// reaches the caller as it is, not as a server fault.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) {
+			return nil, err
+		}
 		return nil, apperror.NewInternal(fmt.Errorf("creating session: %w", err))
 	}
 
 	return session, nil
+}
+
+// ListLinkedEventIDs implements SessionService.
+func (s *sessionService) ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error) {
+	ids, err := s.repo.ListLinkedEventIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return ids, nil
+}
+
+// ListDismissedEventIDs implements SessionService.
+func (s *sessionService) ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error) {
+	ids, err := s.repo.ListDismissedEventIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return ids, nil
+}
+
+// DismissEvent implements SessionService.
+func (s *sessionService) DismissEvent(ctx context.Context, campaignID, eventID, userID string) error {
+	if err := s.repo.DismissEvent(ctx, campaignID, eventID, userID); err != nil {
+		// The repository words an event that vanished mid-request as a 404.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) {
+			return err
+		}
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// RestoreEvent implements SessionService.
+func (s *sessionService) RestoreEvent(ctx context.Context, campaignID, eventID string) error {
+	if err := s.repo.RestoreEvent(ctx, campaignID, eventID); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
 }
 
 // GetSession retrieves a session by ID with attendees and entities.
