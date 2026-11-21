@@ -1292,6 +1292,71 @@ func (h *Handler) ConnectorCheckDid(ctx context.Context, conn *connector.Connect
 	return out, did, nil
 }
 
+// maxMatchNotes is how many look-alike pages one answer names; the rest are
+// counted, so a long request cannot turn the answer into a wall.
+const maxMatchNotes = 5
+
+// ConnectorNotes is what a connected AI is told about a request that was
+// kept: a new page that closely matches a page the campaign already has,
+// by the rule the review uses (importer.FindSimilar), with the way to change
+// that page instead. It only advises, so the owner still gets the request.
+//
+// The search runs as the key's own reader: the owner for any privacy but
+// Safe, a player for Safe, the same split every lookup the AI can make uses.
+// So a page the key's AI could not look up is never named, and only a page's
+// name is told, never its text, so GM-only passages stay where they are. A
+// player's key is left out: it only changes its own character.
+func (h *Handler) ConnectorNotes(ctx context.Context, conn *connector.Connection, changes string) []string {
+	if conn.ForPlayer {
+		return nil
+	}
+	finder, ok := h.importLookup.(importer.PageFinder)
+	if !ok {
+		return nil
+	}
+	role := int(campaigns.RoleOwner)
+	if conn.Privacy == aiexport.PrivacyModeSafe {
+		role = int(campaigns.RolePlayer)
+	}
+	viewer := importer.Viewer{Role: role, UserID: conn.UserID}
+	pages, _ := splitImport(importer.Parse(changes))
+	var out []string
+	more, lookups := 0, 0
+	for _, p := range pages {
+		if !addsAPage(p) || p.Status == importer.StatusParseError {
+			continue
+		}
+		if lookups++; lookups > maxSimilarLookups {
+			break
+		}
+		m := importer.FindSimilar(ctx, finder, conn.CampaignID, viewer, p, nil)
+		if m == nil {
+			continue
+		}
+		if len(out) == maxMatchNotes {
+			more++
+			continue
+		}
+		out = append(out, similarNote(p, m))
+	}
+	if more > 0 {
+		out = append(out, fmt.Sprintf("and %d more new pages that match existing ones", more))
+	}
+	return out
+}
+
+// similarNote tells the AI which page a new one matches and how to change
+// that page instead, in the request's own terms. When the page can't be found
+// by its name there is no update to suggest, so it says only what matches.
+func similarNote(p importer.ParsedPage, m *importer.SimilarPage) string {
+	head := fmt.Sprintf("block %d: the new page %s closely matches the page %s that the campaign already has",
+		p.SourceIndex+1, strconv.Quote(oneLineText(p.Name, 60)), strconv.Quote(oneLineText(m.Name, 60)))
+	if !m.CanUpdate {
+		return head + ". Chronicle can't change that page by its name, so say to the owner that it may already exist"
+	}
+	return head + fmt.Sprintf(". If you meant to change it, use an update block with name: %s instead of a new page", strconv.Quote(oneLineText(m.Name, 60)))
+}
+
 // recordProblems plans the request's record blocks as the review screen
 // will and returns one line for each it would mark unusable.
 func (h *Handler) recordProblems(ctx context.Context, campaignID, userID string, pages, recs []importer.ParsedPage) []string {
