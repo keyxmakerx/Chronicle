@@ -136,6 +136,20 @@ test('a pick made on a phone goes into the chip row and on to the next step', { 
   assert.ok(chips.some((c) => /kit\s*choosing/i.test(c)), 'the step being chosen is the open slot');
 });
 
+test('coming back to a saved draft opens on the first step without a pick', { skip }, async (t) => {
+  const { pg } = await open(t);
+  const reopen = async (picks) => {
+    await pg.evaluate((picks) => localStorage.setItem('chronicle:hero-draft:c1', JSON.stringify({ picks, name: '' })), picks);
+    await pg.reload();
+    await pg.waitForSelector('.hc-app');
+    return pg.locator('.hc-app').getAttribute('data-step');
+  };
+  assert.equal(await reopen({ class: { name: 'Fury', options: [] } }), '2', 'class is chosen, so it opens on Kit');
+  assert.match(await rail(pg, 'class').innerText(), /Fury/, 'the pick is kept');
+  assert.equal(await reopen({ class: { name: 'Fury', options: [] }, kit: { name: 'Battlemind', options: [] }, culture: { name: 'Academic', options: [] } }), '4',
+    'every step chosen opens Name and review');
+});
+
 test('unmounting lets go of the window, the document and the size watcher', { skip }, async (t) => {
   const { pg } = await open(t);
   const r = await pg.evaluate(() => {

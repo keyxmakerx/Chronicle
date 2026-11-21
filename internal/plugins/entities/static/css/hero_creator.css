@@ -99,12 +99,12 @@ html.dark .hc[data-skin="ornate"] {
 .hc-band--note { background: var(--hc-surface-2); }
 .hc-band--note::before { background: var(--hc-warn); }
 
-/* step header (phone): one line, never wrapping */
+/* step header (phone): the step name wraps to a second line rather than being cut */
 .hc-shead { flex: none; position: relative; z-index: 2; background-color: var(--hc-surface); background-image: var(--hc-texture); border-bottom: var(--hc-edge) solid var(--hc-line); }
 .hc-sbtn { width: 100%; min-height: 50px; display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; padding: 6px 16px 4px; border: 0; background: transparent; cursor: pointer; text-align: left; transition: background-color var(--dur-micro) var(--ease-out); }
 .hc-sbtn:hover { background: var(--hc-surface-2); }
 .hc-sbtn .hc-of { font-size: 14px; color: var(--hc-muted); white-space: nowrap; flex: none; }
-.hc-sbtn .hc-nm { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.hc-sbtn .hc-nm { font-size: 17px; font-weight: 600; line-height: 1.25; min-width: 0; overflow-wrap: break-word; }
 .hc-sbtn .hc-chev { margin-left: auto; color: var(--hc-muted); transition: transform var(--dur-standard) var(--ease-out); }
 .hc-sbtn[aria-expanded="true"] .hc-chev { transform: rotate(180deg); }
 .hc-prog { display: flex; gap: 4px; padding: 0 16px 8px; }
@@ -186,7 +186,7 @@ html.dark .hc[data-skin="ornate"] {
 .hc-card:active { transform: scale(0.985); }
 .hc-card > * { flex-shrink: 0; }
 .hc-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 12px; color: var(--hc-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-.hc-top .hc-ix { margin-left: auto; letter-spacing: 0; }
+.hc-top .hc-ix { margin-left: auto; letter-spacing: 0; white-space: nowrap; }
 .hc-card h3 { margin: 0; font-size: 30px; line-height: 1.05; }
 .hc-sum { margin: 0; font-size: 16px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .hc-facts { margin: 0; display: grid; gap: 1px; background: var(--hc-line); border-radius: var(--hc-radius); overflow: hidden; border: var(--hc-edge) solid var(--hc-line); }
@@ -203,18 +203,19 @@ html.dark .hc[data-skin="ornate"] {
 .hc-card--nh:active { transform: none; }
 .hc-card.is-reading { border-color: var(--hc-accent); }
 
-.hc-mark { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 9px; border: var(--hc-edge) solid color-mix(in srgb, var(--hc-warn) 40%, transparent); border-radius: 999px; font: 700 12px/1 var(--hc-face-body); letter-spacing: 0.02em; text-transform: none; white-space: nowrap; cursor: help;
-  color: var(--hc-warn); background: color-mix(in srgb, var(--hc-warn) 13%, var(--hc-surface)); }
+.hc-mark { --mk-bd: color-mix(in srgb, var(--hc-warn) 40%, transparent); --mk-bg: color-mix(in srgb, var(--hc-warn) 13%, var(--hc-surface));
+  display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 9px; border: var(--hc-edge) solid var(--mk-bd); border-radius: 999px; font: 700 12px/1 var(--hc-face-body); letter-spacing: 0.02em; text-transform: none; white-space: nowrap; cursor: help;
+  color: var(--hc-warn); background: var(--mk-bg); }
 .hc-mark::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.hc-mark.is-own { color: var(--hc-link); background: var(--hc-accent-soft); border-color: color-mix(in srgb, var(--hc-accent) 40%, transparent); }
-.hc-mark.is-quiet { color: var(--hc-muted); background: transparent; border-color: var(--hc-line); }
+.hc-mark.is-own { color: var(--hc-link); --mk-bg: var(--hc-accent-soft); --mk-bd: color-mix(in srgb, var(--hc-accent) 40%, transparent); }
+.hc-mark.is-quiet { color: var(--hc-muted); --mk-bg: transparent; --mk-bd: var(--hc-line); }
 
-.hc-under { flex: none; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 8px 0 4px; }
+.hc-under { flex: none; display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 8px 0 4px; }
 .hc-pos { font-size: 14px; color: var(--hc-muted); margin: 0 auto; }
-.hc-dots { display: flex; gap: 5px; margin: 0 auto; align-items: center; }
+.hc-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 0 auto; align-items: center; min-width: 0; }
 .hc-dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--hc-line); transition: width var(--dur-standard) var(--ease-out), background-color var(--dur-standard) var(--ease-out); }
 .hc-dots i.is-on { width: 18px; background: var(--hc-accent); }
-.hc-qw { border: 0; background: transparent; min-height: 44px; padding: 0 10px; border-radius: var(--hc-radius); color: var(--hc-link); font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: background-color var(--dur-micro) var(--ease-out); }
+.hc-qw { flex: none; border: 0; background: transparent; min-height: 44px; padding: 0 8px; border-radius: var(--hc-radius); color: var(--hc-link); font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: background-color var(--dur-micro) var(--ease-out); }
 .hc-qw:hover { background: var(--hc-accent-soft); }
 .hc-qw[disabled] { visibility: hidden; }
 .hc-qw-sp { width: 64px; }
@@ -282,6 +283,9 @@ html.dark .hc[data-skin="ornate"] {
 .hc-tipnm { font-size: 19px; line-height: 1.2; margin: 2px 0 4px; }
 .hc-tip p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--hc-text); }
 .hc-tip .hc-x { position: absolute; right: 2px; top: 2px; width: 40px; height: 40px; }
+.hc-tipb { overflow-y: auto; overscroll-behavior: contain; }
+/* More to read below: the last line fades, so the cut reads as a scroll. */
+.hc-tipb.is-more { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); padding-bottom: 12px; }
 .hc-tip.is-pinned .hc-tipnm { padding-right: 28px; }
 
 /* buying from a list of traits */
@@ -326,10 +330,12 @@ html.dark .hc[data-skin="ornate"] {
 .hc-who { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--hc-muted); }
 .hc-hero h2 { margin: 2px 0; font-size: 32px; line-height: 1.1; overflow-wrap: anywhere; }
 .hc-line { margin: 0; color: var(--hc-muted); font-size: 15px; }
-.hc-stats { display: grid; grid-template-columns: repeat(var(--hc-n, 4), minmax(0, 1fr)); gap: 6px; margin: 16px 0 4px; }
-.hc-stat { display: flex; flex-direction: column-reverse; align-items: center; padding: 8px 2px; border-radius: var(--hc-radius); background: var(--hc-surface-2); border: var(--hc-edge) solid var(--hc-line); }
+/* The tiles wrap to rows rather than squeeze: a label never breaks inside a
+   word, because a tile is never narrower than its label. */
+.hc-stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 4px; }
+.hc-stat { flex: 1 1 76px; display: flex; flex-direction: column-reverse; align-items: center; padding: 8px 6px; border-radius: var(--hc-radius); background: var(--hc-surface-2); border: var(--hc-edge) solid var(--hc-line); }
 .hc-stat b { font-size: 22px; line-height: 1.1; font-weight: 700; display: inline-block; }
-.hc-stat span { font-size: 11px; color: var(--hc-muted); letter-spacing: 0.02em; text-transform: uppercase; max-width: 100%; overflow-wrap: anywhere; }
+.hc-stat span { font-size: 11px; color: var(--hc-muted); letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; }
 .hc-picks { margin: 14px 0 0; padding: 0; list-style: none; }
 .hc-picks li { display: flex; align-items: center; gap: 10px; min-height: 52px; border-bottom: var(--hc-edge) solid var(--hc-line); }
 .hc-picks li:last-child { border-bottom: 0; }
@@ -368,8 +374,8 @@ html.dark .hc[data-skin="ornate"] {
 .hc-sofar h4 { margin: 0 0 2px; font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--hc-muted); }
 .hc-nm2 { font-size: 20px; line-height: 1.2; margin: 0 0 2px; overflow-wrap: anywhere; }
 .hc-ln { font-size: 14px; color: var(--hc-muted); margin: 0 0 10px; min-height: 20px; }
-.hc-sofar .hc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
-.hc-sofar .hc-stat { flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 6px; padding: 7px 8px; }
+.hc-sofar .hc-stats { margin: 0; }
+.hc-sofar .hc-stat { flex-basis: calc(50% - 3px); flex-direction: column; align-items: flex-start; padding: 6px 8px; }
 .hc-sofar .hc-stat b { font-size: 17px; }
 .hc-mid { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .hc-mid .hc-intro { padding: 18px 24px 4px; }
@@ -428,7 +434,10 @@ html.dark .hc[data-skin="ornate"] {
   .hc-mark { min-height: 28px; }
 }
 
-.hc-facts[hidden], .hc-facts div[hidden] { display: none; }
+.hc-facts[hidden], .hc-facts div[hidden], .hc-sum[hidden], .hc-top .hc-ix[hidden] { display: none; }
+.hc-card h3.is-clamp { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+/* An odd fact out spans the row, so a two-column grid leaves no empty cell. */
+.hc-facts div:nth-child(odd):last-child { grid-column: 1 / -1; }
 
 /* The player's own entry: a dashed card at the end of the hand (and a row in
    the list) that opens the editor in the sheet or the right pane. */
@@ -438,7 +447,7 @@ html.dark .hc[data-skin="ornate"] {
 .hc-card--own:hover, .hc-gcard--own:hover { border-color: var(--hc-accent); }
 .hc-gcard--own.is-focus { border-style: solid; }
 .hc-ownbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 12px; font-size: 14px; color: var(--hc-muted); }
-.hc-ownbar .hc-qw { margin-left: -10px; }
+.hc-ownbar .hc-qw { margin-left: -8px; }
 .hc-det p.hc-ownbar { margin: 0 0 12px; }
 .hc-sheet [data-ownfoot], .hc-right .hc-foot[data-ownfoot] { gap: 4px; }
 
@@ -461,11 +470,15 @@ html.dark .hc[data-skin="ornate"] {
 .hc-app:not([data-view="desk"]) .hc-tools { gap: 4px; padding: 6px 12px; }
 /* The step list says each step in full, on two lines when it needs them. */
 .hc-app:not([data-view="desk"]) .hc-drape .hc-row .hc-lb span { white-space: normal; overflow: visible; }
-/* Review: the stats two to a row, so a label never breaks inside a word. */
-.hc-app:not([data-view="desk"]) .hc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.hc-app:not([data-view="desk"]) .hc-stat span { overflow-wrap: normal; }
+/* Review: the stats two to a row on a phone. */
+.hc-app:not([data-view="desk"]) .hc-stat { flex-basis: calc(50% - 3px); }
 /* A mark wraps rather than running off a narrow card. */
 .hc-app:not([data-view="desk"]) .hc-mark { white-space: normal; line-height: 1.2; padding-block: 3px; max-width: 100%; }
+/* A mark that is a button keeps its small pill but presses 44px tall. */
+.hc-app:not([data-view="desk"]) button.hc-mark { position: relative; isolation: isolate; min-height: 44px; border-color: transparent; background: transparent; }
+.hc-app:not([data-view="desk"]) button.hc-mark::after { content: ""; position: absolute; inset: 8px 0; z-index: -1; border-radius: 999px; border: var(--hc-edge) solid var(--mk-bd); background: var(--mk-bg); }
+/* "Start writing" on the own card is a link-coloured line on a tinted card. */
+.hc-card--own .hc-more { color: color-mix(in srgb, var(--hc-link) 62%, var(--hc-text)); }
 /* A short phone: the intro is the step title alone, so the cards keep room. */
 .hc-app.is-short .hc-intro { padding: 8px 16px 2px; }
 .hc-app.is-short .hc-intro p { display: none; }
