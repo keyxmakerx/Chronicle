@@ -77,6 +77,7 @@ func (h *Handler) TryoutNew(c *echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return middleware.Render(c, http.StatusOK, TryoutCreatorPage(cc, TryoutCreatorView{
 		CampaignID: cc.Campaign.ID, UserID: auth.GetUserID(c),
+		TermsURL: h.termsURLIf(c.Request().Context(), cc.Campaign.ID, "/campaigns/"+cc.Campaign.ID+"/characters/try/terms"),
 	}))
 }
 

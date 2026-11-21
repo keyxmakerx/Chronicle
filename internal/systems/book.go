@@ -2,7 +2,6 @@ package systems
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -748,20 +747,9 @@ func decodeBookBytes(data []byte, out any) error {
 // name and summary (or description). Reference markup like {@condition x|y}
 // is flattened to its shown text: the renderer prints definitions as plain text.
 func loadBookGlossary(sysDir, file string, terms map[string]BookTerm) error {
-	if !systemDataFilePattern.MatchString(file) {
-		return fmt.Errorf("%q is not a data file name", file)
-	}
-	data, err := os.ReadFile(filepath.Join(sysDir, "data", file))
+	entries, err := readGlossaryEntries(sysDir, file)
 	if err != nil {
-		return fmt.Errorf("data/%s not found", file)
-	}
-	var entries []struct {
-		Name        string `json:"name"`
-		Summary     string `json:"summary"`
-		Description string `json:"description"`
-	}
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return fmt.Errorf("data/%s is not a list of entries", file)
+		return err
 	}
 	for _, e := range entries {
 		name := strings.TrimSpace(e.Name)

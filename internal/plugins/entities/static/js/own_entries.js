@@ -43,6 +43,12 @@
 
   var DIRTY = 'own-entry';
 
+  // The parts of an entry the form holds and sends are shared with the editor
+  // players write theirs in (own_entry_editor.js, listed before this script).
+  var OE = window.ChronicleOwnEntry;
+  var namedList = OE.namedList, shapeOf = OE.shapeOf, isDraft = OE.isDraft, draftOf = OE.draftOf, listsOf = OE.listsOf,
+    propsOf = OE.propsOf, keptLine = OE.keptLine, tidy = OE.tidy;
+
   function esc(v) { return Chronicle.escapeHtml(v); }
   // The campaign's own word for its game master, already HTML-safe.
   function gm() { return window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM'; }
@@ -52,13 +58,6 @@
   }
   function lower(s) { return String(s || '').toLowerCase(); }
   function an(w) { return /^[aeiou]/i.test(w) ? 'an' : 'a'; }
-  // A fact's label becomes the property key the creator reads ("Size" → size).
-  function keyOf(label) {
-    var k = lower(label).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    if (!/^[a-z]/.test(k)) k = 'f_' + k;
-    return k.slice(0, 40);
-  }
-  function isFact(v) { return typeof v === 'number' || (typeof v === 'string' && v.length > 0 && v.length <= 40); }
   function dirty(on) {
     if (!window.Chronicle) return;
     if (on && Chronicle.markDirty) Chronicle.markDirty(DIRTY);
@@ -76,65 +75,6 @@
     return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
   }
 
-  // The facts a system's own entries share: scalar properties present on at
-  // least half of them, budget keys and display twins aside, most common
-  // first, at most four. A new entry starts with these lines.
-  function suggestedFacts(pkg) {
-    var count = {};
-    pkg.forEach(function (c) {
-      Object.keys(c.properties || {}).forEach(function (k) {
-        if (/(_display|_points)$/.test(k) || !isFact(c.properties[k])) return;
-        count[k] = (count[k] || 0) + 1;
-      });
-    });
-    return Object.keys(count).filter(function (k) { return count[k] * 2 >= pkg.length; })
-      .sort(function (a, b) { return count[b] - count[a] || (a < b ? -1 : 1); }).slice(0, 4);
-  }
-
-  // A list of named items, as the creator reads one (creator's namedList).
-  function namedList(v) {
-    return Array.isArray(v) && v.length > 0 && v.every(function (it) { return it && typeof it === 'object' && typeof it.name === 'string'; });
-  }
-  // A plain list of short words (a quick build), edited one per line.
-  function wordList(v) {
-    return Array.isArray(v) && v.length > 0 && v.every(function (w) { return typeof w === 'string'; });
-  }
-  // A fact too long for one line is written in a box (a benefit, a drawback).
-  function longFact(v) { return typeof v === 'string' && (v.length > 120 || v.indexOf('\n') >= 0); }
-  // Where the words came from is the page's credit, not a fact to edit; it
-  // goes back as loaded and is not named among the kept parts.
-  function creditKey(k) { return k === 'provenance' || k === 'provenance_display'; }
-  // The shape a system's own entries share, so a Director's entry can carry
-  // the same parts: scalar facts, lists of named items that at least half of
-  // them have (a list whose items cost points is one a hero buys from), and
-  // the points budget, read as the creator does from a "*_points" number.
-  function shapeOf(pkg) {
-    var lists = {}, budgets = {};
-    pkg.forEach(function (c) {
-      var p = c.properties || {};
-      Object.keys(p).forEach(function (k) {
-        if (namedList(p[k])) {
-          var l = lists[k] || (lists[k] = { n: 0, buy: 0 });
-          l.n++;
-          if (p[k].every(function (it) { return typeof it.cost === 'number'; })) l.buy++;
-        } else if (/_points$/.test(k) && typeof p[k] === 'number' && p[k] > 0) {
-          var b = budgets[k] || (budgets[k] = {});
-          b[p[k]] = (b[p[k]] || 0) + 1;
-        }
-      });
-    });
-    var keys = Object.keys(lists).filter(function (k) { return lists[k].n * 2 >= pkg.length; }).sort();
-    // What every hero gets comes before what they buy, as in the creator.
-    var shape = { facts: suggestedFacts(pkg), lists: keys.map(function (k) {
-      return { key: k, label: words(k), buy: lists[k].buy * 2 >= lists[k].n };
-    }).sort(function (a, b) { return a.buy - b.buy; }), budgetKey: '', budget: 0 };
-    var bk = Object.keys(budgets).sort()[0];
-    if (bk && shape.lists.some(function (l) { return l.buy; })) {
-      shape.budgetKey = bk;
-      shape.budget = +Object.keys(budgets[bk]).sort(function (a, b) { return budgets[bk][b] - budgets[bk][a]; })[0];
-    }
-    return shape;
-  }
 
   function Entries(root) {
     this.root = root;
@@ -239,8 +179,6 @@
     var m = this.members.filter(function (x) { return x.user_id === id; })[0];
     return m ? (m.display_name || 'A player') : 'A player';
   };
-  // Whether the open entry is a player's, not yet accepted.
-  function isDraft(e) { return !!e && !!e.status && e.status !== 'accepted'; }
   // Entries a Director has accepted, and drafts handed in: the two numbers
   // Campaign settings shows, so a tab and that row always agree.
   Entries.prototype.accepted = function (key) {
@@ -259,141 +197,6 @@
     if (/[^aeiou]y$/.test(w)) return w.slice(0, -1) + 'ies';
     if (/(s|x|z|ch|sh)$/.test(w)) return w + 'es';
     return w + 's';
-  }
-  // Numbers stay numbers so the creator can do sums with them ("3" points).
-  function factValue(v) { v = v.trim(); return /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }
-  // An item as the form edits it; orig is the item as loaded, whose other
-  // keys go back with it while its name stays the same.
-  function itemOf(it) {
-    var text = typeof it.description === 'string' || it.description == null;
-    return { name: String(it.name || ''), cost: typeof it.cost === 'number' ? it.cost : 1,
-      description: text ? String(it.description || '') : '', orig: it };
-  }
-  // The keys of a loaded item the form does not edit.
-  function extraKeys(orig) {
-    if (!orig || typeof orig !== 'object') return [];
-    return Object.keys(orig).filter(function (k) {
-      return k !== 'name' && k !== 'cost' && !(k === 'description' && (typeof orig.description === 'string' || orig.description == null));
-    });
-  }
-  // A draft holds facts as label/value lines, each shaped list by its key,
-  // word lists as lines, and the points budget. A list the system doesn't
-  // share is edited too (extraLists); anything else the form cannot edit
-  // (an object, a yes/no, an empty list) is carried as loaded.
-  function draftOf(e, f, budget0) {
-    var lists = {};
-    f.lists.forEach(function (l) { lists[l.key] = []; });
-    if (!e) {
-      return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '',
-        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }), wordLists: [], extraLists: [], carried: {} };
-    }
-    var props = e.properties || {}, facts = [], wls = [], extra = [], carried = {}, budget = f.budget;
-    var shared = {};
-    f.lists.forEach(function (l) { shared[l.key] = true; });
-    Object.keys(props).forEach(function (k) {
-      var v = props[k];
-      if (creditKey(k)) carried[k] = v;
-      else if (namedList(v)) {
-        lists[k] = v.map(itemOf);
-        if (!shared[k]) extra.push({ key: k, label: words(k), buy: v.every(function (it) { return typeof it.cost === 'number'; }) });
-      } else if (k === f.budgetKey && typeof v === 'number') budget = v;
-      else if (wordList(v)) wls.push({ key: k, label: words(k), text: v.join('\n'), orig: v });
-      else if (typeof v === 'number' || typeof v === 'string') facts.push({ label: words(k), value: String(v), key: k, orig: v, long: longFact(v) });
-      else carried[k] = v;
-    });
-    var who = e.visibility || 'everyone';
-    // A player's draft is only theirs until accepted; accepting it offers
-    // their character, or everyone, never "Directors only" by default.
-    if (isDraft(e)) who = e.visibility === 'character' ? 'character' : 'everyone';
-    return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: who,
-      forName: e.visibility === 'character' ? (e.forName || '') : undefined,
-      budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried,
-      standsFor: e.standsFor || '', standsForName: e.standsForName || '', savedWho: e.visibility || 'everyone',
-      status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
-  }
-  // Every list the form edits for a draft: the system's shared lists, then
-  // the entry's own.
-  function listsOf(d, f) { return f.lists.concat(d.extraLists || []); }
-
-  // propsOf builds the properties sent to Chronicle from a draft: what the
-  // form could not edit first, exactly as loaded, then facts under snake_case
-  // keys (numbers as numbers, an untouched value as it was), the budget, word
-  // lists, and each list with only its named items, an item keeping its
-  // other keys while its name is unchanged.
-  function propsOf(d, f) {
-    var props = {}, seen = {};
-    Object.keys(d.carried || {}).forEach(function (k) { props[k] = d.carried[k]; });
-    for (var i = 0; i < d.facts.length; i++) {
-      var p = d.facts[i];
-      if (!p.label.trim() || !p.value.trim()) continue;
-      // An untouched label keeps the key it came with, so a fact the system
-      // spells differently is not renamed by a save.
-      var k = (p.key && words(p.key) === p.label) ? p.key : keyOf(p.label);
-      if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
-      seen[k] = true;
-      props[k] = (p.orig !== undefined && k === p.key && p.value === String(p.orig)) ? p.orig : factValue(p.value);
-    }
-    if (f.budgetKey) props[f.budgetKey] = d.budget;
-    (d.wordLists || []).forEach(function (w) {
-      var items = w.text.split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
-      if (!items.length) return;
-      props[w.key] = w.orig && w.orig.join('\n') === items.join('\n') ? w.orig : items;
-    });
-    var buyOf = {};
-    listsOf(d, f).forEach(function (l) { buyOf[l.key] = l.buy; });
-    Object.keys(d.lists).forEach(function (key) {
-      var items = d.lists[key].filter(function (it) { return it.name.trim(); }).map(function (it) {
-        var o = {}, same = it.orig && String(it.orig.name || '').trim() === it.name.trim();
-        if (same) extraKeys(it.orig).forEach(function (x) { o[x] = it.orig[x]; });
-        o.name = it.name.trim();
-        if (buyOf[key]) o.cost = it.cost;
-        else if (same && typeof it.orig.cost === 'number') o.cost = it.orig.cost;
-        if (it.description.trim()) o.description = it.description.trim();
-        return o;
-      });
-      if (items.length) props[key] = items;
-    });
-    return { props: props };
-  }
-
-  // keptLine names the parts the form keeps but cannot edit, in one quiet
-  // line, or '' when there are none.
-  function keptLine(d, f) {
-    var parts = Object.keys(d.carried || {}).filter(function (k) { return !creditKey(k); }).map(words);
-    var traits = [];
-    listsOf(d, f).forEach(function (l) {
-      (d.lists[l.key] || []).forEach(function (it) {
-        if (extraKeys(it.orig).length && String(it.orig.name || '').trim() === it.name.trim()) traits.push(it.name.trim());
-      });
-    });
-    if (traits.length) parts.push('the rules attached to ' + (traits.length > 3 ? traits.slice(0, 3).join(', ') + ' and ' + (traits.length - 3) + ' more' : traits.join(', ')));
-    if (!parts.length) return '';
-    return 'Kept as printed, not edited here: ' + parts.join('; ') + '.';
-  }
-  // The writing box's HTML reduced to the few tags it can make, parsed in an
-  // inert document and stripped of every attribute but data-secret, so the
-  // preview never runs anything dropped into the box. The server sanitizes
-  // what is saved on its own.
-  var KEEP = { P: 1, BR: 1, B: 1, STRONG: 1, I: 1, EM: 1, U: 1, SPAN: 1, DIV: 1, UL: 1, OL: 1, LI: 1 };
-  function tidy(html) {
-    var doc = new DOMParser().parseFromString('<div>' + (html || '') + '</div>', 'text/html');
-    var root = doc.body.firstChild;
-    (function walk(el) {
-      Array.prototype.slice.call(el.childNodes).forEach(function (n) {
-        if (n.nodeType === 3) return;
-        if (n.nodeType !== 1) { n.remove(); return; }
-        walk(n);
-        if (!KEEP[n.tagName]) {
-          if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|SVG|MATH)$/i.test(n.tagName)) n.remove();
-          else n.replaceWith.apply(n, Array.prototype.slice.call(n.childNodes));
-          return;
-        }
-        var secret = n.hasAttribute('data-secret');
-        Array.prototype.slice.call(n.attributes).forEach(function (a) { n.removeAttribute(a.name); });
-        if (secret) n.setAttribute('data-secret', 'true');
-      });
-    })(root);
-    return root;
   }
   function sameDraft(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
@@ -1030,25 +833,7 @@
   // The system's rules for an entry, read back. Each is [message, blocks]:
   // what the server would refuse blocks Save; a budget a hero can't spend
   // is only a warning, since a Director may mean it.
-  Entries.prototype.problems = function (d) {
-    var f = this.cur(), out = [];
-    if (!d.name.trim()) out.push(['Give it a name.', true]);
-    listsOf(d, f).forEach(function (l) {
-      var items = d.lists[l.key] || [], seen = {}, total = 0;
-      items.forEach(function (it) {
-        var k = lower(it.name.trim());
-        if (!k) out.push(['One of the ' + lower(l.label) + ' has no name yet.', true]);
-        else if (seen[k]) out.push(['“' + it.name.trim() + '” is in ' + lower(l.label) + ' twice.', true]);
-        seen[k] = true;
-        total += it.cost;
-      });
-      if (l.buy && f.budgetKey) {
-        if (!items.length) out.push(['Add ' + lower(l.label) + ' for heroes to buy.', false]);
-        else if (total < d.budget) out.push(['The ' + lower(l.label) + ' add up to ' + total + ' point' + (total === 1 ? '' : 's') + ', less than the ' + d.budget + ' a hero spends. Add more, or spend fewer.', false]);
-      }
-    });
-    return out;
-  };
+  Entries.prototype.problems = function (d) { return OE.problems(d, this.cur()).map(function (m) { return [m[0], m[1]]; }); };
   Entries.prototype.checksHTML = function (d) {
     var f = this.cur(), p = this.problems(d);
     if (!p.length) {

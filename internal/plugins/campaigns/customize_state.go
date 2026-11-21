@@ -90,6 +90,9 @@ type customizeDraft struct {
 	Email struct {
 		Layout string `json:"layout"` // One of AppearanceEmailLayouts.
 	} `json:"email"`
+	Builder struct {
+		Look string `json:"look"` // One of AppearanceBuilderLooks.
+	} `json:"builder"`
 	Access struct {
 		Sheet    string `json:"sheet"`    // "owner", "codm" or "everyone".
 		Page     string `json:"page"`     // "owner", "codm" or "everyone".
@@ -262,6 +265,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Hover.TimelinePopup = orDefault(a.TimelinePopup, AppearanceTimelinePopups)
 	d.Page.Kit = orDefault(a.StyleKit, AppearanceStyleKits)
 	d.Email.Layout = orDefault(a.EmailLayout, AppearanceEmailLayouts)
+	d.Builder.Look = orDefault(a.BuilderLook, AppearanceBuilderLooks)
 	d.Page.DmKit = "same"
 	if a.DmScreenKit != "" {
 		d.Page.DmKit = a.DmScreenKit

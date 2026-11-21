@@ -211,6 +211,10 @@ func (t *testChoices) CreatorPlan(context.Context, string) (*CreatorPlan, error)
 	return &CreatorPlan{}, nil
 }
 
+func (t *testChoices) RulesTerms(context.Context, string) (*RulesTerms, error) {
+	return &RulesTerms{Terms: map[string]RulesTerm{}}, nil
+}
+
 func (t *testChoices) SetChoiceLimiter(l ChoiceLimiter) { t.limiter = l }
 
 type fakeHeroes struct {
