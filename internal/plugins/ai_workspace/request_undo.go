@@ -43,6 +43,8 @@ type PageUndo interface {
 	// Read is the live page, or nil when it is gone or in the Trash.
 	Read(ctx context.Context, campaignID, id string) (*entities.Entity, error)
 	RestoreText(ctx context.Context, id, name string, entry, entryHTML *string) error
+	// Inside is how many pages sit under a page, any visibility.
+	Inside(ctx context.Context, campaignID, id string) (int, error)
 	// Trash removes a page the way a delete does: to the Trash, not for good.
 	Trash(ctx context.Context, id string) error
 	RestoreFromTrash(ctx context.Context, campaignID, id string) error
@@ -114,38 +116,38 @@ func (u undoCell) undoneText() string {
 // undoConfirm is the plain line before Undo: what is put back and what is
 // not. blocks is how many changes the request had.
 func undoConfirm(left []connector.Before, blocks int) string {
-	var upd, created, removed, other int
-	var names []string
+	var upd, created, removed, other []string
 	for _, b := range left {
 		switch {
 		case b.Kind == kindPage && b.Action == importer.ActionUpdate:
-			upd++
+			upd = append(upd, b.TargetName)
 		case b.Kind == kindPage && b.Action == importer.ActionCreate:
-			created++
+			created = append(created, b.TargetName)
 		case b.Kind == kindPage:
-			removed++
+			removed = append(removed, b.TargetName)
 		default:
-			other++
-			names = append(names, b.TargetName)
+			other = append(other, b.TargetName)
 		}
 	}
+	// Names, not counts: a row is matched to its request by time and summary,
+	// so the names are the owner's check that it is the right one.
 	var parts []string
-	if upd > 0 {
-		parts = append(parts, fmt.Sprintf("Puts back %s as %s before.", plural(upd, "page"), thatWere(upd)))
+	if len(upd) > 0 {
+		parts = append(parts, fmt.Sprintf("Puts back %s as %s before.", joinNames(quoted(upd)), thatWere(len(upd))))
 	}
-	if removed > 0 {
-		parts = append(parts, fmt.Sprintf("Brings back %s from the Trash.", plural(removed, "page")))
+	if len(removed) > 0 {
+		parts = append(parts, fmt.Sprintf("Brings back %s from the Trash.", joinNames(quoted(removed))))
 	}
-	if other > 0 {
-		sort.Strings(names)
-		parts = append(parts, "Puts back "+joinNames(names)+" as it was before.")
+	if len(other) > 0 {
+		sort.Strings(other)
+		parts = append(parts, "Puts back "+joinNames(quoted(other))+" as it was before.")
 	}
-	if created > 0 {
+	if len(created) > 0 {
 		verb := "go"
-		if created == 1 {
+		if len(created) == 1 {
 			verb = "goes"
 		}
-		parts = append(parts, fmt.Sprintf("%s the AI created %s to the Trash.", plural(created, "page"), verb))
+		parts = append(parts, fmt.Sprintf("%s, which the AI created, %s to the Trash.", joinNames(quoted(created)), verb))
 	}
 	if len(left) < blocks {
 		parts = append(parts, "The request's other changes stay as they are.")
@@ -191,9 +193,6 @@ func (h *Handler) fillUndo(ctx context.Context, cc *campaigns.CampaignContext, u
 	v.Undo = map[int64]undoCell{}
 	for _, q := range applied {
 		s := sums[q.ID]
-		if len(s.Left) == 0 && s.UndoneAt == nil {
-			continue
-		}
 		v.Undo[q.ID] = undoCell{CampaignID: cc.Campaign.ID, RequestID: q.ID, UndoneAt: s.UndoneAt,
 			Confirm: undoConfirm(s.Left, q.Blocks), Now: v.Now, Loc: v.Loc}
 	}
@@ -291,12 +290,14 @@ func (h *Handler) UndoRequest(c *echo.Context) error {
 // back, so a request is undone whole or not at all. It names what changed
 // since, in the owner's own terms.
 func (h *Handler) undoRefusal(ctx context.Context, campaignID string, actor aiplug.Actor, left []connector.Before) string {
-	var changed, gone []string
+	var changed, gone, inside []string
 	for _, b := range left {
 		switch ok, why := h.stillAsLeft(ctx, campaignID, actor, b); {
 		case ok:
 		case why == "gone":
 			gone = append(gone, b.TargetName)
+		case why == "inside":
+			inside = append(inside, b.TargetName)
 		default:
 			changed = append(changed, b.TargetName)
 		}
@@ -304,6 +305,9 @@ func (h *Handler) undoRefusal(ctx context.Context, campaignID string, actor aipl
 	var parts []string
 	if len(changed) > 0 {
 		parts = append(parts, joinNames(quoted(changed))+" "+haveHas(len(changed))+" been changed since the AI applied it.")
+	}
+	if len(inside) > 0 {
+		parts = append(parts, joinNames(quoted(inside))+" now "+haveHas(len(inside))+" pages inside, which would go to the Trash too.")
 	}
 	if len(gone) > 0 {
 		parts = append(parts, joinNames(quoted(gone))+" can't be found or brought back any more.")
@@ -347,7 +351,18 @@ func (h *Handler) stillAsLeft(ctx context.Context, campaignID string, actor aipl
 			// A page AI made that is already gone has nothing left to undo.
 			return b.Action == importer.ActionCreate, "gone"
 		}
-		return importer.PageFingerprint(e) == b.AfterHash, "changed"
+		if importer.PageFingerprint(e) != b.AfterHash {
+			return false, "changed"
+		}
+		// Trashing a page takes its sub-pages too, and the fingerprint covers
+		// only the page itself, so a page that has gained pages inside since is
+		// refused rather than taking people's work with it.
+		if b.Action == importer.ActionCreate {
+			if n, err := h.pageUndo.Inside(ctx, campaignID, b.TargetID); err != nil || n > 0 {
+				return false, "inside"
+			}
+		}
+		return true, ""
 	}
 	u, k := h.undoKind(b.Kind)
 	if k == nil {

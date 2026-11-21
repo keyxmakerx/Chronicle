@@ -18,14 +18,14 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const CONFIRM = 'Puts back 2 pages as they were before. 1 page the AI created goes to the Trash.';
-const READY = (why = '') => `<div id="aic-undo-7" class="aic-undo" x-data="{ asking: false }" :data-undo-open="asking ? '' : null">${why}<button type="button" class="quiet-word aic-undo-btn" @click="asking = !asking" :aria-expanded="asking"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undo</button><div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms><p>${CONFIRM}</p><button type="button" class="btn-secondary" @click="asking = false">Keep it</button> <button type="button" class="btn-secondary" hx-post="/campaigns/c1/ai/requests/7/undo" hx-target="#aic-undo-7" hx-swap="outerHTML" hx-disabled-elt="this"><span class="aic-idle">Undo it</span> <span class="aic-busy">Putting back…</span></button></div></div>`;
-const DONE = `<div id="aic-undo-7" class="aic-undo" x-data="{ asking: false }"><p class="aic-undone" role="status"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undone today 2:05 pm</p></div>`;
+const CONFIRM = 'Puts back “Lyra” and “The Vault” as they were before. “Sable Quay”, which the AI created, goes to the Trash.';
+const READY = (why = '') => `<div id="aic-undo-7" class="aic-undo" x-data="{ asking: false }" :data-undo-open="asking ? '' : null">${why}<button type="button" class="quiet-word aic-undo-btn" @click="asking = !asking" :aria-expanded="asking">Undo</button><div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms><p>${CONFIRM}</p><button type="button" class="btn-secondary" @click="asking = false">Keep it</button> <button type="button" class="btn-secondary" hx-post="/campaigns/c1/ai/requests/7/undo" hx-target="#aic-undo-7" hx-swap="outerHTML" hx-disabled-elt="this"><span class="aic-idle">Undo it</span> <span class="aic-busy">Putting back…</span></button></div></div>`;
+const DONE = `<div id="aic-undo-7" class="aic-undo" x-data="{ asking: false }"><p class="aic-undone" role="status">Undone today 2:05 pm</p></div>`;
 const REFUSED = READY('<p class="aic-why aic-undo-why" role="alert">Nothing was put back. “Lyra” has been changed since the AI applied it. Undo won\'t overwrite later work; for a page, open its History to choose an earlier version.</p>');
 
 // A row of What it did as the page lays it out: time, icon, line, result, and
 // the Undo cell under the line.
-const PAGE = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+const PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/ai_page.css">
 <style>[x-cloak]{display:none!important} body{margin:0;font-family:sans-serif} .quiet-word{background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
 .btn-secondary{padding:4px 10px;border:1px solid #999;background:#fff}
@@ -53,9 +53,9 @@ async function open(width, mode, opts = {}) {
     if (p === '/campaigns/c1/ai/requests/7/undo') {
       seen.posts++;
       await new Promise((r) => setTimeout(r, 150));
-      return route.fulfill({ contentType: 'text/html', body: mode === 'refused' ? REFUSED : DONE });
+      return route.fulfill({ contentType: "text/html; charset=utf-8", body: mode === 'refused' ? REFUSED : DONE });
     }
-    return route.fulfill({ contentType: 'text/html', body: PAGE });
+    return route.fulfill({ contentType: 'text/html; charset=utf-8', body: PAGE });
   });
   await page.goto('http://t.test/');
   await page.waitForFunction(() => window.Alpine && document.querySelector('.aic-undo')._x_dataStack);
@@ -73,7 +73,7 @@ for (const [label, width, touch] of [['1280', 1280, false], ['360', 360, true]])
       assert.equal(await visible(page, '.aic-ask'), false, 'the question is closed until Undo is pressed');
       await page.click('.aic-undo-btn');
       await page.waitForSelector('.aic-ask', { state: 'visible' });
-      assert.match(await page.textContent('.aic-ask p'), /Puts back 2 pages as they were before\. 1 page the AI created goes to the Trash\./);
+      assert.match(await page.textContent('.aic-ask p'), /Puts back “Lyra” and “The Vault” as they were before\. “Sable Quay”, which the AI created, goes to the Trash\./);
       // An open question holds back the page's 30-second refresh.
       assert.equal(await page.evaluate(() => !!document.querySelector('[data-undo-open]')), true);
       await page.click('.aic-ask button:has-text("Keep it")');
@@ -114,6 +114,16 @@ for (const [label, width, touch] of [['1280', 1280, false], ['360', 360, true]])
     } finally { await browser.close(); }
   });
 }
+
+test('A row with nothing kept says No undo, with no button or icon', { skip }, async () => {
+  const { browser, page } = await open(360, 'done', { touch: true });
+  try {
+    await page.evaluate(() => { document.querySelector('.aic-undo').outerHTML = '<div class="aic-undo"><p class="aic-undo-none">No undo</p></div>'; });
+    assert.equal(await visible(page, '.aic-undo-none'), true);
+    assert.equal(await page.evaluate(() => document.querySelectorAll('.aic-undo button, .aic-undo i').length), 0);
+    assert.equal(await noSideScroll(page), true);
+  } finally { await browser.close(); }
+});
 
 test('Each Undo target is 44px on touch', { skip }, async () => {
   const { browser, page } = await open(360, 'done', { touch: true });

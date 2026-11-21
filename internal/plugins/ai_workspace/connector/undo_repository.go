@@ -114,15 +114,26 @@ func (r *undoRepository) Summaries(ctx context.Context, campaignID, userID strin
 	if err := brows.Err(); err != nil {
 		return nil, dbError("reading befores", err)
 	}
+	// A request whose changes are not all put back is not "Undone": the press
+	// is still running, or stopped part way and can be pressed again.
+	for id, s := range out {
+		if len(s.Left) > 0 && s.UndoneAt != nil {
+			s.UndoneAt = nil
+			out[id] = s
+		}
+	}
 	return out, nil
 }
 
-func (r *undoRepository) Claim(ctx context.Context, campaignID, userID string, id int64, at time.Time) (bool, error) {
+func (r *undoRepository) Claim(ctx context.Context, campaignID, userID string, id int64, at, staleBefore time.Time) (bool, error) {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE ai_connection_requests q JOIN ai_connections c ON c.id = q.connection_id
 		 SET q.undone_at = ?
-		 WHERE q.campaign_id = ? AND c.user_id = ? AND q.id = ? AND q.status = ? AND q.undone_at IS NULL`,
-		at.UTC(), campaignID, userID, id, RequestAnswered)
+		 WHERE q.campaign_id = ? AND c.user_id = ? AND q.id = ? AND q.status = ?
+		   AND (q.undone_at IS NULL
+		        OR (q.undone_at < ? AND EXISTS (SELECT 1 FROM ai_request_befores b
+		             WHERE b.request_id = q.id AND b.undone_at IS NULL AND b.keep_until > ?)))`,
+		at.UTC(), campaignID, userID, id, RequestAnswered, staleBefore.UTC(), at.UTC())
 	if err != nil {
 		return false, dbError("claiming undo", err)
 	}

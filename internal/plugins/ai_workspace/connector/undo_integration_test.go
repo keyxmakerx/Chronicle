@@ -123,11 +123,12 @@ func TestUndoIntegration_ClaimRunsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.svc.ReleaseUndo(ctx, r.camp, r.user, r.id)
-	if _, left, err := r.svc.ClaimUndo(ctx, r.camp, r.user, r.id); err != nil || len(left) != 1 {
-		t.Fatalf("third claim: %+v, %v", left, err)
+	_, rest, err := r.svc.ClaimUndo(ctx, r.camp, r.user, r.id)
+	if err != nil || len(rest) != 1 {
+		t.Fatalf("third claim: %+v, %v", rest, err)
 	}
 	// Done: the summary says when, and nothing is left to claim.
-	_ = r.svc.BeforeUndone(ctx, left[0].ID, r.user)
+	_ = r.svc.BeforeUndone(ctx, rest[0].ID, r.user)
 	sums, _ := r.svc.UndoSummaries(ctx, r.camp, r.user, []int64{r.id})
 	if sums[r.id].UndoneAt == nil {
 		t.Error("an undone request shows no time")
@@ -211,5 +212,43 @@ func TestUndoIntegration_MigrationUpDownUp(t *testing.T) {
 	}
 	if tb, col := has(); !tb || !col {
 		t.Fatalf("after up again: table %v column %v", tb, col)
+	}
+}
+
+// A claim whose undo stopped part way (a restart) is not "Undone", and once it
+// is stale it can be claimed again; a fresh one cannot, and a finished one
+// never can.
+func TestUndoIntegration_StaleClaimCanBeTakenAgain(t *testing.T) {
+	r := newUndoRig(t)
+	ctx := context.Background()
+	_, left, err := r.svc.ClaimUndo(ctx, r.camp, r.user, r.id)
+	if err != nil || len(left) != 2 {
+		t.Fatalf("claim: %+v %v", left, err)
+	}
+	// One change is put back, then the server stops: no release.
+	if err := r.svc.BeforeUndone(ctx, left[0].ID, r.user); err != nil {
+		t.Fatal(err)
+	}
+	sums, _ := r.svc.UndoSummaries(ctx, r.camp, r.user, []int64{r.id})
+	if sums[r.id].UndoneAt != nil || len(sums[r.id].Left) != 1 {
+		t.Fatalf("a part-done undo reads as %+v", sums[r.id])
+	}
+	if _, _, err := r.svc.ClaimUndo(ctx, r.camp, r.user, r.id); err == nil {
+		t.Fatal("a fresh claim was taken over")
+	}
+	r.exec(`UPDATE ai_connection_requests SET undone_at = ? WHERE id = ?`, time.Now().UTC().Add(-undoStale-time.Minute), r.id)
+	_, left, err = r.svc.ClaimUndo(ctx, r.camp, r.user, r.id)
+	if err != nil || len(left) != 1 {
+		t.Fatalf("stale claim: %+v %v", left, err)
+	}
+	// Finished: nothing left, so even a stale stamp is not claimable.
+	_ = r.svc.BeforeUndone(ctx, left[0].ID, r.user)
+	r.exec(`UPDATE ai_connection_requests SET undone_at = ? WHERE id = ?`, time.Now().UTC().Add(-time.Hour), r.id)
+	if _, _, err := r.svc.ClaimUndo(ctx, r.camp, r.user, r.id); err == nil {
+		t.Error("a finished undo was claimed again")
+	}
+	sums, _ = r.svc.UndoSummaries(ctx, r.camp, r.user, []int64{r.id})
+	if sums[r.id].UndoneAt == nil || len(sums[r.id].Left) != 0 {
+		t.Errorf("a finished undo reads as %+v", sums[r.id])
 	}
 }

@@ -58,7 +58,7 @@ func (m *memUndo) Summaries(_ context.Context, _, _ string, ids []int64, _ time.
 	return out, nil
 }
 
-func (m *memUndo) Claim(_ context.Context, _, _ string, id int64, at time.Time) (bool, error) {
+func (m *memUndo) Claim(_ context.Context, _, _ string, id int64, at, _ time.Time) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.undone == nil {
@@ -153,7 +153,10 @@ type fakePages struct {
 	restored  map[string]string
 	trashed   []string
 	untrashed []string
+	inside    map[string]int
 }
+
+func (f *fakePages) Inside(_ context.Context, _, id string) (int, error) { return f.inside[id], nil }
 
 func (f *fakePages) Read(_ context.Context, campaignID, id string) (*entities.Entity, error) {
 	if e := f.live[id]; e != nil && e.CampaignID == campaignID {
@@ -434,12 +437,12 @@ func TestUndoConfirm(t *testing.T) {
 	}{
 		{"pages put back and created", []connector.Before{
 			b("page", "update", "A"), b("page", "update", "B"), b("page", "create", "C")}, 3,
-			"Puts back 2 pages as they were before. 1 page the AI created goes to the Trash."},
-		{"one page", []connector.Before{b("page", "update", "A")}, 1, "Puts back 1 page as it was before."},
+			"Puts back “A” and “B” as they were before. “C”, which the AI created, goes to the Trash."},
+		{"one page", []connector.Before{b("page", "update", "A")}, 1, "Puts back “A” as it was before."},
 		{"removed and a home", []connector.Before{b("page", "delete", "A"), b("home", "update", "players home")}, 2,
-			"Brings back 1 page from the Trash. Puts back players home as it was before."},
+			"Brings back “A” from the Trash. Puts back “players home” as it was before."},
 		{"part of the request", []connector.Before{b("page", "update", "A")}, 4,
-			"Puts back 1 page as it was before. The request's other changes stay as they are."},
+			"Puts back “A” as it was before. The request's other changes stay as they are."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -476,9 +479,9 @@ func TestKeptBefores(t *testing.T) {
 // when, and the refusal inline.
 func TestUndoCellStates(t *testing.T) {
 	now := time.Date(2026, 11, 21, 14, 5, 0, 0, time.UTC)
-	u := undoCell{CampaignID: "camp-1", RequestID: 7, Confirm: "Puts back 2 pages as they were before.", Now: now, Loc: time.UTC}
+	u := undoCell{CampaignID: "camp-1", RequestID: 7, Confirm: "Puts back “A” and “B” as they were before.", Now: now, Loc: time.UTC}
 	html := renderTempl(t, aiUndoCell(u))
-	for _, want := range []string{`hx-post="/campaigns/camp-1/ai/requests/7/undo"`, "Puts back 2 pages as they were before.", "Undo</button>", "Keep it"} {
+	for _, want := range []string{`hx-post="/campaigns/camp-1/ai/requests/7/undo"`, "Puts back “A” and “B” as they were before.", "Undo</button>", "Keep it"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("ready cell missing %q:\n%s", want, html)
 		}
@@ -489,6 +492,15 @@ func TestUndoCellStates(t *testing.T) {
 	if !strings.Contains(html, "Undone today 1:05 pm") || strings.Contains(html, "hx-post") {
 		t.Errorf("done cell:\n%s", html)
 	}
+	u.UndoneAt, u.Confirm, u.Refusal = nil, "", ""
+	html = renderTempl(t, aiUndoCell(u))
+	if !strings.Contains(html, "No undo") || strings.Contains(html, "hx-post") || strings.Contains(html, "<button") {
+		t.Errorf("a row with nothing kept:\n%s", html)
+	}
+	if strings.Contains(html, "fa-rotate-left") {
+		t.Error("a control with a word has an icon")
+	}
+	u.Confirm = "Puts back “A”."
 	u.UndoneAt, u.Refusal = nil, "Nothing was put back. “Lyra” has been changed since."
 	html = renderTempl(t, aiUndoCell(u))
 	if !strings.Contains(html, `role="alert"`) || !strings.Contains(html, "“Lyra” has been changed since.") || !strings.Contains(html, "hx-post") {
@@ -505,4 +517,21 @@ func renderTempl(t *testing.T, c interface {
 		t.Fatal(err)
 	}
 	return buf.String()
+}
+
+// A page the AI created that has gained pages inside since is refused: moving
+// it to the Trash would take those pages too, and the fingerprint covers only
+// the page itself.
+func TestUndo_CreatedPageWithPagesInsideIsRefused(t *testing.T) {
+	r := newUndoRig(t)
+	r.keepPages(t)
+	r.answer(t)
+	r.pages.inside = map[string]int{"p2": 3}
+	code, body := undo(t, r)
+	if code != http.StatusOK || !strings.Contains(body, "“Sable Quay” now has pages inside, which would go to the Trash too.") {
+		t.Fatalf("refusal: %d %s", code, body)
+	}
+	if len(r.pages.trashed) != 0 || len(r.pages.restored) != 0 {
+		t.Errorf("a refused undo changed pages: %+v", r.pages)
+	}
 }

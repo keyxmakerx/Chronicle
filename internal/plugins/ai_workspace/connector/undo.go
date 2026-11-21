@@ -34,9 +34,13 @@ type Before struct {
 	UndoneAt   *time.Time
 }
 
-// UndoSummary is what "What it did" shows about a request's Undo: how many
-// changes can still be put back, of which kinds, and when it was undone. It
-// carries no before text.
+// undoStale is how long an Undo claim may sit with changes still left before
+// it counts as abandoned and can be claimed again. A real undo takes seconds.
+const undoStale = 10 * time.Minute
+
+// UndoSummary is what "What it did" shows about a request's Undo: the changes
+// that can still be put back, and when it was undone, which is set only when
+// none are left. It carries no before text.
 type UndoSummary struct {
 	Left     []Before
 	UndoneAt *time.Time
@@ -52,8 +56,10 @@ type UndoStore interface {
 	// Summaries reads the Undo state of userID's requests, without before text.
 	Summaries(ctx context.Context, campaignID, userID string, ids []int64, now time.Time) (map[int64]UndoSummary, error)
 	// Claim sets undone_at on userID's answered request in one conditional
-	// update and reports whether this call won it.
-	Claim(ctx context.Context, campaignID, userID string, id int64, at time.Time) (bool, error)
+	// update and reports whether this call won it. A claim older than
+	// staleBefore whose request still has befores left was abandoned (the
+	// server stopped part way), so it may be taken again.
+	Claim(ctx context.Context, campaignID, userID string, id int64, at, staleBefore time.Time) (bool, error)
 	// Release clears undone_at again so a failed undo can be tried again.
 	Release(ctx context.Context, campaignID, userID string, id int64) error
 	// Live lists the request's befores not yet undone and not past keep_until,
@@ -120,7 +126,7 @@ func (s *Service) ClaimUndo(ctx context.Context, campaignID, userID string, id i
 		return nil, nil, apperror.NewBadRequest("only a request you applied can be undone")
 	}
 	now := s.now().UTC()
-	won, err := s.undoStore.Claim(ctx, campaignID, userID, id, now)
+	won, err := s.undoStore.Claim(ctx, campaignID, userID, id, now, now.Add(-undoStale))
 	if err != nil {
 		return nil, nil, err
 	}

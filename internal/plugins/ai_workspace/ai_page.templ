@@ -535,7 +535,7 @@ templ aiActivityList(v ConnectView) {
 				<span class="aic-legend-gap"></span>
 				<span>A sitting ends after 30 quiet minutes.</span>
 				if v.Applied != nil {
-					<span>Undo puts back a page's title and text, a home page or a tracker's settings, for 30 days. Maps, pins, folders, shop looks and players' sheets are changed by hand.</span>
+					<span>Undo puts back a page's title and text, a home page or a tracker's settings, for 30 days. Maps, pins, folders, shop looks, calendar events, a tracker's value and players' sheets are changed by hand.</span>
 				}
 				if len(v.Sittings) > v.Shown {
 					<button
@@ -767,14 +767,17 @@ templ reviewIn(d ImportReviewData) {
 templ aiUndoCell(u undoCell) {
 	<div id={ fmt.Sprintf("aic-undo-%d", u.RequestID) } class="aic-undo" x-data="{ asking: false }" :data-undo-open="asking ? '' : null">
 		if u.UndoneAt != nil {
-			<p class="aic-undone" role="status"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> { u.undoneText() }</p>
+			<p class="aic-undone" role="status">{ u.undoneText() }</p>
 		} else {
 			if u.Refusal != "" {
 				<p class="aic-why aic-undo-why" role="alert">{ u.Refusal }</p>
 			}
+			if !u.Can() && u.Refusal == "" {
+				<p class="aic-undo-none">No undo</p>
+			}
 			if u.Can() {
 				<button type="button" class="quiet-word aic-undo-btn" @click="asking = !asking" :aria-expanded="asking">
-					<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undo
+					Undo
 				</button>
 				<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
 					<p>{ u.Confirm }</p>

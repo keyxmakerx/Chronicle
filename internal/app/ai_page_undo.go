@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -37,6 +38,11 @@ func (u aiPageUndo) Read(ctx context.Context, campaignID, id string) (*entities.
 
 func (u aiPageUndo) RestoreText(ctx context.Context, id, name string, entry, entryHTML *string) error {
 	return u.safety.RestoreText(ctx, id, name, entry, entryHTML)
+}
+
+func (u aiPageUndo) Inside(ctx context.Context, _, id string) (int, error) {
+	kids, err := u.pages.GetChildren(ctx, id, permissions.RoleOwner, "")
+	return len(kids), err
 }
 
 func (u aiPageUndo) Trash(ctx context.Context, id string) error { return u.pages.Delete(ctx, id) }

@@ -47,6 +47,10 @@ func (p realPages) Read(ctx context.Context, campaignID, id string) (*entities.E
 func (p realPages) RestoreText(ctx context.Context, id, name string, entry, html *string) error {
 	return p.safety.RestoreText(ctx, id, name, entry, html)
 }
+func (p realPages) Inside(ctx context.Context, _, id string) (int, error) {
+	kids, err := p.svc.GetChildren(ctx, id, 3, "")
+	return len(kids), err
+}
 func (p realPages) Trash(ctx context.Context, id string) error { return p.svc.Delete(ctx, id) }
 func (p realPages) RestoreFromTrash(ctx context.Context, c, id string) error {
 	_, err := p.safety.RestoreFromTrash(ctx, c, id)
