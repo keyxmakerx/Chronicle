@@ -203,6 +203,9 @@
         var colHead = document.createElement('div');
         colHead.className = 'czf-cols';
         colHead.setAttribute('aria-hidden', 'true');
+        // Only the Customizer's sheet lays the names over the columns; the older
+        // hub draws no such grid, so it goes without them.
+        if (!inDraft) colHead.hidden = true;
         ['Label', 'Kind', 'Section', ''].forEach(function (t) {
           var c = document.createElement('span');
           c.textContent = t;

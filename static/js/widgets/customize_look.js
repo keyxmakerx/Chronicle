@@ -2340,6 +2340,11 @@
           });
         }
       }
+      // A button's icon (Icons > Everywhere) is as much content as its word.
+      if (s) Array.prototype.forEach.call(site.querySelectorAll('.wic'), function(el){
+        var r = el.getBoundingClientRect();
+        if (r.width && r.height) out.push({ x:(r.left - sr.left) / s, y:(r.top - sr.top) / s, w:r.width / s, h:r.height / s });
+      });
       site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
       return out;
     }
