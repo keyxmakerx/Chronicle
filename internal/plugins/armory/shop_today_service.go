@@ -172,20 +172,27 @@ func (s *shopTodayService) shelf(ctx context.Context, campaignID, shopEntityID s
 	}
 	pool := map[int]string{}
 	ids := []int{}
+	// stocked is the part of the pool the pick draws from: a sold-out good
+	// stays in Pool (it is still flagged) but never takes a spot.
+	stocked := []int{}
 	for _, l := range listings {
 		// A DM-only listing is not on anyone's shelf: the shelf is the same
 		// for every viewer, so it may only hold goods every viewer is shown.
-		if l.DmOnly || !parseShopMeta(l.Metadata).Today {
+		meta := parseShopMeta(l.Metadata)
+		if l.DmOnly || !meta.Today {
 			continue
 		}
 		pool[l.RelationID] = l.TargetEntityID
 		ids = append(ids, l.RelationID)
+		if meta.InStock && meta.Quantity != 0 {
+			stocked = append(stocked, l.RelationID)
+		}
 	}
 	day, err := s.shelfDay(ctx, campaignID, a)
 	if err != nil {
 		return nil, nil, err
 	}
-	v := &TodayView{Spots: spots, Pool: ids, Today: pickToday(shopEntityID, day.Index, ids, spots)}
+	v := &TodayView{Spots: spots, Pool: ids, Today: pickToday(shopEntityID, day.Index, stocked, spots)}
 	if day.HoursToDawn >= 0 {
 		h := day.HoursToDawn
 		v.HoursToDawn = &h
