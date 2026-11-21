@@ -385,3 +385,55 @@ func TestAsk_TooManyBlocks(t *testing.T) {
 		t.Errorf("reply %+v, checked %v, kept %d", tr, checked, len(repo.reqs))
 	}
 }
+
+// Advice about a kept request goes to the AI with the answer: the request is
+// still stored for the owner, the notes are told once and not kept, and a
+// request with nothing to note is answered as before.
+func TestHandle_AskForChangesNotes(t *testing.T) {
+	tests := []struct {
+		name  string
+		notes []string
+		want  []string
+		not   []string
+	}{
+		{"a note rides on the answer", []string{"block 1: the new page \"X\" closely matches the page \"Y\""},
+			[]string{"Nothing has changed yet", "Heads up, one thing", "- block 1: the new page", "still waiting as sent", "turned down"}, nil},
+		{"several notes", []string{"a", "b"}, []string{"a few things", "- a\n- b"}, nil},
+		{"none, no heads up", nil, []string{"Nothing has changed yet"}, []string{"Heads up"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, sess, repo := askRig(t)
+			s.Asks.(*Service).SetNotes(func(context.Context, *Connection, string) []string { return tt.notes })
+			out := s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "x", "changes": goodBlocks}))
+			tr := toolText(t, out)
+			if tr.IsError || len(repo.reqs) != 1 {
+				t.Fatalf("reply = %+v, stored %d", tr, len(repo.reqs))
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(tr.Content[0].Text, w) {
+					t.Errorf("answer is missing %q:\n%s", w, tr.Content[0].Text)
+				}
+			}
+			for _, w := range tt.not {
+				if strings.Contains(tr.Content[0].Text, w) {
+					t.Errorf("answer should not contain %q", w)
+				}
+			}
+			if len(tt.notes) > 0 && !out.Called.OK {
+				t.Errorf("a noted request is still a good one: %+v", out.Called)
+			}
+		})
+	}
+}
+
+// A refused request is not advised about: it was not kept.
+func TestHandle_AskForChangesRefusedHasNoNotes(t *testing.T) {
+	s, sess, _ := askRig(t)
+	called := false
+	s.Asks.(*Service).SetNotes(func(context.Context, *Connection, string) []string { called = true; return []string{"x"} })
+	s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "x", "changes": "  "}))
+	if called {
+		t.Error("notes were computed for a refused request")
+	}
+}

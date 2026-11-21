@@ -5690,6 +5690,7 @@ func (a *App) RegisterRoutes() {
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
 		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
+		aiConnectorSvc.SetNotes(aiWorkspaceHandler.ConnectorNotes)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
 			if err != nil || u == nil || u.Timezone == nil {

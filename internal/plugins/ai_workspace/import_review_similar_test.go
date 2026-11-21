@@ -134,7 +134,7 @@ func TestImportReview_SimilarFixture(t *testing.T) {
 	d.Similar = []*importer.SimilarPage{{
 		Name: "New Player Guide", Differ: 9, HasBody: true, CanUpdate: true,
 		GMOnly: importer.GMOnlyParts{Passages: 1},
-		Have:   []string{"Welcome to Therin.", "Bring a hero of level 1."},
+		Have:   []string{"Welcome to Therin.", "Bring a hero of level 1.", importer.GMOnlyMark},
 		Sent:   []string{"Welcome to Therin.", "Bring a hero of level 2."},
 	}}
 	// The stylesheet's cache-busting hash changes with every CSS edit.

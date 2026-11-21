@@ -52,9 +52,29 @@ type SimilarPage struct {
 	GMOnly GMOnlyParts
 	// Have and Sent are the two texts as lines, for "See both". Have is the
 	// page's reader-safe text, so GM-only passages are not copied into a
-	// comparison.
+	// comparison; GMOnlyMark stands where one was left out.
 	Have []string
 	Sent []string
+	// Pending is set when the match is a page another row or request means to
+	// add, not one the campaign has: there is no page to change, so the
+	// review offers only "See both". Elsewhere is then true for a page in a
+	// different waiting request and false for one in this same review.
+	Pending   bool
+	Elsewhere bool
+}
+
+// GMOnlyMark stands in a reader-safe text where a GM-only part was left out.
+// It is a private-use character so it is never a word and never real text;
+// the review turns it into a plain sentence.
+const GMOnlyMark = "\ue000"
+
+// PendingPage is a page some other row or waiting request means to add, in
+// the AI's own words. Index is its row in the review being built, or -1 for
+// a page of another request.
+type PendingPage struct {
+	Index int
+	Name  string
+	Body  string
 }
 
 // suffixes an AI or an export tacks on to make a "different" name for the
@@ -155,6 +175,23 @@ func bestWord(name string) string {
 	return best
 }
 
+// matchRank is how alike two pages are, 0 for not alike: a name match
+// outranks a body match, and a body match adds its overlap. One rule serves
+// existing pages and pending ones so the review and the AI are told the same.
+func matchRank(name, text, otherName, otherText string) float64 {
+	rank := 0.0
+	switch titleStrength(name, otherName) {
+	case 2:
+		rank = 3
+	case 1:
+		rank = 2
+	}
+	if j, _, ok := bodyOverlap(text, otherText); ok && j >= bodyJaccardMin {
+		rank += j
+	}
+	return rank
+}
+
 // FindSimilar returns the best existing page a create request is much like,
 // or nil. A candidate counts by name (same or containing, after the suffix is
 // dropped) or by body (Jaccard over bodyJaccardMin); a name match outranks a
@@ -183,17 +220,7 @@ func FindSimilar(ctx context.Context, finder PageFinder, campaignID string, v Vi
 		if e.Slug == own || e.IsTemplate {
 			continue
 		}
-		rank := 0.0
-		switch titleStrength(p.Name, e.Name) {
-		case 2:
-			rank = 3
-		case 1:
-			rank = 2
-		}
-		if j, _, ok := bodyOverlap(sent, entityText(e)); ok && j >= bodyJaccardMin {
-			rank += j
-		}
-		if rank > bestRank {
+		if rank := matchRank(p.Name, sent, e.Name, entityText(e)); rank > bestRank {
 			best, bestRank = e, rank
 		}
 	}
@@ -214,12 +241,14 @@ func FindSimilar(ctx context.Context, finder PageFinder, campaignID string, v Vi
 
 // entityText is a page's reader-safe words: its HTML with GM-only passages
 // removed, as plain lines. Reading the stripped text keeps hidden passages
-// out of both the word counts and the side-by-side.
+// out of both the word counts and the side-by-side; the mark left in their
+// place lets the side-by-side say a part is not shown instead of showing a
+// sentence with a hole in it.
 func entityText(e *entities.Entity) string {
 	if e == nil || e.EntryHTML == nil {
 		return ""
 	}
-	return htmlText(sanitize.StripSecretsHTML(*e.EntryHTML))
+	return htmlText(sanitize.RedactSecretsHTML(*e.EntryHTML, GMOnlyMark))
 }
 
 // htmlText turns HTML into text with a line break after each block, so the
@@ -262,5 +291,47 @@ func textLines(s string) []string {
 			out = append(out, l)
 		}
 	}
+	return out
+}
+
+// pendingBest is the page in others the request is most like, by the same
+// rule as matchRank, skipping the request's own row. A page whose name is the
+// request's own slug is still a match here: two rows that would make the same
+// page are the clearest case.
+func pendingBest(p ParsedPage, self int, sent string, others []PendingPage) *PendingPage {
+	var best *PendingPage
+	bestRank := 0.0
+	for i := range others {
+		o := &others[i]
+		if o.Index == self && self >= 0 {
+			continue
+		}
+		if rank := matchRank(p.Name, sent, o.Name, markdownText(o.Body)); rank > bestRank {
+			best, bestRank = o, rank
+		}
+	}
+	return best
+}
+
+// FindSimilarPending returns the page among others that a create request is
+// much like, or nil: the review's check for two pages in one request, or in
+// two waiting requests, that would make the same page. It reads nothing from
+// the campaign, so there is no viewer to hide anything from; the pages are
+// the AI's own text, which the owner can read in full on the same screen.
+func FindSimilarPending(p ParsedPage, self int, others []PendingPage) *SimilarPage {
+	if p.Status == StatusParseError || p.FrontMatter.IsEra() || len(others) == 0 {
+		return nil
+	}
+	sent := markdownText(p.Body)
+	best := pendingBest(p, self, sent, others)
+	if best == nil {
+		return nil
+	}
+	have := markdownText(best.Body)
+	out := &SimilarPage{Name: best.Name, Pending: true, Elsewhere: best.Index < 0}
+	if _, d, ok := bodyOverlap(sent, have); ok {
+		out.Differ, out.HasBody = d, true
+	}
+	out.Have, out.Sent = textLines(have), textLines(sent)
 	return out
 }

@@ -80,6 +80,7 @@ type Service struct {
 	callLimits *limiter // tool calls
 	calls      atomic.Int64
 	check      ChangesCheck
+	notes      ChangesNotes
 	// watchRepo and watch are the switches and warnings (watch.go);
 	// watchRepo is nil until SetWatch.
 	watchRepo WatchRepository
@@ -92,6 +93,14 @@ type Service struct {
 // checks everything again. did is the line for "What it did" when a refusal
 // can name the page, and "" otherwise.
 type ChangesCheck func(ctx context.Context, c *Connection, changes string) (problems []string, did string, err error)
+
+// ChangesNotes looks at a request that was kept and returns what the AI
+// should hear about it anyway: advice, never a reason to refuse, so the
+// owner still gets the request. It reads the campaign as the key's AI may.
+type ChangesNotes func(ctx context.Context, c *Connection, changes string) []string
+
+// SetNotes adds the advice given with the answer to a kept request. Optional.
+func (s *Service) SetNotes(f ChangesNotes) { s.notes = f }
 
 // SetCheck adds a check that runs when an AI asks for changes. Optional.
 func (s *Service) SetCheck(f ChangesCheck) { s.check = f }
@@ -395,6 +404,9 @@ func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes strin
 		return nil, err
 	}
 	q.ID = id
+	if s.notes != nil {
+		q.Notes = s.notes(ctx, c, changes)
+	}
 	return q, nil
 }
 
