@@ -92,6 +92,9 @@ type PracticeShelfView struct {
 	// name, empty when they have none, for "Start as a copy of <name>".
 	Max      int
 	HeroName string
+	// Tryout is where a try-out kept on this device shows as the shelf's last
+	// row; nil when the shelf cannot take one.
+	Tryout *TryoutView
 }
 
 // Full reports whether the player holds the most they may.
@@ -158,3 +161,28 @@ type PracticePageView struct {
 	Copied   string
 	Notice   string
 }
+
+// TryoutCreatorView is what the creator page needs in try-out mode.
+type TryoutCreatorView struct {
+	CampaignID string
+	UserID     string
+}
+
+// TryoutView is the Characters page's mount for a try-out kept in the
+// viewer's browser. It carries who the viewer is and nothing about the
+// try-out itself, which the server never sees until it is sent.
+type TryoutView struct {
+	CampaignID string
+	UserID     string
+	CSRFToken  string
+	// Visitor is a look-around visitor, who gets the Practice section of their
+	// own. Otherwise this is a player, who is offered the hero they built
+	// while looking around.
+	Visitor bool
+	// HasHero says a player already has a hero, so the offer is to keep the
+	// try-out as a practice hero instead.
+	HasHero bool
+}
+
+// Base is the campaign path the mount's script builds its addresses from.
+func (v *TryoutView) Base() string { return "/campaigns/" + v.CampaignID }

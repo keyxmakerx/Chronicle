@@ -795,6 +795,9 @@ type CastView struct {
 	// campaign for the Directors; nil for everyone else, or when none exist.
 	Practice         *PracticeShelfView
 	PracticeDirector *PracticeDirectorView
+	// Tryout is the mount for a try-out kept in the viewer's browser: a
+	// visitor's Practice section or a player's offer to keep it. nil otherwise.
+	Tryout *TryoutView
 }
 
 // --- Slug Generation ---

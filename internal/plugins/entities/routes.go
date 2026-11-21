@@ -235,6 +235,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// campaign's cast is browsable signed out, like the old NPC gallery; the
 	// handler lists only what the viewer's visibility role allows.
 	pub.GET("/characters", h.Characters, campaigns.RequireViewAccess())
+	// The try-out: a look-around visitor builds one practice hero that stays in
+	// their own browser. Read-only on purpose, and each handler admits only a
+	// signed-in non-member on a live pass; there is no write route for a
+	// visitor, and none may be added here.
+	pub.GET("/characters/try", h.TryoutNew, campaigns.RequireViewAccess())
+	pub.GET("/characters/try/plan", h.TryoutPlanAPI, campaigns.RequireViewAccess())
 
 	// Widget data endpoints (read-only) — needed so public campaign visitors
 	// can load editor content, attribute fields, etc. Handlers already enforce

@@ -129,6 +129,7 @@ type Handler struct {
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
+	visitorPlanner     VisitorPlanner
 	heroRules          HeroRules
 	practice           PracticeService // Optional: practice heroes; see practice_handler.go.
 	heroReleaser       HeroReleaser    // Optional: frees a hero on a Director's yes to a practice hero.
@@ -4185,6 +4186,12 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 		view.PracticeDirector = h.practiceDirectorList(c, cc)
 	}
 	if pcOn {
+		if t := h.tryoutMount(c, cc); t != nil {
+			view.Tryout = t
+			if view.Practice != nil && !t.Visitor {
+				view.Practice.Tryout = t
+			}
+		}
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID, int(cc.VisibilityRole())), charTypes)
 		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
 		// Only a member with no party yet needs a pointer to where claiming happens.

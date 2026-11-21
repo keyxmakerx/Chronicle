@@ -30,6 +30,9 @@ templ practiceShelf(v *PracticeShelfView) {
 				}
 			</ul>
 		}
+		if v.Tryout != nil {
+			@tryoutDeviceRow(v.Tryout)
+		}
 		if v.Full() {
 			<p class="pr-note">{ practiceFullMessage }</p>
 		} else {

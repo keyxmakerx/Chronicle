@@ -43,6 +43,11 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		@layouts.AppOpening(charactersOpening(cc, view)) {
 			<span>{ fmt.Sprintf("The cast of %s.", cc.Campaign.Name) }</span>
 		}
+		if view.Tryout != nil && view.Tryout.Visitor {
+			@tryoutVisitor(view.Tryout)
+		} else if view.Tryout != nil {
+			@tryoutOffer(view.Tryout)
+		}
 		if view.Builder != nil {
 			@heroBuilder(view.Builder)
 		}

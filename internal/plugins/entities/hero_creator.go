@@ -70,6 +70,9 @@ type HeroPlan struct {
 	// rules keep from this player is back in the lists, labelled, and no rule
 	// locks or forces a step.
 	Practice bool `json:"practice,omitempty"`
+	// Tryout marks the plan a look-around visitor builds from: only what a
+	// public reader may read, no rules, no reasons, nothing kept to a player.
+	Tryout bool `json:"tryout,omitempty"`
 }
 
 // HeroPlanner supplies a campaign's creator steps. director says whether the
@@ -77,6 +80,14 @@ type HeroPlan struct {
 // player see the entries kept to a character they play.
 type HeroPlanner interface {
 	HeroPlan(ctx context.Context, campaignID, userID string, director bool) (*HeroPlan, error)
+}
+
+// VisitorPlanner supplies the creator's steps for a look-around visitor: the
+// list a new player with no rules of their own would be offered, built from
+// what the public can read. Wired beside the HeroPlanner at the composition
+// root; without it the try-out routes answer not found.
+type VisitorPlanner interface {
+	VisitorPlan(ctx context.Context, campaignID string) (*HeroPlan, error)
 }
 
 // HeroPick is what the creator sends for one step: the chosen entry's name
