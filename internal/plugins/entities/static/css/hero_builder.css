@@ -160,12 +160,15 @@
 .hb-trait-c { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .hb-trait.is-off { color: var(--color-text-secondary); cursor: default; }
 @media (pointer: coarse) { .hb-trait { min-height: 44px; } }
+.dark .hb-trait input { color-scheme: dark; }
 .hb-pf { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border); }
 .hb-steps { justify-content: space-between; padding-top: 6px; padding-bottom: 8px; border-top: 0; }
 
 .hb-toast {
-  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 60; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 12px; max-width: min(92vw, 520px); padding: 8px 10px 8px 14px;
+  position: fixed; left: 50%; z-index: var(--z-toast); transform: translateX(-50%);
+  /* Above the docked Table bar (--tt-rest is set only where that bar sits). */
+  bottom: calc(18px + var(--tt-rest, env(safe-area-inset-bottom, 0px)));
+  display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(22rem, calc(100vw - 32px)); padding: 8px 10px 8px 14px;
   border-radius: var(--hb-r-panel); background: var(--color-text-primary); color: var(--color-bg-primary);
   box-shadow: var(--elev-dragged); font-size: 13px; animation: hb-peek var(--dur-micro) var(--ease-out) both;
 }
@@ -175,6 +178,18 @@
 
 /* Narrow screens: one column, and the panel opens under the hero it fills
    in, so it never covers the sentence. */
+/* Touch: the marks keep their size; the 44px hit area is padding or an
+   invisible pseudo-element, and list rows and the search field grow. */
+@media (pointer: coarse) {
+  .hb-btn, .hb-link, .hb-x, .hb-blank { position: relative; }
+  .hb-btn::after, .hb-link::after { content: ""; position: absolute; inset: -7px 0; }
+  .hb-x::after { content: ""; position: absolute; inset: -7px; }
+  .hb-blank::before { content: ""; position: absolute; inset: -7px 0; }
+  .hb-opt { min-height: 44px; }
+  .hb-q { height: 44px; }
+  .hb-toast button { min-height: 44px; }
+}
+
 @media (max-width: 899px) {
   .hb-wrap.is-open { grid-template-columns: minmax(0, 1fr); }
   .hb-panel { position: static; max-height: none; }

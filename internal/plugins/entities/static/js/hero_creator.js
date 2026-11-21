@@ -254,11 +254,31 @@
 
   // --- The page ---
   Creator.prototype.render = function () {
-    var html = '<div class="hc-wrap"><section class="hc-page paper paper-stack" aria-label="Hero creator">' +
+    // The tucked sheet hangs on the wrapper, not the page: the page's own
+    // stacking context would otherwise paint it over the page.
+    var html = '<div class="hc-wrap paper-stack"><section class="hc-page paper" aria-label="Hero creator">' +
       this.trailHTML() + (this.isDetails() ? this.detailsHTML() : this.stepHTML()) + this.footHTML() +
       '</section>' + (this.isDetails() ? '' : '<aside class="hc-leaf paper" aria-hidden="true"></aside>') + '</div>';
     this.root.innerHTML = this.bandHTML() + html;
     this.open = null;
+    this.watchTrail();
+  };
+
+  // A step that starts a wrapped line drops the rule that leads into it; the
+  // rule belongs to its step, so none is left hanging at a line's end.
+  Creator.prototype.watchTrail = function () {
+    var trail = this.root.querySelector('.hc-trail');
+    if (this.trailWatch) { this.trailWatch.disconnect(); this.trailWatch = null; }
+    if (!trail) return;
+    var mark = function () {
+      var prev = null;
+      trail.querySelectorAll('.hc-stop').forEach(function (b) {
+        b.classList.toggle('is-wrapped', !!prev && b.offsetTop > prev.offsetTop + 2);
+        prev = b;
+      });
+    };
+    mark();
+    if (window.ResizeObserver) { this.trailWatch = new ResizeObserver(mark); this.trailWatch.observe(trail); }
   };
 
   // Practice mode says what it is above the steps, in the page's own words.
@@ -277,8 +297,7 @@
     return '<nav class="hc-trail" aria-label="Steps">' + labels.map(function (l, i) {
       var key = i < self.plan.steps.length ? self.plan.steps[i].fieldKey : null;
       var done = key ? !!(self.picks[key] && self.picks[key].name) : !!self.name.trim();
-      return (i ? '<span class="hc-trail__ln" aria-hidden="true"></span>' : '') +
-        '<button type="button" class="hc-stop' + (i === self.step ? ' is-on' : '') + (done ? ' is-done' : '') + '" data-step="' + i + '"' +
+      return '<button type="button" class="hc-stop' + (i === self.step ? ' is-on' : '') + (done ? ' is-done' : '') + '" data-step="' + i + '"' +
         (i === self.step ? ' aria-current="step"' : '') + '><i aria-hidden="true">' + (done && i !== self.step ? '✓' : (i + 1)) + '</i>' +
         '<span class="hc-stop__lbl">' + esc(l) + '</span></button>';
     }).join('') + '</nav>';
@@ -424,10 +443,18 @@
     for (var e = el.parentElement; e && e !== document.body; e = e.parentElement) {
       if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight) {
         var r = e.getBoundingClientRect();
-        return { top: r.top, height: e.clientHeight };
+        return { top: r.top, height: e.clientHeight - dockedBar(r.top + e.clientHeight) };
       }
     }
-    return { top: 0, height: window.innerHeight };
+    return { top: 0, height: window.innerHeight - dockedBar(window.innerHeight) };
+  }
+
+  // How much of the visible bottom a docked bar (The table) covers, so the
+  // leaf stops above it instead of running under.
+  function dockedBar(viewBottom) {
+    var bar = document.getElementById('tt-drawer');
+    if (!bar || getComputedStyle(bar).position !== 'fixed') return 0;
+    return Math.max(0, viewBottom - bar.getBoundingClientRect().top);
   }
 
   Creator.prototype.openLeaf = function (i) {
@@ -440,9 +467,12 @@
     // On a narrow screen the leaf covers the page, so it rises where the
     // reader has scrolled to rather than at the page's top.
     if (leaf.offsetWidth >= wrap.offsetWidth - 1) {
-      var view = scrollerRect(wrap);
-      leaf.style.setProperty('--hc-sheet-h', Math.max(320, view.height - 24) + 'px');
-      var top = Math.min(wrap.offsetHeight - leaf.offsetHeight, view.top + 12 - wrap.getBoundingClientRect().top);
+      var view = scrollerRect(wrap), wtop = wrap.getBoundingClientRect().top;
+      // The leaf starts at the page's top or the reader's, whichever is lower,
+      // and ends 12px above the bottom of what is visible.
+      var from = Math.max(wtop, view.top + 12);
+      leaf.style.setProperty('--hc-sheet-h', Math.max(320, view.top + view.height - 12 - from) + 'px');
+      var top = Math.min(wrap.offsetHeight - leaf.offsetHeight, from - wtop);
       leaf.style.setProperty('--hc-sheet-top', Math.max(0, top) + 'px');
     } else {
       leaf.style.removeProperty('--hc-sheet-top');
@@ -469,7 +499,7 @@
   Creator.prototype.refresh = function () {
     var st = this.cur(), self = this;
     var trail = this.root.querySelector('.hc-trail');
-    if (trail) trail.outerHTML = this.trailHTML();
+    if (trail) { trail.outerHTML = this.trailHTML(); this.watchTrail(); }
     var foot = this.root.querySelector('.hc-foot');
     if (foot) foot.outerHTML = this.footHTML();
     var notes = this.root.querySelector('.hc-notes');
@@ -653,7 +683,7 @@
       if (e.target.hasAttribute && e.target.hasAttribute('data-name')) {
         self.name = e.target.value;
         var trail = root.querySelector('.hc-trail');
-        if (trail) trail.outerHTML = self.trailHTML();
+        if (trail) { trail.outerHTML = self.trailHTML(); self.watchTrail(); }
         self.save();
       }
     });

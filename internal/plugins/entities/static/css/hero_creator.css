@@ -5,7 +5,7 @@
    --paper-mute is proposed for paper.css; the fallback keeps it working
    until it lands there. Calm and Off come from input.css. */
 
-.hc { --hc-mute: var(--paper-mute, #7a6f63); --hc-neg: var(--paper-neg, #9b3b2e); --hc-lit: rgb(255 255 255 / 0.4); --hc-lit-on: rgb(255 255 255 / 0.6); container: hc / inline-size; position: relative; }
+.hc { --hc-mute: var(--paper-mute, #54483e); --hc-neg: var(--paper-neg, #85291e); --hc-lit: rgb(255 255 255 / 0.4); --hc-lit-on: rgb(255 255 255 / 0.6); container: hc / inline-size; position: relative; }
 .hc-wrap { --hc-page-w: 660px; --hc-leaf-w: 560px; position: relative; isolation: isolate; width: var(--hc-page-w); max-width: 100%; margin-inline: auto;
   transition: transform var(--dur-slide) var(--ease-slide); }
 /* Open, the page and its leaf move together so the pair stays centred. */
@@ -16,14 +16,24 @@
 
 /* Steps along the top: numbered seals joined by a rule. */
 .hc-trail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 0; }
-.hc-stop { display: flex; align-items: center; gap: 7px; border: 0; background: none; padding: 2px 0; font: 600 12px var(--paper-ui-font); color: var(--hc-mute); }
+/* Each step carries the rule that leads into it, so a wrapped line can drop
+   its first rule (hero_creator.js marks it) and none is left dangling. */
+.hc-stop { position: relative; display: flex; align-items: center; gap: 7px; border: 0; background: none; padding: 2px 0; font: 600 12px var(--paper-ui-font); color: var(--hc-mute); }
 .hc-stop i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 12px var(--paper-font); font-style: normal;
   border: 1.5px solid var(--paper-edge); background: var(--paper-cut); }
 .hc-stop:hover { color: var(--paper-ink); }
 .hc-stop.is-done:not(.is-on) i { border-color: var(--paper-accent); color: var(--paper-accent); }
 .hc-stop.is-on { color: var(--paper-ink); }
 .hc-stop.is-on i { background: var(--paper-accent); border-color: var(--paper-accent); color: var(--paper-cut); }
-.hc-trail__ln { width: 26px; height: 1.5px; background: var(--paper-edge); margin: 0 6px; }
+/* Only colour eases: a margin that eased would show the dropped rules sliding. */
+.hc-stop { --hc-ln: 26px; transition: color var(--dur-micro) var(--ease-out); }
+.hc-stop + .hc-stop::before { content: ""; width: var(--hc-ln); height: 1.5px; background: var(--paper-edge); margin: 0 -1px 0 6px; flex: none; }
+/* A step that starts a line drops its rule. It keeps the rule's width as
+   margin the next step takes back, so the line looks right and the step never
+   fits back onto the line above. */
+.hc-stop.is-wrapped::before { display: none; }
+.hc-stop.is-wrapped { margin-right: calc(var(--hc-ln) + 12px); }
+.hc-stop.is-wrapped + .hc-stop:not(.is-wrapped) { margin-left: calc(-1 * (var(--hc-ln) + 12px)); }
 
 .hc-head h1 { margin: 2px 0 0; font: 800 32px/1.08 var(--paper-font); color: var(--paper-ink); text-wrap: balance; outline: none; }
 .hc-head p { margin: 6px 0 0; max-width: 56ch; font: 500 15px/1.5 var(--paper-font); color: var(--paper-ink-soft); }
@@ -89,10 +99,12 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .hc-kind { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hc-name { margin: 2px 0 0; font: 800 30px/1.05 var(--paper-font); color: var(--paper-ink); text-wrap: balance; outline: none; }
 .hc-lede { margin: 8px 0 0; font: italic 500 16px/1.5 var(--paper-font); color: var(--paper-ink-soft); }
-.hc-facts { display: flex; flex-wrap: wrap; border-top: 1px solid var(--paper-edge); border-bottom: 1px solid var(--paper-edge); margin: 12px 0 4px; }
-.hc-facts div { flex: 1 1 80px; padding: 7px 4px; text-align: center; min-width: 0; }
-.hc-facts div + div { border-left: 1px dashed var(--paper-edge); }
-.hc-facts b { display: block; font: 700 20px/1.15 var(--paper-font); color: var(--paper-ink); overflow-wrap: anywhere; }
+/* Cells size to their words and wrap whole words. Every cell carries a left
+   rule pulled 1px out of the strip, which hides the one on each row's first
+   cell, so a wrapped row never starts with a lone line. */
+.hc-facts { display: flex; flex-wrap: wrap; overflow: hidden; border-top: 1px solid var(--paper-edge); border-bottom: 1px solid var(--paper-edge); margin: 12px 0 4px; }
+.hc-facts div { flex: 1 1 80px; min-width: min-content; max-width: 100%; margin-left: -1px; padding: 7px 4px; text-align: center; border-left: 1px dashed var(--paper-edge); }
+.hc-facts b { display: block; font: 700 20px/1.15 var(--paper-font); color: var(--paper-ink); overflow-wrap: break-word; }
 .hc-k { font: 600 10px var(--paper-ui-font); letter-spacing: 0.1em; text-transform: uppercase; color: var(--hc-mute); }
 .hc-text { margin: 12px 0 0; font: 500 14px/1.65 var(--paper-font); color: var(--paper-ink-soft); }
 .hc-text p { margin: 0 0 8px; }
@@ -117,8 +129,11 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .hc-field { display: flex; flex-direction: column; gap: 6px; max-width: 420px; }
 .hc-field input { border: 0; border-bottom: 1.5px solid var(--paper-edge); background: transparent; padding: 4px 2px; font: 700 26px var(--paper-font); color: var(--paper-ink); }
 .hc-field input:focus { outline: none; border-bottom-color: var(--paper-accent); }
-.hc-sum { margin: 0; display: grid; grid-template-columns: auto 1fr auto; gap: 0 16px; }
+/* The rule is drawn by each cell edge to edge: the 16px between columns is
+   padding inside the cells, not a grid gap the rule would skip. */
+.hc-sum { margin: 0; display: grid; grid-template-columns: auto 1fr auto; }
 .hc-sum dt, .hc-sum dd { padding: 8px 0; border-bottom: 1px dashed var(--paper-edge); margin: 0; }
+.hc-sum dt, .hc-sum dd:nth-of-type(odd) { padding-right: 16px; }
 .hc-sum dt { font: 600 10.5px/1.9 var(--paper-ui-font); letter-spacing: 0.1em; text-transform: uppercase; color: var(--hc-mute); }
 .hc-sum dd { font: 700 16px var(--paper-font); color: var(--paper-ink); }
 .hc-sum dd small { display: block; font: 500 12.5px var(--paper-font); color: var(--paper-ink-soft); }
@@ -381,7 +396,7 @@ html[data-cz-hover="plain"] .hc, html[data-cz-hover="compact"] .hc, .hc.hc--tool
   --paper: var(--color-card-bg); --paper-cut: var(--color-card-bg);
   --paper-under: color-mix(in srgb, var(--color-text-primary) 6%, var(--color-card-bg));
   --paper-edge: var(--color-border); --paper-ink: var(--color-text-primary); --paper-ink-soft: var(--color-text-body);
-  --paper-accent: var(--color-accent); --hc-mute: var(--color-text-secondary); --paper-font: var(--paper-ui-font);
+  --paper-accent: var(--color-accent); --hc-mute: var(--color-text-secondary); --hc-neg: rgb(var(--color-bad-rgb)); --paper-font: var(--paper-ui-font);
   --hc-lit: color-mix(in srgb, var(--color-accent) 6%, transparent); --hc-lit-on: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 html[data-cz-hover="night"] .hc:not(.hc--tool) {
@@ -405,6 +420,19 @@ html[data-cz-hover="compact"] .hc .hc-head h1 { font-size: 26px; }
 html[data-cz-hover="compact"] .hc .hc-name { font-size: 24px; }
 html[data-cz-hover="compact"] .hc .hc-row { padding: 6px; }
 
+/* Touch: the marks keep their size; a hit area of 44px comes from padding or
+   an invisible pseudo-element. */
+@media (pointer: coarse) {
+  .hc-trail { row-gap: 14px; }
+  .hc-stop { padding: 9px 0; margin: -7px 0; }
+  .hc-btn, .hc-link, .hc-ribbons button { position: relative; }
+  .hc-btn::after { content: ""; position: absolute; inset: -6px 0; }
+  .hc-link::after { content: ""; position: absolute; inset: -15px -4px; }
+  .hc-ribbons { row-gap: 18px; }
+  .hc-ribbons button::after { content: ""; position: absolute; inset: -10px 0; }
+  .hc-leaf__x { top: 0; right: 0; min-width: 44px; min-height: 44px; padding: 10px 16px; display: flex; align-items: center; justify-content: flex-end; }
+}
+
 /* A desk beside the sidebar: a narrower page, and the leaf takes what is left. */
 @container hc (max-width: 1200px) {
   .hc-wrap { --hc-page-w: 540px; --hc-leaf-w: min(560px, 100cqi - 540px - 10px); }
@@ -425,7 +453,7 @@ html[data-cz-hover="compact"] .hc .hc-row { padding: 6px; }
   .hc-head h1 { font-size: 27px; }
   .hc-stop .hc-stop__lbl { display: none; }
   .hc-stop.is-on .hc-stop__lbl { display: inline; }
-  .hc-trail__ln { width: 14px; }
+  .hc-stop { --hc-ln: 14px; }
   .hc-sum { grid-template-columns: 1fr auto; }
   .hc-sum dt { grid-column: 1 / -1; border-bottom: 0; padding-bottom: 0; }
 }
