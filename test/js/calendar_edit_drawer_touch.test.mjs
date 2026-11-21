@@ -23,7 +23,7 @@ function coarseBlocks(src) {
 test('touch raises the Edit drawer buttons and the chosen days actions to 44', () => {
   const body = coarseBlocks(css).join('\n');
   for (const sel of ['.cal-v5 .dkr .btn', '.cal-v5 .bbb']) {
-    const re = new RegExp('(^|[,\\n}])\\s*' + sel.replace(/[.]/g, '\\.') + '\\s*(,[^{]*)?\\{[^}]*min-height:44px');
+    const re = new RegExp('(^|[,\\n}])\\s*' + sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(,[^{]*)?\\{[^}]*min-height:44px');
     assert.match(body, re, sel + ' needs min-height:44px on touch');
   }
 });
