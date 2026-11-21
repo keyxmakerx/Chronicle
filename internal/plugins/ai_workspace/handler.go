@@ -20,6 +20,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
@@ -99,6 +100,8 @@ type Handler struct {
 	// playerSheets is the door players' AI changes go through; nil holds
 	// every one back.
 	playerSheets PlayerSheets
+	// pageUndo puts pages back for Undo; nil leaves pages without it.
+	pageUndo PageUndo
 	// baseURL is the site's public address, for the connector's address.
 	baseURL string
 }
@@ -757,6 +760,7 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	}
 
 	early := h.commitEarlyFolders(c, cc, recs)
+	keep := claimedID != 0 && h.connector != nil && h.connector.CanUndo()
 
 	userID := auth.GetUserID(c)
 	var result importer.CommitResult
@@ -791,7 +795,7 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	// import just created. Folders are the exception: pages file themselves
 	// into folders, so folders are made and renamed first.
 	pageRows := len(result.Rows)
-	recCounts := h.commitRecords(c, cc, recs, &result, early)
+	recCounts := h.commitRecords(c, cc, recs, &result, early, keep)
 	done := h.rememberApplied(c.Request().Context(), cc.Campaign.ID, result, pageRows, pages, recs)
 	h.markApplied(c.Request().Context(), cc.Campaign.ID, userID, lab, done)
 
@@ -816,6 +820,13 @@ func (h *Handler) CommitImport(c *echo.Context) error {
 	res := ImportResultData{CampaignID: cc.Campaign.ID, Result: result}
 	if claimedID != 0 {
 		outcome := requestOutcome(result)
+		if keep {
+			if err := h.connector.KeepBefores(c.Request().Context(), cc.Campaign.ID, userID, claimedID, keptBefores(result)); err != nil {
+				// The changes are written; they just offer no Undo.
+				slog.Error("ai-workspace: keeping befores",
+					slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+			}
+		}
 		// The changes are written, so a failure here is only logged: the
 		// request stays claimed and cannot be applied a second time.
 		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, userID, claimedID, outcome); err != nil {
@@ -882,7 +893,7 @@ type recordCounts struct{ applied, failed int }
 // the result. A delete needs its own confirmation tick, checked here again
 // whatever the browser sent; every record is re-planned inside Apply, so
 // nothing the review screen showed is trusted at commit.
-func (h *Handler) commitRecords(c *echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult, early map[int]importer.RowOutcome) recordCounts {
+func (h *Handler) commitRecords(c *echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult, early map[int]importer.RowOutcome, keep bool) recordCounts {
 	var n recordCounts
 	// Pages are saved by now, so a record's @[Name] resolves against the
 	// campaign alone.
@@ -895,7 +906,7 @@ func (h *Handler) commitRecords(c *echo.Context, cc *campaigns.CampaignContext, 
 	for i, p := range recs {
 		out, done := early[i]
 		if !done {
-			out = h.commitRecord(c, cc, i, p, links, off)
+			out = h.commitRecord(c, cc, i, p, links, off, keep)
 		}
 		out.Index = base + i
 		switch out.Status {
@@ -922,7 +933,7 @@ func (h *Handler) commitRecords(c *echo.Context, cc *campaigns.CampaignContext, 
 // commitRecord applies one record, or says why it was not.
 // A record for a feature in off is refused again here, since the feature
 // may have been switched off after the review.
-func (h *Handler) commitRecord(c *echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks, off records.OffFeatures) importer.RowOutcome {
+func (h *Handler) commitRecord(c *echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks, off records.OffFeatures, keep bool) importer.RowOutcome {
 	prefix := "rec_" + strconv.Itoa(i) + "_"
 	rec := toRecord(i, p, links)
 	out := importer.RowOutcome{Name: rec.Name}
@@ -947,7 +958,19 @@ func (h *Handler) commitRecord(c *echo.Context, cc *campaigns.CampaignContext, i
 		out.Status, out.Reason = importer.StatusFailed, records.OffFeatureReason(off.For(rec))
 	default:
 		rec.Generated = c.FormValue(prefix + "generated")
-		if err := k.Apply(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), rec); err != nil {
+		ctx, actor := c.Request().Context(), actorFor(c, cc)
+		// What the thing was is read before Apply changes it; only a request
+		// a connected AI sent keeps one, since only those show Undo.
+		var snap *aiplug.Snapshot
+		undo, undoable := k.(aiplug.Undoable)
+		if keep && undoable {
+			var berr error
+			if snap, berr = undo.Before(ctx, cc.Campaign.ID, actor, rec); berr != nil {
+				slog.Warn("ai-workspace: keeping a before", slog.String("kind", rec.Kind), slog.Any("error", berr))
+				snap = nil
+			}
+		}
+		if err := k.Apply(ctx, cc.Campaign.ID, actor, rec); err != nil {
 			slog.Warn("ai-workspace: record failed",
 				slog.String("campaign_id", cc.Campaign.ID),
 				slog.String("kind", rec.Kind), slog.Any("error", err))
@@ -961,6 +984,11 @@ func (h *Handler) commitRecord(c *echo.Context, cc *campaigns.CampaignContext, i
 			out.Status = importer.StatusUpdated
 		default:
 			out.Status = importer.StatusCreated
+		}
+		if snap != nil {
+			if hash, herr := undo.Fingerprint(ctx, cc.Campaign.ID, actor, *snap); herr == nil && hash != "" {
+				out.Kept = &importer.KeptRecord{Kind: k.Name(), Action: rec.Action, Snapshot: *snap, AfterHash: hash}
+			}
 		}
 	}
 	return out
@@ -981,7 +1009,7 @@ func (h *Handler) commitEarlyFolders(c *echo.Context, cc *campaigns.CampaignCont
 	}
 	for i, p := range recs {
 		if isEarlyFolder(p) {
-			early[i] = h.commitRecord(c, cc, i, p, nil, nil)
+			early[i] = h.commitRecord(c, cc, i, p, nil, nil, false)
 		}
 	}
 	return early

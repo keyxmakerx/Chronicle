@@ -5665,6 +5665,7 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceRenderer.Folders = aiFolderNames{folders: folderService}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
+	aiWorkspaceHandler.SetPageUndo(aiPageUndo{pages: entityService, safety: pageSafetyService})
 	// Which parts of a split AI answer were applied; left out when its table
 	// did not migrate, so labels are still read but earlier pastes unknown.
 	// So are the owner's switches for which shared notes the AI may change;
@@ -5690,6 +5691,10 @@ func (a *App) RegisterRoutes() {
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
 		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
+		// What an applied request changed is kept for 30 days so the owner can
+		// undo it from Your AI; the purge removes it once the time is up.
+		aiConnectorSvc.SetUndo(connector.NewUndoRepository(a.DB))
+		go aiConnectorSvc.StartBeforePurger(a.ShutdownCtx)
 		aiConnectorSvc.SetNotes(aiWorkspaceHandler.ConnectorNotes)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)

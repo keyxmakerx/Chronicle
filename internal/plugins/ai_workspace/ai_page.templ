@@ -752,3 +752,40 @@ templ reviewIn(d ImportReviewData) {
 		<div id={ requestResultHost } hx-swap-oob="innerHTML"></div>
 	}
 }
+
+// aiUndoCell is the Undo part of an applied request's row in What it did: the
+// Undo word that asks first (the same quiet confirm as Turn down), "Undone
+// <when>" once it ran, and the reason inline when it changed nothing. The
+// confirm's state lives in this fragment, so the swap that answers a press
+// replaces it whole.
+templ aiUndoCell(u undoCell) {
+	<div id={ fmt.Sprintf("aic-undo-%d", u.RequestID) } class="aic-undo" x-data="{ asking: false }" :data-undo-open="asking ? '' : null">
+		if u.UndoneAt != nil {
+			<p class="aic-undone" role="status"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> { u.undoneText() }</p>
+		} else {
+			if u.Refusal != "" {
+				<p class="aic-why aic-undo-why" role="alert">{ u.Refusal }</p>
+			}
+			if u.Can() {
+				<button type="button" class="quiet-word aic-undo-btn" @click="asking = !asking" :aria-expanded="asking">
+					<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undo
+				</button>
+				<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
+					<p>{ u.Confirm }</p>
+					<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
+					<button
+						type="button"
+						class="btn-secondary"
+						hx-post={ fmt.Sprintf("/campaigns/%s/ai/requests/%d/undo", u.CampaignID, u.RequestID) }
+						hx-target={ fmt.Sprintf("#aic-undo-%d", u.RequestID) }
+						hx-swap="outerHTML"
+						hx-disabled-elt="this"
+					>
+						<span class="aic-idle">Undo it</span>
+						<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Putting back…</span>
+					</button>
+				</div>
+			}
+		}
+	</div>
+}
