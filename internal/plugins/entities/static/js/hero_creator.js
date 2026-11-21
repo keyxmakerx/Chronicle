@@ -1162,7 +1162,7 @@
     jobs.forEach(function (j) {
       var c = j.c, sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts'), h3 = c.querySelector('h3');
       j.sum = sum; j.dl = dl; j.h3 = h3; j.ix = c.querySelector('.hc-top .hc-ix');
-      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) h3.style.fontSize = ''; if (j.ix) j.ix.hidden = false;
+      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) { h3.style.fontSize = ''; h3.style.webkitLineClamp = ''; h3.classList.remove('is-clamp'); } if (j.ix) j.ix.hidden = false;
       if (dl) { dl.hidden = false; qa('div', dl).forEach(function (d) { d.hidden = false; }); }
     });
     jobs.forEach(function (j) {
@@ -1173,7 +1173,8 @@
       j.ixWrap = !!j.ix && j.ix.offsetTop > j.ix.parentNode.firstElementChild.offsetTop; j.ixH = j.ix ? j.ix.offsetHeight : 0;
     });
     // "Read the rules" at the foot always stays on the card: the summary and
-    // facts give way first, down to the name alone on the smallest phones.
+    // facts give way first, down to the name alone on the smallest phones,
+    // and last of all a long name is cut to two lines, then one.
     var steps = function (j) {
       var shown = function () { return j.dl ? qa('div', j.dl).filter(function (d) { return !d.hidden; }) : []; };
       var clamp = function (n) { return { save: Math.max(0, j.lines - n) * j.lh - Math.max(0, j.lines - (j.clamp || j.lines)) * j.lh, run: function () { j.sum.style.webkitLineClamp = n; j.clamp = n; } }; };
@@ -1183,7 +1184,9 @@
         function () { return drop(1); }, function () { return drop(0); }, function () { return clamp(1); },
         function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '24px'; } }; },
         function () { return { save: 0, run: function () { j.sum.hidden = true; } }; },
-        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; }];
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; },
+        function () { return { save: 0, run: function () { if (j.h3) { j.h3.classList.add('is-clamp'); j.h3.style.webkitLineClamp = 2; } } }; },
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.webkitLineClamp = 1; } }; }];
     };
     jobs.forEach(function (j) {
       j.list = steps(j); j.i = 0;

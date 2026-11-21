@@ -435,6 +435,7 @@ html.dark .hc[data-skin="ornate"] {
 }
 
 .hc-facts[hidden], .hc-facts div[hidden], .hc-sum[hidden], .hc-top .hc-ix[hidden] { display: none; }
+.hc-card h3.is-clamp { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 /* An odd fact out spans the row, so a two-column grid leaves no empty cell. */
 .hc-facts div:nth-child(odd):last-child { grid-column: 1 / -1; }
 
