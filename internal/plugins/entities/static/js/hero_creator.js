@@ -1,15 +1,16 @@
 /**
- * hero_creator.js — the hero creator (the signed "pull-out leaf" design).
+ * hero_creator.js — the hero creator: "Steps, with cards inside".
  *
- * One paper page per step. A step lists the entries for one character field
- * (Ancestry, Kit…); tapping an entry slides its leaf out from under the page,
- * with ribbons for the leaf's pages. The last step asks for a name and makes
- * the hero.
+ * Each plan step (Ancestry, Kit…) is one step of a short walk. A step deals
+ * its entries as cards; a card opens its full rules (a half-height sheet on a
+ * phone, the right-hand column on a computer) and choosing it plays the card
+ * into its place in the picks, then deals the next step. The last step asks
+ * for a name and makes the hero.
  *
  * Everything drawn comes from the entry itself, so an uploaded system whose
- * entries are only a name and some text gets just those pages:
- * - scalar properties become the facts row;
- * - a property that is a list of named items becomes a ribbon page;
+ * entries are only a name and some text still gets a card and a rules view:
+ * - scalar properties become the facts;
+ * - lists of named items, text, and nested objects become sections;
  * - a list whose items carry a numeric "cost", with a "<…>_points" budget,
  *   can be bought from (the server checks the same rule).
  *
@@ -19,13 +20,23 @@
  *
  * A Director's rules shape each step (the plan's per-step `rules`, worded by
  * hero_rules_lines.js as in the hero builder): Not here entries are gone with
- * a quiet foot line, an Ask first entry carries a mark and is sent to the
- * Director once the hero is made, and a required step with one entry left is
- * filled in and locked.
+ * a quiet card, an Ask first entry carries a mark and is sent to the Director
+ * once the hero is made, and a required step with one entry left is filled in
+ * and locked.
+ *
+ * Rules words: {@category term|label} in package text becomes a dotted,
+ * focusable term when the mount's data-terms-url (fetched once) knows it; a
+ * small hover card explains it. Without the address, or when the fetch
+ * fails, the words are plain text.
  *
  * A step whose list a Director let this player write in links to "Your own
  * entries"; the player's draft then shows in the list, and once the hero is
  * made the draft is kept to that hero.
+ *
+ * Skins: the mount's data-skin (plain, paper, ornate) picks a token set in
+ * hero_creator.css; light or dark follows the site theme. Motion follows
+ * html[data-motion]: Lively by default, Gentle (fades and nudges) under Calm,
+ * instant under Off or prefers-reduced-motion.
  *
  * Practice mode (data-practice="true"): the same pages make a practice hero
  * instead of a real one. The plan puts back the entries the rules keep from
@@ -57,14 +68,6 @@
   // The campaign's own word for its game master, already HTML-safe.
   function gm() { return Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM'; }
 
-  // Package prose: {@category term|shown} markers keep their shown text and
-  // **bold** becomes bold. Escaped first, so nothing in it can become markup.
-  function prose(s) {
-    var t = esc(s).replace(/\{@[a-zA-Z]+\s+([^}|]*)(?:\|([^}]*))?\}/g, function (m, term, shown) { return shown || term; });
-    t = t.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-    return t.split(/\n{2,}/).map(function (p) { return '<p>' + p.replace(/\n/g, '<br>') + '</p>'; }).join('');
-  }
-
   function words(key) {
     var s = String(key).replace(/_display$/, '').replace(/[_-]+/g, ' ').trim();
     return s.charAt(0).toUpperCase() + s.slice(1);
@@ -73,6 +76,9 @@
   var NO_STORAGE = 'This browser won\'t keep things, so the try-out can\'t be saved here.';
 
   function lower(s) { return String(s || '').toLowerCase(); }
+  function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function an(w) { return /^[aeiou]/i.test(w) ? 'an' : 'a'; }
+  function hasOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
 
   function isScalar(v) { return typeof v === 'number' || (typeof v === 'string' && v.length > 0 && v.length <= 40); }
 
@@ -107,11 +113,210 @@
     return '';
   }
 
+  // --- Rules words ---------------------------------------------------------
+
+  // The key a term is looked up by: the term as written in the markup,
+  // lowercased, trimmed, runs of whitespace as one "-" ("Power roll" and
+  // "power-roll" are the same word). The terms endpoint uses the same rule.
+  function termKey(t) { return String(t == null ? '' : t).trim().toLowerCase().replace(/\s+/g, '-'); }
+
+  var MARK = /\{@([a-zA-Z]+)\s+([^}|]*)(?:\|([^}]*))?\}/g;
+  function shown(term, label) { return label || String(term).trim().replace(/-/g, ' '); }
+  // Text with the markers resolved to their shown words, unescaped: for card
+  // fronts and places a button cannot sit.
+  function plain(s) {
+    return String(s == null ? '' : s).replace(MARK, function (m, c, term, label) { return shown(term, label); });
+  }
+  // Escaped text in which each marker the glossary knows is a term button and
+  // every other marker is just its shown words. Nothing in it is trusted.
+  function marked(s, terms) {
+    s = String(s == null ? '' : s);
+    var out = '', last = 0, m;
+    MARK.lastIndex = 0;
+    while ((m = MARK.exec(s))) {
+      var label = shown(m[2], m[3]), key = termKey(m[2]);
+      out += esc(s.slice(last, m.index));
+      out += terms && hasOwn(terms, key)
+        ? '<button type="button" class="hc-term" data-term="' + esc(key) + '" aria-expanded="false">' + esc(label) + '</button>'
+        : esc(label);
+      last = m.index + m[0].length;
+    }
+    return out + esc(s.slice(last));
+  }
+
+  // Package prose: markers, **bold**, and one paragraph per line, with the
+  // lines that read as tiers or bullets set apart.
+  function prose(s, terms) {
+    var lines = String(s == null ? '' : s).split(/\n+/).filter(function (l) { return l.trim(); });
+    return lines.map(function (l) {
+      var tier = /^(- |• )/.test(l) || /^(≤|\d+\s*[-–]\s*\d+:|\d+\+|11 or lower)/.test(l);
+      var t = marked(l.replace(/^(- |• )/, ''), terms).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+      return '<p' + (tier ? ' class="hc-tier"' : '') + '>' + t + '</p>';
+    }).join('');
+  }
+
+  // Text for one trait or item: a single paragraph's worth, markers resolved.
+  function inline(s, terms) { return marked(s, terms).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
+
+  // Properties that are bookkeeping, not rules text.
+  var HIDE = { type: 1, omissions: 1, custom_fields: 1, provenance_display: 1, details_display: 1 };
+  function hidden(k) { return HIDE[k] === 1 || /_display$/.test(k) || /quick_build$/.test(k); }
+
+  // The scalar facts of an entry, as [label, value]; the buy list's budget is
+  // "Points to spend".
+  function factsOf(c) {
+    var props = c.properties || {}, bl = buyList(props), out = [];
+    Object.keys(props).forEach(function (k) {
+      if (hidden(k)) return;
+      var v = props[k];
+      // A fact is a short line, so a rules marker in it shows as its words.
+      if (isScalar(v)) out.push([bl && k === bl.budgetKey ? 'Points to spend' : words(k), plain(v)]);
+      else if (Array.isArray(v) && v.length && v.every(function (x) { return typeof x === 'string' || typeof x === 'number'; })) {
+        var j = v.map(plain).join(', ');
+        if (j.length <= 40) out.push([words(k), j]);
+      }
+    });
+    return out;
+  }
+
+  // A nested object (an ability, a signature move) as lines: its name, then
+  // each field, with tier lines set apart.
+  function objectHTML(o, terms) {
+    var h = '', name = typeof o.name === 'string' ? o.name : '';
+    if (name) h += '<p class="hc-obj"><b>' + esc(name) + '</b></p>';
+    Object.keys(o).forEach(function (k) {
+      var v = o[k];
+      if (k === 'name' || k === 'type' || v == null || v === '') return;
+      if (Array.isArray(v)) v = v.filter(function (x) { return typeof x === 'string' || typeof x === 'number'; }).join(', ');
+      if (typeof v !== 'string' && typeof v !== 'number') return;
+      var t = /^tier(\d)$/.exec(k);
+      if (t) h += '<p class="hc-tier"><b>Tier ' + t[1] + '</b> ' + inline(v, terms) + '</p>';
+      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms) + '</p>';
+    });
+    return h;
+  }
+
+  // The rules sections an entry carries beyond its facts and buy list.
+  function sectionsOf(c, terms) {
+    var props = c.properties || {}, bl = buyList(props), out = [];
+    Object.keys(props).sort().forEach(function (k) {
+      var v = props[k];
+      if (hidden(k) || (bl && bl.key === k) || isScalar(v)) return;
+      var html = '';
+      if (namedList(v)) {
+        html = v.map(function (it) {
+          return '<div class="hc-item"><b>' + esc(it.name) + '</b>' + (itemText(it) ? '<p>' + inline(itemText(it), terms) + '</p>' : '') + '</div>';
+        }).join('');
+      } else if (typeof v === 'string') html = prose(v, terms);
+      else if (Array.isArray(v)) {
+        var flat = v.filter(function (x) { return typeof x === 'string' || typeof x === 'number'; });
+        if (flat.length) html = '<p>' + esc(flat.join(', ')) + '</p>';
+      } else if (v && typeof v === 'object') html = objectHTML(v, terms);
+      if (html) out.push({ title: words(k), html: html });
+    });
+    return out;
+  }
+
+  // The opening line and the rest of an entry's text. A package's summary is
+  // often its description cut short with an ellipsis; then the description's
+  // first paragraph is the opening line, so nothing reads twice or is cut.
+  // A campaign entry's description is sanitized HTML and stays whole below.
+  function splitText(c) {
+    var sum = String(c.summary || '').trim(), desc = String(c.description || '').trim();
+    if (!desc) return { lede: sum, body: '' };
+    if (c.source === 'campaign') return { lede: sum, body: desc };
+    var cut = sum.replace(/(…|\.\.\.)$/, '').trim();
+    if (cut && desc.indexOf(cut) === 0) {
+      if (cut !== sum) { var parts = desc.split(/\n\n+/); return { lede: parts[0], body: parts.slice(1).join('\n\n') }; }
+      return { lede: sum, body: desc.slice(sum.length).trim() };
+    }
+    return { lede: sum, body: desc === sum ? '' : desc };
+  }
+
+  // What a hero adds up to from the picks, for the figures the picks name.
+  // A figure no pick names stays out, so another system shows only its own.
+  function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+  function sumOf(parts) {
+    var t = null;
+    parts.forEach(function (p) { if (p != null) t = (t || 0) + p; });
+    return t;
+  }
+
+  // --- Dice ----------------------------------------------------------------
+
+  // Roll ranges: a list of up to ten is read off one d10, a longer one off
+  // percentile dice, each entry owning an even share of the faces.
+  function sidesFor(n) { return n <= 10 ? 10 : 100; }
+  function rangeOf(n, i) { var R = sidesFor(n); return [Math.floor(i * R / n) + 1, Math.floor((i + 1) * R / n)]; }
+  function indexFor(n, total) { for (var i = 0; i < n; i++) { var r = rangeOf(n, i); if (total >= r[0] && total <= r[1]) return i; } return n - 1; }
+  function rollFace(sides) {
+    try {
+      var a = new Uint32Array(1);
+      window.crypto.getRandomValues(a);
+      return 1 + (a[0] % sides);
+    } catch (e) { return 1 + Math.floor(Math.random() * sides); }
+  }
+  // The entries the dice can land on: Ask first and Not offered ones are
+  // skipped, so the numbers run over what a player may simply take.
+  function rollable(list) { return list.filter(function (c) { return c.state !== 'ask_first' && c.state !== 'not_offered'; }); }
+
+  // One roll for a list of n: Chronicle's dice engine throws it on screen when
+  // the site has it (it decides the face first and honours Calm and Off
+  // itself); otherwise, or if it refuses, the face is drawn here at once.
+  function throwFor(label, n, from) {
+    var instant = function () { return rollFace(sidesFor(n)); };
+    var dice = window.Chronicle && Chronicle.dice;
+    if (!dice || typeof dice.roll !== 'function') return Promise.resolve(instant());
+    var group = { label: label, dice: sidesFor(n) === 10 ? [{ sides: 10 }] : [{ sides: 10, tens: true }, { sides: 10 }] };
+    return Promise.resolve().then(function () {
+      return dice.roll([group], { from: from, describe: function (g, values) { return g.label + ': ' + (values || []).join(' and '); } });
+    }).then(function (res) {
+      var v = (res[0] && res[0].values) || [];
+      if (sidesFor(n) === 10) return v[0] >= 1 && v[0] <= 10 ? v[0] : instant();
+      // Percentile: the tens die reads 00-90, the ones die's 10 is a 0, and
+      // 00 with 0 is 100.
+      var t = (v[0] || 0) + ((v[1] || 0) % 10);
+      return t === 0 ? 100 : t;
+    }).catch(instant);
+  }
+
+  // --- Motion --------------------------------------------------------------
+
+  // "lively" (the default), "gentle" under Calm, "still" under Off or on a
+  // device that asks for less motion, as app_drawer.js reads the same signal.
+  function motion() {
+    var h = document.documentElement, m = h.getAttribute('data-motion');
+    var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (m === 'off' || rm) return 'still';
+    if (m === 'calm' || h.classList.contains('nav-rm') || h.hasAttribute('data-cz-reduce')) return 'gentle';
+    return 'lively';
+  }
+
+  // A signed duration, retimed by the owner's Motion speed: the site's standard
+  // step (200ms by default) is the unit.
+  function ms(n) {
+    var u = window.Chronicle && Chronicle.motionMs ? Chronicle.motionMs('--dur-standard', 200) : 200;
+    return Math.round(n * (u / 200));
+  }
+
+  // Built-in explanations for the marks a Director's rules put on entries.
+  function tips() {
+    return {
+      ask: { name: 'Ask first', category: 'Your ' + gm() + ' decides', html: 'Your ' + gm() + ' looks at this choice before your hero plays. You can keep building meanwhile; they get a note when you finish.' },
+      nh: { name: 'Not offered here', category: 'Set by your ' + gm(), html: 'Your ' + gm() + ' has kept these out of this campaign. The reason is written under each one.' },
+      lock: { name: 'Everyone starts with this', category: 'Set by your ' + gm(), html: 'This step is filled in for every hero in this campaign, so there is nothing to choose.' },
+      mine: { name: 'Your own entry', category: 'Written by you', html: 'You wrote this entry. Your ' + gm() + ' reads it before it counts at the table.' },
+      allow: { name: 'Your ' + gm() + ' allows one', category: 'Set by your ' + gm(), html: 'Your ' + gm() + ' lets you write one of your own here. Save it as a draft, or hand it in: they accept it or ask for changes, and you can pick it for your hero meanwhile.' },
+      campaign: { name: 'This campaign', category: 'Made for this table', html: 'Your ' + gm() + ' made this entry for this campaign. It is not from the game system.' }
+    };
+  }
+
   function Creator(root) {
     this.root = root;
     this.campaignId = root.getAttribute('data-campaign-id');
     this.planUrl = root.getAttribute('data-plan-url');
     this.createUrl = root.getAttribute('data-create-url');
+    this.termsUrl = root.getAttribute('data-terms-url') || '';
     this.csrf = root.getAttribute('data-csrf');
     this.typeName = root.getAttribute('data-type-name') || 'character';
     this.forSelf = root.getAttribute('data-for-self') === 'true';
@@ -125,29 +330,106 @@
     try { var pre = root.getAttribute('data-preload'); if (pre) this.preload = JSON.parse(pre); } catch (e) { /* start blank */ }
     this.draftKey = (this.practice ? 'chronicle:hero-practice:' : 'chronicle:hero-draft:') + this.campaignId;
     this.step = 0;
-    this.open = null;
-    this.tab = 'overview';
+    this.view = 'phone';
+    this.mode = 'cards';
     this.picks = {};
+    this.buys = {};
+    this.skipped = {};
+    this.find = {};
+    this.at = {};
     this.nh = {};
     this.name = '';
+    this.terms = null;
+    this.busy = false;
+    this.sheet = null;
+    this.own = null;
+    this.grants = {};
   }
 
   Creator.prototype.load = function () {
     var self = this;
-    var get = (window.Chronicle && Chronicle.apiFetch) ? Chronicle.apiFetch(this.planUrl) : fetch(this.planUrl, { credentials: 'same-origin' });
-    get.then(function (r) {
+    function get(url) { return (window.Chronicle && Chronicle.apiFetch) ? Chronicle.apiFetch(url) : fetch(url, { credentials: 'same-origin' }); }
+    // The glossary is read once, alongside the plan. A missing address or any
+    // failure just leaves the words plain.
+    var glossary = !this.termsUrl ? Promise.resolve(null) : Promise.resolve().then(function () { return get(self.termsUrl); }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (j) {
+      var t = j && j.terms && typeof j.terms === 'object' ? j.terms : null, out = {};
+      if (!t) return null;
+      Object.keys(t).forEach(function (k) {
+        var v = t[k];
+        if (v && typeof v === 'object' && typeof v.name === 'string') out[termKey(k)] = v;
+      });
+      return out;
+    }).catch(function () { return null; });
+    get(this.planUrl).then(function (r) {
       if (!r.ok) throw new Error('plan ' + r.status);
       return r.json();
     }).then(function (plan) {
-      self.plan = plan || { steps: [] };
+      return Promise.all([glossary, self.readOwn(plan, get)]).then(function (r) { return { plan: plan, terms: r[0] }; });
+    }).then(function (res) {
+      self.plan = res.plan || { steps: [] };
       self.plan.steps = self.plan.steps || [];
+      self.terms = res.terms;
+      self.ownFirst();
       if (self.preload) self.adopt(self.preload); else if (self.tryout) self.adopt(self.stored() || {}); else self.restore();
       self.prefill();
+      self.step = self.firstStep();
+      self.measure();
+      self.loadFonts();
       self.render();
+      self.fit();
+      self.watch();
     }).catch(function () {
       var page = self.root.querySelector('.hc-loading__text');
       if (page) page.textContent = 'The creator could not open. Reload the page to try again.';
     });
+  };
+
+  // What the own-entry card and the cards of the player's own entries need
+  // beyond the plan: the points their Director gave them (the plan only says a
+  // permission exists) and the note a Director left on a draft. Both are read
+  // from the entry API the editor uses; a failure just leaves them out.
+  Creator.prototype.readOwn = function (plan, get) {
+    var self = this, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/system-entries', steps = (plan && plan.steps) || [];
+    if (this.tryout || !this.ownEnabled()) return Promise.resolve();
+    var make = !this.practice && steps.some(function (st) { return st.canMake; });
+    var mine = steps.some(function (st) { return (st.choices || []).some(function (c) { return c.mine && c.status; }); });
+    var jobs = [];
+    if (make) jobs.push(get(base + '/grants').then(function (r) { return r.ok ? r.json() : null; }).then(function (b) {
+      ((b && b.grants) || []).forEach(function (g) { if (g.budget > 0) self.grants[g.fieldKey] = g.budget; });
+    }));
+    if (mine) jobs.push(get(base).then(function (r) { return r.ok ? r.json() : null; }).then(function (b) {
+      var notes = {};
+      ((b && b.entries) || []).forEach(function (e) { if (e.reviewNote && e.status === 'draft') notes[e.id] = e.reviewNote; });
+      steps.forEach(function (st) { (st.choices || []).forEach(function (c) { if (c.mine && notes[c.entryId]) c.reviewNote = notes[c.entryId]; }); });
+    }));
+    return Promise.all(jobs.map(function (j) { return j.catch(function () { /* the card still works without it */ }); }));
+  };
+  // The own-entry editor is a separate script the registry lists first; a
+  // page that lacks it simply has no "make your own".
+  Creator.prototype.ownEnabled = function () { return !!(window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor); };
+  // A player's own entries lead the hand: what they wrote is what they came
+  // back for.
+  Creator.prototype.ownFirst = function () {
+    this.plan.steps.forEach(function (st) {
+      var mine = [], rest = [];
+      (st.choices || []).forEach(function (c) { (c.mine && c.status ? mine : rest).push(c); });
+      st.choices = mine.concat(rest);
+    });
+  };
+
+  // Paper and Ornate set their headings in faces the site does not load for
+  // everything else; they are fetched only when a skin asks for them.
+  Creator.prototype.loadFonts = function () {
+    var skin = this.root.getAttribute('data-skin');
+    if (skin !== 'paper' && skin !== 'ornate') return;
+    if (document.getElementById('hc-fonts')) return;
+    var l = document.createElement('link');
+    l.id = 'hc-fonts';
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Cinzel:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap';
+    document.head.appendChild(l);
   };
 
   // --- Draft kept on this device ---
@@ -166,7 +448,8 @@
       if (!c) return;
       // Keep only options the entry still offers, in case the system changed.
       var bl = buyList(c.properties), opts = Array.isArray(d.picks[k].options) ? d.picks[k].options : [];
-      self.picks[k] = { name: c.name, options: bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [] };
+      var kept = bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [];
+      self.picks[k] = { name: c.name, options: kept };
     });
     this.name = typeof d.name === 'string' ? d.name : '';
   };
@@ -201,6 +484,8 @@
   // --- Lookups ---
   Creator.prototype.steps = function () { return this.plan.steps; };
   Creator.prototype.stepCount = function () { return this.plan.steps.length + 1; };
+  // The last step, name and review, sits one past the plan's steps.
+  Creator.prototype.last = function () { return this.plan.steps.length; };
   Creator.prototype.isDetails = function () { return this.step >= this.plan.steps.length; };
   Creator.prototype.cur = function () { return this.plan.steps[this.step]; };
   Creator.prototype.stepByKey = function (k) {
@@ -225,6 +510,40 @@
     var want = st.rules && st.rules.prefilled, p = this.picks[st.fieldKey];
     return !!(want && p && lower(p.name) === lower(want));
   };
+  // The first step a hero still has something to choose in; a step the rules
+  // fill in for everyone is not a place to start.
+  Creator.prototype.firstStep = function () {
+    for (var i = 0; i < this.plan.steps.length; i++) if (!this.locked(this.plan.steps[i])) return i;
+    return this.last();
+  };
+  // A step is settled once it holds a pick or was skipped on purpose.
+  Creator.prototype.settled = function (i) {
+    var st = this.plan.steps[i];
+    return !!(st && ((this.picks[st.fieldKey] && this.picks[st.fieldKey].name) || this.skipped[st.fieldKey]));
+  };
+  Creator.prototype.picked = function (i) {
+    var st = this.plan.steps[i], p = st && this.picks[st.fieldKey];
+    return p && p.name ? p.name : '';
+  };
+  Creator.prototype.pickedEntry = function (i) {
+    var st = this.plan.steps[i], n = this.picked(i);
+    return n ? this.choice(st.fieldKey, n) : null;
+  };
+  // The next step still open after i, wrapping once; the name step when every
+  // step is settled.
+  Creator.prototype.nextOpen = function (from) {
+    var n = this.plan.steps.length, i;
+    for (i = from + 1; i < n; i++) if (!this.settled(i)) return i;
+    for (i = 0; i < n; i++) if (!this.settled(i) && i !== from) return i;
+    return n;
+  };
+  Creator.prototype.stepWord = function (i) { return i >= this.plan.steps.length ? 'Name and review' : this.plan.steps[i].label; };
+  // A step the rules require can't be left empty; practice forces nothing.
+  Creator.prototype.optional = function (st) { return this.practice || !(st.rules && st.rules.required); };
+  Creator.prototype.missing = function () {
+    var self = this;
+    return this.plan.steps.map(function (st, i) { return !self.picked(i) && !self.optional(st) ? i : -1; }).filter(function (i) { return i >= 0; });
+  };
   // The pick of a step that waits for the Director's yes: an Ask first entry.
   Creator.prototype.waitName = function (st) {
     if (this.practice) return '';
@@ -243,42 +562,118 @@
   Creator.prototype.notesHTML = function (st) {
     return '<div class="hc-notes" aria-live="polite">' + window.ChronicleHeroRules.notes(st, this.waitName(st), 'hc') + '</div>';
   };
+  Creator.prototype.isPicked = function (st, c) {
+    var p = this.picks[st.fieldKey];
+    return !!(p && p.name && lower(p.name) === lower(c.name));
+  };
+  // The bought options for an entry: the pick's own list once it is chosen,
+  // else a list kept here so what was bought is still there if it is chosen.
   Creator.prototype.mine = function (key, c) {
     var p = this.picks[key];
-    return p && lower(p.name) === lower(c.name) ? p.options : [];
+    if (p && p.name && lower(p.name) === lower(c.name)) return p.options;
+    var bk = key + '|' + lower(c.name);
+    return this.buys[bk] || (this.buys[bk] = []);
   };
   Creator.prototype.spent = function (key, c, bl) {
     var mine = this.mine(key, c);
     return bl.items.reduce(function (n, it) { return n + (mine.indexOf(it.name) >= 0 ? it.cost : 0); }, 0);
   };
 
-  // --- The page ---
-  Creator.prototype.render = function () {
-    // The tucked sheet hangs on the wrapper, not the page: the page's own
-    // stacking context would otherwise paint it over the page.
-    var html = '<div class="hc-wrap paper-stack"><section class="hc-page paper" aria-label="Hero creator">' +
-      this.trailHTML() + (this.isDetails() ? this.detailsHTML() : this.stepHTML()) + this.footHTML() +
-      '</section>' + (this.isDetails() ? '' : '<aside class="hc-leaf paper" aria-hidden="true"></aside>') + '</div>';
-    this.root.innerHTML = this.bandHTML() + html;
-    this.open = null;
-    this.watchTrail();
+  // The entries of a step the find box lets through.
+  Creator.prototype.entries = function (si) {
+    var st = this.plan.steps[si], q = lower((this.find[st.fieldKey] || '').trim());
+    if (!q) return st.choices;
+    return st.choices.filter(function (c) {
+      var f = factsOf(c).map(function (x) { return x[1]; }).join(' ');
+      return lower(c.name + ' ' + plain(c.summary) + ' ' + f).indexOf(q) >= 0;
+    });
+  };
+  Creator.prototype.curIdx = function () {
+    var st = this.cur(), l = this.entries(this.step), k = st.fieldKey;
+    if (this.at[k] == null) {
+      var j = -1, p = this.picks[k];
+      l.forEach(function (c, n) { if (p && lower(c.name) === lower(p.name)) j = n; });
+      this.at[k] = j >= 0 ? j : 0;
+    }
+    return Math.max(0, Math.min(this.at[k], l.length - 1));
+  };
+  Creator.prototype.curEntry = function () { var l = this.entries(this.step); return l.length ? l[this.curIdx()] : null; };
+
+  // The figures the picks add up to, where the picks name them.
+  Creator.prototype.stats = function () {
+    var self = this, o = { stamina: null, speed: null, size: null, stab: null, rec: null };
+    var by = function (re) { for (var i = 0; i < self.plan.steps.length; i++) if (re.test(self.plan.steps[i].fieldKey)) return self.pickedEntry(i); return null; };
+    var cls = by(/^(class|calling)$/), anc = by(/^(ancestry|race|species|heritage)$/), kit = by(/^kit$/);
+    var cp = cls && cls.properties || {}, ap = anc && anc.properties || {}, kp = kit && kit.properties || {};
+    o.stamina = sumOf([num(cp.starting_stamina), num(kp.stamina_bonus)]);
+    o.rec = num(cp.recoveries);
+    var speed = num(ap.speed);
+    if (speed != null && anc) {
+      var bl = buyList(ap), mine = this.mine(this.plan.steps[this.stepIndexOf(anc)].fieldKey, anc);
+      if (bl) bl.items.forEach(function (it) {
+        var m = mine.indexOf(it.name) >= 0 && /You have speed (\d+)/.exec(itemText(it));
+        if (m) speed = Math.max(speed, +m[1]);
+      });
+    }
+    o.speed = sumOf([speed, num(kp.speed_bonus)]);
+    o.size = anc && ap.size != null ? String(ap.size) : null;
+    o.stab = sumOf([num(ap.stability), num(kp.stability_bonus)]);
+    return o;
+  };
+  Creator.prototype.stepIndexOf = function (c) {
+    for (var i = 0; i < this.plan.steps.length; i++) if (this.plan.steps[i].choices.indexOf(c) >= 0) return i;
+    return 0;
+  };
+  // A line naming the first picks, for the hero card.
+  Creator.prototype.line = function (n) {
+    var self = this, out = [];
+    this.plan.steps.forEach(function (st, i) { if (out.length < n && self.picked(i)) out.push(self.picked(i)); });
+    return out.join(' · ');
   };
 
-  // A step that starts a wrapped line drops the rule that leads into it; the
-  // rule belongs to its step, so none is left hanging at a line's end.
-  Creator.prototype.watchTrail = function () {
-    var trail = this.root.querySelector('.hc-trail');
-    if (this.trailWatch) { this.trailWatch.disconnect(); this.trailWatch = null; }
-    if (!trail) return;
-    var mark = function () {
-      var prev = null;
-      trail.querySelectorAll('.hc-stop').forEach(function (b) {
-        b.classList.toggle('is-wrapped', !!prev && b.offsetTop > prev.offsetTop + 2);
-        prev = b;
-      });
-    };
-    mark();
-    if (window.ResizeObserver) { this.trailWatch = new ResizeObserver(mark); this.trailWatch.observe(trail); }
+  // --- The page ---
+
+  var I = {
+    chev: '<svg class="hc-ico hc-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8l5 5 5-5"/></svg>',
+    x: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>',
+    back: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4.5L7 10l5.5 5.5"/></svg>',
+    next: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4.5L13 10l-5.5 5.5"/></svg>',
+    find: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2L17 17"/></svg>',
+    die: '<svg class="hc-ico hc-ico--die" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M4 7.4l8 4.6 8-4.6M12 12v9.2"/><circle cx="12" cy="7.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="7.6" cy="13.6" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.4" cy="13.6" r="1.1" fill="currentColor" stroke="none"/></svg>',
+    up: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5-5 5 5"/></svg>'
+  };
+
+  Creator.prototype.title = function () {
+    return this.tryout ? 'Try the hero builder' : this.practice ? (this.updateUrl ? 'Change practice hero' : 'New practice hero') : 'New hero';
+  };
+
+  Creator.prototype.render = function () {
+    var keepOwn = this.own && this.own.editor && !this.own.leaving;
+    this.sheet = null;
+    this.sh = null;
+    this.closeTip(true);
+    var desk = this.view === 'desk', cols;
+    if (desk) {
+      cols = '<div class="hc-cols">' + this.railHTML() + (this.isDetails()
+        ? '<section class="hc-mid hc-mid--wide">' + this.reviewHTML() + '</section>'
+        : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
+    } else {
+      cols = this.sheadHTML() + '<ul class="hc-chips" aria-label="Your picks">' + this.chipsHTML() + '</ul><div class="hc-body" data-body>' + this.bodyInner() + '</div>';
+    }
+    var back = this.backUrl || ('/campaigns/' + encodeURIComponent(this.campaignId) + '/characters');
+    // A redraw keeps the height and shortness the last fit measured, so the
+    // cards are laid out once at their real size rather than twice.
+    this.root.innerHTML = '<div class="hc-app' + (this.short ? ' is-short' : '') + '" data-view="' + this.view + '" data-step="' + this.step + '" data-mo="' + motion() + '"' + (this.fitH ? ' style="--hc-h:' + this.fitH + 'px"' : '') + '>' +
+      '<header class="hc-abar"><a class="hc-ibtn" href="' + esc(back) + '" aria-label="Back to characters">' + I.back + '</a>' +
+      '<div class="hc-abar__t"><h1>' + esc(this.title()) + '</h1><small>' + esc(this.plan.systemName || 'Game system') + '</small></div></header>' +
+      this.bandHTML() + cols + '</div>';
+    this.fit();
+    this.after();
+    // Redrawing shrinks the page for a moment, which can scroll it back; the
+    // builder goes back to where it was aligned.
+    if (this.aligned) this.alignTop();
+    // Turning the screen between phone and computer keeps what was being written.
+    if (keepOwn) this.showOwn(true);
   };
 
   // Practice mode says what it is above the steps, in the page's own words.
@@ -291,154 +686,346 @@
     return note + (this.practice ? '<p class="hc-band"><b>Practice hero.</b> Not in the party, not sent to Foundry.</p>' : '');
   };
 
-  Creator.prototype.trailHTML = function () {
-    var self = this;
-    var labels = this.plan.steps.map(function (s) { return s.label; }).concat(['Name']);
-    return '<nav class="hc-trail" aria-label="Steps">' + labels.map(function (l, i) {
-      var key = i < self.plan.steps.length ? self.plan.steps[i].fieldKey : null;
-      var done = key ? !!(self.picks[key] && self.picks[key].name) : !!self.name.trim();
-      return '<button type="button" class="hc-stop' + (i === self.step ? ' is-on' : '') + (done ? ' is-done' : '') + '" data-step="' + i + '"' +
-        (i === self.step ? ' aria-current="step"' : '') + '><i aria-hidden="true">' + (done && i !== self.step ? '✓' : (i + 1)) + '</i>' +
-        '<span class="hc-stop__lbl">' + esc(l) + '</span></button>';
-    }).join('') + '</nav>';
+  // Phone: the one-line "Step N of M · Label" that opens the step list, and a
+  // thin bar of how far along the steps are.
+  Creator.prototype.sheadHTML = function () {
+    var self = this, n = this.stepCount();
+    var pr = this.plan.steps.map(function (s, i) {
+      return '<i class="' + (self.picked(i) ? 'is-ok' : '') + (i === self.step ? ' is-cur' : '') + '"></i>';
+    }).join('') + '<i class="' + (this.isDetails() ? 'is-cur' : '') + '"></i>';
+    return '<div class="hc-shead"><button class="hc-sbtn" type="button" aria-expanded="false" aria-label="All steps" data-act="steps">' +
+      '<span class="hc-of">Step ' + (this.step + 1) + ' of ' + n + ' ·</span><span class="hc-nm">' + esc(this.stepWord(this.step)) + '</span>' + I.chev + '</button>' +
+      '<div class="hc-prog" aria-hidden="true">' + pr + '</div></div>';
   };
 
-  Creator.prototype.stepHTML = function () {
-    var st = this.cur(), self = this;
-    var head = '<div class="hc-head"><p class="paper-kind">Step ' + (this.step + 1) + ' of ' + this.stepCount() + '</p>' +
-      '<h1 tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h1><p>' +
-      (this.locked(st) ? 'Everyone starts with this. Tap it to pull out its leaf and read the whole entry.' : 'Tap one to pull out its leaf and read the whole entry.') + '</p></div>';
-    var rows = st.choices.map(function (c, i) {
-      var picked = self.picks[st.fieldKey] && lower(self.picks[st.fieldKey].name) === lower(c.name);
-      return '<li><button type="button" class="hc-row" data-open="' + i + '" aria-expanded="false"><b>' + esc(c.name) +
-        (c.mine && c.status ? ' <span class="hc-seal">Yours · ' + (c.status === 'sent' ? 'handed in' : 'draft') + '</span>'
-          : c.source === 'campaign' ? ' <span class="hc-seal">Campaign</span>' : '') +
-        (c.state === 'ask_first' ? ' <span class="hc-seal">Ask first</span>' : '') +
-        (c.state === 'not_offered' ? ' <span class="hc-seal">Not offered here</span>' : '') +
-        (picked && self.locked(st) ? ' <span class="hc-seal">Everyone starts with this</span>' : '') +
-        (picked ? ' <span class="hc-row__pick" aria-label="chosen">✓</span>' : '') +
-        '</b><span class="hc-row__go" aria-hidden="true">Read ›</span><small>' + esc(c.summary) + '</small></button></li>';
-    }).join('');
-    var make = st.canMake && !this.practice ? '<p class="hc-make">Your ' + gm() + ' lets you make your own ' + esc(lower(st.label)) + '. ' +
-      '<a class="hc-link" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/characters/entries?field=' + encodeURIComponent(st.fieldKey) + '&back=new">Make yours ›</a> ' +
-      'Your picks here are kept while you do.</p>' : '';
-    var none = !rows && st.rules ? '<p class="hc-empty">Nothing is on this list for you right now.</p>' : '';
-    return head + this.notesHTML(st) + (rows ? '<ul class="hc-list">' + rows + '</ul>' : none) + this.notHereHTML(st) + make;
+  // The row of what is picked; tapping one goes back to that step.
+  Creator.prototype.chipsHTML = function () {
+    var self = this, h = '';
+    this.plan.steps.forEach(function (st, i) {
+      var p = self.picked(i), cur = i === self.step, e = self.pickedEntry(i);
+      if (!p && !cur && !self.isDetails() && !self.skipped[st.fieldKey]) return;
+      var ask = e && (e.state === 'ask_first' ? !self.practice : e.state === 'not_offered');
+      var on = (cur ? ' is-cur' : '') + (ask ? ' is-ask' : '');
+      if (p) h += '<li><button type="button" class="hc-chip' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + esc(p) + '</b></button></li>';
+      else if (self.skipped[st.fieldKey]) h += '<li><button type="button" class="hc-chip' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>None</b></button></li>';
+      else h += '<li><button type="button" class="hc-chip is-slot' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + (cur ? 'Choosing…' : 'Not yet') + '</b></button></li>';
+    });
+    return h;
   };
 
-  Creator.prototype.notHereHTML = function (st) {
+  // The marks an entry wears, as words. In the open entry they are buttons that
+  // explain themselves; on a card (itself a button) they are plain words that
+  // still answer a hover.
+  Creator.prototype.marksHTML = function (st, c, interactive) {
+    var out = [];
+    function mk(cls, label, tip) {
+      if (interactive) out.push('<button type="button" class="hc-mark ' + cls + '" data-tip="' + tip + '" aria-expanded="false">' + label + '</button>');
+      else out.push('<span class="hc-mark ' + cls + '" data-tip="' + tip + '">' + label + '</span>');
+    }
+    if (c.mine && c.status) mk('is-own', c.status === 'sent' ? 'Waiting for your ' + gm() : c.reviewNote ? 'Changes asked' : 'Draft', 'mine');
+    else if (c.source === 'campaign') mk('is-own', 'Campaign', 'campaign');
+    if (c.state === 'ask_first') mk('is-warn', 'Ask first', 'ask');
+    if (c.state === 'not_offered') mk('is-quiet', 'Not offered here', 'nh');
+    if (this.isPicked(st, c) && this.locked(st)) mk('is-quiet', 'Everyone starts with this', 'lock');
+    return out.join('');
+  };
+
+  Creator.prototype.factsHTML = function (c, max) {
+    var f = factsOf(c).slice(0, max || 12);
+    if (!f.length) return '';
+    return '<dl class="hc-facts">' + f.map(function (x) { return '<div><dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd></div>'; }).join('') + '</dl>';
+  };
+
+  Creator.prototype.introHTML = function () {
+    var st = this.cur(), n = st.choices.length, desk = this.view === 'desk';
+    var hint = this.locked(st) ? 'Everyone starts with this. Open it to read the whole entry.' : desk ? 'Pick a card to read its rules on the right.' : 'Tap a card to read its rules.';
+    return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + ' · ' + n + ' to choose from</div>' : '') +
+      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + '</p></div>' + this.notesHTML(st);
+  };
+
+  Creator.prototype.toolsHTML = function () {
+    var st = this.cur(), q = this.find[st.fieldKey] || '', desk = this.view === 'desk';
+    var h = '<div class="hc-tools"><label class="hc-find">' + I.find + '<span class="hc-sr">Find ' + an(st.label) + ' ' + esc(lower(st.label)) + '</span>' +
+      // A phone's row is narrow: the placeholder is one word there, the label
+      // above still names the list in full.
+      '<input type="search" data-find autocomplete="off" placeholder="' + (desk ? 'Find ' + an(st.label) + ' ' + esc(lower(st.label)) : 'Find') + '" value="' + esc(q) + '">' +
+      (q ? '<button type="button" class="hc-ibtn hc-clr" data-act="clear" aria-label="Clear the search">' + I.x + '</button>' : '') + '</label>' +
+      '<button type="button" class="hc-ibtn hc-die" data-act="die" aria-label="Deal a random card" title="Deal a random card">' + I.die + '</button>' +
+      '<div class="hc-mode" role="group" aria-label="Show as"><button type="button" data-mode="cards" aria-pressed="' + (this.mode === 'cards') + '">Cards</button>' +
+      '<button type="button" data-mode="list" aria-pressed="' + (this.mode === 'list') + '">List</button></div>';
+    if (desk) h += '<span class="hc-keys"><kbd>←</kbd> <kbd>→</kbd> move · <kbd>Enter</kbd> choose</span>';
+    return h + '</div>';
+  };
+
+  Creator.prototype.nhHTML = function (st) {
     return window.ChronicleHeroRules.notHere(st.rules, !!this.nh[st.fieldKey], 'hc');
   };
-
-  Creator.prototype.footHTML = function () {
-    var back = this.step > 0 ? '<button type="button" class="hc-btn hc-btn--ghost" data-act="back">← Back</button>' : '';
-    if (this.isDetails()) {
-      return '<div class="hc-foot"><span class="hc-foot__sp"></span>' + back +
-        '<button type="button" class="hc-btn" data-act="create">' + (this.tryout ? 'Keep it on this device' : this.practice ? (this.updateUrl ? 'Save changes' : 'Keep this practice hero') : 'Create hero') + '</button></div>';
-    }
-    var st = this.cur(), p = this.picks[st.fieldKey];
-    var note = this.pickNote(st);
-    var chosen = p && p.name ? '<b>' + esc(p.name) + '</b>' + (p.options.length ? ' · ' + esc(p.options.join(', ')) : '') +
-      (note ? ' · <span class="hc-wait">' + esc(note) + '</span>' : '')
-      : 'No ' + esc(lower(st.label)) + ' chosen yet';
-    var next = this.step + 1 < this.plan.steps.length ? this.plan.steps[this.step + 1].label : 'Name';
-    return '<div class="hc-foot"><span class="hc-chosen" data-chosen>' + chosen + '</span><span class="hc-foot__sp"></span>' + back +
-      '<button type="button" class="hc-btn" data-act="next">' + (p && p.name ? 'Next: ' : 'Skip to ') + esc(next) + ' →</button></div>';
+  Creator.prototype.showNh = function (st) {
+    return !(this.find[st.fieldKey] || '').trim() && st.rules && st.rules.notHereCount;
+  };
+  Creator.prototype.emptyHTML = function () {
+    var st = this.cur(), q = this.find[st.fieldKey] || '';
+    if (q) return '<div class="hc-empty">No ' + esc(lower(st.label)) + ' matches “' + esc(q) + '”. <button type="button" class="hc-qw" data-act="clear">Clear the search</button></div>';
+    return '<div class="hc-empty">Nothing is on this list for you right now.</div>';
   };
 
-  Creator.prototype.detailsHTML = function () {
-    var self = this;
-    var rows = this.plan.steps.map(function (s, i) {
-      var p = self.picks[s.fieldKey];
-      return '<dt>' + esc(s.label) + '</dt>' + (p && p.name
-        ? '<dd>' + esc(p.name) + (p.options.length ? '<small>' + esc(p.options.join(', ')) + '</small>' : '') +
-          (self.pickNote(s) ? '<small>' + esc(self.pickNote(s)) + '</small>' : '') + '</dd>'
-        : '<dd class="is-none">Not chosen</dd>') +
-        '<dd>' + (self.locked(s) ? '' : '<button type="button" class="hc-link" data-step="' + i + '">Change</button>') + '</dd>';
-    }).join('');
+  // "Make your own": offered while a Director's permission for this list is
+  // unspent. Not in practice (writing an entry spends the one permission, which
+  // belongs to the real hero) and never to a try-out guest, whose plan carries
+  // no permission. Hidden while the find box is in use, as it is not a match.
+  Creator.prototype.canOwn = function (st) {
+    return !!(st && st.canMake && !this.practice && !this.tryout && this.ownEnabled() && !(this.find[st.fieldKey] || '').trim());
+  };
+  Creator.prototype.ownBudget = function (st) {
+    if (this.grants[st.fieldKey]) return this.grants[st.fieldKey];
+    var pkg = st.choices.filter(function (c) { return c.source !== 'campaign'; });
+    return window.ChronicleOwnEntry.shapeOf(pkg).budget || 0;
+  };
+  Creator.prototype.ownCardHTML = function (kind) {
+    var st = this.cur();
+    if (!this.canOwn(st)) return '';
+    var lbl = lower(st.label), pts = this.ownBudget(st), title = 'Make your own ' + esc(lbl);
+    var txt = 'None of these? Write your own: a name, a few words' + (pts ? ' and ' + pts + ' points of traits' : '') + '.';
+    var mk = '<span class="hc-mark is-own" data-tip="allow">Your ' + gm() + ' allows one</span>';
+    if (kind === 'row') {
+      return '<button type="button" class="hc-lrow hc-lrow--own" data-act="ownopen"><span class="hc-h"><b>' + title + '</b>' + mk + '</span><span class="hc-s">' + txt + '</span></button>';
+    }
+    if (kind === 'grid') {
+      return '<div class="hc-gcard hc-gcard--own" role="button" tabindex="0" data-act="ownopen" aria-label="' + title + '"><span class="hc-top">' + mk + '</span><h3 class="hc-disp">' + title + '</h3><p class="hc-sum">' + txt + '</p>' +
+        '<span class="hc-ft"><b>Start writing</b></span></div>';
+    }
+    return '<div class="hc-card hc-card--own" role="button" tabindex="0" data-act="ownopen" aria-label="' + title + ', start writing"><span class="hc-top">' + mk + '</span>' +
+      '<h3 class="hc-disp">' + title + '</h3><p class="hc-sum">' + txt + '</p>' +
+      (pts ? '<dl class="hc-facts"><div><dt>Points to spend</dt><dd>' + pts + ', set by your ' + gm() + '</dd></div></dl>' : '') + '<span class="hc-more">Start writing ' + I.up + '</span></div>';
+  };
+
+  Creator.prototype.cardHTML = function (c, i, n, st) {
+    var pk = this.isPicked(st, c);
+    return '<div class="hc-card' + (pk ? ' is-picked' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules">' +
+      '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your ' + esc(lower(st.label)) : esc(st.label)) + '</span>' + this.marksHTML(st, c, false) + '<span class="hc-ix">' + (i + 1) + ' / ' + n + '</span></span>' +
+      '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + this.factsHTML(c, 3) +
+      '<span class="hc-more">Read the rules ' + I.up + '</span></div>';
+  };
+
+  Creator.prototype.handHTML = function () {
+    var st = this.cur(), l = this.entries(this.step), self = this;
+    if (!l.length && !this.showNh(st) && !this.canOwn(st)) return this.emptyHTML();
+    return '<div class="hc-hand" data-hand aria-label="' + esc(st.label) + ' cards">' + l.map(function (c, i) { return self.cardHTML(c, i, l.length, st); }).join('') +
+      this.ownCardHTML('card') + (this.showNh(st) ? '<div class="hc-card hc-card--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>' : '') + '</div>';
+  };
+
+  Creator.prototype.listHTML = function () {
+    var st = this.cur(), l = this.entries(this.step), self = this, desk = this.view === 'desk';
+    if (!l.length && !this.showNh(st) && !this.canOwn(st)) return '<div class="hc-list">' + this.emptyHTML() + '</div>';
+    var h = '<div class="hc-list" data-list>', ci = this.curIdx();
+    l.forEach(function (c, i) {
+      var pk = self.isPicked(st, c);
+      h += '<button type="button" class="hc-lrow' + (pk ? ' is-picked' : '') + (desk && i === ci ? ' is-focus' : '') + '" data-i="' + i + '"><span class="hc-h"><b>' + esc(c.name) + '</b>' +
+        self.marksHTML(st, c, false) + (pk ? '<span class="hc-mark is-own">Chosen</span>' : '') + '</span><span class="hc-s">' + esc(plain(c.summary)) + '</span></button>';
+    });
+    h += this.ownCardHTML('row');
+    if (this.showNh(st)) h += '<div class="hc-nhbox">' + this.nhHTML(st) + '</div>';
+    return h + '</div>';
+  };
+
+  Creator.prototype.gridHTML = function () {
+    var st = this.cur(), l = this.entries(this.step), ci = this.curIdx(), self = this;
+    if (!l.length && !this.showNh(st) && !this.canOwn(st)) return '<div class="hc-grid">' + this.emptyHTML() + '</div>';
+    var h = '<div class="hc-grid" data-grid role="listbox" aria-label="' + esc(st.label) + '">';
+    l.forEach(function (c, i) {
+      var pk = self.isPicked(st, c), ft = factsOf(c).slice(0, 2).map(function (x) { return '<b>' + esc(x[0]) + '</b> ' + esc(x[1]); }).join(' · ');
+      h += '<div class="hc-gcard' + (i === ci ? ' is-focus' : '') + (pk ? ' is-picked' : '') + '" role="option" tabindex="' + (i === ci ? 0 : -1) + '" aria-selected="' + (i === ci) + '" data-i="' + i + '">' +
+        '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your choice' : esc(st.label)) + '</span>' + self.marksHTML(st, c, false) + '</span>' +
+        '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + (ft ? '<span class="hc-ft">' + ft + '</span>' : '') + '</div>';
+    });
+    h += this.ownCardHTML('grid');
+    if (this.showNh(st)) h += '<div class="hc-gcard hc-gcard--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>';
+    return h + '</div>';
+  };
+
+  // Phone, under the cards: where you are in the hand, and the way on.
+  Creator.prototype.underHTML = function () {
+    var st = this.cur(), l = this.entries(this.step), n = l.length, i = this.curIdx(), mid = '';
+    if (this.mode === 'cards' && n) {
+      if (n <= 12) { mid = '<span class="hc-dots" aria-hidden="true">'; for (var j = 0; j < n; j++) mid += '<i class="' + (j === i ? 'is-on' : '') + '"></i>'; mid += '</span>'; }
+      else mid = '<span class="hc-pos"><span data-posn>' + (i + 1) + '</span> of ' + n + '</span>';
+    } else mid = '<span class="hc-pos">' + n + ' ' + (n === 1 ? 'entry' : 'entries') + '</span>';
+    var right = '';
+    if (this.picked(this.step)) right = '<button type="button" class="hc-qw" data-act="next">Next ' + I.next + '</button>';
+    else if (this.optional(st)) right = '<button type="button" class="hc-qw" data-act="skip">Skip</button>';
+    return '<div class="hc-under"><button type="button" class="hc-qw" data-act="back"' + (this.step === 0 ? ' disabled' : '') + '>' + I.back +
+      (this.step > 0 ? esc(this.plan.steps[this.step - 1].label) : '') + '</button>' + mid + (right || '<span class="hc-qw-sp"></span>') + '</div>';
+  };
+
+  Creator.prototype.bodyInner = function () {
+    if (this.isDetails()) return this.reviewHTML();
+    return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.handHTML() : this.listHTML()) + this.underHTML();
+  };
+  Creator.prototype.midInner = function () {
+    return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.gridHTML() : this.listHTML());
+  };
+
+  // --- The open entry ---
+
+  Creator.prototype.chooseLabel = function (c, st) {
+    var pk = this.isPicked(st, c), name = esc(c.name), sub = '', bl = buyList(c.properties);
+    if (pk && this.locked(st)) return '✓ ' + name + ', everyone starts with this';
+    if (bl) { var left = bl.budget - this.spent(st.fieldKey, c, bl); sub = left ? left + (left === 1 ? ' point' : ' points') + ' unspent' : 'all points spent'; }
+    if (c.state === 'ask_first' && !this.practice) {
+      return (pk ? '✓ Asking for ' : 'Ask for ') + name + ' <small>· your ' + gm() + ' is asked' + (sub ? ', ' + sub : '') + '</small>';
+    }
+    return (pk ? 'Keep ' : 'Choose ') + name + (sub ? ' <small>· ' + sub + '</small>' : '');
+  };
+
+  Creator.prototype.chooseDisabled = function (c, st) { return this.isPicked(st, c) && this.locked(st); };
+
+  Creator.prototype.detHTML = function (c, st) {
+    var T = this.terms, pk = this.isPicked(st, c);
+    var h = '<div class="hc-det"><div class="hc-kind"><span>' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
+      this.marksHTML(st, c, true) + (pk ? '<span class="hc-yours">Your choice</span>' : '') + '</div>';
+    h += '<h3 class="hc-disp" id="hc-dt" tabindex="-1">' + esc(c.name) + '</h3>';
+    if (c.mine && c.status && !this.tryout && this.ownEnabled()) {
+      h += (c.reviewNote && c.status === 'draft' ? '<p class="hc-note"><b>Your ' + gm() + ' asked:</b> ' + esc(c.reviewNote) + '</p>' : '') +
+        '<p class="hc-ownbar"><button type="button" class="hc-qw" data-act="ownedit">Edit your entry</button>' +
+        '<span>' + (c.status === 'sent' ? 'Waiting for your ' + gm() + ', and you can still pick it.' : 'A draft only you and your ' + gm() + ' see. You can pick it now.') + '</span></p>';
+    }
+    var tx = splitText(c);
+    if (tx.lede) h += '<p class="hc-lede">' + marked(tx.lede, T) + '</p>';
+    if (c.state === 'ask_first') h += this.practice ? '<p class="hc-note">Ask first at this table. Picking it here is only practice.</p>'
+      : '<p class="hc-note">Ask first: your ' + gm() + ' allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>';
+    if (c.state === 'not_offered') h += '<p class="hc-note">Not offered at this table. It stays a practice pick, and needs your ' + gm() + '’s yes to play.</p>';
+    h += this.factsHTML(c, 12);
+    var bl = buyList(c.properties);
+    if (bl) h += this.buyHTML(st, c, bl);
+    if (tx.body) h += '<section><h4>About</h4>' + (c.source === 'campaign' ? '<div class="hc-text">' + tx.body + '</div>' : prose(tx.body, T)) + '</section>';
+    sectionsOf(c, T).forEach(function (s) { h += '<section><h4>' + esc(s.title) + '</h4>' + s.html + '</section>'; });
+    return h + '</div>';
+  };
+
+  Creator.prototype.buyHTML = function (st, c, bl) {
+    var self = this, mine = this.mine(st.fieldKey, c), left = bl.budget - this.spent(st.fieldKey, c, bl), pips = '';
+    for (var i = 0; i < bl.budget && i < 12; i++) pips += '<i class="' + (i < bl.budget - left ? 'is-on' : '') + '"></i>';
+    var qb = Array.isArray(c.properties.quick_build) && c.properties.quick_build.length;
+    return '<div class="hc-buy" data-buy><div class="hc-meter"><span class="hc-big" data-left>' + left + '</span><span class="hc-lab2"><b>' + esc(words(bl.budgetKey)) + ' left</b>' +
+      '<span>of ' + bl.budget + ' to spend</span></span><span class="hc-pips" aria-hidden="true">' + pips + '</span></div>' +
+      '<div class="hc-buyrow" role="list">' + bl.items.map(function (it, n) { return self.tcardHTML(it, n, mine, left); }).join('') + '</div>' +
+      '<div class="hc-buyx">' + (qb ? '<button type="button" class="hc-qw" data-act="quick" title="' + esc(c.properties.quick_build.join(', ')) + '">Use the suggested set</button>' : '') +
+      '<button type="button" class="hc-qw" data-act="unbuy">Clear</button></div></div>';
+  };
+  Creator.prototype.tstate = function (it, mine, left) { var on = mine.indexOf(it.name) >= 0; return { on: on, no: !on && it.cost > left }; };
+  Creator.prototype.tlabel = function (it, s, left) {
+    return s.on ? 'Bought ✓' : s.no ? 'Needs ' + it.cost + (it.cost === 1 ? ' point' : ' points') + ', ' + left + ' left' : 'Buy for ' + it.cost + (it.cost === 1 ? ' point' : ' points');
+  };
+  Creator.prototype.tcardHTML = function (it, n, mine, left) {
+    var s = this.tstate(it, mine, left);
+    return '<div class="hc-tcard' + (s.on ? ' is-on' : '') + (s.no ? ' is-no' : '') + '" role="listitem" data-t="' + n + '"><div class="hc-th"><b>' + esc(it.name) + '</b><span class="hc-cost">' + it.cost + (it.cost === 1 ? ' point' : ' points') + '</span></div>' +
+      '<p>' + (itemText(it) ? inline(itemText(it), this.terms) : '') + '</p>' +
+      '<button type="button" class="hc-tbuy" data-buy="' + n + '" aria-pressed="' + s.on + '"' + (s.no ? ' aria-disabled="true"' : '') + '>' + this.tlabel(it, s, left) + '</button></div>';
+  };
+
+  // --- Computer: steps rail, your hero so far, the open entry ---
+
+  Creator.prototype.railHTML = function () {
+    var self = this, h = '<aside class="hc-rail"><nav class="hc-steps" aria-label="Steps">';
+    this.plan.steps.forEach(function (st, i) {
+      var p = self.picked(i), cur = i === self.step, note = self.pickNote(st);
+      h += '<button type="button" class="hc-row" data-go="' + i + '" data-k="' + esc(st.fieldKey) + '"' + (cur ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : cur ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span>' +
+        '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.skipped[st.fieldKey] ? 'None' : self.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+    });
+    var n = this.last();
+    h += '<button type="button" class="hc-row" data-go="' + n + '"' + (this.isDetails() ? ' aria-current="step"' : '') + '><span class="hc-num' + (this.isDetails() ? ' is-now' : '') + '">' + (n + 1) + '</span>' +
+      '<span class="hc-lb"><b>Name and review</b><span>' + (this.name.trim() ? esc(this.name.trim()) : 'Last') + '</span></span></button></nav>';
+    return h + this.sofarHTML() + '</aside>';
+  };
+
+  Creator.prototype.statsHTML = function (stacked) {
+    var s = this.stats(), items = [['stamina', 'Stamina'], ['speed', 'Speed'], ['size', 'Size'], ['stab', 'Stability']];
+    if (!stacked) items.push(['rec', 'Recov.']);
+    var any = items.some(function (it) { return s[it[0]] != null; });
+    if (!any) return '';
+    var shown = items.filter(function (it) { return s[it[0]] != null; });
+    return '<div class="hc-stats" style="--hc-n:' + (stacked ? 2 : shown.length) + '">' + items.map(function (it) {
+      var v = s[it[0]];
+      return v == null ? '' : '<div class="hc-stat"><span>' + it[1] + '</span><b data-stat="' + it[0] + '">' + esc(v) + '</b></div>';
+    }).join('') + '</div>';
+  };
+  Creator.prototype.sofarHTML = function () {
+    var nm = this.name.trim();
+    return '<div class="hc-sofar" data-sofar><h4>Your hero so far</h4><p class="hc-nm2 hc-disp">' + esc(nm || 'Unnamed hero') + '</p><p class="hc-ln">' +
+      esc(this.line(2) || 'Choose something to begin') + '</p>' + this.statsHTML(true) + '</div>';
+  };
+  Creator.prototype.rightInner = function () {
+    var c = this.curEntry(), st = this.cur();
+    if (!c) return '<div class="hc-empty hc-empty--r">Nothing to read yet.</div>';
+    return '<div class="hc-sc" data-rsc>' + this.detHTML(c, st) + '</div><div class="hc-foot"><button type="button" class="hc-btn hc-wide" data-act="choose"' + (this.chooseDisabled(c, st) ? ' disabled' : '') + '>' +
+      this.chooseLabel(c, st) + '</button><span class="hc-hint">or press Enter on a card</span></div>';
+  };
+
+  // --- Name and review ---
+
+  Creator.prototype.heroCard = function () {
+    return '<div class="hc-hero"><div class="hc-who">' + (this.practice ? 'Practice hero' : 'New hero') + '</div><h2 class="hc-disp" data-hname>' + esc(this.name.trim() || 'Unnamed hero') + '</h2>' +
+      '<p class="hc-line">' + esc(this.line(3) || 'Nothing chosen yet') + '</p>' + this.statsHTML(false) + '</div>';
+  };
+  Creator.prototype.reviewHTML = function () {
+    var self = this, desk = this.view === 'desk';
     var whose = this.tryout ? 'This stays in this browser: only you can see it, and nothing is sent to the campaign.' : this.practice ? 'This stays a practice hero: only you and the Directors see it, and it never joins the party.' : this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
     var none = this.plan.steps.length ? '' : '<p class="hc-empty">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
       ' choices for heroes yet, so the creator only asks for a name. ' + gm() + 's can add their own entries.</p>';
-    return '<div class="hc-head"><p class="paper-kind">Step ' + this.stepCount() + ' of ' + this.stepCount() + '</p>' +
-      '<h1 tabindex="-1">Name your ' + (this.practice ? 'practice ' : '') + 'hero</h1></div>' + none +
-      '<label class="hc-field"><span class="hc-k">Name</span><input type="text" maxlength="200" autocomplete="off" data-name value="' + esc(this.name) + '" required></label>' +
-      (rows ? '<dl class="hc-sum">' + rows + '</dl>' : '') + '<p class="hc-note">' + whose + (this.practice ? '' : ' You can change any of it on the sheet later.') + '</p>' +
-      '<p class="hc-error" role="alert" hidden data-error></p>';
-  };
-
-  // --- The leaf ---
-  Creator.prototype.tabs = function (c) {
-    var t = [['overview', 'Overview']], props = c.properties || {}, bl = buyList(props);
-    Object.keys(props).sort().forEach(function (k) {
-      if (namedList(props[k])) t.push([k, bl && bl.key === k ? 'Choose ' + lower(words(k)) : words(k)]);
+    var h = '<div class="hc-rev" data-rev><h2 class="hc-disp hc-rev__t" tabindex="-1">Name your ' + (this.practice ? 'practice ' : '') + 'hero</h2>' + none + (desk ? '<div class="hc-revgrid"><div>' : '');
+    h += '<div class="hc-field"><label for="hc-nm">Your hero’s name</label><input id="hc-nm" type="text" maxlength="200" autocomplete="off" placeholder="Type a name" data-name value="' + esc(this.name) + '" required></div>';
+    h += this.heroCard();
+    var asks = [];
+    this.plan.steps.forEach(function (st) { var w = self.waitName(st); if (w) asks.push(w); });
+    if (asks.length) h += '<div class="hc-callout"><b>' + esc(asks.join(' and ')) + (asks.length > 1 ? ' need' : ' needs') + ' your ' + gm() + '’s okay.</b> You can finish now; they get a note, and your hero plays once they agree.</div>';
+    h += (desk ? '</div><div>' : '') + '<ul class="hc-picks hc-sum">';
+    this.plan.steps.forEach(function (st, i) {
+      var p = self.picked(i), c = self.pickedEntry(i), extra = [], note = self.pickNote(st);
+      var bl = c && buyList(c.properties);
+      if (bl) { var mine = self.mine(st.fieldKey, c); extra.push(mine.length ? mine.join(', ') : 'No ' + lower(words(bl.key)) + ' bought yet'); }
+      if (note) extra.push(note);
+      var miss = !p && !self.optional(st);
+      h += '<li class="' + (miss ? 'is-miss' : '') + '"><span class="hc-lb"><small>' + esc(st.label) + '</small><b>' + (p ? esc(p) : self.optional(st) ? 'None' : 'Not chosen yet') + '</b>' +
+        (extra.length ? '<em>' + esc(extra.join(' · ')) + '</em>' : '') + '</span>' +
+        (self.locked(st) ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
     });
-    return t;
+    h += '</ul><div class="hc-fin">';
+    var mi = this.missing();
+    if (mi.length) h += '<p class="hc-hint hc-hint--l">Still to choose: ' + esc(mi.map(function (i) { return lower(self.plan.steps[i].label); }).join(', ')) + '.</p>';
+    h += '<p class="hc-note hc-plain">' + whose + (this.practice ? '' : ' You can change any of it on the sheet later.') + '</p>';
+    h += '<p class="hc-error" role="alert" hidden data-error></p>';
+    h += '<button type="button" class="hc-btn hc-wide" data-act="create">' + (this.tryout ? 'Keep it on this device' : this.practice ? (this.updateUrl ? 'Save changes' : 'Keep this practice hero') : 'Create hero') + '</button></div>';
+    return h + (desk ? '</div></div>' : '') + '</div>';
   };
 
-  Creator.prototype.overviewHTML = function (st, c) {
-    var props = c.properties || {}, bl = buyList(props);
-    var facts = Object.keys(props).filter(function (k) {
-      return !/_display$/.test(k) && isScalar(props[k]);
-    }).slice(0, 6).map(function (k) {
-      return '<div><b>' + esc(props[k]) + '</b><span class="hc-k">' + esc(bl && k === bl.budgetKey ? 'Points to spend' : words(k)) + '</span></div>';
-    }).join('');
-    var body = '';
-    if (c.description) {
-      body = c.source === 'campaign' ? '<div class="hc-text">' + c.description + '</div>'
-        : (c.description.trim() !== (c.summary || '').trim() ? '<div class="hc-text">' + prose(c.description) + '</div>' : '');
-    }
-    return '<div class="hc-kind"><span class="paper-kind">' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
-      (c.source === 'campaign' ? '<span class="hc-seal">Campaign</span>' : '') + '</div>' +
-      '<h2 class="hc-name" tabindex="-1">' + esc(c.name) + '</h2>' + (c.summary ? '<p class="hc-lede">' + esc(c.summary) + '</p>' : '') +
-      (c.state === 'ask_first' ? (this.practice ? '<p class="hc-note">Ask first at this table. Picking it here is only practice.</p>'
-        : '<p class="hc-note">Ask first: your ' + gm() + ' allows it, or suggests another. You can carry on with the rest of your hero meanwhile.</p>') : '') +
-      (c.state === 'not_offered' ? '<p class="hc-note">Not offered at this table. It stays a practice pick, and needs your ' + gm() + '’s yes to play.</p>' : '') +
-      (facts ? '<div class="hc-facts">' + facts + '</div>' : '') + body;
-  };
+  // --- Size, view and motion ---
 
-  Creator.prototype.listHTML = function (st, c, key) {
-    var props = c.properties || {}, bl = buyList(props), items = props[key] || [];
-    if (!(bl && bl.key === key)) {
-      return '<div class="hc-sec"><span class="hc-k">' + esc(words(key)) + '</span>' + items.map(function (it) {
-        return '<div class="hc-item"><b>' + esc(it.name) + '</b>' + (itemText(it) ? '<p>' + prose(itemText(it)).replace(/^<p>|<\/p>$/g, '') + '</p>' : '') + '</div>';
-      }).join('') + '</div>';
-    }
-    var mine = this.mine(st.fieldKey, c), spent = this.spent(st.fieldKey, c, bl), left = bl.budget - spent;
-    var dots = '';
-    for (var i = 0; i < bl.budget && i < 12; i++) dots += '<i class="' + (i < spent ? 'is-used' : '') + '"></i>';
-    var qb = Array.isArray(props.quick_build) && props.quick_build.length
-      ? '<div class="hc-qb">Not sure? <button type="button" class="hc-link" data-act="quick">Use the suggested set</button> (' + esc(props.quick_build.join(', ')) + ')</div>' : '';
-    return '<div class="hc-sec"><span class="hc-k">' + esc(words(key)) + ' <span class="hc-pts" aria-live="polite">' + dots + ' ' + left + ' of ' + bl.budget + ' left</span></span>' + qb +
-      items.map(function (it) {
-        var on = mine.indexOf(it.name) >= 0;
-        return '<label class="hc-opt"><input type="checkbox" data-option="' + esc(it.name) + '"' + (on ? ' checked' : '') + (!on && it.cost > left ? ' disabled' : '') + '>' +
-          '<b>' + esc(it.name) + '</b><span class="hc-opt__c">' + it.cost + ' pt' + (it.cost === 1 ? '' : 's') + '</span>' +
-          (itemText(it) ? '<p>' + prose(itemText(it)).replace(/^<p>|<\/p>$/g, '') + '</p>' : '') + '</label>';
-      }).join('') + '</div>';
-  };
+  function q1(sel, el) { return el.querySelector(sel); }
+  function qa(sel, el) { return Array.prototype.slice.call(el.querySelectorAll(sel)); }
 
-  Creator.prototype.fillLeaf = function () {
-    var st = this.cur(), c = st.choices[this.open], leaf = this.root.querySelector('.hc-leaf');
-    var tabs = this.tabs(c), self = this;
-    if (!tabs.some(function (t) { return t[0] === self.tab; })) this.tab = 'overview';
-    var pane = this.tab === 'overview' ? this.overviewHTML(st, c) : this.listHTML(st, c, this.tab);
-    var p = this.picks[st.fieldKey], isPicked = p && lower(p.name) === lower(c.name);
-    var bl = buyList(c.properties);
-    var toBuy = this.tab === 'overview' && bl ? '<button type="button" class="hc-link" data-tab="' + esc(bl.key) + '">Choose ' + esc(lower(words(bl.key))) + ' ›</button>' : '';
-    leaf.innerHTML = '<button type="button" class="hc-leaf__x" data-act="close" aria-label="Put the leaf back">×</button>' +
-      (tabs.length > 1 ? '<div class="hc-ribbons" role="tablist">' + tabs.map(function (t) {
-        return '<button type="button" role="tab" data-tab="' + esc(t[0]) + '" aria-selected="' + (self.tab === t[0]) + '">' + esc(t[1]) + '</button>';
-      }).join('') + '</div>' : '<div class="hc-ribbons hc-ribbons--none"></div>') +
-      '<div class="hc-leaf__body"><div class="hc-pane" role="tabpanel">' + pane + '</div></div>' +
-      '<div class="hc-leaf__foot">' + toBuy + '<span class="hc-foot__sp"></span>' +
-      '<button type="button" class="hc-btn" data-act="choose"' + (isPicked ? ' aria-pressed="true"' : '') + (isPicked && this.locked(st) ? ' disabled' : '') + '>' +
-      (c.state === 'ask_first' && !this.practice ? (isPicked ? '✓ Asking for ' : 'Ask for ') + esc(c.name)
-        : isPicked ? '✓ ' + esc(c.name) + (this.locked(st) ? ', everyone starts with this' : ' chosen') : 'Choose ' + esc(c.name)) + '</button></div>';
+  Creator.prototype.app = function () { return this.root.querySelector('.hc-app'); };
+  Creator.prototype.$ = function (sel, el) { return (el || this.app() || this.root).querySelector(sel); };
+  Creator.prototype.$$ = function (sel, el) { return qa(sel, el || this.app() || this.root); };
+  Creator.prototype.lively = function () { return motion() === 'lively'; };
+  Creator.prototype.still = function () { return motion() === 'still'; };
+  Creator.prototype.desk = function () { return this.view === 'desk'; };
+
+  // The three columns need room: a desk 1280 wide with the sidebar open still gets them.
+  Creator.prototype.measure = function () {
+    var v = this.root.clientWidth >= 900 ? 'desk' : 'phone', changed = v !== this.view;
+    this.view = v;
+    return changed;
   };
 
   // The visible part of whatever scrolls the page: the app's main column, or
   // the window when nothing inside it scrolls.
+  // The ones a person can see: a move is played only where it can be seen.
+  function onScreen(list) {
+    var H = window.innerHeight, W = window.innerWidth;
+    return list.filter(function (x) { var b = x.getBoundingClientRect(); return b.bottom > 0 && b.top < H && b.right > 0 && b.left < W; });
+  }
+
   function scrollerRect(el) {
     for (var e = el.parentElement; e && e !== document.body; e = e.parentElement) {
       if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight) {
@@ -450,117 +1037,902 @@
   }
 
   // How much of the visible bottom a docked bar (The table) covers, so the
-  // leaf stops above it instead of running under.
+  // builder stops above it instead of running under.
   function dockedBar(viewBottom) {
     var bar = document.getElementById('tt-drawer');
     if (!bar || getComputedStyle(bar).position !== 'fixed') return 0;
     return Math.max(0, viewBottom - bar.getBoundingClientRect().top);
   }
 
-  Creator.prototype.openLeaf = function (i) {
-    if (this.open !== i) this.tab = 'overview';
-    this.open = i;
-    this.fillLeaf();
-    var wrap = this.root.querySelector('.hc-wrap'), leaf = this.root.querySelector('.hc-leaf');
-    this.root.querySelectorAll('.hc-row').forEach(function (r) { r.setAttribute('aria-expanded', String(r.getAttribute('data-open') === String(i))); });
-    leaf.setAttribute('aria-hidden', 'false');
-    // On a narrow screen the leaf covers the page, so it rises where the
-    // reader has scrolled to rather than at the page's top.
-    if (leaf.offsetWidth >= wrap.offsetWidth - 1) {
-      var view = scrollerRect(wrap), wtop = wrap.getBoundingClientRect().top;
-      // The leaf starts at the page's top or the reader's, whichever is lower,
-      // and ends 12px above the bottom of what is visible.
-      var from = Math.max(wtop, view.top + 12);
-      leaf.style.setProperty('--hc-sheet-h', Math.max(320, view.top + view.height - 12 - from) + 'px');
-      var top = Math.min(wrap.offsetHeight - leaf.offsetHeight, from - wtop);
-      leaf.style.setProperty('--hc-sheet-top', Math.max(0, top) + 'px');
-    } else {
-      leaf.style.removeProperty('--hc-sheet-top');
-      leaf.style.removeProperty('--hc-sheet-h');
+  // The builder fills what is visible above The table bar, so the step header
+  // and the thumb-height Choose always sit on the screen.
+  Creator.prototype.fit = function () {
+    var app = this.app();
+    if (!app) return;
+    var v = scrollerRect(this.root);
+    // The floor is low enough on a phone that a short screen still keeps the
+    // foot above The table bar.
+    this.fitH = Math.max(this.desk() ? 560 : 400, Math.floor(v.height));
+    app.style.setProperty('--hc-h', this.fitH + 'px');
+    // A short phone gives the cards the room the step's intro line would take.
+    this.short = !this.desk() && v.height < 580;
+    app.classList.toggle('is-short', this.short);
+    if (this.$('[data-hand]')) { this.fitCards(); this.scrollHandTo(this.curIdx(), false); this.tilt(); }
+  };
+
+  Creator.prototype.alignTop = function () {
+    var app = this.app();
+    if (!app) return;
+    var v = scrollerRect(this.root), top = app.getBoundingClientRect().top;
+    if (Math.abs(top - v.top) > 2) app.scrollIntoView({ block: 'start' });
+    this.aligned = true;
+  };
+
+  Creator.prototype.watch = function () {
+    var self = this, pend = 0;
+    var run = function () {
+      pend = 0;
+      if (!document.body.contains(self.root)) return;
+      if (self.measure()) { self.render(); self.alignTop(); } else self.fit();
+    };
+    var kick = function () { if (!pend) pend = requestAnimationFrame(run); };
+    if (window.ResizeObserver) { this.ro = new ResizeObserver(kick); this.ro.observe(this.root); }
+    // The table bar is built after the page, and moves: fit again when it
+    // arrives or changes size, so the foot never ends up under it.
+    if (window.MutationObserver) {
+      var barSeen = null;
+      this.mo = new MutationObserver(function () {
+        var bar = document.getElementById('tt-drawer');
+        if (bar === barSeen) return;
+        barSeen = bar;
+        if (bar && self.ro) self.ro.observe(bar);
+        kick();
+      });
+      this.mo.observe(document.body, { childList: true, subtree: true });
+      var bar0 = document.getElementById('tt-drawer');
+      if (bar0 && this.ro) { barSeen = bar0; this.ro.observe(bar0); }
     }
-    requestAnimationFrame(function () { wrap.classList.add('is-open'); leaf.classList.add('is-open'); });
-    var h = leaf.querySelector('.hc-name');
-    if (h) h.focus({ preventScroll: true });
+    this.onResize = kick;
+    window.addEventListener('resize', kick);
+    this.alignTop();
+    requestAnimationFrame(function () { self.fit(); self.alignTop(); });
   };
 
-  Creator.prototype.closeLeaf = function () {
-    var was = this.open, wrap = this.root.querySelector('.hc-wrap'), leaf = this.root.querySelector('.hc-leaf');
-    this.open = null;
-    if (!leaf) return;
-    wrap.classList.remove('is-open');
-    leaf.classList.remove('is-open');
-    leaf.setAttribute('aria-hidden', 'true');
-    this.root.querySelectorAll('.hc-row').forEach(function (r) { r.setAttribute('aria-expanded', 'false'); });
-    var row = this.root.querySelector('.hc-row[data-open="' + was + '"]');
-    if (row) row.focus({ preventScroll: true });
+  // A Web Animations call that honours the motion level: Lively plays it as
+  // given, Gentle keeps only the fade (and a slide a seventh the size), Still
+  // plays nothing.
+  Creator.prototype.anim = function (el, kf, opt) {
+    var mo = motion();
+    if (!el || mo === 'still' || !el.animate) return null;
+    opt = opt || {};
+    if (mo === 'gentle') {
+      kf = kf.map(function (k) {
+        var o = {};
+        for (var p in k) if (p === 'opacity' || p === 'offset') o[p] = k[p];
+        if (k.transform && opt.slide && /translate/.test(k.transform)) {
+          o.transform = k.transform.replace(/-?\d+(\.\d+)?px/g, function (v) { return (parseFloat(v) / 7).toFixed(1) + 'px'; }).replace(/scale\([^)]*\)|rotate\([^)]*\)/g, '');
+        }
+        return o;
+      });
+    }
+    var o2 = { duration: opt.duration != null ? opt.duration : ms(280), easing: opt.easing || 'cubic-bezier(.16,1,.3,1)', fill: opt.fill || 'both', delay: opt.delay || 0 };
+    if (mo === 'gentle') o2.duration = Math.min(o2.duration, 180);
+    try { return el.animate(kf, o2); } catch (e) { return null; }
   };
 
-  // Re-draws what a pick changes, leaving the leaf where it is.
-  Creator.prototype.refresh = function () {
-    var st = this.cur(), self = this;
-    var trail = this.root.querySelector('.hc-trail');
-    if (trail) { trail.outerHTML = this.trailHTML(); this.watchTrail(); }
-    var foot = this.root.querySelector('.hc-foot');
-    if (foot) foot.outerHTML = this.footHTML();
-    var notes = this.root.querySelector('.hc-notes');
-    if (notes) notes.outerHTML = this.notesHTML(st);
-    this.root.querySelectorAll('.hc-row').forEach(function (r) {
-      var c = st.choices[+r.getAttribute('data-open')], p = self.picks[st.fieldKey];
-      var b = r.querySelector('b'), mark = b.querySelector('.hc-row__pick');
-      var on = p && lower(p.name) === lower(c.name);
-      if (on && !mark) b.insertAdjacentHTML('beforeend', ' <span class="hc-row__pick" aria-label="chosen">✓</span>');
-      if (!on && mark) mark.remove();
+  Creator.prototype.say = function (t) {
+    var live = this.root.querySelector('.hc-live');
+    if (!live) { live = document.createElement('div'); live.className = 'hc-live sr-only'; live.setAttribute('aria-live', 'polite'); this.root.appendChild(live); }
+    live.textContent = '';
+    setTimeout(function () { live.textContent = t; }, 30);
+  };
+  Creator.prototype.announce = Creator.prototype.say;
+
+  function rel(app, r) { var o = app.getBoundingClientRect(); return { left: r.left - o.left, top: r.top - o.top, width: r.width, height: r.height }; }
+
+  // --- The hand: snap, track, tilt ---
+
+  Creator.prototype.after = function () {
+    var hand = this.$('[data-hand]');
+    if (hand) { this.setupHand(hand); this.fitCards(); this.scrollHandTo(this.curIdx(), false); this.tilt(); }
+    var chips = this.$('.hc-chips');
+    if (chips) { var c = chips.querySelector('.is-cur') || chips.lastElementChild; if (c) chips.scrollLeft = Math.max(0, c.offsetLeft - 16 - (chips.clientWidth - c.offsetWidth) / 2); }
+    if (this.desk()) { var g = this.$('.hc-gcard.is-focus'); if (g && g.scrollIntoView) g.scrollIntoView({ block: 'nearest' }); }
+  };
+
+  // A card front must read whole: shorten the summary, then hide the last
+  // fact, before anything is cut. Redone whenever the room changes.
+  // Only the cards near the one in hand are fitted, each once for its size:
+  // fitting reads layout after every change, which across a forty-card step
+  // held a slow phone for seconds. The rest are fitted as the hand reaches them.
+  Creator.prototype.fitCards = function (at) {
+    var hand = this.$('[data-hand]');
+    if (!hand) return;
+    var all = qa('.hc-card', hand);
+    if (at == null) { var cur = hand.querySelector('.hc-card[data-i="' + this.curIdx() + '"]'); at = Math.max(0, all.indexOf(cur)); }
+    // Reads and writes are batched across the cards: reset every card, read
+    // them all, shorten each by what its overflow says, then check them all.
+    var jobs = all.filter(function (c, n) { return Math.abs(n - at) <= 2 && c.querySelector('.hc-sum'); })
+      .map(function (c) { return { c: c, size: c.clientWidth + 'x' + c.clientHeight }; })
+      .filter(function (j) { return j.c._fitted !== j.size; });
+    jobs.forEach(function (j) {
+      var c = j.c, sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts'), h3 = c.querySelector('h3');
+      j.sum = sum; j.dl = dl; j.h3 = h3;
+      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) h3.style.fontSize = '';
+      if (dl) { dl.hidden = false; qa('div', dl).forEach(function (d) { d.hidden = false; }); }
     });
-    if (this.open !== null) {
-      var body = this.root.querySelector('.hc-leaf__body'), top = body ? body.scrollTop : 0;
-      this.fillLeaf();
-      body = this.root.querySelector('.hc-leaf__body');
-      if (body) { body.scrollTop = top; var pane = body.querySelector('.hc-pane'); if (pane) pane.style.animation = 'none'; }
+    jobs.forEach(function (j) {
+      j.over = j.c.scrollHeight - j.c.clientHeight;
+      j.lh = parseFloat(getComputedStyle(j.sum).lineHeight) || 24;
+      j.lines = Math.round(j.sum.scrollHeight / j.lh);
+      j.facts = j.dl ? qa('div', j.dl).map(function (d) { return d.offsetHeight + 1; }) : [];
+    });
+    // "Read the rules" at the foot always stays on the card: the summary and
+    // facts give way first, down to the name alone on the smallest phones.
+    var steps = function (j) {
+      var shown = function () { return j.dl ? qa('div', j.dl).filter(function (d) { return !d.hidden; }) : []; };
+      var clamp = function (n) { return { save: Math.max(0, j.lines - n) * j.lh - Math.max(0, j.lines - (j.clamp || j.lines)) * j.lh, run: function () { j.sum.style.webkitLineClamp = n; j.clamp = n; } }; };
+      var drop = function (keep) { return { save: shown().length > keep ? j.facts[shown().length - 1] + (shown().length === 1 ? 10 : 0) : 0, run: function () { var f = shown(); if (f.length > keep) f[f.length - 1].hidden = true; } }; };
+      return [function () { return clamp(4); }, function () { return clamp(3); }, function () { return drop(2); }, function () { return clamp(2); },
+        function () { return drop(1); }, function () { return drop(0); }, function () { return clamp(1); },
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '24px'; } }; },
+        function () { return { save: 0, run: function () { j.sum.hidden = true; } }; },
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; }];
+    };
+    jobs.forEach(function (j) {
+      j.list = steps(j); j.i = 0;
+      var left = j.over - 1;
+      while (left > 0 && j.i < j.list.length) { var s = j.list[j.i++](); left -= s.save; s.run(); if (!s.save && left > 0) break; }
+    });
+    // A card the estimate left long is finished one step at a time.
+    jobs.forEach(function (j) {
+      while (j.i < j.list.length && j.c.scrollHeight > j.c.clientHeight + 1) j.list[j.i++]().run();
+      if (j.dl) j.dl.hidden = !qa('div', j.dl).some(function (d) { return !d.hidden; });
+      j.c._fitted = j.size;
+    });
+  };
+
+  Creator.prototype.setupHand = function (hand) {
+    var self = this, raf = 0;
+    hand.addEventListener('scroll', function () {
+      if (raf) return;
+      raf = requestAnimationFrame(function () {
+        raf = 0;
+        self.tilt();
+        var cards = qa('.hc-card[data-i]', hand);
+        if (!cards.length) return;
+        var mid = hand.scrollLeft + hand.clientWidth / 2, best = 0, bd = 1e9;
+        cards.forEach(function (c, i) { var d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (d < bd) { bd = d; best = i; } });
+        var k = self.cur() && self.cur().fieldKey;
+        if (k && best !== self.at[k]) { self.at[k] = best; self.refreshUnder(); }
+        self.fitCards(qa('.hc-card', hand).indexOf(cards[best]));
+      });
+    }, { passive: true });
+  };
+
+  // Neighbours sit slightly back so the centre card reads as the one in hand.
+  Creator.prototype.tilt = function () {
+    var hand = this.$('[data-hand]'), self = this;
+    if (!hand) return;
+    var mid = hand.scrollLeft + hand.clientWidth / 2, lively = this.lively(), still = this.still();
+    // Every position is read before any card is restyled, so the hand lays
+    // out once rather than once a card.
+    var cards = qa('.hc-card', hand).filter(function (c) { return !c.classList.contains('is-dealing'); });
+    var ds = cards.map(function (c) { return Math.min(1, Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid) / (c.offsetWidth + 12)); });
+    cards.forEach(function (c, n) {
+      var d = ds[n];
+      c.style.transform = lively ? 'scale(' + (1 - 0.05 * d).toFixed(3) + ')' : '';
+      c.style.opacity = still ? '' : (1 - 0.35 * d).toFixed(3);
+    });
+  };
+
+  Creator.prototype.scrollHandTo = function (i, smooth) {
+    var hand = this.$('[data-hand]');
+    if (!hand) return;
+    var c = qa('.hc-card', hand)[i];
+    if (!c) return;
+    var x = c.offsetLeft - (hand.clientWidth - c.offsetWidth) / 2;
+    if (smooth && !this.still() && hand.scrollTo) hand.scrollTo({ left: x, behavior: this.lively() ? 'smooth' : 'auto' }); else hand.scrollLeft = x;
+  };
+
+  Creator.prototype.refreshUnder = function () {
+    var u = this.$('.hc-under');
+    if (u) u.outerHTML = this.underHTML();
+  };
+
+  // Redraws the cards (or rows) after the find box or the Cards/List switch.
+  Creator.prototype.refreshList = function () {
+    var b = this.$('[data-body]') || this.$('[data-mid]');
+    if (!b) return;
+    var old = this.$('.hc-hand, .hc-list, .hc-grid, .hc-body > .hc-empty, [data-mid] > .hc-empty', b);
+    var tmp = document.createElement('div');
+    tmp.innerHTML = this.desk() ? (this.mode === 'cards' ? this.gridHTML() : this.listHTML()) : (this.mode === 'cards' ? this.handHTML() : this.listHTML());
+    var nu = tmp.firstElementChild;
+    if (old && old.parentNode) old.parentNode.replaceChild(nu, old);
+    if (!this.desk()) this.refreshUnder();
+    if (this.$('[data-hand]')) { this.setupHand(this.$('[data-hand]')); this.fitCards(); this.scrollHandTo(this.curIdx(), false); this.tilt(); }
+    if (this.desk()) this.refreshRight();
+    this.anim(nu, [{ opacity: 0 }, { opacity: 1 }], { duration: ms(90), easing: 'linear', fill: 'none' });
+  };
+
+  Creator.prototype.refreshRight = function () {
+    var r = this.$('[data-right]');
+    if (!r || (this.own && this.desk())) return;
+    r.innerHTML = this.rightInner();
+    this.anim(this.$('.hc-det', r), [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: ms(200), fill: 'none', slide: true });
+  };
+
+  // Desk: focus moves between cards with the arrows; the right column shows
+  // the entry the focus is on.
+  Creator.prototype.setFocus = function (i, scroll) {
+    var self = this;
+    if (this.own) { this.leaveOwn(function () { self.setFocus(i, scroll); }); return; }
+    var cards = this.$$('.hc-gcard[data-i]'), st = this.cur();
+    if (!cards.length) {
+      var rows = this.$$('.hc-lrow[data-i]');
+      if (!rows.length) return;
+      i = Math.max(0, Math.min(i, rows.length - 1));
+      this.at[st.fieldKey] = i;
+      rows.forEach(function (r, n) { r.classList.toggle('is-focus', n === i); });
+      this.refreshRight();
+      return;
     }
+    i = Math.max(0, Math.min(i, cards.length - 1));
+    var changed = i !== this.curIdx();
+    this.at[st.fieldKey] = i;
+    cards.forEach(function (c, n) { var on = n === i; c.classList.toggle('is-focus', on); c.tabIndex = on ? 0 : -1; c.setAttribute('aria-selected', String(on)); });
+    if (scroll !== false) {
+      cards[i].focus({ preventScroll: true });
+      if (cards[i].scrollIntoView) cards[i].scrollIntoView({ block: 'nearest', behavior: this.still() ? 'auto' : 'smooth' });
+    }
+    if (changed) this.refreshRight();
+  };
+  Creator.prototype.gridCols = function () {
+    var g = this.$('[data-grid]');
+    return g ? getComputedStyle(g).gridTemplateColumns.split(' ').length : 1;
+  };
+
+  // --- The sheet (phone) ---
+
+  // A half-height sheet over the cards: drag up or scroll for the rest, swipe
+  // down or Esc to put it away. Everything behind it is inert while it is open.
+  // own: the player's own entry editor fills the sheet in place of an entry's
+  // rules, opens full height (it is a form, not a read) and has no Choose; its
+  // Save draft and Hand it in take the foot. own.instant is a remount after a
+  // redraw, with nothing to animate.
+  Creator.prototype.openSheet = function (i, own) {
+    var app = this.app(), c = own ? null : this.entries(this.step)[i], st = this.cur(), self = this;
+    if (!app || (!c && !own)) return;
+    if (!own) this.at[st.fieldKey] = i;
+    this.closeSheet(true);
+    var scrim = document.createElement('div'); scrim.className = 'hc-scrim'; scrim.setAttribute('data-scrim', '');
+    // Not aria-modal: Choose (or the editor's foot) is a sibling of the sheet,
+    // and a reader that honours aria-modal could not reach it. setInert takes
+    // everything else out of reach instead.
+    var sh = document.createElement('div'); sh.className = 'hc-sheet'; sh.setAttribute('role', 'dialog');
+    if (own) sh.setAttribute('aria-label', 'Your own ' + lower(st.label)); else sh.setAttribute('aria-labelledby', 'hc-dt');
+    sh.innerHTML = '<div class="hc-grab" aria-hidden="true"><i></i></div><button type="button" class="hc-ibtn hc-x" data-act="closesheet" aria-label="Close">' + I.x + '</button><div class="hc-sc" data-ssc>' + (own ? '<div data-ownbody></div>' : this.detHTML(c, st)) + '</div>';
+    var ft = document.createElement('div'); ft.className = 'hc-sfoot';
+    if (own) ft.setAttribute('data-ownfoot', '');
+    else ft.innerHTML = '<button type="button" class="hc-btn hc-wide" data-act="choose"' + (this.chooseDisabled(c, st) ? ' disabled' : '') + '>' + this.chooseLabel(c, st) + '</button><span class="hc-hint" data-shint>Drag up for the full rules</span>';
+    app.appendChild(scrim); app.appendChild(sh); app.appendChild(ft);
+    var avail = app.clientHeight;
+    this.sh = { H: avail - 58, y: 0, half: 0, el: sh, ft: ft, scrim: scrim, own: !!own,
+      from: own ? this.$('[data-act="ownopen"]') : (this.$$('.hc-hand .hc-card[data-i]')[i] || this.$$('.hc-lrow[data-i]')[i]) };
+    this.sh.half = Math.round(this.sh.H - avail * 0.6);
+    sh.style.height = this.sh.H + 'px';
+    var rest = own ? 0 : this.sh.half;
+    this.sheet = own ? 'full' : 'half';
+    this.setY(rest, false);
+    requestAnimationFrame(function () { scrim.classList.add('is-on'); });
+    var s = this.sh, mo = motion();
+    if (own && own.instant) mo = 'still';
+    if (mo === 'lively') {
+      sh.animate([{ transform: 'translateY(' + s.H + 'px)' }, { transform: 'translateY(' + rest + 'px)' }], { duration: ms(360), easing: 'cubic-bezier(.22,.8,.24,1)' });
+      ft.animate([{ transform: 'translateY(' + (s.H - rest) + 'px)' }, { transform: 'none' }], { duration: ms(360), easing: 'cubic-bezier(.22,.8,.24,1)' });
+    } else if (mo === 'gentle') {
+      sh.animate([{ opacity: 0, transform: 'translateY(' + (rest + 12) + 'px)' }, { opacity: 1, transform: 'translateY(' + rest + 'px)' }], { duration: ms(180), easing: 'ease-out' });
+      ft.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms(180), easing: 'ease-out' });
+    }
+    var card = own ? this.$('.hc-hand [data-act="ownopen"]') : this.$$('.hc-hand .hc-card[data-i]')[i]; if (card) card.classList.add('is-reading');
+    this.setInert(true);
+    this.wireSheet(sh);
+    if (own) {
+      this.say('Make your own ' + lower(st.label) + ' opened. Save draft and Hand it in are at the bottom.');
+      return;
+    }
+    // Focus lands on Choose with a keyboard or mouse, and on the title with a
+    // finger so no button looks pressed.
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var target = coarse ? sh.querySelector('#hc-dt') : ft.querySelector('[data-act="choose"]:not([disabled])') || sh.querySelector('#hc-dt');
+    if (target) target.focus({ preventScroll: true });
+    this.say(c.name + ' opened. Choose is at the bottom.');
+  };
+
+  Creator.prototype.setInert = function (on) {
+    this.$$('.hc-abar, .hc-band, .hc-shead, .hc-chips, .hc-body').forEach(function (e) { if (on) e.setAttribute('inert', ''); else e.removeAttribute('inert'); });
+  };
+
+  Creator.prototype.setY = function (y, animate) {
+    var s = this.sh;
+    if (!s) return;
+    s.y = y;
+    s.el.style.transition = animate && !this.still() ? 'transform ' + (this.lively() ? '360ms cubic-bezier(.22,.8,.24,1)' : '160ms ease-out') : 'none';
+    s.el.style.transform = 'translateY(' + y + 'px)';
+    var hint = this.$('[data-shint]');
+    if (hint) hint.textContent = y > 4 ? 'Drag up for the full rules' : 'Drag down to make it smaller';
+  };
+  Creator.prototype.setSheet = function (state) { this.sheet = state; if (this.sh) this.setY(state === 'full' ? 0 : this.sh.half, true); };
+
+  Creator.prototype.closeSheet = function (now, cb, refocus) {
+    var s = this.sh, self = this;
+    // Writing is never thrown away on a stray swipe: the editor asks first.
+    if (s && s.own && !now && this.own && !this.own.leaving) {
+      this.own.editor.requestClose(function () { self.own.leaving = true; self.closeSheet(false, cb, refocus); });
+      return;
+    }
+    this.closeTip(true);
+    this.$$('.hc-card.is-reading').forEach(function (c) { c.classList.remove('is-reading'); });
+    if (!s) { if (cb) cb(); return; }
+    var i = this.cur() ? this.curIdx() : 0;
+    this.sh = null; this.sheet = null;
+    this.setInert(false);
+    var gone = function () {
+      s.el.remove(); s.scrim.remove(); s.ft.remove();
+      if (s.own) self.endOwn();
+      if (refocus) { var c = s.own ? self.$('[data-act="ownopen"]') : self.$$('.hc-hand .hc-card[data-i], .hc-lrow[data-i]')[i]; if (c) c.focus({ preventScroll: true }); }
+      if (cb) cb();
+    };
+    if (now || this.still()) { gone(); return; }
+    s.scrim.classList.remove('is-on');
+    var lv = this.lively(), opt = { duration: lv ? 220 : 140, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' };
+    s.ft.animate(lv ? [{ transform: 'none' }, { transform: 'translateY(' + (s.H - s.y + 10) + 'px)' }] : [{ opacity: 1 }, { opacity: 0 }], opt);
+    var a = s.el.animate(lv ? [{ transform: 'translateY(' + s.y + 'px)' }, { transform: 'translateY(' + (s.H + 10) + 'px)' }] : [{ opacity: 1 }, { opacity: 0 }], opt);
+    a.onfinish = gone;
+  };
+
+  Creator.prototype.wireSheet = function (sh) {
+    var self = this, s = this.sh, grab = sh.querySelector('.hc-grab'), head = sh.querySelector('.hc-kind'), drag = null;
+    function down(ev) {
+      if (ev.target.closest('button')) return;
+      drag = { y0: ev.clientY, s0: s.y, t: performance.now(), y: ev.clientY, v: 0 };
+      sh.style.transition = 'none';
+      try { ev.target.setPointerCapture(ev.pointerId); } catch (x) { /* a pointer that cannot be captured still drags */ }
+    }
+    function move(ev) {
+      if (!drag) return;
+      var dy = ev.clientY - drag.y0, now = performance.now();
+      drag.v = (ev.clientY - drag.y) / Math.max(1, now - drag.t); drag.y = ev.clientY; drag.t = now;
+      var y = drag.s0 + dy; if (y < 0) y = y / 3;
+      s.y = y; sh.style.transform = 'translateY(' + y + 'px)';
+    }
+    function up() {
+      if (!drag) return;
+      var v = drag.v; drag = null;
+      if (v < -0.45) return self.setSheet('full');
+      if (v > 0.6) return self.sheet === 'full' && s.y < s.half ? self.setSheet('half') : self.closeSheet(false, null, true);
+      if (s.y > s.half + (s.H - s.half) * 0.35) return self.closeSheet(false, null, true);
+      self.setSheet(s.y < s.half / 2 ? 'full' : 'half');
+    }
+    [grab, head].forEach(function (el) {
+      if (!el) return;
+      el.style.touchAction = 'none';
+      el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    });
+    var sc = sh.querySelector('.hc-sc');
+    sc.addEventListener('scroll', function () { if (self.sheet === 'half' && sc.scrollTop > 6) self.setSheet('full'); self.followTip(); }, { passive: true });
+    sc.addEventListener('wheel', function (ev) { if (self.sheet === 'half' && ev.deltaY > 0) { ev.preventDefault(); self.setSheet('full'); } }, { passive: false });
+  };
+
+  // --- The player's own entry ---
+
+  // Opens the editor for a new entry, or for the player's own entry c. It
+  // takes the sheet on a phone and the right pane on a computer; the form,
+  // its checks and Save draft / Hand it in are the shared editor's.
+  Creator.prototype.openOwn = function (c) {
+    var self = this, st = this.cur(), Own = window.ChronicleOwnEntry;
+    if (!Own || !Own.Editor || !st || this.busy) return;
+    this.endOwn();
+    var desk = this.desk();
+    var ed = new Own.Editor({
+      campaignId: this.campaignId, csrf: this.csrf, step: st, entry: c || null, closeButton: desk,
+      say: function (t) { self.say(t); },
+      onSaved: function (e, mode, isNew) { self.ownSaved(st, c, e, mode, isNew); },
+      onClose: function () { self.closeOwn(); }
+    });
+    this.own = { editor: ed, key: st.fieldKey };
+    ed.start();
+    this.showOwn(false);
+  };
+
+  // Puts the editor on screen (again, after a redraw when instant).
+  Creator.prototype.showOwn = function (instant) {
+    var self = this, o = this.own;
+    if (!o) return;
+    if (this.desk()) {
+      var r = this.$('[data-right]');
+      if (!r) return;
+      r.innerHTML = '<div class="hc-sc" data-rsc><div data-ownbody></div></div><div class="hc-foot" data-ownfoot></div>';
+      this.$$('.hc-gcard.is-focus').forEach(function (g) { g.classList.remove('is-focus'); g.setAttribute('aria-selected', 'false'); });
+      var oc = this.$('.hc-gcard--own'); if (oc) oc.classList.add('is-focus');
+      this.anim(r.firstElementChild, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: ms(200), fill: 'none', slide: true });
+    } else {
+      this.openSheet(null, { instant: !!instant });
+    }
+    o.editor.mount(this.$('[data-ownbody]'), this.$('[data-ownfoot]'));
+    if (!instant) o.editor.focusFirst();
+  };
+
+  Creator.prototype.endOwn = function () {
+    if (!this.own) return;
+    this.own.editor.destroy();
+    this.own = null;
+  };
+
+  // Gets out of the editor on the computer (a phone's sheet closes through
+  // closeSheet), asking first when something unsaved would be lost.
+  Creator.prototype.leaveOwn = function (next) {
+    var self = this;
+    if (!this.own) { next(); return; }
+    this.own.editor.requestClose(function () { self.endOwn(); self.refreshRight(); next(); });
+  };
+
+  Creator.prototype.closeOwn = function () {
+    if (this.desk()) {
+      this.endOwn();
+      this.refreshRight();
+      var oc = this.$('.hc-gcard--own, .hc-lrow--own'); if (oc) oc.focus({ preventScroll: true });
+    } else this.closeSheet(false, null, true);
+  };
+
+  // A saved entry joins the step's list at the front, marked Draft or Waiting
+  // for the Director, and can be chosen for the hero like any other. A new one
+  // spends the permission, so the make card goes. If it was the pick and its
+  // name changed, the pick follows.
+  Creator.prototype.ownSaved = function (st, was, e, mode, isNew) {
+    var self = this, Own = window.ChronicleOwnEntry, ch = Own.Editor.choiceOf(e);
+    var at = -1;
+    st.choices.forEach(function (c, n) { if (c.entryId === e.id) at = n; });
+    if (at >= 0) {
+      var old = st.choices[at], p = this.picks[st.fieldKey];
+      if (p && lower(p.name) === lower(old.name)) { p.name = ch.name; this.save(); }
+      if (old.state) ch.state = old.state;
+      st.choices.splice(at, 1);
+    }
+    st.choices.unshift(ch);
+    if (isNew) st.canMake = false;
+    this.at[st.fieldKey] = 0;
+    this.find[st.fieldKey] = '';
+    var said = ch.name + (mode === 'send' ? ' handed in. It waits for your ' + gm() + ', and you can still choose it.' : ' saved as a draft. You can choose it now.');
+    var finish = function () {
+      if (self.cur() !== st) return;
+      self.own = null;
+      var tl = self.$('.hc-tools'); if (tl) tl.outerHTML = self.toolsHTML();
+      self.refreshList();
+      var c0 = self.$$('.hc-hand .hc-card[data-i], .hc-gcard[data-i]')[0] || self.$$('.hc-lrow[data-i]')[0];
+      if (c0) {
+        if (!self.desk() && self.mode === 'cards') self.scrollHandTo(0, true);
+        c0.classList.remove('is-flash'); void c0.offsetWidth;
+        setTimeout(function () { c0.classList.add('is-flash'); }, self.lively() ? 300 : 0);
+      }
+      self.say(said);
+    };
+    if (this.desk()) { this.own.leaving = true; this.endOwn(); finish(); }
+    else { this.own.leaving = true; this.closeSheet(false, finish); }
+  };
+
+  // --- The step list (phone) ---
+
+  Creator.prototype.toggleDrape = function (force) {
+    var d = this.$('[data-drape]'), btn = this.$('.hc-sbtn'), self = this, app = this.app();
+    var open = force != null ? force : !d;
+    if (!open) {
+      if (!d) return;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      var sc = this.$('[data-dscrim]');
+      if (sc) sc.classList.remove('is-on');
+      var a = this.anim(d, [{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(0 0 100% 0)' }], { duration: ms(150), easing: 'cubic-bezier(.4,0,1,1)' });
+      var done = function () { d.remove(); if (sc) sc.remove(); };
+      if (a) a.onfinish = done; else done();
+      return;
+    }
+    if (d || !app) return;
+    this.closeSheet(true);
+    var head = rel(app, q1('.hc-shead', app).getBoundingClientRect()), y = head.top + head.height;
+    var scrim = document.createElement('div'); scrim.className = 'hc-scrim'; scrim.setAttribute('data-dscrim', ''); scrim.setAttribute('data-act', 'drape'); scrim.style.top = y + 'px';
+    d = document.createElement('div'); d.className = 'hc-drape'; d.setAttribute('data-drape', ''); d.setAttribute('role', 'group'); d.setAttribute('aria-label', 'All steps'); d.style.top = y + 'px';
+    var h = '';
+    for (var i = 0; i <= this.last(); i++) {
+      var p = this.picked(i), st = this.plan.steps[i], note = st && this.pickNote(st);
+      h += '<button type="button" class="hc-row" data-go="' + i + '"' + (i === this.step ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : i === this.step ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span><span class="hc-lb"><b>' + esc(this.stepWord(i)) + '</b><span>' +
+        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.skipped[st.fieldKey] ? 'None' : this.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+    }
+    d.innerHTML = h;
+    app.appendChild(scrim); app.appendChild(d);
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+    requestAnimationFrame(function () { scrim.classList.add('is-on'); });
+    this.anim(d, [{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0 0)' }], { duration: ms(200) });
+    var cur = d.querySelector('[aria-current]');
+    if (cur) cur.focus({ preventScroll: true });
+  };
+
+  // --- Choosing ---
+
+  // Makes an entry the step's pick, keeping what was bought from it.
+  Creator.prototype.commitPick = function (st, c) {
+    var arr = this.mine(st.fieldKey, c);
+    this.picks[st.fieldKey] = { name: c.name, options: arr };
+    delete this.skipped[st.fieldKey];
     this.save();
   };
 
-  Creator.prototype.choose = function () {
-    var st = this.cur(), c = st.choices[this.open], p = this.picks[st.fieldKey];
-    if (!p || lower(p.name) !== lower(c.name)) this.picks[st.fieldKey] = { name: c.name, options: [] };
-    this.refresh();
-    this.announce(c.name + ' chosen');
-    // Where the leaf covers the page, choosing puts it away so the step's
-    // Next button is in reach; beside the page it stays open to re-read.
-    var wrap = this.root.querySelector('.hc-wrap'), leaf = this.root.querySelector('.hc-leaf');
-    if (leaf && leaf.offsetWidth >= wrap.offsetWidth - 1) this.closeLeaf();
+  Creator.prototype.choose = function (i) {
+    if (this.busy || this.isDetails()) return;
+    var l = this.entries(this.step), st = this.cur(), si = this.step;
+    if (i == null) i = this.curIdx();
+    var c = l[i];
+    if (!c || this.chooseDisabled(c, st)) return;
+    this.commitPick(st, c);
+    var nx = this.nextOpen(si);
+    this.say(c.name + ' chosen');
+    this.root.querySelector('.hc-app').setAttribute('data-mo', motion());
+    if (this.desk()) return this.chooseDesk(c, st, si, i, nx);
+    var src = this.mode === 'cards' ? this.$$('.hc-hand .hc-card[data-i]')[i] : this.$$('.hc-lrow[data-i]')[i];
+    var chip = this.$('.hc-chips .hc-chip[data-k="' + st.fieldKey + '"]'), self = this;
+    if (!this.lively() || !src || !chip) {
+      this.closeSheet(false, function () { self.goStep(nx, 'fwd', st.fieldKey); });
+      return;
+    }
+    this.busy = true;
+    var chips = this.$('.hc-chips');
+    chips.style.scrollBehavior = 'auto';
+    chips.scrollLeft = Math.max(0, chip.offsetLeft - 16);
+    var app = this.app(), from = rel(app, src.getBoundingClientRect()), to = rel(app, chip.getBoundingClientRect());
+    this.closeSheet(false);
+    var g = this.ghost(c, st, from);
+    src.style.visibility = 'hidden';
+    onScreen(this.$$('.hc-hand .hc-card, .hc-lrow')).forEach(function (x) {
+      if (x !== src) x.animate([{ opacity: getComputedStyle(x).opacity, transform: x.style.transform || 'none' }, { opacity: 0, transform: 'translateX(-28px) ' + (x.style.transform || '') }], { duration: ms(180), easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
+    });
+    this.$$('[data-body] .hc-intro, [data-body] .hc-notes, [data-body] .hc-tools, [data-body] .hc-under').forEach(function (x) { x.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(160), easing: 'ease-in', fill: 'forwards' }); });
+    var fl = this.flight(g, from, to, ms(460)), seq = this.navSeq;
+    // A step the player presses mid-flight wins over the move to the next one.
+    setTimeout(function () { if (self.navSeq === seq) self.goStep(nx, 'fwd', null, true); }, ms(300));
+    fl.onfinish = function () {
+      g.remove(); self.busy = false;
+      var cs = self.$('.hc-chips');
+      if (cs) {
+        cs.innerHTML = self.chipsHTML();
+        var nc = cs.querySelector('[data-k="' + st.fieldKey + '"]'); if (nc) nc.classList.add('is-glow');
+        var slot = cs.querySelector('.is-slot.is-cur'); if (slot) self.anim(slot, [{ opacity: 0, transform: 'translateX(8px)' }, { opacity: 1, transform: 'none' }], { duration: ms(220), slide: true });
+        self.chipsInto();
+      }
+      var sh = self.$('.hc-shead'); if (sh) sh.outerHTML = self.sheadHTML();
+    };
   };
 
-  Creator.prototype.toggleOption = function (name, on) {
-    var st = this.cur(), c = st.choices[this.open], p = this.picks[st.fieldKey];
-    if (!p || lower(p.name) !== lower(c.name)) { p = { name: c.name, options: [] }; this.picks[st.fieldKey] = p; }
-    if (on && p.options.indexOf(name) < 0) p.options.push(name);
-    if (!on) p.options = p.options.filter(function (o) { return o !== name; });
-    this.refresh();
+  Creator.prototype.chipsInto = function () {
+    var chips = this.$('.hc-chips');
+    if (!chips) return;
+    var c = chips.querySelector('.is-cur') || chips.lastElementChild;
+    if (c && chips.scrollTo) chips.scrollTo({ left: Math.max(0, c.offsetLeft - 16 - (chips.clientWidth - c.offsetWidth) / 2), behavior: this.still() ? 'auto' : 'smooth' });
   };
 
-  Creator.prototype.quick = function () {
-    var st = this.cur(), c = st.choices[this.open], bl = buyList(c.properties);
-    var names = (c.properties.quick_build || []).filter(function (n) { return bl && bl.items.some(function (it) { return it.name === n; }); });
-    this.picks[st.fieldKey] = { name: c.name, options: names };
-    this.refresh();
-    this.announce('Suggested set chosen: ' + names.join(', '));
+  // The card that travels: a copy of the chosen card that shrinks into its
+  // chip, its words crossing over mid-flight.
+  Creator.prototype.ghost = function (c, st, from) {
+    var g = document.createElement('div'); g.className = 'hc-ghost';
+    g.innerHTML = '<div class="hc-gf"><span class="hc-gk">' + esc(st.label) + '</span><span class="hc-disp hc-gn" style="font-size:' + (from.height > 120 ? 30 : 22) + 'px">' + esc(c.name) + '</span><span class="hc-gs">' + esc(plain(c.summary)) + '</span></div>' +
+      '<div class="hc-gc"><small>' + esc(st.label) + '</small><b>' + esc(c.name) + '</b></div>';
+    g.style.left = from.left + 'px'; g.style.top = from.top + 'px'; g.style.width = from.width + 'px'; g.style.height = from.height + 'px';
+    this.app().appendChild(g);
+    return g;
+  };
+  Creator.prototype.flight = function (g, from, to, dur) {
+    var k = [{ left: from.left + 'px', top: from.top + 'px', width: from.width + 'px', height: from.height + 'px', borderRadius: '14px' },
+      { left: (from.left + (to.left - from.left) * 0.35) + 'px', top: (from.top + (to.top - from.top) * 0.6 - 10) + 'px', width: (from.width * 0.7 + to.width * 0.3) + 'px', height: (from.height * 0.45 + to.height * 0.55) + 'px', offset: 0.45 },
+      { left: to.left + 'px', top: to.top + 'px', width: to.width + 'px', height: to.height + 'px', borderRadius: '10px' }];
+    g.querySelector('.hc-gf').animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur * 0.42, easing: 'ease-in', fill: 'forwards' });
+    g.querySelector('.hc-gc').animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur * 0.3, delay: dur * 0.5, fill: 'forwards' });
+    return g.animate(k, { duration: dur, easing: 'cubic-bezier(.3,.7,.25,1)', fill: 'forwards' });
   };
 
-  Creator.prototype.go = function (i) {
-    this.step = Math.max(0, Math.min(i, this.stepCount() - 1));
-    this.render();
-    var h = this.root.querySelector('.hc-head h1');
-    if (h) h.focus({ preventScroll: true });
+  Creator.prototype.chooseDesk = function (c, st, si, i, nx) {
+    var src = this.$$('.hc-gcard[data-i]')[i] || this.$$('.hc-lrow[data-i]')[i], self = this;
+    var row = this.$('.hc-rail .hc-row[data-k="' + st.fieldKey + '"]');
+    if (!this.lively() || !src || !row) { this.goStep(nx, 'fwd', st.fieldKey); return; }
+    this.busy = true;
+    var app = this.app(), from = rel(app, src.getBoundingClientRect()), to = rel(app, row.getBoundingClientRect());
+    var g = this.ghost(c, st, from);
+    src.style.visibility = 'hidden';
+    onScreen(this.$$('.hc-gcard, .hc-lrow')).forEach(function (x) { if (x !== src) x.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(8px)' }], { duration: ms(160), easing: 'ease-in', fill: 'forwards' }); });
+    var fl = this.flight(g, from, to, ms(480)), seq = this.navSeq;
+    setTimeout(function () { if (self.navSeq === seq) self.goStep(nx, 'fwd', null, true); }, ms(300));
+    fl.onfinish = function () {
+      g.remove(); self.busy = false;
+      var rail = self.$('.hc-rail');
+      if (rail) { rail.outerHTML = self.railHTML(); var nr = self.$('.hc-rail .hc-row[data-k="' + st.fieldKey + '"]'); if (nr) nr.classList.add('is-glow'); self.countStats(); }
+    };
+  };
+
+  // The figures in "Your hero so far" count to their new value.
+  Creator.prototype.countStats = function () {
+    var s = this.stats(), self = this, was = this.lastStats || {};
+    this.$$('[data-stat]').forEach(function (b) {
+      var k = b.getAttribute('data-stat'), v = s[k], w = was[k];
+      if (v == null || v === w) return;
+      if (typeof v === 'number' && typeof w === 'number' && self.lively()) {
+        var t0 = performance.now();
+        (function tick(t) { var p = Math.min(1, (t - t0) / 420), e = 1 - Math.pow(1 - p, 3); b.textContent = Math.round(w + (v - w) * e); if (p < 1) requestAnimationFrame(tick); })(t0);
+      } else { b.classList.remove('is-pop'); void b.offsetWidth; if (!self.still()) b.classList.add('is-pop'); }
+    });
+    this.lastStats = s;
+  };
+
+  // Go to a step; dir 'fwd' deals from the right, 'back' from the left.
+  // keepChips leaves the chip row alone while a card is still flying to it.
+  Creator.prototype.goStep = function (i, dir, glowKey, keepChips) {
+    var me = this;
+    if (this.own && this.desk()) { this.leaveOwn(function () { me.goStep(i, dir, glowKey, keepChips); }); return; }
+    // Each move counts, so a choose's delayed step-on can tell the player has
+    // already gone somewhere; a redraw mid-flight ends the flight, and with it
+    // the busy flag.
+    this.navSeq = (this.navSeq || 0) + 1;
+    if (!keepChips) this.busy = false;
+    this.closeTip(true);
+    this.toggleDrape(false);
+    var prev = this.step;
+    this.step = Math.max(0, Math.min(i, this.last()));
+    var app = this.app();
+    if (app) app.setAttribute('data-mo', motion());
+    if (this.desk()) {
+      if (!keepChips) this.render();
+      else {
+        var cols = this.$('.hc-cols'), tmp = document.createElement('div');
+        tmp.innerHTML = '<div class="hc-cols">' + this.railHTML() + (this.isDetails() ? '<section class="hc-mid hc-mid--wide">' + this.reviewHTML() + '</section>'
+          : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
+        cols.parentNode.replaceChild(tmp.firstElementChild, cols);
+        app.setAttribute('data-step', this.step);
+      }
+      if (glowKey) { var r = this.$('.hc-rail .hc-row[data-k="' + glowKey + '"]'); if (r) r.classList.add('is-glow'); }
+      this.after();
+      this.countStats();
+      this.deal(dir || (i < prev ? 'back' : 'fwd'));
+      this.focusHead();
+      return;
+    }
+    if (keepChips) {
+      var b = this.$('[data-body]');
+      b.innerHTML = this.bodyInner();
+      var sh = this.$('.hc-shead'); if (sh) sh.outerHTML = this.sheadHTML();
+      app.setAttribute('data-step', this.step);
+      this.after();
+    } else this.render();
+    if (glowKey) { var c = this.$('.hc-chips [data-k="' + glowKey + '"]'); if (c) c.classList.add('is-glow'); }
+    this.deal(dir || (i < prev ? 'back' : 'fwd'));
+    this.focusHead();
     var top = this.root.getBoundingClientRect().top;
     if (top < 0) this.root.scrollIntoView({ block: 'start' });
   };
 
-  Creator.prototype.announce = function (msg) {
-    var live = this.root.querySelector('.hc-live');
-    if (!live) { live = document.createElement('div'); live.className = 'hc-live sr-only'; live.setAttribute('aria-live', 'polite'); this.root.appendChild(live); }
-    live.textContent = msg;
+  Creator.prototype.focusHead = function () {
+    var h = this.$('.hc-intro h2, .hc-rev__t');
+    if (h) h.focus({ preventScroll: true });
   };
+
+  // The new step's cards are dealt in; under Gentle only a fade.
+  Creator.prototype.deal = function (dir) {
+    if (this.still()) return;
+    var sgn = dir === 'back' ? -1 : 1, self = this;
+    this.$$('[data-body] .hc-intro, [data-mid] .hc-intro, .hc-sbtn').forEach(function (x) { self.anim(x, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: ms(280), fill: 'none', slide: true }); });
+    if (this.lively()) {
+      var hand = this.$('[data-hand]'), mid = hand ? hand.scrollLeft + hand.clientWidth / 2 : 0;
+      var cards = hand ? qa('.hc-card', hand).filter(function (c) { return Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid) < hand.clientWidth; }) : [];
+      cards.forEach(function (c, n) {
+        var end = c.style.transform || 'none', op = c.style.opacity || 1;
+        c.classList.add('is-dealing');
+        var a = c.animate([{ opacity: 0, transform: 'translateX(' + (sgn * 90) + 'px) rotate(' + (sgn * 3) + 'deg) scale(.96)' }, { opacity: op, transform: end }], { duration: ms(340), delay: 40 + n * 60, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' });
+        a.onfinish = function () { c.classList.remove('is-dealing'); };
+      });
+      this.$$('.hc-gcard').slice(0, 9).forEach(function (c, n) { c.animate([{ opacity: 0, transform: 'translateY(14px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: ms(300), delay: 30 + n * 35, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }); });
+      this.$$('.hc-lrow[data-i]').slice(0, 8).forEach(function (c, n) { c.animate([{ opacity: 0, transform: 'translateX(' + (sgn * 24) + 'px)' }, { opacity: 1, transform: 'none' }], { duration: ms(260), delay: n * 30, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }); });
+      var r = this.$('[data-right] .hc-det'); if (r) r.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: ms(280), delay: 120, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' });
+      this.$$('.hc-rev .hc-hero, .hc-rev .hc-field, .hc-rev .hc-picks, .hc-rev .hc-fin').forEach(function (x, n) { x.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: ms(300), delay: n * 60, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }); });
+    } else {
+      this.$$('[data-hand], .hc-list, .hc-grid, [data-right] .hc-det, .hc-rev').forEach(function (x) { self.anim(x, [{ opacity: 0 }, { opacity: 1 }], { duration: ms(180), fill: 'none' }); });
+    }
+  };
+
+  // --- Buying from a list of costed traits ---
+
+  Creator.prototype.buyTarget = function () {
+    var c = this.curEntry(), st = this.cur();
+    var bl = c && buyList(c.properties);
+    return bl ? { st: st, c: c, bl: bl } : null;
+  };
+
+  Creator.prototype.toggleBuy = function (n) {
+    var t = this.buyTarget();
+    if (!t) return;
+    var it = t.bl.items[n], mine = this.mine(t.st.fieldKey, t.c), at = mine.indexOf(it.name), left = t.bl.budget - this.spent(t.st.fieldKey, t.c, t.bl);
+    if (at >= 0) mine.splice(at, 1);
+    else if (it.cost <= left) mine.push(it.name);
+    else {
+      var tc = this.$$('.hc-tcard')[n];
+      if (tc) { tc.classList.remove('is-flash'); void tc.offsetWidth; tc.classList.add('is-flash'); }
+      this.say('Needs ' + it.cost + (it.cost === 1 ? ' point' : ' points') + ', ' + left + ' left.');
+      return;
+    }
+    this.refreshBuy(t);
+    this.save();
+  };
+
+  Creator.prototype.refreshBuy = function (t) {
+    var self = this, mine = this.mine(t.st.fieldKey, t.c), left = t.bl.budget - this.spent(t.st.fieldKey, t.c, t.bl), big = this.$('[data-left]');
+    if (big && big.textContent !== String(left)) { big.textContent = left; big.classList.remove('is-pop'); void big.offsetWidth; if (!this.still()) big.classList.add('is-pop'); }
+    this.$$('.hc-buy .hc-pips i').forEach(function (p, n) { p.classList.toggle('is-on', n < t.bl.budget - left); });
+    this.$$('.hc-buy .hc-tcard').forEach(function (c) {
+      var it = t.bl.items[+c.getAttribute('data-t')], s = self.tstate(it, mine, left);
+      c.classList.toggle('is-on', s.on); c.classList.toggle('is-no', s.no);
+      var bt = c.querySelector('.hc-tbuy'); bt.textContent = self.tlabel(it, s, left); bt.setAttribute('aria-pressed', String(s.on));
+      if (s.no) bt.setAttribute('aria-disabled', 'true'); else bt.removeAttribute('aria-disabled');
+    });
+    this.$$('[data-act="choose"]').forEach(function (b) { b.innerHTML = self.chooseLabel(t.c, t.st); });
+    this.say(left + ' ' + lower(words(t.bl.budgetKey)) + ' left.');
+    if (this.desk()) { var sf = this.$('[data-sofar]'); if (sf) { sf.outerHTML = this.sofarHTML(); this.countStats(); } }
+  };
+
+  Creator.prototype.quick = function () {
+    var t = this.buyTarget();
+    if (!t || !Array.isArray(t.c.properties.quick_build)) return;
+    var mine = this.mine(t.st.fieldKey, t.c), left = t.bl.budget, names = [];
+    mine.length = 0;
+    t.c.properties.quick_build.forEach(function (n) {
+      var it = t.bl.items.filter(function (x) { return x.name === n; })[0];
+      if (it && it.cost <= left) { mine.push(n); names.push(n); left -= it.cost; }
+    });
+    this.refreshBuy(t);
+    this.save();
+    this.say('Suggested set chosen: ' + names.join(', '));
+  };
+
+  Creator.prototype.unbuy = function () {
+    var t = this.buyTarget();
+    if (!t) return;
+    this.mine(t.st.fieldKey, t.c).length = 0;
+    this.refreshBuy(t);
+    this.save();
+  };
+
+  // --- The die ---
+
+  // Deals one card at random, read off the same dice as the hero builder: one
+  // d10 for up to ten cards, percentile dice for more. Ask first and Not
+  // offered cards are not dealt.
+  Creator.prototype.dealRandom = function (btn) {
+    var l = this.entries(this.step), rl = rollable(l), n = rl.length, st = this.cur(), self = this, si = this.step;
+    if (!n) { this.say('There is nothing here to deal.'); return; }
+    if (this.rolling) return;
+    this.rolling = true;
+    btn.classList.remove('is-roll'); void btn.offsetWidth; if (!this.still()) btn.classList.add('is-roll');
+    throwFor(st.label, n, btn).then(function (face) {
+      self.rolling = false;
+      if (self.step !== si || !document.body.contains(self.root)) return;
+      var c = rl[indexFor(n, face)], i = l.indexOf(c);
+      self.dealTo(i);
+      self.say('Dealt ' + c.name + '.');
+    });
+  };
+
+  Creator.prototype.dealTo = function (i) {
+    var st = this.cur(), self = this;
+    this.at[st.fieldKey] = i;
+    var flash = function (c) { if (!c) return; c.classList.remove('is-flash'); void c.offsetWidth; setTimeout(function () { c.classList.add('is-flash'); }, self.lively() ? 300 : 0); };
+    if (this.desk()) { this.setFocus(i); flash(this.$$('.hc-gcard[data-i]')[i] || this.$$('.hc-lrow[data-i]')[i]); return; }
+    if (this.mode === 'cards') { this.scrollHandTo(i, true); flash(this.$$('.hc-hand .hc-card[data-i]')[i]); this.refreshUnder(); return; }
+    var row = this.$$('.hc-lrow[data-i]')[i];
+    if (row) { if (row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: this.still() ? 'auto' : 'smooth' }); this.openSheet(i); }
+  };
+
+  // --- Rules words: one hover card ---
+
+  Creator.prototype.tipInfo = function (el) {
+    var key = el.getAttribute('data-term'), id = el.getAttribute('data-tip');
+    if (key) {
+      var t = this.terms && hasOwn(this.terms, key) ? this.terms[key] : null;
+      return t ? { cat: esc(cap(t.category || 'Rules')), name: esc(t.name), html: esc(t.text || '') } : null;
+    }
+    var T = tips();
+    return id && hasOwn(T, id) ? { cat: T[id].category, name: esc(T[id].name), html: T[id].html } : null;
+  };
+
+  Creator.prototype.showTip = function (el, pin) {
+    var self = this, app = this.app();
+    clearTimeout(this.tipTimer); clearTimeout(this.tipHide);
+    var info = this.tipInfo(el);
+    if (!info || !app) return;
+    var X = '<button type="button" class="hc-ibtn hc-x" data-act="tipx" aria-label="Close">' + I.x + '</button>';
+    if (this.tipFor === el && this.tip) {
+      if (pin && !this.tipPinned) { this.tipPinned = true; this.tip.classList.add('is-pinned'); this.tip.insertAdjacentHTML('beforeend', X); }
+      return;
+    }
+    this.closeTip(true);
+    var tip = document.createElement('div');
+    tip.className = 'hc-tip' + (pin ? ' is-pinned' : '');
+    tip.id = 'hc-tip';
+    tip.setAttribute('role', 'tooltip');
+    tip.innerHTML = '<div class="hc-cat">' + info.cat + '</div><div class="hc-tipnm hc-disp">' + info.name + '</div><p>' + info.html + '</p>' + (pin ? X : '');
+    tip.addEventListener('pointerenter', function () { clearTimeout(self.tipHide); });
+    tip.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse' && !self.tipPinned) self.tipHide = setTimeout(function () { self.closeTip(); }, 160); });
+    app.appendChild(tip);
+    this.tip = tip; this.tipFor = el; this.tipPinned = !!pin;
+    el.setAttribute('aria-expanded', 'true'); el.setAttribute('aria-describedby', 'hc-tip');
+    this.placeTip();
+    this.anim(tip, [{ opacity: 0, transform: tip.getAttribute('data-side') ? 'translateX(6px)' : 'translateY(' + (tip.getAttribute('data-below') === '1' ? -4 : 4) + 'px)' }, { opacity: 1, transform: 'none' }], { duration: ms(140), fill: 'none', slide: true });
+  };
+
+  // Below the term when there is room, else above; always inside the screen.
+  // In the computer's reading column a word explains itself in the margin
+  // beside it, so the lines that follow stay readable.
+  Creator.prototype.placeTip = function () {
+    var tip = this.tip, el = this.tipFor, app = this.app();
+    if (!tip || !el || !app) return;
+    var r = rel(app, el.getBoundingClientRect()), W = app.clientWidth, H = Math.min(app.clientHeight, window.innerHeight - app.getBoundingClientRect().top - dockedBar(window.innerHeight));
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var col = this.desk() && el.closest('[data-right]');
+    if (col) {
+      var c = rel(app, col.getBoundingClientRect());
+      if (c.left - w - 14 > 8) {
+        tip.style.left = (c.left - w - 14) + 'px'; tip.style.top = Math.max(6, Math.min(r.top - 14, H - h - 6)) + 'px';
+        tip.setAttribute('data-below', '0'); tip.setAttribute('data-side', '1');
+        return;
+      }
+    }
+    // On a phone the card never lies on the paragraph being read: it goes
+    // under the paragraph or over it, and when neither has room it sits at
+    // the foot and the reading scrolls up clear of it.
+    if (!this.desk()) {
+      var para = el.closest('p, li, dd, .hc-lede') || el, pr = rel(app, para.getBoundingClientRect());
+      tip.style.left = '8px';
+      tip.removeAttribute('data-side');
+      if (pr.top + pr.height + 8 + h <= H - 6) { tip.style.top = (pr.top + pr.height + 8) + 'px'; tip.setAttribute('data-below', '1'); return; }
+      if (pr.top - 8 - h >= 6) { tip.style.top = (pr.top - 8 - h) + 'px'; tip.setAttribute('data-below', '0'); return; }
+      var foot = H - h - 6, sc = el.closest('.hc-sc, .hc-rev, .hc-list');
+      tip.style.top = Math.max(6, foot) + 'px';
+      tip.setAttribute('data-below', '1');
+      var over = pr.top + pr.height + 8 - foot, room = r.top - (sc ? rel(app, sc.getBoundingClientRect()).top : 0) - 6;
+      if (sc && over > 0 && room > 0) sc.scrollTop += Math.min(over, room);
+      return;
+    }
+    var below = r.top + r.height + 8 + h <= H - 6 || r.top - 8 - h < 6;
+    var top = below ? r.top + r.height + 8 : r.top - 8 - h;
+    top = Math.max(6, Math.min(top, H - h - 6));
+    tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, W - w - 8)) + 'px';
+    tip.style.top = top + 'px';
+    tip.setAttribute('data-below', below ? '1' : '0');
+    tip.removeAttribute('data-side');
+  };
+
+  Creator.prototype.followTip = function () {
+    if (!this.tip || !this.tipFor) return;
+    if (!this.tipPinned) return this.closeTip(true);
+    var sc = this.tipFor.closest('.hc-sc');
+    if (sc) { var a = this.tipFor.getBoundingClientRect(), b = sc.getBoundingClientRect(); if (a.bottom < b.top || a.top > b.bottom) return this.closeTip(true); }
+    this.placeTip();
+  };
+
+  Creator.prototype.closeTip = function (now, refocus) {
+    clearTimeout(this.tipTimer); clearTimeout(this.tipHide);
+    var el = this.tip, f = this.tipFor;
+    if (!el) return;
+    this.tip = null; this.tipFor = null; this.tipPinned = false;
+    if (f) { f.setAttribute('aria-expanded', 'false'); f.removeAttribute('aria-describedby'); if (refocus) f.focus(); }
+    if (now || this.still() || !el.animate) { el.remove(); return; }
+    var a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(90), easing: 'ease-in', fill: 'forwards' });
+    a.onfinish = function () { el.remove(); };
+  };
+
+  // --- Making the hero ---
 
   Creator.prototype.create = function () {
     var self = this, err = this.root.querySelector('[data-error]'), btn = this.root.querySelector('[data-act="create"]');
@@ -645,58 +2017,206 @@
     return Promise.all(calls);
   };
 
+  // --- Events ---
+
+  Creator.prototype.act = function (n, el) {
+    var self = this, st = this.plan.steps[this.step];
+    switch (n) {
+      case 'choose': this.choose(); break;
+      case 'closesheet': this.closeSheet(false, null, true); break;
+      case 'ownopen':
+        // A card peeking in comes to the middle first, as an entry's does.
+        if (!this.desk() && el.classList.contains('hc-card')) {
+          var hand = this.$('[data-hand]'), mid = hand.scrollLeft + hand.clientWidth / 2;
+          if (Math.abs(el.offsetLeft + el.offsetWidth / 2 - mid) > el.offsetWidth / 2) { this.scrollHandTo(this.$$('.hc-hand .hc-card').indexOf(el), true); break; }
+        }
+        this.openOwn(null);
+        break;
+      case 'ownedit': this.openOwn(this.curEntry()); break;
+      case 'tipx': this.closeTip(false, true); break;
+      case 'drape': this.toggleDrape(false); break;
+      case 'steps': this.toggleDrape(); break;
+      case 'back': if (this.step > 0) this.goStep(this.step - 1, 'back'); break;
+      case 'next': this.goStep(this.step + 1, 'fwd'); break;
+      case 'skip': this.skipped[st.fieldKey] = true; this.goStep(this.nextOpen(this.step), 'fwd', st.fieldKey); break;
+      case 'clear':
+        this.find[st.fieldKey] = ''; this.at[st.fieldKey] = 0;
+        var tl = this.$('.hc-tools');
+        tl.outerHTML = this.toolsHTML();
+        this.refreshList();
+        var inp = this.$('[data-find]'); if (inp) inp.focus();
+        break;
+      case 'die': this.dealRandom(el); break;
+      case 'quick': this.quick(); break;
+      case 'unbuy': this.unbuy(); break;
+      case 'create': this.create(); break;
+      case 'nothere':
+        var nh = this.$('.hc-nh');
+        this.nh[st.fieldKey] = !this.nh[st.fieldKey];
+        if (nh) nh.outerHTML = this.nhHTML(st);
+        var again = this.$('.hc-nh .hc-link');
+        if (again) again.focus();
+        break;
+    }
+  };
+
   Creator.prototype.wire = function () {
     var self = this, root = this.root;
-    root.addEventListener('click', function (e) {
-      var t = e.target.closest('button');
-      if (!t || !root.contains(t)) return;
-      if (t.hasAttribute('data-open')) { var i = +t.getAttribute('data-open'); if (self.open === i) self.closeLeaf(); else self.openLeaf(i); return; }
-      if (t.hasAttribute('data-step')) { self.go(+t.getAttribute('data-step')); return; }
-      if (t.hasAttribute('data-tab')) {
-        self.tab = t.getAttribute('data-tab');
-        self.fillLeaf();
-        var tab = root.querySelector('.hc-ribbons [data-tab="' + self.tab + '"]');
-        if (tab) tab.focus();
+
+    root.addEventListener('click', function (ev) {
+      var t = ev.target;
+      var term = t.closest('[data-term], button[data-tip]');
+      if (term && root.contains(term) && !term.closest('.hc-card, .hc-gcard, .hc-lrow')) {
+        ev.preventDefault();
+        if (self.tipPinned && self.tipFor === term) self.closeTip(); else self.showTip(term, true);
         return;
       }
-      switch (t.getAttribute('data-act')) {
-        case 'close': self.closeLeaf(); break;
-        case 'choose': self.choose(); break;
-        case 'quick': self.quick(); break;
-        case 'next': self.go(self.step + 1); break;
-        case 'back': self.go(self.step - 1); break;
-        case 'create': self.create(); break;
-        case 'nothere':
-          var st = self.cur(), nh = root.querySelector('.hc-nh');
-          self.nh[st.fieldKey] = !self.nh[st.fieldKey];
-          if (nh) nh.outerHTML = self.notHereHTML(st);
-          var again = root.querySelector('.hc-nh .hc-link');
-          if (again) again.focus();
-          break;
+      var a = t.closest('[data-act]');
+      if (a && root.contains(a)) { if (a.tagName === 'A') return; self.act(a.getAttribute('data-act'), a, ev); return; }
+      if (!self.plan) return;
+      var go = t.closest('[data-go]');
+      if (go && root.contains(go)) {
+        var gi = +go.getAttribute('data-go');
+        self.toggleDrape(false);
+        self.closeSheet(true);
+        if (gi !== self.step) self.goStep(gi, gi < self.step ? 'back' : 'fwd');
+        return;
       }
+      var md = t.closest('[data-mode]');
+      if (md) {
+        if (self.mode !== md.getAttribute('data-mode')) {
+          self.mode = md.getAttribute('data-mode');
+          self.$$('.hc-mode button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === md)); });
+          self.refreshList();
+        }
+        return;
+      }
+      var buy = t.closest('[data-buy].hc-tbuy, button[data-buy]');
+      if (buy) { self.toggleBuy(+buy.getAttribute('data-buy')); return; }
+      if (!self.desk()) {
+        var card = t.closest('.hc-hand .hc-card[data-i], .hc-lrow[data-i]');
+        if (card) {
+          var i = +card.getAttribute('data-i');
+          if (card.classList.contains('hc-card')) {
+            var hand = self.$('[data-hand]'), mid = hand.scrollLeft + hand.clientWidth / 2;
+            // A neighbour that is peeking in comes to the middle first.
+            if (Math.abs(card.offsetLeft + card.offsetWidth / 2 - mid) > card.offsetWidth / 2) { self.at[self.cur().fieldKey] = i; self.scrollHandTo(i, true); return; }
+          }
+          self.openSheet(i);
+        }
+        return;
+      }
+      var gc = t.closest('.hc-gcard[data-i]:not(.hc-gcard--nh), .hc-mid .hc-lrow[data-i]');
+      if (gc) self.setFocus(+gc.getAttribute('data-i'));
     });
-    root.addEventListener('change', function (e) {
-      var t = e.target;
-      if (t.hasAttribute && t.hasAttribute('data-option')) self.toggleOption(t.getAttribute('data-option'), t.checked);
+
+    root.addEventListener('dblclick', function (ev) {
+      var gc = ev.target.closest('.hc-gcard[data-i], .hc-mid .hc-lrow[data-i]');
+      if (gc && self.desk()) self.choose(+gc.getAttribute('data-i'));
     });
-    root.addEventListener('input', function (e) {
-      if (e.target.hasAttribute && e.target.hasAttribute('data-name')) {
-        self.name = e.target.value;
-        var trail = root.querySelector('.hc-trail');
-        if (trail) { trail.outerHTML = self.trailHTML(); self.watchTrail(); }
+
+    root.addEventListener('input', function (ev) {
+      var t = ev.target;
+      if (t.hasAttribute && t.hasAttribute('data-find')) {
+        var k = self.cur().fieldKey;
+        self.find[k] = t.value; self.at[k] = 0;
+        var clr = self.$('.hc-find .hc-clr');
+        if (t.value && !clr) t.insertAdjacentHTML('afterend', '<button type="button" class="hc-ibtn hc-clr" data-act="clear" aria-label="Clear the search">' + I.x + '</button>');
+        if (!t.value && clr) clr.remove();
+        self.refreshList();
+        return;
+      }
+      if (t.hasAttribute && t.hasAttribute('data-name')) {
+        self.name = t.value;
+        var nm = self.name.trim(), h = self.$('[data-hname]');
+        if (h) h.textContent = nm || 'Unnamed hero';
+        var rl = self.$('.hc-rail .hc-row[data-go="' + self.last() + '"] .hc-lb span'); if (rl) rl.textContent = nm || 'Last';
+        var sf = self.$('[data-sofar] .hc-nm2'); if (sf) sf.textContent = nm || 'Unnamed hero';
         self.save();
       }
     });
-    root.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && self.open !== null) { e.preventDefault(); self.closeLeaf(); }
-      if (e.key === 'Enter' && e.target.hasAttribute && e.target.hasAttribute('data-name')) { e.preventDefault(); self.create(); }
+
+    root.addEventListener('keydown', function (ev) {
+      var t = ev.target, inField = /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
+      if (ev.key === 'Escape') {
+        if (self.tip) { self.closeTip(false, true); ev.preventDefault(); return; }
+        if (self.$('[data-drape]')) { self.toggleDrape(false); var sb = self.$('.hc-sbtn'); if (sb) sb.focus(); ev.preventDefault(); return; }
+        if (self.sh) { self.closeSheet(false, null, true); ev.preventDefault(); return; }
+        if (self.own && self.desk()) { self.own.editor.requestClose(function () { self.closeOwn(); }); ev.preventDefault(); return; }
+        if (inField && t.hasAttribute('data-find') && t.value) { self.act('clear'); ev.preventDefault(); return; }
+      }
+      if (ev.key === 'Enter' && t.hasAttribute && t.hasAttribute('data-name')) { ev.preventDefault(); self.create(); return; }
+      if (ev.key === 'Tab' && self.sh) {
+        var f = qa('button:not([disabled]), [href], input, [tabindex]:not([tabindex="-1"])', self.sh.el).concat(qa('button:not([disabled])', self.sh.ft));
+        if (f.length) {
+          var first = f[0], last = f[f.length - 1];
+          if (ev.shiftKey && (t === first || !self.sh.el.contains(t) && !self.sh.ft.contains(t))) { ev.preventDefault(); last.focus(); }
+          else if (!ev.shiftKey && t === last) { ev.preventDefault(); first.focus(); }
+        }
+        return;
+      }
+      if (inField || !self.plan || self.isDetails()) return;
+      var card = t.closest && t.closest('.hc-hand .hc-card[data-i]');
+      if (card && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); self.openSheet(+card.getAttribute('data-i')); return; }
+      if (card && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) {
+        ev.preventDefault();
+        var j = +card.getAttribute('data-i') + (ev.key === 'ArrowRight' ? 1 : -1), cs = self.$$('.hc-hand .hc-card[data-i]');
+        if (cs[j]) { self.at[self.cur().fieldKey] = j; self.scrollHandTo(j, true); cs[j].focus({ preventScroll: true }); self.refreshUnder(); }
+        return;
+      }
+      var oc = t.closest && t.closest('[data-act="ownopen"]');
+      if (oc && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); self.act('ownopen', oc); return; }
+      if (self.desk() && t.closest && t.closest('.hc-gcard:not(.hc-gcard--own), .hc-mid .hc-lrow:not(.hc-lrow--own)')) {
+        var cur = self.curIdx(), cols = self.mode === 'cards' ? self.gridCols() : 1, n = self.entries(self.step).length;
+        var map = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols };
+        if (map[ev.key] != null) { ev.preventDefault(); self.setFocus(Math.max(0, Math.min(n - 1, cur + map[ev.key]))); return; }
+        if (ev.key === 'Home') { ev.preventDefault(); self.setFocus(0); return; }
+        if (ev.key === 'End') { ev.preventDefault(); self.setFocus(n - 1); return; }
+        if (ev.key === 'Enter') { ev.preventDefault(); self.choose(); return; }
+      }
     });
-    // A click on the page outside the leaf puts it back.
-    document.addEventListener('click', function (e) {
-      if (self.open === null || !document.body.contains(root)) return;
-      if (e.target.closest('.hc-leaf') || e.target.closest('.hc-row')) return;
-      if (root.contains(e.target)) self.closeLeaf();
+
+    // Rules words and marks: a hover card on hover (after a beat), focus or tap.
+    root.addEventListener('pointerover', function (ev) {
+      var t = ev.target.closest && ev.target.closest('[data-term], [data-tip]');
+      if (!t || ev.pointerType !== 'mouse' || self.tipPinned) return;
+      clearTimeout(self.tipHide); clearTimeout(self.tipTimer);
+      self.tipTimer = setTimeout(function () { self.showTip(t, false); }, 150);
     });
+    root.addEventListener('pointerout', function (ev) {
+      var t = ev.target.closest && ev.target.closest('[data-term], [data-tip]');
+      if (!t || ev.pointerType !== 'mouse') return;
+      if (ev.relatedTarget && t.contains(ev.relatedTarget)) return;
+      clearTimeout(self.tipTimer);
+      if (!self.tipPinned) self.tipHide = setTimeout(function () { self.closeTip(); }, 160);
+    });
+    root.addEventListener('focusin', function (ev) {
+      var t = ev.target.closest && ev.target.closest('button[data-term], button[data-tip]');
+      if (t && t.matches(':focus-visible')) self.showTip(t, false);
+    });
+    root.addEventListener('focusout', function (ev) {
+      var t = ev.target.closest && ev.target.closest('button[data-term], button[data-tip]');
+      if (t && !self.tipPinned && self.tipFor === t) self.closeTip();
+    });
+    // A tap anywhere else puts a pinned card away.
+    this.onDocDown = function (ev) {
+      if (!document.body.contains(root) || !self.tip || !self.tipPinned) return;
+      if (ev.target.closest && (ev.target.closest('.hc-tip') || ev.target.closest('[data-term], [data-tip]'))) return;
+      self.closeTip();
+    };
+    document.addEventListener('pointerdown', this.onDocDown);
+  };
+
+  // Unmount on a boosted navigation: the document and window listeners and the
+  // ResizeObserver would otherwise keep this Creator and its plan alive.
+  Creator.prototype.destroy = function () {
+    if (this.onDocDown) document.removeEventListener('pointerdown', this.onDocDown);
+    if (this.onResize) window.removeEventListener('resize', this.onResize);
+    if (this.ro) this.ro.disconnect();
+    if (this.mo) this.mo.disconnect();
+    this.onDocDown = this.onResize = this.ro = this.mo = null;
+    this.closeTip(true);
+    this.endOwn();
   };
 
   // Loaded on sight (ADR-063): boot.js fetches this script when it meets the
@@ -709,8 +2229,13 @@
         el._heroCreator = p;
         p.wire();
         p.load();
+      },
+      destroy: function (el) {
+        if (el._heroCreator) el._heroCreator.destroy();
+        el._heroCreator = null;
       }
     });
   }
+  window.ChronicleHeroCreator = { termKey: termKey, motion: motion, marked: marked, plain: plain, factsOf: factsOf, indexFor: indexFor, rollable: rollable };
   if (window.Chronicle && Chronicle.register) register();
 })();

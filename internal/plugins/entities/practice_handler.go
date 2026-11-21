@@ -102,6 +102,7 @@ func (h *Handler) PracticeNew(c *echo.Context) error {
 	view := PracticeCreatorView{
 		CampaignID: cc.Campaign.ID, CSRFToken: middleware.GetCSRFToken(c),
 		PlanURL: base + "/plan", CreateURL: base,
+		TermsURL: h.termsURLIf(c.Request().Context(), cc.Campaign.ID, base+"/terms"),
 	}
 	var preload *practicePreload
 	switch {

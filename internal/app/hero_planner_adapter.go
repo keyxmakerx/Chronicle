@@ -86,3 +86,23 @@ func heroRequestView(v *systems.RequestView) *entities.HeroRequestView {
 	}
 	return &entities.HeroRequestView{ID: v.ID, EntryName: v.EntryName, EntityID: v.EntityID, Message: v.Message, CreatedAt: v.CreatedAt}
 }
+
+// heroTermsAdapter gives the hero builder its rules words from the systems
+// package's Rules book glossary, so the entities plugin never imports it.
+type heroTermsAdapter struct {
+	choices systems.CharacterChoiceService
+}
+
+// HeroTerms copies the words across; the systems side has already made them
+// plain text and left out anything Director-only.
+func (a heroTermsAdapter) HeroTerms(ctx context.Context, campaignID string) (*entities.HeroTerms, error) {
+	t, err := a.choices.RulesTerms(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := &entities.HeroTerms{Terms: make(map[string]entities.HeroTerm, len(t.Terms)), Present: t.Present}
+	for k, v := range t.Terms {
+		out.Terms[k] = entities.HeroTerm{Name: v.Name, Category: v.Category, Text: v.Text}
+	}
+	return out, nil
+}

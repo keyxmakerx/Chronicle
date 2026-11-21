@@ -343,6 +343,9 @@ type CharacterChoiceService interface {
 	CharacterChoiceList(ctx context.Context, campaignID, fieldKey string) (*ChoiceList, error)
 	// CreatorPlan lists every character field with entries, for the hero creator.
 	CreatorPlan(ctx context.Context, campaignID string) (*CreatorPlan, error)
+	// RulesTerms reads the rules words (the Rules book glossary) of the system
+	// the creator builds from, for the builder's hover meanings.
+	RulesTerms(ctx context.Context, campaignID string) (*RulesTerms, error)
 	// SetChoiceLimiter plugs in the hero-choice rules. Every list is then
 	// narrowed for the viewer after its sources are merged.
 	SetChoiceLimiter(l ChoiceLimiter)

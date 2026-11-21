@@ -138,6 +138,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// the owner allows claiming (checked in the handler).
 	cg.GET("/characters/new", h.NewHero, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/new/plan", h.HeroPlanAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/characters/new/terms", h.HeroTermsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/characters/new", h.CreateHero, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/entries", h.OwnEntries, campaigns.RequireRole(campaigns.RolePlayer))
 	// Practice heroes: saved creator results that are not pages. Each handler
@@ -145,6 +146,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// maker and Director rules, and only Directors answer an ask.
 	cg.GET("/characters/practice/new", h.PracticeNew, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/practice/plan", h.PracticePlanAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/characters/practice/terms", h.PracticeTermsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/characters/practice", h.PracticeCreate, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/practice/:pid", h.PracticeShow, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/characters/practice/:pid", h.PracticeUpdate, campaigns.RequireRole(campaigns.RolePlayer))
@@ -244,6 +246,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// visitor, and none may be added here.
 	pub.GET("/characters/try", h.TryoutNew, campaigns.RequireViewAccess())
 	pub.GET("/characters/try/plan", h.TryoutPlanAPI, campaigns.RequireViewAccess())
+	pub.GET("/characters/try/terms", h.TryoutTermsAPI, campaigns.RequireViewAccess())
 
 	// Widget data endpoints (read-only) — needed so public campaign visitors
 	// can load editor content, attribute fields, etc. Handlers already enforce

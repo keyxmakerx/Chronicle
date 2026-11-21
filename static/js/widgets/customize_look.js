@@ -483,7 +483,7 @@
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll', 'motion.entrance', 'motion.sheen', 'motion.cascade', 'motion.spark'],
       page:['page.look', 'page.kit', 'page.dmKit', 'access.page', 'access.dmscreen'],
       hover:['hover.look', 'hover.timelinePopup', 'access.hover'],
-      sheet:['sheet.style', 'sheet.craftArt', 'access.sheet'],
+      sheet:['sheet.style', 'sheet.craftArt', 'builder.look', 'access.sheet'],
       email:['email.layout']
     };
 
@@ -553,6 +553,7 @@
       d.icons = Object.assign({ amount:'few', colour:'ink' }, d.icons || {});
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
       if (!d.email || !d.email.layout) d.email = { layout:'note' };
+      if (!d.builder || !d.builder.look) d.builder = { look:'plain' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -820,6 +821,9 @@
           '<span class="tn">' + esc(p[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(p[2]) + '</span></span></label>';
       }).join('');
     }
+    // Same ids as the server's AppearanceBuilderLooks, in that order. The
+    // dataset name is what the builder's data-skin takes.
+    var BUILDER_LOOKS = [['plain', 'Plain'], ['paper', 'Paper'], ['ornate', 'Ornate']];
     // Same ids as the server's AppearanceEmailLayouts, in that order. Each tile
     // holds a small game night invite drawn the way that layout draws it, in
     // the draft's colour (syncControls), so what the owner picks is what
@@ -977,7 +981,9 @@
         fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>') +
         fld('sh-craft', 'Made items', 'Crafted items on sheets and in the Crafting block', opts('sh-craft', 'sheet.craftArt', 'sh-craft-l', CRAFT_ARTS) +
-          '<p class="hint">Dark painted shows each made item as an oil-painted object in its recipe\'s colours. Lifelike draws it the way the crafting bench draws its glass and brass; Illustrated is the softer drawn set.</p>'));
+          '<p class="hint">Dark painted shows each made item as an oil-painted object in its recipe\'s colours. Lifelike draws it the way the crafting bench draws its glass and brass; Illustrated is the softer drawn set.</p>') +
+        fld('sh-builder', 'Hero builder look', 'The step-by-step builder players make heroes in', opts('sh-builder', 'builder.look', 'sh-builder-l', BUILDER_LOOKS) +
+          '<p class="hint">How the hero builder looks to your players.</p>'));
       return '';
     }
     // "Who else may pick their own?" for one part, written to the draft's
@@ -1906,6 +1912,7 @@
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
         nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), icons:clone(d.icons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page), access:clone(d.access),
         email:clone(d.email),
+        builder:clone(d.builder),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,

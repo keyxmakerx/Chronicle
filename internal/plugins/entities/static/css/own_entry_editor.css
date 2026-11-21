@@ -1,0 +1,190 @@
+/* own_entry_editor.css — the player's own entry, written inside the builder.
+
+   The editor takes its colours, corners and faces from whichever screen hosts
+   it: the hero creator's --hc-* skin tokens (so Plain, Paper and Ornate and
+   light or dark all reach it), or the site's own theme tokens on the
+   Characters page and the sheet's pick list. Motion follows html[data-motion]
+   (full, calm, off) and a device's reduced-motion setting. */
+
+.oed, .oed-foot {
+  --o-bg: var(--hc-surface, var(--color-card-bg, var(--color-bg-secondary)));
+  --o-bg2: var(--hc-surface-2, var(--color-bg-tertiary));
+  --o-line: var(--hc-line, var(--color-border));
+  --o-text: var(--hc-text, var(--color-text-primary));
+  --o-muted: var(--hc-muted, var(--color-text-secondary));
+  --o-accent: var(--hc-accent, var(--color-accent-fill, var(--color-accent)));
+  --o-ink: var(--hc-accent-ink, var(--color-accent-on-fill, #fff));
+  --o-link: var(--hc-link, var(--color-accent-link, var(--color-accent)));
+  --o-soft: var(--hc-accent-soft, color-mix(in srgb, var(--color-accent) 12%, var(--color-card-bg, transparent)));
+  --o-danger: var(--hc-danger, var(--color-danger-strong, #b91c1c));
+  --o-warn: var(--hc-warn, var(--color-warn, #b45309));
+  --o-ok: var(--hc-ok, var(--color-ok-fg, #047857));
+  --o-r: var(--hc-radius, var(--shape-r-ctl, 8px));
+  --o-rl: var(--hc-radius-lg, var(--shape-r-panel, 12px));
+  --o-edge: var(--hc-edge, var(--shape-edge, 1px));
+  --o-face: var(--hc-face-display, var(--font-sans, system-ui, sans-serif));
+  color: var(--o-text);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.oed, .oed-foot { font-variant-numeric: tabular-nums; }
+.oed :where(input, textarea, button), .oed-foot :where(button) { font: inherit; color: inherit; }
+.oed-load { padding: 28px 0; text-align: center; color: var(--o-muted); }
+.oed-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.oed-fail { margin: 0 0 8px; padding: 10px 12px; border: var(--o-edge) solid var(--o-danger); border-radius: var(--o-r); color: var(--o-danger); }
+
+.oed-kind { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 28px; padding-right: 40px; font-size: 12px; color: var(--o-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+.oed-state { font-weight: 700; color: var(--o-link); }
+.oed-mark { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 9px; border: var(--o-edge) solid color-mix(in srgb, var(--o-accent) 40%, transparent); border-radius: 999px; background: var(--o-soft); color: var(--o-link);
+  font-weight: 700; font-size: 12px; line-height: 1; letter-spacing: 0.02em; text-transform: none; white-space: nowrap; cursor: help; }
+.oed-mark::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.oed-title { margin: 4px 0 6px; font-family: var(--o-face); font-size: 28px; line-height: 1.1; font-weight: 700; outline: none; }
+.oed-lede { margin: 0 0 6px; font-size: 16px; color: var(--o-text); }
+.oed-asked { margin: 8px 0; padding: 10px 12px; border-radius: var(--o-r); border-left: 3px solid var(--o-warn); background: color-mix(in srgb, var(--o-warn) 9%, var(--o-bg)); font-size: 15px; }
+
+.oed-field { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 0; }
+.oed-field label, .oed-k { font-size: 14px; font-weight: 600; }
+.oed-k small { font-weight: 400; }
+.oed input, .oed textarea, .oed-text {
+  width: 100%; border-radius: var(--o-r); border: var(--o-edge) solid var(--o-line); background: var(--o-bg); color: var(--o-text); font-size: 16px; padding: 10px 14px; line-height: 1.45;
+  transition: border-color var(--dur-micro, 120ms) var(--ease-out, ease-out), box-shadow var(--dur-micro, 120ms) var(--ease-out, ease-out); }
+.oed input { min-height: 48px; padding-top: 0; padding-bottom: 0; }
+.oed textarea { resize: vertical; }
+.oed input::placeholder, .oed textarea::placeholder { color: var(--o-muted); }
+.oed input:focus, .oed textarea:focus, .oed-text:focus { outline: none; border-color: var(--o-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--o-accent) 22%, transparent); }
+.oed-big { font-size: 18px; font-weight: 600; }
+.oed-ferr { font-size: 14px; color: var(--o-danger); }
+.oed-ferr[hidden], .oed [hidden] { display: none; }
+.oed-text { min-height: 96px; }
+.oed-text:empty::before { content: attr(data-placeholder); color: var(--o-muted); }
+.oed-tool { display: flex; gap: 4px; }
+.oed-tool button { min-width: 44px; min-height: 44px; border-radius: var(--o-r); border: var(--o-edge) solid var(--o-line); background: var(--o-bg2); cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), transform 60ms; }
+.oed-tool button:hover { background: var(--o-soft); }
+.oed-tool button:active { transform: scale(0.96); }
+
+.oed-facts { display: grid; gap: 8px; }
+.oed-fact { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 44px; gap: 8px; align-items: start; }
+.oed-fact-long { grid-column: 2; }
+.oed-rm { width: 44px; height: 44px; border: 0; background: transparent; border-radius: var(--o-r); font-size: 20px; line-height: 1; color: var(--o-muted); cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out); }
+.oed-rm:hover { background: var(--o-bg2); color: var(--o-danger); }
+.oed-link { align-self: flex-start; min-height: 44px; padding: 0 8px; border: 0; background: transparent; border-radius: var(--o-r); color: var(--o-link); font-weight: 600; font-size: 15px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out); }
+.oed-link:hover { background: var(--o-soft); }
+.oed-add { width: 100%; min-height: 48px; border: var(--o-edge) dashed color-mix(in srgb, var(--o-accent) 55%, var(--o-line)); border-radius: var(--o-r); background: transparent; color: var(--o-link); font-weight: 600; font-size: 15px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), border-color var(--dur-micro, 120ms) var(--ease-out, ease-out); }
+.oed-add:hover { background: var(--o-soft); border-color: var(--o-accent); }
+.oed-hint { font-size: 14px; color: var(--o-muted); }
+.oed-kept { margin: 12px 0 0; }
+
+.oed-ro { margin: 16px 0 0; display: grid; border: var(--o-edge) solid var(--o-line); border-radius: var(--o-r); overflow: hidden; }
+.oed-ro div { display: flex; flex-direction: column; padding: 8px 12px; background: var(--o-bg2); }
+.oed-ro dt { font-size: 12px; color: var(--o-muted); letter-spacing: 0.03em; }
+.oed-ro dd { margin: 0; font-size: 16px; font-weight: 600; }
+.oed-step { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; }
+.oed-step button { width: 44px; height: 44px; border-radius: var(--o-r); border: var(--o-edge) solid var(--o-line); background: var(--o-bg2); font-size: 20px; cursor: pointer; }
+.oed-step output { min-width: 36px; text-align: center; font-size: 20px; font-weight: 700; }
+
+.oed-item { display: grid; gap: 8px; padding: 12px; border: var(--o-edge) solid var(--o-line); border-radius: var(--o-r); background: var(--o-bg2); }
+.oed-item__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.oed-item__name { flex: 1 1 160px; min-width: 0; width: auto; }
+.oed-item textarea { background: var(--o-bg); }
+.oed-cost { display: inline-flex; padding: 2px; border-radius: calc(var(--o-r) + 2px); background: var(--o-bg); border: var(--o-edge) solid var(--o-line); }
+.oed-cost button { min-height: 42px; padding: 0 10px; border: 0; border-radius: var(--o-r); background: transparent; color: var(--o-muted); font-size: 14px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out); }
+.oed-cost button:hover { color: var(--o-text); }
+.oed-cost button[aria-pressed="true"] { background: var(--o-accent); color: var(--o-ink); font-weight: 700; }
+.oed-item.is-new, .oed-fact.is-new { animation: oed-in var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+@keyframes oed-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* How a hero buys it: the creator's own meter and trait cards, so a player
+   sees the entry as it will be bought. */
+.oed-prev { margin-top: 20px; padding-top: 14px; border-top: var(--o-edge) solid var(--o-line); }
+.oed-meter { display: flex; align-items: center; gap: 12px; margin: 6px 0; padding: 8px 0; }
+.oed-bigno { font-size: 28px; font-weight: 700; line-height: 1; min-width: 24px; text-align: right; display: inline-block; }
+.oed-lab2 { display: flex; flex-direction: column; line-height: 1.2; }
+.oed-lab2 b { font-size: 16px; }
+.oed-lab2 span { font-size: 14px; color: var(--o-muted); }
+.oed-pips { display: flex; gap: 4px; margin-left: auto; }
+.oed-pips i { width: 22px; height: 10px; border-radius: 5px; background: var(--o-line); position: relative; overflow: hidden; }
+.oed-pips i::after { content: ""; position: absolute; inset: 0; background: var(--o-accent); transform: scaleX(0); transform-origin: left; transition: transform var(--dur-large, 280ms) var(--ease-out, ease-out); }
+.oed-pips i.is-on::after { transform: scaleX(1); }
+.oed-buyrow { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 20px 10px; margin: 0 -20px; scroll-padding: 0 20px; scrollbar-width: thin; }
+.oed-tcard { flex: none; width: 236px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: var(--o-r); border: var(--o-edge) solid var(--o-line); background: var(--o-bg2);
+  transition: border-color var(--dur-micro, 120ms) var(--ease-out, ease-out), background-color var(--dur-standard, 200ms) var(--ease-out, ease-out), box-shadow var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.oed-th { display: flex; align-items: baseline; gap: 8px; }
+.oed-th b { font-size: 16px; overflow-wrap: anywhere; }
+.oed-pc { margin-left: auto; font-size: 13px; color: var(--o-muted); white-space: nowrap; }
+.oed-tcard p { margin: 0; font-size: 15px; line-height: 1.5; flex: 1; overflow-wrap: anywhere; }
+.oed-tcard.is-on { border-color: var(--o-accent); background: var(--o-soft); box-shadow: 0 0 0 1px var(--o-accent); }
+.oed-tbuy { min-height: 44px; padding: 0 8px; border-radius: var(--o-r); border: var(--o-edge) solid var(--o-accent); background: transparent; color: var(--o-link); font-weight: 700; font-size: 15px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out), transform 60ms; }
+.oed-tbuy:hover { background: var(--o-soft); }
+.oed-tbuy:active { transform: scale(0.97); }
+.oed-tcard.is-on .oed-tbuy { background: var(--o-accent); color: var(--o-ink); }
+.oed-tcard.is-no .oed-tbuy { border-color: var(--o-line); color: var(--o-muted); cursor: not-allowed; background: transparent; }
+.oed-tcard.is-flash { animation: oed-flash 0.7s var(--ease-out, ease-out); }
+@keyframes oed-flash { 0% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--o-danger) 45%, transparent); } 100% { box-shadow: none; } }
+.oed-bigno.is-pop { animation: oed-pop var(--dur-large, 280ms) var(--ease-out, ease-out); }
+@keyframes oed-pop { from { transform: scale(0.7); opacity: 0.3; } to { transform: none; opacity: 1; } }
+
+.oed-checks { margin-top: 14px; }
+.oed-checks:empty { display: none; }
+.oed-ready { margin: 0; font-size: 15px; color: var(--o-ok); font-weight: 600; }
+.oed-problems { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; color: var(--o-muted); }
+.oed-problems li::before { content: "•"; margin-right: 8px; color: var(--o-warn); }
+.oed-problems li.is-block { color: var(--o-danger); }
+.oed-problems li.is-block::before { color: var(--o-danger); }
+.oed-who { margin: 14px 0 0; font-size: 14px; color: var(--o-muted); }
+
+/* The foot: Save draft and Hand it in, in the host's own foot. */
+.oed-error { margin: 0 0 6px; padding: 8px 12px; border-radius: var(--o-r); border: var(--o-edge) solid var(--o-danger); color: var(--o-danger); font-size: 15px; }
+.oed-error[hidden] { display: none; }
+.oed-acts { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+.oed-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 16px; border-radius: var(--o-r); border: var(--o-edge) solid transparent; background: var(--o-accent); color: var(--o-ink); font-weight: 700; font-size: 16px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), box-shadow var(--dur-standard, 200ms) var(--ease-out, ease-out), transform 60ms; }
+.oed-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--o-accent) 88%, var(--o-text)); }
+.oed-btn:active:not(:disabled) { transform: scale(0.97); }
+.oed-btn:disabled { opacity: 0.6; cursor: default; }
+.oed-btn--ghost { background: var(--o-bg2); color: var(--o-text); border-color: var(--o-line); }
+.oed-btn--ghost:hover:not(:disabled) { background: var(--o-soft); }
+.oed-btn--danger { background: var(--o-danger); color: #fff; }
+.oed-confirm p { margin: 0 0 8px; font-size: 15px; }
+.oed-acts + .oed-hint { display: block; text-align: center; margin-top: 4px; }
+.oed-foot { display: flex; flex-direction: column; gap: 4px; }
+.oed-btn:focus-visible, .oed-link:focus-visible, .oed-add:focus-visible, .oed-tbuy:focus-visible, .oed-cost button:focus-visible, .oed-rm:focus-visible { outline: 2px solid var(--o-link); outline-offset: 2px; }
+
+/* Calm: the new row only fades; Off: nothing moves. */
+html[data-motion="calm"] .oed-item.is-new, html[data-motion="calm"] .oed-fact.is-new { animation-name: oed-fade; }
+html[data-motion="calm"] .oed-bigno.is-pop { animation-name: oed-fade; }
+html[data-motion="calm"] .oed-btn:active, html[data-motion="calm"] .oed-tbuy:active, html[data-motion="calm"] .oed-tool button:active { transform: none; }
+@keyframes oed-fade { from { opacity: 0.2; } to { opacity: 1; } }
+html[data-motion="off"] .oed *, html[data-motion="off"] .oed *::before, html[data-motion="off"] .oed *::after { animation: none !important; transition-duration: 1ms !important; }
+@media (prefers-reduced-motion: reduce) {
+  .oed *, .oed *::before, .oed *::after { animation: none !important; transition-duration: 1ms !important; }
+  .oed-btn:active, .oed-tbuy:active, .oed-tool button:active { transform: none; }
+}
+
+/* A computer's pane is wider: the buy cards stack, facts sit two to a row. */
+@container hc (min-width: 900px) {
+  .oed-buyrow { display: grid; grid-template-columns: 1fr; overflow: visible; margin: 0; padding: 4px 0 10px; scroll-snap-type: none; }
+  .oed-tcard { width: auto; }
+}
+
+/* Phone: every word at least 16px and every control at least 44px. */
+@media (max-width: 899px) {
+  .oed-kind, .oed-mark, .oed-asked, .oed-field label, .oed-k, .oed-ferr, .oed-link, .oed-hint, .oed-ro dt, .oed-cost button, .oed-lab2 span, .oed-pc,
+  .oed-tcard p, .oed-tbuy, .oed-ready, .oed-problems, .oed-who, .oed-error, .oed-confirm p { font-size: 16px; }
+  .oed-kind, .oed-ro dt { letter-spacing: 0.02em; }
+  .oed-cost button { min-height: 44px; }
+  /* The mark is a button: its pill stays small, the press area is 44px tall. */
+  button.oed-mark { position: relative; isolation: isolate; min-height: 44px; border-color: transparent; background: transparent; }
+  button.oed-mark::after { content: ""; position: absolute; inset: 8px 0; z-index: -1; border-radius: 999px;
+    border: var(--o-edge) solid color-mix(in srgb, var(--o-accent) 40%, transparent); background: var(--o-soft); }
+}
+
+/* Small link text stays at 4.5:1 or better in every look. */
+.oed-tbuy { color: color-mix(in srgb, var(--o-link) 62%, var(--o-text)); }
+.oed input::placeholder, .oed textarea::placeholder { opacity: 1; }
+.oed-mark { color: color-mix(in srgb, var(--o-link) 62%, var(--o-text)); }

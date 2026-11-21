@@ -150,6 +150,9 @@ type PracticeCreatorView struct {
 	Editing   bool
 	// Preload is the JSON the creator starts from for a copy or an edit.
 	Preload string
+	// TermsURL is where the builder reads the system's rules words; empty
+	// when the system has no glossary.
+	TermsURL string
 }
 
 // PracticePageView is a practice hero's own page.
@@ -176,6 +179,9 @@ type PracticePageView struct {
 type TryoutCreatorView struct {
 	CampaignID string
 	UserID     string
+	// TermsURL is the try-out's own read-only route to the rules words;
+	// empty when the system has no glossary.
+	TermsURL string
 }
 
 // TryoutView is the Characters page's mount for a try-out kept in the
