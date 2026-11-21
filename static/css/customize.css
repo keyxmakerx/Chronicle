@@ -226,6 +226,18 @@
 .czp .sw-add:active{ transform:scale(.94); }
 .czp .sw-add[aria-expanded="true"]{ border-style:solid; border-color:var(--accent); color:var(--accent-ink); }
 .czp .sw-name{ flex-basis:100%; font-size:11.5px; color:var(--muted); }
+/* On a phone or any touch screen the dots keep their 24px look but each sits
+   in a 44px cell, the least a thumb can hit. */
+@container cz (max-width: 760px){
+  .czp .sws{ gap:0; }
+  .czp .sw{ min-width:44px; min-height:44px; place-items:center; }
+  .czp .sw-add{ margin:10px; }
+}
+@media (pointer:coarse){
+  .czp .sws{ gap:0; }
+  .czp .sw{ min-width:44px; min-height:44px; place-items:center; }
+  .czp .sw-add{ margin:10px; }
+}
 
 /* Option tiles (fonts, highlight styles, buttons, depth) */
 .czp .tiles{ display:grid; grid-template-columns:repeat(auto-fill, minmax(124px, 1fr)); gap:8px; }

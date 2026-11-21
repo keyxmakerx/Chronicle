@@ -191,14 +191,19 @@
   }
 
   // The page keeps room below its last line for the strip. On a phone the
-  // strip stands above the table's tab at the window's foot, never on it.
+  // strip stands above the tabs at the window's foot, never on them.
   var phone = window.matchMedia ? window.matchMedia('(max-width: 767.98px)') : null;
   function makeRoom() {
     if (!strip) return;
-    var lift = 0, tt = document.getElementById('tt-drawer');
-    if (tt && phone && phone.matches) {
-      var top = tt.getBoundingClientRect().top;
-      if (top > window.innerHeight / 2) lift = Math.max(0, Math.round(window.innerHeight - top));
+    var lift = 0;
+    if (phone && phone.matches) {
+      // The table's tab and the Jot notes tab are both fixed at the window's
+      // foot; the strip rises above whichever stands highest.
+      [document.getElementById('tt-drawer'), document.querySelector('.jot-tab')].forEach(function (el) {
+        if (!el || el.hidden) return;
+        var r = el.getBoundingClientRect();
+        if (r.height && r.top > window.innerHeight / 2) lift = Math.max(lift, Math.round(window.innerHeight - r.top));
+      });
     }
     strip.style.setProperty('--kit-try-lift', lift + 'px');
     root.style.setProperty('--kit-try-h', (strip.offsetHeight + lift) + 'px');

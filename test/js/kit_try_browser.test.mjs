@@ -102,6 +102,27 @@ test('a tried kit is drawn as a saved one, and Put it back restores the page', {
   });
 });
 
+// On a phone the strip stands above the Jot notes tab fixed at the window's
+// foot, so it never covers it (the stylesheet isn't loaded here, so the lift
+// the script hands the stylesheet is what is read).
+test('on a phone the strip rises above the Jot notes tab', { skip }, async () => {
+  await withTab(async (tab) => {
+    await tab.setViewportSize({ width: 390, height: 844 });
+    await tab.goto('http://t.test/');
+    await tab.evaluate(() => {
+      const b = document.createElement('button');
+      b.className = 'jot-tab';
+      b.textContent = 'Jot';
+      b.style.cssText = 'position:fixed;right:24px;bottom:24px;padding:10px 14px';
+      document.body.appendChild(b);
+    });
+    await tab.evaluate(() => Chronicle.kitTry.open({ url: '/c/customize/kit-try', campaign: 'c1' }));
+    const lift = await tab.evaluate(() => parseFloat(document.querySelector('[data-kit-try-strip]').style.getPropertyValue('--kit-try-lift')));
+    const jotTop = await tab.evaluate(() => window.innerHeight - document.querySelector('.jot-tab').getBoundingClientRect().top);
+    assert.ok(lift >= jotTop - 1, `lift ${lift} is below the tab's top ${jotTop}`);
+  });
+});
+
 test('Keep this kit is the only write, and leads where the server says', { skip }, async () => {
   await withTab(async (tab) => {
     await tab.goto('http://t.test/');

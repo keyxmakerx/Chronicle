@@ -583,13 +583,17 @@
     var uploaded = {};      // picture names stored during this visit, not yet known to be in use
     var ui = { room:'frame', section:'brand', last:{}, viewAs:'owner', zoom:'site', page:'dash', ptheme:null, strip:true, pageAuto:true };
 
-    function matchesLook(d, id){ var L = look(id); return LOOK_KEYS.every(function(k){ return same(getP(d, k), getP(L, k)); }); }
+    // Colours compare without regard to case, as the server's own check of a
+    // saved look does, so a colour stored as #9A4A26 still reads as the look's
+    // #9a4a26 and the row does not call a saved starter look Custom.
+    function sameLook(a, b){ return same(a, b) || (typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase()); }
+    function matchesLook(d, id){ var L = look(id); return LOOK_KEYS.every(function(k){ return sameLook(getP(d, k), getP(L, k)); }); }
     function currentLook(d){
       if (matchesLook(d, d.look)) return d.look;
       var m = LOOKS.filter(function(l){ return matchesLook(d, l.id); })[0];
       return m ? m.id : null;
     }
-    function lookChanges(d){ var L = look(d.look); return LOOK_KEYS.filter(function(k){ return !same(getP(d, k), getP(L, k)); }).length; }
+    function lookChanges(d){ var L = look(d.look); return LOOK_KEYS.filter(function(k){ return !sameLook(getP(d, k), getP(L, k)); }).length; }
     function changedSections(){ return SECTIONS.filter(function(s){ return SEC_KEYS[s.id].some(function(k){ return !same(getP(draft, k), getP(saved, k)); }); }).map(function(s){ return s.id; }); }
     // Reset puts a section back: style settings to the look you started from,
     // your own words, pictures and widgets to what is saved.
