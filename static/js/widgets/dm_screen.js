@@ -131,11 +131,24 @@
 
       function root() { return st.dock && st.dock.querySelector('[data-dms-root]'); }
 
-      // The dock starts under the top bar, whatever sits above it.
+      // The dock starts under the top bar, whatever sits above it. The tucked
+      // tab instead hangs from the top of the page area, so it clears any strip
+      // (call-to-action, guest, view-as, check-up) rather than sitting in its row.
+      // A page opened beside has its close mark at that same edge, so there the
+      // tab hangs below that page's header.
       function place() {
         var bar = document.getElementById('app-topbar');
         var top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 56;
-        document.documentElement.style.setProperty('--dms-top', top + 'px');
+        var row = document.getElementById('beside-row');
+        var tabTop = top;
+        if (row) {
+          var heads = row.querySelectorAll('.beside-head');
+          var edge = heads.length ? heads[heads.length - 1].getBoundingClientRect().bottom : row.getBoundingClientRect().top;
+          tabTop = Math.max(0, Math.round(edge));
+        }
+        var rs = document.documentElement.style;
+        rs.setProperty('--dms-top', top + 'px');
+        rs.setProperty('--dms-tab-top', tabTop + 'px');
       }
 
       function build() {
@@ -190,6 +203,14 @@
           st.mq = window.matchMedia('(max-width: 700px), (hover: none) and (pointer: coarse)');
           st.mq.addEventListener('change', function () { applyOpen(); });
         } catch (e) { /* older browsers redraw on the next open */ }
+        // Any strip above the page changing height resizes the flex-1 row, and a
+        // page opening or closing beside changes its children; the custom
+        // property only moves a fixed element, so neither can loop.
+        try {
+          var row = document.getElementById('beside-row');
+          if (row && window.ResizeObserver) new ResizeObserver(place).observe(row);
+          if (row && window.MutationObserver) new MutationObserver(place).observe(row, { childList: true });
+        } catch (e) { /* the window resize handler still covers most cases */ }
         place();
       }
 
