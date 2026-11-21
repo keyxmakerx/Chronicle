@@ -102,13 +102,8 @@
       cmds.push({ label: 'Go to Plugins', icon: 'fa-puzzle-piece', href: '/campaigns/' + cid + '/plugins', shortcut: '' });
 
       // Actions.
-      cmds.push({
-        id: 'new-page', label: 'New page', icon: 'fa-plus', shortcut: mod + '+N',
-        action: function () {
-          var url = '/campaigns/' + encodeURIComponent(cid) + '/entities/new';
-          if (!(window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(url))) window.location.href = url;
-        }
-      });
+      // sheet: the form opens over the page when it can, and as its own page otherwise.
+      cmds.push({ id: 'new-page', label: 'New page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N', sheet: true });
       cmds.push({
         label: 'Quick Capture Note', icon: 'fa-bolt', shortcut: mod + '+Shift+N',
         action: function () { if (Chronicle.openQuickCapture) Chronicle.openQuickCapture(); }
@@ -338,6 +333,7 @@
     if (cmd.action) {
       cmd.action();
     } else if (cmd.href) {
+      if (cmd.sheet && window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(cmd.href)) return;
       window.location.href = cmd.href;
     }
   }
