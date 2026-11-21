@@ -146,7 +146,7 @@ func TestPracticeRepository_Integration(t *testing.T) {
 				held = append(held, c)
 			}
 			for _, c := range held {
-				c.Close()
+				_ = c.Close()
 			}
 			var level string
 			if err := db.QueryRowContext(ctx, `SELECT @@SESSION.tx_isolation`).Scan(&level); err != nil || level != "READ-COMMITTED" {

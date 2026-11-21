@@ -153,7 +153,7 @@ func (r *practiceRepository) Insert(ctx context.Context, h *PracticeHero, max in
 	if err != nil {
 		return false, fmt.Errorf("saving practice hero: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	name := practiceLockName(h.CampaignID, h.UserID)
 	var got sql.NullInt64
 	if err := conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, ?)`, name, practiceLockSeconds).Scan(&got); err != nil {
