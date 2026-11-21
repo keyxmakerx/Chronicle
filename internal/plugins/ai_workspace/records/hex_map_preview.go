@@ -41,7 +41,7 @@ func (p hexPreview) MarshalJSON() ([]byte, error) {
 		After  [][]any  `json:"after,omitempty"`
 		Ring   [][2]int `json:"ring,omitempty"`
 	}
-	return json.Marshal(wire{p.Cols, p.Rows, p.Art, p.Update, p.Lands, p.Cells, p.After, p.Ring})
+	return json.Marshal(wire(p))
 }
 
 func previewCell(c HexCellState) []any {
