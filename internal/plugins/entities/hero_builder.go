@@ -17,13 +17,7 @@ import (
 type HeroBuilderView struct {
 	CampaignID string
 	CSRFToken  string
-	// CanCreate shows the sentence for a new hero.
-	CanCreate bool
-	// TypeName and ForSelf describe a new hero: the page type it becomes and
-	// whether it will be the viewer's own.
-	TypeName string
-	ForSelf  bool
-	Heroes   []BuilderHero
+	Heroes     []BuilderHero
 }
 
 // BuilderHero is one of the viewer's heroes as the builder sees it.
