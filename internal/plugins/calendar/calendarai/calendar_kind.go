@@ -22,6 +22,9 @@ type CalendarStructureAPI interface {
 	GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
 	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *calendar.ImportResult, opts calendar.CreateCalendarFromImportOptions) (*calendar.Calendar, error)
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
+	// DeleteCalendar takes back a calendar a create made when a later step
+	// of the same create fails.
+	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	UpdateCalendar(ctx context.Context, calendarID, campaignID string, input calendar.UpdateCalendarInput) error
 	SetCurrentDate(ctx context.Context, calendarID, campaignID string, year, month, day, hour, minute int) error
 	PreviewStructureEdit(ctx context.Context, calendarID, campaignID string, edit calendar.StructureEdit) (*calendar.StructurePreview, error)
@@ -1149,12 +1152,27 @@ func (k CalendarKind) applyCreate(ctx context.Context, campaignID string, a Acto
 	if err != nil {
 		return err
 	}
+	// A moon set by hand is stored on an ordinary 30-day cycle until it is
+	// switched, so the calendar must not become the main one (the one the
+	// calendar page and players read) before that is done. Everything the
+	// switch needs was checked above (the Marks service, a valid mode, a
+	// fantasy calendar), so only a storage failure can still land here; then
+	// the new calendar is taken back, leaving the campaign as it was.
+	if err := k.setMoonModes(ctx, campaignID, a, s, cal.ID); err != nil {
+		if delErr := k.Svc.DeleteCalendar(ctx, cal.ID, campaignID); delErr != nil {
+			return fmt.Errorf("%w; the new calendar %q could not be taken back either: it exists but is not the main calendar, so players do not see it; delete it in the calendar settings and run the block again", err, r.Name)
+		}
+		return err
+	}
 	// The service never marks a new calendar as the main one, and every
 	// other block (and the calendar page) reads the main one.
 	if err := k.Svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
+		if delErr := k.Svc.DeleteCalendar(ctx, cal.ID, campaignID); delErr != nil {
+			return fmt.Errorf("%w; the new calendar %q exists but is not the main calendar: make it the main one in the calendar settings", err, r.Name)
+		}
 		return err
 	}
-	return k.setMoonModes(ctx, campaignID, a, s, cal.ID)
+	return nil
 }
 
 // applyUpdate writes the structure first, so the current date and eras

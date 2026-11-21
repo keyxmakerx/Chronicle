@@ -2,6 +2,7 @@ package calendarai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -231,4 +232,62 @@ func TestCalendarKind_DocDescribesMoves(t *testing.T) {
 			t.Errorf("the calendar doc lacks %q", want)
 		}
 	}
+}
+
+// A create whose moon switch fails leaves nothing behind: the calendar is
+// taken back and never made the main one, so players never see a by-hand moon
+// on an invented 30-day cycle. If it cannot be taken back, the error says where
+// it is.
+func TestCalendarKind_CreateIsAllOrNothing(t *testing.T) {
+	moons := []any{
+		map[string]any{"name": "Selune", "cycle": 30.4375},
+		map[string]any{"name": "Umbra", "moves": "by_hand"},
+	}
+	apply := func(f *fakeStructure, k CalendarKind) error {
+		fields := newCalendarFields()
+		fields["moons"] = moons
+		return k.Apply(context.Background(), camp, owner, rec(KindCalendar, ActionCreate, "Harptos", fields, ""))
+	}
+	t.Run("a failed switch rolls the calendar back and it never becomes main", func(t *testing.T) {
+		f := &fakeStructure{}
+		err := apply(f, CalendarKind{Svc: f, Marks: &fakeMarks{modeErr: errors.New("db down")}})
+		if err == nil || !strings.Contains(err.Error(), "db down") {
+			t.Fatalf("err = %v", err)
+		}
+		if f.dflt != "" {
+			t.Errorf("the calendar was made main (%q) before its moons were set", f.dflt)
+		}
+		if len(f.deleted) != 1 || f.deleted[0] != "new" {
+			t.Errorf("deleted = %v, want the new calendar taken back", f.deleted)
+		}
+	})
+	t.Run("a rollback that fails says where the calendar is", func(t *testing.T) {
+		f := &fakeStructure{deleteErr: errors.New("locked")}
+		err := apply(f, CalendarKind{Svc: f, Marks: &fakeMarks{modeErr: errors.New("db down")}})
+		if err == nil || !strings.Contains(err.Error(), "db down") || !strings.Contains(err.Error(), "not the main calendar") {
+			t.Fatalf("err = %v", err)
+		}
+		if f.dflt != "" {
+			t.Errorf("the calendar was made main (%q)", f.dflt)
+		}
+	})
+	t.Run("no Marks service is refused before anything is created", func(t *testing.T) {
+		f := &fakeStructure{}
+		if err := apply(f, CalendarKind{Svc: f}); err == nil {
+			t.Fatal("want a refusal")
+		}
+		if f.created != nil || f.dflt != "" {
+			t.Errorf("created %v, main %q: nothing may be written", f.created, f.dflt)
+		}
+	})
+	t.Run("success switches the moon, then makes it main", func(t *testing.T) {
+		f := &fakeStructure{}
+		marks := &fakeMarks{}
+		if err := apply(f, CalendarKind{Svc: f, Marks: marks}); err != nil {
+			t.Fatal(err)
+		}
+		if f.dflt != "new" || len(marks.modes) != 1 || len(f.deleted) != 0 {
+			t.Errorf("main %q, modes %v, deleted %v", f.dflt, marks.modes, f.deleted)
+		}
+	})
 }

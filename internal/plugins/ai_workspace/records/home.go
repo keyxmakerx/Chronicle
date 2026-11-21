@@ -109,7 +109,12 @@ type homeTarget struct {
 	was       HomeLayout
 	saved     bool
 	next      HomeLayout
+	// words are the written blocks whose words really change, for the review.
+	words []homeWordsChange
 }
+
+// homeWordsChange is one written block's words before and after, as markdown.
+type homeWordsChange struct{ typ, was, now string }
 
 func audienceKey(word string) (key, canonical string, ok bool) {
 	w := strings.ToLower(strings.TrimSpace(word))
@@ -151,15 +156,15 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 	}
 	// Blocks already on the home, by type in the order found, so a listed
 	// block takes over the settings of the one it stands for.
-	pool := map[string][]HomeBlock{}
+	pool := map[string][]*poolBlock{}
 	for _, row := range t.was.Rows {
 		for _, col := range row.Columns {
 			for _, b := range col.Blocks {
-				pool[b.Type] = append(pool[b.Type], b)
+				pool[b.Type] = append(pool[b.Type], &poolBlock{block: b})
 			}
 		}
 	}
-	used := map[string]int{}
+	claimWordMatches(rows, pool)
 	for ri, rv := range rows {
 		rm, ok := rv.(map[string]any)
 		if !ok {
@@ -191,10 +196,9 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 					return t, badRequestf("row %d, column %d: %s is not a home block", ri+1, ci+1, quote(typ))
 				}
 				b := HomeBlock{ID: fmt.Sprintf("blk-ai-%d-%d-%d", ri+1, ci+1, bi+1), Type: typ}
-				if old := pool[typ]; used[typ] < len(old) {
-					b.ID, b.Config = old[used[typ]].ID, cloneConfig(old[used[typ]].Config)
+				if old := takePoolBlock(pool[typ], blockKey(ri, ci, bi)); old != nil {
+					b.ID, b.Config = old.ID, cloneConfig(old.Config)
 				}
-				used[typ]++
 				if spec.hasText && !homeWordsBlocks[typ] && typ != "brochure" {
 					return t, badRequestf("only a text_block, a brochure, a table_agreement or a making_a_hero takes `text`; %s does not", quote(typ))
 				}
@@ -210,10 +214,17 @@ func (k HomeKind) resolve(ctx context.Context, campaignID string, r Record) (hom
 						if len([]rune(spec.text)) > maxHomeText {
 							return t, badRequestf("the words in a %s block run over %d characters", typ, maxHomeText)
 						}
-						if b.Config == nil {
-							b.Config = map[string]any{}
+						// Words sent back as they were read leave the stored
+						// block alone, so a lookup sent back never re-renders
+						// (and so never reshapes) what the owner wrote.
+						was := storedWords(b.Config)
+						if now := normalizeWords(spec.text); now != was {
+							if b.Config == nil {
+								b.Config = map[string]any{}
+							}
+							b.Config["_md"] = spec.text // turned into HTML at Apply
+							t.words = append(t.words, homeWordsChange{typ: typ, was: was, now: now})
 						}
-						b.Config["_md"] = spec.text // turned into HTML at Apply
 					}
 				case typ == "brochure":
 					if err := k.setBrochure(ctx, campaignID, &b, spec); err != nil {
@@ -243,6 +254,77 @@ type homeSpec struct {
 	// tells "left out, keep it" from "empty, clear it".
 	foundryURL, voice       string
 	hasFoundryURL, hasVoice bool
+}
+
+// poolBlock is a block already on the home, waiting to be taken over by the
+// listed block that stands for it.
+type poolBlock struct {
+	block HomeBlock
+	// claim is the listed block that wrote this block's own words back, and
+	// used says it has been taken.
+	claim string
+	used  bool
+}
+
+func blockKey(ri, ci, bi int) string { return fmt.Sprintf("%d.%d.%d", ri, ci, bi) }
+
+// claimWordMatches pairs each listed written block that carries words with the
+// block on the home holding exactly those words, wherever it now sits. Pairing
+// by position alone would hand a moved column's words to another block of the
+// same type, so a lookup sent back with a column moved would rewrite them.
+func claimWordMatches(rows []any, pool map[string][]*poolBlock) {
+	for ri, rv := range rows {
+		rm, _ := rv.(map[string]any)
+		cols, _ := rm["columns"].([]any)
+		for ci, cv := range cols {
+			cm, _ := cv.(map[string]any)
+			blocks, _ := cm["blocks"].([]any)
+			for bi, bv := range blocks {
+				spec, err := homeBlockSpec(bv)
+				if err != nil || !spec.hasText || !homeWordsBlocks[spec.typ] {
+					continue
+				}
+				want := normalizeWords(spec.text)
+				for _, pb := range pool[spec.typ] {
+					if pb.claim == "" && storedWords(pb.block.Config) == want {
+						pb.claim = blockKey(ri, ci, bi)
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+// takePoolBlock gives the listed block at key the block it claimed, else the
+// next block of its type nobody claimed, in the order found.
+func takePoolBlock(blocks []*poolBlock, key string) *HomeBlock {
+	for _, pb := range blocks {
+		if !pb.used && pb.claim == key {
+			pb.used = true
+			return &pb.block
+		}
+	}
+	for _, pb := range blocks {
+		if !pb.used && pb.claim == "" {
+			pb.used = true
+			return &pb.block
+		}
+	}
+	return nil
+}
+
+// storedWords is a written block's stored words in the markdown a lookup
+// writes, so words sent back can be compared with what is there.
+func storedWords(cfg map[string]any) string {
+	content, _ := cfg["content"].(string)
+	return normalizeWords(writtenMarkdown(content))
+}
+
+// normalizeWords makes line endings and outer blank space irrelevant to
+// whether words changed.
+func normalizeWords(s string) string {
+	return strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n"))
 }
 
 // homeWordsBlocks are the blocks whose words are one markdown `text`, kept as
@@ -400,10 +482,18 @@ func (k HomeKind) Plan(ctx context.Context, campaignID string, a Actor, r Record
 	if err := k.Svc.Check(ctx, campaignID, stripMarkdown(probe)); err != nil {
 		return Plan{Error: planError(err)}
 	}
-	if homeShape(t.next) == homeShape(t.was) && !homeHasText(t.next) {
+	if homeShape(t.next) == homeShape(t.was) && len(t.words) == 0 {
 		return Plan{Error: "the " + t.word + " home already has these blocks in these places"}
 	}
 	p := Plan{Summary: "the " + t.word + " home becomes: " + homeSummary(t.next) + " (now: " + homeSummary(t.was) + ")"}
+	for _, w := range t.words {
+		// Only words that really change are shown; the rest stay as written.
+		if w.was == "" {
+			p.Summary += "; " + w.typ + " words: " + quoted(w.now)
+		} else {
+			p.Summary += "; " + w.typ + " words: " + quoted(w.now) + " (was " + quoted(w.was) + ")"
+		}
+	}
 	if dropped := droppedBlocks(t.was, t.next); len(dropped) > 0 {
 		p.Warnings = append(p.Warnings, "left out, so removed: "+strings.Join(dropped, ", "))
 	}
@@ -480,19 +570,6 @@ func stripMarkdown(l HomeLayout) HomeLayout {
 		out.Rows = append(out.Rows, nr)
 	}
 	return out
-}
-
-func homeHasText(l HomeLayout) bool {
-	for _, row := range l.Rows {
-		for _, c := range row.Columns {
-			for _, b := range c.Blocks {
-				if _, ok := b.Config["_md"]; ok {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // homeShape is every column's width and blocks, to tell a change from none.
@@ -606,7 +683,7 @@ func (k HomeKind) blockSpec(ctx context.Context, campaignID string, bl HomeBlock
 	switch bl.Type {
 	case "text_block":
 		if content, _ := bl.Config["content"].(string); content != "" {
-			return "{type: text_block, text: " + quote(textOf(content)) + "}"
+			return "{type: text_block, text: " + quote(writtenMarkdown(content)) + "}"
 		}
 	case "table_agreement", "making_a_hero":
 		if content, _ := bl.Config["content"].(string); strings.TrimSpace(content) != "" {
@@ -646,23 +723,4 @@ func (k HomeKind) brochureSpec(ctx context.Context, campaignID string, b HomeBlo
 		return "brochure"
 	}
 	return "{type: brochure, " + strings.Join(parts, ", ") + "}"
-}
-
-// textOf is a Text Block's HTML as plain words, tags dropped, for an export an
-// AI can rewrite.
-func textOf(html string) string {
-	var out strings.Builder
-	in := false
-	for _, r := range html {
-		switch {
-		case r == '<':
-			in = true
-			out.WriteByte(' ')
-		case r == '>':
-			in = false
-		case !in:
-			out.WriteRune(r)
-		}
-	}
-	return strings.Join(strings.Fields(out.String()), " ")
 }

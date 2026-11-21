@@ -165,7 +165,7 @@ func TestHomeKind_Export(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"audience: players", "width: 7", "- start_here", `{type: text_block, text: "Bring dice ."}`} {
+	for _, want := range []string{"audience: players", "width: 7", "- start_here", `{type: text_block, text: "Bring **dice**."}`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("export missing %q\n%s", want, out)
 		}
@@ -433,11 +433,18 @@ func roundTripHome() HomeLayout {
 	}}
 }
 
+// swapRowTwoColumns moves the first column of the second row after the second,
+// as an AI rearranging a home would, leaving every block's words as read.
+func swapRowTwoColumns(rec Record) {
+	cols := rec.List("rows")[1].(map[string]any)["columns"].([]any)
+	cols[0], cols[1] = cols[1], cols[0]
+}
+
 // readableWords is the words of a block's stored content with the markup and
 // the spacing gone, so two forms of the same words compare equal.
 func readableWords(v any) string {
 	s, _ := v.(string)
-	return strings.Join(strings.Fields(textOf(s)), " ")
+	return strings.Join(strings.Fields(writtenMarkdown(s)), " ")
 }
 
 // What Export writes, parsed and applied again, gives back the same layout:
@@ -459,15 +466,21 @@ func TestHomeKind_ExportRoundTrips(t *testing.T) {
 	rec := recs[0]
 	rec.Action = ActionUpdate
 	rec.Text = BodyText(nil)
-	// The block is the same on screen, so the plan sees no change in its shape
-	// only when no words changed; the words are re-rendered, which is a change.
-	if p := k.Plan(ctx, "c", owner, rec); p.Error != "" && !strings.Contains(p.Error, "already has these blocks") {
-		t.Fatalf("plan: %s\n%s", p.Error, out)
+	// Sent back unchanged the home is already as written, so nothing is saved
+	// and the review says so; moving a column is the change that is saved.
+	if p := k.Plan(ctx, "c", owner, rec); !strings.Contains(p.Error, "already has these blocks") {
+		t.Fatalf("an unchanged home: plan = %+v", p)
+	}
+	swapRowTwoColumns(rec)
+	if p := k.Plan(ctx, "c", owner, rec); p.Error != "" || strings.Contains(p.Summary, "words:") {
+		t.Fatalf("plan: %+v\n%s", p, out)
 	}
 	if err := k.Apply(ctx, "c", owner, rec); err != nil {
 		t.Fatalf("apply: %v\n%s", err, out)
 	}
 	want, got := roundTripHome(), f.saved["player"]
+	cols := want.Rows[1].Columns
+	cols[0], cols[1] = cols[1], cols[0]
 	if len(got.Rows) != len(want.Rows) {
 		t.Fatalf("rows = %d, want %d\n%s", len(got.Rows), len(want.Rows), out)
 	}
@@ -504,7 +517,7 @@ func TestHomeKind_ExportRoundTrips(t *testing.T) {
 		}
 	}
 	// The agreement keeps its headings and list as markdown, not a run-on line.
-	agree := got.Rows[1].Columns[0].Blocks[1].Config["content"].(string)
+	agree := got.Rows[1].Columns[1].Blocks[1].Config["content"].(string)
 	for _, tag := range []string{"<h2>Safety and lines</h2>", "<li>Pause card</li>", "<strong>ask first</strong>", "<h2>Pacing</h2>"} {
 		if !strings.Contains(agree, tag) {
 			t.Errorf("the agreement lost %s:\n%s", tag, agree)
@@ -551,5 +564,76 @@ func TestWrittenMarkdown(t *testing.T) {
 				t.Errorf("writtenMarkdown(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+// A Text Block with a heading and a list comes back from the lookup as
+// markdown, entities decoded, and sending it back unchanged or with a column
+// moved leaves the stored words byte for byte as they were.
+func TestHomeKind_TextBlockLookupSendsBackIntact(t *testing.T) {
+	ctx := context.Background()
+	owner := Actor{UserID: "own", Role: 3}
+	stored := "<h2>House rules</h2><p>Fish &amp; chips, &quot;no&quot; gore.</p><ul><li>Pause card</li><li>Veils</li></ul>"
+	home := HomeLayout{Rows: []HomeRow{{ID: "r1", Columns: []HomeColumn{
+		{ID: "c1", Width: 7, Blocks: []HomeBlock{{ID: "t", Type: "text_block", Config: map[string]any{"content": stored}}}},
+		{ID: "c2", Width: 5, Blocks: []HomeBlock{{ID: "p", Type: "party"}}},
+	}}}}
+	f := &fakeHome{owner: "own", homes: map[string]HomeLayout{"player": home}}
+	k := HomeKind{Svc: f}
+	out, err := k.Export(ctx, "c", owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `## House rules\n\nFish & chips, \"no\" gore.\n\n- Pause card\n- Veils`) {
+		t.Fatalf("words are not markdown with entities decoded:\n%s", out)
+	}
+	rec := parseBlocks(out)[0]
+	rec.Action = ActionUpdate
+	rec.Text = BodyText(nil)
+	if p := k.Plan(ctx, "c", owner, rec); !strings.Contains(p.Error, "already has these blocks") {
+		t.Errorf("unchanged: plan = %+v", p)
+	}
+	if err := k.Apply(ctx, "c", owner, rec); err == nil || len(f.saved) != 0 {
+		t.Errorf("unchanged: apply err %v, saved %v; nothing should be written", err, f.saved)
+	}
+
+	cols := rec.List("rows")[0].(map[string]any)["columns"].([]any)
+	cols[0], cols[1] = cols[1], cols[0]
+	p := k.Plan(ctx, "c", owner, rec)
+	if p.Error != "" || strings.Contains(p.Summary, "words:") {
+		t.Errorf("moved column: plan = %+v; the review must not show unchanged words", p)
+	}
+	if err := k.Apply(ctx, "c", owner, rec); err != nil {
+		t.Fatal(err)
+	}
+	moved := f.saved["player"].Rows[0].Columns
+	if moved[1].Blocks[0].Config["content"] != stored {
+		t.Errorf("stored words = %v, want %q", moved[1].Blocks[0].Config["content"], stored)
+	}
+}
+
+// The review shows a Text Block's words when they really change, with what
+// they were, and not when the same words are written again.
+func TestHomeKind_ReviewShowsChangedWordsOnly(t *testing.T) {
+	ctx := context.Background()
+	owner := Actor{UserID: "own", Role: 3}
+	f := &fakeHome{owner: "own", homes: map[string]HomeLayout{"player": {Rows: []HomeRow{{ID: "r1", Columns: []HomeColumn{
+		{ID: "c1", Width: 12, Blocks: []HomeBlock{{ID: "t", Type: "text_block", Config: map[string]any{"content": "<p>Bring dice.</p>"}}}},
+	}}}}}}
+	k := HomeKind{Svc: f}
+	plan := func(text string) Plan {
+		r := homeRec(ActionUpdate, "players", []any{row(col(12, map[string]any{"type": "text_block", "text": text}))})
+		r.Text = mdText{}
+		return k.Plan(ctx, "c", owner, r)
+	}
+	if p := plan("Bring dice."); !strings.Contains(p.Error, "already has these blocks") {
+		t.Errorf("same words: plan = %+v", p)
+	}
+	if p := plan("Bring dice.\r\n"); !strings.Contains(p.Error, "already has these blocks") {
+		t.Errorf("same words with a trailing line break: plan = %+v", p)
+	}
+	p := plan("Bring dice and snacks.")
+	if p.Error != "" || !strings.Contains(p.Summary, `text_block words: "Bring dice and snacks." (was "Bring dice.")`) {
+		t.Errorf("changed words: plan = %+v", p)
 	}
 }

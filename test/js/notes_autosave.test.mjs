@@ -59,9 +59,69 @@ test('Done flushes instead of an unconditional save (no double-save)', () => {
     'Done must not call saveEditingNote directly — that double-saves after the blur flush');
 });
 
-test('beforeunload autosave listener is added and removed (no leak)', () => {
-  assert.match(src, /addEventListener\(\s*['"]beforeunload['"]\s*,\s*flushAutosave\s*\)/,
+test('every page-leave listener is added and removed on destroy (no leak)', () => {
+  assert.match(src, /addEventListener\(\s*['"]beforeunload['"]\s*,\s*flushOnHide\s*\)/,
     'must flush on page unload');
+  assert.match(src, /addEventListener\(\s*['"]pagehide['"]\s*,\s*flushOnHide\s*\)/,
+    'must flush on pagehide');
+  assert.match(src, /document\.addEventListener\(\s*['"]visibilitychange['"]\s*,\s*el\._notesOnVisibility\s*\)/,
+    'visibilitychange must use a named handler so it can be removed');
   assert.match(src, /removeEventListener\(\s*['"]beforeunload['"]\s*,\s*el\._notesBeforeUnload\s*\)/,
     'the beforeunload listener must be removed on destroy()');
+  assert.match(src, /removeEventListener\(\s*['"]pagehide['"]\s*,\s*el\._notesBeforeUnload\s*\)/,
+    'the pagehide listener must be removed on destroy()');
+  assert.match(src, /document\.removeEventListener\(\s*['"]visibilitychange['"]\s*,\s*el\._notesOnVisibility\s*\)/,
+    'the visibilitychange listener must be removed on destroy()');
+});
+
+test('the hide flush saves with keepalive and the autosave PUT carries it', () => {
+  assert.match(src, /function flushOnHide\(\)\s*\{\s*flushNow\(true\)/);
+  assert.match(src, /function flushAutosave\(\)\s*\{\s*flushNow\(false\)/);
+  assert.match(src, /keepalive:\s*!!keepalive/, 'the PUT must pass keepalive to apiFetch');
+});
+
+// Behavioural: run the real functions cut out of notes.js against stand-ins,
+// since the widget is an IIFE bound to the DOM.
+function cut(name) {
+  const i = src.indexOf('function ' + name);
+  assert.ok(i >= 0, name + ' missing');
+  let depth = 0, j = src.indexOf('{', i);
+  for (let k = j; k < src.length; k++) {
+    if (src[k] === '{') depth++;
+    else if (src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+  }
+  throw new Error('unbalanced ' + name);
+}
+
+function harness(visibility) {
+  const body = [cut('flushAutosave'), cut('flushOnHide'), cut('flushNow'), cut('onVisibilityChange')].join('\n');
+  const saves = [];
+  const factory = new Function('document', 'state', 'saveEditingNote', 'ctl',
+    'var autosaveTimer = null; var notesDirty = ctl.dirty;\n' + body +
+    '\nreturn { flushAutosave: flushAutosave, flushOnHide: flushOnHide, onVisibilityChange: onVisibilityChange };');
+  const api = factory({ visibilityState: visibility }, { editingId: 'n1' },
+    (id, keepalive) => saves.push({ id, keepalive }), { dirty: true });
+  return { api, saves };
+}
+
+test('a hidden tab flushes the dirty edit with keepalive', () => {
+  const { api, saves } = harness('hidden');
+  api.onVisibilityChange();
+  assert.deepEqual(saves, [{ id: 'n1', keepalive: true }]);
+  api.onVisibilityChange();
+  assert.equal(saves.length, 1, 'a clean note is not saved twice');
+});
+
+test('a visible tab does not flush; the debounce flush is not keepalive', () => {
+  const visible = harness('visible');
+  visible.api.onVisibilityChange();
+  assert.equal(visible.saves.length, 0);
+  visible.api.flushAutosave();
+  assert.deepEqual(visible.saves, [{ id: 'n1', keepalive: false }]);
+});
+
+test('an Event passed to the pagehide handler is not read as the keepalive flag', () => {
+  const { api, saves } = harness('visible');
+  api.flushAutosave({ type: 'blur' });
+  assert.equal(saves[0].keepalive, false);
 });

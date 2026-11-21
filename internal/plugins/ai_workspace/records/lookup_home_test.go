@@ -135,14 +135,21 @@ func TestLookups_HomeAnswerSendsBack(t *testing.T) {
 	rec := recs[0]
 	rec.Action = ActionUpdate
 	rec.Text = BodyText(nil)
+	// Unchanged, it is already the home; a moved column is what gets saved.
+	if p := k.Plan(ctx, camp, owner, rec); !strings.Contains(p.Error, "already has these blocks") {
+		t.Fatalf("unchanged: plan = %+v", p)
+	}
+	swapRowTwoColumns(rec)
 	if err := k.Apply(ctx, camp, owner, rec); err != nil {
 		t.Fatalf("apply: %v\n%s", err, ans.Text)
 	}
 	got, want := f.saved["player"], roundTripHome()
+	cols := want.Rows[1].Columns
+	cols[0], cols[1] = cols[1], cols[0]
 	if homeSummary(got) != homeSummary(want) {
 		t.Errorf("layout = %s, want %s", homeSummary(got), homeSummary(want))
 	}
-	if v := got.Rows[1].Columns[1].Blocks[0].Config["voice"]; v != "Discord, the Ember Coast channel" {
+	if v := got.Rows[1].Columns[0].Blocks[0].Config["voice"]; v != "Discord, the Ember Coast channel" {
 		t.Errorf("voice = %v", v)
 	}
 }

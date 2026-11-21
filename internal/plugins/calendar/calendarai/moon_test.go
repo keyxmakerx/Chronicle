@@ -16,9 +16,14 @@ type fakeMarks struct {
 	names []map[string]string
 	puts  []calendar.MoonMark
 	dels  []calendar.DayDate
+	// modeErr makes SetMoonMode fail, as a storage error would.
+	modeErr error
 }
 
 func (f *fakeMarks) SetMoonMode(_ context.Context, _, _ string, _ int, mode string, names map[string]string, _ permissions.Viewer) (*calendar.Moon, error) {
+	if f.modeErr != nil {
+		return nil, f.modeErr
+	}
 	f.modes, f.names = append(f.modes, mode), append(f.names, names)
 	return &calendar.Moon{}, nil
 }

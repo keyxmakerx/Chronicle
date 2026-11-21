@@ -35,6 +35,9 @@ type fakeStructure struct {
 	// afterApply is the main calendar as it reads once its structure is
 	// saved (a new moon has an id then); nil keeps reading cal.
 	afterApply *calendar.Calendar
+	// deleted is the calendars taken back; deleteErr makes that fail.
+	deleted   []string
+	deleteErr error
 }
 
 type moonPhase struct {
@@ -80,6 +83,13 @@ func (f *fakeStructure) GetCalendarForViewer(_ context.Context, id, _ string, _ 
 func (f *fakeStructure) CreateCalendarFromImport(_ context.Context, _ string, ir *calendar.ImportResult, _ calendar.CreateCalendarFromImportOptions) (*calendar.Calendar, error) {
 	f.created = ir
 	return &calendar.Calendar{ID: "new"}, nil
+}
+func (f *fakeStructure) DeleteCalendar(_ context.Context, id, _ string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deleted = append(f.deleted, id)
+	return nil
 }
 func (f *fakeStructure) SetDefaultCalendar(_ context.Context, _, id string) error {
 	f.dflt = id
