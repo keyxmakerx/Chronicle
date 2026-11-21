@@ -220,9 +220,9 @@ func (s *calSpec) moonModeChanges(cal *calendar.Calendar) (hand, cycle int) {
 		if old := baseMoon(cal, m.Name); old != nil && old.PhaseMode != "" {
 			now = old.PhaseMode
 		}
-		switch {
-		case mode == now:
-		case mode == calendar.MoonManual:
+		switch mode {
+		case now:
+		case calendar.MoonManual:
 			hand++
 		default:
 			cycle++
