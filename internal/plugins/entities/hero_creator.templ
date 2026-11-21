@@ -42,9 +42,11 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 				data-type-name={ view.TypeName }
 				data-for-self={ fmt.Sprint(view.ForSelf) }
 			>
-				<div class="hc-page paper paper-stack hc-loading" role="status">
-					<p class="paper-kind">New hero</p>
-					<p class="hc-loading__text">Opening the creator…</p>
+				<div class="hc-wrap paper-stack">
+					<div class="hc-page paper hc-loading" role="status">
+						<p class="paper-kind">New hero</p>
+						<p class="hc-loading__text">Opening the creator…</p>
+					</div>
 				</div>
 				<noscript>
 					<p class="text-sm text-fg-muted">The hero creator needs JavaScript. You can still add a character page from the Characters page.</p>
