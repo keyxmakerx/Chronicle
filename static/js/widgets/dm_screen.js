@@ -131,11 +131,17 @@
 
       function root() { return st.dock && st.dock.querySelector('[data-dms-root]'); }
 
-      // The dock starts under the top bar, whatever sits above it.
+      // The dock starts under the top bar, whatever sits above it. The tucked
+      // tab instead hangs from the top of the page area, so it clears any strip
+      // (call-to-action, guest, view-as, check-up) rather than sitting in its row.
       function place() {
         var bar = document.getElementById('app-topbar');
         var top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 56;
-        document.documentElement.style.setProperty('--dms-top', top + 'px');
+        var row = document.getElementById('beside-row');
+        var tabTop = row ? Math.max(0, Math.round(row.getBoundingClientRect().top)) : top;
+        var rs = document.documentElement.style;
+        rs.setProperty('--dms-top', top + 'px');
+        rs.setProperty('--dms-tab-top', tabTop + 'px');
       }
 
       function build() {
@@ -190,6 +196,12 @@
           st.mq = window.matchMedia('(max-width: 700px), (hover: none) and (pointer: coarse)');
           st.mq.addEventListener('change', function () { applyOpen(); });
         } catch (e) { /* older browsers redraw on the next open */ }
+        // Any strip above the page changing height resizes the flex-1 row; the
+        // custom property only moves a fixed element, so this cannot loop.
+        try {
+          var row = document.getElementById('beside-row');
+          if (row && window.ResizeObserver) new ResizeObserver(place).observe(row);
+        } catch (e) { /* the window resize handler still covers most cases */ }
         place();
       }
 
