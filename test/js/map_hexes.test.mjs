@@ -28,6 +28,8 @@ function load(file = 'map_hexes.js') {
   if (saved.document !== undefined) globalThis.document = saved.document;
   return api;
 }
+// map_hexes.js reads the shared look from the global map_hex_look.js sets.
+const Look = load('map_hex_look.js');
 const H = load();
 const A = load('map_hex_art.js');
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);

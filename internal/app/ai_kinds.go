@@ -47,6 +47,7 @@ type aiDeps struct {
 	FieldRules      fieldrules.Service
 	Folders         entities.FolderService
 	Health          *database.PluginHealthRegistry
+	Hexes           maps.HexService
 	Maps            maps.MapService
 	Notes           notes.NoteService
 	PlayerNotes     entity_notes.Service
@@ -161,6 +162,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	l := &records.Lookups{
 		Folders:  aiFolderNames{folders: d.Folders},
 		Maps:     aiMapsAdapter{d.Maps},
+		Hexes:    aiHexMapAdapter{maps: d.Maps, hexes: d.Hexes},
 		Pages:    d.Entities,
 		Rels:     d.Relations,
 		Notes:    d.Notes,
@@ -292,6 +294,7 @@ func init() {
 			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
+			records.HexMapKind{Svc: aiHexMapAdapter{maps: d.Maps, hexes: d.Hexes}, Maps: aiMapsAdapter{d.Maps}},
 			records.NoteKind{Svc: d.Notes, Entities: d.Entities, Access: d.NoteAccess},
 		}
 		if d.PlayerNotes != nil {
@@ -372,7 +375,7 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 			out["layer"] = "Transformations"
 		}
 		if off("maps") {
-			out["map"], out["pin"] = "Maps", "Maps"
+			out["map"], out["hex-map"], out["pin"] = "Maps", "Maps", "Maps"
 		}
 		if off(entity_notes.AddonSlug) {
 			out[records.KindPlayerNote] = "Player Notes"
