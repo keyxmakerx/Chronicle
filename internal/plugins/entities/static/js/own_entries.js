@@ -853,6 +853,12 @@
   };
 
   // A request a player made for an Ask-first entry: allow it, or send a note.
+  // A draft or ask just answered changes Campaign settings' "needs you" count;
+  // the sidebar keeps its last answer for a while, so ask it to read again.
+  function refreshNeeds() {
+    try { if (window.Chronicle && Chronicle.nav && Chronicle.nav.refreshCount) Chronicle.nav.refreshCount(true); } catch (e) { /* the badge catches up on the next load */ }
+  }
+
   Entries.prototype.answer = function (id, verb, body) {
     var self = this, r = this.requests.filter(function (x) { return String(x.id) === String(id); })[0];
     if (!r || this.busy) return;
@@ -866,6 +872,7 @@
         var said = gone ? 'That request was already answered.' : verb === 'allow'
           ? r.entryName + ' allowed for ' + (r.playerName || 'them') + (b.body && b.body.heroUpdated === false ? '' : ' and put on ' + (r.entityName || 'their hero'))
           : 'Your note went to ' + (r.playerName || 'them');
+        refreshNeeds();
         self.reloadRequests(function () {
           self.reloadRules(function () { self.render(); notify(said, gone ? 'info' : 'success'); self.announce(said); });
         });
@@ -1390,6 +1397,7 @@
         }
         self.busy = false;
         self.closePop(true);
+        if (self.director) refreshNeeds();
         var finish = function () {
           self.render();
           var row = byAttr(self.root, '.hc-row[data-open]', 'data-open', String(e.id));
