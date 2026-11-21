@@ -3,7 +3,9 @@
 // at most and a count for the rest. The Harptos calendar has four moons on a
 // ten-day week (narrow cells); a made calendar has two moons on a six-day
 // week. A player sees the moons the Director has not hidden, and the mark
-// never lands on the day number or the event marks, at desktop or phone width.
+// never lands on the day number, the event marks or the next day's mark, at
+// desktop or phone width. Therin's pair, a pale moon and a deep red one half a
+// cycle apart, is pictured in light and dark to judge the colours by eye.
 //
 // RUN: tools/live-checks.sh test/live/calendar_several_moons.spec.mjs
 
@@ -16,6 +18,7 @@ import { person, newCampaign, addMember, enableAddons, done, picture, repoRoot }
 after(done);
 
 const PHONE = { width: 390, height: 844 };
+const SMALL = { width: 320, height: 640 };
 const DESKTOP = { width: 1280, height: 800 };
 
 async function calendarFor(owner, player, tag, make) {
@@ -33,13 +36,19 @@ async function calendarFor(owner, player, tag, make) {
   return { cid, base, cal: fresh.ok && fresh.body && fresh.body.current_year ? fresh.body : cal };
 }
 
+const SEAL_AND_EMBER = [
+  { name: 'The Seal', cycle_days: 30.4, phase_offset: 8, color: '#d9d4c4' },
+  { name: 'Ember', cycle_days: 17.5, phase_offset: 3, color: '#e08a5a' },
+];
+const THERIN = [
+  { name: 'Lacrimosa', cycle_days: 24, phase_offset: 0, color: '#e5e7eb' },
+  { name: 'Sanguin’mor', cycle_days: 24, phase_offset: 12, color: '#b91c1c' },
+];
+
 // A made calendar: the Imperial preset's six-day week with two moons.
-async function twoMoonsOnSixDays(owner, cid) {
+async function twoMoonsOnSixDays(owner, cid, moons = SEAL_AND_EMBER) {
   const file = JSON.parse(readFileSync(join(repoRoot, 'internal/plugins/calendar/presets/imperial.json'), 'utf8'));
-  file.calendar.moons = [
-    { name: 'The Seal', cycle_days: 30.4, phase_offset: 8, color: '#d9d4c4' },
-    { name: 'Ember', cycle_days: 17.5, phase_offset: 3, color: '#e08a5a' },
-  ];
+  file.calendar.moons = moons;
   return owner.page.evaluate(async ({ cid, text }) => {
     const form = new FormData();
     form.append('file', new File([text], 'calendar.json', { type: 'application/json' }));
@@ -49,9 +58,10 @@ async function twoMoonsOnSixDays(owner, cid) {
 }
 
 // What the month draws: per day with a moon, the discs, lit shapes and count, and whether the mark
-// keeps clear of the day number, the event marks and the cell's edges.
+// keeps clear of the day number, the event marks, the cell's edges and every other day's mark.
 const readMonth = (page) => page.evaluate(() => {
   const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const all = [...document.querySelectorAll('.cal-v5 .day .msil')].map((m) => ({ m, r: m.getBoundingClientRect() }));
   return [...document.querySelectorAll('.cal-v5 .day')].filter((d) => d.querySelector('.msil')).map((d) => {
     const mark = d.querySelector('.msil'), cell = d.getBoundingClientRect();
     const count = mark.querySelector('.mn');
@@ -64,6 +74,7 @@ const readMonth = (page) => page.evaluate(() => {
       tinted: [...mark.querySelectorAll('.dl')].filter((s) => s.style.getPropertyValue('--mc')).length,
       onNumber: !!num && hit(r, num.getBoundingClientRect()),
       onMarks: !!marks && hit(r, marks.getBoundingClientRect()),
+      onNeighbour: all.some((o) => o.m !== mark && hit(r, o.r)),
       inCell: r.left >= cell.left - 0.5 && r.right <= cell.right + 0.5,
     };
   });
@@ -117,7 +128,19 @@ test('four moons on a ten-day week are one disc with three lit shapes and a +1, 
     assert.ok(!d.onNumber && !d.onMarks, `${d.key}: the moons sit on the number or the event marks on a phone`);
     assert.ok(d.inCell, `${d.key}: the moons spill out of the cell on a phone`);
   }
+  assert.ok(narrow.every((d) => !d.onNeighbour), 'a day\'s moons run under the next day\'s on a phone');
   await picture(page, 'calendar-several-moons-phone-light', { check: '#2482', about: 'Owner month, four moons, phone width', locator: page.locator('#cal5-cal') });
+
+  // The narrowest phone: the count sits under the disc, so a day's mark stays inside its own cell.
+  await page.setViewportSize(SMALL);
+  await owner.go(`${base}/view`);
+  await page.locator('.cal-v5 .day .msil').first().waitFor();
+  for (const d of await readMonth(page)) {
+    assert.equal(d.count, '+1', `${d.key}: the narrowest phone counts ${d.count || 'nothing'}`);
+    assert.ok(!d.onNeighbour, `${d.key}: the moons run under the next day's at 320px`);
+    assert.ok(!d.onNumber && !d.onMarks && d.inCell, `${d.key}: the moons collide at 320px`);
+  }
+  await picture(page, 'calendar-several-moons-small-phone-light', { check: '#2532', about: 'Owner month, four moons on a ten-day week, 320px wide', locator: page.locator('#cal5-cal') });
   await page.setViewportSize(DESKTOP);
 
   // A player sees the same moons; when the Director hides one, the player
@@ -160,6 +183,29 @@ test('two moons on a six-day week are one disc with two tinted shapes a day, cle
     }
     assert.ok(days.some((d) => d.shapes === 2), `no day lays both moons' lit shapes at ${width.width}px`);
     await picture(page, `calendar-two-moons-${width.width < 600 ? 'phone' : 'desktop'}`, { check: '#2482', about: `Owner month, two moons on a six-day week, ${width.width}px`, locator: page.locator('#cal5-cal') });
+  }
+  owner.assertClean();
+});
+
+test('a pale moon and a deep red one keep their own colours, in light and dark', async () => {
+  const owner = await person({ tag: 'own', name: 'Mara Vell' });
+  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
+  const { base } = await calendarFor(owner, player, 'Pale and Red', (cid) => twoMoonsOnSixDays(owner, cid, THERIN));
+  const { page } = owner;
+  for (const width of [DESKTOP, PHONE]) {
+    await page.setViewportSize(width);
+    await owner.go(`${base}/view`);
+    await page.locator('.cal-v5 .day .msil').first().waitFor();
+    const days = await readMonth(page);
+    // Half a cycle apart, one moon is always waxing while the other wanes; the disc is never empty.
+    assert.ok(days.every((d) => d.over && d.discs === 1 && d.shapes >= 1 && d.tinted === d.shapes), `a day lost its moons at ${width.width}px`);
+    assert.ok(days.every((d) => !d.onNumber && !d.onNeighbour && d.inCell), `the moons collide at ${width.width}px`);
+    const size = width.width < 600 ? 'phone' : 'desktop';
+    for (const scheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await picture(page, `calendar-pale-and-red-moons-${size}-${scheme}`, { check: '#2532', about: `Owner month, a pale moon and a deep red moon half a cycle apart, ${width.width}px, ${scheme}`, locator: page.locator('#cal5-cal') });
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
   }
   owner.assertClean();
 });

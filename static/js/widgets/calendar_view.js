@@ -4852,6 +4852,8 @@
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
       this.calEl.style.setProperty('--cols', weekdays.length || 7);
+      // The moons' count reads this: a long week's phone cell is narrower than a disc with its count beside it.
+      this.calEl.classList.toggle('manycols', weekdays.length > 7);
     },
 
     renderToday: function (bump) {

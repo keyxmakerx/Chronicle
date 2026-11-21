@@ -904,13 +904,14 @@
 /* Director only: a dashed ring on a red moon players can't see yet. */
 .cal-v5 .msil.blood.dir::after{content:"";position:absolute;inset:1.5px;border-radius:50%;border:1px dashed var(--bldS);pointer-events:none}
 .cal-v5 .band .msil{position:relative;top:auto;right:auto;margin-left:4px;flex:none}
-/* Two or more moons: one disc, each moon's lit shape laid over it in its own colour (--mc) and screen-blended so overlap reads brighter; three moons, then a count. */
+/* Two or more moons: one disc, each moon's lit shape laid over it in its own colour (--mc) and screen-blended so overlap reads brighter; three moons, then a count. A colour too dark to tell from the disc's body is lifted; a browser without relative colours keeps the colour as given, and one without the blend paints the later moon over the earlier. */
 .cal-v5 .msil.over{width:auto;min-width:22px;height:22px;display:flex;align-items:center;justify-content:flex-end;gap:3px;border-radius:11px}
 .cal-v5 .msil.over::before{border-radius:11px}
 .cal-v5 .msil.over .sil{width:18px;height:18px}
 .cal-v5 .sil.ov .db{fill:color-mix(in oklch, var(--sb,var(--silB)) 82%, black)}
 .cal-v5 .sil.ov .ol{isolation:isolate}
-.cal-v5 .sil.ov .dl{fill:color-mix(in oklch, var(--mc, var(--sl,var(--silL))) 78%, white);mix-blend-mode:screen}
+.cal-v5 .sil.ov .dl{fill:var(--mc,var(--sl,var(--silL)));mix-blend-mode:screen}
+@supports (color:oklch(from red l c h)){.cal-v5 .sil.ov .dl{fill:oklch(from var(--mc,var(--sl,var(--silL))) max(l,.5) c h)}}
 .cal-v5 .sil.ov .dl.dim{opacity:.45}
 .cal-v5 .msil .mn{flex:none;font:600 10px/1 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums}
 .cal-v5 .hc .gm{display:flex;align-items:center;gap:6px;white-space:nowrap;font:500 12px/1.35 var(--sans);color:var(--mut)}
@@ -1191,8 +1192,14 @@
 .cal-v5 .msil{top:31px;right:auto;left:50%;width:16px;height:16px;margin-left:-8px}
 .cal-v5 .msil::before{display:none}
 .cal-v5 .msil .sil{width:11px;height:11px}
-.cal-v5 .msil.over{left:50%;transform:translateX(-50%);margin-left:0;width:max-content;height:16px;min-width:0;justify-content:center}
-.cal-v5 .msil.over .sil{width:14px;height:14px}
+/* The shared disc ends a clear step above the event marks, as a lone moon's does. */
+.cal-v5 .msil.over{left:50%;transform:translateX(-50%);margin-left:0;width:max-content;height:14px;min-width:0;justify-content:center}
+.cal-v5 .msil.over .sil{width:12px;height:12px}
+/* A week of eight or more days leaves a phone cell narrower than a disc with its count beside it: the count goes under the disc and the event marks step down. */
+.cal-v5 .manycols .msil.over{flex-direction:column;height:auto;gap:1px}
+.cal-v5 .manycols .msil .mn{font-size:9px}
+.cal-v5 .manycols .day:has(.msil.over .mn) .dc .marks{margin-top:23px}
+.cal-v5 .manycols .band .msil.over{flex-direction:row}
 .cal-v5 .band .msil.over{left:auto;transform:none;margin-left:6px;width:auto}
 .cal-v5 .dc .marks{margin-top:13px}
 .cal-v5 .band .msil{top:auto;left:auto;margin-left:6px}
