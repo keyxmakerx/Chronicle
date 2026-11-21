@@ -64,6 +64,14 @@ Chronicle.register('attributes', {
     // Derive the overrides endpoint from the fields endpoint.
     var overridesEndpoint = config.endpoint.replace(/\/fields$/, '/field-overrides');
 
+    // A url field is typed by a person, so only an http or https address
+    // becomes a link; anything else (a script address above all) stays text.
+    function webAddress(val) {
+      var u;
+      try { u = new URL(String(val), window.location.href); } catch (e) { return ''; }
+      return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : '';
+    }
+
     // Takes what the fields endpoint answers, which the page may also have
     // sent with itself, and draws it.
     function take(data) {
@@ -319,9 +327,12 @@ Chronicle.register('attributes', {
         // Format value based on field type.
         if (field.type === 'checkbox') {
           value.textContent = val === true || val === 'true' || val === 'on' ? 'Yes' : 'No';
+        } else if (field.type === 'url' && val && !webAddress(val)) {
+          // Not a web address: shown as words, never as something to click.
+          value.textContent = String(val);
         } else if (field.type === 'url' && val) {
           var link = document.createElement('a');
-          link.href = String(val);
+          link.href = webAddress(val);
           link.textContent = String(val);
           link.className = 'text-accent hover:underline';
           link.target = '_blank';

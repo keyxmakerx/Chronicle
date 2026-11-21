@@ -130,3 +130,21 @@ test('a refused save shows the server sentence and keeps the form open', { skip 
     await browser.close();
   }
 });
+
+test('a url field links only to a web address; a script address stays words', { skip }, async () => {
+  const fields = [
+    { key: 'site', label: 'Site', type: 'url' },
+    { key: 'trap', label: 'Trap', type: 'url' },
+  ];
+  const { browser, pg } = await open(false, null, {
+    fields, type_fields: fields,
+    fields_data: { site: 'https://example.test/a', trap: 'javascript:window.hit=1' },
+  });
+  try {
+    const links = await pg.$$eval('[data-widget="attributes"] a', (as) => as.map((a) => a.getAttribute('href')));
+    assert.deepEqual(links, ['https://example.test/a']);
+    assert.match(await pg.textContent('[data-widget="attributes"]'), /javascript:window\.hit=1/);
+  } finally {
+    await browser.close();
+  }
+});
