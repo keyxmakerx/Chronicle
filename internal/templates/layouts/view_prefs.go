@@ -17,7 +17,9 @@ type ViewPrefsData struct {
 	TextSize string // standard | larger | largest
 	Contrast string // standard | high
 	Timezone string // IANA zone; empty means use the device's
-	Brush    string // shown | hidden: the header's Customize brush
+	// BrushHidden are the campaigns where the person put the header's
+	// Customize brush away.
+	BrushHidden []string
 }
 
 const keyViewPrefs ctxKey = "layout_view_prefs"

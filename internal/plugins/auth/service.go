@@ -113,6 +113,7 @@ type AuthService interface {
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
 	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
 	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
+	SetBrushHidden(ctx context.Context, userID, campaignID string, hidden bool) (ViewPrefs, error)
 	GetNotifyPrefs(ctx context.Context, userID string) (notifyprefs.Prefs, error)
 	UpdateNotifyPrefs(ctx context.Context, userID string, in notifyprefs.Update) (notifyprefs.Prefs, error)
 	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
@@ -1107,6 +1108,24 @@ func (s *authService) UpdateViewPrefs(ctx context.Context, userID string, input 
 	if err != nil {
 		return cur, err
 	}
+	return s.saveViewPrefs(ctx, userID, cur, next)
+}
+
+// SetBrushHidden puts the header's Customize brush away in one campaign, or
+// brings it back there, for this person only.
+func (s *authService) SetBrushHidden(ctx context.Context, userID, campaignID string, hidden bool) (ViewPrefs, error) {
+	cur, err := s.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return cur, err
+	}
+	next, err := cur.WithBrushHidden(campaignID, hidden)
+	if err != nil {
+		return cur, err
+	}
+	return s.saveViewPrefs(ctx, userID, cur, next)
+}
+
+func (s *authService) saveViewPrefs(ctx context.Context, userID string, cur, next ViewPrefs) (ViewPrefs, error) {
 	raw, err := json.Marshal(next)
 	if err != nil {
 		return cur, apperror.NewInternal(err)

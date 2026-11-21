@@ -14,8 +14,10 @@ import (
 // looking as a player and a signed-out visitor get none; an owner who put it
 // away gets only the inert template Campaign settings brings it back from.
 func TestTopbarBrush_PerViewer(t *testing.T) {
-	hidden := SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{Brush: "hidden"})
-	shown := SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{Brush: "shown"})
+	hidden := SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{BrushHidden: []string{"camp-2", "camp-1"}})
+	shown := SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{})
+	// Hidden in another campaign only: this campaign still shows it.
+	elsewhere := SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{BrushHidden: []string{"camp-2"}})
 	guestPreview := SetPreviewAs(viewer(3, true, false, false, false), "guest")
 	signedOut := SetCampaignID(context.Background(), "camp-1")
 	tests := []struct {
@@ -26,7 +28,8 @@ func TestTopbarBrush_PerViewer(t *testing.T) {
 	}{
 		{"owner", viewer(3, true, false, false, false), true, false},
 		{"owner who chose shown", shown, true, false},
-		{"owner who hid it", hidden, false, true},
+		{"owner who hid it here", hidden, false, true},
+		{"owner who hid it in another campaign only", elsewhere, true, false},
 		{"owner viewing as a player", viewer(1, true, false, true, false), false, false},
 		{"owner previewing as a guest", guestPreview, false, false},
 		{"co-DM", viewer(1, false, true, false, false), false, false},
@@ -123,7 +126,7 @@ func TestBase_KitTryEarly(t *testing.T) {
 		want bool
 	}{
 		{"owner, Material page look", annals(viewer(3, true, false, false, false)), true},
-		{"owner who hid the brush", annals(SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{Brush: "hidden"})), false},
+		{"owner who hid the brush", annals(SetViewPrefs(viewer(3, true, false, false, false), &ViewPrefsData{BrushHidden: []string{"camp-2", "camp-1"}})), false},
 		{"owner, standard page look", SetAppearance(viewer(3, true, false, false, false), &AppearanceData{PageLook: "standard"}), false},
 		{"player", annals(viewer(1, false, false, false, false)), false},
 		{"owner viewing as a player", annals(viewer(1, true, false, true, false)), false},

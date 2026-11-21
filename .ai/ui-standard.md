@@ -722,8 +722,9 @@ The same screens, folded to the width; never a second design.
   Customize" and a quiet "Hide this brush". Rows are words with a quiet second
   line, no icons. On a phone it is a shelf entry, Customize, and the menu
   hangs across the top of the page like the bell's list. Hiding it is the
-  person's own choice; Campaign settings › Customize › Header brush
-  brings it back.
+  person's own choice, kept per campaign (hiding it in one campaign leaves it
+  shown in the others); Campaign settings › Customize › Header brush brings
+  it back.
 - **"Try a style kit here" shows the real page in another kit, unsaved.**
   The brush offers it on a page a kit dresses while the page look is
   Material. A strip on the inverse surface sits centred at the window's foot

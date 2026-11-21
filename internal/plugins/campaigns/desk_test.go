@@ -177,8 +177,8 @@ func TestDeskRows_Customize(t *testing.T) {
 		{"homes", homesLine(c, DeskInputs{GMTerm: "GM"}), "Home pages", "Everyone|no player home yet", "/campaigns/c1/customize/home"},
 		{"a plugin's area with words", tabLine(c, DeskTab{ID: "dice", Label: "Dice", Summary: CustomizeSummary{Text: "Jewelled, onyx", Sub: "players pick their own"}}), "Dice", "Jewelled, onyx|players pick their own", "/campaigns/c1/customize/x/dice"},
 		{"a plugin's area without words", tabLine(c, DeskTab{ID: "maps", Label: "Maps"}), "Maps", "|", "/campaigns/c1/customize/x/maps"},
-		{"brush shown", brushLine(false), "Header brush", "blank:Shown", ""},
-		{"brush hidden", brushLine(true), "Header brush", "blank:Hidden", ""},
+		{"brush shown", brushLine("c1", false), "Header brush", "blank:Shown", ""},
+		{"brush hidden", brushLine("c1", true), "Header brush", "blank:Hidden", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -192,9 +192,9 @@ func TestDeskRows_Customize(t *testing.T) {
 			}
 		})
 	}
-	b := brushLine(false).Values[0].Blank
-	if b.URL != "/account/view-prefs" || b.Field != "brush" || b.Off != "" {
-		t.Errorf("the brush saves to the person's own display choices, never off: %+v", b)
+	b := brushLine("c1", false).Values[0].Blank
+	if b.URL != "/account/brush/c1" || b.Field != "brush" || b.Off != "" {
+		t.Errorf("the brush saves to the person's own choice for this campaign, never off: %+v", b)
 	}
 	if v := lookLine(c, LookSummary{Look: "Classic", Colour: "Indigo"}).Values[0]; !v.SubSwatch || !v.Joined {
 		t.Errorf("the look row draws the colour's swatch beside its name: %+v", v)

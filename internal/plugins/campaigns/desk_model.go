@@ -149,7 +149,7 @@ type DeskInputs struct {
 	// order, with their add-on on, each with what it says is chosen now.
 	Tabs []DeskTab
 	// BrushHidden is the viewer's own choice to hide the header's Customize
-	// brush. It is the person's, not the campaign's.
+	// brush in this campaign. It is the person's, not the campaign's.
 	BrushHidden bool
 }
 

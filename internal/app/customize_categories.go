@@ -75,13 +75,13 @@ type brushPrefsAdapter struct {
 	}
 }
 
-// BrushHidden reports whether the person put the brush away.
-func (a *brushPrefsAdapter) BrushHidden(ctx context.Context, userID string) (bool, error) {
+// BrushHidden reports whether the person put the brush away in this campaign.
+func (a *brushPrefsAdapter) BrushHidden(ctx context.Context, userID, campaignID string) (bool, error) {
 	vp, err := a.svc.GetViewPrefs(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	return vp.Brush == "hidden", nil
+	return vp.HidesBrushIn(campaignID), nil
 }
 
 // categoriesApplier is the slice of the entity service the section needs.

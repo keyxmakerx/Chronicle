@@ -49,13 +49,23 @@ func topbarMayCustomize(ctx context.Context) bool {
 }
 
 // topbarHasBrush reports whether the Customize brush is on the bar: the
-// viewer may customize and has not hidden it (their own display choice).
+// viewer may customize and has not hidden it in this campaign (their own
+// display choice, kept per campaign).
 func topbarHasBrush(ctx context.Context) bool {
 	if !topbarMayCustomize(ctx) {
 		return false
 	}
 	p := GetViewPrefs(ctx)
-	return p == nil || p.Brush != "hidden"
+	if p == nil {
+		return true
+	}
+	id := GetCampaignID(ctx)
+	for _, h := range p.BrushHidden {
+		if h == id {
+			return false
+		}
+	}
+	return true
 }
 
 // topbarToolCount is how many tools the shelf lists besides Find. A member's

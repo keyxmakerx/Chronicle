@@ -398,16 +398,17 @@ func tabLine(c *Campaign, t DeskTab) DeskLine {
 	return DeskLine{ID: "x-" + t.ID, Name: t.Label, Values: []DeskValue{v}}
 }
 
-// brushLine is whether the header's Customize brush shows for this person.
-// It is their own choice, saved with their other display choices, so it is
+// brushLine is whether the header's Customize brush shows for this person in
+// this campaign. It is their own choice, kept per campaign with their other
+// display choices, so it is
 // never off on an archived campaign.
-func brushLine(hidden bool) DeskLine {
+func brushLine(campaignID string, hidden bool) DeskLine {
 	b := DeskBlank{
 		Kind: DeskBlankChoice, ID: "brush", Label: "Header brush",
-		URL: "/account/view-prefs", Method: "PUT", Field: "brush",
+		URL: "/account/brush/" + campaignID, Method: "PUT", Field: "brush",
 		Options: []DeskOption{
 			{Value: "shown", Label: deskBrushShown, Hint: "Customize from any page you're on"},
-			{Value: "hidden", Label: deskBrushHidden, Hint: "Only you stop seeing it"},
+			{Value: "hidden", Label: deskBrushHidden, Hint: "Only you, only in this campaign"},
 		},
 		Value: "shown", Shown: deskBrushShown,
 	}
@@ -424,7 +425,7 @@ func customizeLines(c *Campaign, in DeskInputs) []DeskLine {
 	for _, t := range in.Tabs {
 		out = append(out, tabLine(c, t))
 	}
-	return append(out, brushLine(in.BrushHidden))
+	return append(out, brushLine(c.ID, in.BrushHidden))
 }
 
 // mediaLine is what the picture store holds: a file count and its size.

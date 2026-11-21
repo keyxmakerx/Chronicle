@@ -22,11 +22,12 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
-// BrushPrefs reads one person's choice to hide the header's brush. It is an
+// BrushPrefs reads one person's choice to hide the header's brush in one
+// campaign. It is an
 // interface so the campaigns plugin reads the person's display choices
 // through the auth service, never its tables.
 type BrushPrefs interface {
-	BrushHidden(ctx context.Context, userID string) (bool, error)
+	BrushHidden(ctx context.Context, userID, campaignID string) (bool, error)
 }
 
 // PageCategoryLookup says which category a page of this campaign is in, so
@@ -42,13 +43,13 @@ func (h *Handler) SetBrushPrefs(p BrushPrefs) { h.brushPrefs = p }
 // SetPageCategoryLookup wires the page-to-category lookup the brush uses.
 func (h *Handler) SetPageCategoryLookup(l PageCategoryLookup) { h.pageCategory = l }
 
-// brushHidden reports the person's choice; one that cannot be read leaves
+// brushHidden reports the person's choice in one campaign; one that cannot be read leaves
 // the brush shown, its default.
-func (h *Handler) brushHidden(ctx context.Context, userID string) bool {
+func (h *Handler) brushHidden(ctx context.Context, userID, campaignID string) bool {
 	if h.brushPrefs == nil || userID == "" {
 		return false
 	}
-	hidden, err := h.brushPrefs.BrushHidden(ctx, userID)
+	hidden, err := h.brushPrefs.BrushHidden(ctx, userID, campaignID)
 	if err != nil {
 		slog.Warn("brush choice not read", slog.String("user_id", userID), slog.Any("error", err))
 		return false

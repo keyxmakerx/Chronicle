@@ -21,14 +21,20 @@
  * Material page look (the server draws the row then) and on a page a kit
  * dresses; a try-out left open on the last page comes back on this one.
  *
- * "Hide this brush" saves the person's own display choice (PUT
- * /account/view-prefs {brush:"hidden"}) and puts the brush away as an inert
- * template, from which Campaign settings brings it back.
+ * "Hide this brush" saves the person's own display choice for this campaign
+ * only (PUT /account/brush/<campaign> {brush:"hidden"}) and puts the brush
+ * away as an inert template, from which Campaign settings brings it back.
  */
 (function () {
   'use strict';
   window.Chronicle = window.Chronicle || {};
   var C = window.Chronicle;
+
+  // Where the choice to hide the brush is saved: one campaign at a time.
+  function brushUrl(campaignId) {
+    return '/account/brush/' + encodeURIComponent(campaignId);
+  }
+  C._customizeBrush = { brushUrl: brushUrl };
 
   // The first row for each address, kept for this page's life.
   var cache = {};
@@ -187,7 +193,7 @@
 
       hide.addEventListener('click', function () {
         hide.setAttribute('aria-busy', 'true');
-        C.apiFetch('/account/view-prefs', { method: 'PUT', body: { brush: 'hidden' } }).then(function (r) {
+        C.apiFetch(brushUrl(cid), { method: 'PUT', body: { brush: 'hidden' } }).then(function (r) {
           if (!r.ok) throw new Error('status ' + r.status);
           putAway();
         }).catch(function () {
