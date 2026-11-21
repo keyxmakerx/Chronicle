@@ -85,7 +85,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							class="btn-secondary text-sm"
 							onclick="document.getElementById('edit-session-modal').showModal()"
 						>
-							<i class="fa-solid fa-pen"></i> Edit
+							<i class="fa-solid fa-pen word-ic"></i> Edit
 						</button>
 						if session.Status == StatusPlanned {
 							// Mark Complete sends ONLY {status} — the one thing the
@@ -99,7 +99,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 								data-url={ fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, session.ID) }
 								onclick="Chronicle.apiFetch(this.dataset.url,{method:'PUT',body:{status:'completed'}}).then(function(r){if(r.ok)location.reload();else Chronicle.notify('Failed to complete session','error');});"
 							>
-								<i class="fa-solid fa-check"></i> Mark Complete
+								<i class="fa-solid fa-check word-ic"></i> Mark Complete
 							</button>
 						}
 						if isOwner {
@@ -282,7 +282,7 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 					Cancel
 				</button>
 				<button type="button" class="btn-primary text-sm" id="edit-session-save-btn">
-					<i class="fa-solid fa-check"></i> Save changes
+					<i class="fa-solid fa-check word-ic"></i> Save changes
 				</button>
 			</div>
 		</div>

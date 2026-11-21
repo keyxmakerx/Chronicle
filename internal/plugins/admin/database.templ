@@ -160,7 +160,7 @@ templ dbMigrationsTab(core CoreMigrationStatus, statuses []PluginMigrationStatus
 							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 							class="btn btn-sm btn-primary"
 						>
-							<i class="fa-solid fa-play"></i> Apply Pending Migrations
+							<i class="fa-solid fa-play word-ic"></i> Apply Pending Migrations
 						</button>
 					}
 				</div>
@@ -231,7 +231,7 @@ templ dbHealthTab(health *HealthResult) {
 				</div>
 				<div class="ml-auto flex items-center gap-3 text-xs text-fg-muted">
 					<a href="/admin/database/status" target="_blank" rel="noopener noreferrer" class="hover:text-accent"><i class="fa-solid fa-code mr-1"></i>JSON</a>
-					<a href="/admin/database?tab=health" class="hover:text-accent"><i class="fa-solid fa-rotate mr-1"></i>Check again</a>
+					<a href="/admin/database?tab=health" class="hover:text-accent"><i class="fa-solid fa-rotate mr-1 word-ic"></i>Check again</a>
 				</div>
 			</div>
 

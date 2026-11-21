@@ -104,7 +104,7 @@
     // Add button (Scribe+ only).
     if (state.editable && state.aliases.length < 10) {
       html += '<button class="alias-add inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-edge text-xs text-fg-muted hover:text-fg hover:border-edge-light transition-colors">';
-      html += '<i class="fa-solid fa-plus text-[9px]"></i> alias';
+      html += '<i class="fa-solid fa-plus word-ic text-[9px]"></i> alias';
       html += '</button>';
     }
 

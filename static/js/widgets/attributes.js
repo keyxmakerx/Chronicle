@@ -177,13 +177,13 @@ Chronicle.register('attributes', {
 
         if (state.isEditing) {
           editBtn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done';
-          editBtn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Done';
+          editBtn.innerHTML = '<i class="fa-solid fa-check word-ic" style="font-size:11px"></i> Done';
           editBtn.addEventListener('click', function () {
             saveFields();
           });
         } else {
           editBtn.className = 'chronicle-editor__edit-btn';
-          editBtn.innerHTML = '<i class="fa-solid fa-pen" style="font-size:11px"></i> Edit';
+          editBtn.innerHTML = '<i class="fa-solid fa-pen word-ic" style="font-size:11px"></i> Edit';
           editBtn.addEventListener('click', function () {
             if (state.loadingChoices) return;
             state.loadingChoices = true;
@@ -965,7 +965,7 @@ Chronicle.register('attributes', {
       var addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'text-xs text-accent hover:text-accent-hover mt-1';
-      addBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add Field';
+      addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic mr-1"></i> Add Field';
       addBtn.addEventListener('click', function () {
         addedFields.push({ key: '', label: '', type: 'text', section: 'Custom' });
         overrides.added = addedFields;
@@ -981,7 +981,7 @@ Chronicle.register('attributes', {
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
       saveBtn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done flex-1';
-      saveBtn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Save Customizations';
+      saveBtn.innerHTML = '<i class="fa-solid fa-check word-ic" style="font-size:11px"></i> Save Customizations';
       saveBtn.addEventListener('click', function () {
         saveOverrides(overrides);
       });
@@ -994,7 +994,7 @@ Chronicle.register('attributes', {
         resetBtn.className = 'chronicle-editor__edit-btn flex-shrink-0';
         resetBtn.style.color = 'var(--color-text-muted)';
         resetBtn.title = 'Reset to category template';
-        resetBtn.innerHTML = '<i class="fa-solid fa-rotate-left" style="font-size:11px"></i> Reset';
+        resetBtn.innerHTML = '<i class="fa-solid fa-rotate-left word-ic" style="font-size:11px"></i> Reset';
         resetBtn.addEventListener('click', function () {
           askReset(btnRow);
         });

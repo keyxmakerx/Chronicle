@@ -92,7 +92,7 @@ Chronicle.register('tag-picker', {
         var addBtn = document.createElement('button');
         addBtn.className = 'tp-add-btn';
         addBtn.type = 'button';
-        addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> ' + (state.entityTags.length === 0 ? 'Add a tag' : 'Tag');
+        addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic" style="font-size:10px"></i> ' + (state.entityTags.length === 0 ? 'Add a tag' : 'Tag');
         addBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           state.isOpen = !state.isOpen;
@@ -218,7 +218,7 @@ Chronicle.register('tag-picker', {
 
               var createOption = document.createElement('div');
               createOption.className = 'tp-create';
-              createOption.innerHTML = '<i class="fa-solid fa-plus" style="font-size:11px"></i> Create "' + Chronicle.escapeHtml(searchTerm) + '"';
+              createOption.innerHTML = '<i class="fa-solid fa-plus word-ic" style="font-size:11px"></i> Create "' + Chronicle.escapeHtml(searchTerm) + '"';
               createOption.addEventListener('click', function () {
                 createTag(searchTerm, state.createDmOnly || false);
               });

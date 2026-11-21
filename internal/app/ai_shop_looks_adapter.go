@@ -54,6 +54,11 @@ func (aiShopLooksAdapter) CounterStarter(roomType string) json.RawMessage {
 	return armory.ShopRoomCounterStarter(roomType)
 }
 
+// CounterStarterNamed is the armory's starter of that name, nil when there is none.
+func (aiShopLooksAdapter) CounterStarterNamed(name string) json.RawMessage {
+	return armory.ShopRoomCounterStarterNamed(name)
+}
+
 func (s aiShopLooksAdapter) Front(ctx context.Context, campaignID, shopID string, _ records.Actor) (json.RawMessage, bool, error) {
 	return s.fronts.Front(ctx, campaignID, shopID)
 }

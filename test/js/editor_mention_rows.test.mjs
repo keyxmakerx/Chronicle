@@ -1,6 +1,7 @@
 // editor_mention_rows.test.mjs — pins the rows of the list that opens when a
 // page is linked with @ while writing. A row is the page's name, then its
-// kind as a quiet word at the end, with nothing drawn in front. A page not
+// kind as a quiet word at the end; a category's icon stands in front only when
+// the campaign asks for it, and by default nothing is drawn there. A page not
 // everyone can read says so on a line under its name, and Foundry scenes line
 // up with the pages above them. The list stays inside the window: it opens
 // above the cursor when there is no room under it, and clear of the sides.
@@ -15,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { pw, chromePath, skip } from './_browser_env.mjs';
+import { KIND_ICON_CSS, KIND_ICON_TOKENS } from './_kind_icon_css.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MENTION_JS = readFileSync(join(root, 'static/js/widgets/editor_mention.js'), 'utf8');
@@ -24,7 +26,7 @@ const TIPTAP_JS = readFileSync(join(root, 'static/vendor/tiptap-bundle.min.js'),
 
 const page = (id, name, kind, more = {}) => ({ id, name, url: '/campaigns/c1/entities/' + id, type_name: kind, type_icon: 'fa-user', type_color: '#336699', ...more });
 
-async function open(t, { results = [], scenes = [], hostOpen = false, viewport = { width: 1280, height: 720 }, style = '' } = {}) {
+async function open(t, { results = [], scenes = [], hostOpen = false, viewport = { width: 1280, height: 720 }, style = '', icons = '', colour = '' } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const ctx = await browser.newContext({ viewport });
@@ -35,7 +37,9 @@ async function open(t, { results = [], scenes = [], hostOpen = false, viewport =
   await ctx.route('**/*', (r) => {
     const u = new URL(r.request().url());
     if (u.pathname.endsWith('/entities/search')) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ results }) });
-    return r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body style="margin:0"><div id="ed" style="' + style + '"></div></body></html>' });
+    // The site's own icon rules, and the attributes a campaign's choices put on <html>.
+    const attrs = (icons ? ' data-cz-icons="' + icons + '"' : '') + (colour ? ' data-cz-icon-colour="' + colour + '"' : '');
+    return r.fulfill({ contentType: 'text/html', body: '<!doctype html><html' + attrs + '><head><style>' + KIND_ICON_TOKENS + KIND_ICON_CSS + '</style></head><body style="margin:0"><div id="ed" style="' + style + '"></div></body></html>' });
   });
   await p.goto('https://chronicle.test/campaigns/c1/entities/e1');
   await p.addScriptTag({ content: TIPTAP_JS });
@@ -75,11 +79,13 @@ const rows = (p) => p.$$eval('.mention-popup__item', (els) => els.map((el) => {
   return {
     name: name.textContent,
     kind: kind ? kind.textContent : '',
-    nameLeads: line.firstElementChild === name,
+    // The first thing drawn on the line: a hidden icon slot does not count.
+    nameLeads: [...line.children].find((c) => getComputedStyle(c).display !== 'none') === name,
     kindEnds: !kind || line.lastElementChild === kind,
     inset: Math.round(name.getBoundingClientRect().left - box.left),
     kindRight: kind ? Math.round(box.right - kind.getBoundingClientRect().right) : null,
-    icons: [...el.querySelectorAll('i')].map((i) => i.className),
+    icons: [...el.querySelectorAll('i')].filter((i) => getComputedStyle(i).display !== 'none').map((i) => i.className),
+    kindIcon: (() => { const i = el.querySelector('i.kind-ic'); return i ? { shown: getComputedStyle(i).display !== 'none', cls: i.className, style: i.getAttribute('style') || '', colour: getComputedStyle(i).color } : null; })(),
     under: el.children[1] ? el.children[1].textContent.trim() : '',
     nameCut: name.scrollWidth > name.clientWidth,
     kindCut: kind ? kind.scrollWidth > kind.clientWidth : false,
@@ -88,7 +94,7 @@ const rows = (p) => p.$$eval('.mention-popup__item', (els) => els.map((el) => {
   };
 }));
 
-test('a page is listed by its name, then its kind, with nothing drawn in front', { skip }, async (t) => {
+test('by default a page is listed by its name, then its kind, with nothing drawn in front', { skip }, async (t) => {
   const p = await open(t, { results: [page('e2', 'Thorne', 'Character'), page('e3', 'Thornwall Keep', 'Location', { type_icon: 'fa-map-pin', type_color: '#ef4444' })] });
   const r = await rows(p);
   assert.deepEqual(r.map((x) => [x.name, x.kind]), [['Thorne', 'Character'], ['Thornwall Keep', 'Location']]);
@@ -98,8 +104,45 @@ test('a page is listed by its name, then its kind, with nothing drawn in front',
     assert.equal(x.under, '', 'an open page has one line');
     assert.equal(x.inset, 12, 'the name starts at the row\'s own edge');
     assert.equal(x.kindRight, 12, 'the kind ends at the row\'s other edge');
-    assert.ok(!/#336699|#ef4444|fa-user|fa-map-pin/.test(x.html), 'neither the category\'s colour nor its icon is drawn: ' + x.html);
+    assert.equal(x.kindIcon && x.kindIcon.shown, false, 'the category\'s icon is there but hidden');
   }
+});
+
+test('with icons beside names the category\'s icon stands in front of the name, and the kind still ends the row', { skip }, async (t) => {
+  for (const amount of ['names', 'all']) {
+    const p = await open(t, { icons: amount, results: [page('e2', 'Thorne', 'Character'), page('e3', 'Thornwall Keep', 'Location', { type_icon: 'fa-map-pin', type_color: '#ef4444' })] });
+    const r = await rows(p);
+    assert.equal(r.length, 2);
+    for (const x of r) {
+      assert.ok(x.kindIcon.shown && x.icons.length === 1, amount + ': ' + x.html);
+      assert.ok(x.kindEnds, x.html);
+      assert.ok(x.inset > 12, 'the icon takes room before the name');
+      assert.equal(x.kindRight, 12);
+    }
+    assert.match(r[1].kindIcon.cls, /fa-map-pin/);
+    assert.equal(r[0].inset, r[1].inset, 'names line up');
+    assert.equal(r[1].kindIcon.colour, 'rgb(100, 107, 120)', 'Ink: the muted text colour');
+  }
+});
+
+test('the icon colour theme reaches the link list: Accent and Category', { skip }, async (t) => {
+  const results = [page('e3', 'Thornwall Keep', 'Location', { type_icon: 'fa-map-pin', type_color: '#ef4444' }), page('e4', 'Thornfield', 'Place', { type_icon: 'fa-tree', type_color: '#16a34a' })];
+  const accent = await rows(await open(t, { icons: 'names', colour: 'accent', results }));
+  assert.equal(accent[0].kindIcon.colour, 'rgb(99, 102, 241)');
+  const cat = await rows(await open(t, { icons: 'names', colour: 'category', results }));
+  assert.equal(cat[0].kindIcon.style.includes('--kind-colour:#ef4444'), true);
+  assert.notEqual(cat[0].kindIcon.colour, cat[1].kindIcon.colour);
+});
+
+test('an icon name or colour that is not plain is never put in markup', { skip }, async (t) => {
+  const p = await open(t, { icons: 'names', colour: 'category', results: [
+    page('e3', 'Thornwall Keep', 'Location', { type_icon: 'fa-map-pin', type_color: 'red;background:url(//x.test/a)' }),
+    page('e4', 'Thornfield', 'Place', { type_icon: 'fa-x" onmouseover="alert(1)', type_color: '#16a34a' }),
+  ] });
+  const r = await rows(p);
+  assert.ok(!/url\(|onmouseover|red;/.test(r.map((x) => x.html).join('')));
+  assert.equal(r[0].kindIcon.style.includes('--kind-colour'), false);
+  assert.equal(r[1].kindIcon, null, 'an icon that is not a Font Awesome name is dropped');
 });
 
 test('a long name gives way, and a long kind is cut before it crowds the name out', { skip }, async (t) => {

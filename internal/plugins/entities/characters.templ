@@ -149,12 +149,12 @@ templ castBandHead(label string, ed *CastBandEditor, landed int, players bool, o
 				}
 			</span>
 			<button type="button" class="ag-add" data-opens="add" aria-expanded="false" onclick={ castFoldCall("add") }>
-				<i class="fa-solid fa-plus" aria-hidden="true"></i> Add
+				<i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> Add
 			</button>
 		}
 		if players {
 			<button type="button" class="ag-add ag-players" data-opens="players" aria-expanded={ strconv.FormatBool(open == "players") } onclick={ castFoldCall("players") }>
-				<i class="fa-solid fa-user-shield" aria-hidden="true"></i> Players
+				<i class="fa-solid fa-user-shield word-ic" aria-hidden="true"></i> Players
 			</button>
 		}
 	</div>
