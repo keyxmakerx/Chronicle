@@ -205,10 +205,7 @@ test('handed in, it waits for the Director and can still be chosen into the hero
   await pg.click('.hc-sfoot [data-act="choose"]');
   await pg.waitForFunction(() => /Ashborn/.test(document.querySelector('.hc-chips').innerText));
   // On to the name, and the hero is made with the entry; it is then kept to the hero.
-  await pg.click('.hc-chip.is-slot, .hc-sbtn');
-  await pg.evaluate(() => document.querySelector('.hc-app') && 0);
-  const go = pg.locator('[data-act="steps"]');
-  await go.click();
+  if (!(await pg.locator('.hc-drape').count())) await pg.click('[data-act="steps"]');
   await pg.click('.hc-drape .hc-row:last-child');
   await pg.fill('[data-name]', 'Tess');
   await pg.click('[data-act="create"]');
