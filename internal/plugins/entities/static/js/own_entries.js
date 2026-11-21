@@ -1,5 +1,5 @@
 /**
- * own_entries.js — the Directors' "Your own entries" page.
+ * own_entries.js — the "Own entries" page.
  *
  * A page in the site's plain look with a tab per pick list the game system
  * has (Ancestry, Kit…, named by the system). Opening an entry, or "Add",
@@ -208,6 +208,18 @@
       var start = self.startEntry ? self.entries.filter(function (e) { return String(e.id) === self.startEntry; })[0] : null;
       var key = start ? start.fieldKey : self.startField;
       for (var i = 0; i < self.fields.length; i++) if (self.fields[i].key === key) self.field = i;
+      // With no list asked for, open where something waits, else where the
+      // campaign has entries of its own, else the first list.
+      if (!key && self.director) {
+        var pick = function (test) {
+          for (var j = 0; j < self.fields.length; j++) if (self.mine(self.fields[j].key).some(test)) return j;
+          return -1;
+        };
+        var at = pick(function (e) { return e.status === 'sent'; });
+        for (var q = 0; at < 0 && q < self.fields.length; q++) if (self.waitingFor(self.fields[q].key).length) at = q;
+        if (at < 0) at = pick(function (e) { return !isDraft(e); });
+        if (at >= 0) self.field = at;
+      }
       self.render();
       if (start && self.cur() && self.cur().key === start.fieldKey) { self.openPop(start, null); self.leaveTo = self.returnUrl; }
       else if (self.startNew && self.cur()) { self.openPop(null, self.root.querySelector('[data-act="add"]')); self.leaveTo = self.returnUrl; }
@@ -229,6 +241,14 @@
   };
   // Whether the open entry is a player's, not yet accepted.
   function isDraft(e) { return !!e && !!e.status && e.status !== 'accepted'; }
+  // Entries a Director has accepted, and drafts handed in: the two numbers
+  // Campaign settings shows, so a tab and that row always agree.
+  Entries.prototype.accepted = function (key) {
+    return this.mine(key).filter(function (e) { return !isDraft(e); });
+  };
+  Entries.prototype.handedIn = function (key) {
+    return this.mine(key).filter(function (e) { return e.status === 'sent'; });
+  };
   Entries.prototype.mine = function (key) {
     return this.entries.filter(function (e) { return e.fieldKey === key; })
       .sort(function (a, b) { return lower(a.name) < lower(b.name) ? -1 : 1; });
@@ -389,16 +409,16 @@
   Entries.prototype.pageHTML = function () {
     if (!this.director) return this.playerPageHTML();
     var self = this, f = this.cur();
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · ' + gm() + 's only</p><h1 tabindex="-1">Entries and players’ drafts</h1>' +
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · ' + gm() + 's only</p><h1 tabindex="-1">Own entries</h1>' +
       '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them. Players’ drafts wait here for you, and you let players make their own. Mark any entry to limit what players can pick, or to ask them to take it.</p></div>';
     if (!f) {
-      return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
+      return '<section class="hc-page paper" aria-label="Own entries">' + head +
         '<p class="hc-empty">' + esc(this.system) + ' doesn’t list any choices for making a hero, so there is nothing to add to here.</p></section>';
     }
     var tabs = this.fields.map(function (x, i) {
-      var waiting = self.mine(x.key).filter(function (e) { return e.status === 'sent'; }).length + self.waitingFor(x.key).length;
+      var waiting = self.handedIn(x.key).length + self.waitingFor(x.key).length;
       return '<button type="button" role="tab" data-field="' + i + '" aria-selected="' + (i === self.field) + '">' + esc(x.label) +
-        '<small>' + self.mine(x.key).length + (waiting ? ' · ' + waiting + ' waiting' : '') + '</small></button>';
+        '<small>' + self.accepted(x.key).length + (waiting ? ' · ' + waiting + ' waiting' : '') + '</small></button>';
     }).join('');
     var mine = this.mine(f.key), pl = plural(f.label), data = this.rulesFor(f.key);
     var list;
@@ -406,10 +426,10 @@
     else if (this.rulesErr[this.ck(f.key)]) {
       list = '<p class="hc-empty" role="alert">' + esc(this.rulesErr[this.ck(f.key)]) + ' <button type="button" class="oe-link" data-act="retryrules">Try again</button></p>';
     } else list = '<p class="oe-hint" role="status">Opening the ' + esc(lower(f.label)) + ' list…</p>';
-    return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
-      '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + this.waitingHTML(f) + list +
+    return '<section class="hc-page paper" aria-label="Own entries">' + head +
+      this.draftsWaitingHTML() + '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + this.waitingHTML(f) + list +
       this.grantsHTML() +
-      '<div class="hc-foot"><span>' + mine.length + ' of your own</span><span class="hc-foot__sp"></span>' +
+      '<div class="hc-foot"><span>' + this.accepted(f.key).length + ' of your own</span><span class="hc-foot__sp"></span>' +
       '<button type="button" class="hc-btn" data-act="add">+ Add ' + an(f.label) + ' ' + esc(lower(f.label)) + '</button></div></section>';
   };
 
@@ -499,6 +519,20 @@
           '<input type="text" data-suggest-msg maxlength="300" autocomplete="off" placeholder="A short note, such as which entry fits the table better"></label>' +
           '<div class="oe-req__acts"><button type="button" class="oe-btn" data-act="sendsuggest" data-req="' + esc(r.id) + '">Send</button>' +
           '<button type="button" class="oe-link" data-act="nosuggest">Cancel</button></div></div>' : '') + '</li>';
+    }).join('') + '</ul></div>';
+  };
+
+  // Handed-in drafts of every list, at the top of the page so a Director need
+  // not open each tab to find them.
+  Entries.prototype.draftsWaitingHTML = function () {
+    var self = this, rows = [];
+    this.fields.forEach(function (f) {
+      self.handedIn(f.key).forEach(function (e) { rows.push({ e: e, f: f }); });
+    });
+    if (!rows.length) return '';
+    return '<div class="oe-wait oe-wait--drafts" role="region" aria-label="Waiting for you"><p class="oe-k">Waiting for you</p><ul>' + rows.map(function (r) {
+      return '<li><p><b>' + esc(r.e.name) + '</b> <span class="oe-s">' + esc(r.f.label) + '</span><br><span class="oe-s">A draft from ' + esc(self.memberName(r.e.createdBy)) + '</span></p>' +
+        '<div class="oe-req__acts"><button type="button" class="oe-link" data-readdraft="' + esc(r.e.id) + '">Read</button></div></li>';
     }).join('') + '</ul></div>';
   };
 
@@ -819,6 +853,12 @@
   };
 
   // A request a player made for an Ask-first entry: allow it, or send a note.
+  // A draft or ask just answered changes Campaign settings' "needs you" count;
+  // the sidebar keeps its last answer for a while, so ask it to read again.
+  function refreshNeeds() {
+    try { if (window.Chronicle && Chronicle.nav && Chronicle.nav.refreshCount) Chronicle.nav.refreshCount(true); } catch (e) { /* the badge catches up on the next load */ }
+  }
+
   Entries.prototype.answer = function (id, verb, body) {
     var self = this, r = this.requests.filter(function (x) { return String(x.id) === String(id); })[0];
     if (!r || this.busy) return;
@@ -832,6 +872,7 @@
         var said = gone ? 'That request was already answered.' : verb === 'allow'
           ? r.entryName + ' allowed for ' + (r.playerName || 'them') + (b.body && b.body.heroUpdated === false ? '' : ' and put on ' + (r.entityName || 'their hero'))
           : 'Your note went to ' + (r.playerName || 'them');
+        refreshNeeds();
         self.reloadRequests(function () {
           self.reloadRules(function () { self.render(); notify(said, gone ? 'info' : 'success'); self.announce(said); });
         });
@@ -886,10 +927,10 @@
   Entries.prototype.playerPageHTML = function () {
     var self = this, f = this.cur();
     var back = this.backUrl ? '<p><a class="oe-link" href="' + esc(this.backUrl) + '">← Back to ' + esc(this.forName || 'the hero creator') + '</a></p>' : '';
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · yours</p><h1 tabindex="-1">Your own entries</h1>' + back +
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · yours</p><h1 tabindex="-1">Own entries</h1>' + back +
       '<p>Your ' + gm() + ' lets you write your own. Only you and the ' + gm() + 's see it until a ' + gm() + ' accepts it.</p></div>';
     if (!f) {
-      return '<section class="hc-page paper" aria-label="Your own entries">' + head +
+      return '<section class="hc-page paper" aria-label="Own entries">' + head +
         '<p class="hc-empty">Your ' + gm() + ' hasn’t let you make an entry of your own. Ask them, and it shows up here.</p></section>';
     }
     var tabs = this.fields.length > 1 ? '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + this.fields.map(function (x, i) {
@@ -904,7 +945,7 @@
         (open ? '<span class="hc-row__go" aria-hidden="true">Edit ›</span>' : '') + '<small>' + esc(e.summary) + '</small></' + (open ? 'button' : 'div') + '></li>';
     }).join('') + '</ul>' : '';
     var can = g && !g.entryId;
-    return '<section class="hc-page paper" aria-label="Your own entries">' + head + tabs + rows +
+    return '<section class="hc-page paper" aria-label="Own entries">' + head + tabs + rows +
       (can ? '' : (mine.length ? '' : '<p class="hc-empty">You’ve made your ' + esc(lower(f.label)) + '.</p>')) +
       '<div class="hc-foot"><span class="hc-foot__sp"></span>' +
       (can ? '<button type="button" class="hc-btn" data-act="add">+ Make your ' + esc(lower(f.label)) + '</button>' : '') + '</div></section>';
@@ -1356,6 +1397,7 @@
         }
         self.busy = false;
         self.closePop(true);
+        if (self.director) refreshNeeds();
         var finish = function () {
           self.render();
           var row = byAttr(self.root, '.hc-row[data-open]', 'data-open', String(e.id));
@@ -1586,6 +1628,17 @@
       }
       if (t.hasAttribute('data-menu')) { self.openMenu(t.getAttribute('data-menu')); return; }
       if (t.hasAttribute('data-mact')) { self.menuAct(t); return; }
+      if (t.hasAttribute('data-readdraft')) {
+        if (self.open !== null) return;
+        var did = t.getAttribute('data-readdraft');
+        var dr = self.entries.filter(function (x) { return String(x.id) === did; })[0];
+        if (!dr) return;
+        for (var k = 0; k < self.fields.length; k++) if (self.fields[k].key === dr.fieldKey) self.field = k;
+        self.ui.menu = null; self.ui.strip = null; self.ui.suggest = null; self.ui.more = 40; self.ui.marked = false;
+        self.render();
+        self.openPop(dr, null);
+        return;
+      }
       if (t.hasAttribute('data-open')) {
         var id = t.getAttribute('data-open');
         var hit = self.entries.filter(function (x) { return String(x.id) === id; })[0];
@@ -1820,7 +1873,7 @@
     }
   };
 
-  window.ChronicleOwnEntries = { draftOf: draftOf, propsOf: propsOf, keptLine: keptLine, listsOf: listsOf };
+  window.ChronicleOwnEntries = { draftOf: draftOf, propsOf: propsOf, keptLine: keptLine, listsOf: listsOf, Entries: Entries };
 
   // Loaded on sight (ADR-063): boot.js fetches this file when it meets the
   // page's data-widget="own-entries" mount, and register mounts it.
