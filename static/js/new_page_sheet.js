@@ -76,6 +76,8 @@
 
   function open(href) {
     var u = sheetUrl(href);
+    // The fallback goes to the address that was checked, never the raw one.
+    var full = u ? u.pathname + u.search.replace(/([?&])sheet=1(&|$)/, '$1').replace(/[?&]$/, '') : '';
     if (!u || typeof HTMLDialogElement === 'undefined' || !HTMLDialogElement.prototype.showModal) return false;
     // The full form is on screen: its ids would clash with the sheet's.
     if (document.getElementById('entity-form')) return false;
@@ -103,7 +105,7 @@
         // The sheet could not be had: the full screen still can.
         if (mine !== token) return;
         teardown();
-        window.location.assign(href);
+        window.location.assign(full);
       });
     return true;
   }

@@ -116,7 +116,7 @@ test('the quoted line is drawn from runs: marked ones wrapped, every run escaped
   }]);
   assert.match(row, /<mark class="sp-mark">Tide<\/mark>/);
   assert.match(row, /wrights &lt;script&gt;x\(\)&lt;\/script&gt; &amp; more/);
-  assert.doesNotMatch(row, /<script>/);
+  assert.doesNotMatch(row, /<script/i);
   assert.equal((row.match(/<mark/g) || []).length, 1);
 });
 

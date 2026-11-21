@@ -105,7 +105,7 @@
       cmds.push({
         id: 'new-page', label: 'New page', icon: 'fa-plus', shortcut: mod + '+N',
         action: function () {
-          var url = '/campaigns/' + cid + '/entities/new';
+          var url = '/campaigns/' + encodeURIComponent(cid) + '/entities/new';
           if (!(window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(url))) window.location.href = url;
         }
       });
