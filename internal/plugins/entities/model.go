@@ -126,6 +126,10 @@ func CharacterLayout() EntityTypeLayout {
 // pieces are blocks the owner adds (only character pages start with player
 // notes, in CharacterLayout). Visibility editing lives only in edit mode, not
 // an auto-appended read-page row (ADR-057 decision 5).
+//
+// It is also what a type with no stored layout falls back to when something
+// places a block into it, so it stays as it is; a category made new starts
+// from NewCategoryLayout instead.
 func DefaultLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -153,6 +157,19 @@ func DefaultLayout() EntityTypeLayout {
 			},
 		},
 	}
+}
+
+// NewCategoryLayout is the layout a category made now is stored with: the
+// default plus tags and relations under the title, in the order the
+// no-layout fallback in show.templ draws them, so a new page can carry both.
+// The Annals page editor keeps their add controls out of sight until Edit
+// page. It is applied only when a category is created; stored layouts of
+// existing categories are never rewritten to match.
+func NewCategoryLayout() EntityTypeLayout {
+	l := DefaultLayout()
+	// Each goes right after the title, so relations first leaves tags above it.
+	l = insertAfterTitle(l, TemplateBlock{ID: "blk-relations", Type: "relations"})
+	return insertAfterTitle(l, TemplateBlock{ID: "blk-tags", Type: "tags"})
 }
 
 // entityNotesRow builds a full-width row holding the player-notes
@@ -398,6 +415,12 @@ type Entity struct {
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
 
+	// Opening is the page's first words as this reader is served them, set
+	// by the list handler for pages with no picture so the Gallery has
+	// something true to show. Never the stored text: it has had secrets and
+	// links to hidden pages taken out.
+	Opening string `json:"-"`
+
 	// searchFields, when set, is the field values Create indexes for search,
 	// already without the ones only some readers may see; unset, Create
 	// indexes no field values.
@@ -510,8 +533,14 @@ type CreateEntityRequest struct {
 	EntityTypeID int    `json:"entity_type_id" form:"entity_type_id"`
 	TypeLabel    string `json:"type_label" form:"type_label"`
 	ParentID     string `json:"parent_id" form:"parent_id"`
-	IsPrivate    bool   `json:"is_private" form:"is_private"`
-	TemplateID   int    `json:"template_id" form:"template_id"` // Optional content template to pre-fill.
+	// IsPrivate is a pointer so an explicit false ("show it to players")
+	// survives under a campaign whose pages start hidden; nil means the form
+	// said nothing and the campaign default decides.
+	IsPrivate  *bool `json:"is_private" form:"is_private"`
+	TemplateID int   `json:"template_id" form:"template_id"` // Optional content template to pre-fill.
+	// Sheet marks a form posted from the small sheet, so a refused save
+	// redraws the sheet and not the full page.
+	Sheet bool `json:"-" form:"sheet"`
 }
 
 // UpdateEntityRequest holds the data submitted by the entity edit form.
@@ -589,7 +618,19 @@ type ListOptions struct {
 	// handler sends a query of two or more characters to Search instead and
 	// echoes it back so the box and the page links keep it.
 	Query string
+
+	// SearchScope narrows Search to one of the Search page's two groups:
+	// SearchScopeNamed (the words are in the name, another name or the
+	// descriptor) or SearchScopeMention (only the page's text has them).
+	// Empty is the whole answer, which quick search and the pickers use.
+	SearchScope string
 }
+
+// The Search page's two groups; see ListOptions.SearchScope.
+const (
+	SearchScopeNamed   = "named"
+	SearchScopeMention = "mention"
+)
 
 // DefaultListOptions returns sensible defaults for pagination.
 func DefaultListOptions() ListOptions {

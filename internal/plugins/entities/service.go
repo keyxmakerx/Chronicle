@@ -73,6 +73,9 @@ type EntityService interface {
 	List(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 	ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error)
 	Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	// SearchSnippets quotes the line of each page's reader-safe text that
+	// holds the query's words; see search_snippet.go.
+	SearchSnippets(ctx context.Context, campaignID, query string, ids []string, role int, userID string) map[string][]SnippetPart
 
 	// Entity types
 	GetEntityTypes(ctx context.Context, campaignID string) ([]EntityType, error)
@@ -2296,7 +2299,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	// Player characters default to the dynamic character-sheet surface (the "big
 	// widget"); everything else gets the standard two-column layout. Owners can
 	// re-arrange either in the layout editor afterwards.
-	layout := DefaultLayout()
+	layout := NewCategoryLayout()
 	if pcType {
 		layout = CharacterLayout()
 	}

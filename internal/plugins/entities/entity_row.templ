@@ -1,0 +1,55 @@
+// entity_row.templ draws one page as a row on a hairline: the name first,
+// the Director's lock after it, then the owner's coloured tags on their own line, and at the end its category, when
+// it was edited and the page's own picture. The same row draws All pages and
+// every category's list, so a style kit that dresses one dresses both.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/colour"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
+	"time"
+)
+
+// EntityRow renders a page as a row. The link carries cb-link so the page
+// look and the kits restyle it, and data-dm-only when players can't see the
+// page so it gets the Director's amber edge. The tick box is not drawn here:
+// bulk_actions.js puts it in the margin of any [data-entity-row] it finds, so
+// a list nobody may change carries none.
+templ EntityRow(entity *Entity, cc *campaigns.CampaignContext) {
+	<li class="el-row" data-entity-row data-entity-id={ entity.ID }>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+			class="cb-link el-link"
+			data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
+			if sidebarDMOnly(cc, entity) {
+				data-dm-only
+			}
+		>
+			<span class="el-main">
+				<span class="el-name">{ entity.Name }</span>
+				@listLock(cc, entity)
+				@customShield(cc, entity)
+				if len(entity.Tags) > 0 {
+					<span class="el-tags">
+						for _, tag := range entity.Tags {
+							<span class="el-tag chip-ink" style={ colour.ChipStyle(tag.Color) }>{ tag.Name }</span>
+						}
+					</span>
+				}
+			</span>
+			<span class="el-end">
+				<span class="el-kind">{ entityKindWords(entity) }</span>
+				<time class="el-when" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(entity.UpdatedAt, timeutil.DateWithTime) } data-date-title>{ timeutil.EditedAgo(entity.UpdatedAt, time.Now()) }</time>
+			</span>
+			<span class="el-pic" aria-hidden="true">
+				if entity.ImagePath != nil && *entity.ImagePath != "" {
+					<img src={ layouts.MediaURL(ctx, *entity.ImagePath) } alt="" loading="lazy"/>
+				}
+			</span>
+		</a>
+	</li>
+}

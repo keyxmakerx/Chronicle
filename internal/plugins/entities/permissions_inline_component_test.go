@@ -26,43 +26,37 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// TestEntityCreateFormComponent_NoIsPrivateCheckbox pins that the
-// create form no longer renders the legacy DM-only checkbox. The page's
-// visibility chip replaces it; the hidden `is_private` input the chip's
-// editor writes is allowed (and necessary).
+// TestEntityCreateFormComponent_NoIsPrivateCheckbox pins that the create form
+// never brings back the legacy DM-only checkbox. The sentence under the name
+// replaces it; the hidden is_private field it writes is the one the Create
+// handler reads, and only people who may change it get one.
 func TestEntityCreateFormComponent_NoIsPrivateCheckbox(t *testing.T) {
-	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}}
 	entityTypes := []EntityType{{ID: 1, Name: "Character", Enabled: true}}
-	component := EntityCreateFormComponent(cc, entityTypes, 1, nil, nil, "", "csrf", "", NewPageDraft{})
-
-	var buf bytes.Buffer
-	if err := component.Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render failed: %v", err)
-	}
-	html := buf.String()
-
-	// Hidden input written by the chip's editor stays — the create
-	// handler still reads is_private from form post. What must NOT
-	// be present is the user-visible checkbox.
-	if strings.Contains(html, `type="checkbox" id="is_private"`) {
-		t.Errorf("create form re-introduced the DM-only checkbox; dispatch C-PERMISSIONS-INLINE-COMPONENT removed it")
-	}
-	if strings.Contains(html, `Private (visible to GM only)`) {
-		t.Errorf("create form re-introduced the 'Private (visible to GM only)' label; dispatch C-PERMISSIONS-INLINE-COMPONENT removed it")
-	}
-
-	// Positive assertion: the permissions mount must be present, as the
-	// page's own chip unfolding the corner editor, not the old slide-in.
-	if !strings.Contains(html, `data-widget="permissions"`) {
-		t.Errorf("create form is missing the permissions widget mount")
-	}
-	for _, want := range []string{`data-layout="corner"`, `class="perm-chip"`, "data-perm-corner-trigger", `id="is_private_draft"`, `data-draft-target="#is_private_draft"`} {
-		if !strings.Contains(html, want) {
-			t.Errorf("create form's visibility control is missing %s; it must be the page's chip in draft mode", want)
-		}
-	}
-	if !strings.Contains(html, `data-mode="draft"`) {
-		t.Errorf("create form's permissions mount must declare draft mode so the widget skips the (nonexistent) save endpoint")
+	for _, tc := range []struct {
+		name      string
+		role      campaigns.Role
+		wantField bool
+	}{
+		{"owner", campaigns.RoleOwner, true},
+		{"scribe", campaigns.RoleScribe, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}, MemberRole: tc.role}
+			var buf bytes.Buffer
+			if err := EntityCreateFormComponent(cc, entityTypes, 1, nil, nil, "", "csrf", "", NewPageDraft{}).Render(context.Background(), &buf); err != nil {
+				t.Fatalf("render failed: %v", err)
+			}
+			html := buf.String()
+			if strings.Contains(html, `type="checkbox" id="is_private"`) || strings.Contains(html, `Private (visible to GM only)`) {
+				t.Errorf("create form re-introduced the legacy DM-only checkbox")
+			}
+			if got := strings.Contains(html, `name="is_private"`); got != tc.wantField {
+				t.Errorf("is_private field present = %v, want %v", got, tc.wantField)
+			}
+			if strings.Contains(html, `data-widget="permissions"`) {
+				t.Errorf("create form should say who sees the page in a sentence, not mount the corner chip")
+			}
+		})
 	}
 }
 

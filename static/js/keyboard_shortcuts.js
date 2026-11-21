@@ -112,7 +112,9 @@
         var cid = getCampaignId();
         if (!cid) return;
         e.preventDefault();
-        window.location.href = '/campaigns/' + cid + '/entities/new';
+        var newUrl = '/campaigns/' + cid + '/entities/new';
+        // The small sheet over this screen; the full screen when it can't open.
+        if (!(window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(newUrl))) window.location.href = newUrl;
         break;
 
       // Ctrl+E: Edit current entity.

@@ -309,10 +309,15 @@
   }
 
   function createRow(query, campaignId) {
+    var url = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/new?name=' + encodeURIComponent(query);
     return {
       name: 'Create a page named \u201c' + query + '\u201d',
       type: 'New page',
-      url: '/campaigns/' + encodeURIComponent(campaignId) + '/entities/new?name=' + encodeURIComponent(query),
+      url: url,
+      // The small sheet over the results' page; the full screen if it can't open.
+      action: function () {
+        if (!(window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(url))) window.location.href = url;
+      },
     };
   }
 

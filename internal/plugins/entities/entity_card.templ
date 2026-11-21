@@ -1,82 +1,42 @@
-// entity_card.templ renders a single entity card for the entity list grid.
-// Displays an image thumbnail (if available), type badge with icon, and
-// privacy indicator.
+// entity_card.templ draws one page as a tile of the Gallery view: its own
+// picture with the name under it. A page with no picture shows its opening
+// words in the picture's place, never a stand-in.
 
 package entities
 
 import (
-	"github.com/keyxmakerx/chronicle/internal/colour"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// EntityCard renders a single entity card with image, type badge, and privacy indicator.
+// EntityCard renders a page as a gallery tile. Tags and the edited time are
+// one step away, on the hover card. Opening is the words the handler already
+// served this reader (secrets and hidden mentions removed), never the stored
+// text, so a tile cannot leak what a row would not.
 templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-		class="ec-card card p-0 overflow-hidden hover:shadow-elev-hover transition-shadow block group"
-		data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
-	>
-		<!-- Image or placeholder header -->
-		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			<div class="ec-band h-28 bg-surface-alt overflow-hidden">
-				<img
-					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
-					alt={ entity.Name }
-					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-				/>
-			</div>
-		} else {
-			<div class="ec-band h-14 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
-				if entity.TypeIcon != "" {
-					<i class={ "fa-solid " + entity.TypeIcon, "text-lg opacity-30", "kind-themed" } { layouts.KindIconAttrs(ctx, entity.TypeColor)... }></i>
-				}
-			</div>
-		}
-
-		<!-- Card body -->
-		<div class="ec-body px-3 py-2.5">
-			<div class="ec-head flex items-start justify-between mb-1">
-				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
-				@entityVisibilityBadge(cc, entity)
-			</div>
-
-			<div class="ec-kind flex items-center gap-1.5">
-				<span
-					class="ec-pill inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
-					style={ typeBadgeStyle(entity.TypeColor) }
-				>
-					if entity.TypeIcon != "" {
-						<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]", "kind-themed" } { layouts.KindIconAttrs(ctx, entity.TypeColor)... }></i>
-					}
-					{ entity.TypeName }
-				</span>
-				if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-					<span class="text-[11px] text-fg-secondary truncate">{ *entity.TypeLabel }</span>
-				}
-			</div>
-
-			<!-- Tag chips -->
-			if len(entity.Tags) > 0 {
-				<div class="ec-tags flex flex-wrap gap-0.5 mt-1.5">
-					for _, tag := range entity.Tags {
-						<span
-							class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
-							style={ colour.ChipStyle(tag.Color) }
-						>
-							{ tag.Name }
-						</span>
-					}
-				</div>
+	<li class="el-tile" data-entity-row data-entity-id={ entity.ID }>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+			class="cb-link el-tile-link"
+			data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
+			if sidebarDMOnly(cc, entity) {
+				data-dm-only
 			}
-		</div>
-	</a>
-}
-
-// entityVisibilityBadge is the card's call site for the shared
-// visibilityGlance component (ADR-057). The role gate lives inside
-// visibilityGlance itself, so this call is unconditional.
-templ entityVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity) {
-	@visibilityGlance(cc, entity, nil)
+		>
+			if entity.ImagePath != nil && *entity.ImagePath != "" {
+				<span class="el-tile-pic" aria-hidden="true">
+					<img src={ layouts.MediaURL(ctx, *entity.ImagePath) } alt="" loading="lazy"/>
+				</span>
+			} else {
+				<span class="el-tile-pic el-tile-words" aria-hidden="true">{ entity.Opening }</span>
+			}
+			<span class="el-tile-name">
+				<span class="el-name">{ entity.Name }</span>
+				@listLock(cc, entity)
+				@customShield(cc, entity)
+			</span>
+			<span class="el-kind">{ entityKindWords(entity) }</span>
+		</a>
+	</li>
 }

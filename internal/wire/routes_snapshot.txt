@@ -1217,6 +1217,8 @@ GET	/campaigns/:id/sessions/nights	session	plugins/sessions.(*Handler).ListGameN
 GET	/campaigns/:id/sessions/sightings	session	plugins/sessions.(*Handler).SightingsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sessions/sightings/nights	session	plugins/sessions.(*Handler).SightingNightsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/settings	session	plugins/campaigns.(*Handler).Settings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/setup-steps	session	plugins/campaigns.(*Handler).SetupStepsBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/setup-steps/:step/keep	session	plugins/campaigns.(*Handler).KeepSetupStepPost	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sidebar-config	session	plugins/campaigns.(*Handler).GetSidebarConfig	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/sidebar-config	session	plugins/campaigns.(*Handler).UpdateSidebarConfig	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/sidebar-nodes	session	plugins/entities.(*Handler).CreateSidebarNodeAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole

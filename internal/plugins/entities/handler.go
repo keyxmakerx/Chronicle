@@ -115,6 +115,7 @@ type Handler struct {
 	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
+	pageParts          PageParts // Optional: first content of a page's tags and connections; see first_paint.go.
 	addonSvc           AddonChecker
 	timelineSearcher   TimelineSearcher
 	mapSearcher        MapSearcher
@@ -417,6 +418,8 @@ func (h *Handler) Index(c *echo.Context) error {
 		}
 	}
 
+	h.addOpenings(c, cc, entities)
+
 	csrfToken := middleware.GetCSRFToken(c)
 
 	// When viewing a specific category (type), render the category dashboard.
@@ -475,8 +478,34 @@ func (h *Handler) NewForm(c *echo.Context) error {
 		}
 	}
 
+	// The form opens on what the page will really be given, so its sentence
+	// about who sees it is true before the person touches anything.
+	draft := NewPageDraft{IsPrivate: cc.NewPagePrivacy(patch.Absent[bool]()), Return: openedFrom(c)}
+
+	// ?sheet=1 is the small sheet over the place the person is on: the form
+	// alone, for new_page_sheet.js to put in a dialog.
+	if c.QueryParam("sheet") == "1" {
+		draft.Sheet = true
+		return middleware.Render(c, http.StatusOK, EntityNewSheet(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, draft))
+	}
 	// ?name= comes from quick search's "Create a page named …" row.
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", NewPageDraft{Return: openedFrom(c)}))
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, prefillName(c.QueryParam("name")), csrfToken, "", draft))
+}
+
+// addOpenings gives each listed page with no picture its first words, for the
+// Gallery tile that stands in for the picture. The words go through
+// servedText first, so a reader never gets a secret or the name of a page
+// they can't open that a row would not have shown.
+func (h *Handler) addOpenings(c *echo.Context, cc *campaigns.CampaignContext, entities []Entity) {
+	for i := range entities {
+		e := &entities[i]
+		if (e.ImagePath != nil && *e.ImagePath != "") || e.EntryHTML == nil || *e.EntryHTML == "" {
+			continue
+		}
+		if _, served, _ := h.servedText(c, cc, nil, e.EntryHTML); served != nil {
+			e.Opening = previewExcerpt(*served)
+		}
+	}
 }
 
 // prefillName is a name to start the create form with, trimmed and cut to the
@@ -547,13 +576,15 @@ func (h *Handler) Create(c *echo.Context) error {
 
 	// Resolve visibility against the campaign's DefaultVisibility setting.
 	//
-	// An unchecked HTML checkbox submits NOTHING, so a false here IS the
-	// absent case — this form has no way to say "explicitly public". The
-	// merge itself lives in CampaignSettings.ResolveNewEntityPrivacy, the
-	// single implementation every creation path shares.
+	// The form always sends is_private ("true" or "false") because it tells
+	// the person which one it will save. An explicit false has to reach the
+	// resolver as false, not as absent, or a campaign whose pages start
+	// hidden would hide a page the person chose to show. The merge itself
+	// lives in CampaignSettings.ResolveNewEntityPrivacy, the single
+	// implementation every creation path shares.
 	requestedPrivacy := patch.Absent[bool]()
-	if req.IsPrivate {
-		requestedPrivacy = patch.Of(true)
+	if req.IsPrivate != nil {
+		requestedPrivacy = patch.Of(*req.IsPrivate)
 	}
 	isPrivate := cc.NewPagePrivacy(requestedPrivacy)
 	if err := h.requireCreatableType(c, cc, req.EntityTypeID); err != nil {
@@ -586,7 +617,14 @@ func (h *Handler) Create(c *echo.Context) error {
 				parentEntity = parent
 			}
 		}
-		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: req.IsPrivate, Return: openedFrom(c)}
+		// The mark on the redrawn form is what the page would have been given,
+		// so it stays true after a refusal.
+		draft := NewPageDraft{TypeLabel: req.TypeLabel, TemplateID: req.TemplateID, IsPrivate: isPrivate, Return: openedFrom(c), Sheet: req.Sheet}
+		// A form posted by htmx replaces only itself; the page around it is
+		// already on screen.
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, EntityCreateFormComponent(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
+		}
 		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, parentEntity, prefillName(req.Name), csrfToken, errMsg, draft))
 	}
 
@@ -647,6 +685,11 @@ func (h *Handler) Show(c *echo.Context) error {
 	if c.QueryParam(startWritingParam) == "1" {
 		c.SetRequest(c.Request().WithContext(withStartWriting(c.Request().Context())))
 	}
+	// The page's tags, connections, words and attributes arrive with it, so
+	// nothing lands late and pushes the text down. Built from the viewer
+	// the page is drawn for.
+	c.SetRequest(c.Request().WithContext(withFirstPaint(c.Request().Context(),
+		h.newFirstPaint(c, p.cc, p.entity, p.userID, p.showAttributes))))
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }
 
@@ -1083,6 +1126,16 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		opts.Page = p
 	}
 
+	// The Search page asks for its two groups separately. Any other caller
+	// leaves scope out and gets the whole answer, as quick search does.
+	scope := c.QueryParam("scope")
+	switch scope {
+	case SearchScopeNamed, SearchScopeMention:
+		opts.SearchScope = scope
+	default:
+		scope = ""
+	}
+
 	// Check if the caller wants JSON (used by the editor @mention widget).
 	wantsJSON := strings.Contains(c.Request().Header.Get("Accept"), "application/json")
 
@@ -1145,6 +1198,16 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 			if e.ParentID != nil {
 				item["parent_id"] = *e.ParentID
 			}
+			// The Search page draws the descriptor beside the category and
+			// the page's own small picture at the row's end.
+			if scope != "" {
+				if e.TypeLabel != nil && *e.TypeLabel != "" {
+					item["type_label"] = *e.TypeLabel
+				}
+				if e.ImagePath != nil && *e.ImagePath != "" {
+					item["image"] = layouts.MediaThumbURL(c.Request().Context(), *e.ImagePath, "300")
+				}
+			}
 			// Link pickers mark a page not everyone can read, so an author
 			// knows a link to it would show its name to players who can't
 			// open it. Only pages this viewer can already see are listed,
@@ -1153,6 +1216,21 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 				item["restricted"] = state
 			}
 			items[i] = item
+		}
+		// The mention group quotes where each page holds the words. The text
+		// comes from the same reader-safe column the match ran on, for the
+		// role this request searched as, in one query for the whole page.
+		if scope == SearchScopeMention && len(results) > 0 {
+			ids := make([]string, len(results))
+			for i := range results {
+				ids[i] = results[i].ID
+			}
+			snippets := h.service.SearchSnippets(c.Request().Context(), cc.Campaign.ID, query, ids, role, userID)
+			for i := range results {
+				if parts := snippets[results[i].ID]; len(parts) > 0 {
+					items[i]["snippet"] = parts
+				}
+			}
 		}
 		// Append cross-plugin search results from registered searchers.
 		// Each searcher is gated by its addon being enabled for the campaign,
@@ -1169,7 +1247,11 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		// events a second time. entity_total is the pages' own count, which is
 		// what a pager steps through: total also holds the unpaged hits.
 		entityTotal := total
-		if opts.Page > 1 {
+		// Maps, events and the rest are found by name only, so they belong
+		// to the named group, and a category or tag filter excludes them
+		// (they have neither).
+		onlyPages := scope == SearchScopeMention || (scope != "" && (typeID > 0 || len(opts.TagSlugs) > 0))
+		if opts.Page > 1 || onlyPages {
 			return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total, "entity_total": entityTotal})
 		}
 		if h.timelineSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "timeline") {
@@ -2081,6 +2163,13 @@ func (h *Handler) GetEntry(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	return c.JSON(http.StatusOK, h.entryPayload(c, cc, entity))
+}
+
+// entryPayload is what the editor widget loads: the text as the viewer may
+// read it, and what its save is checked against. The entry endpoint and the
+// page itself (first_paint.go) both send it, so the two never differ.
+func (h *Handler) entryPayload(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity) map[string]any {
 	// Strip inline secrets for everyone but the owner and Co-DMs, so players
 	// and Scribes never receive GM-only text. The owner and Co-DMs see
 	// secrets with a visual indicator.
@@ -2101,7 +2190,7 @@ func (h *Handler) GetEntry(c *echo.Context) error {
 			response["locked"] = true
 		}
 	}
-	return c.JSON(http.StatusOK, response)
+	return response
 }
 
 // UpdateEntryAPI saves the entity's entry content from the editor widget.
@@ -2289,10 +2378,22 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	response, err := h.fieldsPayload(c, cc, entity, userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+// fieldsPayload is what the attributes widget loads: the field definitions and
+// the values the viewer may see. The fields endpoint and the page itself
+// (first_paint.go) both send it, so the two never differ. The caller has
+// already checked the viewer may see the entity.
+func (h *Handler) fieldsPayload(c *echo.Context, cc *campaigns.CampaignContext, entity *Entity, userID string) (map[string]any, error) {
 	// Look up the entity type to get field definitions.
 	et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Merge type-level fields with per-entity overrides for effective field list.
@@ -2330,7 +2431,7 @@ func (h *Handler) GetFieldsAPI(c *echo.Context) error {
 		response["owner_fields"] = keys
 	}
 	h.addHeroRuleNotes(c.Request().Context(), response, cc.Campaign.ID, entity, canSeeGM || isOwner)
-	return c.JSON(http.StatusOK, response)
+	return response, nil
 }
 
 // webWriteContext marks a field write as coming from the web UI, so observers

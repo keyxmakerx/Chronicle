@@ -1,0 +1,42 @@
+// entity_pager.templ is All pages' paging: a quiet "Page 1 of 4" with
+// Previous and Next as words, not buttons.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+)
+
+// entityPager draws nothing while everything fits on one page. The links
+// keep the search and the order, and swap the list in place when htmx is
+// there; without it they are plain links to the same list.
+templ entityPager(p components.PaginationData) {
+	if p.Total > p.PerPage {
+		<nav class="el-pager" aria-label="Pages of the list">
+			if p.HasPrevious() {
+				<a
+					href={ templ.SafeURL(p.PageURL(p.CurrentPage - 1)) }
+					hx-get={ p.PageURL(p.CurrentPage - 1) }
+					hx-target={ p.HTMXTarget }
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					class="quiet-word"
+					rel="prev"
+				>Previous</a>
+			}
+			<span class="el-pager-at">Page { fmt.Sprintf("%d", p.CurrentPage) } of { fmt.Sprintf("%d", p.TotalPages()) }</span>
+			if p.HasNext() {
+				<a
+					href={ templ.SafeURL(p.PageURL(p.CurrentPage + 1)) }
+					hx-get={ p.PageURL(p.CurrentPage + 1) }
+					hx-target={ p.HTMXTarget }
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					class="quiet-word"
+					rel="next"
+				>Next</a>
+			}
+		</nav>
+	}
+}

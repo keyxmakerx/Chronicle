@@ -1,10 +1,9 @@
-// phone_shell.spec.mjs — the app shell and page lists on a phone (390 by 844).
+// phone_shell.spec.mjs — the app shell on a phone (390 by 844).
 //
 // A harness page, as in annals_phone_scroll.spec.mjs: the real phone_shell.css
 // and the real .cta-* rules from input.css, with the header, the time zone
-// and game night banners, the answer buttons and a page row transcribed from
-// layouts/app.templ, the callout handler, sessions/sessions.templ and
-// entities/entity_card.templ. The first test pins that
+// and game night banners and the answer buttons transcribed from layouts/app.templ, the
+// callout handler and sessions/sessions.templ. The first test pins that
 // transcription to the templates, so a renamed class fails here instead of
 // leaving the harness green over a page that changed.
 //
@@ -110,21 +109,6 @@ const answers = `
     ${['Going', 'Maybe', "Can't"].map((w) => `<button class="rsvp-answer text-sm px-3 py-1.5 rounded-md inline-flex items-center gap-1"><span class="ico" style="width:14px;height:14px"></span> ${w}</button>`).join('')}
   </div></div>`;
 
-const row = (name, kind) => `
-  <a href="#" class="ec-card card p-0 overflow-hidden block group">
-    <div class="ec-band h-14 flex items-center justify-center"><i>i</i></div>
-    <div class="ec-body px-3 py-2.5">
-      <div class="ec-head flex items-start justify-between mb-1">
-        <h3 class="font-semibold truncate">${name}</h3>
-        <span class="lock" data-lock>L</span>
-      </div>
-      <div class="ec-kind flex items-center gap-1.5">
-        <span class="ec-pill inline-flex items-center gap-1 px-1.5 rounded-full" style="background-color:#336;color:#fff"><i>i</i>${kind}</span>
-      </div>
-      <div class="ec-tags flex"><span>tag</span></div>
-    </div>
-  </a>`;
-
 function page(body) {
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -151,10 +135,6 @@ test('the harness classes are the ones the templates use', () => {
   const app = read('internal/templates/layouts/app.templ');
   for (const c of ['tb-bell', 'tb-menu-notif', 'tb-menu-count', 'tb-esc', 'data-notif-menu', 'id="user-menu-btn"', 'id="topbar-search-trigger"', 'data-tt-tab']) {
     assert.ok(app.includes(c), `app.templ no longer has ${c}`);
-  }
-  const card = read('internal/plugins/entities/entity_card.templ');
-  for (const c of ['ec-card', 'ec-band', 'ec-body', 'ec-head', 'ec-kind', 'ec-pill', 'ec-tags']) {
-    assert.ok(card.includes(c), `entity_card.templ no longer has ${c}`);
   }
   const callout = read('internal/plugins/sessions/callout_handler.go');
   assert.ok(callout.includes('cta-long') && callout.includes('cta-short'));
@@ -333,37 +313,3 @@ test('with a mouse the answer buttons keep their smaller size', async () => {
   for (const h of hs) assert.ok(h < 40, `a mouse answer button grew to ${h}`);
 });
 
-test('page lists draw as 44-tall rows under 640 and as cards above', async () => {
-  const list = `<div id="entity-list">${row('Brother Quill', 'Character')}${row('The Ashen Reach', 'Location')}</div>`;
-  const narrow = await open(page(list));
-  // The pointer starts at the page origin, over the first row; park it below so
-  // the resting colours are measured, not the hover tint.
-  await narrow.p.mouse.move(380, 840);
-  const n = await narrow.p.evaluate(() => {
-    const a = document.querySelector('.ec-card');
-    const q = (s) => a.querySelector(s);
-    const cs = getComputedStyle(a);
-    const nameR = q('h3').getBoundingClientRect(), kindR = q('.ec-kind').getBoundingClientRect(), lockR = q('[data-lock]').getBoundingClientRect();
-    return {
-      h: a.getBoundingClientRect().height,
-      band: getComputedStyle(q('.ec-band')).display, tags: getComputedStyle(q('.ec-tags')).display,
-      shadow: cs.boxShadow, bg: cs.backgroundColor, border: cs.borderBottomWidth,
-      order: nameR.left < kindR.left && kindR.left < lockR.left,
-      sameLine: Math.abs((nameR.top + nameR.bottom) / 2 - (lockR.top + lockR.bottom) / 2) < 6,
-      pillBg: getComputedStyle(q('.ec-pill')).backgroundColor,
-    };
-  });
-  await narrow.close();
-  assert.ok(n.h >= 44 && n.h < 46, `a row is ${n.h} tall`);
-  assert.equal(n.band, 'none'); assert.equal(n.tags, 'none');
-  assert.equal(n.shadow, 'none'); assert.equal(n.bg, 'rgba(0, 0, 0, 0)');
-  assert.equal(n.border, '1px');
-  assert.ok(n.order && n.sameLine, 'name, kind and lock are not one row in that order');
-  assert.equal(n.pillBg, 'rgba(0, 0, 0, 0)', 'the kind should be muted words, not a pill');
-
-  const wide = await open(page(list), { width: 800, touch: false });
-  const w = await wide.p.$eval('.ec-card', (a) => ({ band: getComputedStyle(a.querySelector('.ec-band')).display, shadow: getComputedStyle(a).boxShadow }));
-  await wide.close();
-  assert.notEqual(w.band, 'none');
-  assert.notEqual(w.shadow, 'none');
-});

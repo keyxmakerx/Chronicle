@@ -71,7 +71,7 @@ func TestCreate_RefusedSaveKeepsWhatWasChosen(t *testing.T) {
 	for _, want := range []string{
 		`selectedID: &#39;parent-1&#39;`, `selectedName: &#39;The Dockside&#39;`,
 		`value="Tavern"`, `data-selected-template="3"`,
-		`name="is_private" value="true"`, `data-draft-private="true"`,
+		`name="is_private" value="true"`, newPageHiddenLine,
 		`name="return" value="/campaigns/camp-1/entities?type=7"`,
 		// Cancel returns to the parent page, not the Pages list.
 		`href="/campaigns/camp-1/entities/parent-1" class="quiet-word">Cancel`,
