@@ -27,6 +27,15 @@
 
   function main() { return document.getElementById('main-content'); }
 
+  // Closed dialogs stay in the page marked hidden, so only a shown one counts.
+  function openDialog() {
+    var all = document.querySelectorAll('dialog[open], [role="dialog"][aria-modal="true"]');
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].getClientRects().length > 0) return true;
+    }
+    return false;
+  }
+
   function state() {
     var m = main();
     var a = document.activeElement;
@@ -36,7 +45,7 @@
       dirty: !!(window.Chronicle && Chronicle.isDirty && Chronicle.isDirty()),
       editing: !!document.querySelector('.chronicle-editor--editing'),
       fieldFocused: field,
-      dialogOpen: !!document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')
+      dialogOpen: openDialog()
     };
   }
 
