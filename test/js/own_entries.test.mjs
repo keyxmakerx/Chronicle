@@ -113,3 +113,37 @@ test('a plain entry has no kept line', () => {
   assert.equal(OE.keptLine(d, field), '');
   assert.equal(OE.keptLine(OE.draftOf(null, field), field), '');
 });
+
+// The page's counts are the ones Campaign settings shows: accepted entries,
+// with handed-in drafts beside them, never inside them.
+const page = () => {
+  const p = Object.create(OE.Entries.prototype);
+  p.director = true;
+  p.fields = [{ key: 'ancestry', label: 'Ancestry' }, { key: 'class', label: 'Class' }];
+  p.entries = [
+    { id: 1, fieldKey: 'ancestry', name: 'Hollowkin', status: 'accepted' },
+    { id: 2, fieldKey: 'ancestry', name: 'Ashborn', status: 'sent', createdBy: 'u1' },
+    { id: 3, fieldKey: 'ancestry', name: 'Wip', status: 'draft', createdBy: 'u1' },
+  ];
+  p.members = [{ user_id: 'u1', display_name: 'Mira' }];
+  return p;
+};
+
+test('accepted counts exclude drafts and handed-in lists only the sent ones', () => {
+  const p = page();
+  assert.equal(p.accepted('ancestry').length, 1);
+  assert.deepEqual(p.handedIn('ancestry').map((e) => e.id), [2]);
+  assert.equal(p.accepted('class').length, 0);
+});
+
+test('the Waiting for you block names the writer and is empty when nothing waits', () => {
+  const p = page();
+  const html = p.draftsWaitingHTML();
+  assert.match(html, /Waiting for you/);
+  assert.match(html, /Ashborn/);
+  assert.match(html, /A draft from Mira/);
+  assert.match(html, /data-readdraft="2"/);
+  assert.doesNotMatch(html, /Wip/);
+  p.entries = p.entries.filter((e) => e.status !== 'sent');
+  assert.equal(p.draftsWaitingHTML(), '');
+});

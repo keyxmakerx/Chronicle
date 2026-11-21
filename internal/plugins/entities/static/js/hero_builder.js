@@ -551,7 +551,7 @@
     p.own.editor.requestClose(function () { var h = p.hero, k = p.key; self.endOwn(); self.panel = { hero: h, key: k, focus: null }; self.drawPanel(); });
   };
   // A new entry joins the list and is picked for the hero at once, as the
-  // Your own entries page always did for a hero it was opened for. Editing an
+  // Own entries page always did for a hero it was opened for. Editing an
   // entry re-picks it only when it is already the hero's pick (a rename), so
   // fixing a draft never replaces what the hero holds.
   Builder.prototype.ownSaved = function (h, st, e, mode, isNew) {

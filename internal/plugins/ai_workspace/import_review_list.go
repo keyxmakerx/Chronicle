@@ -304,3 +304,61 @@ func peekText(body string) string {
 	}
 	return strings.TrimRight(cut, " \n.,;:") + "…"
 }
+
+// similarFor is the existing page an add is much like, or nil.
+func similarFor(d ImportReviewData, idx int) *importer.SimilarPage {
+	if idx < 0 || idx >= len(d.Similar) {
+		return nil
+	}
+	return d.Similar[idx]
+}
+
+// similarDiffer says how far apart the words are, when both pages had enough
+// words to compare; empty otherwise so the line is just the page's name.
+func similarDiffer(m *importer.SimilarPage) string {
+	if !m.HasBody {
+		return ""
+	}
+	if m.Differ == 0 {
+		return ", the same words"
+	}
+	if m.Differ == 1 {
+		return ", 1 word differs"
+	}
+	return fmt.Sprintf(", %d words differ", m.Differ)
+}
+
+// simLine is one line of a side-by-side text. Only marks a line the other
+// text does not have, in words as well as colour.
+type simLine struct {
+	Text string
+	Only bool
+}
+
+// maxSimLines bounds each side of "See both"; a long page shows its start.
+const maxSimLines = 60
+
+// simLines marks which of lines the other text lacks, compared without case
+// or spacing differences.
+func simLines(lines, other []string) []simLine {
+	have := make(map[string]bool, len(other))
+	for _, l := range other {
+		have[strings.ToLower(l)] = true
+	}
+	var out []simLine
+	for _, l := range lines {
+		if len(out) == maxSimLines {
+			out = append(out, simLine{Text: "…"})
+			break
+		}
+		out = append(out, simLine{Text: l, Only: !have[strings.ToLower(l)]})
+	}
+	return out
+}
+
+func simLineClass(l simLine) string {
+	if l.Only {
+		return "is-only"
+	}
+	return ""
+}

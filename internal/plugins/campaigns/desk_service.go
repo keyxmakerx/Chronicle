@@ -103,6 +103,8 @@ func (s *deskService) gather(ctx context.Context, req DeskRequest, only ...DeskS
 				merged.Trash = f.Trash
 			case DeskKeys:
 				merged.Keys = f.Keys
+			case DeskEntries:
+				merged.Entries = f.Entries
 			}
 		}(p)
 	}
@@ -161,7 +163,7 @@ func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs)
 			{Name: "General", Lines: []DeskLine{nameLine(c), descriptionLine(c)}},
 			{Name: "Access", Lines: []DeskLine{publicLine(c), pagesLine(c), previewLine(c)}},
 			{Name: "People", Lines: []DeskLine{peopleLine(c, in.Members), invitedLine(c, in), changesLine(c, facts.Changes)}},
-			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in), tablesLine(c)}},
+			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in), tablesLine(c), entriesLine(c, facts.Entries)}},
 		},
 		Right: []DeskGroup{
 			{Name: "Customize", Lines: customizeLines(c, in)},
@@ -204,7 +206,7 @@ func (s *deskService) figure(id string, c *Campaign, in DeskInputs, f DeskFacts,
 }
 
 func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int {
-	facts := s.gather(ctx, req, DeskFoundry, DeskAI)
+	facts := s.gather(ctx, req, DeskFoundry, DeskAI, DeskEntries)
 	return len(needsYou(in.Campaign, withoutDisabled(facts, in.Addons), req.Now))
 }
 

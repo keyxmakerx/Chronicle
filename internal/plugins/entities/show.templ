@@ -27,6 +27,9 @@ import (
 // this entity's own claimed owner apart from any other viewer.
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
+		// Only the page's own route follows live changes, not the DM Screen
+		// sheet that reuses the body.
+		<div hidden data-widget="page-live" data-entity-id={ entity.ID } data-campaign-id={ cc.Campaign.ID }></div>
 		@withFullPage(entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))
 	}
 }

@@ -2331,11 +2331,26 @@
       return !!pop && !pop.hidden;
     },
 
+    // The panel hangs from the right edge of the header's buttons, which on a
+    // phone sit well inside the screen, so a full-width panel would start left
+    // of it. Shift it sideways just enough to sit 12px inside both edges.
+    _fitPop: function (pop) {
+      if (!pop || !pop.style) return;
+      var host = pop.offsetParent;
+      pop.style.right = '';
+      if (!host) return;
+      var edge = host.getBoundingClientRect().right, w = pop.offsetWidth, vw = window.innerWidth, gap = 12, dx = 0;
+      if (edge - w < gap) dx = gap - (edge - w);
+      else if (edge > vw - gap) dx = (vw - gap) - edge;
+      if (dx) pop.style.right = (-dx) + 'px';
+    },
+
     openWaiting: function () {
       var btn = $('#cal5-waitbtn', this.el), pop = $('#cal5-waitpop', this.el);
       if (!btn || !pop || btn.hidden) return;
       this.closeGnList();
       pop.hidden = false;
+      this._fitPop(pop);
       btn.setAttribute('aria-expanded', 'true');
       var first = $('.wrow', pop);
       if (first) first.focus();
@@ -2367,6 +2382,7 @@
       this.closeWaiting();
       pop.innerHTML = '<p class="gnempty">Loading game nights…</p>';
       pop.hidden = false;
+      this._fitPop(pop);
       btn.setAttribute('aria-expanded', 'true');
       var y = this.cal.current_year, m = this.cal.current_month, months = [];
       for (var i = 0; i < 3; i++) {
@@ -2378,9 +2394,10 @@
           .then(function (r) { return r.ok ? r.json() : {}; })
           .then(function (b) { return !!(b && b.enabled); }, function () { return false; });
       }
-      Promise.all([Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })), this._gnFeedPromise]).then(function (got) {
+      Promise.all([Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })), this._gnFeedPromise, this._gnLoadCands()]).then(function (got) {
         if (pop.hidden) return;
         self._gnFeedOn = got[1];
+        self._gnCands = got[2];
         self._gnNext = [].concat.apply([], got[0]);
         pop.innerHTML = self._gnListHTML(self._gnNext);
         var first = $('.wrow', pop);
@@ -2414,11 +2431,88 @@
           '<span class="wmain"><span class="wt">' + esc(n.name) + '</span><span class="ws">' + esc(sub) + '</span></span>' +
           (ans ? '<span class="gnans' + (k ? ' ' + k : '') + '">' + esc(ans) + '</span>' : '') + '</button></li>';
       };
-      var h = '<div class="gnhead">Coming up</div>';
+      var h = this._gnStripHTML();
+      h += '<div class="gnhead">Coming up</div>';
       h += next.length ? '<ul class="wlist">' + next.map(row).join('') + '</ul>'
         : '<p class="gnempty">' + (this.role >= 2 ? 'Nothing planned yet. Open a day to plan a game night.' : 'Nothing planned yet.') + '</p>';
       if (played) h += '<div class="gnhead">Last played</div><ul class="wlist">' + row(played) + '</ul>';
       return h + this._gnFootHTML(false);
+    },
+
+    // The strip at the top of the panel: Session-kind calendar events that
+    // have no game night, for whoever may make one. It is quiet words, not
+    // buttons, and nothing is made until one is pressed. "Not this one" is
+    // remembered in this browser only; the server holds no such list. At
+    // most three show at once so the strip never pushes the nights away.
+    _gnSkipKey: function () { return 'chronicle:gn-skip:' + this.campaignId; },
+    _gnSkipped: function () {
+      try { var v = JSON.parse(localStorage.getItem(this._gnSkipKey()) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+    },
+    _gnSkip: function (id) {
+      var list = this._gnSkipped();
+      if (list.indexOf(id) < 0) list.push(id);
+      try { localStorage.setItem(this._gnSkipKey(), JSON.stringify(list.slice(-200))); } catch (e) { /* the strip just comes back next time */ }
+    },
+    _gnLoadCands: function () {
+      if (this.role < 2) return Promise.resolve([]);
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-candidates')
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (rows) { return Array.isArray(rows) ? rows : []; }, function () { return []; });
+    },
+    _gnStripHTML: function () {
+      var skipped = this._gnSkipped(), rows = (this._gnCands || []).filter(function (r) { return skipped.indexOf(r.eventId) < 0; });
+      if (!rows.length) return '';
+      var h = rows.slice(0, 3).map(function (r) {
+        var sub = [r.when, r.page].filter(Boolean).join(' · ');
+        return '<div class="gnstrip" role="group" aria-label="' + esc(r.name) + ' has no game night">' +
+          '<p class="gnstrip-t"><b>' + esc(r.name) + '</b> is on your calendar with no game night.</p>' +
+          (sub ? '<p class="gnstrip-s">' + esc(sub) + '</p>' : '') +
+          '<p class="gnstrip-q"><button type="button" class="lnk" data-gn-make="' + esc(r.eventId) + '">Make a game night</button>' +
+          '<button type="button" class="lnk" data-gn-skip="' + esc(r.eventId) + '">Not this one</button></p></div>';
+      }).join('');
+      if (rows.length > 3) {
+        var more = rows.length - 3;
+        h += '<p class="gnstrip-s gnstrip-more">' + more + (more === 1 ? ' more Session event has' : ' more Session events have') + ' no game night.</p>';
+      }
+      return h;
+    },
+    _gnMake: function (btn) {
+      var self = this, id = btn.getAttribute('data-gn-make'), pop = $('#cal5-gnpop', this.el);
+      var row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
+      btn.disabled = true;
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/from-event', { method: 'POST', body: { eventId: id } })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
+        })
+        .then(function (res) {
+          if (!res.ok && res.status !== 409) throw new Error((res.body && (res.body.error || res.body.message)) || 'Could not make the game night. Try again.');
+          // A 409 means a night for it appeared meanwhile: the strip drops it either way.
+          self._gnCands = (self._gnCands || []).filter(function (r) { return r.eventId !== id; });
+          // Re-read the nights so the open panel lists the new one now, not after a reload.
+          return self._gnReloadNights().then(function () {
+            if (!pop.hidden) { pop.innerHTML = self._gnListHTML(self._gnNext || []); var first = $('.gnstrip .lnk', pop) || $('.wrow', pop); if (first) first.focus(); }
+            return res;
+          });
+        })
+        .then(function (res) {
+          self.say(res.ok
+            ? 'Made a game night for ' + (row ? row.name : 'the event') + '.' +
+              // Only a story calendar's night lacks a real date; the server says which.
+              (res.body && res.body.scheduledDate ? '' : ' It has no real date yet: find it under All game nights.')
+            : (row ? row.name : 'That event') + ' already has a game night.');
+        })
+        .catch(function (err) { btn.disabled = false; self.say(err && err.message ? err.message : 'Could not make the game night. Try again.'); });
+    },
+
+    // Fresh read of the three months the panel lists; a failed read keeps the
+    // nights already shown rather than blanking the panel.
+    _gnReloadNights: function () {
+      var self = this, y = this.cal.current_year, m = this.cal.current_month, reads = [];
+      for (var i = 0; i < 3; i++) {
+        reads.push(this.fetchNights(y, m, { fresh: true }));
+        if (++m > 12) { m = 1; y++; }
+      }
+      return Promise.all(reads).then(function (got) { self._gnNext = [].concat.apply([], got); }, function () {});
     },
 
     // The panel's foot: "Add to your calendar" and the switch between the
@@ -5424,6 +5518,16 @@
         $('#cal5-gnpop', this.el).addEventListener('click', function (e) {
           var pop = e.currentTarget, t = e.target;
           if (t.closest('[data-gn-all]')) { self.showAllNights(); return; }
+          var mk = t.closest('[data-gn-make]');
+          if (mk) { self._gnMake(mk); return; }
+          var sk = t.closest('[data-gn-skip]');
+          if (sk) {
+            self._gnSkip(sk.getAttribute('data-gn-skip'));
+            pop.innerHTML = self._gnListHTML(self._gnNext || []);
+            var nx = $('.gnstrip .lnk', pop) || $('.wrow', pop);
+            if (nx) nx.focus();
+            return;
+          }
           if (t.closest('[data-gn-next]')) { pop.innerHTML = self._gnListHTML(self._gnNext || []); return; }
           var fb = t.closest('[data-gn-feed]');
           if (fb) { self.toggleGnFeed(fb); return; }

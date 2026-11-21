@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -133,4 +136,65 @@ func (a *armoryNightsAdapter) Nights(ctx context.Context, campaignID string) ([]
 		out = append(out, armory.Night{ID: s.ID, Name: s.Name, Date: *s.ScheduledDate})
 	}
 	return out, nil
+}
+
+// sessionEventSourceAdapter satisfies sessions.SessionEventSource: the
+// Session-kind events of the campaign's primary calendar, the one a night's
+// in-world date is recorded against, worded in that calendar's own months.
+type sessionEventSourceAdapter struct {
+	svc calendar.CalendarService
+}
+
+func (a *sessionEventSourceAdapter) SessionEvents(ctx context.Context, campaignID string, role int) ([]sessions.SessionEvent, error) {
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, permissions.RequestViewer(role, ""))
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	events, err := a.svc.ListEventsForCalendar(ctx, campaignID, cal.ID, role)
+	if err != nil {
+		return nil, err
+	}
+	return sessionEventsOf(cal, events), nil
+}
+
+// sessionEventsOf keeps the one-off events of the Session kind. A repeating
+// event stands for many days, so it is not one night and is left out.
+func sessionEventsOf(cal *calendar.Calendar, events []calendar.Event) []sessions.SessionEvent {
+	var out []sessions.SessionEvent
+	for i := range events {
+		e := &events[i]
+		if !strings.EqualFold(e.KindSlug, sessions.SessionEventKindSlug) || e.IsRecurring || strings.TrimSpace(e.Name) == "" {
+			continue
+		}
+		ev := sessions.SessionEvent{ID: e.ID, Name: e.Name, CalendarID: e.CalendarID, Year: e.Year, Month: e.Month, Day: e.Day, EntityName: e.EntityName}
+		if e.EntityID != nil {
+			ev.EntityID = *e.EntityID
+		}
+		if cal.Mode == calendar.ModeRealLife {
+			// A real-life calendar's date is a real day; keep it only when it is one.
+			if t := time.Date(e.Year, time.Month(e.Month), e.Day, 12, 0, 0, 0, time.UTC); t.Year() == e.Year && int(t.Month()) == e.Month && t.Day() == e.Day {
+				ev.RealDate = t.Format("2006-01-02")
+				ev.When = t.Format("2 Jan 2006")
+			}
+		}
+		if ev.When == "" {
+			ev.When = storyDateWords(cal, e.Year, e.Month, e.Day)
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+// storyDateWords words a story calendar's date, "14 Hammer, 1492", with the
+// month's number when the calendar has no month at that position.
+func storyDateWords(cal *calendar.Calendar, year, month, day int) string {
+	m := strconv.Itoa(month)
+	if month >= 1 && month <= len(cal.Months) {
+		m = cal.Months[month-1].Name
+	}
+	return strconv.Itoa(day) + " " + m + ", " + strconv.Itoa(year)
 }

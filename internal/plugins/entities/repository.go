@@ -1847,9 +1847,11 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	// FULLTEXT for longer queries, LIKE for short ones.
 	var nameCondition, contentCondition string
 	var nameArg, contentArg string
-	fulltext := len(query) >= 4
+	// A query of nothing but operators leaves MATCH no word, and it rejects a
+	// bare "*", so that one is matched as a run, like a short query.
+	cleaned := stripFTOperators(query)
+	fulltext := len(query) >= 4 && cleaned != ""
 	if fulltext {
-		cleaned := stripFTOperators(query)
 		nameCondition = "MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
 		nameArg = cleaned + "*"
 		contentCondition = "MATCH(e.search_text) AGAINST(? IN BOOLEAN MODE)"
@@ -2622,17 +2624,21 @@ func (r *entityPermissionRepository) UpdateVisibility(ctx context.Context, entit
 	return nil
 }
 
-// ftOperatorReplacer strips MySQL FULLTEXT boolean mode operators from user input
-// to prevent search manipulation. These operators (+, -, >, <, (, ), ~, *, ")
-// have special meaning in BOOLEAN MODE and could alter search behavior.
+// ftOperatorReplacer turns each character the FULLTEXT boolean parser reads as
+// an operator into a space. The index breaks words on the same characters, so
+// a space keeps "Half-Elf" findable by its two words, where dropping the
+// hyphen would make one word no page holds. None may reach the parser: it
+// would change what is searched for, and a stray one (an "@" outside a
+// proximity phrase) is a syntax error.
 var ftOperatorReplacer = strings.NewReplacer(
-	"+", "", "-", "", ">", "", "<", "",
-	"(", "", ")", "", "~", "", "*", "", "\"", "",
+	"+", " ", "-", " ", ">", " ", "<", " ",
+	"(", " ", ")", " ", "~", " ", "*", " ", "\"", " ", "@", " ",
 )
 
-// stripFTOperators removes FULLTEXT boolean operators from a search query.
+// stripFTOperators returns the query's words, single-spaced, with FULLTEXT
+// boolean operators taken out. It is empty when the query held nothing else.
 func stripFTOperators(query string) string {
-	return ftOperatorReplacer.Replace(query)
+	return strings.Join(strings.Fields(ftOperatorReplacer.Replace(query)), " ")
 }
 
 // ListNames returns lightweight name entries for auto-linking, including entity

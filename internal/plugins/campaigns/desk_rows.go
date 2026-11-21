@@ -320,6 +320,21 @@ func tablesLine(c *Campaign) DeskLine {
 	return DeskLine{ID: "tables", Name: "Rolling tables", Values: []DeskValue{openValue(deskHref(c.ID, "/roll-tables/manage"))}}
 }
 
+// entriesLine opens the page of the campaign's own rules entries: how many
+// there are and how many players' drafts wait for a Director.
+func entriesLine(c *Campaign, f *DeskEntriesFacts) DeskLine {
+	href := deskHref(c.ID, "/characters/entries")
+	l := DeskLine{ID: "entries", Name: "Own entries", Values: []DeskValue{openValue(href)}}
+	if f != nil {
+		v := figureValue(strconv.Itoa(f.Entries), "", href)
+		if n := f.Waiting(); n > 0 {
+			v.Sub, v.Joined = fmt.Sprintf("%d waiting", n), true
+		}
+		l.Values = []DeskValue{v}
+	}
+	return l
+}
+
 // gameFigure is what the Game and features page draws beside its title:
 // "Draw Steel · 12 of 15 on". A part it cannot name is left out.
 func gameFigure(in DeskInputs) DeskFigure {
@@ -657,6 +672,19 @@ func needsYou(c *Campaign, f DeskFacts, now time.Time) []NeedsYouItem {
 		out = append(out, NeedsYouItem{
 			Lead: "Your AI", Rest: plural(f.AI.Waiting, "request", "requests") + " waiting for your answer",
 			URL: deskHref(c.ID, "/ai"),
+		})
+	}
+	if f.Entries != nil && f.Entries.Waiting() > 0 {
+		var parts []string
+		if n := f.Entries.Drafts; n > 0 {
+			parts = append(parts, plural(n, "draft", "drafts")+" to read")
+		}
+		if n := f.Entries.Asks; n > 0 {
+			parts = append(parts, plural(n, "ask", "asks")+" to answer")
+		}
+		out = append(out, NeedsYouItem{
+			Lead: "Own entries", Rest: strings.Join(parts, " · "),
+			URL: deskHref(c.ID, "/characters/entries"),
 		})
 	}
 	return out

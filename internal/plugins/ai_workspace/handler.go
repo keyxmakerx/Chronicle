@@ -449,6 +449,8 @@ func (h *Handler) ParseImport(c *echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
+	similar := h.similarPages(c, cc, pages, cls, rollTables)
+
 	// An unknown @[Name] only warns; at commit it stays plain text.
 	for i := range pages {
 		if pages[i].Status != importer.StatusParseError && pages[i].FrontMatter.Action != importer.ActionDelete {
@@ -522,7 +524,38 @@ func (h *Handler) ParseImport(c *echo.Context) error {
 		EngineSrc:      layouts.AssetURL("/static/js/widgets/chronicle_gen.js"),
 		Parts:          notes,
 		Repeats:        repeats,
+		Similar:        similar,
 	}))
+}
+
+// maxSimilarLookups bounds the searches one review makes. Past it the rows
+// simply show no look-alike line, which is the review as it was.
+const maxSimilarLookups = 40
+
+// similarPages finds, for each page the AI asks to add, the existing page it
+// is much like (same index as pages; nil where none). The search runs as the
+// viewer, so a page they cannot see is never named. A page whose name already
+// matches one exactly is the classifier's conflict and is skipped here.
+func (h *Handler) similarPages(c *echo.Context, cc *campaigns.CampaignContext, pages []importer.ParsedPage, cls []importer.Classification, rollTables map[string]string) []*importer.SimilarPage {
+	finder, ok := h.importLookup.(importer.PageFinder)
+	if !ok {
+		return nil
+	}
+	out := make([]*importer.SimilarPage, len(pages))
+	lookups := 0
+	for i, p := range pages {
+		if a := p.FrontMatter.Action; a != "" && a != importer.ActionCreate {
+			continue
+		}
+		if cls[i].Status == importer.StatusParseError || cls[i].Status == importer.StatusFieldProblem || cls[i].ConflictEntity != nil {
+			continue
+		}
+		if lookups++; lookups > maxSimilarLookups {
+			break
+		}
+		out[i] = importer.FindSimilar(c.Request().Context(), finder, cc.Campaign.ID, viewerFor(c, cc), p, rollTables)
+	}
+	return out
 }
 
 // CommitImport runs the entity-creation pass after the operator reviews the

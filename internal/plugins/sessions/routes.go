@@ -73,6 +73,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Every night and series, grouped, for the calendar's "All game nights".
 	cg.GET("/sessions/all", h.AllGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Session-kind calendar events with no game night, and making one: for
+	// whoever may create a night, as POST /sessions is.
+	cg.GET("/sessions/event-candidates", h.EventsWithoutNightAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/sessions/from-event", h.MakeNightFromEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	// A night's recap and visible linked pages, for its page in the calendar.
 	cg.GET("/sessions/:sid/page", h.NightPageAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Who the party saw on which night. Any member may read a page's

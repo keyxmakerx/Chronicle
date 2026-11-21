@@ -91,7 +91,7 @@ templ BeforePageContent(v *BeforeView) {
 				}
 				if v.IsDirector && v.DraftsURL != "" {
 					<p class="rp-dm rp-before__drafts" data-dm-only>
-						<a class="rp-dmword" href={ templ.SafeURL(v.DraftsURL) }>Entries and players’ drafts</a>
+						<a class="rp-dmword" href={ templ.SafeURL(v.DraftsURL) }>Own entries</a>
 						if v.Waiting > 0 {
 							<span>{ itoa(v.Waiting) + " waiting for you" }</span>
 						}
