@@ -241,3 +241,100 @@ func TestTrackerKind_ExportAndLookup(t *testing.T) {
 		t.Fatal("a player read the trackers")
 	}
 }
+
+// `start` on a new tracker puts it on a page at that value and logs the
+// change, as a set on the tracker's own page would, but only within the
+// tracker's own ends.
+func TestTrackerKind_Start(t *testing.T) {
+	t.Run("a count starts on its page", func(t *testing.T) {
+		k, svc := trackerFixture()
+		p := planApply(t, k, rec("tracker", ActionCreate, "Counsel", map[string]any{"min": 0, "max": 5, "page": "Orrin", "start": 3}, ""))
+		if !strings.Contains(p.Summary, "Orrin starts at 3 (Starting value)") {
+			t.Fatalf("summary %q", p.Summary)
+		}
+		if got := svc.placed["p-orrin"]; len(got) != 1 {
+			t.Fatalf("placed %+v", got)
+		}
+		if len(svc.logs) != 1 || svc.logs[0].Op != trackerSet || svc.logs[0].Amount != 3 ||
+			svc.logs[0].TrackerID != svc.placed["p-orrin"][0].ID || svc.logs[0].Note != "Starting value" {
+			t.Fatalf("log %+v", svc.logs)
+		}
+	})
+	t.Run("a note is kept", func(t *testing.T) {
+		k, svc := trackerFixture()
+		planApply(t, k, rec("tracker", ActionCreate, "Counsel", map[string]any{"page": "Orrin", "start": 1, "note": "Orrin arrives owing a favour"}, ""))
+		if svc.logs[0].Note != "Orrin arrives owing a favour" {
+			t.Fatalf("log %+v", svc.logs)
+		}
+	})
+	t.Run("a start at the floor is still logged", func(t *testing.T) {
+		k, svc := trackerFixture()
+		planApply(t, k, rec("tracker", ActionCreate, "Counsel", map[string]any{"min": 0, "page": "Orrin", "start": 0}, ""))
+		if len(svc.logs) != 1 || svc.logs[0].Amount != 0 {
+			t.Fatalf("log %+v", svc.logs)
+		}
+	})
+	t.Run("a count with no ends takes any number, negative too", func(t *testing.T) {
+		k, svc := trackerFixture()
+		planApply(t, k, rec("tracker", ActionCreate, "Debt", map[string]any{"page": "Orrin", "start": -4}, ""))
+		if svc.logs[0].Amount != -4 {
+			t.Fatalf("log %+v", svc.logs)
+		}
+	})
+	t.Run("steps and clocks start inside their ends", func(t *testing.T) {
+		k, svc := trackerFixture()
+		planApply(t, k, rec("tracker", ActionCreate, "Mood", map[string]any{"shape": "steps", "steps": []any{"Calm: quiet", "Uneasy: murmurs", "Hostile: blades"}, "page": "Orrin", "start": 2}, ""))
+		planApply(t, k, rec("tracker", ActionCreate, "Doom", map[string]any{"shape": "clock", "max": 6, "page": "Saatraaol", "start": 6}, ""))
+		if len(svc.logs) != 2 || svc.logs[0].Amount != 2 || svc.logs[1].Amount != 6 {
+			t.Fatalf("logs %+v", svc.logs)
+		}
+	})
+	t.Run("a page this paste makes", func(t *testing.T) {
+		k, svc := trackerFixture()
+		r := rec("tracker", ActionCreate, "Counsel", map[string]any{"page": "Fresh page", "start": 1}, "")
+		if p := k.Plan(context.Background(), camp, owner, r); !strings.Contains(p.Error, `no page called "Fresh page"`) {
+			t.Fatalf("plan %+v", p)
+		}
+		r.Made = map[string]bool{"fresh-page": true}
+		if p := k.Plan(context.Background(), camp, owner, r); p.Error != "" {
+			t.Fatalf("plan %+v", p)
+		}
+		_ = svc
+	})
+
+	refusals := []struct {
+		name   string
+		action string
+		tr     string
+		fields map[string]any
+		want   string
+	}{
+		{"with set", ActionCreate, "New", map[string]any{"page": "Orrin", "start": 1, "set": 2}, "can't be combined with `add` or `set`"},
+		{"with add", ActionCreate, "New", map[string]any{"page": "Orrin", "start": 1, "add": 1}, "can't be combined with `add` or `set`"},
+		{"no page", ActionCreate, "New", map[string]any{"start": 1}, "with `page`"},
+		{"on update", ActionUpdate, "Doom", map[string]any{"page": "Orrin", "start": 1}, "first value of a new tracker"},
+		{"not a number", ActionCreate, "New", map[string]any{"page": "Orrin", "start": "high"}, "not a number"},
+		{"a fraction", ActionCreate, "New", map[string]any{"page": "Orrin", "start": 1.5}, "not a whole number"},
+		{"empty", ActionCreate, "New", map[string]any{"page": "Orrin", "start": nil}, "the number the tracker begins at"},
+		{"below min", ActionCreate, "New", map[string]any{"min": 1, "max": 5, "page": "Orrin", "start": 0}, "outside what \"New\" allows (1 to 5)"},
+		{"above max", ActionCreate, "New", map[string]any{"max": 5, "page": "Orrin", "start": 6}, "(5 or less)"},
+		{"below an open max", ActionCreate, "New", map[string]any{"min": 2, "page": "Orrin", "start": 1}, "(2 or more)"},
+		{"past the last step", ActionCreate, "New", map[string]any{"shape": "steps", "steps": []any{"A: a", "B: b"}, "page": "Orrin", "start": 2}, "0 to 1, one per step"},
+		{"past a clock's segments", ActionCreate, "New", map[string]any{"shape": "clock", "max": 4, "page": "Orrin", "start": 5}, "0 to 4 segments"},
+		{"a clock below zero", ActionCreate, "New", map[string]any{"shape": "clock", "max": 4, "page": "Orrin", "start": -1}, "0 to 4 segments"},
+		{"an unknown page", ActionCreate, "New", map[string]any{"page": "Nobody", "start": 1}, "no page called"},
+	}
+	for _, tc := range refusals {
+		t.Run("refuses "+tc.name, func(t *testing.T) {
+			k, svc := trackerFixture()
+			svc.kinds = []TrackerSetup{{ID: "k9", Name: "Doom", Shape: trackerCount, Visibility: trackerHidden}}
+			p := k.Plan(context.Background(), camp, owner, rec("tracker", tc.action, tc.tr, tc.fields, ""))
+			if !strings.Contains(p.Error, tc.want) {
+				t.Fatalf("error %q, want it to say %q", p.Error, tc.want)
+			}
+		})
+	}
+	if !strings.Contains((TrackerKind{}).Doc(), "`start`") {
+		t.Error("the kind's doc does not describe `start`")
+	}
+}

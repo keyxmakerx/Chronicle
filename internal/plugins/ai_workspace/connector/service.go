@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -404,29 +403,24 @@ func (s *Service) Waiting(ctx context.Context, campaignID, userID string) ([]Req
 	return s.repo.Requests(ctx, campaignID, userID, RequestWaiting, requestsWaiting)
 }
 
-// Decided is userID's latest n answered requests, applied or turned down,
-// newest answer first.
-func (s *Service) Decided(ctx context.Context, campaignID, userID string, n int) ([]Request, error) {
-	var out []Request
-	for _, status := range []string{RequestAnswered, RequestTurnedDown} {
-		l, err := s.repo.Requests(ctx, campaignID, userID, status, n)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, l...)
+// Decided is userID's answered requests (applied or turned down) from one
+// seven-day window, newest answer first. olderDays is how many days back the
+// window starts: 0 is the last seven days, 7 the seven before those. At most
+// records.WaitingDecidedMax come back; Chronicle keeps no more than that per
+// person (requestsKept), so the cap never hides an answer that exists.
+func (s *Service) Decided(ctx context.Context, campaignID, userID string, olderDays int) ([]Request, error) {
+	if olderDays < 0 {
+		olderDays = 0
 	}
-	sort.SliceStable(out, func(i, j int) bool { return decidedAt(out[i]).After(decidedAt(out[j])) })
-	if len(out) > n {
-		out = out[:n]
+	day := 24 * time.Hour
+	to := s.now().Add(-time.Duration(olderDays) * day)
+	from := to.Add(-records.WaitingWindowDays * day)
+	if olderDays == 0 {
+		// The newest window is open at the top, so an answer stamped a moment
+		// after "now" (clock skew between app servers) still shows.
+		to = s.now().Add(time.Minute)
 	}
-	return out, nil
-}
-
-func decidedAt(q Request) time.Time {
-	if q.DecidedAt != nil {
-		return *q.DecidedAt
-	}
-	return q.CreatedAt
+	return s.repo.DecidedRequests(ctx, campaignID, userID, from, to, records.WaitingDecidedMax)
 }
 
 // WaitingRequest is one of userID's waiting requests, with its blocks, or an

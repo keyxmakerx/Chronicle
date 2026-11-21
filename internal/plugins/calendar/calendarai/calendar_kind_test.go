@@ -32,6 +32,9 @@ type fakeStructure struct {
 	hides     map[int]bool
 	// phases is each moon's written phase offset and colour, by moon id.
 	phases map[int]moonPhase
+	// afterApply is the main calendar as it reads once its structure is
+	// saved (a new moon has an id then); nil keeps reading cal.
+	afterApply *calendar.Calendar
 }
 
 type moonPhase struct {
@@ -59,7 +62,18 @@ func (f *fakeStructure) GetCalendarForViewer(_ context.Context, id, _ string, _ 
 		}
 	}
 	if f.cal != nil && f.cal.ID == id {
+		if f.applied > 0 && f.afterApply != nil {
+			return f.afterApply, nil
+		}
 		return f.cal, nil
+	}
+	if id == "new" && f.created != nil {
+		// The calendar a create made: its moons, with ids, moving by cycle.
+		made := &calendar.Calendar{ID: id}
+		for i, m := range f.created.Moons {
+			made.Moons = append(made.Moons, calendar.Moon{ID: 100 + i, Name: m.Name, CycleDays: m.CycleDays, PhaseMode: calendar.MoonCycle})
+		}
+		return made, nil
 	}
 	return nil, apperror.NewNotFound("calendar not found")
 }

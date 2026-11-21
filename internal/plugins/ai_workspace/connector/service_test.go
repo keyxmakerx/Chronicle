@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
 func newTestService() (*Service, *memRepo, owners, *time.Time) {
@@ -237,36 +238,68 @@ func TestOneLine(t *testing.T) {
 	}
 }
 
-// Decided merges applied and turned-down requests, newest answer first, and
-// leaves out waiting ones and other campaigns'.
-func TestDecided_NewestAnswerFirst(t *testing.T) {
+// Decided lists applied and turned-down requests from one seven-day window,
+// newest answer first, and leaves out waiting ones, other campaigns' and other
+// people's. older moves the window back a week at a time.
+func TestDecided_WindowsNewestAnswerFirst(t *testing.T) {
 	svc, repo, _, now := newTestService()
-	at := func(h int) *time.Time { t := now.Add(time.Duration(h) * time.Hour); return &t }
+	ago := func(days, hours int) *time.Time {
+		t := now.Add(-time.Duration(days*24+hours) * time.Hour)
+		return &t
+	}
 	repo.reqs = []*Request{
-		{ID: 1, CampaignID: "camp-1", Summary: "old applied", Status: RequestAnswered, DecidedAt: at(1)},
-		{ID: 2, CampaignID: "camp-1", Summary: "turned down", Status: RequestTurnedDown, DecidedAt: at(3)},
-		{ID: 3, CampaignID: "camp-1", Summary: "new applied", Status: RequestAnswered, DecidedAt: at(2)},
-		{ID: 4, CampaignID: "camp-1", Summary: "still waiting", Status: RequestWaiting},
-		{ID: 5, CampaignID: "camp-2", Summary: "elsewhere", Status: RequestAnswered, DecidedAt: at(4)},
+		{ID: 1, CampaignID: "camp-1", Summary: "two days", Status: RequestAnswered, DecidedAt: ago(2, 0)},
+		{ID: 2, CampaignID: "camp-1", Summary: "an hour", Status: RequestTurnedDown, DecidedAt: ago(0, 1)},
+		{ID: 3, CampaignID: "camp-1", Summary: "six days", Status: RequestAnswered, DecidedAt: ago(6, 23)},
+		{ID: 4, CampaignID: "camp-1", Summary: "still waiting", Status: RequestWaiting, CreatedAt: *ago(1, 0)},
+		{ID: 5, CampaignID: "camp-2", Summary: "elsewhere", Status: RequestAnswered, DecidedAt: ago(1, 0)},
+		{ID: 6, CampaignID: "camp-1", Summary: "eight days", Status: RequestAnswered, DecidedAt: ago(8, 0)},
+		{ID: 7, CampaignID: "camp-1", Summary: "thirteen days", Status: RequestTurnedDown, DecidedAt: ago(13, 0)},
+		{ID: 8, CampaignID: "camp-1", Summary: "no answer time", Status: RequestAnswered, CreatedAt: *ago(10, 0)},
+		{ID: 9, CampaignID: "camp-1", Summary: "twenty days", Status: RequestAnswered, DecidedAt: ago(20, 0)},
 	}
 	tests := []struct {
-		n    int
-		want []string
+		name  string
+		older int
+		want  []string
 	}{
-		{5, []string{"turned down", "new applied", "old applied"}},
-		{2, []string{"turned down", "new applied"}},
+		{"the last seven days", 0, []string{"an hour", "two days", "six days"}},
+		{"the week before", 7, []string{"eight days", "no answer time", "thirteen days"}},
+		{"two weeks back", 14, []string{"twenty days"}},
+		{"nothing that far back", 28, nil},
+		{"negative reads as now", -3, []string{"an hour", "two days", "six days"}},
 	}
 	for _, tt := range tests {
-		got, err := svc.Decided(context.Background(), "camp-1", "", tt.n)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var names []string
-		for _, q := range got {
-			names = append(names, q.Summary)
-		}
-		if strings.Join(names, ",") != strings.Join(tt.want, ",") {
-			t.Errorf("Decided(%d) = %v, want %v", tt.n, names, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := svc.Decided(context.Background(), "camp-1", "", tt.older)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var names []string
+			for _, q := range got {
+				names = append(names, q.Summary)
+			}
+			if strings.Join(names, ",") != strings.Join(tt.want, ",") {
+				t.Errorf("Decided(older %d) = %v, want %v", tt.older, names, tt.want)
+			}
+		})
+	}
+}
+
+// A request stamped a moment after now (clock skew) still shows in the newest
+// window, and the cap is the records package's.
+func TestDecided_NewestWindowIsOpenAtTheTop(t *testing.T) {
+	svc, repo, _, now := newTestService()
+	skewed := now.Add(30 * time.Second)
+	repo.reqs = []*Request{{ID: 1, CampaignID: "camp-1", Summary: "skewed", Status: RequestAnswered, DecidedAt: &skewed}}
+	got, err := svc.Decided(context.Background(), "camp-1", "", 0)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, %v", got, err)
+	}
+	for i := 0; i < records.WaitingDecidedMax+5; i++ {
+		repo.reqs = append(repo.reqs, &Request{ID: int64(i + 2), CampaignID: "camp-1", Status: RequestAnswered, DecidedAt: &skewed})
+	}
+	if got, _ := svc.Decided(context.Background(), "camp-1", "", 0); len(got) != records.WaitingDecidedMax {
+		t.Errorf("returned %d, want the cap %d", len(got), records.WaitingDecidedMax)
 	}
 }

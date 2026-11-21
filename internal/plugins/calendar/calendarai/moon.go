@@ -27,6 +27,19 @@ func (MoonKind) Doc() string {
 		"```\n---\nkind: moon\naction: update\nname: Umbra\nmoves: by_hand\nwords: {vanished: Gone below}\nmarks:\n  - {year: 1043, month: Ashfall, day: 3, state: full}\n  - {year: 1043, month: Ashfall, day: 9, state: vanished, players_see: true}\n  - {year: 1043, month: Ashfall, day: 21, remove: true}\n---\n```"
 }
 
+// readMoves reads a `moves:` value: how a moon is drawn, by its cycle or by
+// the Director's marks. Both the moon block and the calendar block's moons
+// take it.
+func readMoves(raw string) (string, error) {
+	switch strings.ReplaceAll(strings.ToLower(strings.TrimSpace(raw)), " ", "_") {
+	case "by_hand", "hand", "manual":
+		return calendar.MoonManual, nil
+	case "cycle", "by_cycle":
+		return calendar.MoonCycle, nil
+	}
+	return "", apperror.NewBadRequest("moves is `by_hand` or `cycle`")
+}
+
 var moonMarkKeys = map[string]bool{"year": true, "month": true, "day": true, "state": true, "players_see": true, "remove": true}
 
 type moonPlan struct {
@@ -70,13 +83,8 @@ func (k MoonKind) plan(ctx context.Context, campaignID string, a Actor, r Record
 	var did []string
 
 	if r.Has("moves") {
-		switch strings.ReplaceAll(strings.ToLower(r.Str("moves")), " ", "_") {
-		case "by_hand", "hand", "manual":
-			p.mode = calendar.MoonManual
-		case "cycle", "by_cycle":
-			p.mode = calendar.MoonCycle
-		default:
-			return p, "", apperror.NewBadRequest("moves is `by_hand` or `cycle`")
+		if p.mode, err = readMoves(r.Str("moves")); err != nil {
+			return p, "", err
 		}
 		if p.mode == calendar.MoonManual && cal.IsRealLife() {
 			return p, "", badRequestf("%s follows the real Moon and cannot be set by hand", name)

@@ -316,6 +316,26 @@ func TestRepoIntegration_Requests(t *testing.T) {
 	if _, err := repo.MoveRequest(ctx, camp, user, ids[1], RequestWaiting, RequestTurnedDown, "nothing changed", now); err != nil {
 		t.Fatal(err)
 	}
+	// DecidedRequests reads one window of answers, newest first, for this
+	// person and campaign only.
+	{
+		got, err := repo.DecidedRequests(ctx, camp, user, now.Add(-time.Hour), now.Add(time.Hour), 10)
+		if err != nil || len(got) != 2 || got[0].ID != ids[1] || got[1].ID != ids[0] || got[0].Body != "" {
+			t.Fatalf("answered in the window = %+v, %v", got, err)
+		}
+		if got, _ := repo.DecidedRequests(ctx, camp, user, now.Add(-48*time.Hour), now.Add(-24*time.Hour), 10); len(got) != 0 {
+			t.Errorf("an earlier window held %+v", got)
+		}
+		if got, _ := repo.DecidedRequests(ctx, camp, user, now.Add(-time.Hour), now.Add(time.Hour), 1); len(got) != 1 {
+			t.Errorf("the limit gave %d", len(got))
+		}
+		if got, _ := repo.DecidedRequests(ctx, other, otherUser, now.Add(-time.Hour), now.Add(time.Hour), 10); len(got) != 0 {
+			t.Errorf("another campaign read %+v", got)
+		}
+		if got, _ := repo.DecidedRequests(ctx, camp, otherUser, now.Add(-time.Hour), now.Add(time.Hour), 10); len(got) != 0 {
+			t.Errorf("another person read %+v", got)
+		}
+	}
 	if err := repo.PruneRequests(ctx, camp, user, 1); err != nil {
 		t.Fatal(err)
 	}

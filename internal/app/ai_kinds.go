@@ -196,6 +196,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.FoundryScenes != nil {
 		l.Scenes = d.FoundryScenes
 	}
+	l.Homes = &records.HomeKind{Svc: aiHomeAdapter{campaigns: d.Campaigns}, Pages: d.Entities}
 	l.Waiting = aiWaitingAdapter{asks: d.AIAsks, entries: d.SystemEntries, members: d.Campaigns, requests: d.ArmoryRequests, picks: d.ChoiceRules}
 	if d.ItemLooks != nil {
 		l.Looks = d.ItemLooks
@@ -262,8 +263,14 @@ func (p aiLayerPages) FindPage(ctx context.Context, campaignID, name string) (st
 // order. Ranks step by 10 so a new kind can sit between any two.
 func init() {
 	addAIKinds(10, func(d *aiDeps) []records.Kind {
+		// A calendar block's `moves` switches a moon through the moon mark
+		// half of the same service; without it the block refuses `moves`.
+		var marks calendar.MoonMarkService
+		if ms, ok := d.Calendar.(calendar.MoonMarkService); ok {
+			marks = ms
+		}
 		return []records.Kind{
-			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}},
+			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}, Marks: marks},
 			calendarai.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: aiCalendarPages{d.Entities}, Rolls: d.Rolls, Tables: d.Tables},
 			calendarai.WeatherKind{Svc: d.Calendar},
 		}

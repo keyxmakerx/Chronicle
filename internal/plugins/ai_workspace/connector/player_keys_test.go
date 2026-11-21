@@ -209,7 +209,7 @@ func TestPlayerKey_Tools(t *testing.T) {
 			t.Errorf("player key lists %s", tl.Name)
 		}
 	}
-	for _, name := range []string{"players", "waiting_for_review", "encounters", "rolling_tables", "foundry_monsters"} {
+	for _, name := range []string{"players", "home", "waiting_for_review", "encounters", "rolling_tables", "foundry_monsters"} {
 		if findTool(c, nil, name) != nil {
 			t.Errorf("player key can call %s", name)
 		}

@@ -78,6 +78,9 @@ func homeFromLayout(l *campaigns.DashboardLayout) records.HomeLayout {
 	for _, row := range l.Rows {
 		if row.Kind != "" || len(row.Tiles) > 0 {
 			out.Tiles = true
+			for _, t := range row.Tiles {
+				out.TileBlocks = append(out.TileBlocks, t.Type)
+			}
 			continue
 		}
 		r := records.HomeRow{ID: row.ID}

@@ -10,14 +10,29 @@ import (
 // WaitingAPI lists what in a campaign waits on a Director's yes or no,
 // adapted in app wiring so this package imports none of the plugins it reads.
 type WaitingAPI interface {
-	Waiting(ctx context.Context, campaignID string, a Actor) (WaitingList, error)
+	// Waiting lists the queues. olderDays picks which seven-day window of the
+	// AI's answered requests comes back in Decided: 0 is the last seven days,
+	// 7 the seven before those.
+	Waiting(ctx context.Context, campaignID string, a Actor, olderDays int) (WaitingList, error)
 }
+
+// The answered requests come in windows of WaitingWindowDays, at most
+// WaitingDecidedMax at once. Chronicle keeps only each person's latest 100
+// answers, so the cap is the most there can ever be.
+const (
+	WaitingWindowDays = 7
+	WaitingDecidedMax = 100
+	// maxWaitingOlder bounds `older` to ten years; a larger number is a typo,
+	// and it keeps the day arithmetic far from overflow.
+	maxWaitingOlder = 3650
+)
 
 // WaitingList is each review queue's items. A queue that couldn't be read is
 // named in Missing, so the answer never passes an unread queue off as empty.
 type WaitingList struct {
 	// Asks are the AI's requests for changes still waiting on the owner's
-	// review; Decided are the latest ones the owner answered.
+	// review; Decided are the ones the owner answered in the asked-for
+	// window, newest first.
 	Asks, Decided []WaitingAsk
 	// Entries are pick-list entries players wrote that no Director has
 	// accepted yet, handed in or still being written.
@@ -66,7 +81,7 @@ type WaitingRequest struct {
 
 // waiting answers `what: waiting`. Every queue is Director business, so
 // Safe privacy gets a refusal, as game nights do.
-func (run *lookupRun) waiting() (LookupAnswer, error) {
+func (run *lookupRun) waiting(r Record) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Waiting for review"}
 	if run.l.Waiting == nil {
 		return ans, badRequestf("what is waiting for review can't be looked up on this server")
@@ -74,7 +89,11 @@ func (run *lookupRun) waiting() (LookupAnswer, error) {
 	if !run.director() {
 		return ans, badRequestf("what is waiting for review is left out in Safe privacy; choose Permitted to include it")
 	}
-	w, err := run.l.Waiting.Waiting(run.ctx, run.campaignID, run.a)
+	older, _, err := r.Int("older")
+	if err != nil || older < 0 || older > maxWaitingOlder {
+		return ans, badRequestf("`older` is a number of days back, 0 or more (like 7 for the week before this one)")
+	}
+	w, err := run.l.Waiting.Waiting(run.ctx, run.campaignID, run.a, older)
 	if err != nil {
 		return ans, err
 	}
@@ -96,20 +115,21 @@ func (run *lookupRun) waiting() (LookupAnswer, error) {
 	}
 	writeOrNone(&b, lines, "None. The owner reviews them on the campaign's Your AI page.")
 
-	if len(w.Decided) > 0 {
-		b.WriteString("\n### Your AI's requests the owner answered lately\n\n")
-		lines = lines[:0]
-		for _, q := range w.Decided {
-			verdict := "applied"
-			if q.TurnedDown {
-				// Said plainly, so the AI doesn't take the owner's No for a
-				// fault and send the same changes again.
-				verdict = "turned down by the owner, nothing changed; that was their choice, not an error"
-			} else if o := strings.TrimSpace(q.Outcome); o != "" {
-				verdict += ": " + oneLine(o, 1000)
-			}
-			lines = append(lines, fmt.Sprintf("- %s%s, %s (%s)", quoted(q.Summary), askCounts(q.Counts), verdict, askDay(q.At)))
+	b.WriteString("\n### Your AI's requests the owner answered, " + decidedWindow(older) + "\n\n")
+	lines = lines[:0]
+	for _, q := range w.Decided {
+		verdict := "applied"
+		if q.TurnedDown {
+			// Said plainly, so the AI doesn't take the owner's No for a
+			// fault and send the same changes again.
+			verdict = "turned down by the owner, nothing changed; that was their choice, not an error"
+		} else if o := strings.TrimSpace(q.Outcome); o != "" {
+			verdict += ": " + oneLine(o, 1000)
 		}
+		lines = append(lines, fmt.Sprintf("- %s%s, %s (%s)", quoted(q.Summary), askCounts(q.Counts), verdict, askDay(q.At)))
+	}
+	b.WriteString(decidedCount(len(w.Decided), older))
+	if len(lines) > 0 {
 		writeLines(&b, lines)
 	}
 
@@ -167,6 +187,31 @@ func (run *lookupRun) waiting() (LookupAnswer, error) {
 	}
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// decidedWindow names the window of answers shown: "in the last 7 days" or
+// "from 7 to 14 days ago".
+func decidedWindow(older int) string {
+	if older == 0 {
+		return fmt.Sprintf("in the last %d days", WaitingWindowDays)
+	}
+	return fmt.Sprintf("from %d to %d days ago", older, older+WaitingWindowDays)
+}
+
+// decidedCount says how many answers the window holds and how to read the
+// next-older window, so an AI never takes a short list for the whole history.
+func decidedCount(n, older int) string {
+	var b strings.Builder
+	switch {
+	case n == 0:
+		b.WriteString("None answered " + decidedWindow(older) + ".")
+	case n >= WaitingDecidedMax:
+		fmt.Fprintf(&b, "Showing the newest %d answers %s, the most one answer shows.", n, decidedWindow(older))
+	default:
+		fmt.Fprintf(&b, "Showing %s %s.", plural(n, "answer", "answers"), decidedWindow(older))
+	}
+	fmt.Fprintf(&b, " For older ones ask again with `older: %d` (days %d to %d); Chronicle keeps each person's latest %d answers.\n", older+WaitingWindowDays, older+WaitingWindowDays, older+2*WaitingWindowDays, WaitingDecidedMax)
+	return b.String()
 }
 
 // writeOrNone writes the lines, or none when there are none.
