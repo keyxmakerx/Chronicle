@@ -1,5 +1,5 @@
 // entity_type_config.templ renders the unified entity type configuration page.
-// Tabs: Layout (template editor), Attributes (field definitions), and
+// Tabs: Layout (template editor), Fields (field definitions), and
 // Nav Panel (icon/color/name + sidebar).
 //
 // Dashboard settings (description, pinned pages, custom layout) are managed
@@ -63,7 +63,7 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 					:class="tab === 'attributes' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
 					@click="tab = 'attributes'"
 				>
-					<i class="fa-solid fa-sliders mr-1.5 text-xs word-ic"></i> Attributes
+					<i class="fa-solid fa-sliders mr-1.5 text-xs word-ic"></i> Fields
 				</button>
 				<button
 					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
@@ -315,7 +315,7 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 templ EntityTypeAttributesFragmentTmpl(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
 	<div class="space-y-3">
 		<p class="text-xs text-fg-secondary">
-			Define the fields that appear on every { et.Name } page. Players fill these in per-entity.
+			The fields every { et.Name } page has. Each page keeps its own answers.
 		</p>
 		<div
 			data-widget="entity-type-editor"
@@ -341,9 +341,9 @@ templ EntityTypeAttributesFragmentTmpl(cc *campaigns.CampaignContext, et *Entity
 templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string, inDraft bool) {
 	<div class="space-y-6">
 		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Attributes</h2>
+			<h2 class="text-lg font-semibold text-fg mb-1">Fields</h2>
 			<p class="text-sm text-fg-secondary">
-				Define the fields that appear on every { et.Name } page. Players fill these in per-entity.
+				The fields every { et.Name } page has. Each page keeps its own answers.
 			</p>
 		</div>
 

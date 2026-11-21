@@ -138,20 +138,20 @@
 
       // Fields management section.
       var fieldsSection = document.createElement('div');
-      fieldsSection.className = 'mb-4';
+      fieldsSection.className = 'czf mb-4';
 
       var fieldsHeader = document.createElement('div');
-      fieldsHeader.className = 'flex items-center justify-between mb-2';
+      fieldsHeader.className = 'czf-bar flex items-center justify-between mb-2';
 
       var fieldsLabel = document.createElement('label');
-      fieldsLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300';
-      fieldsLabel.textContent = 'Custom Fields';
+      fieldsLabel.className = 'czf-title block text-sm font-medium text-gray-700 dark:text-gray-300';
+      fieldsLabel.textContent = 'Fields';
       fieldsHeader.appendChild(fieldsLabel);
 
       var addFieldBtn = document.createElement('button');
       addFieldBtn.type = 'button';
-      addFieldBtn.className = 'text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300';
-      addFieldBtn.innerHTML = '<i class="fa-solid fa-plus word-ic mr-1"></i> Add Field';
+      addFieldBtn.className = 'czf-add text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300';
+      addFieldBtn.innerHTML = '<i class="fa-solid fa-plus word-ic mr-1"></i> Add a field';
       addFieldBtn.addEventListener('click', function () {
         fields.push({ key: '', label: '', type: 'text', section: 'Basics', options: [] });
         rerender();
@@ -160,7 +160,7 @@
       fieldsSection.appendChild(fieldsHeader);
 
       var fieldsList = document.createElement('div');
-      fieldsList.className = 'space-y-2';
+      fieldsList.className = 'czf-list space-y-2';
       fieldsSection.appendChild(fieldsList);
       el.appendChild(fieldsSection);
 
@@ -194,14 +194,27 @@
         if (fields.length === 0) {
           var empty = document.createElement('p');
           empty.className = 'text-xs text-gray-400 dark:text-gray-500 italic';
-          empty.textContent = 'No custom fields. Click "Add Field" to create one.';
+          empty.textContent = 'No fields yet. Choose "Add a field" to make one.';
           fieldsList.appendChild(empty);
           return;
         }
 
+        // Every column is named, so the third one is not a bare "Basics".
+        var colHead = document.createElement('div');
+        colHead.className = 'czf-cols';
+        colHead.setAttribute('aria-hidden', 'true');
+        ['Label', 'Kind', 'Section', ''].forEach(function (t) {
+          var c = document.createElement('span');
+          c.textContent = t;
+          colHead.appendChild(c);
+        });
+        fieldsList.appendChild(colHead);
+
         fields.forEach(function (field, idx) {
           var row = document.createElement('div');
-          row.className = 'flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700';
+          row.className = 'czf-row flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700';
+          var acts = document.createElement('span');
+          acts.className = 'czf-acts flex items-center gap-2';
 
           // Label input.
           var labelInput = document.createElement('input');
@@ -209,6 +222,7 @@
           labelInput.value = field.label || '';
           labelInput.placeholder = 'Label';
           labelInput.className = 'input text-xs flex-1 py-1';
+          labelInput.setAttribute('aria-label', 'Label');
           labelInput.addEventListener('input', function () {
             fields[idx].label = this.value;
             // Auto-generate key from label.
@@ -220,6 +234,7 @@
           // Type select.
           var typeSelect = document.createElement('select');
           typeSelect.className = 'input text-xs py-1 w-32';
+          typeSelect.setAttribute('aria-label', 'Kind');
           // A link or worked-out field carries its category or rule, which
           // this editor can't choose, so its type is shown and not changed.
           var kept = KEPT_TYPES[field.type];
@@ -244,6 +259,7 @@
           sectionInput.value = field.section || 'Basics';
           sectionInput.placeholder = 'Section';
           sectionInput.className = 'input text-xs py-1 w-20';
+          sectionInput.setAttribute('aria-label', 'Section');
           sectionInput.addEventListener('input', function () {
             fields[idx].section = this.value;
             changed();
@@ -263,7 +279,7 @@
               fields[idx - 1] = temp;
               rerender();
             });
-            row.appendChild(upBtn);
+            acts.appendChild(upBtn);
           }
 
           // Move down button.
@@ -279,7 +295,7 @@
               fields[idx + 1] = temp;
               rerender();
             });
-            row.appendChild(downBtn);
+            acts.appendChild(downBtn);
           }
 
           // Remove button.
@@ -292,7 +308,8 @@
             fields.splice(idx, 1);
             rerender();
           });
-          row.appendChild(removeBtn);
+          acts.appendChild(removeBtn);
+          row.appendChild(acts);
 
           fieldsList.appendChild(row);
           if (field.type === 'calendar_date') fieldsList.appendChild(dateSettings(field));

@@ -311,6 +311,31 @@
 .czs-tabs > span { opacity: 0.5; cursor: not-allowed; }
 .czs-tabs .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
 .czs-legacy { padding: 20px 24px 120px; }
+/* A category's Fields tab: the field editor wearing the frame's tokens, with
+   a name over every column. Scoped here because the same widget still draws
+   itself in the older hub, which loads no Customize sheet. */
+.czs-fields { padding: 8px 24px 120px; max-width: 880px; color: var(--color-text-body); }
+.czs-fields h2 { font-size: 18px; font-weight: 600; color: var(--color-text-primary); }
+.czs-fields .czf-title { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); }
+.czs-fields :is(.text-gray-400, .text-gray-500, .text-fg-secondary) { color: var(--color-text-secondary); }
+.czs-fields .czf-add { color: var(--color-accent-link, var(--color-accent)); min-height: 44px; padding: 0 8px; }
+.czs-fields .czf-add:hover { text-decoration: underline; }
+.czs-fields .czf-list { display: flex; flex-direction: column; gap: 6px; }
+.czs-fields .czf-cols, .czs-fields .czf-row { display: grid; grid-template-columns: minmax(0, 1fr) 9rem 8rem 5.5rem; gap: 8px; align-items: center; }
+.czs-fields .czf-cols { padding: 0 9px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.czs-fields .czf-row { padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-secondary); }
+.czs-fields .czf-row .input { width: 100%; min-width: 0; }
+.czs-fields .czf-acts { justify-content: flex-end; }
+.czs-fields .czf-acts button { min-width: 28px; min-height: 28px; color: var(--color-text-secondary); }
+.czs-fields .czf-acts button:hover { color: var(--color-text-primary); }
+.czs-fields .czf-acts button:last-child:hover { color: var(--czs-bad); }
+@media (max-width: 640px) {
+  .czs-fields { padding: 8px 16px 120px; }
+  .czs-fields .czf-cols { display: none; }
+  .czs-fields .czf-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .czs-fields .czf-row > .input:first-child, .czs-fields .czf-acts { grid-column: 1 / -1; }
+  .czs-fields .czf-acts button { min-width: 44px; min-height: 44px; }
+}
 /* Who sees the open home, under the Home pages tabs. */
 .czs-home-hint { font-size: 12.5px; color: var(--color-text-secondary); margin: 0; padding: 12px 24px 0; max-width: 80ch; }
 

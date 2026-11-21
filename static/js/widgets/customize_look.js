@@ -759,7 +759,7 @@
       return NAV_STYLES.filter(function(s){ return s[2] === kind; }).map(function(s){
         return '<label class="tile nav-tile" data-hc="nav:' + s[0] + '"><input type="radio" name="t-nav" value="' + s[0] + '" data-k="nav.style"><span class="tb">' +
           '<span class="nt-s pv" data-nav="' + s[0] + '" data-own="' + s[0] + '" aria-hidden="true"><span class="s-row on" style="--c:#f87171"><span class="ic">' + IC('i-mappin') + '</span><span class="lb">Cities</span><span class="pn">Emberfall</span>' + HL + '</span></span>' +
-          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === DEFAULT_NAV ? '<span class="tbadge">Signed default</span>' : '') + '</span></label>';
+          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === DEFAULT_NAV ? '<span class="tbadge">Default</span>' : '') + '</span></label>';
       }).join('');
     }
     function tilesBody(){
