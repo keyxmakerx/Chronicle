@@ -131,6 +131,7 @@ type Handler struct {
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
 	visitorPlanner     VisitorPlanner
+	heroTerms          HeroTermsReader
 	heroRules          HeroRules
 	practice           PracticeService // Optional: practice heroes; see practice_handler.go.
 	groupLister        GroupLister

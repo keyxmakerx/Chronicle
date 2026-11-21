@@ -49,6 +49,10 @@ templ PracticeCreatorPage(cc *campaigns.CampaignContext, view PracticeCreatorVie
 				data-csrf={ view.CSRFToken }
 				data-type-name="practice hero"
 				data-for-self="false"
+				data-skin={ layouts.BuilderSkin(ctx) }
+				if view.TermsURL != "" {
+					data-terms-url={ view.TermsURL }
+				}
 			>
 				<div class="hc-wrap paper-stack">
 					<div class="hc-page paper hc-loading" role="status">

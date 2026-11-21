@@ -78,6 +78,11 @@ type AppearanceData struct {
 	// The Moments, each off until the owner turns it on.
 	MomentSheen, MomentCascade, MomentSpark bool
 
+	// BuilderLook is the hero builder's skin ("paper" or "ornate"); "" is
+	// plain. It rides on the mount as data-skin, not on <html>, because only
+	// the builder reads it.
+	BuilderLook string
+
 	// DmScreenKit is the style kit this viewer's DM Screen wears when they
 	// picked their own; "" leaves the screen with the page. It is separate
 	// from StyleKit so one person's pick never restyles the page.
@@ -95,6 +100,19 @@ func SetAppearance(ctx context.Context, a *AppearanceData) context.Context {
 func GetAppearance(ctx context.Context) *AppearanceData {
 	a, _ := ctx.Value(keyAppearance).(*AppearanceData)
 	return a
+}
+
+// BuilderSkin is the hero builder's data-skin value: plain, paper or ornate.
+// Anything else, or no Customize at all, is plain, so a campaign that never
+// chose a look gets the base one.
+func BuilderSkin(ctx context.Context) string {
+	if a := GetAppearance(ctx); a != nil {
+		switch a.BuilderLook {
+		case "paper", "ornate":
+			return a.BuilderLook
+		}
+	}
+	return "plain"
 }
 
 // PageLookAnnals reports whether the campaign draws its pages in the Annals

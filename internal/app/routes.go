@@ -6062,6 +6062,7 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetVisitorPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetHeroTerms(heroTermsAdapter{choices: characterChoiceSvc})
 	// A player's Foundry edit is judged with the same plan the web door uses.
 	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
@@ -6274,6 +6275,7 @@ func (a *App) RegisterRoutes() {
 					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
+					BuilderLook:   ap.BuilderLook,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

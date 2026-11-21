@@ -19,6 +19,9 @@ type HeroCreatorView struct {
 	// ForSelf is true when the hero becomes the viewer's own.
 	ForSelf   bool
 	CSRFToken string
+	// TermsURL is where the builder reads the system's rules words; empty
+	// when the system has no glossary, which leaves the attribute off.
+	TermsURL string
 }
 
 // HeroCreatorPage renders the creator inside the App shell.
@@ -41,6 +44,10 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 				data-csrf={ view.CSRFToken }
 				data-type-name={ view.TypeName }
 				data-for-self={ fmt.Sprint(view.ForSelf) }
+				data-skin={ layouts.BuilderSkin(ctx) }
+				if view.TermsURL != "" {
+					data-terms-url={ view.TermsURL }
+				}
 			>
 				<div class="hc-wrap paper-stack">
 					<div class="hc-page paper hc-loading" role="status">
