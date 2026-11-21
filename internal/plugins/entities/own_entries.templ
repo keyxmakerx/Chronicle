@@ -46,7 +46,7 @@ func ownEntriesTitle(v OwnEntriesView) string {
 // OwnEntriesPage renders the page inside the App shell.
 templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 	@layouts.App(ownEntriesTitle(v) + " - " + cc.Campaign.Name) {
-		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/own_entries.css") }/>
 		<div class="max-w-7xl mx-auto px-4 py-6">
 			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
 				if sys, ok := layouts.GetEnabledSystem(ctx); ok && v.Director {
