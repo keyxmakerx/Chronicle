@@ -3,7 +3,8 @@
 // An owner with no time zone set sees the "Times aren't in your zone yet"
 // banner under the top bar. The tucked tab hangs below that banner, not in
 // its row; once the banner is dismissed it sits under the top bar again, and
-// the banner's controls stay whole beside an open dock.
+// the banner's controls stay whole beside an open dock. A page opened beside
+// keeps its close mark clear of the tab, with the banner and without.
 //
 // RUN: tools/live-checks.sh test/live/dm_screen_tab_banner.spec.mjs
 
@@ -15,6 +16,7 @@ after(done);
 
 const DESK = { viewport: { width: 1280, height: 800 } };
 const NARROW = { viewport: { width: 900, height: 800 } };
+const WIDE = { viewport: { width: 2560, height: 900 } };
 
 function boxes(page) {
   return page.evaluate(() => {
@@ -73,5 +75,40 @@ test('a narrower window still clears the tab', async () => {
   const a = await boxes(who.page);
   assert.ok(!overlaps(a.tab, a.cta), 'the tab sits in the banner');
   assert.ok(Math.abs(a.tab.top - (a.row.top + 12)) <= 1);
+  who.assertClean();
+});
+
+test('a page opened beside keeps its close mark clear of the tab', async () => {
+  const who = await owner(WIDE);
+  const { page } = who;
+  const link = page.locator('#main-content a[href*="/campaigns/"]').first();
+  await link.scrollIntoViewIfNeeded();
+  await link.click({ modifiers: ['Alt'] });
+  await page.locator('.beside-pane [data-beside-close]').waitFor();
+  // What a click on the close mark would land on.
+  const under = () => page.evaluate(() => {
+    const b = document.querySelector('[data-beside-close]').getBoundingClientRect();
+    const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    return !!hit && !!hit.closest('[data-beside-close]');
+  });
+  const clear = () => page.waitForFunction(() => {
+    const t = document.querySelector('.dms-tab').getBoundingClientRect();
+    const h = [...document.querySelectorAll('.beside-head')].pop().getBoundingClientRect();
+    return Math.abs(t.top - (h.bottom + 12)) <= 1;
+  });
+  await clear();
+  assert.ok(await under(), 'the tab covers the close mark, with the banner showing');
+
+  await page.click('[data-cta-dismiss]');
+  await page.waitForFunction(() => !document.querySelector('.cta-host .cta-bar'));
+  await clear();
+  assert.ok(await under(), 'the tab covers the close mark, with no banner');
+
+  await page.locator('[data-beside-close]').click();
+  await page.waitForFunction(() => !document.querySelector('.beside-pane'));
+  await page.waitForFunction(() => {
+    const t = document.querySelector('.dms-tab').getBoundingClientRect().top;
+    return Math.abs(t - (document.getElementById('app-topbar').getBoundingClientRect().bottom + 12)) <= 1;
+  });
   who.assertClean();
 });
