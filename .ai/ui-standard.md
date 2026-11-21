@@ -465,6 +465,13 @@ place, and Off shows the end state.
   frame over 320 ms, `--ease-out`, and the token popping onto the corner
   140 ms later over 260 ms with a small overshoot. Calm and Off show both
   still while the card fades.
+- **The hero builder has three moves of its own**, signed with its design:
+  the **flight** (a chosen card's name flies into its chip or rail row, which
+  glows), the **deal** (a step's cards come in one after another, as a hand is
+  dealt) and a **small settle** (a step's content fades and rises a few
+  pixels). Calm keeps only the fades, a slide a seventh the size, at most
+  180ms; Off and a device asking for reduced motion play none of them and
+  mark a change with a colour cue (`internal/plugins/entities/static/js/hero_creator.js`).
 - **How much motion is one attribute**: `html[data-motion]` is `calm` or `off`
   (absent means full), from `MotionLevel` in
   `internal/templates/layouts/appearance.go`. A device asking for reduced

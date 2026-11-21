@@ -282,12 +282,13 @@
 
   // --- Motion and the stylesheet -------------------------------------------
 
-  // html[data-motion] is the site's own signal: full, calm or off.
+  // html[data-motion] is the site's own signal: full, calm or off. A device
+  // that asks for less motion is still, as in app_drawer.js.
   function motion() {
     var h = document.documentElement, m = h.getAttribute('data-motion');
     var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (m === 'off') return 'still';
-    if (m === 'calm' || rm) return 'gentle';
+    if (m === 'off' || rm) return 'still';
+    if (m === 'calm') return 'gentle';
     return 'lively';
   }
 

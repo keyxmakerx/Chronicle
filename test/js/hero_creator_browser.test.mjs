@@ -36,7 +36,7 @@ const css = () => readFileSync(join(root, 'internal/plugins/entities/static/css/
 const html = (term) => `<!doctype html><html data-gm-term="${term}"><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style><link rel="stylesheet" href="/hero_creator.css"></head><body>
 <div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true"><p class="hc-loading__text">Opening</p></div>
-<script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => document.documentElement.getAttribute('data-gm-term') || 'GM' };</script>
+<script>window.Chronicle = { register: (n, d) => { window.hcImpl = d; document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)); }, escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => document.documentElement.getAttribute('data-gm-term') || 'GM' };</script>
 <script src="/hero_rules_lines.js"></script><script src="/hero_creator.js"></script></body></html>`;
 
 async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term = 'Director', width = 1100 } = {}) {
@@ -134,4 +134,20 @@ test('a pick made on a phone goes into the chip row and on to the next step', { 
   const chips = await pg.locator('.hc-chip').allInnerTexts();
   assert.ok(chips.some((c) => /class\s*fury/i.test(c)), 'the pick is a chip');
   assert.ok(chips.some((c) => /kit\s*choosing/i.test(c)), 'the step being chosen is the open slot');
+});
+
+test('unmounting lets go of the window, the document and the size watcher', { skip }, async (t) => {
+  const { pg } = await open(t);
+  const r = await pg.evaluate(() => {
+    const el = document.querySelector('[data-widget="hero-creator"]'), c = el._heroCreator, gone = [];
+    const doc = document.removeEventListener.bind(document), win = window.removeEventListener.bind(window);
+    document.removeEventListener = (type, fn) => { if (fn === c.onDocDown) gone.push('document ' + type); return doc(type, fn); };
+    window.removeEventListener = (type, fn) => { if (fn === c.onResize) gone.push('window ' + type); return win(type, fn); };
+    let cut = false; if (c.ro) { const d = c.ro.disconnect.bind(c.ro); c.ro.disconnect = () => { cut = true; d(); }; }
+    window.hcImpl.destroy(el);
+    return { gone, cut, left: !!el._heroCreator };
+  });
+  assert.deepEqual(r.gone.sort(), ['document pointerdown', 'window resize']);
+  assert.equal(r.cut, true, 'the ResizeObserver is disconnected');
+  assert.equal(r.left, false);
 });

@@ -44,6 +44,8 @@
  */
 (function () {
   'use strict';
+  // The campaign's own word for its game master.
+  function gm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
 
   window.Chronicle = window.Chronicle || {};
 
@@ -233,7 +235,7 @@
             var r = [].filter.call(box.querySelectorAll('input[type=radio]'), function (x) { return x.value === String(ch.name); })[0];
             if (r) { r.checked = true; r.scrollIntoView({ block: 'nearest' }); }
             update();
-            toast(ch.name + (ch.status === 'sent' ? ' handed in to your Director' : ' saved as a draft'));
+            toast(ch.name + (ch.status === 'sent' ? ' handed in to your ' + gm() : ' saved as a draft'));
           }
         });
         ownEd.start();
@@ -300,9 +302,9 @@
       if (has) {
         html += '<div class="ag-mine"><button type="button" class="ag-link" data-mine>Not listed? Type your own</button></div>';
       }
-      html += '<p class="ag-note" data-askhint hidden>Ask first: your Director allows it, or suggests another. Nothing is set on your hero until they do.</p>';
+      html += '<p class="ag-note" data-askhint hidden>Ask first: your ' + gm() + ' allows it, or suggests another. Nothing is set on your hero until they do.</p>';
       if (list.canMake) {
-        html += '<div class="ag-mine"><button type="button" class="ag-link" data-make>Your Director lets you make your own ' + esc(String(label).toLowerCase()) + ' ›</button></div>';
+        html += '<div class="ag-mine"><button type="button" class="ag-link" data-make>Your ' + gm() + ' lets you make your own ' + esc(String(label).toLowerCase()) + ' ›</button></div>';
       }
       html += '<div class="ag-hint" role="alert" data-err></div>' +
         '<div class="ag-foot"><span class="ag-sp"></span>' +
@@ -323,12 +325,12 @@
       var r = list.rules || {}, out = '';
       var w = r.waiting;
       if (w && (!opts.entityId || String(w.entityId) === String(opts.entityId))) {
-        out += '<p class="ag-note" role="status">' + esc(w.entryName) + ' is waiting for your Director. Pick another to replace it.</p>';
+        out += '<p class="ag-note" role="status">' + esc(w.entryName) + ' is waiting for your ' + gm() + '. Pick another to replace it.</p>';
       } else if (r.suggested) {
-        out += '<p class="ag-note">Your Director asked for another ' + esc(String(label).toLowerCase()) + ' instead of ' + esc(r.suggested.entryName) +
+        out += '<p class="ag-note">Your ' + gm() + ' asked for another ' + esc(String(label).toLowerCase()) + ' instead of ' + esc(r.suggested.entryName) +
           (r.suggested.message ? ': “' + esc(r.suggested.message) + '”' : '.') + '</p>';
       }
-      if (r.required && !r.prefilled) out += '<p class="ag-note">Your Director has set a short list for this.</p>';
+      if (r.required && !r.prefilled) out += '<p class="ag-note">Your ' + gm() + ' has set a short list for this.</p>';
       return out;
     }
     function notHere() {
@@ -336,7 +338,7 @@
       if (!r.notHereCount) return '';
       return '<div class="ag-mine"><button type="button" class="ag-link" data-nothere aria-expanded="false">' + r.notHereCount + ' not here</button>' +
         '<ul class="ag-nh" data-nhlist hidden>' + (r.notHere || []).map(function (n) {
-          return '<li><b>' + esc(n.name) + '</b> isn’t here.' + (n.reason ? ' Your Director says: “' + esc(n.reason) + '”' : '') + '</li>';
+          return '<li><b>' + esc(n.name) + '</b> isn’t here.' + (n.reason ? ' Your ' + gm() + ' says: “' + esc(n.reason) + '”' : '') + '</li>';
         }).join('') + (r.notHereCount > (r.notHere || []).length ? '<li>and ' + (r.notHereCount - (r.notHere || []).length) + ' more</li>' : '') + '</ul></div>';
     }
     function pickedAsk() {
@@ -362,7 +364,7 @@
       save.disabled = !v || v === current;
       var hint = box.querySelector('[data-askhint]');
       if (hint) hint.hidden = !pickedAsk();
-      if (willSave) save.textContent = pickedAsk() ? 'Ask your Director' : 'Save';
+      if (willSave) save.textContent = pickedAsk() ? 'Ask your ' + gm() : 'Save';
     }
 
     function toggleOwn(toOwn) {
@@ -388,9 +390,9 @@
       var ask = pickedAsk();
       saveField(opts, v).then(function (b) {
         var req = (b.requests || []).filter(function (q) { return q.fieldKey === opts.fieldKey; })[0];
-        if (b.requestFailed && b.requestFailed.indexOf(opts.fieldKey) >= 0) throw Object.assign(new Error('request'), { said: 'Your pick of ' + v + ' could not be sent to your Director. Try again.' });
+        if (b.requestFailed && b.requestFailed.indexOf(opts.fieldKey) >= 0) throw Object.assign(new Error('request'), { said: 'Your pick of ' + v + ' could not be sent to your ' + gm() + '. Try again.' });
         if (req) {
-          toast(v + ', waiting for your Director');
+          toast(v + ', waiting for your ' + gm());
           close({ value: current, waiting: v });
           return;
         }
@@ -398,7 +400,7 @@
         close({ value: v });
       }).catch(function (e) {
         save.disabled = false;
-        save.textContent = ask ? 'Ask your Director' : 'Save';
+        save.textContent = ask ? 'Ask your ' + gm() : 'Save';
         var say = (e && e.said) || 'Could not save. Try again.';
         if (err) { err.textContent = ''; var ic = document.createElement('i'); ic.className = 'fa-solid fa-triangle-exclamation'; err.appendChild(ic); err.appendChild(document.createTextNode(' ' + say)); }
       });

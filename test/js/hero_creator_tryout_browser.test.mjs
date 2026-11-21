@@ -177,7 +177,7 @@ test('the motion level follows the site setting and the device', { skip }, async
   assert.equal(await level(off.pg), 'still');
   assert.equal(await dataMo(off.pg), 'still');
   const device = await open(t, { reduced: true, mo: 'full' });
-  assert.equal(await level(device.pg), 'gentle', 'a device that asks for less motion gets Gentle');
+  assert.equal(await level(device.pg), 'still', 'a device that asks for less motion is Still, as the page itself is');
 });
 
 test('rules words are normalised the way the glossary keys them', { skip }, async (t) => {

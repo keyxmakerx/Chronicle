@@ -35,8 +35,8 @@
  *
  * Skins: the mount's data-skin (plain, paper, ornate) picks a token set in
  * hero_creator.css; light or dark follows the site theme. Motion follows
- * html[data-motion]: Lively by default, Gentle (fades and nudges) under Calm
- * or prefers-reduced-motion, instant under Off.
+ * html[data-motion]: Lively by default, Gentle (fades and nudges) under Calm,
+ * instant under Off or prefers-reduced-motion.
  *
  * Practice mode (data-practice="true"): the same pages make a practice hero
  * instead of a real one. The plan puts back the entries the rules keep from
@@ -281,13 +281,13 @@
 
   // --- Motion --------------------------------------------------------------
 
-  // "lively" (the default), "gentle" under Calm or a device that asks for less
-  // motion, "still" under Off: html[data-motion] is the site's own signal.
+  // "lively" (the default), "gentle" under Calm, "still" under Off or on a
+  // device that asks for less motion, as app_drawer.js reads the same signal.
   function motion() {
     var h = document.documentElement, m = h.getAttribute('data-motion');
     var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (m === 'off') return 'still';
-    if (m === 'calm' || rm || h.classList.contains('nav-rm') || h.hasAttribute('data-cz-reduce')) return 'gentle';
+    if (m === 'off' || rm) return 'still';
+    if (m === 'calm' || h.classList.contains('nav-rm') || h.hasAttribute('data-cz-reduce')) return 'gentle';
     return 'lively';
   }
 
@@ -1060,6 +1060,7 @@
     };
     var kick = function () { if (!pend) pend = requestAnimationFrame(run); };
     if (window.ResizeObserver) { this.ro = new ResizeObserver(kick); this.ro.observe(this.root); }
+    this.onResize = kick;
     window.addEventListener('resize', kick);
     this.alignTop();
     requestAnimationFrame(function () { self.fit(); self.alignTop(); });
@@ -1233,7 +1234,10 @@
     if (!own) this.at[st.fieldKey] = i;
     this.closeSheet(true);
     var scrim = document.createElement('div'); scrim.className = 'hc-scrim'; scrim.setAttribute('data-scrim', '');
-    var sh = document.createElement('div'); sh.className = 'hc-sheet'; sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+    // Not aria-modal: Choose (or the editor's foot) is a sibling of the sheet,
+    // and a reader that honours aria-modal could not reach it. setInert takes
+    // everything else out of reach instead.
+    var sh = document.createElement('div'); sh.className = 'hc-sheet'; sh.setAttribute('role', 'dialog');
     if (own) sh.setAttribute('aria-label', 'Your own ' + lower(st.label)); else sh.setAttribute('aria-labelledby', 'hc-dt');
     sh.innerHTML = '<div class="hc-grab" aria-hidden="true"><i></i></div><button type="button" class="hc-ibtn hc-x" data-act="closesheet" aria-label="Close">' + I.x + '</button><div class="hc-sc" data-ssc>' + (own ? '<div data-ownbody></div>' : this.detHTML(c, st)) + '</div>';
     var ft = document.createElement('div'); ft.className = 'hc-sfoot';
@@ -2101,11 +2105,23 @@
       if (t && !self.tipPinned && self.tipFor === t) self.closeTip();
     });
     // A tap anywhere else puts a pinned card away.
-    document.addEventListener('pointerdown', function (ev) {
+    this.onDocDown = function (ev) {
       if (!document.body.contains(root) || !self.tip || !self.tipPinned) return;
       if (ev.target.closest && (ev.target.closest('.hc-tip') || ev.target.closest('[data-term], [data-tip]'))) return;
       self.closeTip();
-    });
+    };
+    document.addEventListener('pointerdown', this.onDocDown);
+  };
+
+  // Unmount on a boosted navigation: the document and window listeners and the
+  // ResizeObserver would otherwise keep this Creator and its plan alive.
+  Creator.prototype.destroy = function () {
+    if (this.onDocDown) document.removeEventListener('pointerdown', this.onDocDown);
+    if (this.onResize) window.removeEventListener('resize', this.onResize);
+    if (this.ro) this.ro.disconnect();
+    this.onDocDown = this.onResize = this.ro = null;
+    this.closeTip(true);
+    this.endOwn();
   };
 
   // Loaded on sight (ADR-063): boot.js fetches this script when it meets the
@@ -2118,6 +2134,10 @@
         el._heroCreator = p;
         p.wire();
         p.load();
+      },
+      destroy: function (el) {
+        if (el._heroCreator) el._heroCreator.destroy();
+        el._heroCreator = null;
       }
     });
   }
