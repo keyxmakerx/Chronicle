@@ -46,10 +46,12 @@ templ customizeOverview(areas []CustomizeArea, sums map[string]CustomizeSummary)
 						</span>
 						if b, ok := customizeAreaBlurb(ctx, a.ID); ok {
 							<p>{ b }</p>
+						} else if a.Blurb != "" {
+							<p>{ a.Blurb }</p>
 						} else if sum := sums[a.ID]; sum.Text != "" {
 							<p>{ joinParts(sum.Text, sum.Sub) }</p>
 						} else {
-							<p>Settings this campaign's { a.Label } feature adds.</p>
+							<p>The { a.Label } settings for this campaign.</p>
 						}
 					</a>
 				}

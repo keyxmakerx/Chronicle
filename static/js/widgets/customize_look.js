@@ -1004,7 +1004,7 @@
           IC(r[2]) + '<span>' + esc(r[1]) + '</span><span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
       }).join('');
       $('#panels').innerHTML = ROOMS.map(function(r, i){
-        var chips = r[3].length ? '<div class="parts" role="group" aria-label="Parts in ' + esc(r[1]) + '">' + r[3].map(function(id){
+        var chips = r[3].length ? '<div class="parts parts-row" role="group" aria-label="Parts in ' + esc(r[1]) + '">' + r[3].map(function(id){
           return '<button type="button" class="part" data-sec="' + id + '" aria-pressed="' + (id === ui.section) + '">' + esc(sectionName(id)) + '<span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
         }).join('') + '</div>' : '';
         var body = r[3].length ? r[3].map(function(id){
@@ -1329,10 +1329,29 @@
       if (sec === 'sidebar') return 'Colour to ' + L + ', corner and glow as saved';
       return 'Back to the ' + L + ' look';
     }
+    // The row of looks scrolls sideways, and Custom (the look the moment
+    // anything is changed) is its last tile, so the tile in use is brought
+    // into view when the selection changes, not on every edit, which would
+    // fight a person scrolling the row by hand.
+    var lookShown = null;
+    function keepLookInView(id){
+      if (id === lookShown) return;
+      lookShown = id;
+      var row = $('#lk-row'), tile = id === 'custom' ? $('#lk-custom') : (row.querySelector('input[value="' + id + '"]') || {}).parentNode;
+      if (tile) rowShow(row, tile);
+    }
+    // Scrolls a sideways row just far enough to show one of its items.
+    function rowShow(row, item){
+      if (row.scrollWidth <= row.clientWidth) return;
+      var r = row.getBoundingClientRect(), t = item.getBoundingClientRect();
+      if (t.left < r.left) row.scrollLeft -= r.left - t.left + 6;
+      else if (t.right > r.right) row.scrollLeft += t.right - r.right + 6;
+    }
     function syncStatus(){
       var cur = currentLook(draft), n = lookChanges(draft);
       $$('input[name="look"]').forEach(function(i){ if (i.checked !== (i.value === cur)) i.checked = i.value === cur; });
       $('#lk-custom').classList.toggle('on', !cur);
+      keepLookInView(cur || 'custom');
       setText($('#lk-custom-d'), cur ? 'Change anything below and the look becomes your own.' : 'Started from ' + look(draft.look).name + ', ' + n + ' change' + (n === 1 ? '' : 's'));
       var ch = changedSections();
       SECTIONS.forEach(function(s){
@@ -1778,6 +1797,7 @@
         var on = s.id === id, p = $('#panel-' + s.id), c = $('[data-sec="' + s.id + '"]');
         if (p.hidden === on){ p.hidden = !on; if (on){ p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); } }
         c.setAttribute('aria-pressed', String(on));
+        if (on && c.parentNode.classList.contains('parts-row')) rowShow(c.parentNode, c);
       });
     }
     function selectSection(id, focus){
@@ -2280,17 +2300,63 @@
     }
     // The part's name for the access mark: only shareable parts carry one.
     function sectionOpen(sec){ return SHARE_SECS.indexOf(sec) >= 0 && draft.access[sec] !== 'owner'; }
+    // Every run of words on the example, in the site's own 880 by 520 units,
+    // measured unzoomed like fzRects, so a mark can be placed clear of them.
+    function fzTextBoxes(){
+      var site = fzSite(), t = site.style.transform, tr = site.style.transition, out = [];
+      site.style.transition = 'none'; site.style.transform = '';
+      var sr = site.getBoundingClientRect(), s = sr.width / 880;
+      if (s){
+        var walk = document.createTreeWalker(site, NodeFilter.SHOW_TEXT, null), rg = document.createRange(), n;
+        while ((n = walk.nextNode())){
+          var el = n.parentNode;
+          if (!n.nodeValue.trim() || !el.offsetParent || el.closest('.rm-blur, .rm-brush, svg, [hidden]')) continue;
+          rg.selectNodeContents(n);
+          Array.prototype.forEach.call(rg.getClientRects(), function(r){
+            if (r.width && r.height) out.push({ x:(r.left - sr.left) / s, y:(r.top - sr.top) / s, w:r.width / s, h:r.height / s });
+          });
+        }
+      }
+      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
+      return out;
+    }
+    // Where a part's pencil mark sits: beside the part, on the first side
+    // where it covers no words and no other mark (right, left, then above its
+    // corner), else where it covers least.
+    function markSpot(r, k, mw, mh, words, taken, ww){
+      var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, H = 520 * k;
+      var tries = [[R + 3, T + 3], [L - 3 - mw, T + 3], [R - mw, T - mh - 2], [R + 3, T - mh - 2]].filter(function(c){
+        return c[0] >= 0 && c[0] + mw <= ww && c[1] >= 0 && c[1] + mh <= H;
+      });
+      if (!tries.length) tries = [[clamp(R - mw, 0, ww - mw), clamp(T + 3, 0, H - mh)]];
+      function cover(c){
+        var a = 0;
+        words.concat(taken).forEach(function(b){
+          var w = Math.min(c[0] + mw, b.x + b.w) - Math.max(c[0], b.x), h = Math.min(c[1] + mh, b.y + b.h) - Math.max(c[1], b.y);
+          if (w > 0 && h > 0) a += w * h;
+        });
+        return a;
+      }
+      var best = tries[0], bc = cover(best);
+      for (var i = 1; i < tries.length && bc > 0; i++){ var c = cover(tries[i]); if (c < bc){ best = tries[i]; bc = c; } }
+      return best;
+    }
     function roomDraw(){
       var blur = $('#rm-blur'), brush = $('#rm-brush');
       if (!blur || !brush) return;
       var all = [], marks = '', k = fzK(), ww = $('#site-wrap').clientWidth;
       if (ui.zoom === 'site' && !ui.focus){
+        var words = fzTextBoxes().map(function(b){ return { x:b.x * k, y:b.y * k, w:b.w * k, h:b.h * k }; }), taken = [];
         roomSecs().forEach(function(sec){
           var rs = fzMeasure(sec);
           if (!rs.length) return;
-          all = all.concat(rs);
-          var r = rs[0], open = sectionOpen(sec);
-          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + clamp((r.x + r.w) * k - 3, 26, ww - 2).toFixed(0) + 'px;top:' + clamp(r.y * k + 3, 2, 520 * k - 22).toFixed(0) + 'px">' +
+          // The category icons are small boxes in the middle of menu rows; left
+          // sharp while their row blurs they read as dark squares, so they blur
+          // with the row until the Icons part is the one open.
+          if (sec !== 'icons' || ui.section === 'icons') all = all.concat(rs);
+          var open = sectionOpen(sec), mw = open ? 44 : 30, mh = 17, at = markSpot(rs[0], k, mw, mh, words, taken, ww);
+          taken.push({ x:at[0], y:at[1], w:mw, h:mh });
+          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + at[0].toFixed(0) + 'px;top:' + at[1].toFixed(0) + 'px">' +
             IC('i-pencil') + (open ? IC('i-users') : '') + '</span>';
         });
       }

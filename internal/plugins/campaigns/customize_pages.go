@@ -41,6 +41,10 @@ type CustomizeArea struct {
 	Parts []CustomizePart `json:"-"`
 	// Part names the part open now, shown after the tab's label.
 	Part string `json:"-"`
+	// Blurb is what the area holds, for its Overview card, and Finds are the
+	// named things inside it for Find. Both come from a plugin's tab.
+	Blurb string          `json:"-"`
+	Finds []CustomizeFind `json:"-"`
 }
 
 // CustomizePart is one line in a tab's drawer.
@@ -172,7 +176,7 @@ func (h *Handler) customizeBase(cc *CampaignContext) string {
 
 // customizeAreas is the rail: Customize's own areas, then any a plugin
 // contributes.
-func (h *Handler) customizeAreas(cc *CampaignContext) []CustomizeArea {
+func (h *Handler) customizeAreas(ctx context.Context, cc *CampaignContext) []CustomizeArea {
 	base := h.customizeBase(cc)
 	areas := []CustomizeArea{
 		{ID: "overview", Label: "Overview", Icon: "fa-compass", Href: base},
@@ -180,10 +184,10 @@ func (h *Handler) customizeAreas(cc *CampaignContext) []CustomizeArea {
 		{ID: "categories", Label: "Categories", Icon: "fa-shapes", Href: base + "/categories", Section: "categories"},
 		{ID: "home", Label: "Home pages", Icon: "fa-table-cells-large", Href: base + "/home"},
 	}
-	for _, t := range h.customizeTabs(cc) {
+	for _, t := range h.shownCustomizeTabs(ctx, cc) {
 		// A tab's icon may carry its own style class; the rail adds fa-solid.
 		icon := strings.TrimSpace(strings.TrimPrefix(t.Icon, "fa-solid "))
-		areas = append(areas, CustomizeArea{ID: "x-" + t.ID, Label: t.Label, Icon: icon, Href: base + "/x/" + t.ID})
+		areas = append(areas, CustomizeArea{ID: "x-" + t.ID, Label: t.Label, Icon: icon, Href: base + "/x/" + t.ID, Blurb: t.Blurb, Finds: t.Finds})
 	}
 	return areas
 }
@@ -263,6 +267,9 @@ func (h *Handler) customizeFindEntries(cc *CampaignContext, areas []CustomizeAre
 	out := make([]customizeFindEntry, 0, len(areas)+len(lookSections)+len(cats)*2+1)
 	for _, a := range areas {
 		out = append(out, customizeFindEntry{Label: a.Label, Path: "Customize", Href: a.Href, Icon: a.Icon})
+		for _, f := range a.Finds {
+			out = append(out, customizeFindEntry{Label: f.Label, Path: a.Label, Href: a.Href, Icon: a.Icon, Words: f.Words})
+		}
 	}
 	for _, s := range lookSections {
 		out = append(out, customizeFindEntry{Label: s.Name, Path: "Look", Href: base + "/look#" + s.ID, Icon: "fa-palette", Words: s.Words})
@@ -288,7 +295,7 @@ func (h *Handler) renderCustomize(c *echo.Context, cc *CampaignContext, area, ti
 func (h *Handler) renderCustomizeIn(c *echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, cat *customizeCatBar, body templ.Component) error {
 	ctx := c.Request().Context()
 	version, draft := h.CustomizeDraftFor(ctx, cc.Campaign.ID, auth.GetUserID(c))
-	areas := h.customizeAreas(cc)
+	areas := h.customizeAreas(ctx, cc)
 	if cats == nil {
 		cats = h.CustomizeCategories(ctx, cc.Campaign.ID)
 	}
@@ -317,9 +324,9 @@ func (h *Handler) Customize(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	areas := h.customizeAreas(cc)
+	areas := h.customizeAreas(c.Request().Context(), cc)
 	sums := map[string]CustomizeSummary{}
-	for _, t := range h.customizeTabs(cc) {
+	for _, t := range h.shownCustomizeTabs(c.Request().Context(), cc) {
 		sums["x-"+t.ID] = t.summary(c.Request().Context())
 	}
 	return h.renderCustomize(c, cc, "overview", "Customize", nil, nil, customizeOverview(areas, sums))

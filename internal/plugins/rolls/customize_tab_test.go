@@ -99,3 +99,22 @@ func TestDiceSetNamesMatchEngine(t *testing.T) {
 		}
 	}
 }
+
+// The Dice tab tells Find what is inside it: the crits, the die colour, the
+// players switch and every set by name.
+func TestDiceFinds_NameWhatIsInsideTheTab(t *testing.T) {
+	have := map[string]bool{}
+	for _, f := range diceFinds() {
+		have[f.Label] = true
+	}
+	for _, want := range []string{"Crit success", "Crit fail", "Die colour", "Players may pick their own dice", "The table’s dice", "Ember obsidian dice", "Nebula resin dice"} {
+		if !have[want] {
+			t.Errorf("Find does not know %q", want)
+		}
+	}
+	for _, k := range DiceSetKeys {
+		if !have[diceSetNames[k]+" dice"] {
+			t.Errorf("set %q has no find", k)
+		}
+	}
+}

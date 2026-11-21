@@ -143,7 +143,7 @@ func (h *Handler) DeskFind(c *echo.Context) error {
 	}
 	ctx := c.Request().Context()
 	in := h.deskInputsFor(ctx, cc.Campaign, deskAddons)
-	areas := h.customizeAreas(cc)
+	areas := h.customizeAreas(ctx, cc)
 	entries := buildDeskFind(deskFindInput{
 		Base:         "/campaigns/" + cc.Campaign.ID,
 		Media:        in.Addons["media-gallery"],

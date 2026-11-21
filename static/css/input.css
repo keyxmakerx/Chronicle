@@ -5642,6 +5642,12 @@ html[data-view-motion="calm"][data-cz-btn="keystone"] .btn:active { transform: n
   color: color-mix(in oklab, var(--kind-colour, var(--nav-text-2)) 55%, var(--nav-text));
 }
 
+/* A category's chip on a page card paints its name in a colour chosen to read
+   on the chip's own tint (colour.BadgeColours). The icon inside takes that same
+   colour; the icon colour choices above would otherwise draw a shade of the
+   chip's own colour on it, nearly invisible. */
+[data-cz-icon-colour] .ec-pill > .kind-themed, .ec-pill > .kind-themed { color: inherit; }
+
 /* .word-ic is an icon on a button or a menu row that already says what it
    does in words. It repeats the word, so it is drawn only when the campaign
    asks for icons everywhere. Icons that are the control, point the way a fold

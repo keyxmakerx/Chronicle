@@ -414,6 +414,12 @@
      * the drawer of the area's parts down from the tab's side line. Escape,
      * the drawer's Close and a click outside put it away. */
     var topBar = $('[data-czs-top]'), openDr = null;
+    // Content that pins itself under the bar (the Look's example) needs its height.
+    var topRO = null;
+    function setTopH() { if (topBar) el.style.setProperty('--czs-top-h', topBar.offsetHeight + 'px'); }
+    setTopH();
+    if (topBar && window.ResizeObserver) { topRO = new ResizeObserver(setTopH); topRO.observe(topBar); }
+    on(window, 'resize', setTopH);
     // On a narrow screen the tabs scroll; start with the open area's in view.
     // A category's bar keeps its name in view when it can, and otherwise
     // starts at a whole part, so no word is cut at its left edge. The page
@@ -563,6 +569,7 @@
       if (palette) { palette.remove(); palette = null; }
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
       if (rowRO) { rowRO.disconnect(); rowRO = null; }
+      if (topRO) { topRO.disconnect(); topRO = null; }
     };
   }
 

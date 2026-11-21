@@ -219,6 +219,16 @@ func frameRest(title string) string {
 	return ""
 }
 
+// frameFinds names the Maps tab's contents for Find: the section, then each
+// frame by its name, so "map frame" and "gilded" both open the tab.
+func frameFinds() []campaigns.CustomizeFind {
+	out := []campaigns.CustomizeFind{{Label: "Map frame", Words: "maps border ornament plate picture frame"}}
+	for _, f := range FrameStyles {
+		out = append(out, campaigns.CustomizeFind{Label: f.Label + " frame", Words: "map maps border"})
+	}
+	return out
+}
+
 // CustomizeTabFactory contributes the "Maps" tab to the campaigns plugin's
 // Customize page (campaigns.Handler.RegisterCustomizeTab). The body reads the
 // campaign's current frame when it renders; a failed read shows the default
@@ -247,6 +257,8 @@ func (h *Handler) CustomizeTabFactory() func(*campaigns.CampaignContext) campaig
 			Addon: PluginSlug,
 			Paths: []string{"/maps"},
 			Here:  "The frame around maps",
+			Blurb: "The frame drawn around every map, and the one each map may choose for itself.",
+			Finds: frameFinds(),
 		}
 	}
 }

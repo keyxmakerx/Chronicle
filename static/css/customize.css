@@ -997,6 +997,11 @@
 .czp.rm .room.enter{ animation-name:czk-fade-in; }
 .czp .room-h{ margin:0; font-size:12.5px; line-height:1.45; color:var(--muted); }
 .czp .parts{ display:flex; flex-wrap:wrap; gap:6px; }
+/* A room's parts stay on one row that scrolls sideways when they run out of
+   room (Colours and type has five). */
+.czp .parts-row{ flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; padding:3px; margin:-3px; }
+.czp .parts-row::-webkit-scrollbar{ display:none; }
+.czp .parts-row .part{ flex:none; }
 .czp .part{
   position:relative; display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:6px 12px; border-radius:999px;
   border:1px solid var(--line); background:var(--surface); color:var(--body); font-size:13px; font-weight:550;
@@ -1041,7 +1046,7 @@
 }
 .czp .rm-brush{ position:absolute; inset:0; z-index:35; pointer-events:none; overflow:hidden; }
 .czp .rb{
-  position:absolute; display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:999px; transform:translateX(-100%);
+  position:absolute; display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:999px;
   background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--surface);
 }
 .czp .rb .i{ width:11px; height:11px; }

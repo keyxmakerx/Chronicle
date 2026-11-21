@@ -26,7 +26,10 @@
 .czs-stage { min-width: 0; display: flex; flex-direction: column; position: relative; flex: 1; }
 .czs-top {
   position: sticky;
-  top: 0;
+  /* A sticky box sticks at the scroller's content edge, below its padding;
+     the frame cancels that padding with a negative margin, so the bar takes
+     the same offset to sit flush and leave no strip of page above it. */
+  top: -0.75rem;
   z-index: 30;
   display: flex;
   align-items: flex-end;
@@ -36,6 +39,7 @@
   background: var(--color-bg-secondary);
   min-width: 0;
 }
+@media (min-width: 768px) { .czs-top { top: -1rem; } }
 .czs-tabs-top { display: flex; align-items: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 12px; }
 .czs-tabs-top::-webkit-scrollbar { display: none; }
 .czs-tabw { position: relative; display: inline-flex; align-items: center; flex: none; }
@@ -148,6 +152,16 @@
 @keyframes czs-drape { from { clip-path: inset(0 -40px 100% -40px); } }
 [data-motion="off"] .czs-drawer, [data-motion="off"] .czs-chev i { animation: none; transition: none; }
 @media (prefers-reduced-motion: reduce) { .czs-drawer { animation: none; } .czs-chev i { transition: none; } }
+
+/* The Look's example stays pinned while its panels scroll; pinned from the
+   scroller's content edge it would sit under the frame's own tab bar, so it
+   starts below it (the bar's height is read by customize_shell.js). */
+.czs { --czs-pad-y: 0.75rem; }
+@media (min-width: 768px) { .czs { --czs-pad-y: 1rem; } }
+.czs .czp .cz-preview { top: calc(var(--czs-top-h, 49px) - var(--czs-pad-y) + 12px); }
+@container cz (max-width: 760px) {
+  .czs .czp .cz-preview { top: calc(var(--czs-top-h, 49px) - var(--czs-pad-y)); }
+}
 
 /* Inside this frame the Look's rooms are the Look tab's drawer. */
 .czs .czp .cz-tabs { display: none; }

@@ -37,6 +37,10 @@ import (
 //     pages ("/maps"); on them the header's brush offers this tab first.
 //   - Here: the words of that brush row ("The frame around maps"); empty
 //     falls back to the tab's label.
+//   - Blurb: optional. What is inside the tab, for its card on the Overview
+//     when it has no summary to show ("The dice everyone rolls, ...").
+//   - Finds: optional. The named things inside the tab, so Find can open the
+//     tab by what it holds and not only by its name.
 //
 // The Customize page is Owner-only, so a contributed tab needs no role of its
 // own: every viewer of it is already an Owner.
@@ -50,6 +54,14 @@ type CustomizeTab struct {
 	Addon     string
 	Paths     []string
 	Here      string
+	Blurb     string
+	Finds     []CustomizeFind
+}
+
+// CustomizeFind is one thing inside a contributed tab that Find should know:
+// the name shown, and other words someone might type for it.
+type CustomizeFind struct {
+	Label, Words string
 }
 
 // CustomizeSummary is a tab's "what is chosen now": a figure and an optional
@@ -86,7 +98,31 @@ func (t CustomizeTab) owns(rel string) bool {
 
 // customizeTabsOn is customizeTabs without the tabs whose add-on is off.
 func (h *Handler) customizeTabsOn(cc *CampaignContext, addons map[string]bool) []CustomizeTab {
+	return tabsWithAddon(h.customizeTabs(cc), addons)
+}
+
+// shownCustomizeTabs is the tabs Customize lists for this campaign: those whose
+// add-on is off are left out, as in the header's brush. When the add-ons
+// cannot be read every tab stays, since hiding a working tab on a failed read
+// is worse than showing one the campaign switched off.
+func (h *Handler) shownCustomizeTabs(ctx context.Context, cc *CampaignContext) []CustomizeTab {
 	all := h.customizeTabs(cc)
+	if h.addonLister == nil {
+		return all
+	}
+	list, err := h.addonLister.ListForPluginHub(ctx, cc.Campaign.ID)
+	if err != nil {
+		return all
+	}
+	addons := make(map[string]bool, len(list))
+	for _, a := range list {
+		addons[a.Slug] = a.Enabled
+	}
+	return tabsWithAddon(all, addons)
+}
+
+// tabsWithAddon drops the tabs whose add-on is not on in addons.
+func tabsWithAddon(all []CustomizeTab, addons map[string]bool) []CustomizeTab {
 	out := all[:0:0]
 	for _, t := range all {
 		if t.Addon == "" || addons[t.Addon] {
