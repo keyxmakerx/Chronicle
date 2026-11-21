@@ -190,6 +190,26 @@ func TestCreateRecipeKeepsTheDraftFlag(t *testing.T) {
 	}
 }
 
+// A recipe is never saved without a name: the Crafting list's typed line
+// relies on the server refusing what the browser might still send.
+func TestCreateRecipeRefusesAnEmptyName(t *testing.T) {
+	tests := []struct {
+		name, input string
+	}{{"empty", ""}, {"spaces", "   "}, {"tab and newline", "\t\n"}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, repo, _ := newTestService()
+			_, err := s.CreateRecipe(context.Background(), "c", director, RecipeInput{Name: tt.input, Goal: 5})
+			if code(err) != http.StatusBadRequest && code(err) != http.StatusUnprocessableEntity {
+				t.Fatalf("err = %v", err)
+			}
+			if len(repo.recipes) != 0 {
+				t.Fatalf("a recipe was stored: %+v", repo.recipes)
+			}
+		})
+	}
+}
+
 // ---------- The item page ----------
 
 func TestItemCraftingShowsAPlayerOnlyTheirBook(t *testing.T) {

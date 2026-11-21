@@ -50,6 +50,45 @@
         });
         this.sync();
       },
+      // swapSimilar turns an add that is much like an existing page into a
+      // change to that page (and back) by setting the row's own name and
+      // action fields, so the commit reads what the owner sees. It lives here,
+      // not in an inline handler, so the markup carries no script.
+      swapSimilar: function (b) {
+        var s = b.closest('.air-sim'), r = s.closest('[data-air-row]'), f = this.$root, d = s.dataset;
+        var n = f.elements[d.nameField], a = f.elements[d.actionField];
+        if (!n || !a) { return; }
+        var to = d.state !== 'on';
+        d.state = to ? 'on' : 'off';
+        n.value = to ? d.matchName : d.sentName;
+        a.value = to ? 'update' : 'create';
+        var v = to ? 'Change' : 'Add';
+        r.dataset.airVerb = v;
+        var p = r.querySelector('.air-pill');
+        if (p) { p.textContent = v; p.className = 'air-pill ' + (to ? 'is-change' : 'is-add'); }
+        var w = r.querySelector('.air-what');
+        if (w) {
+          w.firstChild.textContent = (to ? 'Change the page' : 'Add the page') + ' ';
+          var nb = w.querySelector('b');
+          if (nb) { nb.textContent = to ? d.matchName : d.sentName; }
+        }
+        s.querySelectorAll('span[data-sim]').forEach(function (e) { e.hidden = (e.dataset.sim === 'on') !== to; });
+        var g = s.querySelector('[data-sim-gm]');
+        if (g) {
+          g.hidden = !to;
+          if (to) { r.setAttribute('data-air-gm', ''); } else { r.removeAttribute('data-air-gm'); }
+        }
+        b.textContent = to ? 'Add a new page instead' : 'Update that page instead';
+        b.setAttribute('aria-label', to ? 'Add a new page again instead of changing ' + d.matchName : 'Update the page ' + d.matchName + ' instead of adding a new one');
+        f.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      // toggleBoth opens and closes the side-by-side texts under a similar row.
+      toggleBoth: function (b) {
+        var p = b.closest('.air-sim').querySelector('.air-sim-both'), o = p.hidden;
+        p.hidden = !o;
+        b.setAttribute('aria-expanded', String(o));
+        b.textContent = o ? 'Hide both' : 'See both';
+      },
       onKey: function (ev) {
         if (typing(ev) || ev.ctrlKey || ev.metaKey || ev.altKey || !this.$root.isConnected) { return; }
         var k = (ev.key || '').toLowerCase();

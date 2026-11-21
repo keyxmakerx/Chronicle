@@ -35,6 +35,7 @@ type MailSender interface {
 type Handler struct {
 	svc          SessionService
 	memberLister campaigns.MemberLister
+	eventSource  SessionEventSource
 	// calendarFinder sends game-night links to the real-world calendar.
 	calendarFinder RealWorldCalendarFinder
 	mailer         MailSender

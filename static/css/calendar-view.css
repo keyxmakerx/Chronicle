@@ -2177,10 +2177,19 @@
 .cal-v5 .wact{flex:none;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:8px;background:var(--ink);color:var(--paper);font:550 11.5px/1 var(--sans)}
 /* The real-world calendar's "Game nights" list, in the same short list
    under its button. A row's answer is a quiet word in the answer's colour. */
-/* An open list lifts the header above the grid, which shares its layer. */
-.cal-v5 .head:has(.waitpop:not([hidden])){z-index:3}
+/* An open list lifts the header above the grid and the Look/Edit deck (35), which a tall list otherwise slides under. */
+.cal-v5 .head:has(.waitpop:not([hidden])){z-index:var(--z-popup, 50)}
 .cal-v5 .gnhead{padding:8px 8px 4px;font:650 10.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
 .cal-v5 .gnempty{margin:0;padding:6px 8px 10px;font:500 12.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .gnstrip{margin:2px 8px 6px;padding:8px 0 6px;border-bottom:1px solid var(--hair)}
+.cal-v5 .gnstrip p{margin:0}
+.cal-v5 .gnstrip-t{font:500 12.5px/1.4 var(--sans);color:var(--ink2)}
+.cal-v5 .gnstrip-t b{font-weight:650;color:var(--ink)}
+.cal-v5 .gnstrip-s{font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .gnstrip-more{margin:0 8px 6px}
+.cal-v5 .gnstrip-q{display:flex;flex-wrap:wrap;gap:0 10px;margin-top:2px!important}
+.cal-v5 .gnstrip-q .lnk{margin-left:-6px;min-height:32px}
+@media (pointer:coarse){.cal-v5 .gnstrip-q .lnk{min-height:44px}}
 .cal-v5 .gnans{flex:none;font:550 11.5px/1 var(--sans);color:var(--mut)}
 .cal-v5 .gnans.y{color:var(--free)}
 .cal-v5 .gnans.m{color:var(--best)}

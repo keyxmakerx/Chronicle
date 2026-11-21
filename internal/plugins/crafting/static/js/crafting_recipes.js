@@ -94,9 +94,18 @@ window.CraftingRecipes = (function () {
         var li = document.createElement('li'), b = document.createElement('button'), col = (r.colors && r.colors.final) || BENCH_COLORS.final;
         b.type = 'button'; b.className = 'cra-ritem'; b.setAttribute('aria-current', String(i === sel));
         b.innerHTML = shape('potion', col, 28) + '<span class="cra-rtxt"><b>' + esc(r.name || 'Untitled') + '</b><small>' + esc(L.templateName(lib, r.template) === 'Recipe' ? 'No template' : L.templateName(lib, r.template)) +
-          (r.who === 'learned' ? ' · must be learned' : '') + '</small>' + (r.draft ? '<span class="cra-pill cra-pill-dm">AI draft, not approved</span>' : '') + '</span>';
+          (r.who === 'learned' ? ' · must be learned' : '') + '</small>' + (r.draft ? '<span class="cra-pill cra-pill-dm">' + (r.draftPrompt ? 'AI draft, not approved' : 'Draft, not approved') + '</span>' : '') + '</span>';
         b.addEventListener('click', function () { sel = i; renderAll(); });
-        li.appendChild(b); ul.appendChild(li);
+        li.appendChild(b);
+        // A recipe with nothing in it yet points at the next step, as a
+        // word beside the row so it is not a button inside a button.
+        if (i === sel && !r.materials.length) {
+          var more = document.createElement('button');
+          more.type = 'button'; more.className = 'cra-link cra-rmore'; more.setAttribute('data-act', 'focus-mats');
+          more.textContent = 'Add materials';
+          li.appendChild(more);
+        }
+        ul.appendChild(li);
       });
     }
     function matSelect(m) {
@@ -137,11 +146,13 @@ window.CraftingRecipes = (function () {
     function renderForm() {
       var f = $('.cra-rform'), r = cur(), h = '', fixes = [], Rl = lib.rules, labels = Rl.labels || {};
       if (!r) {
-        f.innerHTML = '<div class="cra-empty">No recipes yet. <button type="button" class="cra-link" data-act="new">Write the first one</button>.</div>';
+        f.innerHTML = '<div class="cra-empty">No recipes yet. <button type="button" class="cra-link" data-act="focus-line">Name the first one</button>.</div>';
         return;
       }
       if (r.draft) {
-        h += '<div class="cra-banner"><div><b>Drafted by your AI</b>' + (r.draftPrompt ? ' from “' + esc(r.draftPrompt) + '”' : '') + '. Check it, then approve it. Players can’t see it until you do.</div>' +
+        // Only an AI draft carries the prompt it came from; a recipe typed on
+        // the line is the Director's own, so it must not claim an AI wrote it.
+        h += '<div class="cra-banner"><div>' + (r.draftPrompt ? '<b>Drafted by your AI</b> from “' + esc(r.draftPrompt) + '”. Check it, then approve it.' : '<b>Draft</b>. Check it, then approve it.') + ' Players can’t see it until you do.</div>' +
           '<div class="cra-row"><button type="button" class="btn btn-primary btn-sm" data-act="approve">Approve</button><button type="button" class="btn btn-secondary btn-sm" data-act="discard">Discard</button></div></div>';
       }
       h += '<div class="cra-fsec cra-head"><label class="cra-fl"><span>Name</span><input class="cra-in cra-big" data-f="name" value="' + esc(r.name) + '" maxlength="120" placeholder="What is it called?"></label>' +
@@ -271,18 +282,29 @@ window.CraftingRecipes = (function () {
     }
 
     /* ---------- Changes ---------- */
-    function newName() {
-      var n = 'New recipe', i = 2, taken = {};
-      R.forEach(function (r) { taken[r.name] = 1; });
-      while (taken[n]) n = 'New recipe ' + (i++);
-      return n;
-    }
-    function create() {
+    /* A recipe only comes into being with a name, typed on the list's top
+       line, so there is never an unnamed one to find and clear away. The
+       server refuses an empty name too. Focus stays on the line so several
+       names can be jotted in a row and filled in later. */
+    var adding = false;
+    function create(name) {
+      name = String(name || '').trim();
+      var line = $('.cra-addin');
+      if (!name || adding) return;
+      adding = true;
+      if (line) line.disabled = true;
       app.status('saving');
-      app.api('POST', '/recipes', {name: newName(), bench: lib.benchKinds[0].key, goal: 30, who: 'all', result: {qty: 1}}).then(function (r) {
-        R.push(r); sel = R.length - 1; app.status('saved'); renderAll();
-        var n = $('[data-f="name"]'); if (n) { n.focus(); n.select(); }
-      }, failed);
+      app.api('POST', '/recipes', {name: name, bench: lib.benchKinds[0].key, goal: 30, who: 'all', draft: true, result: {qty: 1}}).then(function (r) {
+        adding = false;
+        R.push(r); sel = R.length - 1; app.status('saved');
+        if (line) { line.disabled = false; line.value = ''; line.focus(); }
+        renderAll();
+      }, function (err) {
+        // The typed name stays so a taken or too-long one can be fixed in place.
+        adding = false;
+        if (line) { line.disabled = false; line.focus(); }
+        failed(err);
+      });
     }
     function remove(r, why) {
       app.confirm(why || 'Delete “' + r.name + '”?', 'The recipe goes, and characters who learned it forget it. The items it made stay in the Armory.', 'Delete recipe').then(function (yes) {
@@ -301,8 +323,10 @@ window.CraftingRecipes = (function () {
     }
     function bump(v, d, lo, hi) { return Math.max(lo, Math.min(hi, v + d)); }
 
-    el.innerHTML = '<div class="cra-red"><aside class="cra-rlist"><h3 class="cra-ph">Recipes</h3><ul class="cra-rl"></ul>' +
-      '<button type="button" class="cra-newrow" data-act="new">New crafting recipe</button></aside>' +
+    el.innerHTML = '<div class="cra-red"><aside class="cra-rlist"><h3 class="cra-ph">Recipes</h3>' +
+      '<input class="cra-in cra-addin" type="text" maxlength="120" autocomplete="off" aria-label="Name a new recipe" placeholder="Name a recipe, then press Enter">' +
+      '<ul class="cra-rl"></ul>' +
+      '</aside>' +
       '<div class="cra-rform"></div><aside class="cra-rprev"><h3 class="cra-ph">What players see</h3><div class="cra-book"></div><h3 class="cra-ph">Checks</h3><ul class="cra-checks"></ul></aside></div>' +
       '<section class="cra-rules" hidden></section>';
 
@@ -315,6 +339,14 @@ window.CraftingRecipes = (function () {
       p.innerHTML = '<button type="button" class="cra-link" data-act="item-block">Show “How it’s made” on item pages</button>';
       $('.cra-rlist').appendChild(p);
     }, function () {});
+
+    // Enter adds only from this line; nothing else on the page treats a
+    // key as a shortcut. An input method still composing is not "Enter".
+    $('.cra-addin').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      e.preventDefault();
+      create(e.target.value);
+    });
 
     el.addEventListener('input', function (e) {
       var t = e.target, k = t.getAttribute('data-f'), r = cur();
@@ -347,7 +379,8 @@ window.CraftingRecipes = (function () {
       var b = e.target.closest('button');
       if (!b || !el.contains(b) || b.closest('.cra-rules [data-widget]')) return;
       var r = cur(), li = b.closest('[data-i]'), i = li ? +li.getAttribute('data-i') : -1, act = b.getAttribute('data-act');
-      if (act === 'new') { create(); return; }
+      if (act === 'focus-line') { var ln = $('.cra-addin'); if (ln) ln.focus(); return; }
+      if (act === 'focus-mats') { var am = $('[data-act="add-mat"]'); if (am) { am.scrollIntoView({block: 'center'}); am.focus(); } return; }
       if (act === 'item-block') {
         b.disabled = true;
         app.api('POST', '/item-block').then(function (got) {

@@ -41,10 +41,10 @@ const ALL = [
 const TOKEN = '/sessions/feed/eV6Ihdg6aJUrpKydCFGzgv1HPHI66ya2DlFX4KC7tO8.ics';
 
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
-const HTML = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/css/calendar-view.css"></head><body>
+const html = (role) => `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/css/calendar-view.css"></head><body>
 <div class="cal5-page" style="margin:0 auto;padding:24px 16px">
 <div class="cal-v5" data-widget="calendar_view" data-campaign-id="c1" data-calendar-id="k1" data-can-edit="false" data-can-author-dm-only="false"
-  data-role="1" data-user-id="u1" data-game-nights="true" data-api-base="/campaigns/c1/calendars/k1">
+  data-role="${role}" data-user-id="u1" data-game-nights="true" data-api-base="/campaigns/c1/calendars/k1">
 <div id="calendar-config" class="hidden" data-calendar='${attr(CAL)}' data-events="[]" data-zone="America/Chicago"></div>
 </div></div>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
@@ -63,7 +63,7 @@ async function page(t, width, o = {}) {
   t.after(() => assert.deepEqual(errors, []));
   await p.route('**/*', (route) => {
     const u = new URL(route.request().url());
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML });
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: html(o.role || 1) });
     if (u.pathname.startsWith('/static/')) {
       const file = join(root, u.pathname);
       if (!existsSync(file)) return route.fulfill({ status: 404, body: '' });
@@ -72,12 +72,20 @@ async function page(t, width, o = {}) {
     let body = [];
     if (u.pathname === '/campaigns/c1/sessions/nights') {
       const from = u.searchParams.get('from'), to = u.searchParams.get('to');
-      body = NIGHTS.filter((n) => n.date >= from && n.date <= to);
+      body = (o.nights || NIGHTS).filter((n) => n.date >= from && n.date <= to);
     } else if (u.pathname === '/campaigns/c1/sessions/all') body = ALL;
     else if (u.pathname === '/campaigns/c1/sessions/feed-settings') body = { enabled: !!o.feed };
     else if (u.pathname.startsWith('/campaigns/c1/sessions/feed/token')) {
       (o.posts || []).push(u.pathname);
       body = { url: u.pathname.endsWith('/replace') ? TOKEN.replace('eV6', 'xY9') : TOKEN };
+    } else if (u.pathname === '/campaigns/c1/sessions/event-candidates') {
+      (o.asked || []).push(u.pathname);
+      body = o.candidates || [];
+    } else if (u.pathname === '/campaigns/c1/sessions/from-event') {
+      (o.made || []).push(route.request().postDataJSON());
+      if (o.makeStatus) return route.fulfill({ status: o.makeStatus, contentType: 'application/json', body: JSON.stringify({ error: o.makeError || 'no' }) });
+      if (o.afterMake) o.nights.push(o.afterMake);
+      body = { id: 's-new', name: 'made', scheduledDate: o.madeDate || '' };
     } else if (u.pathname.endsWith('/events')) body = { data: [], total: 0 };
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -161,4 +169,148 @@ test('the page grows on a wide screen', { skip }, async (t) => {
   const p = await page(t, 1920);
   const w = await p.$eval('.cal-v5 .cal', (c) => c.getBoundingClientRect().width);
   assert.ok(w > 1100, 'the month is wider than the old 1024px column (' + w + 'px)');
+});
+
+const CANDS = [
+  { eventId: 'e1', name: 'Session 1', when: '14 Hammer, 1492', page: 'The Sunken Chapel' },
+  { eventId: 'e2', name: 'Session 2', when: '21 Hammer, 1492' },
+];
+
+test('a player is not offered the strip and nothing is asked for it', { skip }, async (t) => {
+  const asked = [];
+  const p = await page(t, 1280, { role: 1, candidates: CANDS, asked });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .wrow');
+  assert.equal(await p.$('#cal5-gnpop .gnstrip'), null);
+  assert.deepEqual(asked, []);
+});
+
+test('the strip names Session events with no game night, and makes one on a press', { skip }, async (t) => {
+  const made = [];
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, made });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  const strips = await p.$$eval('#cal5-gnpop .gnstrip', (els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').trim()));
+  assert.equal(strips.length, 2);
+  assert.match(strips[0], /Session 1 is on your calendar with no game night\. 14 Hammer, 1492 · The Sunken Chapel Make a game night Not this one/);
+  assert.ok(strips[1].includes('21 Hammer, 1492') && !strips[1].includes('·'), 'no page, no separator');
+  // The strip sits above "Coming up", and its controls are quiet words, not bordered buttons.
+  assert.ok(await p.$eval('#cal5-gnpop', (pop) => pop.firstElementChild.classList.contains('gnstrip')));
+  assert.equal(await p.$eval('.gnstrip [data-gn-make]', (b) => getComputedStyle(b).borderTopWidth), '0px');
+  assert.equal(made.length, 0, 'nothing is made until it is pressed');
+  await p.click('#cal5-gnpop [data-gn-make="e1"]');
+  await p.waitForFunction(() => document.querySelectorAll('#cal5-gnpop .gnstrip').length === 1);
+  assert.deepEqual(made, [{ eventId: 'e1' }], 'only the event is named; its words come from the server');
+  assert.match(await p.textContent('#cal5-gnpop .gnstrip'), /Session 2/);
+  assert.match(await p.textContent('.toast'), /Made a game night for Session 1\. It has no real date yet/);
+  assert.equal(await p.evaluate(() => document.activeElement.hasAttribute('data-gn-make')), true, 'focus moves to the next control');
+});
+
+test('Not this one hides the event here and keeps it hidden', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 1);
+  await p.click('#cal5-gnbtn');
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .wrow');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Session 1 is on your calendar/);
+  assert.match(await p.textContent('#cal5-gnpop'), /Session 2 is on your calendar/);
+});
+
+test('a refused make says why and keeps the strip', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, makeStatus: 422, makeError: 'the game night could not be made' });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.click('#cal5-gnpop [data-gn-make="e1"]');
+  await p.waitForSelector('.toast.on');
+  assert.match(await p.textContent('.toast'), /could not be made/);
+  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 2);
+  assert.equal(await p.$eval('#cal5-gnpop [data-gn-make="e1"]', (b) => b.disabled), false, 'it can be pressed again');
+});
+
+test('the strip fits a phone', { skip }, async (t) => {
+  const p = await page(t, 360, { role: 2, candidates: CANDS });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  // The strip itself must sit inside the panel and not overflow it sideways.
+  const r = await p.$eval('#cal5-gnpop', (pop) => {
+    const pb = pop.getBoundingClientRect();
+    const out = [...pop.querySelectorAll('.gnstrip, .gnstrip *')].filter((e) => e.getBoundingClientRect().right > pb.right + 1 || e.getBoundingClientRect().left < pb.left - 1);
+    return { over: pop.scrollWidth > pop.clientWidth + 1, out: out.map((e) => e.className) };
+  });
+  assert.deepEqual(r, { over: false, out: [] });
+  const h = await p.$$eval('#cal5-gnpop .gnstrip .lnk', (bs) => bs.map((b) => b.getBoundingClientRect().height));
+  assert.ok(h.every((x) => x >= 32), 'controls have room to press: ' + h);
+});
+
+test('a night made for a real-life calendar event does not claim it has no real date', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, made: [], madeDate: '2026-10-29' });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.click('#cal5-gnpop [data-gn-make="e1"]');
+  await p.waitForSelector('.toast');
+  const toast = await p.textContent('.toast');
+  assert.match(toast, /Made a game night for Session 1\./);
+  assert.doesNotMatch(toast, /no real date/);
+});
+
+test('a night made from an event shows in the open panel at once, without a reload', { skip }, async (t) => {
+  const fresh = night('2026-11-20', 'Session 1 night', false, '');
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, made: [], madeDate: '2026-11-20', nights: NIGHTS.slice(), afterMake: fresh });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Session 1 night/);
+  await p.click('#cal5-gnpop [data-gn-make="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-go="s-2026-11-20"]');
+  assert.equal(await p.$eval('#cal5-gnpop', (x) => x.hidden), false, 'the panel stays open');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Nothing planned yet/);
+});
+
+const MANY = [1, 2, 3, 4, 5].map((n) => ({ eventId: 'e' + n, name: 'Session ' + n, when: n + ' Hammer, 1492' }));
+
+// A button that is drawn but sits under the Look/Edit deck, or off the edge of
+// the screen, cannot be pressed; asking the page what is at its centre is the
+// only check that sees both.
+async function stripButtonsReachable(p) {
+  // The Look/Edit deck belongs to the editor script, which this page does not
+  // load; a stand-in with its class and layer sits across where a tall list
+  // reaches, so the list has to be above it to pass.
+  await p.evaluate(() => {
+    const d = document.createElement('div');
+    d.className = 'deck';
+    d.style.cssText = 'position:absolute;left:0;right:0;top:230px;height:90px';
+    document.querySelector('.cal-v5 .cal').appendChild(d);
+  });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  const bad = await p.$$eval('#cal5-gnpop .gnstrip .lnk', (bs) => bs.flatMap((b) => {
+    b.scrollIntoView({ block: 'nearest' });
+    const r = b.getBoundingClientRect();
+    const inside = r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight;
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const hit = at === b || b.contains(at);
+    return inside && hit ? [] : [b.textContent + ' inside=' + inside + ' hit=' + hit + ' left=' + Math.round(r.left) + ' right=' + Math.round(r.right)];
+  }));
+  assert.deepEqual(bad, []);
+  const pop = await p.$eval('#cal5-gnpop', (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: window.innerWidth }; });
+  assert.ok(pop.l >= 0 && pop.r <= pop.w, 'the panel is inside the screen: ' + JSON.stringify(pop));
+}
+
+test('every strip button is inside the screen and on top, on a phone', { skip }, async (t) => {
+  await stripButtonsReachable(await page(t, 360, { role: 2, candidates: MANY }));
+});
+
+test('every strip button is inside the screen and on top, on a desktop', { skip }, async (t) => {
+  await stripButtonsReachable(await page(t, 1280, { role: 2, candidates: MANY }));
+});
+
+test('the count of events past the three shown agrees with its number', { skip }, async (t) => {
+  for (const [cands, want] of [[MANY.slice(0, 4), '1 more Session event has no game night.'], [MANY, '2 more Session events have no game night.']]) {
+    const p = await page(t, 1280, { role: 2, candidates: cands });
+    await p.click('#cal5-gnbtn');
+    await p.waitForSelector('#cal5-gnpop .gnstrip');
+    assert.equal((await p.textContent('#cal5-gnpop .gnstrip-more')).trim(), want);
+  }
 });

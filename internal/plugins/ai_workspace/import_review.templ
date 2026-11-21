@@ -45,6 +45,9 @@ type ImportReviewData struct {
 	// sits in, which the result replaces ("" is the paste box's).
 	RequestID int64
 	Host      string
+	// Similar is, for each page (same index as Pages), the existing page an
+	// add is much like; nil entries and a nil slice mean none.
+	Similar []*importer.SimilarPage
 }
 
 // WorkshopReviewHost is the element the Homebrew Workshop's "Write with your
@@ -455,6 +458,9 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 					A page called { cls.ConflictEntity.Name } already exists. This one gets a new name unless you pick otherwise in the details.
 				</span>
 			}
+			if m := similarFor(data, idx); m != nil && page.FrontMatter.Action != importer.ActionDelete {
+				@reviewRowSimilar(idx, page, m)
+			}
 			if problem {
 				<span class="air-line air-bad" role="alert">
 					<i class="fa-solid fa-circle-xmark mr-1" aria-hidden="true"></i>
@@ -509,6 +515,83 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			</details>
 		</div>
 		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls, data.fromAI()) && repeat == "", fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
+	</div>
+}
+
+// reviewRowSimilar is the quiet line on an add that is much like a page the
+// campaign already has: which page, how far apart the words are, and two
+// words to act on it. "Update that page instead" turns the row into a change
+// to that page by setting the row's own name and action fields, so the form
+// the commit reads is the one the owner sees under "Change the details";
+// "Add a new page instead" puts the AI's name and action back. "See both"
+// opens the two texts side by side. Both are methods of the form's
+// aiImportReview component (ai_import_review.js), not script blocks, because
+// this arrives in an HTMX swap.
+templ reviewRowSimilar(idx int, page importer.ParsedPage, m *importer.SimilarPage) {
+	<div
+		class="air-sim"
+		data-name-field={ fmt.Sprintf("page_%d_name", idx) }
+		data-action-field={ fmt.Sprintf("page_%d_action", idx) }
+		data-match-name={ m.Name }
+		data-sent-name={ page.Name }
+		data-state="off"
+	>
+		<span class="air-line" data-sim="off">
+			<span class="air-sim-lead">Much like a page you have:</span>
+			{ m.Name }{ similarDiffer(m) }
+		</span>
+		<span class="air-line" data-sim="on" hidden>
+			Changing <b>{ m.Name }</b> instead of adding a page.
+		</span>
+		<span class="air-sim-qs">
+			if m.CanUpdate {
+				<button
+					type="button"
+					class="air-quiet"
+					data-sim-swap
+					aria-label={ "Update the page " + m.Name + " instead of adding a new one" }
+					@click="swapSimilar($el)"
+				>Update that page instead</button>
+			}
+			<button
+				type="button"
+				class="air-quiet"
+				aria-expanded="false"
+				@click="toggleBoth($el)"
+			>See both</button>
+		</span>
+		if m.CanUpdate && m.GMOnly.Any() {
+			// Only once the row is a change to this page: replacing its text
+			// would lose the GM-only parts, so it asks for the same tick any
+			// change to such a page asks for.
+			<div data-sim-gm hidden>
+				@reviewRowGMOnlyConfirm(idx, m.Name, m.GMOnly)
+			</div>
+		}
+		<div class="air-sim-both" hidden>
+			<div class="air-sim-col">
+				<h5>The page you have</h5>
+				for _, l := range simLines(m.Have, m.Sent) {
+					<p class={ simLineClass(l) }>
+						if l.Only {
+							<span class="air-sim-only">Only here</span>
+						}
+						{ l.Text }
+					</p>
+				}
+			</div>
+			<div class="air-sim-col">
+				<h5>What your AI sent</h5>
+				for _, l := range simLines(m.Sent, m.Have) {
+					<p class={ simLineClass(l) }>
+						if l.Only {
+							<span class="air-sim-only">Only here</span>
+						}
+						{ l.Text }
+					</p>
+				}
+			</div>
+		</div>
 	</div>
 }
 
