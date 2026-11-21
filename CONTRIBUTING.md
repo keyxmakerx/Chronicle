@@ -15,9 +15,9 @@ published contact address.
 ## Prerequisites
 
 - Go 1.27 or newer (see `go.mod`)
-- MariaDB 10.11+ and Redis 7+, from Docker (`make docker-up`) or installed locally
+- MariaDB 10.11+ (installed, or `make test-db-up` without Docker) and Redis 7+
 - The `templ` CLI (`go install github.com/a-h/templ/cmd/templ@v0.3.1100`, the
-  version CI uses) and `air` for hot reload
+  version CI uses)
 - Nothing extra for `make tailwind`: it downloads the pinned standalone CLI
   into `bin/` on first use
 - Node.js 20 for the JS tests (`make test-js`). The browser tests
@@ -29,15 +29,20 @@ published contact address.
 
 ```bash
 git clone https://github.com/keyxmakerx/chronicle.git && cd chronicle
-cp .env.example .env     # edit database credentials and SECRET_KEY
-make docker-up           # MariaDB + Redis in containers
 make generate            # templ + tailwind; generated files are not committed
-make dev                 # hot reload; migrations run on startup
+make test-db-up          # MariaDB on port 13306 without Docker (user root, no password)
+mysql -h 127.0.0.1 -P 13306 -u root -e 'CREATE DATABASE chronicle'
+redis-server --daemonize yes
+export DB_HOST=127.0.0.1:13306 DB_USER=root DB_PASSWORD= DB_NAME=chronicle
+export SECRET_KEY="$(openssl rand -base64 32)"
+make run                 # http://localhost:8080; migrations run on startup
 ```
 
-No Docker daemon: `make test-db-up` starts a local MariaDB on port 13306 with
-no containers (`make test-db-down` stops it). The first user to register
-becomes the site admin.
+Chronicle reads its settings from the environment only; `.env.example` lists
+them. To use your own MariaDB, point `DB_*` at it and create the database first.
+`make test-db-down` stops the local one. A new `SECRET_KEY` signs everyone out,
+so keep one value while you work. The first user to register becomes the site
+admin.
 
 To run the whole stack from your working tree, use `make docker-all-local`.
 `make full-stack-check` builds it, waits for `/healthz`, and tears it down
@@ -54,8 +59,8 @@ again; CI runs the same command.
   binary on an emptied scratch database (`tools/live-checks.sh`; defaults suit
   `make test-db-up` and a local `redis-server`) and drives it in a browser, as
   the operator's click-path checks do. Each check names the issue it stands in
-  for. The CI "Live checks" job runs them on every pull request; the pictures they
-  take are not compared.
+  for. The CI "Live checks" job runs them on pull requests to `main` and on
+  `main`; the pictures they take are not compared.
 - A change to a feature people use adds an entry to `updatehealth.Changed`
   (`internal/updatehealth/changed.go`): a new ID, the name a site admin knows
   it by, the routes that serve it and a page to try it. After the update, the
@@ -77,7 +82,7 @@ again; CI runs the same command.
 | Tier | Location | What it is |
 |---|---|---|
 | Plugin | `internal/plugins/<name>/` | A feature (auth, campaigns, entities, maps, calendar...) with handler, service, repository and templates |
-| System | external repos | A game-system content pack, installed from Admin > Packages |
+| System | external repos | A game-system content pack, installed from Site admin > Game systems & modules |
 | Widget | `internal/widgets/<name>/` | A reusable UI block that mounts through `data-widget` and fetches its own data |
 
 Shared code lives in `internal/middleware`, `internal/apperror`,

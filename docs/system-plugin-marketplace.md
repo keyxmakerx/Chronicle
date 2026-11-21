@@ -205,7 +205,7 @@ Each category has a `data/<slug>.json` file. Items are keyed by `id` or `slug` (
 Systems are exposed to campaigns through the addon system:
 
 1. **Auto-registration**: at startup the addons plugin calls `RegisterSystemAddon()` for each system from `AddonInfos()`, so each has an addon row.
-2. **Campaign toggle**: Campaign owners enable/disable system addons via campaign settings.
+2. **Campaign toggle**: Campaign owners turn a system on or off under **Game & features** (`/campaigns/:id/extensions`).
 3. **Middleware gating**: `requireSystemAddon()` middleware checks that the system addon is enabled before serving system routes.
 4. **Entity presets**: once enabled, the manifest's entity type templates are available for new entities.
 
@@ -227,13 +227,18 @@ System packages can provide custom JS widgets:
   {
     "slug": "stat-block",
     "name": "Stat Block",
+    "icon": "fa-shield-halved",
     "script_file": "widgets/stat-block.js",
-    "mount": "entity-sidebar"
+    "tile_sizes": ["2x2", "4x2"]
   }
 ]
 ```
 
-`script_file` is the canonical key (`file` is accepted as an alias). Widgets are served from `/campaigns/:id/systems/:mod/widgets/:slug` and auto-mounted by `boot.js` via `data-widget` attributes.
+`script_file` is the canonical key (`file` is accepted as an alias).
+`tile_sizes` lists the `WxH` sizes the widget fits in a tile section, the first
+being its default; without it the widget cannot be a tile. `host_mounted: true`
+marks a widget Chronicle mounts itself outside entity pages, which the
+Customizer never offers as a block. Widgets are served from `/campaigns/:id/systems/:mod/widgets/:slug` and auto-mounted by `boot.js` via `data-widget` attributes.
 
 ## 6. Card Popup / Stat Block System
 
@@ -307,6 +312,7 @@ Each unlocks a group of host functions:
 "contributes": {
   "wasm_plugins": [{
     "slug": "ac-calculator",
+    "name": "AC calculator",
     "file": "plugins/ac-calculator.wasm",
     "capabilities": ["entity_read", "log"],
     "memory_limit_mb": 16,
@@ -318,9 +324,13 @@ Each unlocks a group of host functions:
 ## 9. Security Model
 
 ### Content Scanning
-- ZIP extraction rejects path traversal and symlinks.
-- File type allowlist: JSON, JS, CSS, SVG, PNG, WASM.
-- Per-package file size limits; SVG and CSS are sanitized.
+- ZIP extraction rejects path traversal.
+- System packages: with **Scan the files** on (Site admin > Package rules, on by
+  default), executables, scripts other than `.js` and symlinks are refused, and
+  every file is held to the size limit set there.
+- Content extensions: only JSON, CSS, SVG, PNG, WebP, JPEG, TXT, Markdown, JS
+  and WASM files are accepted, with per-file and total size limits. SVG and CSS
+  are sanitized.
 
 ### Manifest Validation
 - Required fields, slug format and content limits (see Validation Rules).
@@ -342,7 +352,7 @@ Each unlocks a group of host functions:
 ### System Reference
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/campaigns/:id/systems` | List available systems |
+| GET | `/campaigns/:id/systems/status` | Diagnostics for the campaign's enabled system |
 | GET | `/campaigns/:id/systems/:mod` | System reference home |
 | GET | `/campaigns/:id/systems/:mod/search` | Full-text search |
 | GET | `/campaigns/:id/systems/:mod/:cat` | Category listing |

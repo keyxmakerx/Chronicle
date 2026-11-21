@@ -70,10 +70,11 @@ the handler. Return `internal/apperror` errors, never raw DB errors.
 
 ## Wire it in
 
-1. **Migrations**: add
-   `{Slug: hello.PluginSlug, MigrationsFS: mustSub(hello.MigrationsFS, database.PluginMigrationsSubdir)}`
-   to `registeredPlugins()` in `cmd/server/main.go`. Plugin migrations run
-   after core ones; a failed one marks the plugin unhealthy.
+1. **Migrations**: add `cmd/server/plugin_schema_hello.go` with
+   `func init() { addPluginSchema(310, hello.PluginSlug, hello.MigrationsFS) }`.
+   The rank sets the run order (lower first); give it a higher rank than any
+   plugin whose tables yours points at. Plugin migrations run after core ones;
+   a failed one marks the plugin unhealthy.
 2. **Routes**: in `internal/app/routes.go`, build repo → service → handler and
    register only when healthy:
    ```go

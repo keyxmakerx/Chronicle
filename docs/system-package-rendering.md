@@ -43,6 +43,7 @@ type EntityShowRenderContext struct {
     UserID         string // viewing user's id; empty for an anonymous viewer
     OwnerName      string
     NPCPage        bool
+    System         string // the campaign's game system (module id)
     NamedLayout    bool
 }
 
@@ -135,7 +136,7 @@ The registry is for whole-page rendering. For less:
 
 - **Custom block types:** register against `BlockRegistry`
   (`internal/plugins/entities/block_registry.go`) and reference them from a
-  layout JSON; the owner mixes them in the layout editor.
+  layout JSON; the owner mixes them in the Customizer.
 - **JS widgets:** `Chronicle.register()` plus an `ext_widget` block, for
   client-side interactivity (dice rollers, animated cards).
 
@@ -180,6 +181,7 @@ The mount also carries, all `"true"`/`"false"` except the name and visibility:
 | `data-can-edit-identity` | Viewer may rename the page and set the identity fields (ancestry, culture, career, kit, race, species, heritage, background): Scribe and up, or the claimed owner. The server enforces the same rule. |
 | `data-can-change-image` | Viewer may replace the picture (Scribe and up; the claimed owner may not). |
 | `data-armory-items` | The Items and money panel draws on this same page, so the widget leaves its own item list out. |
+| `data-foundry-linked` | A Foundry world syncs with this campaign, so the sheet may say a value is set in Foundry. |
 | `data-claimed` | Someone has claimed the page. |
 | `data-claimed-by-me` | The viewer is that someone. |
 | `data-claimed-name` | The claimant's display name ("a player" when it can't be resolved), empty when unclaimed. |

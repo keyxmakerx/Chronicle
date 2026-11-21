@@ -8,8 +8,8 @@ The browser contract is the same everywhere; only how the script ships differs:
 
 | Ship it in | Script lives at | Loaded when | Placed by |
 |---|---|---|---|
-| A game system package | `widgets/<slug>.js`, declared in `manifest.json` | the campaign uses that system | owner, in the page layout editor |
-| A content extension | any `.js`, declared in `manifest.json` | the campaign enables the pack | owner, in the page layout editor |
+| A game system package | `widgets/<slug>.js`, declared in `manifest.json` | the campaign uses that system | owner, in the Customizer |
+| A content extension | any `.js`, declared in `manifest.json` | the campaign enables the pack | owner, in the Customizer |
 | Chronicle itself | `static/js/widgets/<name>.js` or a plugin's `static/js/` | first time its mount appears on a page | a templ file that renders the mount |
 
 ## The contract
@@ -73,7 +73,7 @@ they load before widgets. See [game-system.md](game-system.md).
 
 Served from `/extensions/<id>/assets/<file>`. `config` declares the `data-*`
 options the widget reads. A placed block's saved config arrives as those
-attributes, but the layout editor has no form for them yet, so always fall
+attributes, but the Customizer has no form for them yet, so always fall
 back to the default. Working example: `extensions/dice-roller/`.
 See [content-extension.md](content-extension.md).
 
@@ -102,7 +102,7 @@ The mount's parent is the tile cell, and the cell tells the widget its size:
   fixed height or `overflow: auto`; let the content decide.
 - On a narrow screen the grid has 2 columns and a wider tile spans both.
   `detail.columns` below is the width in columns right now.
-- When the size changes (the layout editor resizing a tile) or the screen
+- When the size changes (the Customizer resizing a tile) or the screen
   crosses the narrow breakpoint, the cell dispatches a bubbling
   `chronicle:tile-resize` event:
 
@@ -119,9 +119,9 @@ notice. Neither breaks the page.
 
 ## Placing a packaged widget
 
-Owner: Campaign settings > Customize (`/campaigns/:id/customize`) > Layouts > pick a
-page template > drag your widget from the **Extensions** section of the
-palette. The mount gets `data-campaign-id`, `data-entity-id`, and
+Owner: **Customize** (`/campaigns/:id/customize`) > **Categories** > pick the
+category > **Page layout** > the **Add widgets** tab > your widget under
+**From packages**. The mount gets `data-campaign-id`, `data-entity-id`, and
 `data-editable="true"` for Scribes and up.
 
 Working: the block shows your output on the entity page. Broken: an empty
