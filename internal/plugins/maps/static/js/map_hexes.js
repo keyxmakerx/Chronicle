@@ -1079,7 +1079,10 @@
       artView = null;
     }
 
+    // A pass still painting into the spare would swap it in over a canvas that
+    // is gone, so dropping the canvas always drops the pass with it.
     function dropArtCanvas() {
+      cancelPass();
       if (artCv && artCv.parentNode) artCv.parentNode.removeChild(artCv);
       artCv = artCx = artView = null;
       artBack = null;
@@ -1190,7 +1193,7 @@
         }
         artPass = startPaint(f, 0, 0, W, H, mode, cx);
         artPass.done = function () {
-          if (direct) return;
+          if (direct || !artCv || !artBack) return;
           // The spare takes the visible canvas's place and the old one becomes
           // the spare, so showing the redraw copies no pixels.
           var old = artCv, now = artBack;

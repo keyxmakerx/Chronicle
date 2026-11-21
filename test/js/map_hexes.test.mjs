@@ -995,3 +995,14 @@ test('undo keeps the last 60 steps', () => {
   assert.equal(log[0].n, 15);
   assert.equal(log[59].n, 74);
 });
+
+// The art redraw is closure-private, so its teardown rules are pinned in the
+// source: a redraw that finishes after the art canvas was removed must not
+// dereference the missing canvas.
+test('removing the art canvas cancels a redraw and the swap tolerates a missing canvas', () => {
+  const src = readFileSync(path.join(jsDir, 'map_hexes.js'), 'utf8');
+  const drop = src.match(/function dropArtCanvas\(\) \{([\s\S]*?)\n    \}/);
+  assert.ok(drop, 'dropArtCanvas not found');
+  assert.match(drop[1], /cancelPass\(\)/);
+  assert.match(src, /artPass\.done = function \(\) \{\s*if \(direct \|\| !artCv \|\| !artBack\) return;/);
+});
