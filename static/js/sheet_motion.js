@@ -17,6 +17,7 @@
  *   [data-sheet-section="id"]           a part, with .paper-pull; clicking it presses its button
  *   [data-sheet-open="panel-id"]        the button inside a part that opens a panel
  *   <template data-sheet-panel="panel-id" data-title data-kind>  the panel's body
+ *                                       data-size="tall" asks for a reading panel: 390 to 520px wide as the desk allows, always full height
  *   <details data-sheet-fold><summary>..</summary><div class="fold-body"><div class="fold-in" data-move="fold">..
  *   [data-v] / [data-pv]                values snap() and changed() watch
  * Events on the root: sheet:panel-ready (detail.panel, detail.body), sheet:open,
@@ -132,15 +133,21 @@
   }
 
   // A side paper's tallest: from the sheet's top (on screen) to 24px above the window's bottom, at least 320px.
-  function sideMaxHeight(vh, sheetTop) {
-    return Math.round(Math.max(320, Math.min(vh - 120, vh - 24 - Math.max(0, sheetTop))));
+  // A tall panel may reach nearer the window's top.
+  function sideMaxHeight(vh, sheetTop, tall) {
+    return Math.round(Math.max(320, Math.min(vh - (tall ? 48 : 120), vh - 24 - Math.max(0, sheetTop))));
+  }
+
+  // A tall panel's width: the room beside the sheet once it has shifted as far as it can, kept within 390 to 520px.
+  function sideWidth(room) {
+    return Math.round(Math.max(390, Math.min(520, room)));
   }
 
   var api = {
     STYLES: STYLES, FONTS: FONTS, BAKED: BAKED, FX_KINDS: FX_KINDS,
     fontHref: fontHref, styleFor: styleFor, modeOf: modeOf, durFor: durFor, msOf: msOf,
     longestTransition: longestTransition, fxPlan: fxPlan, foldPlan: foldPlan, panelStep: panelStep, sideOver: sideOver,
-    sideMaxHeight: sideMaxHeight
+    sideMaxHeight: sideMaxHeight, sideWidth: sideWidth
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
@@ -433,7 +440,7 @@
   // One sheet
   // ---------------------------------------------------------------------
 
-  var WD = 390, PEEK = 50;
+  var W0 = 390, PEEK = 50;
 
   function mount(root) {
     if (root._sheet) return root._sheet;
@@ -587,17 +594,19 @@
     }
 
     // Wide desk: the paper comes out beside the part, from behind the sheet's right edge.
-    function sidePaper(part, id, title, kind, body) {
+    function sidePaper(part, id, title, kind, body, tall) {
       var fr = folio.getBoundingClientRect(), sheet = sheetEl(), sr = sheet.getBoundingClientRect(), pr = part.getBoundingClientRect(), cr = desk().getBoundingClientRect();
       var cur = new DOMMatrixReadOnly(getComputedStyle(folio).transform).m41 || 0;
       // Shift the sheet left as far as the desk allows; a paper that still doesn't fit lies over the sheet, next to the part.
-      var left0 = sr.left - cur, cap = Math.max(0, left0 - (cr.left + 12)), need = left0 + sr.width + WD - (cr.right - 12);
+      var left0 = sr.left - cur, cap = Math.max(0, left0 - (cr.left + 12));
+      var WD = tall ? sideWidth(cr.right - 12 - (left0 - cap + sr.width)) : W0, need = left0 + sr.width + WD - (cr.right - 12);
       var shift = Math.min(cap, Math.max(need, WD / 2)), fit = Math.max(0, need - shift);
       var move = role(root, 'panel');
       var p = drawer(id, title, kind, body, false), w = makeWell(folio, 'right', p, move);
       p.style.width = WD + 'px';
       // A panel is as tall as what it holds, up to the window: past a short sheet it lies over the page below rather than cutting off.
-      p.style.maxHeight = sideMaxHeight(innerHeight, sr.top) + 'px';
+      p.style.maxHeight = sideMaxHeight(innerHeight, sr.top, tall) + 'px';
+      if (tall) p.style.height = p.style.maxHeight;
       var ph = p.offsetHeight, rel = sr.right - fr.left, T = pr.top - fr.top - 18;
       var over = sideOver(fit, rel, pr.right - fr.left);
       // Beside the part that was clicked, lifted only as far as it takes to stay in the window, and never above the sheet.
@@ -704,7 +713,7 @@
       if (step.effects.indexOf('close') >= 0) closePanel(false, true);
       part = part || trigger;
       var title = src.tpl.getAttribute('data-title') || trigger.textContent.trim(), kind = src.tpl.getAttribute('data-kind') || '';
-      var o = narrow() ? pagePaper(trigger, part, id, title, kind, src.fragment) : sidePaper(part, id, title, kind, src.fragment);
+      var o = narrow() ? pagePaper(trigger, part, id, title, kind, src.fragment) : sidePaper(part, id, title, kind, src.fragment, src.tpl.getAttribute('data-size') === 'tall');
       trigger.setAttribute('aria-expanded', 'true');
       part.classList.add('is-pulled');
       if (part._peek) part._peek.classList.add('is-pulled');

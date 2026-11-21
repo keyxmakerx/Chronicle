@@ -233,3 +233,14 @@ test('sideMaxHeight: a side paper fits between the sheet top and the window bott
   assert.equal(S.sideMaxHeight(500, 300), 320, 'never shorter than 320');
 });
 
+
+test('sideWidth: a tall panel takes the room, within 390 to 520', () => {
+  assert.equal(S.sideWidth(200), 390);
+  assert.equal(S.sideWidth(450), 450);
+  assert.equal(S.sideWidth(900), 520);
+});
+
+test('sideMaxHeight: a tall panel may reach nearer the window top', () => {
+  assert.equal(S.sideMaxHeight(900, -400, true), 852);
+  assert.equal(S.sideMaxHeight(900, 176, true), 700);
+});
