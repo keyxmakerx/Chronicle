@@ -2,11 +2,13 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -795,4 +797,69 @@ func trackerValue(t TrackerOnPage) string {
 		}
 	}
 	return strconv.Itoa(t.Value)
+}
+
+var _ aiplug.Undoable = TrackerKind{}
+
+// trackerFingerprint is what a kind's settings are, without the counters the
+// service moves on its own (its version and how many pages use it).
+func trackerFingerprint(t TrackerSetup) string {
+	t.Version, t.InUse, t.Managed = 0, 0, false
+	return aiplug.Hash(t)
+}
+
+// Before keeps a tracker kind's settings when the record changes them. Only
+// that is kept: the pages a record places a tracker on and the lines it logs
+// stay as they are.
+func (k TrackerKind) Before(ctx context.Context, campaignID string, a Actor, r Record) (*aiplug.Snapshot, error) {
+	if r.Action != ActionUpdate {
+		return nil, nil
+	}
+	d, err := k.read(ctx, campaignID, a, r)
+	if err != nil || d.existing == nil || !d.kindSet || d.existing.Managed {
+		return nil, nil
+	}
+	b, err := json.Marshal(d.existing)
+	if err != nil {
+		return nil, err
+	}
+	return &aiplug.Snapshot{Target: d.existing.ID, Name: d.existing.Name, Data: string(b)}, nil
+}
+
+func (k TrackerKind) current(ctx context.Context, campaignID string, a Actor, id string) (*TrackerSetup, error) {
+	kinds, _, err := k.Svc.Kinds(ctx, campaignID, a)
+	if err != nil {
+		return nil, err
+	}
+	for i := range kinds {
+		if kinds[i].ID == id {
+			return &kinds[i], nil
+		}
+	}
+	return nil, badRequestf("that tracker is gone")
+}
+
+// Fingerprint is the kind's settings now.
+func (k TrackerKind) Fingerprint(ctx context.Context, campaignID string, a Actor, s aiplug.Snapshot) (string, error) {
+	t, err := k.current(ctx, campaignID, a, s.Target)
+	if err != nil {
+		return "", err
+	}
+	return trackerFingerprint(*t), nil
+}
+
+// Restore saves the kept settings again over the kind as it is now; the
+// version is the live one, so the service's own clash check passes.
+func (k TrackerKind) Restore(ctx context.Context, campaignID string, a Actor, s aiplug.Snapshot) error {
+	var was TrackerSetup
+	if err := json.Unmarshal([]byte(s.Data), &was); err != nil {
+		return err
+	}
+	now, err := k.current(ctx, campaignID, a, s.Target)
+	if err != nil {
+		return err
+	}
+	was.Version = now.Version
+	_, err = k.Svc.UpdateKind(ctx, campaignID, s.Target, a, was)
+	return err
 }
