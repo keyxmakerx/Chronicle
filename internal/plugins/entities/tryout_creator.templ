@@ -16,12 +16,7 @@ import (
 templ TryoutCreatorPage(cc *campaigns.CampaignContext, view TryoutCreatorView) {
 	@layouts.App("Try the hero builder - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
-		<div class="max-w-7xl mx-auto px-4 py-6">
-			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
-				<span aria-hidden="true">/</span>
-				<span class="text-fg">Try the hero builder</span>
-			</nav>
+		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
 				class="hc"
 				data-widget="hero-creator"
@@ -34,11 +29,8 @@ templ TryoutCreatorPage(cc *campaigns.CampaignContext, view TryoutCreatorView) {
 				data-type-name="practice hero"
 				data-for-self="false"
 			>
-				<div class="hc-wrap paper-stack">
-					<div class="hc-page paper hc-loading" role="status">
-						<p class="paper-kind">Try the hero builder</p>
-						<p class="hc-loading__text">Opening the creator…</p>
-					</div>
+				<div class="hc-loading" role="status">
+					<p class="hc-loading__text">Opening the creator…</p>
 				</div>
 				<noscript>
 					<p class="text-sm text-fg-muted">The hero builder needs JavaScript.</p>

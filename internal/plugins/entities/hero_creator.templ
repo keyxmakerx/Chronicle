@@ -25,12 +25,7 @@ type HeroCreatorView struct {
 templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 	@layouts.App("Create hero - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
-		<div class="max-w-7xl mx-auto px-4 py-6">
-			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
-				<span aria-hidden="true">/</span>
-				<span class="text-fg">New hero</span>
-			</nav>
+		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
 				class="hc"
 				data-widget="hero-creator"
@@ -42,11 +37,8 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 				data-type-name={ view.TypeName }
 				data-for-self={ fmt.Sprint(view.ForSelf) }
 			>
-				<div class="hc-wrap paper-stack">
-					<div class="hc-page paper hc-loading" role="status">
-						<p class="paper-kind">New hero</p>
-						<p class="hc-loading__text">Opening the creator…</p>
-					</div>
+				<div class="hc-loading" role="status">
+					<p class="hc-loading__text">Opening the creator…</p>
 				</div>
 				<noscript>
 					<p class="text-sm text-fg-muted">The hero creator needs JavaScript. You can still add a character page from the Characters page.</p>

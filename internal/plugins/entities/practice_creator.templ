@@ -26,16 +26,7 @@ func practiceNewURL(campaignID, query string) string {
 templ PracticeCreatorPage(cc *campaigns.CampaignContext, view PracticeCreatorView) {
 	@layouts.App("Practice hero - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
-		<div class="max-w-7xl mx-auto px-4 py-6">
-			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
-				<span aria-hidden="true">/</span>
-				if view.Editing {
-					<span class="text-fg">Change practice hero</span>
-				} else {
-					<span class="text-fg">New practice hero</span>
-				}
-			</nav>
+		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
 				class="hc"
 				data-widget="hero-creator"
@@ -50,11 +41,8 @@ templ PracticeCreatorPage(cc *campaigns.CampaignContext, view PracticeCreatorVie
 				data-type-name="practice hero"
 				data-for-self="false"
 			>
-				<div class="hc-wrap paper-stack">
-					<div class="hc-page paper hc-loading" role="status">
-						<p class="paper-kind">Practice hero</p>
-						<p class="hc-loading__text">Opening the creator…</p>
-					</div>
+				<div class="hc-loading" role="status">
+					<p class="hc-loading__text">Opening the creator…</p>
 				</div>
 				<noscript>
 					<p class="text-sm text-fg-muted">The hero creator needs JavaScript.</p>
