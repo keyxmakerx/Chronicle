@@ -116,8 +116,11 @@ func eventNightInput(ev SessionEvent, createdBy string) CreateSessionInput {
 // service a night made by hand or by an AI goes through: planned, every member
 // invited, the event's page linked. It sends no email and no bell: the night
 // has no real date yet, and the owner's own press is not an announcement to
-// the table. The "no night yet" check is repeated here so a double press or
-// two tabs make one night.
+// the table. The "no night yet" check is repeated here, but it is a read then
+// a write with no unique key behind it, so simultaneous requests can each pass
+// it and each make a night. The button disables while a press is in flight, so
+// one person cannot double-submit; two tabs or a scripted burst can still make
+// duplicates. TODO(#2522): a unique key on a stored event link would close it.
 func makeNightFromEvent(ctx context.Context, svc SessionService, members campaigns.MemberLister, campaignID, userID string, ev SessionEvent) (*Session, error) {
 	existing, err := svc.ListSessions(ctx, campaignID)
 	if err != nil {

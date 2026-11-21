@@ -322,7 +322,10 @@ func similarDiffer(m *importer.SimilarPage) string {
 	if m.Differ == 0 {
 		return ", the same words"
 	}
-	return fmt.Sprintf(", %d %s differ", m.Differ, pluralize("word", "words", m.Differ))
+	if m.Differ == 1 {
+		return ", 1 word differs"
+	}
+	return fmt.Sprintf(", %d words differ", m.Differ)
 }
 
 // simLine is one line of a side-by-side text. Only marks a line the other

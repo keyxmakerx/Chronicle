@@ -35,6 +35,12 @@ func TestImportReview_SimilarLine(t *testing.T) {
 			absent: []string{"replace_gm_confirmed"},
 		},
 		{
+			name:    "one differing word reads in the singular",
+			similar: []*importer.SimilarPage{{Name: "New Player Guide", Differ: 1, HasBody: true, CanUpdate: true}},
+			want:    []string{", 1 word differs"},
+			absent:  []string{"1 words", "differ<", "1 word differ,"},
+		},
+		{
 			name:    "no match, no line",
 			similar: []*importer.SimilarPage{nil, nil, nil, nil},
 			absent:  []string{"Much like a page you have", "air-sim"},

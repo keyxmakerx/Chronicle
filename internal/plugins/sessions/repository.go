@@ -257,7 +257,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
 	                 s.recap, s.recap_html,
-	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_id, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
@@ -270,7 +270,7 @@ func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
 		&s.Recap, &s.RecapHTML,
-		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarID, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -292,7 +292,7 @@ func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 // sessions end each group.
 func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
-	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_id, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
@@ -321,7 +321,7 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 		var s Session
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
-			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarID, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -338,7 +338,7 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 // SearchByCampaign returns sessions matching a name query for a campaign.
 func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error) {
 	q := `SELECT s.id, s.campaign_id, s.name, s.summary,
-	             s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	             s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_id, s.calendar_year, s.calendar_month, s.calendar_day,
 	             s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	             s.recurrence_day_of_week, s.recurrence_end_date,
 	             s.sort_order, s.created_by, s.created_at, s.updated_at,
@@ -361,7 +361,7 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 		var s Session
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
-			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarID, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -639,7 +639,7 @@ func (r *sessionRepository) ListPlannedByWorldDateRange(ctx context.Context, cam
 // date matches and recurring sessions that would fall in the range.
 func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
-	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_id, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
@@ -667,7 +667,7 @@ func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, sta
 		var s Session
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
-			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarID, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,

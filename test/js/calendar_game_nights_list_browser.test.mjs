@@ -254,3 +254,50 @@ test('a night made for a real-life calendar event does not claim it has no real 
   assert.match(toast, /Made a game night for Session 1\./);
   assert.doesNotMatch(toast, /no real date/);
 });
+
+const MANY = [1, 2, 3, 4, 5].map((n) => ({ eventId: 'e' + n, name: 'Session ' + n, when: n + ' Hammer, 1492' }));
+
+// A button that is drawn but sits under the Look/Edit deck, or off the edge of
+// the screen, cannot be pressed; asking the page what is at its centre is the
+// only check that sees both.
+async function stripButtonsReachable(p) {
+  // The Look/Edit deck belongs to the editor script, which this page does not
+  // load; a stand-in with its class and layer sits across where a tall list
+  // reaches, so the list has to be above it to pass.
+  await p.evaluate(() => {
+    const d = document.createElement('div');
+    d.className = 'deck';
+    d.style.cssText = 'position:absolute;left:0;right:0;top:230px;height:90px';
+    document.querySelector('.cal-v5 .cal').appendChild(d);
+  });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  const bad = await p.$$eval('#cal5-gnpop .gnstrip .lnk', (bs) => bs.flatMap((b) => {
+    b.scrollIntoView({ block: 'nearest' });
+    const r = b.getBoundingClientRect();
+    const inside = r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight;
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const hit = at === b || b.contains(at);
+    return inside && hit ? [] : [b.textContent + ' inside=' + inside + ' hit=' + hit + ' left=' + Math.round(r.left) + ' right=' + Math.round(r.right)];
+  }));
+  assert.deepEqual(bad, []);
+  const pop = await p.$eval('#cal5-gnpop', (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: window.innerWidth }; });
+  assert.ok(pop.l >= 0 && pop.r <= pop.w, 'the panel is inside the screen: ' + JSON.stringify(pop));
+}
+
+test('every strip button is inside the screen and on top, on a phone', { skip }, async (t) => {
+  await stripButtonsReachable(await page(t, 360, { role: 2, candidates: MANY }));
+});
+
+test('every strip button is inside the screen and on top, on a desktop', { skip }, async (t) => {
+  await stripButtonsReachable(await page(t, 1280, { role: 2, candidates: MANY }));
+});
+
+test('the count of events past the three shown agrees with its number', { skip }, async (t) => {
+  for (const [cands, want] of [[MANY.slice(0, 4), '1 more Session event has no game night.'], [MANY, '2 more Session events have no game night.']]) {
+    const p = await page(t, 1280, { role: 2, candidates: cands });
+    await p.click('#cal5-gnbtn');
+    await p.waitForSelector('#cal5-gnpop .gnstrip');
+    assert.equal((await p.textContent('#cal5-gnpop .gnstrip-more')).trim(), want);
+  }
+});

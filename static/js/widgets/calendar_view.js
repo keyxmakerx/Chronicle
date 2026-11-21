@@ -2331,11 +2331,25 @@
       return !!pop && !pop.hidden;
     },
 
+    // The panel hangs from the right edge of the header's buttons, which on a
+    // phone sit well inside the screen, so a full-width panel would start left
+    // of it. Shift it sideways just enough to sit 12px inside both edges.
+    _fitPop: function (pop) {
+      var host = pop.offsetParent;
+      pop.style.right = '';
+      if (!host) return;
+      var edge = host.getBoundingClientRect().right, w = pop.offsetWidth, vw = window.innerWidth, gap = 12, dx = 0;
+      if (edge - w < gap) dx = gap - (edge - w);
+      else if (edge > vw - gap) dx = (vw - gap) - edge;
+      if (dx) pop.style.right = (-dx) + 'px';
+    },
+
     openWaiting: function () {
       var btn = $('#cal5-waitbtn', this.el), pop = $('#cal5-waitpop', this.el);
       if (!btn || !pop || btn.hidden) return;
       this.closeGnList();
       pop.hidden = false;
+      this._fitPop(pop);
       btn.setAttribute('aria-expanded', 'true');
       var first = $('.wrow', pop);
       if (first) first.focus();
@@ -2367,6 +2381,7 @@
       this.closeWaiting();
       pop.innerHTML = '<p class="gnempty">Loading game nights…</p>';
       pop.hidden = false;
+      this._fitPop(pop);
       btn.setAttribute('aria-expanded', 'true');
       var y = this.cal.current_year, m = this.cal.current_month, months = [];
       for (var i = 0; i < 3; i++) {
@@ -2454,7 +2469,10 @@
           '<p class="gnstrip-q"><button type="button" class="lnk" data-gn-make="' + esc(r.eventId) + '">Make a game night</button>' +
           '<button type="button" class="lnk" data-gn-skip="' + esc(r.eventId) + '">Not this one</button></p></div>';
       }).join('');
-      if (rows.length > 3) h += '<p class="gnstrip-s gnstrip-more">' + (rows.length - 3) + ' more Session events have no game night.</p>';
+      if (rows.length > 3) {
+        var more = rows.length - 3;
+        h += '<p class="gnstrip-s gnstrip-more">' + more + (more === 1 ? ' more Session event has' : ' more Session events have') + ' no game night.</p>';
+      }
       return h;
     },
     _gnMake: function (btn) {
