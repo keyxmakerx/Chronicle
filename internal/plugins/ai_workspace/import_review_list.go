@@ -328,11 +328,27 @@ func similarDiffer(m *importer.SimilarPage) string {
 	return fmt.Sprintf(", %d words differ", m.Differ)
 }
 
+// similarLead is the words before the matching page's name.
+func similarLead(m *importer.SimilarPage) string {
+	switch {
+	case !m.Pending:
+		return "Much like a page you have:"
+	case m.Elsewhere:
+		return "Much like a page in another waiting request:"
+	default:
+		return "Much like another page in this request:"
+	}
+}
+
 // simLine is one line of a side-by-side text. Only marks a line the other
-// text does not have, in words as well as colour.
+// text does not have, in words as well as colour. GM marks a line where a
+// GM-only part was left out of the page's reader-safe text: it is not
+// compared, since what is left is not the page's own sentence, and the
+// review says a part is not shown.
 type simLine struct {
 	Text string
 	Only bool
+	GM   bool
 }
 
 // maxSimLines bounds each side of "See both"; a long page shows its start.
@@ -350,6 +366,10 @@ func simLines(lines, other []string) []simLine {
 		if len(out) == maxSimLines {
 			out = append(out, simLine{Text: "…"})
 			break
+		}
+		if strings.Contains(l, importer.GMOnlyMark) {
+			out = append(out, simLine{Text: strings.Join(strings.Fields(strings.ReplaceAll(l, importer.GMOnlyMark, " ")), " "), GM: true})
+			continue
 		}
 		out = append(out, simLine{Text: l, Only: !have[strings.ToLower(l)]})
 	}

@@ -164,6 +164,9 @@ func TestFindSimilar(t *testing.T) {
 			if !got.CanUpdate {
 				t.Fatal("a page whose slug follows its name can be changed by name")
 			}
+			if tt.name == "gm-only passages do not count as words" && !strings.Contains(strings.Join(got.Have, "\n"), GMOnlyMark) {
+				t.Fatal("the comparison should mark where a GM-only part was left out")
+			}
 		})
 	}
 }
