@@ -98,7 +98,9 @@ func TestTryout_AccessMatrix(t *testing.T) {
 		{tryoutViewer{name: "expired pass", user: "u9", role: campaigns.RoleNone, until: &past}, 404, 404, false},
 		{tryoutViewer{name: "pass but no account", role: campaigns.RoleNone, until: &future}, 404, 404, false},
 		{tryoutViewer{name: "player", user: "u1", member: true, role: campaigns.RolePlayer}, 302, 404, true},
-		{tryoutViewer{name: "Director", user: "dm", member: true, role: campaigns.RoleOwner}, 302, 404, true},
+		// Practice heroes are for Players, so nobody else is sent to their creator.
+		{tryoutViewer{name: "Director", user: "dm", member: true, role: campaigns.RoleOwner}, 404, 404, false},
+		{tryoutViewer{name: "Scribe", user: "s", member: true, role: campaigns.RoleScribe}, 404, 404, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.v.name, func(t *testing.T) {

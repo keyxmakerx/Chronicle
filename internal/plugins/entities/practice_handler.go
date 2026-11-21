@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -419,10 +420,11 @@ func (h *Handler) practiceShelf(c *echo.Context, cc *campaigns.CampaignContext, 
 			break
 		}
 	}
+	now := time.Now()
 	for _, p := range mine {
 		line := practiceSummary(p.Picks, p.Level)
 		if p.CopiedFromName != "" {
-			line = "A copy of " + p.CopiedFromName
+			line = "A copy of " + p.CopiedFromName + ", changed " + practiceAge(now, p.UpdatedAt)
 		}
 		v.Rows = append(v.Rows, PracticeShelfRow{ID: p.ID, Name: p.Name, Line: line})
 	}

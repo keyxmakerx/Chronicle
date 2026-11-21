@@ -66,7 +66,7 @@ func (h *Handler) TryoutNew(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	if cc.IsMember && cc.MemberRole >= campaigns.RolePlayer {
+	if cc.IsMember && cc.MemberRole == campaigns.RolePlayer {
 		return c.Redirect(http.StatusFound, practiceNewURL(cc.Campaign.ID, ""))
 	}
 	if err := h.tryoutReady(c, cc); err != nil {

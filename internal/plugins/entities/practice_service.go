@@ -313,8 +313,8 @@ func (s *practiceService) restore(ctx context.Context, h *PracticeHero) {
 	}
 }
 
-// practiceAge words how long ago a practice hero changed, for the shelf's
-// quiet line. Kept coarse on purpose: the exact time sits in the title.
+// practiceAge words how long ago a practice hero changed, for a copy's
+// quiet line. Kept coarse on purpose.
 func practiceAge(now, then time.Time) string {
 	d := now.Sub(then)
 	switch {
