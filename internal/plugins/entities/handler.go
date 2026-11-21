@@ -353,6 +353,9 @@ func (h *Handler) Index(c *echo.Context) error {
 		if err == nil {
 			typeID = et.ID
 			activeEntityType = et
+		} else if apperror.SafeCode(err) != http.StatusNotFound {
+			// A lookup failure is not "no such category"; do not dress it as one.
+			return err
 		}
 	} else if tid, _ := strconv.Atoi(c.QueryParam("type")); tid > 0 {
 		typeID = tid
@@ -364,13 +367,18 @@ func (h *Handler) Index(c *echo.Context) error {
 
 	// A DM-only category, or another campaign's, does not exist for this
 	// viewer: the page answers exactly as it does for a category that was
-	// never made (a slug falls back to All Pages, a type id lists nothing),
-	// so neither its name nor whether it exists can be told apart.
+	// never made (a slug is not found, a type id lists nothing), so neither
+	// its name nor whether it exists can be told apart.
 	if activeEntityType != nil && (activeEntityType.CampaignID != campaignID || !ViewerSeesType(activeEntityType, role)) {
 		activeEntityType = nil
 		if activeTypeSlug != "" {
 			typeID = 0
 		}
+	}
+	// An address that names no category is a dead link, not All pages; a
+	// stale or mistyped URL must not look like a working list.
+	if activeTypeSlug != "" && activeEntityType == nil {
+		return apperror.NewNotFound("category not found")
 	}
 
 	// Fetch entity types for sidebar filter and counts. Non-fatal: degrade

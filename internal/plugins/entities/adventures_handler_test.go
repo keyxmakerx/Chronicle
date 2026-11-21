@@ -150,7 +150,16 @@ func TestIndex_AdventuresCategoryAnswersLikeAMissingOne(t *testing.T) {
 		if slug {
 			c.Set("entity_type_slug", target)
 		}
-		if err := h.Index(c); err != nil {
+		err := h.Index(c)
+		if slug {
+			// A slug naming no visible category is not found, whether it is
+			// hidden or never made.
+			if apperror.SafeCode(err) != http.StatusNotFound {
+				t.Fatalf("Index(%s) err = %v, want not found", target, err)
+			}
+			return http.StatusNotFound, err.Error()
+		}
+		if err != nil {
 			t.Fatalf("Index(%s) err = %v, want the page", target, err)
 		}
 		return rec.Code, rec.Body.String()
@@ -325,6 +334,37 @@ func TestViewableIDsAPI(t *testing.T) {
 			}
 			if got.IDs == nil || strings.Join(got.IDs, ",") != strings.Join(tt.want, ",") {
 				t.Errorf("ids = %v, want %v", got.IDs, tt.want)
+			}
+		})
+	}
+}
+
+// An address that names no category is not found, so a stale or mistyped link
+// does not look like the All pages list.
+func TestIndex_UnknownCategorySlugIsNotFound(t *testing.T) {
+	tests := []struct {
+		name string
+		slug string
+		want int
+	}{
+		{"never made", "no-such-category", http.StatusNotFound},
+		{"a real category", "npc", http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := advHandlerEnv()
+			svc := h.service.(*entityService)
+			svc.types = &slugTypes{mockEntityTypeRepo: svc.types.(*mockEntityTypeRepo)}
+			c, _ := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/"+tt.slug)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
+			c.Set("entity_type_slug", tt.slug)
+			err := h.Index(c)
+			got := http.StatusOK
+			if err != nil {
+				got = apperror.SafeCode(err)
+			}
+			if got != tt.want {
+				t.Fatalf("Index(%s) = %d (%v), want %d", tt.slug, got, err, tt.want)
 			}
 		})
 	}
