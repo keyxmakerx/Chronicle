@@ -232,11 +232,24 @@ func main() {
 	}
 }
 
+// backupRequired decides whether a failed pre-migration backup stops the boot.
+// An explicit BACKUP_REQUIRED wins; unset, production fails closed so a bare
+// binary without mysqldump cannot migrate a live database unprotected, while
+// development keeps the warn-and-proceed default.
+func backupRequired(raw, env string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true":
+		return true
+	case "0", "false":
+		return false
+	}
+	return strings.EqualFold(env, "production")
+}
+
 // bootBackupConfig builds the pre-migration backup settings and reports
 // whether a failed backup must stop the boot (BACKUP_REQUIRED).
 func bootBackupConfig(cfg *config.Config) (database.HealthCheckConfig, bool) {
-	required := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
-		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
+	required := backupRequired(os.Getenv("BACKUP_REQUIRED"), cfg.Env)
 	return database.HealthCheckConfig{
 		BackupDir:      cfg.BackupDir,
 		BackupRequired: required,
