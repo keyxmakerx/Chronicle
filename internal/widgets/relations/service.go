@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 )
 
 // RelationService defines the business logic contract for entity relation
@@ -66,7 +67,22 @@ type RelationService interface {
 	// writes to live clients and the sync change feed. Called during app
 	// wiring; without one, writes are silent.
 	SetEventPublisher(p RelationEventPublisher)
+
+	// SetListingObserver injects the callback told whenever a shop listing
+	// ("sells" / "sold by") is written or removed, so the page behind a
+	// shop good can follow who may see it. Called during app wiring.
+	SetListingObserver(o ListingObserver)
 }
+
+// ListingObserver is told, for each end of a shop listing, that the
+// listing changed. An error from a write inside a transaction rolls it back.
+type ListingObserver func(ctx context.Context, campaignID, entityID string) error
+
+// Relation types a shop listing is stored with, forward and reverse.
+const (
+	listingForward = "sells"
+	listingReverse = "sold by"
+)
 
 // Relation event types passed to RelationEventPublisher.
 const (
@@ -91,6 +107,23 @@ type relationService struct {
 	mentionProvider  MentionLinkProvider
 	entityViewFilter EntityViewFilter
 	publisher        RelationEventPublisher
+	listing          ListingObserver
+}
+
+// SetListingObserver implements RelationService.
+func (s *relationService) SetListingObserver(o ListingObserver) { s.listing = o }
+
+// notifyListing tells the observer about both ends of a shop listing.
+func (s *relationService) notifyListing(ctx context.Context, rel *Relation) error {
+	if s.listing == nil || rel == nil || (rel.RelationType != listingForward && rel.RelationType != listingReverse) {
+		return nil
+	}
+	for _, id := range []string{rel.SourceEntityID, rel.TargetEntityID} {
+		if err := s.listing(ctx, rel.CampaignID, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetEventPublisher implements RelationService.
@@ -203,14 +236,17 @@ func (s *relationService) Create(ctx context.Context, campaignID, sourceEntityID
 			// Conflict means reverse already exists; silently continue.
 		} else {
 			// The forward row is already written, so it is still announced.
-			s.publish(RelationEventCreated, forward)
+			database.AfterCommit(ctx, func() { s.publish(RelationEventCreated, forward) })
 			return nil, fmt.Errorf("creating reverse relation: %w", err)
 		}
 	} else {
-		s.publish(RelationEventCreated, reverse)
+		database.AfterCommit(ctx, func() { s.publish(RelationEventCreated, reverse) })
 	}
 
-	s.publish(RelationEventCreated, forward)
+	if err := s.notifyListing(ctx, forward); err != nil {
+		return nil, err
+	}
+	database.AfterCommit(ctx, func() { s.publish(RelationEventCreated, forward) })
 	return forward, nil
 }
 
@@ -244,7 +280,7 @@ func (s *relationService) Delete(ctx context.Context, id int) error {
 				slog.Any("error", err),
 			)
 		} else {
-			s.publish(RelationEventDeleted, reverse)
+			database.AfterCommit(ctx, func() { s.publish(RelationEventDeleted, reverse) })
 		}
 	}
 
@@ -252,7 +288,12 @@ func (s *relationService) Delete(ctx context.Context, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	s.publish(RelationEventDeleted, rel)
+	database.AfterCommit(ctx, func() { s.publish(RelationEventDeleted, rel) })
+	// The listing is gone either way; a failure to follow it is logged, not
+	// turned into a failed removal.
+	if err := s.notifyListing(ctx, rel); err != nil {
+		slog.Error("shop listing removed but its page was not updated", slog.Int("relation_id", id), slog.Any("error", err))
+	}
 	return nil
 }
 

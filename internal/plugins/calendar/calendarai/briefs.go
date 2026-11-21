@@ -32,7 +32,7 @@ func (MoonKind) Brief() string {
 	return "a moon the Director moves by hand: the day it turns full, dark or vanished, and what players see"
 }
 func (GeneratorKind) Brief() string {
-	return "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result"
+	return "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, the calendar's past history of eras and events, names into a rolling table, a whole new calendar, new moons) instead of inventing the result"
 }
 
 // Stage lets the rows after a calendar create, or a switch of the main

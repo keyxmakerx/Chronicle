@@ -1,0 +1,4 @@
+ALTER TABLE map_hex_cells
+    DROP COLUMN IF EXISTS road,
+    DROP COLUMN IF EXISTS river,
+    DROP COLUMN IF EXISTS trail;

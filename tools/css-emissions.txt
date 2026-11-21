@@ -95,71 +95,41 @@
 .shop-inv
 .shop-inv-header
 .shop-inv-header h3
-.dark .shop-inv-header h3
-.shop-inv-add-btn
-.shop-inv-add-btn:hover
 .shop-inv-empty
 .shop-inv-list
 .shop-inv-item
-.dark .shop-inv-item
-.shop-inv-item-icon
 .shop-inv-item-info
 .shop-inv-item-name
 .shop-inv-item-name:hover
 .shop-inv-item-name-plain
-.dark .shop-inv-item-name
-.dark .shop-inv-item-name-plain
 .shop-inv-item-meta
 .shop-inv-item-controls
 .shop-inv-price
 .shop-inv-qty
 .shop-inv-qty input
-.dark .shop-inv-qty input
 .shop-inv-stock-toggle
 .shop-inv-stock-in
 .shop-inv-stock-out
 .shop-inv-today-on
-.shop-inv-today-off
-.dark .shop-inv-today-on
-.dark .shop-inv-today-off
 .shop-inv-today-note
-.dark .shop-inv-today-note
 .shop-inv-shelf
-.dark .shop-inv-shelf
 .shop-inv-shelf-input
-.dark .shop-inv-shelf-input
 .shop-inv-remove
 .shop-inv-remove:hover
 .shop-inv-search
-.dark .shop-inv-search
 .shop-inv-search-results
 .shop-inv-search-item
 .shop-inv-search-item:hover
-.dark .shop-inv-search-item:hover
 .shop-inv-price-input
-.dark .shop-inv-price-input
 .shop-inv-add-panel
-.dark .shop-inv-add-panel
 .shop-inv-create-section
-.dark .shop-inv-create-section
 .shop-inv-create-row
 .shop-inv-create-input
-.dark .shop-inv-create-input
 .shop-inv-type-select
-.dark .shop-inv-type-select
 .shop-inv-action-btn
 .shop-inv-action-btn:disabled
-.shop-inv-action-btn.green
-.shop-inv-action-btn.green:hover:not(:disabled)
-.shop-inv-action-btn.blue
-.shop-inv-action-btn.blue:hover:not(:disabled)
 .shop-inv-label
-.shop-inv-tx-toggle
-.dark .shop-inv-tx-toggle
-.shop-inv-tx-toggle:hover
-.dark .shop-inv-tx-toggle:hover
 .shop-inv-tx-section
-.dark .shop-inv-tx-section
 .shop-inv-tx-title
 .shop-inv-tx-list
 .shop-inv-tx-row
@@ -169,7 +139,6 @@
 .shop-inv-tx-type.gift
 .shop-inv-tx-type.restock
 .shop-inv-tx-detail
-.dark .shop-inv-tx-detail
 .shop-inv-tx-price
 .shop-inv-tx-date
 .tp-chip
@@ -254,3 +223,9 @@
 .tile[data-tile-w=2]
 .tile[data-tile-w=4]
 .tile[data-tile-h=2]
+.shop-draft
+.sf-seg
+.sf-g
+.shop-good-note
+.armory-views
+[data-whole]:not([data-whole-ready])

@@ -6,13 +6,10 @@
 package entities
 
 import (
-	"github.com/keyxmakerx/chronicle/internal/colour"
 	"fmt"
-	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
-	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // CategoryDashboardPage renders the full category dashboard.
@@ -62,8 +59,8 @@ templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, lay
 templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
 	<div
 		id="entity-list"
-		x-data={ fmt.Sprintf("{ view: localStorage.getItem('chronicle_cat_view_%d') || 'grid' }", et.ID) }
-		x-effect={ fmt.Sprintf("localStorage.setItem('chronicle_cat_view_%d', view)", et.ID) }
+		x-data={ fmt.Sprintf("{ view: localStorage.getItem('chronicle_cat_view2_%d') || 'table' }", et.ID) }
+		x-effect={ fmt.Sprintf("localStorage.setItem('chronicle_cat_view2_%d', view)", et.ID) }
 	>
 		@layouts.AppFrame() {
 		@layouts.AppOpening(categoryOpening(ctx, cc, et, total, opts)) {
@@ -166,39 +163,22 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 					<p class="py-10 text-center text-sm text-fg-muted">Nothing matches. Try other words or filters.</p>
 				}
 			} else {
-				<!-- Grid view -->
+				<!-- Rows: the same row All pages draws -->
+				<div x-show="view === 'table'" x-cloak>
+					<ul class="el-list">
+						for _, entity := range entities {
+							@EntityRow(&entity, cc)
+						}
+					</ul>
+				</div>
+
+				<!-- Gallery: the same tile All pages draws -->
 				<div x-show="view === 'grid'" x-cloak>
-					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+					<ul class="el-gallery">
 						for _, entity := range entities {
 							@EntityCard(&entity, cc)
 						}
-					</div>
-				</div>
-
-				<!-- Table view -->
-				<div x-show="view === 'table'" x-cloak>
-					<div class="card overflow-hidden">
-						<table class="w-full text-sm">
-							<thead>
-								<tr class="border-b border-edge bg-surface-alt">
-									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
-									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden sm:table-cell">Type</th>
-									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden md:table-cell">Tags</th>
-									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden lg:table-cell">Updated</th>
-									if visibilityGlanceVisible(cc) {
-										<th class="text-center px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider w-16">
-											<i class="fa-solid fa-lock text-[10px]" title="Visibility"></i>
-										</th>
-									}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-edge">
-								for _, entity := range entities {
-									@EntityTableRow(&entity, cc)
-								}
-							</tbody>
-						</table>
-					</div>
+					</ul>
 				</div>
 
 				<!-- Tree view -->
@@ -248,86 +228,6 @@ templ PinnedCard(entity *Entity, cc *campaigns.CampaignContext) {
 			{ entity.Name }
 		</span>
 	</a>
-}
-
-// EntityTableRow renders a single row in the table view. Shows entity name with
-// image/icon, category type badge, tags, relative update time, and privacy indicator.
-// Reused by both category dashboard and all-pages list.
-//
-// The data-entity-id attribute is the contract the bulk-actions widget
-// (static/js/widgets/bulk_actions.js) reads to inject the per-row
-// multi-select <td> checkbox; without it the widget still injects the
-// select-all <th> on the header but skips every row, leaving the header
-// one column wider than the body. The widget only activates when a parent
-// declares data-widget="bulk-actions"; the attribute is inert elsewhere.
-templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
-	<tr class="hover:bg-surface-alt transition-colors group" data-entity-id={ entity.ID }>
-		<td class="px-4 py-2.5">
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-				class="flex items-center gap-2.5 group/link"
-			>
-				if entity.ImagePath != nil && *entity.ImagePath != "" {
-					<img
-						src={ layouts.MediaURL(ctx, *entity.ImagePath) }
-						alt={ entity.Name }
-						class="w-8 h-8 rounded object-cover shrink-0"
-					/>
-				} else {
-					<span class="w-8 h-8 flex items-center justify-center shrink-0">
-						if entity.TypeIcon != "" {
-							<i class={ "fa-solid " + entity.TypeIcon, "text-xs", "kind-themed" } { layouts.KindIconAttrs(ctx, entity.TypeColor)... } aria-hidden="true"></i>
-						}
-					</span>
-				}
-				<div class="min-w-0">
-					<span class="font-medium text-fg group-hover/link:text-accent transition-colors truncate block">
-						{ entity.Name }
-					</span>
-					if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-						<span class="text-[11px] text-fg-muted truncate block">{ *entity.TypeLabel }</span>
-					}
-				</div>
-			</a>
-		</td>
-		<td class="px-4 py-2.5 hidden sm:table-cell">
-			<span
-				class="inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
-				style={ fmt.Sprintf("background-color: %s20; color: %s", entity.TypeColor, entity.TypeColor) }
-			>
-				if entity.TypeIcon != "" {
-					<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]" }></i>
-				}
-				{ entity.TypeName }
-			</span>
-		</td>
-		<td class="px-4 py-2.5 hidden md:table-cell">
-			if len(entity.Tags) > 0 {
-				<div class="flex flex-wrap gap-1">
-					for _, tag := range entity.Tags {
-						<span
-							class="chip-ink inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-medium"
-							style={ colour.ChipStyle(tag.Color) }
-						>
-							{ tag.Name }
-						</span>
-					}
-				</div>
-			} else {
-				<span class="text-fg-muted text-xs">—</span>
-			}
-		</td>
-		<td class="px-4 py-2.5 hidden lg:table-cell">
-			<time class="text-xs text-fg-secondary" datetime={ entity.UpdatedAt.UTC().Format(time.RFC3339) } title={ timeutil.FixedDate(entity.UpdatedAt, timeutil.DateWithTime) } data-date-title>
-				{ timeutil.Ago(entity.UpdatedAt, time.Now()) }
-			</time>
-		</td>
-		if visibilityGlanceVisible(cc) {
-			<td class="px-4 py-2.5 text-center">
-				@visibilityGlance(cc, entity, nil)
-			</td>
-		}
-	</tr>
 }
 
 // isPinned checks if an entity ID is in the pinned list.

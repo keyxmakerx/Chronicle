@@ -11,14 +11,14 @@ import (
 )
 
 // ArmoryGalleryPage renders the full Armory gallery page with layout wrapper.
-templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, csrfToken string) {
+templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, showShopGoodsTab bool, shopGoodCount int, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Armory") {
-		@ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selected, tagOptions, csrfToken)
+		@ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selected, tagOptions, showShopGoodsTab, shopGoodCount, csrfToken)
 	}
 }
 
 // ArmoryGalleryContent renders the gallery content (HTMX partial target).
-templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, csrfToken string) {
+templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, showShopGoodsTab bool, shopGoodCount int, csrfToken string) {
 	<div id="armory-gallery">
 		@layouts.AppFrame() {
 			@layouts.AppOpening(armoryOpening(ctx, total, opts, selected)) {
@@ -27,6 +27,33 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					<span>{ *selected.Description }</span>
 				}
 			}
+		// Only the Director sees the tab: it lists pages that exist to be sold.
+		if showShopGoodsTab {
+			<nav class="armory-views" aria-label="Items view">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID)) }
+					class={ "armory-view", templ.KV("is-on", !opts.ShopGoods) }
+					aria-current?={ !opts.ShopGoods }
+					hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
+					hx-target="#armory-gallery"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+				>Items</a>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory?goods=1", cc.Campaign.ID)) }
+					class={ "armory-view", templ.KV("is-on", opts.ShopGoods) }
+					aria-current?={ opts.ShopGoods }
+					hx-get={ fmt.Sprintf("/campaigns/%s/armory?goods=1", cc.Campaign.ID) }
+					hx-target="#armory-gallery"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+				>Shop goods <span class="armory-view-count">{ fmt.Sprintf("%d", shopGoodCount) }</span></a>
+			</nav>
+		}
+		if opts.ShopGoods {
+			<input type="hidden" name="goods" value="1"/>
+			<p class="armory-goods-note">Goods your shops sell that have no page of their own. They stay out of Items, search and links. Open one and choose Make it a full page to bring it in.</p>
+		}
 		// Tools sit under the opening on the page's left edge. .input is
 		// full-width, so each control sets sm:w-auto to size to its content.
 		<div class="mb-6">
@@ -39,7 +66,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
-						hx-include="[name='q'],[name='sort'],[name='tag'],[name='type']"
+						hx-include="[name='goods'],[name='q'],[name='sort'],[name='tag'],[name='type']"
 					>
 						<option value="">All Items</option>
 						for _, inst := range instances {
@@ -86,7 +113,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
 						hx-trigger="input changed delay:300ms"
-						hx-include="[name='sort'],[name='tag'],[name='type'],[name='instance']"
+						hx-include="[name='goods'],[name='sort'],[name='tag'],[name='type'],[name='instance']"
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
 				</div>
@@ -100,7 +127,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
-						hx-include="[name='q'],[name='type'],[name='sort'],[name='instance']"
+						hx-include="[name='goods'],[name='q'],[name='type'],[name='sort'],[name='instance']"
 					>
 						<option value="">Tag: any</option>
 						for _, t := range tagOptions {
@@ -117,7 +144,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
-						hx-include="[name='q'],[name='sort'],[name='tag'],[name='instance']"
+						hx-include="[name='goods'],[name='q'],[name='sort'],[name='tag'],[name='instance']"
 					>
 						<option value="">All types</option>
 						for _, it := range itemTypes {
@@ -136,7 +163,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 					hx-target="#armory-gallery"
 					hx-swap="innerHTML"
-					hx-include="[name='q'],[name='tag'],[name='type'],[name='instance']"
+					hx-include="[name='goods'],[name='q'],[name='tag'],[name='type'],[name='instance']"
 				>
 					<option value="name" selected?={ opts.Sort == "name" }>Name</option>
 					<option value="updated" selected?={ opts.Sort == "updated" }>Recently Updated</option>
@@ -186,6 +213,9 @@ func armoryPageURL(campaignID string, page int, opts ItemListOptions) string {
 	}
 	if opts.InstanceID > 0 {
 		u += fmt.Sprintf("&instance=%d", opts.InstanceID)
+	}
+	if opts.ShopGoods {
+		u += "&goods=1"
 	}
 	return u
 }

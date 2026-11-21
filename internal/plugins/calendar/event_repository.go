@@ -45,7 +45,9 @@ type EventRepository interface {
 	// event in the given calendars in one query, role-filtered.
 	EventDatesForCalendars(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error)
 
-	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
+	// UpdateEventVisibility sets visibility and rules; a non-nil announced
+	// sets the announce setting in the same statement, nil keeps it.
+	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string, announced *string) error
 
 	// ListRuleEvents returns a calendar's RecurrenceByRule events, unfiltered,
 	// for the anchor-cycle check (an event other rules repeat relative to may
@@ -152,7 +154,7 @@ func buildRecurringCandidateClause() string {
 // to campaignID, the campaign of the event's own calendar. Returns
 // apperror.NewValidation on a cross-campaign reference, so a write can never
 // point an event at another campaign's kind or entity.
-func validateEventRefs(ctx context.Context, db *sql.DB, campaignID string, kindID *int, entityID *string) error {
+func validateEventRefs(ctx context.Context, db dbExecutor, campaignID string, kindID *int, entityID *string) error {
 	if kindID != nil {
 		var exists bool
 		if err := db.QueryRowContext(ctx,
@@ -195,10 +197,16 @@ func validEventPayload(payload *string) error {
 // another campaign's kind or entity even if the caller's own check is
 // skipped or wrong. Zero rows is reported as a validation error.
 func (r *eventRepo) CreateEvent(ctx context.Context, evt *Event) error {
+	return insertEvent(ctx, r.db, evt)
+}
+
+// insertEvent is CreateEvent on a caller-chosen executor, so a batch can
+// run it inside its own transaction.
+func insertEvent(ctx context.Context, ex dbExecutor, evt *Event) error {
 	if err := validEventPayload(evt.Payload); err != nil {
 		return err
 	}
-	res, err := r.db.ExecContext(ctx,
+	res, err := ex.ExecContext(ctx,
 		`INSERT INTO calendar_events (id, calendar_id, entity_id, name, description, description_html,
 		        year, month, day, start_hour, start_minute,
 		        end_year, end_month, end_day, end_hour, end_minute,
@@ -336,11 +344,16 @@ func (r *eventRepo) GetEventsByIDs(ctx context.Context, calendarID string, ids [
 // has no prior row to INSERT ... SELECT against). Returns
 // apperror.NewNotFound if the event doesn't exist.
 func (r *eventRepo) UpdateEvent(ctx context.Context, evt *Event) error {
+	return updateEventRow(ctx, r.db, evt)
+}
+
+// updateEventRow is UpdateEvent on a caller-chosen executor.
+func updateEventRow(ctx context.Context, ex dbExecutor, evt *Event) error {
 	if err := validEventPayload(evt.Payload); err != nil {
 		return err
 	}
 	var campaignID string
-	if err := r.db.QueryRowContext(ctx,
+	if err := ex.QueryRowContext(ctx,
 		`SELECT c.campaign_id FROM calendar_events e JOIN calendars c ON c.id = e.calendar_id WHERE e.id = ?`,
 		evt.ID).Scan(&campaignID); err != nil {
 		if err == sql.ErrNoRows {
@@ -348,11 +361,11 @@ func (r *eventRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		}
 		return err
 	}
-	if err := validateEventRefs(ctx, r.db, campaignID, evt.KindID, evt.EntityID); err != nil {
+	if err := validateEventRefs(ctx, ex, campaignID, evt.KindID, evt.EntityID); err != nil {
 		return err
 	}
 
-	_, err := r.db.ExecContext(ctx,
+	_, err := ex.ExecContext(ctx,
 		`UPDATE calendar_events
 		 SET name = ?, description = ?, description_html = ?, entity_id = ?,
 		     year = ?, month = ?, day = ?,
@@ -658,11 +671,13 @@ func (r *eventRepo) EventDatesForCalendars(ctx context.Context, calIDs []string,
 	return out, rows.Err()
 }
 
-// UpdateEventVisibility sets the visibility and per-user rules on an event.
-func (r *eventRepo) UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error {
+// UpdateEventVisibility sets the visibility and per-user rules on an event,
+// and its announce setting when announced is non-nil. One statement, so a
+// concurrent read never sees the new visibility with the old announce rule.
+func (r *eventRepo) UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string, announced *string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE calendar_events SET visibility = ?, visibility_rules = ? WHERE id = ?`,
-		visibility, visRules, eventID,
+		`UPDATE calendar_events SET visibility = ?, visibility_rules = ?, announced = COALESCE(?, announced) WHERE id = ?`,
+		visibility, visRules, announced, eventID,
 	)
 	return err
 }

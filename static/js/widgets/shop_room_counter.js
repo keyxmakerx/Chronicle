@@ -504,7 +504,7 @@
   ].join('\n');
   function injectStyle() {
     if (document.getElementById('src-style')) return;
-    var st = document.createElement('style'); st.id = 'src-style'; st.textContent = CSS; document.head.appendChild(st);
+    var st = document.createElement('style'); st.id = 'src-style'; st.textContent = CSS + '\n' + CM_CSS.join('\n'); document.head.appendChild(st);
   }
 
   /* ---- The composed counter room. One counter view whose room is built
@@ -523,6 +523,13 @@
     outside: ['day', 'dusk', 'night', 'rain']
   };
   var CM_PROPS = ['anvil', 'alembic', 'jars', 'crystal', 'herbs', 'floating-books', 'orrery', 'ladder', 'banner', 'sconce', 'sparks', 'lanterns', 'rain', 'steam-cart', 'motes'];
+  /* What a parts pack (shop_room_parts_*.js) adds besides the option lists:
+     a wall's grain, where a light stands, the layer each prop is drawn in,
+     the props tall enough to take the scales' place, how the hint names a
+     display's goods, and the CSS its moving parts need. */
+  var CM_WALLFQ = {}, CM_LPOS = {}, CM_TALL = [], CM_CSS = [];
+  var CM_LAYER = { back: ['ladder', 'banner', 'sconce', 'herbs', 'lanterns', 'floating-books'], front: ['anvil', 'alembic', 'jars', 'crystal', 'orrery'], over: ['sparks', 'rain', 'motes'] };
+  var CM_WHERE = { shelves: 'on the shelves', pegboard: 'on the pegboard', drawers: 'on the drawer wall', pigeonholes: 'in its pigeonhole', domes: 'under its dome' };
   var CM_DEFAULT = { name: 'Plain counter', version: 1,
     skeleton: { shape: 'square', opening: 'window-right', display: 'shelves', counter: 'straight' },
     theme: { wall: 'plaster', wood: '#6b4527', cloth: '#5a2024', accent: '#e0a83a', trim: '#c89a4a', light: 'lamp', warmth: .7, outside: 'night' }, props: [] };
@@ -576,7 +583,9 @@
     t.time = { day: '', dusk: 'dusk', night: 'night', rain: 'rain' }[th.outside];
     // Where the light sits: on the counter, hung from the ceiling over a stall, in the forge's mouth, or from above through the opening.
     var lx = t.mx(404), ly = 372;
-    if (th.light === 'forge') { lx = 641; ly = 400; }
+    var lq = CM_LPOS[th.light]; if (typeof lq === 'function') lq = lq(sk);
+    if (lq) { lx = t.mx(lq[0]); ly = lq[1]; }
+    else if (th.light === 'forge') { lx = 641; ly = 400; }
     else if (th.light === 'lanterns') { lx = 641; ly = 140; }
     else if (th.light === 'moonlight') { lx = t.mx(sk.opening === 'none' || t.air ? 900 : sk.opening === 'window-centre' ? 641 : 912); ly = 150; }
     else if (t.domes) { lx = t.mx(800); ly = 220; }
@@ -593,7 +602,7 @@
   /* Filters and gradients every part of the composed room shares. Literal
      colours only: baked layers are drawn as standalone images. */
   function cmDefs(t) {
-    var th = t.th, L = t.lp, lights = [{ x: L.x, y: L.y, z: L.z, col: t.lc }], tr = th.trim, acc = th.accent, sc = th.cloth, wallFq = { plaster: [.03, 3.2, 4], stone: [.05, 4.5, 8], timber: ['.07 .004', 2.2, 6], brick: [.08, 3, 12], canvas: ['.35 .05', 1.1, 5], 'night-sky': [.02, 1.6, 3] }[th.wall];
+    var th = t.th, L = t.lp, lights = [{ x: L.x, y: L.y, z: L.z, col: t.lc }], tr = th.trim, acc = th.accent, sc = th.cloth, wallFq = { plaster: [.03, 3.2, 4], stone: [.05, 4.5, 8], timber: ['.07 .004', 2.2, 6], brick: [.08, 3, 12], canvas: ['.35 .05', 1.1, 5], 'night-sky': [.02, 1.6, 3] }[th.wall] || CM_WALLFQ[th.wall] || [.04, 3, 7];
     if (t.props.indexOf('sconce') >= 0) lights.push({ x: t.mx(1130), y: 340, z: 120, col: '#c0905a', k: .55 });
     var cx = L.x + (600 - L.x) * .35, cy = L.y + 20;
     return litF('cm-wall', [-300, -150, 1800, 620], wallFq[0], wallFq[1], wallFq[2], lights, t.amb, th.wall === 'canvas' ? .62 : .5) +
@@ -636,7 +645,7 @@
   // The open-air stall's lane: sky, rooftops, houses leaning in on both sides and wet cobbles running away.
   function cmLane(t) {
     var s = cmSky(t, 'cm-lane-sky', -300, -150, 1800, 500), night = t.time === 'night' || t.time === 'rain', dark = night ? '#0b1022' : t.time === 'dusk' ? '#2a1e30' : '#6a7684';
-    var wc = { plaster: '#6a5a4a', stone: '#4a4a4e', timber: '#4a3424', brick: '#6a3a2c', canvas: '#7a6a50', 'night-sky': '#1a1e3c' }[t.th.wall], r = rng(21), i, j;
+    var wc = { plaster: '#6a5a4a', stone: '#4a4a4e', timber: '#4a3424', brick: '#6a3a2c', canvas: '#7a6a50', 'night-sky': '#1a1e3c' }[t.th.wall] || '#4a4a4e', r = rng(21), i, j;
     s += cmSkyline(-300, 200, 1800, 140, dark, 5) + '<rect x="-300" y="338" width="1800" height="130" fill="' + (night ? '#1a2038' : t.time === 'dusk' ? '#4a3a44' : '#8a8a8a') + '"/>';
     // Cobbles, narrowing to the far end of the lane.
     s += '<path d="M-300,452 L-300,470 H1500 V452 L840,338 H360 Z" fill="' + (night ? '#2a3150' : t.time === 'dusk' ? '#5a4650' : '#9a9486') + '"/>';
@@ -914,7 +923,7 @@
      the scales, the case and the 'more' card, placed by where the room's light
      and goods leave space. ---- */
   function cmSpots(t, hasCase) {
-    var m = t.mx, orr = t.props.indexOf('orrery') >= 0;
+    var m = t.mx, orr = t.props.some(function (p) { return p === 'orrery' || CM_TALL.indexOf(p) >= 0; });
     return { bell: [m(t.domes ? 1040 : 950), t.domes ? 508 : 496], scales: t.domes || orr ? null : [m(1046), 490], cs: [m(330), t.domes ? 506 : 486], more: [m(t.domes ? 100 : 1110), t.domes ? 526 : 520] };
   }
 
@@ -1271,7 +1280,7 @@
       if (more > 0) { var q = PILE[PILE.length - 1]; s += '<g class="src-nohit"><circle cx="' + (q[0] + 18) + '" cy="' + (q[1] - 62) + '" r="13" fill="#2a1a0e" stroke="' + t.th.trim + '" stroke-width="1.4"/><text x="' + (q[0] + 18) + '" y="' + (q[1] - 57) + '" text-anchor="middle" class="src-more">+' + more + '</text></g>'; }
       return s;
     }
-    var BACKP = ['ladder', 'banner', 'sconce', 'herbs', 'lanterns', 'floating-books'], FRONTP = ['anvil', 'alembic', 'jars', 'crystal', 'orrery'], OVERP = ['sparks', 'rain', 'motes'];
+    var BACKP = CM_LAYER.back, FRONTP = CM_LAYER.front, OVERP = CM_LAYER.over;
     function propsOf(list, mirror) {
       var s = '';
       t.props.forEach(function (p) { if (list.indexOf(p) >= 0 && P[p]) s += PROPS[p](t, P[p]); });
@@ -1300,16 +1309,15 @@
         (LG.bake ? '<g data-bake="forge">' + LG.bake + '</g>' : '') + (LG.back || '') + (LG.hung ? cmLanterns(t, true) : '') +
         '<circle cx="' + LP.x + '" cy="' + LP.y + '" r="' + Math.round(t.L.reach * .55) + '" fill="url(#cm-glow)" data-flick=".32"/>' + (LG.moon ? '<circle cx="' + LP.x + '" cy="' + (LP.y + 40) + '" r="320" fill="url(#cm-glow)" opacity=".5" data-flick=".3"/>' : '') +
         (D.art ? '<g data-bake="unit">' + cmM(t, D.art) + '</g>' : '') + (D.zone ? '<rect data-k="shelves" x="' + (t.mir ? 1200 - D.zone[0] - D.zone[2] : D.zone[0]) + '" y="' + D.zone[1] + '" width="' + D.zone[2] + '" height="' + D.zone[3] + '" fill="transparent"/>' : '') +
-        (D.counterTop ? '' : decor() + '<g id="srcb-wares">' + wares() + '</g>') + propsOf(BACKP, true) + (t.pend ? '' : '') + '</g>' +
+        (D.counterTop ? '' : decor() + '<g id="srcb-wares"' + (D.floaty ? ' class="mp-floaty"' : '') + '>' + wares() + '</g>') + propsOf(BACKP, true) + (t.pend ? '' : '') + '</g>' +
         '<g data-depth=".75">' + keeper() + '</g>' +
         '<g data-depth="1"><g data-bake="counter">' + COUNTERS[t.sk.counter](t) + '</g>' + ledger() + propsOf(FRONTP, true) + (LG.front || '') + cast(LP.x, 478, 40, 120, 0) + caseShut() +
-          (D.counterTop ? decor() + '<g id="srcb-wares">' + wares() + '</g>' : '') + cloth() + '<g id="srcb-pile">' + pileSvg() + '</g>' + bell() + scales() + moreCard() + '<g id="srcb-held"></g></g>' +
+          (D.counterTop ? decor() + '<g id="srcb-wares"' + (D.floaty ? ' class="mp-floaty"' : '') + '>' + wares() + '</g>' : '') + cloth() + '<g id="srcb-pile">' + pileSvg() + '</g>' + bell() + scales() + moreCard() + '<g id="srcb-held"></g></g>' +
         propsOf(OVERP.filter(function (p) { return p !== 'sparks'; }), false) + (P.sparks ? PROPS.sparks(t, P.sparks) : '') +
         '<rect data-depth=".8" x="-300" y="-200" width="1800" height="1100" fill="url(#cm-shade)" data-flick=".98" pointer-events="none"/>' +
         '<rect width="1200" height="700" fill="url(#cm-vig)" pointer-events="none"/>' + editSlots();
     }
 
-    var WHERE = { shelves: 'on the shelves', pegboard: 'on the pegboard', drawers: 'on the drawer wall', pigeonholes: 'in its pigeonhole', domes: 'under its dome' };
     function info(k) {
       var p = k.split(':'), it = p[1] ? R.item(p[1]) : null;
       if ((p[0] === 'ware' || p[0] === 'held') && it) return R.info(it, p[0] === 'held' ? 'Drag it onto your pile · Esc puts it back' : it.out ? '' : 'Press and the keeper brings it to the counter');
@@ -1332,7 +1340,7 @@
         var it = R.item(held.id), can = R.canAdd(held.id);
         R.say('<span>The keeper sets the ' + esc(it ? it.n : 'good') + ' on the cloth.' + (can ? ' Drag it onto your pile, or:' : ' ' + esc(R.why(held.id))) + '</span><span class="src-acts">' +
           (can ? '<button type="button" class="src-btn primary" data-act="take">Add to my pile</button>' : '') + R.rollActs(held.id) + '<button type="button" class="src-btn" data-act="back">Put it back</button></span>');
-      } else R.say(R.model.its.length ? '<span>Press a good ' + (WHERE[t.sk.display] || 'on the shelves') + ' and the keeper brings it to the counter.' + (R.place.case.length ? ' Finer goods are in the case.' : '') + '</span>' : '<span>Nothing for sale right now.</span>');
+      } else R.say(R.model.its.length ? '<span>Press a good ' + (CM_WHERE[t.sk.display] || 'on the shelves') + ' and the keeper brings it to the counter.' + (R.place.case.length ? ' Finer goods are in the case.' : '') + '</span>' : '<span>Nothing for sale right now.</span>');
     }
     function menu(k) {
       var p = k.split(':'), it = p[1] ? R.item(p[1]) : null;
@@ -2195,6 +2203,8 @@
   window.ShopRoomCounter = {
     render: render, layout: layout, starters: CM_STARTERS, starterFor: starterFor, normalise: cmNorm,
     options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside }, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
+    // What the parts packs are written with: the room's tables and its drawing helpers.
+    kit: { CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
     sync: function (host, model) { if (host && host._counter) host._counter.update(model); },
     escape: function (host) { return !!call(host, 'escape'); },
     pause: function (host, on) { call(host, 'pause', on); },

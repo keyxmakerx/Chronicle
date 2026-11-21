@@ -262,6 +262,15 @@ func (r *weatherRepo) SetDays(ctx context.Context, calendarID string, days []Day
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	if err := setDaysIn(ctx, tx, calendarID, days); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// setDaysIn is SetDays' writes on a caller-owned transaction, so the year
+// track's batch can land weather in the same transaction as its events.
+func setDaysIn(ctx context.Context, tx *sql.Tx, calendarID string, days []DayWeatherInput) error {
 	manual, err := tx.PrepareContext(ctx, upsertManualDaySQL)
 	if err != nil {
 		return err
@@ -287,7 +296,7 @@ func (r *weatherRepo) SetDays(ctx context.Context, calendarID string, days []Day
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // ClearDays deletes the readings on the given days in one transaction.
@@ -300,6 +309,14 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	if err := clearDaysIn(ctx, tx, calendarID, dates); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// clearDaysIn is ClearDays' deletes on a caller-owned transaction.
+func clearDaysIn(ctx context.Context, tx *sql.Tx, calendarID string, dates []DayDate) error {
 	stmt, err := tx.PrepareContext(ctx,
 		`DELETE FROM calendar_weather_days WHERE calendar_id = ? AND year = ? AND month = ? AND day = ?`)
 	if err != nil {
@@ -311,7 +328,7 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // LockDays flips the lock on existing readings in one transaction. The count

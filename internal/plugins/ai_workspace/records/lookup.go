@@ -116,6 +116,8 @@ type Lookups struct {
 	// Tags answers the tag lookups and shows each page's tags; nil leaves
 	// them out.
 	Tags TagsAPI
+	// Hexes adds a hex map's hexes to its `pins` answer; nil leaves them out.
+	Hexes HexMapAPI
 	// Plugged are the lookups features register themselves (aiplug),
 	// answered after the built-in ones; a `what:` both know is the
 	// built-in one's.
@@ -262,7 +264,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
 	{"page", "`name`", "one page: its text, tags and links, its item look, and for a Director its quest notice and notice boards"},
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
-	{"pins", "optional `map`", "maps, or one map's pins"},
+	{"pins", "optional `map`, and `rows` (like 0-19) for part of a big hex map", "maps, or one map's pins and, on a hex map, its hexes"},
 	{"scenes", "optional `name` (part of a scene's name or folder)", "the scenes in the campaign's Foundry world, as Foundry last reported them, which says which maps already exist there (owner and co-DM only)"},
 	{"stock", "`shop`", "what a shop sells, with its room and storefront as blocks"},
 	{"inventory", "`character`", "what a character carries"},
@@ -415,7 +417,7 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	case "table", "tables":
 		ans, err = run.table(r.Name)
 	case "pins", "map", "maps":
-		ans, err = run.pins(firstNonEmpty(r.Str("map"), r.Name))
+		ans, err = run.pins(firstNonEmpty(r.Str("map"), r.Name), r.Str("rows"))
 	case "scenes", "scene", "foundry-scenes":
 		ans, err = run.scenes(firstNonEmpty(r.Name, r.Str("scene")))
 	case "stock", "shop":
@@ -1207,7 +1209,7 @@ func (run *lookupRun) table(name string) (LookupAnswer, error) {
 	return ans, badRequestf("no rolling table called %s", quote(name))
 }
 
-func (run *lookupRun) pins(mapName string) (LookupAnswer, error) {
+func (run *lookupRun) pins(mapName, rows string) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Maps"}
 	if run.l.Maps == nil {
 		return ans, badRequestf("maps can't be looked up on this server")
@@ -1245,11 +1247,46 @@ func (run *lookupRun) pins(mapName string) (LookupAnswer, error) {
 			lines = append(lines, fmt.Sprintf("- %s (x %.1f, y %.1f)", p.Name, p.X, p.Y))
 		}
 		writeLines(&b, lines)
+		hexes, err := run.hexes(m, rows)
+		if err != nil {
+			return ans, err
+		}
+		b.WriteString(hexes)
 		ans.Text = b.String()
 		return ans, nil
 	}
 	ans.Chip = "Pins · " + mapName
 	return ans, badRequestf("no map called %s", quote(mapName))
+}
+
+// hexes is the hex part of a map's answer: what the reader may see of its hex
+// layer, written as a `hex-map` block. "" for a map on a square grid, one with
+// no hexes painted, or a server without the hex lookup. The layer is read as
+// the reader, so fog and a hidden picture's layer follow the map page's rules.
+func (run *lookupRun) hexes(m MapRef, rows string) (string, error) {
+	if run.l.Hexes == nil {
+		return "", nil
+	}
+	if ok, err := run.l.Hexes.UsesHexGrid(run.ctx, m.ID); err != nil || !ok {
+		return "", err
+	}
+	var band *hexRows
+	if strings.TrimSpace(rows) != "" {
+		r, ok := parseHexRows(rows)
+		if !ok {
+			return "", badRequestf("`rows` should be two row numbers, like 0-19")
+		}
+		band = &r
+	}
+	st, err := run.l.Hexes.Read(run.ctx, run.campaignID, m.ID, run.a)
+	if err != nil {
+		return "", err
+	}
+	text, shown, _ := hexMapRead(m.Name, st, band)
+	if text == "" {
+		return "\n## Hexes on " + m.Name + "\n\nIt uses a hex grid and no hex is painted that you can see.\n", nil
+	}
+	return fmt.Sprintf("\n## Hexes on %s (%d)\n\nThe hexes you can see, as a `hex-map` block. Send back only the lines you want to add or change, not the whole block; `#` lines are notes for you.\n\n", m.Name, shown) + text, nil
 }
 
 // ---- game-system entries and players ----

@@ -1,0 +1,116 @@
+// practice_page.templ — a practice hero's own page: a band saying what it is,
+// the name and summary, one hairline row per pick, and the maker's few
+// actions. Opened by its maker and the Directors only.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// PracticePage renders a practice hero inside the App shell.
+templ PracticePage(cc *campaigns.CampaignContext, view PracticePageView) {
+	@layouts.App("Practice hero - " + cc.Campaign.Name) {
+		@PracticeHeroContent(cc, view)
+	}
+}
+
+// PracticeHeroContent is the swappable body: the ask and answer buttons
+// refresh just this.
+templ PracticeHeroContent(cc *campaigns.CampaignContext, view PracticePageView) {
+	<div id="practice-content">
+		<link rel="stylesheet" href={ practiceCSS() }/>
+		@layouts.AppFrame() {
+			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", view.CampaignID)) } class="hover:text-fg">Characters</a>
+				<span aria-hidden="true">/</span>
+				<span class="text-fg">Practice hero</span>
+			</nav>
+			<article class="pr pr-page">
+				<p class="pr-band"><b>Practice hero.</b> Not in the party, not sent to Foundry.</p>
+				<h1 class="pr-title">{ view.Name }</h1>
+				if view.Summary != "" {
+					<p class="pr-sub">{ view.Summary }</p>
+				}
+				if view.Copied != "" {
+					<p class="pr-sub">A copy of { view.Copied }.</p>
+				}
+				if view.Maker != "" {
+					<p class="pr-sub">Made by { view.Maker }.</p>
+				}
+				if len(view.Rows) > 0 {
+					<ul class="pr-picks">
+						for _, r := range view.Rows {
+							<li class="pr-pick">
+								<b>{ r.Label }: { r.Value }</b>
+								if r.Options != "" {
+									<small>{ r.Options }</small>
+								}
+								if r.Note != "" {
+									<small>{ r.Note }</small>
+								}
+							</li>
+						}
+					</ul>
+				}
+				if view.Mine {
+					@practiceMakerActions(view)
+				} else if view.Status == "waiting" {
+					<p class="pr-ask">{ view.Maker } asks to play this one. You answer on the Characters page.</p>
+				}
+			</article>
+			if view.Notice != "" {
+				<div class="ag-toast ag-toast-timed" role="status">
+					<span>{ view.Notice }</span>
+				</div>
+			}
+		}
+	</div>
+}
+
+// practiceMakerActions are the maker's controls: ask, change, throw away. The
+// throw-away asks first in place, since a practice hero cannot be brought back.
+templ practiceMakerActions(view PracticePageView) {
+	if view.Status == "waiting" {
+		<p class="pr-note">You asked to play this one. The Director hasn't answered yet.</p>
+	} else if view.Status == "declined" {
+		<p class="pr-note">
+			<b>The Director said not now.</b>
+			if view.Note != "" {
+				{ " " + view.Note }
+			}
+		</p>
+	}
+	<div class="pr-acts" data-pr-row="true">
+		if view.Status != "waiting" {
+			<form
+				method="post"
+				action={ templ.SafeURL(practiceURL(view.CampaignID, view.ID) + "/ask") }
+				hx-post={ practiceURL(view.CampaignID, view.ID) + "/ask" }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, view.CSRFToken) }
+				hx-target="#practice-content"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ view.CSRFToken }/>
+				<button type="submit" class="btn-primary" data-working-label="Asking…">Ask to play this one</button>
+			</form>
+		}
+		<a class="pr-word" href={ templ.SafeURL(practiceNewURL(view.CampaignID, "?edit="+view.ID)) }>Change it</a>
+		<button type="button" class="pr-word" data-pr-opens="away" data-pr-hide="true" aria-expanded="false" onclick={ practiceRevealCall("away") }>Throw it away</button>
+		<span class="pr-confirm" data-pr-box="away" hidden>
+			<span>Throw away { view.Name }? It can't be brought back.</span>
+			<button
+				type="button"
+				class="btn-danger btn-sm"
+				hx-delete={ practiceURL(view.CampaignID, view.ID) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, view.CSRFToken) }
+				hx-swap="none"
+				data-working-label="Throwing away…"
+			>Throw it away</button>
+			<button type="button" class="pr-word" onclick={ practiceRevealCall("away") }>Keep it</button>
+		</span>
+	</div>
+}

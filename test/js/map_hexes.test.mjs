@@ -28,6 +28,8 @@ function load(file = 'map_hexes.js') {
   if (saved.document !== undefined) globalThis.document = saved.document;
   return api;
 }
+// map_hexes.js reads the shared look from the global map_hex_look.js sets.
+const Look = load('map_hex_look.js');
 const H = load();
 const A = load('map_hex_art.js');
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
@@ -169,7 +171,8 @@ test('a later change to a hex merges into the queued one and keeps unrelated fie
 test('the palette matches the server allowlist', () => {
   assert.deepEqual(
     H.TERRAINS.map((t) => t[0]),
-    ['plains', 'forest', 'hills', 'mountain', 'water', 'swamp', 'desert', 'snow', 'town', 'road'],
+    ['plains', 'forest', 'hills', 'mountain', 'water', 'swamp', 'desert', 'snow',
+      'jungle', 'farmland', 'scrub', 'badlands', 'waste', 'volcanic', 'coast', 'deep', 'ice', 'cavern', 'town', 'road'],
   );
   // Every filled terrain has an icon; road is a line.
   for (const [id] of H.TERRAINS) assert.equal(id === 'road' ? !H.SIMPLE[id] : !!H.SIMPLE[id], true, id);
@@ -381,6 +384,17 @@ test('isStale: old versions and this client\'s own echoes are ignored, anything 
   for (const v of [undefined, null, 0, 'x']) assert.equal(H.isStale(10, v, {}), false);
 });
 
+test('anyNews: an echo that waited for its own save is not news, another writer\'s change is', () => {
+  // The echo of write 12 arrived before the save answered; by now it is known as this client's own.
+  assert.equal(H.anyNews(10, [12], { 12: true }), false);
+  assert.equal(H.anyNews(10, [12, 12], { 12: true }), false);
+  // Someone else wrote 11 in between.
+  assert.equal(H.anyNews(10, [11, 12], { 12: true }), true);
+  // An event with no usable version cannot be ruled out, so it is read.
+  assert.equal(H.anyNews(10, [undefined], {}), true);
+  assert.equal(H.anyNews(10, [], {}), false);
+});
+
 test('the map picture: the server copy for viewers below DM level while fog is on', () => {
   assert.equal(H.playerImageURL('c1', 'm1', 7), '/campaigns/c1/maps/m1/player-image?v=7');
   const cases = [
@@ -568,7 +582,10 @@ test('pieceOf keeps a chosen piece and gives Mix a stable piece in range', () =>
 
 test('every terrain with pieces has twelve, and its folders hold each exactly once', () => {
   const terrains = Object.keys(A.PIECES);
-  assert.deepEqual(terrains.sort(), ['desert', 'forest', 'hills', 'mountain', 'plains', 'snow', 'swamp', 'town', 'water']);
+  assert.deepEqual(terrains.sort(), [
+    'badlands', 'cavern', 'coast', 'deep', 'desert', 'farmland', 'forest', 'hills', 'ice', 'jungle',
+    'mountain', 'plains', 'scrub', 'snow', 'swamp', 'town', 'volcanic', 'waste', 'water',
+  ]);
   for (const t of terrains) {
     assert.equal(A.PIECES[t].length, 12, t); // the server's HexPiecesPerTerrain
     const all = A.PFOLD[t].flatMap((f) => f[1]).sort((a, b) => a - b);
@@ -621,4 +638,360 @@ test('Detailed art is plain SVG that names its own shading', () => {
   assert.match(svg, /url\(#ugforest\)/);
   assert.ok(!/undefined|NaN/.test(svg));
   assert.match(A.detailedDefs('u'), /id="ugforest"/);
+});
+
+// ---- Paint: sides, stamps, palette, lines ----
+
+// The server's Neighbors order, from its own cube steps (hex.go cubeDirs):
+// east first, turning clockwise. Sides are named from it, so the test derives
+// the offsets from the cube steps rather than from the code under test.
+const GO_DIRS = [[1, -1, 0], [0, -1, 1], [-1, 0, 1], [-1, 1, 0], [0, 1, -1], [1, 0, -1]];
+const goNeighbor = (col, row, i) => {
+  const [x, , z] = H.cubeOf(col, row);
+  const nx = x + GO_DIRS[i][0], nz = z + GO_DIRS[i][2];
+  return { col: nx + (nz - (nz & 1)) / 2, row: nz };
+};
+
+test('the six sides, east first and clockwise, for even and odd rows', () => {
+  const want = {
+    even: [[5, 2], [4, 3], [3, 3], [3, 2], [3, 1], [4, 1]],   // around (4,2)
+    odd: [[5, 3], [5, 4], [4, 4], [3, 3], [4, 2], [5, 2]],    // around (4,3)
+  };
+  for (let i = 0; i < 6; i++) {
+    assert.deepEqual(H.sideNeighbor(4, 2, i), { col: want.even[i][0], row: want.even[i][1] }, `even side ${i}`);
+    assert.deepEqual(H.sideNeighbor(4, 3, i), { col: want.odd[i][0], row: want.odd[i][1] }, `odd side ${i}`);
+  }
+});
+
+test('sideNeighbor agrees with the server\'s cube steps everywhere', () => {
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      for (let i = 0; i < 6; i++) assert.deepEqual(H.sideNeighbor(col, row, i), goNeighbor(col, row, i), `${col},${row} side ${i}`);
+    }
+  }
+});
+
+test('walking out through a side and back through its opposite returns home', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(H.oppositeSide), [3, 4, 5, 0, 1, 2]);
+  for (let row = 0; row < 6; row++) {
+    for (let col = 0; col < 6; col++) {
+      for (let i = 0; i < 6; i++) {
+        const n = H.sideNeighbor(col, row, i);
+        assert.deepEqual(H.sideNeighbor(n.col, n.row, H.oppositeSide(i)), { col, row });
+        assert.equal(H.sideToward({ col, row }, n), i);
+        assert.equal(H.sideToward(n, { col, row }), H.oppositeSide(i));
+      }
+    }
+  }
+  assert.equal(H.sideToward({ col: 2, row: 2 }, { col: 2, row: 2 }), -1);
+  assert.equal(H.sideToward({ col: 2, row: 2 }, { col: 9, row: 9 }), -1);
+});
+
+test('around reaches 1, 7 and 19 hexes, all within range and none twice', () => {
+  for (const [n, count] of [[0, 1], [1, 7], [2, 19]]) {
+    for (const [col, row] of [[5, 5], [5, 6], [0, 0]]) {
+      const list = H.around(col, row, n);
+      assert.equal(list.length, count, `n=${n} at ${col},${row}`);
+      assert.equal(new Set(list.map(keyOf)).size, count);
+      for (const c of list) assert.ok(H.distance({ col, row }, c) <= n);
+    }
+  }
+});
+
+test('every stamp is 7 or 19 letters of known kinds', () => {
+  assert.equal(H.STAMPS.length, 12);
+  const known = new Set(H.TERRAINS.map((t) => t[0]));
+  for (const [name, letters] of H.STAMPS) {
+    assert.ok(name && (letters.length === 7 || letters.length === 19), `${name}: ${letters.length}`);
+    for (const ch of letters) {
+      if (ch === '.') continue;
+      assert.ok(known.has(H.STAMP_KEY[ch]), `${name}: unknown letter ${ch}`);
+    }
+  }
+  assert.ok(H.SPIRAL.length >= 19);
+});
+
+test('a stamp turned six sixths lands where it started, and one sixth moves each ring hex on', () => {
+  for (const st of H.STAMPS) {
+    for (const [col, row] of [[6, 6], [7, 7]]) {
+      const base = H.stampCells(st, col, row, 0);
+      assert.deepEqual(H.stampCells(st, col, row, 6), base, st[0]);
+      assert.deepEqual(H.stampCells(st, col, row, 12), base);
+      assert.deepEqual(H.stampCells(st, col, row, -6), base);
+      for (let k = 1; k < 6; k++) {
+        const turned = H.stampCells(st, col, row, k);
+        assert.equal(turned.length, base.length);
+        // A turn keeps every hex's distance from the middle and its kind.
+        base.forEach((c, i) => {
+          assert.equal(turned[i].terrain, c.terrain);
+          assert.equal(H.distance({ col, row }, turned[i]), H.distance({ col, row }, c));
+        });
+      }
+    }
+  }
+  // Six different hexes in the first ring: a sixth moves each to where the next was.
+  const ring = ['x', 'pfhmwsd'];
+  const at = (rot) => H.stampCells(ring, 6, 6, rot).slice(1).map(keyOf);
+  const zero = at(0), one = at(1);
+  for (let i = 0; i < 6; i++) assert.equal(one[i], zero[(i + 1) % 6], `ring hex ${i}`);
+});
+
+test('the palette holds every kind of land except road, once', () => {
+  const listed = H.FAMILIES.flatMap((f) => f[1]);
+  const want = H.TERRAINS.map((t) => t[0]).filter((t) => t !== 'road');
+  assert.equal(listed.length, new Set(listed).size, 'no kind twice');
+  assert.deepEqual([...listed].sort(), [...want].sort());
+  assert.equal(want.length, 19);
+  for (const f of H.FAMILIES) assert.ok(f[1].length <= 5, `${f[0]} fits a row of five`);
+  assert.deepEqual(H.LINES.map((l) => l[0]), ['road', 'trail', 'river']);
+});
+
+test('mergeEntry carries the three lines, including an explicit null', () => {
+  const drawn = H.mergeEntry({ col: 1, row: 1 }, { river: 5 });
+  assert.deepEqual(drawn, { col: 1, row: 1, river: 5 });
+  assert.deepEqual(H.mergeEntry(drawn, { road: 0, trail: 12 }), { col: 1, row: 1, river: 5, road: 0, trail: 12 });
+  // A later change wins, and null stays in the entry because it is what clears.
+  assert.deepEqual(H.mergeEntry(drawn, { river: null }), { col: 1, row: 1, river: null });
+  assert.ok(Object.prototype.hasOwnProperty.call(H.mergeEntry({ col: 1, row: 1 }, { road: null }), 'road'));
+  // Absent leaves the queued line alone and does not invent one.
+  assert.deepEqual(H.mergeEntry(drawn, { terrain: 'forest' }), { col: 1, row: 1, river: 5, terrain: 'forest' });
+  assert.ok(!('road' in H.mergeEntry({ col: 0, row: 0 }, { terrain: 'hills' })));
+});
+
+test('lineValue accepts 0 to 63 and nothing else', () => {
+  for (const v of [0, 1, 33, 63]) assert.equal(H.lineValue(v), v);
+  for (const v of [-1, 64, 1.5, '3', null, undefined, NaN, true]) assert.equal(H.lineValue(v), null, String(v));
+});
+
+// The path of a line on a hex: every number is rounded as the module does.
+const g60 = H.geometry(60, 1000, 700);
+const f1 = (n) => n.toFixed(1);
+const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+const cellsOf = (list) => Object.fromEntries(list.map((c) => [`${c.col},${c.row}`, { col: c.col, row: c.row, road: null, river: null, trail: null, ...c }]));
+
+test('a line on a hex with no exit is a dot, with one exit a run to the edge', () => {
+  const p = H.center(g60, 2, 2);
+  assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, road: 0 }]), 'road', 0), `M${f1(p[0])} ${f1(p[1])}h0.01`);
+  const east = mid(p, H.center(g60, 3, 2));
+  assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, road: 1 }]), 'road', 0), `M${f1(p[0])} ${f1(p[1])}L${f1(east[0])} ${f1(east[1])}`);
+  assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, road: null }]), 'road', 0), '');
+  assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, river: 1 }]), 'road', 0), '', 'another kind is not drawn');
+});
+
+test('two exits are one curve through the point, three or more curves from the first', () => {
+  const p = H.center(g60, 2, 2);
+  const e = mid(p, H.center(g60, 3, 2)), w = mid(p, H.center(g60, 1, 2)), se = mid(p, H.center(g60, 2, 3));
+  const P = `${f1(p[0])} ${f1(p[1])}`, E = `${f1(e[0])} ${f1(e[1])}`, W = `${f1(w[0])} ${f1(w[1])}`, SE = `${f1(se[0])} ${f1(se[1])}`;
+  assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, road: 1 | 8 }]), 'road', 0), `M${E}Q${P} ${W}`);
+  assert.equal(H.linePath(g60, cellsOf([{ col: 2, row: 2, road: 1 | 2 | 8 }]), 'road', 0), `M${E}Q${P} ${SE}M${E}Q${P} ${W}`);
+});
+
+test('a road on a hex with no exit is a dot, with one exit a single straight run', () => {
+  const p = H.center(g60, 2, 2);
+  assert.equal(H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 0 }])), `M${f1(p[0])} ${f1(p[1])}h0.01`);
+  const east = mid(p, H.center(g60, 3, 2));
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 }]));
+  assert.equal(d, `M${f1(p[0])} ${f1(p[1])}L${f1(east[0])} ${f1(east[1])}`);
+  assert.ok(!d.includes('Q'));
+});
+
+test('a road with no value, or only other lines, draws nothing', () => {
+  assert.equal(H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: null }])), '');
+  assert.equal(H.roadLine(g60, cellsOf([{ col: 2, row: 2, river: 9, trail: 3 }])), '');
+});
+
+test('a road through two opposite exits lies on one straight line', () => {
+  const p = H.center(g60, 2, 2);
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 | 8 }]));
+  const pts = d.match(/-?\d+\.\d/g).map(Number);
+  const xy = [];
+  for (let i = 0; i < pts.length; i += 2) xy.push([pts[i], pts[i + 1]]);
+  const [a, b] = [xy[0], xy[xy.length - 1]];
+  for (const q of xy) {
+    const cross = (b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]);
+    assert.ok(Math.abs(cross) < 2, `${q} is off the line`);
+  }
+  assert.ok(Math.abs(xy[2][0] - p[0]) < 0.06 && Math.abs(xy[2][1] - p[1]) < 0.06, 'the control point is the middle');
+});
+
+test('a road through two exits that are not opposite turns in one corner at the middle', () => {
+  const p = H.center(g60, 2, 2);
+  const e = mid(p, H.center(g60, 3, 2)), se = mid(p, H.center(g60, 2, 3));
+  const P = `${f1(p[0])} ${f1(p[1])}`, E = `${f1(e[0])} ${f1(e[1])}`, SE = `${f1(se[0])} ${f1(se[1])}`;
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 | 2 }]));
+  assert.equal(d.split('Q').length - 1, 1);
+  assert.ok(d.startsWith(`M${E}L`), 'starts at the first edge middle');
+  assert.ok(d.includes(`Q${P} `), 'the control point is the hex middle');
+  assert.ok(d.endsWith(`L${SE}`), 'ends at the second edge middle');
+});
+
+test('a road through three exits is straight spokes with no curve', () => {
+  const p = H.center(g60, 2, 2);
+  const P = `${f1(p[0])} ${f1(p[1])}`;
+  const d = H.roadLine(g60, cellsOf([{ col: 2, row: 2, road: 1 | 2 | 8 }]));
+  assert.ok(!d.includes('Q'));
+  const spokes = d.split('M').filter(Boolean);
+  assert.equal(spokes.length, 3);
+  for (const s of spokes) assert.ok(/^-?\d+\.\d -?\d+\.\dL/.test(s) && s.endsWith(`L${P}`), s);
+});
+
+test('neighbours carrying the same line meet halfway between their points, others at the edge', () => {
+  const both = cellsOf([{ col: 2, row: 2, river: 1 }, { col: 3, row: 2, river: 8 }]);
+  const num = (d) => d.match(/-?\d+\.\d/g).map(Number);
+  const a = num(H.linePath(g60, cellsOf([both['2,2']]), 'river', 0.55));
+  const joined = num(H.linePath(g60, both, 'river', 0.55));
+  // Hex (2,2) alone ends at the middle of the shared edge; with its neighbour's
+  // river beside it, the join moves to halfway between the two wandering points.
+  assert.deepEqual(a.slice(2), mid(H.center(g60, 2, 2), H.center(g60, 3, 2)).map((n) => Number(f1(n))));
+  assert.notDeepEqual(joined.slice(2, 4), a.slice(2));
+  const ends = joined.slice(2, 4), other = joined.slice(6, 8);
+  assert.deepEqual(ends, other, 'both hexes end the line on the same join');
+  // A neighbour with only a road does not count as carrying the river.
+  const road = cellsOf([{ col: 2, row: 2, river: 1 }, { col: 3, row: 2, road: 8 }]);
+  assert.deepEqual(num(H.linePath(g60, road, 'river', 0.55)).slice(2), a.slice(2));
+  // The wander is steady: the same cells draw the same path.
+  assert.equal(H.linePath(g60, both, 'river', 0.55), H.linePath(g60, both, 'river', 0.55));
+});
+
+// applyAll runs the line changes the way the browser does, on a cell map.
+function applyAll(cells, changes) {
+  for (const ch of changes) {
+    const k = `${ch.col},${ch.row}`;
+    cells[k] = cells[k] || { col: ch.col, row: ch.row, terrain: null, road: null, river: null, trail: null };
+    cells[k][ch.kind] = ch.value;
+  }
+}
+const getter = (cells) => (col, row) => cells[`${col},${row}`];
+
+test('drawing through A, B and C opens only the sides that were drawn through', () => {
+  // These three hexes all touch each other, the case a bare "same line next to
+  // same line" rule would turn into a loop.
+  const A = { col: 2, row: 2 }, B = { col: 3, row: 2 }, C = { col: 2, row: 3 };
+  assert.equal(H.sideToward(A, C), 1);
+  assert.equal(H.sideToward(B, C), 2);
+  const cells = {};
+  applyAll(cells, H.lineDraw(getter(cells), 'river', A, null));
+  assert.equal(cells['2,2'].river, 0, 'the first hex is a dot');
+  applyAll(cells, H.lineDraw(getter(cells), 'river', A, B));
+  applyAll(cells, H.lineDraw(getter(cells), 'river', B, C));
+  assert.equal(cells['2,2'].river, 1 << 0, 'A leaves east only');
+  assert.equal(cells['3,2'].river, (1 << 3) | (1 << 2), 'B leaves west and south-west');
+  assert.equal(cells['2,3'].river, 1 << 5, 'C leaves north-east only');
+  assert.equal(cells['2,2'].river & (1 << 1), 0, 'A is not joined to C');
+  assert.equal(cells['2,3'].river & (1 << 4), 0, 'C is not joined to A');
+  // Drawing again over the same way changes nothing; other kinds stay off.
+  assert.deepEqual(H.lineDraw(getter(cells), 'river', A, B), []);
+  assert.deepEqual(H.lineDraw(getter(cells), 'river', A, null), []);
+  assert.ok(Object.values(cells).every((c) => c.road === null && c.trail === null));
+  // A road drawn A to C beside it is its own line.
+  applyAll(cells, H.lineDraw(getter(cells), 'road', A, C));
+  assert.equal(cells['2,2'].road, 1 << 1);
+  assert.equal(cells['2,3'].road, 1 << 4);
+  assert.equal(cells['2,2'].river, 1, 'the river is unchanged');
+});
+
+test('a drag that skips hexes joins the ones hexLine fills in', () => {
+  const cells = {};
+  const path = H.hexLine({ col: 1, row: 4 }, { col: 5, row: 4 });
+  applyAll(cells, H.lineDraw(getter(cells), 'road', path[0], null));
+  for (let i = 1; i < path.length; i++) applyAll(cells, H.lineDraw(getter(cells), 'road', path[i - 1], path[i]));
+  assert.equal(path.length, 5);
+  assert.equal(cells['1,4'].road, 1 << 0);
+  for (const k of ['2,4', '3,4', '4,4']) assert.equal(cells[k].road, (1 << 0) | (1 << 3), k);
+  assert.equal(cells['5,4'].road, 1 << 3);
+});
+
+test('rubbing out takes every line off the hex and the exits that pointed at it', () => {
+  const A = { col: 2, row: 2 }, B = { col: 3, row: 2 }, C = { col: 2, row: 3 };
+  const cells = {};
+  applyAll(cells, H.lineDraw(getter(cells), 'river', A, B));
+  applyAll(cells, H.lineDraw(getter(cells), 'river', B, C));
+  applyAll(cells, H.lineDraw(getter(cells), 'road', C, B));
+  cells['3,2'].terrain = 'forest';
+  const changes = H.lineRubOut(getter(cells), 3, 2);
+  assert.ok(changes.every((c) => ['road', 'river', 'trail'].includes(c.kind)), 'only lines are touched');
+  applyAll(cells, changes);
+  assert.equal(cells['3,2'].river, null);
+  assert.equal(cells['3,2'].road, null);
+  assert.equal(cells['3,2'].terrain, 'forest', 'land stays');
+  assert.equal(cells['2,2'].river, null, 'A only reached B, so its river goes too');
+  assert.equal(cells['2,3'].river, null, 'C only reached B, so its river goes too');
+  assert.equal(cells['2,3'].road, null);
+  // Nothing left pointing at B, and nothing to do the second time.
+  assert.deepEqual(H.lineRubOut(getter(cells), 3, 2), []);
+  // A hex with no line of its own still has the exits at it cleared.
+  const lone = {};
+  applyAll(lone, [{ col: 4, row: 4, kind: 'trail', value: 1 << 3 }]);
+  const toward = H.sideNeighbor(4, 4, 3);
+  assert.deepEqual(H.lineRubOut(getter(lone), toward.col, toward.row), [{ col: 4, row: 4, kind: 'trail', value: null }]);
+  // A neighbour with another exit keeps it; one that was already a dot is untouched.
+  const keep = {};
+  applyAll(keep, [
+    { col: 4, row: 4, kind: 'trail', value: (1 << 3) | (1 << 0) },
+    { col: 3, row: 5, kind: 'trail', value: 0 },
+  ]);
+  const around44 = H.lineRubOut(getter(keep), toward.col, toward.row);
+  assert.deepEqual(around44, [{ col: 4, row: 4, kind: 'trail', value: 1 }]);
+});
+
+test('rubbing out leaves alone the hexes that may not be changed', () => {
+  const A = { col: 2, row: 2 }, B = { col: 3, row: 2 };
+  const cells = {};
+  applyAll(cells, H.lineDraw(getter(cells), 'river', A, B));
+  const only = (set) => (col, row) => set.includes(`${col},${row}`);
+  // The hex itself may not change: nothing happens, neighbours included.
+  assert.deepEqual(H.lineRubOut(getter(cells), 3, 2, only(['2,2'])), []);
+  // A neighbour that may not change keeps its exit; the hex itself is cleared.
+  assert.deepEqual(H.lineRubOut(getter(cells), 3, 2, only(['3,2'])), [{ col: 3, row: 2, kind: 'river', value: null }]);
+  assert.deepEqual(H.lineRubOut(getter(cells), 3, 2, only(['3,2', '2,2'])).map((c) => `${c.col},${c.row}`), ['3,2', '2,2']);
+});
+
+test('a writer who is not sent every hex may change only explored ones', () => {
+  const seen = { explored: true }, hidden = { explored: false };
+  assert.equal(H.hexChangeable(false, false, undefined), true, 'fog off: anywhere');
+  assert.equal(H.hexChangeable(true, true, undefined), true, 'sees everything');
+  assert.equal(H.hexChangeable(true, false, seen), true);
+  assert.equal(H.hexChangeable(true, false, hidden), false);
+  assert.equal(H.hexChangeable(true, false, undefined), false, 'no stored row');
+});
+
+test('fill neither includes nor passes through hexes that may not be changed', () => {
+  const none = () => null;
+  const inside = (n) => n.col >= 0 && n.row >= 0 && n.col < 6 && n.row < 6;
+  // A wall down column 3: the flood from the left stays on the left.
+  const notWall = (n) => n.col !== 3;
+  const left = H.floodSame({ col: 0, row: 0 }, none, inside, 1000, notWall);
+  assert.equal(left.list.length, 18);
+  assert.ok(left.list.every((c) => c.col < 3));
+  // Starting on a hex that may not be changed floods nothing.
+  assert.deepEqual(H.floodSame({ col: 3, row: 1 }, none, inside, 1000, notWall), { list: [], capped: false });
+  // Without the callback nothing changes.
+  assert.equal(H.floodSame({ col: 0, row: 0 }, none, inside, 1000).list.length, 36);
+});
+
+test('fill stops at its cap and says so, and stays inside the field', () => {
+  const none = (col, row) => null;
+  const inside = (n) => n.col >= 0 && n.row >= 0 && n.col < 6 && n.row < 6;
+  const all = H.floodSame({ col: 2, row: 2 }, none, inside, 1000);
+  assert.equal(all.list.length, 36);
+  assert.equal(all.capped, false);
+  const some = H.floodSame({ col: 2, row: 2 }, none, inside, 10);
+  assert.equal(some.list.length, 10);
+  assert.equal(some.capped, true);
+  assert.equal(new Set(some.list.map(keyOf)).size, 10, 'no hex twice');
+  // Only the same kind touching the click is taken.
+  const land = (col, row) => (col < 3 ? 'forest' : 'plains');
+  const wood = H.floodSame({ col: 0, row: 0 }, land, inside, 1000);
+  assert.ok(wood.list.every((c) => c.col < 3));
+  assert.equal(wood.list.length, 18);
+  assert.equal(H.FILL_MAX, 4000);
+});
+
+test('undo keeps the last 60 steps', () => {
+  const log = [];
+  for (let i = 0; i < 75; i++) H.pushStep(log, { n: i });
+  assert.equal(H.UNDO_MAX, 60);
+  assert.equal(log.length, 60);
+  assert.equal(log[0].n, 15);
+  assert.equal(log[59].n, 74);
 });

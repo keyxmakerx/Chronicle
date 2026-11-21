@@ -105,6 +105,7 @@ export async function seed(base, log = console.log) {
   const markers = {}; // marker string -> description
   const playerOnly = {}; // marker -> description: private to the first player; nobody else may see it
   const skipped = [];
+  const controlsExtra = []; // visible text some viewers must see, beyond the page controls
   const scribeMay = new Set(); // markers a Scribe is allowed to see (GM-tier by design)
   const m = (key, what, opts = {}) => { const s = mk(key); markers[s] = what; if (opts.scribe) scribeMay.add(s); return s; };
   const step = async (name, fn) => {
@@ -313,6 +314,45 @@ export async function seed(base, log = console.log) {
     must(await postJSON(`${C}/armory/instances`, { name: mk('INVNAME'), description: mk('INVDESC') }), 'instance');
   });
 
+  // 14b. Shop goods: pages made for a shop's stock. Kept out of every list,
+  // search and Auto-link for everyone (the Director included); a good listed
+  // openly shows in its shop to anyone who can see the shop, and a hidden
+  // listing shows nowhere to a player.
+  const mayShow = {}; // marker -> ids of the pages that may show it
+  await step('shop goods', async () => {
+    const shop = await create('Crawl shop ' + RUN, 'Shop', false);
+    ids.shop = shop;
+    const vis = m('SHOPGOODVIS', 'a shop good listed openly (must stay out of lists, search and Auto-link)');
+    const hid = m('SHOPGOODHID', 'a shop good in a Director-only listing (must show to no player at all)');
+    must(await postJSON(`${C}/armory/shops/${shop}/stock`, { goods: [{ name: vis, price: 5, quantity: 2 }] }), 'keep visible good');
+    must(await postJSON(`${C}/armory/shops/${shop}/stock`, { goods: [{ name: hid, price: 9, quantity: 1 }], hiddenFromPlayers: true }), 'keep hidden good');
+    r = must(await owner.get(`${C}/entities/${shop}/relations`, { headers: { Accept: 'application/json' } }), 'shop relations');
+    const rels = JSON.parse(r.text);
+    const visId = rels.find((x) => x.targetEntityName === vis)?.targetEntityId;
+    const hidId = rels.find((x) => x.targetEntityName === hid)?.targetEntityId;
+    if (!visId || !hidId) throw new Error('the kept goods are not in the shop relations');
+    ids.goodVis = visId; ids.goodHid = hidId;
+    mayShow[vis] = [shop, visId];
+    controlsExtra.push(vis);
+  });
+
+  // A page used only by Director-only listings must be hidden, even when a
+  // public listing once sold it: listed openly in one shop and hidden in
+  // another, then the open listing removed. No player may see it anywhere.
+  await step('shop good whose last public listing was removed', async () => {
+    const shopA = ids.shop;
+    const shopB = await create('Crawl second shop ' + RUN, 'Shop', false);
+    ids.shopB = shopB;
+    const flip = m('SHOPGOODFLIP', 'a shop good whose only public listing was removed (hidden listing left)');
+    must(await postJSON(`${C}/armory/shops/${shopA}/stock`, { goods: [{ name: flip, price: 3, quantity: 1 }] }), 'keep open listing');
+    must(await postJSON(`${C}/armory/shops/${shopB}/stock`, { goods: [{ name: flip, price: 3, quantity: 1 }], hiddenFromPlayers: true }), 'keep hidden listing');
+    r = must(await owner.get(`${C}/entities/${shopA}/relations`, { headers: { Accept: 'application/json' } }), 'shop relations');
+    const rel = JSON.parse(r.text).find((x) => x.targetEntityName === flip);
+    if (!rel) throw new Error('the open listing was not made');
+    ids.goodFlip = rel.targetEntityId;
+    must(await owner.del(`${C}/entities/${shopA}/relations/${rel.id}`), 'remove open listing');
+  });
+
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.
   await step('public campaign', async () => {
     must(await owner.put(C, { json: { name: 'Crawl ' + RUN, description: '', is_public: true } }), 'update campaign');
@@ -334,7 +374,7 @@ export async function seed(base, log = console.log) {
     if (r.status >= 400) throw new Error('player page note -> ' + r.status + ' ' + r.text.slice(0, 120));
   });
 
-  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ...ids.extra);
+  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ...ids.extra);
 
-  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD')], skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
+  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls: [`${C}/armory?goods=1`, `${C}/armory?goods=1&q=ZQ${RUN}`], skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
 }

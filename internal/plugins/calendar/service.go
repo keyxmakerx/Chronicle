@@ -469,6 +469,7 @@ type calendarService struct {
 	publisher   CalendarEventPublisher
 	monthRemap  SessionMonthRemapper
 	rollRepo    EventRollRepository
+	batchRepo   EventBatchRepository
 	markRepo    MoonMarkRepository
 	rollTables  RollTableSource
 	// forecastKey keys the players' weather forecast blur; see
@@ -1693,13 +1694,7 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 		return nil, err
 	}
-	if err := validateEventDates(cal, evt); err != nil {
-		return nil, err
-	}
-	if err := s.refuseSecretEraDate(ctx, cal, evt, input.Author); err != nil {
-		return nil, err
-	}
-	if err := s.validateEventRule(ctx, calendarID, campaignID, "", evt, true, input.Author); err != nil {
+	if err := s.checkNewEvent(ctx, cal, campaignID, evt, input.Author); err != nil {
 		return nil, err
 	}
 	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
@@ -1707,6 +1702,20 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	}
 	s.publish(PubEventCreated, campaignID, calendarID, evt)
 	return evt, nil
+}
+
+// checkNewEvent is the calendar-dependent half of CreateEvent's checks (the
+// dates against cal's geometry, the secret-era refusal, the repeat rule).
+// cal must already carry its months and weekdays, so a batch loads them once
+// and not once per event.
+func (s *calendarService) checkNewEvent(ctx context.Context, cal *Calendar, campaignID string, evt *Event, author permissions.Viewer) error {
+	if err := validateEventDates(cal, evt); err != nil {
+		return err
+	}
+	if err := s.refuseSecretEraDate(ctx, cal, evt, author); err != nil {
+		return err
+	}
+	return s.validateEventRule(ctx, cal.ID, campaignID, "", evt, true, author)
 }
 
 // validateEventDates refuses an event the calendar cannot show: a start,
@@ -2328,6 +2337,23 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	if err != nil {
 		return err
 	}
+	if err := s.mergeEventUpdate(ctx, cal, evt, campaignID, input, v); err != nil {
+		return err
+	}
+	if err := s.eventRepo.UpdateEvent(ctx, evt); err != nil {
+		return fmt.Errorf("update event: %w", err)
+	}
+	s.publish(PubEventUpdated, campaignID, calendarID, evt)
+	return nil
+}
+
+// mergeEventUpdate validates input against the stored evt and merges it into
+// evt in place (load-merge-write's first two steps), writing nothing. The
+// batch endpoint runs it for each update item and writes them all in one
+// transaction.
+func (s *calendarService) mergeEventUpdate(ctx context.Context, cal *Calendar, evt *Event, campaignID string, input UpdateEventInput, v permissions.Viewer) error {
+	calendarID := cal.ID
+	var err error
 
 	name := input.Name.Val(evt.Name)
 	if name == "" {
@@ -2452,11 +2478,6 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.Icon = icon
 	evt.AllDay = input.AllDay.Val(evt.AllDay)
 	evt.Payload = payload
-
-	if err := s.eventRepo.UpdateEvent(ctx, evt); err != nil {
-		return fmt.Errorf("update event: %w", err)
-	}
-	s.publish(PubEventUpdated, campaignID, calendarID, evt)
 	return nil
 }
 
@@ -2495,16 +2516,29 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 	if err := canChangeVisibility(v, input.Visibility, evt.Visibility); err != nil {
 		return err
 	}
+	if input.Announced != "" && !v.SkipsPerUserRules() {
+		return apperror.NewForbidden("only the campaign owner or a granted co-DM may change when players learn of an event")
+	}
+	if input.Announced != "" && !IsSupportedAnnounced(input.Announced) {
+		return apperror.NewValidation("announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
+	}
 	visRules := input.VisibilityRules.Ptr(evt.VisibilityRules)
 	if err := validateVisibilityRulesJSON(visRules); err != nil {
 		return err
 	}
-	if err := s.eventRepo.UpdateEventVisibility(ctx, eventID, input.Visibility, visRules); err != nil {
+	var announced *string
+	if input.Announced != "" {
+		announced = &input.Announced
+	}
+	if err := s.eventRepo.UpdateEventVisibility(ctx, eventID, input.Visibility, visRules, announced); err != nil {
 		return fmt.Errorf("set event visibility: %w", err)
 	}
 	updated := *evt
 	updated.Visibility = input.Visibility
 	updated.VisibilityRules = visRules
+	if announced != nil {
+		updated.Announced = announced
+	}
 	s.publish(PubEventUpdated, campaignID, calendarID, &updated)
 	return nil
 }
@@ -3451,6 +3485,16 @@ func (s *calendarService) SetDayWeather(ctx context.Context, calendarID, campaig
 	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 		return err
 	}
+	if err := checkDayWeather(cal, days); err != nil {
+		return err
+	}
+	return s.publishAfter(s.weatherRepo.SetDays(ctx, calendarID, days), PubWeatherChanged, campaignID, calendarID)
+}
+
+// checkDayWeather validates readings to be stored against cal (geometry
+// loaded) and defaults an empty source to manual, in place. SetDayWeather
+// and the year-track batch share it so a day is judged the same way on both.
+func checkDayWeather(cal *Calendar, days []DayWeatherInput) error {
 	seen := make(map[DayDate]bool, len(days))
 	for i := range days {
 		d := &days[i]
@@ -3473,7 +3517,7 @@ func (s *calendarService) SetDayWeather(ctx context.Context, calendarID, campaig
 			return err
 		}
 	}
-	return s.publishAfter(s.weatherRepo.SetDays(ctx, calendarID, days), PubWeatherChanged, campaignID, calendarID)
+	return nil
 }
 
 // ClearDayWeather removes the readings on the given days.

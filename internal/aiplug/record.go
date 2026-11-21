@@ -101,6 +101,10 @@ type Plan struct {
 	// row writes, drawn on the review screen by the rulebook reader so it
 	// shows in the campaign's look. House rules only; "" for none.
 	Preview string
+	// HexMap is the picture data of a hex-map row (JSON, built by the kind),
+	// drawn on the review screen by the hex map preview widget, and parsed
+	// only when the owner asks to see the map. "" for none.
+	HexMap string
 }
 
 // Kind is one kind of block an AI can ask to write.

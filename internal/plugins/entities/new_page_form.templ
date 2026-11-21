@@ -1,0 +1,209 @@
+// new_page_form.templ draws Create page: the same form as a screen of its own
+// (direct links, no JavaScript) and as the small sheet that opens over the
+// place a person is on. Neither sits in a card.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"strconv"
+)
+
+// EntityNewPage renders Create page as a screen of its own, with every field
+// in sight.
+templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string, draft NewPageDraft) {
+	@layouts.App("New page - " + cc.Campaign.Name) {
+		@layouts.AppFrame() {
+			<div class="np-screen">
+				<header class="mb-6">
+					<h1 class="cb-title text-2xl font-bold text-fg">New page</h1>
+				</header>
+				@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, errMsg, draft)
+			</div>
+		}
+	}
+}
+
+// EntityNewSheet is the form alone, with its heading and a close mark, for
+// the dialog new_page_sheet.js opens. It is only ever fetched, never a page.
+templ EntityNewSheet(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken string, draft NewPageDraft) {
+	<div class="np-sheet-head">
+		<h2 id="np-sheet-title" class="np-sheet-title">New page</h2>
+		<button type="button" class="np-close" aria-label="Close" onclick={ newPageCloseJS() }>
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+	</div>
+	@EntityCreateFormComponent(cc, entityTypes, preselect, variants, parentEntity, name, csrfToken, "", draft)
+}
+
+// EntityCreateFormComponent renders the creation form. The name is the
+// writing line, the category follows it, and the sentence under them says who
+// will see the page. Template, descriptor and parent page sit behind one
+// quiet word on the sheet and are open on the full screen.
+templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, variants []EntityType, parentEntity *Entity, name, csrfToken, errMsg string, draft NewPageDraft) {
+	<div id="entity-form" class="np-form" data-np-form>
+		<form
+			class="np-body"
+			method="POST"
+			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+			hx-post={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+			hx-target="#entity-form"
+			hx-swap="outerHTML"
+			data-track-changes="entity-create"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			if draft.Return != "" {
+				<input type="hidden" name="return" value={ draft.Return }/>
+			}
+			if draft.Sheet {
+				<input type="hidden" name="sheet" value="1"/>
+			}
+			if errMsg != "" {
+				<div class="alert-error" role="alert">
+					{ errMsg }
+				</div>
+			}
+			<div class="np-line">
+				<label for="name" class="sr-only">Name</label>
+				<input
+					type="text"
+					id="name"
+					name="name"
+					value={ name }
+					required
+					autofocus
+					class="np-name"
+					placeholder="Name of the page"
+					maxlength="200"
+					autocomplete="off"
+				/>
+			</div>
+			if len(variants) > 1 {
+				// The category is fixed by where the page was started; the
+				// person picks which layout variant it is made with. The
+				// checked radio carries the entity_type_id.
+				<div class="np-line np-cat">
+					<span class="np-in">in</span>
+					<span class="np-cat-fixed">{ variants[0].Name }</span>
+				</div>
+				<div class="np-line">
+					<p class="np-lab" id="np-variant-lab">Create as</p>
+					<div class="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="np-variant-lab">
+						for i, v := range variants {
+							<label class="cursor-pointer select-none">
+								<input
+									type="radio"
+									name="entity_type_id"
+									value={ strconv.Itoa(v.ID) }
+									required
+									class="peer sr-only"
+									checked?={ (preselect == v.ID) || (preselect == variants[0].ID && i == 0) }
+								/>
+								<span class="np-variant">
+									{ v.Name }
+									if i == 0 {
+										<span class="text-xs text-fg-muted">(default)</span>
+									}
+								</span>
+							</label>
+						}
+					</div>
+				</div>
+			} else {
+				<div class="np-line np-cat">
+					<span class="np-in" aria-hidden="true">in</span>
+					<label for="entity_type_id" class="sr-only">Category</label>
+					<span class="el-pick-wrap">
+						<select id="entity_type_id" name="entity_type_id" required class="ctl-pick np-select">
+							<option value="">Pick a category</option>
+							// Top-level types only: sub-categories are layout variants
+							// of their parent and arrive through the picker above when
+							// that parent is the one the page was started from.
+							for _, et := range entityTypes {
+								if et.Enabled && et.ParentTypeID == nil {
+									<option
+										value={ strconv.Itoa(et.ID) }
+										selected?={ et.ID == preselect }
+									>{ et.Name }</option>
+								}
+							}
+						</select>
+						<svg class="el-picker-ic" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"></path></svg>
+					</span>
+				</div>
+			}
+			@newPageWho(draft.IsPrivate, cc.CanAuthorDmOnly())
+			<details
+				class="np-more"
+				if !draft.Sheet {
+					open
+				}
+			>
+				<summary class="quiet-word np-more-word">More: template, descriptor, parent page</summary>
+				<div class="np-more-body">
+					// Content template picker (template_picker.js loads the
+					// templates of the chosen category).
+					<div
+						id="template-picker"
+						data-campaign-id={ cc.Campaign.ID }
+						if draft.TemplateID > 0 {
+							data-selected-template={ strconv.Itoa(draft.TemplateID) }
+						}
+						class="hidden"
+					>
+						<label for="template_id" class="np-lab">Content template</label>
+						<select id="template_id" name="template_id" class="ctl-field">
+							<option value="0">Blank, start from scratch</option>
+						</select>
+						<p class="np-hint">Starts the page with a set of headings.</p>
+					</div>
+					<div>
+						<label for="type_label" class="np-lab">Descriptor</label>
+						<input
+							type="text"
+							id="type_label"
+							name="type_label"
+							value={ draft.TypeLabel }
+							class="ctl-field"
+							placeholder="City, NPC, artifact"
+							maxlength="100"
+						/>
+						<p class="np-hint">A word or two shown after the category.</p>
+					</div>
+					@parentPicker(cc.Campaign.ID, parentEntity, "Parent page", "np-lab", "ctl-field", "Leave empty to keep it at the top level.")
+				</div>
+			</details>
+			<div class="np-actions">
+				<button type="submit" class="btn-primary">Create page</button>
+				if draft.Sheet {
+					// Leaving isn't a command, so Cancel is a quiet word; on the
+					// sheet it closes the sheet and leaves the place as it was.
+					<button type="button" class="quiet-word" onclick={ newPageCloseJS() }>Cancel</button>
+				} else {
+					<a href={ templ.SafeURL(newPageCancelURL(cc.Campaign.ID, parentEntity, preselect, draft.Return)) } class="quiet-word">Cancel</a>
+				}
+			</div>
+		</form>
+	</div>
+}
+
+// newPageWho is the sentence under the name that says who will see the new
+// page, in the words of what will be saved. Only the owner and Co-DMs may
+// change it; everyone else's page is open to players whatever they ask, so
+// they get the sentence alone and no is_private field to send.
+templ newPageWho(isPrivate, canChange bool) {
+	<div class="np-who" data-np-who>
+		if canChange {
+			<input type="hidden" name="is_private" value={ strconv.FormatBool(isPrivate) }/>
+		}
+		<p class="np-who-line" aria-live="polite">
+			<i class="cb-dm fa-solid fa-lock np-who-lock" aria-hidden="true" data-np-who-lock hidden?={ !isPrivate }></i>
+			<span data-np-who-text>{ newPageWhoLine(isPrivate) }</span>
+			if canChange {
+				<button type="button" class="quiet-word np-who-word" onclick={ newPageWhoToggleJS() } data-np-who-word>{ newPageWhoWord(isPrivate) }</button>
+			}
+		</p>
+	</div>
+}

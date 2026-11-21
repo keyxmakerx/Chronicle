@@ -23,13 +23,23 @@ func TestHexMigration_Reapply_Integration(t *testing.T) {
 			t.Fatalf("table %s missing (n=%d, err=%v)", tbl, n, err)
 		}
 	}
-	// Re-running the DDL must be harmless (CREATE TABLE IF NOT EXISTS).
-	sqlBytes, err := MigrationsFS.ReadFile("migrations/009_hex_layers.up.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
+	// Re-running the DDL must be harmless (CREATE TABLE IF NOT EXISTS, ADD
+	// COLUMN IF NOT EXISTS).
+	for _, file := range []string{"migrations/009_hex_layers.up.sql", "migrations/012_hex_lines.up.sql"} {
+		sqlBytes, err := MigrationsFS.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read migration: %v", err)
+		}
+		for _, stmt := range splitSQLStatements(string(sqlBytes)) {
+			mustExecMaps(t, db, stmt)
+		}
 	}
-	for _, stmt := range splitSQLStatements(string(sqlBytes)) {
-		mustExecMaps(t, db, stmt)
+	for _, col := range []string{"road", "river", "trail"} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = 'map_hex_cells' AND column_name = ?`, col).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("column %s missing (n=%d, err=%v)", col, n, err)
+		}
 	}
 }
 
@@ -188,6 +198,124 @@ func TestHexRepository_Integration(t *testing.T) {
 						deref(c.Terrain), c.Name, deref(c.Notes), ptrStr(c.Piece), deref(tc.wantTerrain), tc.wantName, deref(tc.wantNotes), ptrStr(tc.wantPiece))
 				}
 			})
+		}
+	})
+
+	t.Run("lines merge per field and never disturb the rest", func(t *testing.T) {
+		tests := []struct {
+			name                    string
+			second                  HexCellWrite
+			wantRoad, wantRiver     *int
+			wantTrail               *int
+			wantTerrain, wantName   string
+			wantPiece               *int
+			wantExplored, wantExist bool
+		}{
+			{"a river write leaves road, trail and the land alone",
+				HexCellWrite{RiverSet: true, River: intp(12)},
+				intp(3), intp(12), intp(0), "hills", "Old", intp(4), true, true},
+			{"null road clears only the road",
+				HexCellWrite{RoadSet: true, Road: nil},
+				nil, intp(5), intp(0), "hills", "Old", intp(4), true, true},
+			{"zero is a dot, not a clear",
+				HexCellWrite{TrailSet: true, Trail: intp(0)},
+				intp(3), intp(5), intp(0), "hills", "Old", intp(4), true, true},
+			{"63 is stored whole",
+				HexCellWrite{RoadSet: true, Road: intp(63)},
+				intp(63), intp(5), intp(0), "hills", "Old", intp(4), true, true},
+			{"a terrain write leaves every line alone",
+				HexCellWrite{TerrainSet: true, Terrain: hexStrp("forest")},
+				intp(3), intp(5), intp(0), "forest", "Old", intp(4), true, true},
+			{"empty write changes nothing",
+				HexCellWrite{},
+				intp(3), intp(5), intp(0), "hills", "Old", intp(4), true, true},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				mapID := newMap()
+				if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{
+					Col: 2, Row: 3,
+					TerrainSet: true, Terrain: hexStrp("hills"),
+					PieceSet: true, Piece: intp(4),
+					NameSet: true, Name: "Old",
+					RoadSet: true, Road: intp(3),
+					RiverSet: true, River: intp(5),
+					TrailSet: true, Trail: intp(0),
+				}}); err != nil {
+					t.Fatalf("seed: %v", err)
+				}
+				mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ?", mapID)
+				w := tc.second
+				w.Col, w.Row = 2, 3
+				if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{w}); err != nil {
+					t.Fatalf("second write: %v", err)
+				}
+				got, err := repo.GetCells(ctx, mapID, []HexKey{{2, 3}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				c, ok := got[HexKey{2, 3}]
+				if !ok {
+					t.Fatal("cell missing")
+				}
+				if !intPtrEq(c.Road, tc.wantRoad) || !intPtrEq(c.River, tc.wantRiver) || !intPtrEq(c.Trail, tc.wantTrail) {
+					t.Errorf("lines = %s/%s/%s; want %s/%s/%s",
+						ptrStr(c.Road), ptrStr(c.River), ptrStr(c.Trail), ptrStr(tc.wantRoad), ptrStr(tc.wantRiver), ptrStr(tc.wantTrail))
+				}
+				if deref(c.Terrain) != tc.wantTerrain || c.Name != tc.wantName || !intPtrEq(c.Piece, tc.wantPiece) || !c.Explored {
+					t.Errorf("land fields disturbed: terrain %q name %q piece %s explored %v",
+						deref(c.Terrain), c.Name, ptrStr(c.Piece), c.Explored)
+				}
+			})
+		}
+	})
+
+	t.Run("a lines-only write creates a row, and a row with lines is not empty", func(t *testing.T) {
+		mapID := newMap()
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, RiverSet: true, River: intp(0)},
+			{Col: 1, Row: 0, RoadSet: true, Road: intp(9), TerrainSet: true, Terrain: hexStrp("plains")},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		cells, _ := repo.ListCells(ctx, mapID)
+		if len(cells) != 2 || cells[0].River == nil || *cells[0].River != 0 || cells[0].Terrain != nil {
+			t.Fatalf("cells = %+v; want a terrain-less row holding a river dot, and a road hex", cells)
+		}
+		// Clearing the terrain leaves the road, so the row stays; clearing the
+		// last line then frees it.
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{Col: 1, Row: 0, TerrainSet: true}}); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := repo.CountCells(ctx, mapID); n != 2 {
+			t.Fatalf("count = %d after clearing terrain; want 2 (the road keeps the row)", n)
+		}
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, RiverSet: true},
+			{Col: 1, Row: 0, RoadSet: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := repo.CountCells(ctx, mapID); n != 0 {
+			t.Errorf("count = %d after clearing the last lines; want 0", n)
+		}
+	})
+
+	t.Run("fog reset keeps an unexplored row that still has a line", func(t *testing.T) {
+		mapID := newMap()
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, RoadSet: true, Road: intp(1)},
+			{Col: 1, Row: 0, NameSet: true, Name: "n"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ?", mapID)
+		if _, err := repo.ResetExplored(ctx, mapID, userID); err != nil {
+			t.Fatal(err)
+		}
+		cells, _ := repo.ListCells(ctx, mapID)
+		if len(cells) != 2 {
+			t.Errorf("got %d rows after reset; want 2 (name and road both keep their rows)", len(cells))
 		}
 	})
 
@@ -403,4 +531,101 @@ func deref(p *string) string {
 		return "<nil>"
 	}
 	return *p
+}
+
+func TestOldRoadReconcile_Integration(t *testing.T) {
+	db := newMapsScratchDB(t)
+	ctx := context.Background()
+	store := NewOldRoadStore(db)
+	repo := NewHexRepository(db)
+
+	userID := newMapsDBID(t)
+	campaignID := newMapsDBID(t)
+	mustExecMaps(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		userID, userID+"@example.test", "Road Int Test", "x")
+	mustExecMaps(t, db, `INSERT INTO campaigns (id, name, slug, created_by) VALUES (?, ?, ?, ?)`,
+		campaignID, "Road Int Test", campaignID, userID)
+	newMap := func() string {
+		id := newMapsDBID(t)
+		mustExecMaps(t, db, `INSERT INTO maps (id, campaign_id, name) VALUES (?, ?, ?)`, id, campaignID, "Road Map")
+		return id
+	}
+
+	roadMap, plainMap := newMap(), newMap()
+	// Old road hexes (4,4), (5,4), (6,4) in a row, forest to the north-east and
+	// a town beside; (5,4) also carries a name, notes and the explored flag.
+	writes := []HexCellWrite{
+		{Col: 4, Row: 4, TerrainSet: true, Terrain: hexStrp("road")},
+		{Col: 5, Row: 4, TerrainSet: true, Terrain: hexStrp("road"), NameSet: true, Name: "Crossing", NotesSet: true, Notes: hexStrp("toll")},
+		{Col: 6, Row: 4, TerrainSet: true, Terrain: hexStrp("road"), PieceSet: true, Piece: intp(2)},
+	}
+	// A lone road hex with no usable land must still read as a road (a dot).
+	writes = append(writes, HexCellWrite{Col: 30, Row: 30, TerrainSet: true, Terrain: hexStrp("road")})
+	for _, n := range Neighbors(5, 4) {
+		if n.Row == 3 {
+			writes = append(writes, HexCellWrite{Col: n.Col, Row: n.Row, TerrainSet: true, Terrain: hexStrp("forest")})
+		}
+	}
+	if _, err := repo.ApplyCells(ctx, roadMap, userID, writes); err != nil {
+		t.Fatal(err)
+	}
+	mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ? AND col = 5 AND `row` = 4", roadMap)
+	if _, err := repo.ApplyCells(ctx, plainMap, userID, []HexCellWrite{
+		{Col: 1, Row: 1, TerrainSet: true, Terrain: hexStrp("hills")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	before, _ := repo.GetLayer(ctx, roadMap)
+	plainBefore, _ := repo.GetLayer(ctx, plainMap)
+	cellsBefore, _ := repo.ListCells(ctx, roadMap)
+	want := map[HexKey]OldRoadConversion{}
+	for _, c := range PlanOldRoadConversion(cellsBefore) {
+		want[HexKey{c.Col, c.Row}] = c
+	}
+
+	m, h, err := ReconcileOldRoadHexes(ctx, store)
+	if err != nil || m != 1 || h != 4 {
+		t.Fatalf("first run = %d maps, %d hexes, %v; want 1, 4, nil", m, h, err)
+	}
+
+	after, _ := repo.GetLayer(ctx, roadMap)
+	if after.Version <= before.Version {
+		t.Errorf("version %d -> %d; want it to move", before.Version, after.Version)
+	}
+	cells, _ := repo.ListCells(ctx, roadMap)
+	byKey := map[HexKey]HexCell{}
+	for _, c := range cells {
+		byKey[HexKey{c.Col, c.Row}] = c
+		if c.Terrain != nil && *c.Terrain == "road" {
+			t.Errorf("(%d,%d) is still road terrain", c.Col, c.Row)
+		}
+	}
+	for k, w := range want {
+		got := byKey[k]
+		if got.Road == nil || *got.Road != w.Road || !eqStrPtr(got.Terrain, w.Terrain) || got.Piece != nil {
+			t.Errorf("(%d,%d) = road %s terrain %v piece %s; want road %d terrain %v, no piece",
+				k.Col, k.Row, ptrStr(got.Road), deref(got.Terrain), ptrStr(got.Piece), w.Road, deref(w.Terrain))
+		}
+	}
+	if lone := byKey[HexKey{30, 30}]; lone.Road == nil || *lone.Road != 0 || lone.Terrain != nil {
+		t.Errorf("lone road hex = road %s terrain %v; want a dot (0) and no land", ptrStr(lone.Road), deref(lone.Terrain))
+	}
+	mid := byKey[HexKey{5, 4}]
+	if mid.Name != "Crossing" || deref(mid.Notes) != "toll" || !mid.Explored || deref(mid.UpdatedBy) != userID {
+		t.Errorf("(5,4) other columns changed: %+v", mid)
+	}
+
+	// A second run finds nothing and leaves the version alone.
+	m, h, err = ReconcileOldRoadHexes(ctx, store)
+	if err != nil || m != 0 || h != 0 {
+		t.Fatalf("second run = %d, %d, %v; want 0, 0, nil", m, h, err)
+	}
+	if again, _ := repo.GetLayer(ctx, roadMap); again.Version != after.Version {
+		t.Errorf("second run moved the version %d -> %d", after.Version, again.Version)
+	}
+	// A map without old roads is never touched.
+	if plainAfter, _ := repo.GetLayer(ctx, plainMap); plainAfter.Version != plainBefore.Version {
+		t.Errorf("plain map version %d -> %d; want unchanged", plainBefore.Version, plainAfter.Version)
+	}
 }

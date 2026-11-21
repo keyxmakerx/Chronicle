@@ -26,4 +26,5 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	cg.GET("/roll-tables", h.Get, scribeOrDM)
 	cg.PUT("/roll-tables", h.Put, dmTeam)
+	cg.GET("/roll-tables/manage", h.Manage, dmTeam)
 }

@@ -127,8 +127,16 @@
   function setWith(G, list) {
     var tables = baseSet(G).tables.slice();
     list.forEach(function (t) {
-      tables.push({ id: t.id, name: t.name, output: { kind: 'quest' }, entries: t.entries.map(function (e) {
-        return { weight: e.weight == null ? 1 : e.weight, name: e.name, brief: e.brief || e.name };
+      var out = { kind: 'quest' };
+      // Who sees a day's roll is the table's own answer; a table that never
+      // said keeps the roller's default of hidden until shown.
+      if (t.visibility === 'everyone' || t.visibility === 'dm_only') out.visibility = t.visibility;
+      tables.push({ id: t.id, name: t.name, output: out, entries: t.entries.map(function (e) {
+        var o = { weight: e.weight == null ? 1 : e.weight, name: e.name, brief: e.brief || e.name };
+        // The day conditions the table was saved with, so a calendar day's
+        // Roll one obeys them the way the builder's test rolls did.
+        if (e.when && typeof e.when === 'object') o.when = e.when;
+        return o;
       }) });
     });
     return { format: G.tables.format, version: 1, id: 'campaign', name: 'Campaign tables', tables: tables };
@@ -152,7 +160,13 @@
       return { name: 'This table has a problem', brief: e.message, problem: true };
     }
     if (!r) return { name: 'Nothing on this table fits here', brief: 'Every line needs something this day or page doesn’t have, like a full moon.', problem: true };
-    if (r.name) return { name: r.name, brief: r.brief, kind: r.kind, moon: r.moon };
+    if (r.name) {
+      var res = { name: r.name, brief: r.brief, kind: r.kind, moon: r.moon };
+      // Only the campaign's own tables decide who sees the result; the
+      // starters and the library stay hidden until the DM shows them.
+      if (own(list, id) && (r.visibility === 'everyone' || r.visibility === 'dm_only')) res.visibility = r.visibility;
+      return res;
+    }
     var t = r.text || '';
     return { name: t.charAt(0).toUpperCase() + t.slice(1), brief: null };
   }
@@ -223,7 +237,11 @@
 
   function entriesFor(G, list, id) {
     var o = own(list, id);
-    if (o) return o.entries.map(function (e) { return { name: e.name, brief: e.brief || '', weight: e.weight == null ? 1 : e.weight }; });
+    if (o) return o.entries.map(function (e) {
+      var r = { name: e.name, brief: e.brief || '', weight: e.weight == null ? 1 : e.weight };
+      if (e.when) r.when = e.when;
+      return r;
+    });
     var t = starter(G, id);
     if (!t) return [];
     return t.entries.map(function (e) {
@@ -372,8 +390,13 @@
       if (!S.draft) return;
       var n = B.querySelector('[data-tname]');
       if (n) S.draft.name = n.value;
+      var before = S.draft.entries;
       S.draft.entries = [].map.call(B.querySelectorAll('.rt-ent[data-e]'), function (r) {
-        return { weight: +r.querySelector('[data-w]').value, name: r.querySelector('[data-n]').value, brief: r.querySelector('[data-b]').value };
+        var e = { weight: +r.querySelector('[data-w]').value, name: r.querySelector('[data-n]').value, brief: r.querySelector('[data-b]').value };
+        // The editor has no field for a line's day conditions, so they ride along unchanged.
+        var was = before[+r.getAttribute('data-e')];
+        if (was && was.when) e.when = was.when;
+        return e;
       });
     }
     function closeEditor() {
@@ -405,11 +428,16 @@
       readDraft();
       var d = S.draft;
       d.name = d.name.trim();
-      d.entries = d.entries.filter(function (e) { return e.name.trim(); }).map(function (e) { return { name: e.name.trim(), brief: e.brief.trim(), weight: e.weight }; });
+      d.entries = d.entries.filter(function (e) { return e.name.trim(); }).map(function (e) {
+        var k = { name: e.name.trim(), brief: e.brief.trim(), weight: e.weight };
+        if (e.when) k.when = e.when;
+        return k;
+      });
       if (!d.name) { notify('Give the table a name first.', 'error'); return; }
       if (!d.entries.length) { notify('Add at least one line first.', 'error'); return; }
       var keep = { id: d.id, name: d.name, entries: d.entries };
       if (d.credit) keep.credit = d.credit;
+      if (d.visibility) keep.visibility = d.visibility;
       var next = S.list.filter(function (t) { return t.id !== d.id; }).concat([keep]);
       S.saving = true; drawEditor(true);
       save(opts.campaignId, next).then(function (saved) {
@@ -446,7 +474,7 @@
         if (S.editing) { if (S.dirty) ask(); else closeEditor(); return; }
         S.editing = true;
         var o = own(S.list, S.table);
-        S.draft = o ? { id: o.id, name: o.name, entries: entriesFor(S.G, S.list, o.id), credit: o.credit || null } : null;
+        S.draft = o ? { id: o.id, name: o.name, entries: entriesFor(S.G, S.list, o.id), credit: o.credit || null, visibility: o.visibility || '' } : null;
         draw(); drawEditor(false);
         return;
       }
@@ -544,7 +572,9 @@
         '<div class="rtd-act"><button type="button" class="rt-btn" data-roll title="Roll again" aria-label="Roll again"><i class="fa-solid fa-dice"></i></button>' +
         '<button type="button" class="rt-main" data-put' + (S.res && !S.res.problem && !S.busy ? '' : ' disabled') + '><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i>' + (S.busy ? 'Putting it on the day…' : 'Put on this day') + '</button>' +
         '<button type="button" class="rt-ghost" data-cancel>Cancel</button></div>' +
-        '<p class="rt-note rtd-hid"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Only you see it until you show it.</p>';
+        (S.res && S.res.visibility === 'everyone'
+          ? '<p class="rt-note rtd-hid"><i class="fa-solid fa-eye" aria-hidden="true"></i> Everyone sees it on the day.</p>'
+          : '<p class="rt-note rtd-hid"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Only you see it until you show it.</p>');
     }
     function rollIt() {
       if (!S.G) return;
@@ -609,6 +639,6 @@
   window.Chronicle.RollTables = {
     engine: engine, mine: mine, save: save, roll: roll, mountBlock: mountBlock, mountDay: mountDay,
     library: library,
-    _internal: { catalog: catalog, entriesFor: entriesFor, freeId: freeId, esc: esc, reel: reel, reduced: reduced, notify: notify, own: own, starter: starter, tableName: tableName, NAMES: NAMES, ID_RE: ID_RE, setWith: setWith, useLibrary: useLibrary, creditLine: creditLine, creditHTML: creditHTML, ranges: ranges, weightChoices: weightChoices }
+    _internal: { catalog: catalog, entriesFor: entriesFor, freeId: freeId, esc: esc, reel: reel, reduced: reduced, notify: notify, own: own, starter: starter, tableName: tableName, NAMES: NAMES, ID_RE: ID_RE, setWith: setWith, useLibrary: useLibrary, creditLine: creditLine, creditHTML: creditHTML, creditOf: creditOf, weightLabel: weightLabel, braces: braces, PAGE_CAL: PAGE_CAL, ranges: ranges, weightChoices: weightChoices }
   };
 })();

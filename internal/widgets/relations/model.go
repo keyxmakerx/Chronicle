@@ -36,6 +36,8 @@ type Relation struct {
 	TargetEntityColor string `json:"targetEntityColor,omitempty"`
 	TargetEntitySlug  string `json:"targetEntitySlug,omitempty"`
 	TargetEntityType  string `json:"targetEntityType,omitempty"`
+	// TargetEntityShopGood marks a target page that exists only to be sold.
+	TargetEntityShopGood bool `json:"targetEntityShopGood,omitempty"`
 }
 
 // CampaignRelation holds a relation row with joined entity details for both

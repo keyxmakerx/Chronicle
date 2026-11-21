@@ -2897,8 +2897,10 @@ function portrait(o) {
 }
 // ---------- Sets and crits, imported when first needed ----------
 // Every set in the order a picker lists them; the first three are built in above.
-var SET_KEYS = ['jewelled', 'confetti', 'acrylic', 'cage', 'heartlight', 'gothic', 'obsidian', 'moonstone', 'oak', 'nebula', 'bone', 'scale'];
-var CRIT_KEYS = { succ: ['storm', 'phoenix', 'dawn', 'starfall', 'bloom', 'hoard'], fail: ['grasp', 'frost', 'shatter', 'hex', 'crows', 'abyss'] };
+var SET_KEYS = ['jewelled', 'confetti', 'acrylic', 'cage', 'heartlight', 'gothic', 'obsidian', 'moonstone', 'oak', 'nebula', 'bone', 'scale',
+  'damascus', 'cloisonne', 'kintsugi', 'leather', 'runestone', 'arcana', 'relic', 'agate', 'neon', 'amber', 'botanical', 'clockwork'];
+var CRIT_KEYS = { succ: ['storm', 'phoenix', 'dawn', 'starfall', 'bloom', 'hoard', 'koi', 'prism', 'festival', 'encore', 'fortune', 'flutter'],
+  fail: ['grasp', 'frost', 'shatter', 'hex', 'crows', 'abyss', 'mimic', 'engulf', 'omen', 'shackle', 'melt', 'dust'] };
 var LOADING = {};
 // Only names on the lists above are ever imported, so a key read from a saved preference can't
 // point the import anywhere else.
@@ -2948,5 +2950,5 @@ export {
   hexA, in3, inout, isLight, kindOf, landedFace, len, loadCrits, loadSets, mix, mul, mulberry,
   norm, numberOnto, out3, paintNumeral, polyLen, polyPath, portrait, qualityFor, ready, registerCrit,
   registerSet, roll, setDown, shadeDie, share, simulate, smooth, solid, splitDie, spray, spriteTex,
-  starTex, stop, strokePaths, strokeW, sub, symmetry, tintDie, wave, wholeDie, worldOf, writhe
+  starTex, stop, strokePaths, strokeW, strokesFor, sub, symmetry, tintDie, wave, wholeDie, worldOf, writhe
 };

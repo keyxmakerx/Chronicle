@@ -111,6 +111,47 @@
     this._bindMvCapture();
     this._bindFlapCapture();
     this._buildBulkBar();
+    // The year track (calendar_year_track.js) hangs off the deck's tool row,
+    // the chosen days' row and the Eras card through the few calls below.
+    // It is fetched the first time Edit opens; until then they all stay quiet.
+    this.yearTrack = null;
+    this._ytWait = null;
+  };
+
+  // Runs cb with the year track, fetching its script first if this page has
+  // not yet. A page that is only looked at never pays for it.
+  CalendarEditor.prototype._withYearTrack = function (cb) {
+    var self = this;
+    var attach = function () {
+      // A script that arrives after the page was swapped away has no deck to hang off.
+      if (!self.yearTrack && Chronicle.calendarYearTrack && document.contains(self.deck)) {
+        self.yearTrack = Chronicle.calendarYearTrack.attach(self);
+        self.yearTrack.onDeck();
+        self.yearTrack.onEditing();
+        if (self.editing) self._renderBar();
+      }
+      return self.yearTrack;
+    };
+    if (attach()) { if (cb) cb(this.yearTrack); return; }
+    var src = this.view.yearTrackSrc;
+    if (!src) return;
+    if (this._ytWait) { if (cb) this._ytWait.push(cb); return; }
+    this._ytWait = cb ? [cb] : [];
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = function () {
+      var wait = self._ytWait || [];
+      self._ytWait = null;
+      if (attach()) wait.forEach(function (f) { f(self.yearTrack); });
+    };
+    s.onerror = function () { self._ytWait = null; };
+    document.head.appendChild(s);
+  };
+
+  // The helpers the year track shares with the weather writes in this file,
+  // so a stored reading, a batch and the lazy engine load each have one copy.
+  CalendarEditor.prototype.kit = function () {
+    return { loadEngine: loadEngine, dayInput: dayInput, weatherBatches: weatherBatches };
   };
 
   // ------------------------------------------------------------------
@@ -138,6 +179,11 @@
     var pv = view.canAuthorDmOnly
       ? '<div class="sw dkpv"><span>See it as players do</span><button type="button" class="tog" role="switch" aria-checked="false" aria-label="See it as players do" data-deck-pv></button></div><span class="dkpvnote">Players’ view</span>'
       : '';
+    // The year as a track of the whole year: a view for everyone who can edit,
+    // with the generating tools added for the Owner (calendar_year_track.js).
+    var year = Chronicle.calendarYearTrack || view.yearTrackSrc
+      ? '<button type="button" class="btn sm quiet" data-deck-year aria-expanded="false"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i><span class="btxt">The year</span></button>'
+      : '';
     var deck = document.createElement('div');
     deck.className = 'deck';
     deck.setAttribute('role', 'region');
@@ -145,7 +191,7 @@
     deck.innerHTML =
       '<div class="dkdrawer" id="cal5-dkdrawer" aria-hidden="true" inert>' +
         '<div class="dkr"><span class="dkhint">Click or drag across days to choose them. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span>' +
-          '<button type="button" class="btn sm quiet" data-deck-add><i class="fa-solid fa-plus"></i><span>Add an event</span></button>' +
+          '<button type="button" class="btn sm quiet" data-deck-add><i class="fa-solid fa-plus"></i><span>Add an event</span></button>' + year +
           (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog"><i class="fa-solid fa-cloud-sun"></i><span class="btxt">Weather</span></button>' : '') +
           eras + gear + '</div>' +
       '</div>' +
@@ -162,6 +208,7 @@
       var t = e.target.closest('[data-deck-mode]');
       if (t) { self.setEditing(t.dataset.deckMode === 'edit'); return; }
       if (e.target.closest('[data-deck-pv]')) { self._togglePlayersView(); return; }
+      if (e.target.closest('[data-deck-year]')) { self._withYearTrack(function (yt) { yt.toggle(); }); return; }
       if (e.target.closest('[data-deck-add]')) self._addEventFromDeck();
     });
     if (eras) $('#cal5-erabtn', deck).addEventListener('click', function () { view.toggleEra(); });
@@ -183,6 +230,7 @@
       : pv ? 'Looking as a player would. Their hidden things are left out.' : 'Looking. Events, moons and eras stay as they are.';
     var tog = $('[data-deck-pv]', deck);
     if (tog) tog.setAttribute('aria-checked', String(!!pv));
+    if (this.yearTrack) this.yearTrack.onDeck();
   };
 
   CalendarEditor.prototype._togglePlayersView = function () {
@@ -223,6 +271,9 @@
     this._paintDeck();
     // The deck already says how to choose days, so turning on is only announced.
     if (on) view._announce('Editing on. Click or drag across days to choose them.'); else view.say('Editing off.');
+    // A year-track draft shows on the grid only while editing.
+    if (this.yearTrack) this.yearTrack.onEditing();
+    else if (on) this._withYearTrack();
   };
 
   // ------------------------------------------------------------------
@@ -611,7 +662,7 @@
       var a = t.dataset.bb;
       if (a === 'none') { self.selection = {}; self._syncPicks(); self._renderBar(); }
       else if (a === 'open') { var d = self._firstChosen(); if (d) self.view.openWing(d[0] + '_' + d[1] + '_' + d[2]); }
-      else if (a === 'hide' || a === 'reveal') self._bulkVisibility(a === 'hide' ? 'dm_only' : 'everyone');
+      else if (a === 'hide' || a === 'onday' || a === 'now') self._bulkVisibility(a);
       else if (a === 'shift') self._toggleShiftTray();
       else if (a === 'wx') self._openWeather();
       else if (a === 'lock') self._lockDays();
@@ -627,10 +678,11 @@
       '<div class="bbl"><b>' + (n === 1 ? '1 day' : n + ' days') + ' chosen</b><span>' + this._eventsInSelection().length + ' events touched</span></div>' +
       '<div class="bba">' +
         (n === 1 ? '<button type="button" class="bbb" data-bb="open"><i class="fa-solid fa-up-right-from-square"></i><span>Open day</span></button>' : '') +
-        (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="reveal"><i class="fa-solid fa-eye"></i><span>Reveal</span></button>' : '') +
+        (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="onday"><i class="fa-solid fa-calendar-days"></i><span>Show on the day</span></button><button type="button" class="bbb" data-bb="now"><i class="fa-solid fa-eye"></i><span>Show now</span></button>' : '') +
         '<button type="button" class="bbb" data-bb="shift" aria-expanded="' + !!this._shiftTray + '"><i class="fa-solid fa-arrows-left-right"></i><span>Shift events</span></button>' +
         (canVis ? (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="wx" aria-haspopup="dialog"><i class="fa-solid fa-cloud-sun"></i><span>Weather</span></button>' : '') +
           lockButtonHTML(lockState(this._selectedDates().map(function (d) { return (self.view.weatherByYear[d.year] || {})[d.month + '_' + d.day] || null; }))) : '') +
+        (this.yearTrack ? this.yearTrack.barHTML() : '') +
       '</div>' +
       '<button type="button" class="x" data-bb="none" aria-label="Choose no days">✕</button>';
   };
@@ -652,7 +704,7 @@
   // Refreshes the grid from the server (so it matches whatever actually
   // landed, even on a partial failure) and reports how many of a bulk
   // write's per-event requests succeeded. verb is past tense ("Hid",
-  // "Revealed", "Shifted"); tail is an optional clause inserted before the
+  // "Showed", "Shifted"); tail is an optional clause inserted before the
   // event count's trailing punctuation (e.g. " by 2 days").
   CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail, note) {
     var view = this.view, okCount = oks.filter(Boolean).length, failCount = oks.length - okCount;
@@ -666,16 +718,23 @@
     }
   };
 
-  CalendarEditor.prototype._bulkVisibility = function (visibility) {
-    var self = this, view = this.view, events = this._eventsInSelection();
+  // What each bar action writes. Showing sets visibility and the announce
+  // rule in one request, so an event never sits shown under the wrong rule.
+  var BULK_VISIBILITY = {
+    hide: { body: { visibility: 'dm_only' }, verb: 'Hid', tail: '' },
+    onday: { body: { visibility: 'everyone', announced: 'on_day' }, verb: 'Set', tail: ' to show on their day' },
+    now: { body: { visibility: 'everyone', announced: 'ahead' }, verb: 'Showed', tail: ' now' }
+  };
+
+  CalendarEditor.prototype._bulkVisibility = function (action) {
+    var self = this, view = this.view, events = this._eventsInSelection(), how = BULK_VISIBILITY[action];
     if (!events.length) { view.say('No events in the selected days.'); return; }
-    var verb = visibility === 'dm_only' ? 'Hid' : 'Revealed';
     settleAll(events.map(function (e) {
       return Chronicle.apiFetch(view.apiBase + '/events/' + e.id + '/visibility', {
-        method: 'PUT', body: { visibility: visibility }
+        method: 'PUT', body: how.body
       });
     })).then(function (oks) {
-      self._reportBulkResult(oks, verb);
+      self._reportBulkResult(oks, how.verb, how.tail);
     });
   };
 
@@ -1531,6 +1590,7 @@
           '<span class="lg" aria-hidden="true">›</span></button></li>';
       }).join('') + '</ul>' : '<p class="none">No eras yet.</p>';
       body += '<button type="button" class="addev" data-add-era><i class="fa-solid fa-plus"></i>Add an era</button>';
+      if (this.yearTrack) body += this.yearTrack.eraRowHTML();
       // Colours, style and feel are set in the Era look part of the calendar
       // settings, which is Owner only like the rest of that page.
       if (view.role >= ROLE_OWNER && view.campaignId && view.calendarId) {
@@ -1655,6 +1715,11 @@
     var self = this, view = this.view;
     if (!view.canAuthorDmOnly) return;
     view.flapEl.addEventListener('click', function (e) {
+      if (e.target.closest('[data-yt-history]')) {
+        var wh = e.target.closest('[data-yt-history]');
+        if (!wh.disabled && self.yearTrack) { view.closeFlap({ quiet: true }); self.yearTrack.startHistory(); }
+        return;
+      }
       var add = e.target.closest('[data-add-era]');
       var edit = e.target.closest('[data-edit-era]');
       var del = e.target.closest('[data-del-era]');

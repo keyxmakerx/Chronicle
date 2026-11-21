@@ -3,6 +3,7 @@ package entities
 import (
 	"bytes"
 	"context"
+	"github.com/a-h/templ"
 	"strings"
 	"testing"
 
@@ -68,55 +69,23 @@ func TestEntityListWidget_CategoryIconInFrontOfEachName(t *testing.T) {
 	}
 }
 
-func TestEntityCard_IconTakesTheThemeNotItsCategoryColour(t *testing.T) {
+// The list's row and tile name a page by its words and its own picture; neither
+// draws a category icon, so there is nothing for a category colour to tint.
+func TestEntityRowAndTile_DrawNoCategoryIcon(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer}
 	e := &Entity{ID: "e1", Name: "Harbor Town", TypeName: "Location", TypeIcon: "fa-map-pin", TypeColor: "#ef4444"}
 
-	for _, colour := range []string{"", "accent", "category"} {
-		t.Run("theme "+colour, func(t *testing.T) {
+	parts := map[string]templ.Component{"row": EntityRow(e, cc), "tile": EntityCard(e, cc)}
+	for name, part := range parts {
+		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := EntityCard(e, cc).Render(kindCtx(colour), &buf); err != nil {
+			if err := part.Render(kindCtx("category"), &buf); err != nil {
 				t.Fatal(err)
 			}
 			out := buf.String()
-			if strings.Count(out, "kind-themed") != 2 {
-				t.Errorf("the band's icon and the pill's icon both take the theme: %s", out)
-			}
-			for rest := out; ; {
-				i := strings.Index(rest, "<i ")
-				if i < 0 {
-					break
-				}
-				tag := rest[i : i+strings.Index(rest[i:], ">")]
-				if strings.Contains(tag, "color:") && !strings.Contains(tag, "--kind-colour") {
-					t.Errorf("an icon is still coloured by its category directly: %s", tag)
-				}
-				rest = rest[i+len(tag):]
-			}
-			if has := strings.Contains(out, "--kind-colour:#ef4444;"); has != (colour == "category") {
-				t.Errorf("--kind-colour present = %v under theme %q", has, colour)
+			if strings.Contains(out, "fa-map-pin") || strings.Contains(out, "#ef4444") {
+				t.Errorf("the %s draws its category's icon or colour: %s", name, out)
 			}
 		})
-	}
-}
-
-func TestEntityTableRow_StandInIconIsUnboxedAndThemed(t *testing.T) {
-	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer}
-	e := &Entity{ID: "e1", Name: "Harbor Town", TypeName: "Location", TypeIcon: "fa-map-pin", TypeColor: "#ef4444"}
-	var buf bytes.Buffer
-	if err := EntityTableRow(e, cc).Render(kindCtx("category"), &buf); err != nil {
-		t.Fatal(err)
-	}
-	out := buf.String()
-	i := strings.Index(out, `<span class="w-8 h-8 flex`)
-	if i < 0 {
-		t.Fatalf("the name's icon slot is missing: %s", out)
-	}
-	slot := out[i : i+strings.Index(out[i:], "</span>")]
-	if strings.Contains(slot, "background") || strings.Contains(slot, "rounded") {
-		t.Errorf("something is drawn behind the icon: %s", slot)
-	}
-	if !strings.Contains(slot, `kind-themed" style="--kind-colour:#ef4444;"`) {
-		t.Errorf("the icon does not take the theme: %s", slot)
 	}
 }

@@ -23,3 +23,33 @@ func TestShopRoomCounterStarter(t *testing.T) {
 		})
 	}
 }
+
+// Every starter is a theme the validator accepts as it stands, under a name
+// of its own that the by-name lookup finds.
+func TestShopRoomCounterStarters_AllValidAndNamed(t *testing.T) {
+	var all []ShopRoomCounter
+	if err := json.Unmarshal([]byte(shopRoomCounterStartersJSON), &all); err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 32 {
+		t.Fatalf("starters = %d, want 32", len(all))
+	}
+	seen := map[string]bool{}
+	for i := range all {
+		c := all[i]
+		if seen[c.Name] {
+			t.Errorf("two starters are called %q", c.Name)
+		}
+		seen[c.Name] = true
+		if err := c.validate(); err != nil {
+			t.Errorf("%s: %v", c.Name, err)
+		}
+		var got ShopRoomCounter
+		if err := json.Unmarshal(ShopRoomCounterStarterNamed(c.Name), &got); err != nil || got.Name != c.Name || got.Skeleton != c.Skeleton {
+			t.Errorf("by name %q = %+v (%v)", c.Name, got, err)
+		}
+	}
+	if raw := ShopRoomCounterStarterNamed("The Missing Room"); raw != nil {
+		t.Errorf("an unknown name gave %s", raw)
+	}
+}

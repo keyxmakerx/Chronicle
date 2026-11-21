@@ -282,6 +282,30 @@
       return null;
     },
 
+    // effectiveAnnounced mirrors Event.EffectiveAnnounced (model.go): the
+    // event's own setting, else "ahead" when it repeats yearly, else its
+    // kind's default, else "on_day".
+    effectiveAnnounced: function (cal, e) {
+      if (e.announced) return e.announced;
+      if (e.is_recurring && e.recurrence_type === CalDate.RECUR_YEARLY) return 'ahead';
+      var kinds = (cal && cal.event_kinds) || [];
+      for (var i = 0; e.kind_id != null && i < kinds.length; i++) {
+        if (kinds[i].id === e.kind_id) return kinds[i].default_announced || 'on_day';
+      }
+      return 'on_day';
+    },
+
+    // waitsForItsDay is true for an event players can see only once its
+    // day arrives, the rule the server applies to every non-author read
+    // (dropUnannouncedFutureEvents): shown to them eventually, start date
+    // strictly after today, and held by "on the day". Hidden events are
+    // not waiting; they stay hidden.
+    waitsForItsDay: function (cal, e) {
+      if (!e || e._draft || e.visibility === 'dm_only') return false;
+      if (CalDate.effectiveAnnounced(cal, e) !== 'on_day') return false;
+      return CalDate.dayIndex(cal, e.year, e.month, e.day) > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    },
+
     // occursOn mirrors Event.OccursOn exactly (model.go), including its
     // early-outs and its "recurrence only moves forward" rule, for an event
     // that arrived without occurrences.
@@ -1162,7 +1186,7 @@
     var cr = calEl.getBoundingClientRect();
     return (P.pairs || []).map(function (p, i) {
       var a = (back ? p.ric : p.mk).getBoundingClientRect(), b = (back ? p.mk : p.ric).getBoundingClientRect(), f = document.createElement('span');
-      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '');
+      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '') + (p.mk.classList.contains('wait') ? ' wait' : '');
       f.setAttribute('style', (p.mk.getAttribute('style') || '') + ';width:' + a.width.toFixed(1) + 'px;height:' + a.height.toFixed(1) + 'px');
       if (p.mk.classList.contains('gnm')) f.innerHTML = p.mk.innerHTML;
       else f.textContent = p.mk.textContent;
@@ -1447,6 +1471,7 @@
       this.apiBase = config.apiBase;
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
       this.skyRailSrc = config.skyRailSrc; // calendar_sky_rail.js, loaded only for the owner's sky controls
+      this.yearTrackSrc = config.yearTrackSrc; // calendar_year_track.js, loaded only when an editor opens Edit
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -1456,6 +1481,8 @@
       if (!Array.isArray(initialEvents)) initialEvents = [];
 
       this.eventsByMonth = {};
+      this.evPreview = null; // a draft's events on the grid, set by the editor's year track
+      this.afterPaint = null; // the year track's hook, run at the end of each month paint
       this._players = false; // "See it as players do" is on
       this._pvPending = null; // its read, while one is in flight
       this._dmFlags = null; // what this viewer had before it went on
@@ -4572,7 +4599,13 @@
     // Every event touching (y,m,d): base-date match, recurrence expansion,
     // or a non-recurring multi-day span.
     eventsOnDay: function (y, m, d) {
-      var cal = this.cal, list = this.eventsFor(y, m);
+      return this._occurringOn(this.eventsFor(y, m), y, m, d);
+    },
+
+    // The events of a list that touch (y,m,d). Shared by the saved events
+    // and by a draft's marks (evPreview), so both follow one rule.
+    _occurringOn: function (list, y, m, d) {
+      var cal = this.cal;
       // Events based in the previous/next month can still span into this
       // one, or recur onto it; a full sweep of just this month's list
       // covers the overwhelming majority (ListEventsForMonth's own
@@ -4637,6 +4670,8 @@
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
       this.calEl.style.setProperty('--cols', weekdays.length || 7);
+      // The moons' row reads this: phone cells of a long week are too narrow for one line.
+      this.calEl.classList.toggle('manycols', weekdays.length > 7);
     },
 
     renderToday: function (bump) {
@@ -4831,6 +4866,8 @@
       this._gnSpin();
       if (this._pollDraft) this._pollPaintPicks();
       if (ri) this._startRoll(ri);
+      // The editor's year track dresses the fresh month (its draft's ink, what was just kept).
+      if (this.afterPaint) this.afterPaint();
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {
@@ -4880,10 +4917,21 @@
       }).join('') + '</div>';
     },
 
+    // A draft from the editor's year track, in the way wxPreview holds a
+    // weather draft: {events: [draft events], hide: {saved id: true}}. Its
+    // events are drawn as ghosts after the saved ones, and the saved events
+    // it would replace are left out, so the grid shows what Keep would write.
+    _withPreview: function (y, m, d, evs) {
+      var pv = this.evPreview;
+      if (!pv) return evs;
+      if (pv.hide) evs = evs.filter(function (e) { return !pv.hide[e.id]; });
+      return evs.concat(this._occurringOn(pv.events || [], y, m, d));
+    },
+
     // noNights leaves game nights out, for the grid's cell, which draws
     // them on their own (_gnDiceHTML).
     _marksHTML: function (y, m, d, noNights) {
-      var evs = this.eventsOnDay(y, m, d), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
+      var evs = this._withPreview(y, m, d, this.eventsOnDay(y, m, d)), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
       if (!evs.length && !nights.length && !polls.length) return '';
       var self = this;
       // Game nights come first, then the dates polls suggest: they are the
@@ -4895,17 +4943,19 @@
       }));
       var cap = Math.max(0, 4 - gn.length), shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
-        var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
+        var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' && !e._draft ? ' dir' : '';
+        var waits = !dirRing && self.canAuthorDmOnly && CalDate.waitsForItsDay(self.cal, e);
+        if (waits) dirRing = ' wait';
         var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
-        return '<span class="mk' + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
+        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '') + (waits ? ' (players see it on the day)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
       return html;
     },
 
-    // The moons a day's corner shows: those this viewer may see, at most
-    // three (the glance names them all). A hand-set moon that players have
+    // The moons a day's corner shows: those this viewer may see (the glance
+    // names them all). A hand-set moon that players have
     // no mark for yet stays off their calendar.
     _gridMoons: function (abs) {
       var dm = this.canAuthorDmOnly;
@@ -4914,32 +4964,26 @@
       });
     },
 
-    // A day's moons: one moon is its phase silhouette; two or more are
-    // nested rings, outermost first, each filled as far as that moon is lit
-    // and tinted faintly toward its own colour.
+    // A day's moons: one moon is its phase silhouette; two or more are a row
+    // of silhouettes in calendar order, the lit part tinted toward each
+    // moon's own colour. The row shows four moons (three on phones, by CSS)
+    // and a count for the rest; the title and glance name them all.
     _dayMoonsHTML: function (key, abs) {
-      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly;
+      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly, self = this;
       if (!moons.length) return '';
       var unshown = function (mo) { var k = dm && MoonMath.manual(mo) ? MoonMath.markOn(mo, abs) : null; return !!(k && !k.shown); };
       var title = moons.map(function (mo) {
         return mo.name + ', ' + MoonMath.label(mo, abs) + (unshown(mo) ? ' (players don’t see this)' : '');
       }).join('; ');
-      var dim = moons.length === 1 && unshown(moons[0]);
-      var body = moons.length === 1 ? this._moonSilFor(moons[0], abs) : this._moonRingsSVG(moons.slice(0, 3), abs, unshown);
-      return '<span class="msil' + (moons.length > 1 ? ' rings' : '') + (dim ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(title) + '">' + body + '</span>';
-    },
-
-    _moonRingsSVG: function (moons, abs, unshown) {
-      var radii = moons.length === 2 ? [8, 4.8] : [8.2, 5.6, 3];
-      return '<svg class="rng" width="20" height="20" viewBox="-10 -10 20 20" aria-hidden="true">' + moons.map(function (mo, i) {
-        var r = radii[i], c = 2 * Math.PI * r, tint = sanitizeColor(mo.color);
-        var style = tint ? ' style="--mc:' + tint + '"' : '';
-        var cls = 'rg' + (unshown(mo) ? ' dim' : '');
-        if (MoonMath.unseen(mo, abs)) return '<circle class="' + cls + ' gone" r="' + r + '"' + style + '/>';
-        var lit = MoonMath.litPct(MoonMath.phase(mo, abs)) / 100;
-        return '<g class="' + cls + '"' + style + '><circle class="rt" r="' + r + '"/>' +
-          (lit > 0.01 ? '<circle class="rl" r="' + r + '" stroke-dasharray="' + (c * lit).toFixed(2) + ' ' + c.toFixed(2) + '" transform="rotate(-90)"/>' : '') + '</g>';
-      }).join('') + '</svg>';
+      var attrs = ' data-moon-day="' + key + '" title="' + esc(title) + '">';
+      if (moons.length === 1) return '<span class="msil' + (unshown(moons[0]) ? ' dim' : '') + '"' + attrs + this._moonSilFor(moons[0], abs) + '</span>';
+      var row = moons.slice(0, 4).map(function (mo, i) {
+        var tint = sanitizeColor(mo.color);
+        return '<span class="m1' + (i === 3 ? ' m4' : '') + (unshown(mo) ? ' dim' : '') + '"' + (tint ? ' style="--mc:' + tint + '"' : '') + '>' + self._moonSilFor(mo, abs) + '</span>';
+      }).join('');
+      if (moons.length > 3) row += '<span class="mn mn-p" aria-hidden="true">+' + (moons.length - 3) + '</span>';
+      if (moons.length > 4) row += '<span class="mn mn-d" aria-hidden="true">+' + (moons.length - 4) + '</span>';
+      return '<span class="msil several"' + attrs + row + '</span>';
     },
 
     _moonSilSVG: function (phase) {
@@ -6069,13 +6113,13 @@
           var body = {
             name: r.name, description: r.brief || null,
             description_html: r.brief ? '<p>' + esc(r.brief) + '</p>' : null,
-            year: d.y, month: d.m, day: d.d, all_day: true, visibility: 'dm_only'
+            year: d.y, month: d.m, day: d.d, all_day: true, visibility: r.visibility === 'everyone' ? 'everyone' : 'dm_only'
           };
           return Chronicle.apiFetch(self.apiBase + '/events', { method: 'POST', body: body }).then(function (resp) {
             if (!resp.ok) throw new Error('not saved');
             self.eventsByMonth = {};
             self.renderMonth();
-            self.say('On ' + label + '. Players won’t see it until you show it.');
+            self.say('On ' + label + (body.visibility === 'everyone' ? '. Everyone can see it.' : '. Players won’t see it until you show it.'));
           });
         },
         onClose: function () {
@@ -6337,7 +6381,8 @@
         recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">' + esc(this.repeatText(ev)) + '</span></div>';
       }
       var entity = ev.entity_id ? '<div class="row"><i class="fa-solid fa-link"></i><a class="tt" href="/campaigns/' + esc(this.campaignId) + '/entities/' + esc(ev.entity_id) + '">' + esc(ev.entity_name || 'Linked page') + '</a></div>' : '';
-      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>' + Chronicle.gmTerm() + ' only</span>' : '';
+      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>' + Chronicle.gmTerm() + ' only</span>'
+        : (this.canAuthorDmOnly && CalDate.waitsForItsDay(cal, ev)) ? '<span class="dirnote">Players see it on the day</span>' : '';
       var body = ev.description_html ? ev.description_html : (ev.description ? '<p>' + esc(ev.description) + '</p>' : '');
 
       return '<div class="grab" aria-hidden="true"></div>' +

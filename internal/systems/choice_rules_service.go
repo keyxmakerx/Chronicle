@@ -225,10 +225,16 @@ func NewChoiceRuleService(repo ChoiceRuleRepository, entries SystemEntryReposito
 // them. A failing read is an error rather than an unfiltered list: a limit
 // that quietly stops holding is worse than a list that fails to load.
 func (s *choiceRuleService) Limit(ctx context.Context, campaignID string, l *ChoiceList) error {
-	if l == nil || l.SystemID == "" || ChoiceViewerIsDirector(ctx) || choiceUnlimited(ctx) {
+	// A visitor is never exempt and has no account, whatever else the context
+	// says (choice_visitor.go).
+	visitor := choiceVisitor(ctx)
+	if l == nil || l.SystemID == "" || (!visitor && (ChoiceViewerIsDirector(ctx) || choiceUnlimited(ctx))) {
 		return nil
 	}
 	viewer := ChoiceFor(ctx)
+	if visitor {
+		viewer = ""
+	}
 	rows, err := s.repo.ListForViewer(ctx, campaignID, l.SystemID, l.FieldKey, viewer)
 	if err != nil {
 		return err

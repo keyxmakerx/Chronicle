@@ -16,7 +16,13 @@ func (s *entityService) SetHookDispatcher(d EntityHookDispatcher) {
 
 // publishEntity announces a page change to the live-sync bus and to extension
 // plugins. Every page write announces through here so the two never disagree.
+//
+// A shop good is kept out of every sync surface, so nothing about it is
+// announced until the Director makes it a full page (SetShopGood).
 func (s *entityService) publishEntity(ctx context.Context, eventType, campaignID, entityID string, entity *Entity) {
+	if entity != nil && entity.ShopGood {
+		return
+	}
 	s.events.PublishEntityEvent(eventType, campaignID, entityID, entity)
 	if s.hooks != nil && entity != nil {
 		s.hooks.EntityChanged(ctx, eventType, campaignID, entity)

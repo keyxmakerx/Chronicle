@@ -28,12 +28,24 @@ const (
 	TerrainSnow     = "snow"
 	TerrainTown     = "town"
 	TerrainRoad     = "road"
+	TerrainJungle   = "jungle"
+	TerrainFarmland = "farmland"
+	TerrainScrub    = "scrub"
+	TerrainBadlands = "badlands"
+	TerrainWaste    = "waste"
+	TerrainVolcanic = "volcanic"
+	TerrainCoast    = "coast"
+	TerrainDeep     = "deep"
+	TerrainIce      = "ice"
+	TerrainCavern   = "cavern"
 )
 
 // hexTerrains is the closed set of terrain kinds, in palette order.
 var hexTerrains = []string{
 	TerrainPlains, TerrainForest, TerrainHills, TerrainMountain, TerrainWater,
 	TerrainSwamp, TerrainDesert, TerrainSnow, TerrainTown, TerrainRoad,
+	TerrainJungle, TerrainFarmland, TerrainScrub, TerrainBadlands, TerrainWaste,
+	TerrainVolcanic, TerrainCoast, TerrainDeep, TerrainIce, TerrainCavern,
 }
 
 // IsValidTerrain reports whether t is one of the allowed terrain kinds.
@@ -111,10 +123,16 @@ func DefaultHexLayer(mapID string) HexLayer {
 // a row. Name and Notes are plain text: they are stored as typed and escaped
 // by whatever renders them.
 type HexCell struct {
-	Col       int       `json:"col"`
-	Row       int       `json:"row"`
-	Terrain   *string   `json:"terrain"`
-	Piece     *int      `json:"piece"`
+	Col     int     `json:"col"`
+	Row     int     `json:"row"`
+	Terrain *string `json:"terrain"`
+	Piece   *int    `json:"piece"`
+	// Road, River and Trail are the sides each line leaves the hex through,
+	// one bit per neighbour in Neighbors() order. nil is no such line; 0 is the
+	// line on the hex with no exits. They lie on top of the terrain.
+	Road      *int      `json:"road,omitempty"`
+	River     *int      `json:"river,omitempty"`
+	Trail     *int      `json:"trail,omitempty"`
 	Name      string    `json:"name"`
 	Notes     *string   `json:"notes"`
 	Explored  bool      `json:"explored"`
@@ -128,6 +146,34 @@ type HexKey struct {
 	Row int `json:"row"`
 }
 
+// MaxHexLineMask is the largest line value: six sides, one bit each.
+const MaxHexLineMask = 1<<6 - 1
+
+// hiddenSides returns the sides of hex (col, row) whose neighbour is not in
+// sent, as a mask in Neighbors() order. It is the one definition of "a side a
+// filtered viewer is not shown": the read side clips exits through it and the
+// write side keeps the stored exits through it, so they cannot drift apart.
+func hiddenSides(col, row int, sent func(HexKey) bool) int {
+	hidden := 0
+	for i, n := range Neighbors(col, row) {
+		if !sent(n) {
+			hidden |= 1 << i
+		}
+	}
+	return hidden
+}
+
+// clipLine drops the exit bits of a line that point at a hex not in sent, so a
+// visible hex never tells a viewer a river runs on into hexes they were not
+// given. It returns a fresh pointer: the caller's cell must stay untouched.
+func clipLine(mask *int, col, row int, sent map[HexKey]struct{}) *int {
+	if mask == nil {
+		return nil
+	}
+	kept := *mask &^ hiddenSides(col, row, func(k HexKey) bool { _, ok := sent[k]; return ok })
+	return &kept
+}
+
 // VisibleCells returns the cells role may receive. role is the viewer's
 // VisibilityRole, so a co-DM grant already arrives promoted to owner.
 //
@@ -136,15 +182,31 @@ type HexKey struct {
 // rows only and nothing that hints at the rest. Scribes are filtered on
 // purpose: an unexplored hex is a secret from the whole table, and a scribe
 // can write on the map without being the DM.
+//
+// Lines ride on their hex's row, so a hidden row hides its lines. A filtered
+// viewer's line exits are also clipped to the rows they are sent: an exit
+// toward an unexplored or absent hex would reveal that the line continues into
+// the fog. Every read of cells for a client goes through here so none can skip
+// the clipping.
 func VisibleCells(layer HexLayer, cells []HexCell, role int) []HexCell {
 	out := make([]HexCell, 0, len(cells))
 	if !layer.FogEnabled || permissions.CanSeeDmOnly(role) {
 		return append(out, cells...)
 	}
+	sent := make(map[HexKey]struct{}, len(cells))
 	for _, c := range cells {
 		if c.Explored {
-			out = append(out, c)
+			sent[HexKey{c.Col, c.Row}] = struct{}{}
 		}
+	}
+	for _, c := range cells {
+		if !c.Explored {
+			continue
+		}
+		c.Road = clipLine(c.Road, c.Col, c.Row, sent)
+		c.River = clipLine(c.River, c.Col, c.Row, sent)
+		c.Trail = clipLine(c.Trail, c.Col, c.Row, sent)
+		out = append(out, c)
 	}
 	return out
 }

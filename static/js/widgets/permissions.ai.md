@@ -18,12 +18,11 @@ rendered for the Owner only:
 |---|---|---|
 | Page corner | `data-layout="corner"`, `data-endpoint`, `data-editable` | Reuses the server-rendered `[data-perm-corner-trigger]` chip; the editor unfolds from it as a popover. The chip is icon-only until the page is in edit mode (`[data-editing]`); its word stays for screen readers and the hover tip. Outside click closes it only when nothing is saving or failed, else a "Not saved yet" warning shows; Escape always closes. With `data-category-dm-only="true"` (a DM-only category such as Adventures) the chip reads as DM only even when the page's own mode is everyone, and the tag-widening dot is hidden |
 
-Two more mounts in `plugins/entities/form.templ`:
+One more mount in `plugins/entities/form.templ` (the Create form does not mount this widget: it states who sees a new page in one sentence, `new_page_form.templ`):
 
 | Mount | Attributes | Behaviour |
 |---|---|---|
 | Edit form | `data-endpoint=/campaigns/:id/entities/:eid/permissions`, `data-layout="inline"`, `data-editable`, `data-csrf` | Loads and saves via the endpoint; inline panel expands in place |
-| Create form | `data-layout="corner"`, `data-mode="draft"`, `data-draft-target="#is_private_draft"`, `data-editable="true"` | The page's own chip (`draftVisibilityControl`), unfolding the same editor; no endpoint, writes `true`/`false` into the hidden `is_private` input; Custom mode is disabled until the entity exists |
 
 With neither layout the card is a right-edge slide-in with a
 backdrop and body-scroll lock. `data-editable` must be `"true"` to save.

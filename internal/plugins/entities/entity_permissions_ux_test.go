@@ -35,77 +35,60 @@ func renderEntityCardOnCampaign(t *testing.T, entity *Entity, role campaigns.Rol
 		MemberRole: role,
 	}
 	var buf bytes.Buffer
-	if err := EntityCard(entity, cc).Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render card: %v", err)
+	if err := EntityRow(entity, cc).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render row: %v", err)
 	}
 	return buf.String()
 }
 
-// Part 1 — each visibility state renders its distinct badge for Scribe+,
-// via the shared visibilityGlance component. The "everyone" tooltip claims
-// visitor reach only on a PUBLIC campaign, since a logged-out reader cannot
-// open any page of a private one; the fixture below builds a campaign with
-// IsPublic unset, so the expected fragment is the members-only wording. The
-// public branch is pinned separately, both directions, by
-// TestEffectiveVisibilityTooltip_VisitorsOnlyWhenCampaignIsPublic.
-func TestEntityCard_VisibilityBadge_States(t *testing.T) {
+// Part 1 — a page players can't see carries the Director's amber on its row:
+// the lock after the name and the leading edge (data-dm-only). A page everyone
+// sees carries nothing, and a page shared with chosen players keeps the
+// shield. The owner and Co-DMs see these; players never do (below).
+func TestEntityRow_DirectorMark_States(t *testing.T) {
 	cases := []struct {
 		name       string
 		entity     *Entity
-		wantBadge  string // data-visibility-badge value
-		wantIcon   string
-		wantTitleX string // a fragment of the title text
+		wantLock   bool
+		wantShield bool
 	}{
-		{
-			name:       "everyone",
-			entity:     &Entity{ID: "e1", Name: "Town", Visibility: VisibilityDefault, IsPrivate: false},
-			wantBadge:  `data-visibility-badge="everyone"`,
-			wantIcon:   "fa-globe",
-			wantTitleX: "everyone in this campaign",
-		},
-		{
-			name:       "dm_only",
-			entity:     &Entity{ID: "e2", Name: "Secret", Visibility: VisibilityDefault, IsPrivate: true},
-			wantBadge:  `data-visibility-badge="dm_only"`,
-			wantIcon:   "fa-lock",
-			wantTitleX: "co-GMs can see this page",
-		},
-		{
-			name:       "custom",
-			entity:     &Entity{ID: "e3", Name: "Shared", Visibility: VisibilityCustom},
-			wantBadge:  `data-visibility-badge="custom"`,
-			wantIcon:   "fa-shield-halved",
-			wantTitleX: "Custom",
-		},
+		{"everyone", &Entity{ID: "e1", Name: "Town", Visibility: VisibilityDefault, IsPrivate: false}, false, false},
+		{"dm_only", &Entity{ID: "e2", Name: "Secret", Visibility: VisibilityDefault, IsPrivate: true}, true, false},
+		{"hidden by its category", &Entity{ID: "e4", Name: "Plot", Visibility: VisibilityDefault, TypeDMOnly: true}, true, false},
+		{"custom", &Entity{ID: "e3", Name: "Shared", Visibility: VisibilityCustom}, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			html := renderEntityCard(t, tc.entity, campaigns.RoleScribe)
-			for _, want := range []string{tc.wantBadge, tc.wantIcon, tc.wantTitleX} {
-				if !strings.Contains(html, want) {
-					t.Errorf("%s badge missing %q", tc.name, want)
-				}
+			html := renderEntityCard(t, tc.entity, campaigns.RoleOwner)
+			if got := strings.Contains(html, "data-dm-only"); got != tc.wantLock {
+				t.Errorf("data-dm-only present = %v, want %v", got, tc.wantLock)
 			}
-			// Exactly one badge slot — the other two states must be absent.
-			for _, other := range []string{`data-visibility-badge="everyone"`, `data-visibility-badge="dm_only"`, `data-visibility-badge="custom"`} {
-				if other != tc.wantBadge && strings.Contains(html, other) {
-					t.Errorf("%s: unexpected second badge %q", tc.name, other)
-				}
+			if got := strings.Contains(html, "cb-dm"); got != tc.wantLock {
+				t.Errorf("amber lock present = %v, want %v", got, tc.wantLock)
+			}
+			if got := strings.Contains(html, `data-visibility-badge="custom"`); got != tc.wantShield {
+				t.Errorf("custom shield present = %v, want %v", got, tc.wantShield)
+			}
+			if strings.Contains(html, "fa-globe") {
+				t.Errorf("a row no longer says Everyone with a globe")
 			}
 		})
 	}
 }
 
-// Part 1 — players (below Scribe) never see the badge.
-func TestEntityCard_VisibilityBadge_PlayerHidden(t *testing.T) {
+// Part 1 — players (below Scribe) get no mark on any row: no lock, no amber
+// edge, no badge.
+func TestEntityRow_DirectorMark_PlayerSeesNone(t *testing.T) {
 	for _, e := range []*Entity{
 		{ID: "e1", Name: "Town", Visibility: VisibilityDefault, IsPrivate: false},
 		{ID: "e2", Name: "Secret", Visibility: VisibilityDefault, IsPrivate: true},
 		{ID: "e3", Name: "Shared", Visibility: VisibilityCustom},
 	} {
 		html := renderEntityCard(t, e, campaigns.RolePlayer)
-		if strings.Contains(html, "data-visibility-badge") {
-			t.Errorf("player must not see any visibility badge; got one for %q", e.Name)
+		for _, bad := range []string{"data-visibility-badge", "data-dm-only", "cb-dm"} {
+			if strings.Contains(html, bad) {
+				t.Errorf("player must not see %s on the row for %q", bad, e.Name)
+			}
 		}
 	}
 }
@@ -185,23 +168,4 @@ func lineageSnippet(html string) string {
 		end = len(html)
 	}
 	return html[i:end]
-}
-
-// TestEntityCard_EveryoneBadge_MentionsVisitorsOnlyOnAPublicCampaign is the
-// render-level twin of the tooltip unit test: it proves the campaign's
-// publicness actually reaches the glance through the component's call chain,
-// not merely that the helper branches correctly. Without this, threading
-// could be dropped at the templ call site and the unit test would stay green.
-func TestEntityCard_EveryoneBadge_MentionsVisitorsOnlyOnAPublicCampaign(t *testing.T) {
-	ent := &Entity{ID: "e1", Name: "Town", Visibility: VisibilityDefault, IsPrivate: false}
-
-	private := renderEntityCardOnCampaign(t, ent, campaigns.RoleScribe, false)
-	if strings.Contains(private, "logged-out visitors") {
-		t.Errorf("a private campaign's card must not claim strangers can read the page; got %q", private)
-	}
-
-	public := renderEntityCardOnCampaign(t, ent, campaigns.RoleScribe, true)
-	if !strings.Contains(public, "logged-out visitors") {
-		t.Errorf("a public campaign's card must warn that strangers can read the page; got %q", public)
-	}
 }

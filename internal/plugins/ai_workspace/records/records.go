@@ -152,6 +152,7 @@ var briefs = map[string]string{
 	"carried-item":   "items a character carries",
 	"pin":            "pins on the campaign's maps",
 	"map":            "new maps drawn from a sketch on a grid of squares: rooms, areas, water, danger zones, walls, roads, paths, labels and pins",
+	"hex-map":        "hex maps: land painted hex by hex, with roads, rivers and trails on top and named places",
 	"note":           "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
 	KindPlayerNote:   "my own Player Notes on pages only, never Player Notes anyone else wrote",
 	"house-rule":     "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",

@@ -553,6 +553,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "setup_steps", Label: "Setup steps", Icon: "fa-list-check", Picture: PictureSteps,
+		Description: "The owner's \"Getting your table ready\" line, ticked from what exists",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "activity_feed", Label: "Activity feed", Icon: "fa-clock-rotate-left", Picture: PictureFeed,
 		Description: "Recent campaign activity log",
 		Contexts: []string{"dashboard"},

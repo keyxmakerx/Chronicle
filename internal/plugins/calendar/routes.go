@@ -156,6 +156,10 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 	g.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// One draft in one transaction. Scribe is the floor; the service checks
+	// each item against its single route's gate (delete Owner, weather and
+	// dm_only Director) and refuses the whole batch on one miss.
+	g.POST("/calendars/:calid/events/batch", h.ApplyEventBatchAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	g.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	g.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	// Pages tied to an event: read like the event, changed like it (Scribe+;

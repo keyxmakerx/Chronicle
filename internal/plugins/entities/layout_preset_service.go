@@ -185,7 +185,7 @@ func defaultLayoutPresets(campaignID string) []LayoutPreset {
 			Icon:        "fa-table-columns",
 			SortOrder:   1,
 			IsBuiltin:   true,
-			LayoutJSON:  mustMarshalLayout(DefaultLayout()),
+			LayoutJSON:  mustMarshalLayout(NewCategoryLayout()),
 		},
 		{
 			CampaignID:  campaignID,

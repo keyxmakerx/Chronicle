@@ -753,3 +753,34 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 @media (prefers-reduced-motion: reduce) {
   [data-cz-page="annals"] .cb-title::after { animation: none !important; }
 }
+
+/* A page with no tags, relations or extra places shows no add control at
+   rest; Edit page offers them as quiet words, the lightest control. */
+[data-cz-page="annals"] [data-pe-page]:not([data-editing]) :is([data-tp-empty], [data-rel-empty], [data-places-empty]) { display: none; }
+[data-cz-page="annals"] [data-editing] :is([data-tp-empty], [data-rel-empty], [data-places-empty]) {
+  animation: pe-fade var(--dur-standard, 200ms) var(--ease-standard) both;
+}
+/* Tags and relations sit side by side on one line, as one row of words. */
+[data-cz-page="annals"] [data-editing] :is([data-tp-empty], [data-rel-empty]) { display: inline-block; vertical-align: top; margin: 0 16px 0 0; }
+[data-cz-page="annals"] [data-editing] :is([data-tp-empty] .tp-add-btn, [data-rel-empty] .rel-add-btn, [data-places-empty] .pl-add) {
+  min-height: 32px; padding: 0; border: 0; border-radius: 0; background: none;
+  font-size: 0.8125rem; font-weight: 500; color: var(--annals-acc);
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-micro, 120ms) var(--ease-standard);
+}
+[data-cz-page="annals"] [data-editing] :is([data-tp-empty] .tp-add-btn, [data-rel-empty] .rel-add-btn, [data-places-empty] .pl-add):is(:hover, :focus-visible) { text-decoration-color: currentColor; outline: none; background: none; }
+[data-cz-page="annals"] [data-editing] :is([data-tp-empty] .tp-add-btn, [data-rel-empty] .rel-add-btn, [data-places-empty] .pl-add) > i { display: none; }
+[data-cz-page="annals"][data-motion="off"] [data-editing] :is([data-tp-empty], [data-rel-empty], [data-places-empty]) { animation: none; }
+/* On a page that already has tags or relations the add control is the same
+   quiet word, with a plus, at rest and while editing: never a dashed chip. */
+[data-cz-page="annals"] :is(.tp-add-btn, .rel-add-btn) {
+  min-height: 32px; padding: 0; border: 0; border-radius: 0; background: none;
+  font-size: 0.8125rem; font-weight: 500; color: var(--annals-acc);
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-micro, 120ms) var(--ease-standard);
+}
+[data-cz-page="annals"] :is(.tp-add-btn, .rel-add-btn):is(:hover, :focus-visible) { text-decoration-color: currentColor; outline: none; background: none; }
+[data-cz-page="annals"] :is(.tp-add-btn, .rel-add-btn) > i { display: none; }
+[data-cz-page="annals"] [data-widget="tag-picker"]:not([data-tp-empty]) .tp-add-btn::before,
+[data-cz-page="annals"] [data-widget="relations"]:not([data-rel-empty]) .rel-add-btn::before { content: "+\00a0"; }
+@media (pointer: coarse) { [data-cz-page="annals"] :is(.tp-add-btn, .rel-add-btn) { min-height: 44px; } }

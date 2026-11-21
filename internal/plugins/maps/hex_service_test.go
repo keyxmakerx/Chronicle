@@ -27,6 +27,7 @@ type fakeHexRepo struct {
 	anchorSets int // SetAnchor calls
 	travelSets int // SetTravel calls
 	bumps      int // BumpVersion calls
+	getCalls   int // GetCells calls
 
 	// Fog and party writes.
 	exploredWrites [][]HexKey // keys of each SetExplored call
@@ -54,6 +55,7 @@ func (r *fakeHexRepo) ListCells(context.Context, string) ([]HexCell, error) {
 	return out, nil
 }
 func (r *fakeHexRepo) GetCells(_ context.Context, _ string, keys []HexKey) (map[HexKey]HexCell, error) {
+	r.getCalls++
 	out := map[HexKey]HexCell{}
 	for _, k := range keys {
 		if c, ok := r.cells[k]; ok {

@@ -126,6 +126,10 @@ func CharacterLayout() EntityTypeLayout {
 // pieces are blocks the owner adds (only character pages start with player
 // notes, in CharacterLayout). Visibility editing lives only in edit mode, not
 // an auto-appended read-page row (ADR-057 decision 5).
+//
+// It is also what a type with no stored layout falls back to when something
+// places a block into it, so it stays as it is; a category made new starts
+// from NewCategoryLayout instead.
 func DefaultLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -153,6 +157,19 @@ func DefaultLayout() EntityTypeLayout {
 			},
 		},
 	}
+}
+
+// NewCategoryLayout is the layout a category made now is stored with: the
+// default plus tags and relations under the title, in the order the
+// no-layout fallback in show.templ draws them, so a new page can carry both.
+// The Annals page editor keeps their add controls out of sight until Edit
+// page. It is applied only when a category is created; stored layouts of
+// existing categories are never rewritten to match.
+func NewCategoryLayout() EntityTypeLayout {
+	l := DefaultLayout()
+	// Each goes right after the title, so relations first leaves tags above it.
+	l = insertAfterTitle(l, TemplateBlock{ID: "blk-relations", Type: "relations"})
+	return insertAfterTitle(l, TemplateBlock{ID: "blk-tags", Type: "tags"})
 }
 
 // entityNotesRow builds a full-width row holding the player-notes
@@ -305,6 +322,11 @@ type FieldDefinition struct {
 	// JSONList says a text field holds a JSON list, so AI Import refuses text
 	// that is not one rather than store what the sheet's widgets cannot read.
 	JSONList bool `json:"json_list,omitempty"`
+	// Formula marks a number the game system works out from other fields.
+	// AI Import's review may add it to a page whose AI left it out, with the
+	// figure the system's sheet check proposes; no other unwritten key is
+	// ever added.
+	Formula bool `json:"formula,omitempty"`
 	// LinkTo is the category a "link" field's pages come from. The stored
 	// value is the linked page's id.
 	LinkTo int `json:"link_to,omitempty"`
@@ -323,6 +345,7 @@ type FieldChecks struct {
 	Min      *float64
 	Max      *float64
 	JSONList bool
+	Formula  bool
 }
 
 // FieldPlay mirrors the manifest's play block. It is a separate type from the
@@ -344,28 +367,31 @@ type FieldPlay struct {
 // Entity represents a single worldbuilding object — a character, location,
 // item, or any other type defined in the campaign's entity types.
 type Entity struct {
-	ID              string          `json:"id"`
-	CampaignID      string          `json:"campaign_id"`
-	EntityTypeID    int             `json:"entity_type_id"`
-	Name            string          `json:"name"`
-	Slug            string          `json:"slug"`
-	Entry           *string         `json:"entry,omitempty"`             // TipTap/ProseMirror JSON document.
-	EntryHTML       *string         `json:"entry_html,omitempty"`        // Pre-rendered HTML from entry.
-	PlayerNotes     *string         `json:"player_notes,omitempty"`      // Player-facing ProseMirror JSON (synced as a player-visible Foundry page).
-	PlayerNotesHTML *string         `json:"player_notes_html,omitempty"` // Pre-rendered HTML from player_notes.
-	ImagePath       *string         `json:"image_path,omitempty"`
-	CoverImagePath  *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
-	ParentID        *string         `json:"parent_id,omitempty"`        // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
-	ParentNodeID    *string         `json:"parent_node_id,omitempty"`   // Parent sidebar folder node ID. Mutually exclusive with ParentID.
-	SortOrder       int             `json:"sort_order"`                 // Manual ordering within parent/category (0 = default).
-	TypeLabel       *string         `json:"type_label,omitempty"`       // Freeform subtype (e.g., "City" for a Location).
-	IsPrivate       bool            `json:"is_private"`
-	Visibility      VisibilityMode  `json:"visibility"`
-	IsTemplate      bool            `json:"is_template"`
-	FieldsData      map[string]any  `json:"fields_data"`
-	FieldOverrides  *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
-	PopupConfig     *PopupConfig    `json:"popup_config,omitempty"`    // Controls hover tooltip content.
-	CreatedBy       string          `json:"created_by"`
+	ID              string         `json:"id"`
+	CampaignID      string         `json:"campaign_id"`
+	EntityTypeID    int            `json:"entity_type_id"`
+	Name            string         `json:"name"`
+	Slug            string         `json:"slug"`
+	Entry           *string        `json:"entry,omitempty"`             // TipTap/ProseMirror JSON document.
+	EntryHTML       *string        `json:"entry_html,omitempty"`        // Pre-rendered HTML from entry.
+	PlayerNotes     *string        `json:"player_notes,omitempty"`      // Player-facing ProseMirror JSON (synced as a player-visible Foundry page).
+	PlayerNotesHTML *string        `json:"player_notes_html,omitempty"` // Pre-rendered HTML from player_notes.
+	ImagePath       *string        `json:"image_path,omitempty"`
+	CoverImagePath  *string        `json:"cover_image_path,omitempty"` // Full-width banner image.
+	ParentID        *string        `json:"parent_id,omitempty"`        // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
+	ParentNodeID    *string        `json:"parent_node_id,omitempty"`   // Parent sidebar folder node ID. Mutually exclusive with ParentID.
+	SortOrder       int            `json:"sort_order"`                 // Manual ordering within parent/category (0 = default).
+	TypeLabel       *string        `json:"type_label,omitempty"`       // Freeform subtype (e.g., "City" for a Location).
+	IsPrivate       bool           `json:"is_private"`
+	Visibility      VisibilityMode `json:"visibility"`
+	IsTemplate      bool           `json:"is_template"`
+	// ShopGood marks a page that exists only to be sold: kept out of lists,
+	// search, Auto-link and sync until the Director makes it a full page.
+	ShopGood       bool            `json:"shop_good"`
+	FieldsData     map[string]any  `json:"fields_data"`
+	FieldOverrides *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
+	PopupConfig    *PopupConfig    `json:"popup_config,omitempty"`    // Controls hover tooltip content.
+	CreatedBy      string          `json:"created_by"`
 	// OwnerUserID claims an entity for a player. Nullable: most entities
 	// (locations, factions, lore) are not owned. Character-shaped entities
 	// surface in the owner's Yours band on the Characters page. Set by Foundry
@@ -397,6 +423,12 @@ type Entity struct {
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
+
+	// Opening is the page's first words as this reader is served them, set
+	// by the list handler for pages with no picture so the Gallery has
+	// something true to show. Never the stored text: it has had secrets and
+	// links to hidden pages taken out.
+	Opening string `json:"-"`
 
 	// searchFields, when set, is the field values Create indexes for search,
 	// already without the ones only some readers may see; unset, Create
@@ -510,8 +542,14 @@ type CreateEntityRequest struct {
 	EntityTypeID int    `json:"entity_type_id" form:"entity_type_id"`
 	TypeLabel    string `json:"type_label" form:"type_label"`
 	ParentID     string `json:"parent_id" form:"parent_id"`
-	IsPrivate    bool   `json:"is_private" form:"is_private"`
-	TemplateID   int    `json:"template_id" form:"template_id"` // Optional content template to pre-fill.
+	// IsPrivate is a pointer so an explicit false ("show it to players")
+	// survives under a campaign whose pages start hidden; nil means the form
+	// said nothing and the campaign default decides.
+	IsPrivate  *bool `json:"is_private" form:"is_private"`
+	TemplateID int   `json:"template_id" form:"template_id"` // Optional content template to pre-fill.
+	// Sheet marks a form posted from the small sheet, so a refused save
+	// redraws the sheet and not the full page.
+	Sheet bool `json:"-" form:"sheet"`
 }
 
 // UpdateEntityRequest holds the data submitted by the entity edit form.
@@ -546,6 +584,9 @@ type CreateEntityInput struct {
 	// Playable marks the new page as a character a player may play before
 	// anyone claims it; the hero creator sets it for heroes a Director makes.
 	Playable bool
+	// ShopGood creates the page as a shop good (see Entity.ShopGood). Import
+	// sets it to bring an exported good back as it was.
+	ShopGood bool
 }
 
 // UpdateEntityInput is the validated input for updating an entity: a
@@ -585,11 +626,41 @@ type ListOptions struct {
 	// whatever happens to sit in the newest page of a mixed listing.
 	PrivateOnly bool
 
+	// ShopGoods says which pages a listing or search returns. The zero value
+	// leaves shop goods out, so a caller that has not thought about them
+	// never shows one; only the Director's Shop goods view and export ask
+	// for them.
+	ShopGoods ShopGoodsMode
+
 	// Query is the All Pages search box's text. List ignores it; the index
 	// handler sends a query of two or more characters to Search instead and
 	// echoes it back so the box and the page links keep it.
 	Query string
+
+	// SearchScope narrows Search to one of the Search page's two groups:
+	// SearchScopeNamed (the words are in the name, another name or the
+	// descriptor) or SearchScopeMention (only the page's text has them).
+	// Empty is the whole answer, which quick search and the pickers use.
+	SearchScope string
 }
+
+// ShopGoodsMode selects shop goods in a listing.
+type ShopGoodsMode int
+
+const (
+	// ShopGoodsHide returns ordinary pages only (the default).
+	ShopGoodsHide ShopGoodsMode = iota
+	// ShopGoodsOnly returns shop goods only.
+	ShopGoodsOnly
+	// ShopGoodsInclude returns both, for export and backup.
+	ShopGoodsInclude
+)
+
+// The Search page's two groups; see ListOptions.SearchScope.
+const (
+	SearchScopeNamed   = "named"
+	SearchScopeMention = "mention"
+)
 
 // DefaultListOptions returns sensible defaults for pagination.
 func DefaultListOptions() ListOptions {
@@ -773,7 +844,10 @@ type CastView struct {
 	// Landed is the type just added, flashed once on its chip.
 	Landed int
 	// Notice is a one-line confirmation shown as a toast after a change.
-	Notice    string
+	Notice string
+	// Alert is a lasting line shown above the page when something needs the
+	// reader's action; unlike Notice it does not fade.
+	Alert     string
 	CSRFToken string
 	// CanCreateHero shows the Create hero button: staff always, a player when
 	// the owner lets players claim the hero's page type.
@@ -790,6 +864,14 @@ type CastView struct {
 	// Builder is the hero builder for the viewer's own heroes and a new
 	// one; nil hides it.
 	Builder *HeroBuilderView
+	// Practice is the player's Practice shelf; nil for anyone who may not
+	// make practice heroes. PracticeDirector is every practice hero of the
+	// campaign for the Directors; nil for everyone else, or when none exist.
+	Practice         *PracticeShelfView
+	PracticeDirector *PracticeDirectorView
+	// Tryout is the mount for a try-out kept in the viewer's browser: a
+	// visitor's Practice section or a player's offer to keep it. nil otherwise.
+	Tryout *TryoutView
 }
 
 // --- Slug Generation ---

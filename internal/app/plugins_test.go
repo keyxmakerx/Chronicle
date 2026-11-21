@@ -195,7 +195,7 @@ func TestCoreWidgetsLoad(t *testing.T) {
 	}
 	for _, w := range coreWidgets {
 		for i, s := range w.Scripts {
-			src, err := os.ReadFile(filepath.Join("..", "..", strings.TrimPrefix(s, "/")))
+			src, err := os.ReadFile(coreScriptFile(s))
 			if err != nil {
 				t.Errorf("%s: %v", w.Name, err)
 				continue
@@ -205,4 +205,16 @@ func TestCoreWidgetsLoad(t *testing.T) {
 			}
 		}
 	}
+}
+
+// coreScriptFile is the file behind a core widget script URL: /static/... is
+// the repo's static folder, and /static/plugins/<slug>/... is that plugin's own
+// static folder.
+func coreScriptFile(url string) string {
+	rest := strings.TrimPrefix(url, "/static/")
+	if p, ok := strings.CutPrefix(rest, "plugins/"); ok {
+		slug, file, _ := strings.Cut(p, "/")
+		return filepath.Join("..", "plugins", slug, "static", file)
+	}
+	return filepath.Join("..", "..", "static", rest)
 }

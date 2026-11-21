@@ -153,42 +153,6 @@
   body:has(#sidebar:not(.sidebar-unpinned):not(.sidebar-collapsed):not(.sidebar-fully-hidden)) .block-row > * { grid-column: auto; }
 }
 
-/* Page lists draw as rows under 640 wide: name, kind in muted words and the
-   Director's lock at the end, 44 tall, on hairlines with no band and no card.
-   The grid, table and tree switch is unchanged on wider screens. */
-@media (max-width: 639.98px) {
-  #entity-list .ec-card {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-block-size: 44px;
-    padding: 0 4px;
-    overflow: visible;
-    border: 0;
-    border-block-end: 1px solid var(--color-border-light, #f3f4f6);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  #entity-list .ec-card:hover { background: var(--color-bg-tertiary, rgba(127, 127, 127, 0.08)); box-shadow: none; }
-  #entity-list .ec-band,
-  #entity-list .ec-tags { display: none; }
-  /* The body and head wrappers step aside so the name, kind and lock line up
-     as one row. */
-  #entity-list .ec-body,
-  #entity-list .ec-head { display: contents; }
-  #entity-list .ec-head > h3 { order: 1; flex: 1 1 auto; min-inline-size: 0; margin: 0; }
-  #entity-list .ec-kind { order: 2; flex: 0 1 auto; min-inline-size: 0; }
-  #entity-list .ec-head > :not(h3) { order: 3; flex: 0 0 auto; }
-  #entity-list .ec-pill {
-    padding: 0;
-    background: transparent !important;
-    color: var(--color-text-muted, #6b7280) !important;
-    font-weight: 400;
-  }
-  #entity-list .ec-pill > i { display: none; }
-}
-
 /* The Tools tab and its shelf (layouts/topbar_tools.templ,
    widgets/topbar_tools.js). Under 768 wide, where the menu button shows, the
    bar's tool buttons step off it and one Tools tab takes their place; tapping

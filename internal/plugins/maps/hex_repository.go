@@ -23,7 +23,19 @@ type HexCellWrite struct {
 	Notes      *string // nil with NotesSet clears
 	PieceSet   bool
 	Piece      *int // nil with PieceSet means "Mix"
+	// Each line is a six-bit side mask; nil with its Set flag removes the line.
+	RoadSet  bool
+	Road     *int
+	RiverSet bool
+	River    *int
+	TrailSet bool
+	Trail    *int
 }
+
+// emptyCellWhere matches a row that carries nothing, lines included, so no
+// path can delete a hex that still has a road, river or trail on it.
+const emptyCellWhere = "terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL " +
+	"AND road IS NULL AND river IS NULL AND trail IS NULL AND explored = 0"
 
 // HexRepository defines persistence for hex layers and their cells.
 type HexRepository interface {
@@ -106,7 +118,7 @@ func scanHexCells(rows *sql.Rows) ([]HexCell, error) {
 	out := []HexCell{}
 	for rows.Next() {
 		var c HexCell
-		if err := rows.Scan(&c.Col, &c.Row, &c.Terrain, &c.Piece, &c.Name, &c.Notes,
+		if err := rows.Scan(&c.Col, &c.Row, &c.Terrain, &c.Piece, &c.Road, &c.River, &c.Trail, &c.Name, &c.Notes,
 			&c.Explored, &c.UpdatedBy, &c.UpdatedAt); err != nil {
 			return nil, apperror.NewInternal(err)
 		}
@@ -119,7 +131,7 @@ func scanHexCells(rows *sql.Rows) ([]HexCell, error) {
 }
 
 // `row` is a reserved word in MariaDB, so every statement quotes it.
-const hexCellColumns = "col, `row`, terrain, piece, name, notes, explored, updated_by, updated_at"
+const hexCellColumns = "col, `row`, terrain, piece, road, river, trail, name, notes, explored, updated_by, updated_at"
 
 func (r *hexRepo) ListCells(ctx context.Context, mapID string) ([]HexCell, error) {
 	rows, err := r.db.QueryContext(ctx,
@@ -190,18 +202,21 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 	// Each flag pair makes the UPDATE branch keep the stored value unless the
 	// caller named the field; the INSERT branch (a hex nobody has touched yet)
 	// takes what was sent, with unnamed fields at their column defaults.
-	const upsert = "INSERT INTO map_hex_cells (map_id, col, `row`, terrain, piece, name, notes, updated_by) " +
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+	const upsert = "INSERT INTO map_hex_cells (map_id, col, `row`, terrain, piece, road, river, trail, name, notes, updated_by) " +
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
 		"ON DUPLICATE KEY UPDATE " +
 		"terrain = IF(?, VALUES(terrain), terrain), " +
 		"piece = IF(?, VALUES(piece), piece), " +
+		"road = IF(?, VALUES(road), road), " +
+		"river = IF(?, VALUES(river), river), " +
+		"trail = IF(?, VALUES(trail), trail), " +
 		"name = IF(?, VALUES(name), name), " +
 		"notes = IF(?, VALUES(notes), notes), " +
 		"updated_by = VALUES(updated_by)"
 	for _, w := range writes {
 		if _, err := tx.ExecContext(ctx, upsert,
-			mapID, w.Col, w.Row, w.Terrain, w.Piece, w.Name, w.Notes, by,
-			w.TerrainSet, w.PieceSet, w.NameSet, w.NotesSet); err != nil {
+			mapID, w.Col, w.Row, w.Terrain, w.Piece, w.Road, w.River, w.Trail, w.Name, w.Notes, by,
+			w.TerrainSet, w.PieceSet, w.RoadSet, w.RiverSet, w.TrailSet, w.NameSet, w.NotesSet); err != nil {
 			return 0, apperror.NewInternal(err)
 		}
 	}
@@ -212,7 +227,7 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 	// transaction, so a concurrent writer's row is never swept by mistake.
 	for _, w := range writes {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? AND col = ? AND `row` = ? "+
-			"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0",
+			"AND "+emptyCellWhere,
 			mapID, w.Col, w.Row); err != nil {
 			return 0, apperror.NewInternal(err)
 		}
@@ -299,7 +314,7 @@ func layerVersion(ctx context.Context, tx *sql.Tx, mapID string) (uint64, error)
 // hidden hex does not keep a row (and a cap slot) alive.
 func deleteEmptyCell(ctx context.Context, tx *sql.Tx, mapID string, k HexKey) error {
 	_, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? AND col = ? AND `row` = ? "+
-		"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0",
+		"AND "+emptyCellWhere,
 		mapID, k.Col, k.Row)
 	if err != nil {
 		return apperror.NewInternal(err)
@@ -444,7 +459,7 @@ func (r *hexRepo) ResetExplored(ctx context.Context, mapID, userID string) (uint
 		return 0, apperror.NewInternal(err)
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? "+
-		"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0", mapID); err != nil {
+		"AND "+emptyCellWhere, mapID); err != nil {
 		return 0, apperror.NewInternal(err)
 	}
 	v, err := layerVersion(ctx, tx, mapID)

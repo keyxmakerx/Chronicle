@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -63,6 +64,22 @@ func (h *Handler) Put(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, doc)
+}
+
+// Manage draws the Rolling tables page. Only the DM team may open it: it is
+// where tables are made, renamed, moved and removed, and players never see
+// the builder.
+//
+// GET /campaigns/:id/roll-tables/manage
+func (h *Handler) Manage(c *echo.Context) error {
+	cc, err := requireContext(c)
+	if err != nil {
+		return err
+	}
+	if !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden(writeDenyMsg)
+	}
+	return middleware.Render(c, http.StatusOK, ManagePage(cc.Campaign.ID))
 }
 
 const (

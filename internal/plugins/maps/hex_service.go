@@ -35,8 +35,13 @@ type UpdateHexCellInput struct {
 	Row     int
 	Terrain patch.Field[string]
 	Piece   patch.Field[int]
-	Name    patch.Field[string]
-	Notes   patch.Field[string]
+	// Road, River and Trail are line side masks (0..MaxHexLineMask, bit i is
+	// neighbour i of Neighbors()); null removes the line from the hex.
+	Road  patch.Field[int]
+	River patch.Field[int]
+	Trail patch.Field[int]
+	Name  patch.Field[string]
+	Notes patch.Field[string]
 }
 
 // UpdateHexLayerInput is a partial change to the layer row: an absent field
@@ -549,7 +554,8 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 	}
 	// An entry naming only a position changes nothing; refusing it keeps a
 	// malformed client from burning a version bump (and a cap slot) on a no-op.
-	if !e.Terrain.Present() && !e.Piece.Present() && !e.Name.Present() && !e.Notes.Present() {
+	if !e.Terrain.Present() && !e.Piece.Present() && !e.Road.Present() && !e.River.Present() &&
+		!e.Trail.Present() && !e.Name.Present() && !e.Notes.Present() {
 		return HexCellWrite{}, apperror.NewBadRequest("every hex needs a field to change")
 	}
 	w := HexCellWrite{Col: e.Col, Row: e.Row}
@@ -575,6 +581,16 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 			w.Piece = &p
 		}
 	}
+	var err error
+	if w.RoadSet, w.Road, err = lineWrite("road", e.Road); err != nil {
+		return HexCellWrite{}, err
+	}
+	if w.RiverSet, w.River, err = lineWrite("river", e.River); err != nil {
+		return HexCellWrite{}, err
+	}
+	if w.TrailSet, w.Trail, err = lineWrite("trail", e.Trail); err != nil {
+		return HexCellWrite{}, err
+	}
 	if e.Name.Present() {
 		w.NameSet = true
 		if !e.Name.IsNull() {
@@ -596,6 +612,90 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 		}
 	}
 	return w, nil
+}
+
+// keepHiddenExits makes a fog-filtered writer unable to add or remove a line
+// exit they are not shown. Such a writer's client holds masks clipped to the
+// explored hexes (VisibleCells) and sends them back with its change, so taking
+// the request as is would erase the stored exits into the fog and leave the
+// hidden neighbour with half a join. For each line set to a value, sides toward
+// hexes that are not explored come from the stored mask, the rest from the
+// request. A null still clears the whole line. Every written hex is already
+// known to be stored and explored here; only the neighbours need a read, and
+// only when a batch writes a line value.
+func (s *hexService) keepHiddenExits(ctx context.Context, mapID string, writes []HexCellWrite, stored map[HexKey]HexCell) error {
+	if !batchWritesLineValue(writes) {
+		return nil
+	}
+	var need []HexKey
+	seen := map[HexKey]bool{}
+	for _, w := range writes {
+		for _, n := range Neighbors(w.Col, w.Row) {
+			if _, ok := stored[n]; !ok && !seen[n] {
+				seen[n] = true
+				need = append(need, n)
+			}
+		}
+	}
+	explored := map[HexKey]bool{}
+	for k, c := range stored {
+		explored[k] = c.Explored
+	}
+	if len(need) > 0 {
+		more, err := s.repo.GetCells(ctx, mapID, need)
+		if err != nil {
+			return err
+		}
+		for k, c := range more {
+			explored[k] = c.Explored
+		}
+	}
+	isExplored := func(k HexKey) bool { return explored[k] }
+	merge := func(set bool, sent *int, old *int, hidden int) *int {
+		if !set || sent == nil {
+			return sent
+		}
+		kept := *sent &^ hidden
+		if old != nil {
+			kept |= *old & hidden
+		}
+		return &kept
+	}
+	for i := range writes {
+		w := &writes[i]
+		hidden := hiddenSides(w.Col, w.Row, isExplored)
+		old := stored[HexKey{w.Col, w.Row}]
+		w.Road = merge(w.RoadSet, w.Road, old.Road, hidden)
+		w.River = merge(w.RiverSet, w.River, old.River, hidden)
+		w.Trail = merge(w.TrailSet, w.Trail, old.Trail, hidden)
+	}
+	return nil
+}
+
+func batchWritesLineValue(writes []HexCellWrite) bool {
+	for _, w := range writes {
+		if w.RoadSet && w.Road != nil || w.RiverSet && w.River != nil || w.TrailSet && w.Trail != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// lineWrite validates one line field: absent is not written, null removes the
+// line, a value must be a side mask. The range check is here because the column
+// would accept up to 255, and the viewer only knows six sides.
+func lineWrite(name string, f patch.Field[int]) (set bool, mask *int, err error) {
+	if !f.Present() {
+		return false, nil, nil
+	}
+	if f.IsNull() {
+		return true, nil, nil
+	}
+	v, _ := f.Get()
+	if v < 0 || v > MaxHexLineMask {
+		return false, nil, apperror.NewBadRequest(name + " is out of range")
+	}
+	return true, &v, nil
 }
 
 // fitPieces checks every piece against the terrain the hex will have after the
@@ -682,6 +782,15 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 		if w.PieceSet {
 			p.PieceSet, p.Piece = true, w.Piece
 		}
+		if w.RoadSet {
+			p.RoadSet, p.Road = true, w.Road
+		}
+		if w.RiverSet {
+			p.RiverSet, p.River = true, w.River
+		}
+		if w.TrailSet {
+			p.TrailSet, p.Trail = true, w.Trail
+		}
 		if w.NameSet {
 			p.NameSet, p.Name = true, w.Name
 		}
@@ -707,6 +816,12 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 			if c, ok := stored[k]; !ok || !c.Explored {
 				return nil, apperror.NewForbidden("you can only change hexes the party has explored")
 			}
+		}
+	}
+
+	if layer.FogEnabled && !actor.IsDM {
+		if err := s.keepHiddenExits(ctx, mapID, writes, stored); err != nil {
+			return nil, err
 		}
 	}
 

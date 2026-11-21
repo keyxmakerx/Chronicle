@@ -269,7 +269,7 @@ type fakeEventRepo struct {
 	listAllFn             func(ctx context.Context, calendarID string) ([]Event, error)
 	strandedCountsFn      func(ctx context.Context, campaignID string) (map[string]int, error)
 	eventDatesFn          func(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error)
-	updateVisibilityFn    func(ctx context.Context, eventID, visibility string, visRules *string) error
+	updateVisibilityFn    func(ctx context.Context, eventID, visibility string, visRules *string, announced *string) error
 	linkEntityEventFn     func(ctx context.Context, entityID, eventID, role string) error
 	unlinkEntityEventFn   func(ctx context.Context, entityID, eventID string) error
 	linkEntityEraFn       func(ctx context.Context, entityID string, eraID int, role *string) error
@@ -400,9 +400,9 @@ func (m *fakeEventRepo) EventDatesForCalendars(ctx context.Context, calIDs []str
 	}
 	return nil, nil
 }
-func (m *fakeEventRepo) UpdateEventVisibility(ctx context.Context, eventID, visibility string, visRules *string) error {
+func (m *fakeEventRepo) UpdateEventVisibility(ctx context.Context, eventID, visibility string, visRules *string, announced *string) error {
 	if m.updateVisibilityFn != nil {
-		return m.updateVisibilityFn(ctx, eventID, visibility, visRules)
+		return m.updateVisibilityFn(ctx, eventID, visibility, visRules, announced)
 	}
 	return nil
 }

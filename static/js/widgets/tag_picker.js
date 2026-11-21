@@ -22,21 +22,35 @@ Chronicle.register('tag-picker', {
 
     el._tagPickerState = state;
 
-    // Fetch both tag lists in parallel.
-    Promise.all([
-      Chronicle.apiFetch(config.tagsEndpoint).then(function (r) { return r.json(); }),
-      Chronicle.apiFetch(config.entityTagsEndpoint).then(function (r) { return r.json(); })
-    ]).then(function (results) {
-      state.allTags = results[0] || [];
-      state.entityTags = results[1] || [];
+    // The page may have sent both lists with itself; then there is nothing
+    // to wait for and nothing to land late. Otherwise fetch them in parallel.
+    var first = Chronicle.firstPaint(el);
+    if (first && Array.isArray(first.all) && Array.isArray(first.mine)) {
+      state.allTags = first.all;
+      state.entityTags = first.mine;
       render();
-    }).catch(function (err) {
-      console.error('[tag-picker] Failed to load tags:', err);
-      Chronicle.notify('Failed to load tags', 'error');
-    });
+      Chronicle.drawn(el);
+    } else {
+      Promise.all([
+        Chronicle.apiFetch(config.tagsEndpoint).then(function (r) { return r.json(); }),
+        Chronicle.apiFetch(config.entityTagsEndpoint).then(function (r) { return r.json(); })
+      ]).then(function (results) {
+        state.allTags = results[0] || [];
+        state.entityTags = results[1] || [];
+        render();
+        Chronicle.drawn(el);
+      }).catch(function (err) {
+        console.error('[tag-picker] Failed to load tags:', err);
+        Chronicle.notify('Failed to load tags', 'error');
+        Chronicle.drawn(el);
+      });
+    }
 
     function render() {
       el.innerHTML = '';
+      // A page with no tags and nothing open is just an offer to add one;
+      // the Annals page editor shows it only while editing.
+      el.toggleAttribute('data-tp-empty', state.entityTags.length === 0 && !state.isOpen);
 
       var wrap = document.createElement('div');
       wrap.className = 'tp-wrap';
@@ -78,7 +92,7 @@ Chronicle.register('tag-picker', {
         var addBtn = document.createElement('button');
         addBtn.className = 'tp-add-btn';
         addBtn.type = 'button';
-        addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic" style="font-size:10px"></i> Tag';
+        addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic" style="font-size:10px"></i> ' + (state.entityTags.length === 0 ? 'Add a tag' : 'Tag');
         addBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           state.isOpen = !state.isOpen;

@@ -43,6 +43,9 @@ type hexCellRequest struct {
 	Row     *int                `json:"row"`
 	Terrain patch.Field[string] `json:"terrain"`
 	Piece   patch.Field[int]    `json:"piece"`
+	Road    patch.Field[int]    `json:"road"`
+	River   patch.Field[int]    `json:"river"`
+	Trail   patch.Field[int]    `json:"trail"`
 	Name    patch.Field[string] `json:"name"`
 	Notes   patch.Field[string] `json:"notes"`
 }
@@ -65,7 +68,7 @@ func (h *HexHandler) PatchHexCells(c *echo.Context) error {
 		if e.Col == nil || e.Row == nil {
 			return apperror.NewBadRequest("every hex needs a col and a row")
 		}
-		entries[i] = UpdateHexCellInput{Col: *e.Col, Row: *e.Row, Terrain: e.Terrain, Piece: e.Piece, Name: e.Name, Notes: e.Notes}
+		entries[i] = UpdateHexCellInput{Col: *e.Col, Row: *e.Row, Terrain: e.Terrain, Piece: e.Piece, Road: e.Road, River: e.River, Trail: e.Trail, Name: e.Name, Notes: e.Notes}
 	}
 	res, err := h.svc.PatchCells(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), HexActor{
 		UserID: getUserID(c),

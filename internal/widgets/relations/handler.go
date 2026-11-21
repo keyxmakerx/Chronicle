@@ -77,9 +77,38 @@ func (h *Handler) ListRelations(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	relations, err := h.service.ListByEntity(c.Request().Context(), cc.Campaign.ID, entityID)
+	relations, err := h.visibleRelations(c.Request().Context(), cc, entityID, userID)
 	if err != nil {
 		return err
+	}
+	return c.JSON(http.StatusOK, relations)
+}
+
+// FirstPaint is what the relations widget would fetch on load, for the entity
+// page to send with the page. The page has already confirmed the viewer may
+// open the entity; everything after that gate is the same code the list
+// endpoint runs. The types are only needed by someone who can add a relation.
+func (h *Handler) FirstPaint(ctx context.Context, cc *campaigns.CampaignContext, entityID, userID string, withTypes bool) (relations []Relation, types any, err error) {
+	if h.entityGate == nil {
+		return nil, nil, errors.New("relations: entity gate not configured")
+	}
+	relations, err = h.visibleRelations(ctx, cc, entityID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if withTypes {
+		types = h.service.GetCommonTypes()
+	}
+	return relations, types, nil
+}
+
+// visibleRelations lists an entity's relations as this viewer may see them:
+// dm_only relations and private targets are dropped for anyone but the owner,
+// site admins and DM-granted viewers. The caller has gated the source entity.
+func (h *Handler) visibleRelations(ctx context.Context, cc *campaigns.CampaignContext, entityID, userID string) ([]Relation, error) {
+	relations, err := h.service.ListByEntity(ctx, cc.Campaign.ID, entityID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Owner / site-admin / DM-granted viewers keep the full picture (dm_only
@@ -99,9 +128,9 @@ func (h *Handler) ListRelations(c *echo.Context) error {
 		// name/slug/type are the leak. Batched visibility check (no N+1).
 		// Promoted role for consistency with the source-entity gate above
 		// (ADR-057): the two role derivations must agree.
-		relations, err = h.filterByTargetVisibility(c.Request().Context(), cc.Campaign.ID, relations, int(cc.VisibilityRole()), userID)
+		relations, err = h.filterByTargetVisibility(ctx, cc.Campaign.ID, relations, int(cc.VisibilityRole()), userID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -110,7 +139,7 @@ func (h *Handler) ListRelations(c *echo.Context) error {
 		relations = []Relation{}
 	}
 
-	return c.JSON(http.StatusOK, relations)
+	return relations, nil
 }
 
 // requireViewableEntity answers 404 unless the entity is in the URL's campaign

@@ -145,29 +145,37 @@ test('a press skips to the result, which stays until a second press', { skip }, 
 test('the catalogue lists every set, colour and crit with the defaults', { skip }, async (t) => {
   const p = await page(t, 'off');
   const c = await p.evaluate(() => Chronicle.dice.catalogue());
-  assert.deepEqual(c.sets.map((s) => s.key), ['jewelled', 'confetti', 'acrylic', 'cage', 'heartlight', 'gothic', 'obsidian', 'moonstone', 'oak', 'nebula', 'bone', 'scale']);
+  assert.deepEqual(c.sets.map((s) => s.key), ['jewelled', 'confetti', 'acrylic', 'cage', 'heartlight', 'gothic', 'obsidian', 'moonstone', 'oak', 'nebula', 'bone', 'scale',
+    'damascus', 'cloisonne', 'kintsugi', 'leather', 'runestone', 'arcana', 'relic', 'agate', 'neon', 'amber', 'botanical', 'clockwork']);
   for (const s of c.sets) {
     assert.ok(s.name && s.show && s.showWhat, `${s.key} has a name and a show`);
     assert.ok(s.colours.length >= 3, `${s.key} has colours`);
     for (const col of s.colours) assert.ok(col.key && col.name && /^#[0-9a-f]{6}$/i.test(col.swatch[0]) && /^#[0-9a-f]{6}$/i.test(col.glow), `${s.key}/${col.key}`);
   }
-  assert.deepEqual(c.crits.succ.map((x) => x.key), ['storm', 'phoenix', 'dawn', 'starfall', 'bloom', 'hoard']);
-  assert.deepEqual(c.crits.fail.map((x) => x.key), ['grasp', 'frost', 'shatter', 'hex', 'crows', 'abyss']);
+  assert.deepEqual(c.crits.succ.map((x) => x.key), ['storm', 'phoenix', 'dawn', 'starfall', 'bloom', 'hoard', 'koi', 'prism', 'festival', 'encore', 'fortune', 'flutter']);
+  assert.deepEqual(c.crits.fail.map((x) => x.key), ['grasp', 'frost', 'shatter', 'hex', 'crows', 'abyss', 'mimic', 'engulf', 'omen', 'shackle', 'melt', 'dust']);
   for (const x of c.crits.succ.concat(c.crits.fail)) assert.ok(x.name && x.what && x.echoWhat, x.key);
   assert.deepEqual(c.defaults, { set: 'jewelled', colour: 'onyx', succ: 'phoenix', fail: 'grasp', quality: 'auto' });
 });
 
 test('every set throws and lights its number, on every shape of die', { skip, timeout: 300000 }, async (t) => {
   const p = await enginePage(t);
-  const res = await p.evaluate(() => {
-    const sides = [4, 6, 8, 10, 100, 12, 20];
-    return E.roll({
-      dice: E.SET_KEYS.map((kind, j) => ({ sides: sides[j % 7], kind, value: sides[j % 7] === 100 ? 90 : 3 })),
-      quality: { mode: 'basic' }, hold: 0
-    });
+  // Twelve sets to a throw, so the dice have room to land; the shapes shift between throws.
+  const res = await p.evaluate(async () => {
+    const sides = [4, 6, 8, 10, 100, 12, 20], out = [];
+    for (let from = 0; from < E.SET_KEYS.length; from += 12) {
+      out.push(await E.roll({
+        dice: E.SET_KEYS.slice(from, from + 12).map((kind, j) => { const n = sides[(from / 12 * 3 + j) % 7]; return { sides: n, kind, value: n === 100 ? 90 : 3 }; }),
+        quality: { mode: 'basic' }, hold: 0
+      }));
+    }
+    return out;
   });
-  assert.equal(res.drawn, true);
-  assert.equal(res.values.length, 12);
+  assert.equal(res.length, 2);
+  for (const r of res) {
+    assert.equal(r.drawn, true);
+    assert.equal(r.values.length, 12);
+  }
 });
 
 for (const motion of ['calm', 'off']) {

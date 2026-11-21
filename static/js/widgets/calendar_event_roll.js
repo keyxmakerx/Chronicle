@@ -32,6 +32,26 @@
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  // nightDots is one dot per night in the on-the-night window: filled when
+  // the night is rolled, hollow when no line of the table fit. The server
+  // names the reason for a hollow one; it is shown only when pressed.
+  function nightDots(nights, unfit, label) {
+    var out = [];
+    (nights || []).forEach(function (n) { out.push({ d: n, unfit: false }); });
+    (unfit || []).forEach(function (u) { out.push({ d: u, unfit: true, why: u.why }); });
+    out.sort(function (x, y) { return x.d.year - y.d.year || x.d.month - y.d.month || x.d.day - y.d.day; });
+    return out.map(function (o) {
+      var l = label(o.d), key = o.d.year + '_' + o.d.month + '_' + o.d.day;
+      return { key: key, unfit: o.unfit, label: o.unfit ? l + ': no line fits' : l + ': rolled', reason: o.unfit ? unfitReason(l, o.why) : '' };
+    });
+  }
+
+  // unfitReason is the one quiet line a hollow dot reveals.
+  function unfitReason(label, why) {
+    var w = String(why || 'no line of the table fits.');
+    return label + ': ' + w.charAt(0).toLowerCase() + w.slice(1);
+  }
+
   // A new roll starts as two results over 2d10, ready to rename.
   function starter() {
     return {
@@ -210,6 +230,35 @@
     return d.day + ' ' + (mo ? mo.name : d.month);
   };
 
+  // _dotLabel is the short weekday and day a night's dot is named by.
+  Roll.prototype._dotLabel = function (d) {
+    var cal = this.view.cal, wd = cal.weekdays || [], name = '';
+    if (wd.length && Chronicle.calendarDate.weekdayCol) {
+      var w = wd[Chronicle.calendarDate.weekdayCol(cal, d.year, d.month, d.day)];
+      name = w && w.name ? String(w.name).slice(0, 3) + ' ' : '';
+    }
+    return name + d.day;
+  };
+
+  Roll.prototype._dotsHTML = function (today) {
+    var self = this, cal = this.view.cal, CalDate = Chronicle.calendarDate, data = this.data || {};
+    if (!(data.unfit || []).length) return '';
+    var dots = nightDots(data.nights, data.unfit, function (d) { return self._dotLabel(d); }).filter(function (o) {
+      var k = o.key.split('_');
+      return self.showPast || CalDate.dayIndex(cal, +k[0], +k[1], +k[2]) >= today;
+    });
+    var open = null, h = '<div class="rldots" role="group" aria-label="Nights in the on-the-night window">';
+    dots.forEach(function (o) {
+      if (!o.unfit) { h += '<span class="rldot" role="img" aria-label="' + esc(o.label) + '"></span>'; return; }
+      var on = self.openDot === o.key;
+      if (on) open = o;
+      h += '<button type="button" class="rldot hollow" data-r="dot" data-k="' + o.key + '" aria-expanded="' + on + '" aria-label="' + esc(o.label) + '"></button>';
+    });
+    h += '</div>';
+    if (open) h += '<p class="rlhint rlwhy">' + esc(open.reason) + '</p>';
+    return h;
+  };
+
   Roll.prototype._nightsHTML = function () {
     var self = this, data = this.data || {}, cal = this.view.cal, CalDate = Chronicle.calendarDate;
     var today = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
@@ -217,8 +266,11 @@
       .concat((data.upcoming || []).map(function (d) { return { d: d, n: null }; }));
     rows.forEach(function (r) { r.ix = CalDate.dayIndex(cal, r.d.year, r.d.month, r.d.day); });
     rows.sort(function (a, b) { return a.ix - b.ix; });
+    var unfitAt = {};
+    (data.unfit || []).forEach(function (u) { unfitAt[u.year + '_' + u.month + '_' + u.day] = true; });
     if (!rows.length) return '<p class="rlhint">' + (data.truncated ? 'This event’s nights in ' + this.year + ' couldn’t all be worked out.' : 'This event has no nights in ' + this.year + '.') + '</p>';
     var past = rows.filter(function (r) { return r.ix < today; }).length, h = '';
+    h += this._dotsHTML(today);
     if (past) h += '<button type="button" class="rlq" data-r="past" aria-expanded="' + this.showPast + '">' + (this.showPast ? 'Hide' : 'Show') + ' ' + past + ' past night' + (past > 1 ? 's' : '') + '</button>';
     rows.forEach(function (r) {
       var isPast = r.ix < today;
@@ -227,7 +279,7 @@
       var told = n && n.told && r.ix <= today;
       h += '<div class="rlnight' + (isPast ? ' past' : '') + '" data-d="' + key + '"><span class="d">' + esc(self._dateText(r.d)) + '</span>' +
         (n ? '<span class="tot">' + (n.total != null ? esc(String(n.total)) : '') + '</span><span class="bn"><i class="tick' + tick + '"></i><b>' + esc(n.result || '—') + '</b>' + (told ? '<span class="told">Players told</span>' : '') + '</span>'
-           : '<span class="tot"></span><span class="bn wait">Not rolled yet</span>') +
+           : '<span class="tot"></span><span class="bn wait">' + (unfitAt[key] ? 'No line fits' : 'Not rolled yet') + '</span>') +
         '<span class="acts">' +
         '<button type="button" class="rlic" data-r="lock" aria-pressed="' + !!(n && n.locked) + '" aria-label="' + (n && n.locked ? 'Unlock' : 'Lock') + ' ' + esc(self._dateText(r.d)) + '"' + (n ? '' : ' disabled') + '><i class="fa-solid ' + (n && n.locked ? 'fa-lock' : 'fa-lock-open') + '"></i></button>' +
         '<button type="button" class="rlic" data-r="reroll" aria-label="Roll ' + esc(self._dateText(r.d)) + '"' + (n && n.locked ? ' disabled' : '') + '><i class="fa-solid fa-rotate"></i></button></span></div>';
@@ -285,6 +337,7 @@
       this._edited(); this.render(); return;
     }
     if (r === 'y-' || r === 'y+') { this.year += r === 'y-' ? -1 : 1; this._load(); return; }
+    if (r === 'dot') { this.openDot = this.openDot === t.dataset.k ? null : t.dataset.k; $('.rlnights', this.host).innerHTML = this._nightsHTML(); var again = $('.rldot[data-k="' + t.dataset.k + '"]', this.host); if (again) again.focus(); return; }
     if (r === 'past') { this.showPast = !this.showPast; $('.rlnights', this.host).innerHTML = this._nightsHTML(); return; }
     if (r === 'ai') {
       var pre = $('.rlcode', this.host), open = pre.hidden;
@@ -401,7 +454,7 @@
   };
 
   window.Chronicle = window.Chronicle || {};
-  Chronicle.calendarEventRoll = { parseDice: parseDice, Roll: Roll };
+  Chronicle.calendarEventRoll = { parseDice: parseDice, nightDots: nightDots, unfitReason: unfitReason, Roll: Roll };
 
   // The drawer renders the section with data-widget="calendar_event_roll"
   // and hands over its calendar and event on the element, so this file

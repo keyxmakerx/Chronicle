@@ -24,6 +24,9 @@ var diceSetNames = map[string]string{
 	"jewelled": "Jewelled", "confetti": "Confetti glass", "acrylic": "Acrylic", "cage": "Verdant cage",
 	"heartlight": "Heartlight", "gothic": "Gothic", "obsidian": "Ember obsidian", "moonstone": "Moonstone",
 	"oak": "Druid's oak", "nebula": "Nebula resin", "bone": "Dragonbone", "scale": "Dragonscale",
+	"damascus": "Damascus steel", "cloisonne": "Cloisonné", "kintsugi": "Kintsugi", "leather": "Tooled leather",
+	"runestone": "Runestone", "arcana": "Arcana", "relic": "Relic coin", "agate": "Banded agate",
+	"neon": "Neon", "amber": "Amber", "botanical": "Pressed flowers", "clockwork": "Clockwork",
 }
 
 // The engine's own defaults (dice.js DEFAULTS), what an empty pick means.

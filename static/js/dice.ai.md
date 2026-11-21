@@ -23,16 +23,25 @@ weight that `TestEveryPageScriptBudget` counts.
 - `dice/engine.js`: an ES module that holds the physics, the table and the
   Jewelled, Confetti glass and Acrylic sets. It also holds all six shows (the way
   a landed number lights up), the crit rules, quality and the catalogue.
-- `dice/sets/<key>.js`: one file per set, for the other nine sets. Each calls
+- `dice/sets/<key>.js`: one file per set, for every other set. Each calls
   `registerSet`.
 - `dice/crits/<key>.js`: one file per crit. Each calls `registerCrit`.
+- `dice/crits/kit.js`: what several crits share, so no crit copies it.
+  `critScene` holds a crit's own objects, clips the die against planes
+  (`clip`, for a die that sinks or blows away) and puts the die back as it
+  was at the end. `numeral` draws the landed number flat on the page, and
+  `tarot` deals cards.
 
 **Module identity.** Set and crit files `import … from '../engine.js'`. Every
 importer must name the engine by the same bare URL, or the browser runs two
 copies with two registries. That is why `dice.js` imports it with no `?v=`.
 Unversioned static files are always revalidated. Only keys in `SET_KEYS` and
 `CRIT_KEYS` are ever imported, and library URLs must be same-origin `/static`
-paths. Adding a set or crit means adding its key to that list in `engine.js`.
+paths. Adding a set or crit means adding its key to that list in `engine.js`
+and to the matching list in the rolls plugin's `model.go`, which is what the
+server accepts as a saved pick (`TestDiceKeysMatchEngine` holds the two
+together). The Foundry module lists the same keys for Dice So Nice
+(`RUNE_SET_IDS` and `CRITS` in its `scripts/_rune-dice.mjs`).
 
 **API** (full detail in the header of `dice.js`)
 - `roll(groups, opts)` resolves `[{ label, values, crits }]`.

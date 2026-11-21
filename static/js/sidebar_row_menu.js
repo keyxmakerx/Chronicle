@@ -557,7 +557,8 @@
         run(id, { href: info.href, page: '' });
         break;
       case 'new-sub':
-        window.location.assign(treeURL(info, '/entities/new?type=' + info.typeId + '&parent_id=' + encodeURIComponent(info.entityId)));
+        var subUrl = treeURL(info, '/entities/new?type=' + info.typeId + '&parent_id=' + encodeURIComponent(info.entityId));
+        if (!(window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(subUrl))) window.location.assign(subUrl);
         break;
       case 'new-folder': {
         var parent = info.kind === 'folder' ? info.nodeId : info.folder;

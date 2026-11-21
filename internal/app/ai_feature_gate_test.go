@@ -32,7 +32,7 @@ func TestAIFeatureGate(t *testing.T) {
 		{"all on", fakeAddonSwitch{on: map[string]bool{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true, crafting.AddonSlug: true, armory.AddonSlug: true, transformations.AddonSlug: true}}, map[string]string{}},
 		{"new campaign", fakeAddonSwitch{on: map[string]bool{}}, map[string]string{
 			records.KindCalendar: "Calendar", "event": "Calendar", "weather": "Calendar", "roll-night": "Calendar", "moon": "Calendar",
-			"game-night": "Game nights", "map": "Maps", "pin": "Maps", records.KindPlayerNote: "Player Notes",
+			"game-night": "Game nights", "map": "Maps", "hex-map": "Maps", "pin": "Maps", records.KindPlayerNote: "Player Notes",
 			"recipe": "Crafting", "material": "Crafting", "drops": "Crafting", "bench": "Crafting",
 			"shop-room": "Armory", "storefront": "Armory", "item-look": "Armory", "layer": "Transformations",
 		}},

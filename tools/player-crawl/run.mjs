@@ -17,7 +17,7 @@ try {
   const s = await seed(BASE, (...a) => console.log(...a));
   const names = Object.keys(s.markers).length;
   console.log(`\nseeded ${names} markers in ${s.ids.cid}; ${s.skipped.length} step(s) not seeded`);
-  const o = await crawl(s.owner, s.ids.cid, s.ids.all, s.markers, { term: 'ZQ' + RUN, controls: s.controls });
+  const o = await crawl(s.owner, s.ids.cid, s.ids.all, s.markers, { term: 'ZQ' + RUN, controls: s.controls, extraUrls: s.extraUrls });
   let unreachable = Object.entries(s.markers).filter(([k]) => !o.seen.has(k));
   // The author's own walk must find their private notes, or the check on the others proves nothing.
   const own = await crawl(s.player, s.ids.cid, s.ids.all, s.playerOnly, { term: 'ZQ' + RUN });
@@ -26,6 +26,19 @@ try {
   for (const [, v] of unreachable) console.log('  UNREACHABLE (no page shows it to the owner):', v);
 
   let leaks = 0;
+  // Shop goods stay out of lists even for the Director: they show in their
+  // shop, on their own page and in the Director's Shop goods tab, nowhere else.
+  for (const k of Object.keys(s.markers).filter((x) => /SHOPGOOD/.test(x))) {
+    const ok = [s.ids.shop, s.ids.shopB, s.ids.goodVis, s.ids.goodHid, s.ids.goodFlip].filter(Boolean);
+    const bad = o.hits.filter((h) => h.marker === k && !ok.some((id) => h.route.includes(id)) && !/\/armory\?goods=1/.test(h.route)
+      // The AI export names a shop's goods only as its "sells" relations; the goods get no page of their own there.
+      && !/\/ai-export\/generate/.test(h.route));
+    if (bad.length) {
+      leaks++;
+      console.log(`  LEAK  the Director's own walk finds ${s.markers[k]} outside its shop:`);
+      for (const h of bad.slice(0, 6)) console.log(`        ${h.variant.padEnd(4)} ${idShape(h.route)}`);
+    }
+  }
   // The owner previewing as a guest rides the owner's own session with the
   // guest cookie on. The server lowers each read to a visitor's, so this walk
   // must see what the signed-out stranger sees, under the same leak checks.
@@ -38,7 +51,7 @@ try {
   for (const [who, client] of Object.entries(viewers)) {
     const previewing = who === 'owner previewing as a guest';
     if (previewing) client.jar.set(GUEST_COOKIE, s.ids.cid);
-    const r = await crawl(client, s.ids.cid, s.ids.all, { ...s.markers, ...s.playerOnly }, { term: 'ZQ' + RUN, controls: s.controls });
+    const r = await crawl(client, s.ids.cid, s.ids.all, { ...s.markers, ...s.playerOnly }, { term: 'ZQ' + RUN, controls: s.controls, extraUrls: s.extraUrls });
     if (previewing) client.jar.delete(GUEST_COOKIE);
     walks[who] = r;
     if (r.lostAt.length) console.log(`  (${who}'s session ended during the walk at: ${r.lostAt.join(', ')}; signed back in)`);
@@ -46,6 +59,9 @@ try {
     for (const h of r.hits) {
       if (who === 'scribe' && s.scribeMay.has(h.marker)) continue;
       if (who === 'player' && s.playerOnly[h.marker]) continue; // the author reading their own note
+      // A shop good listed openly shows in its own shop and on its own page;
+      // anywhere else (a list, search, Auto-link, the Items gallery) is a leak.
+      if ((s.mayShow[h.marker] || []).some((id) => h.route.includes(id))) continue;
       const e = byMarker.get(h.marker) || new Set();
       e.add(`${h.variant.padEnd(4)} ${idShape(h.route)}`);
       byMarker.set(h.marker, e);

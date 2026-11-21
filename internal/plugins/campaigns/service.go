@@ -196,6 +196,10 @@ type CampaignService interface {
 	// Game system
 	UpdateSystemID(ctx context.Context, campaignID, systemID string) error
 
+	// KeepSetupStep records that the owner passed on a setup step ("game" or
+	// "look") instead of doing it, so the setup line counts it as done.
+	KeepSetupStep(ctx context.Context, campaignID, step string) error
+
 	// Lifecycle hooks — set after construction to avoid circular initialization.
 	SetContentTemplateSeeder(seeder ContentTemplateSeeder)
 	SetWorldbuildingPromptSeeder(seeder WorldbuildingPromptSeeder)
@@ -204,6 +208,11 @@ type CampaignService interface {
 	// SetCharacterListSeeder sets what records a new campaign's character and
 	// NPC page types. Late-bound and nil-safe.
 	SetCharacterListSeeder(seeder CharacterListSeeder)
+
+	// SetFeatureEnabler sets what turns on the usual set of features for a
+	// new campaign. Late-bound and nil-safe: without it a campaign starts
+	// with every feature off.
+	SetFeatureEnabler(enabler FeatureEnabler)
 
 	// UpdateCharacterLists stores the page types the campaign lists as
 	// characters and as NPCs. Callers validate the IDs; this only persists.
@@ -227,6 +236,15 @@ type CampaignService interface {
 	// start with it. Late-bound and nil-safe: without it new campaigns start
 	// as Classic.
 	SetSiteLookSource(src SiteLookSource)
+}
+
+// FeatureEnabler turns on the features a campaign starts with. The list of
+// which ones lives with the composition root (internal/app), which knows the
+// add-ons by name; campaigns only says when. One feature that cannot be turned
+// on is skipped and logged by the implementation, never an error here, because
+// the campaign exists and the owner can switch it on in Game & features.
+type FeatureEnabler interface {
+	EnableStarterFeatures(ctx context.Context, campaignID, userID string)
 }
 
 // SiteLookSource reads the site-wide look an admin chose. The settings
@@ -290,10 +308,14 @@ type campaignService struct {
 	connRevoker     ConnectionRevoker         // Drops live sockets when access is lowered. May be nil until wiring reaches it.
 	navSections     NavSectionsSource         // Draws a member's sidebar for pin checks. Pins are refused while nil.
 	siteLook        SiteLookSource            // Site-wide look new campaigns start with. May be nil.
+	features        FeatureEnabler            // Turns on the usual features for a new campaign. May be nil.
 	baseURL         string
 	// memberRemoved runs after a member is removed, so other plugins can end
 	// credentials they issued for that campaign without campaigns importing them.
 	memberRemoved []func(ctx context.Context, campaignID, userID string)
+	// memberRoleChanged runs after a member's role changes, so other plugins
+	// can drop things only the old role could hold.
+	memberRoleChanged []func(ctx context.Context, campaignID, userID string, from, to Role)
 	// campaignDeleted runs after a campaign is purged, for accounts that
 	// existed only for it (guests).
 	campaignDeleted []func(ctx context.Context, campaignID string)
@@ -337,6 +359,24 @@ func OnMemberRemoved(svc CampaignService, fn func(ctx context.Context, campaignI
 	}
 }
 
+// OnMemberRoleChanged registers fn to run after a member's role changes to a
+// different one (not on a no-op save), whether by an owner or an admin.
+func OnMemberRoleChanged(svc CampaignService, fn func(ctx context.Context, campaignID, userID string, from, to Role)) {
+	if s, ok := svc.(*campaignService); ok && fn != nil {
+		s.memberRoleChanged = append(s.memberRoleChanged, fn)
+	}
+}
+
+// roleChanged tells the registered hooks a member's role moved.
+func (s *campaignService) roleChanged(ctx context.Context, campaignID, userID string, from, to Role) {
+	if from == to {
+		return
+	}
+	for _, fn := range s.memberRoleChanged {
+		fn(ctx, campaignID, userID, from, to)
+	}
+}
+
 // OnCampaignDeleted registers fn to run after a campaign is purged from the
 // Trash, not when it is moved there, so an Undo finds it whole.
 func OnCampaignDeleted(svc CampaignService, fn func(ctx context.Context, campaignID string)) {
@@ -355,6 +395,11 @@ func NewCampaignService(repo CampaignRepository, users UserFinder, mail MailServ
 		seeder:  seeder,
 		baseURL: baseURL,
 	}
+}
+
+// SetFeatureEnabler sets what turns on a new campaign's usual features.
+func (s *campaignService) SetFeatureEnabler(enabler FeatureEnabler) {
+	s.features = enabler
 }
 
 // SetContentTemplateSeeder sets the seeder for default content templates.
@@ -734,6 +779,12 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 				slog.Any("error", err),
 			)
 		}
+	}
+
+	// Turn on the usual features last: some run enable effects (the Player
+	// Characters page type) that need the campaign's page types to exist.
+	if s.features != nil && !input.SkipDefaultFeatures {
+		s.features.EnableStarterFeatures(ctx, campaign.ID, userID)
 	}
 
 	slog.Info("campaign created",
@@ -1189,6 +1240,7 @@ func (s *campaignService) UpdateMemberRole(ctx context.Context, campaignID, user
 	if role < member.Role && s.connRevoker != nil {
 		s.connRevoker.RevokeUser(campaignID, userID)
 	}
+	s.roleChanged(ctx, campaignID, userID, member.Role, role)
 
 	slog.Info("member role updated",
 		slog.String("campaign_id", campaignID),
@@ -2128,6 +2180,7 @@ func (s *campaignService) AdminAddMember(ctx context.Context, campaignID, userID
 		if role < existing.Role && s.connRevoker != nil {
 			s.connRevoker.RevokeUser(campaignID, userID)
 		}
+		s.roleChanged(ctx, campaignID, userID, existing.Role, role)
 		return nil
 	}
 
@@ -2300,6 +2353,34 @@ func (s *campaignService) UpdateSystemID(ctx context.Context, campaignID, system
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
+}
+
+// setupKeepable are the setup steps the owner may pass on. The others (invite,
+// first page) are done by making something, so there is nothing to pass on.
+var setupKeepable = map[string]bool{"game": true, "look": true}
+
+// KeepSetupStep records that the owner chose to keep things as they are for a
+// setup step. It is idempotent and stores only the step's key.
+func (s *campaignService) KeepSetupStep(ctx context.Context, campaignID, step string) error {
+	if !setupKeepable[step] {
+		return apperror.NewBadRequest("unknown setup step")
+	}
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	settings := campaign.ParseSettings()
+	for _, k := range settings.SetupKept {
+		if k == step {
+			return nil
+		}
+	}
+	settings.SetupKept = append(settings.SetupKept, step)
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
 	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
 }
 

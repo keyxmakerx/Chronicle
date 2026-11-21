@@ -18,13 +18,26 @@ func typeBadgeStyle(hexColor string) string {
 
 // entityListParams is the All Pages query string the page links carry, so
 // paging through search results keeps the search.
-func entityListParams(typeID int, query string) string {
+func entityListParams(typeID int, query, sort string) string {
 	v := url.Values{}
 	v.Set("type", strconv.Itoa(typeID))
 	if query != "" {
 		v.Set("q", query)
 	}
+	// A–Z is the page's own order, so only another order rides on the links.
+	if sort != "" && sort != "name" {
+		v.Set("sort", sort)
+	}
 	return v.Encode()
+}
+
+// entityKindWords is a row's category as a quiet phrase: the category, then
+// the page's own descriptor when it has one ("Character · NPC").
+func entityKindWords(e *Entity) string {
+	if e.TypeLabel != nil && *e.TypeLabel != "" {
+		return e.TypeName + " · " + *e.TypeLabel
+	}
+	return e.TypeName
 }
 
 // searchMatchSummary is the line under the All Pages title while a search

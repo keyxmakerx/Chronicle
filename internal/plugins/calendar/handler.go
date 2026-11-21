@@ -313,52 +313,50 @@ func (h *Handler) GetEventAPI(c *echo.Context) error {
 	return c.JSON(http.StatusOK, evt)
 }
 
-// CreateEventAPI creates an event. Scribe+; the service refuses (403) a
-// visibility=dm_only or a visibility_rules from a caller who may not author
-// dm_only content (CalendarService.CreateEvent's doc comment).
-// POST /campaigns/:id/calendars/:calid/events
-func (h *Handler) CreateEventAPI(c *echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	var req struct {
-		Name                     string          `json:"name"`
-		Description              *string         `json:"description"`
-		DescriptionHTML          *string         `json:"description_html"`
-		EntityID                 *string         `json:"entity_id"`
-		Year                     int             `json:"year"`
-		Month                    int             `json:"month"`
-		Day                      int             `json:"day"`
-		StartHour                *int            `json:"start_hour"`
-		StartMinute              *int            `json:"start_minute"`
-		EndYear                  *int            `json:"end_year"`
-		EndMonth                 *int            `json:"end_month"`
-		EndDay                   *int            `json:"end_day"`
-		EndHour                  *int            `json:"end_hour"`
-		EndMinute                *int            `json:"end_minute"`
-		IsRecurring              bool            `json:"is_recurring"`
-		RecurrenceType           *string         `json:"recurrence_type"`
-		RecurrenceInterval       *int            `json:"recurrence_interval"`
-		RecurrenceEndYear        *int            `json:"recurrence_end_year"`
-		RecurrenceEndMonth       *int            `json:"recurrence_end_month"`
-		RecurrenceEndDay         *int            `json:"recurrence_end_day"`
-		RecurrenceMaxOccurrences *int            `json:"recurrence_max_occurrences"`
-		RecurrenceRule           json.RawMessage `json:"recurrence_rule"`
-		Visibility               string          `json:"visibility"`
-		VisibilityRules          *string         `json:"visibility_rules"`
-		KindID                   *int            `json:"kind_id"`
-		Announced                *string         `json:"announced"`
-		Tier                     *string         `json:"tier"`
-		Color                    *string         `json:"color"`
-		Icon                     *string         `json:"icon"`
-		AllDay                   bool            `json:"all_day"`
-		Payload                  *string         `json:"payload"`
-	}
-	if err := c.Bind(&req); err != nil {
-		return apperror.NewBadRequest("invalid request")
-	}
+// createEventRequest is the body of POST .../events, and of each item in a
+// year-track batch's create list, so both take the same fields.
+type createEventRequest struct {
+	Name                     string          `json:"name"`
+	Description              *string         `json:"description"`
+	DescriptionHTML          *string         `json:"description_html"`
+	EntityID                 *string         `json:"entity_id"`
+	Year                     int             `json:"year"`
+	Month                    int             `json:"month"`
+	Day                      int             `json:"day"`
+	StartHour                *int            `json:"start_hour"`
+	StartMinute              *int            `json:"start_minute"`
+	EndYear                  *int            `json:"end_year"`
+	EndMonth                 *int            `json:"end_month"`
+	EndDay                   *int            `json:"end_day"`
+	EndHour                  *int            `json:"end_hour"`
+	EndMinute                *int            `json:"end_minute"`
+	IsRecurring              bool            `json:"is_recurring"`
+	RecurrenceType           *string         `json:"recurrence_type"`
+	RecurrenceInterval       *int            `json:"recurrence_interval"`
+	RecurrenceEndYear        *int            `json:"recurrence_end_year"`
+	RecurrenceEndMonth       *int            `json:"recurrence_end_month"`
+	RecurrenceEndDay         *int            `json:"recurrence_end_day"`
+	RecurrenceMaxOccurrences *int            `json:"recurrence_max_occurrences"`
+	RecurrenceRule           json.RawMessage `json:"recurrence_rule"`
+	Visibility               string          `json:"visibility"`
+	VisibilityRules          *string         `json:"visibility_rules"`
+	KindID                   *int            `json:"kind_id"`
+	Announced                *string         `json:"announced"`
+	Tier                     *string         `json:"tier"`
+	Color                    *string         `json:"color"`
+	Icon                     *string         `json:"icon"`
+	AllDay                   bool            `json:"all_day"`
+	Payload                  *string         `json:"payload"`
+}
 
-	evt, err := h.svc.CreateEvent(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, CreateEventInput{
-		CanAuthorDmOnly:          viewerFrom(c, cc).SkipsPerUserRules(),
-		Author:                   viewerFrom(c, cc),
+// toInput builds the service input. Who is writing, and so whether a dm_only
+// event may be saved, comes from the caller's viewer, never from the body.
+func (r createEventRequest) toInput(v permissions.Viewer, userID string) CreateEventInput {
+	req := r
+	return CreateEventInput{
+		CanAuthorDmOnly:          v.SkipsPerUserRules(),
+		Author:                   v,
+		CreatedBy:                userID,
 		RecurrenceRule:           req.RecurrenceRule,
 		Name:                     req.Name,
 		Description:              req.Description,
@@ -390,12 +388,65 @@ func (h *Handler) CreateEventAPI(c *echo.Context) error {
 		Icon:                     req.Icon,
 		AllDay:                   req.AllDay,
 		Payload:                  req.Payload,
-		CreatedBy:                auth.GetUserID(c),
-	})
+	}
+}
+
+// CreateEventAPI creates an event. Scribe+; the service refuses (403) a
+// visibility=dm_only or a visibility_rules from a caller who may not author
+// dm_only content (CalendarService.CreateEvent's doc comment).
+// POST /campaigns/:id/calendars/:calid/events
+func (h *Handler) CreateEventAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req createEventRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	evt, err := h.svc.CreateEvent(c.Request().Context(), c.Param("calid"), cc.Campaign.ID,
+		req.toInput(viewerFrom(c, cc), auth.GetUserID(c)))
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusCreated, evt)
+}
+
+// updateEventRequest is the body of PUT .../events/:eid, and the changes of
+// each update item in a year-track batch. Every field is a patch.Field so an
+// absent key preserves; it must stay field-for-field the same as
+// UpdateEventInput, which the conversion in the handlers enforces at compile
+// time.
+type updateEventRequest struct {
+	Name                     patch.Field[string]          `json:"name"`
+	Description              patch.Field[string]          `json:"description"`
+	DescriptionHTML          patch.Field[string]          `json:"description_html"`
+	EntityID                 patch.Field[string]          `json:"entity_id"`
+	Year                     patch.Field[int]             `json:"year"`
+	Month                    patch.Field[int]             `json:"month"`
+	Day                      patch.Field[int]             `json:"day"`
+	StartHour                patch.Field[int]             `json:"start_hour"`
+	StartMinute              patch.Field[int]             `json:"start_minute"`
+	EndYear                  patch.Field[int]             `json:"end_year"`
+	EndMonth                 patch.Field[int]             `json:"end_month"`
+	EndDay                   patch.Field[int]             `json:"end_day"`
+	EndHour                  patch.Field[int]             `json:"end_hour"`
+	EndMinute                patch.Field[int]             `json:"end_minute"`
+	IsRecurring              patch.Field[bool]            `json:"is_recurring"`
+	RecurrenceType           patch.Field[string]          `json:"recurrence_type"`
+	RecurrenceInterval       patch.Field[int]             `json:"recurrence_interval"`
+	RecurrenceEndYear        patch.Field[int]             `json:"recurrence_end_year"`
+	RecurrenceEndMonth       patch.Field[int]             `json:"recurrence_end_month"`
+	RecurrenceEndDay         patch.Field[int]             `json:"recurrence_end_day"`
+	RecurrenceMaxOccurrences patch.Field[int]             `json:"recurrence_max_occurrences"`
+	RecurrenceRule           patch.Field[json.RawMessage] `json:"recurrence_rule"`
+	Visibility               patch.Field[string]          `json:"visibility"`
+	VisibilityRules          patch.Field[string]          `json:"visibility_rules"`
+	KindID                   patch.Field[int]             `json:"kind_id"`
+	Announced                patch.Field[string]          `json:"announced"`
+	Tier                     patch.Field[string]          `json:"tier"`
+	Color                    patch.Field[string]          `json:"color"`
+	Icon                     patch.Field[string]          `json:"icon"`
+	AllDay                   patch.Field[bool]            `json:"all_day"`
+	Payload                  patch.Field[string]          `json:"payload"`
 }
 
 // UpdateEventAPI applies a partial update to an event. Scribe+; the service
@@ -406,76 +457,13 @@ func (h *Handler) CreateEventAPI(c *echo.Context) error {
 // PUT /campaigns/:id/calendars/:calid/events/:eid
 func (h *Handler) UpdateEventAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	var req struct {
-		Name                     patch.Field[string]          `json:"name"`
-		Description              patch.Field[string]          `json:"description"`
-		DescriptionHTML          patch.Field[string]          `json:"description_html"`
-		EntityID                 patch.Field[string]          `json:"entity_id"`
-		Year                     patch.Field[int]             `json:"year"`
-		Month                    patch.Field[int]             `json:"month"`
-		Day                      patch.Field[int]             `json:"day"`
-		StartHour                patch.Field[int]             `json:"start_hour"`
-		StartMinute              patch.Field[int]             `json:"start_minute"`
-		EndYear                  patch.Field[int]             `json:"end_year"`
-		EndMonth                 patch.Field[int]             `json:"end_month"`
-		EndDay                   patch.Field[int]             `json:"end_day"`
-		EndHour                  patch.Field[int]             `json:"end_hour"`
-		EndMinute                patch.Field[int]             `json:"end_minute"`
-		IsRecurring              patch.Field[bool]            `json:"is_recurring"`
-		RecurrenceType           patch.Field[string]          `json:"recurrence_type"`
-		RecurrenceInterval       patch.Field[int]             `json:"recurrence_interval"`
-		RecurrenceEndYear        patch.Field[int]             `json:"recurrence_end_year"`
-		RecurrenceEndMonth       patch.Field[int]             `json:"recurrence_end_month"`
-		RecurrenceEndDay         patch.Field[int]             `json:"recurrence_end_day"`
-		RecurrenceMaxOccurrences patch.Field[int]             `json:"recurrence_max_occurrences"`
-		RecurrenceRule           patch.Field[json.RawMessage] `json:"recurrence_rule"`
-		Visibility               patch.Field[string]          `json:"visibility"`
-		VisibilityRules          patch.Field[string]          `json:"visibility_rules"`
-		KindID                   patch.Field[int]             `json:"kind_id"`
-		Announced                patch.Field[string]          `json:"announced"`
-		Tier                     patch.Field[string]          `json:"tier"`
-		Color                    patch.Field[string]          `json:"color"`
-		Icon                     patch.Field[string]          `json:"icon"`
-		AllDay                   patch.Field[bool]            `json:"all_day"`
-		Payload                  patch.Field[string]          `json:"payload"`
-	}
+	var req updateEventRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.UpdateEvent(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, UpdateEventInput{
-		Name:                     req.Name,
-		Description:              req.Description,
-		DescriptionHTML:          req.DescriptionHTML,
-		EntityID:                 req.EntityID,
-		Year:                     req.Year,
-		Month:                    req.Month,
-		Day:                      req.Day,
-		StartHour:                req.StartHour,
-		StartMinute:              req.StartMinute,
-		EndYear:                  req.EndYear,
-		EndMonth:                 req.EndMonth,
-		EndDay:                   req.EndDay,
-		EndHour:                  req.EndHour,
-		EndMinute:                req.EndMinute,
-		IsRecurring:              req.IsRecurring,
-		RecurrenceType:           req.RecurrenceType,
-		RecurrenceInterval:       req.RecurrenceInterval,
-		RecurrenceEndYear:        req.RecurrenceEndYear,
-		RecurrenceEndMonth:       req.RecurrenceEndMonth,
-		RecurrenceEndDay:         req.RecurrenceEndDay,
-		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
-		RecurrenceRule:           req.RecurrenceRule,
-		Visibility:               req.Visibility,
-		VisibilityRules:          req.VisibilityRules,
-		KindID:                   req.KindID,
-		Announced:                req.Announced,
-		Tier:                     req.Tier,
-		Color:                    req.Color,
-		Icon:                     req.Icon,
-		AllDay:                   req.AllDay,
-		Payload:                  req.Payload,
-	}, viewerFrom(c, cc))
+	return h.svc.UpdateEvent(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID,
+		UpdateEventInput(req), viewerFrom(c, cc))
 }
 
 // occurrenceDate reads the :y/:m/:d path segments naming one occurrence.
@@ -621,6 +609,7 @@ func (h *Handler) SetEventVisibilityAPI(c *echo.Context) error {
 	var req struct {
 		Visibility      string              `json:"visibility"`
 		VisibilityRules patch.Field[string] `json:"visibility_rules"`
+		Announced       string              `json:"announced"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -628,6 +617,7 @@ func (h *Handler) SetEventVisibilityAPI(c *echo.Context) error {
 	if err := h.svc.SetEventVisibility(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, UpdateEventVisibilityInput{
 		Visibility:      req.Visibility,
 		VisibilityRules: req.VisibilityRules,
+		Announced:       req.Announced,
 	}, viewerFrom(c, cc)); err != nil {
 		return err
 	}

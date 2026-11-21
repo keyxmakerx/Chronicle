@@ -26,6 +26,11 @@ const (
 	MaxCreditNotice  = 600
 	MaxCreditURL     = 300
 	defaultWeight    = 1.0
+
+	// VisibilityEveryone and VisibilityDMOnly are the two answers to who sees
+	// what a calendar day's roll puts on the day.
+	VisibilityEveryone = "everyone"
+	VisibilityDMOnly   = "dm_only"
 )
 
 // idPattern keeps table ids stable, URL-safe keys so a client can address a
@@ -95,16 +100,18 @@ type inDocument struct {
 }
 
 type inTable struct {
-	ID      string    `json:"id"`
-	Name    string    `json:"name"`
-	Credit  *Credit   `json:"credit"`
-	Entries []inEntry `json:"entries"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Credit     *Credit   `json:"credit"`
+	Visibility string    `json:"visibility"`
+	Entries    []inEntry `json:"entries"`
 }
 
 type inEntry struct {
-	Name   string   `json:"name"`
-	Brief  string   `json:"brief"`
-	Weight *float64 `json:"weight"`
+	Name   string          `json:"name"`
+	Brief  string          `json:"brief"`
+	Weight *float64        `json:"weight"`
+	When   json.RawMessage `json:"when"`
 }
 
 // normalize validates the body and returns the canonical document.
@@ -160,13 +167,20 @@ func normalize(body []byte) (Document, error) {
 			if math.IsNaN(w) || w < 0 || w > MaxWeight {
 				return Document{}, errInvalid(fmt.Sprintf("%s: the weight must be a number from 0 to %d", elabel, MaxWeight))
 			}
-			entries = append(entries, Entry{Name: ename, Brief: e.Brief, Weight: w})
+			when, err := normalizeWhen(e.When, elabel)
+			if err != nil {
+				return Document{}, err
+			}
+			entries = append(entries, Entry{Name: ename, Brief: e.Brief, Weight: w, When: when})
 		}
 		credit, err := normalizeCredit(t.Credit, label)
 		if err != nil {
 			return Document{}, err
 		}
-		out.Tables = append(out.Tables, Table{ID: t.ID, Name: name, Credit: credit, Entries: entries})
+		if t.Visibility != "" && t.Visibility != VisibilityEveryone && t.Visibility != VisibilityDMOnly {
+			return Document{}, errInvalid(label + ": who sees it must be \"everyone\" or \"dm_only\"")
+		}
+		out.Tables = append(out.Tables, Table{ID: t.ID, Name: name, Credit: credit, Visibility: t.Visibility, Entries: entries})
 	}
 	return out, nil
 }
