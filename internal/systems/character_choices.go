@@ -447,6 +447,11 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 		if base == "" || !choiceBasenamePattern.MatchString(base) {
 			base = pluralBasename(fieldKey)
 		}
+		// A Director-only category's file is not the public's to read, so a
+		// visitor's list never draws on it.
+		if choiceVisitor(ctx) && c.manifest.DirectorOnly(base) {
+			continue
+		}
 		dataDir := filepath.Clean(filepath.Join(c.dir, "data"))
 		p := filepath.Clean(filepath.Join(dataDir, base+".json"))
 		// The base name is validated, but clamp anyway like SystemDataAPI.
@@ -474,6 +479,11 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 		}
 		res.Choices = merged
 	}
+	if choiceVisitor(ctx) {
+		// Sources are not part of what a signed-out reader's catalog serves.
+		sources = nil
+		res.Choices = visitorChoices(res.Choices)
+	}
 	for _, src := range sources {
 		extra, err := src(ctx, campaignID, fieldKey)
 		if err != nil {
@@ -489,6 +499,6 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 			return nil, err
 		}
 	}
-	res.CanMake = canMakeOwn(ctx, campaignID, fieldKey)
+	res.CanMake = !choiceVisitor(ctx) && canMakeOwn(ctx, campaignID, fieldKey)
 	return res, nil
 }
