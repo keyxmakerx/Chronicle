@@ -2471,7 +2471,9 @@
           self._gnCands = (self._gnCands || []).filter(function (r) { return r.eventId !== id; });
           if (!pop.hidden) { pop.innerHTML = self._gnListHTML(self._gnNext || []); var first = $('.gnstrip .lnk', pop) || $('.wrow', pop); if (first) first.focus(); }
           self.say(res.ok
-            ? 'Made a game night for ' + (row ? row.name : 'the event') + '. It has no real date yet: find it under All game nights.'
+            ? 'Made a game night for ' + (row ? row.name : 'the event') + '.' +
+              // Only a story calendar's night lacks a real date; the server says which.
+              (res.body && res.body.scheduledDate ? '' : ' It has no real date yet: find it under All game nights.')
             : (row ? row.name : 'That event') + ' already has a game night.');
         })
         .catch(function (err) { btn.disabled = false; self.say(err && err.message ? err.message : 'Could not make the game night. Try again.'); });

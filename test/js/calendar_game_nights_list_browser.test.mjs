@@ -84,7 +84,7 @@ async function page(t, width, o = {}) {
     } else if (u.pathname === '/campaigns/c1/sessions/from-event') {
       (o.made || []).push(route.request().postDataJSON());
       if (o.makeStatus) return route.fulfill({ status: o.makeStatus, contentType: 'application/json', body: JSON.stringify({ error: o.makeError || 'no' }) });
-      body = { id: 's-new', name: 'made' };
+      body = { id: 's-new', name: 'made', scheduledDate: o.madeDate || '' };
     } else if (u.pathname.endsWith('/events')) body = { data: [], total: 0 };
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -201,7 +201,7 @@ test('the strip names Session events with no game night, and makes one on a pres
   await p.waitForFunction(() => document.querySelectorAll('#cal5-gnpop .gnstrip').length === 1);
   assert.deepEqual(made, [{ eventId: 'e1' }], 'only the event is named; its words come from the server');
   assert.match(await p.textContent('#cal5-gnpop .gnstrip'), /Session 2/);
-  assert.match(await p.textContent('.toast'), /Made a game night for Session 1\./);
+  assert.match(await p.textContent('.toast'), /Made a game night for Session 1\. It has no real date yet/);
   assert.equal(await p.evaluate(() => document.activeElement.hasAttribute('data-gn-make')), true, 'focus moves to the next control');
 });
 
@@ -242,4 +242,15 @@ test('the strip fits a phone', { skip }, async (t) => {
   assert.deepEqual(r, { over: false, out: [] });
   const h = await p.$$eval('#cal5-gnpop .gnstrip .lnk', (bs) => bs.map((b) => b.getBoundingClientRect().height));
   assert.ok(h.every((x) => x >= 32), 'controls have room to press: ' + h);
+});
+
+test('a night made for a real-life calendar event does not claim it has no real date', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, made: [], madeDate: '2026-10-29' });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.click('#cal5-gnpop [data-gn-make="e1"]');
+  await p.waitForSelector('.toast');
+  const toast = await p.textContent('.toast');
+  assert.match(toast, /Made a game night for Session 1\./);
+  assert.doesNotMatch(toast, /no real date/);
 });

@@ -4,7 +4,9 @@
 // own markup (fixtures/ai_import_similar_review.html, kept current by a Go
 // test). "Update that page instead" must change the form fields the commit
 // reads, and "Add a new page instead" must put them back; "See both" opens
-// the two texts.
+// the two texts. Those buttons are methods of the aiImportReview component,
+// so the test loads the real widget script and Alpine, and asserts the markup
+// carries no inline handler.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -18,6 +20,7 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const fragment = readFileSync(join(root, 'test', 'js', 'fixtures', 'ai_import_similar_review.html'), 'utf8');
+const SCRIPTS = { '/htmx.js': 'static/vendor/htmx.min.js', '/boot.js': 'static/js/boot.js', '/alpine.js': 'static/vendor/alpine.min.js', '/review.js': 'static/js/widgets/ai_import_review.js' };
 const TYPES = { '.css': 'text/css', '.js': 'application/javascript', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 
 async function open(t, width = 1000) {
@@ -29,14 +32,18 @@ async function open(t, width = 1000) {
   await page.route('**/*', (route) => {
     const u = new URL(route.request().url());
     if (u.pathname === '/') {
-      return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/css/app.css"></head><body style="margin:0;padding:12px">${fragment}</body></html>` });
+      return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/css/app.css"><script src="/htmx.js" defer></script><script src="/boot.js" defer></script><script src="/review.js" defer></script><script src="/alpine.js" defer></script></head><body style="margin:0;padding:12px">${fragment}</body></html>` });
     }
+    // The review's own widget and Alpine, as the page loads them: the buttons
+    // are Alpine methods of the form, not inline handlers.
+    if (SCRIPTS[u.pathname]) return route.fulfill({ contentType: 'application/javascript', body: readFileSync(join(root, SCRIPTS[u.pathname])) });
     const file = join(root, u.pathname);
     if (existsSync(file)) return route.fulfill({ contentType: TYPES[u.pathname.slice(u.pathname.lastIndexOf('.'))] || 'application/octet-stream', body: readFileSync(file) });
     return route.fulfill({ status: 404, body: '' });
   });
   page.setDefaultTimeout(30000);
   await page.goto('http://review.test/', { waitUntil: 'load' });
+  await page.waitForFunction(() => document.querySelector('#ai-import-review')?._x_dataStack);
   return { page, errors };
 }
 const field = (page, name) => page.$eval(`[name="${name}"]`, (e) => e.value);
@@ -99,4 +106,9 @@ test('on a phone the two texts stack and nothing runs off the screen', { skip, t
   assert.ok(Math.max(a.right, b.right) <= 360, 'inside the screen');
   const h = await page.$$eval('.air-sim-qs .air-quiet', (bs) => bs.map((x) => x.getBoundingClientRect().height));
   assert.ok(h.length === 2 && h.every((x) => x >= 24), 'controls have a body');
+});
+
+test('the similar line carries no inline handler', { skip, timeout: 120000 }, async (t) => {
+  const { page } = await open(t);
+  assert.equal(await page.$$eval('.air-sim [onclick], .air-sim [onchange]', (e) => e.length), 0);
 });

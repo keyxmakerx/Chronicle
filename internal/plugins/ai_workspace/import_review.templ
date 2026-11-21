@@ -524,8 +524,9 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 // to that page by setting the row's own name and action fields, so the form
 // the commit reads is the one the owner sees under "Change the details";
 // "Add a new page instead" puts the AI's name and action back. "See both"
-// opens the two texts side by side. Plain inline handlers, not a script
-// block, because this arrives in an HTMX swap.
+// opens the two texts side by side. Both are methods of the form's
+// aiImportReview component (ai_import_review.js), not script blocks, because
+// this arrives in an HTMX swap.
 templ reviewRowSimilar(idx int, page importer.ParsedPage, m *importer.SimilarPage) {
 	<div
 		class="air-sim"
@@ -549,14 +550,14 @@ templ reviewRowSimilar(idx int, page importer.ParsedPage, m *importer.SimilarPag
 					class="air-quiet"
 					data-sim-swap
 					aria-label={ "Update the page " + m.Name + " instead of adding a new one" }
-					onclick="(function(b){var s=b.closest('.air-sim'),r=s.closest('[data-air-row]'),f=r.closest('form'),d=s.dataset,n=f.elements[d.nameField],a=f.elements[d.actionField];if(!n||!a)return;var to=d.state!=='on';d.state=to?'on':'off';n.value=to?d.matchName:d.sentName;a.value=to?'update':'create';var v=to?'Change':'Add';r.dataset.airVerb=v;var p=r.querySelector('.air-pill');if(p){p.textContent=v;p.className='air-pill '+(to?'is-change':'is-add');}var w=r.querySelector('.air-what');if(w){w.firstChild.textContent=(to?'Change the page':'Add the page')+' ';var nb=w.querySelector('b');if(nb)nb.textContent=to?d.matchName:d.sentName;}s.querySelectorAll('span[data-sim]').forEach(function(e){e.hidden=(e.dataset.sim==='on')!==to;});var g=s.querySelector('[data-sim-gm]');if(g){g.hidden=!to;if(to)r.setAttribute('data-air-gm','');else r.removeAttribute('data-air-gm');}b.textContent=to?'Add a new page instead':'Update that page instead';b.setAttribute('aria-label',to?'Add a new page again instead of changing '+d.matchName:'Update the page '+d.matchName+' instead of adding a new one');f.dispatchEvent(new Event('change',{bubbles:true}));})(this)"
+					@click="swapSimilar($el)"
 				>Update that page instead</button>
 			}
 			<button
 				type="button"
 				class="air-quiet"
 				aria-expanded="false"
-				onclick="(function(b){var s=b.closest('.air-sim'),p=s.querySelector('.air-sim-both'),o=p.hidden;p.hidden=!o;b.setAttribute('aria-expanded',String(o));b.textContent=o?'Hide both':'See both';})(this)"
+				@click="toggleBoth($el)"
 			>See both</button>
 		</span>
 		if m.CanUpdate && m.GMOnly.Any() {

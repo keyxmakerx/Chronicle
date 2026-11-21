@@ -213,5 +213,16 @@ func (h *Handler) MakeNightFromEventAPI(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, map[string]string{"id": s.ID, "name": s.Name})
+	return c.JSON(http.StatusCreated, madeNightBody(s))
+}
+
+// madeNightBody is the reply to making a night from an event. scheduledDate
+// is empty for a story calendar's night, so the calendar can say "no real
+// date yet" only when that is true.
+func madeNightBody(s *Session) map[string]string {
+	body := map[string]string{"id": s.ID, "name": s.Name, "scheduledDate": ""}
+	if s.ScheduledDate != nil {
+		body["scheduledDate"] = *s.ScheduledDate
+	}
+	return body
 }

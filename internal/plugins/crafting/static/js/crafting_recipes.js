@@ -94,7 +94,7 @@ window.CraftingRecipes = (function () {
         var li = document.createElement('li'), b = document.createElement('button'), col = (r.colors && r.colors.final) || BENCH_COLORS.final;
         b.type = 'button'; b.className = 'cra-ritem'; b.setAttribute('aria-current', String(i === sel));
         b.innerHTML = shape('potion', col, 28) + '<span class="cra-rtxt"><b>' + esc(r.name || 'Untitled') + '</b><small>' + esc(L.templateName(lib, r.template) === 'Recipe' ? 'No template' : L.templateName(lib, r.template)) +
-          (r.who === 'learned' ? ' · must be learned' : '') + '</small>' + (r.draft ? '<span class="cra-pill cra-pill-dm">AI draft, not approved</span>' : '') + '</span>';
+          (r.who === 'learned' ? ' · must be learned' : '') + '</small>' + (r.draft ? '<span class="cra-pill cra-pill-dm">' + (r.draftPrompt ? 'AI draft, not approved' : 'Draft, not approved') + '</span>' : '') + '</span>';
         b.addEventListener('click', function () { sel = i; renderAll(); });
         li.appendChild(b);
         // A recipe with nothing in it yet points at the next step, as a
@@ -150,7 +150,9 @@ window.CraftingRecipes = (function () {
         return;
       }
       if (r.draft) {
-        h += '<div class="cra-banner"><div><b>Drafted by your AI</b>' + (r.draftPrompt ? ' from “' + esc(r.draftPrompt) + '”' : '') + '. Check it, then approve it. Players can’t see it until you do.</div>' +
+        // Only an AI draft carries the prompt it came from; a recipe typed on
+        // the line is the Director's own, so it must not claim an AI wrote it.
+        h += '<div class="cra-banner"><div>' + (r.draftPrompt ? '<b>Drafted by your AI</b> from “' + esc(r.draftPrompt) + '”. Check it, then approve it.' : '<b>Draft</b>. Check it, then approve it.') + ' Players can’t see it until you do.</div>' +
           '<div class="cra-row"><button type="button" class="btn btn-primary btn-sm" data-act="approve">Approve</button><button type="button" class="btn btn-secondary btn-sm" data-act="discard">Discard</button></div></div>';
       }
       h += '<div class="cra-fsec cra-head"><label class="cra-fl"><span>Name</span><input class="cra-in cra-big" data-f="name" value="' + esc(r.name) + '" maxlength="120" placeholder="What is it called?"></label>' +
@@ -292,7 +294,7 @@ window.CraftingRecipes = (function () {
       adding = true;
       if (line) line.disabled = true;
       app.status('saving');
-      app.api('POST', '/recipes', {name: name, bench: lib.benchKinds[0].key, goal: 30, who: 'all', result: {qty: 1}}).then(function (r) {
+      app.api('POST', '/recipes', {name: name, bench: lib.benchKinds[0].key, goal: 30, who: 'all', draft: true, result: {qty: 1}}).then(function (r) {
         adding = false;
         R.push(r); sel = R.length - 1; app.status('saved');
         if (line) { line.disabled = false; line.value = ''; line.focus(); }

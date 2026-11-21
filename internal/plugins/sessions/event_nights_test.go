@@ -142,3 +142,24 @@ func TestMakeNightFromEvent(t *testing.T) {
 		})
 	}
 }
+
+// The calendar's message says "no real date yet" only when the reply has none.
+func TestMadeNightBodyCarriesTheRealDate(t *testing.T) {
+	day := "2026-10-29"
+	tests := []struct {
+		name string
+		s    Session
+		want string
+	}{
+		{"a story calendar's night has no real date", Session{ID: "s1", Name: "A"}, ""},
+		{"a real-life calendar's night has one", Session{ID: "s2", Name: "B", ScheduledDate: &day}, day},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := madeNightBody(&tt.s)
+			if body["scheduledDate"] != tt.want || body["id"] != tt.s.ID || body["name"] != tt.s.Name {
+				t.Fatalf("body %v, want scheduledDate %q", body, tt.want)
+			}
+		})
+	}
+}

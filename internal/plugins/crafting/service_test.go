@@ -456,6 +456,45 @@ func TestBookShowsOnlyWhatThePlayerMayRead(t *testing.T) {
 	}
 }
 
+// The Workshop's quick-add line creates with Draft set; a player must not
+// read that recipe in the book or the crafting list until a Director approves it.
+func TestALineAddedDraftIsHiddenFromPlayersUntilApproved(t *testing.T) {
+	s, _, _ := newTestService()
+	ctx := context.Background()
+	// The exact body the quick-add line sends.
+	r, err := s.CreateRecipe(ctx, "c", director, RecipeInput{Name: "Scribbled", Bench: "apothecary", Goal: 30, Who: "all",
+		Result: Result{Qty: 1}, Draft: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Draft {
+		t.Fatal("a recipe created with draft:true must start as a draft")
+	}
+	names := func(v Viewer) string {
+		pages, err := s.Book(ctx, "c", v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, p := range pages {
+			out = append(out, p.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names(player); got != "" {
+		t.Fatalf("before approval the player's book holds %q", got)
+	}
+	if got := names(director); got != "" {
+		t.Fatalf("a draft is not in the Director's book either, got %q", got)
+	}
+	if _, err := s.Approve(ctx, "c", r.ID, director); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(player); got != "Scribbled" {
+		t.Fatalf("after approval the player's book holds %q, want Scribbled", got)
+	}
+}
+
 func TestTagsAndCatalog(t *testing.T) {
 	s, repo, _ := newTestService()
 	ctx := context.Background()
