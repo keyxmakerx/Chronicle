@@ -75,7 +75,7 @@ func (h *Handler) ExtensionsHub(c *echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK,
-		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), contentPacksCard))
+		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), contentPacksCard, h.piecePlaceable))
 }
 
 // foundryRow loads the Foundry row's view model. A missing connector or a

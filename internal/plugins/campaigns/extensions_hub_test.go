@@ -244,7 +244,7 @@ func TestExtensionsHubPage_GameAndFeaturesOnly(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := ExtensionsHubPage(cc, tc.addons, "csrf", "[]", nil).Render(context.Background(), &buf); err != nil {
+			if err := ExtensionsHubPage(cc, tc.addons, "csrf", "[]", nil, nil).Render(context.Background(), &buf); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			html := buf.String()
@@ -317,7 +317,7 @@ func TestCurrentSystemID(t *testing.T) {
 func TestExtensionsHubPage_ForYourPages(t *testing.T) {
 	cc := &CampaignContext{Campaign: &Campaign{ID: "c-1", Name: "Test"}, MemberRole: RoleOwner}
 	var buf bytes.Buffer
-	if err := ExtensionsHubPage(cc, nil, "csrf", "[]", nil).Render(context.Background(), &buf); err != nil {
+	if err := ExtensionsHubPage(cc, nil, "csrf", "[]", nil, nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
@@ -375,5 +375,36 @@ func TestExtensionsHubFragment_RedrawsTheTitleCount(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("response lacks %q:\n%s", want, html)
 		}
+	}
+}
+
+// A piece whose block is not registered (its plugin is degraded) is not
+// offered a button that can only fail.
+func TestExtensionsHubPage_UnavailablePiece(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c-1", Name: "Test"}, MemberRole: RoleOwner}
+	cases := []struct {
+		name        string
+		placeable   func(string) bool
+		wantButtons int
+		wantMissing int
+	}{
+		{"all registered", func(string) bool { return true }, 4, 0},
+		{"nothing said", nil, 4, 0},
+		{"trackers and tests degraded", func(b string) bool { return b != "trackers" && b != "page_tests" }, 2, 2},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := ExtensionsHubPage(cc, nil, "csrf", "[]", nil, c.placeable).Render(context.Background(), &buf); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			html := buf.String()
+			if n := strings.Count(html, ">Put on a page</button>"); n != c.wantButtons {
+				t.Errorf("buttons = %d, want %d", n, c.wantButtons)
+			}
+			if n := strings.Count(html, "data-piece-unavailable"); n != c.wantMissing {
+				t.Errorf("unavailable notes = %d, want %d", n, c.wantMissing)
+			}
+		})
 	}
 }
