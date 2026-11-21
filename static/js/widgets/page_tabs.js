@@ -5,7 +5,7 @@
  * (internal/plugins/entities/page_tabs.templ); each piece then loads itself.
  * This widget switches tabs, keeps each tab's count from the rows its piece
  * drew (data-pt-count, or a pane's data-pt-grp groups), and gives the bar one
- * action button that presses the current piece's own add button
+ * action word that presses the current piece's own add button
  * (data-pt-act) and wears its label, so "New Note" reads "Cancel" while a
  * note is being written.
  *
@@ -68,7 +68,9 @@ Chronicle.register('page-tabs', {
         var n = count(tab, pane);
         var badge = tab.querySelector('[data-pt-n]');
         // Written only on change: the observer below would see every write.
-        if (badge && badge.textContent !== String(n)) badge.textContent = String(n);
+        // An empty tab shows no number.
+        var shown = n > 0 ? String(n) : '';
+        if (badge && badge.textContent !== shown) badge.textContent = shown;
         tab.classList.toggle('is-empty', n === 0);
         var isBlank = !settling(pane) && blank(pane);
         var empty = pane.querySelector('[data-pt-empty]');
@@ -144,6 +146,24 @@ Chronicle.register('page-tabs', {
       schedule();
     }
 
+    // The sheet above slides left while a paper is out beside it; the strip
+    // takes the same shift so the two stay one column. The sheet stays the
+    // authority: this only copies what its folio says.
+    var folio = document.querySelector('[data-sheet-folio]');
+    function follow() {
+      // A narrow sheet (under 820px wide) does not slide, so neither does the strip.
+      var sheet = folio.closest('[data-sheet]');
+      var on = folio.classList.contains('is-shifted') && !(sheet && sheet.clientWidth < 820);
+      if (on) el.style.setProperty('--shift', folio.style.getPropertyValue('--shift') || '0px');
+      el.classList.toggle('is-shifted', on);
+    }
+    var fo = null;
+    if (folio) {
+      fo = new MutationObserver(follow);
+      fo.observe(folio, { attributes: true, attributeFilter: ['class', 'style'] });
+      follow();
+    }
+
     el.addEventListener('click', onClick);
     el.addEventListener('keydown', onKey);
     el.addEventListener('htmx:afterRequest', onLoaded);
@@ -155,6 +175,7 @@ Chronicle.register('page-tabs', {
     el._ptOff = function () {
       clearTimeout(autoTimer);
       mo.disconnect();
+      if (fo) fo.disconnect();
       el.removeEventListener('click', onClick);
       el.removeEventListener('keydown', onKey);
       el.removeEventListener('htmx:afterRequest', onLoaded);

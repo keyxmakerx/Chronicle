@@ -33,7 +33,7 @@ ${tab('items', 'Items', 'li[data-item-id]', '[data-open-give]')}
 ${tab('files', 'Files', '[data-pf-row]', '[data-pf-attach]')}
 ${tab('posts', 'Posts', '.card[data-post-id]', '[data-action="create-post"]')}
 ${tab('links', 'Links', '', '.rel-add-btn')}
-</div><button type="button" class="pt-act" data-pt-press hidden><span data-pt-press-label></span></button></div>
+</div></div>
 <div class="pt-pane" data-pt-pane="notes"><div data-widget="entity-notes"></div></div>
 <div class="pt-pane" data-pt-pane="items" hidden><div hx-get="/panel" hx-trigger="load" hx-swap="outerHTML"></div></div>
 <div class="pt-pane" data-pt-pane="files" hidden><div hx-get="/files" hx-trigger="load" hx-swap="outerHTML"></div><p class="pt-empty" data-pt-empty hidden>No files yet.</p></div>
@@ -41,7 +41,7 @@ ${tab('links', 'Links', '', '.rel-add-btn')}
 <div class="pt-pane" data-pt-pane="links" hidden><div class="pt-links">
 <div class="pt-grp" data-pt-grp=".rel-item"><h3>Relations</h3><p data-pt-none hidden>None yet</p><div data-widget="relations"></div></div>
 <div class="pt-grp" data-pt-grp=".space-y-2 > a"><h3>Mentioned on</h3><p data-pt-none hidden>None</p><div hx-get="/backlinks" hx-trigger="load" hx-swap="innerHTML"></div></div>
-</div></div></section>`;
+</div></div><button type="button" class="pt-act" data-pt-press hidden><span data-pt-press-label></span></button></section>`;
 
 // What each piece draws once its fetch lands, shaped as the real widgets draw it.
 const PIECES = {
@@ -86,7 +86,7 @@ test('opens on the first tab with something in it, as the pieces load', { skip }
   const s = await state(p);
   assert.equal(s.selected, 'items');
   assert.deepEqual(s.open, ['items']);
-  assert.deepEqual(s.counts, { notes: '0', items: '2', files: '0', posts: '1', links: '1' });
+  assert.deepEqual(s.counts, { notes: '', items: '2', files: '', posts: '1', links: '1' });
   assert.equal(s.press, 'Give an item');
 });
 
@@ -156,4 +156,20 @@ test('on a wide page the panel is as wide as the sheet above it and lines up wit
   const box = (s) => p.evaluate((sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return [b.left, b.width]; }, s);
   assert.deepEqual(await box('section.pt'), await box('[data-sheet-folio]'));
   assert.equal((await box('section.pt'))[1], 920);
+});
+
+test('the panel slides with the sheet while a paper is out beside it', { skip }, async (t) => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  const shiftRule = CSS.match(/^\.pt\.is-shifted \{[^}]*\}/m)[0];
+  const folio = '<div data-sheet><div data-sheet-folio style="width:var(--sheet-width,920px);max-width:100%;margin-inline:auto;height:200px"></div></div>';
+  await p.setContent(`<!doctype html><html><head><style>body{margin:0}[hidden]{display:none}${PT_RULES}\n${shiftRule}</style></head><body><main style="width:1280px">${folio}${MARKUP}</main></body></html>`);
+  await p.addScriptTag({ content: 'window.Chronicle = { register: function (n, impl) { impl.init(document.querySelector("[data-widget=" + n + "]")); } };' });
+  await p.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets/page_tabs.js'), 'utf8') });
+  await p.evaluate(() => { const f = document.querySelector('[data-sheet-folio]'); f.style.setProperty('--shift', '120px'); f.classList.add('is-shifted'); });
+  await p.waitForFunction(() => document.querySelector('section.pt').classList.contains('is-shifted'));
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('section.pt')).getPropertyValue('--shift')), '120px');
+  await p.evaluate(() => document.querySelector('[data-sheet-folio]').classList.remove('is-shifted'));
+  await p.waitForFunction(() => !document.querySelector('section.pt').classList.contains('is-shifted'));
 });
