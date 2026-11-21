@@ -320,6 +320,21 @@ func tablesLine(c *Campaign) DeskLine {
 	return DeskLine{ID: "tables", Name: "Rolling tables", Values: []DeskValue{openValue(deskHref(c.ID, "/roll-tables/manage"))}}
 }
 
+// entriesLine opens the page of the campaign's own rules entries: how many
+// there are and how many players' drafts wait for a Director.
+func entriesLine(c *Campaign, f *DeskEntriesFacts) DeskLine {
+	href := deskHref(c.ID, "/characters/entries")
+	l := DeskLine{ID: "entries", Name: "Own entries", Values: []DeskValue{openValue(href)}}
+	if f != nil {
+		v := figureValue(strconv.Itoa(f.Entries), "", href)
+		if f.Waiting > 0 {
+			v.Sub, v.Joined = fmt.Sprintf("%d waiting", f.Waiting), true
+		}
+		l.Values = []DeskValue{v}
+	}
+	return l
+}
+
 // gameFigure is what the Game and features page draws beside its title:
 // "Draw Steel · 12 of 15 on". A part it cannot name is left out.
 func gameFigure(in DeskInputs) DeskFigure {
@@ -657,6 +672,12 @@ func needsYou(c *Campaign, f DeskFacts, now time.Time) []NeedsYouItem {
 		out = append(out, NeedsYouItem{
 			Lead: "Your AI", Rest: plural(f.AI.Waiting, "request", "requests") + " waiting for your answer",
 			URL: deskHref(c.ID, "/ai"),
+		})
+	}
+	if f.Entries != nil && f.Entries.Waiting > 0 {
+		out = append(out, NeedsYouItem{
+			Lead: "Own entries", Rest: plural(f.Entries.Waiting, "player's draft", "players' drafts") + " to read",
+			URL: deskHref(c.ID, "/characters/entries"),
 		})
 	}
 	return out

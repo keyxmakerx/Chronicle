@@ -25,6 +25,7 @@ const (
 	DeskAI      DeskSlot = "ai"      // the owner's AI connection
 	DeskTrash   DeskSlot = "trash"   // pages waiting in the campaign Trash
 	DeskKeys    DeskSlot = "keys"    // the campaign's API keys
+	DeskEntries DeskSlot = "entries" // the campaign's own rules entries
 )
 
 // DeskRequest says whose desk is being drawn. Providers read it, never an
@@ -57,6 +58,14 @@ type DeskFacts struct {
 	AI      *DeskAIFacts
 	Trash   *DeskTrashFacts
 	Keys    *DeskKeysFacts
+	Entries *DeskEntriesFacts
+}
+
+// DeskEntriesFacts counts the campaign's own rules entries and the players'
+// drafts handed in for a Director to accept.
+type DeskEntriesFacts struct {
+	Entries int // accepted entries, not drafts
+	Waiting int // drafts a player has handed in
 }
 
 // DeskChangesFacts counts what players changed in the last week.

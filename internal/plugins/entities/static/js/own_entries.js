@@ -1,5 +1,5 @@
 /**
- * own_entries.js — the Directors' "Your own entries" page.
+ * own_entries.js — the "Own entries" page.
  *
  * A page in the site's plain look with a tab per pick list the game system
  * has (Ancestry, Kit…, named by the system). Opening an entry, or "Add",
@@ -389,10 +389,10 @@
   Entries.prototype.pageHTML = function () {
     if (!this.director) return this.playerPageHTML();
     var self = this, f = this.cur();
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · ' + gm() + 's only</p><h1 tabindex="-1">Entries and players’ drafts</h1>' +
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · ' + gm() + 's only</p><h1 tabindex="-1">Own entries</h1>' +
       '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them. Players’ drafts wait here for you, and you let players make their own. Mark any entry to limit what players can pick, or to ask them to take it.</p></div>';
     if (!f) {
-      return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
+      return '<section class="hc-page paper" aria-label="Own entries">' + head +
         '<p class="hc-empty">' + esc(this.system) + ' doesn’t list any choices for making a hero, so there is nothing to add to here.</p></section>';
     }
     var tabs = this.fields.map(function (x, i) {
@@ -406,7 +406,7 @@
     else if (this.rulesErr[this.ck(f.key)]) {
       list = '<p class="hc-empty" role="alert">' + esc(this.rulesErr[this.ck(f.key)]) + ' <button type="button" class="oe-link" data-act="retryrules">Try again</button></p>';
     } else list = '<p class="oe-hint" role="status">Opening the ' + esc(lower(f.label)) + ' list…</p>';
-    return '<section class="hc-page paper" aria-label="Entries and players’ drafts">' + head +
+    return '<section class="hc-page paper" aria-label="Own entries">' + head +
       '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + this.waitingHTML(f) + list +
       this.grantsHTML() +
       '<div class="hc-foot"><span>' + mine.length + ' of your own</span><span class="hc-foot__sp"></span>' +
@@ -886,10 +886,10 @@
   Entries.prototype.playerPageHTML = function () {
     var self = this, f = this.cur();
     var back = this.backUrl ? '<p><a class="oe-link" href="' + esc(this.backUrl) + '">← Back to ' + esc(this.forName || 'the hero creator') + '</a></p>' : '';
-    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · yours</p><h1 tabindex="-1">Your own entries</h1>' + back +
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · yours</p><h1 tabindex="-1">Own entries</h1>' + back +
       '<p>Your ' + gm() + ' lets you write your own. Only you and the ' + gm() + 's see it until a ' + gm() + ' accepts it.</p></div>';
     if (!f) {
-      return '<section class="hc-page paper" aria-label="Your own entries">' + head +
+      return '<section class="hc-page paper" aria-label="Own entries">' + head +
         '<p class="hc-empty">Your ' + gm() + ' hasn’t let you make an entry of your own. Ask them, and it shows up here.</p></section>';
     }
     var tabs = this.fields.length > 1 ? '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + this.fields.map(function (x, i) {
@@ -904,7 +904,7 @@
         (open ? '<span class="hc-row__go" aria-hidden="true">Edit ›</span>' : '') + '<small>' + esc(e.summary) + '</small></' + (open ? 'button' : 'div') + '></li>';
     }).join('') + '</ul>' : '';
     var can = g && !g.entryId;
-    return '<section class="hc-page paper" aria-label="Your own entries">' + head + tabs + rows +
+    return '<section class="hc-page paper" aria-label="Own entries">' + head + tabs + rows +
       (can ? '' : (mine.length ? '' : '<p class="hc-empty">You’ve made your ' + esc(lower(f.label)) + '.</p>')) +
       '<div class="hc-foot"><span class="hc-foot__sp"></span>' +
       (can ? '<button type="button" class="hc-btn" data-act="add">+ Make your ' + esc(lower(f.label)) + '</button>' : '') + '</div></section>';
