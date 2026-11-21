@@ -118,6 +118,12 @@ func ResolveNavState(ctx context.Context) context.Context {
 		cands = append(cands, navCandidate{key: row.Key, url: row.URL})
 	}
 
+	// The owner reaches the Own entries page from Campaign settings, so that row
+	// lights there, not on Characters whose address the page sits under.
+	if len(NavManagePages(ctx)) > 0 {
+		cands = append(cands, navCandidate{key: "manage:dashboard", url: base + "/characters/entries"})
+	}
+
 	if hint, ok := ctx.Value(keyNavHint).(NavHint); ok && hint.TypeID > 0 {
 		key := "cat:" + strconv.Itoa(hint.TypeID)
 		for _, c := range cands {

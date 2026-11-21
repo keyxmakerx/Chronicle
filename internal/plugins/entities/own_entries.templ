@@ -1,9 +1,9 @@
 // own_entries.templ — the entry editor's page: one paper page with a tab per
-// pick list, and the creator's pull-out leaf for writing an entry. For a
-// Director it is "Entries and players' drafts", reached from "Before you play
-// in <campaign>": every entry, the drafts players hand in, and the permission
-// to make their own. A player's "Your own entries" holds only the entries a
-// Director let them write. The page is a
+// pick list, and the creator's pull-out leaf for writing an entry. It is
+// "Own entries" for everyone. A Director's holds every entry, the drafts
+// players hand in, and the permission to make their own, reached from
+// Campaign settings and "Before you play in <campaign>"; a player's holds
+// only the entries a Director let them write. The page is a
 // mount point; static/js/own_entries.js (loaded on sight, ADR-063) reads the pick lists from the creator's plan and the entries and
 // permissions from the systems plugin's entry API.
 
@@ -35,13 +35,9 @@ type OwnEntriesView struct {
 	Return string
 }
 
-// ownEntriesTitle is the page's honest name for who reads it.
-func ownEntriesTitle(v OwnEntriesView) string {
-	if v.Director {
-		return "Entries and players’ drafts"
-	}
-	return "Your own entries"
-}
+// ownEntriesTitle is the page's one name, the same for a Director and a
+// player, so a search for it finds it whoever looks.
+func ownEntriesTitle(OwnEntriesView) string { return "Own entries" }
 
 // OwnEntriesPage renders the page inside the App shell.
 templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
@@ -49,9 +45,9 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
 		<div class="max-w-7xl mx-auto px-4 py-6">
 			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				if sys, ok := layouts.GetEnabledSystem(ctx); ok && v.Director {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/before-you-play", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ "Before you play in " + cc.Campaign.Name }</a>
-				} else if ok {
+				if v.Director && cc.MemberRole >= campaigns.RoleOwner {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", cc.Campaign.ID)) } class="hover:text-fg">Campaign settings</a>
+				} else if sys, ok := layouts.GetEnabledSystem(ctx); ok {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ rulesCrumb(sys) }</a>
 				} else {
 					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID) } class="hover:text-fg">{ cc.Campaign.Name }</a>

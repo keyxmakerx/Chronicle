@@ -78,6 +78,11 @@ func TestDeskRows_NameAndValue(t *testing.T) {
 		{"features unread", featuresLine(c, DeskInputs{}), "Features", "Open|", "/campaigns/c1/extensions", ""},
 		{"features", featuresLine(c, DeskInputs{FeaturesOn: 12, FeaturesTotal: 15}), "Features", "12 of 15|on", "/campaigns/c1/extensions", ""},
 		{"tables", tablesLine(c), "Rolling tables", "Open|", "/campaigns/c1/roll-tables/manage", ""},
+		{"entries unread", entriesLine(c, nil), "Own entries", "Open|", "/campaigns/c1/characters/entries", ""},
+		{"entries none", entriesLine(c, &DeskEntriesFacts{}), "Own entries", "0|", "/campaigns/c1/characters/entries", ""},
+		{"entries some", entriesLine(c, &DeskEntriesFacts{Entries: 7}), "Own entries", "7|", "/campaigns/c1/characters/entries", ""},
+		{"entries asks too", entriesLine(c, &DeskEntriesFacts{Entries: 7, Drafts: 1, Asks: 2}), "Own entries", "7|3 waiting", "/campaigns/c1/characters/entries", ""},
+		{"entries waiting", entriesLine(c, &DeskEntriesFacts{Entries: 7, Drafts: 2}), "Own entries", "7|2 waiting", "/campaigns/c1/characters/entries", ""},
 		{"media no provider", mediaLine(c, nil), "Media", "Open|", "/campaigns/c1/media", ""},
 		{"media none", mediaLine(c, &DeskMediaFacts{}), "Media", "0 files|", "/campaigns/c1/media", ""},
 		{"media one", mediaLine(c, &DeskMediaFacts{Files: 1, Bytes: 2048}), "Media", "1 file|2 KB", "/campaigns/c1/media", ""},
@@ -488,6 +493,9 @@ func TestNeedsYou(t *testing.T) {
 		{"foundry silent over a week", DeskFacts{Foundry: &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &old}}}, 1},
 		{"foundry connected", DeskFacts{Foundry: &DeskFoundryFacts{Connection: FoundryConnection{Connected: true, HasKey: true, KeyLastUsed: &old}}}, 0},
 		{"ai waiting", DeskFacts{AI: &DeskAIFacts{State: DeskAIConnected, Waiting: 2}}, 1},
+		{"drafts waiting", DeskFacts{Entries: &DeskEntriesFacts{Entries: 3, Drafts: 2}}, 1},
+		{"asks waiting", DeskFacts{Entries: &DeskEntriesFacts{Asks: 1}}, 1},
+		{"entries but no drafts", DeskFacts{Entries: &DeskEntriesFacts{Entries: 3}}, 0},
 		{"both", DeskFacts{AI: &DeskAIFacts{Waiting: 1}, Foundry: &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &old}}}, 2},
 	}
 	for _, tt := range tests {
@@ -1000,10 +1008,10 @@ func TestDeskService_Build_GroupsAndRows(t *testing.T) {
 		want   string
 	}{
 		{"add-ons off", map[string]bool{},
-			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables]" +
+			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables,entries]" +
 				" || Customize[look,categories,homes,brush] Connections[ai,keys] Data[copy,activity,trash] Danger zone[end]"},
 		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true},
-			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables]" +
+			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables,entries]" +
 				" || Customize[look,categories,homes,brush] Connections[foundry,ai,keys] Data[copy,activity,media,trash] Danger zone[end]"},
 	}
 	for _, tt := range tests {
@@ -1080,5 +1088,42 @@ func TestUpdate_FormBodyKeepsAbsentKeysAbsent(t *testing.T) {
 				t.Errorf("name present = %v, public present = %v", svc.got.Name != nil, svc.got.IsPublic != nil)
 			}
 		})
+	}
+}
+
+// A waiting player draft shows on the Own entries row, in Needs you, and in
+// the sidebar's Manage count, all from one provider slot.
+func TestDeskService_EntriesWaitingNeedsYou(t *testing.T) {
+	in := DeskInputs{Campaign: &Campaign{ID: "c", Settings: "{}"}}
+	s := NewDeskService()
+	s.Register(stubProvider{DeskEntries, func(context.Context) (DeskFacts, error) {
+		return DeskFacts{Entries: &DeskEntriesFacts{Entries: 7, Drafts: 2}}, nil
+	}})
+	d := s.Build(context.Background(), DeskRequest{}, in)
+	if got := vals(*lineByID(d, "entries")); got != "7|2 waiting" {
+		t.Errorf("entries = %q", got)
+	}
+	if len(d.Needs) != 1 || d.Needs[0].Rest != "2 drafts to read" || d.Needs[0].URL != "/campaigns/c/characters/entries" {
+		t.Errorf("needs = %+v", d.Needs)
+	}
+	if n := s.NeedsCount(context.Background(), DeskRequest{}, in); n != 1 {
+		t.Errorf("needs count = %d, want 1", n)
+	}
+}
+
+func TestNeedsYou_EntriesWording(t *testing.T) {
+	c := &Campaign{ID: "c1"}
+	for _, tt := range []struct {
+		f    DeskEntriesFacts
+		want string
+	}{
+		{DeskEntriesFacts{Drafts: 1}, "1 draft to read"},
+		{DeskEntriesFacts{Asks: 1}, "1 ask to answer"},
+		{DeskEntriesFacts{Drafts: 2, Asks: 3}, "2 drafts to read · 3 asks to answer"},
+	} {
+		got := needsYou(c, DeskFacts{Entries: &tt.f}, time.Time{})
+		if len(got) != 1 || got[0].Rest != tt.want {
+			t.Errorf("%+v: got %+v, want %q", tt.f, got, tt.want)
+		}
 	}
 }

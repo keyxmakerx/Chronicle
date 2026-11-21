@@ -6036,6 +6036,7 @@ func (a *App) RegisterRoutes() {
 		systems.WithEntryRules(choiceRuleSvc),
 		systems.WithStandardSystem(systems.StandardSystemFor(campaignSystemMgr, systems.EntryManifestResolver(manifestFor))),
 		systems.WithEntryPeople(entryPeopleAdapter{entities: entityService, lists: characterListService}))
+	campaignHandler.RegisterDeskProvider(systems.NewEntriesDeskProvider(systemEntrySvc, choiceRuleSvc))
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).
