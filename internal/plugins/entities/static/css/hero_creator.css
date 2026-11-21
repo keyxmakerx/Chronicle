@@ -459,3 +459,5 @@ html[data-cz-hover="compact"] .hc .hc-row { padding: 6px; }
 .hc-band { width: 660px; max-width: 100%; margin: 0 auto 12px; padding: 8px 14px; border-radius: var(--shape-r-ctl, 8px);
   background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-text-primary); font-size: 13px; line-height: 1.45; }
 .hc-band b { font-weight: 600; }
+/* A notice the Characters page left for this page, in the same band. */
+.hc-band--note { background: var(--color-bg-tertiary); }

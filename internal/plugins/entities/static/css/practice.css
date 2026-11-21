@@ -36,6 +36,18 @@
 .pr-word:disabled { opacity: 0.5; cursor: default; }
 .pr-note { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--color-text-muted); max-width: 70ch; }
 
+/* A try-out kept on this device: a visitor's one row, a player's last row on
+   the shelf, and the offer to send it. The row joins the list above it
+   without a second hairline. */
+.pr-list--device { margin: 0; }
+.pr-list + .pr-device > .pr-list--device { border-top: 0; }
+.pr-row--stack .pr-words { padding: 0 4px; margin-top: 0; }
+.pr-row--stack .pr-confirm { padding: 8px 0 0; }
+.pr-offer { padding-bottom: 12px; border-bottom: 1px solid var(--color-border-light); }
+.pr-offer__line { color: var(--color-text-primary); font-size: 14.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.pr-offer .pr-acts { margin-top: 8px; }
+.pr-offer .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
 /* A Director's answers. */
 .pr-ask { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
 .pr-answers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 8px 4px 0; }
@@ -61,6 +73,7 @@
 /* Phones: controls are 44px to touch and the rows keep their words whole. */
 @media (max-width: 640px) {
   .pr-word { min-height: 44px; }
+  .pr-offer .btn-primary, .pr-device .btn-danger, .pr-row--stack .pr-confirm .btn-danger,
   .pr-acts .btn-primary, .pr-answers .btn-primary, .pr-confirm .btn-primary, .pr-confirm .btn-danger, .pr-no .btn-secondary { min-height: 44px; }
   .pr-answers, .pr-acts { gap: 4px 16px; }
 }
