@@ -501,6 +501,40 @@
     return d;
   }
 
+  // ROAD_CORNER is how far from the hex's middle, as a fraction of the way to
+  // the exit, a road's corner starts.
+  var ROAD_CORNER = 0.45;
+
+  // roadLine draws every hex of cells that carries a road as one path. A built
+  // road runs straight and then turns, which sets it apart from the wandering
+  // river and trail: one exit is a straight run from the middle to the shared
+  // edge, two are straight runs joined by a short corner at the middle, more
+  // are straight spokes meeting there.
+  function roadLine(g, cells) {
+    var d = '';
+    function f(n) { return n.toFixed(1); }
+    function xy(p) { return f(p[0]) + ' ' + f(p[1]); }
+    for (var k in cells) {
+      var c = cells[k], v = c.road;
+      if (v == null) continue;
+      var p = center(g, c.col, c.row), joins = [];
+      for (var i = 0; i < 6; i++) {
+        if (!(v & (1 << i))) continue;
+        var n = sideNeighbor(c.col, c.row, i), q = center(g, n.col, n.row);
+        joins.push([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
+      }
+      if (!joins.length) d += 'M' + xy(p) + 'h0.01';
+      else if (joins.length === 1) d += 'M' + xy(p) + 'L' + xy(joins[0]);
+      else if (joins.length === 2) {
+        var j0 = joins[0], j1 = joins[1];
+        var a = [p[0] + (j0[0] - p[0]) * ROAD_CORNER, p[1] + (j0[1] - p[1]) * ROAD_CORNER];
+        var b = [p[0] + (j1[0] - p[0]) * ROAD_CORNER, p[1] + (j1[1] - p[1]) * ROAD_CORNER];
+        d += 'M' + xy(j0) + 'L' + xy(a) + 'Q' + xy(p) + ' ' + xy(b) + 'L' + xy(j1);
+      } else for (var j = 0; j < joins.length; j++) d += 'M' + xy(joins[j]) + 'L' + xy(p);
+    }
+    return d;
+  }
+
   // floodSame lists the hexes that touch h through hexes of the same kind
   // (kindAt gives a hex's terrain or null) and pass within. allowed (optional)
   // names the hexes the flood may enter at all: it neither includes nor passes
@@ -854,7 +888,7 @@
       ART_REACH: ART_REACH, artRange: artRange,
       STAMPS: STAMPS, STAMP_KEY: STAMP_KEY, SPIRAL: SPIRAL, FAMILIES: FAMILIES, LINES: LINES, stampCells: stampCells, around: around,
       sideNeighbor: sideNeighbor, sideToward: sideToward, oppositeSide: oppositeSide, lineValue: lineValue,
-      lineDraw: lineDraw, lineRubOut: lineRubOut, hexChangeable: hexChangeable, linePath: linePath, floodSame: floodSame, FILL_MAX: FILL_MAX,
+      lineDraw: lineDraw, lineRubOut: lineRubOut, hexChangeable: hexChangeable, linePath: linePath, roadLine: roadLine, floodSame: floodSame, FILL_MAX: FILL_MAX,
       UNDO_MAX: UNDO_MAX, pushStep: pushStep
     };
   }
@@ -2278,7 +2312,7 @@
     // linesMarkup draws the three lines over the land: river under trail
     // under road, in the stroke of the map's art.
     function linesMarkup(amode, kk0) {
-      var f = '', rv = linePath(geo, cells, 'river', 0.55), tr = linePath(geo, cells, 'trail', 0.5), rd = linePath(geo, cells, 'road', 0);
+      var f = '', rv = linePath(geo, cells, 'river', 0.55), tr = linePath(geo, cells, 'trail', 0.5), rd = roadLine(geo, cells);
       var kw = amode === 'real' ? 1.45 : 1;
       function w(n) { return (n * kk0 * kw).toFixed(2); }
       if (rv) {
@@ -2297,15 +2331,17 @@
       return f;
     }
 
+    // roadMarkup strokes a road path as a band of packed earth with a soft
+    // edge; it deliberately has no dashes and no dark outline.
     function roadMarkup(rd, amode, kk0) {
-      if (amode === 'simple') {
-        return '<path d="' + rd + '" fill="none" stroke="#7a5a35" stroke-width="' + (2.6 * kk0).toFixed(2) +
-          '" stroke-linecap="round" stroke-dasharray="' + (5 * kk0).toFixed(2) + ' ' + (3 * kk0).toFixed(2) + '"/>';
+      var k = amode === 'real' ? 1.3 : 1;
+      function w(n) { return (n * kk0 * k).toFixed(2); }
+      function stroke(col, width, extra) {
+        return '<path d="' + rd + '" fill="none" stroke="' + col + '" stroke-width="' + w(width) + '" stroke-linecap="round" stroke-linejoin="round"' + (extra || '') + '/>';
       }
-      return '<path d="' + rd + '" fill="none" stroke="' + (amode === 'real' ? '#3e2e1c' : '#5a4128') + '" stroke-width="' + (5.5 * kk0).toFixed(2) +
-        '" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>' +
-        '<path d="' + rd + '" fill="none" stroke="#c19a66" stroke-width="' + (3.4 * kk0).toFixed(2) + '" stroke-linecap="round" stroke-linejoin="round"/>' +
-        '<path d="' + rd + '" fill="none" stroke="#ead6ad" stroke-width="' + (0.8 * kk0).toFixed(2) + '" stroke-dasharray="' + (3 * kk0).toFixed(2) + ' ' + (4 * kk0).toFixed(2) + '"/>';
+      if (amode === 'simple') return stroke('#b08a58', 3.2);
+      if (amode === 'real') return stroke('#5f4729', 5.6, ' opacity=".5"') + stroke('#c4a676', 4.5);
+      return stroke('#9a7848', 5.3) + stroke('#d3b98a', 4.4);
     }
 
     // ---- Stamps ----
@@ -2593,7 +2629,7 @@
         if (ptab === 'lines') {
           h += toolRow(['brush', 'erase'], false);
           h += '<div class="mp-hx-pal">' + LINES.map(function (l) {
-            var art = l[0] === 'road' ? '<path d="M-11 5Q0-6 11 2" fill="none" stroke="#5a4128" stroke-width="4" stroke-linecap="round"/><path d="M-11 5Q0-6 11 2" fill="none" stroke="#c19a66" stroke-width="2.4" stroke-linecap="round"/>' :
+            var art = l[0] === 'road' ? '<path d="M-9 4L1 4Q3.5 4 4.75 1.83L8-3.8" fill="none" stroke="#9a7848" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M-9 4L1 4Q3.5 4 4.75 1.83L8-3.8" fill="none" stroke="#d3b98a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>' :
               l[0] === 'river' ? '<path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#2f5d86" stroke-width="4.4" stroke-linecap="round"/><path d="M-11 6Q-4-7 1 0T11-4" fill="none" stroke="#5fa3d4" stroke-width="2.8" stroke-linecap="round"/>' :
               '<path d="M-11 4Q-3-7 2 1T11-3" fill="none" stroke="#5a3f22" stroke-width="1.9" stroke-linecap="round" stroke-dasharray="0.1 3.6"/>';
             return '<button type="button" data-ln="' + l[0] + '" aria-pressed="' + (paintLine === l[0] && tool !== 'erase') + '"><svg viewBox="-15 -14 30 28" width="36" height="32" aria-hidden="true"><path d="' + hexD(0, 0, 13) + '" fill="#e8dcc0"/>' + art + '</svg>' + l[1] + '</button>';
