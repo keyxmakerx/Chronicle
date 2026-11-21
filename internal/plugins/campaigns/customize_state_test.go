@@ -47,10 +47,18 @@ func TestBuildCustomizeState(t *testing.T) {
 			if d.Hover.TimelinePopup != "classic" {
 				t.Errorf("an unset time line popup is the classic card, got %q", d.Hover.TimelinePopup)
 			}
+			if d.Builder.Look != "plain" {
+				t.Errorf("an unset hero builder look is Plain, got %q", d.Builder.Look)
+			}
 		}},
 		{"email layout reads back", `{"appearance":{"email_layout":"chat"}}`, nil, func(t *testing.T, st customizeState) {
 			if st.Draft.Email.Layout != "chat" {
 				t.Errorf("email layout = %q, want chat", st.Draft.Email.Layout)
+			}
+		}},
+		{"builder look reads back", `{"appearance":{"builder_look":"paper"}}`, nil, func(t *testing.T, st customizeState) {
+			if st.Draft.Builder.Look != "paper" {
+				t.Errorf("builder look = %q, want paper", st.Draft.Builder.Look)
 			}
 		}},
 		{"icon choices read back", `{"appearance":{"icon_amount":"all","icon_colour":"accent"}}`, nil, func(t *testing.T, st customizeState) {

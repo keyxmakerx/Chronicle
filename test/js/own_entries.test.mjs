@@ -11,11 +11,14 @@ import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(path.join(here, '..', '..', 'internal', 'plugins', 'entities', 'static', 'js', 'own_entries.js'), 'utf8');
+const editorSrc = readFileSync(path.join(here, '..', '..', 'internal', 'plugins', 'entities', 'static', 'js', 'own_entry_editor.js'), 'utf8');
 const OE = (() => {
   const document = { readyState: 'complete', addEventListener() {}, querySelectorAll() { return []; } };
   const window = {};
   const sandbox = { window, document, Chronicle: { escapeHtml: (s) => String(s) }, JSON, Object, Array, String, Number };
-  vm.runInNewContext(src, sandbox);
+  vm.createContext(sandbox);
+  vm.runInContext(editorSrc, sandbox);
+  vm.runInContext(src, sandbox);
   return window.ChronicleOwnEntries;
 })();
 

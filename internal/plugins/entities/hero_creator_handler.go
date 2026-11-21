@@ -164,7 +164,27 @@ func (h *Handler) NewHero(c *echo.Context) error {
 		TypeName:  target.Name,
 		ForSelf:   access.ForSelf,
 		CSRFToken: middleware.GetCSRFToken(c),
+		TermsURL:  h.termsURLIf(c.Request().Context(), cc.Campaign.ID, "/campaigns/"+cc.Campaign.ID+"/characters/new/terms"),
 	}))
+}
+
+// requireHeroPlanAccess is the gate on the creator's plan and its rules
+// words. Directors also read the plan: the "Own entries" page takes its
+// pick lists from it, whether or not they could make a hero themselves. So
+// does a player who already has a hero, whose builder fills in that hero from
+// the same lists.
+func (h *Handler) requireHeroPlanAccess(c *echo.Context, cc *campaigns.CampaignContext) error {
+	if cc.CanAuthorDmOnly() {
+		return nil
+	}
+	ok, err := h.mayReadHeroPlan(c, cc)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperror.NewForbidden("you can't create a hero in this campaign")
+	}
+	return nil
 }
 
 // HeroPlanAPI returns the creator's steps (GET /campaigns/:id/characters/new/plan).
@@ -173,18 +193,8 @@ func (h *Handler) HeroPlanAPI(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	// Directors also read the plan: the "Own entries" page takes its
-	// pick lists from it, whether or not they could make a hero themselves.
-	// So does a player who already has a hero, whose builder fills in that
-	// hero from the same lists.
-	if !cc.CanAuthorDmOnly() {
-		ok, err := h.mayReadHeroPlan(c, cc)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return apperror.NewForbidden("you can't create a hero in this campaign")
-		}
+	if err := h.requireHeroPlanAccess(c, cc); err != nil {
+		return err
 	}
 	// ?as= is a Director's preview as one player.
 	if as := c.QueryParam("as"); as != "" && cc.CanAuthorDmOnly() && len(as) <= 36 {

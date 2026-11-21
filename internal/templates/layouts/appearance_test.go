@@ -63,6 +63,30 @@ func TestAppearanceClassicShadesDefaultAccent(t *testing.T) {
 	}
 }
 
+// BuilderSkin is what the hero builder's mount wears: the owner's paper or
+// ornate look, and Plain for everything else, including no Customize at all.
+func TestBuilderSkin(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want string
+	}{
+		{"no appearance", context.Background(), "plain"},
+		{"unset", SetAppearance(context.Background(), &AppearanceData{}), "plain"},
+		{"plain", SetAppearance(context.Background(), &AppearanceData{BuilderLook: "plain"}), "plain"},
+		{"paper", SetAppearance(context.Background(), &AppearanceData{BuilderLook: "paper"}), "paper"},
+		{"ornate", SetAppearance(context.Background(), &AppearanceData{BuilderLook: "ornate"}), "ornate"},
+		{"unknown", SetAppearance(context.Background(), &AppearanceData{BuilderLook: "x\" onload=\"y"}), "plain"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := BuilderSkin(tc.ctx); got != tc.want {
+				t.Errorf("BuilderSkin = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAppearanceAttrs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -78,6 +102,7 @@ func TestAppearanceAttrs(t *testing.T) {
 		{"made items illustrated", AppearanceData{CraftArt: "illustrated"}, map[string]string{"data-craft-art": "illustrated"}},
 		{"page standard", AppearanceData{PageLook: "standard"}, map[string]string{}},
 		{"page annals", AppearanceData{PageLook: "annals"}, map[string]string{"data-cz-page": "annals"}},
+		{"builder look is not an html attribute", AppearanceData{BuilderLook: "paper"}, map[string]string{}},
 		{"time line popup classic", AppearanceData{TimelinePopup: "classic"}, map[string]string{}},
 		{"time line popup corner", AppearanceData{TimelinePopup: "corner"}, map[string]string{"data-cz-tlpop": "corner"}},
 		{"kit material", AppearanceData{PageLook: "annals", StyleKit: "material"}, map[string]string{"data-cz-page": "annals"}},

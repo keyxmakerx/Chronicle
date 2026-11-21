@@ -68,3 +68,35 @@ func TestVisitorPlanCopiesEntriesOnly(t *testing.T) {
 		t.Error("the plan was read as someone other than a visitor")
 	}
 }
+
+// termsSpy answers the rules words a system reads from its glossary.
+type termsSpy struct {
+	systems.CharacterChoiceService
+	terms *systems.RulesTerms
+}
+
+func (s termsSpy) RulesTerms(context.Context, string) (*systems.RulesTerms, error) {
+	return s.terms, nil
+}
+
+// The builder's words cross from the systems package to the entities plugin
+// intact, and the served shape names only name, category and text.
+func TestHeroTermsAdapterCopiesWords(t *testing.T) {
+	spy := termsSpy{terms: &systems.RulesTerms{Present: true, Terms: map[string]systems.RulesTerm{
+		"save-ends": {Name: "Save Ends", Category: "duration", Text: "Roll at end of turn."},
+	}}}
+	got, err := heroTermsAdapter{choices: spy}.HeroTerms(context.Background(), "camp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Present || len(got.Terms) != 1 || got.Terms["save-ends"].Name != "Save Ends" || got.Terms["save-ends"].Category != "duration" || got.Terms["save-ends"].Text != "Roll at end of turn." {
+		t.Fatalf("terms = %+v", got)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `{"terms":{"save-ends":{"name":"Save Ends","category":"duration","text":"Roll at end of turn."}}}` {
+		t.Errorf("wire = %s", raw)
+	}
+}

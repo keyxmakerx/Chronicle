@@ -3236,10 +3236,10 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
-			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
-			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/hero_creator.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_builder.js"}},
+			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_creator.js"}},
 			{Name: "hero-tryout", Scripts: []string{"js/hero_tryout.js"}},
-			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
+			{Name: "own-entries", Scripts: []string{"js/own_entry_editor.js", "js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
 			{Name: "brochure", Scripts: []string{"js/brochure.js"}},
@@ -6088,6 +6088,7 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetVisitorPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetHeroTerms(heroTermsAdapter{choices: characterChoiceSvc})
 	// A player's Foundry edit is judged with the same plan the web door uses.
 	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
@@ -6300,6 +6301,7 @@ func (a *App) RegisterRoutes() {
 					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
+					BuilderLook:   ap.BuilderLook,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

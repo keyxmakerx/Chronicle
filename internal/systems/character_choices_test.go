@@ -217,6 +217,10 @@ func (s *stubChoiceSvc) CreatorPlan(ctx context.Context, c string) (*CreatorPlan
 	return &CreatorPlan{}, nil
 }
 
+func (s *stubChoiceSvc) RulesTerms(context.Context, string) (*RulesTerms, error) {
+	return &RulesTerms{Terms: map[string]RulesTerm{}}, nil
+}
+
 func (s *stubChoiceSvc) SetChoiceLimiter(ChoiceLimiter) {}
 
 func TestValidChoiceFieldKey(t *testing.T) {
