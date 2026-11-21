@@ -1,11 +1,14 @@
 package app
 
 import (
+	"context"
+	"reflect"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
@@ -51,6 +54,23 @@ func TestRollsPublisherAudience(t *testing.T) {
 				if got := bus.msgs[0].DeliversTo(c); got != tt.want[c] {
 					t.Errorf("%s (%s) receives = %v, want %v", c.UserID, c.Source, got, tt.want[c])
 				}
+			}
+		})
+	}
+}
+
+type stubEnabledSystem struct{ sys systems.System }
+
+func (s stubEnabledSystem) EnabledSystem(context.Context, string) systems.System { return s.sys }
+
+func TestRollsCritAdapterFallsBackToDefault(t *testing.T) {
+	for name, a := range map[string]*rollsCritAdapter{
+		"no system source":  {},
+		"no enabled system": {sys: stubEnabledSystem{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := a.CritRules(context.Background(), "c1"); !reflect.DeepEqual(got, systems.DefaultCritRules()) {
+				t.Fatalf("got %v, want the default rules", got)
 			}
 		})
 	}

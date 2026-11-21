@@ -9,6 +9,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
@@ -79,4 +80,23 @@ func (l *craftingRollLog) ProjectRolled(ctx context.Context, campaignID string, 
 	if err != nil {
 		slog.Warn("rolls: a crafting roll was not added to the roll log", slog.String("campaign_id", campaignID), slog.Any("error", err))
 	}
+}
+
+// rollsCritAdapter gives the roll log the crit rules of the campaign's enabled
+// game system; with none enabled the default (natural 20 and 1 on a d20) applies.
+type rollsCritAdapter struct {
+	sys interface {
+		EnabledSystem(ctx context.Context, campaignID string) systems.System
+	}
+}
+
+func (a *rollsCritAdapter) CritRules(ctx context.Context, campaignID string) []systems.CritRule {
+	if a.sys == nil {
+		return systems.DefaultCritRules()
+	}
+	s := a.sys.EnabledSystem(ctx, campaignID)
+	if s == nil || s.Info() == nil {
+		return systems.DefaultCritRules()
+	}
+	return s.Info().CritRules()
 }

@@ -163,6 +163,28 @@ An optional top-level block saying how the game rolls and counts a crafting proj
 
 Every key is optional; a missing one, or a system with no block, takes the default (2d10, no characteristic, +2 and -2, `[11, 16]`, "Goal", "Item prerequisite", "Project source"). A block that breaks these rules fails manifest validation, so the system does not load.
 
+### Crits (`crits`)
+
+An optional top-level list saying which dice results the game counts as a critical success or failure. Chronicle's server applies it to every roll it records, so the Table's dice (both looks), the log and Foundry's rolls agree; a browser never decides a crit.
+
+```json
+"crits": [
+  {"dice": "2d10", "judge": "total", "succ": [19, 20]}
+]
+```
+
+| Key | Meaning |
+|-----|---------|
+| `dice` | The dice the rule covers: `d4`, `d6`, `d8`, `d10`, `d12` or `d20` (every such die), or with a count of one to four, like `2d10` |
+| `judge` | `each` (default): every die by its own face. `total`: a group of exactly `dice`'s count is judged by its sum, and every die of the group is a crit of that kind. A `total` rule needs the count written |
+| `succ`, `fail` | The faces (for `each`) or sums (for `total`) that count, at most 20 values each, each one the dice can show; a rule lists at least one of them |
+
+Up to 8 rules; the first rule that covers a die decides it, so a die no rule covers is never a crit. A roll made at the Table groups dice by the terms of its formula (the `2d10` in `2d10+1d20` is one group). A roll another app reports has no terms, so consecutive dice of one size are taken as a group.
+
+With no `crits` block, or no system, a natural 20 on a d20 is a success and a natural 1 a failure. `"crits": []` means the game has no crits at all. Draw Steel's power roll is the example above: a total of 19 or 20 on 2d10, no failure. A block that breaks these rules fails manifest validation, so the system does not load.
+
+Each person can turn crit animations off for themselves in the Table's My dice leaf; the dice stay marked, only the effects stop.
+
 ### Data Files
 
 Each category has a `data/<slug>.json` file. Items are keyed by `id` or `slug` (the loader fills `id` from `slug`):
