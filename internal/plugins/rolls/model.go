@@ -174,9 +174,12 @@ const (
 // both places because the server must refuse a name the engine would never
 // load; TestDiceKeysMatchEngine in service_test.go keeps the two lists equal.
 var (
-	DiceSetKeys  = []string{"jewelled", "confetti", "acrylic", "cage", "heartlight", "gothic", "obsidian", "moonstone", "oak", "nebula", "bone", "scale"}
-	CritSuccKeys = []string{"storm", "phoenix", "dawn", "starfall", "bloom", "hoard"}
-	CritFailKeys = []string{"grasp", "frost", "shatter", "hex", "crows", "abyss"}
+	DiceSetKeys = []string{
+		"jewelled", "confetti", "acrylic", "cage", "heartlight", "gothic", "obsidian", "moonstone", "oak", "nebula", "bone", "scale",
+		"damascus", "cloisonne", "kintsugi", "leather", "runestone", "arcana", "relic", "agate", "neon", "amber", "botanical", "clockwork",
+	}
+	CritSuccKeys = []string{"storm", "phoenix", "dawn", "starfall", "bloom", "hoard", "koi", "prism", "festival", "encore", "fortune", "flutter"}
+	CritFailKeys = []string{"grasp", "frost", "shatter", "hex", "crows", "abyss", "mimic", "engulf", "omen", "shackle", "melt", "dust"}
 )
 
 // Settings is the campaign's dice: the table's look (what a player who hasn't

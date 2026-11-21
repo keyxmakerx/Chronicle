@@ -28,42 +28,57 @@ Chronicle.register('relations', {
 
     el._relationsState = state;
 
-    // Load relations and common types in parallel.
-    var fetches = [
-      Chronicle.apiFetch(config.relationsEndpoint).then(function (r) {
-        if (!r.ok) throw new Error('Failed to load relations');
-        return r.json();
-      })
-    ];
-
-    // Only fetch relation types if editable (needed for the add UI).
-    if (config.editable && config.relationTypesEndpoint) {
-      fetches.push(
-        Chronicle.apiFetch(config.relationTypesEndpoint).then(function (r) {
-          if (!r.ok) throw new Error('Failed to load relation types');
-          return r.json();
-        })
-      );
+    // The page may have sent the first rows with itself; then they are drawn
+    // at once, without a fetch that lands later and pushes the page down.
+    var first = Chronicle.firstPaint(el);
+    if (first && Array.isArray(first.relations) && (!config.editable || Array.isArray(first.types))) {
+      state.relations = first.relations;
+      if (first.types) state.relationTypes = first.types;
+      render();
+      loaded();
+    } else {
+      fetchRows();
     }
 
-    Promise.all(fetches).then(function (results) {
-      state.relations = results[0] || [];
-      if (results[1]) {
-        state.relationTypes = results[1] || [];
+    function fetchRows() {
+      // Load relations and common types in parallel.
+      var fetches = [
+        Chronicle.apiFetch(config.relationsEndpoint).then(function (r) {
+          if (!r.ok) throw new Error('Failed to load relations');
+          return r.json();
+        })
+      ];
+
+      // Only fetch relation types if editable (needed for the add UI).
+      if (config.editable && config.relationTypesEndpoint) {
+        fetches.push(
+          Chronicle.apiFetch(config.relationTypesEndpoint).then(function (r) {
+            if (!r.ok) throw new Error('Failed to load relation types');
+            return r.json();
+          })
+        );
       }
-      render();
-      loaded();
-    }).catch(function (err) {
-      console.error('[relations] Failed to load:', err);
-      Chronicle.notify('Failed to load relations', 'error');
-      state.error = 'Failed to load relations. Please refresh the page.';
-      render();
-      loaded();
-    });
+
+      Promise.all(fetches).then(function (results) {
+        state.relations = results[0] || [];
+        if (results[1]) {
+          state.relationTypes = results[1] || [];
+        }
+        render();
+        loaded();
+      }).catch(function (err) {
+        console.error('[relations] Failed to load:', err);
+        Chronicle.notify('Failed to load relations', 'error');
+        state.error = 'Failed to load relations. Please refresh the page.';
+        render();
+        loaded();
+      });
+    }
 
     // Says the first rows are drawn, for a page move that waits on them
     // (annals_pull.js).
     function loaded() {
+      Chronicle.drawn(el);
       el.dispatchEvent(new CustomEvent('chronicle:relations-rendered', { bubbles: true }));
     }
 
@@ -71,6 +86,9 @@ Chronicle.register('relations', {
 
     function render() {
       el.innerHTML = '';
+      // Nothing linked and no add form open: only an offer, which the Annals
+      // page editor shows while editing.
+      el.toggleAttribute('data-rel-empty', state.relations.length === 0 && !state.isAdding);
 
       // Error state.
       if (state.error && state.relations.length === 0) {
@@ -129,7 +147,7 @@ Chronicle.register('relations', {
           var addBtn = document.createElement('button');
           addBtn.type = 'button';
           addBtn.className = 'rel-add-btn';
-          addBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size:10px"></i> Add relation';
+          addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic" style="font-size:10px"></i> ' + (groupOrder.length === 0 ? 'Add a relation' : 'Add relation');
           addBtn.addEventListener('click', function () {
             state.isAdding = true;
             state.selectedTarget = null;

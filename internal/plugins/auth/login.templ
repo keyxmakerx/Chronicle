@@ -77,7 +77,7 @@ templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts Logi
 				}
 				if opts.ProviderName != "" {
 					<a href={ templ.SafeURL(providerLoginHref(redirect)) } class="btn-primary w-full py-2.5 flex items-center justify-center gap-2" data-testid="provider-sign-in">
-						<i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+						<i class="fa-solid fa-right-to-bracket word-ic" aria-hidden="true"></i>
 						Sign in with { opts.ProviderName }
 					</a>
 					if opts.HidePassword {

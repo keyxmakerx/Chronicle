@@ -114,7 +114,18 @@ test('phone: All pages fits at 360 wide without sliding sideways', async () => {
   // The shell check above reads only the document; the list scrolls inside
   // #main-content, so a toolbar wider than the screen shows up here.
   assert.ok(await page.evaluate(() => { const m = document.getElementById('main-content'); return m.scrollWidth <= m.clientWidth; }), '#main-content slides sideways on All pages');
-  const bounds = await page.locator('a[aria-label="New page"]').evaluate((e) => e.getBoundingClientRect().right);
+  const bounds = await page.locator('[data-app-opening] a[href*="entities/new"]').evaluate((e) => e.getBoundingClientRect().right);
   assert.ok(bounds <= 360, `New page ends at ${bounds}, past the screen`);
+
+  // With a long name and tags the rows, the gallery and Select mode must
+  // still fit.
+  const eid = await newPage(owner, cid, 'Location', 'The Tidewrights Guild of Saltreach and the Outer Moorings Unbroken'.replace(/ /g, (m, i) => (i > 40 ? '' : m)));
+  const tag = await owner.api(`/campaigns/${cid}/tags`, { method: 'POST', body: { name: 'Coast', color: '#0d9488' } });
+  await owner.api(`/campaigns/${cid}/entities/${eid}/tags`, { method: 'PUT', body: { tagIds: [tag.body.id] } });
+  const fits = () => page.evaluate(() => { const m = document.getElementById('main-content'); return m.scrollWidth <= m.clientWidth; });
+  await owner.go(`/campaigns/${cid}/entities`);
+  assert.ok(await fits(), '#main-content slides sideways on a list with a long name');
+  await page.getByRole('tab', { name: /gallery/i }).click().catch(() => {});
+  assert.ok(await fits(), '#main-content slides sideways on the gallery');
   owner.assertClean();
 });

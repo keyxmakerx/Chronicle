@@ -80,7 +80,7 @@ templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string)
 								class="px-2.5 py-1 text-xs rounded border border-edge hover:bg-surface-alt"
 								title={ fmt.Sprintf("Notify owner that v%s is available", version) }
 							>
-								<i class="fa-solid fa-bullhorn mr-1"></i> Notify
+								<i class="fa-solid fa-bullhorn mr-1 word-ic"></i> Notify
 							</button>
 							<button
 								type="button"
@@ -88,7 +88,7 @@ templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string)
 								class="px-2.5 py-1 text-xs rounded border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
 								title={ fmt.Sprintf("Force-update this campaign to v%s", version) }
 							>
-								<i class="fa-solid fa-thumbtack mr-1"></i> Force-update
+								<i class="fa-solid fa-thumbtack mr-1 word-ic"></i> Force-update
 							</button>
 						</div>
 					</div>
@@ -111,7 +111,7 @@ templ versionActionRow(version string, usage []CampaignUsage, csrfToken string) 
 			class="px-3 py-1.5 text-xs rounded-md border border-edge hover:bg-surface-alt"
 			title="Notify every campaign with a pin older than this version"
 		>
-			<i class="fa-solid fa-bullhorn mr-1"></i> Notify Older Campaigns
+			<i class="fa-solid fa-bullhorn mr-1 word-ic"></i> Notify Older Campaigns
 		</button>
 		<button
 			type="button"
@@ -119,7 +119,7 @@ templ versionActionRow(version string, usage []CampaignUsage, csrfToken string) 
 			class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
 			title="Force-update every campaign with a pin older than this version"
 		>
-			<i class="fa-solid fa-arrow-up mr-1"></i> Force-update All Older
+			<i class="fa-solid fa-arrow-up mr-1 word-ic"></i> Force-update All Older
 		</button>
 		{{ _ = usage }}
 		{{ _ = csrfToken }}

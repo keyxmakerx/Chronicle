@@ -103,6 +103,9 @@
       // Players read this text (an open page, a recap), so the link pickers
       // ask before linking a page they can't read.
       var hostOpen = config.openToPlayers === true;
+      // The page may have sent the text with itself. It sits inside the mount,
+      // which is cleared just below, so it is taken out first.
+      var seed = Chronicle.firstPaint(el);
       // Create editor container structure.
       el.innerHTML = '';
       el.classList.add('chronicle-editor');
@@ -449,7 +452,7 @@
 
       // Load initial content from API.
       if (endpoint) {
-        loadContent(state);
+        loadContent(state, seed, el);
       }
     },
 
@@ -537,11 +540,11 @@
 
     if (isEditing) {
       btn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done';
-      btn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Done';
+      btn.innerHTML = '<i class="fa-solid fa-check word-ic" style="font-size:11px"></i> Done';
       btn.title = 'Exit edit mode';
     } else {
       btn.className = 'chronicle-editor__edit-btn';
-      btn.innerHTML = '<i class="fa-solid fa-pen" style="font-size:11px"></i> Edit';
+      btn.innerHTML = '<i class="fa-solid fa-pen word-ic" style="font-size:11px"></i> Edit';
       btn.title = 'Enter edit mode';
     }
 
@@ -740,7 +743,7 @@
     var saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'chronicle-editor__btn chronicle-editor__btn--save';
-    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk" style="font-size:11px" aria-hidden="true"></i> Save';
+    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk word-ic" style="font-size:11px" aria-hidden="true"></i> Save';
     saveBtn.title = 'Save (Ctrl+S)';
     saveBtn.setAttribute('data-cmd', 'save');
     toolbar.appendChild(saveBtn);
@@ -1000,45 +1003,67 @@
   /**
    * Load content from the API endpoint.
    */
-  function loadContent(state) {
+  function loadContent(state, seed, el) {
+    // Said when the text is in, or could not be: a page that sent its text
+    // with itself waits for this before it shows.
+    function finished() { if (el) Chronicle.drawn(el); }
+    if (seed && typeof seed === 'object') {
+      try {
+        applyLoaded(state, seed);
+        finished();
+        return;
+      } catch (err) {
+        console.error('[Editor] The page\'s own text did not open; fetching it:', err);
+      }
+    }
     Chronicle.apiFetch(state.endpoint)
       .then(function (res) {
         if (!res.ok) throw new Error('Failed to load: ' + res.status);
         return res.json();
       })
       .then(function (data) {
-        if (data.entry) {
-          // entry is ProseMirror JSON stored as a string.
-          var content = typeof data.entry === 'string' ? JSON.parse(data.entry) : data.entry;
-          state.editor.commands.setContent(content);
-        } else if (data.entry_html) {
-          // A body written as HTML (e.g. synced from Foundry) has no editor
-          // JSON yet; open the HTML so editing starts from what the page shows.
-          state.editor.commands.setContent(data.entry_html);
-        }
-        if (typeof data.rev === 'number') state.rev = data.rev;
-        if (data.locked === true && state.headerEl) {
-          state.locked = true;
-          state.startEditing = false;
-          state.headerEl.dataset.locked = 'true';
-          renderHeader(state.headerEl, false);
-        }
-        state.dirty = false;
-        if (state.editor.isEditable) {
-          setStatus(state.statusEl, 'saved');
-        }
-        // A link that means "write this now" opens straight into editing.
-        if (state.startEditing) {
-          state.startEditing = false;
-          enterEditMode(state);
-          forgetWriteNow();
-        }
+        applyLoaded(state, data);
+        finished();
       })
       .catch(function (err) {
         console.error('[Editor] Load error:', err);
         Chronicle.notify('Failed to load editor content', 'error');
         setStatus(state.statusEl, 'error', 'Failed to load content');
+        finished();
       });
+  }
+
+  /**
+   * Put what the entry endpoint answers into the editor. The page may send
+   * the same answer with itself, so this is the one place it is read.
+   */
+  function applyLoaded(state, data) {
+    if (data.entry) {
+      // entry is ProseMirror JSON stored as a string.
+      var content = typeof data.entry === 'string' ? JSON.parse(data.entry) : data.entry;
+      state.editor.commands.setContent(content);
+    } else if (data.entry_html) {
+      // A body written as HTML (e.g. synced from Foundry) has no editor
+      // JSON yet; open the HTML so editing starts from what the page shows.
+      state.editor.commands.setContent(data.entry_html);
+    }
+    if (typeof data.rev === 'number') state.rev = data.rev;
+    if (data.locked === true && state.headerEl) {
+      state.locked = true;
+      state.startEditing = false;
+      state.headerEl.dataset.locked = 'true';
+      renderHeader(state.headerEl, false);
+    }
+    state.dirty = false;
+    if (state.editor.isEditable) {
+      setStatus(state.statusEl, 'saved');
+    }
+    // A link that means "write this now" opens straight into editing.
+    if (state.startEditing) {
+      state.startEditing = false;
+      enterEditMode(state);
+      forgetWriteNow();
+    }
   }
 
   /**

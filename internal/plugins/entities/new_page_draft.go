@@ -17,7 +17,11 @@ import (
 type NewPageDraft struct {
 	TypeLabel  string
 	TemplateID int
-	IsPrivate  bool
+	// IsPrivate is the state the page will be saved in, resolved against the
+	// campaign's default and the maker's role, never the form's own guess.
+	IsPrivate bool
+	// Sheet draws the form for the small sheet over the current screen.
+	Sheet bool
 	// Return is a same-site path the form was opened from, or "".
 	Return string
 }

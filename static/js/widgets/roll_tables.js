@@ -302,11 +302,11 @@
         '<button type="button" class="rt-tbl" data-pick aria-haspopup="listbox" aria-expanded="' + S.picking + '">' + esc(tableName(S.G, S.list, S.table)) + ' <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>' +
         '<span class="rt-src">' + srcLabel() + '</span><span class="rt-sp"></span>' +
         '<span class="rt-seg" role="group" aria-label="How many to roll">' + [1, 3, 5].map(function (n) { return '<button type="button" data-n="' + n + '" aria-pressed="' + (S.count === n) + '">' + n + '</button>'; }).join('') + '</span>' +
-        (names ? '' : '<button type="button" class="rt-ghost" data-edit aria-expanded="' + S.editing + '"><i class="fa-solid fa-pen" aria-hidden="true"></i>' + (S.editing ? 'Close table' : 'Edit table') + '</button>') + '</div>' +
+        (names ? '' : '<button type="button" class="rt-ghost" data-edit aria-expanded="' + S.editing + '"><i class="fa-solid fa-pen word-ic" aria-hidden="true"></i>' + (S.editing ? 'Close table' : 'Edit table') + '</button>') + '</div>' +
         '<div class="rt-ed" data-ed></div>' +
         (S.editing ? '' : '<div class="rt-rows" aria-live="polite">' + S.rows.map(rowHTML).join('') + '</div>') +
         (S.editing ? '' : '<div class="rt-foot"><button type="button" class="rt-main" data-roll><i class="fa-solid fa-dice" aria-hidden="true"></i>' + (anyPin() ? 'Reroll the rest' : 'Roll') + '</button>' +
-          '<button type="button" class="rt-sec" data-put><i class="fa-solid fa-arrow-turn-up" aria-hidden="true"></i>Put in page</button>' +
+          '<button type="button" class="rt-sec" data-put><i class="fa-solid fa-arrow-turn-up word-ic" aria-hidden="true"></i>Put in page</button>' +
           '<span class="rt-sp"></span><span class="rt-note"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Players don’t see the roller, only what you put in the page</span></div>');
       if (S.editing) drawEditor(true);
       if (S.picking) drawPicker('');
@@ -347,7 +347,7 @@
           return '<button type="button" role="option" data-t="' + esc(t.id) + '" aria-selected="' + (t.id === S.table) + '">' + esc(t.name) + '<small>' + (t.names ? 'from the name generator' : t.n + ' lines') + '</small></button>';
         }).join('');
       });
-      h += '<hr><button type="button" class="rt-pick-new" data-new><i class="fa-solid fa-plus" aria-hidden="true"></i>New table</button></div>';
+      h += '<hr><button type="button" class="rt-pick-new" data-new><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i>New table</button></div>';
       B.insertAdjacentHTML('beforeend', h);
       var inp = B.querySelector('[data-q]');
       inp.focus();
@@ -377,7 +377,7 @@
         }).join('') + '</select><div><input data-n maxlength="200" aria-label="Name" placeholder="What happens, in a few words" value="' + esc(e.name) + '"><textarea data-b maxlength="1000" rows="1" aria-label="More detail" placeholder="One line a ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' can use as it stands">' + esc(e.brief) + '</textarea></div>' +
           '<button type="button" class="rt-btn" data-del title="Remove this line" aria-label="Remove this line"><i class="fa-solid fa-trash-can"></i></button></div>';
       }).join('') + '</div>';
-      h += '<div class="rt-foot">' + (mineT ? '<button type="button" class="rt-main" data-save' + (S.saving ? ' disabled' : '') + '><i class="fa-solid fa-check" aria-hidden="true"></i>' + (S.saving ? 'Saving…' : 'Save table') + '</button><button type="button" class="rt-sec" data-add><i class="fa-solid fa-plus" aria-hidden="true"></i>Add a line</button>' : '') +
+      h += '<div class="rt-foot">' + (mineT ? '<button type="button" class="rt-main" data-save' + (S.saving ? ' disabled' : '') + '><i class="fa-solid fa-check word-ic" aria-hidden="true"></i>' + (S.saving ? 'Saving…' : 'Save table') + '</button><button type="button" class="rt-sec" data-add><i class="fa-solid fa-plus" aria-hidden="true"></i>Add a line</button>' : '') +
         '<span class="rt-sp"></span><span class="rt-note">Words in <span class="rt-brace">{braces}</span> roll on another table, like <span class="rt-brace">{trade}</span>.</span></div>';
       ed.innerHTML = h;
       ed.querySelectorAll('textarea').forEach(function (t) { t.style.height = (t.scrollHeight + 2) + 'px'; });

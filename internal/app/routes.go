@@ -3485,6 +3485,8 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
+	// A campaign made from now on starts with the usual set of features on.
+	campaignService.SetFeatureEnabler(starterFeatures{addons: addonService})
 	// A member's own sidebar pins are checked against the sidebar they see,
 	// which only this composition root can draw.
 	campaignService.SetNavSectionsSource(&navSectionsSource{entities: entityService, addons: addonService})
@@ -4996,6 +4998,7 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetExtensionEnableChecker(addonService)
 	timelineHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(tagFetcherAdapter)
+	entityHandler.SetPageParts(&entityPagePartsAdapter{tags: tagHandler, rels: relHandler})
 	entityHandler.SetTimelineSearcher(timelineSvc)
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
@@ -6086,6 +6089,12 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
 			ctx = layouts.SetIsGuest(ctx, session.GuestCampaignID != "")
+			// The notice bar is drawn with a full page, so it never arrives
+			// after the page and pushes it down. A boosted swap discards the
+			// strip, so it is not worked out for one.
+			if !middleware.IsHTMX(c) {
+				ctx = layouts.SetCalloutSeed(ctx, func() (string, bool) { return sessionsHandler.CalloutHTML(c) })
+			}
 
 			// The person's own look. HTMX swaps never replace <html>, so only
 			// full-page renders need it. A failed read leaves the default look
@@ -6153,7 +6162,7 @@ func (a *App) RegisterRoutes() {
 					NavStyle: ap.EffectiveNavStyle(), NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
-					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
+					ButtonStyle: ap.ButtonStyle, IconAmount: ap.IconAmount, IconColour: ap.IconColour, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
 					ReduceMotion:  ap.ReduceMotion,
 					HeaderHeight:  ap.HeaderHeight,
 					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
@@ -6372,6 +6381,8 @@ func (a *App) RegisterRoutes() {
 			// resolved here.
 			calendarHealthy := a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)
 			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
+			ctx = layouts.SetHomeBlocksOff(ctx, homeBlocksOff(enabledSlugs, calendarHealthy,
+				a.PluginHealth == nil || a.PluginHealth.IsHealthy(sessions.PluginSlug)))
 
 			// The header's data-backed widgets (date, weather, moon, game
 			// night) read today's world from the calendar and sessions. This
@@ -7238,7 +7249,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_rolls.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_parts_strange.js", "/static/js/widgets/shop_room_parts_trades.js", "/static/js/widgets/shop_room_parts_places.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_rolls.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
 	{Name: "design_gallery_admin", Scripts: []string{"/static/js/widgets/design_gallery_admin.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},

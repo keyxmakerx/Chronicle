@@ -133,9 +133,10 @@ func TestQuickCreateAPI_HonoursCampaignDefaultVisibility(t *testing.T) {
 // --- Handler.Create (the web form, which already honoured the setting) -----
 
 // The form path resolves privacy via the shared
-// CampaignSettings.ResolveNewEntityPrivacy. An unchecked HTML checkbox
-// submits NOTHING, so the form's value-typed false IS the absent case — the
-// form has no way to express "explicitly public".
+// CampaignSettings.ResolveNewEntityPrivacy. The form always sends is_private
+// ("true" or "false"), so an explicit "false" must stay false under a campaign
+// whose pages start hidden: that is what "Show it to players" saves. A request
+// that sends nothing still takes the campaign default.
 func TestCreate_FormHonoursCampaignDefaultVisibility(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -170,6 +171,24 @@ func TestCreate_FormHonoursCampaignDefaultVisibility(t *testing.T) {
 		{
 			name:       "checked box is private under dm_only default",
 			defaultVis: "dm_only",
+			form:       url.Values{"name": {"Secret"}, "entity_type_id": {"7"}, "is_private": {"true"}},
+			want:       true,
+		},
+		{
+			name:       "an explicit false under dm_only default is shown to players",
+			defaultVis: "dm_only",
+			form:       url.Values{"name": {"Town Notice"}, "entity_type_id": {"7"}, "is_private": {"false"}},
+			want:       false,
+		},
+		{
+			name:       "an explicit false under private default is shown to players",
+			defaultVis: "private",
+			form:       url.Values{"name": {"Town Notice"}, "entity_type_id": {"7"}, "is_private": {"false"}},
+			want:       false,
+		},
+		{
+			name:       "an explicit true with no default is private",
+			defaultVis: "",
 			form:       url.Values{"name": {"Secret"}, "entity_type_id": {"7"}, "is_private": {"true"}},
 			want:       true,
 		},

@@ -552,7 +552,7 @@ second; the dice settle in under 480ms.
 | Fold | sections, groups, more details | to its real height; arrow turns | 200ms ease-out | opens at once |
 | Pull-down | a title's drawer, a small widget's full list | Drape from its edge over the page | 200ms ease-out, 150ms back up | fade |
 | Tab switch | changing tab or view | a fade, no rise | 90ms (`--dur-page`) | the same |
-| Another page | any link to a new page | thin accent progress line, then a fade with no rise; the menu stays. Under Annals a connection Pulls instead | 90ms (`--dur-page`) | line and fade |
+| Another page | any link to a new page in the same campaign: the menu, a link in a page's words, a home row, a card | thin accent progress line, then a fade with no rise; the menu stays and the new page opens at its top (`static/js/page_links.js`). A page arrives whole: its tags, connections, words and attributes come with it and it shows once they have drawn. Under Annals a connection Pulls instead | 90ms (`--dur-page`) | line and fade |
 | Adding to a list | a new page, a tag | the row Folds open, fades in, Glows | 200ms, glow fades over 1.2s | fade and glow |
 | Removing from a list | deleting, unlinking | the row fades and Folds closed | 160ms ease-in | fade, space closes at once |
 | Dragging | reordering, moving between groups | lifts to depth 3 with a slight tilt; drops into place | 120ms pick up, 200ms drop | lift shadow only |
@@ -664,7 +664,9 @@ second; the dice settle in under 480ms.
   The kind follows as a quiet word at the row's end, and a page that has a
   picture shows a small one there, its own and never a stand-in; a page with
   none shows none. An owner still picks each category's icon in the
-  Customizer, and it shows in the sidebar.
+  Customizer, and it shows in the sidebar. An owner may bring category icons
+  back beside page names, and choose their colour theme, in the Customizer's
+  Icons section; the default is the rule as written.
 - Screens not yet brought to these three icon rules: TODO(#2276).
 - Buttons and pills size to their content; nothing stretches full width after
   a state change.
@@ -779,6 +781,12 @@ their tokens.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
   it; Keystone is soft, raised and rounded (12px), and gives every button the
   heavy press.
+- **Icons** (`data-cz-icons`, `data-cz-icon-colour`): Few is the base; Beside
+  names draws a category's icon in front of a page's name in header search, the
+  link list, page rows and cards; Everywhere also draws the icon on a button
+  or menu row that has a word (`.word-ic`, hidden otherwise). Ink is the
+  base colour; Accent takes the campaign accent; Category mixes the category's
+  saved colour toward the text colour so every category reads alike.
 - **Depth** (`data-cz-elev`, shadows from `czElevation`): Standard is the
   base; Flat, Dramatic, and Ambient, whose shadows are tinted with the accent
   under a faint light from the page's top corner.

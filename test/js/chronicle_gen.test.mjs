@@ -264,3 +264,18 @@ test('the harptos-like recipe starts each month on a new week, and the other rec
   const wild = G.calendar.generate({ seed: 's1', recipe: 'calendar.wild' });
   assert.equal(wild.preset.calendar.month_starts_new_week, undefined);
 });
+
+test('weather: a wind’s bearing is a whole number from 0 to 359, the range the server stores', () => {
+  const h = shipped('harptos');
+  let days = 0;
+  for (let s = 0; s < 12; s++) {
+    const r = G.mass.fillRestOfYear({ generator: 'weather', calendar: h, seed: 'deg-' + s, existing: [] });
+    for (const d of r.result.days) {
+      days++;
+      const deg = d.wind.direction_degrees;
+      assert.ok(Number.isInteger(deg) && deg >= 0 && deg <= 359, `seed deg-${s}, ${d.month}/${d.day}: ${deg}`);
+      assert.equal(G.weather.toWeatherInput(d).wind_direction_degrees, deg);
+    }
+  }
+  assert.ok(days > 4000);
+});

@@ -103,6 +103,27 @@ func (h *Handler) ListTags(c *echo.Context) error {
 	return c.JSON(http.StatusOK, tags)
 }
 
+// FirstPaint is what the tag picker would fetch on load (every tag the viewer
+// may see, and this entity's), for the entity page to send with the page. The
+// page has already confirmed the viewer may open the entity.
+func (h *Handler) FirstPaint(ctx context.Context, cc *campaigns.CampaignContext, entityID string) (all, mine []Tag, err error) {
+	all, err = h.service.ListByCampaign(ctx, cc.Campaign.ID, canSeeDmOnly(cc))
+	if err != nil {
+		return nil, nil, err
+	}
+	mine, err = h.service.GetEntityTags(ctx, entityID, canSeeDmOnly(cc))
+	if err != nil {
+		return nil, nil, err
+	}
+	if all == nil {
+		all = []Tag{}
+	}
+	if mine == nil {
+		mine = []Tag{}
+	}
+	return all, mine, nil
+}
+
 // CreateTag creates a new tag in the campaign (POST /campaigns/:id/tags).
 func (h *Handler) CreateTag(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)

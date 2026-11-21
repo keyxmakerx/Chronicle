@@ -1447,6 +1447,7 @@
       this.apiBase = config.apiBase;
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
       this.skyRailSrc = config.skyRailSrc; // calendar_sky_rail.js, loaded only for the owner's sky controls
+      this.yearTrackSrc = config.yearTrackSrc; // calendar_year_track.js, loaded only when an editor opens Edit
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -1456,6 +1457,8 @@
       if (!Array.isArray(initialEvents)) initialEvents = [];
 
       this.eventsByMonth = {};
+      this.evPreview = null; // a draft's events on the grid, set by the editor's year track
+      this.afterPaint = null; // the year track's hook, run at the end of each month paint
       this._players = false; // "See it as players do" is on
       this._pvPending = null; // its read, while one is in flight
       this._dmFlags = null; // what this viewer had before it went on
@@ -4572,7 +4575,13 @@
     // Every event touching (y,m,d): base-date match, recurrence expansion,
     // or a non-recurring multi-day span.
     eventsOnDay: function (y, m, d) {
-      var cal = this.cal, list = this.eventsFor(y, m);
+      return this._occurringOn(this.eventsFor(y, m), y, m, d);
+    },
+
+    // The events of a list that touch (y,m,d). Shared by the saved events
+    // and by a draft's marks (evPreview), so both follow one rule.
+    _occurringOn: function (list, y, m, d) {
+      var cal = this.cal;
       // Events based in the previous/next month can still span into this
       // one, or recur onto it; a full sweep of just this month's list
       // covers the overwhelming majority (ListEventsForMonth's own
@@ -4831,6 +4840,8 @@
       this._gnSpin();
       if (this._pollDraft) this._pollPaintPicks();
       if (ri) this._startRoll(ri);
+      // The editor's year track dresses the fresh month (its draft's ink, what was just kept).
+      if (this.afterPaint) this.afterPaint();
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {
@@ -4880,10 +4891,21 @@
       }).join('') + '</div>';
     },
 
+    // A draft from the editor's year track, in the way wxPreview holds a
+    // weather draft: {events: [draft events], hide: {saved id: true}}. Its
+    // events are drawn as ghosts after the saved ones, and the saved events
+    // it would replace are left out, so the grid shows what Keep would write.
+    _withPreview: function (y, m, d, evs) {
+      var pv = this.evPreview;
+      if (!pv) return evs;
+      if (pv.hide) evs = evs.filter(function (e) { return !pv.hide[e.id]; });
+      return evs.concat(this._occurringOn(pv.events || [], y, m, d));
+    },
+
     // noNights leaves game nights out, for the grid's cell, which draws
     // them on their own (_gnDiceHTML).
     _marksHTML: function (y, m, d, noNights) {
-      var evs = this.eventsOnDay(y, m, d), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
+      var evs = this._withPreview(y, m, d, this.eventsOnDay(y, m, d)), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
       if (!evs.length && !nights.length && !polls.length) return '';
       var self = this;
       // Game nights come first, then the dates polls suggest: they are the
@@ -4895,9 +4917,9 @@
       }));
       var cap = Math.max(0, 4 - gn.length), shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
-        var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
+        var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' && !e._draft ? ' dir' : '';
         var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
-        return '<span class="mk' + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
+        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';

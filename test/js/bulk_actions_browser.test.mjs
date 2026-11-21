@@ -17,9 +17,9 @@ const BULK_JS = readFileSync(join(root, 'static/js/widgets/bulk_actions.js'), 'u
 
 const LIST = '<div id="list" data-campaign-id="c1" data-role="3" data-can-hide="true"' +
   ' data-entity-types=\'[{"id":1,"name":"NPC"},{"id":2,"name":"Place"}]\' data-tags="[]">' +
-  '<table><thead><tr><th>Name</th></tr></thead><tbody>' +
-  ['e1', 'e2', 'e3', 'e4'].map((id) => '<tr data-entity-id="' + id + '"><td>' + id + '</td></tr>').join('') +
-  '</tbody></table></div><div id="toasts"></div>';
+  '<ul class="el-list">' +
+  ['e1', 'e2', 'e3', 'e4'].map((id) => '<li class="el-row" data-entity-row data-entity-id="' + id + '"><a class="el-link" href="#"><span class="el-name">' + id + '</span></a></li>').join('') +
+  '</ul></div><div id="toasts"></div>';
 
 const STUB = `
   window.calls = []; window.reloads = 0;
@@ -73,7 +73,7 @@ const tick = (p, id) => p.click('input[data-bulk-id="' + id + '"]');
 const remount = (p) => p.evaluate(() => {
   document.querySelectorAll('.bulk-action-bar, .bulk-picker').forEach((n) => n.remove());
   const old = document.getElementById('list'); const fresh = old.cloneNode(false); fresh.innerHTML = old.innerHTML;
-  fresh.querySelectorAll('.bulk-checkbox, .bulk-select-all').forEach((n) => n.remove());
+  fresh.querySelectorAll('.el-pick').forEach((n) => n.remove());
   old.replaceWith(fresh); window.widget.init(fresh);
 });
 
@@ -158,6 +158,20 @@ test('shift-click ticks the range, and Select all takes the rest', { skip }, asy
   assert.match(await p.textContent('.bulk-action-bar'), /3 selected/);
   await p.click('[data-bulk-action="all"]');
   assert.match(await p.textContent('.bulk-action-bar'), /4 selected/);
+});
+
+test('a remembered Gallery is applied on load, and a stray value is ignored', { skip }, async (t) => {
+  const p = await open(t);
+  const view = (stored) => p.evaluate((v) => {
+    localStorage.setItem('vk', v);
+    const el = document.getElementById('list');
+    el.setAttribute('data-view', 'list'); el.setAttribute('data-view-key', 'vk');
+    el.innerHTML = '<button data-view-tab data-view="list" aria-selected="true"></button><button data-view-tab data-view="gallery" aria-selected="false"></button>' + el.innerHTML;
+    window.widget.init(el);
+    return [el.getAttribute('data-view'), el.querySelector('[data-view="gallery"]').getAttribute('aria-selected')];
+  }, stored);
+  assert.deepEqual(await view('gallery'), ['gallery', 'true']);
+  assert.deepEqual(await view('<script>'), ['list', 'false']);
 });
 
 test('nothing in the widget opens a browser dialog', () => {

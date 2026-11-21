@@ -1,0 +1,198 @@
+{
+  "format": "chronicle-calendar-v1",
+  "version": 2,
+  "calendar": {
+    "name": "Gravetide Count",
+    "description": "A bleak count of nine long months, each one turn of the pale moon and five eight-day weeks, closed by five hollow days when the dead are remembered.",
+    "mode": "fantasy",
+    "epoch_name": "Year Since the Fall",
+    "current_year": 309,
+    "current_month": 1,
+    "current_day": 1,
+    "current_hour": 0,
+    "current_minute": 0,
+    "hours_per_day": 24,
+    "minutes_per_hour": 60,
+    "seconds_per_minute": 60,
+    "leap_year_every": 0,
+    "leap_year_offset": 0,
+    "tracks_real_time": false,
+    "forecasts_enabled": false,
+    "month_starts_new_week": true,
+    "months": [
+      {
+        "name": "Ashmonth",
+        "days": 40,
+        "sort_order": 0,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Crowmonth",
+        "days": 40,
+        "sort_order": 1,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Thornmonth",
+        "days": 40,
+        "sort_order": 2,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Rotmonth",
+        "days": 40,
+        "sort_order": 3,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Pyremonth",
+        "days": 40,
+        "sort_order": 4,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Gallowsmonth",
+        "days": 40,
+        "sort_order": 5,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Wormmonth",
+        "days": 40,
+        "sort_order": 6,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Shroudmonth",
+        "days": 40,
+        "sort_order": 7,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Bonemonth",
+        "days": 40,
+        "sort_order": 8,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "The Hollow Days",
+        "days": 5,
+        "sort_order": 9,
+        "is_intercalary": true,
+        "leap_year_days": 0
+      }
+    ],
+    "weekdays": [
+      {
+        "name": "Tollday",
+        "sort_order": 0,
+        "is_rest_day": false
+      },
+      {
+        "name": "Ashday",
+        "sort_order": 1,
+        "is_rest_day": false
+      },
+      {
+        "name": "Vigilday",
+        "sort_order": 2,
+        "is_rest_day": false
+      },
+      {
+        "name": "Gravesday",
+        "sort_order": 3,
+        "is_rest_day": false
+      },
+      {
+        "name": "Lanternday",
+        "sort_order": 4,
+        "is_rest_day": false
+      },
+      {
+        "name": "Wakeday",
+        "sort_order": 5,
+        "is_rest_day": false
+      },
+      {
+        "name": "Mournday",
+        "sort_order": 6,
+        "is_rest_day": false
+      },
+      {
+        "name": "Stillday",
+        "sort_order": 7,
+        "is_rest_day": true
+      }
+    ],
+    "moons": [
+      {
+        "name": "The Pale Widow",
+        "cycle_days": 40,
+        "phase_offset": 0,
+        "color": "#d8d8d0"
+      },
+      {
+        "name": "The Cinder",
+        "cycle_days": 17.5,
+        "phase_offset": 6,
+        "color": "#b0503a"
+      }
+    ],
+    "seasons": [
+      {
+        "name": "The Thin Light",
+        "start_month": 1,
+        "start_day": 1,
+        "end_month": 3,
+        "end_day": 40,
+        "color": "oklch(0.66 0.05 110)"
+      },
+      {
+        "name": "The Reaping",
+        "start_month": 4,
+        "start_day": 1,
+        "end_month": 6,
+        "end_day": 40,
+        "color": "oklch(0.52 0.11 35)"
+      },
+      {
+        "name": "The Long Dark",
+        "start_month": 7,
+        "start_day": 1,
+        "end_month": 10,
+        "end_day": 5,
+        "color": "oklch(0.38 0.04 280)"
+      }
+    ],
+    "eras": [
+      {
+        "name": "Before the Fall",
+        "start_year": -1000,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.60 0.05 90)",
+        "sort_order": 0,
+        "description": "What came before is mostly guessed at.",
+        "end_year": 0
+      },
+      {
+        "name": "Since the Fall",
+        "start_year": 1,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.42 0.06 20)",
+        "sort_order": 1,
+        "description": "Counted from the night the old kingdom ended."
+      }
+    ]
+  }
+}

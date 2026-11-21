@@ -41,6 +41,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			class={ layouts.AppFrameClass }
 			data-app-frame
 			data-page-frame
+			data-whole?={ sendsFirstPaint(ctx) }
 			data-entity-type-slug={ entityType.Slug }
 			if editor {
 				data-pe-page
@@ -349,7 +350,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						title="Edit page details"
 						onclick={ headerCall("nameFold") }
 					>
-						<i class="fa-solid fa-pencil"></i> Edit name
+						<i class="fa-solid fa-pencil word-ic"></i> Edit name
 					</button>
 					if isScribe {
 						@pageCloneForm(cc, entity, csrfToken, "btn-ghost btn-sm")
@@ -414,11 +415,11 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *Enti
 									data-name={ entity.Name }
 									data-art={ layouts.MediaURL(ctx, *entity.ImagePath) }
 									aria-label={ "Make token for " + entity.Name }
-								><i class="fa-solid fa-chess-pawn" aria-hidden="true"></i> Make token</button>
-								<button type="button" class="fx-chip" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+								><i class="fa-solid fa-chess-pawn word-ic" aria-hidden="true"></i> Make token</button>
+								<button type="button" class="fx-chip" data-pick aria-label="Change image"><i class="fa-solid fa-camera word-ic"></i> Change</button>
 							</div>
 						} else {
-							<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+							<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera word-ic"></i> Change</button>
 						}
 						@eraPictureLabel()
 					</div>
@@ -482,7 +483,20 @@ templ blockEntryEditor(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 			data-open-to-players="true"
 		}
 		data-csrf-token={ csrfToken }
-	></div>
+		data-first-paint?={ firstPaintOf(ctx, fpEntry) != "" }
+	>
+		@firstPaintSeed(fpEntry)
+	</div>
+}
+
+// firstPaintSeed carries a widget's first content inside its mount, as inert
+// text the widget reads and removes when it takes over (boot.js
+// Chronicle.firstPaint). It is a <template>, not a <script>, because page
+// scripts are stripped when a boosted link swaps the page in.
+templ firstPaintSeed(part int) {
+	if raw := firstPaintOf(ctx, part); raw != "" {
+		<template data-first-paint-data>{ raw }</template>
+	}
 }
 
 // blockAttributes renders the attributes widget. Loads field definitions from
@@ -497,7 +511,10 @@ templ blockAttributes(cc *campaigns.CampaignContext, entity *Entity, entityType 
 			data-editable="true"
 		}
 		data-csrf-token={ csrfToken }
-	></div>
+		data-first-paint?={ firstPaintOf(ctx, fpFields) != "" }
+	>
+		@firstPaintSeed(fpFields)
+	</div>
 }
 
 // blockDetails renders the type badge, the shared visibility glance
@@ -543,7 +560,10 @@ templ blockTags(cc *campaigns.CampaignContext, entity *Entity, csrfToken string)
 			data-editable="true"
 		}
 		data-csrf-token={ csrfToken }
-	></div>
+		data-first-paint?={ firstPaintOf(ctx, fpTags) != "" }
+	>
+		@firstPaintSeed(fpTags)
+	</div>
 }
 
 // blockRelations renders the entity relations widget mount point. The widget
@@ -563,7 +583,10 @@ templ blockRelations(cc *campaigns.CampaignContext, entity *Entity, csrfToken st
 			data-is-dm="true"
 		}
 		data-csrf-token={ csrfToken }
-	></div>
+		data-first-paint?={ firstPaintOf(ctx, fpRelations) != "" }
+	>
+		@firstPaintSeed(fpRelations)
+	</div>
 }
 
 // blockInventory renders the character inventory widget mount point. Shows
@@ -814,8 +837,9 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?parent_id=%s&type=%d", cc.Campaign.ID, entity.ID, entity.EntityTypeID)) }
 					class="btn-secondary text-sm"
+					onclick={ layouts.NewPageOpenJS() }
 				>
-					<i class="fa-solid fa-plus text-xs"></i>
+					<i class="fa-solid fa-plus text-xs word-ic"></i>
 					Create sub-page
 				</a>
 			}
@@ -976,7 +1000,7 @@ templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken s
 						data-upload-url="/media/upload"
 						data-csrf-token={ csrfToken }
 					>
-						<button type="button" class="fx-chip is-corner" data-pick aria-label="Change cover image"><i class="fa-solid fa-camera"></i> Change</button>
+						<button type="button" class="fx-chip is-corner" data-pick aria-label="Change cover image"><i class="fa-solid fa-camera word-ic"></i> Change</button>
 					</div>
 				}
 			</div>

@@ -228,3 +228,4 @@
 .sf-g
 .shop-good-note
 .armory-views
+[data-whole]:not([data-whole-ready])

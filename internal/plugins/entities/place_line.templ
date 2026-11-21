@@ -30,6 +30,9 @@ templ entityPlaces(cc *campaigns.CampaignContext, entity *Entity, p pagePlaces) 
 			data-self-id={ entity.ID }
 			data-parent-id={ p.RealParentID }
 			data-listed={ placeIDList(p.Links) }
+			if len(p.Links) == 0 {
+				data-places-empty
+			}
 		>
 			if len(p.Links) > 0 {
 				<span class="pl-lead"><i class="fa-solid fa-link" aria-hidden="true"></i> Also listed under:</span>
@@ -61,7 +64,7 @@ templ entityPlaces(cc *campaigns.CampaignContext, entity *Entity, p pagePlaces) 
 						aria-expanded="false"
 						aria-haspopup="dialog"
 						onclick={ placesCall("toggle") }
-					><i class="fa-solid fa-plus" aria-hidden="true"></i> Add a place</button>
+					><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> Add a place</button>
 					<div class="pl-pop" data-pop data-kit-open="card" role="dialog" aria-label="List this page under another page" hidden>
 						<div class="ag-search">
 							<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>

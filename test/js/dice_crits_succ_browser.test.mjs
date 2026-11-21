@@ -11,5 +11,5 @@ import assert from 'node:assert/strict';
 import { skip, playCrits } from './_dice_page.mjs';
 
 test('every crit success plays its grand and its echo, without an error', { skip, timeout: 600000 }, async (t) => {
-  assert.deepEqual(await playCrits(t, 'succ'), ['bloom', 'dawn', 'hoard', 'phoenix', 'starfall', 'storm']);
+  assert.deepEqual(await playCrits(t, 'succ'), ['bloom', 'dawn', 'encore', 'festival', 'flutter', 'fortune', 'hoard', 'koi', 'phoenix', 'prism', 'starfall', 'storm']);
 });

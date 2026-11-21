@@ -22,11 +22,14 @@
 
   var C = null, cur = null, mode = 'lists', armed = '', placedMap = {}, noteT = 0;
   var LBL = {
-    shape: { 'open-air': 'Open-air stall' },
+    shape: { 'open-air': 'Open-air stall', hold: 'Ship’s hold', hollow: 'Hollow tree', 'void': 'Open void', ribs: 'Great ribs', works: 'Gearworks' },
     opening: { none: 'No window', 'window-left': 'Window, left', 'window-right': 'Window, right', 'window-centre': 'Window, centre', 'round-window': 'Round window', doorway: 'Doorway' },
-    counter: { 'stall-table': 'Stall table' },
+    counter: { 'stall-table': 'Stall table', log: 'Fallen log', slab: 'Stone slab' },
+    wall: { white: 'White nowhere', lair: 'Dragon’s lair' },
     prop: { 'floating-books': 'Floating books', 'steam-cart': 'Steam cart' }
   };
+  // The server takes at most this many props in one theme.
+  var MAX_PROPS = 24, FULL = 'A room holds up to 24 props. Take one out first.';
   var SKEL = [['shape', 'Back wall'], ['opening', 'Opening'], ['display', 'Display'], ['counter', 'Counter']];
   var LOOK = [['wall', 'Wall'], ['light', 'Light'], ['outside', 'Outside']];
   var COLS = [['wood', 'Wood'], ['cloth', 'Cloth'], ['accent', 'Accent'], ['trim', 'Trim']];
@@ -151,6 +154,7 @@
     if (!cur || !p || !C.options.propAt[p]) return;
     if (slotOf(p) !== slot) { say('The ' + lbl('prop', p).toLowerCase() + ' belongs at: ' + slotName(slotOf(p)).toLowerCase() + '.'); return; }
     if (cur.api.theme().props.indexOf(p) >= 0) { say('The ' + lbl('prop', p).toLowerCase() + ' is already in the room.'); return; }
+    if (cur.api.theme().props.length >= MAX_PROPS) { say(FULL); return; }
     armed = '';
     change(function (t) { t.props.push(p); });
     say('Placed the ' + lbl('prop', p).toLowerCase() + '.');
@@ -169,7 +173,10 @@
   function onInput(e) {
     var c = e.target, path = c.getAttribute && c.getAttribute('data-cb-path'), pr = c.getAttribute && c.getAttribute('data-cb-prop');
     if (path) { var v = c.type === 'range' ? +c.value : c.value; change(function (t) { pathSet(t, path, v); }, c.type === 'range' || c.type === 'color'); }
-    else if (pr && e.type === 'change') change(function (t) { var i = t.props.indexOf(pr); if (c.checked && i < 0) t.props.push(pr); else if (!c.checked && i >= 0) t.props.splice(i, 1); });
+    else if (pr && e.type === 'change') {
+      if (c.checked && cur.api.theme().props.length >= MAX_PROPS) { c.checked = false; say(FULL); return; }
+      change(function (t) { var i = t.props.indexOf(pr); if (c.checked && i < 0) t.props.push(pr); else if (!c.checked && i >= 0) t.props.splice(i, 1); });
+    }
   }
 
   // Opening: the window in place mode moves left, centre, right, then away.

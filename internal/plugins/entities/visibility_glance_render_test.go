@@ -1,5 +1,5 @@
 // visibility_glance_render_test.go renders the REAL call sites (the page corner,
-// EntityCard, blockDetails, EntityTableRow, entityTreeLevel, blockChildren,
+// blockDetails, entityTreeLevel, blockChildren,
 // entityBlock/RenderBlock), never a hand-rolled stand-in for them (ADR-057).
 package entities
 
@@ -42,7 +42,7 @@ func glanceViewers() map[string]*campaigns.CampaignContext {
 // TestVisibilityGlance_GateAcrossCallSites pins the visibility-glance gate
 // across every render call site, not just the show page header: Player and
 // anonymous viewers must get no glance element, and co-DM/Owner must, on
-// the page corner, EntityCard, blockDetails, EntityTableRow, entityTreeLevel and
+// the page corner, blockDetails, entityTreeLevel and
 // blockChildren alike (ADR-057).
 func TestVisibilityGlance_GateAcrossCallSites(t *testing.T) {
 	entity := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 9, Name: "Waterdeep", Visibility: VisibilityDefault, IsPrivate: true}
@@ -53,14 +53,8 @@ func TestVisibilityGlance_GateAcrossCallSites(t *testing.T) {
 		"page corner (effectiveVisibilityBadge)": func(cc *campaigns.CampaignContext) string {
 			return renderComponent(t, effectiveVisibilityBadge(cc, entity, nil))
 		},
-		"card (EntityCard)": func(cc *campaigns.CampaignContext) string {
-			return renderComponent(t, EntityCard(entity, cc))
-		},
 		"details (blockDetails)": func(cc *campaigns.CampaignContext) string {
 			return renderComponent(t, blockDetails(cc, entity))
-		},
-		"table row (EntityTableRow)": func(cc *campaigns.CampaignContext) string {
-			return renderComponent(t, EntityTableRow(entity, cc))
 		},
 		"tree node (entityTreeLevel)": func(cc *campaigns.CampaignContext) string {
 			return renderComponent(t, entityTreeLevel(cc, []EntityTreeNode{node}, 0))
@@ -83,37 +77,6 @@ func TestVisibilityGlance_GateAcrossCallSites(t *testing.T) {
 				html := render(viewers[visible])
 				if !strings.Contains(html, "data-visibility-badge") {
 					t.Errorf("%s viewer must see the glance, got none:\n%s", visible, html)
-				}
-			}
-		})
-	}
-}
-
-// TestVisibilityGlance_ThreeStates pins the glyph-per-state mapping through a
-// real call site (the card), not the component in isolation: globe for
-// everyone, lock for dm_only, shield for custom, and never more than one of
-// the three on a given render.
-func TestVisibilityGlance_ThreeStates(t *testing.T) {
-	owner := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner}
-	glyphs := []string{"fa-globe", "fa-lock", "fa-shield-halved"}
-	cases := []struct {
-		name   string
-		entity *Entity
-		want   string
-	}{
-		{"everyone", &Entity{ID: "e1", Visibility: VisibilityDefault, IsPrivate: false}, "fa-globe"},
-		{"dm_only", &Entity{ID: "e2", Visibility: VisibilityDefault, IsPrivate: true}, "fa-lock"},
-		{"custom", &Entity{ID: "e3", Visibility: VisibilityCustom}, "fa-shield-halved"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			html := renderComponent(t, EntityCard(tc.entity, owner))
-			if !strings.Contains(html, tc.want) {
-				t.Errorf("expected %q in rendered card, got:\n%s", tc.want, html)
-			}
-			for _, other := range glyphs {
-				if other != tc.want && strings.Contains(html, other) {
-					t.Errorf("did not expect %q alongside %q, got:\n%s", other, tc.want, html)
 				}
 			}
 		})

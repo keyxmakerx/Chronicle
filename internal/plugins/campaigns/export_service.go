@@ -522,6 +522,8 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		Name:               data.Campaign.Name,
 		Description:        ptrToString(data.Campaign.Description),
 		SkipEntityTypeSeed: len(data.EntityTypes) > 0,
+		// The file's own addon list is applied below.
+		SkipDefaultFeatures: true,
 	})
 	if err != nil {
 		return nil, report, fmt.Errorf("import create campaign: %w", err)
