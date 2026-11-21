@@ -1239,3 +1239,19 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - Heroes store names, so renaming a campaign entry leaves a hero flagged as holding an unknown name until names carry the key (follow-up).
 - A new rule table or state needs the evaluator in `choice_rules_eval.go` changed first, and its tests, not a second copy of the precedence.
+
+## ADR-076: The guest preview can show a visitor who came in on a guest code
+
+**Status:** Accepted; operator picked "both, with a switch" (#2560). Extends ADR-074.
+
+**Context:** Someone who joins on a guest code reads the campaign on a look-around pass, on a private campaign too, and only they get the hero try-out. The guest preview showed a visitor with no code, so a Director could not see what the people they send codes to see, and on a private campaign could not preview guests at all.
+
+**Decision:**
+1. A second guest preview, cookie `chronicle_view_as_guestcode`, lowers the DM team's own reads to `GuestCodePreviewContext`: the same context as `GuestPreviewContext` plus a pass (`VisitUntil`) ending a week from now. A pass gives exactly what a public visit gives (`RoleNone`), so this lowers as far as ADR-074's preview does.
+2. Unlike ADR-074 point 2, this preview works on a private campaign, because a pass opens one for reading. The no-code preview still needs a public campaign.
+3. Every other ADR-074 rule holds: only for the DM team's own GET or HEAD, never a write, chrome fields grant nothing, members-only routes are refused, and the REST session door lowers the read (`guestPreviewMode` is the one rule all of them ask).
+4. The strip under the top bar switches between the two visitors on a public campaign; a private campaign's Home note offers the guest-code view.
+
+**Consequences:**
+- The preview's pass date is made up (a week out), so the visitor banner shows a date a real pass holder would see their own version of.
+- `tools/player-crawl` still walks the no-code preview only.

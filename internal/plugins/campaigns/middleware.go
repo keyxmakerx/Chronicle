@@ -240,9 +240,7 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 				// preview's chrome and grant nothing. The user id stays on the
 				// session, so a grant made to the owner's own account on a
 				// page would still match where a signed-out visitor's would not.
-				if guestPreviewActive(c, cc) {
-					cc = cc.GuestPreviewContext()
-				}
+				cc = lowerForGuestPreview(c, cc)
 				c.Set(contextKeyCampaign, cc)
 				return next(c)
 			}
