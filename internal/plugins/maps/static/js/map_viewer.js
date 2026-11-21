@@ -1276,7 +1276,7 @@
 		hexesLoading = true;
 		// The terrain art is optional: without it every map draws Simple.
 		var art = cfg.dataset.hexArtSrc ? loadScript(cfg.dataset.hexArtSrc).catch(function() {}) : Promise.resolve();
-		Promise.all([art, loadScript(cfg.dataset.hexesSrc)]).then(function() {
+		Promise.all([art, loadScript(cfg.dataset.hexLookSrc)]).then(function() { return loadScript(cfg.dataset.hexesSrc); }).then(function() {
 			hexesLoading = false;
 			if (destroyed || !window.ChronicleMapHexes || !viewerCtx) return;
 			try { window.ChronicleMapHexes.init(viewerCtx); } catch (err) { console.error('[map-viewer] hexes failed:', err); }
