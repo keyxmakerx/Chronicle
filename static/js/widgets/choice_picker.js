@@ -115,24 +115,18 @@
     });
   };
 
-  // The own-entry editor is the entities plugin's script. It is fetched the
-  // first time a player asks to make their own entry, from the address the
-  // page's widget list already names (so it carries the same cache version).
-  // Only that exact path, with at most a version token, is ever loaded: the
-  // list is page text, and a script address must never come from page text.
-  var EDITOR_SRC = /^\/static\/plugins\/entities\/js\/own_entry_editor\.js(\?v=[A-Za-z0-9_-]+)?$/;
+  // The own-entry editor is the entities plugin's script, fetched the first
+  // time a player asks to make their own entry (a page that lists it already
+  // has it). The address is fixed, never read from page text, and carries no
+  // version token: unversioned static files are revalidated on every load.
+  var EDITOR_SRC = '/static/plugins/entities/js/own_entry_editor.js';
   var editorLoad = null;
   function loadEditor() {
     if (window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor) return Promise.resolve();
     if (editorLoad) return editorLoad;
     editorLoad = new Promise(function (resolve, reject) {
-      var url = '/static/plugins/entities/js/own_entry_editor.js';
-      try {
-        var lists = JSON.parse((document.getElementById('chronicle-widget-scripts') || {}).textContent || '{}');
-        Object.keys(lists).forEach(function (k) { (lists[k] || []).forEach(function (u) { var m = EDITOR_SRC.exec(String(u)); if (m) url = '/static/plugins/entities/js/own_entry_editor.js' + (m[1] || ''); }); });
-      } catch (e) { /* the plain address works too */ }
       var sc = document.createElement('script');
-      sc.src = url;
+      sc.src = EDITOR_SRC;
       sc.onload = function () { if (window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor) resolve(); else reject(new Error('editor')); };
       sc.onerror = function () { reject(new Error('editor')); };
       document.head.appendChild(sc);
