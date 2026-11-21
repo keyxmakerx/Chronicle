@@ -4477,6 +4477,7 @@ func (a *App) RegisterRoutes() {
 	// down they go to the Calendar app.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		sessionsHandler.SetCalendarFinder(&realWorldCalendarFinderAdapter{svc: calendarService})
+		sessionsHandler.SetSessionEventSource(&sessionEventSourceAdapter{svc: calendarService})
 	}
 	// CALV5-PLACEHOLDER: V5 must restore three post-construction setters —
 	// SetAvailabilityWriter (member zones + exception dates),
