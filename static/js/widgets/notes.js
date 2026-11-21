@@ -2007,6 +2007,11 @@ Chronicle.register('notes', {
     // may not complete during unload (same caveat as the lock release
     // below), but it costs nothing and rescues the common case.
     window.addEventListener('beforeunload', flushAutosave);
+    // beforeunload does not fire reliably on mobile; hiding the page does.
+    window.addEventListener('pagehide', flushAutosave);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') flushAutosave();
+    });
 
     // A panel kept open reopens on the next page; otherwise just count this page.
     if (embedded || isPinnedOpen()) openPanel(); else loadCount();
