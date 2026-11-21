@@ -1,9 +1,9 @@
-// calendar_several_moons.spec.mjs — a calendar with several moons shows each
-// moon on every day as its own small silhouette in a row, not as nested
-// rings. The Harptos calendar has four moons on a ten-day week (narrow
-// cells); a made calendar has two moons on a six-day week. A player sees the
-// moons the Director has not hidden, and the row never lands on the day
-// number or the event marks, at desktop or phone width.
+// calendar_several_moons.spec.mjs — a calendar with several moons shows one
+// disc a day with each moon's lit shape laid over it in its own colour, three
+// at most and a count for the rest. The Harptos calendar has four moons on a
+// ten-day week (narrow cells); a made calendar has two moons on a six-day
+// week. A player sees the moons the Director has not hidden, and the mark
+// never lands on the day number or the event marks, at desktop or phone width.
 //
 // RUN: tools/live-checks.sh test/live/calendar_several_moons.spec.mjs
 
@@ -48,27 +48,23 @@ async function twoMoonsOnSixDays(owner, cid) {
   }, { cid, text: JSON.stringify(file) });
 }
 
-// What the month draws: per day with a moon, how many silhouettes, rings and counts, and whether the
-// row keeps clear of the day number, the event marks and the cell's edges.
+// What the month draws: per day with a moon, the discs, lit shapes and count, and whether the mark
+// keeps clear of the day number, the event marks and the cell's edges.
 const readMonth = (page) => page.evaluate(() => {
   const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
   return [...document.querySelectorAll('.cal-v5 .day')].filter((d) => d.querySelector('.msil')).map((d) => {
-    const row = d.querySelector('.msil'), cell = d.getBoundingClientRect();
-    const sils = [...row.querySelectorAll('.m1')].filter((s) => getComputedStyle(s).display !== 'none');
-    const count = [...row.querySelectorAll('.mn')].find((n) => getComputedStyle(n).display !== 'none');
-    // What is drawn, not the row's box: the box keeps a touch margin around the silhouettes.
-    const boxes = sils.concat(count ? [count] : []).map((e) => e.getBoundingClientRect());
-    const r = { left: Math.min(...boxes.map((b) => b.left)), right: Math.max(...boxes.map((b) => b.right)), top: Math.min(...boxes.map((b) => b.top)), bottom: Math.max(...boxes.map((b) => b.bottom)) };
+    const mark = d.querySelector('.msil'), cell = d.getBoundingClientRect();
+    const count = mark.querySelector('.mn');
+    const r = mark.getBoundingClientRect();
     const num = d.querySelector('.num'), marks = d.querySelector('.marks');
     return {
-      key: d.dataset.key, several: row.classList.contains('several'),
-      silhouettes: sils.length, rings: row.querySelectorAll('.rng').length, count: count ? count.textContent : '',
-      tinted: sils.filter((s) => s.style.getPropertyValue('--mc')).length,
+      key: d.dataset.key, over: mark.classList.contains('over'),
+      discs: mark.querySelectorAll('.sil.ov .db').length, shapes: mark.querySelectorAll('.sil.ov .dl').length,
+      count: count ? count.textContent : '',
+      tinted: [...mark.querySelectorAll('.dl')].filter((s) => s.style.getPropertyValue('--mc')).length,
       onNumber: !!num && hit(r, num.getBoundingClientRect()),
       onMarks: !!marks && hit(r, marks.getBoundingClientRect()),
       inCell: r.left >= cell.left - 0.5 && r.right <= cell.right + 0.5,
-      offCentre: Math.abs((r.left + r.right) / 2 - (cell.left + cell.right) / 2),
-      top: Math.round(row.getBoundingClientRect().top - cell.top),
     };
   });
 });
@@ -82,7 +78,7 @@ async function addMarks(owner, base, cal) {
   }
 }
 
-test('four moons on a ten-day week are four silhouettes a day, no rings, for the owner and a player', async () => {
+test('four moons on a ten-day week are one disc with three lit shapes and a +1, for the owner and a player', async () => {
   const owner = await person({ tag: 'own', name: 'Mara Vell' });
   const player = await person({ tag: 'ply', name: 'Tobin Hale' });
   const { base, cal } = await calendarFor(owner, player, 'Several Moons', (cid) => owner.api(`/campaigns/${cid}/calendars/presets/harptos`, { method: 'POST', body: {} }));
@@ -94,15 +90,16 @@ test('four moons on a ten-day week are four silhouettes a day, no rings, for the
   const wide = await readMonth(page);
   assert.ok(wide.length >= 10, 'the month drew too few moon marks');
   for (const d of wide) {
-    assert.ok(d.several, `${d.key} is not a row of silhouettes`);
-    assert.equal(d.silhouettes, 4, `${d.key} shows ${d.silhouettes} silhouettes`);
-    assert.equal(d.rings, 0, `${d.key} still draws rings`);
-    assert.equal(d.count, '', `${d.key} counts moons that are all shown`);
-    assert.equal(d.tinted, 4, `${d.key} has a moon with no colour of its own`);
+    assert.ok(d.over && d.discs === 1, `${d.key} is not one shared disc`);
+    // A dark moon has no lit shape, so a day lays up to three.
+    assert.ok(d.shapes <= 3, `${d.key} lays ${d.shapes} lit shapes on the disc`);
+    assert.equal(d.count, '+1', `${d.key} counts ${d.count || 'nothing'} for the fourth moon`);
+    assert.equal(d.tinted, d.shapes, `${d.key} has a moon with no colour of its own`);
     assert.ok(!d.onNumber, `${d.key}: the moons sit on the day number`);
     assert.ok(!d.onMarks, `${d.key}: the moons sit on the event marks`);
     assert.ok(d.inCell, `${d.key}: the moons spill out of the cell`);
   }
+  assert.ok(wide.some((d) => d.shapes === 3), 'no day of the month lays three lit shapes');
   await picture(page, 'calendar-several-moons-desktop-light', { check: '#2482', about: 'Owner month, four moons on a ten-day week, desktop', locator: page.locator('#cal5-cal') });
 
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -114,13 +111,11 @@ test('four moons on a ten-day week are four silhouettes a day, no rings, for the
   await page.locator('.cal-v5 .day .msil').first().waitFor();
   const narrow = await readMonth(page);
   for (const d of narrow) {
-    // A ten-day week leaves a phone cell about 33px: all four moons, two lines of two, nothing left out.
-    assert.equal(d.silhouettes, 4, `${d.key}: a phone shows ${d.silhouettes} silhouettes`);
-    assert.equal(d.count, '', `${d.key}: a phone counts moons that are all shown`);
+    // The mark is one disc wide, so a ten-day week's phone cell holds it with its count.
+    assert.ok(d.over && d.discs === 1 && d.shapes <= 3, `${d.key}: a phone draws ${d.shapes} shapes on ${d.discs} discs`);
+    assert.equal(d.count, '+1', `${d.key}: a phone counts ${d.count || 'nothing'}`);
     assert.ok(!d.onNumber && !d.onMarks, `${d.key}: the moons sit on the number or the event marks on a phone`);
     assert.ok(d.inCell, `${d.key}: the moons spill out of the cell on a phone`);
-    assert.ok(d.offCentre < 2, `${d.key}: the row is ${d.offCentre}px off centre`);
-    assert.equal(d.top, 31, `${d.key}: the row starts ${d.top}px down, not at the single moon's height`);
   }
   await picture(page, 'calendar-several-moons-phone-light', { check: '#2482', about: 'Owner month, four moons, phone width', locator: page.locator('#cal5-cal') });
   await page.setViewportSize(DESKTOP);
@@ -129,7 +124,7 @@ test('four moons on a ten-day week are four silhouettes a day, no rings, for the
   // sees three and the Director still sees all four.
   await player.go(`${base}/view`);
   await player.page.locator('.cal-v5 .day .msil').first().waitFor();
-  assert.ok((await readMonth(player.page)).every((d) => d.silhouettes === 4 && d.rings === 0), 'a player does not see the same four moons');
+  assert.ok((await readMonth(player.page)).every((d) => d.shapes <= 3 && d.count === '+1'), 'a player does not see the same four moons');
 
   const moons = cal.moons || (await owner.api(base)).body.moons;
   assert.equal(moons.length, 4);
@@ -137,15 +132,15 @@ test('four moons on a ten-day week are four silhouettes a day, no rings, for the
   assert.ok(hid.ok, `hiding a moon answered ${hid.status}`);
   await player.go(`${base}/view`);
   await player.page.locator('.cal-v5 .day .msil').first().waitFor();
-  assert.ok((await readMonth(player.page)).every((d) => d.silhouettes === 3), 'the player still sees the hidden moon');
+  assert.ok((await readMonth(player.page)).every((d) => d.shapes <= 3 && d.count === ''), 'the player still sees the hidden moon');
   await owner.go(`${base}/view`);
   await page.locator('.cal-v5 .day .msil').first().waitFor();
-  assert.ok((await readMonth(page)).every((d) => d.silhouettes === 4), 'the Director lost a moon by hiding it from players');
+  assert.ok((await readMonth(page)).every((d) => d.shapes <= 3 && d.count === '+1'), 'the Director lost a moon by hiding it from players');
   owner.assertClean();
   player.assertClean();
 });
 
-test('two moons on a six-day week are two tinted silhouettes a day, clear of the day number', async () => {
+test('two moons on a six-day week are one disc with two tinted shapes a day, clear of the day number', async () => {
   const owner = await person({ tag: 'own', name: 'Mara Vell' });
   const player = await person({ tag: 'ply', name: 'Tobin Hale' });
   const { base, cal } = await calendarFor(owner, player, 'Two Moons', (cid) => twoMoonsOnSixDays(owner, cid));
@@ -160,9 +155,10 @@ test('two moons on a six-day week are two tinted silhouettes a day, clear of the
     const days = await readMonth(page);
     assert.ok(days.length >= 10, 'the month drew too few moon marks');
     for (const d of days) {
-      assert.ok(d.several && d.silhouettes === 2 && d.rings === 0 && d.tinted === 2, `${d.key} at ${width.width}px: ${JSON.stringify(d)}`);
+      assert.ok(d.over && d.discs === 1 && d.shapes <= 2 && d.count === '' && d.tinted === d.shapes, `${d.key} at ${width.width}px: ${JSON.stringify(d)}`);
       assert.ok(!d.onNumber && !d.onMarks && d.inCell, `${d.key} at ${width.width}px: the moons collide`);
     }
+    assert.ok(days.some((d) => d.shapes === 2), `no day lays both moons' lit shapes at ${width.width}px`);
     await picture(page, `calendar-two-moons-${width.width < 600 ? 'phone' : 'desktop'}`, { check: '#2482', about: `Owner month, two moons on a six-day week, ${width.width}px`, locator: page.locator('#cal5-cal') });
   }
   owner.assertClean();
