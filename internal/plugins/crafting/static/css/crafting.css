@@ -136,11 +136,11 @@ html[data-motion="off"] .cra-drawer { transition: none; }
   border-radius: var(--cra-r-sm); background: none; color: var(--cra-ink); cursor: pointer; }
 .cra-ritem:hover { background: var(--cra-tint); }
 .cra-ritem[aria-current="true"] { background: color-mix(in srgb, var(--cra-acc) 9%, transparent); box-shadow: inset 2px 0 0 var(--cra-acc); }
-/* Adding a recipe is the list's last row, a quiet word lined up with the
-   names above it, rather than a boxed button under the list. */
-.cra-newrow { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 8px 10px; font: inherit; font-weight: 600; text-align: left; border: 0;
-  border-radius: var(--cra-r-sm); background: none; color: var(--color-accent-link, var(--cra-acc)); cursor: pointer; transition: background-color var(--dur-micro, .12s); }
-.cra-newrow:hover { background: var(--cra-tint); text-decoration: underline; text-underline-offset: 2px; }
+/* Adding a recipe is one typed line above the list: no name, no recipe. */
+.cra-addin { width: 100%; min-height: 44px; margin: 0 0 8px; }
+.cra-rl > li { display: flex; align-items: center; gap: 4px; }
+.cra-rl > li > .cra-ritem { flex: 1 1 auto; min-width: 0; }
+.cra-rmore { flex: 0 0 auto; min-height: 44px; padding: 0 8px; }
 .cra-rtxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cra-rtxt b { font-weight: 600; overflow-wrap: anywhere; }
 .cra-rtxt small { font-size: 12.5px; color: var(--cra-muted); }
