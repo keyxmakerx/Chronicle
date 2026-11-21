@@ -73,7 +73,7 @@ function bookFixture(opts = {}) {
         { id: 'basics', title: 'Basics', pages: [opts.jumps ? jumpPage('Start here') : longPage('Start here'), rollPage, longPage('Rolling')] },
         { id: 'screen', title: 'Players Screen', pages: [{ title: 'At the table', wide: true, blocks: [{ type: 'text', text: 'Everything at once.' }] }] },
         { id: 'tests', title: 'Tests', pages: [longPage('Rolling a test'), longPage('Easy and hard')] },
-        { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
+        { id: 'combat', title: 'Combat', pages: [longPage('Turns'), opts.popUp ? { title: 'Pop-up fight', blocks: [{ type: 'widget', widget: 'class-fights' }] } : longPage('Moving')] },
       ],
     }, {
       title: "Director's book", director: true,
@@ -772,6 +772,24 @@ test('the Sections ribbon pulls down, lists chapters and pages, and rolls up bef
     st = await bmState(page);
     assert.equal(st.expanded, 'false');
   }, { bold: true });
+});
+
+test('a page with a pop-up book on it glows in the Sections list, and Calm stills the glow', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-bm-tab');
+    await page.waitForFunction(() => document.querySelector('.rb-bm-roll').getBoundingClientRect().height > 200);
+    const lit = await page.$$eval('.rb-bm-list .rb-bm-live span', (els) => els.map((e) => e.textContent));
+    assert.deepEqual(lit, ['Pop-up fight']);
+    const css = () => page.$eval('.rb-bm-live span', (e) => [getComputedStyle(e).animationName, getComputedStyle(e).textShadow !== 'none', getComputedStyle(e, '::after').content]);
+    const [anim, glows, star] = await css();
+    assert.equal(anim, 'rb-bm-glow');
+    assert.ok(glows);
+    assert.ok(star.includes('\u2726'), star);
+    await page.evaluate(() => document.documentElement.setAttribute('data-motion', 'calm'));
+    const [calmAnim, calmGlows] = await css();
+    assert.equal(calmAnim, 'none');
+    assert.ok(calmGlows, 'still shines');
+  }, { popUp: true });
 });
 
 test('Escape or a click elsewhere rolls the Sections ribbon up; Escape returns focus to it', async () => {

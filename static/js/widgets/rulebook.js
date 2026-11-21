@@ -1866,6 +1866,12 @@
       '<ul class="rb-bm-list" id="' + id + '"></ul></div></div></div>';
   };
 
+  // A page with a package widget on it (a pop-up book to play) is the one kind
+  // of page the Sections list lights up, so a reader can see where to play.
+  function playable(p) {
+    return arr(p && p.blocks).some(function (b) { return str(b.type) === 'widget' && SLUG_RE.test(str(b.widget)); });
+  }
+
   Rulebook.prototype.bmListHTML = function () {
     var self = this, h = '', open = false, lastPart = null, num = 0, parts = {};
     var sp = this.spreads[this.at], cur = {}, curCh = sp ? sp.items[0].ch : null;
@@ -1880,12 +1886,12 @@
           h += '<li class="rb-bm-part">' + esc(it.part.title) + '</li>';
         }
         num++;
-        h += '<li><button type="button" data-bm="' + it.n + '"' + (it.ch === curCh ? ' aria-current="true"' : '') + '><i>' + (bold ? roman(num) : num) + '</i><span>' +
+        h += '<li><button type="button" data-bm="' + it.n + '"' + (it.ch === curCh ? ' aria-current="true"' : '') + (it.solo && playable(it.p) ? ' class="rb-bm-live"' : '') + '><i>' + (bold ? roman(num) : num) + '</i><span>' +
           esc(it.ch.title) + '</span>' + (it.ch.director && !it.part.director ? '<em>' + gmTerm() + '</em>' : '') + '</button>';
         open = true;
         if (it.kind === 'open' && it.pages.length > 1) {
           h += '<ul class="rb-bm-sub">' + it.pages.map(function (p) {
-            return '<li><button type="button" data-bm="' + p.n + '"' + (cur[p.n] ? ' aria-current="true"' : '') + '><span>' +
+            return '<li><button type="button" data-bm="' + p.n + '"' + (cur[p.n] ? ' aria-current="true"' : '') + (playable(p.p) ? ' class="rb-bm-live"' : '') + '><span>' +
               esc(p.p.title || 'Untitled page') + '</span>' + (p.p.director && !it.ch.director ? '<em>' + gmTerm() + '</em>' : '') + '</button></li>';
           }).join('') + '</ul>';
         }

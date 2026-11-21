@@ -530,6 +530,17 @@
 .rb-bm-list button[aria-current="true"]:where(:not(.rb-wslot *)) { background: rgba(0, 0, 0, 0.3); box-shadow: inset 4px 0 0 #fff; }
 .rb-bm-list button i:where(:not(.rb-wslot *)) { min-width: 20px; font: 800 15px/1 var(--rb-head); font-style: normal; opacity: 0.85; }
 .rb-bm-list button em:where(:not(.rb-wslot *)) { margin-left: auto; font: 700 9px/1 var(--rb-ui); font-style: normal; letter-spacing: 0.08em; padding: 2px 4px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 3px; }
+/* A page you can play (a pop-up book) glows softly in the list, with a star that
+   twinkles. The glow is a still shine when motion is Calm or Off. */
+.rb-bm-live span:where(:not(.rb-wslot *)) { text-shadow: 0 0 6px rgba(255, 255, 255, 0.55), 0 0 12px rgba(255, 224, 150, 0.45); animation: rb-bm-glow 2.8s ease-in-out infinite; }
+.rb-bm-live span:where(:not(.rb-wslot *))::after { content: "\2726"; margin-left: 0.45em; font-size: 0.85em; color: #ffe9a8; display: inline-block; animation: rb-bm-twinkle 2.8s ease-in-out infinite; }
+@keyframes rb-bm-glow { 0%, 100% { text-shadow: 0 0 4px rgba(255, 255, 255, 0.35), 0 0 9px rgba(255, 224, 150, 0.3); } 50% { text-shadow: 0 0 7px rgba(255, 255, 255, 0.8), 0 0 16px rgba(255, 224, 150, 0.65); } }
+@keyframes rb-bm-twinkle { 0%, 100% { opacity: 0.55; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15) rotate(12deg); } }
+:is(html[data-motion], html[data-cz-reduce], html[data-view-motion="calm"]) .rb-bm-live span:where(:not(.rb-wslot *)),
+:is(html[data-motion], html[data-cz-reduce], html[data-view-motion="calm"]) .rb-bm-live span:where(:not(.rb-wslot *))::after { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rb-bm-live span:where(:not(.rb-wslot *)), .rb-bm-live span:where(:not(.rb-wslot *))::after { animation: none; }
+}
 .rb-bm-all:where(:not(.rb-wslot *)) { padding: 10px 22px 2px; }
 .rb-bm-all a:where(:not(.rb-wslot *)) { font: 600 12.5px/1.3 var(--rb-ui); color: #fff; text-decoration: none; text-underline-offset: 3px; }
 .rb-bm-all a:hover:where(:not(.rb-wslot *)) { text-decoration: underline; }
