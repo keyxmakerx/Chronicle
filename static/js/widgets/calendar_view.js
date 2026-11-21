@@ -1670,8 +1670,7 @@
       this.fvEl = $('#cal5-fv', this.el);
     },
 
-    // action, optional: {label, run, ms} adds a button to the toast (Undo);
-    // ms is how long it stays, 8 seconds when not given.
+    // action, optional: {label, run} adds a button to the toast (Undo).
     say: function (msg, action) {
       this._announce(msg);
       this._toast(msg, action);
@@ -2042,7 +2041,7 @@
       el.querySelector('span').setAttribute('aria-hidden', 'true');
       el.classList.add('on');
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? (action.ms || 8000) : 3200);
+      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
     },
 
     // --------------------------------------------------------------
@@ -2447,38 +2446,89 @@
     // it holds for everyone and on every device. At most three show at once so
     // the strip never pushes the nights away.
     //
-    // _gnSkip drops the row at once and tells the server; a refusal brings it
-    // back and says so. The hiding is for everyone with no other way back, so
-    // the toast offers Undo for three seconds. Resolves true when stored.
+    // _gnSkip swaps the row for a quiet "Hidden for everyone. Undo" line in the
+    // panel, where the press happened: a toast sits in the calendar card, outside
+    // the panel, so pressing it closes the panel and can be off-screen. The line
+    // folds away after three seconds. A refused press brings the row back and
+    // says so. Resolves true when stored.
     _gnSkip: function (id) {
-      var self = this, kept = this._gnCands || [];
-      var at = kept.findIndex(function (r) { return r.eventId === id; });
-      var row = at < 0 ? null : kept[at];
-      var url = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-dismissals/' + encodeURIComponent(id);
-      this._gnCands = kept.filter(function (r) { return r.eventId !== id; });
-      return Chronicle.apiFetch(url, { method: 'PUT' })
+      var self = this, row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
+      if (!row) return Promise.resolve(false);
+      row._hid = true;
+      this._gnRepaint('[data-gn-undo="' + id + '"]');
+      return Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'PUT' })
         .then(function (r) { if (!r.ok) throw new Error('dismiss ' + r.status); return true; })
         .then(function () {
-          self.say('Hidden for everyone.', { label: 'Undo', ms: 3000, run: function () { self._gnUnskip(url, row, at); } });
+          self._announce('Hidden for everyone. Undo is available for a few seconds.');
+          self._gnUndoTimer(row, 3000);
           return true;
         }, function () {
-          self._gnCands = kept;
+          row._hid = false;
+          self._gnRepaint('[data-gn-skip="' + id + '"]');
           self.say('Could not hide that one. Try again.');
           return false;
         });
     },
-    _gnUnskip: function (url, row, at) {
+    _gnDismissUrl: function (id) {
+      return '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-dismissals/' + encodeURIComponent(id);
+    },
+    // Repaints the open panel and puts focus on the first match of focusSel,
+    // else on the next strip link or row, so focus never lands on a removed node.
+    _gnRepaint: function (focusSel) {
+      var pop = $('#cal5-gnpop', this.el);
+      if (!pop || pop.hidden) return;
+      pop.innerHTML = this._gnListHTML(this._gnNext || []);
+      var f = (focusSel && $(focusSel, pop)) || $('.gnstrip .lnk', pop) || $('.wrow', pop);
+      if (f) f.focus();
+    },
+    _gnUndoTimer: function (row, ms) {
       var self = this;
-      Chronicle.apiFetch(url, { method: 'DELETE' })
+      clearTimeout(row._t);
+      row._t = setTimeout(function () { self._gnFold(row); }, ms);
+    },
+    // The line leaves the way a removed row does: it folds to nothing under Full
+    // motion, only fades under Calm or reduced motion, and goes at once when
+    // motion is Off. Focus moves on only if it was inside the line.
+    _gnFold: function (row) {
+      var self = this, pop = $('#cal5-gnpop', this.el);
+      if (!row._hid) return;
+      var el = pop && !pop.hidden ? $('[data-gn-undo-row="' + row.eventId + '"]', pop) : null;
+      var done = function () {
+        if (!row._hid) return;
+        var held = el && el.contains(document.activeElement);
+        self._gnCands = (self._gnCands || []).filter(function (r) { return r !== row; });
+        if (pop && !pop.hidden) {
+          pop.innerHTML = self._gnListHTML(self._gnNext || []);
+          var f = held && ($('.gnstrip .lnk', pop) || $('.wrow', pop));
+          if (f) f.focus();
+        }
+      };
+      var mode = document.documentElement.getAttribute('data-motion');
+      var calm = mode === 'calm' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (!el || mode === 'off') return done();
+      if (!calm) el.style.height = el.offsetHeight + 'px';
+      void el.offsetHeight;
+      el.classList.add(calm ? 'gn-fade' : 'gn-fold');
+      setTimeout(done, 170);
+    },
+    _gnUnskip: function (id) {
+      var self = this, row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
+      if (!row) return;
+      clearTimeout(row._t);
+      Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'DELETE' })
         .then(function (r) { if (!r.ok) throw new Error('restore ' + r.status); })
         .then(function () {
-          var cands = self._gnCands = self._gnCands || [];
-          if (row && !cands.some(function (r) { return r.eventId === row.eventId; })) cands.splice(at, 0, row);
-          var pop = $('#cal5-gnpop', self.el);
-          if (pop && !pop.hidden) pop.innerHTML = self._gnListHTML(self._gnNext || []);
+          row._hid = false;
+          self._gnRepaint('[data-gn-make="' + id + '"]');
           self._announce('Back on the list.');
         })
-        .catch(function () { self.say('That couldn’t be undone. Try again.'); });
+        .catch(function () {
+          // Still hidden on the server: say so in the line and keep Undo for another try.
+          row._err = true;
+          self._gnRepaint('[data-gn-undo="' + id + '"]');
+          self._announce('That couldn’t be undone. Try again.');
+          self._gnUndoTimer(row, 6000);
+        });
     },
     _gnLoadCands: function () {
       if (this.role < 2) return Promise.resolve([]);
@@ -2491,6 +2541,11 @@
       if (!rows.length) return '';
       var h = rows.slice(0, 3).map(function (r) {
         var sub = [r.when, r.page].filter(Boolean).join(' · ');
+        if (r._hid) {
+          return '<div class="gnstrip gnstrip-undo" data-gn-undo-row="' + esc(r.eventId) + '"><p class="gnstrip-t">' +
+            (r._err ? 'Could not undo that. ' : 'Hidden for everyone. ') +
+            '<button type="button" class="lnk" data-gn-undo="' + esc(r.eventId) + '">Undo</button></p></div>';
+        }
         return '<div class="gnstrip" role="group" aria-label="' + esc(r.name) + ' has no game night">' +
           '<p class="gnstrip-t"><b>' + esc(r.name) + '</b> is on your calendar with no game night.</p>' +
           (sub ? '<p class="gnstrip-s">' + esc(sub) + '</p>' : '') +
@@ -5554,15 +5609,9 @@
           var mk = t.closest('[data-gn-make]');
           if (mk) { self._gnMake(mk); return; }
           var sk = t.closest('[data-gn-skip]');
-          if (sk) {
-            var gone = self._gnSkip(sk.getAttribute('data-gn-skip'));
-            pop.innerHTML = self._gnListHTML(self._gnNext || []);
-            var nx = $('.gnstrip .lnk', pop) || $('.wrow', pop);
-            if (nx) nx.focus();
-            // A refused press puts the row back where the owner can see it.
-            gone.then(function (ok) { if (!ok && !pop.hidden) pop.innerHTML = self._gnListHTML(self._gnNext || []); });
-            return;
-          }
+          if (sk) { self._gnSkip(sk.getAttribute('data-gn-skip')); return; }
+          var un = t.closest('[data-gn-undo]');
+          if (un) { self._gnUnskip(un.getAttribute('data-gn-undo')); return; }
           if (t.closest('[data-gn-next]')) { pop.innerHTML = self._gnListHTML(self._gnNext || []); return; }
           var fb = t.closest('[data-gn-feed]');
           if (fb) { self.toggleGnFeed(fb); return; }

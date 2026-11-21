@@ -2190,6 +2190,12 @@
 .cal-v5 .gnstrip-q{display:flex;flex-wrap:wrap;gap:0 10px;margin-top:2px!important}
 .cal-v5 .gnstrip-q .lnk{margin-left:-6px;min-height:32px}
 @media (pointer:coarse){.cal-v5 .gnstrip-q .lnk{min-height:44px}}
+/* "Hidden for everyone. Undo" stands where the row was and folds away: to nothing under Full motion, a fade under Calm or reduced motion. */
+.cal-v5 .gnstrip-undo{overflow:hidden;display:flex;align-items:center;min-height:32px}
+.cal-v5 .gnstrip-undo .lnk{min-height:32px;margin-left:2px}
+@media (pointer:coarse){.cal-v5 .gnstrip-undo{min-height:44px}.cal-v5 .gnstrip-undo .lnk{min-height:44px;min-width:44px}}
+.cal-v5 .gnstrip-undo.gn-fold{height:0!important;min-height:0;opacity:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-bottom-width:0;transition:height var(--dur-micro,120ms) var(--ease-in,ease-in) 40ms,opacity var(--dur-micro,120ms) ease-in,margin var(--dur-micro,120ms) ease-in,padding var(--dur-micro,120ms) ease-in}
+.cal-v5 .gnstrip-undo.gn-fade{opacity:0;transition:opacity var(--dur-micro,120ms) ease-in}
 .cal-v5 .gnans{flex:none;font:550 11.5px/1 var(--sans);color:var(--mut)}
 .cal-v5 .gnans.y{color:var(--free)}
 .cal-v5 .gnans.m{color:var(--best)}

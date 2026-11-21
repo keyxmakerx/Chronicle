@@ -225,7 +225,7 @@ test('Not this one is kept on the server, not in this browser', { skip }, async 
   await p.click('#cal5-gnbtn');
   await p.waitForSelector('#cal5-gnpop .gnstrip');
   await p.click('#cal5-gnpop [data-gn-skip="e1"]');
-  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 1, 'the row goes at once');
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1, 'the row goes at once');
   for (let i = 0; i < 50 && !dismissed.length; i++) await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(dismissed, ['PUT e1'], 'the press is sent to the server');
   // Reopening reads the strip from the server again, which now leaves it out.
@@ -237,46 +237,71 @@ test('Not this one is kept on the server, not in this browser', { skip }, async 
   assert.equal(await p.evaluate(() => Object.keys(localStorage).filter((k) => /gn-skip/.test(k)).length), 0, 'nothing is remembered in the browser');
 });
 
-test('Not this one says it is for everyone, and Undo puts the row back where it was', { skip }, async (t) => {
-  const dismissed = [];
-  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), original: CANDS, dismissed });
-  await p.click('#cal5-gnbtn');
-  await p.waitForSelector('#cal5-gnpop .gnstrip');
-  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
-  await p.waitForSelector('.toast.on button:not([hidden])');
-  assert.match(await p.textContent('.toast span'), /Hidden for everyone\./);
-  assert.equal(await p.textContent('.toast button'), 'Undo');
-  await p.click('.toast button');
-  for (let i = 0; i < 50 && dismissed.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
-  assert.deepEqual(dismissed, ['PUT e1', 'DELETE e1']);
-  // The click lands outside the panel and closes it; reopening reads the strip again.
-  if (await p.$eval('#cal5-gnpop', (el) => el.hidden)) await p.click('#cal5-gnbtn');
-  await p.waitForFunction(() => document.querySelectorAll('#cal5-gnpop .gnstrip').length === 2);
-  const names = await p.$$eval('#cal5-gnpop .gnstrip b', (els) => els.map((e) => e.textContent));
-  assert.equal(names[0], 'Session 1', 'back in its old place');
-});
+const ROW = '#cal5-gnpop .gnstrip:not(.gnstrip-undo)';
 
-test('the Undo goes away after three seconds', { skip }, async (t) => {
+for (const [w, h] of [[1280, 900], [360, 800]]) {
+  test(`Not this one leaves Undo in the panel, in the window at ${w}x${h}, and Undo keeps the panel open`, { skip }, async (t) => {
+    const dismissed = [];
+    const p = await page(t, w, { role: 2, candidates: CANDS.slice(), original: CANDS, dismissed });
+    await p.setViewportSize({ width: w, height: h });
+    await p.click('#cal5-gnbtn');
+    await p.waitForSelector(ROW);
+    await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+    await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+    assert.match(await p.textContent('#cal5-gnpop [data-gn-undo-row="e1"]'), /Hidden for everyone\. Undo/);
+    assert.equal(await p.$('.toast.on'), null, 'no toast for this action');
+    const box = await p.$eval('#cal5-gnpop [data-gn-undo="e1"]', (b) => {
+      const r = b.getBoundingClientRect();
+      return { t: r.top, b: r.bottom, l: r.left, r: r.right, vw: innerWidth, vh: innerHeight };
+    });
+    assert.ok(box.t >= 0 && box.b <= box.vh && box.l >= 0 && box.r <= box.vw, 'Undo is inside the window: ' + JSON.stringify(box));
+    assert.equal(await p.evaluate(() => document.activeElement.getAttribute('data-gn-undo')), 'e1', 'focus moves to Undo');
+    await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+    await p.waitForFunction(() => document.querySelectorAll('#cal5-gnpop .gnstrip:not(.gnstrip-undo)').length === 2);
+    assert.equal(await p.$eval('#cal5-gnpop', (el) => el.hidden), false, 'the panel stays open');
+    assert.deepEqual(dismissed, ['PUT e1', 'DELETE e1']);
+    assert.equal(await p.$('#cal5-gnpop .gnstrip-undo'), null);
+    const names = await p.$$eval(ROW + ' b', (els) => els.map((e) => e.textContent));
+    assert.equal(names[0], 'Session 1', 'back in its old place');
+    assert.equal(await p.evaluate(() => document.activeElement.getAttribute('data-gn-make')), 'e1', 'focus returns to the row');
+  });
+}
+
+test('the Undo line folds away after about three seconds and focus moves to the next row', { skip }, async (t) => {
   const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed: [] });
   await p.click('#cal5-gnbtn');
-  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.waitForSelector(ROW);
   await p.click('#cal5-gnpop [data-gn-skip="e1"]');
-  await p.waitForSelector('.toast.on button:not([hidden])');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
   const t0 = Date.now();
-  await p.waitForFunction(() => !document.querySelector('.toast.on'), null, { timeout: 6000 });
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo-row="e1"]', { state: 'detached', timeout: 6000 });
   const took = Date.now() - t0;
-  assert.ok(took > 1500 && took < 4500, 'the toast lasted about three seconds, took ' + took);
+  assert.ok(took > 2000 && took < 4500, 'the line lasted about three seconds, took ' + took);
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1);
+  assert.equal(await p.evaluate(() => !!document.activeElement.closest('.gnstrip') && document.activeElement.closest('.gnstrip').textContent.includes('Session 2')), true);
 });
 
-test('an Undo the server refuses says so and leaves the row hidden', { skip }, async (t) => {
+test('with motion Off the Undo line still waits three seconds, then goes without a fold', { skip }, async (t) => {
+  const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed: [] });
+  await p.evaluate(() => document.documentElement.setAttribute('data-motion', 'off'));
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo-row="e1"]', { state: 'detached', timeout: 6000 });
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1);
+});
+
+test('an Undo the server refuses says so in the line and leaves the row hidden', { skip }, async (t) => {
   const p = await page(t, 1280, { role: 2, candidates: CANDS.slice(), dismissed: [], restoreStatus: 500 });
   await p.click('#cal5-gnbtn');
-  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  await p.waitForSelector(ROW);
   await p.click('#cal5-gnpop [data-gn-skip="e1"]');
-  await p.waitForSelector('.toast.on button:not([hidden])');
-  await p.click('.toast button');
-  await p.waitForFunction(() => /couldn.t be undone/.test(document.querySelector('.toast span').textContent));
-  assert.equal(await p.$$eval('#cal5-gnpop .gnstrip', (e) => e.length), 1);
+  await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.waitForFunction(() => /Could not undo that/.test(document.querySelector('#cal5-gnpop [data-gn-undo-row="e1"]').textContent));
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 1, 'Session 1 is not shown as restored');
+  assert.ok(await p.$('#cal5-gnpop [data-gn-undo="e1"]'), 'Undo can be tried again');
+  assert.equal(await p.$eval('#cal5-gnpop', (el) => el.hidden), false);
 });
 
 test('an old browser-only skip no longer hides anything, so every device agrees', { skip }, async (t) => {
