@@ -3,6 +3,8 @@ package campaigns
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"html"
 	"strings"
 	"testing"
 )
@@ -24,8 +26,8 @@ func TestCreate_StartsWithSetupStepsAndHiddenPages(t *testing.T) {
 		t.Fatal("the DM team's home should be its own layout")
 	}
 	first := home.Rows[1].Columns[0].Blocks[0]
-	if first.ID != setupStepsBlockID || first.Type != BlockTextBlock {
-		t.Fatalf("first block = %+v, want the setup steps text block", first)
+	if first.ID != setupStepsBlockID || first.Type != BlockSetupSteps {
+		t.Fatalf("first block = %+v, want the setup steps block", first)
 	}
 	for _, aud := range []string{HomeScribe, HomeGuest} {
 		if created.HasSavedHome(aud) {
@@ -133,9 +135,15 @@ func TestCreate_StartsPlayersOnThePlayersHome(t *testing.T) {
 	}
 }
 
-// The steps render through the Text Block as links into this campaign.
-func TestSetupSteps_RenderAsLinks(t *testing.T) {
-	block := starterDirectorHome("camp-9").Rows[1].Columns[0].Blocks[0]
+// legacySetupBlock is the Text Block of setup steps that campaigns made before
+// the setup line hold in their saved home. They keep it as it is.
+func legacySetupBlock(campaignID string) DashboardBlock {
+	return DashboardBlock{ID: setupStepsBlockID, Type: BlockTextBlock, Config: map[string]any{"content": legacySetupStepsHTML(campaignID)}}
+}
+
+// The older Text Block of steps renders as links into this campaign.
+func TestSetupSteps_LegacyRenderAsLinks(t *testing.T) {
+	block := legacySetupBlock("camp-9")
 	var buf bytes.Buffer
 	if err := dashTextBlock(&CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleOwner}, block.Config).Render(context.Background(), &buf); err != nil {
 		t.Fatal(err)
@@ -155,7 +163,7 @@ func TestSetupSteps_RenderAsLinks(t *testing.T) {
 // The setup note is the owner's checklist; a co-DM gets their own short note
 // whose links they can open, and a player gets neither.
 func TestSetupNote_ByRole(t *testing.T) {
-	block := starterDirectorHome("camp-9").Rows[1].Columns[0].Blocks[0]
+	block := legacySetupBlock("camp-9")
 	ownerLinks := []string{"/extensions", "/members", "/customize/look", "/customize/home/director"}
 	tests := []struct {
 		name     string
@@ -221,6 +229,43 @@ func TestSetupNote_ByRole(t *testing.T) {
 	}
 }
 
+// The setup line is the owner's: the owner's home loads it, a co-Director gets
+// their own note, and everyone else gets nothing.
+func TestSetupLine_ByRole(t *testing.T) {
+	block := starterDirectorHome("camp-9").Rows[1].Columns[0].Blocks[0]
+	tests := []struct {
+		name     string
+		cc       *CampaignContext
+		want     []string
+		nothing  bool
+		noOwners bool
+	}{
+		{"owner loads the line", &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleOwner}, []string{`hx-get="/campaigns/camp-9/setup-steps"`}, false, false},
+		{"co-director gets their note", &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RoleScribe, IsDmGranted: true}, []string{"amber edge"}, false, true},
+		{"player gets nothing", &CampaignContext{Campaign: &Campaign{ID: "camp-9"}, MemberRole: RolePlayer}, nil, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := DashboardBlockSwitch(tt.cc, block, nil).Render(context.Background(), &buf); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			if tt.nothing && strings.TrimSpace(out) != "" {
+				t.Fatalf("expected nothing, got:\n%s", out)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(out, w) {
+					t.Errorf("missing %q\n%s", w, out)
+				}
+			}
+			if tt.noOwners && strings.Contains(out, "/setup-steps") {
+				t.Errorf("a co-Director is shown the owner's line:\n%s", out)
+			}
+		})
+	}
+}
+
 // An empty Text Block is a placeholder for the owner only; players get no card.
 func TestTextBlock_EmptyShowsOnlyToOwner(t *testing.T) {
 	for _, tt := range []struct {
@@ -253,3 +298,20 @@ func TestSetupNote_CoDMKeepsTheOwnersRewrite(t *testing.T) {
 		t.Errorf("rewritten note changed: show=%v %v", show, got.Config)
 	}
 }
+
+// legacySetupStepsHTML is the setup block's text: four steps, each a link to the
+// page that does it, and where to remove the block. The wording avoids the
+// game master's title because no game system is chosen yet.
+func legacySetupStepsHTML(campaignID string) string {
+	base := "/campaigns/" + html.EscapeString(campaignID)
+	return fmt.Sprintf(`<h3>Get your table ready</h3>
+<p>Only the people running this campaign see this note.</p>
+<ol>
+<li><a href="%[1]s/extensions">Choose your game</a> and turn on the parts you'll use, like the calendar and maps.</li>
+<li><a href="%[1]s/members">Invite your players</a>. One link works for new and returning players.</li>
+<li><a href="%[1]s/customize/look">Pick a look</a> for your campaign.</li>
+<li><a href="%[1]s/entities/new">Write your first page</a>: a place, a villain, a hook. New pages start hidden from players until you show them.</li>
+</ol>
+<p>Done? Remove this note in <a href="%[1]s/customize/home/director">Customize → Home pages</a>.</p>`, base)
+}
+

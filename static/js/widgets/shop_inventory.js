@@ -25,6 +25,9 @@ Chronicle.register('shop_inventory', {
     var editable = el.dataset.editable === 'true';
     // Only the campaign Owner sets how many places today's shelf has.
     var isOwner = el.dataset.owner === 'true';
+    // The Director is the owner or a co-DM: they fill shelves and see which
+    // goods are shop goods.
+    var isDirector = el.dataset.director === 'true' || isOwner;
     var csrfToken = el.dataset.csrfToken || '';
 
     // Transaction endpoints derive from the campaign URL.
@@ -49,6 +52,11 @@ Chronicle.register('shop_inventory', {
       // Today's shelf from the armory ({spots, hoursToDawn, pool, today}),
       // or null when the armory is off or could not be read.
       today: null,
+      // Fill the shelves: the open draft sheet, the last Keep (for Undo) and
+      // the listings it made (they glow once).
+      fill: null,
+      kept: null,
+      fresh: {},
     };
     el._shopState = state;
 
@@ -65,13 +73,22 @@ Chronicle.register('shop_inventory', {
       var header = document.createElement('div');
       header.className = 'shop-inv-header';
       var title = document.createElement('h3');
-      title.innerHTML = '<i class="fas fa-store"></i> Inventory';
+      title.appendChild(document.createTextNode('Stock '));
+      var pill = document.createElement('span');
+      pill.className = 'shop-inv-pill';
+      pill.textContent = String(state.items.length);
+      title.appendChild(pill);
       header.appendChild(title);
+      var spacer = document.createElement('span');
+      spacer.className = 'shop-inv-sp';
+      header.appendChild(spacer);
 
       if (editable) {
         var addBtn = document.createElement('button');
-        addBtn.className = 'shop-inv-add-btn';
-        addBtn.textContent = '+ Add Item';
+        addBtn.type = 'button';
+        addBtn.className = 'shop-inv-link';
+        addBtn.textContent = 'Add a good';
+        addBtn.setAttribute('aria-expanded', state.addMode ? 'true' : 'false');
         addBtn.onclick = function () {
           state.addMode = !state.addMode;
           state.searchQuery = '';
@@ -80,7 +97,19 @@ Chronicle.register('shop_inventory', {
         };
         header.appendChild(addBtn);
       }
+      // Only the Director fills shelves; the sheet drapes over the list.
+      if (isDirector && !state.loading && !state.failed) {
+        var fillBtn = document.createElement('button');
+        fillBtn.type = 'button';
+        fillBtn.className = 'btn-secondary shop-inv-fill-btn';
+        fillBtn.textContent = 'Fill the shelves';
+        fillBtn.setAttribute('aria-expanded', state.fill ? 'true' : 'false');
+        fillBtn.onclick = function () { if (state.fill) closeFill(); else openFill(); };
+        header.appendChild(fillBtn);
+      }
       wrapper.appendChild(header);
+      if (isDirector && state.kept) wrapper.appendChild(renderKept());
+      if (state.fill) wrapper.appendChild(state.fill.slot);
 
       // Add item panel.
       if (state.addMode && editable) {
@@ -91,7 +120,7 @@ Chronicle.register('shop_inventory', {
       if (state.loading) {
         var loading = document.createElement('div');
         loading.className = 'shop-inv-empty';
-        loading.textContent = 'Loading inventory...';
+        loading.textContent = 'Loading stock\u2026';
         wrapper.appendChild(loading);
       } else if (state.failed) {
         // A failed read is not an empty shop: saying "no items" would invite
@@ -99,7 +128,7 @@ Chronicle.register('shop_inventory', {
         var bad = document.createElement('div');
         bad.className = 'shop-inv-empty';
         bad.setAttribute('role', 'alert');
-        bad.textContent = 'The inventory couldn’t be loaded. ';
+        bad.textContent = 'The stock couldn’t be loaded. ';
         var again = document.createElement('button');
         again.type = 'button';
         again.className = 'shop-inv-link';
@@ -110,7 +139,7 @@ Chronicle.register('shop_inventory', {
       } else if (state.items.length === 0) {
         var empty = document.createElement('div');
         empty.className = 'shop-inv-empty';
-        empty.textContent = editable ? 'No items yet. Click "+ Add Item" to stock the shop.' : 'This shop has no items.';
+        empty.textContent = editable ? (isDirector ? 'Nothing for sale yet. Add a good, or fill the shelves.' : 'Nothing for sale yet. Add a good.') : 'This shop has no items.';
         wrapper.appendChild(empty);
       } else {
         if (editable) {
@@ -129,8 +158,9 @@ Chronicle.register('shop_inventory', {
       // Transaction history section.
       if (editable) {
         var txToggle = document.createElement('button');
-        txToggle.className = 'shop-inv-tx-toggle';
-        txToggle.innerHTML = '<i class="fas fa-receipt"></i> ' + (state.showTransactions ? 'Hide Transactions' : 'Transactions');
+        txToggle.type = 'button';
+        txToggle.className = 'shop-inv-link';
+        txToggle.textContent = state.showTransactions ? 'Hide transactions' : 'Transactions';
         txToggle.onclick = function () {
           state.showTransactions = !state.showTransactions;
           if (state.showTransactions && state.transactions.length === 0) {
@@ -264,17 +294,7 @@ Chronicle.register('shop_inventory', {
       var meta = item.metadata || {};
       var isCustom = !item.targetEntityId;
       var row = document.createElement('div');
-      row.className = 'shop-inv-item';
-
-      // Icon.
-      var iconWrap = document.createElement('div');
-      iconWrap.className = 'shop-inv-item-icon';
-      var iconColor = isCustom ? '#6b7280' : (item.targetEntityColor || '#6b7280');
-      var iconClass = isCustom ? 'fa-box' : (item.targetEntityIcon || 'fa-box');
-      iconWrap.style.backgroundColor = iconColor + '20';
-      iconWrap.style.color = iconColor;
-      iconWrap.innerHTML = '<i class="fas ' + Chronicle.escapeHtml(iconClass) + '"></i>';
-      row.appendChild(iconWrap);
+      row.className = 'shop-inv-item' + (state.fresh[item.id] ? ' is-new' : '');
 
       // Info.
       var info = document.createElement('div');
@@ -288,7 +308,7 @@ Chronicle.register('shop_inventory', {
         info.appendChild(nameSpan);
         var customBadge = document.createElement('div');
         customBadge.className = 'shop-inv-item-meta';
-        customBadge.textContent = 'Custom item';
+        customBadge.textContent = 'Sold by name';
         info.appendChild(customBadge);
       } else {
         var nameLink = document.createElement('a');
@@ -298,12 +318,24 @@ Chronicle.register('shop_inventory', {
         nameLink.textContent = item.targetEntityName;
         info.appendChild(nameLink);
 
-        if (item.targetEntityType) {
+        if (item.targetEntityShopGood && isDirector) {
+          // Kept out of lists and search; only the Director is told.
+          var goodBadge = document.createElement('div');
+          goodBadge.className = 'shop-inv-item-meta shop-inv-good';
+          goodBadge.textContent = 'Shop good';
+          info.appendChild(goodBadge);
+        } else if (item.targetEntityType) {
           var typeBadge = document.createElement('div');
           typeBadge.className = 'shop-inv-item-meta';
           typeBadge.textContent = item.targetEntityType;
           info.appendChild(typeBadge);
         }
+      }
+      if (editable && !(meta.price > 0)) {
+        var np = document.createElement('div');
+        np.className = 'shop-inv-item-meta shop-inv-noprice';
+        np.textContent = 'Set a price. Players can\u2019t buy it until you do.';
+        info.appendChild(np);
       }
       var ts = todayState(item);
       if (ts || (editable && meta.today === true)) {
@@ -325,7 +357,9 @@ Chronicle.register('shop_inventory', {
         priceInput.type = 'number';
         priceInput.min = '0';
         priceInput.step = '0.01';
-        priceInput.value = meta.price || 0;
+        priceInput.value = meta.price > 0 ? meta.price : '';
+        priceInput.placeholder = 'Set a price';
+        priceInput.setAttribute('aria-label', 'Price');
         priceInput.title = 'Price';
         priceInput.onchange = function () {
           meta.price = parseFloat(priceInput.value) || 0;
@@ -352,9 +386,8 @@ Chronicle.register('shop_inventory', {
         var qtyWrap = document.createElement('div');
         qtyWrap.className = 'shop-inv-qty';
         var qtyLabel = document.createElement('span');
-        qtyLabel.textContent = 'Qty:';
-        qtyLabel.style.fontSize = '0.75rem';
-        qtyLabel.style.color = '#6b7280';
+        qtyLabel.textContent = 'Count';
+        qtyLabel.className = 'shop-inv-qty-label';
         var qtyInput = document.createElement('input');
         qtyInput.type = 'number';
         qtyInput.min = '0';
@@ -370,9 +403,8 @@ Chronicle.register('shop_inventory', {
         controls.appendChild(qtyWrap);
       } else if (meta.quantity != null) {
         var qtySpan = document.createElement('span');
-        qtySpan.style.fontSize = '0.75rem';
-        qtySpan.style.color = '#6b7280';
-        qtySpan.textContent = 'Qty: ' + meta.quantity;
+        qtySpan.className = 'shop-inv-qty-label';
+        qtySpan.textContent = 'Count ' + meta.quantity;
         controls.appendChild(qtySpan);
       }
 
@@ -380,7 +412,7 @@ Chronicle.register('shop_inventory', {
       if (editable) {
         var stockBtn = document.createElement('button');
         stockBtn.className = 'shop-inv-stock-toggle ' + (meta.in_stock !== false ? 'shop-inv-stock-in' : 'shop-inv-stock-out');
-        stockBtn.textContent = meta.in_stock !== false ? 'In Stock' : 'Out';
+        stockBtn.textContent = meta.in_stock !== false ? 'In stock' : 'Out';
         stockBtn.onclick = function () {
           meta.in_stock = meta.in_stock === false;
           updateMetadata(item.id, meta);
@@ -414,7 +446,7 @@ Chronicle.register('shop_inventory', {
       } else if (meta.in_stock === false) {
         var outBadge = document.createElement('span');
         outBadge.className = 'shop-inv-stock-toggle shop-inv-stock-out';
-        outBadge.textContent = 'Out of Stock';
+        outBadge.textContent = 'Out of stock';
         controls.appendChild(outBadge);
       }
 
@@ -430,7 +462,8 @@ Chronicle.register('shop_inventory', {
       var searchInput = document.createElement('input');
       searchInput.className = 'shop-inv-search';
       searchInput.type = 'text';
-      searchInput.placeholder = 'Search for an item to add...';
+      searchInput.placeholder = 'Search for an item page to add';
+      searchInput.setAttribute('aria-label', 'Search for an item page to add');
       searchInput.value = state.searchQuery;
       searchInput.oninput = function () {
         state.searchQuery = searchInput.value;
@@ -458,7 +491,7 @@ Chronicle.register('shop_inventory', {
 
         var createLabel = document.createElement('div');
         createLabel.className = 'shop-inv-label';
-        createLabel.textContent = 'Or create a new item:';
+        createLabel.textContent = 'Or make a new item page:';
         createSection.appendChild(createLabel);
 
         var createRow = document.createElement('div');
@@ -467,7 +500,8 @@ Chronicle.register('shop_inventory', {
         var nameInput = document.createElement('input');
         nameInput.className = 'shop-inv-create-input';
         nameInput.type = 'text';
-        nameInput.placeholder = 'Item name...';
+        nameInput.placeholder = 'Item name';
+        nameInput.setAttribute('aria-label', 'Item name');
 
         // Entity type dropdown.
         var typeSelect = document.createElement('select');
@@ -489,16 +523,16 @@ Chronicle.register('shop_inventory', {
 
         var createBtn = document.createElement('button');
         createBtn.className = 'shop-inv-action-btn green';
-        createBtn.textContent = 'Create & Add';
+        createBtn.textContent = 'Create and add';
         createBtn.onclick = function () {
           var name = nameInput.value.trim();
           if (!name) return;
           var typeId = parseInt(typeSelect.value, 10) || 0;
           createBtn.disabled = true;
-          createBtn.textContent = 'Creating...';
+          createBtn.textContent = 'Creating\u2026';
           quickCreateItem(name, typeId, function () {
             createBtn.disabled = false;
-            createBtn.textContent = 'Create & Add';
+            createBtn.textContent = 'Create and add';
           });
         };
 
@@ -561,11 +595,93 @@ Chronicle.register('shop_inventory', {
       }
     }
 
+    // --- Fill the shelves ---
+
+    function openFill() {
+      if (!Chronicle.shopFill || !window.ShopStockGen) {
+        Chronicle.notify('Fill the shelves could not load. Reload the page and try again.', 'error');
+        return;
+      }
+      state.kept = null;
+      var slot = document.createElement('div');
+      slot.className = 'shop-inv-fillslot';
+      state.fill = { slot: slot, handle: null };
+      render();
+      state.fill.handle = Chronicle.shopFill.open(slot, {
+        campaignUrl: campaignUrl,
+        shopId: shopId,
+        words: state.words,
+        spots: state.today ? state.today.spots : 2,
+        onKept: function (res) {
+          state.fresh = {};
+          (res.relations || []).forEach(function (id) { state.fresh[id] = true; });
+          state.kept = res;
+        },
+        onClose: function () {
+          state.fill = null;
+          render();
+          // A Keep changed the list, so read it again; a Discard changed nothing.
+          if (state.kept) loadInventory();
+        },
+      });
+    }
+
+    function closeFill() {
+      if (state.fill && state.fill.handle) state.fill.handle.close(false);
+    }
+
+    // After a Keep: what was kept, and Undo for exactly that batch.
+    function renderKept() {
+      var k = state.kept;
+      var line = document.createElement('p');
+      line.className = 'shop-inv-kept';
+      line.setAttribute('role', 'status');
+      var n = (k.relations || []).length;
+      var text = n + (n === 1 ? ' good' : ' goods') + ' kept.';
+      if (k.skipped) text += ' ' + k.skipped + ' already on the shelves.';
+      if (k.unpriced) text += ' ' + k.unpriced + (k.unpriced === 1 ? ' has' : ' have') + ' no price yet.';
+      line.appendChild(document.createTextNode(text + ' '));
+      var undo = document.createElement('button');
+      undo.type = 'button';
+      undo.className = 'shop-inv-link';
+      undo.textContent = 'Undo';
+      undo.onclick = function () {
+        undo.disabled = true;
+        Chronicle.apiFetch(campaignUrl + '/armory/shops/' + shopId + '/stock/undo', {
+          method: 'POST', body: { batch: k.batch, relations: k.relations },
+        }).then(function (res) {
+          if (!res.ok) throw new Error('undo');
+          return res.json().catch(function () { return {}; });
+        }).then(function (j) {
+          state.kept = null; state.fresh = {};
+          // A good a player has already rolled for or bought from stays,
+          // since taking it off would delete that record.
+          var left = (j && j.kept && j.kept.length) || 0;
+          if (left > 0) {
+            Chronicle.notify(left + (left === 1 ? ' good stays' : ' goods stay') + ' on the shelves because a player has already rolled for or bought ' + (left === 1 ? 'it.' : 'them.'), 'info');
+          }
+          loadInventory();
+        }).catch(function () {
+          undo.disabled = false;
+          Chronicle.notify('Could not undo that. The goods are still on the shelves.', 'error');
+        });
+      };
+      line.appendChild(undo);
+      var done = document.createElement('button');
+      done.type = 'button';
+      done.className = 'shop-inv-link';
+      done.textContent = 'Done';
+      done.onclick = function () { state.kept = null; state.fresh = {}; render(); };
+      line.appendChild(document.createTextNode(' '));
+      line.appendChild(done);
+      return line;
+    }
+
     // --- API Calls ---
 
     function loadInventory() {
       var ids = (relationsEndpoint || '').match(/\/campaigns\/([^/]+)\/entities\/([^/]+)\//) || [];
-      if (Chronicle.localWords && !editable) {
+      if (Chronicle.localWords) {
         Chronicle.localWords(ids[1], ids[2]).then(function (w) { state.words = w || {}; if (!state.loading) render(); });
       }
       Chronicle.apiFetch(relationsEndpoint, { method: 'GET' })
@@ -789,6 +905,9 @@ Chronicle.register('shop_inventory', {
   },
 
   destroy: function (el) {
+    if (el._shopState && el._shopState.fill && el._shopState.fill.handle) {
+      el._shopState.fill.handle.close(false);
+    }
     if (el._shopState && el._shopState.searchTimer) {
       clearTimeout(el._shopState.searchTimer);
     }

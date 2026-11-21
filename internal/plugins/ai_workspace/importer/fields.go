@@ -66,7 +66,8 @@ const maxSheetFormula = 64 << 10
 // screen's game-system check worked out, for the numbers the director chose
 // "Use the formula" on. raw is that screen's JSON object of key → value. Only
 // a key the AI wrote is replaced (matched ignoring case, kept under the AI's
-// spelling), so the screen can never add a field; the committer then checks
+// spelling), so this never adds a field (UseDeclaredFormula adds the ones a
+// system declares); the committer then checks
 // the result like any other `fields:`. Input that is too large or unreadable
 // changes nothing and is reported, so a director who pressed the button is
 // never left thinking the formula was applied.
@@ -95,6 +96,45 @@ func UseSheetFormula(fields map[string]any, raw string) (map[string]any, error) 
 		}
 	}
 	return fields, nil
+}
+
+// UseDeclaredFormula adds to fields the review screen's formula values for
+// numbers the AI left out, but only for a key the category defines and the
+// game system marked as a formula figure (FieldDefinition.Formula). Keys the
+// AI wrote are UseSheetFormula's, and any other key is dropped, so the review
+// can never invent a field. It returns a new map and leaves fields as it was;
+// the committer checks the result like any other `fields:`. Unreadable input
+// adds nothing (UseSheetFormula has already reported it).
+func UseDeclaredFormula(defs []entities.FieldDefinition, fields map[string]any, raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > maxSheetFormula {
+		return fields
+	}
+	var formula map[string]any
+	if err := json.Unmarshal([]byte(raw), &formula); err != nil {
+		return fields
+	}
+	declared := make(map[string]string)
+	for _, d := range defs {
+		if d.Formula {
+			declared[strings.ToLower(strings.TrimSpace(d.Key))] = d.Key
+		}
+	}
+	written := make(map[string]bool, len(fields))
+	for k := range fields {
+		written[strings.ToLower(strings.TrimSpace(k))] = true
+	}
+	out := make(map[string]any, len(fields)+len(formula))
+	for k, v := range fields {
+		out[k] = v
+	}
+	for k, v := range formula {
+		lk := strings.ToLower(strings.TrimSpace(k))
+		if key, ok := declared[lk]; ok && !written[lk] {
+			out[key] = v
+		}
+	}
+	return out
 }
 
 // fieldValue checks one value against its field's type, returning what to

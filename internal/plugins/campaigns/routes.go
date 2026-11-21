@@ -67,6 +67,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// campaigns shouldn't have to unarchive one first.
 	cgArchived.DELETE("", h.Delete, RequireRole(RoleOwner))
 	cg.GET("/settings", h.Settings, RequireRole(RoleOwner))
+	cg.GET("/setup-steps", h.SetupStepsBlock, RequireRole(RoleOwner))
+	cg.POST("/setup-steps/:step/keep", h.KeepSetupStepPost, RequireRole(RoleOwner))
 	// /ai-export/generate is registered by ai_workspace.RegisterOwnerRoutes
 	// against this same campaign group.
 	// Customize's areas (customize_pages.go). Each has its own address so

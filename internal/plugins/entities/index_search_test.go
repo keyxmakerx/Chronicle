@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -12,29 +13,38 @@ import (
 // submit to the search endpoint rendered its bare fragment as a whole page.
 func TestEntityListContent_SearchFiltersInPlace(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleScribe}
+	one := []Entity{{ID: "e1", CampaignID: "c1", Name: "Old Harbor", TypeName: "Location", UpdatedAt: time.Now()}}
 	tests := []struct {
-		name    string
-		query   string
-		want    []string
-		notWant []string
+		name     string
+		query    string
+		entities []Entity
+		total    int
+		want     []string
+		notWant  []string
 	}{
 		{
-			name:  "no query",
-			query: "",
+			name:     "a list has the find field wired to swap in place",
+			entities: one,
+			total:    1,
 			want: []string{
 				`action="/campaigns/c1/entities"`,
 				`hx-get="/campaigns/c1/entities"`,
 				`hx-target="#entity-list"`,
 				`id="entity-list-search"`,
-				`Create Your First Page`,
+				`hx-include="#entity-list-sort"`,
 			},
 			notWant: []string{`/entities/search`},
 		},
 		{
-			name:    "query echoed and empty state explains",
+			name:    "query echoed and the empty result explains",
 			query:   "harbor",
 			want:    []string{`value="harbor"`, `0 pages match`, `Nothing matches that search`},
-			notWant: []string{`Create Your First Page`},
+			notWant: []string{`Create Your First Page`, `None has been made yet`},
+		},
+		{
+			name:    "no pages and no search is the bare opening, with no tools",
+			want:    []string{`data-app-opening="empty"`},
+			notWant: []string{`id="entity-list-search"`, `Create Your First Page`},
 		},
 	}
 	for _, tt := range tests {
@@ -42,7 +52,7 @@ func TestEntityListContent_SearchFiltersInPlace(t *testing.T) {
 			opts := DefaultListOptions()
 			opts.Query = tt.query
 			var b strings.Builder
-			if err := EntityListContent(cc, nil, nil, map[int]int{}, 0, opts, 0, "", "tok").Render(context.Background(), &b); err != nil {
+			if err := EntityListContent(cc, tt.entities, nil, map[int]int{}, tt.total, opts, 0, "", "tok").Render(context.Background(), &b); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			out := b.String()
@@ -57,22 +67,5 @@ func TestEntityListContent_SearchFiltersInPlace(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestEntityListParams(t *testing.T) {
-	tests := []struct {
-		typeID int
-		query  string
-		want   string
-	}{
-		{0, "", "type=0"},
-		{3, "old harbor", "q=old+harbor&type=3"},
-		{0, "a&b", "q=a%26b&type=0"},
-	}
-	for _, tt := range tests {
-		if got := entityListParams(tt.typeID, tt.query); got != tt.want {
-			t.Errorf("entityListParams(%d, %q) = %q, want %q", tt.typeID, tt.query, got, tt.want)
-		}
 	}
 }

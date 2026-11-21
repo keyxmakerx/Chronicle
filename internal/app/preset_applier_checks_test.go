@@ -12,7 +12,7 @@ import (
 func TestChecksByCategory(t *testing.T) {
 	one, twenty := 1.0, 20.0
 	ds := &systems.SystemManifest{EntityPresets: []systems.EntityPresetDef{{Category: "creature", Fields: []systems.FieldDef{
-		{Key: "level", Min: &one, Max: &twenty}, {Key: "abilities_json", JSONList: true},
+		{Key: "level", Min: &one, Max: &twenty}, {Key: "abilities_json", JSONList: true}, {Key: "ev", Formula: true},
 	}}}}
 	other := &systems.SystemManifest{EntityPresets: []systems.EntityPresetDef{{Category: "creature", Fields: []systems.FieldDef{
 		{Key: "level"},
@@ -38,6 +38,9 @@ func TestChecksByCategory(t *testing.T) {
 			}
 			if !got["creature"]["abilities_json"].JSONList {
 				t.Error("an uncontested check was dropped")
+			}
+			if !got["creature"]["ev"].Formula {
+				t.Error("a formula figure was dropped")
 			}
 		})
 	}

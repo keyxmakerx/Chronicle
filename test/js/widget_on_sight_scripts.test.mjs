@@ -104,7 +104,9 @@ test('the widget mounts once its script registers it', () => {
 test('scripts are fetched once per page, across mounts and htmx swaps', () => {
   const b = boot(['timeline-viz', 'timeline-viz'], LIST);
   b.fireDOMContentLoaded();
-  b.fireAfterSettle({ querySelectorAll: () => [makeMount('timeline-viz')] });
+  // Only widget mounts answer; a blanket answer would also hand a mount to
+  // the whole-page frame scan, which expects frames.
+  b.fireAfterSettle({ querySelectorAll: (sel) => (sel === '[data-widget]' ? [makeMount('timeline-viz')] : []) });
   assert.equal(b.appended.length, 2);
 });
 

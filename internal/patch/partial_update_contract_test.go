@@ -117,6 +117,7 @@ var governedFieldExceptions = map[string]string{
 	// presence-aware (patch.Field), which is the field the fix is actually
 	// about.
 	"calendar.UpdateEventVisibilityInput.Visibility":    "value-typed by choice: SetEventVisibility is a dedicated set-visibility action, not a general update — the caller always states the event's new visibility outright.",
+	"calendar.UpdateEventVisibilityInput.Announced":     "value-typed by choice: empty already leaves the stored announce setting alone and a value sets it, so an absent key preserves it; clearing back to the kind's default is not offered on this route.",
 	"calendar.UpdateCalendarVisibilityInput.Visibility": "value-typed by choice: same reason as calendar.UpdateEventVisibilityInput.Visibility — a dedicated set-visibility action, not a general update.",
 }
 

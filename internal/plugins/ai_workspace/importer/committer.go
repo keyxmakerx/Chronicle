@@ -133,6 +133,12 @@ type RowDecision struct {
 	// commitUpdate re-checks it so a client that never rendered the tick
 	// cannot apply the replace.
 	ReplaceGMOnlyConfirmed bool
+
+	// SheetFormula is the review screen's JSON of numbers taken from the
+	// game system's formulas. Keys the AI wrote were laid over its fields
+	// already; here the committer adds the ones the category declares as
+	// formula figures, once it knows the category.
+	SheetFormula string
 }
 
 // CommitInput bundles the per-request commit payload.
@@ -528,7 +534,7 @@ func (c *Committer) commitRow(
 	// The sheet fields are checked before anything is written, against the
 	// category this row creates the page in; a skip or an update into an
 	// existing page never reaches here.
-	fields, reason := c.sheetFields(ctx, campaignID, typeID, page, links)
+	fields, reason := c.sheetFields(ctx, campaignID, typeID, page, dec.SheetFormula, links)
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -641,7 +647,7 @@ func (c *Committer) commitUpdate(
 	}
 	// An update never changes the category, so its fields are checked
 	// against the page's own, before any write.
-	fields, reason := c.sheetFields(ctx, existing.CampaignID, existing.EntityTypeID, page, links)
+	fields, reason := c.sheetFields(ctx, existing.CampaignID, existing.EntityTypeID, page, dec.SheetFormula, links)
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -1072,7 +1078,7 @@ func intToStr(n int) string {
 
 // sheetFields checks a page's `fields:` against the sheet of the category
 // with typeID. "" reason means they fit (or there are none).
-func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID int, page ParsedPage, links *PageLinks) (map[string]any, string) {
+func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID int, page ParsedPage, formula string, links *PageLinks) (map[string]any, string) {
 	if len(page.FrontMatter.Fields) == 0 {
 		return nil, ""
 	}
@@ -1084,7 +1090,7 @@ func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID i
 		if t.ID != typeID {
 			continue
 		}
-		checked, problems := CheckFields(t.Fields, page.FrontMatter.Fields)
+		checked, problems := CheckFields(t.Fields, UseDeclaredFormula(t.Fields, page.FrontMatter.Fields, formula))
 		if len(problems) == 0 {
 			problems = LinkFields(t.Fields, checked, links)
 		}

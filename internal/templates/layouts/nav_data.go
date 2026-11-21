@@ -149,6 +149,7 @@ func addWords(out *[]navCommand, label, href, icon, words string) {
 var manageToolWords = map[string]string{
 	"manage:trash":          "delete deleted restore undo bin",
 	"manage:player-changes": "history changes undo revert",
+	"manage:roll-tables":    "rumours omens random generator roll table builder lines",
 }
 
 // ownerCommands are the owner's own phrases: what people type when they want
@@ -221,6 +222,8 @@ func ManageToolRows(base string, media, foundry bool) []NavRowView {
 	rows = append(rows,
 		NavRowView{Key: "manage:customize", Label: "Customize", Icon: "fa-paintbrush", URL: base + "/customize"},
 		NavRowView{Key: "manage:extensions", Label: "Game & features", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
+		// Every rolling table, with a way to start a new one.
+		NavRowView{Key: "manage:roll-tables", Label: "Rolling tables", Icon: "fa-table-list", URL: base + "/roll-tables/manage"},
 	)
 	// The Foundry page (connection, players, module version, install link,
 	// and from there the sync history) only means something once the

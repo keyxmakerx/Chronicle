@@ -204,6 +204,8 @@ type mockEntityRepo struct {
 	findMentionPagesFn   func(ctx context.Context, campaignID string, ids []string, role int, userID string) (map[string]MentionPage, error)
 
 	createFn           func(ctx context.Context, entity *Entity) error
+	findShopGoodFn     func(ctx context.Context, campaignID, name string) (*Entity, error)
+	setShopGoodFn      func(ctx context.Context, campaignID, entityID string, shopGood bool) error
 	findByIDFn         func(ctx context.Context, id string) (*Entity, error)
 	findBySlugFn       func(ctx context.Context, campaignID, slug string) (*Entity, error)
 	updateFn           func(ctx context.Context, entity *Entity) error
@@ -458,6 +460,20 @@ func (m *mockEntityRepo) FindMentionPages(ctx context.Context, campaignID string
 func (m *mockEntityRepo) UpdateCoverImage(ctx context.Context, id, coverImagePath string) error {
 	if m.updateCoverImageFn != nil {
 		return m.updateCoverImageFn(ctx, id, coverImagePath)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) FindShopGoodByName(ctx context.Context, campaignID, name string) (*Entity, error) {
+	if m.findShopGoodFn != nil {
+		return m.findShopGoodFn(ctx, campaignID, name)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error {
+	if m.setShopGoodFn != nil {
+		return m.setShopGoodFn(ctx, campaignID, entityID, shopGood)
 	}
 	return nil
 }

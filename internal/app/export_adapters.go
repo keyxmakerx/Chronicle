@@ -125,6 +125,8 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 		ents, _, err := a.entitySvc.List(ctx, campaignID, 0, ownerRole, "", entities.ListOptions{
 			Page:    page,
 			PerPage: 100,
+			// A backup must carry the goods kept out of lists.
+			ShopGoods: entities.ShopGoodsInclude,
 		})
 		if err != nil {
 			return nil, err
@@ -163,6 +165,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				TypeLabel:      e.TypeLabel,
 				IsPrivate:      e.IsPrivate,
 				IsTemplate:     e.IsTemplate,
+				ShopGood:       e.ShopGood,
 				Visibility:     string(e.Visibility),
 				FieldsData:     fieldsData,
 				FieldOverrides: fieldOverrides,
@@ -1344,6 +1347,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			EntityTypeID: typeID,
 			TypeLabel:    ptrString(e.TypeLabel),
 			IsPrivate:    e.IsPrivate,
+			ShopGood:     e.ShopGood,
 			FieldsData:   fieldsData,
 		})
 		if err != nil {

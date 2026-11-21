@@ -8,6 +8,8 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -463,5 +465,38 @@ func TestDiceKeysMatchEngine(t *testing.T) {
 				t.Fatalf("engine has %v, server has %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// A pick is stored by name, and the sets on offer as one comma-separated
+// list, so a longer list of sets has to still fit the columns.
+func TestDiceKeysFitTheirColumns(t *testing.T) {
+	src, err := os.ReadFile("migrations/002_roll_dice_looks.up.sql")
+	if err != nil {
+		t.Fatalf("read the migration: %v", err)
+	}
+	width := func(col string) int {
+		m := regexp.MustCompile(col + ` +VARCHAR\((\d+)\)`).FindStringSubmatch(string(src))
+		if m == nil {
+			t.Fatalf("no %s column in the migration", col)
+		}
+		n, _ := strconv.Atoi(m[1])
+		return n
+	}
+	for col, keys := range map[string][]string{"dice_set": DiceSetKeys, "crit_succ": CritSuccKeys, "crit_fail": CritFailKeys} {
+		for _, k := range keys {
+			if len(k) > width(col) {
+				t.Errorf("%q is longer than %s holds (%d)", k, col, width(col))
+			}
+		}
+	}
+	// Every set offered is stored as an empty list, so the longest stored
+	// list is every set but the shortest one.
+	shortest := len(DiceSetKeys[0])
+	for _, k := range DiceSetKeys {
+		shortest = min(shortest, len(k))
+	}
+	if longest := len(strings.Join(DiceSetKeys, ",")) - shortest - 1; longest > width("dice_offered") {
+		t.Errorf("the longest list of offered sets is %d characters, dice_offered holds %d", longest, width("dice_offered"))
 	}
 }

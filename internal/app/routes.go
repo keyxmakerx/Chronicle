@@ -50,6 +50,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -1206,6 +1207,11 @@ type entityEventPublisherAdapter struct {
 // PublishEntityEvent translates entity domain events into WebSocket messages.
 func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, entityID string, entity *entities.Entity) {
 	if campaignID == "" {
+		return
+	}
+	// Shop goods never reach live sync or the change feed; the entities
+	// service holds them back too, this keeps any other publisher honest.
+	if entity != nil && entity.ShopGood && eventType != "deleted" {
 		return
 	}
 	var msgType ws.MessageType
@@ -3165,6 +3171,13 @@ func (a *App) RegisterRoutes() {
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
+	// A practice hero's table has its own plugin migration, so it is gated on
+	// that slug alone; when it did not apply the repository is nil and every
+	// hook skips it, and the Standing block is unaffected.
+	var practiceRepo entities.PracticeRepository
+	if a.PluginHealth.IsHealthy(practiceschema.SchemaSlug) {
+		practiceRepo = entities.NewPracticeRepository(a.DB)
+	}
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
 	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB))
 	entityHandler.SetFolderService(folderService)
@@ -3188,6 +3201,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
 			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/hero_creator.js"}},
+			{Name: "hero-tryout", Scripts: []string{"js/hero_tryout.js"}},
 			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
@@ -3480,6 +3494,8 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
+	// A campaign made from now on starts with the usual set of features on.
+	campaignService.SetFeatureEnabler(starterFeatures{addons: addonService})
 	// A member's own sidebar pins are checked against the sidebar they see,
 	// which only this composition root can draw.
 	campaignService.SetNavSectionsSource(&navSectionsSource{entities: entityService, addons: addonService})
@@ -4901,11 +4917,23 @@ func (a *App) RegisterRoutes() {
 	auth.ConfigureAccountDeletion(authService, &accountDeletionAdapter{campaigns: campaignService})
 	auth.OnAccountDeleted(authService, func(ctx context.Context, userID string) {
 		forgetDeletedAccount(ctx, userID, entityRepo, entityNotesRepo, noteRepo, syncService)
+		if practiceRepo != nil {
+			if _, err := practiceRepo.DeleteForUserEverywhere(ctx, userID); err != nil {
+				slog.Error("clearing deleted account's practice heroes failed", slog.String("user_id", userID), slog.Any("error", err))
+			}
+		}
 	})
 	// Merging a guest: their characters and notes in the campaign go to the
 	// account they merged into, before the guest account is emptied.
 	auth.OnGuestMerged(authService, func(ctx context.Context, campaignID, guestID, targetID string) error {
-		return moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo)
+		if err := moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo); err != nil {
+			return err
+		}
+		if practiceRepo == nil {
+			return nil
+		}
+		// The newest few stay, so the receiver never ends up past the cap.
+		return practiceRepo.MoveUser(ctx, campaignID, guestID, targetID, entities.MaxPracticeHeroes)
 	})
 	// Removing a player from a campaign ends their grants there, so a later
 	// re-invite starts with none.
@@ -4914,6 +4942,28 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// A member who leaves or is removed takes their practice heroes with them;
+	// they were only ever theirs to try things on.
+	if practiceRepo != nil {
+		campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+			if _, err := practiceRepo.DeleteForUser(ctx, campaignID, userID); err != nil {
+				slog.Error("clearing a former member's practice heroes failed",
+					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
+		// Practice heroes are for Players. Someone who stops being one has
+		// nothing a Director could say yes to, so a waiting ask would only sit
+		// in the list; the hero itself stays on their shelf.
+		campaigns.OnMemberRoleChanged(campaignService, func(ctx context.Context, campaignID, userID string, from, to campaigns.Role) {
+			if to == campaigns.RolePlayer {
+				return
+			}
+			if _, err := practiceRepo.ClearWaitingForUser(ctx, campaignID, userID); err != nil {
+				slog.Error("clearing a former player's waiting practice ask failed",
+					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
+	}
 	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
 	// the owner gets one bell note.
 	campaigns.ConfigureLeaving(campaignService,
@@ -5000,6 +5050,7 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetExtensionEnableChecker(addonService)
 	timelineHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(tagFetcherAdapter)
+	entityHandler.SetPageParts(&entityPagePartsAdapter{tags: tagHandler, rels: relHandler})
 	entityHandler.SetTimelineSearcher(timelineSvc)
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
@@ -5895,6 +5946,24 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
+	// Fill the shelves: a Director's draft of a shop's stock, kept in one batch.
+	shopStockSvc := armory.NewShopStockService(
+		&armoryShopCheckerAdapter{svc: entityService},
+		&shopGoodPagesAdapter{svc: entityService},
+		&shopStockWriterAdapter{svc: relService},
+		&shopSellsAdapter{svc: relService},
+		&armoryRelationFinderAdapter{svc: relService},
+		armory.NewShopPriceRepository(a.DB),
+		armorySvc,
+		&armoryItemTypeFinderAdapter{svc: entityService},
+		&systemGoodsAdapter{sys: systemHandler},
+		&stockTxAdapter{db: a.DB},
+		armory.NewListingActivity(a.DB),
+	)
+	// A shop good's page follows its listings: hidden unless a public one
+	// sells it, whoever adds or removes the listing.
+	relService.SetListingObserver(shopGoodVisibilityObserver(entityService, relService))
+	armory.RegisterShopStockRoutes(e, armory.NewShopStockHandler(shopStockSvc), campaignService, authService, addonService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
 	manifestFor := campaignManifest(func(ctx context.Context, campaignID string) *systems.SystemManifest {
@@ -5957,9 +6026,18 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetVisitorPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	// A player's Foundry edit is judged with the same plan the web door uses.
 	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
+	// Practice heroes exist only while their own schema migrated; without it
+	// the shelf is absent.
+	if practiceRepo != nil {
+		entityHandler.SetPracticeService(entities.NewPracticeService(practiceRepo, heroPlannerAdapter{choices: characterChoiceSvc}, entities.PracticeDeps{
+			Pages: entityService, Types: characterListService, Members: campaignService,
+			Releaser: entityRepo.(entities.HeroReleaser),
+		}))
+	}
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
 	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
@@ -6072,6 +6150,12 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
 			ctx = layouts.SetIsGuest(ctx, session.GuestCampaignID != "")
+			// The notice bar is drawn with a full page, so it never arrives
+			// after the page and pushes it down. A boosted swap discards the
+			// strip, so it is not worked out for one.
+			if !middleware.IsHTMX(c) {
+				ctx = layouts.SetCalloutSeed(ctx, func() (string, bool) { return sessionsHandler.CalloutHTML(c) })
+			}
 
 			// The person's own look. HTMX swaps never replace <html>, so only
 			// full-page renders need it. A failed read leaves the default look
@@ -7228,7 +7312,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
-	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},
+	{Name: "shop_good_note", Scripts: []string{"/static/js/widgets/shop_good_note.js"}},
+	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_stock_gen.js", "/static/js/widgets/shop_stock_fill.js", "/static/js/widgets/shop_inventory.js"}},
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},

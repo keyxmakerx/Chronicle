@@ -424,6 +424,7 @@ renderer or widget):
       items: [
         { id: 'stamina', label: 'Stamina', ai: '20', formula: '30', matches: false }
       ],
+      // env.stored: the page's own fields before the change ({} on a new page).
       patch: function (ids) { return { stamina: 30 }; }
     });
   }
@@ -432,15 +433,30 @@ renderer or widget):
 
 - The kind is `creature` for a creature category or one of its sub-types,
   otherwise the category's preset `category` (`character`, …).
-- Report only numbers the AI wrote (`env.written`) that a published formula
-  covers. A number with no formula is left off, not shown as a guess. Return
+- Report numbers a published formula covers. A number the AI wrote
+  (`env.written`) is offered with a press; a number it left out can be offered
+  too (see below). A number with no formula is never shown as a guess. Return
   nothing, or no items, to leave the row as it is.
 - `ai` and `formula` are display text and are never read as HTML. An item
   that differs needs a `formula`.
 - `patch(ids)` gets the ids the director took the formula for and returns
-  the field values to save, keyed by field key. Chronicle replaces only keys
-  the AI wrote, then checks the result against the category's fields like any
-  other `fields:`, so a patch can never add a field.
+  the field values to save, keyed by field key. Chronicle replaces keys the
+  AI wrote, and adds a key the AI left out only when the category's preset
+  field is marked `"formula": true` in the manifest; any other key is dropped.
+  It then checks the result against the category's fields like any other
+  `fields:`.
+- An item may also carry:
+  - `start: "used"`: the formula's figure is taken when the row is drawn (its
+    patch is in the form before any press) and a press leaves it as it was.
+    Use it for a number nothing was written for, or one that followed the
+    formula before; never for a number the director or the AI chose.
+  - `blank: true` (nothing is there, so the tile shows "blank" when the figure
+    is not taken) or `from: "stored"` (the page's stored figure shows when it
+    is not taken). `ai` is the figure shown in that case.
+  - `taken` and `kept`: display text for the tile's second line when the
+    figure is taken or not, replacing the defaults.
+  - `said` (with no `label` or `formula`): a plain line for a number no
+    formula covers; it is not pressable.
 - A check that throws or rejects leaves the row without tiles; the import
   goes on.
 

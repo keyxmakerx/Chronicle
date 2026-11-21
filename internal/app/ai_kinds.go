@@ -342,7 +342,7 @@ func init() {
 		return []records.Kind{records.PageMapKind{Svc: d.PageMaps, Entities: d.Entities}}
 	})
 	addAIKinds(220, func(d *aiDeps) []records.Kind {
-		return []records.Kind{calendarai.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls}}
+		return []records.Kind{calendarai.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls, Structure: d.Calendar, Eras: d.Calendar}}
 	})
 }
 

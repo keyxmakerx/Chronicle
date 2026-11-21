@@ -235,17 +235,14 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	input := CreateEntityInput{
-		Name:         req.Name,
-		EntityTypeID: target.ID,
-		IsPrivate:    cc.NewPagePrivacy(patch.Absent[bool]()),
-		FieldsData:   fields,
-		Playable:     true,
-	}
+	var owner *string
 	if access.ForSelf {
-		input.OwnerUserID = &userID
+		owner = &userID
 	}
-	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
+	// A Director's own creation follows the campaign's default for new pages;
+	// a player's is never private.
+	entity, err := createHeroPage(c.Request().Context(), h.service, cc.Campaign.ID, userID, req.Name, target, fields, owner,
+		cc.NewPagePrivacy(patch.Absent[bool]()))
 	if err != nil {
 		return err
 	}

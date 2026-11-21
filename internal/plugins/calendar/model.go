@@ -81,9 +81,13 @@ func (v *VisibilityRules) Allows(userID string) bool {
 // VisibilityRules is patch.Field so a visibility-only call (flip
 // everyone/dm_only) can leave an existing per-user rules blob untouched:
 // absent preserves it, explicit null clears it, a value replaces it.
+// Announced is "" to leave the stored setting alone, or AnnouncedAhead /
+// AnnouncedOnDay to set it in the same write as the visibility, so a reveal
+// is never half applied (shown, but still under the wrong announce rule).
 type UpdateEventVisibilityInput struct {
 	Visibility      string
 	VisibilityRules patch.Field[string]
+	Announced       string
 }
 
 // UpdateCalendarVisibilityInput is the validated input for updating a

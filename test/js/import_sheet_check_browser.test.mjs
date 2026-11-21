@@ -74,7 +74,7 @@ const state = (p) => p.evaluate(() => ({
 test('marks what differs, and the director takes the formula for all, or for one', { skip }, async (t) => {
   const p = await page(t, CHECK);
   const seen = await p.evaluate(() => window.seen);
-  assert.deepEqual(seen, { fields: { level: 1, stamina: 20 }, env: { campaignId: 'camp-1', written: ['stamina'] } });
+  assert.deepEqual(seen, { fields: { level: 1, stamina: 20 }, env: { campaignId: 'camp-1', written: ['stamina'], stored: {} } });
 
   let s = await state(p);
   assert.equal(s.note, 'Level 1 Platoon Harrier');
@@ -143,4 +143,54 @@ test('shows every number up to the cap and says how many it did not check', { sk
   assert.equal(s.all, 'Use the formula for all 200');
   const note = await p.evaluate(() => document.querySelector('.air-bad').textContent);
   assert.match(note, /first 200 numbers\. 30 more were not checked/);
+});
+
+// A check for a creature the AI left figures off: blank figures open taken,
+// a figure that followed the old level opens taken, one somebody set opens
+// off, and a figure no formula covers is a plain line.
+const OPEN = `Chronicle.sheetChecks = { creature: { check: function () {
+  return Promise.resolve({
+    items: [
+      { id: 'ev', label: 'Encounter value', ai: '', formula: '4', start: 'used', blank: true },
+      { id: 'stamina', label: 'Stamina', ai: '30', formula: '50', start: 'used', from: 'stored',
+        taken: 'Follows the formula, as at level 1 (was 30)' },
+      { id: 'free_strike', label: 'Free strike', ai: '6', formula: '5', from: 'stored',
+        kept: 'Yours, kept. Formula gives 5' },
+      { id: 'swarm', said: 'No published formula covers a swarm’s Stamina.' }
+    ],
+    patch: function (ids) {
+      var p = {};
+      if (ids.indexOf('ev') >= 0) p.ev = 4;
+      if (ids.indexOf('stamina') >= 0) p.stamina = 50;
+      if (ids.indexOf('free_strike') >= 0) p.free_strike = 5;
+      return p;
+    }
+  });
+} } };`;
+
+test('figures the AI left out open taken, and a press puts them back', { skip }, async (t) => {
+  const p = await page(t, OPEN);
+  let s = await state(p);
+  assert.deepEqual(s.tiles.map((x) => x.cls.replace('air-stat ', '')), ['is-used', 'is-used', 'is-off']);
+  assert.equal(s.tiles[0].small, 'Formula used (was blank)');
+  assert.equal(s.tiles[1].small, 'Follows the formula, as at level 1 (was 30)');
+  assert.equal(s.tiles[2].small, 'Yours, kept. Formula gives 5');
+  assert.equal(s.tiles[2].value, '6');
+  // The patch is in the input before any press.
+  assert.deepEqual(JSON.parse(s.input), { ev: 4, stamina: 50 });
+  assert.equal(s.all, 'Keep the old figures');
+  const said = await p.evaluate(() => [...document.querySelectorAll('.air-sheet > .air-line')].map((n) => ({ tag: n.tagName, text: n.textContent })));
+  assert.deepEqual(said, [{ tag: 'SPAN', text: 'No published formula covers a swarm’s Stamina.' }]);
+  assert.equal(await p.locator('.air-sheet button').count(), 4);
+
+  await p.click('button[data-id="ev"]');
+  s = await state(p);
+  assert.equal(s.tiles[0].value, 'blank');
+  assert.equal(s.tiles[0].small, 'Left blank. Formula gives 4');
+  assert.deepEqual(JSON.parse(s.input), { stamina: 50 });
+
+  await p.click('.air-stats-all');
+  s = await state(p);
+  assert.equal(s.input, '');
+  assert.equal(s.all, 'Use the formula for all 3');
 });
