@@ -99,6 +99,9 @@ templ reviewRecordRow(campaignID string, r RecordRow, fromAI bool) {
 					}
 				</ul>
 			}
+			if r.Plan.HexMap != "" {
+				@recordHexMap(r)
+			}
 		</div>
 		@yesNo(fmt.Sprintf("rec_%d_include", r.Index), recordStartsYes(r, fromAI), fmt.Sprintf("%s %s", r.actionWord(), r.title()))
 	</div>
@@ -120,5 +123,24 @@ templ recordPreview(campaignID string, r RecordRow) {
 				aria-label={ fmt.Sprintf("Preview of %s", r.title()) }
 			></div>
 		</div>
+	</details>
+}
+
+// recordHexMap is the quiet "See the map" under a hex-map row. The picture is
+// drawn by the hex map preview widget only when it is first asked for; until
+// then the row holds just the data (records.hexPreview). The word works as a
+// plain details fold without the script.
+templ recordHexMap(r RecordRow) {
+	<details
+		class="air-more air-map mt-1"
+		data-widget="hex-map-preview"
+		data-map-json={ r.Plan.HexMap }
+		data-name={ r.title() }
+	>
+		<summary>
+			<span class="air-map-see">See the map</span>
+			<span class="air-map-hide">Hide the map</span>
+		</summary>
+		<div class="air-map-body" data-map-body></div>
 	</details>
 }

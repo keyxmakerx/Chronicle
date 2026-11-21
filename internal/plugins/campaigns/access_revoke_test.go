@@ -6,6 +6,8 @@ package campaigns
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -251,5 +253,41 @@ func TestMoveToTrash_UnwiredRevokerStillTrashes(t *testing.T) {
 	}
 	if !trashed {
 		t.Error("campaign was not trashed even though the revoker was never wired")
+	}
+}
+
+// A role change tells the hooks who moved, from what to what, and a save that
+// changes nothing tells them nothing.
+func TestUpdateMemberRole_RunsRoleChangedHooks(t *testing.T) {
+	tests := []struct {
+		name string
+		from Role
+		to   Role
+		want []string
+	}{
+		{"a player becomes a scribe", RolePlayer, RoleScribe, []string{"camp-1/u1 1->2"}},
+		{"a scribe becomes a player", RoleScribe, RolePlayer, []string{"camp-1/u1 2->1"}},
+		{"no change runs nothing", RolePlayer, RolePlayer, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &mockCampaignRepo{
+				findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+					return &CampaignMember{UserID: userID, Role: tc.from}, nil
+				},
+				updateMemberRoleFn: func(context.Context, string, string, Role) error { return nil },
+			}
+			svc := newTestCampaignService(repo, &mockUserFinder{})
+			var got []string
+			OnMemberRoleChanged(svc, func(_ context.Context, campaignID, userID string, from, to Role) {
+				got = append(got, fmt.Sprintf("%s/%s %d->%d", campaignID, userID, from, to))
+			})
+			if err := svc.UpdateMemberRole(context.Background(), "camp-1", "u1", tc.to); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("hooks = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

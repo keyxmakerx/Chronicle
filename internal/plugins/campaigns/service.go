@@ -313,6 +313,9 @@ type campaignService struct {
 	// memberRemoved runs after a member is removed, so other plugins can end
 	// credentials they issued for that campaign without campaigns importing them.
 	memberRemoved []func(ctx context.Context, campaignID, userID string)
+	// memberRoleChanged runs after a member's role changes, so other plugins
+	// can drop things only the old role could hold.
+	memberRoleChanged []func(ctx context.Context, campaignID, userID string, from, to Role)
 	// campaignDeleted runs after a campaign is purged, for accounts that
 	// existed only for it (guests).
 	campaignDeleted []func(ctx context.Context, campaignID string)
@@ -353,6 +356,24 @@ func (s *campaignService) VisitPass(ctx context.Context, campaignID, userID stri
 func OnMemberRemoved(svc CampaignService, fn func(ctx context.Context, campaignID, userID string)) {
 	if s, ok := svc.(*campaignService); ok && fn != nil {
 		s.memberRemoved = append(s.memberRemoved, fn)
+	}
+}
+
+// OnMemberRoleChanged registers fn to run after a member's role changes to a
+// different one (not on a no-op save), whether by an owner or an admin.
+func OnMemberRoleChanged(svc CampaignService, fn func(ctx context.Context, campaignID, userID string, from, to Role)) {
+	if s, ok := svc.(*campaignService); ok && fn != nil {
+		s.memberRoleChanged = append(s.memberRoleChanged, fn)
+	}
+}
+
+// roleChanged tells the registered hooks a member's role moved.
+func (s *campaignService) roleChanged(ctx context.Context, campaignID, userID string, from, to Role) {
+	if from == to {
+		return
+	}
+	for _, fn := range s.memberRoleChanged {
+		fn(ctx, campaignID, userID, from, to)
 	}
 }
 
@@ -1219,6 +1240,7 @@ func (s *campaignService) UpdateMemberRole(ctx context.Context, campaignID, user
 	if role < member.Role && s.connRevoker != nil {
 		s.connRevoker.RevokeUser(campaignID, userID)
 	}
+	s.roleChanged(ctx, campaignID, userID, member.Role, role)
 
 	slog.Info("member role updated",
 		slog.String("campaign_id", campaignID),
@@ -2158,6 +2180,7 @@ func (s *campaignService) AdminAddMember(ctx context.Context, campaignID, userID
 		if role < existing.Role && s.connRevoker != nil {
 			s.connRevoker.RevokeUser(campaignID, userID)
 		}
+		s.roleChanged(ctx, campaignID, userID, existing.Role, role)
 		return nil
 	}
 

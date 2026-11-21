@@ -307,3 +307,59 @@ func TestCharacterChoiceList_OverlayFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+// Every reader below Director is refused a Director-only file through the
+// pick list, whatever field key asks for it; a Director still reads it. This
+// is the same rule /data/:file applies.
+func TestCharacterChoiceList_DirectorOnlyFileNeedsDirector(t *testing.T) {
+	m := &SystemManifest{
+		ID: "drawsteel", Name: "Draw Steel",
+		Categories:   []CategoryDef{{Slug: "monsters", Director: true}},
+		DirectorData: []string{"transformations.json"},
+	}
+	files := map[string]string{
+		"drawsteel/data/monsters.json":        `[{"slug":"dragon","name":"Adult Dragon"}]`,
+		"drawsteel/data/creatures.json":       `[{"slug":"ogre","name":"Ogre"}]`,
+		"drawsteel/data/transformations.json": `[{"slug":"beast","name":"Beast"}]`,
+		"drawsteel/data/ancestries.json":      `[{"slug":"orc","name":"Orc"}]`,
+	}
+	m.Categories = append(m.Categories, CategoryDef{Slug: "creatures", Director: true})
+	viewers := map[string]context.Context{
+		"player":      WithChoiceViewer(context.Background(), false),
+		"scribe":      WithChoiceUnlimited(WithChoiceViewer(context.Background(), false)),
+		"preview as":  WithChoiceViewerUser(WithChoiceViewer(context.Background(), false), "p1"),
+		"no identity": context.Background(),
+		"visitor":     WithChoiceVisitor(context.Background()),
+	}
+	for _, key := range []string{"monster", "creature", "transformation"} {
+		for who, ctx := range viewers {
+			t.Run(key+"/"+who, func(t *testing.T) {
+				svc := newTestChoiceService(t, files, []*SystemManifest{m}, fakeAddons{"drawsteel": true})
+				l, err := svc.CharacterChoiceList(ctx, "c1", key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(l.Choices) != 0 {
+					t.Errorf("%s read %d Director-only entries via %q", who, len(l.Choices), key)
+				}
+			})
+		}
+		t.Run(key+"/director", func(t *testing.T) {
+			svc := newTestChoiceService(t, files, []*SystemManifest{m}, fakeAddons{"drawsteel": true})
+			l, err := svc.CharacterChoiceList(WithChoiceViewer(context.Background(), true), "c1", key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(l.Choices) != 1 {
+				t.Errorf("Director read %d entries via %q, want 1", len(l.Choices), key)
+			}
+		})
+	}
+	t.Run("hero step still readable by a player", func(t *testing.T) {
+		svc := newTestChoiceService(t, files, []*SystemManifest{m}, fakeAddons{"drawsteel": true})
+		l, err := svc.CharacterChoiceList(WithChoiceViewer(context.Background(), false), "c1", "ancestry")
+		if err != nil || len(l.Choices) != 1 {
+			t.Fatalf("ancestry: %v, %d choices", err, len(l.Choices))
+		}
+	})
+}

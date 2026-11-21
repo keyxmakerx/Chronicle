@@ -1,0 +1,51 @@
+// tryout_mount.templ — the Characters page's places for a try-out kept in the
+// browser. Each is a shell the hero-tryout widget fills in from localStorage,
+// so the server draws only what holds for everyone: a visitor's heading, the
+// way in and the note. Everything about the hero itself is written by the
+// widget, with textContent.
+
+package entities
+
+import "strconv"
+
+// tryoutAttrs is the data every mount carries for the widget.
+func tryoutAttrs(v *TryoutView) templ.Attributes {
+	return templ.Attributes{
+		"data-campaign-id": v.CampaignID,
+		"data-user-id":     v.UserID,
+		"data-base":        v.Base(),
+		"data-csrf":        v.CSRFToken,
+		"data-has-hero":    strconv.FormatBool(v.HasHero),
+	}
+}
+
+// tryoutVisitor is a look-around visitor's Practice section: a quiet way in
+// until they have built one, then one row for it.
+templ tryoutVisitor(v *TryoutView) {
+	<link rel="stylesheet" href={ practiceCSS() }/>
+	<section class="pr mb-8" data-widget="hero-tryout" data-mode="visitor" aria-labelledby="pr-tryout-h" { tryoutAttrs(v)... }>
+		<div class="pr-head">
+			<h2 id="pr-tryout-h" class="section-header">Practice</h2>
+			<span class="pr-count">kept on this device</span>
+		</div>
+		<div data-tryout-slot="true">
+			<p class="pr-words">
+				<a class="pr-word" href={ templ.SafeURL(v.Base() + "/characters/try") }>Try the hero builder</a>
+			</p>
+		</div>
+		<p class="pr-note">Only you can see this. It stays in this browser.</p>
+	</section>
+}
+
+// tryoutOffer is a player's offer to make the hero they built while looking
+// around. Hidden until the widget finds one in this browser.
+templ tryoutOffer(v *TryoutView) {
+	<link rel="stylesheet" href={ practiceCSS() }/>
+	<section class="pr pr-offer mb-8" data-widget="hero-tryout" data-mode="offer" aria-live="polite" hidden { tryoutAttrs(v)... }></section>
+}
+
+// tryoutDeviceRow is the try-out's row at the end of a player's Practice
+// shelf, so one that was not sent is never out of sight.
+templ tryoutDeviceRow(v *TryoutView) {
+	<div class="pr-device" data-widget="hero-tryout" data-mode="shelf" hidden { tryoutAttrs(v)... }></div>
+}

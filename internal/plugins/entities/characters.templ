@@ -43,6 +43,15 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		@layouts.AppOpening(charactersOpening(cc, view)) {
 			<span>{ fmt.Sprintf("The cast of %s.", cc.Campaign.Name) }</span>
 		}
+		if view.Alert != "" {
+			<link rel="stylesheet" href={ practiceCSS() }/>
+			<p class="pr-alert" role="alert">{ view.Alert }</p>
+		}
+		if view.Tryout != nil && view.Tryout.Visitor {
+			@tryoutVisitor(view.Tryout)
+		} else if view.Tryout != nil {
+			@tryoutOffer(view.Tryout)
+		}
 		if view.Builder != nil {
 			@heroBuilder(view.Builder)
 		}
@@ -55,6 +64,12 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 					}
 				</div>
 			</section>
+		}
+		if view.Practice != nil {
+			@practiceShelf(view.Practice)
+		}
+		if view.PracticeDirector != nil {
+			@practiceDirectorList(view.PracticeDirector)
 		}
 		if len(view.Pickable) > 0 {
 			@castPickBox(cc.Campaign.ID, view.CSRFToken, view.Pickable)

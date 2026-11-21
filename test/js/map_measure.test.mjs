@@ -28,6 +28,7 @@ function load(file) {
   return api;
 }
 
+load('map_hex_look.js'); // sets the global map_hexes.js reads
 const hx = load('map_hexes.js');
 const M = load('map_measure.js');
 M.useHexMath(hx);

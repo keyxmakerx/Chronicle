@@ -50,6 +50,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -3170,6 +3171,13 @@ func (a *App) RegisterRoutes() {
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
+	// A practice hero's table has its own plugin migration, so it is gated on
+	// that slug alone; when it did not apply the repository is nil and every
+	// hook skips it, and the Standing block is unaffected.
+	var practiceRepo entities.PracticeRepository
+	if a.PluginHealth.IsHealthy(practiceschema.SchemaSlug) {
+		practiceRepo = entities.NewPracticeRepository(a.DB)
+	}
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
 	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB))
 	entityHandler.SetFolderService(folderService)
@@ -3193,6 +3201,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/hero_builder.js"}},
 			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/hero_creator.js"}},
+			{Name: "hero-tryout", Scripts: []string{"js/hero_tryout.js"}},
 			{Name: "own-entries", Scripts: []string{"js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},
@@ -4908,11 +4917,23 @@ func (a *App) RegisterRoutes() {
 	auth.ConfigureAccountDeletion(authService, &accountDeletionAdapter{campaigns: campaignService})
 	auth.OnAccountDeleted(authService, func(ctx context.Context, userID string) {
 		forgetDeletedAccount(ctx, userID, entityRepo, entityNotesRepo, noteRepo, syncService)
+		if practiceRepo != nil {
+			if _, err := practiceRepo.DeleteForUserEverywhere(ctx, userID); err != nil {
+				slog.Error("clearing deleted account's practice heroes failed", slog.String("user_id", userID), slog.Any("error", err))
+			}
+		}
 	})
 	// Merging a guest: their characters and notes in the campaign go to the
 	// account they merged into, before the guest account is emptied.
 	auth.OnGuestMerged(authService, func(ctx context.Context, campaignID, guestID, targetID string) error {
-		return moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo)
+		if err := moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo); err != nil {
+			return err
+		}
+		if practiceRepo == nil {
+			return nil
+		}
+		// The newest few stay, so the receiver never ends up past the cap.
+		return practiceRepo.MoveUser(ctx, campaignID, guestID, targetID, entities.MaxPracticeHeroes)
 	})
 	// Removing a player from a campaign ends their grants there, so a later
 	// re-invite starts with none.
@@ -4921,6 +4942,28 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// A member who leaves or is removed takes their practice heroes with them;
+	// they were only ever theirs to try things on.
+	if practiceRepo != nil {
+		campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+			if _, err := practiceRepo.DeleteForUser(ctx, campaignID, userID); err != nil {
+				slog.Error("clearing a former member's practice heroes failed",
+					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
+		// Practice heroes are for Players. Someone who stops being one has
+		// nothing a Director could say yes to, so a waiting ask would only sit
+		// in the list; the hero itself stays on their shelf.
+		campaigns.OnMemberRoleChanged(campaignService, func(ctx context.Context, campaignID, userID string, from, to campaigns.Role) {
+			if to == campaigns.RolePlayer {
+				return
+			}
+			if _, err := practiceRepo.ClearWaitingForUser(ctx, campaignID, userID); err != nil {
+				slog.Error("clearing a former player's waiting practice ask failed",
+					slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+			}
+		})
+	}
 	// Leaving a campaign: the leaver's characters go back to "Free to pick" and
 	// the owner gets one bell note.
 	campaigns.ConfigureLeaving(campaignService,
@@ -5983,9 +6026,18 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	entityHandler.SetVisitorPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	// A player's Foundry edit is judged with the same plan the web door uses.
 	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
+	// Practice heroes exist only while their own schema migrated; without it
+	// the shelf is absent.
+	if practiceRepo != nil {
+		entityHandler.SetPracticeService(entities.NewPracticeService(practiceRepo, heroPlannerAdapter{choices: characterChoiceSvc}, entities.PracticeDeps{
+			Pages: entityService, Types: characterListService, Members: campaignService,
+			Releaser: entityRepo.(entities.HeroReleaser),
+		}))
+	}
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
 	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
@@ -7078,6 +7130,7 @@ func (a *App) RegisterRoutes() {
 		CharacterChoice: characterChoiceSvc,
 		DMScreen:        dmScreenSvc,
 		Drawings:        drawingService,
+		Hexes:           hexService,
 		Encounters:      encounterAPI.svc,
 		Entities:        entityService,
 		FieldRules:      fieldRulesSvc,
@@ -7229,6 +7282,13 @@ var coreWidgets = []PluginWidget{
 	{Name: "diag-picker", Scripts: []string{"/static/js/widgets/diag_picker.js"}},
 	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "ai-import-review", Scripts: []string{"/static/js/widgets/ai_import_review.js"}},
+	// The picture of a hex map on the review is drawn with the map page's own
+	// art and line code, so its widget loads them first.
+	{Name: "hex-map-preview", Scripts: []string{
+		"/static/plugins/" + maps.PluginSlug + "/js/map_hex_look.js",
+		"/static/plugins/" + maps.PluginSlug + "/js/map_hex_art.js",
+		"/static/js/widgets/hex_map_preview.js",
+	}},
 	{Name: "ai-chip", Scripts: []string{"/static/js/widgets/ai_chip.js"}},
 	{Name: "mini-bar-chart", Scripts: []string{"/static/js/widgets/mini_bar_chart.js"}},
 	{Name: "surface-demo", Scripts: []string{"/static/js/widgets/surface_demo.js"}},
@@ -7872,6 +7932,101 @@ func (m aiMapSketchAdapter) ClearSketch(ctx context.Context, mapID, layerID stri
 		n++
 	}
 	return n, nil
+}
+
+// aiHexMapAdapter makes the blank hex map and paints it through the same
+// services, and checks, as the map page's Paint tools.
+type aiHexMapAdapter struct {
+	maps  maps.MapService
+	hexes maps.HexService
+}
+
+func (m aiHexMapAdapter) CreateHexMap(ctx context.Context, campaignID, name string, cols, rows int) (string, error) {
+	width, height, gridSize := maps.HexMapSize(cols, rows)
+	mp, err := m.maps.CreateMap(ctx, maps.CreateMapInput{CampaignID: campaignID, Name: name, ImageWidth: width, ImageHeight: height})
+	if err != nil {
+		return "", err
+	}
+	// picture.blank is the owner's "no picture, keep it blank" answer, so the
+	// map page does not ask for one.
+	settings, err := json.Marshal(map[string]any{
+		"grid":    map[string]any{"type": maps.GridHex, "size": gridSize},
+		"picture": map[string]any{"blank": true},
+	})
+	if err != nil {
+		return "", err
+	}
+	return mp.ID, m.maps.UpdateMap(ctx, mp.ID, maps.UpdateMapInput{Name: mp.Name, DisplaySettings: patch.Of(json.RawMessage(settings))})
+}
+
+func (m aiHexMapAdapter) UsesHexGrid(ctx context.Context, mapID string) (bool, error) {
+	mp, err := m.maps.GetMap(ctx, mapID)
+	if err != nil {
+		return false, err
+	}
+	return maps.ResolveDisplay(mp, "").GridType == maps.GridHex, nil
+}
+
+// Read gives the hexes the actor may see, the map's art, and the map's own
+// hex field laid over its whole picture the way the hex layer lays it. A layer
+// pinned to a picture has a field this does not work out, so it reports none.
+func (m aiHexMapAdapter) Read(ctx context.Context, campaignID, mapID string, a records.Actor) (records.HexMapState, error) {
+	layer, err := m.hexes.GetLayer(ctx, campaignID, mapID, a.Role)
+	if err != nil {
+		return records.HexMapState{}, err
+	}
+	st := records.HexMapState{Cells: make([]records.HexCellState, len(layer.Cells)), Art: layer.Art}
+	for i, c := range layer.Cells {
+		cs := records.HexCellState{Col: c.Col, Row: c.Row, Road: c.Road, River: c.River, Trail: c.Trail, Name: c.Name}
+		if c.Terrain != nil {
+			cs.Terrain = *c.Terrain
+		}
+		if c.Notes != nil {
+			cs.Notes = *c.Notes
+		}
+		st.Cells[i] = cs
+	}
+	if layer.Layer.AnchorDrawingID != nil {
+		return st, nil
+	}
+	mp, err := m.maps.GetMap(ctx, mapID)
+	if err != nil {
+		return records.HexMapState{}, err
+	}
+	if mp.ImageWidth > 0 && mp.ImageHeight > 0 {
+		g := maps.NewHexGeometry(float64(maps.ResolveDisplay(mp, "").GridSize), float64(mp.ImageWidth), float64(mp.ImageHeight))
+		st.Cols, st.Rows = min(g.Cols, maps.MaxHexCoord+1), min(g.Rows, maps.MaxHexCoord+1)
+	}
+	return st, nil
+}
+
+func (m aiHexMapAdapter) PaintCells(ctx context.Context, campaignID, mapID string, a records.Actor, cells []records.HexWrite) error {
+	entries := make([]maps.UpdateHexCellInput, len(cells))
+	for i, c := range cells {
+		e := maps.UpdateHexCellInput{Col: c.Col, Row: c.Row}
+		if c.Terrain != "" {
+			e.Terrain = patch.Of(c.Terrain)
+		}
+		for _, l := range []struct {
+			to   *patch.Field[int]
+			mask *int
+		}{{&e.Road, c.Road}, {&e.River, c.River}, {&e.Trail, c.Trail}} {
+			if l.mask != nil {
+				*l.to = patch.Of(*l.mask)
+			}
+		}
+		if c.Place {
+			e.Name = patch.Of(c.Name)
+			// A place written without notes keeps the notes already on the
+			// hex: renaming a hex must not cost the owner what they wrote.
+			if c.Notes != "" {
+				e.Notes = patch.Of(c.Notes)
+			}
+		}
+		entries[i] = e
+	}
+	_, err := m.hexes.PatchCells(ctx, campaignID, mapID, maps.HexActor{UserID: a.UserID, Role: a.Role, IsDM: a.CanAuthorDmOnly()}, entries)
+	return err
 }
 
 // aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,
