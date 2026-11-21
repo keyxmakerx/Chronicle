@@ -69,7 +69,7 @@ async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ i
       store.push(e);
       return ok({ entry: e }, 201);
     }
-    if (u.pathname.startsWith(C + '/system-entries/') && m === 'PUT') { seen.put.push({ path: u.pathname, body: JSON.parse(req.postData()) }); return ok({}); }
+    if (u.pathname.startsWith(C + '/system-entries/') && m === 'PUT') { const b = JSON.parse(req.postData()); seen.put.push({ path: u.pathname, body: b }); const id = +u.pathname.split('/').pop(); const was = store.find((x) => x.id === id) || { id, fieldKey: 'ancestry', status: 'draft', properties: {} }; return ok({ entry: Object.assign({}, was, b) }); }
     if (u.pathname === C + '/characters/new' && m === 'POST') { seen.put.push({ path: u.pathname, body: JSON.parse(req.postData()) }); return ok({ id: 'e9', url: C + '/entities/e9' }, 201); }
     if (u.pathname.startsWith(C + '/entities/')) { seen.put.push({ path: u.pathname, body: JSON.parse(req.postData() || 'null') }); return ok({ status: 'ok' }); }
     if (u.pathname.startsWith('/static/')) {
@@ -141,4 +141,22 @@ test('a new hero keeps its picked draft to it once it is made', { skip }, async 
   await nav;
   const kept = seen.put.find((x) => x.path === C + '/system-entries/41');
   assert.deepEqual(kept && kept.body, { forEntityId: 'e9' });
+});
+
+test('editing a draft the hero has not picked never changes the hero', { skip }, async (t) => {
+  const mine = { slug: 'ashborn', name: 'Ashborn', summary: 'Born of ash.', source: 'campaign', mine: true, status: 'draft', entryId: 41, properties: {} };
+  const { p, seen } = await open(t, { canMake: false, extra: [mine], heroes: [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human' }, hidden: [] }], entries: [{ id: 41, fieldKey: 'ancestry', name: 'Ashborn', summary: 'Born of ash.', properties: {}, status: 'draft' }] });
+  await p.click('[data-blank="ancestry"]');
+  await p.locator('.hb-opt', { hasText: 'Ashborn' }).click();
+  await p.click('[data-own-edit]');
+  await p.waitForSelector('.hb-panel [data-k="name"]');
+  await p.fill('.hb-panel [data-k="summary"]', 'Born of cinders.');
+  const saved = p.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/system-entries/41'));
+  await p.click('.hb-panel [data-oed="draft"]');
+  await saved;
+  await p.waitForFunction(() => { const t = document.querySelector('.hb-toast'); return t && !t.hidden; });
+  assert.match(await p.locator('.hb-toast').innerText(), /saved as a draft\.$/);
+  assert.equal(await p.locator('.hb-panel .hb-opt', { hasText: 'Ashborn' }).count(), 1, 'the panel stays open on the list');
+  assert.ok(seen.put.some((x) => x.path === C + '/system-entries/41'), 'the entry itself is saved');
+  assert.equal(seen.put.filter((x) => x.path === C + '/entities/e1/fields').length, 0, 'the hero keeps Human');
 });

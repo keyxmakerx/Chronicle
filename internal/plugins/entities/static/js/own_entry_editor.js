@@ -299,7 +299,10 @@
     cssReady = new Promise(function (resolve) {
       var have = document.querySelector('link[data-oed-css]');
       if (have && have.sheet) { resolve(); return; }
-      var href = HERE ? HERE.replace(/\.js(\?|#|$)/, '.css$1').replace(/\/js\/([^\/]*)$/, '/css/$1') : '/static/plugins/entities/css/own_entry_editor.css';
+      // The script's ?v= token is its own digest, not the stylesheet's, so the
+      // address drops it and the stylesheet is revalidated instead of being
+      // held for a year.
+      var href = HERE ? HERE.replace(/[?#].*$/, '').replace(/\.js$/, '.css').replace(/\/js\/([^\/]*)$/, '/css/$1') : '/static/plugins/entities/css/own_entry_editor.css';
       var l = have || document.createElement('link');
       l.rel = 'stylesheet';
       l.setAttribute('data-oed-css', '');
@@ -354,6 +357,8 @@
     this.d = null;
     this.saved = null;
     this.ready = false;
+    // Always built from fixed words and the already-escaped GM term, so it is
+    // written as HTML.
     this.failed = '';
     this.busy = false;
     this.confirm = false;
@@ -453,7 +458,7 @@
     var sc = scroller(b), top = sc ? sc.scrollTop : 0;
     if (!this.ready) b.innerHTML = '<div class="oed oed-load" role="status">Opening…</div>';
     else if (this.failed) {
-      b.innerHTML = '<div class="oed"><p class="oed-fail" role="alert">' + esc(this.failed) + '</p>' +
+      b.innerHTML = '<div class="oed"><p class="oed-fail" role="alert">' + this.failed + '</p>' +
         (this.d ? '' : '<button type="button" class="oed-link" data-oed="retry">Try again</button>') + '</div>';
     } else b.innerHTML = this.formHTML();
     if (sc) sc.scrollTop = top;

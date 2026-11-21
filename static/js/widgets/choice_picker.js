@@ -233,7 +233,7 @@
             list.canMake = false;
             endOwn();
             renderBody();
-            var r = box.querySelector('input[type=radio][value="' + String(ch.name).replace(/"/g, '\\"') + '"]');
+            var r = [].filter.call(box.querySelectorAll('input[type=radio]'), function (x) { return x.value === String(ch.name); })[0];
             if (r) { r.checked = true; r.scrollIntoView({ block: 'nearest' }); }
             update();
             toast(ch.name + (ch.status === 'sent' ? ' handed in to your Director' : ' saved as a draft'));

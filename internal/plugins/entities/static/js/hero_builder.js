@@ -550,17 +550,28 @@
     if (!p || !p.own) return;
     p.own.editor.requestClose(function () { var h = p.hero, k = p.key; self.endOwn(); self.panel = { hero: h, key: k, focus: null }; self.drawPanel(); });
   };
-  // A saved entry joins the list and is picked for the hero at once, as the
-  // Your own entries page always did for a hero it was opened for.
+  // A new entry joins the list and is picked for the hero at once, as the
+  // Your own entries page always did for a hero it was opened for. Editing an
+  // entry re-picks it only when it is already the hero's pick (a rename), so
+  // fixing a draft never replaces what the hero holds.
   Builder.prototype.ownSaved = function (h, st, e, mode, isNew) {
-    var ch = window.ChronicleOwnEntry.Editor.choiceOf(e), at = -1;
+    var ch = window.ChronicleOwnEntry.Editor.choiceOf(e), at = -1, wasPick = false;
     st.choices.forEach(function (c, n) { if (c.entryId === e.id) at = n; });
-    if (at >= 0) { if (st.choices[at].state) ch.state = st.choices[at].state; st.choices[at] = ch; } else st.choices.push(ch);
+    if (at >= 0) {
+      wasPick = !!h.values[st.fieldKey] && lower(h.values[st.fieldKey]) === lower(st.choices[at].name);
+      if (st.choices[at].state) ch.state = st.choices[at].state;
+      st.choices[at] = ch;
+    } else st.choices.push(ch);
     if (isNew) st.canMake = false;
     this.endOwn();
     this.panel = { hero: h.id, key: st.fieldKey, focus: null };
-    this.pick(h.id, st.fieldKey, ch.name);
-    if (!buyListOf(ch)) this.toast(ch.name + (mode === 'send' ? ' handed in. It waits for your ' + gm() + ', and you can still change it.' : ' saved as a draft and picked.'));
+    if (isNew || wasPick) {
+      this.pick(h.id, st.fieldKey, ch.name);
+      if (!buyListOf(ch)) this.toast(ch.name + (mode === 'send' ? ' handed in. It waits for your ' + gm() + ', and you can still change it.' : ' saved as a draft and picked.'));
+    } else {
+      this.drawPanel();
+      this.toast(ch.name + (mode === 'send' ? ' handed in. It waits for your ' + gm() + '.' : ' saved as a draft.'));
+    }
   };
   // The drafts a new hero's player picked are kept to the hero once it exists,
   // so a Director accepting one can give it to that hero alone.
