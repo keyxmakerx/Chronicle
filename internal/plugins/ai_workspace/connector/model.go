@@ -86,7 +86,10 @@ type Request struct {
 	Blocks  int
 	// Body is the blocks, in the copy-and-paste format. Only Request reads
 	// it; lists leave it empty.
-	Body      string
+	Body string
+	// Notes is what Ask noticed about a request it kept, for the AI that
+	// sent it. It is told once with the answer and never stored.
+	Notes     []string
 	Status    string
 	Outcome   string
 	CreatedAt time.Time

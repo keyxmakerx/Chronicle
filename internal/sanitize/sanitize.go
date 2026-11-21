@@ -137,13 +137,21 @@ var gmDiagramRe = regexp.MustCompile(`(?s)<pre\b[^>]*\bclass="[^"]*\bce-diagram-
 // GM-only pictures, GM-only diagrams and rolling-table rollers from HTML, used
 // to hide GM-only content from players.
 func StripSecretsHTML(html string) string {
+	return RedactSecretsHTML(html, "")
+}
+
+// RedactSecretsHTML is StripSecretsHTML that leaves marker where each GM-only
+// part was, so a caller that shows the stripped text can say a part is not
+// shown instead of presenting a sentence with a hole in it. marker is spliced
+// in as is, so it must be text that is safe in HTML.
+func RedactSecretsHTML(html, marker string) string {
 	if html == "" {
 		return ""
 	}
-	html = gmPictureRe.ReplaceAllString(html, "")
-	html = gmDiagramRe.ReplaceAllString(html, "")
-	html = rollerRe.ReplaceAllString(html, "")
-	out, _ := stripSecretSpans(html)
+	html = gmPictureRe.ReplaceAllString(html, marker)
+	html = gmDiagramRe.ReplaceAllString(html, marker)
+	html = rollerRe.ReplaceAllString(html, marker)
+	out, _ := stripSecretSpans(html, marker)
 	return out
 }
 
@@ -154,7 +162,7 @@ func StripSecretsHTML(html string) string {
 // secret in the output. An unclosed secret is removed to the end of the
 // input: failing closed is safer than leaking. Untouched markup is copied
 // byte for byte from the tokenizer's raw output.
-func stripSecretSpans(src string) (string, int) {
+func stripSecretSpans(src, marker string) (string, int) {
 	z := html.NewTokenizer(strings.NewReader(src))
 	var out strings.Builder
 	out.Grow(len(src))
@@ -184,6 +192,7 @@ func stripSecretSpans(src string) (string, int) {
 			name, hasAttr := z.TagName()
 			if string(name) == "span" && hasAttr && hasSecretAttr(z) {
 				count++
+				out.WriteString(marker)
 				if tt == html.StartTagToken {
 					depth = 1
 				}
@@ -221,7 +230,7 @@ func CountSecrets(html string) (passages, pictures, diagrams int) {
 	html = gmPictureRe.ReplaceAllString(html, "")
 	diagrams = len(gmDiagramRe.FindAllStringIndex(html, -1))
 	html = gmDiagramRe.ReplaceAllString(html, "")
-	_, passages = stripSecretSpans(html)
+	_, passages = stripSecretSpans(html, "")
 	return passages, pictures, diagrams
 }
 

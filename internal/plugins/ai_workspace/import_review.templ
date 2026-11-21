@@ -526,73 +526,101 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 // "Add a new page instead" puts the AI's name and action back. "See both"
 // opens the two texts side by side. Both are methods of the form's
 // aiImportReview component (ai_import_review.js), not script blocks, because
-// this arrives in an HTMX swap.
+// this arrives in an HTMX swap. A page another row or request would add has
+// nothing to change, so it gets the line and "See both" only.
 templ reviewRowSimilar(idx int, page importer.ParsedPage, m *importer.SimilarPage) {
-	<div
-		class="air-sim"
-		data-name-field={ fmt.Sprintf("page_%d_name", idx) }
-		data-action-field={ fmt.Sprintf("page_%d_action", idx) }
-		data-match-name={ m.Name }
-		data-sent-name={ page.Name }
-		data-state="off"
-	>
-		<span class="air-line" data-sim="off">
-			<span class="air-sim-lead">Much like a page you have:</span>
-			{ m.Name }{ similarDiffer(m) }
-		</span>
-		<span class="air-line" data-sim="on" hidden>
-			Changing <b>{ m.Name }</b> instead of adding a page.
-		</span>
-		<span class="air-sim-qs">
-			if m.CanUpdate {
+	if m.Pending {
+		<div class="air-sim">
+			<span class="air-line">
+				<span class="air-sim-lead">{ similarLead(m) }</span>
+				{ m.Name }{ similarDiffer(m) }
+			</span>
+			<span class="air-sim-qs">
 				<button
 					type="button"
 					class="air-quiet"
-					data-sim-swap
-					aria-label={ "Update the page " + m.Name + " instead of adding a new one" }
-					@click="swapSimilar($el)"
-				>Update that page instead</button>
+					aria-expanded="false"
+					@click="toggleBoth($el)"
+				>See both</button>
+			</span>
+			@similarBoth(m, "The other page", "This page")
+		</div>
+	} else {
+		<div
+			class="air-sim"
+			data-name-field={ fmt.Sprintf("page_%d_name", idx) }
+			data-action-field={ fmt.Sprintf("page_%d_action", idx) }
+			data-match-name={ m.Name }
+			data-sent-name={ page.Name }
+			data-state="off"
+		>
+			<span class="air-line" data-sim="off">
+				<span class="air-sim-lead">{ similarLead(m) }</span>
+				{ m.Name }{ similarDiffer(m) }
+			</span>
+			<span class="air-line" data-sim="on" hidden>
+				Changing <b>{ m.Name }</b> instead of adding a page.
+			</span>
+			<span class="air-sim-qs">
+				if m.CanUpdate {
+					<button
+						type="button"
+						class="air-quiet"
+						data-sim-swap
+						aria-label={ "Update the page " + m.Name + " instead of adding a new one" }
+						@click="swapSimilar($el)"
+					>Update that page instead</button>
+				}
+				<button
+					type="button"
+					class="air-quiet"
+					aria-expanded="false"
+					@click="toggleBoth($el)"
+				>See both</button>
+			</span>
+			if m.CanUpdate && m.GMOnly.Any() {
+				// Only once the row is a change to this page: replacing its text
+				// would lose the GM-only parts, so it asks for the same tick any
+				// change to such a page asks for.
+				<div data-sim-gm hidden>
+					@reviewRowGMOnlyConfirm(idx, m.Name, m.GMOnly)
+				</div>
 			}
-			<button
-				type="button"
-				class="air-quiet"
-				aria-expanded="false"
-				@click="toggleBoth($el)"
-			>See both</button>
-		</span>
-		if m.CanUpdate && m.GMOnly.Any() {
-			// Only once the row is a change to this page: replacing its text
-			// would lose the GM-only parts, so it asks for the same tick any
-			// change to such a page asks for.
-			<div data-sim-gm hidden>
-				@reviewRowGMOnlyConfirm(idx, m.Name, m.GMOnly)
-			</div>
-		}
-		<div class="air-sim-both" hidden>
-			<div class="air-sim-col">
-				<h5>The page you have</h5>
-				for _, l := range simLines(m.Have, m.Sent) {
-					<p class={ simLineClass(l) }>
-						if l.Only {
-							<span class="air-sim-only">Only here</span>
-						}
-						{ l.Text }
-					</p>
-				}
-			</div>
-			<div class="air-sim-col">
-				<h5>What your AI sent</h5>
-				for _, l := range simLines(m.Sent, m.Have) {
-					<p class={ simLineClass(l) }>
-						if l.Only {
-							<span class="air-sim-only">Only here</span>
-						}
-						{ l.Text }
-					</p>
-				}
-			</div>
+			@similarBoth(m, "The page you have", "What your AI sent")
+		</div>
+	}
+}
+
+// similarBoth is the two texts of "See both", closed until asked for. A line
+// the page's reader-safe text had to leave out says so instead of reading as
+// a broken sentence.
+templ similarBoth(m *importer.SimilarPage, haveHead, sentHead string) {
+	<div class="air-sim-both" hidden>
+		<div class="air-sim-col">
+			<h5>{ haveHead }</h5>
+			for _, l := range simLines(m.Have, m.Sent) {
+				@simLineView(l)
+			}
+		</div>
+		<div class="air-sim-col">
+			<h5>{ sentHead }</h5>
+			for _, l := range simLines(m.Sent, m.Have) {
+				@simLineView(l)
+			}
 		</div>
 	</div>
+}
+
+templ simLineView(l simLine) {
+	<p class={ simLineClass(l) }>
+		if l.Only {
+			<span class="air-sim-only">Only here</span>
+		}
+		{ l.Text }
+		if l.GM {
+			<span class="air-sim-gm">A GM-only part isn't shown.</span>
+		}
+	</p>
 }
 
 // reviewRowSheetCheck is where the campaign's game system sets the numbers

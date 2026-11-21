@@ -283,8 +283,17 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	if sess.Conn.ForPlayer {
 		who = "you"
 	}
-	out := toolResult(id, fmt.Sprintf("Sent to %s for review in Chronicle: %s. Nothing has changed yet: "+
-		"each one is answered yes or no from the AI button at the top of any Chronicle page. Say it is waiting there, and don't send the same changes again.", who, q.Counts), false)
+	msg := fmt.Sprintf("Sent to %s for review in Chronicle: %s. Nothing has changed yet: "+
+		"each one is answered yes or no from the AI button at the top of any Chronicle page. Say it is waiting there, and don't send the same changes again.", who, q.Counts)
+	if len(q.Notes) > 0 {
+		// Advice about a kept request: it is not refused, so the AI is told
+		// what to do if it was a slip without being asked to resend blindly.
+		msg += "\n\nHeads up, " + plural(len(q.Notes), "one thing", "a few things") + " about what you sent:\n- " + strings.Join(q.Notes, "\n- ") +
+			"\nThe request is still waiting as sent, and the owner is shown the same match when they review it. " +
+			"If it was a slip, send the change you meant and say the earlier request can be turned down."
+		line.Note = "sent for your review, with a note on a matching page"
+	}
+	out := toolResult(id, msg, false)
 	out.Called = line
 	return out
 }

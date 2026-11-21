@@ -93,6 +93,11 @@ test('See both opens the two texts, marks what differs, and closes', { skip, tim
   // One differing line a side, marked in words.
   assert.deepEqual(await page.$$eval('.air-sim-col p.is-only', (e) => e.map((x) => x.textContent.replace(/\s+/g, ' ').trim())),
     ['Only here Bring a hero of level 1.', 'Only here Bring a hero of level 2.']);
+  // The page's GM-only part is left out of its text, and the line says so
+  // rather than reading as a broken sentence marked "Only here".
+  assert.deepEqual(await page.$$eval('.air-sim-gm', (e) => e.map((x) => x.textContent.trim())), ["A GM-only part isn't shown."]);
+  assert.equal(await page.$$eval('.air-sim-col p.is-only .air-sim-gm', (e) => e.length), 0);
+  assert.equal(await page.$eval('.air-sim-both', (e) => e.textContent.includes('\ue000')), false);
   await page.click('button:has-text("Hide both")');
   assert.equal(await visible(page, '.air-sim-both'), false);
   assert.deepEqual(errors, []);

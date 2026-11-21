@@ -449,7 +449,7 @@ func (h *Handler) ParseImport(c *echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
-	similar := h.similarPages(c, cc, pages, cls, rollTables)
+	similar := h.similarPages(c, cc, pages, cls, rollTables, requestID)
 
 	// An unknown @[Name] only warns; at commit it stays plain text.
 	for i := range pages {
@@ -532,28 +532,82 @@ func (h *Handler) ParseImport(c *echo.Context) error {
 // simply show no look-alike line, which is the review as it was.
 const maxSimilarLookups = 40
 
-// similarPages finds, for each page the AI asks to add, the existing page it
-// is much like (same index as pages; nil where none). The search runs as the
-// viewer, so a page they cannot see is never named. A page whose name already
-// matches one exactly is the classifier's conflict and is skipped here.
-func (h *Handler) similarPages(c *echo.Context, cc *campaigns.CampaignContext, pages []importer.ParsedPage, cls []importer.Classification, rollTables map[string]string) []*importer.SimilarPage {
-	finder, ok := h.importLookup.(importer.PageFinder)
-	if !ok {
-		return nil
-	}
+// maxOtherRequests bounds how many other waiting requests a review reads to
+// look for a twin; the newest come first.
+const maxOtherRequests = 10
+
+// addsAPage is whether a block asks to make a new page, which is the only
+// kind of row a look-alike line is for.
+func addsAPage(p importer.ParsedPage) bool {
+	a := p.FrontMatter.Action
+	return a == "" || a == importer.ActionCreate
+}
+
+// similarPages finds, for each page the AI asks to add, the page it is much
+// like (same index as pages; nil where none): first an existing page, found
+// as the viewer so a page they cannot see is never named, and failing that
+// another page this review or another waiting request would add. A page whose
+// name already matches one exactly is the classifier's conflict and is
+// skipped for the existing-page search.
+func (h *Handler) similarPages(c *echo.Context, cc *campaigns.CampaignContext, pages []importer.ParsedPage, cls []importer.Classification, rollTables map[string]string, requestID int64) []*importer.SimilarPage {
+	finder, _ := h.importLookup.(importer.PageFinder)
 	out := make([]*importer.SimilarPage, len(pages))
+	pending := h.pendingPages(c, cc, pages, requestID)
 	lookups := 0
 	for i, p := range pages {
-		if a := p.FrontMatter.Action; a != "" && a != importer.ActionCreate {
+		if !addsAPage(p) {
 			continue
 		}
-		if cls[i].Status == importer.StatusParseError || cls[i].Status == importer.StatusFieldProblem || cls[i].ConflictEntity != nil {
+		if cls[i].Status == importer.StatusParseError || cls[i].Status == importer.StatusFieldProblem {
 			continue
 		}
-		if lookups++; lookups > maxSimilarLookups {
+		if finder != nil && cls[i].ConflictEntity == nil && lookups < maxSimilarLookups {
+			lookups++
+			out[i] = importer.FindSimilar(c.Request().Context(), finder, cc.Campaign.ID, viewerFor(c, cc), p, rollTables)
+		}
+		if out[i] == nil {
+			out[i] = importer.FindSimilarPending(p, i, pending)
+		}
+	}
+	return out
+}
+
+// pendingPages is every page this review, and the owner's other waiting
+// requests, would add. A request that cannot be read is skipped: the line is
+// a courtesy and must never stop a review from opening.
+func (h *Handler) pendingPages(c *echo.Context, cc *campaigns.CampaignContext, pages []importer.ParsedPage, requestID int64) []importer.PendingPage {
+	var out []importer.PendingPage
+	for i, p := range pages {
+		if addsAPage(p) && p.Status != importer.StatusParseError && strings.TrimSpace(p.Name) != "" {
+			out = append(out, importer.PendingPage{Index: i, Name: p.Name, Body: p.Body})
+		}
+	}
+	if h.connector == nil {
+		return out
+	}
+	ctx, userID := c.Request().Context(), auth.GetUserID(c)
+	waiting, err := h.connector.Waiting(ctx, cc.Campaign.ID, userID)
+	if err != nil {
+		return out
+	}
+	read := 0
+	for _, w := range waiting {
+		if w.ID == requestID {
+			continue
+		}
+		if read++; read > maxOtherRequests {
 			break
 		}
-		out[i] = importer.FindSimilar(c.Request().Context(), finder, cc.Campaign.ID, viewerFor(c, cc), p, rollTables)
+		q, err := h.connector.WaitingRequest(ctx, cc.Campaign.ID, userID, w.ID)
+		if err != nil {
+			continue
+		}
+		others, _ := splitImport(importer.Parse(q.Body))
+		for _, o := range others {
+			if addsAPage(o) && o.Status != importer.StatusParseError && strings.TrimSpace(o.Name) != "" {
+				out = append(out, importer.PendingPage{Index: -1, Name: o.Name, Body: o.Body})
+			}
+		}
 	}
 	return out
 }
@@ -1236,6 +1290,71 @@ func (h *Handler) ConnectorCheckDid(ctx context.Context, conn *connector.Connect
 		out = append(out, h.recordProblems(ctx, campaignID, conn.UserID, pages, recs)...)
 	}
 	return out, did, nil
+}
+
+// maxMatchNotes is how many look-alike pages one answer names; the rest are
+// counted, so a long request cannot turn the answer into a wall.
+const maxMatchNotes = 5
+
+// ConnectorNotes is what a connected AI is told about a request that was
+// kept: a new page that closely matches a page the campaign already has,
+// by the rule the review uses (importer.FindSimilar), with the way to change
+// that page instead. It only advises, so the owner still gets the request.
+//
+// The search runs as the key's own reader: the owner for any privacy but
+// Safe, a player for Safe, the same split every lookup the AI can make uses.
+// So a page the key's AI could not look up is never named, and only a page's
+// name is told, never its text, so GM-only passages stay where they are. A
+// player's key is left out: it only changes its own character.
+func (h *Handler) ConnectorNotes(ctx context.Context, conn *connector.Connection, changes string) []string {
+	if conn.ForPlayer {
+		return nil
+	}
+	finder, ok := h.importLookup.(importer.PageFinder)
+	if !ok {
+		return nil
+	}
+	role := int(campaigns.RoleOwner)
+	if conn.Privacy == aiexport.PrivacyModeSafe {
+		role = int(campaigns.RolePlayer)
+	}
+	viewer := importer.Viewer{Role: role, UserID: conn.UserID}
+	pages, _ := splitImport(importer.Parse(changes))
+	var out []string
+	more, lookups := 0, 0
+	for _, p := range pages {
+		if !addsAPage(p) || p.Status == importer.StatusParseError {
+			continue
+		}
+		if lookups++; lookups > maxSimilarLookups {
+			break
+		}
+		m := importer.FindSimilar(ctx, finder, conn.CampaignID, viewer, p, nil)
+		if m == nil {
+			continue
+		}
+		if len(out) == maxMatchNotes {
+			more++
+			continue
+		}
+		out = append(out, similarNote(p, m))
+	}
+	if more > 0 {
+		out = append(out, fmt.Sprintf("and %d more new pages that match existing ones", more))
+	}
+	return out
+}
+
+// similarNote tells the AI which page a new one matches and how to change
+// that page instead, in the request's own terms. When the page can't be found
+// by its name there is no update to suggest, so it says only what matches.
+func similarNote(p importer.ParsedPage, m *importer.SimilarPage) string {
+	head := fmt.Sprintf("block %d: the new page %s closely matches the page %s that the campaign already has",
+		p.SourceIndex+1, strconv.Quote(oneLineText(p.Name, 60)), strconv.Quote(oneLineText(m.Name, 60)))
+	if !m.CanUpdate {
+		return head + ". Chronicle can't change that page by its name, so say to the owner that it may already exist"
+	}
+	return head + fmt.Sprintf(". If you meant to change it, use an update block with name: %s instead of a new page", strconv.Quote(oneLineText(m.Name, 60)))
 }
 
 // recordProblems plans the request's record blocks as the review screen
