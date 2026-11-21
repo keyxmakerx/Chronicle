@@ -112,17 +112,16 @@ func (r *entityRepository) SearchTexts(ctx context.Context, campaignID string, i
 
 // SearchTerms are the words a snippet marks: the ones Search matched on.
 // A query of four or more characters is matched word by word (FULLTEXT) and
-// shorter ones as one run (LIKE), so the same split is used here.
+// a shorter one, or one with no word in it, as one run (LIKE), so the same
+// split is used here.
 func SearchTerms(query string) []string {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil
 	}
-	var raw []string
-	if len(q) >= 4 {
-		raw = strings.Fields(stripFTOperators(q))
-	} else {
-		raw = []string{q}
+	raw := []string{q}
+	if words := strings.Fields(stripFTOperators(q)); len(q) >= 4 && len(words) > 0 {
+		raw = words
 	}
 	terms := make([]string, 0, len(raw))
 	for _, t := range raw {

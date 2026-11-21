@@ -76,12 +76,44 @@ func TestSearchTerms(t *testing.T) {
 		{"ti", "ti"},
 		{"tide wright", "tide|wright"},
 		{"+tide -wright*", "tide|wright"},
+		{"Half-Elf", "Half|Elf"},
+		{"Not @Notes", "Not|Notes"},
+		{"kara@example.test", "kara|example.test"},
+		{"----", "----"}, // no word in it, so it is matched as one run
 		{"  ", ""},
 		{"a b", "a b"}, // under four characters it is matched as one run
 	}
 	for _, tt := range tests {
 		if got := strings.Join(SearchTerms(tt.query), "|"); got != tt.want {
 			t.Errorf("SearchTerms(%q) = %q, want %q", tt.query, got, tt.want)
+		}
+	}
+}
+
+// No character the FULLTEXT boolean parser reads as an operator may reach it,
+// and each one is a word break, as it is to the index.
+func TestStripFTOperators(t *testing.T) {
+	tests := []struct {
+		query string
+		want  string
+	}{
+		{"tide wright", "tide wright"},
+		{"+tide -wright*", "tide wright"},
+		{"Half-Elf", "Half Elf"},
+		{"Not @Notes", "Not Notes"},
+		{"kara@example.test", "kara example.test"},
+		{`"the (old) ~inn" <now> @4`, "the old inn now 4"},
+		{"  two   spaces ", "two spaces"},
+		{"----", ""},
+		{`@ "( )" *`, ""},
+	}
+	for _, tt := range tests {
+		got := stripFTOperators(tt.query)
+		if got != tt.want {
+			t.Errorf("stripFTOperators(%q) = %q, want %q", tt.query, got, tt.want)
+		}
+		if strings.ContainsAny(got, `+-><()~*"@`) {
+			t.Errorf("stripFTOperators(%q) = %q still holds an operator", tt.query, got)
 		}
 	}
 }
