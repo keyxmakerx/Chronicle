@@ -61,7 +61,7 @@ async function page(t, width, o = {}) {
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
-  await p.route('**/*', (route) => {
+  await p.route('**/*', async (route) => {
     const u = new URL(route.request().url());
     if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: html(o.role || 1) });
     if (u.pathname.startsWith('/static/')) {
@@ -84,6 +84,8 @@ async function page(t, width, o = {}) {
     } else if (u.pathname.startsWith('/campaigns/c1/sessions/event-dismissals/')) {
       const id = decodeURIComponent(u.pathname.split('/').pop());
       (o.dismissed || []).push(route.request().method() + ' ' + id);
+      // A test holds the PUT's answer to press Undo while it is still pending.
+      if (route.request().method() === 'PUT' && o.holdPut) await o.holdPut;
       if (route.request().method() === 'DELETE') {
         if (o.restoreStatus) return route.fulfill({ status: o.restoreStatus, contentType: 'application/json', body: '{"error":"no"}' });
         // The server puts it back: the next read of the strip lists it again.
@@ -302,6 +304,58 @@ test('an Undo the server refuses says so in the line and leaves the row hidden',
   assert.equal(await p.$$eval(ROW, (e) => e.length), 1, 'Session 1 is not shown as restored');
   assert.ok(await p.$('#cal5-gnpop [data-gn-undo="e1"]'), 'Undo can be tried again');
   assert.equal(await p.$eval('#cal5-gnpop', (el) => el.hidden), false);
+});
+
+test('a refused Undo does not leave its error on a later hide of the same row', { skip }, async (t) => {
+  const o = { role: 2, candidates: CANDS.slice(), original: CANDS, dismissed: [], restoreStatus: 500 };
+  const p = await page(t, 1280, o);
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.waitForFunction(() => /Could not undo that/.test(document.querySelector('#cal5-gnpop [data-gn-undo-row="e1"]').textContent));
+  o.restoreStatus = 0;
+  await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-make="e1"]');
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo-row="e1"]');
+  const line = await p.textContent('#cal5-gnpop [data-gn-undo-row="e1"]');
+  assert.match(line, /Hidden for everyone\./);
+  assert.doesNotMatch(line, /Could not undo/);
+});
+
+test('Undo pressed while the hide is still pending sends its DELETE only after the PUT answers', { skip }, async (t) => {
+  let release;
+  const o = { role: 2, candidates: CANDS.slice(), original: CANDS, dismissed: [], holdPut: new Promise((r) => { release = r; }) };
+  const p = await page(t, 1280, o);
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(o.dismissed, ['PUT e1'], 'no DELETE while the PUT is unanswered');
+  release();
+  await p.waitForSelector('#cal5-gnpop [data-gn-make="e1"]');
+  assert.deepEqual(o.dismissed, ['PUT e1', 'DELETE e1'], 'the DELETE follows the PUT');
+  assert.equal(await p.$('#cal5-gnpop .gnstrip-undo'), null);
+});
+
+test('Undo pressed while the hide is pending, then the hide is refused: row restored, no DELETE', { skip }, async (t) => {
+  let release;
+  const o = { role: 2, candidates: CANDS.slice(), dismissed: [], dismissStatus: 500, holdPut: new Promise((r) => { release = r; }) };
+  const p = await page(t, 1280, o);
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector(ROW);
+  await p.click('#cal5-gnpop [data-gn-skip="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-undo="e1"]');
+  await p.click('#cal5-gnpop [data-gn-undo="e1"]');
+  release();
+  await p.waitForSelector('#cal5-gnpop [data-gn-make="e1"]');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(o.dismissed, ['PUT e1'], 'nothing to undo, so no DELETE');
+  assert.equal(await p.$('#cal5-gnpop .gnstrip-undo'), null);
+  assert.equal(await p.$$eval(ROW, (e) => e.length), 2, 'the row is back');
 });
 
 test('an old browser-only skip no longer hides anything, so every device agrees', { skip }, async (t) => {
