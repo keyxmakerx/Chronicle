@@ -856,16 +856,16 @@
 .cal-v5 .band{min-height:38px;padding:0 10px}
 .cal-v5 .band .dc{gap:8px}
 .cal-v5 .hc{display:none}
-.cal-v5 .wing, .cal-v5 .flap, .cal-v5 .evp{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;border-radius:18px 18px 0 0}
-.cal-v5 .wing, .cal-v5 .flap{height:auto!important;max-height:82vh!important;border-left:0;border-right:0;border-bottom:0;overflow:auto;--hg:linear-gradient(transparent,transparent)!important}
+.cal-v5 .wing, .cal-v5 .flap, .cal-v5 .evp{position:fixed;left:0!important;right:0;top:auto!important;bottom:var(--bottom-bar,0px);width:auto!important;border-radius:18px 18px 0 0}
+.cal-v5 .wing, .cal-v5 .flap{height:auto!important;max-height:calc(82vh - var(--bottom-bar,0px))!important;max-height:calc(82dvh - var(--bottom-bar,0px))!important;border-left:0;border-right:0;border-bottom:0;overflow:auto;-webkit-overflow-scrolling:touch;--hg:linear-gradient(transparent,transparent)!important}
 /* A phone's sheet grows whole, so its leaves are only groupings and the sheet itself scrolls. */
 .cal-v5 .leaf, .cal-v5 .lscroll{display:contents}
-.cal-v5 .evp{max-height:86vh!important}
+.cal-v5 .evp{max-height:calc(86vh - var(--bottom-bar,0px))!important;max-height:calc(86dvh - var(--bottom-bar,0px))!important}
 .cal-v5 .evp::before{box-shadow:inset 0 1px 0 var(--edge)}
 .cal-v5 .evp .crease{border-radius:18px 18px 0 0}
 .cal-v5 .dock{overflow:visible}
 .cal-v5 .dscrim{display:none}
-.cal-v5 .drawer{position:fixed;top:auto;left:0;right:0;bottom:-28px;width:auto;max-height:calc(86vh + 28px);padding:0 0 28px;border:0;border-top:1px solid var(--edge);border-radius:18px 18px 0 0;transform:translate3d(0,105%,0)}
+.cal-v5 .drawer{position:fixed;top:auto;left:0;right:0;bottom:calc(var(--bottom-bar,0px) - 28px);width:auto;max-height:calc(86vh + 28px - var(--bottom-bar,0px));padding:0 0 28px;border:0;border-top:1px solid var(--edge);border-radius:18px 18px 0 0;transform:translate3d(0,105%,0)}
 .cal-v5 .drawer.open{transform:none}
 .cal-v5 .scrim{display:block}
 .cal-v5 .scrim.on{opacity:1;pointer-events:auto}
