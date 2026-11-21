@@ -401,3 +401,15 @@ label.aic-row { cursor: pointer; }
 .aic-request .aic-req-review > .aip-review { border: 0; box-shadow: none; background: transparent; border-radius: 0 0 12px 12px; }
 .aip-body:has(#ai-player-paste-review > *) .aip-empty { display: none; }
 .aip-yes { font-size: 0.875rem; color: var(--color-text-primary); }
+
+/* Undo on an applied request: it sits under the row's line, in the text
+ * column, so the time and icon columns keep their place. */
+.aic-undo { grid-column: 3 / -1; min-width: 0; margin-top: 2px; }
+.aic-undo-btn { font-size: 0.8125rem; }
+.aic-undo-btn i, .aic-undone i { margin-right: 4px; font-size: 0.75rem; }
+.aic-undone { margin: 0; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.aic-undo-why { color: rgb(var(--color-bad-rgb)); }
+.aic-undo .aic-ask { margin-top: 6px; }
+@media (pointer: coarse) {
+  .aic-undo-btn, .aic-undo .aic-ask .btn-secondary { min-height: 44px; }
+}

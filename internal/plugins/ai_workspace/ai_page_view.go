@@ -109,6 +109,8 @@ type callRow struct {
 	Waiting bool
 	// Left is where its tick sits on the sitting's strip, 0 to 100.
 	Left float64
+	// Undo is the Undo part of an applied request's row; nil on any other.
+	Undo *undoCell
 }
 
 // toolAskName is the connector's request-for-changes tool, as calls log it.
@@ -126,6 +128,11 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 		if c.Tool == toolAskName {
 			r.Kind = "ask"
 			r.Waiting = c.OK && callWaiting(v, c)
+			if id, ok := appliedFor(v, c); ok && c.OK {
+				if u, has := v.Undo[id]; has {
+					r.Undo = &u
+				}
+			}
 		}
 		out = append(out, r)
 	}
