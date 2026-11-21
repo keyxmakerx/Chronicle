@@ -621,6 +621,7 @@ func (h *Handler) SetEventVisibilityAPI(c *echo.Context) error {
 	var req struct {
 		Visibility      string              `json:"visibility"`
 		VisibilityRules patch.Field[string] `json:"visibility_rules"`
+		Announced       string              `json:"announced"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -628,6 +629,7 @@ func (h *Handler) SetEventVisibilityAPI(c *echo.Context) error {
 	if err := h.svc.SetEventVisibility(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, UpdateEventVisibilityInput{
 		Visibility:      req.Visibility,
 		VisibilityRules: req.VisibilityRules,
+		Announced:       req.Announced,
 	}, viewerFrom(c, cc)); err != nil {
 		return err
 	}

@@ -177,7 +177,7 @@ func TestEventRepository_Integration(t *testing.T) {
 			t.Fatalf("CreateEvent: %v", err)
 		}
 		rules := `{"denied_users":["u2"]}`
-		if err := eventRepo.UpdateEventVisibility(ctx, evt.ID, "dm_only", &rules); err != nil {
+		if err := eventRepo.UpdateEventVisibility(ctx, evt.ID, "dm_only", &rules, nil); err != nil {
 			t.Fatalf("UpdateEventVisibility: %v", err)
 		}
 		got, _ := eventRepo.GetEvent(ctx, evt.ID)

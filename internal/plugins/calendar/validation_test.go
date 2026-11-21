@@ -12,6 +12,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // wantValidationErr accepts either 400 (apperror.ValidateRequired's "missing
@@ -370,6 +371,58 @@ func TestSetEventVisibility_Validation(t *testing.T) {
 		VisibilityRules: patch.Of("{not json"),
 	}, ownerViewer("u-owner"))
 	wantValidationErr(t, err, "malformed visibility_rules JSON")
+}
+
+func TestSetEventVisibility_Announced(t *testing.T) {
+	ahead, onDay := AnnouncedAhead, AnnouncedOnDay
+	tests := []struct {
+		name      string
+		in        UpdateEventVisibilityInput
+		viewer    permissions.Viewer
+		wantErr   bool
+		wantWrite bool
+		wantAnn   *string
+	}{
+		{"keeps the stored setting when none is sent", UpdateEventVisibilityInput{Visibility: "everyone"}, ownerViewer("u-owner"), false, true, nil},
+		{"show on the day", UpdateEventVisibilityInput{Visibility: "everyone", Announced: AnnouncedOnDay}, ownerViewer("u-owner"), false, true, &onDay},
+		{"show now", UpdateEventVisibilityInput{Visibility: "everyone", Announced: AnnouncedAhead}, ownerViewer("u-owner"), false, true, &ahead},
+		{"an unknown value is refused", UpdateEventVisibilityInput{Visibility: "everyone", Announced: "tomorrow"}, ownerViewer("u-owner"), true, false, nil},
+		{"a scribe cannot set it", UpdateEventVisibilityInput{Visibility: "everyone", Announced: AnnouncedAhead}, permissions.RequestViewer(int(permissions.RoleScribe), "u-scribe"), true, false, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calRepo := &fakeCalendarRepo{
+				getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+					return &Calendar{ID: id, CampaignID: testCampaignA}, nil
+				},
+			}
+			var wrote bool
+			var gotAnn *string
+			eventRepo := &fakeEventRepo{
+				getEventFn: func(_ context.Context, id string) (*Event, error) {
+					return &Event{ID: id, CalendarID: "cal-1", Visibility: "everyone"}, nil
+				},
+				updateVisibilityFn: func(_ context.Context, _, _ string, _ *string, a *string) error {
+					wrote, gotAnn = true, a
+					return nil
+				},
+			}
+			svc := newTestCalendarService(calRepo, eventRepo, nil, nil)
+			err := svc.SetEventVisibility(context.Background(), "evt-1", "cal-1", testCampaignA, tt.in, tt.viewer)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if wrote != tt.wantWrite {
+				t.Fatalf("wrote = %v, want %v", wrote, tt.wantWrite)
+			}
+			if tt.wantWrite && (gotAnn == nil) != (tt.wantAnn == nil) {
+				t.Fatalf("announced written = %v, want %v", gotAnn, tt.wantAnn)
+			}
+			if gotAnn != nil && *gotAnn != *tt.wantAnn {
+				t.Errorf("announced written = %q, want %q", *gotAnn, *tt.wantAnn)
+			}
+		})
+	}
 }
 
 func TestEventKind_Validation(t *testing.T) {

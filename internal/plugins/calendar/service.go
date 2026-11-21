@@ -2495,16 +2495,29 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 	if err := canChangeVisibility(v, input.Visibility, evt.Visibility); err != nil {
 		return err
 	}
+	if input.Announced != "" && !v.SkipsPerUserRules() {
+		return apperror.NewForbidden("only the campaign owner or a granted co-DM may change when players learn of an event")
+	}
+	if input.Announced != "" && !IsSupportedAnnounced(input.Announced) {
+		return apperror.NewValidation("announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
+	}
 	visRules := input.VisibilityRules.Ptr(evt.VisibilityRules)
 	if err := validateVisibilityRulesJSON(visRules); err != nil {
 		return err
 	}
-	if err := s.eventRepo.UpdateEventVisibility(ctx, eventID, input.Visibility, visRules); err != nil {
+	var announced *string
+	if input.Announced != "" {
+		announced = &input.Announced
+	}
+	if err := s.eventRepo.UpdateEventVisibility(ctx, eventID, input.Visibility, visRules, announced); err != nil {
 		return fmt.Errorf("set event visibility: %w", err)
 	}
 	updated := *evt
 	updated.Visibility = input.Visibility
 	updated.VisibilityRules = visRules
+	if announced != nil {
+		updated.Announced = announced
+	}
 	s.publish(PubEventUpdated, campaignID, calendarID, &updated)
 	return nil
 }
