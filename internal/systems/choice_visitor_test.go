@@ -190,12 +190,12 @@ func TestChoiceVisitor_ContextCannotWidenIt(t *testing.T) {
 // visitor's list never draws on its file.
 func TestChoiceVisitor_DirectorOnlyFileIsSkipped(t *testing.T) {
 	env := newVisitorEnv(t, func(m *SystemManifest) { m.DirectorData = []string{"ancestries.json"} })
-	player, err := env.choices.CreatorPlan(WithChoiceViewerUser(WithChoiceViewer(context.Background(), false), "newcomer"), vcamp)
+	director, err := env.choices.CreatorPlan(WithChoiceViewerUser(WithChoiceViewer(context.Background(), true), "dm"), vcamp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if planNames(player) == "" {
-		t.Fatal("setup: a player should read the file")
+	if planNames(director) == "" {
+		t.Fatal("setup: a Director should read the file")
 	}
 	got, err := env.choices.CreatorPlan(WithChoiceVisitor(context.Background()), vcamp)
 	if err != nil {

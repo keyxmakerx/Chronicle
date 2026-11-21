@@ -447,9 +447,11 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 		if base == "" || !choiceBasenamePattern.MatchString(base) {
 			base = pluralBasename(fieldKey)
 		}
-		// A Director-only category's file is not the public's to read, so a
-		// visitor's list never draws on it.
-		if choiceVisitor(ctx) && c.manifest.DirectorOnly(base) {
+		// A Director-only category's file is the Directors' to read, the same
+		// rule /data/:file applies, so any other reader's list (a player's,
+		// a Scribe's, a visitor's) never draws on it. Any field key reaches
+		// here, not only a hero's steps.
+		if !ChoiceViewerIsDirector(ctx) && c.manifest.DirectorOnly(base) {
 			continue
 		}
 		dataDir := filepath.Clean(filepath.Join(c.dir, "data"))
