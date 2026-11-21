@@ -34,6 +34,20 @@ crash-looped boot (the 000030 incident, ADR-044/045).
    takes a pre-migration backup for this migration's kind (core vs plugin), and
    that `BACKUP_REQUIRED` makes a failed backup fatal rather than a warning.
 
+8. **Reconcilers.** If the change adds or edits a boot-time data rewrite (an
+   `EnsureX`/`MergeX`/`Reconcile…` run from `internal/app/routes.go`, main or
+   a `SetupProvider`), check it is idempotent (a second run writes nothing),
+   transactional per map/record group, guarded by a `WHERE` on the old shape,
+   and never blocks boot on failure. The boot backup runs only while a
+   migration is pending, so confirm the same PR ships one (or the PR says
+   "back up before deploying"), and say that a rewrite cannot be undone from
+   inside Chronicle.
+9. **Bookkeeping.** Core change: `ExpectedCoreMigrationVersion` equals the new
+   highest number, and `tools/check-migration-numbers.sh` passes. Plugin
+   change: its `addPluginSchema` rank runs after any plugin whose tables it
+   references. `BACKUP_REQUIRED` is on by default only when `ENV=production`;
+   a development boot without `mysqldump` only warns.
+
 ## Output
 
 A verdict per numbered check: PASS, FAIL, or N/A with one line of why. Then one

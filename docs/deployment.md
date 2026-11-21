@@ -125,7 +125,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed (which header: Admin > Security > Visitor addresses). **Replaces** the default. See "Client IP behind a reverse proxy". |
 | `BACKUP_DIR` | `/app/data/backups` | Empty is unsupported: the admin UI reports "not configured" and the pre-migration backup is skipped. |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The pre-migration rotator has its own fixed 7 days. |
-| `BACKUP_REQUIRED` | `0` (binary), `1` (compose) | `1`/`true` makes the pre-migration backup mandatory: any failure (no `mysqldump`, empty dump, manifest write failure) aborts startup before migrations apply, for pending core and plugin migrations. Default is warn and proceed. Use `1` in production. |
+| `BACKUP_REQUIRED` | `1` when `ENV=production`, else `0` (compose sets `1`) | `1`/`true` makes the pre-migration backup mandatory: any failure (no `mysqldump`, empty dump, manifest write failure) aborts startup before migrations apply, for pending core and plugin migrations. Unset, development warns and proceeds; set `0` to opt out in production. |
 | `BOOT_FAIL_BACKOFF` | `45s` | Sleep before `os.Exit(1)` on an unrecoverable boot error, so `restart: unless-stopped` retries about once a minute instead of looping hot and repeating pre-migration backups. Use `2s` in dev. |
 | `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |
 | `RESTORE_SCRIPT_PATH` | `/app/scripts/restore.sh` | Used by the admin restore page. |

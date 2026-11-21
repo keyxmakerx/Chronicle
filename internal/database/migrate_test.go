@@ -450,23 +450,20 @@ func TestMigrations_IdempotentDDL(t *testing.T) {
 	}
 	files = append(files, core...)
 
-	entries, err := os.ReadDir(pluginsDir(t))
+	// Walk the whole plugins tree: some plugins keep a second migration set in
+	// a nested folder (ai_workspace/connector, entities/layoutschema, ...).
+	err = filepath.WalkDir(pluginsDir(t), func(path string, d os.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".up.sql") &&
+			filepath.Base(filepath.Dir(path)) == "migrations" {
+			files = append(files, path)
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("reading plugins dir: %v", err)
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		migDir := filepath.Join(pluginsDir(t), e.Name(), "migrations")
-		if _, err := os.Stat(migDir); err != nil {
-			continue
-		}
-		ups, err := filepath.Glob(filepath.Join(migDir, "*.up.sql"))
-		if err != nil {
-			t.Fatalf("globbing %s: %v", migDir, err)
-		}
-		files = append(files, ups...)
+		t.Fatalf("walking plugins dir: %v", err)
 	}
 
 	for _, f := range files {
