@@ -226,3 +226,10 @@ test('a paper that cannot fit beside the sheet lies next to the part that was cl
   // A right-column part: never less overlap than the desk forces.
   assert.equal(S.sideOver(51, 920, 900), 51);
 });
+
+test('sideMaxHeight: a side paper fits between the sheet top and the window bottom', () => {
+  assert.equal(S.sideMaxHeight(900, -400), 780, 'sheet scrolled above: window minus 120');
+  assert.equal(S.sideMaxHeight(900, 176), 700, 'sheet low in the window: stops 24px above the bottom');
+  assert.equal(S.sideMaxHeight(500, 300), 320, 'never shorter than 320');
+});
+
