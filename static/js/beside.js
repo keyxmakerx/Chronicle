@@ -70,7 +70,25 @@
     return typeof url === 'string' && url.startsWith('/') && !url.startsWith('//');
   }
 
-  C.Beside = { pagesFit: pagesFit, plan: plan, beside: beside, onSite: onSite };
+  // samePath rebuilds an address on this site from its parts, each one
+  // re-encoded, so a link or a frame source only ever gets a path that was
+  // made here: never another site, a scheme, or markup. null for anything
+  // that is not a plain path.
+  function samePath(url) {
+    if (!onSite(url)) return null;
+    var u;
+    try { u = new URL(url, 'https://x.invalid'); } catch (e) { return null; }
+    if (u.origin !== 'https://x.invalid') return null;
+    function enc(part) {
+      try { return encodeURIComponent(decodeURIComponent(part)); } catch (e) { return encodeURIComponent(part); }
+    }
+    var path = u.pathname.split('/').map(enc).join('/');
+    var query = [];
+    u.searchParams.forEach(function (v, k) { query.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); });
+    return path + (query.length ? '?' + query.join('&') : '') + (u.hash.length > 1 ? '#' + enc(u.hash.slice(1)) : '');
+  }
+
+  C.Beside = { pagesFit: pagesFit, plan: plan, beside: beside, onSite: onSite, samePath: samePath };
   if (!window.document || !document.documentElement) return;
 
   function linkOf(t) {
@@ -124,7 +142,8 @@
   function makePane(url) {
     // The address becomes a link and a frame's source just below, so it is
     // checked here as well, whatever handed it over.
-    if (typeof url !== 'string' || !url.startsWith('/') || url.startsWith('//')) return null;
+    url = samePath(url);
+    if (url === null) return null;
     var el = document.createElement('section');
     el.className = 'beside-pane';
     el.innerHTML = '<header class="beside-head"><button type="button" class="beside-earlier" hidden></button>' +
@@ -137,7 +156,7 @@
     p.frame.addEventListener('load', function () {
       try {
         var d = p.frame.contentDocument;
-        p.url = p.frame.contentWindow.location.pathname + p.frame.contentWindow.location.search;
+        p.url = samePath(p.frame.contentWindow.location.pathname + p.frame.contentWindow.location.search) || p.url;
         var name = (d.title || '').split(' - ')[0] || 'Page';
         p.title.textContent = name;
         el.setAttribute('aria-label', name);
