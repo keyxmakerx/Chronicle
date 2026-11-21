@@ -72,7 +72,7 @@ async function page(t, width, o = {}) {
     let body = [];
     if (u.pathname === '/campaigns/c1/sessions/nights') {
       const from = u.searchParams.get('from'), to = u.searchParams.get('to');
-      body = NIGHTS.filter((n) => n.date >= from && n.date <= to);
+      body = (o.nights || NIGHTS).filter((n) => n.date >= from && n.date <= to);
     } else if (u.pathname === '/campaigns/c1/sessions/all') body = ALL;
     else if (u.pathname === '/campaigns/c1/sessions/feed-settings') body = { enabled: !!o.feed };
     else if (u.pathname.startsWith('/campaigns/c1/sessions/feed/token')) {
@@ -84,6 +84,7 @@ async function page(t, width, o = {}) {
     } else if (u.pathname === '/campaigns/c1/sessions/from-event') {
       (o.made || []).push(route.request().postDataJSON());
       if (o.makeStatus) return route.fulfill({ status: o.makeStatus, contentType: 'application/json', body: JSON.stringify({ error: o.makeError || 'no' }) });
+      if (o.afterMake) o.nights.push(o.afterMake);
       body = { id: 's-new', name: 'made', scheduledDate: o.madeDate || '' };
     } else if (u.pathname.endsWith('/events')) body = { data: [], total: 0 };
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
@@ -253,6 +254,18 @@ test('a night made for a real-life calendar event does not claim it has no real 
   const toast = await p.textContent('.toast');
   assert.match(toast, /Made a game night for Session 1\./);
   assert.doesNotMatch(toast, /no real date/);
+});
+
+test('a night made from an event shows in the open panel at once, without a reload', { skip }, async (t) => {
+  const fresh = night('2026-11-20', 'Session 1 night', false, '');
+  const p = await page(t, 1280, { role: 2, candidates: CANDS, made: [], madeDate: '2026-11-20', nights: NIGHTS.slice(), afterMake: fresh });
+  await p.click('#cal5-gnbtn');
+  await p.waitForSelector('#cal5-gnpop .gnstrip');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Session 1 night/);
+  await p.click('#cal5-gnpop [data-gn-make="e1"]');
+  await p.waitForSelector('#cal5-gnpop [data-gn-go="s-2026-11-20"]');
+  assert.equal(await p.$eval('#cal5-gnpop', (x) => x.hidden), false, 'the panel stays open');
+  assert.doesNotMatch(await p.textContent('#cal5-gnpop'), /Nothing planned yet/);
 });
 
 const MANY = [1, 2, 3, 4, 5].map((n) => ({ eventId: 'e' + n, name: 'Session ' + n, when: n + ' Hammer, 1492' }));

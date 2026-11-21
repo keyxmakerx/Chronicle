@@ -2488,7 +2488,13 @@
           if (!res.ok && res.status !== 409) throw new Error((res.body && (res.body.error || res.body.message)) || 'Could not make the game night. Try again.');
           // A 409 means a night for it appeared meanwhile: the strip drops it either way.
           self._gnCands = (self._gnCands || []).filter(function (r) { return r.eventId !== id; });
-          if (!pop.hidden) { pop.innerHTML = self._gnListHTML(self._gnNext || []); var first = $('.gnstrip .lnk', pop) || $('.wrow', pop); if (first) first.focus(); }
+          // Re-read the nights so the open panel lists the new one now, not after a reload.
+          return self._gnReloadNights().then(function () {
+            if (!pop.hidden) { pop.innerHTML = self._gnListHTML(self._gnNext || []); var first = $('.gnstrip .lnk', pop) || $('.wrow', pop); if (first) first.focus(); }
+            return res;
+          });
+        })
+        .then(function (res) {
           self.say(res.ok
             ? 'Made a game night for ' + (row ? row.name : 'the event') + '.' +
               // Only a story calendar's night lacks a real date; the server says which.
@@ -2496,6 +2502,17 @@
             : (row ? row.name : 'That event') + ' already has a game night.');
         })
         .catch(function (err) { btn.disabled = false; self.say(err && err.message ? err.message : 'Could not make the game night. Try again.'); });
+    },
+
+    // Fresh read of the three months the panel lists; a failed read keeps the
+    // nights already shown rather than blanking the panel.
+    _gnReloadNights: function () {
+      var self = this, y = this.cal.current_year, m = this.cal.current_month, reads = [];
+      for (var i = 0; i < 3; i++) {
+        reads.push(this.fetchNights(y, m, { fresh: true }));
+        if (++m > 12) { m = 1; y++; }
+      }
+      return Promise.all(reads).then(function (got) { self._gnNext = [].concat.apply([], got); }, function () {});
     },
 
     // The panel's foot: "Add to your calendar" and the switch between the

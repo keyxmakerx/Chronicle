@@ -153,3 +153,30 @@ test('a draft that carries its prompt is still worded as the AI\'s', { skip, tim
   assert.match(await page.textContent('.cra-pill-dm'), /^AI draft, not approved$/);
   assert.match(await page.textContent('.cra-banner'), /Drafted by your AI from “a healing salve”/);
 });
+
+// The "Add materials" word sits under the row's text, inside the list column,
+// and the name keeps room to read: at most two lines for a 15-letter name.
+for (const width of [1280, 360]) {
+  for (const draft of [false, true]) {
+    test('the next-step link stays inside the list at ' + width + (draft ? ' on a draft row' : ''), { skip, timeout: 120000 }, async (t) => {
+      const r = { ...recipe('Moonpetal salve', 1), draft };
+      const { page, errors } = await open(t, { width, seed: [r] });
+      await page.waitForSelector('.cra-rmore');
+      const m = await page.evaluate(() => {
+        const box = (e) => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, h: b.height }; };
+        const name = document.querySelector('.cra-ritem b');
+        const line = parseFloat(getComputedStyle(name).lineHeight) || name.getBoundingClientRect().height / name.getClientRects().length;
+        return { list: box(document.querySelector('.cra-rlist')), btn: box(document.querySelector('.cra-ritem')), link: box(document.querySelector('.cra-rmore')),
+          form: box(document.querySelector('.cra-rform')), nameLines: Math.round(name.getBoundingClientRect().height / line), nameLeft: name.getBoundingClientRect().left };
+      });
+      const inside = (a, o) => a.l >= o.l - 0.5 && a.r <= o.r + 0.5 && a.t >= o.t - 0.5 && a.b <= o.b + 0.5;
+      const apart = (a, o) => a.r <= o.l + 0.5 || a.l >= o.r - 0.5 || a.b <= o.t + 0.5 || a.t >= o.b - 0.5;
+      assert.ok(m.nameLines <= 2, 'the name is on at most two lines: ' + m.nameLines);
+      assert.ok(inside(m.link, m.list), 'the link is inside the list: ' + JSON.stringify(m));
+      assert.ok(apart(m.link, m.btn), 'the link does not overlap the row button');
+      assert.ok(apart(m.link, m.form), 'the link does not overlap the form');
+      assert.ok(Math.abs(m.link.l - m.nameLeft) <= 1, 'the link lines up with the name: ' + m.link.l + ' vs ' + m.nameLeft);
+      assert.deepEqual(errors, []);
+    });
+  }
+}
