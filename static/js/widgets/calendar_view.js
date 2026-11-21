@@ -2455,12 +2455,17 @@
       var self = this, row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
       if (!row) return Promise.resolve(false);
       row._hid = true;
+      // A refused Undo from an earlier hide must not colour this new line.
+      row._err = false;
       this._gnRepaint('[data-gn-undo="' + id + '"]');
-      return Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'PUT' })
+      // Kept so Undo can wait for the PUT: the two requests must reach the
+      // server in order or the event stays hidden while the row shows.
+      return row._put = Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'PUT' })
         .then(function (r) { if (!r.ok) throw new Error('dismiss ' + r.status); return true; })
         .then(function () {
           self._announce('Hidden for everyone. Undo is available for a few seconds.');
-          self._gnUndoTimer(row, 3000);
+          // Undo already pressed: the line must not fold under the DELETE.
+          if (!row._undoing) self._gnUndoTimer(row, 3000);
           return true;
         }, function () {
           row._hid = false;
@@ -2514,21 +2519,32 @@
     _gnUnskip: function (id) {
       var self = this, row = (this._gnCands || []).filter(function (r) { return r.eventId === id; })[0];
       if (!row) return;
+      if (row._undoing) return;
+      row._undoing = true;
       clearTimeout(row._t);
-      Chronicle.apiFetch(this._gnDismissUrl(id), { method: 'DELETE' })
-        .then(function (r) { if (!r.ok) throw new Error('restore ' + r.status); })
-        .then(function () {
-          row._hid = false;
-          self._gnRepaint('[data-gn-make="' + id + '"]');
-          self._announce('Back on the list.');
-        })
-        .catch(function () {
-          // Still hidden on the server: say so in the line and keep Undo for another try.
-          row._err = true;
-          self._gnRepaint('[data-gn-undo="' + id + '"]');
-          self._announce('That couldn’t be undone. Try again.');
-          self._gnUndoTimer(row, 6000);
-        });
+      // Wait for the hide to settle first. If it failed, the row is already
+      // back and there is nothing to undo, so no DELETE is sent.
+      var settled = (row._put || Promise.resolve(true)).then(function (ok) { return ok !== false; }, function () { return false; });
+      settled.then(function (stored) {
+        if (!stored) { row._undoing = false; return; }
+        return Chronicle.apiFetch(self._gnDismissUrl(id), { method: 'DELETE' })
+          .then(function (r) { if (!r.ok) throw new Error('restore ' + r.status); })
+          .then(function () {
+            row._undoing = false;
+            row._err = false;
+            row._hid = false;
+            self._gnRepaint('[data-gn-make="' + id + '"]');
+            self._announce('Back on the list.');
+          })
+          .catch(function () {
+            // Still hidden on the server: say so in the line and keep Undo for another try.
+            row._undoing = false;
+            row._err = true;
+            self._gnRepaint('[data-gn-undo="' + id + '"]');
+            self._announce('That couldn’t be undone. Try again.');
+            self._gnUndoTimer(row, 6000);
+          });
+      });
     },
     _gnLoadCands: function () {
       if (this.role < 2) return Promise.resolve([]);
