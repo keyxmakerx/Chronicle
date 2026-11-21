@@ -715,6 +715,28 @@ The same screens, folded to the width; never a second design.
   remembered per browser; none by default. Someone with fewer than two tools
   keeps the bar as it is. The "Viewing as player" banner carries a quiet
   "Back to your view" on every width.
+- **The owner's Customize brush is a header tool.** On a computer it sits
+  among the tools and opens a small menu that Grows from it: first the place's
+  own part of Customize when it has one ("How Character pages are laid out",
+  with the quiet path under it), then "This campaign's look", "Everything in
+  Customize" and a quiet "Hide this brush". Rows are words with a quiet second
+  line, no icons. On a phone it is a shelf entry, Customize, and the menu
+  hangs across the top of the page like the bell's list. Hiding it is the
+  person's own choice, kept per campaign (hiding it in one campaign leaves it
+  shown in the others); Campaign settings › Customize › Header brush brings
+  it back.
+- **"Try a style kit here" shows the real page in another kit, unsaved.**
+  The brush offers it on a page a kit dresses while the page look is
+  Material. A strip on the inverse surface sits centred at the window's foot
+  (above the table's tab on a phone, never over the page's last line): the
+  page's name, the kit and "not saved", the six kits as words with the one on
+  the page underlined, and quiet "Keep this kit" and "Put it back". A kit
+  pressed redraws the page at once; arrows move between kits and Enter
+  picks. The try-out follows the owner across pages in that tab until "Put
+  it back" or Escape; "Keep this kit" puts the kit into Customize's draft and
+  opens Customize › Look on it. The strip Settles in (Calm fades, Off shows
+  it). A page loaded in full during a try-out wears the tried kit from its
+  first paint.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll
@@ -829,6 +851,15 @@ their tokens.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
+- **Look's example for style kits is one of your own pages.** While the
+  Pages part is open, the example column shows one of the owner's pages in a
+  frame wearing the kit picked, changed at once on each press: a picture,
+  scaled like the example site, inert, with a text alternative. Above it a
+  label in the example's label style ("Saltgrave Harbour · in Ornate · not
+  saved", or "· as saved"); under it quiet "Another page" and "Walk your
+  pages in this kit". When the draft holds unsaved colours or fonts, one
+  quiet line says the frame cannot show them. The swap with the example site
+  is a fade, instant at Off.
 
 ## Style kits
 

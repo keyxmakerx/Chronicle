@@ -4,7 +4,8 @@
  * Mount: <div data-widget="topbar-tools"> drawn by layouts/topbar_tools.templ,
  * only for a viewer with two or more tools. Under 768 wide the bar shows one
  * Tools tab; tapping it hangs a shelf from the bar with every tool and its
- * name. The bar's real tool buttons (AI, Table, DM Screen, the eye, the bell)
+ * name. The bar's real tool buttons (AI, the Customize brush, Table, DM
+ * Screen, the eye, the bell)
  * stay in the page with their hosts, only hidden by phone_shell.css, so an
  * entry here presses the real button and the tool opens exactly as it does
  * from the bar. Counts are mirrored from the real badges, never recounted.
@@ -26,8 +27,8 @@
   var KEY = 'chronicle-topbar-kept';
   var MAX_KEPT = 2;
   // The tools that can stay on the bar. Find is always there already.
-  var KEEPABLE = ['ai', 'table', 'dms', 'pv', 'bell'];
-  var REAL = { ai: '[data-ai-chip]', table: '[data-tt-tab]', dms: '[data-dms-toggle]', bell: '[data-notif-toggle]' };
+  var KEEPABLE = ['ai', 'brush', 'table', 'dms', 'pv', 'bell'];
+  var REAL = { ai: '[data-ai-chip]', brush: '[data-brush-toggle]', table: '[data-tt-tab]', dms: '[data-dms-toggle]', bell: '[data-notif-toggle]' };
   var BADGE = { ai: '[data-ai-chip-n]', table: '[data-tt-count]', bell: '[data-notif-badge] [data-count]' };
 
   // The kept tools out of what storage held: known tools that are on this
@@ -119,7 +120,13 @@
       function wireFocus(id) {
         var btn = realButton(id);
         if (!btn) return;
-        if (kept.indexOf(id) >= 0) { delete btn.focus; } else { btn.focus = function () { tab.focus(); }; }
+        // Only on a phone, where the button is hidden: on a wider bar the
+        // button is on show and takes its own focus.
+        if (kept.indexOf(id) >= 0) { delete btn.focus; } else {
+          btn.focus = function (o) {
+            if (wide && wide.matches) HTMLElement.prototype.focus.call(btn, o); else tab.focus(o);
+          };
+        }
       }
 
       function applyKept() {
@@ -245,6 +252,8 @@
       function onNav(ev) { if (!ev.detail || ev.type !== 'htmx:afterSwap' || ev.detail.boosted) close(false); }
       document.addEventListener('pointerdown', onPointerDown, true);
       document.addEventListener('keydown', onKey);
+      // The brush can be put away or brought back on the page.
+      document.addEventListener('chronicle:brush', soon);
       ['htmx:afterSwap', 'htmx:pushedIntoHistory', 'htmx:historyRestore'].forEach(function (t) { document.addEventListener(t, onNav); });
 
       var wide = window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
@@ -268,6 +277,7 @@
         clearTimeout(queued);
         document.removeEventListener('pointerdown', onPointerDown, true);
         document.removeEventListener('keydown', onKey);
+        document.removeEventListener('chronicle:brush', soon);
         ['htmx:afterSwap', 'htmx:pushedIntoHistory', 'htmx:historyRestore'].forEach(function (t) { document.removeEventListener(t, onNav); });
         if (wide && wide.removeEventListener) wide.removeEventListener('change', onWide);
         if (watch) watch.disconnect();

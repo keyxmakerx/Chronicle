@@ -327,7 +327,7 @@
     var HDR_HEIGHTS = [['slim', 'Slim'], ['tall', 'Tall']];
     // Corners of the menu and the choices that go with them.
     var CORNERS = [['plain', 'Logo and name', 'As today'], ['subtitle', 'Logo, name and a subtitle', 'A short line under the name'], ['banner', 'Banner picture', 'A picture behind the name']];
-    var MENU_COLOURS = [['charcoal', 'Charcoal', 'Chronicle as it is today'], ['ink', 'Ink', 'A deep blue-black'], ['tinted', 'Tinted', 'A dark shade of your chrome accent'], ['own', 'Your own colour', 'Kept dark enough to read']];
+    var MENU_COLOURS = [['charcoal', 'Charcoal', 'Chronicle as it is today'], ['ink', 'Ink', 'A deep blue-black'], ['tinted', 'Tinted', 'A dark shade of your menus and links colour'], ['own', 'Your own colour', 'Kept dark enough to read']];
     var GLOWS = [['accent', 'Follow the accent colour', 'Changes with the look'], ['own', 'Its own colour', 'Pick any colour']];
     var HDR_DIRS = { r:['to right', 'Left to right'], br:['to bottom right', 'Diagonal'], b:['to bottom', 'Top to bottom'] };
     var SCRIMS = { light:[.32, 'Light'], medium:[.5, 'Medium'], strong:[.68, 'Strong'] };
@@ -409,7 +409,7 @@
       { id:'header', name:'Header', icon:'i-topbar', desc:'The bar across the top of every page: its background and the widgets in it.' },
       { id:'sidebar', name:'Sidebar', icon:'i-sidebar', desc:'The menu down the left of every page: its colour, what fills its top-left corner, and the glow that shows when it is hidden.' },
       { id:'nav', name:'Navigation', icon:'i-nav', desc:'How the menu shows the page you are on.' },
-      { id:'colours', name:'Colours', icon:'i-palette', desc:'The site’s own colour, the two colours your pages use, and the tones behind them.' },
+      { id:'colours', name:'Colours', icon:'i-palette', desc:'Three colours, each named for what it paints, and the tones behind them.' },
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
       { id:'icons', name:'Icons', icon:'i-icons', desc:'Chronicle shows few icons. Bring more back for this campaign here.' },
@@ -583,13 +583,17 @@
     var uploaded = {};      // picture names stored during this visit, not yet known to be in use
     var ui = { room:'frame', section:'brand', last:{}, viewAs:'owner', zoom:'site', page:'dash', ptheme:null, strip:true, pageAuto:true };
 
-    function matchesLook(d, id){ var L = look(id); return LOOK_KEYS.every(function(k){ return same(getP(d, k), getP(L, k)); }); }
+    // Colours compare without regard to case, as the server's own check of a
+    // saved look does, so a colour stored as #9A4A26 still reads as the look's
+    // #9a4a26 and the row does not call a saved starter look Custom.
+    function sameLook(a, b){ return same(a, b) || (typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase()); }
+    function matchesLook(d, id){ var L = look(id); return LOOK_KEYS.every(function(k){ return sameLook(getP(d, k), getP(L, k)); }); }
     function currentLook(d){
       if (matchesLook(d, d.look)) return d.look;
       var m = LOOKS.filter(function(l){ return matchesLook(d, l.id); })[0];
       return m ? m.id : null;
     }
-    function lookChanges(d){ var L = look(d.look); return LOOK_KEYS.filter(function(k){ return !same(getP(d, k), getP(L, k)); }).length; }
+    function lookChanges(d){ var L = look(d.look); return LOOK_KEYS.filter(function(k){ return !sameLook(getP(d, k), getP(L, k)); }).length; }
     function changedSections(){ return SECTIONS.filter(function(s){ return SEC_KEYS[s.id].some(function(k){ return !same(getP(draft, k), getP(saved, k)); }); }).map(function(s){ return s.id; }); }
     // Reset puts a section back: style settings to the look you started from,
     // your own words, pictures and widgets to what is saved.
@@ -603,8 +607,6 @@
     /* ---------- From draft to preview tokens ---------- */
     function pageTheme(){ return root.classList.contains('dark') ? 'dark' : 'light'; }
     function previewTheme(){ return ui.ptheme || pageTheme(); }
-    // sRGB alpha compositing, as the browser paints rgb(x / a) over a colour.
-    function over(fg, bg, a){ var F = hexToRgb(fg), B = hexToRgb(bg); return rgbToHex(F.map(function(v, i){ return v * a + B[i] * (1 - a); })); }
     function tones(d, theme){
       var T = clone(TONES[d.colours.page][theme]);
       if (d.colours.contrast === 'high'){ T.muted = T.body; T.body = T.text; T.line = T.line2; T.line2 = mix(T.line2, T.text, 0.3); }
@@ -646,10 +648,13 @@
     function derive(d, theme){
       var T = tones(d, theme), sb = sidebarTone(d), dir = theme === 'dark' ? 'lighter' : 'darker';
       var acc = d.colours.accent, s1 = d.colours.s1 || acc, s2 = d.colours.s2 || acc;
-      var f = fillFor(acc), f1 = fillFor(s1), f2 = fillFor(s2);
+      var f = fillFor(acc), f1 = fillFor(s1);
       var link = readable(acc, [T.bg, T.card], 4.5, dir).hex;
-      var s1t = readable(s1, [T.bg, T.card, over(s1, T.bg, 0.14)], 4.5, dir).hex;
-      var s2t = readable(s2, [T.card, over(s2, T.card, 0.16)], 4.5, dir).hex;
+      // The server's ink for Headers and events, on the same three fills.
+      var s1t = readable(s1, [T.bg, T.card, T.alt], 4.5, dir).hex;
+      // Tags stand for new tags, which wear Tags and marks; painted exactly
+      // as a real chip is (chip_ink.js), with the words for this theme.
+      var chip = window.ChronicleChip ? window.ChronicleChip.ink(s2) : { light:s2, dark:s2 };
       var accL = mix(acc, '#ffffff', 0.45);
       var sbAcc = readable(mix(acc, '#ffffff', 0.3), [sb.bg], 4.5, 'lighter').hex;
       var B = bodyFont(d.type.body), H = headFont(d.type.heading), fs = SCALES[d.type.scale][0];
@@ -660,8 +665,8 @@
         '--p-bg':T.bg, '--p-card':T.card, '--p-alt':T.alt, '--p-line':T.line, '--p-line2':T.line2, '--p-text':T.text, '--p-body':T.body, '--p-muted':T.muted,
         '--p-accent':acc, '--p-accent-rgb':rgbCh(acc), '--p-accent-l-rgb':rgbCh(accL), '--p-link':link,
         '--p-fill':f.fill, '--p-fill-rgb':rgbCh(f.fill), '--p-on-fill':f.on, '--p-fill-deep':mix(f.fill, '#000000', 0.3),
-        '--p-s1-rgb':rgbCh(s1), '--p-s1-fill':f1.fill, '--p-on-s1':f1.on, '--p-s1-text':s1t,
-        '--p-s2-rgb':rgbCh(s2), '--p-s2-fill':f2.fill, '--p-on-s2':f2.on, '--p-s2-text':s2t,
+        '--p-s1-rgb':rgbCh(s1), '--p-s1-fill':f1.fill, '--p-s1-text':s1t,
+        '--p-s2-rgb':rgbCh(s2), '--p-tag-bg':s2.toLowerCase() + '22', '--p-tag-ink':theme === 'dark' ? chip.dark : chip.light,
         '--p-sb':sb.bg, '--p-sb-text':sb.text, '--p-sb-text-2':sb.text2, '--p-sb-text-3':sb.text3, '--p-sb-hi':'#ffffff', '--p-sb-line':'rgb(255 255 255 / .07)', '--p-sb-accent':sbAcc,
         '--p-font':B[2], '--p-font-h':same_ ? B[2] : H[2], '--p-hw':same_ ? '700' : String(H[4]), '--p-hw-b':same_ ? '700' : String(H[4]), '--p-hls':H[6],
         '--p-fs':fs + 'px', '--p-h1':(fs * 1.8 * hz).toFixed(2) + 'px', '--p-h2':(fs * 1.38 * hz).toFixed(2) + 'px', '--p-h3':(fs * 1.16 * hz).toFixed(2) + 'px',
@@ -686,15 +691,11 @@
         else if (f.de > 0.03) parts.push('buttons use a slightly deeper shade');
         if (link.de > 0.03) parts.push('links use a deeper shade on light pages');
       } else if (which === 's1'){
-        var t1 = readable(hex, [T.bg, T.card, over(hex, T.bg, 0.14)], 4.5, 'darker');
-        if (f.flip) parts.push('headers and event chips on it use dark words');
-        else if (f.de > 0.03) parts.push('headers use a slightly deeper shade');
-        if (t1.de > 0.03) parts.push('coloured words use a deeper shade');
-      } else {
-        var t2 = readable(hex, [T.card, over(hex, T.card, 0.16)], 4.5, 'darker');
-        if (f.flip) parts.push('badges on it use dark words');
-        else if (f.de > 0.03) parts.push('badges use a slightly deeper shade');
-        if (t2.de > 0.03) parts.push('tags use a deeper shade for their words');
+        // Tags and marks needs no note: a tag chip shades its own words.
+        var t1 = readable(hex, [T.bg, T.card, T.alt], 4.5, 'darker');
+        if (f.flip) parts.push('event dots on it use dark marks');
+        else if (f.de > 0.03) parts.push('event dots use a slightly deeper shade');
+        if (t1.de > 0.03) parts.push('event words use a deeper shade');
       }
       if (!parts.length) return '';
       var list = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
@@ -704,9 +705,9 @@
     /* ---------- Building the controls ---------- */
     // Swatch groups: which setting each writes, its list, and its extra option.
     var GROUPS = {
-      accent:{ k:'colours.accent', list:ACCENT_PRESETS, label:'Chrome accent' },
-      s1:    { k:'colours.s1', list:PRESETS, follow:true, label:'Surface A' },
-      s2:    { k:'colours.s2', list:PRESETS, follow:true, label:'Surface B' },
+      accent:{ k:'colours.accent', list:ACCENT_PRESETS, label:'Menus and links' },
+      s1:    { k:'colours.s1', list:PRESETS, follow:true, label:'Headers and events' },
+      s2:    { k:'colours.s2', list:PRESETS, follow:true, label:'Tags and marks' },
       hsolid:{ k:'header.solid', list:HDR_COLOURS, page:true, label:'Header colour', deep:true },
       hfrom: { k:'header.from', list:HDR_COLOURS, label:'Gradient start', deep:true },
       hto:   { k:'header.to', list:HDR_COLOURS, label:'Gradient end', deep:true },
@@ -716,6 +717,11 @@
     function inList(g, v){ return GROUPS[g].list.some(function(x){ return x[1] === v; }); }
     function fld(id, label, sub, body){
       return '<div class="fld"><div class="lab" id="' + id + '-l">' + esc(label) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div><div class="ctl">' + body + '</div></div>';
+    }
+    // A campaign colour's row: named for what it paints, with one line on
+    // where it shows, the swatches beside it and a hairline between rows.
+    function crow(id, label, line, body){
+      return '<div class="fld crow"><div class="lab" id="' + id + '-l">' + esc(label) + '<small>' + esc(line) + '</small></div><div class="ctl">' + body + '</div></div>';
     }
     function opts(name, k, labelledby, items){
       return '<div class="opts" role="radiogroup" aria-labelledby="' + labelledby + '">' + items.map(function(it){
@@ -738,7 +744,7 @@
     }
     function swatches(g, labelledby){
       var G = GROUPS[g], name = 'sw-' + g, h = '<div class="sws" role="radiogroup" aria-labelledby="' + labelledby + '" data-swg="' + g + '">';
-      if (G.follow) h += '<label class="sw" data-hc="sw:' + g + ':follow"><input type="radio" name="' + name + '" value="__follow" data-k="' + G.k + '" data-g="' + g + '" aria-label="Same as the chrome accent"><span class="sw-follow">' + IC('i-link') + '</span></label>';
+      if (G.follow) h += '<label class="sw" data-hc="sw:' + g + ':follow"><input type="radio" name="' + name + '" value="__follow" data-k="' + G.k + '" data-g="' + g + '" aria-label="Same as menus and links"><span class="sw-follow">' + IC('i-link') + '</span></label>';
       if (G.page) h += '<label class="sw page" data-hc="sw:' + g + ':page"><input type="radio" name="' + name + '" value="page" data-k="' + G.k + '" data-g="' + g + '" aria-label="Match the page"><span class="sw-page"></span></label>';
       G.list.forEach(function(p){
         h += '<label class="sw" data-hc="sw:' + g + ':' + p[1] + '"><input type="radio" name="' + name + '" value="' + p[1] + '" data-k="' + G.k + '" data-g="' + g + '" aria-label="' + esc(p[0]) + '"><span style="--c:' + p[1] + '"></span></label>';
@@ -757,7 +763,7 @@
       return NAV_STYLES.filter(function(s){ return s[2] === kind; }).map(function(s){
         return '<label class="tile nav-tile" data-hc="nav:' + s[0] + '"><input type="radio" name="t-nav" value="' + s[0] + '" data-k="nav.style"><span class="tb">' +
           '<span class="nt-s pv" data-nav="' + s[0] + '" data-own="' + s[0] + '" aria-hidden="true"><span class="s-row on" style="--c:#f87171"><span class="ic">' + IC('i-mappin') + '</span><span class="lb">Cities</span><span class="pn">Emberfall</span>' + HL + '</span></span>' +
-          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === DEFAULT_NAV ? '<span class="tbadge">Signed default</span>' : '') + '</span></label>';
+          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === DEFAULT_NAV ? '<span class="tbadge">Default</span>' : '') + '</span></label>';
       }).join('');
     }
     function tilesBody(){
@@ -867,7 +873,7 @@
         fld('b-name', 'Name', 'Up to 40 characters',
           '<input class="inp" id="b-name" type="text" maxlength="40" data-k="brand.name" placeholder="' + esc(CAMPAIGN) + '" aria-labelledby="b-name-l" aria-describedby="b-name-h">' +
           '<div class="row-h"><span class="hint" id="b-name-h">Shown at the top of the menu. Leave it empty to use the campaign’s name.</span><span class="cnt" id="b-name-c"></span></div>') +
-        fld('brand-logo', 'Logo', 'Square works best', imgSlot('brand.logo', 'sq', 'Upload', 'Up to 1 MB. Without a logo, the menu shows your first letter on your chrome accent.')) +
+        fld('brand-logo', 'Logo', 'Square works best', imgSlot('brand.logo', 'sq', 'Upload', 'Up to 1 MB. Without a logo, the menu shows your first letter on your menus and links colour.')) +
         fld('b-welcome', 'Welcome message', 'Up to 500 characters',
           '<textarea class="inp" id="b-welcome" rows="3" maxlength="' + welcomeMax() + '" data-k="brand.welcome" aria-labelledby="b-welcome-l" aria-describedby="b-welcome-h"></textarea>' +
           '<div class="row-h"><span class="hint" id="b-welcome-h">Shown over the backdrop at the top of the campaign home.</span><span class="cnt" id="b-welcome-c"></span></div>') +
@@ -915,10 +921,11 @@
           '<p class="hint">Reorder, pin, hide and group them with the pencil beside your campaign’s name at the top of the menu.</p>') +
         '<p class="note"><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span>Members who ask their device for less motion always see the matching still style.</span></p>');
       if (id === 'colours') return (
-        '<p class="sec-lead">Chrome is Chronicle’s own colour: the menu highlight, links and anything selected. The two surface colours belong to your pages: character headers, calendar events, timeline marks and tags.</p>' +
-        fld('accent', 'Chrome accent', null, swatches('accent', 'accent-l')) +
-        fld('s1', 'Surface A', 'Primary', swatches('s1', 's1-l')) +
-        fld('s2', 'Surface B', 'Secondary', swatches('s2', 's2-l')) +
+        '<div class="crows">' +
+        crow('accent', GROUPS.accent.label, 'The menu highlight, links, buttons, anything selected', swatches('accent', 'accent-l')) +
+        crow('s1', GROUPS.s1.label, 'Page title rules, and calendar events without their own colour', swatches('s1', 's1-l')) +
+        crow('s2', GROUPS.s2.label, 'Tags without a colour of their own, timeline marks', swatches('s2', 's2-l')) +
+        '</div>' +
         fld('c-page', 'Page tone', null, opts('c-page', 'colours.page', 'c-page-l', [['cool', 'Cool', '#eef0f4'], ['warm', 'Warm', '#f1ebe3'], ['paper', 'Paper', '#eadfc6']])) +
         fld('c-con', 'Text contrast', null, opts('c-con', 'colours.contrast', 'c-con-l', [['standard', 'Standard'], ['high', 'High']]) +
           '<p class="hint">High makes body text and small print darker, and borders firmer.</p>') +
@@ -950,7 +957,7 @@
         fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS) +
           '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>') +
         fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS) +
-          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>') +
+          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look. The example shows one of your own pages in the kit you press.' + kfBrushHint() + '</p>') +
         fld('pg-open', 'How cards open', 'Cards and panels that come out of something you click', '<div id="pg-open-pick">' + opts('pg-open', 'motion.entrance', 'pg-open-l', ENTRANCES) +
           '<p class="hint">Grow is the base. Bloom comes into focus from a soft blur, Unfold is revealed downward from its top edge and Drop is set down with weight. Menus, pickers and dialogs keep their quick moves, and Calm turns each into a short fade.</p></div>' +
           '<p class="hint" id="pg-open-kit" hidden></p>') +
@@ -1001,7 +1008,7 @@
           IC(r[2]) + '<span>' + esc(r[1]) + '</span><span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
       }).join('');
       $('#panels').innerHTML = ROOMS.map(function(r, i){
-        var chips = r[3].length ? '<div class="parts" role="group" aria-label="Parts in ' + esc(r[1]) + '">' + r[3].map(function(id){
+        var chips = r[3].length ? '<div class="parts parts-row" role="group" aria-label="Parts in ' + esc(r[1]) + '">' + r[3].map(function(id){
           return '<button type="button" class="part" data-sec="' + id + '" aria-pressed="' + (id === ui.section) + '">' + esc(sectionName(id)) + '<span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
         }).join('') + '</div>' : '';
         var body = r[3].length ? r[3].map(function(id){
@@ -1045,8 +1052,11 @@
     function prow(icon, colour, name, kind){
       return '<span class="prow"><span class="pv-ic" style="--c:' + colour + '">' + IC(icon) + '</span><span class="p-link">' + name + '</span><span class="pk">' + kind + '</span></span>';
     }
-    function pbtn(kind, label, real){
-      return real ? '<button type="button" class="pbtn ' + kind + '"><span class="f">' + label + '</span></button>' : '<span class="pbtn ' + kind + '"><span class="f">' + label + '</span></span>';
+    // A button's icon is drawn only while the Icons part is on Everywhere
+    // (.wic, as .word-ic on the real pages), so that step of the choice shows.
+    function pbtn(kind, label, real, icon){
+      var f = '<span class="f">' + (icon ? IC(icon, 'wic') : '') + label + '</span>';
+      return real ? '<button type="button" class="pbtn ' + kind + '">' + f + '</button>' : '<span class="pbtn ' + kind + '">' + f + '</span>';
     }
     function siteHTML(){
       var sb = '<div class="s-sb"><div class="s-brand"><span class="s-bnr" id="d-bnr"></span><span class="s-logo" id="d-logo"></span><span class="s-btext"><span class="s-bname" id="d-bname"></span><span class="s-bsub" id="d-bsub"></span></span><span class="s-bchev">' + IC('i-chev') + '</span><span class="s-pen" id="d-pen">' + IC('i-pencil') + '</span></div><div class="s-list">' +
@@ -1063,7 +1073,7 @@
         '<div class="s-hdr-sky" id="d-sky"><canvas></canvas></div><div class="s-hdr-skyscrim"></div></div>' +
         '<div class="s-path" id="d-path"></div><div class="s-rail" id="d-rail"></div><div class="s-tools" id="d-tools"></div></div>';
       var dash = '<div class="s-page" data-page="dash"><div class="d-banner" id="d-banner"><div class="d-img" id="d-img"></div><div class="d-scrim"></div><p class="d-welcome" id="d-welcome"></p></div>' +
-        '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page') + pbtn('sec', 'Invite players') + '</div></div>' +
+        '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page', false, 'i-plus') + pbtn('sec', 'Invite players', false, 'i-users') + '</div></div>' +
         '<div class="d-grid">' +
           '<div class="pcard lifts"><p class="c-h">The party</p><div class="band"><b>Sera Windrose</b><span class="czbadge">Level 6 · Ranger</span></div>' +
             '<div class="who"><span class="av">KV</span>Kaelen Voss<span>Rogue</span></div><div class="who"><span class="av b">BA</span>Brother Aldric<span>Cleric</span></div></div>' +
@@ -1077,7 +1087,7 @@
         '<div class="e-head"><span class="kind">' + IC('i-mappin') + 'City</span><div class="h1">Emberfall</div><p class="lede">Capital of the Cinder Reach, built in the lee of Mount Varn where the ash falls warm.</p></div>' +
         '<div class="e-grid"><div class="e-body"><p>Emberfall grew from a waystation on the old salt road into the largest city north of the Glass Wastes. Its walls are cut from black basalt.</p>' +
           '<p>Margravine Ysolde Vane rules from <span class="p-link">Cinder Keep</span>. Her treaty with the <span class="p-link">Ashwright Guild</span> keeps the forges lit.</p>' +
-          '<div class="d-act">' + pbtn('pri', 'Edit page') + pbtn('sec', 'Share with players') + '</div></div>' +
+          '<div class="d-act">' + pbtn('pri', 'Edit page', false, 'i-pencil') + pbtn('sec', 'Share with players', false, 'i-users') + '</div></div>' +
           '<div class="pcard lifts e-info"><p class="c-h">At a glance</p><dl><dt>Population</dt><dd>18,400</dd><dt>Ruler</dt><dd>Ysolde Vane</dd><dt>Founded</dt><dd>212 AF</dd></dl>' +
           '<div class="tags"><span class="tag">#cinder-reach</span><span class="tag">#capital</span></div></div></div>' + hoverSampleHTML() + '</div>';
       return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + sheetHTML() + '</div></div>';
@@ -1118,7 +1128,7 @@
       return '<div class="pieces">' +
         pc('Card · point at it', '<div class="pcard lifts pc-card" tabindex="0" role="group" aria-label="Sample card"><div class="h3">The Warm Ash</div><p>A tavern in the lower wards of Emberfall, linked from <span class="p-link">Cinder Keep</span>.</p><div class="tags"><span class="tag">#tavern</span><span class="tag">#emberfall</span></div></div>') +
         pc('Calendar day', '<div class="day big"><span class="day-n">12</span><div class="day-t"><b>Harvestwane, Starday</b><span class="chipe a">Session 14 · The Warm Ash</span><span class="chipe b">Festival of Embers</span></div></div>') +
-        pc('Buttons · point and press', '<div class="pc-btns" id="pc-btns">' + pbtn('pri', 'Save page', true) + pbtn('sec', 'Share', true) + pbtn('qui', 'Cancel', true) + '</div>') +
+        pc('Buttons · point and press', '<div class="pc-btns" id="pc-btns">' + pbtn('pri', 'Save page', true, 'i-check') + pbtn('sec', 'Share', true, 'i-users') + pbtn('qui', 'Cancel', true) + '</div>') +
         pc('Timeline event', '<div class="tl-ev"><span class="mk-dot"></span><div><span class="y">412 AF · Age of Ash</span><div class="h3">The Warm Ash opens</div><p>Old Brannoc pours the first ale.</p></div></div>') +
         '<div class="pc wide"><div class="pc-l">Menu rows · rest, hover, the page you are on</div><div class="mini-sb" aria-hidden="true">' +
           '<div class="s-row"><span class="ic">' + IC('i-map') + '</span><span class="lb">Maps</span></div>' +
@@ -1253,7 +1263,7 @@
         if (cv){ $('span', cus).style.setProperty('--c', cv); cus.dataset.hc = 'sw:' + g + ':' + cv; $('input', cus).setAttribute('aria-label', 'Your own colour, ' + cv.toUpperCase()); }
         if (G.follow) $('.sw-follow', wrap).style.setProperty('--c', d.colours.accent);
         if (G.page){ var pg = $('.sw-page', wrap); pg.style.setProperty('--c', T.card); pg.style.setProperty('--c2', T.line2); }
-        setText($('#' + g + '-name'), v == null ? 'Same as the chrome accent' : v === 'page' ? 'Matches the page' : colourName(v) + (inList(g, v) ? '' : ' · ' + v.toUpperCase()));
+        setText($('#' + g + '-name'), v == null ? 'Same as menus and links' : v === 'page' ? 'Matches the page' : colourName(v) + (inList(g, v) ? '' : ' · ' + v.toUpperCase()));
       });
       var adj = kitAccent(d), adjEl = $('#accent-adj');
       adjEl.hidden = !(adj.light || adj.dark);
@@ -1326,10 +1336,29 @@
       if (sec === 'sidebar') return 'Colour to ' + L + ', corner and glow as saved';
       return 'Back to the ' + L + ' look';
     }
+    // The row of looks scrolls sideways, and Custom (the look the moment
+    // anything is changed) is its last tile, so the tile in use is brought
+    // into view when the selection changes, not on every edit, which would
+    // fight a person scrolling the row by hand.
+    var lookShown = null;
+    function keepLookInView(id){
+      if (id === lookShown) return;
+      lookShown = id;
+      var row = $('#lk-row'), tile = id === 'custom' ? $('#lk-custom') : (row.querySelector('input[value="' + id + '"]') || {}).parentNode;
+      if (tile) rowShow(row, tile);
+    }
+    // Scrolls a sideways row just far enough to show one of its items.
+    function rowShow(row, item){
+      if (row.scrollWidth <= row.clientWidth) return;
+      var r = row.getBoundingClientRect(), t = item.getBoundingClientRect();
+      if (t.left < r.left) row.scrollLeft -= r.left - t.left + 6;
+      else if (t.right > r.right) row.scrollLeft += t.right - r.right + 6;
+    }
     function syncStatus(){
       var cur = currentLook(draft), n = lookChanges(draft);
       $$('input[name="look"]').forEach(function(i){ if (i.checked !== (i.value === cur)) i.checked = i.value === cur; });
       $('#lk-custom').classList.toggle('on', !cur);
+      keepLookInView(cur || 'custom');
       setText($('#lk-custom-d'), cur ? 'Change anything below and the look becomes your own.' : 'Started from ' + look(draft.look).name + ', ' + n + ' change' + (n === 1 ? '' : 's'));
       var ch = changedSections();
       SECTIONS.forEach(function(s){
@@ -1364,6 +1393,7 @@
       syncLookTiles(theme);
       syncStatus();
       if (SHELL) toShell();
+      kitFrame();
       runMotion();
     }
 
@@ -1659,7 +1689,7 @@
       }
       if (t === 'sw'){
         var g = p[1], v = p.slice(2).join(':');
-        if (v === 'follow') return '<b>Same as the chrome accent</b><span>Changes whenever the chrome accent does.</span>';
+        if (v === 'follow') return '<b>Same as menus and links</b><span>Changes whenever that colour does.</span>';
         if (v === 'page') return '<b>Match the page</b><span>A light header on light pages and a dark one on dark pages.</span>';
         if (v === 'custom') return '';
         var n = '';
@@ -1725,6 +1755,7 @@
       $('#preview').dataset.zoom = z;
       $$('input[name="dpage"]').forEach(function(i){ i.disabled = z !== 'site'; });
       if (z !== 'site'){ fzHover(null); fzSet(null); }
+      kitFrame();
       runMotion();
     }
     function clearErrors(){ $$('.err').forEach(function(e){ e.hidden = true; }); }
@@ -1773,6 +1804,7 @@
         var on = s.id === id, p = $('#panel-' + s.id), c = $('[data-sec="' + s.id + '"]');
         if (p.hidden === on){ p.hidden = !on; if (on){ p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); } }
         c.setAttribute('aria-pressed', String(on));
+        if (on && c.parentNode.classList.contains('parts-row')) rowShow(c.parentNode, c);
       });
     }
     function selectSection(id, focus){
@@ -1811,7 +1843,16 @@
       var ch = changedSections();
       if (!ch.length) return null;
       var base = '/campaigns/' + encodeURIComponent(CID) + '/customize/look#';
-      return { draft:draft, input:toInput(draft), _changes:ch.map(function(id){ return { label:'Look: ' + sectionName(id), href:base + id }; }) };
+      var lines = ch.map(function(id){ return { label:'Look: ' + sectionName(id), href:base + id }; });
+      // Picking a whole look sets many sections at once; until something is
+      // changed by hand it is one change, named for the look.
+      if (draft.look !== saved.look && matchesLook(draft, draft.look)){
+        var own = ch.filter(function(id){ return SEC_KEYS[id].some(function(k){ return LOOK_KEYS.indexOf(k) >= 0; }); });
+        if (own.length){
+          lines = [{ label:'the ' + look(draft.look).name + ' look', href:base + own[0] }].concat(lines.filter(function(l, i){ return own.indexOf(ch[i]) < 0; }));
+        }
+      }
+      return { draft:draft, input:toInput(draft), _changes:lines };
     }
     function toShell(){
       var v = shellValue(), sig = JSON.stringify(v);
@@ -2031,7 +2072,14 @@
       if (t.dataset.sec){ selectSection(t.dataset.sec); return; }
       if (t.dataset.quick){ quickSetup(t.dataset.quick); return; }
       if (t.dataset.viewas){ ui.viewAs = t.dataset.viewas; update(); return; }
-      if (t.dataset.open){ selectSection(t.dataset.open, true); return; }
+      if (t.dataset.open){
+        // A People row opens the part that holds its setting; say so, since the
+        // room changes under the pointer.
+        var to = t.dataset.open, rm = ROOMS.filter(function(r){ return r[0] === ROOM_OF[to]; })[0];
+        selectSection(to, true);
+        if (rm) toast('Opened ' + sectionName(to) + ' in ' + rm[1] + '.');
+        return;
+      }
       if (t.dataset.reset){ resetSection(t.dataset.reset); return; }
       if (t.dataset.pick){ if (pick && pick.btn === t) closePicker(true); else { if (pick) closePicker(false); openPicker(t); } return; }
       if (t.dataset.up){ upKey = t.dataset.up; $('#file').value = ''; $('#file').click(); return; }
@@ -2092,6 +2140,29 @@
       ROOT.style.setProperty('--strip-h', phone() ? $('#pv-col').offsetHeight + 'px' : '0px');
     }
 
+    /* ---------- Style kits on one of your own pages ----------
+       While the Pages part is open and the page look is Material, the
+       example is one of the owner's pages in a frame wearing the draft's kit
+       (look_kit_frame.js); everywhere else the example site stays. The
+       frame is made the first time it is wanted and kept. */
+    var kf = null;
+    function kitFrame(){
+      var on = ui.room === 'pages' && ui.section === 'page' && ui.zoom === 'site' && draft.page.look === 'annals';
+      if (!kf){
+        if (!on || !Chronicle.lookKitFrame || !Chronicle.kitTry) return;
+        kf = Chronicle.lookKitFrame({ pvw:$('#pv-col .pvw'), preview:$('#preview'), cid:CID });
+      }
+      var ch = changedSections();
+      kf.set({ on:on, kit:draft.page.kit, saved:saved.page.kit, theme:previewTheme(), unsaved:ch.indexOf('colours') >= 0 || ch.indexOf('type') >= 0 });
+      if (on){ fzHover(null); fzSet(null); }
+      $$('input[name="dpage"]').forEach(function(i){ i.disabled = ui.zoom !== 'site' || on; });
+    }
+    // The hint names the brush's try-out only while the owner's brush is on.
+    function kfBrushHint(){
+      return document.querySelector('#app-topbar [data-widget="customize-brush"]') ?
+        ' To walk your pages in a kit, use Try a style kit here on the brush at the top of any page.' : '';
+    }
+
     /* ---------- Click to focus ----------
        Each section owns some parts of the example site. Pointing outlines
        them, a click opens the section and zooms in, Whole site zooms out.
@@ -2101,7 +2172,7 @@
       header: { all:['.s-hdr'], tip:'The bar across the top' },
       sidebar:{ all:['.s-sb'], tip:'The menu’s colour and top-left corner' },
       nav:    { all:['.s-list'], tip:'How the menu shows where you are' },
-      colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
+      colours:{ all:['.p-link', '.chipe', '.tag', '.tev'], tip:'Links, events, tags and timeline marks' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
       icons:  { all:['.s-row .ic.kic', '.s-row .dot.kic', '.pv-ic'], tip:'Category icons' },
@@ -2111,7 +2182,7 @@
       hover:  { all:['.e-hc'], tip:'The card that opens when you point at a link' }
     };
     // Most specific first: a button inside a card is a button.
-    var FZ_HIT = [['.pbtn', 'buttons'], ['.s-row .ic.kic, .s-row .dot.kic, .pv-ic', 'icons'], ['.e-hc', 'hover'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
+    var FZ_HIT = [['.pbtn', 'buttons'], ['.s-row .ic.kic, .s-row .dot.kic, .pv-ic', 'icons'], ['.e-hc', 'hover'], ['.p-link, .chipe, .tag, .tev', 'colours'],
       ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
       ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.e-body, .d-grid', 'page'], ['.s-page', 'colours']];
     var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', icons:'icons', motion:'motion', sheet:'sheet', page:'page', hover:'hover' };
@@ -2224,11 +2295,12 @@
     /* ---------- Rooms: brush the room's parts, soften the rest ----------
        The parts a room owns stay sharp; a blurred, slightly dimmed layer
        covers the rest of the example site. The layer is clipped with holes at
-       the room's parts, so nothing selected is ever blurred. */
+       the room's parts, so nothing selected is ever blurred. It works in
+       screen pixels (see .rm-blur), so its clip is scaled by the site's k. */
     function roomSecs(){ var r = ROOMS.filter(function(x){ return x[0] === ui.room; })[0]; return r[3].length ? r[3] : SHARE_SECS; }
     // The site minus the parts: cut along every part edge and keep the cells no
     // part covers. The cells never overlap, so one filled path draws them all.
-    function roomClip(rs){
+    function roomClip(rs, k){
       var pad = 4, R = rs.map(function(r){ return [Math.max(0, r.x - pad), Math.max(0, r.y - pad), Math.min(880, r.x + r.w + pad), Math.min(520, r.y + r.h + pad)]; });
       function edges(i, max){ var e = [0, max]; R.forEach(function(r){ e.push(r[i], r[i + 2]); }); return e.sort(function(a, b){ return a - b; }).filter(function(v, n, all){ return !n || v !== all[n - 1]; }); }
       var xs = edges(0, 880), ys = edges(1, 520), d = '';
@@ -2242,7 +2314,7 @@
           }
           if (out){ if (run === null) run = xs[i]; }
           else if (run !== null){
-            d += 'M' + run.toFixed(1) + ' ' + ys[j].toFixed(1) + 'H' + xs[i].toFixed(1) + 'V' + ys[j + 1].toFixed(1) + 'H' + run.toFixed(1) + 'Z';
+            d += 'M' + (run * k).toFixed(1) + ' ' + (ys[j] * k).toFixed(1) + 'H' + (xs[i] * k).toFixed(1) + 'V' + (ys[j + 1] * k).toFixed(1) + 'H' + (run * k).toFixed(1) + 'Z';
             run = null;
           }
         }
@@ -2251,21 +2323,75 @@
     }
     // The part's name for the access mark: only shareable parts carry one.
     function sectionOpen(sec){ return SHARE_SECS.indexOf(sec) >= 0 && draft.access[sec] !== 'owner'; }
+    // Every run of words on the example, in the site's own 880 by 520 units,
+    // measured unzoomed like fzRects, so a mark can be placed clear of them.
+    function fzTextBoxes(){
+      var site = fzSite(), t = site.style.transform, tr = site.style.transition, out = [];
+      site.style.transition = 'none'; site.style.transform = '';
+      var sr = site.getBoundingClientRect(), s = sr.width / 880;
+      if (s){
+        var walk = document.createTreeWalker(site, NodeFilter.SHOW_TEXT, null), rg = document.createRange(), n;
+        while ((n = walk.nextNode())){
+          var el = n.parentNode;
+          if (!n.nodeValue.trim() || !el.offsetParent || el.closest('.rm-blur, .rm-brush, svg, [hidden]')) continue;
+          rg.selectNodeContents(n);
+          Array.prototype.forEach.call(rg.getClientRects(), function(r){
+            if (r.width && r.height) out.push({ x:(r.left - sr.left) / s, y:(r.top - sr.top) / s, w:r.width / s, h:r.height / s });
+          });
+        }
+      }
+      // A button's icon (Icons > Everywhere) is as much content as its word.
+      if (s) Array.prototype.forEach.call(site.querySelectorAll('.wic'), function(el){
+        var r = el.getBoundingClientRect();
+        if (r.width && r.height) out.push({ x:(r.left - sr.left) / s, y:(r.top - sr.top) / s, w:r.width / s, h:r.height / s });
+      });
+      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
+      return out;
+    }
+    // Where a part's pencil mark sits: beside the part, on the first side
+    // where it covers no words and no other mark (right, left, then above its
+    // corner), else where it covers least.
+    function markSpot(r, k, mw, mh, words, taken, ww){
+      var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, H = 520 * k;
+      var tries = [[R + 3, T + 3], [L - 3 - mw, T + 3], [R - mw, T - mh - 2], [R + 3, T - mh - 2]].filter(function(c){
+        return c[0] >= 0 && c[0] + mw <= ww && c[1] >= 0 && c[1] + mh <= H;
+      });
+      if (!tries.length) tries = [[clamp(R - mw, 0, ww - mw), clamp(T + 3, 0, H - mh)]];
+      function cover(c){
+        var a = 0;
+        words.concat(taken).forEach(function(b){
+          var w = Math.min(c[0] + mw, b.x + b.w) - Math.max(c[0], b.x), h = Math.min(c[1] + mh, b.y + b.h) - Math.max(c[1], b.y);
+          if (w > 0 && h > 0) a += w * h;
+        });
+        return a;
+      }
+      var best = tries[0], bc = cover(best);
+      for (var i = 1; i < tries.length && bc > 0; i++){ var c = cover(tries[i]); if (c < bc){ best = tries[i]; bc = c; } }
+      return best;
+    }
     function roomDraw(){
       var blur = $('#rm-blur'), brush = $('#rm-brush');
       if (!blur || !brush) return;
       var all = [], marks = '', k = fzK(), ww = $('#site-wrap').clientWidth;
       if (ui.zoom === 'site' && !ui.focus){
+        var words = fzTextBoxes().map(function(b){ return { x:b.x * k, y:b.y * k, w:b.w * k, h:b.h * k }; }), taken = [];
         roomSecs().forEach(function(sec){
           var rs = fzMeasure(sec);
           if (!rs.length) return;
-          all = all.concat(rs);
-          var r = rs[0], open = sectionOpen(sec);
-          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + clamp((r.x + r.w) * k - 3, 26, ww - 2).toFixed(0) + 'px;top:' + clamp(r.y * k + 3, 2, 520 * k - 22).toFixed(0) + 'px">' +
+          // The category icons are small boxes in the middle of menu rows; left
+          // sharp while their row blurs they read as dark squares, so they blur
+          // with the row until the Icons part is the one open.
+          if (sec !== 'icons' || ui.section === 'icons') all = all.concat(rs);
+          var open = sectionOpen(sec), mw = open ? 44 : 30, mh = 17, at = markSpot(rs[0], k, mw, mh, words, taken, ww);
+          taken.push({ x:at[0], y:at[1], w:mw, h:mh });
+          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + at[0].toFixed(0) + 'px;top:' + at[1].toFixed(0) + 'px">' +
             IC('i-pencil') + (open ? IC('i-users') : '') + '</span>';
         });
       }
-      if (all.length){ blur.style.clipPath = 'path("' + roomClip(all) + '")'; blur.classList.add('on'); }
+      // Leaving for a zoomed part, the layer goes at once: its undoing of the
+      // scale does not follow the zoom, so a fade would show mirrored copies.
+      blur.classList.toggle('cut', !!ui.focus || ui.zoom !== 'site');
+      if (all.length){ blur.style.clipPath = 'path("' + roomClip(all, k) + '")'; blur.classList.add('on'); }
       else blur.classList.remove('on');
       setHTML(brush, marks);
     }

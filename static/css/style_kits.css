@@ -295,7 +295,7 @@
 [data-cz-page="annals"][data-cz-kit="flowing"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 600; letter-spacing: -0.01em; padding-bottom: 12px; }
 /* The title's rule is a drawn wave. */
 [data-cz-page="annals"][data-cz-kit="flowing"] .cb-title:not(:where([data-workshop] .cb-title))::after {
-  height: 8px; border-radius: 0; background: var(--kit-acc); opacity: 0.7;
+  height: 8px; border-radius: 0; background: var(--color-accent-surface-1, var(--kit-acc)); opacity: 0.7;
   -webkit-mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
   mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
 }
@@ -354,7 +354,7 @@
 /* The title's rule is a hairline of light, fading at both ends. */
 [data-cz-page="annals"][data-cz-kit="lumen"] .cb-title:not(:where([data-workshop] .cb-title))::after {
   height: 1px; border-radius: 0;
-  background: linear-gradient(90deg, var(--kit-acc), var(--k-shine) 35%, var(--kit-acc) 60%, transparent);
+  background: linear-gradient(90deg, var(--color-accent-surface-1, var(--kit-acc)), var(--k-shine) 35%, var(--color-accent-surface-1, var(--kit-acc)) 60%, transparent);
   box-shadow: 0 0 8px var(--k-glow);
 }
 [data-cz-page="annals"][data-cz-kit="lumen"] .cb-head {
@@ -409,7 +409,7 @@
 [data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title:not(:where([data-workshop] .cb-title)) { font-weight: 700; }
 /* The title's rule is a pen stroke in the accent. */
 [data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title:not(:where([data-workshop] .cb-title))::after {
-  height: 7px; border-radius: 0; background: var(--kit-acc);
+  height: 7px; border-radius: 0; background: var(--color-accent-surface-1, var(--kit-acc));
   -webkit-mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
   mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
 }

@@ -59,6 +59,10 @@ type TagService interface {
 
 	// SetHookDispatcher wires the extension hook dispatcher. Optional.
 	SetHookDispatcher(d TagHookDispatcher)
+
+	// SetCampaignColours wires where a following tag's colour comes from.
+	// Unset, following tags wear DefaultTagColour.
+	SetCampaignColours(c CampaignColours)
 }
 
 // TagHookDispatcher tells extension (WASM) plugins that a tag was put on or
@@ -71,8 +75,9 @@ type TagHookDispatcher interface {
 
 // tagService implements TagService with validation and slug generation.
 type tagService struct {
-	repo  TagRepository
-	hooks TagHookDispatcher // nil: extension plugins are not told
+	repo    TagRepository
+	hooks   TagHookDispatcher // nil: extension plugins are not told
+	colours CampaignColours   // nil: following tags wear DefaultTagColour
 }
 
 // NewTagService creates a new TagService backed by the given repository.
@@ -85,9 +90,21 @@ func (s *tagService) SetHookDispatcher(d TagHookDispatcher) {
 	s.hooks = d
 }
 
+// SetCampaignColours wires the campaign colour lookup.
+func (s *tagService) SetCampaignColours(c CampaignColours) {
+	s.colours = c
+}
+
+// painter is a fresh per-call painter, so each read path asks each campaign
+// for its colour once.
+func (s *tagService) painter() *tagPainter {
+	return newTagPainter(s.colours)
+}
+
 // Create validates the tag name and color, generates a URL-safe slug, and
 // persists the new tag. The slug is derived from the name (lowercase, hyphens
-// replace non-alphanumeric characters).
+// replace non-alphanumeric characters). With no colour the tag stores "" and
+// follows the campaign's colour.
 func (s *tagService) Create(ctx context.Context, campaignID string, name, color string, dmOnly bool) (*Tag, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -95,10 +112,7 @@ func (s *tagService) Create(ctx context.Context, campaignID string, name, color 
 	}
 
 	color = strings.TrimSpace(color)
-	if color == "" {
-		color = "#6b7280" // Default gray matching the migration default.
-	}
-	if !hexColorPattern.MatchString(color) {
+	if color != "" && !hexColorPattern.MatchString(color) {
 		return nil, apperror.NewBadRequest("color must be a valid hex color (e.g. #ff5733)")
 	}
 
@@ -114,18 +128,29 @@ func (s *tagService) Create(ctx context.Context, campaignID string, name, color 
 		return nil, err
 	}
 
+	s.painter().paint(ctx, tag)
 	return tag, nil
 }
 
 // GetByID retrieves a single tag by its primary key.
 func (s *tagService) GetByID(ctx context.Context, id int) (*Tag, error) {
-	return s.repo.FindByID(ctx, id)
+	tag, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	s.painter().paint(ctx, tag)
+	return tag, nil
 }
 
 // ListByCampaign returns all tags for the given campaign. When includeDmOnly
 // is false, dm_only tags are excluded (player view).
 func (s *tagService) ListByCampaign(ctx context.Context, campaignID string, includeDmOnly bool) ([]Tag, error) {
-	return s.repo.ListByCampaign(ctx, campaignID, includeDmOnly)
+	ts, err := s.repo.ListByCampaign(ctx, campaignID, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	s.painter().paintAll(ctx, ts)
+	return ts, nil
 }
 
 // Update validates the new name, regenerates the slug, and persists the
@@ -144,14 +169,12 @@ func (s *tagService) Update(ctx context.Context, id int, input UpdateTagInput) (
 	}
 
 	// Load-merge-write (ADR-056): `tag` is the row as stored, so Color/DmOnly
-	// default to the stored value; only a key the caller actually sent changes.
+	// default to the stored value ("" for a following tag); only a key the
+	// caller actually sent changes. A colour sent as "" means follow.
 	color := tag.Color
 	if input.Color != nil {
 		color = strings.TrimSpace(*input.Color)
-		if color == "" {
-			color = "#6b7280"
-		}
-		if !hexColorPattern.MatchString(color) {
+		if color != "" && !hexColorPattern.MatchString(color) {
 			return nil, apperror.NewBadRequest("color must be a valid hex color (e.g. #ff5733)")
 		}
 	}
@@ -170,6 +193,7 @@ func (s *tagService) Update(ctx context.Context, id int, input UpdateTagInput) (
 		return nil, err
 	}
 
+	s.painter().paint(ctx, tag)
 	return tag, nil
 }
 
@@ -230,6 +254,16 @@ func (s *tagService) SetEntityTagsVisible(ctx context.Context, entityID string, 
 		desiredSet[id] = true
 	}
 
+	// Hooks are told about tags as every other reader sees them.
+	if s.hooks != nil {
+		p := s.painter()
+		p.paintAll(ctx, currentTags)
+		for id, t := range validIDs {
+			p.paint(ctx, &t)
+			validIDs[id] = t
+		}
+	}
+
 	// Remove tags that are in current but not in desired.
 	for _, t := range currentTags {
 		if !desiredSet[t.ID] {
@@ -260,13 +294,26 @@ func (s *tagService) SetEntityTagsVisible(ctx context.Context, entityID string, 
 // GetEntityTags returns all tags associated with the given entity.
 // When includeDmOnly is false, dm_only tags are excluded.
 func (s *tagService) GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]Tag, error) {
-	return s.repo.GetEntityTags(ctx, entityID, includeDmOnly)
+	ts, err := s.repo.GetEntityTags(ctx, entityID, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	s.painter().paintAll(ctx, ts)
+	return ts, nil
 }
 
 // GetEntityTagsBatch returns tags for multiple entities in one query.
 // When includeDmOnly is false, dm_only tags are excluded.
 func (s *tagService) GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]Tag, error) {
-	return s.repo.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	by, err := s.repo.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	p := s.painter()
+	for _, ts := range by {
+		p.paintAll(ctx, ts)
+	}
+	return by, nil
 }
 
 // generateSlug creates a URL-safe slug from a tag name. Converts to lowercase,

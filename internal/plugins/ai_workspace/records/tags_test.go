@@ -62,9 +62,11 @@ func (f *fakeTags) GetEntityTagsBatch(_ context.Context, ids []string, dm bool) 
 func tagWorld() (*fakeTags, *fakePages) {
 	ft := &fakeTags{
 		list: []tags.Tag{
-			{ID: 1, Name: "Gods", Slug: "gods", Color: "#8b5cf6"},
-			{ID: 2, Name: "Trade Hub", Slug: "trade-hub", Color: "#6b7280"},
-			{ID: 3, Name: "Secret Cult", Slug: "secret-cult", Color: "#ef4444", DmOnly: true},
+			{ID: 1, Name: "Gods", Slug: "gods", Color: "#8b5cf6", OwnColor: true},
+			// Trade Hub follows the campaign: the service shows it in the
+			// campaign's colour with OwnColor false.
+			{ID: 2, Name: "Trade Hub", Slug: "trade-hub", Color: "#d97706"},
+			{ID: 3, Name: "Secret Cult", Slug: "secret-cult", Color: "#ef4444", OwnColor: true, DmOnly: true},
 		},
 		byPage:  map[string][]int{"aldric": {1, 3}, "anchor": {2}, "rope": {1}},
 		updated: map[int]tags.UpdateTagInput{},
@@ -113,6 +115,8 @@ func TestTagKind_Plan(t *testing.T) {
 		{"dm_only empty", tagRec(ActionUpdate, "Gods", map[string]any{"dm_only": nil}), owner, "", "not true or false"},
 		{"dm_only text true", tagRec(ActionUpdate, "Gods", map[string]any{"dm_only": "True"}), owner, "hidden from players", ""},
 		{"nothing to change", tagRec(ActionUpdate, "Gods", nil), owner, "", "nothing to change"},
+		{"follow the campaign", tagRec(ActionUpdate, "Gods", map[string]any{"color": ""}), owner, "colour the campaign's", ""},
+		{"new tag, empty colour", tagRec(ActionCreate, "Moons", map[string]any{"color": ""}), owner, "makes the tag", ""},
 		{"update missing", tagRec(ActionUpdate, "Nope", map[string]any{"color": "#000000"}), owner, "", "no tag called"},
 		{"remove, with count", tagRec(ActionDelete, "Gods", nil), owner, "removes the tag from 2 pages", ""},
 		{"remove, one page", tagRec(ActionDelete, "Trade Hub", nil), owner, "removes the tag from 1 page", ""},
@@ -171,6 +175,14 @@ func TestTagKind_Apply(t *testing.T) {
 		t.Fatalf("hide sent %+v", in)
 	}
 
+	// An empty colour puts the tag back to following the campaign.
+	if err := k.Apply(ctx, camp, owner, tagRec(ActionUpdate, "Gods", map[string]any{"color": ""})); err != nil {
+		t.Fatal(err)
+	}
+	if in := ft.updated[1]; in.Color == nil || *in.Color != "" {
+		t.Fatalf("follow sent %+v", in)
+	}
+
 	if err := k.Apply(ctx, camp, owner, tagRec(ActionDelete, "Trade Hub", nil)); err != nil {
 		t.Fatal(err)
 	}
@@ -197,6 +209,11 @@ func TestTagKind_Export(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("export lacks %q:\n%s", want, s)
 		}
+	}
+	// A following tag is written without a colour, so applying the record
+	// back cannot freeze the campaign's colour into it.
+	if !strings.Contains(s, "name: \"Trade Hub\"\n---") || strings.Contains(s, "#d97706") {
+		t.Errorf("a following tag's record carries a colour:\n%s", s)
 	}
 	if s, _ := k.Export(context.Background(), camp, player); s != "" {
 		t.Errorf("a player's export lists tags: %q", s)
@@ -225,7 +242,7 @@ func TestLookups_Tags(t *testing.T) {
 		err     string
 	}{
 		{"director sees all with counts", lookup("tags", nil), owner,
-			[]string{"Gods, #8b5cf6, 2 pages", "Trade Hub, #6b7280, 1 page", "Secret Cult, #ef4444, Directors only, 1 page"}, nil, ""},
+			[]string{"Gods, #8b5cf6, 2 pages", "Trade Hub, campaign colour, 1 page", "Secret Cult, #ef4444, Directors only, 1 page"}, nil, ""},
 		{"player never sees a hidden tag", lookup("tags", nil), player,
 			[]string{"Gods, #8b5cf6, 2 pages"}, []string{"Secret Cult", "Directors only"}, ""},
 		{"pages show their tags", lookup("pages", nil), owner,

@@ -155,45 +155,58 @@ func TestDeskValues_ChevronOnFiguresOnly(t *testing.T) {
 
 func ptrTime(t time.Time) *time.Time { return &t }
 
-func TestDeskRows_Colour(t *testing.T) {
+// The Customize block says what is chosen now in a DM's words: the look by
+// its starter's name, the colour by name with its swatch and never a hex
+// code, the page style by its kit; then each area in Customize's order, a
+// plugin's area with the words that plugin gives, and the person's brush.
+func TestDeskRows_Customize(t *testing.T) {
+	c := &Campaign{ID: "c1", Settings: "{}"}
+	parent := 1
+	cats := []CustomizeCategory{{ID: 1, Name: "Character"}, {ID: 2, Name: "Location"}, {ID: 3, ParentID: &parent}, {ID: 8, DMOnly: true}}
 	tests := []struct {
 		name     string
-		settings string
-		want     string
+		line     DeskLine
+		wantName string
+		wantVals string
+		wantHref string
 	}{
-		{"no stored accent", `{}`, "Default"},
-		{"stored accent is upper-cased", `{"accent_color":"#6366f1"}`, "#6366F1"},
-		{"a value that is not a colour is no colour", `{"accent_color":"indigo"}`, "Default"},
+		{"look", lookLine(c, LookSummary{Look: "Parchment", Colour: "Sienna", Pages: "Sketchbook pages"}), "Look", "Parchment|Sienna · Sketchbook pages", "/campaigns/c1/customize/look"},
+		{"look in a colour of the owner's own", lookLine(c, LookSummary{Look: "Custom", Pages: "Standard pages"}), "Look", "Custom|Standard pages", "/campaigns/c1/customize/look"},
+		{"categories unread", categoriesLine(c, DeskInputs{}), "Categories", "Open|", "/campaigns/c1/customize/categories"},
+		{"categories, kinds not counted again", categoriesLine(c, DeskInputs{Categories: cats, CategoriesRead: true}), "Categories", "3|1 hidden from players", "/campaigns/c1/customize/categories"},
+		{"categories none hidden", categoriesLine(c, DeskInputs{Categories: cats[:2], CategoriesRead: true}), "Categories", "2|", "/campaigns/c1/customize/categories"},
+		{"homes", homesLine(c, DeskInputs{GMTerm: "GM"}), "Home pages", "Everyone|no player home yet", "/campaigns/c1/customize/home"},
+		{"a plugin's area with words", tabLine(c, DeskTab{ID: "dice", Label: "Dice", Summary: CustomizeSummary{Text: "Jewelled, onyx", Sub: "players pick their own"}}), "Dice", "Jewelled, onyx|players pick their own", "/campaigns/c1/customize/x/dice"},
+		{"a plugin's area without words", tabLine(c, DeskTab{ID: "maps", Label: "Maps"}), "Maps", "|", "/campaigns/c1/customize/x/maps"},
+		{"brush shown", brushLine("c1", false), "Header brush", "blank:Shown", ""},
+		{"brush hidden", brushLine("c1", true), "Header brush", "blank:Hidden", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := colourLine(&Campaign{ID: "c1", Settings: tt.settings})
-			v := l.Values[0]
-			if l.Name != "Colour" || v.Text != tt.want || !v.Swatch || v.Href != "/campaigns/c1/customize" {
-				t.Errorf("colour row = %+v", l)
+			if tt.line.Name != tt.wantName || vals(tt.line) != tt.wantVals || hrefOf(tt.line) != tt.wantHref {
+				t.Errorf("row = %+v, want %s %q %s", tt.line, tt.wantName, tt.wantVals, tt.wantHref)
+			}
+			for _, v := range tt.line.Values {
+				if strings.Contains(v.Text+v.Sub, "#") || strings.Contains(v.Text+v.Sub, " kit") {
+					t.Errorf("row speaks in codes: %+v", v)
+				}
 			}
 		})
 	}
-}
-
-func TestDeskRows_Style(t *testing.T) {
-	tests := []struct {
-		name     string
-		settings string
-		want     string
-	}{
-		{"standard", `{}`, "Standard|"},
-		{"material default kit", `{"appearance":{"page_look":"annals"}}`, "Material|"},
-		{"material named default kit", `{"appearance":{"page_look":"annals","style_kit":"material"}}`, "Material|"},
-		{"material named kit", `{"appearance":{"page_look":"annals","style_kit":"slate"}}`, "Material|Slate kit"},
+	b := brushLine("c1", false).Values[0].Blank
+	if b.URL != "/account/brush/c1" || b.Field != "brush" || b.Off != "" {
+		t.Errorf("the brush saves to the person's own choice for this campaign, never off: %+v", b)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			l := styleLine(&Campaign{ID: "c1", Settings: tt.settings})
-			if l.Name != "Style" || vals(l) != tt.want || hrefOf(l) != "/campaigns/c1/customize" {
-				t.Errorf("style row = %+v, want %q", l, tt.want)
-			}
-		})
+	if v := lookLine(c, LookSummary{Look: "Classic", Colour: "Indigo"}).Values[0]; !v.SubSwatch || !v.Joined {
+		t.Errorf("the look row draws the colour's swatch beside its name: %+v", v)
+	}
+	order := customizeLines(c, DeskInputs{Tabs: []DeskTab{{ID: "maps", Label: "Maps"}, {ID: "dice", Label: "Dice"}}})
+	var ids []string
+	for _, l := range order {
+		ids = append(ids, l.ID)
+	}
+	if got := strings.Join(ids, ","); got != "look,categories,homes,x-maps,x-dice,brush" {
+		t.Errorf("Customize block order = %s", got)
 	}
 }
 
@@ -657,7 +670,7 @@ func TestOwnerDashboard_OnlyTheOwnerOpensTheDesk(t *testing.T) {
 				body := rec.Body.String()
 				// "Needs you" is drawn only when something needs the owner.
 				for _, want := range []string{
-					"Campaign settings", "General", "Access", "People", "Game", "Look", "Connections", "Data", "Danger zone",
+					"Campaign settings", "General", "Access", "People", "Game", "Customize", "Connections", "Data", "Danger zone",
 					"7 items", "kept 30 days", `href="/campaigns/camp-1/extensions"`, `id="line-pages"`, `id="line-preview"`, `id="line-end"`,
 				} {
 					if !strings.Contains(body, want) {
@@ -988,10 +1001,10 @@ func TestDeskService_Build_GroupsAndRows(t *testing.T) {
 	}{
 		{"add-ons off", map[string]bool{},
 			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables]" +
-				" || Look[style,colour] Connections[ai,keys] Data[copy,activity,trash] Danger zone[end]"},
+				" || Customize[look,categories,homes,brush] Connections[ai,keys] Data[copy,activity,trash] Danger zone[end]"},
 		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true},
 			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables]" +
-				" || Look[style,colour,media] Connections[foundry,ai,keys] Data[copy,activity,trash] Danger zone[end]"},
+				" || Customize[look,categories,homes,brush] Connections[foundry,ai,keys] Data[copy,activity,media,trash] Danger zone[end]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

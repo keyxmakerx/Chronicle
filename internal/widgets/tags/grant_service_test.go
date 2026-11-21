@@ -210,3 +210,26 @@ func TestTagGrantService_GrantsForEntity_ResolvesLabels(t *testing.T) {
 		}
 	}
 }
+
+// A grant on a tag that follows the campaign names the colour the tag is
+// shown in, and a tag with its own colour keeps it.
+func TestTagGrantService_GrantsForEntity_FollowingTagColour(t *testing.T) {
+	repo := &mockGrantRepo{listGrantsForEntityFn: func(_ context.Context, _ string) ([]EntityTagGrant, error) {
+		return []EntityTagGrant{
+			{TagSlug: "own", TagColor: "#0d9488", SubjectType: SubjectPublic},
+			{TagSlug: "follows", TagColor: "", SubjectType: SubjectPublic},
+		}, nil
+	}}
+	svc := NewTagGrantService(repo, tagInCampaign("camp-1"), &mockMemberChecker{}, &mockGroupChecker{})
+	svc.SetCampaignColours(&fakeColours{marks: map[string]string{"camp-1": "#d97706"}})
+	grants, err := svc.GrantsForEntity(context.Background(), "camp-1", "ent-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"own": "#0d9488", "follows": "#d97706"}
+	for _, g := range grants {
+		if g.TagColor != want[g.TagSlug] {
+			t.Errorf("%s: %q, want %q", g.TagSlug, g.TagColor, want[g.TagSlug])
+		}
+	}
+}

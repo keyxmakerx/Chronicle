@@ -170,7 +170,7 @@ func (c *craftingCampaigns) Directs(ctx context.Context, campaignID, userID stri
 // itself when there are none.
 func registerCraftingItemBlock(blockRegistry *entities.BlockRegistry) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: crafting.ItemBlockType, Label: "How it's made", Icon: "fa-mortar-pestle",
+		Type: crafting.ItemBlockType, Label: "How it's made", Icon: "fa-mortar-pestle", Picture: entities.PictureSteps,
 		Description: "The crafting recipe that makes this item, and where it is used",
 		Addon:       crafting.AddonSlug,
 		Contexts:    []string{"template"},

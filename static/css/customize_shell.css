@@ -26,7 +26,10 @@
 .czs-stage { min-width: 0; display: flex; flex-direction: column; position: relative; flex: 1; }
 .czs-top {
   position: sticky;
-  top: 0;
+  /* A sticky box sticks at the scroller's content edge, below its padding;
+     the frame cancels that padding with a negative margin, so the bar takes
+     the same offset to sit flush and leave no strip of page above it. */
+  top: -0.75rem;
   z-index: 30;
   display: flex;
   align-items: flex-end;
@@ -36,6 +39,7 @@
   background: var(--color-bg-secondary);
   min-width: 0;
 }
+@media (min-width: 768px) { .czs-top { top: -1rem; } }
 .czs-tabs-top { display: flex; align-items: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 12px; }
 .czs-tabs-top::-webkit-scrollbar { display: none; }
 .czs-tabw { position: relative; display: inline-flex; align-items: center; flex: none; }
@@ -68,6 +72,47 @@
 .czs-chev[aria-expanded="true"] i { transform: rotate(180deg); }
 .czs-tsep { flex: none; width: 1px; height: 16px; align-self: center; margin: 8px 6px 0; background: var(--color-border); }
 .czs-top .czs-find { align-self: center; margin-block: 7px; width: 220px; flex: none; }
+
+/* Inside a category the bar is the category's own: back to Categories, its
+   name (which opens the Categories drawer to switch), and its five tabs. The
+   page layout puts its layout picker in the slot at the bar's right. */
+.czs-back { position: relative; flex: none; display: inline-grid; place-items: center; width: 36px; min-height: 44px; margin-left: -10px; border-radius: var(--shape-r-ctl); color: var(--color-text-secondary); text-decoration: none; font-size: 13px; transition: color var(--dur-micro), background-color var(--dur-micro); }
+.czs-back:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
+.czs-back:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.czs-back .czs-dot { position: absolute; top: 10px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
+.czs-catname { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; margin-right: 8px; padding: 6px 8px 4px 2px; border: 0; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-primary); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-micro); }
+.czs-catname > span { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; }
+.czs-catname > i { font-size: 10px; color: var(--color-text-secondary); transition: transform var(--dur-standard) var(--ease-out); }
+.czs-catname:hover { background: var(--color-bg-tertiary); }
+.czs-catname:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.czs-catname[aria-expanded="true"] > i { transform: rotate(180deg); }
+.czs-catbar .czs-tab.is-off { opacity: 0.45; cursor: default; }
+.czs-catbar .czs-tab.is-off:hover { color: var(--color-text-secondary); }
+:is(.czs-back, .czs-catname, .czs-lay-pick):focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.czs-bar-slot { flex: none; display: flex; align-items: center; align-self: center; margin-left: auto; }
+.czs-bar-slot:empty { display: none; }
+.czs-bar-slot:not(:empty) + .czs-find { margin-left: 0; }
+.czs-lay-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border: var(--shape-edge) solid transparent; border-radius: var(--shape-r-ctl); background: none; color: var(--color-text-secondary); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-micro), border-color var(--dur-micro); }
+.czs-lay-pick b { color: var(--color-text-primary); font-weight: 600; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.czs-lay-pick > i { font-size: 10px; transition: transform var(--dur-standard) var(--ease-out); }
+.czs-lay-pick:hover { background: var(--color-bg-tertiary); }
+.czs-lay-pick:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+.czs-lay-pick[aria-expanded="true"] { border-color: var(--color-border); background: var(--color-bg-tertiary); }
+.czs-lay-pick[aria-expanded="true"] > i { transform: rotate(180deg); }
+[data-motion="off"] :is(.czs-catname, .czs-lay-pick) > i { transition: none; }
+@media (prefers-reduced-motion: reduce) { :is(.czs-catname, .czs-lay-pick) > i { transition: none; } }
+@media (max-width: 640px) {
+  .czs-catname { font-size: 14px; }
+  .czs-catname > span { max-width: 14ch; }
+  /* On a phone the picker is the last part of the swipeable row
+     (customize_page_editor.js moves it there), so it covers nothing. */
+  .czs-catbar .czs-lay-w { align-self: center; margin-left: 4px; }
+  /* A scrolling row clips what hangs past its start, so the chevron sits
+     whole inside the gutter here. */
+  .czs-catbar .czs-back { margin-left: 0; }
+  .czs-lay-pick { min-height: 44px; padding: 0 8px; }
+  .czs-lay-pick b { max-width: 14ch; }
+}
 
 /* A drawer drapes down from its tab's side line over the area; nothing
    below moves. */
@@ -107,6 +152,16 @@
 @keyframes czs-drape { from { clip-path: inset(0 -40px 100% -40px); } }
 [data-motion="off"] .czs-drawer, [data-motion="off"] .czs-chev i { animation: none; transition: none; }
 @media (prefers-reduced-motion: reduce) { .czs-drawer { animation: none; } .czs-chev i { transition: none; } }
+
+/* The Look's example stays pinned while its panels scroll; pinned from the
+   scroller's content edge it would sit under the frame's own tab bar, so it
+   starts below it (the bar's height is read by customize_shell.js). */
+.czs { --czs-pad-y: 0.75rem; }
+@media (min-width: 768px) { .czs { --czs-pad-y: 1rem; } }
+.czs .czp .cz-preview { top: calc(var(--czs-top-h, 49px) - var(--czs-pad-y) + 12px); }
+@container cz (max-width: 760px) {
+  .czs .czp .cz-preview { top: calc(var(--czs-top-h, 49px) - var(--czs-pad-y)); }
+}
 
 /* Inside this frame the Look's rooms are the Look tab's drawer. */
 .czs .czp .cz-tabs { display: none; }
@@ -256,6 +311,31 @@
 .czs-tabs > span { opacity: 0.5; cursor: not-allowed; }
 .czs-tabs .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
 .czs-legacy { padding: 20px 24px 120px; }
+/* A category's Fields tab: the field editor wearing the frame's tokens, with
+   a name over every column. Scoped here because the same widget still draws
+   itself in the older hub, which loads no Customize sheet. */
+.czs-fields { padding: 8px 24px 120px; max-width: 880px; color: var(--color-text-body); }
+.czs-fields h2 { font-size: 18px; font-weight: 600; color: var(--color-text-primary); }
+.czs-fields .czf-title { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); }
+.czs-fields :is(.text-gray-400, .text-gray-500, .text-fg-secondary) { color: var(--color-text-secondary); }
+.czs-fields .czf-add { color: var(--color-accent-link, var(--color-accent)); min-height: 44px; padding: 0 8px; }
+.czs-fields .czf-add:hover { text-decoration: underline; }
+.czs-fields .czf-list { display: flex; flex-direction: column; gap: 6px; }
+.czs-fields .czf-cols, .czs-fields .czf-row { display: grid; grid-template-columns: minmax(0, 1fr) 9rem 8rem 5.5rem; gap: 8px; align-items: center; }
+.czs-fields .czf-cols { padding: 0 9px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.czs-fields .czf-row { padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-secondary); }
+.czs-fields .czf-row .input { width: 100%; min-width: 0; }
+.czs-fields .czf-acts { justify-content: flex-end; }
+.czs-fields .czf-acts button { min-width: 28px; min-height: 28px; color: var(--color-text-secondary); }
+.czs-fields .czf-acts button:hover { color: var(--color-text-primary); }
+.czs-fields .czf-acts button:last-child:hover { color: var(--czs-bad); }
+@media (max-width: 640px) {
+  .czs-fields { padding: 8px 16px 120px; }
+  .czs-fields .czf-cols { display: none; }
+  .czs-fields .czf-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .czs-fields .czf-row > .input:first-child, .czs-fields .czf-acts { grid-column: 1 / -1; }
+  .czs-fields .czf-acts button { min-width: 44px; min-height: 44px; }
+}
 /* Who sees the open home, under the Home pages tabs. */
 .czs-home-hint { font-size: 12.5px; color: var(--color-text-secondary); margin: 0; padding: 12px 24px 0; max-width: 80ch; }
 

@@ -39,13 +39,42 @@ func topbarHasDMScreen(ctx context.Context) bool {
 	return InCampaign(ctx) && (GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx))
 }
 
+// topbarMayCustomize reports whether the viewer may open Customize here,
+// the check Customize's own routes make (the campaign's owner), and is not
+// looking at the campaign as a player or a guest. It decides whether the
+// header carries the brush at all, shown or put away.
+func topbarMayCustomize(ctx context.Context) bool {
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsOwner(ctx) && !IsGuest(ctx) &&
+		!IsViewingAsPlayer(ctx) && PreviewAs(ctx) == "" && !InSiteAdmin(ctx)
+}
+
+// topbarHasBrush reports whether the Customize brush is on the bar: the
+// viewer may customize and has not hidden it in this campaign (their own
+// display choice, kept per campaign).
+func topbarHasBrush(ctx context.Context) bool {
+	if !topbarMayCustomize(ctx) {
+		return false
+	}
+	p := GetViewPrefs(ctx)
+	if p == nil {
+		return true
+	}
+	id := GetCampaignID(ctx)
+	for _, h := range p.BrushHidden {
+		if h == id {
+			return false
+		}
+	}
+	return true
+}
+
 // topbarToolCount is how many tools the shelf lists besides Find. A member's
 // AI is left out: it appears only once the plugin allows it, so the bar must
 // not depend on it to earn a shelf.
 func topbarToolCount(ctx context.Context) int {
 	n := 0
 	for _, has := range []bool{
-		topbarHasOwnerAI(ctx), topbarHasTable(ctx), topbarHasDMScreen(ctx),
+		topbarHasOwnerAI(ctx), topbarHasBrush(ctx), topbarHasTable(ctx), topbarHasDMScreen(ctx),
 		topbarHasViewAs(ctx), topbarHasBell(ctx),
 	} {
 		if has {

@@ -82,6 +82,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/customize/categories/:key", h.CustomizeCategory, RequireRole(RoleOwner))
 	cg.GET("/customize/categories/:key/:tab", h.CustomizeCategory, RequireRole(RoleOwner))
 	cg.GET("/customize/x/:tab", h.CustomizePluginArea, RequireRole(RoleOwner))
+	// The header brush's first row for the page the owner is on.
+	cg.GET("/customize/here", h.CustomizeHere, RequireRole(RoleOwner))
+	cg.GET("/customize/kit-try", h.CustomizeKitTry, RequireRole(RoleOwner))
+	cg.POST("/customize/kit-try/keep", h.CustomizeKitKeep, RequireRole(RoleOwner))
 	// The one Customize draft, kept until the owner presses Save or Discard.
 	cg.GET("/customize/draft", h.GetCustomizeDraftAPI, RequireRole(RoleOwner))
 	cg.PUT("/customize/draft", h.PutCustomizeDraftAPI, RequireRole(RoleOwner))

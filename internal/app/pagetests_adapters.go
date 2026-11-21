@@ -76,7 +76,7 @@ func (a encounterResultsAdapter) Outcomes(ctx context.Context, campaignID string
 // add a test, so a player's page has no empty box.
 func registerPageTestsBlock(blockRegistry *entities.BlockRegistry, svc pagetests.Service) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: pagetests.BlockType, Label: "Tests", Icon: "fa-flag-checkered",
+		Type: pagetests.BlockType, Label: "Tests", Icon: "fa-flag-checkered", Picture: entities.PictureSteps,
 		Description: "Montages and other long tests on this page, and how they ended",
 		Contexts:    []string{"template"},
 		TileSizes:   []string{"2x2", "4x2", "1x2"},

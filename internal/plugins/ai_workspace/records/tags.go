@@ -46,7 +46,7 @@ type TagKind struct {
 func (TagKind) Name() string  { return "tag" }
 func (TagKind) Label() string { return "Tag" }
 func (TagKind) Doc() string {
-	return "A tag the campaign puts on pages, matched by `name` (\"Trade Hub\" finds the tag trade-hub). Keys: `color` (#RRGGBB; a new tag is grey when it has none), `dm_only` (true hides the tag and its filter from players), `rename_to`. Putting a tag on or off a page is done on the page block with `tags:`, which makes missing tags itself; use this kind to tidy the tags themselves. Removing a tag takes it off every page that carries it, and only the owner or a co-DM may change tags. Ask `what: tags` to see the tags and how many pages carry each.\n\n```\n---\nkind: tag\nname: Gods\ncolor: \"#8b5cf6\"\ndm_only: false\n---\n```\n\n```\n---\nkind: tag\naction: update\nname: Gods\nrename_to: Deities\n---\n```"
+	return "A tag the campaign puts on pages, matched by `name` (\"Trade Hub\" finds the tag trade-hub). Keys: `color` (#RRGGBB, or \"\" to follow the campaign's Tags and marks colour; a tag with no colour of its own follows it, and a new tag without `color` starts that way), `dm_only` (true hides the tag and its filter from players), `rename_to`. Putting a tag on or off a page is done on the page block with `tags:`, which makes missing tags itself; use this kind to tidy the tags themselves. Removing a tag takes it off every page that carries it, and only the owner or a co-DM may change tags. Ask `what: tags` to see the tags and how many pages carry each.\n\n```\n---\nkind: tag\nname: Gods\ncolor: \"#8b5cf6\"\ndm_only: false\n---\n```\n\n```\n---\nkind: tag\naction: update\nname: Gods\nrename_to: Deities\n---\n```"
 }
 
 // find is the campaign tag the record names, or nil.
@@ -70,11 +70,12 @@ func matchTag(all []tags.Tag, name string) *tags.Tag {
 	return nil
 }
 
-// tagKeys reads and checks color and dm_only; only written keys are set.
+// tagKeys reads and checks color and dm_only; only written keys are set. A
+// color written as "" means the tag follows the campaign's colour.
 func tagKeys(r Record) (color *string, dmOnly *bool, err error) {
 	if r.Has("color") {
-		c := r.Str("color")
-		if !tagColor.MatchString(c) {
+		c := strings.TrimSpace(r.Str("color"))
+		if c != "" && !tagColor.MatchString(c) {
 			return nil, nil, badRequestf("color: %q is not a colour written #RRGGBB", c)
 		}
 		color = &c
@@ -129,7 +130,7 @@ func (k TagKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 			return Plan{Error: "rename_to only applies to action: update"}
 		}
 		s := "makes the tag"
-		if color != nil {
+		if color != nil && *color != "" {
 			s += " in " + *color
 		}
 		if dmOnly != nil && *dmOnly {
@@ -151,7 +152,7 @@ func (k TagKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 			parts = append(parts, "renamed to "+quote(to))
 		}
 		if color != nil {
-			parts = append(parts, "colour "+*color)
+			parts = append(parts, "colour "+colourWords(*color))
 		}
 		if dmOnly != nil {
 			if *dmOnly {
@@ -174,6 +175,14 @@ func (k TagKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 		}
 		return Plan{Summary: s}
 	}
+}
+
+// colourWords names a written colour for a plan line.
+func colourWords(c string) string {
+	if c == "" {
+		return "the campaign's"
+	}
+	return c
 }
 
 func pageCountText(n int) string {
@@ -248,7 +257,8 @@ func (k TagKind) Apply(ctx context.Context, campaignID string, a Actor, r Record
 }
 
 // Export lists every tag in this kind's own format, so an AI can update or
-// remove one by name.
+// remove one by name. A tag that follows the campaign's colour is written
+// without `color`, so applying the record back never freezes the colour in.
 func (k TagKind) Export(ctx context.Context, campaignID string, a Actor) (string, error) {
 	if !a.CanAuthorDmOnly() {
 		return "", nil
@@ -259,7 +269,10 @@ func (k TagKind) Export(ctx context.Context, campaignID string, a Actor) (string
 	}
 	var b strings.Builder
 	for _, t := range all {
-		b.WriteString("---\nkind: tag\nname: " + quote(t.Name) + "\ncolor: " + quote(t.Color) + "\n")
+		b.WriteString("---\nkind: tag\nname: " + quote(t.Name) + "\n")
+		if c := t.StoredColor(); c != "" {
+			b.WriteString("color: " + quote(c) + "\n")
+		}
 		if t.DmOnly {
 			b.WriteString("dm_only: true\n")
 		}
@@ -333,8 +346,10 @@ func (run *lookupRun) tagsLookup() (LookupAnswer, error) {
 	var lines []string
 	for _, t := range all {
 		line := "- " + t.Name
-		if t.Color != "" {
+		if t.OwnColor {
 			line += ", " + t.Color
+		} else {
+			line += ", campaign colour"
 		}
 		if t.DmOnly {
 			line += ", Directors only"

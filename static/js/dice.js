@@ -14,6 +14,10 @@
  *
  * opts:
  *   from              an element or client { x, y } the throw starts at
+ *   host              an element (positioned) to throw inside, in place of the whole page; the
+ *                     throw stays inside it, and keep leaves the dice resting there until the next
+ *                     roll on that host or stop(host)
+ *   keep              leave the dice on the table once they rest (with host)
  *   describe(group, values)   the words read out to screen readers
  *   results           values decided by the caller, one array per group
  *   crits(group, values, index)   the game system's crit rule: 'succ', 'fail' or null per die, or
@@ -42,7 +46,10 @@
  *   Chronicle.diceTable        optional { set, colour, succ, fail, quality (a string) }: the look of
  *                     this person's own rolls on the page, set by the Table tab. An empty or missing
  *                     name means the default.
- *   Chronicle.dice.stop()
+ *   Chronicle.dice.stop(host)   clear the page's table, or the dice thrown into host
+ *   Chronicle.dice.portrait({ set, colour, value, px }) -> Promise<data URL>   a still picture of one
+ *                     d20 of that set and colour, value up, drawn by the same engine as a throw, for
+ *                     pickers. Rejects without WebGL or when the files can't load.
  *
  * The values and crits are decided here before anything is drawn, so Calm, Off and a browser
  * without WebGL resolve with the same numbers a throw would show. dice/engine.js draws the throw;
@@ -224,9 +231,10 @@
 
   // Each roll takes a number; a roll still loading when a newer one starts is never drawn.
   var seq = 0;
-  function stop() {
+  function stop(host) {
     seq++;
-    if (ENGINE) ENGINE.then(function (E) { E.stop(document.body); }, function () {});
+    var on = host && host.nodeType === 1 ? host : document.body;
+    if (ENGINE) ENGINE.then(function (E) { E.stop(on); }, function () {});
   }
 
   // Auto quality measures the device once, when the page is idle after a throw, so nobody waits for
@@ -264,7 +272,10 @@
       announce(told); call(opts.onSettle, []); call(opts.onEnd);
       return Promise.resolve(out);
     }
+    var host = opts.host && opts.host.nodeType === 1 ? opts.host : null;
     var still = !!opts.still || m === 'calm', me = ++seq, from = fromPoint(opts.from);
+    // Inside a host, the start point is in the host's own pixels.
+    if (host && from) { var hr = host.getBoundingClientRect(); from = { x: from.x - hr.left, y: from.y - hr.top }; }
     return new Promise(function (resolve) {
       var resolved = false, settled = false, ended = false, late = false;
       function resolveNow() { if (!resolved) { resolved = true; announce(told); resolve(out); } }
@@ -288,8 +299,8 @@
           if (late || me !== seq) { end(); return; }
           return E.roll({
             dice: dice, succFx: succ, failFx: fail, quality: opts.quality || { mode: DEFAULTS.quality },
-            from: from, padTop: topClear(), still: still, skippable: opts.skippable !== false,
-            onSettle: settle
+            from: from, padTop: host ? 0 : topClear(), still: still, skippable: opts.skippable !== false,
+            host: host || undefined, keep: !!(host && opts.keep), onSettle: settle
           }).then(function () { end(); measureLater(E, opts.quality); });
         });
       }).catch(function () { clearTimeout(timer); end(); });
@@ -303,11 +314,27 @@
     });
   }
 
+  // Portraits are drawn once per set, colour, number and size, and kept for the page.
+  var PORTRAITS = {};
+  function portrait(o) {
+    o = o || {};
+    var key = [o.set, o.colour, o.value, o.px].join('|');
+    if (!PORTRAITS[key]) {
+      PORTRAITS[key] = typeof document === 'undefined' || !hasGL() ? Promise.reject(new Error('no WebGL')) : engine().then(function (E) {
+        return E.portrait({ kind: E.hasSet(o.set) ? o.set : DEFAULTS.set, colour: o.colour, value: o.value, px: o.px });
+      });
+      // A failed draw is tried again next time.
+      PORTRAITS[key].catch(function () { delete PORTRAITS[key]; });
+    }
+    return PORTRAITS[key];
+  }
+
   W.Chronicle = W.Chronicle || {};
   W.Chronicle.dice = {
     roll: roll,
     stop: stop,
     catalogue: catalogue,
+    portrait: portrait,
     defaults: Object.assign({}, DEFAULTS),
     // Exposed for test/js/dice.test.mjs.
     _internal: { decide: decide, critsOf: critsOf, forceCrit: forceCrit, engineDice: engineDice, withTable: withTable }

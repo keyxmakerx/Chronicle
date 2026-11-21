@@ -72,3 +72,37 @@ test('beside: only campaign pages of this site', () => {
   ];
   for (const [href, want] of cases) assert.equal(beside(href, o), want, href);
 });
+
+test('onSite: only a plain path on this site reaches a pane', () => {
+  const { onSite } = load();
+  const cases = [
+    ['/campaigns/abc/entities/1', true],
+    ['/campaigns/abc/maps?floor=2', true],
+    ['//other.example/campaigns/abc/entities/1', false],
+    ['https://chronicle.example/campaigns/abc/maps', false],
+    ['javascript:alert(1)', false],
+    ['campaigns/abc/maps', false],
+    ['', false],
+    [null, false],
+    [{ url: '/campaigns/abc/maps' }, false],
+  ];
+  for (const [url, want] of cases) assert.equal(onSite(url), want, String(url));
+});
+
+test('samePath: rebuilds a plain path on this site, refuses the rest', () => {
+  const { samePath } = load();
+  const cases = [
+    ['/campaigns/abc/entities/1', '/campaigns/abc/entities/1'],
+    ['/campaigns/abc/maps?floor=2&x=a b', '/campaigns/abc/maps?floor=2&x=a%20b'],
+    ['/campaigns/abc/p#notes', '/campaigns/abc/p#notes'],
+    ['/campaigns/a%20b/p', '/campaigns/a%20b/p'],
+    ['/campaigns/"><img src=x>/p', '/campaigns/%22%3E%3Cimg%20src%3Dx%3E/p'],
+    ['//evil.example/x', null],
+    ['https://evil.example/x', null],
+    ['javascript:alert(1)', null],
+    ['/\\evil.example', null],
+    ['', null],
+    [null, null],
+  ];
+  for (const [url, want] of cases) assert.equal(samePath(url), want, String(url));
+});

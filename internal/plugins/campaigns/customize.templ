@@ -29,8 +29,9 @@ func customizeAreaBlurb(ctx context.Context, id string) (string, bool) {
 	return b, ok
 }
 
-// customizeOverview is Customize's front page: one card per area.
-templ customizeOverview(areas []CustomizeArea) {
+// customizeOverview is Customize's front page: one card per area. A plugin's
+// area says what is chosen now when its tab gives a summary.
+templ customizeOverview(areas []CustomizeArea, sums map[string]CustomizeSummary) {
 	<div class="czs-pad" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 		<h1 class="czs-h1">Customize</h1>
 		<p class="czs-lede">Everything about how the campaign looks and how its pages are set up, in one place. Pick what you want to change, or press <kbd>/</kbd> and type it. Changes wait in one draft until you save them.</p>
@@ -45,8 +46,12 @@ templ customizeOverview(areas []CustomizeArea) {
 						</span>
 						if b, ok := customizeAreaBlurb(ctx, a.ID); ok {
 							<p>{ b }</p>
+						} else if a.Blurb != "" {
+							<p>{ a.Blurb }</p>
+						} else if sum := sums[a.ID]; sum.Text != "" {
+							<p>{ joinParts(sum.Text, sum.Sub) }</p>
 						} else {
-							<p>Settings this campaign's { a.Label } feature adds.</p>
+							<p>The { a.Label } settings for this campaign.</p>
 						}
 					</a>
 				}
@@ -87,13 +92,14 @@ templ customizeCategoriesArea(cc *CampaignContext, state, key, tab string) {
 	</div>
 }
 
-// customizeCategoryWorkspace is one category: its header and tabs, drawn by
-// customize_categories.js, then the open tab. Settings is drawn by the same
-// script; the other tabs are editors that write into the same draft.
+// customizeCategoryWorkspace is one category's open tab. Its name and tabs
+// are the frame's one bar (customizeCatBarNav), kept in step with the draft by
+// customize_categories.js; the head here only says when the category is gone
+// from the draft. Settings is drawn by the same script; the other tabs are
+// editors that write into the same draft.
 templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, etID int) {
 	<div data-widget="customize-categories" data-state={ state } data-campaign-id={ cc.Campaign.ID }>
-		<div class="czs-ws-head" data-czs-ws-head></div>
-		<div class="czs-tabs" data-czs-ws-tabs></div>
+		<div class="czs-ws-head" data-czs-ws-head hidden></div>
 		if tab == "settings" {
 			<div class="czs-pad" data-czs-ws-settings></div>
 		}

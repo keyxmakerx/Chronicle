@@ -29,6 +29,13 @@ templ topbarToolsTab() {
 						<i class="fa-solid fa-wand-magic-sparkles tb-ico" aria-hidden="true"></i>
 					}
 				}
+				// Drawn whenever the brush may be, so a brush brought back on
+				// this page has its entry; it hides while the brush is put away.
+				if topbarMayCustomize(ctx) {
+					@topbarToolEntry("brush", "Customize", !topbarHasBrush(ctx)) {
+						<i class="fa-solid fa-paintbrush tb-ico" aria-hidden="true"></i>
+					}
+				}
 				if topbarHasTable(ctx) {
 					@topbarToolEntry("table", "The table", false) {
 						<svg class="tb-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">

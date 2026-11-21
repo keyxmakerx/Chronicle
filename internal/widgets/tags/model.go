@@ -13,12 +13,18 @@ import "time"
 // Tag represents a campaign-scoped label that can be attached to entities.
 // Tags have a unique slug within their campaign for URL-safe references.
 // DmOnly tags are only visible to Scribes and Owners — Players cannot see them.
+//
+// A tag stores its own hex, or "" to follow the campaign's Tags and marks
+// colour. Every tag the service returns has Color filled in with a real hex
+// and OwnColor saying which of the two it is; StoredColor gives back what is
+// stored.
 type Tag struct {
 	ID         int       `json:"id"`
 	CampaignID string    `json:"campaignId"`
 	Name       string    `json:"name"`
 	Slug       string    `json:"slug"`
 	Color      string    `json:"color"`
+	OwnColor   bool      `json:"ownColor"`
 	DmOnly     bool      `json:"dmOnly"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
@@ -33,7 +39,8 @@ type EntityTag struct {
 
 // --- Request DTOs (bound from HTTP requests) ---
 
-// CreateTagRequest holds the data submitted when creating a new tag.
+// CreateTagRequest holds the data submitted when creating a new tag. An
+// empty Color makes a tag that follows the campaign's colour.
 type CreateTagRequest struct {
 	Name   string `json:"name" form:"name"`
 	Color  string `json:"color" form:"color"`
@@ -47,7 +54,8 @@ type CreateTagRequest struct {
 // zero value) replaces — a rename that omits them must not clobber them,
 // e.g. silently making a DM-only tag public. Name stays a required plain
 // string: Update rejects the call with 400 when the merged name is blank,
-// so an absent name fails loudly instead of overwriting silently.
+// so an absent name fails loudly instead of overwriting silently. A Color
+// sent as "" puts the tag back to following the campaign's colour.
 type UpdateTagRequest struct {
 	Name   string  `json:"name" form:"name"`
 	Color  *string `json:"color" form:"color"`

@@ -141,24 +141,6 @@ func TestCreate_Success(t *testing.T) {
 	}
 }
 
-func TestCreate_DefaultColor(t *testing.T) {
-	repo := &mockTagRepo{
-		createFn: func(_ context.Context, tag *Tag) error {
-			tag.ID = 1
-			return nil
-		},
-	}
-	svc := newTestService(repo)
-
-	result, err := svc.Create(context.Background(), "camp-1", "Test Tag", "", false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Color != "#6b7280" {
-		t.Errorf("expected default color '#6b7280', got %q", result.Color)
-	}
-}
-
 func TestCreate_DmOnly(t *testing.T) {
 	var captured *Tag
 	repo := &mockTagRepo{
@@ -335,20 +317,6 @@ func TestUpdate_InvalidColor(t *testing.T) {
 	invalid := "invalid"
 	_, err := svc.Update(context.Background(), 1, UpdateTagInput{Name: "Name", Color: &invalid})
 	assertAppError(t, err, 400)
-}
-
-func TestUpdate_DefaultColor(t *testing.T) {
-	repo := &mockTagRepo{}
-	svc := newTestService(repo)
-
-	empty := ""
-	result, err := svc.Update(context.Background(), 1, UpdateTagInput{Name: "Name", Color: &empty})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Color != "#6b7280" {
-		t.Errorf("expected default color, got %q", result.Color)
-	}
 }
 
 // --- Delete Tests ---

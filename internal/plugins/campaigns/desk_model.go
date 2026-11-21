@@ -139,6 +139,24 @@ type DeskInputs struct {
 	// GMTerm is the campaign's own word for its game master, for the words a
 	// service builds (the template reads it from its context instead).
 	GMTerm string
+	// Look is the saved look in words, for the Customize block's Look row.
+	Look LookSummary
+	// Categories are the campaign's categories; CategoriesRead says they
+	// could be read, so an unread list is never drawn as none.
+	Categories     []CustomizeCategory
+	CategoriesRead bool
+	// Tabs are the areas other plugins add to Customize, in Customize's
+	// order, with their add-on on, each with what it says is chosen now.
+	Tabs []DeskTab
+	// BrushHidden is the viewer's own choice to hide the header's Customize
+	// brush in this campaign. It is the person's, not the campaign's.
+	BrushHidden bool
+}
+
+// DeskTab is one plugin-contributed Customize area as its row needs it.
+type DeskTab struct {
+	ID, Label string
+	Summary   CustomizeSummary
 }
 
 // Desk is the page: named rows in groups, in two columns.
@@ -188,6 +206,12 @@ type DeskValue struct {
 	State string
 	// Swatch draws the campaign's colour as a dot before the value.
 	Swatch bool
+	// SubSwatch draws the campaign's colour as a dot at the start of the
+	// muted part, the colour's name standing beside it.
+	SubSwatch bool
+	// Joined puts a middle dot between the figure and its muted part, which
+	// then reads as more of the same answer ("8 · 1 hidden from players").
+	Joined bool
 	// Danger draws the word in the state red: only Delete.
 	Danger bool
 	// Blank is set for a value that is changed where it stands.

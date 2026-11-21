@@ -17,6 +17,62 @@ type ViewPrefs struct {
 	Motion   string `json:"motion"`   // owner | calm | off
 	TextSize string `json:"textSize"` // standard | larger | largest
 	Contrast string `json:"contrast"` // standard | high
+	// BrushHidden lists the campaigns where this person put the header's
+	// Customize brush away. The choice is per campaign: hiding it in one
+	// leaves it shown in the rest. Newest last; never nil.
+	BrushHidden []string `json:"brushHidden"`
+}
+
+// maxBrushHidden bounds the list so a stored row cannot grow without limit;
+// past it the oldest choice is forgotten (that campaign shows the brush again).
+const maxBrushHidden = 200
+
+// HidesBrushIn reports whether the brush is put away in this campaign.
+func (p ViewPrefs) HidesBrushIn(campaignID string) bool {
+	for _, id := range p.BrushHidden {
+		if id == campaignID {
+			return true
+		}
+	}
+	return false
+}
+
+// validBrushCampaignID accepts the shape of a campaign id (a UUID), so only
+// vetted text is ever stored or echoed back.
+func validBrushCampaignID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, r := range id {
+		ok := r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '-' || r == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// WithBrushHidden returns the prefs with the brush put away in (hidden) or
+// brought back in (!hidden) one campaign, leaving every other campaign as it
+// was.
+func (p ViewPrefs) WithBrushHidden(campaignID string, hidden bool) (ViewPrefs, error) {
+	if !validBrushCampaignID(campaignID) {
+		return p, apperror.NewBadRequest("invalid campaign")
+	}
+	next := make([]string, 0, len(p.BrushHidden)+1)
+	for _, id := range p.BrushHidden {
+		if id != campaignID {
+			next = append(next, id)
+		}
+	}
+	if hidden {
+		next = append(next, campaignID)
+		if len(next) > maxBrushHidden {
+			next = next[len(next)-maxBrushHidden:]
+		}
+	}
+	p.BrushHidden = next
+	return p, nil
 }
 
 // Allowed values per choice. The default is first so an empty or cleared
@@ -32,13 +88,13 @@ var (
 
 // DefaultViewPrefs is the look a person gets before choosing anything.
 func DefaultViewPrefs() ViewPrefs {
-	return ViewPrefs{Theme: viewThemes[0], Motion: viewMotions[0], TextSize: viewTextSizes[0], Contrast: viewContrasts[0]}
+	return ViewPrefs{Theme: viewThemes[0], Motion: viewMotions[0], TextSize: viewTextSizes[0], Contrast: viewContrasts[0], BrushHidden: []string{}}
 }
 
 // UpdateViewPrefsInput is a PARTIAL update: each choice saves on its own as
 // the person taps it, so an absent key preserves the stored choice, an
 // explicit null or "" resets that one choice to its default, and a value
-// replaces it. Echoing the other three back would race a second device.
+// replaces it. Echoing the others back would race a second device.
 type UpdateViewPrefsInput struct {
 	Theme    patch.Field[string] `json:"theme"`
 	Motion   patch.Field[string] `json:"motion"`
@@ -94,9 +150,14 @@ func ParseViewPrefs(raw []byte) ViewPrefs {
 	if len(raw) == 0 {
 		return out
 	}
-	var stored map[string]string
+	var stored map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &stored); err != nil {
 		return out
+	}
+	str := func(key string) string {
+		var v string
+		_ = json.Unmarshal(stored[key], &v)
+		return v
 	}
 	pick := func(v string, allowed []string, def string) string {
 		for _, a := range allowed {
@@ -106,9 +167,24 @@ func ParseViewPrefs(raw []byte) ViewPrefs {
 		}
 		return def
 	}
-	out.Theme = pick(stored["theme"], viewThemes, out.Theme)
-	out.Motion = pick(stored["motion"], viewMotions, out.Motion)
-	out.TextSize = pick(stored["textSize"], viewTextSizes, out.TextSize)
-	out.Contrast = pick(stored["contrast"], viewContrasts, out.Contrast)
+	out.Theme = pick(str("theme"), viewThemes, out.Theme)
+	out.Motion = pick(str("motion"), viewMotions, out.Motion)
+	out.TextSize = pick(str("textSize"), viewTextSizes, out.TextSize)
+	out.Contrast = pick(str("contrast"), viewContrasts, out.Contrast)
+	// Rows from before the brush choice was per campaign carry "brush":
+	// "hidden" for the whole account. It is not read: the brush is shown
+	// again everywhere and the person hides it where they want it gone.
+	var hidden []string
+	_ = json.Unmarshal(stored["brushHidden"], &hidden)
+	seen := map[string]bool{}
+	for _, id := range hidden {
+		if validBrushCampaignID(id) && !seen[id] {
+			seen[id] = true
+			out.BrushHidden = append(out.BrushHidden, id)
+		}
+	}
+	if len(out.BrushHidden) > maxBrushHidden {
+		out.BrushHidden = out.BrushHidden[len(out.BrushHidden)-maxBrushHidden:]
+	}
 	return out
 }

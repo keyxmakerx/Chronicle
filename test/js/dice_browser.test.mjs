@@ -197,3 +197,43 @@ for (const motion of ['calm', 'off']) {
     }
   });
 }
+
+test('a throw into a host lands inside it and, with keep, rests there until stop(host)', { skip }, async (t) => {
+  const p = await page(t, null);
+  const out = await p.evaluate(async () => {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:relative;width:300px;height:240px';
+    document.body.appendChild(host);
+    const res = await Chronicle.dice.roll([{ label: 'd20', dice: [{ sides: 20 }] }], { results: [[13]], host, keep: true, skippable: false });
+    await new Promise((r) => setTimeout(r, 4000));
+    const inHost = !!host.querySelector('canvas.chronicle-dice'), overPage = !!document.querySelector('body > canvas.chronicle-dice');
+    Chronicle.dice.stop(host);
+    await new Promise((r) => setTimeout(r, 200));
+    return { res, inHost, overPage, after: !!host.querySelector('canvas.chronicle-dice') };
+  });
+  assert.deepEqual(out.res, [{ label: 'd20', values: [13], crits: [null] }]);
+  assert.equal(out.inHost, true, 'the die rests in the host after the throw');
+  assert.equal(out.overPage, false, 'nothing is drawn over the page');
+  assert.equal(out.after, false, 'stop(host) clears it');
+});
+
+test('a portrait is a still picture of the set\'s own die, drawn on one kept table', { skip, timeout: 120000 }, async (t) => {
+  const p = await page(t, null);
+  const out = await p.evaluate(async () => {
+    // The page's stub loads dice.js on its first roll or catalogue; a picker always asks for the catalogue first.
+    await Chronicle.dice.catalogue();
+    const a = await Chronicle.dice.portrait({ set: 'jewelled', colour: 'onyx', px: 72 });
+    const b = await Chronicle.dice.portrait({ set: 'oak', colour: '', value: 7, px: 72 });
+    const again = await Chronicle.dice.portrait({ set: 'jewelled', colour: 'onyx', px: 72 });
+    const size = await new Promise((r) => { const i = new Image(); i.onload = () => r([i.width, i.height]); i.src = a; });
+    // How much of the picture is the die (not see-through), from its alpha.
+    const cover = await new Promise((r) => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = i.width; c.height = i.height; const g = c.getContext('2d'); g.drawImage(i, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let k = 3; k < d.length; k += 4) if (d[k] > 128) n++; r(n / (d.length / 4)); }; i.src = a; });
+    return { png: /^data:image\/png/.test(a), differ: a !== b, cached: a === again, size, cover, tables: document.querySelectorAll('canvas.chronicle-dice').length };
+  });
+  assert.equal(out.png, true);
+  assert.equal(out.differ, true, 'two sets give two pictures');
+  assert.equal(out.cached, true, 'the same die is drawn once');
+  assert.deepEqual(out.size, [72, 72]);
+  assert.ok(out.cover > 0.3 && out.cover < 0.95, `the die fills the picture without spilling off it (${out.cover})`);
+  assert.equal(out.tables, 1, 'one hidden table draws every portrait');
+});

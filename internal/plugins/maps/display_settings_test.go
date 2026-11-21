@@ -497,3 +497,12 @@ func TestMapPartyWho(t *testing.T) {
 		})
 	}
 }
+
+// The Maps row of Campaign settings names the frame the way the gallery does.
+func TestFrameSummary(t *testing.T) {
+	for id, want := range map[string]string{"atlas": "Atlas frame", "gilded": "Gilded frame", "nope": "Atlas frame", "": "Atlas frame"} {
+		if got := frameSummary(id); got != want {
+			t.Errorf("frameSummary(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

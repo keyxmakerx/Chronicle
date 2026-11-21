@@ -3,11 +3,13 @@
 ## Purpose
 Drag-and-drop layout editor used for campaign dashboards, owner dashboards,
 and category dashboards (`data-context="dashboard"`), and for a category's
-page layout (`data-context="template"`). Mounted directly via
-`data-widget="layout-editor"` by Customize's Home pages
-(`customize.templ`), its category workspace
-(`entity_type_customize_tab.templ`) and `entity_type_config.templ`. The new
-Customizer's page layout replaces it (#1362).
+page layout (`data-context="template"`). The Customizer's page layout
+(`customize_page_editor.js`) has replaced it everywhere linked. It is still
+mounted by `EntityTypeCustomizeFragmentTmpl` (`entity_type_config.templ`),
+which only the owner's unlinked `GET /campaigns/:id/entity-types/:etid/customize`
+draws. `EntityTypeConfigPage` in the same file is never rendered: the
+`/entity-types/:etid/config` route redirects to the category's Customize
+workspace.
 
 ## Mount
 ```html
@@ -18,7 +20,6 @@ Customizer's page layout replaces it (#1362).
      data-context="dashboard"
      data-features="roles"
      data-layout='{"rows":[...]}'
-     data-block-types='[...]'
      data-fields='[...]'>
 </div>
 ```
@@ -33,7 +34,6 @@ Customizer's page layout replaces it (#1362).
 | `data-scope` | No | `"category"` on a category dashboard: the palette is fetched with `context=category` (every dashboard block plus blocks listing `category`) |
 | `data-features` | No | Comma-separated feature flags (see below) |
 | `data-layout` | No | Initial layout JSON; if absent, fetched via GET from endpoint |
-| `data-block-types` | No | Override palette block types JSON array |
 | `data-fields` | No | Entity type field definitions for preview mockups |
 | `data-role` | No | Role for dashboard layouts (default/player/scribe) |
 

@@ -13,8 +13,8 @@ type lookPreset struct {
 
 	NavStyle, NavStrength string
 
-	// Accent, S1 and S2 are the chrome accent and the two surface colours;
-	// an empty S1 or S2 follows the accent.
+	// Accent, S1 and S2 are the menus and links, headers and events, and tags
+	// and marks colours; an empty S1 or S2 follows the accent.
 	Accent, S1, S2           string
 	Sidebar, Page, Contrast  string
 	Body, Heading, Scale     string

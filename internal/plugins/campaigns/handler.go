@@ -179,6 +179,11 @@ type Handler struct {
 	sheetChecker           SheetChecker
 	// testMailer sends Customize's "Send me a test" email; nil refuses it.
 	testMailer TestMailer
+	// brushPrefs and pageCategory serve the header's Customize brush
+	// (customize_brush.go); either nil leaves the brush shown and without a
+	// page's own row.
+	brushPrefs   BrushPrefs
+	pageCategory PageCategoryLookup
 }
 
 // NewHandler creates a new campaign handler.
