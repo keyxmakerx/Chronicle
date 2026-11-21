@@ -32,47 +32,52 @@ const PLAN = () => ({ systemName: 'Draw Steel', steps: [
     rules: { limited: true, suggested: { id: 4, entryName: 'Nomad', message: 'Try the coast' } } },
 ] });
 
-const html = (term) => `<!doctype html><html data-gm-term="${term}"><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style></head><body>
+const css = () => readFileSync(join(root, 'internal/plugins/entities/static/css/hero_creator.css'));
+const html = (term) => `<!doctype html><html data-gm-term="${term}"><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style><link rel="stylesheet" href="/hero_creator.css"></head><body>
 <div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true"><p class="hc-loading__text">Opening</p></div>
 <script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => document.documentElement.getAttribute('data-gm-term') || 'GM' };</script>
 <script src="/hero_rules_lines.js"></script><script src="/hero_creator.js"></script></body></html>`;
 
-async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term = 'Director' } = {}) {
+async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term = 'Director', width = 1100 } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
-  const pg = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+  const pg = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
   const seen = { post: [] };
   await pg.route('http://t.test/**', (route) => {
     const req = route.request(), p = new URL(req.url()).pathname;
     const ok = (b, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(b) });
     if (p === '/hero_creator.js') return route.fulfill({ contentType: 'text/javascript', body: js('hero_creator.js') });
+    if (p === '/hero_creator.css') return route.fulfill({ contentType: 'text/css', body: css() });
     if (p === '/hero_rules_lines.js') return route.fulfill({ contentType: 'text/javascript', body: js('hero_rules_lines.js') });
     if (p === C + '/characters/new/plan') return ok(PLAN());
     if (p === C + '/characters/new' && req.method() === 'POST') { seen.post.push(JSON.parse(req.postData())); return ok(created, 201); }
     return route.fulfill({ contentType: 'text/html', body: html(term) });
   });
   await pg.goto('http://t.test/');
-  await pg.waitForSelector('.hc-page');
+  await pg.waitForSelector('.hc-app');
   return { pg, seen };
 }
 const text = (pg, sel) => pg.locator(sel).first().innerText();
-const next = (pg) => pg.click('[data-act="next"]');
+const gcard = (pg, name) => pg.locator('.hc-gcard', { hasText: name });
+const rail = (pg, key) => pg.locator('.hc-rail .hc-row[data-k="' + key + '"]');
+const pick = async (pg, name) => { await gcard(pg, name).click(); await pg.click('.hc-right [data-act="choose"]'); };
 
 test('a required step with one entry is filled in and locked', { skip }, async (t) => {
   const { pg } = await open(t);
-  assert.match(await text(pg, '.hc-head'), /Everyone starts with this/);
-  assert.match(await text(pg, '.hc-row'), /Everyone starts with this/);
-  assert.match(await text(pg, '.hc-chosen'), /Human.*everyone starts with this/);
-  await pg.click('.hc-row');
-  assert.equal(await pg.locator('[data-act="choose"]').isDisabled(), true);
+  assert.equal(await pg.locator('.hc-app').getAttribute('data-step'), '1', 'the page opens on the first step with something to choose');
+  assert.match(await rail(pg, 'ancestry').innerText(), /Human/);
+  await rail(pg, 'ancestry').click();
+  assert.match(await text(pg, '.hc-intro'), /Everyone starts with this/);
+  assert.match(await text(pg, '.hc-gcard'), /Everyone starts with this/);
+  assert.match(await text(pg, '.hc-right [data-act="choose"]'), /Human, everyone starts with this/);
+  assert.equal(await pg.locator('.hc-right [data-act="choose"]').isDisabled(), true);
   assert.equal(await pg.locator('.hc-note').count(), 0, 'no short-list note for a locked step');
 });
 
 test('not here folds open names and reasons at the list foot', { skip }, async (t) => {
   const { pg } = await open(t);
-  await next(pg);
-  assert.equal(await pg.locator('.hc-row').count(), 2, 'not-here entries are not listed');
+  assert.equal(await pg.locator('.hc-gcard[data-i]').count(), 2, 'not-here entries are not listed');
   const foot = pg.locator('.hc-nh .hc-link');
   assert.equal((await foot.innerText()).trim(), '3 not here');
   assert.equal(await pg.locator('.hc-nh-list').count(), 0);
@@ -86,34 +91,47 @@ test('not here folds open names and reasons at the list foot', { skip }, async (
 
 test('the campaign\'s own word for its game master is used', { skip }, async (t) => {
   const { pg } = await open(t, { term: 'DM' });
-  await next(pg);
   await pg.click('.hc-nh .hc-link');
   assert.match(await text(pg, '.hc-nh-list'), /Your DM says: “Not in this story”/);
-  await pg.locator('.hc-row', { hasText: 'Tactician' }).click();
-  await pg.click('[data-act="choose"]');
+  await pick(pg, 'Tactician');
+  assert.match(await rail(pg, 'class').innerText(), /waiting for your DM/);
+  await rail(pg, 'class').click();
   assert.match(await text(pg, '.hc-notes'), /Tactician is waiting for your DM/);
-  assert.doesNotMatch(await pg.locator('.hc-page').innerText(), /Director/);
+  assert.doesNotMatch(await pg.locator('.hc-app').innerText(), /Director/);
 });
 
 test('an Ask first pick is marked, waits for the Director and is sent with the hero', { skip }, async (t) => {
   const { pg, seen } = await open(t);
-  await next(pg);
-  assert.match(await text(pg, '.hc-row:nth-of-type(1)'), /Fury/);
-  assert.match(await pg.locator('.hc-row', { hasText: 'Tactician' }).innerText(), /Ask first/);
-  await pg.locator('.hc-row', { hasText: 'Tactician' }).click();
-  assert.match(await text(pg, '[data-act="choose"]'), /^Ask for Tactician/);
-  await pg.click('[data-act="choose"]');
+  assert.match(await text(pg, '.hc-gcard'), /Fury/);
+  assert.match(await gcard(pg, 'Tactician').innerText(), /Ask first/);
+  await gcard(pg, 'Tactician').click();
+  assert.match(await text(pg, '.hc-right [data-act="choose"]'), /^Ask for Tactician/);
+  await pg.click('.hc-right [data-act="choose"]');
+  assert.match(await rail(pg, 'class').innerText(), /Tactician.*waiting for your Director/);
+  await rail(pg, 'class').click();
   assert.match(await text(pg, '.hc-notes'), /Tactician is waiting for your Director/);
-  assert.match(await text(pg, '.hc-chosen'), /Tactician.*waiting for your Director/);
-  await next(pg);
+  await rail(pg, 'kit').click();
   assert.match(await text(pg, '.hc-notes'), /Your Director has set a short list for this/);
-  await next(pg);
+  await pick(pg, 'Arcane Archer');
   assert.match(await text(pg, '.hc-notes'), /asked for another culture instead of Nomad: “Try the coast”/);
-  await next(pg);
+  await pick(pg, 'Academic');
   assert.match(await text(pg, '.hc-sum'), /Tactician\s*waiting for your Director/);
   await pg.fill('[data-name]', 'Tess');
   await pg.click('[data-act="create"]');
   await pg.waitForTimeout(100);
   assert.deepEqual(seen.post[0].picks.class, { name: 'Tactician', options: [] });
   assert.deepEqual(seen.post[0].picks.ancestry, { name: 'Human', options: [] }, 'the locked step is sent');
+  assert.deepEqual(seen.post[0].picks.kit, { name: 'Arcane Archer', options: [] });
+});
+
+test('a pick made on a phone goes into the chip row and on to the next step', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390 });
+  assert.equal(await pg.locator('.hc-app').getAttribute('data-view'), 'phone');
+  assert.match(await text(pg, '.hc-sbtn'), /Step 2 of 5\s*·\s*Class/, 'the locked first step is not a place to start');
+  await pg.locator('.hc-card', { hasText: 'Fury' }).click();
+  await pg.click('.hc-sfoot [data-act="choose"]');
+  await pg.waitForFunction(() => /Step 3 of 5/.test(document.querySelector('.hc-sbtn').innerText));
+  const chips = await pg.locator('.hc-chip').allInnerTexts();
+  assert.ok(chips.some((c) => /class\s*fury/i.test(c)), 'the pick is a chip');
+  assert.ok(chips.some((c) => /kit\s*choosing/i.test(c)), 'the step being chosen is the open slot');
 });
