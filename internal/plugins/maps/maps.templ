@@ -321,13 +321,50 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-hexpanel { top: 58px; left: 58px; width: 260px; max-height: calc(100% - 80px); overflow: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; color: var(--color-text-primary); animation: mp-hx-panel 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
 		.mp-hexpanel > * { flex-shrink: 0; }
 		.mp-hexpanel .mp-hx-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; padding: 10px 0 2px; position: sticky; top: 0; background: var(--mp-float); }
-		.mp-hexpanel .mp-hx-x { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
-		.mp-hexpanel .mp-hx-x:hover { background: var(--color-bg-tertiary); }
+		/* Controls in the panel answer on press with an inner shadow and a colour,
+		   never a move, so Calm and Off see the same answer. Keyboard focus is the
+		   map's accent ring. */
+		.mp-hexpanel .mp-hx-x { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); transition: background-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
+		.mp-hexpanel .mp-hx-x:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-x:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.22); }
 		.mp-hexpanel p { margin: 0; color: var(--color-text-secondary); }
 		.mp-hexpanel .mp-hx-pal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-		.mp-hexpanel .mp-hx-pal button { border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card-bg); padding: 5px 3px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-pal button { border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card-bg); padding: 5px 3px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--color-text-primary); transition: background-color var(--dur-micro, 120ms), border-color var(--dur-micro, 120ms), box-shadow var(--dur-micro, 120ms); }
+		.mp-hexpanel .mp-hx-pal button:hover { background: var(--color-bg-tertiary); }
 		.mp-hexpanel .mp-hx-pal button[aria-pressed="true"] { border-color: var(--mp-accent); box-shadow: 0 0 0 2px var(--mp-accent-soft); }
 		.mp-hexpanel .mp-hx-pal svg { display: block; overflow: visible; }
+		.mp-hexpanel .mp-hx-ur { margin-left: auto; display: flex; gap: 2px; margin-right: 4px; }
+		.mp-hexpanel .mp-hx-ib { border: 0; background: none; width: 30px; height: 30px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary); font-size: 14px; transition: background-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
+		.mp-hexpanel .mp-hx-ib:hover:not(:disabled) { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-ib[aria-pressed="true"] { background: var(--mp-accent-soft); color: var(--mp-accent); }
+		.mp-hexpanel .mp-hx-ib[aria-pressed="true"]:hover:not(:disabled) { background: var(--mp-accent-soft); color: var(--mp-accent); }
+		.mp-hexpanel .mp-hx-ib:active:not(:disabled) { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.22); }
+		.mp-hexpanel .mp-hx-ib:disabled { opacity: 0.35; cursor: default; }
+		.mp-hexpanel .mp-hx-sz svg { fill: currentColor; }
+		.mp-hexpanel .mp-hx-tools { display: flex; align-items: center; gap: 2px; }
+		.mp-hexpanel .mp-hx-sep { width: 1px; height: 18px; background: var(--color-border); margin: 0 7px; }
+		.mp-hexpanel .mp-hx-tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--color-border); margin-top: 2px; }
+		.mp-hexpanel .mp-hx-tabs button { border: 0; background: none; padding: 5px 0 7px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color var(--dur-micro, 120ms), border-color var(--dur-micro, 120ms); }
+		.mp-hexpanel .mp-hx-tabs button:hover { color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-tabs button[aria-selected="true"] { color: var(--color-text-primary); border-bottom-color: var(--mp-accent); }
+		.mp-hexpanel .mp-hx-tabs button:active { border-bottom-color: var(--mp-accent-soft); }
+		.mp-hexpanel .mp-hx-tabs button:disabled { opacity: 0.45; cursor: default; }
+		.mp-hexpanel .mp-hx-drawer { display: flex; flex-direction: column; gap: 9px; }
+		.mp-hexpanel .mp-hx-drawer > * { flex-shrink: 0; }
+		.mp-hexpanel .mp-hx-now { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+		.mp-hexpanel .mp-hx-now b { font-size: 13.5px; font-weight: 600; }
+		.mp-hexpanel .mp-hx-dim { font-size: 11.5px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pal5 { grid-template-columns: repeat(5, 1fr); gap: 3px 2px; }
+		.mp-hexpanel .mp-hx-pal5 button { border-color: transparent; background: none; padding: 5px 0 4px; border-radius: 8px; }
+		.mp-hexpanel .mp-hx-pal5 button:hover { background: var(--color-bg-tertiary); }
+		.mp-hexpanel .mp-hx-pal5 button[aria-pressed="true"] { background: var(--mp-accent-soft); border-color: var(--mp-accent); box-shadow: none; }
+		.mp-hexpanel .mp-hx-pal5 button:focus-visible { outline-offset: -2px; }
+		.mp-hexpanel .mp-hx-stamps button { font-size: 10.5px; line-height: 1.2; text-align: center; padding: 3px 2px 5px; gap: 1px; }
+		.mp-hexpanel .mp-hx-pal button:active:not(:disabled) { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.22); }
+		.mp-hexpanel .mp-hx-pal button:disabled { opacity: 0.45; cursor: default; }
+		.mp-hexpanel .mp-hx-chk { display: flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+		.mp-hexpanel .mp-hx-chk input { accent-color: var(--mp-accent); margin: 0; }
+		.mp-hexpanel .mp-hx-chk input:disabled { opacity: 0.45; cursor: default; }
 		.mp-hexpanel .mp-hx-pal i { width: 22px; height: 13px; border-radius: 3px; display: block; background: repeating-linear-gradient(45deg, #ccc 0 3px, #fff 3px 6px); }
 		/* The Art chips and the piece picker in Paint. Folders are dashed so they
 		   read as something to open rather than a piece to paint with. */
@@ -363,6 +400,15 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		@keyframes mp-hx-out { to { opacity: 0; transform: scale(0.8); } }
 		@media (max-width: 760px) {
 			.mp-hexpanel { left: 12px; right: 12px; width: auto; top: auto; bottom: 64px; max-height: 46%; }
+			/* Touch gets 44 tall. Seven tool buttons at 34 wide still fit the
+			   272px a 320px phone leaves; the row wraps rather than squeeze. */
+			.mp-hexpanel .mp-hx-ib, .mp-hexpanel .mp-hx-x { width: 34px; height: 44px; }
+			.mp-hexpanel .mp-hx-tools { flex-wrap: wrap; }
+			.mp-hexpanel .mp-hx-sep { margin: 0 4px; }
+			.mp-hexpanel .mp-hx-pal5 button { min-height: 44px; }
+			.mp-hexpanel .mp-hx-tabs button { min-height: 44px; padding-top: 0; padding-bottom: 0; }
+			.mp-hexpanel .mp-hx-chk { min-height: 44px; }
+			.mp-hexpanel .mp-hx-chk input { width: 20px; height: 20px; }
 		}
 
 		/* The Measure tool (static/js/map_measure.js): its panel beside the rail,
