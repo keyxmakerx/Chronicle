@@ -52,7 +52,7 @@ func (h *Handler) AllGameNightsAPI(c *echo.Context) error {
 	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
 	viewerTZ := h.storedTZ(c.Request().Context(), userID)
 	return c.JSON(http.StatusOK, allNightsGroups(cc.Campaign.ID, groupSessions(list, today), today, viewerTZ,
-		func(s *Session) string { return h.noRealDateWhen(c.Request().Context(), s) }))
+		h.noRealDateWhenFn(c.Request().Context(), cc.Campaign.ID)))
 }
 
 // allNightsGroups shapes the grouped sessions for the calendar. Only planned

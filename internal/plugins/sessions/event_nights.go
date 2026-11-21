@@ -282,6 +282,18 @@ func (h *Handler) DismissEventAPI(c *echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// RestoreEventAPI is the Undo of "Not this one": the event is offered on the
+// strip again. It never reads the calendar: an event that was deleted has no
+// dismissal left to remove, and removing nothing is still a success.
+// DELETE /campaigns/:id/sessions/event-dismissals/:eid
+func (h *Handler) RestoreEventAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if err := h.svc.RestoreEvent(c.Request().Context(), cc.Campaign.ID, c.Param("eid")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // madeNightBody is the reply to making a night from an event. scheduledDate
 // is empty for a story calendar's night, so the calendar can say "no real
 // date yet" only when that is true.

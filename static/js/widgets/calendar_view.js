@@ -1670,7 +1670,8 @@
       this.fvEl = $('#cal5-fv', this.el);
     },
 
-    // action, optional: {label, run} adds a button to the toast (Undo).
+    // action, optional: {label, run, ms} adds a button to the toast (Undo);
+    // ms is how long it stays, 8 seconds when not given.
     say: function (msg, action) {
       this._announce(msg);
       this._toast(msg, action);
@@ -2041,7 +2042,7 @@
       el.querySelector('span').setAttribute('aria-hidden', 'true');
       el.classList.add('on');
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
+      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? (action.ms || 8000) : 3200);
     },
 
     // --------------------------------------------------------------
@@ -2446,19 +2447,38 @@
     // it holds for everyone and on every device. At most three show at once so
     // the strip never pushes the nights away.
     //
-    // _gnSkip drops the row at once and tells the server; when that fails the
-    // row comes back and the owner is told, so a press is never silently lost.
-    // Resolves true when the server has it.
+    // _gnSkip drops the row at once and tells the server; a refusal brings it
+    // back and says so. The hiding is for everyone with no other way back, so
+    // the toast offers Undo for three seconds. Resolves true when stored.
     _gnSkip: function (id) {
       var self = this, kept = this._gnCands || [];
+      var at = kept.findIndex(function (r) { return r.eventId === id; });
+      var row = at < 0 ? null : kept[at];
+      var url = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-dismissals/' + encodeURIComponent(id);
       this._gnCands = kept.filter(function (r) { return r.eventId !== id; });
-      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/event-dismissals/' + encodeURIComponent(id), { method: 'PUT' })
+      return Chronicle.apiFetch(url, { method: 'PUT' })
         .then(function (r) { if (!r.ok) throw new Error('dismiss ' + r.status); return true; })
-        .catch(function () {
+        .then(function () {
+          self.say('Hidden for everyone.', { label: 'Undo', ms: 3000, run: function () { self._gnUnskip(url, row, at); } });
+          return true;
+        }, function () {
           self._gnCands = kept;
           self.say('Could not hide that one. Try again.');
           return false;
         });
+    },
+    _gnUnskip: function (url, row, at) {
+      var self = this;
+      Chronicle.apiFetch(url, { method: 'DELETE' })
+        .then(function (r) { if (!r.ok) throw new Error('restore ' + r.status); })
+        .then(function () {
+          var cands = self._gnCands = self._gnCands || [];
+          if (row && !cands.some(function (r) { return r.eventId === row.eventId; })) cands.splice(at, 0, row);
+          var pop = $('#cal5-gnpop', self.el);
+          if (pop && !pop.hidden) pop.innerHTML = self._gnListHTML(self._gnNext || []);
+          self._announce('Back on the list.');
+        })
+        .catch(function () { self.say('That couldn’t be undone. Try again.'); });
     },
     _gnLoadCands: function () {
       if (this.role < 2) return Promise.resolve([]);

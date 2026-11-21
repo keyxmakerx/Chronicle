@@ -4478,7 +4478,7 @@ func (a *App) RegisterRoutes() {
 	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
 		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
 	sessionsHandler.SetSightingService(sightingService)
-	// The Last seen block's and the session edit dialog's scripts load on
+	// The Last seen block's, the session edit dialog's and the night's Real date card's scripts load on
 	// sight (ADR-063); the block itself is
 	// registered with the other page blocks below.
 	a.registerPlugin(PluginRegistration{
@@ -4487,6 +4487,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
 			{Name: "session-edit", Scripts: []string{"js/session_edit.js"}},
+			{Name: "night-date", Scripts: []string{"js/night_date.js"}},
 		},
 	})
 	// Game-night links open the real-world calendar; with the calendar plugin

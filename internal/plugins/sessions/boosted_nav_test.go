@@ -38,3 +38,33 @@ func TestSessionPageHasNoScriptInsideTheSwappedRegion(t *testing.T) {
 		t.Error("the stored status is not selected in the markup")
 	}
 }
+
+// TestNightDateCardIsAWidgetMount pins that the Real date card on a date-less
+// night's page is a night-date mount with no inline handler and no script
+// inside the swapped region, so it works after a boosted navigation.
+func TestNightDateCardIsAWidgetMount(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp1", Name: "Test Campaign"}}
+	s := &Session{ID: "s1", CampaignID: "camp1", Name: "Night one", Status: "planned"}
+	note := NightDateNote{NoRealDate: true, Words: NoRealDateWords}
+	var sb strings.Builder
+	if err := SessionDetailPage(cc, s, "tok", true, true, "u1", RecapView{}, "UTC", note).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	page := sb.String()
+	at := strings.Index(page, `data-testid="set-real-date"`)
+	if at < 0 {
+		t.Fatal("no Real date card on a date-less night's page for a Scribe")
+	}
+	card := page[at:]
+	if end := strings.Index(card, "Set the date"); end >= 0 {
+		card = card[:end]
+	}
+	for _, want := range []string{`data-widget="night-date"`, `id="night-real-date"`, `id="night-real-date-btn"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if strings.Contains(card, "onclick") || strings.Contains(card, "<script") {
+		t.Error("the Real date card has an inline handler or script tag")
+	}
+}

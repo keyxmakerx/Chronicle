@@ -30,6 +30,8 @@ type SessionRepository interface {
 	ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error)
 	// DismissEvent records "Not this one" for an event. Idempotent.
 	DismissEvent(ctx context.Context, campaignID, eventID, userID string) error
+	// RestoreEvent undoes "Not this one". Idempotent, scoped to the campaign.
+	RestoreEvent(ctx context.Context, campaignID, eventID string) error
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	// ListPlannedByWorldDateRange returns planned sessions whose in-world
 	// date (calendar_year/month/day) lies in [from, to] inclusive, soonest
@@ -222,6 +224,9 @@ func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Se
 		var me *mysql.MySQLError
 		if errors.As(err, &me) && me.Number == 1062 && strings.Contains(me.Message, "uq_sessions_calendar_event") {
 			return apperror.NewConflict("this event already has a game night")
+		}
+		if isMissingEventLink(err, "fk_sessions_calendar_event") {
+			return apperror.NewNotFound("that event is no longer on the calendar")
 		}
 		return fmt.Errorf("inserting session: %w", err)
 	}

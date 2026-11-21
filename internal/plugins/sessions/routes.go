@@ -79,6 +79,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.POST("/sessions/from-event", h.MakeNightFromEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	// "Not this one": hides an event from that strip for the whole campaign.
 	cg.PUT("/sessions/event-dismissals/:eid", h.DismissEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/sessions/event-dismissals/:eid", h.RestoreEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	// A night's recap and visible linked pages, for its page in the calendar.
 	cg.GET("/sessions/:sid/page", h.NightPageAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Who the party saw on which night. Any member may read a page's

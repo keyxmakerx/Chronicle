@@ -15,10 +15,17 @@ func (f fakeEventSource) SessionEvents(context.Context, string, int) ([]SessionE
 	return f.events, nil
 }
 
-type fakeWorder struct{ words string }
+// fakeWorder counts how many times the calendars were "read".
+type fakeWorder struct {
+	words string
+	reads *int
+}
 
-func (f fakeWorder) WorldDateWords(_ context.Context, _, _ string, y, m, d int) string {
-	return f.words
+func (f fakeWorder) WorldDateWordsFor(context.Context, string) func(string, int, int, int) string {
+	if f.reads != nil {
+		*f.reads++
+	}
+	return func(string, int, int, int) string { return f.words }
 }
 
 func eventCtx(method, target string, role campaigns.Role, params ...string) (*echo.Context, *httptest.ResponseRecorder) {

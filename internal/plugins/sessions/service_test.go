@@ -25,6 +25,7 @@ type mockSessionRepo struct {
 	listLinkedEventIDsFn       func(ctx context.Context, campaignID string) ([]string, error)
 	listDismissedEventIDsFn    func(ctx context.Context, campaignID string) ([]string, error)
 	dismissEventFn             func(ctx context.Context, campaignID, eventID, userID string) error
+	restoreEventFn             func(ctx context.Context, campaignID, eventID string) error
 	listPlannedByWorldDateFn   func(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error)
 	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	listUnstampedCampaignsFn   func(ctx context.Context) ([]string, error)
@@ -298,6 +299,13 @@ func (m *mockSessionRepo) ListDismissedEventIDs(ctx context.Context, campaignID 
 func (m *mockSessionRepo) DismissEvent(ctx context.Context, campaignID, eventID, userID string) error {
 	if m.dismissEventFn != nil {
 		return m.dismissEventFn(ctx, campaignID, eventID, userID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) RestoreEvent(ctx context.Context, campaignID, eventID string) error {
+	if m.restoreEventFn != nil {
+		return m.restoreEventFn(ctx, campaignID, eventID)
 	}
 	return nil
 }

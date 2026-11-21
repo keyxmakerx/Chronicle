@@ -70,11 +70,50 @@ func TestNightPageSaysNoRealDate(t *testing.T) {
 			if has := strings.Contains(out, `id="night-real-date"`); has != tt.wantInput {
 				t.Errorf("date box present = %v, want %v", has, tt.wantInput)
 			}
-			if tt.wantInput && !strings.Contains(out, "scheduled_date:i.value") {
-				t.Error("the Set the date button does not send scheduled_date")
+			// The card is a widget mount, so it works after a boosted swap
+			// without an inline handler or a script tag.
+			if has := strings.Contains(out, `data-widget="night-date"`); has != tt.wantInput {
+				t.Errorf("night-date mount present = %v, want %v", has, tt.wantInput)
 			}
-			if tt.wantInput && !strings.Contains(out, `onclick="`) {
-				t.Error("the date handler must be an inline onclick, not a script helper")
+			if tt.wantInput && !strings.Contains(out, `data-url="/campaigns/camp-1/sessions/s1"`) {
+				t.Error("the mount does not carry the night's URL")
+			}
+			if strings.Contains(out, "night_setRealDate") || strings.Contains(out, "scheduled_date:i.value") {
+				t.Error("the date card still has an inline handler")
+			}
+		})
+	}
+}
+
+// A list of date-less nights reads the calendars once, however many rows, and
+// not at all when no row has an in-world day.
+func TestNoRealDateWordsReadCalendarsOncePerList(t *testing.T) {
+	y, m, d := 1492, 3, 14
+	story := func(id string) *Session {
+		return &Session{ID: id, CampaignID: "camp-1", CalendarYear: &y, CalendarMonth: &m, CalendarDay: &d}
+	}
+	tests := []struct {
+		name      string
+		nights    []*Session
+		wantReads int
+		want      string
+	}{
+		{"many story nights, one read", []*Session{story("a"), story("b"), story("c")}, 1, "No real date yet · 14 Hammer, 1492"},
+		{"nights with no in-world day, no read", []*Session{{ID: "x"}, {ID: "y"}}, 0, NoRealDateWords},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reads := 0
+			h := NewHandler(NewSessionService(&mockSessionRepo{}, nil, nil))
+			h.SetWorldDateWorder(fakeWorder{words: "14 Hammer, 1492", reads: &reads})
+			words := h.noRealDateWhenFn(context.Background(), "camp-1")
+			for _, n := range tt.nights {
+				if got := words(n); got != tt.want {
+					t.Errorf("night %s = %q, want %q", n.ID, got, tt.want)
+				}
+			}
+			if reads != tt.wantReads {
+				t.Errorf("calendar reads = %d, want %d", reads, tt.wantReads)
 			}
 		})
 	}

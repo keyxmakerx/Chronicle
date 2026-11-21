@@ -49,6 +49,8 @@ type SessionService interface {
 	ListLinkedEventIDs(ctx context.Context, campaignID string) ([]string, error)
 	ListDismissedEventIDs(ctx context.Context, campaignID string) ([]string, error)
 	DismissEvent(ctx context.Context, campaignID, eventID, userID string) error
+	// RestoreEvent puts a dismissed event back on the strip. Idempotent.
+	RestoreEvent(ctx context.Context, campaignID, eventID string) error
 	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
@@ -421,6 +423,19 @@ func (s *sessionService) ListDismissedEventIDs(ctx context.Context, campaignID s
 // DismissEvent implements SessionService.
 func (s *sessionService) DismissEvent(ctx context.Context, campaignID, eventID, userID string) error {
 	if err := s.repo.DismissEvent(ctx, campaignID, eventID, userID); err != nil {
+		// The repository words an event that vanished mid-request as a 404.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) {
+			return err
+		}
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// RestoreEvent implements SessionService.
+func (s *sessionService) RestoreEvent(ctx context.Context, campaignID, eventID string) error {
+	if err := s.repo.RestoreEvent(ctx, campaignID, eventID); err != nil {
 		return apperror.NewInternal(err)
 	}
 	return nil

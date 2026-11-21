@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/a-h/templ"
-
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -21,8 +19,12 @@ const NoRealDateWords = "No real date yet"
 // Hammer, 1492"). Implemented in internal/app over the calendar service, so
 // this plugin never imports the calendar plugin. It answers "" when the date
 // cannot be worded, and the page then says only that there is no real date.
+//
+// WorldDateWordsFor reads the campaign's calendars once and returns the
+// wording function for that read, so a list of date-less nights costs one
+// calendar read rather than one per row.
 type WorldDateWorder interface {
-	WorldDateWords(ctx context.Context, campaignID, calendarID string, year, month, day int) string
+	WorldDateWordsFor(ctx context.Context, campaignID string) func(calendarID string, year, month, day int) string
 }
 
 // SetWorldDateWorder wires the wording of a date-less night's in-world day.
@@ -39,18 +41,31 @@ func (s *Session) hasRealDate() bool {
 // real one: the plain words, then the in-world day when it has one. It is
 // never empty, so no row of a list is left blank.
 func (h *Handler) noRealDateWhen(ctx context.Context, s *Session) string {
-	if h.worldWords == nil || !s.HasCalendarDate() {
-		return NoRealDateWords
+	return h.noRealDateWhenFn(ctx, s.CampaignID)(s)
+}
+
+// noRealDateWhenFn is noRealDateWhen for many nights of one campaign: the
+// calendars are read once, on the first night that has an in-world day, and
+// never for a list that has none.
+func (h *Handler) noRealDateWhenFn(ctx context.Context, campaignID string) func(*Session) string {
+	var words func(calendarID string, year, month, day int) string
+	return func(s *Session) string {
+		if h.worldWords == nil || !s.HasCalendarDate() {
+			return NoRealDateWords
+		}
+		if words == nil {
+			words = h.worldWords.WorldDateWordsFor(ctx, campaignID)
+		}
+		cal := ""
+		if s.CalendarID != nil {
+			cal = *s.CalendarID
+		}
+		w := strings.TrimSpace(words(cal, *s.CalendarYear, *s.CalendarMonth, *s.CalendarDay))
+		if w == "" {
+			return NoRealDateWords
+		}
+		return NoRealDateWords + " · " + w
 	}
-	cal := ""
-	if s.CalendarID != nil {
-		cal = *s.CalendarID
-	}
-	words := strings.TrimSpace(h.worldWords.WorldDateWords(ctx, s.CampaignID, cal, *s.CalendarYear, *s.CalendarMonth, *s.CalendarDay))
-	if words == "" {
-		return NoRealDateWords
-	}
-	return NoRealDateWords + " · " + words
 }
 
 // NightDateNote is what a night's page says about its date when the date is
@@ -95,18 +110,4 @@ func (h *Handler) nightDateNote(ctx context.Context, cc *campaigns.CampaignConte
 		break
 	}
 	return n
-}
-
-// setNightDateScript sets the night's real date from the date box beside the
-// button and reloads the page. It is an inline handler so it works after a
-// boosted swap, and it sends only scheduled_date: under the partial-update
-// contract every other field keeps its stored value.
-func setNightDateScript() templ.ComponentScript {
-	return templ.ComponentScript{
-		Name: "night_setRealDate",
-		Call: "(function(b){var i=document.getElementById('night-real-date');if(!i||!i.value)return;b.disabled=true;" +
-			"Chronicle.apiFetch(b.dataset.url,{method:'PUT',body:{scheduled_date:i.value}})" +
-			".then(function(r){if(r.ok)location.reload();else{b.disabled=false;Chronicle.notify('Could not set the date','error');}})" +
-			".catch(function(){b.disabled=false;Chronicle.notify('Could not set the date','error');});})(this)",
-	}
 }
