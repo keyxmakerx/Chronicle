@@ -11,6 +11,7 @@ const plainCounter = `{"name":"Plain counter","version":1,"skeleton":{"shape":"s
 const smithyCounter = `{"name":"The Smithy","version":1,"skeleton":{"shape":"square","opening":"window-right","display":"pegboard","counter":"straight"},"theme":{"wall":"stone","wood":"#4a3220","cloth":"#5a3a22","accent":"#ff9a50","trim":"#9aa0a8","light":"forge","warmth":0.9,"outside":"dusk"},"props":["anvil","sparks"]}`
 
 const arcaneCounter = `{"name":"The Arcane Shop","version":1,"skeleton":{"shape":"round","opening":"round-window","display":"pigeonholes","counter":"curved"},"theme":{"wall":"night-sky","wood":"#4a3a5a","cloth":"#4a2a6a","accent":"#8ab4ff","trim":"#d9b25a","light":"candles","warmth":0.45,"outside":"night"},"props":["orrery","floating-books","crystal","ladder"]}`
+const taproomCounter = `{"name":"The Taproom","version":1,"skeleton":{"shape":"taproom","opening":"hearth","display":"casks","counter":"bar"},"theme":{"wall":"daub","wood":"#5a3a22","cloth":"#7a2a22","accent":"#e8a040","trim":"#b89a58","light":"firelight","warmth":0.95,"outside":"night"},"props":["tankards","keg","antlers","smoke"]}`
 const marketCounter = `{"name":"The Night Market","version":1,"skeleton":{"shape":"open-air","opening":"none","display":"domes","counter":"stall-table"},"theme":{"wall":"brick","wood":"#4a2a20","cloth":"#8a2a2e","accent":"#d9a441","trim":"#d9a441","light":"lanterns","warmth":0.8,"outside":"rain"},"props":["rain","steam-cart","motes"]}`
 
 // roomWithCounter is the arranged forge room with a saved counter theme.
@@ -83,7 +84,16 @@ func TestShopRoomCounterEdit(t *testing.T) {
 		{"the saved theme again changes nothing", custom, "Ember Forge", map[string]any{"shape": "round", "props": []any{"herbs", "jars"}}, "changes nothing in Ember Forge's room", "", nil},
 		{"the type's own starter changes nothing", "", "Ember Forge", map[string]any{"start": "smithy"}, "changes nothing in Ember Forge's room", "", nil},
 		{"a bad colour", custom, "Ember Forge", map[string]any{"wood": "brown"}, "", "counter.wood: write a colour as #rrggbb", nil},
-		{"a bad word names the choices", custom, "Ember Forge", map[string]any{"shape": "hexagon"}, "", `counter.shape: "hexagon" is not one of alcove, open-air, round, square`, nil},
+		{"a bad word names the choices", custom, "Ember Forge", map[string]any{"shape": "hexagon"}, "", `counter.shape: "hexagon" is not one of alcove, barn, cabin, cavern, `, nil},
+		{"a start by the starter's name", custom, "Ember Forge", map[string]any{"start": "The Taproom", "remove": "smoke"},
+			"", "", func(t *testing.T, c counterTheme) {
+				if c.Name != "The Taproom" || c.Skeleton.Display != "casks" || c.Theme.Light != "firelight" || strings.Join(c.Props, ",") != "tankards,keg,antlers" {
+					t.Fatalf("%+v", c)
+				}
+			}},
+		{"a part from the newer rooms", custom, "Ember Forge", map[string]any{"opening": "porthole", "add": "hanging baskets"},
+			"Ember Forge's room: counter: opening porthole, +hanging-baskets", "", nil},
+		{"a named starter the armory has lost", custom, "Ember Forge", map[string]any{"start": "glasshouse"}, "", "counter.start: the starter can't be read", nil},
 		{"a bad prop", custom, "Ember Forge", map[string]any{"add": []any{"dragon"}}, "", `counter.add: "dragon" is not one of`, nil},
 		{"a bad start", custom, "Ember Forge", map[string]any{"start": "tavern"}, "", `counter.start: "tavern" is not one of`, nil},
 		{"a bad warmth", custom, "Ember Forge", map[string]any{"warmth": 2}, "", "counter.warmth: write a number from 0", nil},

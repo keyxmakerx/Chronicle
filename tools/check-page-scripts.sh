@@ -97,9 +97,11 @@ count_src_tags() {
 #   OCCURRENCES, not lines: two tags on one line are two violations, and
 #   `grep -c` would have said one.
 inventory() {
+  # Agent worktrees under .claude/ are full copies of this tree; scanning them
+  # reports every survivor again under a path the allowlist cannot name.
   local root="$1" exempt="${2:-}"
   ( cd "${root}" && \
-    find . -name '*.templ' -not -path './node_modules/*' -print \
+    find . -name '*.templ' -not -path './node_modules/*' -not -path './.claude/worktrees/*' -print \
     | sed 's|^\./||' | sort \
     | while IFS= read -r f; do
         [[ -n "${exempt}" && "${f}" == "${exempt}" ]] && continue

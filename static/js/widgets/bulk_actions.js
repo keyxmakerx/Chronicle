@@ -1,12 +1,14 @@
 /**
  * bulk_actions.js -- Entity Bulk Selection & Actions
  *
- * Adds multi-select checkboxes to entity cards/rows and a floating
- * action bar with bulk operations (category, add a tag, move under another
- * page, who sees them, the Trash), each picked from a list and each with Undo.
+ * Adds a tick box to each [data-entity-row] (List row or Gallery tile) and a
+ * floating action bar with bulk operations (category, add a tag, move under
+ * another page, who sees them, the Trash), each picked from a list and each
+ * with Undo. Also remembers the List or Gallery view per browser.
  *
  * Mount: data-widget="bulk-actions"
  * Config:
+ *   data-view-key     - localStorage key holding "list" or "gallery"
  *   data-campaign-id  - Campaign UUID
  *   data-csrf-token   - CSRF token
  *   data-role         - User's campaign role (int)
@@ -49,6 +51,21 @@
     } } });
   }
 
+  // The list opens in the view this browser last chose. The server draws the
+  // List; a stored Gallery is applied here, and the tabs follow it. Storage
+  // can be refused (private windows), and then the List stays.
+  function applyStoredView(el) {
+    var key = el.dataset.viewKey;
+    if (!key) return;
+    var v = null;
+    try { v = localStorage.getItem(key); } catch (e) { return; }
+    if (v !== 'list' && v !== 'gallery') return;
+    el.setAttribute('data-view', v);
+    el.querySelectorAll('[data-view-tab]').forEach(function (t) {
+      t.setAttribute('aria-selected', t.getAttribute('data-view') === v ? 'true' : 'false');
+    });
+  }
+
   Chronicle.register('bulk-actions', {
     init: function (el) {
       var campaignId = el.dataset.campaignId;
@@ -61,82 +78,60 @@
       try { entityTypes = JSON.parse(el.dataset.entityTypes || '[]'); } catch (e) { /* */ }
       try { tags = JSON.parse(el.dataset.tags || '[]'); } catch (e) { /* */ }
 
+      // The view (List or Gallery) is remembered for everyone, players too.
+      applyStoredView(el);
+
       // Only Scribes+ can use bulk actions.
       if (role < 2) return;
 
       var selected = {};
       var actionBar = null;
 
-      // --- Inject Checkboxes ---
+      // --- The tick boxes ---
 
-      // nameCheckbox gives a row's checkbox the page's name, so a screen reader
-      // says "Select Aria" rather than an unnamed checkbox in a list of many.
+      // Each page is a [data-entity-row] (a row of the List, a tile of the
+      // Gallery). Its box is put in as the row's first child, so the server
+      // draws no box for a list nobody may change. CSS keeps the box out of
+      // sight until the pointer or the keyboard is on its row, or Select is on.
       function nameCheckbox(input, host) {
-        var t = host.querySelector('h3, h4, a[href*="/entities/"]');
+        var t = host.querySelector('.el-name');
         var name = t ? t.textContent.trim() : '';
         input.setAttribute('aria-label', name ? 'Select ' + name : 'Select page');
       }
 
       function injectCheckboxes() {
-        // Grid view cards.
-        el.querySelectorAll('[data-entity-preview]').forEach(function (card) {
-          if (card.querySelector('.bulk-checkbox')) return;
-          var entityId = extractEntityId(card);
-          if (!entityId) return;
-
-          var cb = document.createElement('div');
-          // Shown on hover, and on keyboard focus, which reaches it without a hover.
-          cb.className = 'bulk-checkbox absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity';
-          cb.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" data-bulk-id="' + entityId + '"/>';
-          nameCheckbox(cb.querySelector('input'), card);
-          cb.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
-          cb.querySelector('input').addEventListener('change', function (e) {
-            e.stopPropagation();
-            toggleSelect(entityId, this.checked);
-          });
-
-          // Make card relative for absolute positioning.
-          card.style.position = 'relative';
-          card.insertBefore(cb, card.firstChild);
-        });
-
-        // Table view rows.
-        el.querySelectorAll('tr[data-entity-id]').forEach(function (row) {
-          if (row.querySelector('.bulk-checkbox')) return;
+        el.querySelectorAll('[data-entity-row]').forEach(function (row) {
+          if (row.querySelector('.el-pick')) return;
           var entityId = row.dataset.entityId;
           if (!entityId) return;
 
-          var td = document.createElement('td');
-          td.className = 'bulk-checkbox px-2 py-2 w-8';
-          td.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" data-bulk-id="' + entityId + '"/>';
-          nameCheckbox(td.querySelector('input'), row);
-          td.querySelector('input').addEventListener('change', function () {
-            toggleSelect(entityId, this.checked);
-          });
-          row.insertBefore(td, row.firstChild);
+          var box = document.createElement('label');
+          box.className = 'el-pick';
+          var input = document.createElement('input');
+          input.type = 'checkbox';
+          input.setAttribute('data-bulk-id', entityId);
+          box.appendChild(input);
+          nameCheckbox(input, row);
+          input.checked = !!selected[entityId];
+          input.addEventListener('change', function () { toggleSelect(entityId, this.checked); });
+          row.insertBefore(box, row.firstChild);
+          if (selected[entityId]) row.setAttribute('data-picked', '');
         });
-
-        // Add select-all checkbox to table header if table exists.
-        var thead = el.querySelector('thead tr');
-        if (thead && !thead.querySelector('.bulk-select-all')) {
-          var th = document.createElement('th');
-          th.className = 'bulk-select-all px-2 py-2.5 w-8';
-          th.innerHTML = '<input type="checkbox" class="w-4 h-4 accent-accent rounded border-edge cursor-pointer" title="Select all" aria-label="Select all"/>';
-          th.querySelector('input').addEventListener('change', function () {
-            var checked = this.checked;
-            el.querySelectorAll('[data-bulk-id]').forEach(function (cb) {
-              cb.checked = checked;
-              toggleSelect(cb.dataset.bulkId, checked);
-            });
-          });
-          thead.insertBefore(th, thead.firstChild);
-        }
       }
 
-      function extractEntityId(card) {
-        var href = card.getAttribute('href') || '';
-        var match = href.match(/\/entities\/([a-f0-9-]+)/);
-        return match ? match[1] : null;
+      // The same page is a row and a tile; the boxes the person can see are
+      // the ones in the view that is showing.
+      function visibleBoxes() {
+        return Array.prototype.slice.call(el.querySelectorAll('[data-bulk-id]')).filter(function (cb) {
+          return cb.offsetParent !== null;
+        });
+      }
+
+      // Keeps both views' boxes for one page in step.
+      function setBoxes(entityId, isSelected) {
+        el.querySelectorAll('[data-bulk-id]').forEach(function (cb) {
+          if (cb.dataset.bulkId === entityId) cb.checked = isSelected;
+        });
       }
 
       // --- Selection State ---
@@ -151,12 +146,12 @@
       function toggleSelect(entityId, isSelected) {
         if (shiftHeld && lastTicked && lastTicked !== entityId) {
           shiftHeld = false;
-          var boxes = Array.prototype.slice.call(el.querySelectorAll('[data-bulk-id]'));
+          var boxes = visibleBoxes();
           var ids = boxes.map(function (cb) { return cb.dataset.bulkId; });
           var a = ids.indexOf(lastTicked), b = ids.indexOf(entityId);
           if (a !== -1 && b !== -1) {
             boxes.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(function (cb) {
-              cb.checked = isSelected;
+              setBoxes(cb.dataset.bulkId, isSelected);
               if (isSelected) selected[cb.dataset.bulkId] = true; else delete selected[cb.dataset.bulkId];
             });
             lastTicked = entityId;
@@ -167,6 +162,7 @@
         }
         shiftHeld = false;
         lastTicked = entityId;
+        setBoxes(entityId, isSelected);
         if (isSelected) {
           selected[entityId] = true;
         } else {
@@ -185,22 +181,15 @@
         el.querySelectorAll('[data-bulk-id]').forEach(function (cb) {
           cb.checked = false;
         });
-        var selectAll = el.querySelector('.bulk-select-all input');
-        if (selectAll) selectAll.checked = false;
         updateActionBar();
         updateCardHighlights();
       }
 
+      // A picked page's row or tile carries data-picked, which CSS tints.
       function updateCardHighlights() {
-        el.querySelectorAll('[data-entity-preview]').forEach(function (card) {
-          var entityId = extractEntityId(card);
-          if (entityId && selected[entityId]) {
-            card.classList.add('ring-2', 'ring-accent/50');
-            var cb = card.querySelector('.bulk-checkbox');
-            if (cb) cb.classList.add('opacity-100');
-          } else {
-            card.classList.remove('ring-2', 'ring-accent/50');
-          }
+        el.querySelectorAll('[data-entity-row]').forEach(function (row) {
+          if (selected[row.dataset.entityId]) row.setAttribute('data-picked', '');
+          else row.removeAttribute('data-picked');
         });
       }
 
@@ -211,8 +200,20 @@
       // A change applies at once; the page reloads with an Undo message
       // that puts back exactly what changed.
 
+      // The Select word reads Done while the boxes are on or any page is
+      // picked (a pick made with the pointer on desktop included), so it
+      // always offers the way out.
+      function syncSelectWord(count) {
+        var w = el.querySelector('.el-select-word');
+        if (!w) return;
+        var on = count > 0 || el.hasAttribute('data-selecting');
+        w.textContent = on ? 'Done' : 'Select';
+        w.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+
       function updateActionBar() {
         var count = getSelectedIds().length;
+        syncSelectWord(count);
         if (count === 0) {
           closePicker();
           if (actionBar) { actionBar.remove(); actionBar = null; }
@@ -221,7 +222,7 @@
 
         if (!actionBar) {
           actionBar = document.createElement('div');
-          actionBar.className = 'bulk-action-bar fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-elev-hover px-4 py-2 w-max flex flex-wrap items-center gap-4 text-sm max-w-[calc(100vw-2rem)]';
+          actionBar.className = 'bulk-action-bar fixed left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-elev-hover px-4 py-2 w-max flex flex-wrap items-center gap-x-4 text-sm max-w-[calc(100vw-2rem)]';
           actionBar.setAttribute('role', 'toolbar');
           actionBar.setAttribute('aria-label', 'Change the selected pages');
           document.body.appendChild(actionBar);
@@ -232,7 +233,7 @@
         var word = function (act, label) {
           return '<button type="button" class="quiet-word" data-bulk-action="' + act + '" aria-haspopup="listbox" aria-expanded="false">' + label + ' <i class="fa-solid fa-chevron-down text-[10px] ml-1" aria-hidden="true"></i></button>';
         };
-        var onPage = el.querySelectorAll('[data-bulk-id]').length;
+        var onPage = visibleBoxes().length;
         actionBar.innerHTML =
           '<span class="text-fg font-medium tabular-nums" aria-live="polite">' + count + ' selected</span>' +
           (onPage > count ? '<button type="button" class="quiet-word" data-bulk-action="all">Select all ' + onPage + '</button>' : '') +
@@ -251,7 +252,7 @@
         var act = btn.getAttribute('data-bulk-action');
         if (act === 'clear') { clearSelection(); return; }
         if (act === 'all') {
-          el.querySelectorAll('[data-bulk-id]').forEach(function (cb) { cb.checked = true; selected[cb.dataset.bulkId] = true; });
+          visibleBoxes().forEach(function (cb) { setBoxes(cb.dataset.bulkId, true); selected[cb.dataset.bulkId] = true; });
           updateActionBar();
           updateCardHighlights();
           return;
@@ -499,6 +500,9 @@
       }
 
       offerUndo(campaignId);
+
+      // Done on the Select word puts the picks down.
+      el.addEventListener('bulk:clear', clearSelection);
 
       // --- Init ---
 

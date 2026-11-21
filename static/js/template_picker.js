@@ -287,6 +287,10 @@
 
   // --- Initialization ---
 
+  // A form put in the page by script (the new-page sheet) asks for the same wiring.
+  window.Chronicle = window.Chronicle || {};
+  window.Chronicle.initTemplatePicker = initTemplatePicker;
+
   // Init on page load.
   document.addEventListener('DOMContentLoaded', function () {
     initTemplatePicker();

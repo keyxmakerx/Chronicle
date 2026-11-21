@@ -39,9 +39,19 @@ var WeatherClimates = []WeatherClimate{
 	{ID: "highland", Name: "Highland"},
 	{ID: "mediterranean", Name: "Warm coast"},
 	{ID: "tundra", Name: "Tundra"},
+	{ID: "steppe", Name: "Steppe"},
+	{ID: "rainforest", Name: "Rainforest"},
+	{ID: "savanna", Name: "Savanna"},
+	{ID: "taiga", Name: "Taiga"},
+	{ID: "storm-isles", Name: "Storm isles"},
+	{ID: "bayou", Name: "Bayou"},
 	{ID: "fey-wilds", Name: "Fey wilds", Magic: true},
 	{ID: "ashlands", Name: "Ashlands", Magic: true},
 	{ID: "gloomfen", Name: "Gloomfen", Magic: true},
+	{ID: "frostfell", Name: "Frostfell", Magic: true},
+	{ID: "leylands", Name: "Leylands", Magic: true},
+	{ID: "duskmarch", Name: "Duskmarch", Magic: true},
+	{ID: "blightlands", Name: "Blightlands", Magic: true},
 }
 
 // validClimate reports whether id is one of WeatherClimates.

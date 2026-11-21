@@ -36,7 +36,7 @@ templ aiBubbleBody(cc *campaigns.CampaignContext, v ConnectView) {
 			<h2 id="ai-bubble-heading" class="sr-only">Your AI</h2>
 			@bubbleTools(fmt.Sprintf("/campaigns/%s/ai/copy", cc.Campaign.ID), "Copy for my AI", true)
 			<button type="button" class="aib-side" data-ai-side title="Open the waiting requests in the side panel">
-				<i class="fa-solid fa-table-columns text-xs" aria-hidden="true"></i>
+				<i class="fa-solid fa-table-columns text-xs word-ic" aria-hidden="true"></i>
 				<span>Side panel</span>
 			</button>
 			<button type="button" class="aic-icon" data-ai-bubble-close aria-label="Close">
@@ -129,11 +129,11 @@ templ playerBubbleBody(v PlayerAIView) {
 templ bubbleTools(copyURL, copyLabel string, owner bool) {
 	<div class="aib-tools">
 		<button type="button" class="aib-tool" data-ai-copy={ copyURL } data-ai-copy-owner?={ owner }>
-			<i class="fa-regular fa-copy" aria-hidden="true"></i>
+			<i class="fa-regular fa-copy word-ic" aria-hidden="true"></i>
 			<span data-ai-copy-label>{ copyLabel }</span>
 		</button>
 		<button type="button" class="aib-tool" data-ai-paste>
-			<i class="fa-regular fa-paste" aria-hidden="true"></i>
+			<i class="fa-regular fa-paste word-ic" aria-hidden="true"></i>
 			<span>Paste answer</span>
 		</button>
 	</div>

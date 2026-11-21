@@ -51,7 +51,7 @@ window.CraftingMaterials = (function () {
         if (!(it.tags || []).length) count.none++;
         (it.tags || []).forEach(function (t) { count[t] = (count[t] || 0) + 1; });
       });
-      // Only the kinds in use: twenty chips would bury the list
+      // Only the kinds in use: a chip for every kind would bury the list
       var list = [{key: 'all', label: 'All'}, {key: 'none', label: 'No kind yet'}].concat(lib.tags.filter(function (t) { return count[t.key] || filter === t.key; }));
       $('.cra-mfilters').innerHTML = list.map(function (t) {
         return '<button type="button" class="cra-chip cra-chip-sm" data-filter="' + esc(t.key) + '" aria-pressed="' + (filter === t.key) + '">' +
@@ -254,7 +254,7 @@ window.CraftingMaterials = (function () {
 
     /* ---------- Events ---------- */
     el.innerHTML = '<div class="cra-mats-pane"><div class="cra-mhead"><div><h3 class="cra-ph">Materials</h3><p class="cra-fine">Give Armory items a kind, and a recipe can ask for “any herb” instead of one item. ' +
-      'Grinding takes herbs, fungi, bones, body parts, scales, gems and Remnant parts; pouring takes liquids, essences, venoms and resins. ' +
+      'Grinding takes dry things such as herbs, bones, salt and shells; pouring takes wet ones such as oils, venoms and blood. A step says so when an item does not fit. ' +
       'Pictures follow each kind; open <b>Pictures</b> to change them, or open any item’s picture to give it its own. Everything saves as you click.</p></div>' +
       '<div class="cra-mtools"><button type="button" class="cra-itab" data-act="board" aria-expanded="false" aria-controls="cra-board">Pictures</button>' +
       '<label class="cra-search"><span class="sr-only">Find an item</span><input type="search" class="cra-in" data-f="q" placeholder="Find an item"></label></div></div>' +

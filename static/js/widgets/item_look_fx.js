@@ -59,9 +59,28 @@ var MOTIFS = {
   petals:  { blend: 'source-over', make: function (p) { p.vx = rand(-18, 18); p.vy = rand(-30, -6); p.life = rand(1.4, 2.4); p.size = rand(3, 5.5); p.rot = rand(0, TAU); p.vr = rand(-3, 3); p.g = 22; p.wob = rand(0, TAU); } },
   bubbles: { blend: 'lighter', make: function (p) { p.vx = rand(-6, 6); p.vy = rand(-40, -16); p.life = rand(0.8, 1.6); p.size = rand(2, 5); p.g = -6; p.wob = rand(0, TAU); } },
   shards:  { blend: 'lighter', make: function (p) { p.vx = rand(-24, 24); p.vy = rand(-30, 6); p.life = rand(0.9, 1.7); p.size = rand(3, 6); p.rot = rand(0, TAU); p.vr = rand(-4, 4); p.g = 30; } },
-  glints:  { blend: 'lighter', make: function (p) { p.vx = 0; p.vy = 0; p.life = rand(0.5, 0.9); p.size = rand(5, 9); p.g = 0; } }
+  glints:  { blend: 'lighter', make: function (p) { p.vx = 0; p.vy = 0; p.life = rand(0.5, 0.9); p.size = rand(5, 9); p.g = 0; } },
+  wisps:   { blend: 'source-over', make: function (p) { p.vx = rand(-16, 16); p.vy = rand(-34, -10); p.life = rand(1.4, 2.4); p.size = rand(8, 14); p.grow = rand(8, 16); p.g = -3; p.wob = rand(0, TAU); } },
+  drops:   { blend: 'source-over', make: function (p) { p.vx = rand(-40, 40); p.vy = rand(-90, -20); p.life = rand(0.7, 1.2); p.size = rand(2.4, 4.4); p.g = 240; } },
+  spray:   { blend: 'lighter', make: function (p) { p.vx = rand(-70, 70); p.vy = rand(-150, -60); p.life = rand(0.6, 1.1); p.size = rand(1.4, 3); p.g = 320; } },
+  grit:    { blend: 'lighter', make: function (p) { p.vx = rand(70, 170); p.vy = rand(-18, 18); p.x -= rand(20, 70); p.life = rand(0.7, 1.3); p.size = rand(1.1, 2.4); p.g = 0; p.wob = rand(0, TAU); } },
+  rocks:   { blend: 'source-over', make: function (p) { p.vx = rand(-50, 50); p.vy = rand(-120, -40); p.life = rand(0.8, 1.3); p.size = rand(3.5, 8); p.rot = rand(0, TAU); p.vr = rand(-8, 8); p.g = 380; } },
+  runes:   { blend: 'lighter', make: function (p) { p.vx = rand(-6, 6); p.vy = rand(-24, -10); p.life = rand(1.4, 2.4); p.size = rand(6, 10); p.rot = rand(-0.3, 0.3); p.vr = rand(-0.4, 0.4); p.g = 0; } },
+  leaves:  { blend: 'source-over', make: function (p) { p.vx = rand(30, 90); p.vy = rand(-40, 10); p.x -= rand(10, 40); p.life = rand(1.4, 2.4); p.size = rand(4, 7); p.rot = rand(0, TAU); p.vr = rand(-4, 4); p.g = 16; p.wob = rand(0, TAU); } },
+  stars:   { blend: 'lighter', make: function (p) { p.vx = rand(20, 50); p.vy = rand(40, 110); p.x -= rand(10, 50); p.y -= rand(40, 100); p.life = rand(0.8, 1.4); p.size = rand(3, 6); p.g = 0; } },
+  notes:   { blend: 'lighter', make: function (p) { p.vx = rand(-12, 12); p.vy = rand(-36, -16); p.life = rand(1.4, 2.2); p.size = rand(6, 9); p.rot = rand(-0.3, 0.3); p.g = 0; p.wob = rand(0, TAU); } }
 };
-var MOTIF_NAMES = { embers: 'Embers', frost: 'Frost', sparks: 'Sparks', motes: 'Motes of light', smoke: 'Smoke', petals: 'Petals', bubbles: 'Bubbles', shards: 'Glass shards', glints: 'Glints', none: 'None' };
+/* Rune marks, as strokes in a box one unit each way from the centre. */
+var RUNES = [
+  [[0, -1, 0, 1], [0, -0.6, 0.6, -0.1], [0, 0.1, -0.6, 0.6]],
+  [[-0.6, -1, -0.6, 1], [-0.6, -1, 0.6, -0.2], [0.6, -0.2, -0.6, 0.4]],
+  [[-0.7, 1, 0, -1], [0, -1, 0.7, 1], [-0.35, 0.1, 0.35, 0.1]],
+  [[-0.6, -1, 0.6, 1], [0.6, -1, -0.6, 1], [-0.6, 0, 0.6, 0]],
+  [[0, -1, 0, 1], [-0.6, -0.4, 0, -1], [0.6, -0.4, 0, -1]],
+  [[-0.5, -1, 0.5, 0], [0.5, 0, -0.5, 1], [-0.5, -1, -0.5, 1]]
+];
+var MOTIF_NAMES = { embers: 'Embers', frost: 'Frost', sparks: 'Sparks', motes: 'Motes of light', smoke: 'Smoke', petals: 'Petals', bubbles: 'Bubbles', shards: 'Glass shards', glints: 'Glints',
+  wisps: 'Shadow wisps', drops: 'Drops', spray: 'Spray', grit: 'Blown sand', rocks: 'Stone chips', runes: 'Runes', leaves: 'Leaves', stars: 'Falling stars', notes: 'Music notes', none: 'None' };
 
 function drawParticle(g, p) {
   var a = 1 - p.age / p.life; if (a <= 0) return;
@@ -102,6 +121,58 @@ function drawParticle(g, p) {
     g.globalAlpha = gl; g.strokeStyle = mix(p.c, '#ffffff', 0.6); g.lineWidth = 1.2;
     g.beginPath(); g.moveTo(p.x - s2, p.y); g.lineTo(p.x + s2, p.y); g.moveTo(p.x, p.y - s2); g.lineTo(p.x, p.y + s2); g.stroke();
     g.globalAlpha = gl * 0.6; g.drawImage(sprite(p.c), p.x - s2, p.y - s2, s2 * 2, s2 * 2);
+  } else if (k === 'wisps') {
+    var wr = p.size + p.grow * (p.age / p.life), wa = a * Math.min(1, p.age * 2.5);
+    g.globalAlpha = wa * 0.9; var wd = sprite(mix(p.c, '#000000', 0.9)); g.drawImage(wd, p.x - wr * 2, p.y - wr * 2, wr * 4, wr * 4); g.drawImage(wd, p.x - wr * 1.2, p.y - wr * 1.2, wr * 2.4, wr * 2.4);
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = wa * 0.3; g.strokeStyle = p.c; g.lineWidth = 2.6; g.lineCap = 'round';
+    var wsw = Math.sin(p.age * 3 + p.seed) * wr * 0.5;
+    g.beginPath(); g.moveTo(p.x - wr * 0.5, p.y + wr * 0.5); g.quadraticCurveTo(p.x + wsw, p.y, p.x - wsw * 0.6, p.y - wr * 0.8); g.stroke(); g.globalCompositeOperation = 'source-over';
+  } else if (k === 'drops') {
+    var da = Math.atan2(p.vy, p.vx), dl = clamp(Math.sqrt(p.vx * p.vx + p.vy * p.vy) / 90, 1, 2.4);
+    g.save(); g.translate(p.x, p.y); g.rotate(da); g.globalAlpha = Math.min(1, a * 2.5);
+    g.fillStyle = mix(p.c, '#000000', 0.15); g.beginPath(); g.moveTo(p.size, 0); g.quadraticCurveTo(0, p.size, -p.size * dl * 1.6, 0); g.quadraticCurveTo(0, -p.size, p.size, 0); g.fill();
+    g.fillStyle = rgba(p.c2 || '#ffffff', 0.7); g.beginPath(); g.arc(p.size * 0.25, -p.size * 0.3, p.size * 0.28, 0, TAU); g.fill(); g.restore();
+  } else if (k === 'spray') {
+    g.globalAlpha = a * 0.5; g.drawImage(sprite(p.c), p.x - p.size * 3, p.y - p.size * 3, p.size * 6, p.size * 6);
+    g.globalAlpha = a; g.strokeStyle = mix(p.c, '#ffffff', 0.7); g.lineWidth = p.size * 0.8; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025); g.stroke();
+  } else if (k === 'grit') {
+    g.globalAlpha = a * 0.85; g.strokeStyle = mix(p.c, '#ffffff', 0.3); g.lineWidth = p.size; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * 0.09, p.y - p.vy * 0.09); g.stroke();
+    if (p.seed > 55) { g.globalAlpha = a * 0.2; g.drawImage(sprite(p.c), p.x - 34, p.y - 20, 68, 40); }
+  } else if (k === 'rocks') {
+    g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.globalAlpha = Math.min(1, a * 3);
+    var rk = function (i) { var an = i * TAU / 5 + 0.3, rr2 = p.size * (0.7 + 0.3 * Math.sin(p.seed * (i + 1))); return [Math.cos(an) * rr2, Math.sin(an) * rr2]; };
+    g.fillStyle = mix(p.c, '#000000', 0.3); g.beginPath(); for (var ri = 0; ri < 5; ri++) { var pt = rk(ri); if (ri) g.lineTo(pt[0], pt[1]); else g.moveTo(pt[0], pt[1]); } g.closePath(); g.fill();
+    g.fillStyle = rgba(mix(p.c, '#ffffff', 0.45), 0.95); g.beginPath(); var q0 = rk(2), q1 = rk(3), q2 = rk(4); g.moveTo(0, 0); g.lineTo(q0[0], q0[1]); g.lineTo(q1[0], q1[1]); g.lineTo(q2[0], q2[1]); g.closePath(); g.fill(); g.restore();
+  } else if (k === 'runes') {
+    var ra = Math.min(a * 1.6, p.age * 3, 1), mk = RUNES[Math.floor(p.seed) % RUNES.length];
+    g.save(); g.translate(p.x, p.y); g.rotate(p.rot);
+    g.globalAlpha = ra * 0.55; g.drawImage(sprite(p.c), -p.size * 2.2, -p.size * 2.2, p.size * 4.4, p.size * 4.4);
+    g.globalAlpha = ra; g.strokeStyle = mix(p.c, '#ffffff', 0.55); g.lineWidth = 1.5; g.lineCap = 'round'; g.beginPath();
+    mk.forEach(function (m) { g.moveTo(m[0] * p.size, m[1] * p.size); g.lineTo(m[2] * p.size, m[3] * p.size); }); g.stroke(); g.restore();
+  } else if (k === 'leaves') {
+    g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.globalAlpha = Math.min(1, a * 2) * 0.95; g.scale(1, 0.4 + 0.5 * Math.abs(Math.sin(p.age * 5 + p.seed)));
+    g.fillStyle = mix(p.c, '#000000', 0.12); g.beginPath(); g.moveTo(-p.size, 0); g.quadraticCurveTo(0, -p.size * 0.8, p.size, 0); g.quadraticCurveTo(0, p.size * 0.8, -p.size, 0); g.fill();
+    g.strokeStyle = rgba(p.c2 || '#ffffff', 0.6); g.lineWidth = 0.8; g.beginPath(); g.moveTo(-p.size * 0.8, 0); g.lineTo(p.size * 0.8, 0); g.stroke(); g.restore();
+  } else if (k === 'stars') {
+    var st = p.size * (0.75 + 0.25 * Math.sin(p.age * 14 + p.seed));
+    g.globalAlpha = a * 0.6; g.strokeStyle = p.c; g.lineWidth = 1.4; g.lineCap = 'round'; g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * 0.22, p.y - p.vy * 0.22); g.stroke();
+    g.globalAlpha = a * 0.7; g.drawImage(sprite(p.c), p.x - st * 2.4, p.y - st * 2.4, st * 4.8, st * 4.8);
+    g.globalAlpha = a; g.fillStyle = mix(p.c, '#ffffff', 0.75); g.beginPath();
+    for (var si = 0; si < 8; si++) { var sa = si * TAU / 8, sr = si % 2 ? st * 0.28 : st; if (si) g.lineTo(p.x + Math.cos(sa) * sr, p.y + Math.sin(sa) * sr); else g.moveTo(p.x + sr, p.y); }
+    g.closePath(); g.fill();
+  } else if (k === 'notes') {
+    var na = Math.min(a * 1.6, p.age * 4, 1), ns = p.size, two = p.seed > 55;
+    g.save(); g.translate(p.x, p.y); g.rotate(p.rot + Math.sin(p.age * 3 + p.seed) * 0.15);
+    g.globalAlpha = na * 0.45; g.drawImage(sprite(p.c), -ns * 2, -ns * 2, ns * 4, ns * 4);
+    g.globalAlpha = na; g.fillStyle = g.strokeStyle = mix(p.c, '#ffffff', 0.5); g.lineWidth = 1.4; g.lineCap = 'round';
+    g.beginPath(); g.ellipse(-ns * 0.25, ns * 0.55, ns * 0.36, ns * 0.26, -0.4, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(ns * 0.08, ns * 0.5); g.lineTo(ns * 0.08, -ns * 0.7);
+    if (two) { g.lineTo(ns * 0.95, -ns * 0.9); g.lineTo(ns * 0.95, ns * 0.3); } else { g.quadraticCurveTo(ns * 0.7, -ns * 0.5, ns * 0.5, -ns * 0.05); }
+    g.stroke();
+    if (two) { g.beginPath(); g.ellipse(ns * 0.62, ns * 0.35, ns * 0.36, ns * 0.26, -0.4, 0, TAU); g.fill(); }
+    g.restore();
   }
   g.globalAlpha = 1;
 }
@@ -121,7 +192,7 @@ Sound.ensure = function () {
 function env(c, node, t, a, peak, d) { var gn = c.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(peak, t + a); gn.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(gn); gn.connect(Sound.out); return gn; }
 function tone(c, type, f, t, a, peak, d, f2) { var o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + a + d); env(c, o, t, a, peak, d); o.start(t); o.stop(t + a + d + 0.05); }
 function noise(c, t, a, peak, d, ftype, f, q, f2) { var s = c.createBufferSource(); s.buffer = Sound.noise; s.loop = true; var fl = c.createBiquadFilter(); fl.type = ftype; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + a + d); fl.Q.value = q || 1; s.connect(fl); env(c, fl, t, a, peak, d); s.start(t, Math.random() * 0.5); s.stop(t + a + d + 0.05); }
-var SOUNDS = {
+var SYNTH = {
   crackle: function (c, t) { noise(c, t, 0.08, 0.25, 0.5, 'bandpass', 380, 0.7, 1400); for (var i = 0; i < 16; i++) noise(c, t + rand(0, 0.55), 0.002, rand(0.15, 0.5), rand(0.01, 0.03), 'bandpass', rand(1800, 5200), 3); },
   ping:    function (c, t, p) { var m = Math.pow(2, p / 12); [1760, 2349, 2637].forEach(function (f, i) { tone(c, 'sine', f * m, t + i * 0.055, 0.003, 0.18, 0.45); tone(c, 'sine', f * m * 2.01, t + i * 0.055, 0.003, 0.04, 0.2); }); noise(c, t, 0.002, 0.12, 0.05, 'highpass', 6000); },
   zap:     function (c, t) { tone(c, 'sawtooth', 1400, t, 0.005, 0.14, 0.28, 70); noise(c, t, 0.003, 0.35, 0.12, 'highpass', 3000); noise(c, t + 0.08, 0.003, 0.2, 0.1, 'bandpass', 2500, 2); },
@@ -131,14 +202,24 @@ var SOUNDS = {
   bubble:  function (c, t) { for (var i = 0; i < 7; i++) { var s = rand(260, 520); tone(c, 'sine', s, t + rand(0, 0.5), 0.004, 0.12, 0.07, s * 2.4); } },
   hiss:    function (c, t) { noise(c, t, 0.05, 0.16, 0.55, 'highpass', 5200); },
   swish:   function (c, t) { noise(c, t, 0.06, 0.18, 0.18, 'bandpass', 500, 0.9, 2400); },
+  whisper: function (c, t) { noise(c, t, 0.25, 0.12, 0.7, 'bandpass', 900, 1.5, 2600); noise(c, t + 0.15, 0.2, 0.08, 0.6, 'bandpass', 2400, 2, 1100); tone(c, 'sine', 98, t, 0.2, 0.07, 0.9, 82); },
+  heartbeat: function (c, t) { [0, 0.24].forEach(function (d, i) { tone(c, 'sine', 78, t + d, 0.008, i ? 0.4 : 0.5, 0.22, 38); noise(c, t + d, 0.004, 0.14, 0.07, 'lowpass', 180); }); },
+  splash:  function (c, t) { noise(c, t, 0.01, 0.34, 0.5, 'bandpass', 3200, 0.8, 500); noise(c, t, 0.004, 0.2, 0.12, 'highpass', 4200); for (var i = 0; i < 5; i++) { var s = rand(420, 900); tone(c, 'sine', s, t + rand(0.08, 0.5), 0.004, 0.07, 0.06, s * 1.9); } },
+  rattle:  function (c, t) { noise(c, t, 0.12, 0.1, 0.7, 'bandpass', 4200, 1.2, 2600); for (var i = 0; i < 26; i++) noise(c, t + rand(0, 0.7), 0.001, rand(0.05, 0.2), rand(0.006, 0.02), 'highpass', rand(3500, 7000)); },
+  rumble:  function (c, t) { noise(c, t, 0.08, 0.5, 1.1, 'lowpass', 130); tone(c, 'sine', 44, t, 0.05, 0.4, 1.1, 30); for (var i = 0; i < 6; i++) noise(c, t + rand(0.05, 0.7), 0.002, rand(0.1, 0.25), rand(0.02, 0.05), 'bandpass', rand(500, 1100), 2); },
+  hum:     function (c, t, p) { var m = Math.pow(2, p / 12); [[196, 'triangle', 0.14], [293.7, 'sine', 0.1], [392, 'sine', 0.09], [1568, 'sine', 0.025]].forEach(function (v, i) { tone(c, v[1], v[0] * m, t + i * 0.03, 0.2, v[2], 1.2, v[0] * m * 1.012); }); },
+  gust:    function (c, t) { noise(c, t, 0.3, 0.26, 0.9, 'bandpass', 380, 0.8, 1500); noise(c, t + 0.1, 0.35, 0.07, 0.7, 'highpass', 3600); },
+  twinkle: function (c, t, p) { var m = Math.pow(2, p / 12); [3520, 3136, 2637, 2349, 2093, 1760].forEach(function (f, i) { tone(c, 'sine', f * m, t + i * 0.07, 0.003, 0.12, 0.3); tone(c, 'sine', f * m * 2, t + i * 0.07, 0.003, 0.03, 0.15); }); },
+  lute:    function (c, t, p) { var f = 293.7 * Math.pow(2, p / 12); [1, 1.5, 2].forEach(function (r, i) { var at = t + i * 0.11; tone(c, 'triangle', f * r, at, 0.004, 0.22, 0.7); tone(c, 'sine', f * r * 2, at, 0.004, 0.06, 0.35); tone(c, 'sine', f * r * 3, at, 0.004, 0.03, 0.2); noise(c, at, 0.001, 0.08, 0.015, 'bandpass', 2200, 2); }); },
   note:    function (c, t, p) { var f = 440 * Math.pow(2, p / 12); tone(c, 'triangle', f, t, 0.01, 0.16, 1.2); tone(c, 'sine', f * 2, t, 0.01, 0.05, 0.8); }
 };
-var SOUND_NAMES = { crackle: 'Crackle', ping: 'Ice ping', zap: 'Zap', chime: 'Chime', bell: 'Bell', thrum: 'Low thrum', bubble: 'Bubbling', hiss: 'Hiss', none: 'Silent' };
+var SOUND_NAMES = { crackle: 'Crackle', ping: 'Ice ping', zap: 'Zap', chime: 'Chime', bell: 'Bell', thrum: 'Low thrum', bubble: 'Bubbling', hiss: 'Hiss',
+  whisper: 'Whisper', heartbeat: 'Heartbeat', splash: 'Splash', rattle: 'Sand rattle', rumble: 'Rumble', hum: 'Arcane hum', gust: 'Gust of wind', twinkle: 'Twinkle', lute: 'Lute', none: 'Silent' };
 Sound.play = function (kind, pitch, delay) {
-  if (!this.on || !kind || kind === 'none' || !SOUNDS[kind]) return;
+  if (!this.on || !kind || kind === 'none' || !SYNTH[kind]) return;
   var c = this.ensure(); if (!c) return;
   if (c.state === 'suspended') c.resume();
-  SOUNDS[kind](c, c.currentTime + 0.02 + (delay || 0), pitch || 0);
+  SYNTH[kind](c, c.currentTime + 0.02 + (delay || 0), pitch || 0);
 };
 
 /* ---------- Drawing the things ---------- */
@@ -569,10 +650,21 @@ var LOOKS = {
   rot:   { name: 'Remnant rot', color: '#6d45c4', color2: '#7cf5c8', lightColor: '#8a63e0', motif: 'smoke', sound: 'thrum', light: 0.8, flicker: 0.4 },
   venom: { name: 'Venom', color: '#a6e34a', color2: '#e9ffb0', motif: 'bubbles', sound: 'bubble', light: 0.7, flicker: 0.2 },
   glass: { name: 'Glass and starlight', color: '#cfe6ff', color2: '#ffffff', motif: 'shards', sound: 'ping', pitch: 5, light: 0.7, flicker: 0.15 },
-  quiet: { name: 'Quiet glint', color: '#e8dcc0', color2: '#ffffff', motif: 'none', shimmer: '#fff2cc', sound: 'none', light: 0.45, flicker: 0 }
+  quiet: { name: 'Quiet glint', color: '#e8dcc0', color2: '#ffffff', motif: 'none', shimmer: '#fff2cc', sound: 'none', light: 0.45, flicker: 0 },
+  shadow: { name: 'Creeping shadow', color: '#7a5ad8', color2: '#cdb8ff', lightColor: '#5a3fb0', motif: 'wisps', sound: 'whisper', light: 0.55, flicker: 0.35 },
+  blood: { name: 'Blood price', color: '#d0202e', color2: '#ff9a8a', motif: 'drops', amount: 1.3, sound: 'heartbeat', light: 0.7, flicker: 0.25 },
+  tide:  { name: 'Tide surge', color: '#3aa6d8', color2: '#d6f6ff', motif: 'spray', amount: 1.4, sound: 'splash', light: 0.8, flicker: 0.15 },
+  sand:  { name: 'Sandstorm', color: '#d8b070', color2: '#fff0c8', motif: 'grit', amount: 1.7, sound: 'rattle', light: 0.6, flicker: 0.3 },
+  quake: { name: 'Stonebreak', color: '#b09a80', color2: '#ffe0a8', motif: 'rocks', amount: 1.3, sound: 'rumble', light: 0.5, flicker: 0.1 },
+  arcane: { name: 'Arcane runes', color: '#c77dff', color2: '#f3dcff', motif: 'runes', sound: 'hum', light: 0.9, flicker: 0.2 },
+  gale:  { name: 'Gale and leaves', color: '#9ad36a', color2: '#eaffc8', motif: 'leaves', sound: 'gust', light: 0.6, flicker: 0.1 },
+  starfall: { name: 'Starfall', color: '#7fa8ff', color2: '#ffffff', motif: 'stars', sound: 'twinkle', light: 0.9, flicker: 0.25 },
+  song:  { name: "Bard's tune", color: '#ffb86b', color2: '#fff0d0', motif: 'notes', sound: 'lute', light: 0.7, flicker: 0.05, heals: true }
 };
-var TINTS = ['#ff7a2f', '#ffd66b', '#8fe07a', '#7cf5c8', '#8fd8ff', '#a99bff', '#f59ac0', '#e8dcc0'];
-var SOUNDS = ['crackle', 'ping', 'zap', 'chime', 'bell', 'thrum', 'bubble', 'hiss', 'none'];
+var TINTS = ['#ff7a2f', '#ffd66b', '#8fe07a', '#7cf5c8', '#8fd8ff', '#a99bff', '#f59ac0', '#e8dcc0',
+  '#e5484d', '#e056c1', '#c77dff', '#4f8cff', '#2fc4b2', '#c8e34a', '#d8b070', '#ffffff'];
+var SOUNDS = ['crackle', 'ping', 'zap', 'chime', 'bell', 'thrum', 'bubble', 'hiss',
+  'whisper', 'heartbeat', 'splash', 'rattle', 'rumble', 'hum', 'gust', 'twinkle', 'lute', 'none'];
 
 /* resolve turns a saved look ({look, tint, sound, words}) into what the
    Stage draws, or null when it names no gallery look. Pure. */

@@ -246,3 +246,29 @@ test('a row\'s mark takes no colour from its category, in the editor or the play
   assert.doesNotMatch(src, /\.color\b/, 'the editor draws every mark in the sidebar\'s one icon colour');
   assert.doesNotMatch(src, /style\.(backgroundColor|color)\s*=/);
 });
+
+test('a feature toggled on Game & features redraws the sidebar, so the Apps counts follow', () => {
+  const listeners = {};
+  const noop = () => {};
+  const document = {
+    addEventListener: (name, fn) => { (listeners[name] = listeners[name] || []).push(fn); },
+    getElementById: () => null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    documentElement: { classList: { contains: () => false } },
+    body: { classList: { contains: () => false, toggle: noop } },
+  };
+  const fetched = [];
+  const window = {
+    addEventListener: noop,
+    matchMedia: () => ({ matches: false }),
+    location: { href: '/campaigns/c1/extensions', reload: noop },
+  };
+  const fetch = (url) => { fetched.push(url); return Promise.reject(new Error('offline')); };
+  const sandbox = { window, document, JSON, fetch };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  assert.equal(listeners['extensions-hub-refresh']?.length, 1, 'the sidebar listens for the hub\'s toggle event');
+  listeners['extensions-hub-refresh'][0]();
+  assert.deepEqual(fetched, ['/campaigns/c1/extensions']);
+});

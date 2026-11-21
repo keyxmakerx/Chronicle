@@ -43,6 +43,9 @@ func (s *dmGrantEntitySvc) GetByID(_ context.Context, _ string) (*Entity, error)
 	return &e, nil
 }
 
+// EntryRev is read when the page sends the text with itself.
+func (s *dmGrantEntitySvc) EntryRev(context.Context, string) (int, error) { return 1, nil }
+
 func (s *dmGrantEntitySvc) GetEntityTypeByID(_ context.Context, _ int) (*EntityType, error) {
 	et := *s.etype
 	return &et, nil

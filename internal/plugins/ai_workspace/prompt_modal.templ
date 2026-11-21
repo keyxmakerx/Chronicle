@@ -56,7 +56,7 @@ templ PromptModal(prompt, errMsg string) {
 						data-ai-export-copy
 						@click="copied = true; setTimeout(() => copied = false, 2000)"
 					>
-						<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy</span>
+						<span x-show="!copied"><i class="fa-solid fa-copy mr-1 word-ic"></i> Copy</span>
 						<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
 					</button>
 				</div>

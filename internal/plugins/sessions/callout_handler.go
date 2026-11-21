@@ -30,15 +30,24 @@ const calloutNotificationScan = 50
 // a banner that cannot be built should read the same as one with nothing to
 // say, not as a page-wide error toast.
 func (h *Handler) CalloutAPI(c *echo.Context) error {
+	body, _ := h.CalloutHTML(c)
+	return c.HTML(http.StatusOK, body)
+}
+
+// CalloutHTML is the banner the endpoint answers. The page draws it into the
+// strip itself on a full load, so the strip has its height from the first
+// paint instead of pushing the page down when a poll fills it. ok is false
+// when the banner could not be built; the strip then asks for itself as before.
+func (h *Handler) CalloutHTML(c *echo.Context) (body string, ok bool) {
 	ctx := c.Request().Context()
 	userID := auth.GetUserID(c)
 	if userID == "" {
-		return c.HTML(http.StatusOK, "")
+		return "", true
 	}
 
 	notes, err := h.svc.ListMyNotifications(ctx, userID, calloutNotificationScan)
 	if err != nil {
-		return c.HTML(http.StatusOK, "")
+		return "", false
 	}
 	// Only asks that can still be answered raise the banner, judged on the
 	// reader's own day: the day the night's page marks it Played by.
@@ -51,12 +60,12 @@ func (h *Handler) CalloutAPI(c *echo.Context) error {
 
 	out := BuildCallout(notes, zoneSet, time.Now().UTC())
 	if out.Kind == CalloutNone {
-		return c.HTML(http.StatusOK, "")
+		return "", true
 	}
 	if sess := auth.GetSession(c); sess != nil && sess.GuestCampaignID != "" {
 		out.NoAccountPage = true
 	}
-	return c.HTML(http.StatusOK, renderCallout(out))
+	return renderCallout(out), true
 }
 
 // timezoneShortMessage is the timezone sentence on a phone, where the banner

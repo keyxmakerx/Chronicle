@@ -108,7 +108,7 @@
         el.innerHTML = '<div class="space-y-4"><div><h2 class="text-base font-semibold text-fg mb-0.5">Starting text</h2>' +
           '<p class="text-xs text-fg-secondary">Pre-fill the page editor when creating new pages. Templates appear in the create form and the page editor’s “/” menu.</p></div>' +
           '<div class="space-y-2">' + (list.length ? list.map(row).join('') : '<div class="card p-6 text-center"><p class="text-sm text-fg-secondary">No starting text yet.</p></div>') + '</div>' +
-          '<button type="button" class="btn-primary text-sm" data-new><i class="fa-solid fa-plus" aria-hidden="true"></i> New starting text</button></div>';
+          '<button type="button" class="btn-primary text-sm" data-new><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> New starting text</button></div>';
       }
       function row(t) {
         var tag = t.isGlobal ? '<span class="text-[10px] text-fg-muted bg-surface-alt px-2 py-0.5 rounded-full">Built-in</span>' : '';

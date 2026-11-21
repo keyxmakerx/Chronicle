@@ -70,6 +70,7 @@ func TestApplyAppearance_DefaultsStoredAsEmpty(t *testing.T) {
 	in.Colours.Page, in.Colours.Contrast = "cool", "standard"
 	in.Type.Body, in.Type.Heading, in.Type.Scale = "inter", "same", "standard"
 	in.Buttons.Style = "lift"
+	in.Icons.Amount, in.Icons.Colour = "few", "ink"
 	in.Motion.Elevation, in.Motion.Speed = "standard", "standard"
 
 	var s CampaignSettings
@@ -102,6 +103,8 @@ func appearanceFieldCases() []fieldCase {
 		{"heading font", func(in *AppearanceInput, v string) { in.Type.Heading = v }, func(a *Appearance) string { return a.HeadingFont }, "cinzel"},
 		{"type scale", func(in *AppearanceInput, v string) { in.Type.Scale = v }, func(a *Appearance) string { return a.TypeScale }, "roomy"},
 		{"button style", func(in *AppearanceInput, v string) { in.Buttons.Style = v }, func(a *Appearance) string { return a.ButtonStyle }, "ink"},
+		{"icon amount", func(in *AppearanceInput, v string) { in.Icons.Amount = v }, func(a *Appearance) string { return a.IconAmount }, "names"},
+		{"icon colour", func(in *AppearanceInput, v string) { in.Icons.Colour = v }, func(a *Appearance) string { return a.IconColour }, "category"},
 		{"elevation", func(in *AppearanceInput, v string) { in.Motion.Elevation = v }, func(a *Appearance) string { return a.Elevation }, "dramatic"},
 		{"motion speed", func(in *AppearanceInput, v string) { in.Motion.Speed = v }, func(a *Appearance) string { return a.MotionSpeed }, "leisurely"},
 		{"header height", func(in *AppearanceInput, v string) { in.Header.Height = v }, func(a *Appearance) string { return a.HeaderHeight }, "tall"},
@@ -200,7 +203,7 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 		"look": AppearanceLooks, "nav style": AppearanceNavStyles, "nav strength": AppearanceNavStrengths,
 		"nav page name": AppearanceNavPageNames, "page tone": AppearancePageTones, "contrast": AppearanceContrasts,
 		"body font": AppearanceBodyFonts, "heading font": AppearanceHeadingFonts, "type scale": AppearanceTypeScales,
-		"button style": AppearanceButtonStyles, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
+		"button style": AppearanceButtonStyles, "icon amount": AppearanceIconAmounts, "icon colour": AppearanceIconColours, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
 		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles, "made item pictures": AppearanceCraftArts,
 		"page look": AppearancePageLooks, "style kit": AppearanceStyleKits, "time line popup": AppearanceTimelinePopups,
 		"email layout": AppearanceEmailLayouts,

@@ -410,13 +410,13 @@
 
         var loadBtn = document.createElement('button');
         loadBtn.className = 'flex items-center gap-2 w-full px-3 py-2 mb-1 bg-surface-raised border border-edge rounded-md hover:border-accent/50 hover:shadow-sm transition-all text-sm text-left';
-        loadBtn.innerHTML = '<i class="fa-solid fa-download w-4 text-fg-muted text-center"></i><span class="text-fg">Load Preset</span>';
+        loadBtn.innerHTML = '<i class="fa-solid fa-download word-ic w-4 text-fg-muted text-center"></i><span class="text-fg">Load Preset</span>';
         loadBtn.addEventListener('click', function () { self.showLoadPresetMenu(loadBtn); });
         actContent.appendChild(loadBtn);
 
         var savePresetBtn = document.createElement('button');
         savePresetBtn.className = 'flex items-center gap-2 w-full px-3 py-2 bg-surface-raised border border-edge rounded-md hover:border-accent/50 hover:shadow-sm transition-all text-sm text-left';
-        savePresetBtn.innerHTML = '<i class="fa-solid fa-floppy-disk w-4 text-fg-muted text-center"></i><span class="text-fg">Save as Preset</span>';
+        savePresetBtn.innerHTML = '<i class="fa-solid fa-floppy-disk word-ic w-4 text-fg-muted text-center"></i><span class="text-fg">Save as Preset</span>';
         savePresetBtn.addEventListener('click', function () { self.saveAsPreset(); });
         actContent.appendChild(savePresetBtn);
 
@@ -443,7 +443,7 @@
       COL_PRESETS.forEach(function (p) {
         var btn = document.createElement('button');
         btn.className = 'w-full text-left flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised hover:border-accent/50 transition-colors text-xs';
-        btn.innerHTML = '<i class="fa-solid fa-plus text-[10px] text-fg-muted w-4 text-center"></i><span class="text-fg font-medium">' + Chronicle.escapeHtml(p.label) + '</span>';
+        btn.innerHTML = '<i class="fa-solid fa-plus word-ic text-[10px] text-fg-muted w-4 text-center"></i><span class="text-fg font-medium">' + Chronicle.escapeHtml(p.label) + '</span>';
         btn.addEventListener('click', function () { self.addRow(p.widths); });
         rowContent.appendChild(btn);
       });
@@ -829,7 +829,7 @@
           var addBtn = document.createElement('button');
           addBtn.className = 'text-xs text-accent hover:text-accent-hover px-1.5 py-0.5 border border-accent/30 rounded hover:bg-accent/10 transition-colors';
           addBtn.title = 'Add tab';
-          addBtn.innerHTML = '<i class="fa-solid fa-plus text-[10px]"></i> Tab';
+          addBtn.innerHTML = '<i class="fa-solid fa-plus word-ic text-[10px]"></i> Tab';
           addBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             block.config.tabs.push({ label: 'Tab ' + (block.config.tabs.length + 1), blocks: [] });

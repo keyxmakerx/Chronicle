@@ -159,6 +159,8 @@
           return {
             name: e.name,
             type: e.type_name || '',
+            icon: e.type_icon || '',
+            color: e.type_color || '',
             url: resultUrl(e, campaignId),
             // The page's own setting, or its category, hides it from players.
             locked: e.restricted === 'dm_only',
@@ -307,10 +309,15 @@
   }
 
   function createRow(query, campaignId) {
+    var url = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/new?name=' + encodeURIComponent(query);
     return {
       name: 'Create a page named \u201c' + query + '\u201d',
       type: 'New page',
-      url: '/campaigns/' + encodeURIComponent(campaignId) + '/entities/new?name=' + encodeURIComponent(query),
+      url: url,
+      // The small sheet over the results' page; the full screen if it can't open.
+      action: function () {
+        if (!(window.Chronicle && Chronicle.newPage && Chronicle.newPage.open(url))) window.location.href = url;
+      },
     };
   }
 
@@ -327,6 +334,19 @@
     }
   }
 
+  // The category's icon in front of a page's name. The row always carries
+  // the slot: the site's CSS hides it unless the campaign shows icons beside
+  // names, and a row with no icon (a note, a command) keeps an empty slot so
+  // every name starts at the same edge. Icon and colour are checked here
+  // because both land in markup.
+  var KIND_ICON_RE = /^fa-[a-z0-9-]{1,40}$/;
+  var KIND_COLOUR_RE = /^#[0-9a-fA-F]{6}$/;
+  function kindIcon(icon, colour) {
+    if (!KIND_ICON_RE.test(icon || '')) return '<span class="kind-ic" aria-hidden="true"></span>';
+    return '<i class="fa-solid ' + icon + ' kind-ic"' +
+      (KIND_COLOUR_RE.test(colour || '') ? ' style="--kind-colour:' + colour.toLowerCase() + '"' : '') + ' aria-hidden="true"></i>';
+  }
+
   function renderResults(heading) {
     if (results.length === 0) {
       showHint('No results found.');
@@ -335,14 +355,15 @@
 
     var html = heading ? '<div class="px-4 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">' + Chronicle.escapeHtml(heading) + '</div>' : '';
     // A row is its name, then what kind of thing it is as a quiet word at the
-    // end. Nothing is drawn in front: the name is what tells two rows apart.
+    // end. A category's icon may stand in front when the campaign asks for it
+    // (see kindIcon); by default the name is what tells two rows apart.
     // A page players can't see carries the same lock as the other page lists.
     var lockLabel = (Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' team only';
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
       var active = i === activeIndex ? ' bg-surface-alt' : '';
       html += '<a href="' + Chronicle.escapeAttr(r.url || '#') + '" data-index="' + i + '" class="flex items-baseline gap-3 px-4 py-2.5 text-sm hover:bg-surface-alt transition-colors' + active + '">' +
-        '<span class="flex-1 min-w-0 flex items-baseline gap-1.5"><span class="truncate text-fg">' + Chronicle.escapeHtml(r.name) + '</span>' +
+        '<span class="flex-1 min-w-0 flex items-baseline gap-1.5">' + kindIcon(r.icon, r.color) + '<span class="truncate text-fg">' + Chronicle.escapeHtml(r.name) + '</span>' +
           (r.locked ? '<i class="cb-dm fa-solid fa-lock shrink-0 text-[10px] text-fg-muted" role="img" aria-label="' + lockLabel + '" title="' + lockLabel + '"></i>' : '') + '</span>' +
         '<span class="text-xs text-fg-muted shrink-0 max-w-[45%] truncate">' + Chronicle.escapeHtml(r.type) + '</span>' +
       '</a>';

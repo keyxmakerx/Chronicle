@@ -254,3 +254,4 @@
 .tile[data-tile-w=2]
 .tile[data-tile-w=4]
 .tile[data-tile-h=2]
+[data-whole]:not([data-whole-ready])

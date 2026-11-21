@@ -1,0 +1,15 @@
+// custom_shield.templ marks a listed page that only chosen players can see.
+
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+
+// customShield is the quiet shield after the name of a page shared with
+// chosen players. It is not the Director's amber: the page is not hidden from
+// everyone, so it takes no lock and no edge. The shared glance draws it and
+// holds the role gate, so a player gets nothing.
+templ customShield(cc *campaigns.CampaignContext, e *Entity) {
+	if e.Visibility == VisibilityCustom {
+		@visibilityGlance(cc, e, nil)
+	}
+}

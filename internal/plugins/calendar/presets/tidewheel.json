@@ -1,0 +1,219 @@
+{
+  "format": "chronicle-calendar-v1",
+  "version": 2,
+  "calendar": {
+    "name": "Tidewheel Almanac",
+    "description": "A sailors’ year of thirteen months, each one turn of the big moon, with a single day of slack water outside the months.",
+    "mode": "fantasy",
+    "epoch_name": "Year of the Chart",
+    "current_year": 612,
+    "current_month": 1,
+    "current_day": 1,
+    "current_hour": 0,
+    "current_minute": 0,
+    "hours_per_day": 24,
+    "minutes_per_hour": 60,
+    "seconds_per_minute": 60,
+    "leap_year_every": 0,
+    "leap_year_offset": 0,
+    "tracks_real_time": false,
+    "forecasts_enabled": false,
+    "month_starts_new_week": false,
+    "months": [
+      {
+        "name": "Fairwind",
+        "days": 28,
+        "sort_order": 0,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Longswell",
+        "days": 28,
+        "sort_order": 1,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Kelpbloom",
+        "days": 28,
+        "sort_order": 2,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Gullmoon",
+        "days": 28,
+        "sort_order": 3,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Highsun",
+        "days": 28,
+        "sort_order": 4,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Shoalrun",
+        "days": 28,
+        "sort_order": 5,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Netmend",
+        "days": 28,
+        "sort_order": 6,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Galewatch",
+        "days": 28,
+        "sort_order": 7,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Stormbreak",
+        "days": 28,
+        "sort_order": 8,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Darkwater",
+        "days": 28,
+        "sort_order": 9,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Icewatch",
+        "days": 28,
+        "sort_order": 10,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Thawtide",
+        "days": 28,
+        "sort_order": 11,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Homeharbour",
+        "days": 28,
+        "sort_order": 12,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      },
+      {
+        "name": "Slack Water",
+        "days": 1,
+        "sort_order": 13,
+        "is_intercalary": true,
+        "leap_year_days": 0
+      }
+    ],
+    "weekdays": [
+      {
+        "name": "Dawnwatch",
+        "sort_order": 0,
+        "is_rest_day": false
+      },
+      {
+        "name": "Foretide",
+        "sort_order": 1,
+        "is_rest_day": false
+      },
+      {
+        "name": "Midwatch",
+        "sort_order": 2,
+        "is_rest_day": false
+      },
+      {
+        "name": "Ebbday",
+        "sort_order": 3,
+        "is_rest_day": false
+      },
+      {
+        "name": "Netday",
+        "sort_order": 4,
+        "is_rest_day": false
+      },
+      {
+        "name": "Marketday",
+        "sort_order": 5,
+        "is_rest_day": false
+      },
+      {
+        "name": "Harbourday",
+        "sort_order": 6,
+        "is_rest_day": true
+      }
+    ],
+    "moons": [
+      {
+        "name": "The Pilot",
+        "cycle_days": 28,
+        "phase_offset": 0,
+        "color": "#dfe8f2"
+      },
+      {
+        "name": "The Gull",
+        "cycle_days": 9.5,
+        "phase_offset": 3,
+        "color": "#9fc7d6"
+      }
+    ],
+    "seasons": [
+      {
+        "name": "Fair Sailing",
+        "start_month": 1,
+        "start_day": 1,
+        "end_month": 4,
+        "end_day": 28,
+        "color": "oklch(0.72 0.10 200)"
+      },
+      {
+        "name": "High Water",
+        "start_month": 5,
+        "start_day": 1,
+        "end_month": 7,
+        "end_day": 28,
+        "color": "oklch(0.78 0.12 95)"
+      },
+      {
+        "name": "Storm Season",
+        "start_month": 8,
+        "start_day": 1,
+        "end_month": 10,
+        "end_day": 28,
+        "color": "oklch(0.50 0.07 255)"
+      },
+      {
+        "name": "Ice Watch",
+        "start_month": 11,
+        "start_day": 1,
+        "end_month": 14,
+        "end_day": 1,
+        "color": "oklch(0.82 0.04 230)"
+      }
+    ],
+    "eras": [
+      {
+        "name": "The Charted Years",
+        "start_year": 1,
+        "start_month": 1,
+        "start_day": 1,
+        "color": "oklch(0.62 0.09 215)",
+        "sort_order": 0,
+        "description": "Counted from the year the first chart of the whole coast was drawn."
+      }
+    ]
+  }
+}

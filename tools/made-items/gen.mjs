@@ -4,7 +4,7 @@
 import { DEMO } from './src/items/demo.js';
 import fs from 'fs';
 const order = JSON.parse(fs.readFileSync('order.json')), G = JSON.parse(fs.readFileSync('greys.json'));
-const MOV = 'bomb candle censer conch core egg fang geode hand heart horn ink knot lantern orb pie potion runestone scale skull starfrag stew tentacle tongs torch unicorn wing wisp'.split(' ');
+const MOV = 'bomb candle censer conch core egg fang geode hand heart horn ink knot lantern orb pie potion runestone scale skull starfrag stew tentacle tongs torch unicorn wing wisp poison cauldron holysymbol genielamp teapot coal slime lightning'.split(' ');
 const MORE = 'meat hand geode unicorn starfrag ink conch mandrake egg wing'.split(' ');
 const WAIT = 'potion ore bolt herbs boots torch bomb gems'.split(' ');
 const groups = [order.filter(k => !MORE.includes(k) && !WAIT.includes(k)), MORE, WAIT];
