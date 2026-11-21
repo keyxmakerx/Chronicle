@@ -91,13 +91,15 @@ test('four moons on a ten-day week are one disc with three lit shapes and a +1, 
   assert.ok(wide.length >= 10, 'the month drew too few moon marks');
   for (const d of wide) {
     assert.ok(d.over && d.discs === 1, `${d.key} is not one shared disc`);
-    assert.equal(d.shapes, 3, `${d.key} lays ${d.shapes} lit shapes on the disc`);
+    // A dark moon has no lit shape, so a day lays up to three.
+    assert.ok(d.shapes <= 3, `${d.key} lays ${d.shapes} lit shapes on the disc`);
     assert.equal(d.count, '+1', `${d.key} counts ${d.count || 'nothing'} for the fourth moon`);
-    assert.equal(d.tinted, 3, `${d.key} has a moon with no colour of its own`);
+    assert.equal(d.tinted, d.shapes, `${d.key} has a moon with no colour of its own`);
     assert.ok(!d.onNumber, `${d.key}: the moons sit on the day number`);
     assert.ok(!d.onMarks, `${d.key}: the moons sit on the event marks`);
     assert.ok(d.inCell, `${d.key}: the moons spill out of the cell`);
   }
+  assert.ok(wide.some((d) => d.shapes === 3), 'no day of the month lays three lit shapes');
   await picture(page, 'calendar-several-moons-desktop-light', { check: '#2482', about: 'Owner month, four moons on a ten-day week, desktop', locator: page.locator('#cal5-cal') });
 
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -110,7 +112,7 @@ test('four moons on a ten-day week are one disc with three lit shapes and a +1, 
   const narrow = await readMonth(page);
   for (const d of narrow) {
     // The mark is one disc wide, so a ten-day week's phone cell holds it with its count.
-    assert.ok(d.over && d.discs === 1 && d.shapes === 3, `${d.key}: a phone draws ${d.shapes} shapes on ${d.discs} discs`);
+    assert.ok(d.over && d.discs === 1 && d.shapes <= 3, `${d.key}: a phone draws ${d.shapes} shapes on ${d.discs} discs`);
     assert.equal(d.count, '+1', `${d.key}: a phone counts ${d.count || 'nothing'}`);
     assert.ok(!d.onNumber && !d.onMarks, `${d.key}: the moons sit on the number or the event marks on a phone`);
     assert.ok(d.inCell, `${d.key}: the moons spill out of the cell on a phone`);
@@ -122,7 +124,7 @@ test('four moons on a ten-day week are one disc with three lit shapes and a +1, 
   // sees three and the Director still sees all four.
   await player.go(`${base}/view`);
   await player.page.locator('.cal-v5 .day .msil').first().waitFor();
-  assert.ok((await readMonth(player.page)).every((d) => d.shapes === 3 && d.count === '+1'), 'a player does not see the same four moons');
+  assert.ok((await readMonth(player.page)).every((d) => d.shapes <= 3 && d.count === '+1'), 'a player does not see the same four moons');
 
   const moons = cal.moons || (await owner.api(base)).body.moons;
   assert.equal(moons.length, 4);
@@ -130,10 +132,10 @@ test('four moons on a ten-day week are one disc with three lit shapes and a +1, 
   assert.ok(hid.ok, `hiding a moon answered ${hid.status}`);
   await player.go(`${base}/view`);
   await player.page.locator('.cal-v5 .day .msil').first().waitFor();
-  assert.ok((await readMonth(player.page)).every((d) => d.shapes === 3 && d.count === ''), 'the player still sees the hidden moon');
+  assert.ok((await readMonth(player.page)).every((d) => d.shapes <= 3 && d.count === ''), 'the player still sees the hidden moon');
   await owner.go(`${base}/view`);
   await page.locator('.cal-v5 .day .msil').first().waitFor();
-  assert.ok((await readMonth(page)).every((d) => d.shapes === 3 && d.count === '+1'), 'the Director lost a moon by hiding it from players');
+  assert.ok((await readMonth(page)).every((d) => d.shapes <= 3 && d.count === '+1'), 'the Director lost a moon by hiding it from players');
   owner.assertClean();
   player.assertClean();
 });
@@ -153,9 +155,10 @@ test('two moons on a six-day week are one disc with two tinted shapes a day, cle
     const days = await readMonth(page);
     assert.ok(days.length >= 10, 'the month drew too few moon marks');
     for (const d of days) {
-      assert.ok(d.over && d.discs === 1 && d.shapes === 2 && d.count === '' && d.tinted === 2, `${d.key} at ${width.width}px: ${JSON.stringify(d)}`);
+      assert.ok(d.over && d.discs === 1 && d.shapes <= 2 && d.count === '' && d.tinted === d.shapes, `${d.key} at ${width.width}px: ${JSON.stringify(d)}`);
       assert.ok(!d.onNumber && !d.onMarks && d.inCell, `${d.key} at ${width.width}px: the moons collide`);
     }
+    assert.ok(days.some((d) => d.shapes === 2), `no day lays both moons' lit shapes at ${width.width}px`);
     await picture(page, `calendar-two-moons-${width.width < 600 ? 'phone' : 'desktop'}`, { check: '#2482', about: `Owner month, two moons on a six-day week, ${width.width}px`, locator: page.locator('#cal5-cal') });
   }
   owner.assertClean();
