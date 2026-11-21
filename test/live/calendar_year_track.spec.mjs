@@ -98,6 +98,7 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   await undo.click();
   await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor();
   assert.deepEqual(writes, ['POST /events/batch 200'], `Undo was not one request: ${writes.join(', ')}`);
+  writes.length = 0;
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'Undo left events behind');
 
   // A second fill replaces the first one's events instead of stacking on them.
