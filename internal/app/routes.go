@@ -50,6 +50,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -3165,10 +3166,11 @@ func (a *App) RegisterRoutes() {
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
-	// A practice hero's table comes from the entities plugin's own migrations;
-	// when they did not apply the repository is nil and every hook skips it.
+	// A practice hero's table has its own plugin migration, so it is gated on
+	// that slug alone; when it did not apply the repository is nil and every
+	// hook skips it, and the Standing block is unaffected.
 	var practiceRepo entities.PracticeRepository
-	if a.PluginHealth.IsHealthy(entities.StandingPluginSlug) {
+	if a.PluginHealth.IsHealthy(practiceschema.SchemaSlug) {
 		practiceRepo = entities.NewPracticeRepository(a.DB)
 	}
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
@@ -5981,8 +5983,8 @@ func (a *App) RegisterRoutes() {
 	// A player's Foundry edit is judged with the same plan the web door uses.
 	syncAPIHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroRules(heroRulesAdapter{rules: choiceRuleSvc})
-	// Practice heroes live in the standing migrations' table set, so they
-	// exist only while that schema migrated; without it the shelf is absent.
+	// Practice heroes exist only while their own schema migrated; without it
+	// the shelf is absent.
 	if practiceRepo != nil {
 		entityHandler.SetPracticeService(entities.NewPracticeService(practiceRepo, heroPlannerAdapter{choices: characterChoiceSvc}))
 		entityHandler.SetHeroReleaser(entityRepo.(entities.HeroReleaser))

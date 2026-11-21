@@ -2,9 +2,30 @@ package entities
 
 import (
 	"context"
+	"database/sql"
+	"io/fs"
 	"sync"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/database/dbtest"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 )
+
+// openPracticeDB is a scratch schema with the core migrations and the practice
+// table's own plugin migration, under its own slug as in production.
+func openPracticeDB(t *testing.T) *sql.DB {
+	t.Helper()
+	sub, err := fs.Sub(practiceschema.MigrationsFS, database.PluginMigrationsSubdir)
+	if err != nil {
+		t.Fatalf("sub-FS: %v", err)
+	}
+	return dbtest.Open(t, dbtest.Options{
+		Prefix:           "chronicle_prac_",
+		StrictMigrations: true,
+		Plugins:          []dbtest.PluginMigrations{{Slug: practiceschema.SchemaSlug, FS: sub}},
+	})
+}
 
 // TestPracticeRepository_Integration runs the practice table for real: the
 // cap that two simultaneous requests cannot get past, the single taking of a
@@ -14,7 +35,7 @@ func TestPracticeRepository_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
-	db := openStandingDB(t)
+	db := openPracticeDB(t)
 	ctx := context.Background()
 	repo := NewPracticeRepository(db)
 

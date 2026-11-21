@@ -1,4 +1,4 @@
--- 002_practice_heroes: a player's practice heroes, kept apart from entities.
+-- 001_practice_heroes: a player's practice heroes, kept apart from entities.
 --
 -- A practice hero is only a saved hero-creator result: a name and the picks
 -- made in each step. It is deliberately not an entities row, so nothing that
