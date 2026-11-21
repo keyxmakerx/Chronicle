@@ -65,27 +65,27 @@ export async function enginePage(t, browser) {
 }
 
 
-// Plays one kind's six crits, each with its grand on the die that counts and a
-// same-kind echo, split across two browsers so each draws on its own software
-// GPU. One success and one failure also carry a die of the other kind, which
-// plays the table's echo after the grand's peak. Indexes run over the whole
-// crit list, so each crit keeps the set it has always been thrown with.
+// Plays every crit of one kind, each with its grand on the die that counts and
+// a same-kind echo, split across two browsers so each draws on its own software
+// GPU. One crit of the kind also carries a die of the other kind, which plays
+// the table's echo after the grand's peak. Successes take the first half of
+// the sets and failures the second, so between them every set carries a grand.
 export async function playCrits(t, want) {
   const first = await enginePage(t);
   const second = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   t.after(() => second.close());
   const pages = [first, await enginePage(t, second)];
   const parts = await Promise.all(pages.map((p, part) => p.evaluate(async ({ part, want }) => {
-    const all = E.CRIT_KEYS.succ.concat(E.CRIT_KEYS.fail), ran = [];
-    const mine = all.map((key, i) => i).filter((i) => E.CRIT_KEYS[want].includes(all[i]));
-    for (let n = part; n < mine.length; n += 2) {
-      const i = mine[n], key = all[i], kind = want, other = kind === 'succ' ? 'fail' : 'succ';
+    const list = E.CRIT_KEYS[want], sets = E.SET_KEYS, ran = [];
+    const from = want === 'succ' ? 0 : E.CRIT_KEYS.succ.length;
+    for (let n = part; n < list.length; n += 2) {
+      const i = from + n, key = list[n], kind = want, other = kind === 'succ' ? 'fail' : 'succ';
       const v = (k) => (k === 'succ' ? 20 : 1);
       const dice = [
-        { sides: 20, kind: E.SET_KEYS[i], value: v(kind), crit: kind, counts: true },
-        { sides: 20, kind: E.SET_KEYS[(i + 6) % 12], value: v(kind), crit: kind }
+        { sides: 20, kind: sets[i % sets.length], value: v(kind), crit: kind, counts: true },
+        { sides: 20, kind: sets[(i + 6) % sets.length], value: v(kind), crit: kind }
       ];
-      if (i === 0 || i === 7) dice.push({ sides: 20, kind: E.SET_KEYS[(i + 3) % 12], value: v(other), crit: other });
+      if (n === (kind === 'succ' ? 0 : 1)) dice.push({ sides: 20, kind: sets[(i + 3) % sets.length], value: v(other), crit: other });
       const res = await E.roll({ dice, succFx: kind === 'succ' ? key : 'phoenix', failFx: kind === 'fail' ? key : 'grasp', quality: { mode: 'basic' }, hold: 0 });
       ran.push({ key, grand: res.grand, echoes: res.echoes.length, want: dice.length - 1 });
     }
