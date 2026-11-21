@@ -4670,6 +4670,8 @@
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
       this.calEl.style.setProperty('--cols', weekdays.length || 7);
+      // The moons' row reads this: phone cells of a long week are too narrow for one line.
+      this.calEl.classList.toggle('manycols', weekdays.length > 7);
     },
 
     renderToday: function (bump) {
@@ -4952,8 +4954,8 @@
       return html;
     },
 
-    // The moons a day's corner shows: those this viewer may see, at most
-    // three (the glance names them all). A hand-set moon that players have
+    // The moons a day's corner shows: those this viewer may see (the glance
+    // names them all). A hand-set moon that players have
     // no mark for yet stays off their calendar.
     _gridMoons: function (abs) {
       var dm = this.canAuthorDmOnly;
@@ -4962,32 +4964,26 @@
       });
     },
 
-    // A day's moons: one moon is its phase silhouette; two or more are
-    // nested rings, outermost first, each filled as far as that moon is lit
-    // and tinted faintly toward its own colour.
+    // A day's moons: one moon is its phase silhouette; two or more are a row
+    // of silhouettes in calendar order, the lit part tinted toward each
+    // moon's own colour. The row shows four moons (three on phones, by CSS)
+    // and a count for the rest; the title and glance name them all.
     _dayMoonsHTML: function (key, abs) {
-      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly;
+      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly, self = this;
       if (!moons.length) return '';
       var unshown = function (mo) { var k = dm && MoonMath.manual(mo) ? MoonMath.markOn(mo, abs) : null; return !!(k && !k.shown); };
       var title = moons.map(function (mo) {
         return mo.name + ', ' + MoonMath.label(mo, abs) + (unshown(mo) ? ' (players don’t see this)' : '');
       }).join('; ');
-      var dim = moons.length === 1 && unshown(moons[0]);
-      var body = moons.length === 1 ? this._moonSilFor(moons[0], abs) : this._moonRingsSVG(moons.slice(0, 3), abs, unshown);
-      return '<span class="msil' + (moons.length > 1 ? ' rings' : '') + (dim ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(title) + '">' + body + '</span>';
-    },
-
-    _moonRingsSVG: function (moons, abs, unshown) {
-      var radii = moons.length === 2 ? [8, 4.8] : [8.2, 5.6, 3];
-      return '<svg class="rng" width="20" height="20" viewBox="-10 -10 20 20" aria-hidden="true">' + moons.map(function (mo, i) {
-        var r = radii[i], c = 2 * Math.PI * r, tint = sanitizeColor(mo.color);
-        var style = tint ? ' style="--mc:' + tint + '"' : '';
-        var cls = 'rg' + (unshown(mo) ? ' dim' : '');
-        if (MoonMath.unseen(mo, abs)) return '<circle class="' + cls + ' gone" r="' + r + '"' + style + '/>';
-        var lit = MoonMath.litPct(MoonMath.phase(mo, abs)) / 100;
-        return '<g class="' + cls + '"' + style + '><circle class="rt" r="' + r + '"/>' +
-          (lit > 0.01 ? '<circle class="rl" r="' + r + '" stroke-dasharray="' + (c * lit).toFixed(2) + ' ' + c.toFixed(2) + '" transform="rotate(-90)"/>' : '') + '</g>';
-      }).join('') + '</svg>';
+      var attrs = ' data-moon-day="' + key + '" title="' + esc(title) + '">';
+      if (moons.length === 1) return '<span class="msil' + (unshown(moons[0]) ? ' dim' : '') + '"' + attrs + this._moonSilFor(moons[0], abs) + '</span>';
+      var row = moons.slice(0, 4).map(function (mo, i) {
+        var tint = sanitizeColor(mo.color);
+        return '<span class="m1' + (i === 3 ? ' m4' : '') + (unshown(mo) ? ' dim' : '') + '"' + (tint ? ' style="--mc:' + tint + '"' : '') + '>' + self._moonSilFor(mo, abs) + '</span>';
+      }).join('');
+      if (moons.length > 3) row += '<span class="mn mn-p" aria-hidden="true">+' + (moons.length - 3) + '</span>';
+      if (moons.length > 4) row += '<span class="mn mn-d" aria-hidden="true">+' + (moons.length - 4) + '</span>';
+      return '<span class="msil several"' + attrs + row + '</span>';
     },
 
     _moonSilSVG: function (phase) {

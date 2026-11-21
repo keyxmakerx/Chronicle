@@ -904,13 +904,15 @@
 /* Director only: a dashed ring on a red moon players can't see yet. */
 .cal-v5 .msil.blood.dir::after{content:"";position:absolute;inset:1.5px;border-radius:50%;border:1px dashed var(--bldS);pointer-events:none}
 .cal-v5 .band .msil{position:relative;top:auto;right:auto;margin-left:4px;flex:none}
-/* Two or more moons: nested rings, each lit as far as its moon, tinted a third of the way toward the moon's own colour. */
-.cal-v5 .msil .rng{display:block;overflow:visible}
-.cal-v5 .msil .rng circle{fill:none;stroke-width:1.9}
-.cal-v5 .msil .rng .rt{stroke:var(--silB)}
-.cal-v5 .msil .rng .rl{stroke:color-mix(in oklch, var(--silL) 68%, var(--mc, var(--silL)));stroke-linecap:round}
-.cal-v5 .msil .rng .gone{stroke:var(--silS);stroke-dasharray:1.6 1.6}
-.cal-v5 .msil .rng .dim{opacity:.45}
+/* Two or more moons: a row of silhouettes, each lit part mixed a share of the way toward its moon's own colour (--mc), the body a little less. The row ends where the day number begins: its silhouettes shrink to fit (down to 8px) rather than cross it. A blood moon keeps its red as the base. */
+.cal-v5 .msil.several{width:auto;height:auto;min-height:22px;max-width:calc(100% - 38px);display:flex;justify-content:flex-end;align-items:center;gap:2px;padding:0 2px;border-radius:11px;--bl:var(--silL);--bb:var(--silB)}
+.cal-v5 .msil.several.blood{--bl:var(--bldL);--bb:var(--bldB)}
+.cal-v5 .msil.several::before{border-radius:11px}
+.cal-v5 .msil .m1{display:block;flex:0 1 14px;min-width:8px;line-height:0;--sl:color-mix(in oklch, var(--bl) 40%, var(--mc, var(--bl)));--sb:color-mix(in oklch, var(--bb) 78%, var(--mc, var(--bb)))}
+.cal-v5 .msil .m1 .sil{width:100%;height:auto}
+.cal-v5 .msil .m1.dim{opacity:.45}
+.cal-v5 .msil .mn{flex:none;font:600 10px/1 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums;display:none}
+.cal-v5 .msil .mn-d{display:block}
 .cal-v5 .hc .gm{display:flex;align-items:center;gap:6px;white-space:nowrap;font:500 12px/1.35 var(--sans);color:var(--mut)}
 .cal-v5 .hc .gm b{font-weight:600;color:var(--ink)}
 .cal-v5 .hc .gm + .gm{margin-top:4px}
@@ -1189,7 +1191,18 @@
 .cal-v5 .msil{top:31px;right:auto;left:50%;width:16px;height:16px;margin-left:-8px}
 .cal-v5 .msil::before{display:none}
 .cal-v5 .msil .sil{width:11px;height:11px}
-.cal-v5 .msil .rng{width:15px;height:15px}
+.cal-v5 .msil.several{left:50%;transform:translateX(-50%);margin-left:0;width:max-content;max-width:calc(100% - 2px);min-height:16px;justify-content:center;padding:0}
+.cal-v5 .msil .m1{flex-basis:11px;min-width:7px}
+.cal-v5 .msil .m4, .cal-v5 .msil .mn-d{display:none}
+.cal-v5 .msil .mn-p{display:block;margin-left:1px}
+/* A week of eight or more days leaves a phone cell about 40px: the moons make two lines of two, and a count past four. */
+.cal-v5 .manycols .msil.several{width:22px;flex-wrap:wrap;justify-content:center;align-content:center}
+.cal-v5 .manycols .msil .m1{flex-basis:9px;min-width:9px}
+.cal-v5 .manycols .msil .m4{display:block}
+.cal-v5 .manycols .msil .mn-p{display:none}
+.cal-v5 .manycols .msil .mn-d{display:block;margin-left:0}
+.cal-v5 .manycols .day:has(.msil.several) .dc .marks{margin-top:24px}
+.cal-v5 .band .msil.several{left:auto;transform:none;margin-left:6px;width:auto;max-width:none;flex-wrap:nowrap}
 .cal-v5 .dc .marks{margin-top:13px}
 .cal-v5 .band .msil{top:auto;left:auto;margin-left:6px}
 .cal-v5 .band .dc .marks{margin-top:0}
