@@ -32,6 +32,19 @@
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  // unfitNotes says, one quiet sentence per night, which nights the roll on
+  // the night left unrolled because no line of the table fits, and why. The
+  // server names the reason; past `max` nights the rest are counted.
+  function unfitNotes(unfit, dateText, max) {
+    var list = unfit || [], out = [];
+    list.slice(0, max).forEach(function (u) { out.push(dateText(u) + ' was left unrolled. ' + (u.why || 'No line of the table fits.')); });
+    if (list.length > max) {
+      var more = list.length - max;
+      out.push(more + ' more night' + (more > 1 ? 's were' : ' was') + ' left unrolled the same way.');
+    }
+    return out;
+  }
+
   // A new roll starts as two results over 2d10, ready to rename.
   function starter() {
     return {
@@ -217,8 +230,11 @@
       .concat((data.upcoming || []).map(function (d) { return { d: d, n: null }; }));
     rows.forEach(function (r) { r.ix = CalDate.dayIndex(cal, r.d.year, r.d.month, r.d.day); });
     rows.sort(function (a, b) { return a.ix - b.ix; });
+    var unfitAt = {};
+    (data.unfit || []).forEach(function (u) { unfitAt[u.year + '_' + u.month + '_' + u.day] = true; });
     if (!rows.length) return '<p class="rlhint">' + (data.truncated ? 'This event’s nights in ' + this.year + ' couldn’t all be worked out.' : 'This event has no nights in ' + this.year + '.') + '</p>';
     var past = rows.filter(function (r) { return r.ix < today; }).length, h = '';
+    unfitNotes(data.unfit, function (u) { return self._dateText(u); }, 5).forEach(function (t) { h += '<p class="rlhint">' + esc(t) + '</p>'; });
     if (past) h += '<button type="button" class="rlq" data-r="past" aria-expanded="' + this.showPast + '">' + (this.showPast ? 'Hide' : 'Show') + ' ' + past + ' past night' + (past > 1 ? 's' : '') + '</button>';
     rows.forEach(function (r) {
       var isPast = r.ix < today;
@@ -227,7 +243,7 @@
       var told = n && n.told && r.ix <= today;
       h += '<div class="rlnight' + (isPast ? ' past' : '') + '" data-d="' + key + '"><span class="d">' + esc(self._dateText(r.d)) + '</span>' +
         (n ? '<span class="tot">' + (n.total != null ? esc(String(n.total)) : '') + '</span><span class="bn"><i class="tick' + tick + '"></i><b>' + esc(n.result || '—') + '</b>' + (told ? '<span class="told">Players told</span>' : '') + '</span>'
-           : '<span class="tot"></span><span class="bn wait">Not rolled yet</span>') +
+           : '<span class="tot"></span><span class="bn wait">' + (unfitAt[key] ? 'No line fits' : 'Not rolled yet') + '</span>') +
         '<span class="acts">' +
         '<button type="button" class="rlic" data-r="lock" aria-pressed="' + !!(n && n.locked) + '" aria-label="' + (n && n.locked ? 'Unlock' : 'Lock') + ' ' + esc(self._dateText(r.d)) + '"' + (n ? '' : ' disabled') + '><i class="fa-solid ' + (n && n.locked ? 'fa-lock' : 'fa-lock-open') + '"></i></button>' +
         '<button type="button" class="rlic" data-r="reroll" aria-label="Roll ' + esc(self._dateText(r.d)) + '"' + (n && n.locked ? ' disabled' : '') + '><i class="fa-solid fa-rotate"></i></button></span></div>';
@@ -401,7 +417,7 @@
   };
 
   window.Chronicle = window.Chronicle || {};
-  Chronicle.calendarEventRoll = { parseDice: parseDice, Roll: Roll };
+  Chronicle.calendarEventRoll = { parseDice: parseDice, unfitNotes: unfitNotes, Roll: Roll };
 
   // The drawer renders the section with data-widget="calendar_event_roll"
   // and hands over its calendar and event on the element, so this file

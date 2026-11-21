@@ -226,9 +226,10 @@ func (s *calendarService) rollOne(ctx context.Context, cal *Calendar, campaignID
 		}
 		// Only lines whose conditions hold that night can come up, as in
 		// the browser's Roll one.
-		fits := eligibleEntries(table, s.nightFactsFor(ctx, cal, d, table))
+		facts := s.nightFactsFor(ctx, cal, d, table)
+		fits := eligibleEntries(table, facts)
 		if len(fits) == 0 {
-			return n, errNothingFits
+			return n, &noFitError{why: whyNothingFits(table, facts)}
 		}
 		e, err := pickEntry(fits)
 		if err != nil {
@@ -306,10 +307,13 @@ func pickEntry(entries []RollTableEntry) (RollTableEntry, error) {
 // rollArrived rolls, for a roll that rolls on the night, every night in
 // dates that has arrived (within rollOnTheNightWindow of today) and has no
 // stored result. stored is updated in place. A failure to roll is not the
-// reader's problem: the night stays unrolled and the read goes on.
-func (s *calendarService) rollArrived(ctx context.Context, cal *Calendar, campaignID, eventID string, cfg *RollConfig, dates []DayDate, stored map[DayDate]RollNight) {
+// reader's problem: the night stays unrolled and the read goes on. A night
+// left unrolled because no line of the table fits it is returned with the
+// reason, for the Director's view; it is worked out afresh on each read, since
+// nothing is stored for a night that was not rolled.
+func (s *calendarService) rollArrived(ctx context.Context, cal *Calendar, campaignID, eventID string, cfg *RollConfig, dates []DayDate, stored map[DayDate]RollNight) []UnfitNight {
 	if !cfg.OnTheNight {
-		return
+		return nil
 	}
 	today := calToday(cal)
 	earliest, ok := shiftDate(cal, today, -rollOnTheNightWindow)
@@ -317,6 +321,7 @@ func (s *calendarService) rollArrived(ctx context.Context, cal *Calendar, campai
 		earliest = today
 	}
 	var fresh []RollNight
+	var unfit []UnfitNight
 	var table *RollTable
 	for _, d := range dates {
 		if _, have := stored[d]; have || !d.inRange(earliest, today) {
@@ -325,35 +330,40 @@ func (s *calendarService) rollArrived(ctx context.Context, cal *Calendar, campai
 		if cfg.Source == RollSourceTable && table == nil {
 			t, err := s.loadRollTable(ctx, campaignID, cfg.TableID)
 			if err != nil {
-				return
+				return unfit
 			}
 			table = t
 		}
 		n, err := s.rollOne(ctx, cal, campaignID, cfg, d, RollNightOnDay, table)
 		if errors.Is(err, errNothingFits) {
+			var nf *noFitError
+			if errors.As(err, &nf) {
+				unfit = append(unfit, UnfitNight{DayDate: d, Why: nf.why})
+			}
 			continue
 		}
 		if err != nil {
-			return
+			return unfit
 		}
 		fresh = append(fresh, n)
 	}
 	if len(fresh) == 0 {
-		return
+		return unfit
 	}
 	if err := s.rollRepo.PutNights(ctx, eventID, fresh, true); err != nil {
-		return
+		return unfit
 	}
 	// Re-read rather than trust fresh: another reader may have stored the
 	// same night first, and theirs is the one that stands.
 	from, to := fresh[0].date(), fresh[len(fresh)-1].date()
 	got, err := s.rollRepo.ListNights(ctx, eventID, from, to)
 	if err != nil {
-		return
+		return unfit
 	}
 	for _, n := range got {
 		stored[n.date()] = n
 	}
+	return unfit
 }
 
 // buildRollView shapes an event's year for v.
@@ -382,7 +392,7 @@ func (s *calendarService) buildRollView(ctx context.Context, t *rollTarget, camp
 	for _, n := range got {
 		stored[n.date()] = n
 	}
-	s.rollArrived(ctx, t.cal, campaignID, t.evt.ID, cfg, dates, stored)
+	unfit := s.rollArrived(ctx, t.cal, campaignID, t.evt.ID, cfg, dates, stored)
 
 	if !director {
 		s.hideTableFromPlayers(ctx, campaignID, cfg)
@@ -421,6 +431,7 @@ func (s *calendarService) buildRollView(ctx context.Context, t *rollTarget, camp
 		c := *cfg
 		out.Config = &c
 		out.Truncated = truncated
+		out.Unfit = unfit
 	}
 	return out, nil
 }
