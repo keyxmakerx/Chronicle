@@ -373,6 +373,32 @@ func UpcomingEventsAvailable(ctx context.Context) bool {
 	return available
 }
 
+// --- Home blocks whose feature is off ---
+//
+// A home block another plugin draws loads its content from that plugin's
+// route, and an off addon answers that route 404: HTMX does not swap it, so
+// the block stays a grey loading bar and the error body pops a toast at every
+// viewer. internal/app, which may name every plugin, resolves which block
+// types have their feature off into this map (block type to a short name of
+// the feature) so campaigns and entities can skip the block without naming a
+// plugin (T-B2).
+type ctxKeyHomeBlocksOff struct{}
+
+// SetHomeBlocksOff records the block types whose feature is off for this
+// request, each with the feature's name for the owner's note.
+func SetHomeBlocksOff(ctx context.Context, off map[string]string) context.Context {
+	return context.WithValue(ctx, ctxKeyHomeBlocksOff{}, off)
+}
+
+// HomeBlockOff reports whether blockType's feature is off, and the feature's
+// name. Unset means nothing is off: a template rendered without the request
+// middleware keeps drawing every block, as it did before this existed.
+func HomeBlockOff(ctx context.Context, blockType string) (string, bool) {
+	off, _ := ctx.Value(ctxKeyHomeBlocksOff{}).(map[string]string)
+	feature, ok := off[blockType]
+	return feature, ok
+}
+
 // EnabledSystem identifies the game system enabled for the current campaign,
 // used to render its rulebook (reference) nav link. Slug is the system's
 // module ID (the `:mod` path segment, e.g. "drawsteel").

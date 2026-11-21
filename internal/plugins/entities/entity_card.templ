@@ -30,7 +30,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 		} else {
 			<div class="ec-band h-14 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
 				if entity.TypeIcon != "" {
-					<i class={ "fa-solid " + entity.TypeIcon, "text-lg opacity-30" } style={ fmt.Sprintf("color: %s", entity.TypeColor) }></i>
+					<i class={ "fa-solid " + entity.TypeIcon, "text-lg opacity-30", "kind-themed" } { layouts.KindIconAttrs(ctx, entity.TypeColor)... }></i>
 				}
 			</div>
 		}
@@ -48,7 +48,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 					style={ typeBadgeStyle(entity.TypeColor) }
 				>
 					if entity.TypeIcon != "" {
-						<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]" }></i>
+						<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]", "kind-themed" } { layouts.KindIconAttrs(ctx, entity.TypeColor)... }></i>
 					}
 					{ entity.TypeName }
 				</span>

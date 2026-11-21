@@ -48,6 +48,35 @@ test('every look uses a motif and sound the engine can draw and play', () => {
   }
 });
 
+// A stand-in for the browser's audio, counting every node the engine makes.
+function loadWithAudio() {
+  let made = 0;
+  const param = { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {} };
+  const node = () => new Proxy(function () {}, {
+    get: (t, k) => (k === 'gain' || k === 'frequency' || k === 'Q' || k === 'detune' || k === 'playbackRate' ? param
+      : k === 'getChannelData' ? () => new Float32Array(8) : () => (made++, node())),
+    set: () => true,
+  });
+  const sandbox = {};
+  sandbox.window = sandbox;
+  sandbox.AudioContext = function () { return Object.assign(node(), { sampleRate: 8, currentTime: 0, state: 'running', destination: {} }); };
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync(join(root, 'static', 'js', 'widgets', 'item_look_fx.js'), 'utf8'), sandbox);
+  return { FX: sandbox.ItemLookFX, made: () => made };
+}
+test('every sound a look can carry reaches the sound makers, and none stays silent', () => {
+  const { FX: A, made } = loadWithAudio();
+  A.Sound.play('crackle', 0, 0);
+  assert.equal(made(), 0, 'sound is off until the viewer turns it on');
+  A.Sound.on = true;
+  for (const s of A.SOUNDS) {
+    const before = made();
+    A.Sound.play(s, 0, 0);
+    if (s === 'none') assert.equal(made(), before, 'none makes no sound');
+    else assert.ok(made() > before, `sound ${s} plays nothing`);
+  }
+});
+
 test('resolve applies the colour, sound and words, and leaves the gallery untouched', () => {
   const L = FX.resolve({ look: 'ember', tint: '#8fd8ff', sound: 'bell', words: '6 fire' });
   assert.equal(L.color, '#8fd8ff');

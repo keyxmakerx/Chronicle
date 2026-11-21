@@ -105,7 +105,7 @@
     var submitBtn = document.createElement('button');
     submitBtn.type = 'button';
     submitBtn.className = 'btn-primary text-sm px-4 py-1.5';
-    submitBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Create Note';
+    submitBtn.innerHTML = '<i class="fa-solid fa-check word-ic mr-1"></i> Create Note';
     submitBtn.id = 'qc-submit';
     submitBtn.addEventListener('click', submitNote);
 
@@ -217,7 +217,7 @@
       })
       .finally(function () {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Create Note';
+        submitBtn.innerHTML = '<i class="fa-solid fa-check word-ic mr-1"></i> Create Note';
       });
   }
 

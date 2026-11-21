@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  var SPRITE = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\" focusable=\"false\"><defs><symbol id=\"cz-i-home\" viewBox=\"0 0 24 24\"><path d=\"M3.5 11.5 12 4.5l8.5 7\"/><path d=\"M5.5 10v9.5h13V10\"/><path d=\"M10 19.5v-5h4v5\"/></symbol><symbol id=\"cz-i-journal\" viewBox=\"0 0 24 24\"><path d=\"M12 6.5C10.3 5 7.4 4.5 4 5v13.5c3.4-.5 6.3 0 8 1.5 1.7-1.5 4.6-2 8-1.5V5c-3.4-.5-6.3 0-8 1.5z\"/><path d=\"M12 6.5V20\"/></symbol><symbol id=\"cz-i-cal\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2\"/><path d=\"M4 10h16M8.5 3.5v4M15.5 3.5v4M8 14h2M14 14h2M8 17h2\"/></symbol><symbol id=\"cz-i-d20\" viewBox=\"0 0 24 24\"><path d=\"M12 3 20 7.5v9L12 21l-8-4.5v-9z\"/><path d=\"M12 3 7.5 13.5h9zM4 7.5l3.5 6M20 7.5l-3.5 6M7.5 13.5 12 21l4.5-7.5\"/></symbol><symbol id=\"cz-i-map\" viewBox=\"0 0 24 24\"><path d=\"M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z\"/><path d=\"M9 4.5v13M15 6.5v13\"/></symbol><symbol id=\"cz-i-users\" viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"8.5\" r=\"3.2\"/><path d=\"M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5\"/><circle cx=\"16.5\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16 14.2c2.4.1 4 1.7 4.5 4.3\"/></symbol><symbol id=\"cz-i-layers\" viewBox=\"0 0 24 24\"><path d=\"M12 4 20.5 8.5 12 13 3.5 8.5z\"/><path d=\"m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5\"/></symbol><symbol id=\"cz-i-mappin\" viewBox=\"0 0 24 24\"><path d=\"M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.3\"/></symbol><symbol id=\"cz-i-banner\" viewBox=\"0 0 24 24\"><path d=\"M6.5 3.5v17M6.5 4.5h11v10.5l-5.5-3-5.5 3\"/></symbol><symbol id=\"cz-i-gem\" viewBox=\"0 0 24 24\"><path d=\"M7 4.5h10l3.5 5-8.5 10-8.5-10z\"/><path d=\"M3.5 9.5h17M9.5 4.5 8 9.5l4 10 4-10-1.5-5\"/></symbol><symbol id=\"cz-i-scroll\" viewBox=\"0 0 24 24\"><path d=\"M8 4h9.5a2 2 0 0 1 0 4H17v10a2 2 0 0 1-2 2H6.5a2 2 0 0 1 0-4H8z\"/><path d=\"M8 16V6a2 2 0 0 0-4 0v1M11 9h3M11 12.5h3\"/></symbol><symbol id=\"cz-i-tack\" viewBox=\"0 0 24 24\"><path d=\"M9.5 3.5h5l-.8 5.3 3.3 3.2H7l3.3-3.2z\"/><path d=\"M12 12v8.5\"/></symbol><symbol id=\"cz-i-pencil\" viewBox=\"0 0 24 24\"><path d=\"M16.9 4.5a2.1 2.1 0 1 1 3 3L8 19.3l-4 1 1-4z\"/><path d=\"M14.5 7l2.5 2.5\"/></symbol><symbol id=\"cz-i-chev\" viewBox=\"0 0 24 24\"><path d=\"m6 9 6 6 6-6\"/></symbol><symbol id=\"cz-i-chev-r\" viewBox=\"0 0 24 24\"><path d=\"m9 6 6 6-6 6\"/></symbol><symbol id=\"cz-i-search\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/></symbol><symbol id=\"cz-i-mask\" viewBox=\"0 0 24 24\"><path d=\"M4 5h8v7c0 3-2 6-4 6s-4-3-4-6zM12 5h8v7c0 3-2 6-4 6s-4-3-4-6z\"/></symbol><symbol id=\"cz-i-bell\" viewBox=\"0 0 24 24\"><path d=\"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z\"/><path d=\"M10 21h4\"/></symbol><symbol id=\"cz-i-note\" viewBox=\"0 0 24 24\"><path d=\"M5 4h14v11l-5 5H5z\"/><path d=\"M14 20v-5h5\"/></symbol><symbol id=\"cz-i-mail\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5.5\" width=\"17\" height=\"13\" rx=\"2\"/><path d=\"m4.5 7 7.5 6 7.5-6\"/></symbol><symbol id=\"cz-i-flame\" viewBox=\"0 0 24 24\"><path d=\"M12 21c-3.6 0-6-2.4-6-5.6 0-3.6 3.2-5.2 3.7-9.4 2.2 1.3 3.4 3.4 3.3 5.6 1-.5 1.7-1.5 2-2.8 1.7 1.5 3 3.6 3 6.4 0 3.4-2.4 5.8-6 5.8z\"/></symbol><symbol id=\"cz-i-check\" viewBox=\"0 0 24 24\"><path d=\"M5 12.5 10 17.5 19.5 7\"/></symbol><symbol id=\"cz-i-plus\" viewBox=\"0 0 24 24\"><path d=\"M12 5.5v13M5.5 12h13\"/></symbol><symbol id=\"cz-i-x\" viewBox=\"0 0 24 24\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></symbol><symbol id=\"cz-i-up\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M6 11l6-6 6 6\"/></symbol><symbol id=\"cz-i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M6 13l6 6 6-6\"/></symbol><symbol id=\"cz-i-gear\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/></symbol><symbol id=\"cz-i-undo\" viewBox=\"0 0 24 24\"><path d=\"M9 6.5 4.5 11 9 15.5\"/><path d=\"M4.5 11H14a5 5 0 0 1 0 10h-2.5\"/></symbol><symbol id=\"cz-i-info\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></symbol><symbol id=\"cz-i-upload\" viewBox=\"0 0 24 24\"><path d=\"M12 15.5V4.5M7.5 9 12 4.5 16.5 9\"/><path d=\"M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15\"/></symbol><symbol id=\"cz-i-trash\" viewBox=\"0 0 24 24\"><path d=\"M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13\"/></symbol><symbol id=\"cz-i-image\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5\" width=\"17\" height=\"14\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"m5 17 4.5-4.5 3 3 2.5-2.5 4 4\"/></symbol><symbol id=\"cz-i-link\" viewBox=\"0 0 24 24\"><path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/></symbol><symbol id=\"cz-i-spark\" viewBox=\"0 0 24 24\"><path d=\"M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z\"/><path d=\"M18.5 15.5v5M16 18h5\"/></symbol><symbol id=\"cz-i-tag\" viewBox=\"0 0 24 24\"><path d=\"M3.5 12V4h8l9 9-8 8z\"/><circle cx=\"7.8\" cy=\"8.2\" r=\"1.3\"/></symbol><symbol id=\"cz-i-topbar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M3.5 9.5h17M6.5 7h4\"/></symbol><symbol id=\"cz-i-sidebar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M5.5 4.5H9.5v15H5.5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z\" fill=\"currentColor\" fill-opacity=\".4\"/></symbol><symbol id=\"cz-i-nav\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M9.5 4.5v15M5.8 8.5h1.6M5.8 12h1.6M5.8 15.5h1.6\"/></symbol><symbol id=\"cz-i-palette\" viewBox=\"0 0 24 24\"><path d=\"M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2c2.3 0 4.1-1.8 4.1-4.1 0-4-3.8-7.1-8.5-7.1z\"/><circle cx=\"7.8\" cy=\"11\" r=\"1.1\"/><circle cx=\"10.5\" cy=\"7.6\" r=\"1.1\"/><circle cx=\"15\" cy=\"8\" r=\"1.1\"/></symbol><symbol id=\"cz-i-type\" viewBox=\"0 0 24 24\"><path d=\"M3.5 18.5 8 6h1.5L14 18.5M5.2 14h7.1\"/><path d=\"M20.5 18.5v-5a2.5 2.5 0 0 0-4.7-1.2M20.5 15.2c-3-.4-4.9.3-4.9 1.8 0 1.4 1.8 1.9 3.3 1.1\"/></symbol><symbol id=\"cz-i-cursor\" viewBox=\"0 0 24 24\"><path d=\"M6 3.5 18.5 12l-5.3 1.3 2.9 5.9-2.3 1.1-2.8-5.9L7 17.5z\"/></symbol><symbol id=\"cz-i-depth\" viewBox=\"0 0 24 24\"><rect x=\"8.5\" y=\"8.5\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M15.5 5.5H6A2.5 2.5 0 0 0 3.5 8v9.5\"/></symbol><symbol id=\"cz-i-moon\" viewBox=\"0 0 24 24\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z\"/></symbol><symbol id=\"cz-i-lock\" viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10.5\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10.5V8a4 4 0 0 1 8 0v2.5\"/></symbol><symbol id=\"cz-i-eyeoff\" viewBox=\"0 0 24 24\"><path d=\"M3.5 3.5l17 17M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.4 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1\"/></symbol></defs></svg>";
+  var SPRITE = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\" focusable=\"false\"><defs><symbol id=\"cz-i-home\" viewBox=\"0 0 24 24\"><path d=\"M3.5 11.5 12 4.5l8.5 7\"/><path d=\"M5.5 10v9.5h13V10\"/><path d=\"M10 19.5v-5h4v5\"/></symbol><symbol id=\"cz-i-journal\" viewBox=\"0 0 24 24\"><path d=\"M12 6.5C10.3 5 7.4 4.5 4 5v13.5c3.4-.5 6.3 0 8 1.5 1.7-1.5 4.6-2 8-1.5V5c-3.4-.5-6.3 0-8 1.5z\"/><path d=\"M12 6.5V20\"/></symbol><symbol id=\"cz-i-cal\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2\"/><path d=\"M4 10h16M8.5 3.5v4M15.5 3.5v4M8 14h2M14 14h2M8 17h2\"/></symbol><symbol id=\"cz-i-d20\" viewBox=\"0 0 24 24\"><path d=\"M12 3 20 7.5v9L12 21l-8-4.5v-9z\"/><path d=\"M12 3 7.5 13.5h9zM4 7.5l3.5 6M20 7.5l-3.5 6M7.5 13.5 12 21l4.5-7.5\"/></symbol><symbol id=\"cz-i-map\" viewBox=\"0 0 24 24\"><path d=\"M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z\"/><path d=\"M9 4.5v13M15 6.5v13\"/></symbol><symbol id=\"cz-i-users\" viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"8.5\" r=\"3.2\"/><path d=\"M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5\"/><circle cx=\"16.5\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16 14.2c2.4.1 4 1.7 4.5 4.3\"/></symbol><symbol id=\"cz-i-layers\" viewBox=\"0 0 24 24\"><path d=\"M12 4 20.5 8.5 12 13 3.5 8.5z\"/><path d=\"m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5\"/></symbol><symbol id=\"cz-i-mappin\" viewBox=\"0 0 24 24\"><path d=\"M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.3\"/></symbol><symbol id=\"cz-i-banner\" viewBox=\"0 0 24 24\"><path d=\"M6.5 3.5v17M6.5 4.5h11v10.5l-5.5-3-5.5 3\"/></symbol><symbol id=\"cz-i-gem\" viewBox=\"0 0 24 24\"><path d=\"M7 4.5h10l3.5 5-8.5 10-8.5-10z\"/><path d=\"M3.5 9.5h17M9.5 4.5 8 9.5l4 10 4-10-1.5-5\"/></symbol><symbol id=\"cz-i-scroll\" viewBox=\"0 0 24 24\"><path d=\"M8 4h9.5a2 2 0 0 1 0 4H17v10a2 2 0 0 1-2 2H6.5a2 2 0 0 1 0-4H8z\"/><path d=\"M8 16V6a2 2 0 0 0-4 0v1M11 9h3M11 12.5h3\"/></symbol><symbol id=\"cz-i-tack\" viewBox=\"0 0 24 24\"><path d=\"M9.5 3.5h5l-.8 5.3 3.3 3.2H7l3.3-3.2z\"/><path d=\"M12 12v8.5\"/></symbol><symbol id=\"cz-i-pencil\" viewBox=\"0 0 24 24\"><path d=\"M16.9 4.5a2.1 2.1 0 1 1 3 3L8 19.3l-4 1 1-4z\"/><path d=\"M14.5 7l2.5 2.5\"/></symbol><symbol id=\"cz-i-chev\" viewBox=\"0 0 24 24\"><path d=\"m6 9 6 6 6-6\"/></symbol><symbol id=\"cz-i-chev-r\" viewBox=\"0 0 24 24\"><path d=\"m9 6 6 6-6 6\"/></symbol><symbol id=\"cz-i-search\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/></symbol><symbol id=\"cz-i-mask\" viewBox=\"0 0 24 24\"><path d=\"M4 5h8v7c0 3-2 6-4 6s-4-3-4-6zM12 5h8v7c0 3-2 6-4 6s-4-3-4-6z\"/></symbol><symbol id=\"cz-i-bell\" viewBox=\"0 0 24 24\"><path d=\"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z\"/><path d=\"M10 21h4\"/></symbol><symbol id=\"cz-i-note\" viewBox=\"0 0 24 24\"><path d=\"M5 4h14v11l-5 5H5z\"/><path d=\"M14 20v-5h5\"/></symbol><symbol id=\"cz-i-mail\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5.5\" width=\"17\" height=\"13\" rx=\"2\"/><path d=\"m4.5 7 7.5 6 7.5-6\"/></symbol><symbol id=\"cz-i-flame\" viewBox=\"0 0 24 24\"><path d=\"M12 21c-3.6 0-6-2.4-6-5.6 0-3.6 3.2-5.2 3.7-9.4 2.2 1.3 3.4 3.4 3.3 5.6 1-.5 1.7-1.5 2-2.8 1.7 1.5 3 3.6 3 6.4 0 3.4-2.4 5.8-6 5.8z\"/></symbol><symbol id=\"cz-i-check\" viewBox=\"0 0 24 24\"><path d=\"M5 12.5 10 17.5 19.5 7\"/></symbol><symbol id=\"cz-i-plus\" viewBox=\"0 0 24 24\"><path d=\"M12 5.5v13M5.5 12h13\"/></symbol><symbol id=\"cz-i-x\" viewBox=\"0 0 24 24\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></symbol><symbol id=\"cz-i-up\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M6 11l6-6 6 6\"/></symbol><symbol id=\"cz-i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M6 13l6 6 6-6\"/></symbol><symbol id=\"cz-i-gear\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/></symbol><symbol id=\"cz-i-undo\" viewBox=\"0 0 24 24\"><path d=\"M9 6.5 4.5 11 9 15.5\"/><path d=\"M4.5 11H14a5 5 0 0 1 0 10h-2.5\"/></symbol><symbol id=\"cz-i-info\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></symbol><symbol id=\"cz-i-upload\" viewBox=\"0 0 24 24\"><path d=\"M12 15.5V4.5M7.5 9 12 4.5 16.5 9\"/><path d=\"M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15\"/></symbol><symbol id=\"cz-i-trash\" viewBox=\"0 0 24 24\"><path d=\"M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13\"/></symbol><symbol id=\"cz-i-image\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5\" width=\"17\" height=\"14\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"m5 17 4.5-4.5 3 3 2.5-2.5 4 4\"/></symbol><symbol id=\"cz-i-link\" viewBox=\"0 0 24 24\"><path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/></symbol><symbol id=\"cz-i-spark\" viewBox=\"0 0 24 24\"><path d=\"M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z\"/><path d=\"M18.5 15.5v5M16 18h5\"/></symbol><symbol id=\"cz-i-tag\" viewBox=\"0 0 24 24\"><path d=\"M3.5 12V4h8l9 9-8 8z\"/><circle cx=\"7.8\" cy=\"8.2\" r=\"1.3\"/></symbol><symbol id=\"cz-i-topbar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M3.5 9.5h17M6.5 7h4\"/></symbol><symbol id=\"cz-i-sidebar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M5.5 4.5H9.5v15H5.5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z\" fill=\"currentColor\" fill-opacity=\".4\"/></symbol><symbol id=\"cz-i-nav\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M9.5 4.5v15M5.8 8.5h1.6M5.8 12h1.6M5.8 15.5h1.6\"/></symbol><symbol id=\"cz-i-palette\" viewBox=\"0 0 24 24\"><path d=\"M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2c2.3 0 4.1-1.8 4.1-4.1 0-4-3.8-7.1-8.5-7.1z\"/><circle cx=\"7.8\" cy=\"11\" r=\"1.1\"/><circle cx=\"10.5\" cy=\"7.6\" r=\"1.1\"/><circle cx=\"15\" cy=\"8\" r=\"1.1\"/></symbol><symbol id=\"cz-i-type\" viewBox=\"0 0 24 24\"><path d=\"M3.5 18.5 8 6h1.5L14 18.5M5.2 14h7.1\"/><path d=\"M20.5 18.5v-5a2.5 2.5 0 0 0-4.7-1.2M20.5 15.2c-3-.4-4.9.3-4.9 1.8 0 1.4 1.8 1.9 3.3 1.1\"/></symbol><symbol id=\"cz-i-cursor\" viewBox=\"0 0 24 24\"><path d=\"M6 3.5 18.5 12l-5.3 1.3 2.9 5.9-2.3 1.1-2.8-5.9L7 17.5z\"/></symbol><symbol id=\"cz-i-depth\" viewBox=\"0 0 24 24\"><rect x=\"8.5\" y=\"8.5\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M15.5 5.5H6A2.5 2.5 0 0 0 3.5 8v9.5\"/></symbol><symbol id=\"cz-i-icons\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"4\" width=\"6.5\" height=\"6.5\" rx=\"1.5\"/><circle cx=\"16.5\" cy=\"7.25\" r=\"3.25\"/><path d=\"M7.25 14l3.25 5.5H4z\"/><path d=\"M13.5 16.5h6M16.5 13.5v6\"/></symbol><symbol id=\"cz-i-moon\" viewBox=\"0 0 24 24\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z\"/></symbol><symbol id=\"cz-i-lock\" viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10.5\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10.5V8a4 4 0 0 1 8 0v2.5\"/></symbol><symbol id=\"cz-i-eyeoff\" viewBox=\"0 0 24 24\"><path d=\"M3.5 3.5l17 17M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.4 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1\"/></symbol></defs></svg>";
 
   // refreshTopbar() redraws the live header's background, centre content
   // and name from a fresh server render of this page. The header sits
@@ -412,6 +412,7 @@
       { id:'colours', name:'Colours', icon:'i-palette', desc:'The site’s own colour, the two colours your pages use, and the tones behind them.' },
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
+      { id:'icons', name:'Icons', icon:'i-icons', desc:'Chronicle shows few icons. Bring more back for this campaign here.' },
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
       { id:'page', name:'Pages', icon:'i-scroll', desc:'How every page in the campaign draws its sections. Workshops like this one keep their own look.' },
       { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page, a rule word or an event on a time line. One look for the whole campaign.' },
@@ -423,7 +424,7 @@
     // section of its own: it lists the parts others may pick.
     var ROOMS = [
       ['frame', 'Site frame', 'i-sidebar', ['brand', 'header', 'sidebar', 'nav'], 'dash', 'The parts around every page.'],
-      ['style', 'Colours and type', 'i-palette', ['colours', 'type', 'buttons', 'motion'], 'dash', 'Colour, fonts, buttons and depth. Click a part, or pick one below.'],
+      ['style', 'Colours and type', 'i-palette', ['colours', 'type', 'buttons', 'icons', 'motion'], 'dash', 'Colour, fonts, buttons and depth. Click a part, or pick one below.'],
       ['pages', 'Pages and sheets', 'i-scroll', ['page', 'hover', 'sheet', 'email'], 'city', 'A page, a hover card, a character sheet and the campaign’s emails.'],
       ['people', 'People', 'i-users', [], 'city', 'Everything others may change for themselves, in one list.']
     ];
@@ -478,6 +479,7 @@
       colours:['colours.accent', 'colours.s1', 'colours.s2', 'colours.page', 'colours.contrast'],
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
+      icons:['icons.amount', 'icons.colour'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll', 'motion.entrance', 'motion.sheen', 'motion.cascade', 'motion.spark'],
       page:['page.look', 'page.kit', 'page.dmKit', 'access.page', 'access.dmscreen'],
       hover:['hover.look', 'hover.timelinePopup', 'access.hover'],
@@ -548,6 +550,7 @@
       if (!d.page.kit) d.page.kit = 'material';
       if (!d.page.dmKit) d.page.dmKit = 'same';
       if (!d.motion.entrance) d.motion.entrance = 'grow';
+      d.icons = Object.assign({ amount:'few', colour:'ink' }, d.icons || {});
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
       if (!d.email || !d.email.layout) d.email = { layout:'note' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
@@ -718,6 +721,19 @@
       return '<div class="opts" role="radiogroup" aria-labelledby="' + labelledby + '">' + items.map(function(it){
         return '<label class="opt"' + (it[4] ? ' data-hc="' + it[4] + '"' : '') + '><input type="radio" name="' + name + '" value="' + it[0] + '" data-k="' + k + '"' + (it[3] ? ' disabled' : '') + '><span>' +
           (it[2] ? '<i class="chip" style="--c:' + it[2] + '"></i>' : '') + esc(it[1]) + (it[5] ? '<em class="soon">' + esc(it[5]) + '</em>' : '') + '</span></label>';
+      }).join('') + '</div>';
+    }
+    // The two Icons choices. Ids match the server's AppearanceIconAmounts and
+    // AppearanceIconColours, in that order.
+    var ICON_AMOUNTS = [['few', 'Few'], ['names', 'Beside names'], ['all', 'Everywhere']];
+    // Each colour choice shows what it draws: Category shows three of the
+    // category colours the example uses.
+    var ICON_COLOURS = [['ink', 'Ink', ['ink']], ['accent', 'Accent', ['acc']], ['category', 'Category', ['#f87171', '#fbbf24', '#a78bfa']]];
+    function iconColourOpts(){
+      return '<div class="opts" role="radiogroup" aria-labelledby="i-colour-l">' + ICON_COLOURS.map(function(c){
+        return '<label class="opt"><input type="radio" name="i-colour" value="' + c[0] + '" data-k="icons.colour"><span><i class="dots" aria-hidden="true">' + c[2].map(function(d){
+          return d === 'ink' ? '<i class="dotc ink"></i>' : d === 'acc' ? '<i class="dotc acc"></i>' : '<i class="dotc" style="--c:' + d + '"></i>';
+        }).join('') + '</i>' + esc(c[1]) + '</span></label>';
       }).join('') + '</div>';
     }
     function swatches(g, labelledby){
@@ -915,6 +931,11 @@
       if (id === 'buttons') return (
         fld('b-style', 'Style', 'Shape and motion', '<div class="tiles two" role="radiogroup" aria-labelledby="b-style-l">' + tilesBtn() + '</div>' +
           '<p class="hint">Point at a sample and press it. The buttons in the preview use your choice.</p>'));
+      if (id === 'icons') return (
+        fld('i-amount', 'How many icons', null, opts('i-amount', 'icons.amount', 'i-amount-l', ICON_AMOUNTS) +
+          '<p class="hint">Few is how Chronicle looks today. Beside names adds each category’s icon in front of a page’s name. Everywhere also keeps the icon on buttons and menu rows that have a word.</p>') +
+        fld('i-colour', 'Icon colour', null, iconColourOpts() +
+          '<p class="hint">One choice colours every icon that stands for a category.</p>'));
       if (id === 'motion') return (
         fld('m-elev', 'Elevation', 'How far cards lift', '<div class="tiles rows" role="radiogroup" aria-labelledby="m-elev-l">' + tilesElev() + '</div>') +
         fld('m-speed', 'Motion', 'How quickly things move', opts('m-speed', 'motion.speed', 'm-speed-l', Object.keys(SPEEDS).map(function(k){ return [k, SPEEDS[k].name]; })) +
@@ -1013,11 +1034,16 @@
        sections), the header, a dashboard, a city page and a character
        sheet. Nothing here is a picture of the site. */
     function srow(id, icon, label, count, colour, withHL){
-      return '<div class="s-row" data-row="' + id + '"' + (colour ? ' style="--c:' + colour + '"' : '') + '><span class="ic">' + IC(icon) + '</span><span class="lb">' + label + '</span>' +
+      return '<div class="s-row" data-row="' + id + '"' + (colour ? ' style="--c:' + colour + '"' : '') + '><span class="ic' + (colour ? ' kic' : '') + '">' + IC(icon) + '</span><span class="lb">' + label + '</span>' +
         (count != null ? '<span class="ct">' + count + '</span>' : '') + (withHL ? '<span class="pn"></span>' + HL : '') + '</div>';
     }
     function ssub(id, label, count, withHL){
-      return '<div class="s-row sub" data-row="' + id + '" style="--c:#f87171"><span class="dot"></span><span class="lb">' + label + '</span><span class="ct">' + count + '</span>' + (withHL ? '<span class="pn"></span>' + HL : '') + '</div>';
+      return '<div class="s-row sub" data-row="' + id + '" style="--c:#f87171"><span class="dot kic"></span><span class="lb">' + label + '</span><span class="ct">' + count + '</span>' + (withHL ? '<span class="pn"></span>' + HL : '') + '</div>';
+    }
+    // A page in a list: its category's icon (drawn only when the draft asks
+    // for icons beside names), its name, and its kind as a quiet word at the end.
+    function prow(icon, colour, name, kind){
+      return '<span class="prow"><span class="pv-ic" style="--c:' + colour + '">' + IC(icon) + '</span><span class="p-link">' + name + '</span><span class="pk">' + kind + '</span></span>';
     }
     function pbtn(kind, label, real){
       return real ? '<button type="button" class="pbtn ' + kind + '"><span class="f">' + label + '</span></button>' : '<span class="pbtn ' + kind + '"><span class="f">' + label + '</span></span>';
@@ -1042,7 +1068,7 @@
           '<div class="pcard lifts"><p class="c-h">The party</p><div class="band"><b>Sera Windrose</b><span class="czbadge">Level 6 · Ranger</span></div>' +
             '<div class="who"><span class="av">KV</span>Kaelen Voss<span>Rogue</span></div><div class="who"><span class="av b">BA</span>Brother Aldric<span>Cleric</span></div></div>' +
           '<div class="pcard lifts"><p class="c-h">Next session</p><div class="day"><span class="day-n">12</span><div class="day-t"><b>Harvestwane, Starday</b><span class="chipe a">Session 14 · The Warm Ash</span><span class="chipe b">Festival of Embers</span></div></div></div>' +
-          '<div class="pcard lifts"><p class="c-h">Recent pages</p><div class="links"><span class="p-link">Emberfall</span><span class="p-link">Cinder Keep</span><span class="p-link">The Warm Ash</span></div><div class="tags"><span class="tag">#emberfall</span><span class="tag">#guild</span></div></div>' +
+          '<div class="pcard lifts"><p class="c-h">Recent pages</p><div class="links">' + prow('i-mappin', '#f87171', 'Emberfall', 'Locations') + prow('i-banner', '#fbbf24', 'Ashwright Guild', 'Factions') + prow('i-gem', '#a78bfa', 'Cinder Ring', 'Items') + prow('i-scroll', '#34d399', 'Salt Road Annals', 'Lore') + '</div><div class="tags"><span class="tag">#emberfall</span><span class="tag">#guild</span></div></div>' +
         '</div>' +
         '<div class="pcard"><p class="c-h">Timeline · Age of Ash</p><div class="tline">' +
           '<div class="tev"><span class="y">398 AF</span><span class="t">The Glass Wastes burn</span></div><div class="tev"><span class="y">406 AF</span><span class="t">Ashwright charter</span></div>' +
@@ -1148,6 +1174,8 @@
       pv.dataset.navChosen = d.nav.style;
       pv.dataset.strength = d.nav.strength;
       pv.dataset.btn = d.buttons.style;
+      pv.dataset.icons = d.icons.amount;
+      pv.dataset.icolour = d.icons.colour;
       pv.dataset.hdr = d.header.bg;
       pv.dataset.hdrh = d.header.height;
       pv.dataset.corner = d.sidebar.corner;
@@ -1206,6 +1234,7 @@
         else on = v === val || (!v && inp.dataset.k === 'page.look' && val === 'standard');
         if (inp.checked !== on) inp.checked = on;
       });
+      $$('.dotc.acc').forEach(function(x){ x.style.setProperty('--c', d.colours.accent); });
       $('#m-reduce').checked = !!d.motion.reduceAll;
       ['sheen', 'cascade', 'spark'].forEach(function(m){ var c = $('#m-' + m); if (c) c.checked = !!d.motion[m]; });
       var kitName = (STYLE_KITS.filter(function(k){ return k[0] === d.page.kit; })[0] || [])[1], underMaterial = d.page.kit === 'material';
@@ -1834,7 +1863,7 @@
           dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page), access:clone(d.access),
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), icons:clone(d.icons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page), access:clone(d.access),
         email:clone(d.email),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
@@ -2075,16 +2104,17 @@
       colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
+      icons:  { all:['.s-row .ic.kic', '.s-row .dot.kic', '.pv-ic'], tip:'Category icons' },
       motion: { all:['.pcard'], tip:'Cards and how they lift' },
       sheet:  { all:['#d-sheet'], tip:'Every character sheet' },
       page:   { all:['.e-body', '.d-grid'], tip:'How pages draw their sections' },
       hover:  { all:['.e-hc'], tip:'The card that opens when you point at a link' }
     };
     // Most specific first: a button inside a card is a button.
-    var FZ_HIT = [['.pbtn', 'buttons'], ['.e-hc', 'hover'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
+    var FZ_HIT = [['.pbtn', 'buttons'], ['.s-row .ic.kic, .s-row .dot.kic, .pv-ic', 'icons'], ['.e-hc', 'hover'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
       ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
       ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.e-body, .d-grid', 'page'], ['.s-page', 'colours']];
-    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion', sheet:'sheet', page:'page', hover:'hover' };
+    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', icons:'icons', motion:'motion', sheet:'sheet', page:'page', hover:'hover' };
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){

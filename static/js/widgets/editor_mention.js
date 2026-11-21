@@ -401,7 +401,7 @@
         under = '<div style="font-size:12px;opacity:0.6"><i class="fa-solid fa-lock" aria-hidden="true" style="font-size:10px"></i> ' +
           Chronicle.escapeHtml(note) + '</div>';
       }
-      html += this._rowHTML(i, isDark, Chronicle.escapeHtml(item.name), Chronicle.escapeHtml(item.type_name || ''), under);
+      html += this._rowHTML(i, isDark, Chronicle.escapeHtml(item.name), Chronicle.escapeHtml(item.type_name || ''), under, kindIconHTML(item.type_icon, item.type_color));
     }
 
     this.el.innerHTML = html;
@@ -427,16 +427,29 @@
   };
 
   /**
-   * One row of the list: the name, then a quiet word at the end saying what
-   * it is, and under them an optional line. Nothing is drawn in front, so
-   * every name starts at the same edge and a long one keeps the most room.
+   * A page's category icon, in front of its name. The site's CSS hides it
+   * unless the campaign shows icons beside names, so by default every name
+   * starts at the row's edge. Icon and colour are checked because both land
+   * in markup. Scene rows have none.
    */
-  MentionPopup.prototype._rowHTML = function (i, isDark, nameHTML, endHTML, underHTML) {
+  function kindIconHTML(icon, colour) {
+    if (!/^fa-[a-z0-9-]{1,40}$/.test(icon || '')) return '';
+    return '<i class="fa-solid ' + icon + ' kind-ic" style="margin-right:-4px' +
+      (/^#[0-9a-fA-F]{6}$/.test(colour || '') ? ';--kind-colour:' + colour.toLowerCase() : '') + '" aria-hidden="true"></i>';
+  }
+
+  /**
+   * One row of the list: the name, then a quiet word at the end saying what
+   * it is, and under them an optional line. By default nothing is drawn in
+   * front, so every name starts at the same edge and a long one keeps the most
+   * room; leadHTML is the hidden-until-asked category icon.
+   */
+  MentionPopup.prototype._rowHTML = function (i, isDark, nameHTML, endHTML, underHTML, leadHTML) {
     var selected = i === this.selectedIndex;
     var bgSelected = selected ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;') : '';
     return '<div class="mention-popup__item' + (selected ? ' mention-popup__item--selected' : '') + '" ' +
       'data-index="' + i + '" style="padding:8px 12px;cursor:pointer;transition:background-color 0.1s;' + bgSelected + '">' +
-      '<div style="display:flex;align-items:baseline;gap:12px">' +
+      '<div style="display:flex;align-items:baseline;gap:12px">' + (leadHTML || '') +
       '<span class="mention-popup__name" style="min-width:0;flex:1;font-weight:500;font-size:14px;' +
       'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nameHTML + '</span>' +
       (endHTML ? '<span class="mention-popup__kind" style="flex-shrink:0;max-width:45%;font-size:12px;opacity:0.6;' +

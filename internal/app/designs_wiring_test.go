@@ -50,3 +50,22 @@ func TestDesignKindsAcceptLaterKinds(t *testing.T) {
 		t.Errorf("kinds = %s", got)
 	}
 }
+
+// Every starter the AI's counter block can ask for by name is one the armory
+// keeps and accepts, so `start` never names a room that is not there.
+func TestCounterStartNamesAreTheArmorysStarters(t *testing.T) {
+	names := records.CounterStartNames()
+	if len(names) != 27 {
+		t.Fatalf("named starters = %d, want 27", len(names))
+	}
+	for _, n := range names {
+		raw := aiShopLooksAdapter{}.CounterStarterNamed(n)
+		if raw == nil {
+			t.Errorf("the armory has no starter called %q", n)
+			continue
+		}
+		if _, err := armory.NormalizeShopRoomCounter(raw); err != nil {
+			t.Errorf("%q is refused by the armory: %v", n, err)
+		}
+	}
+}

@@ -16,6 +16,15 @@ type sheetChoice struct {
 	Label string
 }
 
+// pinStyleChoices offers every pin shape, from the one list the validator reads.
+func pinStyleChoices() []sheetChoice {
+	out := make([]sheetChoice, len(PinStyles))
+	for i, p := range PinStyles {
+		out[i] = sheetChoice{p.ID, p.Label}
+	}
+	return out
+}
+
 // sheetChips renders a segmented control bound to one resolved-display key.
 // The pressed state is set by the script from the live settings, so the markup
 // carries no state of its own.
@@ -106,7 +115,7 @@ templ mapSettingsSheet(data MapViewData) {
 			<section>
 				<h3>Pins</h3>
 				<div class="mp-f"><span>Pin style</span>
-					@sheetChips("pin_style", []sheetChoice{{"drop", "Drop"}, {"seal", "Seal"}, {"flag", "Flag"}, {"dot", "Dot"}})
+					@sheetChips("pin_style", pinStyleChoices())
 				</div>
 				<div class="mp-f"><span>Pin size</span>
 					@sheetChips("pin_size", []sheetChoice{{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}})

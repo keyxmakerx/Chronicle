@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // EntityListWidget lists one category's pages. With no category chosen, or
@@ -31,6 +32,10 @@ templ EntityListWidget(cc *campaigns.CampaignContext, et *EntityType, pages []En
 				for i := range pages {
 					<li class="cb-row rounded-lg hover:bg-surface-alt group">
 						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pages[i].ID)) } class="cb-link flex items-center gap-2 min-w-0 px-2 py-1.5">
+							// Drawn only when the campaign shows icons beside names; the CSS hides it otherwise.
+							if et.Icon != "" {
+								<i class={ "fa-solid " + et.Icon, "kind-ic" } { layouts.KindIconAttrs(ctx, et.Color)... } aria-hidden="true"></i>
+							}
 							<span class="text-sm text-fg truncate group-hover:text-accent transition-colors">{ pages[i].Name }</span>
 							@listLock(cc, &pages[i])
 						</a>

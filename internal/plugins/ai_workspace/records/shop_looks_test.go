@@ -35,6 +35,12 @@ func (f *fakeShopLooks) CounterStarter(roomType string) json.RawMessage {
 	}
 	return json.RawMessage(plainCounter)
 }
+func (f *fakeShopLooks) CounterStarterNamed(name string) json.RawMessage {
+	if name == "The Taproom" {
+		return json.RawMessage(taproomCounter)
+	}
+	return nil
+}
 func (f *fakeShopLooks) Front(_ context.Context, _, id string, _ Actor) (json.RawMessage, bool, error) {
 	if fr, ok := f.fronts[id]; ok {
 		return fr, true, nil

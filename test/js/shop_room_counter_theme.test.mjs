@@ -15,7 +15,7 @@ const dir = join(root, 'static', 'js', 'widgets');
 const sandbox = {};
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['shop_room_icons.js', 'shop_room_counter.js', 'shop_room.js']) vm.runInContext(readFileSync(join(dir, f), 'utf8'), sandbox);
+for (const f of ['shop_room_icons.js', 'shop_room_counter.js', 'shop_room_parts_strange.js', 'shop_room_parts_trades.js', 'shop_room_parts_places.js', 'shop_room.js']) vm.runInContext(readFileSync(join(dir, f), 'utf8'), sandbox);
 const C = sandbox.ShopRoomCounter;
 const SR = sandbox.ShopRoom;
 const plain = (o) => JSON.parse(JSON.stringify(o));
@@ -36,7 +36,7 @@ test('odd or missing theme values fall back to the plain counter', () => {
   const plainTheme = plain(C.normalise(null));
   assert.equal(plainTheme.name, 'Plain counter');
   for (const bad of [undefined, null, 'smithy', 7, [], {}]) assert.deepEqual(plain(C.normalise(bad)), plainTheme, String(bad));
-  const t = plain(C.normalise({ name: 'x'.repeat(200), skeleton: { shape: 'hexagon', display: 'domes' }, theme: { wall: 'marble', wood: 'red', cloth: '#ABCDEF', warmth: 9, light: 5 }, props: ['anvil', 'anvil', 'dragon', 7, 'herbs'] }));
+  const t = plain(C.normalise({ name: 'x'.repeat(200), skeleton: { shape: 'hexagon', display: 'domes' }, theme: { wall: 'wallpaper', wood: 'red', cloth: '#ABCDEF', warmth: 9, light: 5 }, props: ['anvil', 'anvil', 'dragon', 7, 'herbs'] }));
   assert.equal(t.name.length, 60);
   assert.equal(t.skeleton.shape, 'square', 'unknown shape falls back');
   assert.equal(t.skeleton.display, 'domes', 'a known value is kept');
@@ -49,7 +49,9 @@ test('odd or missing theme values fall back to the plain counter', () => {
 });
 
 test('each shop type starts from its own starter, anything else from the plain counter', () => {
-  assert.deepEqual(plain(C.starters.map((s) => s.name)), ['Plain counter', 'The Smithy', 'The Apothecary', 'The Arcane Shop', 'The Night Market']);
+  assert.deepEqual(plain(C.starters.slice(0, 5).map((s) => s.name)), ['Plain counter', 'The Smithy', 'The Apothecary', 'The Arcane Shop', 'The Night Market'], 'the starters a shop type begins from keep their places');
+  assert.equal(C.starters.length, 32);
+  assert.equal(new Set(C.starters.map((s) => s.name)).size, 32, 'every starter has its own name');
   const by = { forge: 'The Smithy', apothecary: 'The Apothecary', library: 'The Arcane Shop', market: 'The Night Market', general: 'Plain counter', jeweler: 'Plain counter', constructor: 'Plain counter', '': 'Plain counter' };
   for (const k of Object.keys(by)) assert.equal(C.starterFor(k).name, by[k], k);
   // Every starter is already a valid, complete theme.

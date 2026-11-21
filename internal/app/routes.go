@@ -6139,7 +6139,7 @@ func (a *App) RegisterRoutes() {
 					NavStyle: ap.EffectiveNavStyle(), NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
-					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
+					ButtonStyle: ap.ButtonStyle, IconAmount: ap.IconAmount, IconColour: ap.IconColour, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
 					ReduceMotion:  ap.ReduceMotion,
 					HeaderHeight:  ap.HeaderHeight,
 					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
@@ -6358,6 +6358,8 @@ func (a *App) RegisterRoutes() {
 			// resolved here.
 			calendarHealthy := a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)
 			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
+			ctx = layouts.SetHomeBlocksOff(ctx, homeBlocksOff(enabledSlugs, calendarHealthy,
+				a.PluginHealth == nil || a.PluginHealth.IsHealthy(sessions.PluginSlug)))
 
 			// The header's data-backed widgets (date, weather, moon, game
 			// night) read today's world from the calendar and sessions. This
@@ -7230,7 +7232,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "hero-pack", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/craft_results.js", "/static/js/widgets/craft_results_real.js", "/static/js/widgets/hero_pack.js"}},
 	{Name: "shop_street", Scripts: []string{"/static/js/widgets/shop_storefront.js", "/static/js/widgets/shop_street.js"}},
 	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
-	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_rolls.js", "/static/js/widgets/shop_room.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/craft_pictures.js", "/static/js/widgets/made_items.js", "/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room_counter.js", "/static/js/widgets/shop_room_parts_strange.js", "/static/js/widgets/shop_room_parts_trades.js", "/static/js/widgets/shop_room_parts_places.js", "/static/js/widgets/design_library.js", "/static/js/widgets/design_library_gallery.js", "/static/js/widgets/design_library_suggest.js", "/static/js/widgets/shop_room_builder.js", "/static/js/widgets/shop_room_keeper.js", "/static/js/widgets/shop_rolls.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "design_library", Scripts: []string{"/static/js/widgets/design_library.js"}},
 	{Name: "design_gallery_admin", Scripts: []string{"/static/js/widgets/design_gallery_admin.js"}},
 	{Name: "craft_moment_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/craft_rules_stage.js", "/static/js/widgets/craft_moment_look.js"}},
