@@ -9,12 +9,12 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, newCampaign, done, picture, go } from './_live.mjs';
+import { person, newCampaign, done, go } from './_live.mjs';
 
 after(done);
 
 const DESK = { viewport: { width: 1280, height: 800 } };
-const WIDE_ENOUGH_TO_WRAP = { viewport: { width: 900, height: 800 } };
+const NARROW = { viewport: { width: 900, height: 800 } };
 
 function boxes(page) {
   return page.evaluate(() => {
@@ -55,7 +55,8 @@ test('an open dock leaves the banner whole', async () => {
   const { page } = who;
   await page.click('.dms-tab');
   await page.waitForSelector('.dms-dock:not([hidden])');
-  await page.waitForTimeout(500);
+  // The banner gives way once the page has made room for the dock.
+  await page.waitForFunction(() => document.querySelector('.cta-bar').getBoundingClientRect().right <= document.querySelector('.dms-dock').getBoundingClientRect().left + 1);
   const bar = await page.evaluate(() => {
     const b = document.querySelector('.cta-bar').getBoundingClientRect();
     const dock = document.querySelector('.dms-dock').getBoundingClientRect();
@@ -67,8 +68,8 @@ test('an open dock leaves the banner whole', async () => {
   who.assertClean();
 });
 
-test('a narrower window, where the banner wraps, still clears the tab', async () => {
-  const who = await owner(WIDE_ENOUGH_TO_WRAP);
+test('a narrower window still clears the tab', async () => {
+  const who = await owner(NARROW);
   const a = await boxes(who.page);
   assert.ok(!overlaps(a.tab, a.cta), 'the tab sits in the banner');
   assert.ok(Math.abs(a.tab.top - (a.row.top + 12)) <= 1);
