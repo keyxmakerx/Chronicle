@@ -61,12 +61,16 @@ type DeskFacts struct {
 	Entries *DeskEntriesFacts
 }
 
-// DeskEntriesFacts counts the campaign's own rules entries and the players'
-// drafts handed in for a Director to accept.
+// DeskEntriesFacts counts the campaign's own rules entries and what waits on
+// a Director in those lists.
 type DeskEntriesFacts struct {
 	Entries int // accepted entries, not drafts
-	Waiting int // drafts a player has handed in
+	Drafts  int // drafts a player has handed in
+	Asks    int // Ask-first picks a player is waiting on
 }
+
+// Waiting is everything in the lists that waits for a Director.
+func (f DeskEntriesFacts) Waiting() int { return f.Drafts + f.Asks }
 
 // DeskChangesFacts counts what players changed in the last week.
 type DeskChangesFacts struct {

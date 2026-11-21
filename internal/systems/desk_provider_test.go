@@ -25,7 +25,8 @@ func TestEntriesDeskProvider_CountsAcceptedAndHandedIn(t *testing.T) {
 		{Status: EntryStatusAccepted}, {Status: EntryStatusAccepted},
 		{Status: EntryStatusSent}, {Status: EntryStatusDraft},
 	}}
-	p := NewEntriesDeskProvider(svc)
+	asks := fakeAsks(2)
+	p := NewEntriesDeskProvider(svc, asks)
 	if p.Slot() != campaigns.DeskEntries {
 		t.Fatalf("slot = %q", p.Slot())
 	}
@@ -33,10 +34,16 @@ func TestEntriesDeskProvider_CountsAcceptedAndHandedIn(t *testing.T) {
 	if err != nil || f.Entries == nil {
 		t.Fatalf("facts = %+v, err = %v", f, err)
 	}
-	if f.Entries.Entries != 2 || f.Entries.Waiting != 1 {
-		t.Errorf("got %+v, want 2 entries and 1 waiting (a draft still being written is not counted)", *f.Entries)
+	if f.Entries.Entries != 2 || f.Entries.Drafts != 1 || f.Entries.Asks != 2 {
+		t.Errorf("got %+v, want 2 entries, 1 draft and 2 asks (a draft still being written is not counted)", *f.Entries)
 	}
 	if !svc.seen.IsDirector {
 		t.Error("entries must be read as a Director so handed-in drafts are visible")
 	}
+}
+
+type fakeAsks int
+
+func (n fakeAsks) WaitingRequests(context.Context, string, EntryActor) ([]WaitingChoiceRequest, error) {
+	return make([]WaitingChoiceRequest, int(n)), nil
 }

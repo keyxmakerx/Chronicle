@@ -327,8 +327,8 @@ func entriesLine(c *Campaign, f *DeskEntriesFacts) DeskLine {
 	l := DeskLine{ID: "entries", Name: "Own entries", Values: []DeskValue{openValue(href)}}
 	if f != nil {
 		v := figureValue(strconv.Itoa(f.Entries), "", href)
-		if f.Waiting > 0 {
-			v.Sub, v.Joined = fmt.Sprintf("%d waiting", f.Waiting), true
+		if n := f.Waiting(); n > 0 {
+			v.Sub, v.Joined = fmt.Sprintf("%d waiting", n), true
 		}
 		l.Values = []DeskValue{v}
 	}
@@ -674,9 +674,16 @@ func needsYou(c *Campaign, f DeskFacts, now time.Time) []NeedsYouItem {
 			URL: deskHref(c.ID, "/ai"),
 		})
 	}
-	if f.Entries != nil && f.Entries.Waiting > 0 {
+	if f.Entries != nil && f.Entries.Waiting() > 0 {
+		var parts []string
+		if n := f.Entries.Drafts; n > 0 {
+			parts = append(parts, plural(n, "draft", "drafts")+" to read")
+		}
+		if n := f.Entries.Asks; n > 0 {
+			parts = append(parts, plural(n, "ask", "asks")+" to answer")
+		}
 		out = append(out, NeedsYouItem{
-			Lead: "Own entries", Rest: plural(f.Entries.Waiting, "player's draft", "players' drafts") + " to read",
+			Lead: "Own entries", Rest: strings.Join(parts, " · "),
 			URL: deskHref(c.ID, "/characters/entries"),
 		})
 	}

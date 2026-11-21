@@ -11,11 +11,20 @@ import (
 )
 
 // EntriesDeskProvider fills the desk's Own entries line.
-type EntriesDeskProvider struct{ svc SystemEntryService }
+type EntriesDeskProvider struct {
+	svc  SystemEntryService
+	asks AskCounter
+}
+
+// AskCounter lists the Ask-first picks waiting on a Director.
+type AskCounter interface {
+	WaitingRequests(ctx context.Context, campaignID string, actor EntryActor) ([]WaitingChoiceRequest, error)
+}
 
 // NewEntriesDeskProvider returns the desk provider for Own entries.
-func NewEntriesDeskProvider(svc SystemEntryService) *EntriesDeskProvider {
-	return &EntriesDeskProvider{svc: svc}
+// asks may be nil, which leaves Ask-first picks out of the figures.
+func NewEntriesDeskProvider(svc SystemEntryService, asks AskCounter) *EntriesDeskProvider {
+	return &EntriesDeskProvider{svc: svc, asks: asks}
 }
 
 // Slot is the one desk line this provider fills.
@@ -23,9 +32,10 @@ func (p *EntriesDeskProvider) Slot() campaigns.DeskSlot { return campaigns.DeskE
 
 // Facts reads the entries as a Director, the same list the page draws, so the
 // row and the page agree. A draft a player is still writing is not counted:
-// only a handed-in draft waits on the owner.
+// only a handed-in draft waits on the owner, and so does an Ask-first pick.
 func (p *EntriesDeskProvider) Facts(ctx context.Context, req campaigns.DeskRequest) (campaigns.DeskFacts, error) {
-	list, err := p.svc.List(ctx, req.CampaignID, "", EntryActor{UserID: req.OwnerID, IsDirector: true})
+	actor := EntryActor{UserID: req.OwnerID, IsDirector: true}
+	list, err := p.svc.List(ctx, req.CampaignID, "", actor)
 	if err != nil {
 		return campaigns.DeskFacts{}, err
 	}
@@ -33,10 +43,17 @@ func (p *EntriesDeskProvider) Facts(ctx context.Context, req campaigns.DeskReque
 	for _, e := range list {
 		switch e.Status {
 		case EntryStatusSent:
-			f.Waiting++
+			f.Drafts++
 		case EntryStatusAccepted:
 			f.Entries++
 		}
+	}
+	if p.asks != nil {
+		asks, err := p.asks.WaitingRequests(ctx, req.CampaignID, actor)
+		if err != nil {
+			return campaigns.DeskFacts{}, err
+		}
+		f.Asks = len(asks)
 	}
 	return campaigns.DeskFacts{Entries: &f}, nil
 }

@@ -216,6 +216,7 @@
           return -1;
         };
         var at = pick(function (e) { return e.status === 'sent'; });
+        for (var q = 0; at < 0 && q < self.fields.length; q++) if (self.waitingFor(self.fields[q].key).length) at = q;
         if (at < 0) at = pick(function (e) { return !isDraft(e); });
         if (at >= 0) self.field = at;
       }
@@ -415,7 +416,7 @@
         '<p class="hc-empty">' + esc(this.system) + ' doesn’t list any choices for making a hero, so there is nothing to add to here.</p></section>';
     }
     var tabs = this.fields.map(function (x, i) {
-      var waiting = self.handedIn(x.key).length;
+      var waiting = self.handedIn(x.key).length + self.waitingFor(x.key).length;
       return '<button type="button" role="tab" data-field="' + i + '" aria-selected="' + (i === self.field) + '">' + esc(x.label) +
         '<small>' + self.accepted(x.key).length + (waiting ? ' · ' + waiting + ' waiting' : '') + '</small></button>';
     }).join('');
