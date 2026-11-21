@@ -79,3 +79,45 @@ func TestPublishers_PlayerReach(t *testing.T) {
 		})
 	}
 }
+
+// TestPageChangedNudge pins who is told that an open page changed: players
+// only for a page everyone may read, and the owner always gets the full event.
+func TestPageChangedNudge(t *testing.T) {
+	tests := []struct {
+		name string
+		e    *entities.Entity
+		want bool
+	}{
+		{"shared page", &entities.Entity{ID: "e1"}, true},
+		{"private page", &entities.Entity{ID: "e1", IsPrivate: true}, false},
+		{"custom-access page", &entities.Entity{ID: "e1", Visibility: entities.VisibilityCustom}, false},
+		{"DM-only category", &entities.Entity{ID: "e1", TypeDMOnly: true}, false},
+	}
+	player := &ws.Client{UserID: "u-player", Role: permissions.RolePlayer, Source: "browser"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bus := &noteCaptureBus{}
+			(&entityEventPublisherAdapter{bus: bus}).PublishEntityEvent("updated", "c1", "e1", tt.e)
+			var nudge *ws.Message
+			for _, m := range bus.msgs {
+				if m.Type == ws.MsgPageChanged {
+					nudge = m
+				}
+			}
+			if (nudge != nil) != tt.want {
+				t.Fatalf("nudge sent = %v, want %v", nudge != nil, tt.want)
+			}
+			if nudge != nil {
+				if !nudge.DeliversTo(player) {
+					t.Error("a player must receive the nudge for a shared page")
+				}
+				if len(nudge.Payload) != 0 {
+					t.Error("the nudge must carry no content")
+				}
+			}
+			if last := bus.msgs[len(bus.msgs)-1]; last.Type != ws.MsgEntityUpdated || last.DeliversTo(player) {
+				t.Error("the full entity event stays last and DM-only")
+			}
+		})
+	}
+}

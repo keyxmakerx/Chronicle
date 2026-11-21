@@ -16,6 +16,11 @@ const (
 	MsgEntityDeleted MessageType = "entity.deleted"
 )
 
+// MsgPageChanged tells a reader's open page to fetch itself again. It carries
+// no content, so it can go to every member, but only for pages everyone may
+// read: a hidden page never announces itself to a player's socket.
+const MsgPageChanged MessageType = "page.changed"
+
 // Map sync messages.
 const (
 	MsgMapUpdated     MessageType = "map.updated"
