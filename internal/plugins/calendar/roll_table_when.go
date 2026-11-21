@@ -20,13 +20,24 @@ import (
 // ahead leaves such a night unrolled, as Roll one says "nothing fits here".
 var errNothingFits = errors.New("no line of the table can come up that night")
 
+// noFitError is errNothingFits with the reason, so a read can tell the
+// Director why a night was left unrolled. errors.Is(err, errNothingFits)
+// still matches it.
+type noFitError struct{ why string }
+
+func (e *noFitError) Error() string        { return errNothingFits.Error() }
+func (e *noFitError) Is(target error) bool { return target == errNothingFits }
+
 // nightFacts is what a night's conditions are tested against.
 type nightFacts struct {
 	cal     *Calendar
 	d       DayDate
 	abs     int
 	weather *DayWeather
-	climate string
+	// weatherRead is whether the day's weather was looked up successfully, so
+	// "no weather" can be told from "the lookup failed".
+	weatherRead bool
+	climate     string
 }
 
 // nightFactsFor gathers a night's facts. Weather and climate are read only
@@ -49,6 +60,7 @@ func (s *calendarService) nightFactsFor(ctx context.Context, cal *Calendar, d Da
 	}
 	if needWeather {
 		if days, err := s.weatherRepo.ListDays(ctx, cal.ID, d.Year, d.Month); err == nil {
+			f.weatherRead = true
 			for i := range days {
 				if days[i].Day == d.Day {
 					f.weather = &days[i]
@@ -74,6 +86,92 @@ func eligibleEntries(table *RollTable, f *nightFacts) []RollTableEntry {
 		}
 	}
 	return out
+}
+
+// unmetOrder fixes the order the reasons are told in.
+var unmetOrder = []string{"season", "month", "weekday", "moon", "weather", "climate", "rest", "festival", "not"}
+
+// whyNothingFits says, in words, which conditions kept every line of the
+// table from coming up that night: the union of the conditions each line
+// failed, each with the night's own fact where one helps ("it is autumn").
+func whyNothingFits(table *RollTable, f *nightFacts) string {
+	failed := map[string]bool{}
+	for _, e := range table.Entries {
+		w, ok := parseWhen(e.When)
+		if !ok {
+			failed["unreadable"] = true
+			continue
+		}
+		for k, v := range w {
+			if !f.condition(k, v) {
+				failed[k] = true
+			}
+		}
+	}
+	var parts []string
+	for _, k := range unmetOrder {
+		if !failed[k] {
+			continue
+		}
+		parts = append(parts, f.unmetPhrase(k))
+		delete(failed, k)
+	}
+	if len(failed) > 0 {
+		parts = append(parts, "a condition that can’t be read")
+	}
+	if len(parts) == 0 {
+		return "No line can come up that night."
+	}
+	return "The lines wait on " + joinPhrases(parts) + "."
+}
+
+func joinPhrases(p []string) string {
+	switch len(p) {
+	case 1:
+		return p[0]
+	case 2:
+		return p[0] + " and " + p[1]
+	}
+	return strings.Join(p[:len(p)-1], ", ") + " and " + p[len(p)-1]
+}
+
+// unmetPhrase names one failed condition, with the night's fact beside it.
+func (f *nightFacts) unmetPhrase(key string) string {
+	switch key {
+	case "season":
+		name, kind := f.seasonOf()
+		if name == "" {
+			name = kind
+		}
+		return "the season (it is " + strings.ToLower(name) + ")"
+	case "month":
+		if f.d.Month >= 1 && f.d.Month <= len(f.cal.Months) {
+			return "the month (it is " + f.cal.Months[f.d.Month-1].Name + ")"
+		}
+		return "the month"
+	case "weekday":
+		if idx := f.cal.WeekdayIndex(f.d.Year, f.d.Month, f.d.Day); idx >= 0 && idx < len(f.cal.Weekdays) {
+			return "the weekday (it is " + f.cal.Weekdays[idx].Name + ")"
+		}
+		return "the weekday"
+	case "moon":
+		return "the moon"
+	case "weather":
+		if !f.weatherRead {
+			return "the weather (it couldn’t be read)"
+		}
+		if f.weather == nil {
+			return "the weather (none is set for that day)"
+		}
+		return "the weather"
+	case "climate":
+		return "the climate"
+	case "rest":
+		return "rest days"
+	case "festival":
+		return "festival days"
+	}
+	return "a night the lines rule out"
 }
 
 // whenSet is a line's conditions as stored: a map from condition to its raw

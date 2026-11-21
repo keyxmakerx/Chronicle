@@ -134,8 +134,18 @@ type EventRollView struct {
 	// Upcoming are the event's dates in the asked year that have no result,
 	// so the Director's list can show them. Director only.
 	Upcoming []DayDate `json:"upcoming,omitempty"`
+	// Unfit are the nights the roll on the night left unrolled because no
+	// line of its table could come up, each with the reason. Director only.
+	Unfit []UnfitNight `json:"unfit,omitempty"`
 	// Truncated says the event's dates could not all be worked out.
 	Truncated bool `json:"truncated,omitempty"`
+}
+
+// UnfitNight is a night left unrolled because no table line fits it.
+type UnfitNight struct {
+	DayDate
+	// Why names the conditions that ruled the lines out, in words.
+	Why string `json:"why"`
 }
 
 // DiceExpr is a parsed dice expression.

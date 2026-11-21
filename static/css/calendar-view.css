@@ -2281,6 +2281,14 @@
 .cal-v5 .rlnight .bn{display:flex;align-items:center;gap:6px;min-width:0}
 .cal-v5 .rlnight .bn b{font:600 12.5px/1.2 var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .rlnight .bn.wait{font-style:italic;color:var(--mut)}
+.cal-v5 .rldots{display:flex;flex-wrap:wrap;align-items:center;margin:0 -6px}
+.cal-v5 .rldot{box-sizing:content-box;width:8px;height:8px;margin:0;padding:4px;flex:none;border:0;background:none;background-clip:content-box;border-radius:50%;position:relative}
+.cal-v5 .rldot:not(.hollow){background:var(--ink);background-clip:content-box;opacity:.45}
+.cal-v5 .rldot.hollow{cursor:pointer;color:var(--ink)}
+.cal-v5 .rldot.hollow::after{content:"";position:absolute;inset:4px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor}
+.cal-v5 .rldot.hollow:hover::after, .cal-v5 .rldot.hollow[aria-expanded="true"]::after{background:var(--hair)}
+.cal-v5 .rldot.hollow:focus-visible{outline:2px solid var(--ink);outline-offset:-2px;border-radius:6px}
+.cal-v5 .rlwhy{margin:2px 0 6px}
 .cal-v5 .rlnight .acts{display:flex}
 .cal-v5 .rlnight .tick{width:8px;height:8px;flex:none;border-radius:50%;background:var(--mut)}
 .cal-v5 .rlnight .tick.t1{background:var(--bldT)}
@@ -2561,6 +2569,9 @@ html[data-motion="off"] .cal-v5 .yt-tk.kept::before, html[data-motion="off"] .ca
   .cal-v5 .yt-acts .yt-sp{flex-basis:100%;height:0}
 }
 @media (pointer:coarse){
+  .cal-v5 .rldots{margin:0 -18px}
+  .cal-v5 .rldot{padding:18px}
+  .cal-v5 .rldot.hollow::after{inset:18px}
   .cal-v5 .yt-word, .cal-v5 .yt-chip{min-height:44px}
   .cal-v5 .yt-acts .btn{height:44px;padding:0 16px}
   .cal-v5 .yt-months{height:44px}

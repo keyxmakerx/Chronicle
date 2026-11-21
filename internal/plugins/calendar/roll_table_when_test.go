@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -324,6 +325,89 @@ func TestOnlyYouTableNightsStayFromPlayers(t *testing.T) {
 			dir, err := svc.GetEventRoll(ctx, "ev-blood", "cal", "camp", 5, owner)
 			if err != nil || len(dir.Nights) != 1 {
 				t.Errorf("Director read = %+v %v, want the night", dir, err)
+			}
+		})
+	}
+}
+
+// A night the roll on the night leaves unrolled because no line fits is told
+// (only nights within the on-the-night window of today, which here is the
+// event's 3rd of the second month; the first month's 3rd is too far back)
+// to the Director, with the conditions that ruled the lines out; nobody else
+// is told, and a roll that does not roll on the night attempts nothing.
+func TestEventRollTellsTheDirectorWhichNightsNoLineFit(t *testing.T) {
+	tb := func(whens ...string) *RollTable {
+		t := &RollTable{Name: "Omens"}
+		for i, w := range whens {
+			t.Entries = append(t.Entries, RollTableEntry{Name: string(rune('A' + i)), Weight: 1, When: raw(w)})
+		}
+		return t
+	}
+	type unfit struct {
+		month int
+		why   string
+	}
+	tests := []struct {
+		name    string
+		table   *RollTable
+		onNight bool
+		want    []unfit
+	}{
+		{"a line fits every night", tb(`{"month":[1,2]}`), true, nil},
+		{"one month has no line", tb(`{"month":[1]}`), true, []unfit{{2, "The lines wait on the month (it is Two)."}}},
+		{"a month no line names", tb(`{"month":[3]}`), true, []unfit{{2, "The lines wait on the month (it is Two)."}}},
+		{"weather that is not set", tb(`{"month":[1],"weather":["rain"]}`), true, []unfit{
+			{2, "The lines wait on the month (it is Two) and the weather (none is set for that day)."}}},
+		{"lines that fail different conditions", tb(`{"month":[3]}`, `{"moon":{"phase":"full"}}`), true, []unfit{
+			{2, "The lines wait on the month (it is Two) and the moon."}}},
+		{"not rolled on the night", tb(`{"month":[3]}`), false, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, rolls := tableRoll(t, tt.table, func(c *RollConfig) { c.OnTheNight = tt.onNight })
+			got, err := svc.GetEventRoll(context.Background(), "ev-blood", "cal", "camp", 5, owner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var have []unfit
+			for _, u := range got.Unfit {
+				if u.Year != 5 || u.Day != 3 {
+					t.Errorf("unfit night %+v is not one of the event's nights", u)
+				}
+				have = append(have, unfit{u.Month, u.Why})
+			}
+			if !reflect.DeepEqual(have, tt.want) {
+				t.Errorf("unfit = %+v, want %+v", have, tt.want)
+			}
+			// What is left unrolled stays unrolled, and a player is told nothing of it.
+			for _, u := range got.Unfit {
+				if _, ok := rolls.nights["ev-blood"][u.DayDate]; ok {
+					t.Errorf("night %+v was both rolled and reported", u.DayDate)
+				}
+			}
+			pv, err := svc.GetEventRoll(context.Background(), "ev-blood", "cal", "camp", 5, player)
+			if err != nil || len(pv.Unfit) != 0 {
+				t.Errorf("player view = %+v %v, want no unfit nights", pv, err)
+			}
+		})
+	}
+}
+
+// "None is set" is said only when the weather was read and the day had none.
+func TestUnmetWeatherPhraseTellsNoneFromUnreadable(t *testing.T) {
+	tests := []struct {
+		name string
+		f    nightFacts
+		want string
+	}{
+		{"lookup failed", nightFacts{}, "the weather (it couldn’t be read)"},
+		{"read, none set", nightFacts{weatherRead: true}, "the weather (none is set for that day)"},
+		{"read, a day that does not match", nightFacts{weatherRead: true, weather: &DayWeather{}}, "the weather"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.f.unmetPhrase("weather"); got != tt.want {
+				t.Errorf("phrase = %q, want %q", got, tt.want)
 			}
 		})
 	}

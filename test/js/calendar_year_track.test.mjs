@@ -77,9 +77,12 @@ test('what Keep says it did, whole and partial', () => {
   assert.equal(YT.keptWords(19, 120), 'Kept 19 events and 120 days of weather.');
   assert.equal(YT.keptWords(1, 0), 'Kept 1 event.');
   assert.equal(YT.keptWords(0, 1), 'Kept 1 day of weather.');
-  assert.equal(YT.partialWords(12, 31), 'Kept 12 of 31. The rest are still a draft.');
-  assert.equal(YT.weatherLeftWords(3), 'Kept 3 events. The weather could not be saved and is still a draft.');
-  assert.equal(YT.weatherLeftWords(0), 'The weather could not be saved and is still a draft.');
+  assert.equal(YT.notKeptWords(500), 'Nothing was saved. The draft is still here.');
+  assert.match(YT.notKeptWords(429), /^The server is busy\. Nothing was saved/);
+  assert.match(YT.notKeptWords(0), /may or may not have been saved/, 'no answer is not a refusal');
+  assert.match(YT.notUndoneWords(0), /may or may not have happened/);
+  assert.match(YT.notUndoneWords(500), /Nothing was changed/);
+  assert.match(YT.notUndoneWords(429), /^The server is busy\. Nothing was undone/);
 });
 
 // ---- The generated marker ----
@@ -141,6 +144,84 @@ test('a new fill replaces an earlier fill from today on, and nothing a person ma
   const hand = { id: 'h1', name: 'Coronation', year: 100, month: 5, day: 1 }, old = made('history', { id: 'g6', month: 5, day: 2 });
   const ids = YT.fillReplaces([later, today, past, otherYear, edited, hand, old], now).map((e) => e.id);
   assert.deepEqual(ids, ['g1', 'g2']);
+});
+
+// A weekly market is stored once, on its first day. When the date has moved
+// on, a new fill ends it the day before today and starts its own.
+test('a new fill ends an earlier fill\'s repeat that began before today and still runs', () => {
+  const now = { year: 100, month: 2, day: 10 };
+  const weekly = (id, over) => made('events', Object.assign({ id, month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' }, over));
+  const tests = [
+    ['weekly, no end', weekly('a'), true],
+    ['biweekly', weekly('a', { recurrence_type: 'biweekly' }), true],
+    ['monthly', weekly('a', { recurrence_type: 'monthly' }), true],
+    ['ends today or later', weekly('a', { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 10 }), true],
+    ['already ended before today', weekly('a', { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 9 }), false],
+    ['an every-N-weeks repeat is not one a fill makes', weekly('a', { recurrence_type: 'custom' }), false],
+    ['yearly: its next day is next year', weekly('a', { recurrence_type: 'yearly' }), false],
+    ['capped by a count', weekly('a', { recurrence_max_occurrences: 8 }), false],
+    ['begins today or later: that one is deleted instead', weekly('a', { month: 2, day: 10 }), false],
+    ['does not repeat', weekly('a', { is_recurring: false, recurrence_type: null }), false],
+    ['begun in another year', weekly('a', { year: 99 }), false],
+    ['a sky event counts too', Object.assign(made('sky', { id: 'a', month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' })), true],
+    ['edited by hand', Object.assign(weekly('a'), { name: 'Renamed by hand' }), false],
+    ['made by hand', { id: 'a', name: 'Market', year: 100, month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' }, false],
+    ['a history event', made('history', { id: 'a', month: 1, day: 9, is_recurring: true, recurrence_type: 'weekly' }), false],
+  ];
+  for (const [name, e, want] of tests) {
+    assert.equal(YT.fillRetires([e], now).length === 1, want, name);
+  }
+  // Nothing is both deleted and ended.
+  const mixed = [weekly('w'), made('events', { id: 'later', month: 3, day: 4 }), weekly('w2', { month: 4, day: 1 })];
+  const gone = YT.fillReplaces(mixed, now).map((e) => e.id), ended = YT.fillRetires(mixed, now).map((e) => e.id);
+  assert.deepEqual(gone, ['later', 'w2']);
+  assert.deepEqual(ended, ['w']);
+});
+
+test('the day before today follows the calendar\'s own months', () => {
+  const md = (i) => DAYS[i];
+  const tests = [
+    [{ year: 100, month: 2, day: 10 }, { year: 100, month: 2, day: 9 }],
+    [{ year: 100, month: 3, day: 1 }, { year: 100, month: 2, day: 28 }],
+    [{ year: 100, month: 5, day: 1 }, { year: 100, month: 4, day: 12 }],
+    [{ year: 100, month: 1, day: 1 }, null],
+  ];
+  for (const [now, want] of tests) assert.deepEqual(YT.dayBefore(now, md) && { ...YT.dayBefore(now, md) }, want);
+  assert.deepEqual({ ...YT.dayBefore({ year: 100, month: 3, day: 1 }, (i) => (i === 1 ? 0 : 5)) }, { year: 100, month: 1, day: 5 }, 'a month with no days is stepped over');
+});
+
+test('Keep ends a repeat with an update item, and Undo gives it its old end back', () => {
+  const end = { year: 100, month: 2, day: 9 };
+  const items = [{ body: { name: 'new market' } }];
+  const open = made('events', { id: 'm1', is_recurring: true, recurrence_type: 'weekly' });
+  const capped = made('events', { id: 'm2', is_recurring: true, recurrence_type: 'weekly', recurrence_end_year: 100, recurrence_end_month: 11, recurrence_end_day: 30 });
+  const body = JSON.parse(JSON.stringify(YT.keepBatchBody(items, [{ id: 'old' }], [], [open, capped], end)));
+  assert.deepEqual(body.update, [
+    { id: 'm1', changes: { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 9 } },
+    { id: 'm2', changes: { recurrence_end_year: 100, recurrence_end_month: 2, recurrence_end_day: 9 } },
+  ]);
+  assert.equal('update' in YT.keepBatchBody(items, [], [], [], end), false, 'nothing to end sends no update');
+  assert.equal('update' in YT.keepBatchBody(items, [], [], [open], null), false, 'no day before today ends nothing');
+
+  const rec = { created: [{ id: 'n1' }], removed: [], wx: [], prev: {}, retired: [{ id: 'm1', was: null }, { id: 'm2', was: { year: 100, month: 11, day: 30 } }] };
+  assert.deepEqual(JSON.parse(JSON.stringify(YT.undoBatchBody(rec).update)), [
+    { id: 'm1', changes: { recurrence_end_year: null, recurrence_end_month: null, recurrence_end_day: null } },
+    { id: 'm2', changes: { recurrence_end_year: 100, recurrence_end_month: 11, recurrence_end_day: 30 } },
+  ]);
+});
+
+test('a fill that ends repeats counts them among what it replaces', () => {
+  const D = YT.blankDraft('fill', 's');
+  D.ev = [{ _lane: 'events', gen: { key: 'a' }, year: 100 }];
+  D.remove = [made('events', { id: 'g1' })];
+  D.retire = [made('events', { id: 'm1', is_recurring: true, recurrence_type: 'weekly' }), made('sky', { id: 'm2', is_recurring: true, recurrence_type: 'monthly' })];
+  const ctx = { now: 'M2 10', year: '100', yearOf: String };
+  assert.match(YT.sentence(D, ctx), /It replaces 3 events from an earlier fill\.$/);
+  D.on.sky = false;
+  assert.deepEqual(YT.retiresOf(D).map((e) => e.id), ['m1']);
+  D.on.events = false;
+  assert.equal(YT.retiresOf(D).length, 0);
+  assert.equal(YT.retiresOf(YT.blankDraft('history', 's')).length, 0);
 });
 
 test('a fill removes an earlier fill only for the parts switched on, and says so', () => {
@@ -290,48 +371,42 @@ test('only an owner who may write director-only content may generate', () => {
   assert.equal(YT.mayGenerate(null), false);
 });
 
-// ---- Writing a few at a time ----
-test('writeEach stops after the first group with a failure and reports what was saved', async () => {
-  const seen = [];
-  const items = Array.from({ length: 10 }, (_, i) => i);
-  const r = await YT.writeEach(items, (n) => { seen.push(n); return n === 5 ? Promise.reject(new Error('x')) : Promise.resolve(n * 2); });
-  assert.equal(r.stopped, true);
-  assert.equal(seen.length, 8);
-  assert.deepEqual(Array.from(r.results.map((x) => x.it)), [0, 1, 2, 3, 4, 6, 7]);
-});
-
-test('writeEach with no failure writes all, in groups of WRITE_AT_ONCE', async () => {
-  let inFlight = 0, most = 0;
-  const r = await YT.writeEach(Array.from({ length: 9 }, (_, i) => i), () => {
-    inFlight++; most = Math.max(most, inFlight);
-    return new Promise((res) => setTimeout(() => { inFlight--; res(1); }, 1));
+// ---- One batch, all or nothing ----
+test('Keep sends the new events, the ids they replace and the weather in one body', () => {
+  const items = [{ body: { name: 'a' } }, { body: { name: 'b' } }];
+  const removed = [{ id: 'old1' }, { id: 'old2' }];
+  const put = [{ year: 100, month: 2, day: 11, source: 'generated' }];
+  assert.deepEqual(JSON.parse(JSON.stringify(YT.keepBatchBody(items, removed, put))), {
+    create: [{ name: 'a' }, { name: 'b' }], delete: ['old1', 'old2'], weather: { set: put },
   });
-  assert.equal(r.stopped, false);
-  assert.equal(r.results.length, 9);
-  assert.ok(most <= YT.WRITE_AT_ONCE);
+  assert.equal('weather' in YT.keepBatchBody(items, [], []), false, 'a draft with no weather sends no weather key');
 });
 
-test('a write the server asks to wait on is tried again after the wait, not counted as failed', async () => {
-  const limit = () => Object.assign(new Error('save'), { status: 429, retryAfter: 7 });
-  const tries = {}, waits = [], said = [];
-  const r = await YT.writeEach([0, 1, 2, 3, 4, 5], (n) => {
-    tries[n] = (tries[n] || 0) + 1;
-    return (n === 2 || n === 3) && tries[n] === 1 ? Promise.reject(limit()) : Promise.resolve(n);
-  }, { sleep: (ms) => { waits.push(ms); return Promise.resolve(); }, onPause: (s) => said.push('pause ' + s), onResume: () => said.push('on') });
-  assert.equal(r.stopped, false);
-  assert.deepEqual(Array.from(r.results.map((x) => x.it)).sort(), [0, 1, 2, 3, 4, 5]);
-  assert.equal(tries[2], 2);
-  assert.deepEqual(waits, [7250]);
-  assert.deepEqual(said, ['pause 7', 'on']);
+test('Undo deletes what Keep made, puts the replaced events back with their marker, and restores weather', () => {
+  const old = made('events', { id: 'old1' });
+  const prev = { year: 100, month: 2, day: 11, preset_id: 'rain' };
+  const rec = {
+    created: [{ id: 'new1' }, { id: 'new2' }], removed: [old],
+    wx: [{ year: 100, month: 2, day: 11 }, { year: 100, month: 2, day: 12 }], prev: { '100_2_11': prev },
+  };
+  const b = JSON.parse(JSON.stringify(YT.undoBatchBody(rec)));
+  assert.deepEqual(b.delete, ['new1', 'new2']);
+  assert.equal(b.create.length, 1);
+  assert.equal(b.create[0].payload, old.payload, 'an Undo puts the generated marker back');
+  assert.deepEqual(b.weather, { clear: rec.wx, set: [prev] });
+  rec.wx = [];
+  assert.equal('weather' in YT.undoBatchBody(rec), false);
 });
 
-test('a server that keeps asking to wait stops the run after MAX_PAUSES, with what was saved', async () => {
-  const limit = () => Object.assign(new Error('save'), { status: 429, retryAfter: 1 });
-  let waits = 0;
-  const r = await YT.writeEach([0, 1], (n) => (n === 1 ? Promise.reject(limit()) : Promise.resolve(n)), { sleep: () => { waits++; return Promise.resolve(); } });
-  assert.equal(r.stopped, true);
-  assert.equal(waits, YT.MAX_PAUSES);
-  assert.deepEqual(Array.from(r.results.map((x) => x.it)), [0]);
+test('the batch caps match the server', () => {
+  const go = readFileSync(path.join(here, '..', '..', 'internal', 'plugins', 'calendar', 'event_batch.go'), 'utf8');
+  assert.equal(+/maxBatchEventWrites = (\d+)/.exec(go)[1], YT.BATCH_MAX_EVENTS);
+  assert.equal(+/maxBatchWeatherDays = (\d+)/.exec(go)[1], YT.BATCH_MAX_DAYS);
+});
+
+test('the year track no longer carries the pause-and-retry write loop', () => {
+  const src = read('calendar_year_track.js');
+  assert.doesNotMatch(src, /writeEach|MAX_PAUSES|retryAfter|WRITE_AT_ONCE/);
 });
 
 test('a refill on a year whose weather is all set says so instead of counting zero days', () => {

@@ -13,10 +13,8 @@ after(done);
 
 const listOf = (body) => (Array.isArray(body) ? body : (body && body.data) || []);
 
-// This check writes several hundred events inside a minute, which is more
-// than the server lets one person write. The page then waits, as it would
-// for anyone, so the later steps allow for one such wait.
-const LONG = { timeout: 150000 };
+// Keep and Undo are one request each, so nothing here waits on the server's
+// per-minute write budget: the ordinary timeouts hold.
 
 // Every event of the calendar's current year as `who` is allowed to read it.
 async function yearEvents(who, base, year, months) {
@@ -62,21 +60,21 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'the draft was saved before Keep');
   await picture(page, 'year-track-draft', { check: '#2222', about: 'Edit drawer with a fill draft', mask: ['header'] });
 
-  // Keep is done when the draft bar has gone. An Undo button alone does not
-  // say so: the one from an earlier Keep can still be on screen.
-  const refusedWrites = [];
+  // Every write the page makes, so Keep and Undo can be shown to be one
+  // request each and not one per event.
+  const writes = [];
   page.on('response', (r) => {
     const q = r.request();
-    if (q.method() !== 'GET' && r.status() >= 400) refusedWrites.push(`${q.method()} ${new URL(r.url()).pathname.replace(base, '')} ${r.status()}`);
+    if (q.method() !== 'GET') writes.push(`${q.method()} ${new URL(r.url()).pathname.replace(base, '').replace(/[0-9a-f-]{36}/g, ':id')} ${r.status()}`);
   });
+  // Keep is done when the draft bar has gone. An Undo button alone does not
+  // say so: the one from an earlier Keep can still be on screen.
   const keptAll = async () => {
     const live = page.locator('#cal5-live');
-    const done = keep.waitFor({ state: 'detached', ...LONG }).then(() => false);
-    const stopped = live.filter({ hasText: /could not|Nothing could be saved|The rest are still a draft/ }).waitFor(LONG).then(() => true, () => false);
-    if (await Promise.race([done, stopped])) {
-      assert.fail(`Keep stopped part way: "${await live.innerText()}"; refused writes: ${[...new Set(refusedWrites.map((w) => w.replace(/[0-9a-f-]{36}/g, ':id')))].join(', ') || 'none'}`);
-    }
-    await live.filter({ hasText: /^Kept/ }).waitFor(LONG);
+    await keep.waitFor({ state: 'detached' });
+    await live.filter({ hasText: /^Kept/ }).waitFor();
+    const mine = writes.splice(0);
+    assert.deepEqual(mine, ['POST /events/batch 200'], `Keep was not one request: ${mine.join(', ')}`);
   };
   await keep.click();
   await keptAll();
@@ -96,8 +94,11 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   const seen = await yearEvents(player, base, cal.current_year, months);
   assert.equal(seen.length, 0, 'a player can read generated events');
 
+  writes.length = 0;
   await undo.click();
   await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor();
+  assert.deepEqual(writes, ['POST /events/batch 200'], `Undo was not one request: ${writes.join(', ')}`);
+  writes.length = 0;
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'Undo left events behind');
 
   // A second fill replaces the first one's events instead of stacking on them.
@@ -124,7 +125,7 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
 
   // Undoing the second fill puts the first back, still director-only and still marked.
   await undo.click();
-  await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor(LONG);
+  await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor();
   const back = await yearEvents(owner, base, cal.current_year, months);
   assert.equal(back.length, first.length, 'Undo did not put the first fill back');
   for (const e of back) {
