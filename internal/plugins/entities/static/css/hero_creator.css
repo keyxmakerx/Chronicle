@@ -150,7 +150,7 @@ html.dark .hc[data-skin="ornate"] {
 .hc-intro { padding: 14px 16px 6px; }
 .hc-intro h2 { margin: 0; font-size: 24px; line-height: 1.15; outline: none; }
 .hc-intro p { margin: 4px 0 0; font-size: 15px; color: var(--hc-muted); }
-.hc-intro .hc-make { color: var(--hc-text); }
+
 .hc-link { border: 0; background: none; padding: 0; color: var(--hc-link); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
 .hc-link:hover { text-decoration: underline; }
 .hc-notes { display: grid; gap: 6px; padding: 0 16px; }
@@ -428,3 +428,15 @@ html.dark .hc[data-skin="ornate"] {
 }
 
 .hc-facts[hidden], .hc-facts div[hidden] { display: none; }
+
+/* The player's own entry: a dashed card at the end of the hand (and a row in
+   the list) that opens the editor in the sheet or the right pane. */
+.hc-card--own, .hc-gcard--own, .hc-lrow--own { border-style: dashed; border-color: color-mix(in srgb, var(--hc-accent) 55%, var(--hc-line)); background-color: color-mix(in srgb, var(--hc-accent) 5%, var(--hc-surface)); }
+.hc-lrow--own { border: var(--hc-edge) dashed color-mix(in srgb, var(--hc-accent) 55%, var(--hc-line)); border-radius: var(--hc-radius); margin-top: 10px; }
+.hc-gcard--own .hc-ft b { color: var(--hc-link); }
+.hc-card--own:hover, .hc-gcard--own:hover { border-color: var(--hc-accent); }
+.hc-gcard--own.is-focus { border-style: solid; }
+.hc-ownbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 12px; font-size: 14px; color: var(--hc-muted); }
+.hc-ownbar .hc-qw { margin-left: -10px; }
+.hc-det p.hc-ownbar { margin: 0 0 12px; }
+.hc-sheet [data-ownfoot], .hc-right .hc-foot[data-ownfoot] { gap: 4px; }

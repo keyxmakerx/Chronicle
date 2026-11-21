@@ -6,8 +6,10 @@
  * entry's NAME as plain text, so Foundry pulls (which write item names) stay
  * compatible; a value that is not in the list is still shown and kept, and
  * "Not listed? Type your own" always works. A player a Director let write
- * their own entry for the field also gets a link to write it ("Make your
- * own"), kept to the hero the picker is for.
+ * their own entry for the field also gets "Make your own", which opens the
+ * shared own-entry editor (the plugin's own_entry_editor.js, loaded on first
+ * use) in the fold, kept to the hero the picker is for; the new entry is
+ * then selected in the list.
  *
  * Shared on purpose: the attributes widget uses it, and so can a system
  * package's own widget (Draw Steel hero pages do not use attributes):
@@ -113,6 +115,28 @@
     });
   };
 
+  // The own-entry editor is the entities plugin's script. It is fetched the
+  // first time a player asks to make their own entry, from the address the
+  // page's widget list already names (so it carries the same cache version).
+  var editorLoad = null;
+  function loadEditor() {
+    if (window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor) return Promise.resolve();
+    if (editorLoad) return editorLoad;
+    editorLoad = new Promise(function (resolve, reject) {
+      var url = '/static/plugins/entities/js/own_entry_editor.js';
+      try {
+        var lists = JSON.parse((document.getElementById('chronicle-widget-scripts') || {}).textContent || '{}');
+        Object.keys(lists).forEach(function (k) { (lists[k] || []).forEach(function (u) { if (/\/own_entry_editor\.js(\?|$)/.test(u)) url = u; }); });
+      } catch (e) { /* the plain address works too */ }
+      var sc = document.createElement('script');
+      sc.src = url;
+      sc.onload = function () { if (window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor) resolve(); else reject(new Error('editor')); };
+      sc.onerror = function () { reject(new Error('editor')); };
+      document.head.appendChild(sc);
+    }).catch(function (e) { editorLoad = null; throw e; });
+    return editorLoad;
+  }
+
   function saveField(opts, value) {
     var patch = {};
     patch[opts.fieldKey] = value;
@@ -170,6 +194,7 @@
     }
     // leave closes unless a pick is waiting to be saved; then it asks first.
     function leave() {
+      if (ownEd) { ownEd.requestClose(function () { endOwn(); close(null); }); return; }
       var v = list ? chosen() : '';
       if (!v || v === current || !Chronicle.askSlip) { close(null); return; }
       Chronicle.askSlip(box, {
@@ -185,6 +210,46 @@
       return '<div class="ag-head"><h4>' + esc(label) + '</h4>' +
         (srcName ? '<span class="ag-src">from ' + esc(srcName) + '</span>' : '') +
         '<button type="button" class="ag-x" data-x aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>';
+    }
+
+    // The own-entry editor fills the fold in place of the list. Leaving it
+    // with writing unsaved asks first; saving selects the new entry.
+    var ownEd = null;
+    function endOwn() { if (ownEd) { ownEd.destroy(); ownEd = null; } }
+    function renderOwn() {
+      loadEditor().then(function () {
+        if (closed) return;
+        var Own = window.ChronicleOwnEntry;
+        box.innerHTML = header('') + '<div class="ag-body"><button type="button" class="ag-link" data-ownback>‹ Back to the list</button>' +
+          '<div data-ownbody></div><div data-ownfoot></div></div>';
+        wire();
+        ownEd = new Own.Editor({
+          campaignId: opts.campaignId, step: { fieldKey: opts.fieldKey, label: label, choices: list.choices }, forId: opts.entityId || '',
+          onSaved: function (e) {
+            var ch = Own.Editor.choiceOf(e), at = -1;
+            list.choices.forEach(function (c, n) { if (c.entryId === e.id) at = n; });
+            if (at >= 0) list.choices.splice(at, 1);
+            list.choices.unshift(ch);
+            list.canMake = false;
+            endOwn();
+            renderBody();
+            var r = box.querySelector('input[type=radio][value="' + String(ch.name).replace(/"/g, '\\"') + '"]');
+            if (r) { r.checked = true; r.scrollIntoView({ block: 'nearest' }); }
+            update();
+            toast(ch.name + (ch.status === 'sent' ? ' handed in to your Director' : ' saved as a draft'));
+          }
+        });
+        ownEd.start();
+        ownEd.mount(box.querySelector('[data-ownbody]'), box.querySelector('[data-ownfoot]'));
+        ownEd.focusFirst();
+      }).catch(function () {
+        var err = box.querySelector('[data-err]');
+        if (err) err.textContent = 'The editor could not be opened. Reload the page to try again.';
+      });
+    }
+    function backFromOwn() {
+      if (!ownEd) return;
+      ownEd.requestClose(function () { endOwn(); renderBody(); });
     }
 
     function renderLoading() {
@@ -240,9 +305,7 @@
       }
       html += '<p class="ag-note" data-askhint hidden>Ask first: your Director allows it, or suggests another. Nothing is set on your hero until they do.</p>';
       if (list.canMake) {
-        html += '<div class="ag-mine"><a class="ag-link" href="/campaigns/' + encodeURIComponent(opts.campaignId) + '/characters/entries?field=' +
-          encodeURIComponent(opts.fieldKey) + (opts.entityId ? '&for=' + encodeURIComponent(opts.entityId) : '') +
-          '">Your Director lets you make your own ' + esc(String(label).toLowerCase()) + ' ›</a></div>';
+        html += '<div class="ag-mine"><button type="button" class="ag-link" data-make>Your Director lets you make your own ' + esc(String(label).toLowerCase()) + ' ›</button></div>';
       }
       html += '<div class="ag-hint" role="alert" data-err></div>' +
         '<div class="ag-foot"><span class="ag-sp"></span>' +
@@ -348,7 +411,9 @@
       box.onclick = function (e) {
         var t = e.target.closest('button');
         if (!t) return;
-        if (t.hasAttribute('data-x')) close(null);
+        if (t.hasAttribute('data-x')) { if (ownEd) leave(); else close(null); }
+        else if (t.hasAttribute('data-make')) renderOwn();
+        else if (t.hasAttribute('data-ownback')) backFromOwn();
         else if (t.hasAttribute('data-mine')) toggleOwn(box.querySelector('[data-ownpane]').hidden);
         else if (t.hasAttribute('data-nothere')) {
           var nl = box.querySelector('[data-nhlist]'), openNh = nl.hidden;

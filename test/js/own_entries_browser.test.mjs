@@ -43,7 +43,7 @@ const html = (director) => `<!doctype html><html><head><meta charset="utf-8"><st
 <div class="hc hc--tool" data-widget="own-entries" data-own-entries="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-entries-url="${C}/system-entries"
   data-members-url="${C}/members" data-director="${director}" data-user="u1" data-field="class" data-csrf="tok"><p class="hc-loading__text">Opening</p></div>
 <script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) };</script>
-<script src="/own_entries.js"></script></body></html>`;
+<script src="/own_entry_editor.js"></script><script src="/own_entries.js"></script></body></html>`;
 
 async function open(t, { director = true, checkCount = 0, requests = [REQUEST], putStatus = 200 } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
@@ -53,6 +53,8 @@ async function open(t, { director = true, checkCount = 0, requests = [REQUEST], 
   await pg.route('http://t.test/**', (route) => {
     const req = route.request(), p = new URL(req.url()).pathname, m = req.method();
     const ok = (b, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(b) });
+    if (p === '/own_entry_editor.js') return route.fulfill({ contentType: 'text/javascript', body: readFileSync(join(root, 'internal/plugins/entities/static/js/own_entry_editor.js')) });
+    if (p === '/own_entry_editor.css') return route.fulfill({ contentType: 'text/css', body: '' });
     if (p === '/own_entries.js') return route.fulfill({ contentType: 'text/javascript', body: readFileSync(join(root, 'internal/plugins/entities/static/js/own_entries.js')) });
     if (p === C + '/characters/new/plan') return ok(PLAN);
     if (p === C + '/system-entries') return ok({ entries: [] });

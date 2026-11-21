@@ -305,6 +305,7 @@
       nh: { name: 'Not offered here', category: 'Set by your ' + gm(), html: 'Your ' + gm() + ' has kept these out of this campaign. The reason is written under each one.' },
       lock: { name: 'Everyone starts with this', category: 'Set by your ' + gm(), html: 'This step is filled in for every hero in this campaign, so there is nothing to choose.' },
       mine: { name: 'Your own entry', category: 'Written by you', html: 'You wrote this entry. Your ' + gm() + ' reads it before it counts at the table.' },
+      allow: { name: 'Your ' + gm() + ' allows one', category: 'Set by your ' + gm(), html: 'Your ' + gm() + ' lets you write one of your own here. Save it as a draft, or hand it in: they accept it or ask for changes, and you can pick it for your hero meanwhile.' },
       campaign: { name: 'This campaign', category: 'Made for this table', html: 'Your ' + gm() + ' made this entry for this campaign. It is not from the game system.' }
     };
   }
@@ -340,6 +341,8 @@
     this.terms = null;
     this.busy = false;
     this.sheet = null;
+    this.own = null;
+    this.grants = {};
   }
 
   Creator.prototype.load = function () {
@@ -362,11 +365,12 @@
       if (!r.ok) throw new Error('plan ' + r.status);
       return r.json();
     }).then(function (plan) {
-      return glossary.then(function (terms) { return { plan: plan, terms: terms }; });
+      return Promise.all([glossary, self.readOwn(plan, get)]).then(function (r) { return { plan: plan, terms: r[0] }; });
     }).then(function (res) {
       self.plan = res.plan || { steps: [] };
       self.plan.steps = self.plan.steps || [];
       self.terms = res.terms;
+      self.ownFirst();
       if (self.preload) self.adopt(self.preload); else if (self.tryout) self.adopt(self.stored() || {}); else self.restore();
       self.prefill();
       self.step = self.firstStep();
@@ -378,6 +382,39 @@
     }).catch(function () {
       var page = self.root.querySelector('.hc-loading__text');
       if (page) page.textContent = 'The creator could not open. Reload the page to try again.';
+    });
+  };
+
+  // What the own-entry card and the cards of the player's own entries need
+  // beyond the plan: the points their Director gave them (the plan only says a
+  // permission exists) and the note a Director left on a draft. Both are read
+  // from the entry API the editor uses; a failure just leaves them out.
+  Creator.prototype.readOwn = function (plan, get) {
+    var self = this, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/system-entries', steps = (plan && plan.steps) || [];
+    if (this.tryout || !this.ownEnabled()) return Promise.resolve();
+    var make = !this.practice && steps.some(function (st) { return st.canMake; });
+    var mine = steps.some(function (st) { return (st.choices || []).some(function (c) { return c.mine && c.status; }); });
+    var jobs = [];
+    if (make) jobs.push(get(base + '/grants').then(function (r) { return r.ok ? r.json() : null; }).then(function (b) {
+      ((b && b.grants) || []).forEach(function (g) { if (g.budget > 0) self.grants[g.fieldKey] = g.budget; });
+    }));
+    if (mine) jobs.push(get(base).then(function (r) { return r.ok ? r.json() : null; }).then(function (b) {
+      var notes = {};
+      ((b && b.entries) || []).forEach(function (e) { if (e.reviewNote && e.status === 'draft') notes[e.id] = e.reviewNote; });
+      steps.forEach(function (st) { (st.choices || []).forEach(function (c) { if (c.mine && notes[c.entryId]) c.reviewNote = notes[c.entryId]; }); });
+    }));
+    return Promise.all(jobs.map(function (j) { return j.catch(function () { /* the card still works without it */ }); }));
+  };
+  // The own-entry editor is a separate script the registry lists first; a
+  // page that lacks it simply has no "make your own".
+  Creator.prototype.ownEnabled = function () { return !!(window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor); };
+  // A player's own entries lead the hand: what they wrote is what they came
+  // back for.
+  Creator.prototype.ownFirst = function () {
+    this.plan.steps.forEach(function (st) {
+      var mine = [], rest = [];
+      (st.choices || []).forEach(function (c) { (c.mine && c.status ? mine : rest).push(c); });
+      st.choices = mine.concat(rest);
     });
   };
 
@@ -610,7 +647,9 @@
   };
 
   Creator.prototype.render = function () {
+    var keepOwn = this.own && this.own.editor && !this.own.leaving;
     this.sheet = null;
+    this.sh = null;
     this.closeTip(true);
     var desk = this.view === 'desk', cols;
     if (desk) {
@@ -630,6 +669,8 @@
     // Redrawing shrinks the page for a moment, which can scroll it back; the
     // builder goes back to where it was aligned.
     if (this.aligned) this.alignTop();
+    // Turning the screen between phone and computer keeps what was being written.
+    if (keepOwn) this.showOwn(true);
   };
 
   // Practice mode says what it is above the steps, in the page's own words.
@@ -678,7 +719,7 @@
       if (interactive) out.push('<button type="button" class="hc-mark ' + cls + '" data-tip="' + tip + '" aria-expanded="false">' + label + '</button>');
       else out.push('<span class="hc-mark ' + cls + '" data-tip="' + tip + '">' + label + '</span>');
     }
-    if (c.mine && c.status) mk('is-own', 'Yours · ' + (c.status === 'sent' ? 'handed in' : 'draft'), 'mine');
+    if (c.mine && c.status) mk('is-own', c.status === 'sent' ? 'Waiting for your ' + gm() : c.reviewNote ? 'Changes asked' : 'Draft', 'mine');
     else if (c.source === 'campaign') mk('is-own', 'Campaign', 'campaign');
     if (c.state === 'ask_first') mk('is-warn', 'Ask first', 'ask');
     if (c.state === 'not_offered') mk('is-quiet', 'Not offered here', 'nh');
@@ -695,11 +736,8 @@
   Creator.prototype.introHTML = function () {
     var st = this.cur(), n = st.choices.length, desk = this.view === 'desk';
     var hint = this.locked(st) ? 'Everyone starts with this. Open it to read the whole entry.' : desk ? 'Pick a card to read its rules on the right.' : 'Tap a card to read its rules.';
-    var make = st.canMake && !this.practice ? '<p class="hc-make">Your ' + gm() + ' lets you make your own ' + esc(lower(st.label)) + '. ' +
-      '<a class="hc-link" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/characters/entries?field=' + encodeURIComponent(st.fieldKey) + '&back=new">Make yours ›</a> ' +
-      'Your picks here are kept while you do.</p>' : '';
     return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + ' · ' + n + ' to choose from</div>' : '') +
-      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + '</p>' + make + '</div>' + this.notesHTML(st);
+      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + '</p></div>' + this.notesHTML(st);
   };
 
   Creator.prototype.toolsHTML = function () {
@@ -726,6 +764,36 @@
     return '<div class="hc-empty">Nothing is on this list for you right now.</div>';
   };
 
+  // "Make your own": offered while a Director's permission for this list is
+  // unspent. Not in practice (writing an entry spends the one permission, which
+  // belongs to the real hero) and never to a try-out guest, whose plan carries
+  // no permission. Hidden while the find box is in use, as it is not a match.
+  Creator.prototype.canOwn = function (st) {
+    return !!(st && st.canMake && !this.practice && !this.tryout && this.ownEnabled() && !(this.find[st.fieldKey] || '').trim());
+  };
+  Creator.prototype.ownBudget = function (st) {
+    if (this.grants[st.fieldKey]) return this.grants[st.fieldKey];
+    var pkg = st.choices.filter(function (c) { return c.source !== 'campaign'; });
+    return window.ChronicleOwnEntry.shapeOf(pkg).budget || 0;
+  };
+  Creator.prototype.ownCardHTML = function (kind) {
+    var st = this.cur();
+    if (!this.canOwn(st)) return '';
+    var lbl = lower(st.label), pts = this.ownBudget(st), title = 'Make your own ' + esc(lbl);
+    var txt = 'None of these? Write your own: a name, a few words' + (pts ? ' and ' + pts + ' points of traits' : '') + '.';
+    var mk = '<span class="hc-mark is-own" data-tip="allow">Your ' + gm() + ' allows one</span>';
+    if (kind === 'row') {
+      return '<button type="button" class="hc-lrow hc-lrow--own" data-act="ownopen"><span class="hc-h"><b>' + title + '</b>' + mk + '</span><span class="hc-s">' + txt + '</span></button>';
+    }
+    if (kind === 'grid') {
+      return '<div class="hc-gcard hc-gcard--own" role="button" tabindex="0" data-act="ownopen" aria-label="' + title + '"><span class="hc-top">' + mk + '</span><h3 class="hc-disp">' + title + '</h3><p class="hc-sum">' + txt + '</p>' +
+        '<span class="hc-ft"><b>Start writing</b></span></div>';
+    }
+    return '<div class="hc-card hc-card--own" role="button" tabindex="0" data-act="ownopen" aria-label="' + title + ', start writing"><span class="hc-top">' + mk + '</span>' +
+      '<h3 class="hc-disp">' + title + '</h3><p class="hc-sum">' + txt + '</p>' +
+      (pts ? '<dl class="hc-facts"><div><dt>Points to spend</dt><dd>' + pts + ', set by your ' + gm() + '</dd></div></dl>' : '') + '<span class="hc-more">Start writing ' + I.up + '</span></div>';
+  };
+
   Creator.prototype.cardHTML = function (c, i, n, st) {
     var pk = this.isPicked(st, c);
     return '<div class="hc-card' + (pk ? ' is-picked' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules">' +
@@ -736,27 +804,28 @@
 
   Creator.prototype.handHTML = function () {
     var st = this.cur(), l = this.entries(this.step), self = this;
-    if (!l.length && !this.showNh(st)) return this.emptyHTML();
+    if (!l.length && !this.showNh(st) && !this.canOwn(st)) return this.emptyHTML();
     return '<div class="hc-hand" data-hand aria-label="' + esc(st.label) + ' cards">' + l.map(function (c, i) { return self.cardHTML(c, i, l.length, st); }).join('') +
-      (this.showNh(st) ? '<div class="hc-card hc-card--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>' : '') + '</div>';
+      this.ownCardHTML('card') + (this.showNh(st) ? '<div class="hc-card hc-card--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>' : '') + '</div>';
   };
 
   Creator.prototype.listHTML = function () {
     var st = this.cur(), l = this.entries(this.step), self = this, desk = this.view === 'desk';
-    if (!l.length && !this.showNh(st)) return '<div class="hc-list">' + this.emptyHTML() + '</div>';
+    if (!l.length && !this.showNh(st) && !this.canOwn(st)) return '<div class="hc-list">' + this.emptyHTML() + '</div>';
     var h = '<div class="hc-list" data-list>', ci = this.curIdx();
     l.forEach(function (c, i) {
       var pk = self.isPicked(st, c);
       h += '<button type="button" class="hc-lrow' + (pk ? ' is-picked' : '') + (desk && i === ci ? ' is-focus' : '') + '" data-i="' + i + '"><span class="hc-h"><b>' + esc(c.name) + '</b>' +
         self.marksHTML(st, c, false) + (pk ? '<span class="hc-mark is-own">Chosen</span>' : '') + '</span><span class="hc-s">' + esc(plain(c.summary)) + '</span></button>';
     });
+    h += this.ownCardHTML('row');
     if (this.showNh(st)) h += '<div class="hc-nhbox">' + this.nhHTML(st) + '</div>';
     return h + '</div>';
   };
 
   Creator.prototype.gridHTML = function () {
     var st = this.cur(), l = this.entries(this.step), ci = this.curIdx(), self = this;
-    if (!l.length && !this.showNh(st)) return '<div class="hc-grid">' + this.emptyHTML() + '</div>';
+    if (!l.length && !this.showNh(st) && !this.canOwn(st)) return '<div class="hc-grid">' + this.emptyHTML() + '</div>';
     var h = '<div class="hc-grid" data-grid role="listbox" aria-label="' + esc(st.label) + '">';
     l.forEach(function (c, i) {
       var pk = self.isPicked(st, c), ft = factsOf(c).slice(0, 2).map(function (x) { return '<b>' + esc(x[0]) + '</b> ' + esc(x[1]); }).join(' · ');
@@ -764,6 +833,7 @@
         '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your choice' : esc(st.label)) + '</span>' + self.marksHTML(st, c, false) + '</span>' +
         '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + (ft ? '<span class="hc-ft">' + ft + '</span>' : '') + '</div>';
     });
+    h += this.ownCardHTML('grid');
     if (this.showNh(st)) h += '<div class="hc-gcard hc-gcard--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>';
     return h + '</div>';
   };
@@ -809,6 +879,11 @@
     var h = '<div class="hc-det"><div class="hc-kind"><span>' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
       this.marksHTML(st, c, true) + (pk ? '<span class="hc-yours">Your choice</span>' : '') + '</div>';
     h += '<h3 class="hc-disp" id="hc-dt" tabindex="-1">' + esc(c.name) + '</h3>';
+    if (c.mine && c.status && !this.tryout && this.ownEnabled()) {
+      h += (c.reviewNote && c.status === 'draft' ? '<p class="hc-note"><b>Your ' + gm() + ' asked:</b> ' + esc(c.reviewNote) + '</p>' : '') +
+        '<p class="hc-ownbar"><button type="button" class="hc-qw" data-act="ownedit">Edit your entry</button>' +
+        '<span>' + (c.status === 'sent' ? 'Waiting for your ' + gm() + ', and you can still pick it.' : 'A draft only you and your ' + gm() + ' see. You can pick it now.') + '</span></p>';
+    }
     var tx = splitText(c);
     if (tx.lede) h += '<p class="hc-lede">' + marked(tx.lede, T) + '</p>';
     if (c.state === 'ask_first') h += this.practice ? '<p class="hc-note">Ask first at this table. Picking it here is only practice.</p>'
@@ -1109,7 +1184,7 @@
 
   Creator.prototype.refreshRight = function () {
     var r = this.$('[data-right]');
-    if (!r) return;
+    if (!r || (this.own && this.desk())) return;
     r.innerHTML = this.rightInner();
     this.anim(this.$('.hc-det', r), [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: ms(200), fill: 'none', slide: true });
   };
@@ -1117,6 +1192,8 @@
   // Desk: focus moves between cards with the arrows; the right column shows
   // the entry the focus is on.
   Creator.prototype.setFocus = function (i, scroll) {
+    var self = this;
+    if (this.own) { this.leaveOwn(function () { self.setFocus(i, scroll); }); return; }
     var cards = this.$$('.hc-gcard[data-i]'), st = this.cur();
     if (!cards.length) {
       var rows = this.$$('.hc-lrow[data-i]');
@@ -1146,35 +1223,48 @@
 
   // A half-height sheet over the cards: drag up or scroll for the rest, swipe
   // down or Esc to put it away. Everything behind it is inert while it is open.
-  Creator.prototype.openSheet = function (i) {
-    var app = this.app(), c = this.entries(this.step)[i], st = this.cur(), self = this;
-    if (!app || !c) return;
-    this.at[st.fieldKey] = i;
+  // own: the player's own entry editor fills the sheet in place of an entry's
+  // rules, opens full height (it is a form, not a read) and has no Choose; its
+  // Save draft and Hand it in take the foot. own.instant is a remount after a
+  // redraw, with nothing to animate.
+  Creator.prototype.openSheet = function (i, own) {
+    var app = this.app(), c = own ? null : this.entries(this.step)[i], st = this.cur(), self = this;
+    if (!app || (!c && !own)) return;
+    if (!own) this.at[st.fieldKey] = i;
     this.closeSheet(true);
     var scrim = document.createElement('div'); scrim.className = 'hc-scrim'; scrim.setAttribute('data-scrim', '');
-    var sh = document.createElement('div'); sh.className = 'hc-sheet'; sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true'); sh.setAttribute('aria-labelledby', 'hc-dt');
-    sh.innerHTML = '<div class="hc-grab" aria-hidden="true"><i></i></div><button type="button" class="hc-ibtn hc-x" data-act="closesheet" aria-label="Close">' + I.x + '</button><div class="hc-sc" data-ssc>' + this.detHTML(c, st) + '</div>';
+    var sh = document.createElement('div'); sh.className = 'hc-sheet'; sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+    if (own) sh.setAttribute('aria-label', 'Your own ' + lower(st.label)); else sh.setAttribute('aria-labelledby', 'hc-dt');
+    sh.innerHTML = '<div class="hc-grab" aria-hidden="true"><i></i></div><button type="button" class="hc-ibtn hc-x" data-act="closesheet" aria-label="Close">' + I.x + '</button><div class="hc-sc" data-ssc>' + (own ? '<div data-ownbody></div>' : this.detHTML(c, st)) + '</div>';
     var ft = document.createElement('div'); ft.className = 'hc-sfoot';
-    ft.innerHTML = '<button type="button" class="hc-btn hc-wide" data-act="choose"' + (this.chooseDisabled(c, st) ? ' disabled' : '') + '>' + this.chooseLabel(c, st) + '</button><span class="hc-hint" data-shint>Drag up for the full rules</span>';
+    if (own) ft.setAttribute('data-ownfoot', '');
+    else ft.innerHTML = '<button type="button" class="hc-btn hc-wide" data-act="choose"' + (this.chooseDisabled(c, st) ? ' disabled' : '') + '>' + this.chooseLabel(c, st) + '</button><span class="hc-hint" data-shint>Drag up for the full rules</span>';
     app.appendChild(scrim); app.appendChild(sh); app.appendChild(ft);
     var avail = app.clientHeight;
-    this.sh = { H: avail - 58, y: 0, half: 0, el: sh, ft: ft, scrim: scrim, from: this.$$('.hc-hand .hc-card[data-i]')[i] || this.$$('.hc-lrow[data-i]')[i] };
+    this.sh = { H: avail - 58, y: 0, half: 0, el: sh, ft: ft, scrim: scrim, own: !!own,
+      from: own ? this.$('[data-act="ownopen"]') : (this.$$('.hc-hand .hc-card[data-i]')[i] || this.$$('.hc-lrow[data-i]')[i]) };
     this.sh.half = Math.round(this.sh.H - avail * 0.6);
     sh.style.height = this.sh.H + 'px';
-    this.sheet = 'half';
-    this.setY(this.sh.half, false);
+    var rest = own ? 0 : this.sh.half;
+    this.sheet = own ? 'full' : 'half';
+    this.setY(rest, false);
     requestAnimationFrame(function () { scrim.classList.add('is-on'); });
     var s = this.sh, mo = motion();
+    if (own && own.instant) mo = 'still';
     if (mo === 'lively') {
-      sh.animate([{ transform: 'translateY(' + s.H + 'px)' }, { transform: 'translateY(' + s.half + 'px)' }], { duration: ms(360), easing: 'cubic-bezier(.22,.8,.24,1)' });
-      ft.animate([{ transform: 'translateY(' + (s.H - s.half) + 'px)' }, { transform: 'none' }], { duration: ms(360), easing: 'cubic-bezier(.22,.8,.24,1)' });
+      sh.animate([{ transform: 'translateY(' + s.H + 'px)' }, { transform: 'translateY(' + rest + 'px)' }], { duration: ms(360), easing: 'cubic-bezier(.22,.8,.24,1)' });
+      ft.animate([{ transform: 'translateY(' + (s.H - rest) + 'px)' }, { transform: 'none' }], { duration: ms(360), easing: 'cubic-bezier(.22,.8,.24,1)' });
     } else if (mo === 'gentle') {
-      sh.animate([{ opacity: 0, transform: 'translateY(' + (s.half + 12) + 'px)' }, { opacity: 1, transform: 'translateY(' + s.half + 'px)' }], { duration: ms(180), easing: 'ease-out' });
+      sh.animate([{ opacity: 0, transform: 'translateY(' + (rest + 12) + 'px)' }, { opacity: 1, transform: 'translateY(' + rest + 'px)' }], { duration: ms(180), easing: 'ease-out' });
       ft.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms(180), easing: 'ease-out' });
     }
-    var card = this.$$('.hc-hand .hc-card[data-i]')[i]; if (card) card.classList.add('is-reading');
+    var card = own ? this.$('.hc-hand [data-act="ownopen"]') : this.$$('.hc-hand .hc-card[data-i]')[i]; if (card) card.classList.add('is-reading');
     this.setInert(true);
     this.wireSheet(sh);
+    if (own) {
+      this.say('Make your own ' + lower(st.label) + ' opened. Save draft and Hand it in are at the bottom.');
+      return;
+    }
     // Focus lands on Choose with a keyboard or mouse, and on the title with a
     // finger so no button looks pressed.
     var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
@@ -1200,6 +1290,11 @@
 
   Creator.prototype.closeSheet = function (now, cb, refocus) {
     var s = this.sh, self = this;
+    // Writing is never thrown away on a stray swipe: the editor asks first.
+    if (s && s.own && !now && this.own && !this.own.leaving) {
+      this.own.editor.requestClose(function () { self.own.leaving = true; self.closeSheet(false, cb, refocus); });
+      return;
+    }
     this.closeTip(true);
     this.$$('.hc-card.is-reading').forEach(function (c) { c.classList.remove('is-reading'); });
     if (!s) { if (cb) cb(); return; }
@@ -1208,7 +1303,8 @@
     this.setInert(false);
     var gone = function () {
       s.el.remove(); s.scrim.remove(); s.ft.remove();
-      if (refocus) { var c = self.$$('.hc-hand .hc-card[data-i], .hc-lrow[data-i]')[i]; if (c) c.focus({ preventScroll: true }); }
+      if (s.own) self.endOwn();
+      if (refocus) { var c = s.own ? self.$('[data-act="ownopen"]') : self.$$('.hc-hand .hc-card[data-i], .hc-lrow[data-i]')[i]; if (c) c.focus({ preventScroll: true }); }
       if (cb) cb();
     };
     if (now || this.still()) { gone(); return; }
@@ -1250,6 +1346,103 @@
     var sc = sh.querySelector('.hc-sc');
     sc.addEventListener('scroll', function () { if (self.sheet === 'half' && sc.scrollTop > 6) self.setSheet('full'); self.followTip(); }, { passive: true });
     sc.addEventListener('wheel', function (ev) { if (self.sheet === 'half' && ev.deltaY > 0) { ev.preventDefault(); self.setSheet('full'); } }, { passive: false });
+  };
+
+  // --- The player's own entry ---
+
+  // Opens the editor for a new entry, or for the player's own entry c. It
+  // takes the sheet on a phone and the right pane on a computer; the form,
+  // its checks and Save draft / Hand it in are the shared editor's.
+  Creator.prototype.openOwn = function (c) {
+    var self = this, st = this.cur(), Own = window.ChronicleOwnEntry;
+    if (!Own || !Own.Editor || !st || this.busy) return;
+    this.endOwn();
+    var desk = this.desk();
+    var ed = new Own.Editor({
+      campaignId: this.campaignId, csrf: this.csrf, step: st, entry: c || null, closeButton: desk,
+      say: function (t) { self.say(t); },
+      onSaved: function (e, mode, isNew) { self.ownSaved(st, c, e, mode, isNew); },
+      onClose: function () { self.closeOwn(); }
+    });
+    this.own = { editor: ed, key: st.fieldKey };
+    ed.start();
+    this.showOwn(false);
+  };
+
+  // Puts the editor on screen (again, after a redraw when instant).
+  Creator.prototype.showOwn = function (instant) {
+    var self = this, o = this.own;
+    if (!o) return;
+    if (this.desk()) {
+      var r = this.$('[data-right]');
+      if (!r) return;
+      r.innerHTML = '<div class="hc-sc" data-rsc><div data-ownbody></div></div><div class="hc-foot" data-ownfoot></div>';
+      this.$$('.hc-gcard.is-focus').forEach(function (g) { g.classList.remove('is-focus'); g.setAttribute('aria-selected', 'false'); });
+      var oc = this.$('.hc-gcard--own'); if (oc) oc.classList.add('is-focus');
+      this.anim(r.firstElementChild, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: ms(200), fill: 'none', slide: true });
+    } else {
+      this.openSheet(null, { instant: !!instant });
+    }
+    o.editor.mount(this.$('[data-ownbody]'), this.$('[data-ownfoot]'));
+    if (!instant) o.editor.focusFirst();
+  };
+
+  Creator.prototype.endOwn = function () {
+    if (!this.own) return;
+    this.own.editor.destroy();
+    this.own = null;
+  };
+
+  // Gets out of the editor on the computer (a phone's sheet closes through
+  // closeSheet), asking first when something unsaved would be lost.
+  Creator.prototype.leaveOwn = function (next) {
+    var self = this;
+    if (!this.own) { next(); return; }
+    this.own.editor.requestClose(function () { self.endOwn(); self.refreshRight(); next(); });
+  };
+
+  Creator.prototype.closeOwn = function () {
+    if (this.desk()) {
+      this.endOwn();
+      this.refreshRight();
+      var oc = this.$('.hc-gcard--own, .hc-lrow--own'); if (oc) oc.focus({ preventScroll: true });
+    } else this.closeSheet(false, null, true);
+  };
+
+  // A saved entry joins the step's list at the front, marked Draft or Waiting
+  // for the Director, and can be chosen for the hero like any other. A new one
+  // spends the permission, so the make card goes. If it was the pick and its
+  // name changed, the pick follows.
+  Creator.prototype.ownSaved = function (st, was, e, mode, isNew) {
+    var self = this, Own = window.ChronicleOwnEntry, ch = Own.Editor.choiceOf(e);
+    var at = -1;
+    st.choices.forEach(function (c, n) { if (c.entryId === e.id) at = n; });
+    if (at >= 0) {
+      var old = st.choices[at], p = this.picks[st.fieldKey];
+      if (p && lower(p.name) === lower(old.name)) { p.name = ch.name; this.save(); }
+      if (old.state) ch.state = old.state;
+      st.choices.splice(at, 1);
+    }
+    st.choices.unshift(ch);
+    if (isNew) st.canMake = false;
+    this.at[st.fieldKey] = 0;
+    this.find[st.fieldKey] = '';
+    var said = ch.name + (mode === 'send' ? ' handed in. It waits for your ' + gm() + ', and you can still choose it.' : ' saved as a draft. You can choose it now.');
+    var finish = function () {
+      if (self.cur() !== st) return;
+      self.own = null;
+      var tl = self.$('.hc-tools'); if (tl) tl.outerHTML = self.toolsHTML();
+      self.refreshList();
+      var c0 = self.$$('.hc-hand .hc-card[data-i], .hc-gcard[data-i]')[0] || self.$$('.hc-lrow[data-i]')[0];
+      if (c0) {
+        if (!self.desk() && self.mode === 'cards') self.scrollHandTo(0, true);
+        c0.classList.remove('is-flash'); void c0.offsetWidth;
+        setTimeout(function () { c0.classList.add('is-flash'); }, self.lively() ? 300 : 0);
+      }
+      self.say(said);
+    };
+    if (this.desk()) { this.own.leaving = true; this.endOwn(); finish(); }
+    else { this.own.leaving = true; this.closeSheet(false, finish); }
   };
 
   // --- The step list (phone) ---
@@ -1402,6 +1595,8 @@
   // Go to a step; dir 'fwd' deals from the right, 'back' from the left.
   // keepChips leaves the chip row alone while a card is still flying to it.
   Creator.prototype.goStep = function (i, dir, glowKey, keepChips) {
+    var me = this;
+    if (this.own && this.desk()) { this.leaveOwn(function () { me.goStep(i, dir, glowKey, keepChips); }); return; }
     this.closeTip(true);
     this.toggleDrape(false);
     var prev = this.step;
@@ -1731,6 +1926,15 @@
     switch (n) {
       case 'choose': this.choose(); break;
       case 'closesheet': this.closeSheet(false, null, true); break;
+      case 'ownopen':
+        // A card peeking in comes to the middle first, as an entry's does.
+        if (!this.desk() && el.classList.contains('hc-card')) {
+          var hand = this.$('[data-hand]'), mid = hand.scrollLeft + hand.clientWidth / 2;
+          if (Math.abs(el.offsetLeft + el.offsetWidth / 2 - mid) > el.offsetWidth / 2) { this.scrollHandTo(this.$$('.hc-hand .hc-card').indexOf(el), true); break; }
+        }
+        this.openOwn(null);
+        break;
+      case 'ownedit': this.openOwn(this.curEntry()); break;
       case 'tipx': this.closeTip(false, true); break;
       case 'drape': this.toggleDrape(false); break;
       case 'steps': this.toggleDrape(); break;
@@ -1840,6 +2044,7 @@
         if (self.tip) { self.closeTip(false, true); ev.preventDefault(); return; }
         if (self.$('[data-drape]')) { self.toggleDrape(false); var sb = self.$('.hc-sbtn'); if (sb) sb.focus(); ev.preventDefault(); return; }
         if (self.sh) { self.closeSheet(false, null, true); ev.preventDefault(); return; }
+        if (self.own && self.desk()) { self.own.editor.requestClose(function () { self.closeOwn(); }); ev.preventDefault(); return; }
         if (inField && t.hasAttribute('data-find') && t.value) { self.act('clear'); ev.preventDefault(); return; }
       }
       if (ev.key === 'Enter' && t.hasAttribute && t.hasAttribute('data-name')) { ev.preventDefault(); self.create(); return; }
@@ -1861,7 +2066,9 @@
         if (cs[j]) { self.at[self.cur().fieldKey] = j; self.scrollHandTo(j, true); cs[j].focus({ preventScroll: true }); self.refreshUnder(); }
         return;
       }
-      if (self.desk() && t.closest && t.closest('.hc-gcard, .hc-mid .hc-lrow')) {
+      var oc = t.closest && t.closest('[data-act="ownopen"]');
+      if (oc && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); self.act('ownopen', oc); return; }
+      if (self.desk() && t.closest && t.closest('.hc-gcard:not(.hc-gcard--own), .hc-mid .hc-lrow:not(.hc-lrow--own)')) {
         var cur = self.curIdx(), cols = self.mode === 'cards' ? self.gridCols() : 1, n = self.entries(self.step).length;
         var map = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols };
         if (map[ev.key] != null) { ev.preventDefault(); self.setFocus(Math.max(0, Math.min(n - 1, cur + map[ev.key]))); return; }
