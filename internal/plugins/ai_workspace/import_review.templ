@@ -525,6 +525,7 @@ templ reviewRowSheetCheck(campaignID string, idx int, cls importer.Classificatio
 		data-sheet-kind={ cls.SheetKind }
 		data-fields={ sheetCheckJSON(cls.SheetFields) }
 		data-written={ sheetCheckJSON(cls.SheetWritten) }
+		data-stored={ sheetCheckJSON(cls.SheetStored) }
 		data-input={ fmt.Sprintf("page_%d_sheet_formula", idx) }
 		class="air-sheet"
 	></div>

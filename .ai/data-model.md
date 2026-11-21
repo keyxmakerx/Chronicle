@@ -17,6 +17,11 @@ logs. A campaign-scoped table carries `campaign_id`. Most tables have
 
 **Ownership.** `created_by` records the acting user on most tables and has no
 FK-cascade behavior that deletes content when the user is deleted.
+`entities.shop_good` marks a page made for a shop's stock (migration 66): every
+list, search, Auto-link, recent-pages list and sync read leaves it out unless
+it asks for shop goods (`ListOptions.ShopGoods`); lookups by id still find it.
+Export and import carry it. The Director's "Make it a full page" clears it.
+
 `entities.owner_user_id` is different: it is the nullable, player-claimable
 "this is my character" pointer (`ON DELETE SET NULL`). `campaign_members.role`
 (`owner`/`scribe`/`player`) is the campaign-wide authority tier;
@@ -442,6 +447,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 | `armory_item_copies` | Part of a holder's count of an item that remembers marks, a quality, a quirk, its maker or harvester, and when it goes off; the rest of the count is plain | PK `id`; `holder_kind` `character`/`stash` + `holder_id` (not FKs: two tables); `quantity`; `memory` TEXT (JSON the service cleans); FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
 | `armory_move_picks` | The copy a waiting move request asked for, so it is still the one that goes when approved | PK `move_id` FK→`item_moves` CASCADE; `copy_id` FK→`armory_item_copies` CASCADE |
 | `armory_item_places` | Which container a hero carries an item in (`hand`, `worn`, `belt`); no row is the backpack | PK (`character_id`, `item_entity_id`); `place`; FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
+| `armory_campaign_prices` | What a day's food costs in the campaign's main coin; every everyday price in Fill the shelves follows it. No row reads as 1 | PK `campaign_id`; `food_price` DECIMAL(10,2); `updated_by` |
 | `shop_good_secrets` | The owner's hidden note and extra on a shop listing; players read them only through a counter-roll reveal | PK (`campaign_id`, `shop_entity_id`, `relation_id`); `note`, `extra` VARCHAR(400); FKs to `campaigns`, `entities`, `entity_relations` (`ON DELETE CASCADE`) |
 | `shop_counter_rolls` | A character's haggle or look closer on a listing for one shelf day; the unique key is the one-try-a-day rule | PK `id`; UNIQUE (`campaign_id`, `shop_entity_id`, `relation_id`, `character_id`, `action`, `shelf_day`); `tier`, `pct` (haggle price change), `roll_total`; FKs to `campaigns`, `entities` (shop, character), `entity_relations` (`ON DELETE CASCADE`) |
 
@@ -449,7 +455,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
+| `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit. A table may carry `visibility` (`everyone` or `dm_only`, who sees a calendar day's roll), and a line may carry `when` (the day conditions the client engine reads; the service validates them) | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
 
 ### designs (`internal/plugins/designs/migrations/`)
 

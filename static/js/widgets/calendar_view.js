@@ -6113,13 +6113,13 @@
           var body = {
             name: r.name, description: r.brief || null,
             description_html: r.brief ? '<p>' + esc(r.brief) + '</p>' : null,
-            year: d.y, month: d.m, day: d.d, all_day: true, visibility: 'dm_only'
+            year: d.y, month: d.m, day: d.d, all_day: true, visibility: r.visibility === 'everyone' ? 'everyone' : 'dm_only'
           };
           return Chronicle.apiFetch(self.apiBase + '/events', { method: 'POST', body: body }).then(function (resp) {
             if (!resp.ok) throw new Error('not saved');
             self.eventsByMonth = {};
             self.renderMonth();
-            self.say('On ' + label + '. Players won’t see it until you show it.');
+            self.say('On ' + label + (body.visibility === 'everyone' ? '. Everyone can see it.' : '. Players won’t see it until you show it.'));
           });
         },
         onClose: function () {

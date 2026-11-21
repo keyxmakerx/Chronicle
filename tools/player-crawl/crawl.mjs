@@ -53,7 +53,7 @@ const VARIANTS = [
 
 // Returns {hits: [{route, variant, marker, status}], seen:Set(markers), requests,
 // statuses: Map('variant route' -> status)}
-export async function crawl(client, cid, ids, markers, { log = () => {}, term = 'ZQ', controls = [] } = {}) {
+export async function crawl(client, cid, ids, markers, { log = () => {}, term = 'ZQ', controls = [], extraUrls = [] } = {}) {
   const controlSeen = new Set();
   const pool = { ids: [...new Set(ids)], ints: ['1', '2', '3', '4', '5'] };
   const keys = Object.keys(markers);
@@ -70,6 +70,9 @@ export async function crawl(client, cid, ids, markers, { log = () => {}, term = 
     if (/search|find|lookup|suggest|changes|feed|entities$|notes$|timeline|sidebar|results/.test(u)) urls.add(u + (u.includes('?') ? '&' : '?') + Q);
   }
   for (const e of [`/campaigns/${cid}/entities?q=${term}`, `/campaigns/${cid}/search?q=${term}`]) urls.add(e);
+  // Pages reached by a query the route list cannot spell out (a Director-only
+  // view a viewer may still ask for by hand).
+  for (const u of extraUrls) urls.add(u);
   const lostAt = [];
   for (const u of urls) {
     // A GET that ends the session would turn the rest of the walk into a

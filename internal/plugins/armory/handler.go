@@ -12,6 +12,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -71,6 +72,11 @@ func (h *Handler) Index(c *echo.Context) error {
 		}
 	}
 
+	// Shop goods are the Director's alone; anyone else asking for them gets
+	// the ordinary gallery.
+	director := cc.VisibilityRole() >= permissions.RoleOwner
+	opts.ShopGoods = director && c.QueryParam("goods") == "1"
+
 	userID := auth.GetUserID(c)
 	// VisibilityRole() promotes a DM-granted co-DM to Owner for visibility,
 	// the same promotion every entity path applies, so a co-DM sees
@@ -100,12 +106,23 @@ func (h *Handler) Index(c *echo.Context) error {
 	// A failed tag lookup only hides the filter; the gallery still works.
 	tagOptions, _ := h.svc.ListTagOptions(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), userID)
 
+	// The tab shows only for a Director who has goods, so a campaign that
+	// never sells a pageless good never sees it.
+	shopGoodCount := 0
+	if director {
+		goodsOpts := DefaultItemListOptions()
+		goodsOpts.PerPage = 1
+		goodsOpts.ShopGoods = true
+		_, shopGoodCount, _ = h.svc.ListItems(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), userID, goodsOpts)
+	}
+	showTab := director && (shopGoodCount > 0 || opts.ShopGoods)
+
 	csrfToken := middleware.GetCSRFToken(c)
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selectedInstance, tagOptions, csrfToken))
+		return middleware.Render(c, http.StatusOK, ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selectedInstance, tagOptions, showTab, shopGoodCount, csrfToken))
 	}
-	return middleware.Render(c, http.StatusOK, ArmoryGalleryPage(cc, cards, total, opts, itemTypes, instances, selectedInstance, tagOptions, csrfToken))
+	return middleware.Render(c, http.StatusOK, ArmoryGalleryPage(cc, cards, total, opts, itemTypes, instances, selectedInstance, tagOptions, showTab, shopGoodCount, csrfToken))
 }
 
 // CountAPI returns the item count as JSON at GET /campaigns/:id/armory/count.

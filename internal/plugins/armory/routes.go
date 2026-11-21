@@ -165,3 +165,19 @@ func RegisterShopRollRoutes(e *echo.Echo, h *ShopRollHandler, campaignSvc campai
 	cg.GET("/armory/shops/:eid/secrets", h.Secrets, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/armory/shops/:eid/secrets/:rel", h.PutSecret, campaigns.RequireRole(campaigns.RoleOwner))
 }
+
+// RegisterShopStockRoutes sets up Fill the shelves. Director only (the owner
+// or a co-DM granted DM access): a draft is never shown to anyone else, and
+// the service checks again.
+func RegisterShopStockRoutes(e *echo.Echo, h *ShopStockHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, AddonSlug),
+	)
+	director := campaigns.RequireCapability((*campaigns.CampaignContext).CanAuthorDmOnly, "Only the Director can fill a shop's shelves.")
+	cg.GET("/armory/shops/:eid/fill-sources", h.Sources, director)
+	cg.POST("/armory/shops/:eid/stock", h.Keep, director)
+	cg.POST("/armory/shops/:eid/stock/undo", h.Undo, director)
+	cg.PUT("/armory/food-price", h.PutFoodPrice, director)
+}

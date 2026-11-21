@@ -122,6 +122,11 @@ type SystemManifest struct {
 	// d20 against a DC.
 	ShopTests *ShopTestsDef `json:"shop_tests,omitempty"`
 
+	// Goods names the categories a shop may stock, and the fields that say
+	// each entry's kind, rarity and price (shop_goods.go). Absent: a shop's
+	// fill offers none of this system's entries.
+	Goods []GoodsDef `json:"goods,omitempty"`
+
 	// Designs are saved designs the package ships (room themes, crafting
 	// designs). Campaigns on this system see them read-only under "From
 	// <system>" in the design library. See package_designs.go.
@@ -357,6 +362,12 @@ type FieldDef struct {
 	// JSONList marks a text field that holds a JSON list (a stat block's
 	// abilities), so AI Import refuses text that does not parse as one.
 	JSONList bool `json:"json_list,omitempty"`
+
+	// Formula marks a number the system works out from other fields (a
+	// stat block's EV or Stamina). AI Import's review may then fill it in on
+	// a page where the AI left it out, with the figure the system's sheet
+	// check proposes; any other key is still never added by the review.
+	Formula bool `json:"formula,omitempty"`
 
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
@@ -1093,6 +1104,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateShopTests(m.ShopTests); err != nil {
 		return fmt.Errorf("shop_tests: %w", err)
+	}
+
+	if err := validateGoods(m); err != nil {
+		return fmt.Errorf("goods: %w", err)
 	}
 
 	m.sanitizeDesigns()

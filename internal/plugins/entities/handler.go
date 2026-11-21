@@ -5066,3 +5066,26 @@ func (h *Handler) MoveSidebarRowAPI(c *echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// MakeFullPageAPI brings a shop good into lists, search and links by clearing
+// its mark. Director only; asking again for a page that is already full is a
+// no-op, so a second press never errors.
+//
+// Route: POST /campaigns/:id/entities/:eid/full-page
+func (h *Handler) MakeFullPageAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	entity, err := h.campaignEntity(c, cc, c.Param("eid"))
+	if err != nil {
+		return err
+	}
+	if !entity.ShopGood {
+		return c.JSON(http.StatusOK, map[string]bool{"shopGood": false})
+	}
+	if err := h.service.SetShopGood(c.Request().Context(), cc.Campaign.ID, entity.ID, false); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]bool{"shopGood": false})
+}

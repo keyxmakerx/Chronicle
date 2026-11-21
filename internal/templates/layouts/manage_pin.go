@@ -17,6 +17,7 @@ var manageToolOfLine = map[string]string{
 	"look":     "manage:customize",
 	"media":    "manage:media",
 	"settings": "manage:settings",
+	"tables":   "manage:roll-tables",
 	"foundry":  "manage:foundry",
 	"ai":       "manage:ai",
 	"trash":    "manage:trash",

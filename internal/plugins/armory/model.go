@@ -21,6 +21,9 @@ type ItemListOptions struct {
 	Tag        string // Optional tag slug filter.
 	TypeID     int    // Optional entity type ID filter (0 = all item types).
 	InstanceID int    // Optional inventory instance filter (0 = all items).
+	// ShopGoods lists the pages kept out of Items because they exist only
+	// to be sold. Only the Director's Shop goods tab sets it.
+	ShopGoods bool
 }
 
 // DefaultItemListOptions returns sensible defaults for the Armory gallery.

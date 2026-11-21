@@ -60,6 +60,8 @@
 .air-what b { font-weight: 600; }
 .air-line { font-size: 0.84rem; color: var(--color-text-secondary); overflow-wrap: anywhere; }
 .air-line i { font-style: normal; color: var(--color-text-body); }
+/* In a sheet check each line is its own row, so a plain line never runs on from the note. */
+.air-sheet > .air-line { display: block; }
 .air-line.air-bad { color: rgb(var(--color-bad-rgb)); }
 .air-row:has(.air-n input:checked) .air-what { color: var(--color-text-secondary); text-decoration: line-through; }
 
@@ -70,6 +72,7 @@
 .air-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 4px; }
 .air-stat { font: inherit; text-align: left; border: 1px solid var(--color-border); border-radius: 8px; padding: 6px 10px; font-size: 0.84rem; display: flex; flex-direction: column; gap: 2px; background: var(--color-card-bg); color: var(--color-text-body); min-width: 0; }
 .air-stat b { color: var(--color-text-primary); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 0.96rem; overflow-wrap: anywhere; }
+.air-stat b.is-blank { color: var(--color-text-secondary); font-weight: 500; font-style: italic; }
 .air-stat small { font-size: 0.76rem; color: var(--color-text-secondary); }
 .air-stat.is-ok small, .air-stat.is-used small { color: color-mix(in srgb, rgb(var(--color-ok-rgb)) 70%, var(--color-text-primary)); }
 .air-stat.is-off { border-color: rgb(var(--color-warn-rgb) / 0.55); background: rgb(var(--color-warn-rgb) / 0.10); }

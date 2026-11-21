@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	gohtml "html"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/editordoc"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -30,6 +32,17 @@ type EntityService interface {
 	// Entity CRUD
 	Create(ctx context.Context, campaignID, userID string, input CreateEntityInput) (*Entity, error)
 	Clone(ctx context.Context, campaignID, userID, sourceEntityID string) (*Entity, error)
+	// EnsureShopGood returns the shop good page of that name (case-ignored)
+	// in the campaign, making it in the given item type when there is none.
+	// A good for sale to players is never left on a page hidden from them,
+	// since the shop drops listings whose page a player cannot see.
+	EnsureShopGood(ctx context.Context, campaignID, userID string, typeID int, name string, hiddenFromPlayers bool) (*Entity, error)
+	// SetShopGood marks a page as a shop good or, with false, makes it a full page.
+	SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error
+
+	// ReconcileShopGoodVisibility hides a shop good page unless a public
+	// listing sells it (publicListings > 0); other pages are untouched.
+	ReconcileShopGoodVisibility(ctx context.Context, campaignID, entityID string, publicListings int) error
 	GetByID(ctx context.Context, id string) (*Entity, error)
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
@@ -618,6 +631,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		TypeLabel:    typeLabelPtr,
 		IsPrivate:    input.IsPrivate,
 		IsTemplate:   false,
+		ShopGood:     input.ShopGood,
 		FieldsData:   fieldsData,
 		CreatedBy:    userID,
 		OwnerUserID:  ownerUserIDPtr,
@@ -641,8 +655,13 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		slog.String("name", name),
 	)
 
-	s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
-	s.publishEntity(ctx, "created", campaignID, entity.ID, entity)
+	// History and the live event wait for the commit when the page is made
+	// inside a larger transaction (Fill the shelves), so a rolled-back batch
+	// leaves no trace of the page.
+	database.AfterCommit(ctx, func() {
+		s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
+		s.publishEntity(ctx, "created", campaignID, entity.ID, entity)
+	})
 	return entity, nil
 }
 
@@ -687,6 +706,7 @@ func (s *entityService) Clone(ctx context.Context, campaignID, userID, sourceEnt
 		TypeLabel:      source.TypeLabel,
 		IsPrivate:      source.IsPrivate,
 		IsTemplate:     source.IsTemplate,
+		ShopGood:       source.ShopGood,
 		FieldsData:     fieldsData,
 		FieldOverrides: source.FieldOverrides,
 		PopupConfig:    source.PopupConfig,
@@ -3813,7 +3833,7 @@ func (s *entityService) SyncFieldPlay(ctx context.Context, playByCategory map[st
 	return updated, nil
 }
 
-// SyncFieldChecks converges FieldDefinition.Min, Max and JSONList on stored
+// SyncFieldChecks converges FieldDefinition.Min, Max, JSONList and Formula on stored
 // entity types so AI Import's range checks reach categories created before a
 // system declared them. A key absent from the map is left alone.
 func (s *entityService) SyncFieldChecks(ctx context.Context, checksByCategory map[string]map[string]FieldChecks) (int, error) {
@@ -3841,8 +3861,8 @@ func (s *entityService) SyncFieldChecks(ctx context.Context, checksByCategory ma
 				continue
 			}
 			f := &et.Fields[j]
-			if !reflect.DeepEqual(f.Min, c.Min) || !reflect.DeepEqual(f.Max, c.Max) || f.JSONList != c.JSONList {
-				f.Min, f.Max, f.JSONList = c.Min, c.Max, c.JSONList
+			if !reflect.DeepEqual(f.Min, c.Min) || !reflect.DeepEqual(f.Max, c.Max) || f.JSONList != c.JSONList || f.Formula != c.Formula {
+				f.Min, f.Max, f.JSONList, f.Formula = c.Min, c.Max, c.JSONList, c.Formula
 				changed = true
 			}
 		}
@@ -3928,4 +3948,79 @@ func (s *entityService) syncFieldFlag(
 // text, not a document.
 func isEditorDoc(entry string) bool {
 	return strings.HasPrefix(entry, "{") && json.Valid([]byte(entry))
+}
+
+// maxShopGoodName is the longest name a shop good page is made with.
+const maxShopGoodName = 200
+
+// EnsureShopGood finds or makes the shop good page for a name. Two shops
+// selling the same good share one page, found by name within the campaign's
+// shop goods only: an ordinary page with the same name is never taken over,
+// so a Director's own "Healing Potion" page is never turned into a good.
+func (s *entityService) EnsureShopGood(ctx context.Context, campaignID, userID string, typeID int, name string, hiddenFromPlayers bool) (*Entity, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, apperror.NewBadRequest("A good needs a name.")
+	}
+	if len(name) > maxShopGoodName {
+		return nil, apperror.NewBadRequest("A good's name can be at most 200 characters.")
+	}
+	existing, err := s.entities.FindShopGoodByName(ctx, campaignID, name)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	if existing != nil {
+		// Who may see an existing good follows its listings, not this one:
+		// ReconcileShopGoodVisibility runs when the listing is written.
+		return existing, nil
+	}
+	return s.Create(ctx, campaignID, userID, CreateEntityInput{
+		Name: name, EntityTypeID: typeID, IsPrivate: hiddenFromPlayers, ShopGood: true,
+	})
+}
+
+// ReconcileShopGoodVisibility makes a shop good page hidden from players
+// unless at least one public listing sells it: used only by Director-only
+// listings it stays hidden, and when the last public listing goes it is
+// hidden again. Any other page is left alone.
+func (s *entityService) ReconcileShopGoodVisibility(ctx context.Context, campaignID, entityID string, publicListings int) error {
+	e, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return nil
+		}
+		return err
+	}
+	if e.CampaignID != campaignID || !e.ShopGood {
+		return nil
+	}
+	wantPrivate := publicListings == 0
+	if e.IsPrivate == wantPrivate {
+		return nil
+	}
+	if err := s.entities.UpdatePrivate(ctx, entityID, wantPrivate); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// SetShopGood changes the shop good mark. Who may is decided by the route.
+func (s *entityService) SetShopGood(ctx context.Context, campaignID, entityID string, shopGood bool) error {
+	if err := s.entities.SetShopGood(ctx, campaignID, entityID, shopGood); err != nil {
+		return err
+	}
+	e, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil
+	}
+	if shopGood {
+		// Sync may already hold the page from before it became a shop good;
+		// tell it the page is gone from its world.
+		s.events.PublishEntityEvent("deleted", campaignID, entityID, &Entity{ID: entityID, CampaignID: campaignID})
+		return nil
+	}
+	// Promoted: to sync this is a page that has just appeared.
+	s.publishEntity(ctx, "created", campaignID, entityID, e)
+	return nil
 }

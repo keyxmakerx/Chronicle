@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 )
 
 // RelationRepository defines the data access contract for entity relations.
@@ -61,7 +62,7 @@ func (r *relationRepository) Create(ctx context.Context, rel *Relation) error {
 	           (campaign_id, source_entity_id, target_entity_id, relation_type, reverse_relation_type, created_by, metadata, dm_only)
 	           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := database.Q(ctx, r.db).ExecContext(ctx, query,
 		rel.CampaignID, rel.SourceEntityID, rel.TargetEntityID,
 		rel.RelationType, rel.ReverseRelationType, rel.CreatedBy, nullableJSON(rel.Metadata), rel.DmOnly,
 	)
@@ -90,7 +91,7 @@ func (r *relationRepository) FindByID(ctx context.Context, id int) (*Relation, e
 
 	var rel Relation
 	var metaBytes []byte
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
+	err := database.Q(ctx, r.db).QueryRowContext(ctx, query, id).Scan(
 		&rel.ID, &rel.CampaignID, &rel.SourceEntityID, &rel.TargetEntityID,
 		&rel.RelationType, &rel.ReverseRelationType, &metaBytes, &rel.DmOnly, &rel.CreatedAt, &rel.CreatedBy,
 	)
@@ -112,14 +113,14 @@ func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entit
 	                  er.relation_type, er.reverse_relation_type, er.metadata, er.dm_only,
 	                  er.created_at, er.created_by,
 	                  e.name, COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280'),
-	                  e.slug, COALESCE(et.name, '')
+	                  e.slug, COALESCE(et.name, ''), e.shop_good
 	           FROM entity_relations er
 	           INNER JOIN entities e ON e.id = er.target_entity_id AND e.deleted_at IS NULL AND e.campaign_id = er.campaign_id
 	           LEFT JOIN entity_types et ON et.id = e.entity_type_id
 	           WHERE er.source_entity_id = ? AND er.campaign_id = ?
 	           ORDER BY er.relation_type ASC, e.name ASC`
 
-	rows, err := r.db.QueryContext(ctx, query, entityID, campaignID)
+	rows, err := database.Q(ctx, r.db).QueryContext(ctx, query, entityID, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("listing relations by entity: %w", err)
 	}
@@ -134,7 +135,7 @@ func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entit
 			&rel.RelationType, &rel.ReverseRelationType, &metaBytes, &rel.DmOnly,
 			&rel.CreatedAt, &rel.CreatedBy,
 			&rel.TargetEntityName, &rel.TargetEntityIcon, &rel.TargetEntityColor,
-			&rel.TargetEntitySlug, &rel.TargetEntityType,
+			&rel.TargetEntitySlug, &rel.TargetEntityType, &rel.TargetEntityShopGood,
 		); err != nil {
 			return nil, fmt.Errorf("scanning relation row: %w", err)
 		}
@@ -152,7 +153,7 @@ func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entit
 func (r *relationRepository) Delete(ctx context.Context, id int) error {
 	query := `DELETE FROM entity_relations WHERE id = ?`
 
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := database.Q(ctx, r.db).ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("deleting relation: %w", err)
 	}
@@ -179,7 +180,7 @@ func (r *relationRepository) FindReverse(ctx context.Context, sourceEntityID, ta
 	           WHERE source_entity_id = ? AND target_entity_id = ? AND relation_type = ?`
 
 	var rel Relation
-	err := r.db.QueryRowContext(ctx, query, sourceEntityID, targetEntityID, relationType).Scan(
+	err := database.Q(ctx, r.db).QueryRowContext(ctx, query, sourceEntityID, targetEntityID, relationType).Scan(
 		&rel.ID, &rel.CampaignID, &rel.SourceEntityID, &rel.TargetEntityID,
 		&rel.RelationType, &rel.ReverseRelationType, &rel.CreatedAt, &rel.CreatedBy,
 	)
@@ -268,6 +269,7 @@ func (r *relationRepository) ListByCampaign(ctx context.Context, campaignID stri
 	           LEFT JOIN entity_types ett ON ett.id = et.entity_type_id
 	           WHERE er.campaign_id = ?
 	             AND er.source_entity_id < er.target_entity_id
+	             AND es.shop_good = 0 AND et.shop_good = 0
 	           ORDER BY er.relation_type ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)

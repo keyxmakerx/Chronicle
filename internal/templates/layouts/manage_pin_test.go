@@ -23,6 +23,7 @@ func TestManageToolOfLine(t *testing.T) {
 	}{
 		{"people", "manage:members", "People"},
 		{"trash", "manage:trash", "Trash"},
+		{"tables", "manage:roll-tables", "Rolling tables"},
 		{"look", "manage:customize", "Customize"},
 		{"changes", "manage:player-changes", "What players changed"},
 		{"name", "", ""},

@@ -1,0 +1,1619 @@
+{
+ "format": "chronicle-everyday-goods-v1",
+ "licence": "Written for Chronicle and released with it under the same licence as Chronicle. No rules book was copied: names, relative prices and counts are original.",
+ "unit": "A price is in days of food: 1 is what one day's food costs. The fill multiplies by the campaign's own figure for a day's food, so the same list fits any coin.",
+ "goods": [
+  {
+   "name": "Trail rations, one day",
+   "price": 1,
+   "count": [
+    10,
+    40
+   ],
+   "shops": [
+    "market",
+    "general",
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Trail rations, three days",
+   "price": 3,
+   "count": [
+    4,
+    16
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Bread, a loaf",
+   "price": 0.2,
+   "count": [
+    6,
+    24
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Hard cheese, a wedge",
+   "price": 0.4,
+   "count": [
+    4,
+    14
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Dried fish, a bundle",
+   "price": 0.5,
+   "count": [
+    4,
+    14
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Smoked sausage, a link",
+   "price": 0.4,
+   "count": [
+    4,
+    16
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Honey, a small crock",
+   "price": 1.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Salt, a pouch",
+   "price": 0.5,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Pepper, a twist",
+   "price": 2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Ale, a skin",
+   "price": 0.4,
+   "count": [
+    4,
+    16
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Wine, a bottle",
+   "price": 2,
+   "count": [
+    2,
+    10
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Fine wine, a bottle",
+   "price": 12,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "market"
+   ],
+   "find": true
+  },
+  {
+   "name": "Waterskin",
+   "price": 0.4,
+   "count": [
+    3,
+    12
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Lamp oil, a flask",
+   "price": 0.2,
+   "count": [
+    6,
+    24
+   ],
+   "shops": [
+    "market",
+    "general",
+    "forge"
+   ]
+  },
+  {
+   "name": "Torch",
+   "price": 0.1,
+   "count": [
+    10,
+    40
+   ],
+   "shops": [
+    "market",
+    "general",
+    "forge"
+   ]
+  },
+  {
+   "name": "Candles, a dozen",
+   "price": 0.4,
+   "count": [
+    4,
+    16
+   ],
+   "shops": [
+    "market",
+    "general",
+    "library",
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Beeswax candle, fine",
+   "price": 1,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "library"
+   ]
+  },
+  {
+   "name": "Rope, fifty feet",
+   "price": 2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "general",
+    "forge"
+   ]
+  },
+  {
+   "name": "Silk rope, fifty feet",
+   "price": 10,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "market",
+    "general"
+   ],
+   "find": true
+  },
+  {
+   "name": "Iron spikes, a bundle of ten",
+   "price": 1,
+   "count": [
+    4,
+    20
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Grappling hook",
+   "price": 2,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Crowbar",
+   "price": 2,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Hammer",
+   "price": 1,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Pickaxe",
+   "price": 2,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Shovel",
+   "price": 1,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Chain, ten feet",
+   "price": 4,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Padlock and key",
+   "price": 10,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Lock, a fine one",
+   "price": 25,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "forge"
+   ],
+   "find": true
+  },
+  {
+   "name": "Thieves' picks, a roll",
+   "price": 25,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "forge"
+   ],
+   "find": true
+  },
+  {
+   "name": "Iron nails, a pouch",
+   "price": 0.2,
+   "count": [
+    6,
+    24
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Horseshoes, a set of four",
+   "price": 1.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Whetstone",
+   "price": 0.2,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Tongs",
+   "price": 1,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Iron pot",
+   "price": 1.2,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Skillet",
+   "price": 0.8,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Hooded lantern",
+   "price": 5,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Bullseye lantern",
+   "price": 12,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "forge"
+   ],
+   "find": true
+  },
+  {
+   "name": "Bucket",
+   "price": 0.2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Hatchet, for chopping wood",
+   "price": 1,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Saw, hand",
+   "price": 1.5,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Buckle and strap set",
+   "price": 0.5,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Steel mirror, small",
+   "price": 4,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "forge",
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Brass bell",
+   "price": 1,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "forge",
+    "market"
+   ]
+  },
+  {
+   "name": "Iron cooking tripod",
+   "price": 2,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "forge"
+   ]
+  },
+  {
+   "name": "Fire-steel and flint",
+   "price": 0.2,
+   "count": [
+    4,
+    16
+   ],
+   "shops": [
+    "forge",
+    "general"
+   ]
+  },
+  {
+   "name": "Tinderbox",
+   "price": 0.5,
+   "count": [
+    3,
+    12
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Backpack",
+   "price": 2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Bedroll",
+   "price": 1,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Blanket, wool",
+   "price": 0.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Tent, two people",
+   "price": 4,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Cloak, travelling",
+   "price": 3,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Boots, sturdy",
+   "price": 4,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Gloves, leather",
+   "price": 1,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Belt pouch",
+   "price": 0.4,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Sack, burlap",
+   "price": 0.1,
+   "count": [
+    6,
+    20
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Basket, wicker",
+   "price": 0.3,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Chalk, a box",
+   "price": 0.1,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "general",
+    "library"
+   ]
+  },
+  {
+   "name": "Soap, a bar",
+   "price": 0.2,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "market",
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Healing salve, a tin",
+   "price": 5,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Bandages, a roll",
+   "price": 0.4,
+   "count": [
+    6,
+    20
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Willow-bark tea, a packet",
+   "price": 0.5,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Honey cough syrup",
+   "price": 1.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Antitoxin, a vial",
+   "price": 25,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "apothecary"
+   ],
+   "find": true
+  },
+  {
+   "name": "Smelling salts",
+   "price": 1,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Sleeping draught, a vial",
+   "price": 8,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "apothecary"
+   ],
+   "find": true
+  },
+  {
+   "name": "Dried herbs, a bundle",
+   "price": 0.4,
+   "count": [
+    4,
+    14
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Mortar and pestle",
+   "price": 1,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Glass vials, a half dozen",
+   "price": 1,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Poultice for bruises",
+   "price": 1,
+   "count": [
+    3,
+    10
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Fever tonic",
+   "price": 3,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Clove oil, a small bottle",
+   "price": 1.5,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Sweetroot, to chew",
+   "price": 0.3,
+   "count": [
+    4,
+    14
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Lavender sachet",
+   "price": 0.4,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "apothecary",
+    "market"
+   ]
+  },
+  {
+   "name": "Healing potion, a small flask",
+   "price": 15,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "apothecary"
+   ],
+   "find": true
+  },
+  {
+   "name": "Eye drops, clear",
+   "price": 2,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "apothecary"
+   ]
+  },
+  {
+   "name": "Alchemist's fire, a flask",
+   "price": 10,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "apothecary"
+   ],
+   "find": true
+  },
+  {
+   "name": "Perfume, a small phial",
+   "price": 8,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "apothecary",
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Incense, a bundle",
+   "price": 1,
+   "count": [
+    3,
+    10
+   ],
+   "shops": [
+    "apothecary",
+    "library"
+   ]
+  },
+  {
+   "name": "Silver ring, plain",
+   "price": 10,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Gold ring, plain",
+   "price": 40,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Copper bracelet",
+   "price": 3,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Brass earrings, a pair",
+   "price": 2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Silver chain, thin",
+   "price": 15,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Gold chain, fine",
+   "price": 60,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "jeweler"
+   ],
+   "find": true
+  },
+  {
+   "name": "Signet ring, blank",
+   "price": 30,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Pearl, small",
+   "price": 25,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Garnet, uncut",
+   "price": 20,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Moonstone, polished",
+   "price": 30,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "jeweler"
+   ],
+   "find": true
+  },
+  {
+   "name": "Jade bead",
+   "price": 10,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Amber pendant",
+   "price": 14,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Ruby, cut",
+   "price": 150,
+   "count": [
+    1,
+    1
+   ],
+   "shops": [
+    "jeweler"
+   ],
+   "find": true
+  },
+  {
+   "name": "Silver comb",
+   "price": 8,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Jeweller's loupe",
+   "price": 6,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Hairpins, silver, a pair",
+   "price": 3,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Brooch, enamelled",
+   "price": 12,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Gold-leaf, a packet",
+   "price": 20,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "jeweler"
+   ],
+   "find": true
+  },
+  {
+   "name": "Locket",
+   "price": 18,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Cloak clasp, silver",
+   "price": 6,
+   "count": [
+    1,
+    5
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Silver cup",
+   "price": 12,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Velvet pouch for gems",
+   "price": 2,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Candle snuffer, brass",
+   "price": 1.2,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "jeweler",
+    "library"
+   ]
+  },
+  {
+   "name": "Ink, a bottle",
+   "price": 1,
+   "count": [
+    3,
+    10
+   ],
+   "shops": [
+    "library",
+    "general"
+   ]
+  },
+  {
+   "name": "Ink, a bottle of red",
+   "price": 2,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Quill pens, a bundle",
+   "price": 0.3,
+   "count": [
+    4,
+    14
+   ],
+   "shops": [
+    "library",
+    "general"
+   ]
+  },
+  {
+   "name": "Parchment, ten sheets",
+   "price": 1.5,
+   "count": [
+    3,
+    10
+   ],
+   "shops": [
+    "library",
+    "general"
+   ]
+  },
+  {
+   "name": "Paper, ten sheets",
+   "price": 3,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Sealing wax, a stick",
+   "price": 0.5,
+   "count": [
+    3,
+    10
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Seal, engraved",
+   "price": 8,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "library",
+    "jeweler"
+   ]
+  },
+  {
+   "name": "Blank journal",
+   "price": 2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "library",
+    "general"
+   ]
+  },
+  {
+   "name": "Map case, leather",
+   "price": 3,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Regional map, hand-drawn",
+   "price": 5,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Almanac, this year's",
+   "price": 1.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Book of recipes",
+   "price": 4,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Book of local tales",
+   "price": 6,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Primer for reading",
+   "price": 1,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Herbal, illustrated",
+   "price": 15,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "library",
+    "apothecary"
+   ],
+   "find": true
+  },
+  {
+   "name": "Chart of the stars",
+   "price": 12,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "library"
+   ],
+   "find": true
+  },
+  {
+   "name": "Bookmark, silk",
+   "price": 0.4,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Reading lens",
+   "price": 8,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Scroll case",
+   "price": 1,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Blotting sand, a tin",
+   "price": 0.3,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Ledger, bound",
+   "price": 3,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "library"
+   ]
+  },
+  {
+   "name": "Wooden whistle",
+   "price": 0.2,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Playing cards, a deck",
+   "price": 1,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Dice, a set of bone",
+   "price": 0.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Small drum",
+   "price": 3,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Flute, wooden",
+   "price": 4,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Child's wooden toy",
+   "price": 0.5,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Chess set, carved",
+   "price": 10,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "market",
+    "jeweler"
+   ],
+   "find": true
+  },
+  {
+   "name": "Spyglass",
+   "price": 40,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "market",
+    "general"
+   ],
+   "find": true
+  },
+  {
+   "name": "Hourglass",
+   "price": 5,
+   "count": [
+    1,
+    3
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Compass",
+   "price": 6,
+   "count": [
+    1,
+    2
+   ],
+   "shops": [
+    "market",
+    "general"
+   ],
+   "find": true
+  },
+  {
+   "name": "Pack mule's feed, a bag",
+   "price": 1,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Saddle blanket",
+   "price": 2,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "market"
+   ]
+  },
+  {
+   "name": "Fishing line and hooks",
+   "price": 0.5,
+   "count": [
+    3,
+    10
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Snare wire, a coil",
+   "price": 0.4,
+   "count": [
+    2,
+    8
+   ],
+   "shops": [
+    "general"
+   ]
+  },
+  {
+   "name": "Net, fishing",
+   "price": 2,
+   "count": [
+    1,
+    4
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  },
+  {
+   "name": "Mess kit",
+   "price": 1,
+   "count": [
+    2,
+    6
+   ],
+   "shops": [
+    "general"
+   ]
+  },
+  {
+   "name": "Wooden bowl and spoon",
+   "price": 0.2,
+   "count": [
+    4,
+    12
+   ],
+   "shops": [
+    "market",
+    "general"
+   ]
+  }
+ ]
+}

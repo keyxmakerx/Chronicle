@@ -60,11 +60,11 @@ function json(body) {
 }
 
 // boot mounts the widget with apiFetch routed by URL to `routes`.
-function boot(routes, editable = true) {
+function boot(routes, editable = true, director = false) {
   const notices = [];
   const sandbox = {
     console: { error() {}, log() {}, warn() {} },
-    document: { createElement: makeNode },
+    document: { createElement: makeNode, createTextNode: (t) => ({ nodeType: 3, textContent: String(t), children: [] }) },
     setTimeout: (fn) => { fn(); return 0; },
     clearTimeout() {},
     Chronicle: {
@@ -89,6 +89,7 @@ function boot(routes, editable = true) {
     quickCreateEndpoint: '/campaigns/c1/entities/quick-create',
     campaignUrl: '/campaigns/c1',
     editable: editable ? 'true' : 'false',
+    director: director ? 'true' : 'false',
   };
   sandbox.Chronicle._impls.shop_inventory.init(el);
   return { el, notices };
@@ -134,7 +135,7 @@ test('search offers only entity pages that are not already stocked', async () =>
     ], total: 3 }],
   ]);
   await flush(); await flush();
-  findByClass(el, 'shop-inv-add-btn').onclick();
+  findAllByClass(el, 'shop-inv-link').find((b) => b.textContent === 'Add a good').onclick();
   const input = findByClass(el, 'shop-inv-search');
   input.value = 'Shi';
   input.oninput();
@@ -174,4 +175,33 @@ test('an editor sees every good, which are out today, and the shelf switch', asy
   assert.equal(findAllByClass(last(el), 'shop-inv-today-on').length, 2);
   assert.equal(findAllByClass(last(el), 'shop-inv-today-off').length, 1);
   assert.ok(findByClass(last(el), 'shop-inv-shelf'), 'the places line shows once a good is marked');
+});
+
+// Shop goods and Fill the shelves belong to the Director: a Scribe who can
+// edit the stock list sees neither the button nor the "Shop good" tag.
+const goodRel = { ...sellsRelation, id: 30, targetEntityId: 'g1', targetEntityName: 'Rope', targetEntityShopGood: true, metadata: { price: 1 } };
+const unpriced = { ...sellsRelation, id: 31, targetEntityId: 'g2', targetEntityName: 'Odd axe', targetEntityShopGood: true, metadata: {} };
+
+test('the Director gets Fill the shelves and the Shop good tag', async () => {
+  const { el } = boot([['/campaigns/c1/entities/shop1/relations', [goodRel, sellsRelation]]], true, true);
+  await flush(); await flush(); await flush();
+  const view = last(el);
+  assert.ok(findAllByClass(view, 'shop-inv-fill-btn').some((b) => b.textContent === 'Fill the shelves'));
+  assert.deepEqual(findAllByClass(view, 'shop-inv-good').map((n) => n.textContent), ['Shop good']);
+});
+
+test('a Scribe editing the list sees no Fill button and no Shop good tag', async () => {
+  const { el } = boot([['/campaigns/c1/entities/shop1/relations', [goodRel, unpriced]]], true, false);
+  await flush(); await flush(); await flush();
+  const view = last(el);
+  assert.equal(findAllByClass(view, 'shop-inv-fill-btn').length, 0);
+  assert.equal(findAllByClass(view, 'shop-inv-good').length, 0);
+  assert.equal(findAllByClass(view, 'shop-inv-noprice').length, 1, 'a good with no price is still flagged for the editor');
+});
+
+test('a reader sees no shop good tag and no Fill button', async () => {
+  const { el } = boot([['/campaigns/c1/entities/shop1/relations', [goodRel]]], false, false);
+  await flush(); await flush(); await flush();
+  assert.equal(findAllByClass(last(el), 'shop-inv-good').length, 0);
+  assert.equal(findAllByClass(last(el), 'shop-inv-fill-btn').length, 0);
 });

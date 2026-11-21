@@ -103,6 +103,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/:eid/family/candidates", h.FamilyCandidatesAPI, RequireFamilyDirector())
 	cg.POST("/entities/:eid/family", h.FamilyEditAPI, RequireFamilyDirector())
 
+	// A shop good becomes a full page: Director only.
+	cg.POST("/entities/:eid/full-page", h.MakeFullPageAPI, campaigns.RequireCapability((*campaigns.CampaignContext).CanAuthorDmOnly, "only the Director can make a shop good a full page"))
+
 	// Saved filter presets (per-user tag filter combos, Player+).
 	cg.GET("/saved-filters", h.ListSavedFiltersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/saved-filters", h.CreateSavedFilterAPI, campaigns.RequireRole(campaigns.RolePlayer))
