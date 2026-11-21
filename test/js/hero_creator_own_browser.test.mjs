@@ -134,7 +134,10 @@ test('on a phone the editor opens in the sheet, checks the name and keeps the po
   // Handing in nameless says so, in place, and sends nothing.
   await pg.click('.hc-sfoot [data-oed="send"]');
   assert.equal(await pg.locator('[data-ferr="name"]').isVisible(), true);
-  assert.match(await text(pg, '.hc-sfoot [data-error]'), /Give it a name/);
+  // Said once, by the field, and tied to it.
+  assert.equal(await pg.locator('.hc-sheet :text("Give it a name")').count() + await pg.locator('.hc-sfoot :text("Give it a name")').count(), 1, 'the missing name is said once');
+  assert.equal(await pg.getAttribute('[data-k="name"]', 'aria-invalid'), 'true');
+  assert.equal(await pg.getAttribute('[data-k="name"]', 'aria-describedby'), 'oed-n-err');
   assert.equal(seen.post.length, 0);
 });
 

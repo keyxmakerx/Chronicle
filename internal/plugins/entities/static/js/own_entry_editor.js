@@ -485,6 +485,14 @@
     if (this.errText) this.showError(this.errText);
   };
 
+  // The name field's own error, tied to the field for a screen reader.
+  Editor.prototype.nameError = function (on) {
+    var fe = this.bodyEl && this.bodyEl.querySelector('[data-ferr="name"]'), n = this.bodyEl && this.bodyEl.querySelector('[data-k="name"]');
+    if (fe) fe.hidden = !on;
+    if (!n) return;
+    if (on) { n.setAttribute('aria-invalid', 'true'); n.setAttribute('aria-describedby', 'oed-n-err'); }
+    else { n.removeAttribute('aria-invalid'); n.removeAttribute('aria-describedby'); }
+  };
   Editor.prototype.showError = function (msg) {
     this.errText = msg;
     var e = this.footEl && this.footEl.querySelector('[data-error]');
@@ -515,7 +523,7 @@
       '<h3 class="oed-title" tabindex="-1" data-oed-title>' + (d.id ? 'Your ' + esc(lbl) : 'Make your own ' + esc(lbl)) + '</h3>' +
       '<p class="oed-lede">Built like every ' + esc(lbl) + ' here' + (f.budgetKey && buyL ? ', with ' + d.budget + ' points to spend on ' + esc(lower(buyL.label)) : '') + '. Your ' + gm() + ' reads it before it counts.</p>' + asked +
       '<div class="oed-field"><label for="oed-n">Name</label><input id="oed-n" class="oed-big" data-k="name" maxlength="100" autocomplete="off" value="' + esc(d.name) + '" placeholder="For example, Ashborn">' +
-      '<span class="oed-ferr" data-ferr="name" hidden>Give it a name first.</span></div>' +
+      '<span class="oed-ferr" id="oed-n-err" data-ferr="name" hidden>Give it a name first.</span></div>' +
       '<div class="oed-field"><label for="oed-s">A few words about it</label><textarea id="oed-s" rows="2" data-k="summary" maxlength="300" placeholder="What a player reads before opening it">' + esc(d.summary) + '</textarea></div>' +
       this.factsHTML() + this.textHTML() + this.wordsHTML() + this.budgetHTML() +
       listsOf(d, f).map(function (l) { return self.listHTML(l); }).join('') + '<div data-prev>' + this.prevHTML() + '</div>';
@@ -668,8 +676,8 @@
   };
 
   Editor.prototype.checksHTML = function () {
-    var self = this, p = problems(this.d, this.f).filter(function (m) { return !m[1] || self.tried; });
-    if (!p.length) return this.tried || !problems(this.d, this.f).length ? '<p class="oed-ready">✓ Ready' + (this.f.budgetKey ? '. A hero can spend all ' + this.d.budget + ' points.' : '.') + '</p>' : '';
+    var self = this, p = problems(this.d, this.f).filter(function (m) { return (!m[1] || self.tried) && !(self.tried && m[2] === 'name'); });
+    if (!p.length) return (this.tried || !problems(this.d, this.f).length) && this.d.name.trim() ? '<p class="oed-ready">✓ Ready' + (this.f.budgetKey ? '. A hero can spend all ' + this.d.budget + ' points.' : '.') + '</p>' : '';
     return '<ul class="oed-problems" aria-label="Before you save">' + p.map(function (m) { return '<li class="' + (m[1] ? 'is-block' : '') + '">' + esc(m[0]) + '</li>'; }).join('') + '</ul>';
   };
 
@@ -691,7 +699,7 @@
     if (c) c.innerHTML = this.checksHTML();
     var p = this.bodyEl.querySelector('[data-prev]');
     if (p) p.innerHTML = this.prevHTML();
-    if (d.name.trim()) { var fe = this.bodyEl.querySelector('[data-ferr="name"]'); if (fe) fe.hidden = true; }
+    if (d.name.trim()) this.nameError(false);
     if (this.errText) { this.errText = ''; this.showError(''); }
   };
 
@@ -783,12 +791,15 @@
     var bad = problems(d, f).filter(function (m) { return m[1]; });
     if (bad.length) {
       this.touched();
+      // A missing name is said once, by the name field; the foot speaks only
+      // for what the field cannot.
+      var rest = bad.filter(function (m) { return m[2] !== 'name'; });
       if (!d.name.trim()) {
-        var fe = this.bodyEl.querySelector('[data-ferr="name"]'), n = this.bodyEl.querySelector('[data-k="name"]');
-        if (fe) fe.hidden = false;
+        this.nameError(true);
+        var n = this.bodyEl.querySelector('[data-k="name"]');
         if (n) n.focus();
       }
-      this.showError(bad[0][0]);
+      this.showError(rest.length ? rest[0][0] : '');
       return;
     }
     var built = propsOf(d, f);

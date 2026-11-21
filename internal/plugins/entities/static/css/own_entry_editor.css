@@ -171,3 +171,20 @@ html[data-motion="off"] .oed *, html[data-motion="off"] .oed *::before, html[dat
   .oed-buyrow { display: grid; grid-template-columns: 1fr; overflow: visible; margin: 0; padding: 4px 0 10px; scroll-snap-type: none; }
   .oed-tcard { width: auto; }
 }
+
+/* Phone: every word at least 16px and every control at least 44px. */
+@media (max-width: 899px) {
+  .oed-kind, .oed-mark, .oed-asked, .oed-field label, .oed-k, .oed-ferr, .oed-link, .oed-hint, .oed-ro dt, .oed-cost button, .oed-lab2 span, .oed-pc,
+  .oed-tcard p, .oed-tbuy, .oed-ready, .oed-problems, .oed-who, .oed-error, .oed-confirm p { font-size: 16px; }
+  .oed-kind, .oed-ro dt { letter-spacing: 0.02em; }
+  .oed-cost button { min-height: 44px; }
+  /* The mark is a button: its pill stays small, the press area is 44px tall. */
+  button.oed-mark { position: relative; isolation: isolate; min-height: 44px; border-color: transparent; background: transparent; }
+  button.oed-mark::after { content: ""; position: absolute; inset: 8px 0; z-index: -1; border-radius: 999px;
+    border: var(--o-edge) solid color-mix(in srgb, var(--o-accent) 40%, transparent); background: var(--o-soft); }
+}
+
+/* Small link text stays at 4.5:1 or better in every look. */
+.oed-tbuy { color: color-mix(in srgb, var(--o-link) 62%, var(--o-text)); }
+.oed input::placeholder, .oed textarea::placeholder { opacity: 1; }
+.oed-mark { color: color-mix(in srgb, var(--o-link) 62%, var(--o-text)); }

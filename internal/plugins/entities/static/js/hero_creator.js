@@ -169,9 +169,10 @@
     Object.keys(props).forEach(function (k) {
       if (hidden(k)) return;
       var v = props[k];
-      if (isScalar(v)) out.push([bl && k === bl.budgetKey ? 'Points to spend' : words(k), String(v)]);
+      // A fact is a short line, so a rules marker in it shows as its words.
+      if (isScalar(v)) out.push([bl && k === bl.budgetKey ? 'Points to spend' : words(k), plain(v)]);
       else if (Array.isArray(v) && v.length && v.every(function (x) { return typeof x === 'string' || typeof x === 'number'; })) {
-        var j = v.join(', ');
+        var j = v.map(plain).join(', ');
         if (j.length <= 40) out.push([words(k), j]);
       }
     });
@@ -660,7 +661,9 @@
       cols = this.sheadHTML() + '<ul class="hc-chips" aria-label="Your picks">' + this.chipsHTML() + '</ul><div class="hc-body" data-body>' + this.bodyInner() + '</div>';
     }
     var back = this.backUrl || ('/campaigns/' + encodeURIComponent(this.campaignId) + '/characters');
-    this.root.innerHTML = '<div class="hc-app" data-view="' + this.view + '" data-step="' + this.step + '" data-mo="' + motion() + '">' +
+    // A redraw keeps the height and shortness the last fit measured, so the
+    // cards are laid out once at their real size rather than twice.
+    this.root.innerHTML = '<div class="hc-app' + (this.short ? ' is-short' : '') + '" data-view="' + this.view + '" data-step="' + this.step + '" data-mo="' + motion() + '"' + (this.fitH ? ' style="--hc-h:' + this.fitH + 'px"' : '') + '>' +
       '<header class="hc-abar"><a class="hc-ibtn" href="' + esc(back) + '" aria-label="Back to characters">' + I.back + '</a>' +
       '<div class="hc-abar__t"><h1>' + esc(this.title()) + '</h1><small>' + esc(this.plan.systemName || 'Game system') + '</small></div></header>' +
       this.bandHTML() + cols + '</div>';
@@ -743,7 +746,9 @@
   Creator.prototype.toolsHTML = function () {
     var st = this.cur(), q = this.find[st.fieldKey] || '', desk = this.view === 'desk';
     var h = '<div class="hc-tools"><label class="hc-find">' + I.find + '<span class="hc-sr">Find ' + an(st.label) + ' ' + esc(lower(st.label)) + '</span>' +
-      '<input type="search" data-find autocomplete="off" placeholder="Find ' + an(st.label) + ' ' + esc(lower(st.label)) + '" value="' + esc(q) + '">' +
+      // A phone's row is narrow: the placeholder is one word there, the label
+      // above still names the list in full.
+      '<input type="search" data-find autocomplete="off" placeholder="' + (desk ? 'Find ' + an(st.label) + ' ' + esc(lower(st.label)) : 'Find') + '" value="' + esc(q) + '">' +
       (q ? '<button type="button" class="hc-ibtn hc-clr" data-act="clear" aria-label="Clear the search">' + I.x + '</button>' : '') + '</label>' +
       '<button type="button" class="hc-ibtn hc-die" data-act="die" aria-label="Deal a random card" title="Deal a random card">' + I.die + '</button>' +
       '<div class="hc-mode" role="group" aria-label="Show as"><button type="button" data-mode="cards" aria-pressed="' + (this.mode === 'cards') + '">Cards</button>' +
@@ -1015,6 +1020,12 @@
 
   // The visible part of whatever scrolls the page: the app's main column, or
   // the window when nothing inside it scrolls.
+  // The ones a person can see: a move is played only where it can be seen.
+  function onScreen(list) {
+    var H = window.innerHeight, W = window.innerWidth;
+    return list.filter(function (x) { var b = x.getBoundingClientRect(); return b.bottom > 0 && b.top < H && b.right > 0 && b.left < W; });
+  }
+
   function scrollerRect(el) {
     for (var e = el.parentElement; e && e !== document.body; e = e.parentElement) {
       if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight) {
@@ -1039,7 +1050,13 @@
     var app = this.app();
     if (!app) return;
     var v = scrollerRect(this.root);
-    app.style.setProperty('--hc-h', Math.max(this.desk() ? 560 : 520, Math.floor(v.height)) + 'px');
+    // The floor is low enough on a phone that a short screen still keeps the
+    // foot above The table bar.
+    this.fitH = Math.max(this.desk() ? 560 : 400, Math.floor(v.height));
+    app.style.setProperty('--hc-h', this.fitH + 'px');
+    // A short phone gives the cards the room the step's intro line would take.
+    this.short = !this.desk() && v.height < 580;
+    app.classList.toggle('is-short', this.short);
     if (this.$('[data-hand]')) { this.fitCards(); this.scrollHandTo(this.curIdx(), false); this.tilt(); }
   };
 
@@ -1060,6 +1077,21 @@
     };
     var kick = function () { if (!pend) pend = requestAnimationFrame(run); };
     if (window.ResizeObserver) { this.ro = new ResizeObserver(kick); this.ro.observe(this.root); }
+    // The table bar is built after the page, and moves: fit again when it
+    // arrives or changes size, so the foot never ends up under it.
+    if (window.MutationObserver) {
+      var barSeen = null;
+      this.mo = new MutationObserver(function () {
+        var bar = document.getElementById('tt-drawer');
+        if (bar === barSeen) return;
+        barSeen = bar;
+        if (bar && self.ro) self.ro.observe(bar);
+        kick();
+      });
+      this.mo.observe(document.body, { childList: true, subtree: true });
+      var bar0 = document.getElementById('tt-drawer');
+      if (bar0 && this.ro) { barSeen = bar0; this.ro.observe(bar0); }
+    }
     this.onResize = kick;
     window.addEventListener('resize', kick);
     this.alignTop();
@@ -1110,17 +1142,53 @@
 
   // A card front must read whole: shorten the summary, then hide the last
   // fact, before anything is cut. Redone whenever the room changes.
-  Creator.prototype.fitCards = function () {
-    this.$$('.hc-hand .hc-card[data-i]').forEach(function (c) {
-      var sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts');
-      sum.style.webkitLineClamp = '';
+  // Only the cards near the one in hand are fitted, each once for its size:
+  // fitting reads layout after every change, which across a forty-card step
+  // held a slow phone for seconds. The rest are fitted as the hand reaches them.
+  Creator.prototype.fitCards = function (at) {
+    var hand = this.$('[data-hand]');
+    if (!hand) return;
+    var all = qa('.hc-card', hand);
+    if (at == null) { var cur = hand.querySelector('.hc-card[data-i="' + this.curIdx() + '"]'); at = Math.max(0, all.indexOf(cur)); }
+    // Reads and writes are batched across the cards: reset every card, read
+    // them all, shorten each by what its overflow says, then check them all.
+    var jobs = all.filter(function (c, n) { return Math.abs(n - at) <= 2 && c.querySelector('.hc-sum'); })
+      .map(function (c) { return { c: c, size: c.clientWidth + 'x' + c.clientHeight }; })
+      .filter(function (j) { return j.c._fitted !== j.size; });
+    jobs.forEach(function (j) {
+      var c = j.c, sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts'), h3 = c.querySelector('h3');
+      j.sum = sum; j.dl = dl; j.h3 = h3;
+      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) h3.style.fontSize = '';
       if (dl) { dl.hidden = false; qa('div', dl).forEach(function (d) { d.hidden = false; }); }
-      var shownFacts = function () { return dl ? qa('div', dl).filter(function (d) { return !d.hidden; }) : []; };
-      var drop = function (keep) { return function () { var f = shownFacts(); if (f.length > keep) f[f.length - 1].hidden = true; }; };
-      var tries = [function () { sum.style.webkitLineClamp = 4; }, function () { sum.style.webkitLineClamp = 3; }, drop(2),
-        function () { sum.style.webkitLineClamp = 2; }, drop(1), drop(0)];
-      for (var i = 0; i < tries.length && c.scrollHeight > c.clientHeight + 1; i++) tries[i]();
-      if (dl) dl.hidden = !shownFacts().length;
+    });
+    jobs.forEach(function (j) {
+      j.over = j.c.scrollHeight - j.c.clientHeight;
+      j.lh = parseFloat(getComputedStyle(j.sum).lineHeight) || 24;
+      j.lines = Math.round(j.sum.scrollHeight / j.lh);
+      j.facts = j.dl ? qa('div', j.dl).map(function (d) { return d.offsetHeight + 1; }) : [];
+    });
+    // "Read the rules" at the foot always stays on the card: the summary and
+    // facts give way first, down to the name alone on the smallest phones.
+    var steps = function (j) {
+      var shown = function () { return j.dl ? qa('div', j.dl).filter(function (d) { return !d.hidden; }) : []; };
+      var clamp = function (n) { return { save: Math.max(0, j.lines - n) * j.lh - Math.max(0, j.lines - (j.clamp || j.lines)) * j.lh, run: function () { j.sum.style.webkitLineClamp = n; j.clamp = n; } }; };
+      var drop = function (keep) { return { save: shown().length > keep ? j.facts[shown().length - 1] + (shown().length === 1 ? 10 : 0) : 0, run: function () { var f = shown(); if (f.length > keep) f[f.length - 1].hidden = true; } }; };
+      return [function () { return clamp(4); }, function () { return clamp(3); }, function () { return drop(2); }, function () { return clamp(2); },
+        function () { return drop(1); }, function () { return drop(0); }, function () { return clamp(1); },
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '24px'; } }; },
+        function () { return { save: 0, run: function () { j.sum.hidden = true; } }; },
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; }];
+    };
+    jobs.forEach(function (j) {
+      j.list = steps(j); j.i = 0;
+      var left = j.over - 1;
+      while (left > 0 && j.i < j.list.length) { var s = j.list[j.i++](); left -= s.save; s.run(); if (!s.save && left > 0) break; }
+    });
+    // A card the estimate left long is finished one step at a time.
+    jobs.forEach(function (j) {
+      while (j.i < j.list.length && j.c.scrollHeight > j.c.clientHeight + 1) j.list[j.i++]().run();
+      if (j.dl) j.dl.hidden = !qa('div', j.dl).some(function (d) { return !d.hidden; });
+      j.c._fitted = j.size;
     });
   };
 
@@ -1137,6 +1205,7 @@
         cards.forEach(function (c, i) { var d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (d < bd) { bd = d; best = i; } });
         var k = self.cur() && self.cur().fieldKey;
         if (k && best !== self.at[k]) { self.at[k] = best; self.refreshUnder(); }
+        self.fitCards(qa('.hc-card', hand).indexOf(cards[best]));
       });
     }, { passive: true });
   };
@@ -1145,12 +1214,15 @@
   Creator.prototype.tilt = function () {
     var hand = this.$('[data-hand]'), self = this;
     if (!hand) return;
-    var mid = hand.scrollLeft + hand.clientWidth / 2;
-    qa('.hc-card', hand).forEach(function (c) {
-      if (c.classList.contains('is-dealing')) return;
-      var d = Math.min(1, Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid) / (c.offsetWidth + 12));
-      c.style.transform = self.lively() ? 'scale(' + (1 - 0.05 * d).toFixed(3) + ')' : '';
-      c.style.opacity = self.still() ? '' : (1 - 0.35 * d).toFixed(3);
+    var mid = hand.scrollLeft + hand.clientWidth / 2, lively = this.lively(), still = this.still();
+    // Every position is read before any card is restyled, so the hand lays
+    // out once rather than once a card.
+    var cards = qa('.hc-card', hand).filter(function (c) { return !c.classList.contains('is-dealing'); });
+    var ds = cards.map(function (c) { return Math.min(1, Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid) / (c.offsetWidth + 12)); });
+    cards.forEach(function (c, n) {
+      var d = ds[n];
+      c.style.transform = lively ? 'scale(' + (1 - 0.05 * d).toFixed(3) + ')' : '';
+      c.style.opacity = still ? '' : (1 - 0.35 * d).toFixed(3);
     });
   };
 
@@ -1519,12 +1591,13 @@
     this.closeSheet(false);
     var g = this.ghost(c, st, from);
     src.style.visibility = 'hidden';
-    this.$$('.hc-hand .hc-card, .hc-lrow').forEach(function (x) {
+    onScreen(this.$$('.hc-hand .hc-card, .hc-lrow')).forEach(function (x) {
       if (x !== src) x.animate([{ opacity: getComputedStyle(x).opacity, transform: x.style.transform || 'none' }, { opacity: 0, transform: 'translateX(-28px) ' + (x.style.transform || '') }], { duration: ms(180), easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
     });
     this.$$('[data-body] .hc-intro, [data-body] .hc-notes, [data-body] .hc-tools, [data-body] .hc-under').forEach(function (x) { x.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(160), easing: 'ease-in', fill: 'forwards' }); });
-    var fl = this.flight(g, from, to, ms(460));
-    setTimeout(function () { self.goStep(nx, 'fwd', null, true); }, ms(300));
+    var fl = this.flight(g, from, to, ms(460)), seq = this.navSeq;
+    // A step the player presses mid-flight wins over the move to the next one.
+    setTimeout(function () { if (self.navSeq === seq) self.goStep(nx, 'fwd', null, true); }, ms(300));
     fl.onfinish = function () {
       g.remove(); self.busy = false;
       var cs = self.$('.hc-chips');
@@ -1572,9 +1645,9 @@
     var app = this.app(), from = rel(app, src.getBoundingClientRect()), to = rel(app, row.getBoundingClientRect());
     var g = this.ghost(c, st, from);
     src.style.visibility = 'hidden';
-    this.$$('.hc-gcard, .hc-lrow').forEach(function (x) { if (x !== src) x.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(8px)' }], { duration: ms(160), easing: 'ease-in', fill: 'forwards' }); });
-    var fl = this.flight(g, from, to, ms(480));
-    setTimeout(function () { self.goStep(nx, 'fwd', null, true); }, ms(300));
+    onScreen(this.$$('.hc-gcard, .hc-lrow')).forEach(function (x) { if (x !== src) x.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(8px)' }], { duration: ms(160), easing: 'ease-in', fill: 'forwards' }); });
+    var fl = this.flight(g, from, to, ms(480)), seq = this.navSeq;
+    setTimeout(function () { if (self.navSeq === seq) self.goStep(nx, 'fwd', null, true); }, ms(300));
     fl.onfinish = function () {
       g.remove(); self.busy = false;
       var rail = self.$('.hc-rail');
@@ -1601,6 +1674,11 @@
   Creator.prototype.goStep = function (i, dir, glowKey, keepChips) {
     var me = this;
     if (this.own && this.desk()) { this.leaveOwn(function () { me.goStep(i, dir, glowKey, keepChips); }); return; }
+    // Each move counts, so a choose's delayed step-on can tell the player has
+    // already gone somewhere; a redraw mid-flight ends the flight, and with it
+    // the busy flag.
+    this.navSeq = (this.navSeq || 0) + 1;
+    if (!keepChips) this.busy = false;
     this.closeTip(true);
     this.toggleDrape(false);
     var prev = this.step;
@@ -1809,6 +1887,22 @@
         tip.setAttribute('data-below', '0'); tip.setAttribute('data-side', '1');
         return;
       }
+    }
+    // On a phone the card never lies on the paragraph being read: it goes
+    // under the paragraph or over it, and when neither has room it sits at
+    // the foot and the reading scrolls up clear of it.
+    if (!this.desk()) {
+      var para = el.closest('p, li, dd, .hc-lede') || el, pr = rel(app, para.getBoundingClientRect());
+      tip.style.left = '8px';
+      tip.removeAttribute('data-side');
+      if (pr.top + pr.height + 8 + h <= H - 6) { tip.style.top = (pr.top + pr.height + 8) + 'px'; tip.setAttribute('data-below', '1'); return; }
+      if (pr.top - 8 - h >= 6) { tip.style.top = (pr.top - 8 - h) + 'px'; tip.setAttribute('data-below', '0'); return; }
+      var foot = H - h - 6, sc = el.closest('.hc-sc, .hc-rev, .hc-list');
+      tip.style.top = Math.max(6, foot) + 'px';
+      tip.setAttribute('data-below', '1');
+      var over = pr.top + pr.height + 8 - foot, room = r.top - (sc ? rel(app, sc.getBoundingClientRect()).top : 0) - 6;
+      if (sc && over > 0 && room > 0) sc.scrollTop += Math.min(over, room);
+      return;
     }
     var below = r.top + r.height + 8 + h <= H - 6 || r.top - 8 - h < 6;
     var top = below ? r.top + r.height + 8 : r.top - 8 - h;
@@ -2119,7 +2213,8 @@
     if (this.onDocDown) document.removeEventListener('pointerdown', this.onDocDown);
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     if (this.ro) this.ro.disconnect();
-    this.onDocDown = this.onResize = this.ro = null;
+    if (this.mo) this.mo.disconnect();
+    this.onDocDown = this.onResize = this.ro = this.mo = null;
     this.closeTip(true);
     this.endOwn();
   };

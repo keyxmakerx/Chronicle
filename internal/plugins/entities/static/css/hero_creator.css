@@ -73,7 +73,8 @@ html.dark .hc[data-skin="ornate"] {
   transition: background-color var(--dur-standard) var(--ease-out), color var(--dur-standard) var(--ease-out);
 }
 .hc-app[data-view="desk"] { border: var(--hc-edge) solid var(--hc-line); border-radius: var(--hc-radius-lg); box-shadow: var(--hc-shadow); }
-.hc-app :where(button, input) { font: inherit; color: inherit; }
+/* No weight of its own, so a tool inside (the own-entry editor) keeps its colours. */
+:where(.hc-app) :where(button, input) { font: inherit; color: inherit; }
 .hc-app :focus { outline: none; }
 .hc-app :focus-visible { outline: 2px solid var(--hc-link); outline-offset: 2px; border-radius: var(--hc-radius); }
 .hc-disp { font-family: var(--hc-face-display); letter-spacing: var(--hc-display-track); font-weight: var(--hc-display-weight); }
@@ -440,3 +441,41 @@ html.dark .hc[data-skin="ornate"] {
 .hc-ownbar .hc-qw { margin-left: -10px; }
 .hc-det p.hc-ownbar { margin: 0 0 12px; }
 .hc-sheet [data-ownfoot], .hc-right .hc-foot[data-ownfoot] { gap: 4px; }
+
+/* Phone: every word at least 16px and every control at least 44px, so the
+   builder reads and taps comfortably at arm's length. Rules words inside a
+   paragraph keep the paragraph's line height. */
+.hc-app:not([data-view="desk"]) :is(.hc-abar__t small, .hc-band, .hc-sbtn .hc-of, .hc-chip small, .hc-chip b, .hc-num, .hc-row .hc-lb span,
+  .hc-intro p, .hc-note, .hc-mode button, .hc-top, .hc-facts dt, .hc-facts dd, .hc-more, .hc-mark, .hc-pos, .hc-qw, .hc-lrow .hc-s,
+  .hc-nhbox, .hc-nh, .hc-hint, .hc-btn small, .hc-kind, .hc-det h4, .hc-lab, .hc-tip .hc-cat, .hc-tip p, .hc-lab2 span, .hc-cost,
+  .hc-det .hc-tcard p, .hc-tbuy, .hc-field label, .hc-who, .hc-line, .hc-stat span, .hc-picks .hc-lb small, .hc-picks .hc-lb em,
+  .hc-callout, .hc-fin .hc-note, .hc-error, .hc-ft, .hc-ownbar, .hc-loading__text) { font-size: 16px; }
+.hc-app:not([data-view="desk"]) .hc-top .hc-ix { font-size: 16px; }
+.hc-app:not([data-view="desk"]) :is(.hc-chip small, .hc-top, .hc-kind, .hc-det h4, .hc-lab, .hc-who, .hc-stat span, .hc-picks .hc-lb small) { letter-spacing: 0.02em; }
+.hc-app:not([data-view="desk"]) .hc-num { width: 32px; height: 32px; }
+.hc-app:not([data-view="desk"]) .hc-mode { padding: 0; }
+.hc-app:not([data-view="desk"]) .hc-mode button { min-height: 44px; min-width: 52px; padding: 0 8px; }
+.hc-app:not([data-view="desk"]) .hc-ibtn { min-width: 44px; min-height: 44px; }
+.hc-app:not([data-view="desk"]) .hc-find .hc-clr { width: 44px; }
+.hc-app:not([data-view="desk"]) .hc-find input:not(:placeholder-shown) { padding-right: 44px; }
+.hc-app:not([data-view="desk"]) .hc-tools { gap: 4px; padding: 6px 12px; }
+/* The step list says each step in full, on two lines when it needs them. */
+.hc-app:not([data-view="desk"]) .hc-drape .hc-row .hc-lb span { white-space: normal; overflow: visible; }
+/* Review: the stats two to a row, so a label never breaks inside a word. */
+.hc-app:not([data-view="desk"]) .hc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hc-app:not([data-view="desk"]) .hc-stat span { overflow-wrap: normal; }
+/* A mark wraps rather than running off a narrow card. */
+.hc-app:not([data-view="desk"]) .hc-mark { white-space: normal; line-height: 1.2; padding-block: 3px; max-width: 100%; }
+/* A short phone: the intro is the step title alone, so the cards keep room. */
+.hc-app.is-short .hc-intro { padding: 8px 16px 2px; }
+.hc-app.is-short .hc-intro p { display: none; }
+.hc-app.is-short .hc-intro h2 { font-size: 20px; }
+.hc-app:not([data-view="desk"]) .hc-tip { width: calc(100% - 16px); }
+
+/* Small text stays at 4.5:1 or better in every look, light and dark. */
+.hc-field input::placeholder, .hc-find input::placeholder { color: var(--hc-muted); opacity: 1; }
+.hc-btn small { opacity: 1; }
+.hc-tbuy { color: color-mix(in srgb, var(--hc-link) 62%, var(--hc-text)); }
+.hc-mark.is-own, .hc-gcard--own .hc-ft b { color: color-mix(in srgb, var(--hc-link) 62%, var(--hc-text)); }
+/* Fitting one card never lays out the whole hand. */
+.hc-hand .hc-card { contain: layout paint; }

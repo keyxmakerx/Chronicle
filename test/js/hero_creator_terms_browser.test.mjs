@@ -117,3 +117,28 @@ test('with no glossary address, or a glossary that fails, every word is plain', 
 });
 
 function text(pg, sel) { return pg.locator(sel).first().innerText(); }
+
+test('Escape on a word\'s card puts it away and gives focus back to the word', { skip }, async (t) => {
+  const { pg } = await open(t);
+  const word = pg.locator('.hc-right .hc-term[data-term="bleeding"]');
+  const onWord = () => pg.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-term'));
+  // Pressed: the card is pinned; Escape closes it and focus is on the word.
+  await word.click();
+  await pg.waitForSelector('.hc-tip.is-pinned');
+  await pg.keyboard.press('Escape');
+  await pg.waitForFunction(() => !document.querySelector('.hc-tip'));
+  assert.equal(await onWord(), 'bleeding');
+  await pg.waitForTimeout(300);
+  assert.equal(await pg.locator('.hc-tip').count(), 0, 'focus coming back does not open it again');
+  // From the keyboard: focus opens it, Escape closes it and focus stays.
+  await word.blur();
+  await word.focus();
+  await pg.keyboard.press('Shift+Tab');
+  await pg.keyboard.press('Tab');
+  await pg.waitForSelector('.hc-tip');
+  await pg.keyboard.press('Escape');
+  await pg.waitForFunction(() => !document.querySelector('.hc-tip'));
+  assert.equal(await onWord(), 'bleeding');
+  await pg.waitForTimeout(300);
+  assert.equal(await pg.locator('.hc-tip').count(), 0);
+});
