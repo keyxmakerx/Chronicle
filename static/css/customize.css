@@ -670,7 +670,9 @@
   .czp .sv-st b{ overflow:hidden; text-overflow:ellipsis; }
   .czp .czb{ padding:0 12px; }
   .czp .toast{ bottom:calc(70px + env(safe-area-inset-bottom, 0px)); }
-  .czp .lk-ws.panel-open .cpe-dock-wrap{ bottom:calc(var(--lk-hh) * .58 + 8px); }
+  /* While the sheet is up its Done is the way back, so the tools step aside
+     and the example keeps the room above the sheet. */
+  .czp .lk-ws.panel-open .cpe-dock-wrap{ display:none; }
   /* The tools wrap onto centred rows rather than scroll, so every one shows;
      the example and the sheet keep clear of the taller dock. */
   .czp .cpe-dock{ flex-wrap:wrap; justify-content:center; overflow:visible; gap:2px; }
@@ -680,7 +682,7 @@
   .czp .fz-bar .czb::after{ content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
   .czp .cpe-dk{ min-height:44px; padding:0 9px; }
   .czp .lk-work{ padding-bottom:156px; }
-  .czp .lk-ws.panel-open .lk-work{ padding-bottom:calc(var(--lk-hh) * .58 + 120px); }
+  .czp .lk-ws.panel-open .lk-work{ padding-bottom:calc(var(--lk-hh) * .58 + 12px); }
 }
 html[data-motion="off"] .czp .lk-pb .sec.enter, html[data-motion="off"] .czp .lk-pb .room.enter, html[data-motion="off"] .czp .lk-pb .lk-looks.enter, html[data-motion="off"] .czp .lk-pb .cz-panels.enter,
 .czp.rm .lk-pb .sec.enter, .czp.rm .lk-pb .room.enter, .czp.rm .lk-pb .lk-looks.enter, .czp.rm .lk-pb .cz-panels.enter{ animation:none; }

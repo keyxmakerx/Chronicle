@@ -105,9 +105,9 @@ test('every choice that was words alone now carries a sample', () => {
   assert.match(src, /<span class="tn" style="font-family:' \+ esc\(f\[2\]\)/);
 });
 
-test('the dock lifts above the save bar and the sheet on a phone sits at 58%', () => {
+test('the dock lifts above the save bar; on a phone the sheet sits at 58% and the dock steps aside for it', () => {
   assert.match(css, /\.czp \.lk-panel\{ height:58%; width:auto; \}/);
-  assert.match(css, /\.lk-ws\.panel-open \.cpe-dock-wrap\{ bottom:calc\(var\(--lk-hh\) \* \.58 \+ 8px\); \}/);
+  assert.match(css, /\.lk-ws\.panel-open \.cpe-dock-wrap\{ display:none; \}/);
   // The shared dock rule that lifts it over the save bar is Page layout's own.
   assert.match(read('static', 'css', 'customize_page_editor.css'), /\.czs-stage:has\(> \[data-czs-savebar\]:not\(\[hidden\]\)\) \.cpe-dock-wrap \{ bottom: 76px; \}/);
 });
