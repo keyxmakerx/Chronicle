@@ -514,6 +514,16 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 |---|---|---|
 | `hero_layers` | A layer on a hero's page (a vampire's bite, rising as a revenant) that changes sheet fields without writing them | `name`, `source` (the preset, such as `drawsteel:revenant`); `data` LONGTEXT JSON (`note`, `changes` of `{field, op, value, label}`) validated in the service; applied oldest first by `created_at`; at most 20 per page; FK→`entities` and `campaigns` CASCADE |
 
+### decks (`internal/plugins/decks/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `decks` | A deck: `name` (unique per campaign), `kind` (`hero`, `party`, `event`; only sets defaults), `holder_entity_id` (the hero page of a hero deck; cleared, not cascaded, when the page is purged), `settings` and `look` (JSON text, a re-marshal of the service's typed structs), `version` (a stale save is a conflict). FK to `campaigns` cascades. At most 60 per campaign |
+| `deck_players` | The players a Director chose for a deck: PK `(deck_id, user_id)`; `draws_left` (NULL is no limit); `created_at` (a grant counts only if not before the member's `joined_at`); FKs to `decks` and `users` cascade |
+| `deck_cards` | A card definition: `name` (unique per deck), `kind_key`, `words` (the face a player reads), `director_note` and `when_json` (never sent to a player), `picture`, `corner`, `copies` (1 to 20), `fate` (`''` is the deck's default), `when_open`, `ask_first`. FKs cascade. At most 200 per deck |
+| `deck_copies` | One physical card: `zone` (`pile`, `shown`, `hand`, `play`, `used`, `gone`), `holder_entity_id` (the hero page holding it; NULL in `play` is the whole table), `face_up`, `asked_at` (an ask-first play waiting for a Director), `dealt_by`, `dealt_at`, `turned_at`, `moved_at`. The pile has no stored order. FKs to `decks`, `campaigns`, `deck_cards` and `entities` cascade. At most 600 per deck |
+| `deck_log` | One line per move, Directors only: `action`, `actor_user_id`, `holder_entity_id`, `card_name` (so a line reads by card after the copy's id is refreshed), `seen` (set when a taken-back copy was face up). The service keeps the newest 1000 per deck. FKs to `decks` and `campaigns` cascade; `card_id` and `copy_id` carry no FK so a line outlives its card |
+
 ## MariaDB-specific notes
 
 - **JSON columns:** MariaDB validates JSON on write. Prefer loading full JSON

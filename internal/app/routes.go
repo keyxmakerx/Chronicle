@@ -43,6 +43,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
@@ -7051,6 +7052,17 @@ func (a *App) RegisterRoutes() {
 		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
 		slog.Warn("transformations plugin degraded — layers on heroes are not available")
+	}
+
+	// Card decks: server-side draws and hands, behind the Card decks add-on.
+	// Server only for now; the notifier is wired when live messages exist.
+	a.registerPlugin(PluginRegistration{Slug: decks.PluginSlug})
+	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
+		decksSvc := decks.NewService(decks.NewRepository(a.DB),
+			&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService})
+		decks.RegisterRoutes(e, decks.NewHandler(decksSvc), campaignService, authService, addonService)
+	} else {
+		slog.Warn("decks plugin degraded — card decks are not available")
 	}
 
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The

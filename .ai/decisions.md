@@ -1239,3 +1239,22 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - Heroes store names, so renaming a campaign entry leaves a hero flagged as holding an unknown name until names carry the key (follow-up).
 - A new rule table or state needs the evaluator in `choice_rules_eval.go` changed first, and its tests, not a second copy of the precedence.
+
+## ADR-076: Decks are their own plugin, the server draws, a card has copies, the pile has no order
+
+**Status:** Accepted; operator signed the design (#2561, #2566).
+
+**Context:** Card decks look like a rolling table with a fancier face, so extending the rolling tables was the obvious start. A rolling table is saved as a whole set with the last write winning, is rolled in the browser, and is readable by Scribes. A deck needs the opposite on every count: two people move cards at once, a hidden card must never reach a player's browser, and a Scribe is a player here.
+
+**Decision:**
+1. Decks are a plugin of their own (`internal/plugins/decks`), behind the Card decks add-on, with their own tables, not an extension of rolling tables.
+2. The server draws. A draw picks uniformly at random among the pile's copies at that moment with crypto randomness, inside one transaction that holds the deck's row lock, so no browser ever holds the pile.
+3. A card has copies, not weights: a card at three copies is three rows in `deck_copies`, and a copy is in exactly one zone. A weighted pick cannot be a physical deck with a used pile.
+4. The pile has no stored order, so there is no order to leak, reorder or replay. Shuffling the used pile back is a zone change.
+5. Every move claims its copy with a conditional update on its zone, holder and face, and checks the rows it changed. A player and a Director get separate response types with no hidden field on the player ones; a thing a player may not see answers 404.
+
+**Consequences:**
+- A new field on a card is hidden from players until it is added to a player type on purpose; there is no blanking step to forget.
+- Anything that needs the pile's contents to leave the server (a "peek", a client-side shuffle) is a new decision, not a setting.
+- A copy returning to the pile gets a fresh id, so a remembered id cannot be tracked through the pile.
+- A change to the zones or the claim rule changes the move table in `internal/plugins/decks/.ai.md` and its tests first.

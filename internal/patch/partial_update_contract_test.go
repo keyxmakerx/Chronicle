@@ -82,6 +82,8 @@ var contractGoverned = map[string]string{
 	"rumours.UpdateRumourInput":            "PUT .../entities/:eid/rumours/:rid — an edit that names only the sureness must keep the words, and one that names only the speaker must keep the rumour; all three fields are required columns, so an explicit null preserves rather than blanks (born governed, no incident)",
 	"designs.UpdateDesignInput":            "PATCH /campaigns/:id/designs/:did — a rename must not clear the note, and a note edit must not rename (born governed, no incident)",
 	"auth.UpdateViewPrefsInput":            "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
+	"decks.UpdateDeckInput":                "PUT /campaigns/:id/decks/:did — a rename must not reset the deck's rules or look, and a look-only save must not rename it or clear its hero page; the version is carried as a field so a stale editor is a conflict (born governed, no incident)",
+	"decks.UpdateCardInput":                "PUT /campaigns/:id/decks/:did/cards/:cid — a words-only edit must not reset copies, fate or the Director's note, and lowering copies must not touch the words (born governed, no incident)",
 	"rolls.UpdateSettingsInput":            "PUT /campaigns/:id/rolls/settings — the Customize Dice tab saves each pick as it is made and the Table drawer sends only the look, so a body naming one setting must not reset the campaign's set, colours, crits, detail, offered sets or the players-may-pick switch (born governed, no incident)",
 }
 
