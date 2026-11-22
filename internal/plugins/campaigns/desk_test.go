@@ -166,8 +166,18 @@ func TestBoardTiles_People(t *testing.T) {
 	if f := p.Faces[2]; f.Name != "Someone" || f.Initial() != "S" {
 		t.Errorf("a face with neither name nor email is Someone: %+v", f)
 	}
-	if faceHue("u1") != faceHue("u1") || faceHue("u1") < 0 || faceHue("u1") > 4 {
-		t.Error("a face keeps its tint from visit to visit")
+	// The tint comes from the id alone, so it is one of the five and the
+	// same id always lands on the same one.
+	seen := map[int]bool{}
+	for _, id := range []string{"u1", "u2", "u3", "owner-7", ""} {
+		h := faceHue(id)
+		if h < 0 || h > 4 {
+			t.Errorf("faceHue(%q) = %d, want 0 to 4", id, h)
+		}
+		seen[h] = true
+	}
+	if faceHue("u1") != 0 || len(seen) < 2 {
+		t.Errorf("faceHue(u1) = %d, tints seen %v", faceHue("u1"), seen)
 	}
 }
 
@@ -287,8 +297,6 @@ func TestDeskValues_ChevronOnFiguresOnly(t *testing.T) {
 		t.Errorf("quiet words carry no chevron: %s", h)
 	}
 }
-
-func ptrTime(t time.Time) *time.Time { return &t }
 
 // The Customize block says what is chosen now in a DM's words: the look by
 // its starter's name, the colour by name with its swatch and never a hex
