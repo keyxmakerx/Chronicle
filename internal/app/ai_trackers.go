@@ -22,7 +22,11 @@ func init() {
 		if d.Campaigns != nil {
 			dir = &trackersMemberAdapter{svc: d.Campaigns}
 		}
-		return []records.Kind{records.TrackerKind{Svc: aiTrackersAdapter{svc: d.Trackers, ents: d.Entities, members: dir}, Entities: d.Entities}}
+		ad := aiTrackersAdapter{svc: d.Trackers, ents: d.Entities, members: dir}
+		if d.Entities != nil {
+			ad.claims = d.Entities
+		}
+		return []records.Kind{records.TrackerKind{Svc: ad, Entities: d.Entities}}
 	})
 }
 
@@ -35,6 +39,13 @@ type aiTrackersAdapter struct {
 	// members is the same directory the trackers screen chooses players from;
 	// nil while campaigns is unavailable, which leaves nobody to name.
 	members trackers.MemberDirectory
+	// claims lists the claimed hero pages; nil leaves display names only.
+	claims heroClaims
+}
+
+// heroClaims is the one read the adapter needs to tie a hero to its player.
+type heroClaims interface {
+	ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]entities.Entity, error)
 }
 
 var _ records.TrackersAPI = aiTrackersAdapter{}
@@ -188,9 +199,30 @@ func (t aiTrackersAdapter) Members(ctx context.Context, campaignID string, a rec
 	if err != nil {
 		return nil, err
 	}
+	heroes := t.claimedHeroes(ctx, campaignID, a)
 	out := make([]records.TrackerMember, len(list))
 	for i, m := range list {
-		out[i] = records.TrackerMember{UserID: m.UserID, Name: m.Name, Character: m.Character, Director: m.Director}
+		out[i] = records.TrackerMember{UserID: m.UserID, Name: m.Name, Character: m.Character, Heroes: heroes[m.UserID], Director: m.Director}
 	}
 	return out, nil
+}
+
+// claimedHeroes names each member's claimed hero pages, as the players lookup
+// shows them, so a hero's name reaches its player without a People page link.
+// A failed read leaves display names, which still work.
+func (t aiTrackersAdapter) claimedHeroes(ctx context.Context, campaignID string, a records.Actor) map[string][]string {
+	if t.claims == nil {
+		return nil
+	}
+	claimed, err := t.claims.ListClaimed(ctx, campaignID, a.Role, a.UserID)
+	if err != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for _, e := range claimed {
+		if e.OwnerUserID != nil {
+			out[*e.OwnerUserID] = append(out[*e.OwnerUserID], e.Name)
+		}
+	}
+	return out
 }

@@ -28,6 +28,7 @@ func TestTrackerKind_ShownTo(t *testing.T) {
 		{"one player by display name", map[string]any{"page": "Sivin", "shown_to": []any{"Pat"}}, trackerChosen, []string{"u-pat"}, nil, "shown to Pat on Sivin"},
 		{"a single name as a string", map[string]any{"page": "Sivin", "shown_to": "pat"}, trackerChosen, []string{"u-pat"}, nil, "shown to Pat"},
 		{"a hero page's name reaches its player", map[string]any{"page": "Sivin", "shown_to": []any{"  SIVIN "}}, trackerChosen, []string{"u-pat"}, nil, "shown to Pat"},
+		{"a claimed hero's name reaches its player", map[string]any{"page": "Sivin", "shown_to": []any{"old brannoc"}}, trackerChosen, []string{"u-sam"}, nil, "shown to Sam"},
 		{"two players, one may change", map[string]any{"page": "Sivin", "shown_to": []any{"Pat", "Sam"}, "may_change": []any{"Pat"}}, trackerChosen, []string{"u-pat", "u-sam"}, []string{"u-pat"}, "shown to Pat and Sam; Pat may change it"},
 		{"may_change as a string", map[string]any{"page": "Sivin", "shown_to": []any{"Pat", "Sam"}, "may_change": "Brannoc"}, trackerChosen, []string{"u-pat", "u-sam"}, []string{"u-sam"}, "Sam may change it"},
 		{"hidden", map[string]any{"page": "Sivin", "shown_to": "directors"}, trackerHidden, nil, nil, "hidden from players on Sivin"},

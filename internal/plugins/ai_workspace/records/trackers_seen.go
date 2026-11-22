@@ -100,7 +100,7 @@ func seenWithoutPlayers(r Record, vis string, d *trackerDraft) error {
 func pickPlayer(members []TrackerMember, name, key string) (TrackerMember, error) {
 	var hits []TrackerMember
 	for _, m := range members {
-		if sameName(m.Name, name) || (m.Character != "" && sameName(m.Character, name)) {
+		if m.answersTo(name) {
 			hits = append(hits, m)
 		}
 	}

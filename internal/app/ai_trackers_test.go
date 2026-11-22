@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -105,7 +106,25 @@ func TestAITrackersAdapter_Members(t *testing.T) {
 	ad := aiTrackersAdapter{members: fakeDirectory{
 		{UserID: "u1", Name: "Pat", Character: "Sivin"}, {UserID: "u2", Name: "Dee", Director: true}}}
 	got, err := ad.Members(context.Background(), "c", records.Actor{UserID: "own", Role: 3})
-	if err != nil || len(got) != 2 || got[0] != (records.TrackerMember{UserID: "u1", Name: "Pat", Character: "Sivin"}) || !got[1].Director {
+	if err != nil || len(got) != 2 || got[0].UserID != "u1" || got[0].Name != "Pat" || got[0].Character != "Sivin" || got[0].Heroes != nil || !got[1].Director {
 		t.Fatalf("members %+v err %v", got, err)
+	}
+}
+
+// A hero's name must reach the player who claimed it, as the players lookup
+// shows them, whether or not the People page links the two.
+func TestAITrackersAdapter_MembersCarryClaimedHeroes(t *testing.T) {
+	ad := aiTrackersAdapter{claims: newSheetEntities(), members: fakeDirectory{
+		{UserID: "player-1", Name: "Pat"}, {UserID: "player-2", Name: "Sam"}, {UserID: "dm", Name: "Dee", Director: true}}}
+	got, err := ad.Members(context.Background(), "camp-1", records.Actor{UserID: "own", Role: 3})
+	if err != nil || len(got) != 3 {
+		t.Fatalf("members %+v err %v", got, err)
+	}
+	if !slices.Equal(got[0].Heroes, []string{"Tyne", "Mira"}) || !slices.Equal(got[1].Heroes, []string{"Brann"}) || got[2].Heroes != nil {
+		t.Fatalf("heroes %+v", got)
+	}
+	// A reader who is no Director is told nobody's name, heroes included.
+	if ms, err := ad.Members(context.Background(), "camp-1", records.Actor{UserID: "player-1", Role: 1}); err != nil || ms != nil {
+		t.Fatalf("a player's members %+v err %v", ms, err)
 	}
 }

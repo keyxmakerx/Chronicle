@@ -127,12 +127,27 @@ type TrackerSeen struct {
 	Players    []TrackerPlayer
 }
 
-// TrackerMember is a campaign member as a name can mean them: by display name
-// or by the hero page they have claimed. Director marks someone who already
-// sees every tracker and so cannot be chosen.
+// TrackerMember is a campaign member as a name can mean them: by display name,
+// by the character linked to them on the People page, or by a hero page they
+// have claimed (Heroes). Director marks someone who already sees every tracker
+// and so cannot be chosen.
 type TrackerMember struct {
 	UserID, Name, Character string
+	Heroes                  []string
 	Director                bool
+}
+
+// answersTo reports whether a name means this member, ignoring case.
+func (m TrackerMember) answersTo(name string) bool {
+	if sameName(m.Name, name) || (m.Character != "" && sameName(m.Character, name)) {
+		return true
+	}
+	for _, h := range m.Heroes {
+		if sameName(h, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // TrackerPlace puts a kind on a page.

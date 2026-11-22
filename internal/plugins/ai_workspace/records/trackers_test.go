@@ -116,7 +116,7 @@ func trackerFixture() (TrackerKind, *fakeTrackers) {
 	svc := newFakeTrackers()
 	svc.members = []TrackerMember{
 		{UserID: "u-pat", Name: "Pat", Character: "Sivin"},
-		{UserID: "u-sam", Name: "Sam", Character: "Brannoc"},
+		{UserID: "u-sam", Name: "Sam", Character: "Brannoc", Heroes: []string{"Brannoc", "Old Brannoc"}},
 		{UserID: "u-twin1", Name: "Alex"}, {UserID: "u-twin2", Name: "alex"},
 		{UserID: "u-dm", Name: "Dee", Director: true},
 	}
