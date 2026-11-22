@@ -94,13 +94,13 @@ func (a *pageBlocksEntityAdapter) Live(ctx context.Context, campaignID string, i
 	return out, nil
 }
 
-// FindByName looks a page up by the slug its name makes, the way AI Import
-// resolves a `page:` name, keeps it only when its name is the one written (a
+// FindByName looks a page up by the slug its name makes, past a uniqueness
+// suffix, the way AI Import resolves a `page:` name, keeps it only when its name is the one written (a
 // slug can stand for many names, and every name with no Latin letters makes
 // the same one), then asks the visibility filter, so a page the viewer cannot
 // open reads exactly like one that does not exist.
 func (a *pageBlocksEntityAdapter) FindByName(ctx context.Context, campaignID, name string, v pageblocks.Viewer) (pageblocks.PageLink, bool, error) {
-	e, err := a.svc.GetBySlug(ctx, campaignID, entities.Slugify(name))
+	e, err := a.svc.GetByNameSlug(ctx, campaignID, entities.Slugify(name))
 	if err != nil {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {

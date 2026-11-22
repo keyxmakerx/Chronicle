@@ -7,7 +7,8 @@ import (
 
 // A page made while a trashed page of the same name still holds the plain
 // slug gets "-2"; a name lookup finds the live page, never the trashed one,
-// and never a page whose own name only looks like the suffix.
+// never a page whose own name only looks like the suffix, and never a page
+// whose slug merely starts with the name's.
 func TestGetByNameSlug_PastATrashedPage_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
@@ -37,6 +38,7 @@ func TestGetByNameSlug_PastATrashedPage_Integration(t *testing.T) {
 		}
 		return id
 	}
+	page("Hessa Ord's Workshop Annex", "hessa-ord-s-workshop-annex", false)
 	page("Hessa Ord's Workshop", "hessa-ord-s-workshop", true)
 	live := page("Hessa Ord's Workshop", "hessa-ord-s-workshop-2", false)
 	page("Lamp 2", "lamp-2", false)
@@ -48,6 +50,10 @@ func TestGetByNameSlug_PastATrashedPage_Integration(t *testing.T) {
 	}
 	if e, err := svc.GetByNameSlug(ctx, camp, Slugify("Lamp")); e != nil || err == nil {
 		t.Fatalf("Lamp found %+v; Lamp 2 is not called Lamp", e)
+	}
+	// Only uniqueness suffixes come back, so a longer name never fills the cap.
+	if got, err := NewEntityRepository(db).ListSuffixedSlugs(ctx, camp, "hessa-ord-s-workshop"); err != nil || len(got) != 1 || got[0].ID != live {
+		t.Fatalf("suffixed slugs %+v, %v; want only the live page", got, err)
 	}
 	if got, err := NewEntityRepository(db).ListSuffixedSlugs(ctx, camp, "hessa%"); err != nil || len(got) != 0 {
 		t.Fatalf("a wildcard base matched %d pages, %v", len(got), err)

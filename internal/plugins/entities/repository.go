@@ -1329,13 +1329,15 @@ func (r *entityRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// maxSuffixedSlugs bounds ListSuffixedSlugs; generateSlug never makes more
-// than about a hundred variants of one base.
+// maxSuffixedSlugs bounds ListSuffixedSlugs. Only uniqueness suffixes match,
+// and generateSlug makes about a hundred numbered ones per base before it
+// turns to a hex tail.
 const maxSuffixedSlugs = 120
 
-// ListSuffixedSlugs returns the live entities whose slug starts with base
-// and a hyphen, oldest first. Slugs hold only [a-z0-9-], so base carries no
-// LIKE wildcards; a base with anything else matches nothing.
+// ListSuffixedSlugs returns the live entities whose slug is base plus a
+// uniqueness suffix ("-2", "-<8 hex>"), oldest first, so "saltreach-docks"
+// never crowds out "saltreach-2". Slugs hold only [a-z0-9-], so base carries
+// no LIKE or regexp syntax; a base with anything else matches nothing.
 func (r *entityRepository) ListSuffixedSlugs(ctx context.Context, campaignID, base string) ([]Entity, error) {
 	if base == "" || strings.Trim(base, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
 		return nil, nil
@@ -1343,10 +1345,10 @@ func (r *entityRepository) ListSuffixedSlugs(ctx context.Context, campaignID, ba
 	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
-	          WHERE e.campaign_id = ? AND e.slug LIKE ?` + liveOnly + `
+	          WHERE e.campaign_id = ? AND e.slug LIKE ? AND e.slug REGEXP ?` + liveOnly + `
 	          ORDER BY e.created_at, e.id
 	          LIMIT ?`
-	rows, err := database.Q(ctx, r.db).QueryContext(ctx, query, campaignID, base+"-%", maxSuffixedSlugs)
+	rows, err := database.Q(ctx, r.db).QueryContext(ctx, query, campaignID, base+"-%", "^"+base+"-([0-9]+|[0-9a-f]{8})$", maxSuffixedSlugs)
 	if err != nil {
 		return nil, fmt.Errorf("listing suffixed slugs: %w", err)
 	}
