@@ -1,11 +1,14 @@
 /**
- * calendar_day_passes.js — the sheet that asks what became of the events on
- * the days the Director has just moved today past.
+ * calendar_outcome.js — changing what became of events: the sheet that asks
+ * about the events on the days the Director has just moved today past, and
+ * the change form in an event's card. Kept out of calendar_view.js, which
+ * every page loads, since both are wanted only now and then.
  *
  * calendar_view.js fetches this the first time today moves forward over
  * events (only the owner moves today, and Calendar settings can switch the
- * question off), then calls Chronicle.calendarDayPasses.open(view, from, to,
- * kit). The sheet reads GET .../events/passed?from&to, which lists each
+ * question off), then calls Chronicle.calendarOutcome.open(view, from, to,
+ * kit); or the first time a button in a card's outcome part is pressed, then
+ * calls cardClick(view, box, target, kit). The sheet reads GET .../events/passed?from&to, which lists each
  * one-off event still planned whose last day is now behind and each date of
  * a repeating event, as this viewer may see them. Nothing to ask, no sheet.
  *
@@ -20,6 +23,9 @@
  * On a computer the sheet grows out of the today pill, where the date was
  * moved; on a phone it slides up from the bottom edge. Calm fades it, Off
  * and a key show it at once.
+ *
+ * The card's form offers the four states, a new day for Moved and the line,
+ * and saves only what changed with PUT .../events/:id.
  */
 (function () {
   'use strict';
@@ -293,9 +299,6 @@
     function occURL(o) {
       return view.apiBase + '/events/' + encodeURIComponent(o.id) + '/occurrences/' + o.date.y + '/' + o.date.m + '/' + o.date.d;
     }
-    function failWords(resp, fallback) {
-      return resp.json().then(function (j) { return (j && j.message) || fallback; }, function () { return fallback; });
-    }
 
     // Done: the one-off answers go in one batch, all or nothing; the dates
     // of repeating events follow, each its own override.
@@ -353,5 +356,100 @@
     return handle;
   }
 
-  Chronicle.calendarDayPasses = { open: open, requests: requests, heading: heading, longDate: longDate, spanWords: spanWords };
+  // ---- The event card's change form ----
+  var WORDS = [['planned', 'Planned'], ['happened', 'Happened'], ['moved', 'Moved'], ['called_off', 'Called off']];
+  var SAID = { planned: 'planned', happened: 'happened', moved: 'moved', called_off: 'called off' };
+  function statusOf(ev) { return ev.status || 'planned'; }
+
+  function cardFormHTML(view, ev, kit) {
+    var st = statusOf(ev), c = view.cal, CalDate = kit.CalDate, esc = kit.esc, mc = CalDate.monthCount(c);
+    var day = st === 'moved' ? { y: ev.year, m: ev.month, d: ev.day } : CalDate.addDays(c, { y: ev.year, m: ev.month, d: ev.day }, 1);
+    var months = (c.months || []).map(function (mo, i) {
+      return '<option value="' + (i + 1) + '"' + (i + 1 === day.m ? ' selected' : '') + '>' + esc(mo.name || 'Month ' + (i + 1)) + '</option>';
+    }).join('') || Array.from({ length: mc }, function (_, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + '</option>'; }).join('');
+    return '<div class="evochips" role="group" aria-label="What became of it">' + WORDS.map(function (w) {
+        return '<button type="button" class="evochip" data-evout-st="' + w[0] + '" aria-pressed="' + (w[0] === st) + '">' + w[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="evomv strow3" data-evout-mv' + (st === 'moved' ? '' : ' hidden') + '>' +
+        '<label class="fld"><span>Moved to</span><select name="month">' + months + '</select></label>' +
+        '<label class="fld"><span>Day</span><input type="number" name="day" inputmode="numeric" min="1" value="' + day.d + '"></label>' +
+        '<label class="fld"><span>Year</span><input type="number" name="year" inputmode="numeric" value="' + day.y + '"></label></div>' +
+      '<label class="fld evoln"><span>What happened, if you like</span><textarea name="outcome" rows="2" maxlength="1000">' + esc(ev.outcome || '') + '</textarea></label>' +
+      '<p class="sterr" role="alert" hidden></p>' +
+      '<div class="sta"><button type="button" class="btn sm primary" data-evout-save>Save</button><button type="button" class="btn sm quiet" data-evout-cancel>Cancel</button></div>';
+  }
+
+  // A press on a button inside the card's outcome part (box).
+  function cardClick(view, box, target, kit) {
+    var ev = view._findEvent(box.dataset.evout), form = box.querySelector('[data-evout-form]'), opener = box.querySelector('[data-evout-open]');
+    if (!ev || !form) return;
+    if (target.closest('[data-evout-open]')) {
+      var opening = form.hidden;
+      if (opening) form.innerHTML = cardFormHTML(view, ev, kit);
+      form.hidden = !opening;
+      opener.setAttribute('aria-expanded', String(opening));
+      if (opening) { var on = form.querySelector('[aria-pressed="true"]'); if (on) on.focus({ preventScroll: true }); }
+      return;
+    }
+    var chip = target.closest('[data-evout-st]');
+    if (chip) {
+      form.querySelectorAll('[data-evout-st]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === chip)); });
+      form.querySelector('[data-evout-mv]').hidden = chip.dataset.evoutSt !== 'moved';
+      return;
+    }
+    if (target.closest('[data-evout-cancel]')) {
+      form.hidden = true; form.innerHTML = '';
+      opener.setAttribute('aria-expanded', 'false');
+      opener.focus({ preventScroll: true });
+      return;
+    }
+    var save = target.closest('[data-evout-save]');
+    if (save) saveCard(view, ev, form, save, kit);
+  }
+
+  // Sends only what changed, as the event route's partial update reads it,
+  // then redraws the month and the card from the server. A span moves
+  // whole, as a drag on the year track moves it.
+  function saveCard(view, ev, form, btn, kit) {
+    var CalDate = kit.CalDate, err = form.querySelector('.sterr'), was = statusOf(ev);
+    var picked = form.querySelector('[data-evout-st][aria-pressed="true"]');
+    var st = picked ? picked.dataset.evoutSt : was;
+    var line = form.querySelector('[name="outcome"]').value.trim();
+    var body = {}, fail = function (msg) { err.textContent = msg; err.hidden = false; };
+    if (st !== was) body.status = st;
+    if (line !== (ev.outcome || '')) body.outcome = line || null;
+    if (st === 'moved') {
+      var n = function (k) { var v = form.querySelector('[name="' + k + '"]').value.trim(); return /^-?\d+$/.test(v) ? parseInt(v, 10) : NaN; };
+      var y = n('year'), m = n('month'), d = n('day');
+      if ([y, m, d].some(isNaN)) { fail('Fill in the day it moved to.'); return; }
+      var len = CalDate.monthDays(view.cal, m - 1, y);
+      if (d < 1 || d > len) { fail('That month has ' + len + ' days.'); return; }
+      if (y !== ev.year || m !== ev.month || d !== ev.day) {
+        body.year = y; body.month = m; body.day = d; body.status = 'moved';
+        if (ev.end_year != null) {
+          var end = CalDate.addDays(view.cal, { y: ev.end_year, m: ev.end_month, d: ev.end_day }, CalDate.dayIndex(view.cal, y, m, d) - CalDate.dayIndex(view.cal, ev.year, ev.month, ev.day));
+          body.end_year = end.y; body.end_month = end.m; body.end_day = end.d;
+        }
+      } else if (was !== 'moved') { fail('Pick the day it moved to.'); return; }
+    }
+    if (!Object.keys(body).length) { view.closeEventDetail(); return; }
+    btn.disabled = true;
+    Chronicle.apiFetch(view.apiBase + '/events/' + encodeURIComponent(ev.id), { method: 'PUT', body: body }).then(function (resp) {
+      if (!resp.ok) return failWords(resp, 'Not saved. Try again.');
+      view.eventsByMonth = {};
+      view.closeEventDetail();
+      view.renderMonth();
+      view.say(ev.name + ': ' + SAID[st] + '.');
+      return '';
+    }, function () { return 'Could not reach Chronicle. Try again.'; }).then(function (msg) {
+      btn.disabled = false;
+      if (msg) fail(msg);
+    });
+  }
+
+  function failWords(resp, fallback) {
+    return resp.json().then(function (j) { return (j && j.message) || fallback; }, function () { return fallback; });
+  }
+
+  Chronicle.calendarOutcome = { open: open, cardClick: cardClick, requests: requests, heading: heading, longDate: longDate, spanWords: spanWords };
 })();

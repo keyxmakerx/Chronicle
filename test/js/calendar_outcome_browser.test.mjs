@@ -1,4 +1,4 @@
-// calendar_day_passes_browser.test.mjs — what became of the events once
+// calendar_outcome_browser.test.mjs — what became of the events once
 // today moves past them.
 //
 // Runs calendar_view.js in a real Chromium as the campaign owner against a
@@ -57,7 +57,7 @@ const html = (role, cal, month) => `<!doctype html><html><head><meta charset="ut
 <style>html,body{margin:0}</style></head><body>
 <main id="main-content"><div style="max-width:64rem;margin:0 auto;padding:24px 16px">
 <div class="cal-v5" data-widget="calendar_view" data-campaign-id="c1" data-calendar-id="k1" data-can-edit="${role >= 3}" data-can-author-dm-only="${role >= 3}"
-  data-role="${role}" data-user-id="u0" data-api-base="${API}" data-day-passes-src="/static/js/widgets/calendar_day_passes.js">
+  data-role="${role}" data-user-id="u0" data-api-base="${API}" data-outcome-src="/static/js/widgets/calendar_outcome.js">
 <div id="calendar-config" class="hidden" data-calendar='${attr(cal)}' data-events='${attr(month)}'></div>
 </div></div></main>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
@@ -244,7 +244,7 @@ test('the switch in Calendar settings, a step back and a player never ask', { sk
     await p.waitForSelector('#cal5-todaypill .td:has-text("12")');
     await p.waitForTimeout(150);
     assert.deepEqual(asked, []);
-    assert.equal(loaded.includes('/static/js/widgets/calendar_day_passes.js'), false, 'switched off, the sheet is never fetched');
+    assert.equal(loaded.includes('/static/js/widgets/calendar_outcome.js'), false, 'switched off, the sheet is never fetched');
   }
   {
     const { p, asked } = await page(t, { cal: calendar({ current_day: 20 }) });
@@ -256,7 +256,7 @@ test('the switch in Calendar settings, a step back and a player never ask', { sk
   {
     const { p, loaded } = await page(t, { role: 1 });
     assert.equal(await p.$('#cal5-todaypill [data-today-set]'), null, 'a player cannot move today');
-    assert.equal(loaded.includes('/static/js/widgets/calendar_day_passes.js'), false);
+    assert.equal(loaded.includes('/static/js/widgets/calendar_outcome.js'), false);
   }
 });
 

@@ -1495,7 +1495,7 @@
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
       this.skyRailSrc = config.skyRailSrc; // calendar_sky_rail.js, loaded only for the owner's sky controls
       this.yearTrackSrc = config.yearTrackSrc; // calendar_year_track.js, loaded only when an editor opens Edit
-      this.dayPassesSrc = config.dayPassesSrc; // calendar_day_passes.js, loaded the first time today moves past events
+      this.outcomeSrc = config.outcomeSrc; // calendar_outcome.js: the day-passes sheet and the card's change form, loaded when first wanted
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -5002,7 +5002,7 @@
 
     // --------------------------------------------------------------
     // When today moves forward past events, the calendar asks once what
-    // became of them (calendar_day_passes.js, fetched the first time it is
+    // became of them (calendar_outcome.js, fetched the first time it is
     // needed). Only the owner moves today, the calendar's settings can turn
     // the question off, and a step back in time asks nothing.
     // --------------------------------------------------------------
@@ -5010,18 +5010,27 @@
       var self = this, cal = this.cal;
       if (cal.ask_when_day_passes === false || this._players || !this._canSetToday()) return;
       if (CalDate.dayIndex(cal, to.y, to.m, to.d) <= CalDate.dayIndex(cal, from.y, from.m, from.d)) return;
-      var open = function () {
-        if (!Chronicle.calendarDayPasses || !self.el.isConnected) return;
+      this._withOutcome(function (O) {
         if (self._passes) self._passes.destroy();
-        self._passes = Chronicle.calendarDayPasses.open(self, from, to, self._passesKit());
-      };
-      if (Chronicle.calendarDayPasses) { open(); return; }
-      if (!this.dayPassesSrc || this._passesLoading) return;
-      this._passesLoading = true;
+        self._passes = O.open(self, from, to, self._passesKit());
+      });
+    },
+
+    // Runs fn with calendar_outcome.js once it has loaded; nothing without it.
+    _withOutcome: function (fn) {
+      var self = this;
+      if (Chronicle.calendarOutcome) { fn(Chronicle.calendarOutcome); return; }
+      if (!this.outcomeSrc) return;
+      (this._outcomeWait = this._outcomeWait || []).push(fn);
+      if (this._outcomeWait.length > 1) return;
       var s = document.createElement('script');
-      s.src = this.dayPassesSrc;
-      s.onload = function () { self._passesLoading = false; open(); };
-      s.onerror = function () { self._passesLoading = false; };
+      s.src = this.outcomeSrc;
+      s.onload = function () {
+        var q = self._outcomeWait || [];
+        self._outcomeWait = null;
+        if (Chronicle.calendarOutcome && self.el.isConnected) q.forEach(function (f) { f(Chronicle.calendarOutcome); });
+      };
+      s.onerror = function () { self._outcomeWait = null; };
       document.head.appendChild(s);
     },
 
@@ -6749,95 +6758,13 @@
       return html + '</div>';
     },
 
-    // The four states as one choice, a new day for Moved, and the line.
-    _evOutcomeFormHTML: function (ev) {
-      var st = evStatus(ev), c = this.cal, mc = CalDate.monthCount(c);
-      var words = [['planned', 'Planned'], ['happened', 'Happened'], ['moved', 'Moved'], ['called_off', 'Called off']];
-      var day = st === 'moved' ? { y: ev.year, m: ev.month, d: ev.day } : CalDate.addDays(c, { y: ev.year, m: ev.month, d: ev.day }, 1);
-      var months = (c.months || []).map(function (mo, i) {
-        return '<option value="' + (i + 1) + '"' + (i + 1 === day.m ? ' selected' : '') + '>' + esc(mo.name || 'Month ' + (i + 1)) + '</option>';
-      }).join('') || Array.from({ length: mc }, function (_, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + '</option>'; }).join('');
-      return '<div class="evochips" role="group" aria-label="What became of it">' + words.map(function (w) {
-          return '<button type="button" class="evochip" data-evout-st="' + w[0] + '" aria-pressed="' + (w[0] === st) + '">' + w[1] + '</button>';
-        }).join('') + '</div>' +
-        '<div class="evomv strow3" data-evout-mv' + (st === 'moved' ? '' : ' hidden') + '>' +
-          '<label class="fld"><span>Moved to</span><select name="month">' + months + '</select></label>' +
-          '<label class="fld"><span>Day</span><input type="number" name="day" inputmode="numeric" min="1" value="' + day.d + '"></label>' +
-          '<label class="fld"><span>Year</span><input type="number" name="year" inputmode="numeric" value="' + day.y + '"></label></div>' +
-        '<label class="fld evoln"><span>What happened, if you like</span><textarea name="outcome" rows="2" maxlength="1000">' + esc(ev.outcome || '') + '</textarea></label>' +
-        '<p class="sterr" role="alert" hidden></p>' +
-        '<div class="sta"><button type="button" class="btn sm primary" data-evout-save>Save</button><button type="button" class="btn sm quiet" data-evout-cancel>Cancel</button></div>';
-    },
-
-    // Clicks inside the card's outcome part; true when one was handled.
+    // Clicks inside the card's outcome part: the change form lives in
+    // calendar_outcome.js, fetched the first time it is wanted.
     _evOutcomeClick: function (e) {
-      var box = e.target.closest('[data-evout]');
-      if (!box) return false;
-      var ev = this._findEvent(box.dataset.evout), form = box.querySelector('[data-evout-form]'), open = box.querySelector('[data-evout-open]');
-      if (!ev || !form) return false;
-      if (e.target.closest('[data-evout-open]')) {
-        var opening = form.hidden;
-        if (opening) form.innerHTML = this._evOutcomeFormHTML(ev);
-        form.hidden = !opening;
-        open.setAttribute('aria-expanded', String(opening));
-        if (opening) { var on = form.querySelector('[aria-pressed="true"]'); if (on) on.focus({ preventScroll: true }); }
-        return true;
-      }
-      var chip = e.target.closest('[data-evout-st]');
-      if (chip) {
-        form.querySelectorAll('[data-evout-st]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === chip)); });
-        form.querySelector('[data-evout-mv]').hidden = chip.dataset.evoutSt !== 'moved';
-        return true;
-      }
-      if (e.target.closest('[data-evout-cancel]')) {
-        form.hidden = true; form.innerHTML = '';
-        open.setAttribute('aria-expanded', 'false');
-        open.focus({ preventScroll: true });
-        return true;
-      }
-      if (e.target.closest('[data-evout-save]')) { this._saveOutcome(ev, form, e.target.closest('[data-evout-save]')); return true; }
-      return false;
-    },
-
-    // Sends only what changed, as the event route's partial update reads
-    // it, then redraws the month and the card from the server.
-    _saveOutcome: function (ev, form, btn) {
-      var self = this, err = form.querySelector('.sterr');
-      var picked = form.querySelector('[data-evout-st][aria-pressed="true"]');
-      var st = picked ? picked.dataset.evoutSt : evStatus(ev);
-      var line = form.querySelector('[name="outcome"]').value.trim();
-      var body = {};
-      if (st !== evStatus(ev)) body.status = st;
-      if (line !== (ev.outcome || '')) body.outcome = line || null;
-      if (st === 'moved') {
-        var n = function (k) { var v = form.querySelector('[name="' + k + '"]').value.trim(); return /^-?\d+$/.test(v) ? parseInt(v, 10) : NaN; };
-        var y = n('year'), m = n('month'), d = n('day');
-        if ([y, m, d].some(isNaN)) { err.textContent = 'Fill in the day it moved to.'; err.hidden = false; return; }
-        var len = CalDate.monthDays(this.cal, m - 1, y);
-        if (d < 1 || d > len) { err.textContent = 'That month has ' + len + ' days.'; err.hidden = false; return; }
-        if (y !== ev.year || m !== ev.month || d !== ev.day) {
-          body.year = y; body.month = m; body.day = d; body.status = 'moved';
-          // A span moves whole, as a drag on the year track moves it.
-          if (ev.end_year != null) {
-            var end = CalDate.addDays(this.cal, { y: ev.end_year, m: ev.end_month, d: ev.end_day }, CalDate.dayIndex(this.cal, y, m, d) - CalDate.dayIndex(this.cal, ev.year, ev.month, ev.day));
-            body.end_year = end.y; body.end_month = end.m; body.end_day = end.d;
-          }
-        }
-        else if (evStatus(ev) !== 'moved') { err.textContent = 'Pick the day it moved to.'; err.hidden = false; return; }
-      }
-      if (!Object.keys(body).length) { this.closeEventDetail(); return; }
-      btn.disabled = true;
-      Chronicle.apiFetch(this.apiBase + '/events/' + encodeURIComponent(ev.id), { method: 'PUT', body: body }).then(function (resp) {
-        if (!resp.ok) return resp.json().then(function (j) { return (j && j.message) || 'Not saved. Try again.'; }, function () { return 'Not saved. Try again.'; });
-        self.eventsByMonth = {};
-        self.closeEventDetail();
-        self.renderMonth();
-        self.say(ev.name + ': ' + ({ planned: 'planned', happened: 'happened', moved: 'moved', called_off: 'called off' }[st]) + '.');
-        return '';
-      }, function () { return 'Could not reach Chronicle. Try again.'; }).then(function (msg) {
-        btn.disabled = false;
-        if (msg) { err.textContent = msg; err.hidden = false; }
-      });
+      var self = this, box = e.target.closest('[data-evout]'), t = e.target;
+      if (!box || !t.closest('button')) return !!box;
+      this._withOutcome(function (O) { if (box.isConnected) O.cardClick(self, box, t, self._passesKit()); });
+      return true;
     },
 
     // --------------------------------------------------------------

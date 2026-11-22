@@ -1,6 +1,6 @@
-// calendar_day_passes.test.mjs — the sheet's pure parts: the heading, and
+// calendar_outcome.test.mjs — the sheet's pure parts: the heading, and
 // the writes Done and Undo send for each answer, worked out before anything
-// is sent. The sheet itself runs in calendar_day_passes_browser.test.mjs.
+// is sent. The sheet itself runs in calendar_outcome_browser.test.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,8 +18,8 @@ function load() {
   vm.runInContext(read('calendar_view.js'), sandbox);
   const CalDate = sandbox.module.exports.CalDate;
   delete sandbox.module;
-  vm.runInContext(read('calendar_day_passes.js'), sandbox);
-  return { CalDate, P: sandbox.Chronicle.calendarDayPasses };
+  vm.runInContext(read('calendar_outcome.js'), sandbox);
+  return { CalDate, P: sandbox.Chronicle.calendarOutcome };
 }
 
 const { CalDate, P } = load();
