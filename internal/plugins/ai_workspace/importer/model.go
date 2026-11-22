@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
@@ -234,4 +235,48 @@ func (p ParsedPage) IsRecord() bool {
 // name-input vs an error placeholder.
 func (p ParsedPage) HasName() bool {
 	return p.Name != ""
+}
+
+// PageBefore is what Undo needs to take back one page row of an applied
+// request: for an update, the page's title and text as they were; for a
+// create, nothing (Undo moves the page to the Trash); for a delete, nothing
+// (the page waits in the Trash). AfterHash is the page as the request left
+// it, so Undo can tell whether someone has edited it since.
+type PageBefore struct {
+	Action    string
+	EntityID  string
+	Name      string
+	Entry     *string
+	EntryHTML *string
+	AfterHash string
+}
+
+// PageFingerprint is what Undo compares: the title and text the page holds.
+func PageFingerprint(e *entities.Entity) string {
+	return aiplug.Hash([]any{e.Name, e.Entry, e.EntryHTML})
+}
+
+// changesOnlyText reports a block whose only effect on an existing page is its
+// title and text.
+func changesOnlyText(p ParsedPage) bool {
+	fm := p.FrontMatter
+	return fm.Subcategory == "" && fm.Visibility == "" && fm.Tags == nil && fm.Parent == "" &&
+		fm.Folder == "" && fm.Layout == "" && len(fm.Fields) == 0
+}
+
+func copyString(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := *s
+	return &v
+}
+
+// KeptRecord is what Undo needs to take back one record row: the kind's own
+// snapshot of the thing before, and its fingerprint after.
+type KeptRecord struct {
+	Kind      string
+	Action    string
+	Snapshot  aiplug.Snapshot
+	AfterHash string
 }

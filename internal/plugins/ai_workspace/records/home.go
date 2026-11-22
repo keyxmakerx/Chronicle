@@ -2,9 +2,11 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -723,4 +725,58 @@ func (k HomeKind) brochureSpec(ctx context.Context, campaignID string, b HomeBlo
 		return "brochure"
 	}
 	return "{type: brochure, " + strings.Join(parts, ", ") + "}"
+}
+
+// homeBefore is a home as it was: its arrangement, and whether it was the
+// audience's own or borrowed from another home.
+type homeBefore struct {
+	Layout HomeLayout
+	Saved  bool
+}
+
+var _ aiplug.Undoable = HomeKind{}
+
+// Before keeps the audience's home as it is now, whatever the record is
+// about to do to it.
+func (k HomeKind) Before(ctx context.Context, campaignID string, _ Actor, r Record) (*aiplug.Snapshot, error) {
+	key, word, ok := audienceKey(r.Str("audience"))
+	if !ok || k.Svc == nil {
+		return nil, nil
+	}
+	l, saved, err := k.Svc.Home(ctx, campaignID, key)
+	if err != nil {
+		return nil, err
+	}
+	// A tile section is arranged only in Customize and is not kept here, so
+	// putting the rows back would lose it.
+	if l.Tiles {
+		return nil, nil
+	}
+	b, err := json.Marshal(homeBefore{Layout: l, Saved: saved})
+	if err != nil {
+		return nil, err
+	}
+	return &aiplug.Snapshot{Target: key, Name: word + " home", Data: string(b)}, nil
+}
+
+// Fingerprint is the audience's home now.
+func (k HomeKind) Fingerprint(ctx context.Context, campaignID string, a Actor, s aiplug.Snapshot) (string, error) {
+	l, saved, err := k.Svc.Home(ctx, campaignID, s.Target)
+	if err != nil {
+		return "", err
+	}
+	return aiplug.Hash(homeBefore{Layout: l, Saved: saved}), nil
+}
+
+// Restore saves the kept arrangement again, or gives the audience back the
+// home it borrowed.
+func (k HomeKind) Restore(ctx context.Context, campaignID string, _ Actor, s aiplug.Snapshot) error {
+	var b homeBefore
+	if err := json.Unmarshal([]byte(s.Data), &b); err != nil {
+		return err
+	}
+	if !b.Saved {
+		return k.Svc.Reset(ctx, campaignID, s.Target)
+	}
+	return k.Svc.Save(ctx, campaignID, s.Target, b.Layout)
 }
