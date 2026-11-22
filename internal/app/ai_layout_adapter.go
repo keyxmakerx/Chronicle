@@ -65,6 +65,11 @@ func (l aiLayoutAdapter) BlockTypes(ctx context.Context, campaignID string) []re
 	return out
 }
 
+func (l aiLayoutAdapter) ShowsSheet(blockType string) bool {
+	reg := entities.GetGlobalBlockRegistry()
+	return reg != nil && reg.ShowsSheet(blockType)
+}
+
 func (l aiLayoutAdapter) Check(ctx context.Context, campaignID string, _ int, layout entities.EntityTypeLayout) error {
 	reg := entities.GetGlobalBlockRegistry()
 	if reg == nil {

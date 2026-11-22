@@ -53,7 +53,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: "attributes", Label: "Attributes", Icon: "fa-list", Picture: PictureFacts,
+		Type: "attributes", Label: "Attributes", Icon: "fa-list", Picture: PictureFacts, ShowsSheet: true,
 		TileSizes: []string{"2x2", "2x1", "4x2"},
 		Description: "Custom field values",
 		Contexts:    []string{"template"},
@@ -62,7 +62,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: "character_surface", Label: "Character sheet", Icon: "fa-id-badge", Picture: PictureSheet,
+		Type: "character_surface", Label: "Character sheet", Icon: "fa-id-badge", Picture: PictureSheet, ShowsSheet: true,
 		Description: "Dynamic character sheet — expandable boxes built from the page's portrait, fields, and description. The default for player characters.",
 		Contexts:    []string{"template"},
 		Singleton:   true,
@@ -201,7 +201,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: BlockSystemPanels, Label: "Game system panels", Icon: "fa-dice-d20", Picture: PictureSheet,
+		Type: BlockSystemPanels, Label: "Game system panels", Icon: "fa-dice-d20", Picture: PictureSheet, ShowsSheet: true,
 		Description: "Panels the game system adds to NPC pages",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -209,7 +209,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: BlockGameSystemSheet, Label: "Game system sheet", Icon: "fa-scroll", Picture: PictureSheet,
+		Type: BlockGameSystemSheet, Label: "Game system sheet", Icon: "fa-scroll", Picture: PictureSheet, ShowsSheet: true,
 		Description: "The sheet your game system draws for this page, like a Draw Steel hero's",
 		Contexts:    []string{"template"},
 		Singleton:   true,

@@ -186,13 +186,18 @@ func (s *shopBuyService) describeBuyer(ctx context.Context, ref *EntityRef) Buye
 	return b
 }
 
+// MoneyKeyWealth is the money field key of a sheet that keeps Wealth, the one
+// the shop treats as a threshold. It is exported so callers that need the same
+// test do not repeat the literal.
+const MoneyKeyWealth = "wealth"
+
 // buyKind says how a character pays: Wealth is a threshold, several coin
 // fields are a purse, anything else is one number.
 func buyKind(ref *EntityRef) string {
 	switch {
 	case ref.MoneyKey == "":
 		return ""
-	case ref.MoneyKey == "wealth":
+	case ref.MoneyKey == MoneyKeyWealth:
 		return BuyKindWealth
 	case ref.MoneyKey == "gp" && len(ref.Purse) > 0:
 		return BuyKindPurse

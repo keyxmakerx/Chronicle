@@ -55,6 +55,10 @@ type BlockMeta struct {
 	// Group names the palette heading an entry goes under; empty lets the
 	// editor choose from the type.
 	Group string `json:"group,omitempty"`
+	// ShowsSheet marks a block that draws a page's own sheet or its fields
+	// (the attributes, a character sheet, the game system's panels). A
+	// layout without one of them leaves its pages with no sheet.
+	ShowsSheet bool `json:"shows_sheet,omitempty"`
 	// Picture names the small drawing of what the type puts on a page that
 	// the Customizer's widget list shows beside its name: one of
 	// PictureKinds. Empty draws PictureLines, as a package widget does.
@@ -238,6 +242,15 @@ func (r *BlockRegistry) IsSingleton(blockType string) bool {
 		return false
 	}
 	return entry.meta.Singleton
+}
+
+// ShowsSheet reports whether blockType is registered and draws a page's
+// sheet or its fields. Unknown types return false.
+func (r *BlockRegistry) ShowsSheet(blockType string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.entries[blockType]
+	return ok && entry.meta.ShowsSheet
 }
 
 // Types returns all registered block metadata in registration order.

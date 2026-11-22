@@ -134,6 +134,42 @@ type aiFieldNotes struct {
 	types    interface {
 		GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
 	}
+	// choices names the character fields that have a pick list. Nil leaves
+	// pick-list fields described as plain text.
+	choices interface {
+		CreatorPlan(ctx context.Context, campaignID string) (*systems.CreatorPlan, error)
+	}
+	// linked says whether a Foundry world syncs with the campaign. Nil is
+	// read as linked, the safe side: a value written here would be replaced.
+	linked func(ctx context.Context, campaignID string) bool
+}
+
+// pickListNote tells the AI that a field takes a name from the campaign's
+// pick list and how to read that list. The list itself stays out of the
+// brief: it can be long, and Directors add their own entries to it.
+func pickListNote(step systems.CreatorStep) string {
+	note := "A name from the campaign's `" + step.FieldKey + "` list: read it with the `system-entries` lookup (connector tool `system_entries`, field `" + step.FieldKey + "`) before writing a hero"
+	if step.Parent != "" {
+		note += "; it must belong to the chosen `" + step.Parent + "`"
+	}
+	return note
+}
+
+// pickLists is the character fields that have a pick list, by key.
+func (n aiFieldNotes) pickLists(ctx context.Context, campaignID string) map[string]systems.CreatorStep {
+	if n.choices == nil {
+		return nil
+	}
+	// The keys alone are used, so the Director's view is the whole set.
+	plan, err := n.choices.CreatorPlan(systems.WithChoiceViewer(ctx, true), campaignID)
+	if err != nil || plan == nil {
+		return nil
+	}
+	out := make(map[string]systems.CreatorStep, len(plan.Steps))
+	for _, st := range plan.Steps {
+		out[st.FieldKey] = st
+	}
+	return out
 }
 
 // foundryKeeps reports whether Foundry is where a character field's value
@@ -165,6 +201,14 @@ func (n aiFieldNotes) FieldNotes(ctx context.Context, campaignID string, t entit
 			if id != t.ID {
 				continue
 			}
+			var picks map[string]systems.CreatorStep
+			var foundry bool
+			if p.Category == presetCategoryCharacter {
+				picks = n.pickLists(ctx, campaignID)
+				// Where a campaign has no Foundry world the sheet lets a person
+				// edit these by hand, so the AI writes them like any other.
+				foundry = n.linked == nil || n.linked(ctx, campaignID)
+			}
 			// A category the system's sheet lives on can still carry the
 			// starting set's fields from another game (race, alignment), so
 			// those are named as not the system's own.
@@ -187,11 +231,17 @@ func (n aiFieldNotes) FieldNotes(ctx context.Context, campaignID string, t entit
 				// as a creature's current Stamina; a write here would be
 				// replaced at the next sync, or overwrite what the table tracks.
 				pulled := slices.Contains(p.FoundryPullFields, f.Key)
-				if (p.Category == presetCategoryCharacter && foundryKeeps(f)) || pulled {
+				kept := foundry && foundryKeeps(f)
+				if kept || pulled {
 					if note != "" {
 						note += ". "
 					}
 					note += "Foundry keeps this one: leave it out"
+				} else if st, ok := picks[f.Key]; ok {
+					if note != "" {
+						note += ". "
+					}
+					note += pickListNote(st)
 				}
 				if r := rangeNote(f); r != "" && !pulled {
 					if note != "" {

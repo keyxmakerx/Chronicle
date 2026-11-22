@@ -1142,6 +1142,14 @@ var eraFeelPresets = map[string][2]float64{
 	EraFeelLively: {1.7, 1.9},
 }
 
+// EraFeelNumbers is the intensity and speed a preset feel stands for, so a
+// caller that picks a feel by name stores the same numbers the era look
+// screen does; ok is false for "custom" and anything unknown.
+func EraFeelNumbers(feel string) (intensity, speed float64, ok bool) {
+	p, ok := eraFeelPresets[feel]
+	return p[0], p[1], ok
+}
+
 // isEraPresetFeel reports whether f names a preset feel (not "custom").
 func isEraPresetFeel(f string) bool {
 	_, ok := eraFeelPresets[f]

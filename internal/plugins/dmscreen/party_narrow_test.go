@@ -45,3 +45,27 @@ func TestHeroViews_Narrowed(t *testing.T) {
 		t.Errorf("unnarrowed view lost values: %+v", whole)
 	}
 }
+
+// The level is read from the same values as the meters: shown when the sheet
+// has one, empty when it has none or the narrower took it out.
+func TestHeroViews_Level(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]any
+		narrow FieldNarrower
+		want   string
+	}{
+		{"number", map[string]any{"level": float64(3)}, nil, "3"},
+		{"text", map[string]any{"level": " 5 "}, nil, "5"},
+		{"none", map[string]any{"class": "Fury"}, nil, ""},
+		{"narrowed away", map[string]any{"level": float64(3)}, func(Hero) map[string]any { return map[string]any{} }, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := heroViews(nil, []Hero{{ID: "h1", Fields: tc.fields}}, nil, tc.narrow)
+			if got[0].Level != tc.want {
+				t.Errorf("Level = %q, want %q", got[0].Level, tc.want)
+			}
+		})
+	}
+}

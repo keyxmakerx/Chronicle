@@ -24,6 +24,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -79,6 +80,8 @@ type aiDeps struct {
 	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
 	Layers          transformations.Service          // nil while the transformations plugin is degraded
 	Designs         records.DesignsAPI               // nil while the designs plugin is degraded
+	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
+	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
@@ -175,6 +178,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Plugged:  d.plugged(),
 		Kinds:    reg,
 		PageMaps: d.PageMaps,
+		Aliases:  d.Entities,
 		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
 		Tests:    d.Tests,
 		Monsters: d.Monsters,
@@ -212,6 +216,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.ShopLooks != nil {
 		l.Shops = d.ShopLooks
 	}
+	if pay, ok := d.Carried.(records.ShopPayAPI); ok {
+		l.Pay = pay
+	}
 	if cp, ok := d.Carried.(records.CopiesAPI); ok {
 		l.Copies = cp
 	}
@@ -221,6 +228,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 // plugged are the lookups features bring themselves, in the prompt's order.
 func (d *aiDeps) plugged() []aiplug.Lookup {
 	out := append(d.CalLookups.All(), d.Nights)
+	out = append(out, d.coverageLookups()...)
 	if d.Designs != nil {
 		out = append(out, records.DesignsLookup{Svc: d.Designs, Owners: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}})
 		if g, ok := d.Designs.(records.GalleryAPI); ok {
@@ -234,7 +242,7 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if svc := d.pageTemplates(); svc != nil {
 		templates.Templates = svc
 	}
-	out = append(out, templates)
+	out = append(out, templates, d.look())
 	if d.LayersAI != nil {
 		out = append(out, d.LayersAI)
 	}
@@ -280,7 +288,7 @@ func init() {
 			marks = ms
 		}
 		return []records.Kind{
-			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}, Marks: marks},
+			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}, Marks: marks, Tiers: d.Campaigns},
 			calendarai.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: aiCalendarPages{d.Entities}, Rolls: d.Rolls, Tables: d.Tables},
 			calendarai.WeatherKind{Svc: d.Calendar},
 		}
@@ -306,8 +314,9 @@ func init() {
 		return []records.Kind{d.Tables}
 	})
 	addAIKinds(70, func(d *aiDeps) []records.Kind {
+		pay, _ := d.Carried.(records.ShopPayAPI)
 		kinds := []records.Kind{
-			records.ShopStockKind(d.Entities, d.Relations),
+			records.ShopStockKind(d.Entities, d.Relations, pay),
 			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},

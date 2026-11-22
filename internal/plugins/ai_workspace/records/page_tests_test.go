@@ -165,3 +165,36 @@ func TestTestKind_ExportRoundTrips(t *testing.T) {
 		t.Fatal("a player's export lists tests")
 	}
 }
+
+// A test made without `results` gets the three defaults, and each needs an id
+// the Tests block accepts: the service refuses an empty one, and the fake
+// writer above would not notice, so the ids are checked here.
+func TestTestKind_DefaultResultsHaveValidIDs(t *testing.T) {
+	k, svc := testKindFixture()
+	bare := rec("test", ActionCreate, "Chase", map[string]any{"page": "The Sandstorm", "type": "Montage", "successes": 5, "failures": 3}, "")
+	if p := k.Plan(context.Background(), camp, owner, bare); p.Error != "" {
+		t.Fatalf("plan: %s", p.Error)
+	}
+	if err := k.Apply(context.Background(), camp, owner, bare); err != nil {
+		t.Fatal(err)
+	}
+	res := svc.created[0].Results
+	if len(res) != 3 {
+		t.Fatalf("default results: %+v", res)
+	}
+	seen := map[string]bool{}
+	for _, r := range res {
+		if r.ID == "" || seen[r.ID] || strings.Trim(r.ID, "abcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
+			t.Errorf("result %q has bad or repeated id %q", r.Label, r.ID)
+		}
+		seen[r.ID] = true
+	}
+	// A second create must not share state with the first.
+	res[0].Label = "changed"
+	if err := k.Apply(context.Background(), camp, owner, bare); err != nil {
+		t.Fatal(err)
+	}
+	if svc.created[1].Results[0].Label != "Success" {
+		t.Errorf("defaults were shared between creates: %+v", svc.created[1].Results)
+	}
+}

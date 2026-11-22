@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -463,5 +464,30 @@ func TestShopStock_UndoKeepsListingsWithRecords(t *testing.T) {
 		if id == 2 {
 			t.Error("a listing with a record was deleted")
 		}
+	}
+}
+
+// CheckStockPrice is the one rule for a stock price: the shop's own Keep and
+// the AI's plan both use it, so the boundary is pinned here.
+func TestCheckStockPrice(t *testing.T) {
+	tests := []struct {
+		name    string
+		price   float64
+		wantErr bool
+	}{
+		{"zero is left for the Director", 0, false},
+		{"one cent", 0.01, false},
+		{"largest charged price", 10_000_000, false},
+		{"just above it", 10_000_000.01, true},
+		{"negative", -0.01, true},
+		{"not a number", math.NaN(), true},
+		{"infinite", math.Inf(1), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := CheckStockPrice(tt.price); (err != nil) != tt.wantErr {
+				t.Fatalf("CheckStockPrice(%v) = %v, wantErr %v", tt.price, err, tt.wantErr)
+			}
+		})
 	}
 }

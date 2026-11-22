@@ -33,6 +33,12 @@ type TrackersAPI interface {
 	Pages(ctx context.Context, campaignID string, a Actor) ([]TrackerPageRef, error)
 	// HasBlock says whether a page's category layout shows the Trackers block.
 	HasBlock(ctx context.Context, campaignID, pageID string) (bool, error)
+	// SetSeen changes who sees one placed tracker. The service decides who
+	// may: it refuses anyone who is not a Director.
+	SetSeen(ctx context.Context, campaignID, trackerID string, a Actor, in TrackerSeen) error
+	// Members is everyone in the campaign, Directors marked, so a name can be
+	// matched to the person it means. Directors only.
+	Members(ctx context.Context, campaignID string, a Actor) ([]TrackerMember, error)
 }
 
 // Trackers' shapes, who sees them and the two ways a value changes, in the
@@ -43,6 +49,7 @@ const (
 	trackerClock  = "clock"
 	trackerHidden = "directors"
 	trackerShown  = "everyone"
+	trackerChosen = "players"
 	trackerAdd    = "add"
 	trackerSet    = "set"
 )
@@ -86,9 +93,12 @@ type TrackerPage struct{ Trackers []TrackerOnPage }
 // kind a category puts on every page that nobody has changed there yet.
 type TrackerOnPage struct {
 	ID, KindID, Name, Shape, Visibility string
-	Value                               int
-	Max                                 *int
-	Steps                               []TrackerStep
+	// Players is who a `players` tracker is shown to, filled for a Director's
+	// view only.
+	Players []TrackerPlayer
+	Value   int
+	Max     *int
+	Steps   []TrackerStep
 	// Now is what the value means: the step's or band's text.
 	Now string
 	// Log is the latest changes first.
@@ -101,6 +111,43 @@ type TrackerLogLine struct {
 	Amount     int
 	Note, When string
 	Struck     bool
+}
+
+// TrackerPlayer is a player a tracker is shown to; CanChange lets them change
+// its value too.
+type TrackerPlayer struct {
+	UserID, Name string
+	CanChange    bool
+}
+
+// TrackerSeen is who sees one placed tracker: Visibility is `directors`,
+// `everyone` or `players`, and Players is read only for the last.
+type TrackerSeen struct {
+	Visibility string
+	Players    []TrackerPlayer
+}
+
+// TrackerMember is a campaign member as a name can mean them: by display name,
+// by the character linked to them on the People page, or by a hero page they
+// have claimed (Heroes). Director marks someone who already sees every tracker
+// and so cannot be chosen.
+type TrackerMember struct {
+	UserID, Name, Character string
+	Heroes                  []string
+	Director                bool
+}
+
+// answersTo reports whether a name means this member, ignoring case.
+func (m TrackerMember) answersTo(name string) bool {
+	if sameName(m.Name, name) || (m.Character != "" && sameName(m.Character, name)) {
+		return true
+	}
+	for _, h := range m.Heroes {
+		if sameName(h, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // TrackerPlace puts a kind on a page.
@@ -130,8 +177,9 @@ func (TrackerKind) Name() string  { return "tracker" }
 func (TrackerKind) Label() string { return "Tracker" }
 func (TrackerKind) Doc() string {
 	return "A tracker (owner or co-DM only): a number, named steps or a clock kept on pages, with a dated log of every change. Matched by `name`. Keys: `shape` (`count`, the default; `steps`; or `clock`), `min` and `max` (a count's ends, either optional; a clock's `max` is its segments, 2 to 24), `steps` (2 to 20, in order, each `Name: what it means`), `bands` (a count's or clock's meanings from a value up, each `3: what it means`), `players_see` (false, the default, keeps it hidden from players: a secret counter; true shows it on the page), `every` (a category's name: the tracker is on every page of it), and `pages` (page names to put it on). " +
+		"To choose who sees it on a page, name the page with `page` (or `pages`) and add `shown_to`: `directors` (hidden), `everyone`, or a list of players, each by display name or by the name of their hero page, as `what: players` shows; the tracker is put on the page first if it isn't there, and a list is `shown_to: [Pat, Sam]` (a single name is a list of one). `may_change` lists the players from `shown_to` who may also change its value; the rest may only look. `players_see` is only the default for trackers put on pages later. `shown_to` and `may_change` are not undone by Undo. " +
 		"To change its value on one page, add `page` with `add` (a step up or down, such as 1 or -1) or `set` (the new value), and a `note` saying why; a page that doesn't have the tracker yet gets it. A new tracker (`action: create`) can instead take `start` with `page`: the number it begins at on that page, which must fit its `min` and `max`, its steps (0 is the first step) or its clock's segments; it is logged as a change, noted \"Starting value\" unless a `note` says otherwise, and can't be combined with `add` or `set`. On update a key you leave out keeps what is there and `pages` adds pages. A tracker kept by a Homebrew recipe is changed through its recipe, not here. Removing one is refused while it is still on pages. A tracker shows only on pages whose layout has a Trackers block. Read today's values with `what: trackers`.\n\n" +
-		"```\n---\nkind: tracker\nname: Counsel\nmin: 0\nmax: 5\nbands:\n  - \"0: Orrin has no counsel to give\"\n  - \"3: Orrin's advice comes unbidden\"\npages: [Orrin]\n---\n\n---\nkind: tracker\naction: update\nname: Counsel\npage: Orrin\nadd: 1\nnote: Counselled Saatraaol at the Lastwell gate\n---\n```"
+		"```\n---\nkind: tracker\nname: Counsel\nmin: 0\nmax: 5\nbands:\n  - \"0: Orrin has no counsel to give\"\n  - \"3: Orrin's advice comes unbidden\"\npages: [Orrin]\n---\n\n---\nkind: tracker\naction: update\nname: Counsel\npage: Orrin\nadd: 1\nnote: Counselled Saatraaol at the Lastwell gate\n---\n\n---\nkind: tracker\naction: update\nname: Hunger\npage: Sivin\nshown_to: [Sivin]\n---\n```"
 }
 
 // Title is the row's heading: "Counsel", or "Counsel on Orrin" for a change.
@@ -162,6 +210,11 @@ type trackerDraft struct {
 	// start is true when log is a new tracker's first value (`start:`) rather
 	// than a later `set`, which only changes how the plan words it.
 	start bool
+	// seen is who `shown_to` and `may_change` ask to see the tracker on
+	// seenPages (and seenMissing, pages this paste makes).
+	seen        *trackerSeen
+	seenPages   []*entities.Entity
+	seenMissing []string
 }
 
 func (k TrackerKind) page(ctx context.Context, campaignID, name string) *entities.Entity {
@@ -328,6 +381,15 @@ func (k TrackerKind) read(ctx context.Context, campaignID string, a Actor, r Rec
 		}
 	}
 
+	if r.Has("shown_to") || r.Has("may_change") {
+		if err := k.readSeen(ctx, campaignID, a, r, &d); err != nil {
+			return d, err
+		}
+		if err := k.seenTargets(ctx, campaignID, r, &d); err != nil {
+			return d, err
+		}
+	}
+
 	_, hasAdd := r.Fields["add"]
 	_, hasSet := r.Fields["set"]
 	if r.Has("start") {
@@ -355,7 +417,7 @@ func (k TrackerKind) read(ctx context.Context, campaignID string, a Actor, r Rec
 			return d, apperror.NewBadRequest("`add` must move the value: 1, -1 or more")
 		}
 		d.log = &TrackerChange{Op: op, Amount: n, Note: r.Str("note")}
-	} else if r.Has("page") {
+	} else if r.Has("page") && d.seen == nil {
 		return d, apperror.NewBadRequest("to change a value on `page`, add `add` or `set`; to put the tracker on pages, use `pages`")
 	}
 	return d, nil
@@ -462,7 +524,7 @@ func (k TrackerKind) Plan(ctx context.Context, campaignID string, a Actor, r Rec
 	if err != nil {
 		return Plan{Error: planError(err)}
 	}
-	needed := append([]string(nil), d.missing...)
+	needed := append(append([]string(nil), d.missing...), d.seenMissing...)
 	if d.log != nil && d.logPage == nil {
 		needed = append(needed, d.logName)
 	}
@@ -520,8 +582,11 @@ func (k TrackerKind) Plan(ctx context.Context, campaignID string, a Actor, r Rec
 		}
 		parts = append(parts, line)
 	}
+	if d.seen != nil {
+		parts = append(parts, k.seenPart(ctx, campaignID, a, d))
+	}
 	if len(parts) == 0 {
-		return Plan{Error: "say what to change: the tracker's settings, `pages`, or `page` with `add` or `set`"}
+		return Plan{Error: "say what to change: the tracker's settings, `pages`, `shown_to`, or `page` with `add` or `set`"}
 	}
 	p := Plan{Summary: strings.Join(parts, "; ")}
 	for _, pg := range append(append([]*entities.Entity(nil), d.places...), d.logPage) {
@@ -578,7 +643,19 @@ func (k TrackerKind) Apply(ctx context.Context, campaignID string, a Actor, r Re
 		kind = d.existing
 	}
 	for _, pg := range d.places {
-		if _, err := k.placed(ctx, campaignID, pg.ID, a, kind); err != nil {
+		if _, err := k.placed(ctx, campaignID, pg.ID, a, kind, "", false); err != nil {
+			return err
+		}
+	}
+	if d.seen != nil {
+		for _, m := range d.seenMissing {
+			p := k.page(ctx, campaignID, m)
+			if p == nil {
+				return badRequestf("no page called %s", quote(m))
+			}
+			d.seenPages = append(d.seenPages, p)
+		}
+		if err := k.applySeen(ctx, campaignID, a, d, kind); err != nil {
 			return err
 		}
 	}
@@ -586,7 +663,7 @@ func (k TrackerKind) Apply(ctx context.Context, campaignID string, a Actor, r Re
 		return nil
 	}
 	in := *d.log
-	tv, err := k.placed(ctx, campaignID, d.logPage.ID, a, kind)
+	tv, err := k.placed(ctx, campaignID, d.logPage.ID, a, kind, "", false)
 	if err != nil {
 		return err
 	}
@@ -599,9 +676,10 @@ func (k TrackerKind) Apply(ctx context.Context, campaignID string, a Actor, r Re
 }
 
 // placed is the page's tracker of kind, put on the page first when it has
-// none. A kind on every page of the page's category answers its virtual
-// tracker (no id), whose first change creates it.
-func (k TrackerKind) placed(ctx context.Context, campaignID, pageID string, a Actor, kind *TrackerSetup) (TrackerOnPage, error) {
+// none, with vis when given instead of the kind's default. A kind on every
+// page of the page's category answers its virtual tracker (no id), whose first
+// change creates it; real makes it a row now, for a caller that must patch it.
+func (k TrackerKind) placed(ctx context.Context, campaignID, pageID string, a Actor, kind *TrackerSetup, vis string, real bool) (TrackerOnPage, error) {
 	find := func() (TrackerOnPage, bool, error) {
 		pv, err := k.Svc.Page(ctx, campaignID, pageID, a)
 		if err != nil {
@@ -614,10 +692,13 @@ func (k TrackerKind) placed(ctx context.Context, campaignID, pageID string, a Ac
 		}
 		return TrackerOnPage{}, false, nil
 	}
-	if t, ok, err := find(); err != nil || ok {
+	if t, ok, err := find(); err != nil || (ok && (t.ID != "" || !real)) {
 		return t, err
 	}
-	if err := k.Svc.Place(ctx, campaignID, pageID, a, TrackerPlace{KindID: kind.ID, Visibility: kind.Visibility}); err != nil {
+	if vis == "" {
+		vis = kind.Visibility
+	}
+	if err := k.Svc.Place(ctx, campaignID, pageID, a, TrackerPlace{KindID: kind.ID, Visibility: vis}); err != nil {
 		return TrackerOnPage{}, err
 	}
 	t, ok, err := find()
@@ -636,7 +717,7 @@ func (k TrackerKind) Export(ctx context.Context, campaignID string, a Actor) (st
 	if err != nil {
 		return "", err
 	}
-	onPages, err := trackerPages(ctx, k.Svc, campaignID, a)
+	onPages, placements, err := trackerPages(ctx, k.Svc, campaignID, a)
 	if err != nil {
 		return "", err
 	}
@@ -650,32 +731,47 @@ func (k TrackerKind) Export(ctx context.Context, campaignID string, a Actor) (st
 			continue
 		}
 		b.WriteString(trackerBlock(kd, typeName[kd.EveryTypeID], onPages[kd.ID]))
+		for _, pl := range placements[kd.ID] {
+			b.WriteString(seenBlock(kd.Name, pl.page, pl.t))
+		}
 	}
 	return b.String(), nil
 }
 
-// trackerPages maps each kind to the names of the pages it was placed on.
-func trackerPages(ctx context.Context, svc TrackersAPI, campaignID string, a Actor) (map[string][]string, error) {
+// trackerPlacement is one tracker on a named page.
+type trackerPlacement struct {
+	page string
+	t    TrackerOnPage
+}
+
+// trackerPages maps each kind to the names of the pages it was placed on, and
+// to those placements in the same order, for who sees each.
+func trackerPages(ctx context.Context, svc TrackersAPI, campaignID string, a Actor) (map[string][]string, map[string][]trackerPlacement, error) {
 	pages, err := svc.Pages(ctx, campaignID, a)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := map[string][]string{}
+	placed := map[string][]trackerPlacement{}
 	for _, pg := range pages {
 		pv, err := svc.Page(ctx, campaignID, pg.ID, a)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, t := range pv.Trackers {
 			if t.ID != "" {
 				out[t.KindID] = append(out[t.KindID], pg.Name)
+				placed[t.KindID] = append(placed[t.KindID], trackerPlacement{pg.Name, t})
 			}
 		}
 	}
 	for _, names := range out {
 		sort.Strings(names)
 	}
-	return out, nil
+	for _, pls := range placed {
+		sort.Slice(pls, func(i, j int) bool { return pls[i].page < pls[j].page })
+	}
+	return out, placed, nil
 }
 
 func trackerBlock(kd TrackerSetup, every string, pages []string) string {
@@ -751,9 +847,7 @@ func (run *lookupRun) trackersLookup(page string) (LookupAnswer, error) {
 			if t.Now != "" {
 				line += " (" + t.Now + ")"
 			}
-			if t.Visibility != trackerShown {
-				line += "; hidden from players"
-			}
+			line += "; who sees it: " + seenLine(t)
 			lines = append(lines, line)
 			for i, e := range t.Log {
 				if i >= trackerLogShown {
@@ -775,7 +869,7 @@ func (run *lookupRun) trackersLookup(page string) (LookupAnswer, error) {
 	}
 	ans.Chip = fmt.Sprintf("Trackers · %d", count)
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Trackers (%d)\n\nChange one with a `kind: tracker` block: `page`, then `add` or `set`, and a `note`. A tracker a category puts on every page shows here once it has been changed.\n\n", count)
+	fmt.Fprintf(&b, "## Trackers (%d)\n\nChange one with a `kind: tracker` block: `page`, then `add` or `set`, and a `note`; change who sees one with `shown_to` and `page`. A tracker a category puts on every page shows here once it has been changed.\n\n", count)
 	if len(lines) == 0 {
 		b.WriteString("None yet.\n")
 	}
@@ -823,7 +917,13 @@ func (k TrackerKind) Before(ctx context.Context, campaignID string, a Actor, r R
 	if err != nil {
 		return nil, err
 	}
-	return &aiplug.Snapshot{Target: d.existing.ID, Name: d.existing.Name, Data: string(b)}, nil
+	name := d.existing.Name
+	if d.seen != nil {
+		// Undo puts the kind's settings back and cannot put an audience back;
+		// the name is what the undo screen tells the owner it restores.
+		name += " (its settings, not who sees it)"
+	}
+	return &aiplug.Snapshot{Target: d.existing.ID, Name: name, Data: string(b)}, nil
 }
 
 func (k TrackerKind) current(ctx context.Context, campaignID string, a Actor, id string) (*TrackerSetup, error) {

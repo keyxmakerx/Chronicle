@@ -220,6 +220,9 @@ type CalendarKind struct {
 	// Marks switches a moon between its cycle and the Director's hand, for a
 	// moon's `moves:`. Without it a block that names `moves` is refused.
 	Marks calendar.MoonMarkService
+	// Tiers reads and replaces the campaign's event importance levels, for
+	// `tiers:`. Without it a block that names `tiers` is refused.
+	Tiers TierLister
 }
 
 func (CalendarKind) Name() string  { return KindCalendar }
@@ -229,7 +232,7 @@ func (CalendarKind) Doc() string {
 		"- `name`; on update, `rename_to` renames it.\n" +
 		"- `main: true` (update only): makes the calendar called `name` the main one, for a campaign whose calendars have none set, or to switch to another of its calendars. The block's other keys then change that calendar.\n" +
 		"- `year_label`: what follows the year, e.g. DR.\n" +
-		"- `current_year`, `current_month` (number or name), `current_day`: today's date. Needed on create.\n" +
+		"- `current_year`, `current_month` (number or name), `current_day`: today's date. All three are needed on create; on update any part left out keeps today's value (`current_day: 5` alone moves to day 5 of the present month and year).\n" +
 		"- `months`: a list of `name`, `days`, optional `season`, `intercalary` (true for festival days outside the weeks), `leap_days`. Needed on create.\n" +
 		"- `weekdays`: a list of names, or of `name` with `rest_day: true`. Needed on create.\n" +
 		"- `seasons`: a list of `name`, `start_month`, `start_day`, `end_month`, `end_day`, `color`. Without it, seasons are made from the months' `season`.\n" +
@@ -237,6 +240,11 @@ func (CalendarKind) Doc() string {
 		"- `sun`: the kind of star the sun is, `red` (a red ember), `orange`, `yellow` (the usual sun), `white` or `blue` (blue-white); its daylight and sky follow. Or a map of `kind` and `color` (an exact colour that overrides the kind's; `none` clears it).\n" +
 		"- `eras`: a list of `name`, `start_year` (optional `start_month`, `start_day`), optional `end_year`/`end_month`/`end_day`, `color`, `description`, and optionally `page` (the name of a page that tells of the era; `none` clears it, leaving it out keeps it).\n" +
 		"- `leap_year_every`: years between leap years (0 for none).\n" +
+		"- `hemisphere` (update only): `north`, `south` or `none` (clears it); which way the sky and a real-world calendar's seasons run.\n" +
+		"- `forecasts` (update only): true shows players a weather forecast of the days ahead, false hides it.\n" +
+		"- `month_starts_new_week` (update only, not for a real-world calendar): true makes day 1 of every month the first weekday, with festival days outside any week.\n" +
+		"- `era_look` (update only): how eras are tinted behind the month, as a map of `colors_on` (true/false), `feel` (`still`, `subtle`, `lively` or `custom`), `intensity` (0.5 to 3) and `speed` (0 to 2.5); keys left out keep what is there, and a feel sets intensity and speed itself.\n" +
+		"- `tiers` (update only, owner only): the campaign's whole list of event importance levels, as entries of `slug` (lowercase letters, digits, - or _), `name`, `color` (#RRGGBB), `prominence` (0 to 100, how large events of that level draw) and `default: true` on exactly one. It replaces the whole list, and events keep the level they have. Ask `what: calendar` for the current list and send it back with your changes.\n" +
 		"The body is the calendar's description. On update, a `months`, `weekdays`, `seasons` or `moons` list replaces the whole list (events follow a month that keeps its name), and a key left out keeps what is there. Moons and eras are matched by name, and a key left out keeps what is there; a moon hidden from players is never removed here. Eras not listed are kept. An end with only `end_year` runs to the end of that year.\n\n" +
 		"```\n---\nkind: calendar\nname: Calendar of Harptos\nyear_label: DR\ncurrent_year: 1492\ncurrent_month: Hammer\ncurrent_day: 1\nmonths:\n  - {name: Hammer, days: 30, season: Winter}\n  - {name: Midwinter, days: 1, intercalary: true, season: Winter}\n  - {name: Alturiak, days: 30, season: Winter}\nweekdays: [First-day, Second-day, Third-day]\nmoons:\n  - {name: Selune, cycle: 30.4375, phase_offset: 0, color: \"#e8e8f0\", strength: 0.6}\nsun: yellow\neras:\n  - {name: Dalereckoning, start_year: 1, page: The Dalereckoning}\n---\n```"
 }
@@ -257,6 +265,7 @@ type calSpec struct {
 	yearLabel *string
 	next      *calendar.Calendar // the calendar as it will be, for dates
 	today     *calDate
+	opts      calOptions
 	warnings  []string
 }
 
@@ -537,12 +546,30 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 		s.sun = sun
 	}
 
-	y, m, d, dated, err := readDate(next, r, "current_")
+	dateRec := r
+	if base != nil && (r.Has("current_year") || r.Has("current_month") || r.Has("current_day")) {
+		// A part of the date left out keeps today's value, so the result is
+		// judged as a whole date against the months it will have.
+		f := make(map[string]any, len(r.Fields)+3)
+		for k, v := range r.Fields {
+			f[k] = v
+		}
+		for k, v := range map[string]int{"current_year": base.CurrentYear, "current_month": base.CurrentMonth, "current_day": base.CurrentDay} {
+			if !r.Has(k) {
+				f[k] = v
+			}
+		}
+		dateRec = Record{Fields: f}
+	}
+	y, m, d, dated, err := readDate(next, dateRec, "current_")
 	if err != nil {
 		return nil, err
 	}
 	if dated {
 		s.today = &calDate{y, m, d}
+	}
+	if s.opts, err = readCalOptions(r); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -708,6 +735,7 @@ func (k CalendarKind) existing(ctx context.Context, campaignID string, a Actor) 
 
 func (k CalendarKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
 	p, _ := k.plan(ctx, campaignID, a, r)
+	p.Warnings = append(p.Warnings, unknownKeyWarnings(r, calendarKeys, KindCalendar)...)
 	return p
 }
 
@@ -794,6 +822,9 @@ func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor
 	}
 	if err := k.checkMoves(s); err != nil {
 		return Plan{Error: planError(err)}, nil
+	}
+	if s.opts.tiers != nil || s.opts.needsCalendarUpdate() || s.opts.eraLook != nil {
+		return Plan{Error: "tiers, hemisphere, forecasts, month_starts_new_week and era_look only apply to action: update; make the calendar first, then change them in a second block"}, nil
 	}
 	switch {
 	case s.months == nil:
@@ -1067,6 +1098,14 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor
 			did = append(did, "changes "+plural(changed, "era", "eras"))
 		}
 	}
+	if err := k.checkTiers(a, s.opts); err != nil {
+		return Plan{Error: planError(err)}
+	}
+	opts, err := s.opts.changes(cal, k.currentTiers(ctx, campaignID))
+	if err != nil {
+		return Plan{Error: planError(err)}
+	}
+	did = append(did, opts...)
 	if len(did) == 0 {
 		return Plan{Error: "this block changes nothing; give the keys to change"}
 	}
@@ -1214,6 +1253,10 @@ func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, a Acto
 	}
 	in := calendar.UpdateCalendarInput{Name: cal.Name}
 	changed := false
+	if s.opts.needsCalendarUpdate() {
+		s.opts.toUpdate(&in)
+		changed = true
+	}
 	if to := r.Str("rename_to"); to != "" {
 		in.Name, changed = to, true
 	}
@@ -1232,6 +1275,9 @@ func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, a Acto
 		if err := k.Svc.SetCurrentDate(ctx, cal.ID, campaignID, s.today.Y, s.today.M, s.today.D, cal.CurrentHour, cal.CurrentMinute); err != nil {
 			return err
 		}
+	}
+	if err := k.applyOptions(ctx, campaignID, s, cal); err != nil {
+		return err
 	}
 	for _, e := range s.eras {
 		old := findEra(cal, e.in.Name)
@@ -1323,6 +1369,13 @@ func (k CalendarKind) Export(ctx context.Context, campaignID string, a Actor) (s
 		}
 	}
 	b.WriteString(sunLine(cal.Sun))
+	b.WriteString(optionLines(cal))
+	if a.CanAuthorDmOnly() {
+		// Importance levels are the Director's to see, as in the lookup.
+		if defs := k.currentTiers(ctx, campaignID); len(defs) > 0 {
+			b.WriteString(tiersBlock(defs))
+		}
+	}
 	if len(cal.Moons) > 0 {
 		b.WriteString("moons:\n")
 		for _, m := range cal.Moons {
