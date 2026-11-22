@@ -1290,7 +1290,7 @@
    Name and reading share a row and wrap under each other on a phone; no motion of its own. */
 .cal-v5 .wxplist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
 .cal-v5 .wxp{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:7px 10px;border-radius:8px;font:500 12px/1.35 var(--sans);color:var(--ink2);min-width:0}
-.cal-v5 .wxp.here{background:var(--paper2);box-shadow:inset 2px 0 0 var(--ink)}
+.cal-v5 .wxp.party{background:var(--paper2);box-shadow:inset 2px 0 0 var(--ink)}
 .cal-v5 .wxpn{display:flex;flex-direction:column;min-width:0}
 .cal-v5 .wxpn b{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
 .cal-v5 .wxpn small{font-size:11px;color:var(--mut)}

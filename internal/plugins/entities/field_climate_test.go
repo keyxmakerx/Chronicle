@@ -289,6 +289,9 @@ func TestClimateShown(t *testing.T) {
 			if got.Text != "Cold coast" || c.Own != tt.own || c.Covers != tt.covers || c.From != tt.wantFrom {
 				t.Fatalf("shown %+v %+v", got, c)
 			}
+			if c.Covers != (c.Here == "Saltreach") {
+				t.Errorf("covers %v names %q", c.Covers, c.Here)
+			}
 			if (c.FromHref != "") != (tt.wantFrom != "") {
 				t.Errorf("link %q with name %q", c.FromHref, c.From)
 			}

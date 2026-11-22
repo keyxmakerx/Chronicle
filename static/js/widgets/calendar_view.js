@@ -895,7 +895,7 @@
     var reading = w ? '<span class="wxpr"><i class="fa-solid ' + weatherIcon(w) + '"' + weatherStyle(w) + ' aria-hidden="true"></i>' +
       esc(weatherLabel(w)) + (w.temperature_celsius != null ? ' · ' + esc(String(w.temperature_celsius)) + '°' : '') + '</span>'
       : '<span class="wxpr none">No weather yet</span>';
-    return '<li class="wxp' + (r.here ? ' here' : '') + '"><span class="wxpn"><b>' + esc(r.name) + '</b><small>' + esc(r.climate) +
+    return '<li class="wxp' + (r.here ? ' party' : '') + '"><span class="wxpn"><b>' + esc(r.name) + '</b><small>' + esc(r.climate) +
       (r.here ? ' · <span class="wxph">the party is here</span>' : '') + '</small></span>' + reading + '</li>';
   }
 
@@ -6568,7 +6568,7 @@
       if (placeRows.length) reading = partyRowReading(placeRows);
       var weatherFact = isForecast ? forecastFactHTML(fc) : weatherFactHTML(reading, isFuture) + (this.canAuthorDmOnly && fc ? playersSeeHTML(fc) : '');
       if (!this.canAuthorDmOnly && reading && reading.place && !isForecast) {
-        weatherFact += '<div class="row wxf wxat"><span class="tt"><small>' + esc('Where the party is: ' + reading.place) + '</small></span></div>';
+        weatherFact += '<div class="row wxf wxat"><span class="tt"><small>' + esc('The party is in ' + reading.place) + '</small></span></div>';
       }
       var dmMoons = this.canAuthorDmOnly;
       var moonRows = (cal.moons || []).map(function (mo) {

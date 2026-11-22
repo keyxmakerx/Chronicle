@@ -56,8 +56,10 @@ type ClimateShown struct {
 	From     string        `json:"from,omitempty"`
 	FromHref string        `json:"fromHref,omitempty"`
 	Today    *ClimateToday `json:"today,omitempty"`
-	// Covers says pages under this one follow its climate.
-	Covers bool `json:"covers,omitempty"`
+	// Covers says pages under this one follow its climate; Here is this
+	// page's name for that line.
+	Covers bool   `json:"covers,omitempty"`
+	Here   string `json:"here,omitempty"`
 }
 
 // SetFieldClimate wires the calendar's climates into the fields API.
@@ -267,7 +269,7 @@ func (h *Handler) climateShown(ctx context.Context, campaignID string, entity *E
 			cs.FromHref = fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, region.ID)
 		}
 	} else if kids, err := h.service.GetChildren(ctx, entity.ID, role, userID); err == nil && len(kids) > 0 {
-		cs.Covers = true
+		cs.Covers, cs.Here = true, entity.Name
 	}
 	if h.fieldClimate != nil {
 		cs.Today = h.fieldClimate.Today(ctx, campaignID, region.ID, role, userID)

@@ -481,7 +481,7 @@ Chronicle.register('attributes', {
         group.appendChild(t);
       }
       if (c.own && c.covers) {
-        group.appendChild(factRow('Places here', 'Use this climate unless they set their own'));
+        group.appendChild(factRow('Places here', 'Use ' + (c.here ? c.here + '’s' : 'this') + ' climate unless they set their own'));
       }
     }
 
