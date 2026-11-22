@@ -86,6 +86,17 @@ test('a needed step on a phone has no Skip; an optional one does', { skip }, asy
   assert.equal(await pg.locator('.hc-under [data-act="skip"]').count(), 1);
 });
 
+test('on a phone, the chip of a step the class does not use reads Not used', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390 });
+  await pg.evaluate(() => document.querySelector('[data-widget="hero-creator"]')._heroCreator.goStep(1, 'fwd'));
+  await pg.locator('.hc-card', { hasText: 'Conduit' }).click();
+  await pg.click('.hc-sfoot [data-act="choose"]');
+  await pg.evaluate(() => document.querySelector('[data-widget="hero-creator"]')._heroCreator.goStep(3, 'fwd'));
+  const chips = await pg.locator('.hc-chip').allInnerTexts();
+  assert.ok(chips.some((c) => /kit\s*not used/i.test(c)), chips.join(' | '));
+  assert.ok(!chips.some((c) => /kit\s*choosing/i.test(c)), 'an unused step is not being chosen');
+});
+
 test('a dependent step offers only the picked parent\'s entries and asks for the parent first', { skip }, async (t) => {
   const { pg } = await open(t);
   await rail(pg, 'subclass').click();
@@ -127,8 +138,7 @@ test('a count of 0 reads Not used with its note, is skipped, and is never sent',
   await rail(pg, 'kit').click();
   assert.match(await text(pg, '.hc-intro'), /not used/i);
   const empty = await text(pg, '.hc-empty');
-  assert.match(empty, /A Conduit doesn.t use a kit\./);
-  assert.match(empty, /Conduits choose a prayer and a ward instead\./);
+  assert.equal(empty.trim(), 'Conduits choose a prayer and a ward instead.', "the system's note stands alone, not after a lead-in saying the same");
   // Picking the subclass moves on past the unused kit.
   await rail(pg, 'subclass').click();
   await pick(pg, 'Light');

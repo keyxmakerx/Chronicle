@@ -594,11 +594,13 @@
     return a.known && a.count === 0 ? 'unused' : 'open';
   };
   Creator.prototype.unused = function (st) { return this.stepState(st) === 'unused'; };
-  // The plain sentence for a step the picked entries do not use.
+  // The plain sentence for a step the picked entries do not use. A system's
+  // own note already says so in its words, so it stands alone when given.
   Creator.prototype.unusedLine = function (st) {
-    var a = this.allowance(st), by = a.known && a.count === 0 ? a.by : (this.picks[st.parent] && this.picks[st.parent].name) || '';
-    var line = by ? cap(an(by)) + ' ' + by + ' doesn\u2019t use ' + an(st.label) + ' ' + lower(st.label) + '.' : cap(st.label) + ' isn\u2019t used here.';
-    return line + (a.known && a.count === 0 && a.note ? ' ' + a.note : '');
+    var a = this.allowance(st);
+    if (a.known && a.count === 0 && a.note) return a.note;
+    var by = a.known && a.count === 0 ? a.by : (this.picks[st.parent] && this.picks[st.parent].name) || '';
+    return by ? cap(an(by)) + ' ' + by + ' doesn\u2019t use ' + an(st.label) + ' ' + lower(st.label) + '.' : cap(st.label) + ' isn\u2019t used here.';
   };
   // Takes off every pick that no longer fits what is picked at its parent or
   // what its parent allows, until nothing more changes; returns the labels.
@@ -855,7 +857,7 @@
       var on = (cur ? ' is-cur' : '') + (ask ? ' is-ask' : '');
       if (p) h += '<li><button type="button" class="hc-chip' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + esc(p) + '</b></button></li>';
       else if (self.skipped[st.fieldKey]) h += '<li><button type="button" class="hc-chip' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>None</b></button></li>';
-      else h += '<li><button type="button" class="hc-chip is-slot' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + (cur ? 'Choosing…' : 'Not yet') + '</b></button></li>';
+      else h += '<li><button type="button" class="hc-chip is-slot' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + (self.unused(st) ? 'Not used' : cur ? 'Choosing…' : 'Not yet') + '</b></button></li>';
     });
     return h;
   };
