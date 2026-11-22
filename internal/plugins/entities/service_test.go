@@ -215,6 +215,7 @@ type mockEntityRepo struct {
 	updateFieldsFn     func(ctx context.Context, id string, fieldsData map[string]any, searchText string) error
 	deleteFn           func(ctx context.Context, id string) error
 	slugExistsFn       func(ctx context.Context, campaignID, slug string) (bool, error)
+	listSuffixedFn     func(ctx context.Context, campaignID, base string) ([]Entity, error)
 	listByCampaignFn   func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 	searchFn           func(ctx context.Context, campaignID, query string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 	countByTypeFn      func(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
@@ -330,6 +331,13 @@ func (m *mockEntityRepo) Delete(ctx context.Context, id string) error {
 		return m.deleteFn(ctx, id)
 	}
 	return nil
+}
+
+func (m *mockEntityRepo) ListSuffixedSlugs(ctx context.Context, campaignID, base string) ([]Entity, error) {
+	if m.listSuffixedFn != nil {
+		return m.listSuffixedFn(ctx, campaignID, base)
+	}
+	return nil, nil
 }
 
 func (m *mockEntityRepo) SlugExists(ctx context.Context, campaignID, slug string) (bool, error) {
