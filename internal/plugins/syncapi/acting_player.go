@@ -55,9 +55,10 @@ func heldKeysList(held map[string]string) []heldKey {
 // refused outright, since the GM's key must not be a way to write a page the
 // player could not.
 //
-// The verdict's changes are the picks the write changes while the hero's
-// picks are open, and raised the level the player gives their own hero, both
-// for the Directors' bell once the write is stored. Staff and the plain sync
+// The verdict's changes are what the write changes that rings the bell (a
+// pick only while the hero's picks are open; a list, story or identity text
+// always), and raised the level the player gives their own hero, both for the
+// Directors' bell once the write is stored. Staff and the plain sync
 // get neither, so their writes ring nothing.
 func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Entity, actingUserID string, patch map[string]any) (actingVerdict, error) {
 	var v actingVerdict
@@ -95,6 +96,19 @@ func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Ent
 			return v, err
 		}
 	}
+	// The bell names a field by its label and never one the type marks
+	// GM-only; a type that can't be read must not turn into "nothing is".
+	et, err := h.entitySvc.GetEntityTypeByID(ctx, entity.EntityTypeID)
+	if err != nil {
+		return v, err
+	}
+	if et == nil {
+		return v, apperror.NewNotFound("entity type not found")
+	}
+	typeFields := append([]entities.FieldDefinition{}, et.Fields...)
+	if entity.FieldOverrides != nil {
+		typeFields = append(typeFields, entity.FieldOverrides.Added...)
+	}
 	held := entities.PlayerPicksHeld(entity, patch, plan)
 	if held == nil {
 		held = map[string]string{}
@@ -105,7 +119,7 @@ func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Ent
 			rest[k] = val
 		}
 	}
-	locked, changes, err := h.heroChanges.HeldPicks(ctx, entity, rest, plan)
+	locked, changes, err := h.heroChanges.HeldPicks(ctx, entity, rest, plan, typeFields)
 	if err != nil {
 		return v, err
 	}

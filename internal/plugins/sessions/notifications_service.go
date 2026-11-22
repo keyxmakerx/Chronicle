@@ -23,6 +23,10 @@ type notificationPayload struct {
 	// Action is an optional label for the row's link, shown under the detail
 	// ("Give Brannoc to someone").
 	Action string `json:"action,omitempty"`
+	// State is opaque text the writer of a folded row keeps with it, so its
+	// next write can fold into this one without parsing the words above. It is
+	// never shown or served: the bell list reads only the fields above.
+	State string `json:"state,omitempty"`
 }
 
 // marshalPayload builds the JSON payload string for a notification.
@@ -43,6 +47,85 @@ func marshalPayloadAction(message, kind, detail, action string) *string {
 	}
 	s := string(b)
 	return &s
+}
+
+// marshalPayloadState is marshalPayloadAction with the writer's kept state.
+func marshalPayloadState(message, kind, detail, state string) *string {
+	b, err := json.Marshal(notificationPayload{Message: message, Kind: kind, Detail: detail, State: state})
+	if err != nil {
+		return nil
+	}
+	s := string(b)
+	return &s
+}
+
+// foldAttempts bounds the retries when a recipient's row changes under a fold.
+const foldAttempts = 3
+
+// FoldUnreadNotification keeps one unread row of ntype and link per
+// recipient, however often it is written: when the recipient already has an
+// unread row, fold gets the state that row kept and its answer rewrites the
+// row (and moves it to the newest); otherwise fold gets "" and its answer is
+// a new row. Once the recipient has read the row, the next write starts a
+// fresh one. fold returns the message, the second line and the state to keep,
+// and is called once per recipient, so each keeps their own.
+//
+// The store knows nothing of what is folded: a feature outside the scheduler
+// owns the meaning of the state, as it owns its type constant.
+func (s *sessionService) FoldUnreadNotification(ctx context.Context, userIDs []string, campaignID, ntype, link string, fold func(kept string) (message, detail, state string)) error {
+	if ntype == "" || link == "" {
+		return apperror.NewValidation("notification type and link are required")
+	}
+	for _, uid := range s.bellRecipients(ctx, userIDs, ntype) {
+		if uid == "" {
+			continue
+		}
+		if err := s.foldFor(ctx, uid, campaignID, ntype, link, fold); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *sessionService) foldFor(ctx context.Context, uid, campaignID, ntype, link string, fold func(string) (string, string, string)) error {
+	for range foldAttempts {
+		cur, err := s.repo.FindUnreadNotification(ctx, uid, ntype, link)
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("finding unread notification: %w", err))
+		}
+		if cur == nil {
+			break
+		}
+		var kept notificationPayload
+		if cur.Payload != nil {
+			// A row whose payload can't be read starts over rather than
+			// failing the writer's save.
+			_ = json.Unmarshal([]byte(*cur.Payload), &kept)
+		}
+		message, detail, state := fold(kept.State)
+		ok, err := s.repo.RewriteUnreadNotification(ctx, cur.ID, cur.Payload, marshalPayloadState(message, ntype, detail, state), time.Now().UTC())
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("folding notification: %w", err))
+		}
+		if ok {
+			return nil
+		}
+	}
+	message, detail, state := fold("")
+	cid, l := campaignID, link
+	n := &Notification{
+		ID:         generateUUID(),
+		UserID:     uid,
+		CampaignID: &cid,
+		Type:       ntype,
+		Payload:    marshalPayloadState(message, ntype, detail, state),
+		Link:       &l,
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := s.repo.CreateNotification(ctx, n); err != nil {
+		return apperror.NewInternal(fmt.Errorf("writing notification: %w", err))
+	}
+	return nil
 }
 
 // proposalLink is the in-app URL a proposal notification points to.

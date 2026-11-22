@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -40,6 +41,58 @@ func (r *sessionRepository) MergeUnreadNotification(ctx context.Context, n *Noti
 		return nil
 	}
 	return r.CreateNotification(ctx, n)
+}
+
+// FindUnreadNotification returns the user's newest unread notification of the
+// type and link, or nil when there is none.
+func (r *sessionRepository) FindUnreadNotification(ctx context.Context, userID, ntype, link string) (*Notification, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, user_id, campaign_id, type, payload, link, read_at, created_at
+		 FROM notifications WHERE user_id = ? AND type = ? AND link = ? AND read_at IS NULL
+		 ORDER BY created_at DESC LIMIT 1`, userID, ntype, link)
+	if err != nil {
+		return nil, fmt.Errorf("finding unread notification: %w", err)
+	}
+	defer rows.Close()
+	ns, err := scanNotifications(rows)
+	if err != nil || len(ns) == 0 {
+		return nil, err
+	}
+	return &ns[0], nil
+}
+
+// RewriteUnreadNotification replaces a row's payload and time, only while the
+// row is still unread and still holds the payload the caller built on, so a
+// fold never overwrites a change it did not see or a row the recipient has
+// read. It reports whether the row was rewritten.
+func (r *sessionRepository) RewriteUnreadNotification(ctx context.Context, id string, was, payload *string, at time.Time) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE notifications SET payload = ?, created_at = ?
+		 WHERE id = ? AND read_at IS NULL AND payload <=> ?`,
+		payload, at, id, was)
+	if err != nil {
+		return false, fmt.Errorf("rewriting notification: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("rewriting notification: %w", err)
+	}
+	if n > 0 {
+		return true, nil
+	}
+	// MariaDB counts changed rows, not matched ones: a rewrite that says what
+	// the row already says, in the same second, changes nothing. That is a
+	// success, not a lost race, or the caller would add a second row.
+	var one int
+	err = r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM notifications WHERE id = ? AND read_at IS NULL AND payload <=> ?`, id, payload).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("rewriting notification: %w", err)
+	}
+	return true, nil
 }
 
 // LatestCampaignNotificationAt is the newest created_at among the campaign's

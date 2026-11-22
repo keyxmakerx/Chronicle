@@ -66,15 +66,54 @@ func (fakeHeroCamps) ListMembers(context.Context, string) ([]campaigns.CampaignM
 	}, nil
 }
 
-// fakeBell keeps the one bell it was asked to send.
+// fakeBell keeps the one bell it was asked to send, and folds like the real
+// store: one unread row per user, type and link, until that user reads it.
 type fakeBell struct {
 	to                           []string
 	ntype, message, detail, link string
+	rows                         []*foldedRow
+}
+
+// foldedRow is a bell row as the fake store keeps it.
+type foldedRow struct {
+	user, ntype, link, message, detail, state string
+	read                                      bool
 }
 
 func (b *fakeBell) NotifyUsersWithDetail(_ context.Context, to []string, _, ntype, message, detail, link string) error {
 	b.to, b.ntype, b.message, b.detail, b.link = to, ntype, message, detail, link
 	return nil
+}
+
+func (b *fakeBell) FoldUnreadNotification(_ context.Context, to []string, _, ntype, link string, fold func(string) (string, string, string)) error {
+	for _, uid := range to {
+		var row *foldedRow
+		for _, r := range b.rows {
+			if r.user == uid && r.ntype == ntype && r.link == link && !r.read {
+				row = r
+			}
+		}
+		kept := ""
+		if row != nil {
+			kept = row.state
+		} else {
+			row = &foldedRow{user: uid, ntype: ntype, link: link}
+			b.rows = append(b.rows, row)
+		}
+		row.message, row.detail, row.state = fold(kept)
+	}
+	return nil
+}
+
+// unread is the user's unread rows of a type.
+func (b *fakeBell) unread(user, ntype string) []*foldedRow {
+	var out []*foldedRow
+	for _, r := range b.rows {
+		if r.user == user && r.ntype == ntype && !r.read {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // The level bell goes to the owner and the Co-DM, not the player, another

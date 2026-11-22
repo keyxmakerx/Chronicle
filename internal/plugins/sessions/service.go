@@ -266,6 +266,10 @@ type SessionService interface {
 	NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error
 	// NotifyUsersWithAction adds a label for the link, shown under the detail.
 	NotifyUsersWithAction(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, action, link string) error
+	// FoldUnreadNotification keeps one unread row of a type and link per
+	// recipient: a write while the row is unread rewrites it from the state it
+	// kept; a read row starts a fresh one. See notifications_service.go.
+	FoldUnreadNotification(ctx context.Context, userIDs []string, campaignID, ntype, link string, fold func(kept string) (message, detail, state string)) error
 	// NotifyProposalConfirmed tells everyone who responded that the winning
 	// slot was picked, linking to the new session.
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error

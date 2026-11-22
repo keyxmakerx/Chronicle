@@ -2540,9 +2540,11 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	// What is left changes the hero's picks outright, which the Director's
 	// times allow or refuse. An ask-first pick waits for a Director's yes
 	// anyway, so it was taken out above and is never locked.
+	// A list, story or identity change is never refused, but it rings the
+	// bell, so a claimed owner's patch is judged even when it needed no plan.
 	var heroChanges []HeroPickChange
-	if len(picks) > 0 && fieldsPatch != nil {
-		if heroChanges, err = h.heroChanges.CheckPicks(c.Request().Context(), entity, fieldsPatch, picks, plan); err != nil {
+	if fieldsPatch != nil && IsClaimedOwnerPlayer(cc.MemberRole, entity, auth.GetUserID(c)) {
+		if heroChanges, err = h.heroChanges.CheckPicks(c.Request().Context(), entity, fieldsPatch, picks, plan, typeFields); err != nil {
 			return err
 		}
 	}
