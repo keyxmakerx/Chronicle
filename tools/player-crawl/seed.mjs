@@ -520,6 +520,8 @@ export async function seed(base, log = console.log) {
     const who = ['player', 'other player', 'scribe', 'signedout'];
     for (const tail of ['deal', 'another', 'invite', 'dismiss']) postProbes.push({ path: `${C}/decks/moments/${moment.id}/${tail}`, who });
     postProbes.push({ path: `${C}/decks/${deck}/cards/${card}/say`, who });
+    // Starting a deck from another deck or a table is the Director's alone, and a stranger learns nothing.
+    postProbes.push({ path: `${C}/decks/from`, who });
   });
 
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.

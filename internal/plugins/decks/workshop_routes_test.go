@@ -445,3 +445,56 @@ func TestNoKindsSaysSoAndKindsArePickedWithButtons(t *testing.T) {
 		t.Error("the kind's colour and sign are radio buttons named in words, the current ones checked")
 	}
 }
+
+// The New deck page has the three ways to start as tabs, and each tab with
+// nothing to offer says so in one quiet line instead of going missing.
+func TestNewDeckPageHasThreeStartsAndQuietLinesWhenEmpty(t *testing.T) {
+	// No other deck and no rolling tables reader.
+	fx := newFixture(t)
+	e := echo.New()
+	RegisterRoutes(e, NewHandler(fx.svc), guardCampaigns{}, guardAuth{}, guardAddons{on: true})
+	page := func(e *echo.Echo) string {
+		req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/decks/workshop/new", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: "u-dir"})
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("the page: %d", rec.Code)
+		}
+		return rec.Body.String()
+	}
+	body := page(e)
+	last := -1
+	for _, tab := range []string{"A style", "Copy a deck", "From a rolling table"} {
+		i := strings.Index(body, ">"+tab+"</button>")
+		if i <= last {
+			t.Errorf("tab %q is missing or out of order", tab)
+		}
+		last = i
+	}
+	for _, line := range []string{"No decks to copy yet.", "No rolling tables yet."} {
+		if !strings.Contains(body, line) {
+			t.Errorf("the quiet line %q is missing", line)
+		}
+	}
+	if strings.Count(body, `role="tab"`) != 3 || strings.Count(body, `role="tabpanel"`) != 3 {
+		t.Error("the tabs and their panels are not three each")
+	}
+
+	// With a deck and a table, both are offered as single-choice groups.
+	src := fx.deck("Iron omens", KindHero, nil)
+	tb := newFakeTables()
+	tb.add("loot", "Loot of the hoard", TableLine{Name: "Gold", Weight: 1}, TableLine{Name: "Gems", Weight: 1})
+	fx.svc = NewService(fx.repo, fx.heroes, fx.members, WithTables(tb))
+	e2 := echo.New()
+	RegisterRoutes(e2, NewHandler(fx.svc), guardCampaigns{}, guardAuth{}, guardAddons{on: true})
+	body = page(e2)
+	for _, want := range []string{`data-deck="` + src + `"`, `data-table="loot"`, "Loot of the hoard", "2 lines", `aria-label="A deck to copy"`, `aria-label="A rolling table to make cards from"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %s", want)
+		}
+	}
+	if strings.Contains(body, "No decks to copy yet.") || strings.Contains(body, "No rolling tables yet.") {
+		t.Error("a quiet line shows beside something to choose")
+	}
+}

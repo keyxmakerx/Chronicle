@@ -181,6 +181,18 @@
     });
   }
 
+  /** tabKeyTarget: the tab an arrow, Home or End key moves to from the focused tab, or null. One rule for every tab strip on the workshop's pages. */
+  function tabKeyTarget(ev, root) {
+    var t = ev.target.closest && ev.target.closest('.dkw-tab');
+    if (!t) return null;
+    var tabs = $$('.dkw-tab', root), i = tabs.indexOf(t), j = -1;
+    if (ev.key === 'ArrowRight') j = (i + 1) % tabs.length;
+    else if (ev.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
+    else if (ev.key === 'Home') j = 0;
+    else if (ev.key === 'End') j = tabs.length - 1;
+    return j < 0 ? null : tabs[j];
+  }
+
   /** pickedValue: the value of the checked choice in a radio group. */
   function pickedValue(group) {
     var on = group && $('[role=radio][aria-checked=true]', group);
@@ -542,6 +554,49 @@
 
   // ---- deck-new ----
 
+  /** startBody: what the open tab of the New deck page sends, or the sentence that says what is missing. Pure, so a test can pin that the open tab decides. */
+  function startBody(tab, picked) {
+    if (tab === 'copy') {
+      if (!picked.deck) return { error: 'Choose a deck to copy.' };
+      return { url: 'from', body: { deckId: picked.deck } };
+    }
+    if (tab === 'table') {
+      if (!picked.table) return { error: 'Choose a rolling table.' };
+      return { url: 'from', body: { tableId: picked.table } };
+    }
+    return { url: '', body: { look: picked.look || {} } };
+  }
+
+  var LEFT_KEY = 'dkw-left-';
+
+  /** rememberLeftOff: carry what a new deck left off to the deck's own page, once. */
+  function rememberLeftOff(deckId, notes) {
+    try {
+      if (notes && notes.length) sessionStorage.setItem(LEFT_KEY + deckId, JSON.stringify(notes));
+    } catch (e) { /* storage may be blocked; the deck is made either way */ }
+  }
+
+  /** showLeftOff: say once, at the top of the deck's page, what its making left off. */
+  function showLeftOff(el, deckId) {
+    var notes = [];
+    try {
+      var raw = sessionStorage.getItem(LEFT_KEY + deckId);
+      if (raw) { notes = JSON.parse(raw) || []; sessionStorage.removeItem(LEFT_KEY + deckId); }
+    } catch (e) { notes = []; }
+    notes = notes.filter(function (n) { return typeof n === 'string' && n; });
+    var head = $('.dkw-head', el);
+    if (!notes.length || !head) return;
+    var box = node('div', 'dkw-note dkw-leftoff');
+    box.setAttribute('role', 'status');
+    box.setAttribute('data-dkw-leftoff', '');
+    notes.forEach(function (n) {
+      var p = node('p', 'dkw-quiet');
+      p.textContent = n;
+      box.appendChild(p);
+    });
+    head.appendChild(box);
+  }
+
   function initNew(el) {
     {
       var cid = el.getAttribute('data-campaign-id');
@@ -551,6 +606,7 @@
       var styleGroup = $('.dkw-styles', form);
       var hero = $('[data-dkw-hero]', form);
       var kind = 'hero';
+      var tab = 'style';
       rove(el);
 
       function say(msg, focusEl) {
@@ -565,27 +621,74 @@
         check(kindGroup, b);
         hero.hidden = kind !== 'hero';
       });
-      styleGroup.addEventListener('click', function (ev) {
-        var b = ev.target.closest('[data-style]');
-        if (b) check(styleGroup, b);
+      // Each choice group is single-choice: a press checks one and unchecks the rest.
+      $$('[role=radiogroup]', el).forEach(function (g) {
+        if (g === kindGroup) return;
+        g.addEventListener('click', function (ev) {
+          var b = ev.target.closest('[role=radio]');
+          if (b && g.contains(b)) { check(g, b); say(''); }
+        });
       });
+
+      // The tabs: the same strip as a deck's page, its keys from the same function.
+      function showStart(key, focus) {
+        var b = $('.dkw-tab[data-tab="' + key + '"]', form);
+        if (!b) return;
+        tab = key;
+        $$('.dkw-tab', form).forEach(function (t) {
+          var on = t === b;
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          t.tabIndex = on ? 0 : -1;
+        });
+        $$('[data-start]', form).forEach(function (p) { p.hidden = p.getAttribute('data-start') !== key; });
+        $$('[data-hint]', form).forEach(function (p) { p.hidden = p.getAttribute('data-hint') !== key; });
+        say('');
+        if (focus) b.focus();
+      }
+      $$('.dkw-tab', form).forEach(function (b) {
+        b.addEventListener('click', function () { showStart(b.getAttribute('data-tab')); });
+      });
+      form.addEventListener('keydown', function (ev) {
+        var to = tabKeyTarget(ev, form);
+        if (!to) return;
+        ev.preventDefault();
+        showStart(to.getAttribute('data-tab'), true);
+      });
+
+      function picked(group, attr) {
+        var o = group && $('[role=radio][aria-checked=true]', group);
+        return o ? o.getAttribute(attr) : '';
+      }
 
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         var nameEl = $('[name=name]', form);
         var name = nameEl.value.trim();
         if (!name) return say('Give the deck a name.', nameEl);
-        var style = $('[data-style][aria-checked=true]', styleGroup);
         var look = {};
-        try { look = JSON.parse(style.getAttribute('data-look') || '{}'); } catch (e) { look = {}; }
-        var body = { name: name, kind: kind, look: look };
+        var style = $('[data-style][aria-checked=true]', styleGroup);
+        try { look = JSON.parse((style && style.getAttribute('data-look')) || '{}'); } catch (e) { look = {}; }
+        var start = startBody(tab, {
+          look: look,
+          deck: picked($('[data-dkw-decks]', form), 'data-deck'),
+          table: picked($('[data-dkw-tables]', form), 'data-table')
+        });
+        if (start.error) {
+          var none = $('[data-start="' + tab + '"] [role=radio]', form);
+          return say(start.error, none);
+        }
+        var body = start.body;
+        body.name = name;
+        body.kind = kind;
         var sel = $('[name=holderEntityId]', form);
         if (kind === 'hero' && sel && sel.value) body.holderEntityId = sel.value;
         var btn = $('[type=submit]', form);
         say('');
         btn.disabled = true;
         if (C.working) C.working(btn, true);
-        api('POST', '/campaigns/' + cid + '/decks', body).then(function (deck) {
+        api('POST', '/campaigns/' + cid + '/decks' + (start.url ? '/' + start.url : ''), body).then(function (made) {
+          var deck = start.url ? made.deck : made;
+          if (start.url && made.report) rememberLeftOff(deck.id, made.report.notes);
           location.assign('/campaigns/' + cid + '/decks/workshop/' + encodeURIComponent(deck.id) + '?tab=cards');
         }, function (e) {
           btn.disabled = false;
@@ -614,6 +717,7 @@
       if (el.hasAttribute('data-dkw-new-page')) return initNew(el);
       var cid = el.getAttribute('data-campaign-id');
       var did = el.getAttribute('data-deck-id');
+      showLeftOff(el, did);
       var base = '/campaigns/' + cid + '/decks/';
       var deckURL = base + did;
       var panel = $('#dkw-panel', el);
@@ -739,17 +843,11 @@
       }
 
       el.addEventListener('keydown', function (ev) {
-        var t = ev.target.closest && ev.target.closest('.dkw-tab');
-        if (!t) return;
-        var tabs = $$('.dkw-tab', el), i = tabs.indexOf(t), j = -1;
-        if (ev.key === 'ArrowRight') j = (i + 1) % tabs.length;
-        else if (ev.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
-        else if (ev.key === 'Home') j = 0;
-        else if (ev.key === 'End') j = tabs.length - 1;
-        if (j < 0) return;
+        var to = tabKeyTarget(ev, el);
+        if (!to) return;
         ev.preventDefault();
-        tabs[j].focus();
-        showTab(tabs[j].getAttribute('data-tab')).then(function () { tabs[j].focus(); });
+        to.focus();
+        showTab(to.getAttribute('data-tab')).then(function () { to.focus(); });
       });
 
       // ---- the table row ----
@@ -1398,6 +1496,7 @@
     LISTS: LISTS, PALETTE: PALETTE, DRAW_MIN: DRAW_MIN, DRAW_MAX: DRAW_MAX, COPIES_MAX: COPIES_MAX, MAX_KINDS: MAX_KINDS,
     clampCount: clampCount, stepCount: stepCount, lookPatch: lookPatch, kindKey: kindKey, nextKindName: nextKindName, isStale: isStale, words: words, parseVersion: parseVersion,
     MAX_TESTS: MAX_TESTS, KIND_ORDER: KIND_ORDER, TEST_KEYS: TEST_KEYS, whenBody: whenBody, newTest: newTest, changeTest: changeTest, parseNumber: parseNumber,
-    whenHint: whenHint, nowLine: nowLine, kindAvailable: kindAvailable, shareLabel: shareLabel, buildRow: buildRow
+    whenHint: whenHint, nowLine: nowLine, kindAvailable: kindAvailable, shareLabel: shareLabel, buildRow: buildRow,
+    startBody: startBody
   };
 })();

@@ -12,7 +12,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, newCampaign, addMember, enableAddons, api, done } from './_live.mjs';
+import { person, newCampaign, addMember, enableAddons, newPage, api, done } from './_live.mjs';
 
 after(done);
 
@@ -489,4 +489,169 @@ test('on a phone the table row is compact, the card stays at the top of Look, in
   assert.ok(dy > lastRow.y, 'Delete this deck is not at the end of the page');
   assert.deepEqual(errors, []);
   void owner;
+});
+
+// ---- New deck: copy a deck, from a rolling table ----
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const post = (owner, url, body) => owner.api(url, { method: 'POST', body: JSON.stringify(body), headers: JSON_HEADERS });
+
+// A hero deck for a hero page with two cards: one carries a printed test the
+// copy can keep and a test on the deck's hero a party deck cannot hold.
+async function seedSource(owner, cid, name = 'Source deck') {
+  const hero = await newPage(owner, cid, 'Character', 'Orrin');
+  const made = await post(owner, `/campaigns/${cid}/decks`, { name, kind: 'hero', holderEntityId: hero });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  const id = made.body.id;
+  const a = await post(owner, `/campaigns/${cid}/decks/${id}/cards`, { name: 'Crow speaks', words: 'It knows your name.', copies: 2, corner: 'IV',
+    when: [{ test: 'say', open: true }, { test: 'layer', who: 'holder', name: 'Haunted', on: true }] });
+  assert.equal(a.status, 201, JSON.stringify(a.body));
+  const b = await post(owner, `/campaigns/${cid}/decks/${id}/cards`, { name: 'Quiet road', copies: 1 });
+  assert.equal(b.status, 201, JSON.stringify(b.body));
+  return { id, hero };
+}
+
+// The page picks light or dark when it loads, so a change of scheme in the middle of a walk sets the class the page's own script would have set.
+const setScheme = async (page, scheme) => {
+  await page.emulateMedia({ colorScheme: scheme });
+  await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), scheme === 'dark');
+};
+const startTab = (page, name) => page.getByRole('tab', { name }).click();
+const deckOf = async (owner, cid, id) => (await owner.api(`/campaigns/${cid}/decks/${id}`)).body;
+const idFromUrl = (page) => page.url().match(/workshop\/([0-9a-f-]{36})/)[1];
+
+test('copy a deck: its cards and a condition arrive in the pile, and what the new deck cannot hold is said once', async () => {
+  const { owner, cid, page, errors } = await director('dkw-copy');
+  const { id: src } = await seedSource(owner, cid);
+  await owner.go(`/campaigns/${cid}/decks/workshop/new`);
+  await page.getByLabel('Name', { exact: true }).fill('Party omens');
+  await page.getByRole('radio', { name: 'The party' }).click();
+  await startTab(page, 'Copy a deck');
+  assert.equal(await page.locator('[data-start=copy]').isVisible(), true);
+  assert.equal(await page.locator('[data-start=style]').isVisible(), false);
+  await page.getByRole('button', { name: 'Make the deck' }).click();
+  await page.locator('[data-dkw-err]').filter({ hasText: 'Choose a deck to copy.' }).waitFor();
+  await page.locator('[data-deck]').filter({ hasText: 'Source deck' }).click();
+  await page.getByRole('button', { name: 'Make the deck' }).click();
+  await page.waitForURL(/\/decks\/workshop\/[0-9a-f-]{36}/);
+  const id = idFromUrl(page);
+  assert.notEqual(id, src);
+
+  const notice = page.locator('[data-dkw-leftoff]');
+  await notice.waitFor();
+  assert.match(await notice.textContent(), /1 condition was left off because the new deck can't hold it: Crow speaks\./);
+  assert.equal(await page.locator('#dkw-grid').getByRole('link', { name: /^Crow speaks/ }).count(), 1);
+  assert.equal(await page.locator('#dkw-grid').getByRole('link', { name: /^Quiet road/ }).count(), 1);
+
+  const deck = await deckOf(owner, cid, id);
+  assert.equal(deck.kind, 'party');
+  assert.equal(deck.cards.length, 2);
+  const crow = deck.cards.find((c) => c.name === 'Crow speaks');
+  assert.deepEqual(crow.when.map((w) => w.test), ['say'], 'only the test the deck can hold is stored');
+  assert.equal(crow.copies, 2);
+  assert.equal(crow.words, 'It knows your name.');
+  assert.equal(deck.counts.pile, 3, 'every copy starts in the pile');
+
+  await page.reload();
+  await page.locator('#dkw-panel').waitFor();
+  assert.equal(await page.locator('[data-dkw-leftoff]').count(), 0, 'the notice goes away on the next load');
+  assert.deepEqual(errors, []);
+});
+
+test('make a deck from a rolling table by keyboard alone, and read what the cards cannot do yet', async () => {
+  const { owner, cid, page, errors } = await director('dkw-table');
+  const put = await owner.api(`/campaigns/${cid}/roll-tables`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ tables: [
+    { id: 'omens', name: 'Dockside omens', entries: [
+      { name: 'Gulls scatter', brief: 'Something large is below.', weight: 3 },
+      { name: 'Red sky', brief: 'At dawn.', weight: 0.4 },
+      { name: 'Full moon tide', brief: 'Only on a full moon.', weight: 2, when: { moon: { name: 'any', phase: 'full', within: 1 } } },
+      { name: 'Never', weight: 0 },
+    ] },
+    { id: 'secret', name: 'Only for the Director', visibility: 'dm_only', entries: [{ name: 'Twist', weight: 1 }] },
+  ] }) });
+  assert.equal(put.status, 200, JSON.stringify(put.body));
+  await owner.go(`/campaigns/${cid}/decks/workshop/new`);
+  await page.locator('#dkw-name').focus();
+  await page.keyboard.type('Dock omens');
+  // To the tab strip, to "From a rolling table", into the list, down to the first table, choose it.
+  await page.getByRole('tab', { name: 'A style' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.locator('#dkw-start-table[aria-selected=true]').waitFor();
+  assert.equal(await page.locator('[data-table]').count(), 2, 'a Director sees the Director-only table too');
+  assert.match(await page.locator('[data-table=omens]').textContent(), /Dockside omens\s*4 lines/);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-table')), 'omens');
+  await page.keyboard.press('Space');
+  assert.equal(await page.locator('[data-table=omens]').getAttribute('aria-checked'), 'true');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Space');
+  assert.equal(await page.locator('[data-table=omens]').getAttribute('aria-checked'), 'false', 'a group takes one choice');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Space');
+  await page.getByRole('button', { name: 'Make the deck' }).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForURL(/\/decks\/workshop\/[0-9a-f-]{36}/);
+
+  const notice = page.locator('[data-dkw-leftoff]');
+  await notice.waitFor();
+  assert.match(await notice.textContent(), /1 line only comes up on certain days\. Cards can't wait for a day yet, so that card comes up any time\./);
+  const deck = await deckOf(owner, cid, idFromUrl(page));
+  assert.deepEqual(deck.cards.map((c) => [c.name, c.copies]).sort(), [['Full moon tide', 2], ['Gulls scatter', 3], ['Red sky', 1]]);
+  assert.ok(deck.cards.every((c) => !c.when || c.when.length === 0), 'no day condition was stored');
+  assert.equal(deck.counts.pile, 6);
+  assert.deepEqual(errors, []);
+});
+
+test('the New deck tabs draw in light, dark and at 390 wide, empty and full, with no sideways scroll or error', async () => {
+  const { owner, cid, page, errors } = await director('dkw-newtabs');
+  const modes = [['light', 'light', 1280], ['dark', 'dark', 1280], ['phone', 'light', 390]];
+  const tabs = [['style', 'A style'], ['copy', 'Copy a deck'], ['table', 'From a rolling table']];
+  const walk = async (label) => {
+    for (const [mode, scheme, width] of modes) {
+      await page.setViewportSize({ width, height: 900 });
+      await setScheme(page, scheme);
+      for (const [key, name] of tabs) {
+        await startTab(page, name);
+        await page.locator(`[data-start=${key}]`).waitFor({ state: 'visible' });
+        await page.waitForTimeout(150);
+        await noSideways(page, `${label} ${key} ${mode}`);
+        if (label === 'empty' && key !== 'style') {
+          const line = key === 'copy' ? 'No decks to copy yet.' : 'No rolling tables yet.';
+          assert.equal(await page.locator(`[data-start=${key}]`).getByText(line).count(), 1, `${key} has no quiet line`);
+        }
+        if (width === 390) {
+          const small = await page.evaluate(() => [...document.querySelectorAll('.dkw-tab, .dkw-choice')].filter((n) => n.getBoundingClientRect().height > 0 && n.getBoundingClientRect().height < 43).length);
+          assert.equal(small, 0, `${label} ${key}: a control is under 44 tall on a phone`);
+        }
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/new-${key}-${label}-${mode}.png`, fullPage: true });
+      }
+    }
+  };
+  await owner.go(`/campaigns/${cid}/decks/workshop/new`);
+  await walk('empty');
+  const { id: src } = await seedSource(owner, cid);
+  await owner.api(`/campaigns/${cid}/roll-tables`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ tables: [
+    { id: 'omens', name: 'Dockside omens', entries: [{ name: 'Gulls', weight: 1 }, { name: 'Tide', weight: 2, when: { moon: { name: 'any', phase: 'full', within: 1 } } }] },
+    { id: 'rumours', name: 'Rumours of the road with a rather long name to see how it wraps', entries: [{ name: 'A', weight: 1 }] },
+  ] }) });
+  await owner.go(`/campaigns/${cid}/decks/workshop/new`);
+  await walk('full');
+
+  // The new deck's page with the left-off sentence, in each mode.
+  await startTab(page, 'Copy a deck');
+  await page.getByLabel('Name', { exact: true }).fill('Party copy');
+  await page.getByRole('radio', { name: 'The party' }).click();
+  await page.locator(`[data-deck="${src}"]`).click();
+  await page.getByRole('button', { name: 'Make the deck' }).click();
+  await page.waitForURL(/\/decks\/workshop\/[0-9a-f-]{36}/);
+  await page.locator('[data-dkw-leftoff]').waitFor();
+  for (const [mode, scheme, width] of modes) {
+    await page.setViewportSize({ width, height: 900 });
+    await setScheme(page, scheme);
+    await page.waitForTimeout(150);
+    await noSideways(page, `left-off ${mode}`);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/new-leftoff-${mode}.png`, fullPage: true });
+  }
+  assert.deepEqual(errors, []);
 });

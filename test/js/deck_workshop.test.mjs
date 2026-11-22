@@ -217,3 +217,12 @@ test('the hint and the Now line say what a Director needs', () => {
   assert.equal(DW.nowLine([{}], { fitsNow: true }), 'Fits now.');
   assert.equal(DW.nowLine([{}], { fitsNow: false, whyNot: 'Tam is above half' }), 'Waiting: Tam is above half.');
 });
+
+test('the open tab of the New deck page decides what goes out', () => {
+  const plain = (v) => JSON.parse(JSON.stringify(v)); // across the sandbox's realm
+  assert.deepEqual(plain(DW.startBody('style', { look: { border: 'metal' }, deck: 'd1', table: 't1' })), { url: '', body: { look: { border: 'metal' } } });
+  assert.deepEqual(plain(DW.startBody('copy', { look: {}, deck: 'd1', table: 't1' })), { url: 'from', body: { deckId: 'd1' } });
+  assert.deepEqual(plain(DW.startBody('table', { look: {}, deck: 'd1', table: 't1' })), { url: 'from', body: { tableId: 't1' } });
+  assert.match(DW.startBody('copy', { look: {}, deck: '', table: 't1' }).error, /Choose a deck/);
+  assert.match(DW.startBody('table', { look: {}, deck: 'd1', table: '' }).error, /Choose a rolling table/);
+});

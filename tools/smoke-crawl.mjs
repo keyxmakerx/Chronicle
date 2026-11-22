@@ -120,9 +120,15 @@ async function seedCampaign() {
     if (!d) return '';
     await post(`/campaigns/${cid}/decks/${d.id}/cards`, { name: 'Smoke card', copies: 2 });
     await post(`/campaigns/${cid}/decks/${d.id}/draw`, { count: 1 });
-    return d.id;
+    // The two other ways to start a deck: copy this one, and read a rolling table.
+    // The New deck page then has something under each tab.
+    const put = await Chronicle.apiFetch(`/campaigns/${cid}/roll-tables`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tables: [{ id: 'smoke-omens', name: 'Smoke omens', entries: [{ name: 'Gulls', weight: 2 }, { name: 'Tide', weight: 1 }] }] }) });
+    const copy = await post(`/campaigns/${cid}/decks/from`, { name: 'Smoke copy', kind: 'event', deckId: d.id });
+    const table = put.ok ? await post(`/campaigns/${cid}/decks/from`, { name: 'Smoke from a table', kind: 'event', tableId: 'smoke-omens' }) : null;
+    return copy && table ? d.id : '';
   }, id);
-  if (!deck) throw new Error('the smoke deck could not be made, so the deck pages would go unchecked');
+  if (!deck) throw new Error('the smoke deck, its copy or its deck from a rolling table could not be made, so the deck pages would go unchecked');
   return { id, entity, deck };
 }
 

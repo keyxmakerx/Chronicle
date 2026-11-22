@@ -89,7 +89,7 @@ try {
       if (got.status === 200) { leaks++; console.log(`  LEAK  ${who} was sent a face-down card's picture: ${u}`); }
     }
   }
-  // The turn request: sent by people who may not turn that copy, it must be
+  // The write probes (the turn request, starting a deck from a source): sent by people who may not, the first by people who may not turn that copy, it must be
   // refused as if nothing were there, carry no marker, and leave the copy face
   // down (checked from the Director's side afterwards).
   for (const pr of s.postProbes || []) {
@@ -97,8 +97,8 @@ try {
       const client = viewers[who];
       const res = await client.post(pr.path, { body: { csrf_token: client.csrf() }, headers: { Accept: 'text/html, application/json' }, follow: false });
       const found = Object.keys({ ...s.markers, ...s.playerOnly }).filter((k) => res.text.includes(k));
-      console.log(`turn request as ${who}: ${res.status}`);
-      if (res.status === 200 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} to a turn request${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
+      console.log(`write probe ${pr.path.replace(s.C, '')} as ${who}: ${res.status}`);
+      if (res.status === 200 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} to a write probe (${pr.path.replace(s.C, '')})${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
     }
   }
   // The moment and the card are as the Director left them: the answers and the

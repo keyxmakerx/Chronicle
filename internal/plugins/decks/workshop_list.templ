@@ -23,14 +23,7 @@ templ WorkshopListPage(campaignID string, ds []DirectorDeck) {
 					for _, d := range ds {
 						<li>
 							<a class="dkw-deck" href={ templ.SafeURL("/campaigns/" + campaignID + "/decks/workshop/" + d.ID) }>
-								<span class="dkw-deck-back">
-									@CardBack(d.Look, SizeRow)
-								</span>
-								<span class="dkw-deck-text">
-									<b class="dkw-deck-name">{ d.Name }</b>
-									<span class="dkw-quiet">{ kindWords(d.Kind) }</span>
-									<span class="dkw-quiet">{ strconv.Itoa(d.Counts.Pile) } in the pile, { strconv.Itoa(d.Counts.Used) } used, { strconv.Itoa(d.Counts.Play) } in play</span>
-								</span>
+								@deckFace(d)
 							</a>
 						</li>
 					}
@@ -68,4 +61,18 @@ func kindWords(kind string) string {
 		return "The party's deck"
 	}
 	return "An event deck"
+}
+
+// deckFace is a deck as the Decks page draws it: its own back, its name, who it
+// is for and where its cards are. The New deck page's "Copy a deck" choices
+// draw the same thing, so a deck looks the same wherever it is picked.
+templ deckFace(d DirectorDeck) {
+	<span class="dkw-deck-back">
+		@CardBack(d.Look, SizeRow)
+	</span>
+	<span class="dkw-deck-text">
+		<b class="dkw-deck-name">{ d.Name }</b>
+		<span class="dkw-quiet">{ kindWords(d.Kind) }</span>
+		<span class="dkw-quiet">{ strconv.Itoa(d.Counts.Pile) } in the pile, { strconv.Itoa(d.Counts.Used) } used, { strconv.Itoa(d.Counts.Play) } in play</span>
+	</span>
 }

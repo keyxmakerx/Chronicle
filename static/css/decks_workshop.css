@@ -257,6 +257,21 @@
 .dkw-deck-text { display: grid; gap: 2px; min-width: 0; }
 .dkw-deck-name { font-size: 1rem; overflow-wrap: anywhere; }
 .dkw-newform { display: grid; gap: 4px; max-width: 64rem; margin-top: 16px; }
+.dkw-newtop { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 32px; }
+.dkw-newtop > .dkw-field:first-child { flex: 0 1 18rem; }
+/* Choices that are one of a few: a deck to copy, a table to read. Checked draws as a style does. */
+.dkw-choice { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.dkw-choice[aria-checked="true"] { border-color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); }
+.dkw-tablepicks { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.dkw-tablepick { display: grid; gap: 2px; align-content: center; min-height: 3.5rem; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); color: var(--color-text-primary); box-shadow: var(--elev-resting); }
+.dkw-tablepick:hover, .dkw-choice:hover { box-shadow: var(--elev-hover); }
+.dkw-tablepick b { overflow-wrap: anywhere; }
+.dkw-newfoot { align-items: center; margin-top: 16px; }
+.dkw-newfoot .dkw-hint { flex: 1 1 18rem; margin: 0; }
+.dkw-newfoot .dkw-hint[hidden] { display: none; }
+.dkw-newfoot [type="submit"] { margin-left: auto; }
+.dkw-leftoff { margin-top: 10px; }
+.dkw-leftoff p { margin: 0 0 4px; font-size: 0.875rem; color: var(--color-text-primary); }
 .dkw-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .dkw-hero[hidden] { display: none; }
 
@@ -330,6 +345,11 @@
   .dkw-switch { min-height: 44px; }
   .dkw-opt { min-height: 44px; }
   .dkw-tab { min-height: 44px; }
+  .dkw-choice { min-height: 44px; }
+  /* Three starts fit a phone's width by wrapping a label, not by scrolling the strip out from under the first. */
+  .dkw-newform .dkw-tabs { overflow-x: visible; }
+  .dkw-newform .dkw-tab { flex: 1 1 auto; padding: 6px 10px; white-space: normal; text-align: left; line-height: 1.25; }
+  .dkw-newfoot [type="submit"] { margin-left: 0; }
   .dkw-line, .dkw-title, .dkw-num { min-height: 44px; }
   .dkw-kopt { min-width: 44px; min-height: 44px; }
 }
