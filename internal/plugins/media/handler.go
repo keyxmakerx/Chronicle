@@ -545,12 +545,23 @@ func (h *Handler) checkCardPictureGuard(c *echo.Context, file *MediaFile, isThum
 	if h.cardPictures == nil || file.CampaignID == nil {
 		return nil
 	}
-	// Directors and the owner's API-key links see every card, so they skip the
-	// lookup (a Director asking costs nothing extra on every image).
+	ctx := c.Request().Context()
+	// Asked first, and alone, because this runs on every campaign image: a
+	// file no card wears costs one indexed lookup and no role lookup.
+	isPicture, err := h.cardPictures.IsCardPicture(ctx, *file.CampaignID, file.ID)
+	if err != nil {
+		slog.Error("media: card picture check failed; denying access",
+			slog.String("file_id", file.ID), slog.Any("error", err))
+		return apperror.NewNotFound("media file not found")
+	}
+	if !isPicture {
+		return nil
+	}
+	// Directors and the owner's API-key links see every card.
 	if h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
 		return nil
 	}
-	allowed, err := h.cardPictureAllowed(c.Request().Context(), file, auth.GetUserID(c))
+	allowed, err := h.cardPictureShownTo(ctx, file, auth.GetUserID(c))
 	if err != nil {
 		slog.Error("media: card picture check failed; denying access",
 			slog.String("file_id", file.ID), slog.Any("error", err))
@@ -563,18 +574,24 @@ func (h *Handler) checkCardPictureGuard(c *echo.Context, file *MediaFile, isThum
 }
 
 // cardPictureAllowed is the card rule for one viewer ("" is anonymous): true
-// for a file that is no card's picture, for a Director, while a copy of a card
-// wearing it is face up to them, or while a page they can see also shows it.
-// An error means "could not tell"; callers refuse.
+// for a file that is no card's picture, and otherwise whatever
+// cardPictureShownTo says. An error means "could not tell"; callers refuse.
 func (h *Handler) cardPictureAllowed(ctx context.Context, file *MediaFile, userID string) (bool, error) {
-	campaignID := *file.CampaignID
-	isPicture, err := h.cardPictures.IsCardPicture(ctx, campaignID, file.ID)
+	isPicture, err := h.cardPictures.IsCardPicture(ctx, *file.CampaignID, file.ID)
 	if err != nil {
 		return false, err
 	}
 	if !isPicture {
 		return true, nil
 	}
+	return h.cardPictureShownTo(ctx, file, userID)
+}
+
+// cardPictureShownTo answers for a file already known to be a card's picture:
+// true for a Director, while a copy of a card wearing it is face up to the
+// viewer, or while a page they can see also shows it.
+func (h *Handler) cardPictureShownTo(ctx context.Context, file *MediaFile, userID string) (bool, error) {
+	campaignID := *file.CampaignID
 	if userID != "" {
 		if v, ok := h.cardPictureViewer(campaignID, userID); ok {
 			if v.Director {

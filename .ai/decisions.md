@@ -1278,7 +1278,7 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **What the guard does not claim:** a viewer who has been shown a face has seen its picture and may keep a copy. Cookieless API-key links live 15 minutes and are not tied to a viewer. The guard exists so that a picture nobody has been shown cannot be fetched or listed.
 
 **Consequences:**
-- Every campaign file request from a non-Director costs one extra lookup of `deck_cards` on `(campaign_id, picture)` (none for a Director). A campaign without decks tables answers "no card pictures" rather than failing.
+- Every campaign file request costs one extra lookup of `deck_cards` on `(campaign_id, picture)`, whoever asks; the viewer's role and the card's visibility are looked up only for a file that is a card's picture. A campaign without decks tables answers "no card pictures" rather than failing.
 - A trashed picture opens until its purge, as it does for a page, so a card keeps showing it until then; after a purge the card keeps a dangling id and renders without a picture.
 - A new way to read a face (a new zone, a new setting) changes `playerDeck` and so changes the picture rule with it; there is no second copy of the rules to update.
 - A new place that mints cookieless media links for members must ask the card rule first.
