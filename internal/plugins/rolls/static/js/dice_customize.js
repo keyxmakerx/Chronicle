@@ -113,8 +113,11 @@
     if (this.stage && C.dice && typeof C.dice.stop === 'function') C.dice.stop(this.stage);
   };
 
+  // The workshop is busy until the settings and the dice have arrived, which
+  // screen readers hear and Customize's grow waits for.
   Dice.prototype.load = function () {
     var self = this;
+    self.el.setAttribute('aria-busy', 'true');
     var settings = C.apiFetch(this.base).then(function (r) { if (!r.ok) throw new Error('status ' + r.status); return r.json(); });
     var catalogue = C.dice && typeof C.dice.catalogue === 'function' ? C.dice.catalogue() : Promise.reject(new Error('no dice'));
     Promise.all([settings, catalogue]).then(function (v) {
@@ -125,8 +128,10 @@
       self.frame();
       self.render();
       self.trayRest();
+      self.el.removeAttribute('aria-busy');
     }).catch(function () {
       if (!self.alive) return;
+      self.el.removeAttribute('aria-busy');
       self.el.innerHTML = '<p class="dcz-hint dcz-bad" role="alert">The dice settings couldn’t be read. Reload the page to try again.</p>';
     });
   };

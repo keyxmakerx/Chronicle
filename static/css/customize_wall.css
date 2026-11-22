@@ -186,70 +186,25 @@
 .czw-app-ic { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 16px; background: var(--x-acc); color: #fff; font-size: 28px; margin-bottom: 10px; }
 
 /* ---------- Opening a part: the grow ----------
-   customize_shell.js names the pressed picture and, on the way in, the
-   workshop's stage (the part's preview, or its whole body), and sets
-   html[data-czs-vt]. The picture then travels to the stage's place and the
-   rest of the wall steps back; the bar's tabs and the workshop's own controls
-   follow once it has landed. Opening takes 0.92 of --dur-slide on --ease-out;
-   closing runs back over 0.9 of --dur-large on --ease-in-out. The tokens carry
-   the owner's Motion speed. */
-html[data-czs-vt="open"] { --czs-vt-dur: calc(var(--dur-slide) * 0.92); --czs-vt-ease: var(--ease-out); }
-html[data-czs-vt="close"] { --czs-vt-dur: calc(var(--dur-large) * 0.9); --czs-vt-ease: var(--ease-in-out); }
-html[data-czs-vt="open"] .czs-is-workshop [data-czs-stage] { view-transition-name: czs-grow; }
-html[data-czs-vt="open"]::view-transition-group(czs-grow),
-html[data-czs-vt="close"]::view-transition-group(czs-grow) {
-  animation-duration: var(--czs-vt-dur); animation-timing-function: var(--czs-vt-ease);
-  overflow: clip; border-radius: var(--shape-r-panel);
+   customize_shell.js flies a copy of the pressed picture (.czw-fly) to where
+   the workshop's stage will be and back, with the Web Animations API, timed
+   from the tokens so the owner's Motion speed carries. While a move is on,
+   html[data-czs-fly] hides what is arriving until the move takes it over: the
+   workshop's stage while the picture holds over it ("grow"), the wall until
+   the picture starts home ("shrink"). The bar's tabs come in as the
+   workshop arrives. */
+.czw-fly {
+  position: fixed; z-index: var(--z-raised); margin: 0; transform-origin: 0 0;
+  pointer-events: none; transition: none; will-change: transform, opacity;
+  box-shadow: var(--elev-dragged);
 }
-html[data-czs-vt="open"]::view-transition-image-pair(czs-grow),
-html[data-czs-vt="close"]::view-transition-image-pair(czs-grow) { isolation: auto; }
-html[data-czs-vt="open"]::view-transition-old(czs-grow),
-html[data-czs-vt="open"]::view-transition-new(czs-grow),
-html[data-czs-vt="close"]::view-transition-old(czs-grow),
-html[data-czs-vt="close"]::view-transition-new(czs-grow) {
-  width: 100%; height: 100%; object-fit: cover; object-position: top left; mix-blend-mode: normal;
-  animation-duration: var(--czs-vt-dur); animation-timing-function: var(--czs-vt-ease); animation-fill-mode: both;
-}
-html[data-czs-vt="open"]::view-transition-old(czs-grow) { animation-name: czs-vt-fade-out; }
-html[data-czs-vt="open"]::view-transition-new(czs-grow) { animation-name: czs-vt-fade-in-late; }
-html[data-czs-vt="close"]::view-transition-old(czs-grow) { animation-name: czs-vt-fade-out-early; }
-html[data-czs-vt="close"]::view-transition-new(czs-grow) { animation-name: czs-vt-fade-in; }
-/* The rest of the page: the wall steps back, then the workshop's frame arrives. */
-html[data-czs-vt="open"]::view-transition-old(root),
-html[data-czs-vt="open"]::view-transition-new(root),
-html[data-czs-vt="close"]::view-transition-old(root),
-html[data-czs-vt="close"]::view-transition-new(root) {
-  mix-blend-mode: normal; animation-duration: var(--czs-vt-dur); animation-timing-function: var(--czs-vt-ease); animation-fill-mode: both;
-}
-html[data-czs-vt="open"]::view-transition-old(root) { animation-name: czs-vt-step-back; }
-html[data-czs-vt="open"]::view-transition-new(root) { animation-name: czs-vt-arrive; }
-html[data-czs-vt="close"]::view-transition-old(root) { animation-name: czs-vt-fade-out-early; }
-html[data-czs-vt="close"]::view-transition-new(root) { animation-name: czs-vt-step-forward; }
-@keyframes czs-vt-step-back { to { opacity: 0; transform: scale(0.97); } }
-@keyframes czs-vt-step-forward { from { opacity: 0; transform: scale(0.97); } }
-@keyframes czs-vt-arrive { 0%, 55% { opacity: 0; } 100% { opacity: 1; } }
-@keyframes czs-vt-fade-out { 0%, 25% { opacity: 1; } 75%, 100% { opacity: 0; } }
-@keyframes czs-vt-fade-in-late { 0%, 35% { opacity: 0; } 85%, 100% { opacity: 1; } }
-@keyframes czs-vt-fade-out-early { 0% { opacity: 1; } 55%, 100% { opacity: 0; } }
-@keyframes czs-vt-fade-in { 0%, 20% { opacity: 0; } 100% { opacity: 1; } }
-/* Calm is a short cross-fade; Off is instant (the script cancels the transition). */
-html[data-czs-vt="calm"]::view-transition-old(root),
-html[data-czs-vt="calm"]::view-transition-new(root) { animation-duration: var(--dur-standard); animation-timing-function: var(--ease-out); }
-/* The tabs and the workshop's controls come in after the picture has landed. */
-html[data-czs-vt="open"] .czs-is-workshop .czs-top .czs-tabw,
-html[data-czs-vt="open"] .czs-is-workshop .czs-top .czs-find {
+html[data-czs-fly="grow"] .czs-is-workshop [data-czs-stage] { opacity: 0; animation: none; }
+html[data-czs-fly="shrink"] .czs-is-wall [data-czw] { opacity: 0; }
+html[data-czs-fly="grow"] .czs-is-workshop .czs-top :is(.czs-tabw, .czs-find) {
   animation: czs-tab-in var(--dur-standard) var(--ease-out) backwards;
-  animation-delay: calc(var(--czs-vt-dur) * 0.72 + var(--czs-i, 0) * 30ms);
-}
-html[data-czs-vt="open"] .czs-is-workshop .czs-body { animation: none; }
-html[data-czs-vt="open"] .czs-is-workshop .czs-body > * {
-  animation: czs-controls-in var(--dur-standard) var(--ease-out) backwards;
-  animation-delay: calc(var(--czs-vt-dur) * 0.8);
+  animation-delay: calc(var(--czs-i, 0) * 30ms);
 }
 @keyframes czs-tab-in { from { opacity: 0; transform: translateY(-4px); } }
-@keyframes czs-controls-in { from { opacity: 0; transform: translateY(6px); } }
-html[data-czs-vt="close"] .czs-is-wall .czw-head,
-html[data-czs-vt="close"] .czs-is-wall .czw-group { animation: none; }
 
 /* Calm: the lift and the ring fade only; Off: nothing moves. */
 html[data-motion="calm"] .czw-tile .czw-pic, html[data-cz-reduce] .czw-tile .czw-pic, html[data-view-motion="calm"] .czw-tile .czw-pic { transition-property: box-shadow; }
@@ -267,4 +222,7 @@ html[data-motion="off"] .czw-tile:is(:hover, :focus-visible, :active) .czw-pic {
   .czw { padding: 20px 16px 120px; }
   .czw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
   .czw-head .czs-find { margin-top: 0; }
+  /* "All categories" keeps its quiet size; its touch area is 44 tall. */
+  .czw-more { position: relative; }
+  .czw-more::after { content: ""; position: absolute; left: -4px; right: -4px; top: 50%; height: 44px; transform: translateY(-50%); }
 }

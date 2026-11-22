@@ -612,7 +612,17 @@
       return p ? p.name : '';
     }
     // fill puts each widget's look into the canvas, or says why there is none.
+    // The canvas is busy until the widgets' names and a real page's drawing
+    // have arrived: screen readers hear it, and Customize's grow holds its
+    // picture over the workshop until then.
+    function markBusy() {
+      var cv = $('.cpe-canvas');
+      if (!cv) return;
+      if (paletteState === 'loading' || (!PV.loaded && S.preview)) cv.setAttribute('aria-busy', 'true');
+      else cv.removeAttribute('aria-busy');
+    }
     function fill() {
+      markBusy();
       $$('[data-pv]').forEach(function (box) {
         var key = PV.byRef && PV.byRef[box.getAttribute('data-pv')];
         if (box.getAttribute('data-filled') === '1') return;
@@ -859,7 +869,7 @@
     }
     // renderSlot draws the picker into the bar, only when it changed, so an
     // open menu keeps the button it grew from. On a phone it is the last part
-    // of the category's swipeable row, so it never sits over the tabs; wider,
+    // of the category's row of tabs, so it never sits over them; wider,
     // it waits in the slot at the bar's right.
     var PICK = null;
     function renderSlot() {
@@ -871,7 +881,7 @@
           '<span class="czs-lay-lab">Layout:</span><b>' + esc(layoutName(plNow(), VAR)) + '</b><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>';
       }
       var bar = SHELL.querySelector('[data-czs-catbar]');
-      var host = bar && window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? bar : SLOT;
+      var host = bar && window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? (bar.querySelector('.czs-tabrow') || bar) : SLOT;
       var moved = false;
       if (!h) {
         if (PICK && PICK.parentNode) { PICK.remove(); moved = true; }

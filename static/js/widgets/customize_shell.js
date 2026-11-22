@@ -10,8 +10,8 @@
  *
  * The frame also runs the wall's behaviour (Customize's first page): it scales
  * each picture to its tile, lights the part a shared picture changes in the
- * others, and, at module level, asks for the view transition that grows a
- * pressed picture into its workshop and back (see "The grow" below).
+ * others, and, at module level, grows a pressed picture into its workshop
+ * and back (see "The grow" below).
  *
  * Areas talk to the frame through the page, not through each other:
  *   - An area changes its section with Chronicle.customizeSet(key, value)
@@ -83,17 +83,25 @@
 
 
   /* ---------- The grow ----------
-   * A picture on the wall is a boosted link whose swap asks for a view
-   * transition (hx-swap "transition:true"). Just before htmx starts it, this
-   * names the pressed picture "czs-grow" (the old state) and sets
-   * html[data-czs-vt]; customize_wall.css names the workshop's stage the same
-   * (the new state), so the browser flies one to the other while the rest of
-   * the page steps back. "Everything" runs it the other way. Calm gets a short
-   * cross-fade and Off cancels the transition. Browser Back restores the wall
-   * from htmx's history without a transition, so it plays the reverse itself
-   * on the tile it left from. */
+   * Pressing a picture on the wall flies a copy of it (the "fly") from its
+   * tile to where the workshop's stage will be, in the same frame as the
+   * press, while the wall steps back; the request runs meanwhile. The copy is
+   * laid out at its landing size with the miniature scaled to that width and
+   * played from the tile with a transform, so it stays sharp as it grows. It
+   * holds there, over the stage, until the workshop has drawn (every widget
+   * in [data-czs-stage] mounted and no [aria-busy="true"] left in it, or
+   * 1.5 s at most), then
+   * cross-fades into it. "Everything" and browser Back step the workshop back
+   * at once and, when the wall arrives, fly the picture from the stage into
+   * its tile. Calm fades the picture in place instead of flying it; Off and
+   * a device asking for reduced motion swap at once. Focus lands on the
+   * workshop's name going in and on the tile you came from coming back.
+   * html[data-czs-fly] keeps the arriving content hidden until its move
+   * starts (customize_wall.css), so nothing is drawn first and then moves. */
   var G = document.documentElement;
-  var growClear = 0, growStyle = null, growFrom = '', left = null;
+  var growFrom = '', fly = null, back = null, lastBar = null;
+  var READY_CAP = 1500;      // ms after the swap the fly waits for the workshop at most
+  var STALE = 10000;         // ms after which a move with no swap is given up
   function motionLevel() {
     var m = G.getAttribute('data-motion');
     if (m === 'off' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return 'off';
@@ -104,12 +112,8 @@
     var v = parseFloat(getComputedStyle(G).getPropertyValue(name));
     return isFinite(v) && v > 0 ? v : dflt;
   }
+  function cssEase(name, dflt) { return getComputedStyle(G).getPropertyValue(name).trim() || dflt; }
   function keyAttr(k) { return String(k || '').replace(/[^a-z0-9-]/gi, ''); }
-  function growReset() {
-    clearTimeout(growClear);
-    G.removeAttribute('data-czs-vt');
-    if (growStyle) { growStyle.remove(); growStyle = null; }
-  }
   // The wall picture a workshop returns to: the one pressed to get here, or
   // the one its own address names after a reload.
   function returnKey(frame) {
@@ -118,53 +122,245 @@
     if (look && growFrom && !/^(cat|home|app)-/.test(growFrom)) return growFrom;
     return own || growFrom || 'frame';
   }
-  document.addEventListener('htmx:beforeTransition', function (e) {
-    var cfg = e.detail && e.detail.requestConfig, elt = cfg && cfg.elt;
-    var link = elt && elt.closest ? elt.closest('.czw-tile, [data-czs-back]') : null;
-    if (!link) return;
+  function tileFor(wall, key) {
+    return wall ? wall.querySelector('.czw-tile[data-czw-key="' + keyAttr(key) + '"]') : null;
+  }
+  // Where a workshop's stage sits: below the bar, across the content column,
+  // down to the foot of the window. On the wall there is no bar yet, so its
+  // height is the one last measured, or the frame's own --czs-bar-h.
+  function stageBox() {
+    var main = document.getElementById('main-content'), czs = document.querySelector('.czs');
+    var m = main ? main.getBoundingClientRect() : { top: 0 }, c = czs ? czs.getBoundingClientRect() : { left: 0, width: window.innerWidth };
+    var bar = (lastBar && lastBar.w === window.innerWidth && lastBar.h) || (czs && parseFloat(getComputedStyle(czs).getPropertyValue('--czs-bar-h'))) || 50;
+    var top = Math.max(0, m.top) + bar;
+    return { left: c.left, top: top, width: c.width, height: Math.max(0, window.innerHeight - top) };
+  }
+  // The copy that flies: the tile's miniature in a picture laid out at width w
+  // at (x, y), which scales the miniature to that width itself.
+  function ghostOf(tile, x, y, w) {
+    var mini = tile && tile.querySelector('.czw-mini');
+    if (!mini) return null;
+    var g = document.createElement('div');
+    g.className = 'czw-pic czw-fly';
+    g.setAttribute('aria-hidden', 'true');
+    g.style.left = x + 'px'; g.style.top = y + 'px'; g.style.width = w + 'px';
+    g.appendChild(mini.cloneNode(true));
+    g.firstChild.style.setProperty('--s', (w / 720).toFixed(4));
+    document.body.appendChild(g);
+    return g;
+  }
+  function flipFrom(r, g) {
+    var w = g.offsetWidth || 1, x = parseFloat(g.style.left), y = parseFloat(g.style.top);
+    return 'translate(' + (r.left - x) + 'px,' + (r.top - y) + 'px) scale(' + (r.width / w) + ')';
+  }
+  // Puts everything a move touched back and forgets it; safe to call twice.
+  function flyClear(m) {
+    m = m || fly;
+    if (!m) return;
+    if (m === fly) fly = null;
+    if (m === back) back = null;
+    cancelAnimationFrame(m.raf); clearTimeout(m.cap); clearTimeout(m.stale);
+    m.anims.forEach(function (a) { try { a.cancel(); } catch (e) { /* already gone */ } });
+    m.anims = [];
+    if (m.ghost) m.ghost.remove();
+    if (m.pic) m.pic.style.visibility = '';
+    if (m.wall) { m.wall.style.pointerEvents = ''; m.wall.style.transformOrigin = ''; }
+    if (!fly && !back) G.removeAttribute('data-czs-fly');
+  }
+  function play(m, el, frames, opts) {
+    if (!el || !el.animate) return null;
+    var a = el.animate(frames, opts);
+    m.anims.push(a);
+    return a;
+  }
+  // Moves keyboard focus without scrolling the page, keeping the target in
+  // view of the scrolling column.
+  function focusQuiet(el) {
+    if (!el) return;
+    try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+    var main = document.getElementById('main-content');
+    if (!main || !main.contains(el)) return;
+    var r = el.getBoundingClientRect(), m = main.getBoundingClientRect();
+    if (r.top < m.top + 8) main.scrollTop -= m.top + 8 - r.top;
+    else if (r.bottom > m.bottom - 8) main.scrollTop += Math.min(r.top - m.top - 8, r.bottom - m.bottom + 8);
+  }
+  function focusLost() {
+    var a = document.activeElement;
+    return !a || a === document.body || !a.isConnected;
+  }
+
+  // Opening: a press on a picture starts the fly at once; htmx sends the
+  // request from the same click.
+  function grow(tile) {
+    flyClear(fly); flyClear(back);
+    growFrom = tile.getAttribute('data-czw-key') || '';
     var lv = motionLevel();
-    if (lv === 'off') { e.preventDefault(); return; }
-    growReset();
-    if (lv === 'calm') G.setAttribute('data-czs-vt', 'calm');
-    else if (link.classList.contains('czw-tile')) {
-      growFrom = link.getAttribute('data-czw-key') || '';
-      var pic = link.querySelector('[data-czw-pic]');
-      if (pic) pic.style.viewTransitionName = 'czs-grow';
-      G.setAttribute('data-czs-vt', 'open');
+    if (lv === 'off') return;
+    var wall = tile.closest('[data-czw]'), pic = tile.querySelector('[data-czw-pic]');
+    var to = stageBox(), from = pic && pic.getBoundingClientRect();
+    var g = from && from.width ? ghostOf(tile, to.left, to.top, to.width) : null;
+    if (!g) return;
+    var m = fly = { kind: 'grow', elt: tile, ghost: g, pic: pic, wall: wall, anims: [], raf: 0, cap: 0, stale: 0, landed: false, swapped: false, settled: false };
+    G.setAttribute('data-czs-fly', 'grow');
+    wall.style.pointerEvents = 'none';
+    var ease = cssEase('--ease-out', 'ease-out'), a;
+    if (lv === 'full') {
+      var dur = cssMs('--dur-slide', 360) * 0.92;
+      pic.style.visibility = 'hidden';
+      // The wall steps back about the middle of what shows of it.
+      var wr = wall.getBoundingClientRect();
+      wall.style.transformOrigin = (window.innerWidth / 2 - wr.left) + 'px ' + (window.innerHeight / 2 - wr.top) + 'px';
+      play(m, wall, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: dur, easing: ease, fill: 'forwards' });
+      a = play(m, g, [{ transform: flipFrom(from, g) }, { transform: 'none' }], { duration: dur, easing: ease, fill: 'both' });
     } else {
-      var stage = document.querySelector('[data-czs-stage]');
-      if (stage) stage.style.viewTransitionName = 'czs-grow';
-      growStyle = document.createElement('style');
-      growStyle.textContent = 'html[data-czs-vt="close"] .czw-tile[data-czw-key="' + keyAttr(returnKey(document.querySelector('.czs'))) +
-        '"] [data-czw-pic]{view-transition-name:czs-grow}';
-      document.head.appendChild(growStyle);
-      G.setAttribute('data-czs-vt', 'close');
+      var calm = cssMs('--dur-standard', 200);
+      play(m, wall, [{ opacity: 1 }, { opacity: 0 }], { duration: calm, easing: ease, fill: 'forwards' });
+      a = play(m, g, [{ opacity: 0 }, { opacity: 1 }], { duration: calm, easing: ease, fill: 'both' });
     }
-    growClear = setTimeout(growReset, 1200);
-  });
-  // Browser Back from a part: htmx restores the wall at once, so the picture
-  // travels back from where the stage was.
-  window.addEventListener('popstate', function () {
-    var frame = document.querySelector('.czs-is-workshop'), stage = frame && frame.querySelector('[data-czs-stage]');
-    left = stage ? { key: returnKey(frame), rect: stage.getBoundingClientRect(), t: Date.now() } : null;
+    var landed = function () { m.landed = true; };
+    if (a) { a.onfinish = landed; } else landed();
+    m.stale = setTimeout(function () { flyClear(m); }, STALE);
+  }
+  // The workshop has drawn: the picture fades into it.
+  function reveal(m) {
+    if (m !== fly) return;
+    cancelAnimationFrame(m.raf); clearTimeout(m.cap);
+    var stage = document.querySelector('.czs-is-workshop [data-czs-stage]');
+    var dur = cssMs('--dur-standard', 200), ease = cssEase('--ease-out', 'ease-out');
+    G.removeAttribute('data-czs-fly');
+    if (stage && motionLevel() !== 'off') play(m, stage, [{ opacity: 0 }, { opacity: 1 }], { duration: dur * 0.6, easing: ease });
+    var a = play(m, m.ghost, [{ opacity: 1 }, { opacity: 0 }], { duration: dur, easing: ease, fill: 'forwards' });
+    // The stage keeps animation: none, or its own settle would play again.
+    var done = function () { flyClear(m); };
+    if (a) { a.onfinish = done; a.oncancel = done; } else done();
+  }
+  function waitReady(m) {
+    var t0 = 0;
+    var tick = function () {
+      if (m !== fly) return;
+      var stage = document.querySelector('.czs-is-workshop [data-czs-stage]');
+      if (!stage) { flyClear(m); return; }
+      // A widget whose script is still on the way counts as loading; one
+      // frame after mounting, its own loading mark has had its chance.
+      var waiting = Chronicle.isMounted && Array.prototype.some.call(stage.querySelectorAll('[data-widget]'), function (w) { return !Chronicle.isMounted(w); });
+      if (waiting) t0 = 0;
+      else if (m.landed && t0 && !stage.querySelector('[aria-busy="true"]')) { reveal(m); return; }
+      else t0 = 1;
+      m.raf = requestAnimationFrame(tick);
+    };
+    m.raf = requestAnimationFrame(tick);
+    m.cap = setTimeout(function () { if (m === fly) reveal(m); }, READY_CAP);
+  }
+
+  // Closing: the workshop steps back at once, as feedback while the wall is
+  // fetched; the picture flies home once it arrives.
+  function stepBack(frame) {
+    flyClear(fly); flyClear(back);
+    var stage = frame && frame.querySelector('[data-czs-stage]'), lv = motionLevel();
+    if (!stage) return;
+    var top = frame.querySelector('[data-czs-top]'), r = stage.getBoundingClientRect();
+    var t = Math.max(r.top, top ? top.getBoundingClientRect().bottom : r.top);
+    var m = back = { kind: 'shrink', key: returnKey(frame), rect: { left: r.left, top: t, width: r.width }, lv: lv, anims: [], raf: 0, cap: 0, stale: 0, t: Date.now() };
+    if (lv === 'off') return;
+    G.setAttribute('data-czs-fly', 'shrink');
+    var dur = cssMs('--dur-micro', 120), ease = cssEase('--ease-out', 'ease-out');
+    play(m, stage, lv === 'full' ? [{ opacity: 1, transform: 'none' }, { opacity: 0.6, transform: 'scale(0.985)' }] : [{ opacity: 1 }, { opacity: 0.6 }],
+      { duration: dur, easing: ease, fill: 'forwards' });
+    m.stale = setTimeout(function () { flyClear(m); }, STALE);
+  }
+  // The wall is in: focus the tile you came from and fly its picture home.
+  function homeward(m) {
+    var wall = document.querySelector('.czs-is-wall [data-czw]');
+    flyClear(m);
+    if (!wall) return;
+    var tile = tileFor(wall, m.key) || tileFor(wall, 'frame');
+    if (tile) focusQuiet(tile);
+    if (m.lv === 'off' || !tile) return;
+    var pic = tile.querySelector('[data-czw-pic]'), to = pic && pic.getBoundingClientRect();
+    var g = to && to.width ? ghostOf(tile, m.rect.left, m.rect.top, m.rect.width) : null;
+    var n = back = { kind: 'home', ghost: g, pic: pic, wall: wall, anims: [], raf: 0, cap: 0, stale: 0 };
+    G.setAttribute('data-czs-fly', 'shrink');
+    var a;
+    if (m.lv === 'full' && g) {
+      var dur = cssMs('--dur-large', 280) * 0.9, ease = cssEase('--ease-in-out', 'ease-in-out');
+      pic.style.visibility = 'hidden';
+      var wr = wall.getBoundingClientRect();
+      wall.style.transformOrigin = (window.innerWidth / 2 - wr.left) + 'px ' + (window.innerHeight / 2 - wr.top) + 'px';
+      play(n, wall, [{ opacity: 0, transform: 'scale(0.97)' }, { opacity: 1, transform: 'none' }], { duration: dur, easing: ease });
+      a = play(n, g, [{ transform: 'none' }, { transform: flipFrom(to, g) }], { duration: dur, easing: ease, fill: 'forwards' });
+    } else {
+      var calm = cssMs('--dur-standard', 200), ce = cssEase('--ease-out', 'ease-out');
+      play(n, wall, [{ opacity: 0 }, { opacity: 1 }], { duration: calm, easing: ce });
+      a = play(n, g, [{ opacity: 1 }, { opacity: 0 }], { duration: calm, easing: ce, fill: 'forwards' });
+    }
+    // The wall's own fade now holds it, so the hiding rule can go.
+    G.setAttribute('data-czs-fly', 'home');
+    var done = function () { flyClear(n); };
+    if (a) { a.onfinish = done; a.oncancel = done; } else done();
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !e.target.closest) return;
+    var tile = e.target.closest('.czs-is-wall .czw-tile[href]');
+    if (tile) { grow(tile); return; }
+    var link = e.target.closest('.czs-is-workshop [data-czs-back]');
+    if (link) stepBack(link.closest('.czs'));
   }, true);
-  document.addEventListener('htmx:historyRestore', function () {
-    var l = left; left = null;
-    var wall = document.querySelector('.czs-is-wall');
-    if (!l || !wall || Date.now() - l.t > 4000 || motionLevel() !== 'full') return;
-    var pic = wall.querySelector('.czw-tile[data-czw-key="' + keyAttr(l.key) + '"] [data-czw-pic]');
-    var dur = cssMs('--dur-large', 280) * 0.9;
-    var ease = getComputedStyle(G).getPropertyValue('--ease-in-out').trim() || 'ease-in-out';
-    if (wall.animate) wall.animate([{ opacity: 0, transform: 'scale(0.97)' }, { opacity: 1, transform: 'none' }], { duration: dur, easing: ease });
-    if (!pic || !pic.animate) return;
-    var to = pic.getBoundingClientRect();
-    if (!to.width || !to.height) return;
-    pic.style.zIndex = '5'; pic.style.transformOrigin = '0 0';
-    var a = pic.animate([{ transform: 'translate(' + (l.rect.left - to.left) + 'px,' + (l.rect.top - to.top) + 'px) scale(' + (l.rect.width / to.width) + ',' + (l.rect.height / to.height) + ')', opacity: 0.4 },
-      { transform: 'none', opacity: 1 }], { duration: dur, easing: ease });
-    var done = function () { pic.style.zIndex = ''; pic.style.transformOrigin = ''; };
-    a.onfinish = done; a.oncancel = done;
+  // Browser Back from a part: the same step back, then the same way home.
+  window.addEventListener('popstate', function () {
+    if (fly) flyClear(fly);
+    var frame = document.querySelector('.czs-is-workshop');
+    if (frame) stepBack(frame); else flyClear(back);
+  }, true);
+  document.addEventListener('htmx:afterSwap', function (e) {
+    var main = document.getElementById('main-content');
+    if (!e.detail || e.detail.target !== main) return;
+    if (fly && document.querySelector('.czs-is-workshop')) {
+      fly.swapped = true;
+      clearTimeout(fly.stale);
+      // The stage's own settle would replay once the hiding rule lifts.
+      var st = document.querySelector('.czs-is-workshop [data-czs-stage]');
+      if (st) st.style.animation = 'none';
+    } else if (fly) flyClear(fly);
+    if (back && back.kind === 'shrink') {
+      var m = back;
+      // After boot.js puts the column back at its top, before the first paint.
+      if (document.querySelector('.czs-is-wall')) Promise.resolve().then(function () { homeward(m); });
+      else flyClear(m);
+    }
   });
+  document.addEventListener('htmx:afterSettle', function (e) {
+    var main = document.getElementById('main-content');
+    if (!e.detail || e.detail.target !== main) return;
+    var frame = document.querySelector('.czs-is-workshop');
+    if (!frame) return;
+    // Going in, focus lands on the workshop's name once its widgets have mounted.
+    requestAnimationFrame(function () {
+      if (focusLost()) focusQuiet(frame.querySelector('.czs-catname'));
+    });
+    if (fly && fly.swapped) waitReady(fly);
+  });
+  document.addEventListener('htmx:historyRestore', function () {
+    if (back && back.kind === 'shrink' && document.querySelector('.czs-is-wall')) { homeward(back); return; }
+    flyClear(fly); flyClear(back);
+    var frame = document.querySelector('.czs-is-workshop');
+    if (frame) requestAnimationFrame(function () { if (focusLost()) focusQuiet(frame.querySelector('.czs-catname')); });
+  });
+  ['htmx:responseError', 'htmx:sendError', 'htmx:timeout', 'htmx:swapError'].forEach(function (t) {
+    document.addEventListener(t, function () { flyClear(fly); flyClear(back); });
+  });
+  // Escape mid-move: before the swap it stops the request and the page stays;
+  // after it, the workshop shows at once. Either way no copy is left behind.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || (!fly && !back)) return;
+    if (fly && !fly.swapped && window.htmx) htmx.trigger(fly.elt, 'htmx:abort');
+    if (back && back.kind === 'shrink' && window.htmx) {
+      var l = document.querySelector('.czs-is-workshop [data-czs-back]');
+      if (l) htmx.trigger(l, 'htmx:abort');
+    }
+    flyClear(fly); flyClear(back);
+  }, true);
+  Chronicle._customizeGrow = { clear: function () { flyClear(fly); flyClear(back); }, active: function () { return !!(fly || back); } };
 
   function mount(el) {
     var CID = el.getAttribute('data-campaign-id');
@@ -537,7 +733,7 @@
     var topBar = $('[data-czs-top]'), openDr = null;
     // Content that pins itself under the bar (the Look's example) needs its height.
     var topRO = null;
-    function setTopH() { if (topBar) el.style.setProperty('--czs-top-h', topBar.offsetHeight + 'px'); }
+    function setTopH() { if (topBar && topBar.offsetHeight) { el.style.setProperty('--czs-top-h', topBar.offsetHeight + 'px'); lastBar = { w: window.innerWidth, h: topBar.offsetHeight }; } }
     setTopH();
     if (topBar && window.ResizeObserver) { topRO = new ResizeObserver(setTopH); topRO.observe(topBar); }
     on(window, 'resize', setTopH);
@@ -546,15 +742,18 @@
     // starts at a whole part, so no word is cut at its left edge. The page
     // layout calls it again once its picker has narrowed the row.
     function revealTab() {
-      var strip = topBar && topBar.querySelector('.czs-tabs-top'), cur = strip && strip.querySelector('.czs-tab[aria-current]');
+      // On a phone the tabs have a row of their own, which is what scrolls.
+      var row = topBar && topBar.querySelector('.czs-tabrow');
+      var strip = row && row.clientWidth ? row : topBar && topBar.querySelector('.czs-tabs-top'), cur = strip && strip.querySelector('.czs-tab[aria-current]');
       if (!cur || strip.scrollWidth <= strip.clientWidth) return;
       var w = cur.closest('.czs-tabw') || cur, x0 = strip.offsetLeft;
+      if (strip === row) { strip.scrollLeft = Math.max(0, w.offsetLeft - x0 - 12); return; }
       if (!strip.hasAttribute('data-czs-catbar')) { strip.scrollLeft = Math.max(0, w.offsetLeft - x0 - 12); return; }
       // The row lands with a whole item at its left edge. Near the end the
       // row could not scroll that far, so a tail of room is added after the
       // last item rather than leaving a cut-off word at the left.
       var right = w.offsetLeft - x0 + w.offsetWidth;
-      var parts = Array.prototype.slice.call(strip.children);
+      var parts = Array.prototype.slice.call(strip.querySelectorAll(':scope > .czs-back-all, :scope > .czs-tabw, :scope > .czs-tabrow > *'));
       // "Everything" stays pinned at the row's start, so the landing leaves
       // room for it and the first item is the one after it.
       var pin = strip.querySelector('.czs-back-all'), pinW = pin ? pin.offsetWidth : 0, first = pin ? 1 : 0;
@@ -580,7 +779,7 @@
     // A row that scrolls sideways fades on the side that has more beyond it,
     // so a cut word never reads as the end of the row. Rows are drawn by
     // several scripts, so this watches the frame rather than each row.
-    var CUE_ROWS = '.czs-tabs-top, .czs-tabs, .czp .parts-row, .czp .lk-row, .cpe-dock';
+    var CUE_ROWS = '.czs-tabs-top, .czs-tabrow, .czs-tabs, .czp .parts-row, .czp .lk-row, .cpe-dock';
     function cueRow(r) {
       var max = r.scrollWidth - r.clientWidth, x = Math.abs(r.scrollLeft);
       r.classList.toggle('cue-l', x > 1);
@@ -599,7 +798,7 @@
     if (rowStrip && window.ResizeObserver) {
       rowRO = new ResizeObserver(function () { if (alive && rowRO) revealTab(); });
       rowRO.observe(rowStrip);
-      Array.prototype.forEach.call(rowStrip.children, function (k) { rowRO.observe(k); });
+      Array.prototype.forEach.call(rowStrip.querySelectorAll(':scope > *, .czs-tabrow > *'), function (k) { rowRO.observe(k); });
       var settle = function () { if (rowRO) { rowRO.disconnect(); rowRO = null; } };
       ['pointerdown', 'wheel', 'touchstart', 'keydown'].forEach(function (t) { on(rowStrip, t, settle, { passive: true }); });
     }

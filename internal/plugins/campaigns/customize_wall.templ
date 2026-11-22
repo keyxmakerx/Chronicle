@@ -40,14 +40,13 @@ templ customizeWall(name string, groups []wallGroup, skin wallSkin) {
 	</div>
 }
 
-// wallTileLink is one picture and its two lines. The link carries the grow:
-// its swap asks for a view transition, and the way back from the workshop
-// finds this tile again by its key.
+// wallTileLink is one picture and its two lines. customize_shell.js grows the
+// picture from it when it is pressed, and the way back from the workshop finds
+// this tile again by its key.
 templ wallTileLink(t wallTile, skin wallSkin) {
 	<a
 		class="czw-tile"
 		href={ templ.SafeURL(t.Href) }
-		hx-swap="innerHTML transition:true show:window:top"
 		data-czw-key={ t.Key }
 		if t.Share != "" {
 			data-czw-shares={ t.Share }

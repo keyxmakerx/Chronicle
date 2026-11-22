@@ -39,7 +39,7 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 							@customizePartBarNav(d.Bar)
 						}
 						<div class="czs-bar-slot" data-czs-bar-slot></div>
-						<button type="button" class="czs-find" data-czs-find aria-haspopup="dialog" aria-keyshortcuts="/">
+						<button type="button" class="czs-find" data-czs-find aria-haspopup="dialog" aria-keyshortcuts="/" aria-label="Find a setting">
 							<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
 							<span>Find a setting</span>
 							<kbd>/</kbd>
@@ -74,16 +74,19 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 
 // customizePartBarNav is the bar inside any other part: back to the wall,
 // the part's name, and the part's own tabs (Look's rooms, the homes). The open
-// tab wears the index mark. Look's rooms are the address's # on the same page,
-// which customize_shell.js follows.
+// tab wears the index mark. The tabs share one row with the name on a wide
+// screen and take a row of their own on a phone (.czs-tabrow). The name takes
+// focus, though it is no tab stop, when a workshop opens. Look's rooms are the
+// address's # on the same page, which customize_shell.js follows.
 templ customizePartBarNav(b *customizeBar) {
 	<nav class="czs-tabs-top czs-catbar" aria-label={ b.Name } data-czs-catbar hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
-		<a class="czs-back czs-back-all" href={ templ.SafeURL(b.Base) } data-czs-back hx-swap="innerHTML transition:true show:window:top">
+		<a class="czs-back czs-back-all" href={ templ.SafeURL(b.Base) } data-czs-back>
 			<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
 			<span>Everything</span>
 			<span class="czs-dot" title="Unsaved changes" data-czs-area-dot={ b.Dot } hidden></span>
 		</a>
-		<span class="czs-tabw czs-catname-w" style={ templ.SafeCSS("--czs-i:1") }><span class="czs-catname is-static">{ b.Name }</span></span>
+		<span class="czs-tabw czs-catname-w" style={ templ.SafeCSS("--czs-i:1") }><span class="czs-catname is-static" tabindex="-1">{ b.Name }</span></span>
+		<span class="czs-tabrow">
 		for i, t := range b.Tabs {
 			<span class="czs-tabw" style={ templ.SafeCSS("--czs-i:" + strconv.Itoa(i+2)) }>
 				<a
@@ -103,6 +106,7 @@ templ customizePartBarNav(b *customizeBar) {
 				</a>
 			</span>
 		}
+		</span>
 	</nav>
 }
 
@@ -113,7 +117,7 @@ templ customizePartBarNav(b *customizeBar) {
 // the slot after it (data-czs-bar-slot).
 templ customizeCatBarNav(c *customizeCatBar) {
 	<nav class="czs-tabs-top czs-catbar" aria-label={ c.Name } data-czs-catbar hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
-		<a class="czs-back czs-back-all" href={ templ.SafeURL(c.Base) } data-czs-back hx-swap="innerHTML transition:true show:window:top">
+		<a class="czs-back czs-back-all" href={ templ.SafeURL(c.Base) } data-czs-back>
 			<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
 			<span>Everything</span>
 			<span class="czs-dot" title="Unsaved changes" data-czs-area-dot="categories" hidden></span>
@@ -131,6 +135,7 @@ templ customizeCatBarNav(c *customizeCatBar) {
 				<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
 			</button>
 		</span>
+		<span class="czs-tabrow">
 		for i, t := range catBarTabs() {
 			<span class="czs-tabw" style={ templ.SafeCSS("--czs-i:" + strconv.Itoa(i+2)) }>
 				if c.New && t.ID != "settings" {
@@ -150,6 +155,7 @@ templ customizeCatBarNav(c *customizeCatBar) {
 				}
 			</span>
 		}
+		</span>
 	</nav>
 }
 
