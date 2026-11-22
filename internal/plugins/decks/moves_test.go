@@ -98,8 +98,10 @@ func TestMoveTable(t *testing.T) {
 		{name: "take off from a hand is the wrong zone", verb: "take-off", start: start{zone: ZoneHand, holder: "h-tam"}, actor: tamOf, wantCode: conf},
 		// discard
 		{name: "discard is off by default", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, actor: tamOf, wantCode: forbid},
-		{name: "owner discards when the deck allows", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, settings: &SettingsInput{Discard: ptr(true)}, actor: tamOf, wantZone: ZoneUsed},
-		{name: "discard with fate play ends in used", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, settings: &SettingsInput{Discard: ptr(true)}, card: CreateCardInput{Fate: FatePlay}, actor: tamOf, wantZone: ZoneUsed},
+		{name: "owner discards when the deck allows", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam", faceUp: true}, settings: &SettingsInput{Discard: ptr(true)}, actor: tamOf, wantZone: ZoneUsed},
+		{name: "discard with fate play ends in used", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam", faceUp: true}, settings: &SettingsInput{Discard: ptr(true)}, card: CreateCardInput{Fate: FatePlay}, actor: tamOf, wantZone: ZoneUsed},
+		{name: "a player cannot discard a face-down card", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, settings: &SettingsInput{Discard: ptr(true)}, actor: tamOf, wantCode: conf},
+		{name: "nor one whose fate sends it back to the pile", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, settings: &SettingsInput{Discard: ptr(true)}, card: CreateCardInput{Fate: FateBack}, actor: tamOf, wantCode: conf},
 		{name: "a Director discards regardless", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, actor: dirOf, wantZone: ZoneUsed},
 		{name: "another player discarding is a 404", verb: "discard", start: start{zone: ZoneHand, holder: "h-tam"}, settings: &SettingsInput{Discard: ptr(true)}, actor: ilseOf, wantCode: notFound},
 		// take back

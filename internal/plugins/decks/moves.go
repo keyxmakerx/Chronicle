@@ -374,6 +374,11 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if !v.Director && !(own && d.Settings.Discard) {
 			return nil, errForbidden("you can't discard from this deck")
 		}
+		if !v.Director && !c.FaceUp {
+			// Where a discarded card lands depends on its fate, so discarding
+			// one unseen would tell the player something about it.
+			return nil, conflict("turn the card over before discarding it")
+		}
 		m.To, m.Asked, action = afterLeaving(fateOf(d, card)), AskedClear, ActDiscard
 
 	case verbTakeBack:
