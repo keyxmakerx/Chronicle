@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { pw, chromePath, skip } from './_browser_env.mjs';
+import { bordersAttrs, pickerScripts, serveBorders, contrast, INFO } from './_card_border_fixture.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const C = '/campaigns/c1';
@@ -35,25 +36,36 @@ const PLAN = (extra = {}, choices = ANCESTRY()) => ({ systemName: 'Draw Steel', 
   { fieldKey: 'class', label: 'Class', choices: [pkg('fury', 'Fury')] },
 ] });
 
-const html = (attrs, motion) => `<!doctype html><html data-gm-term="Director"${motion ? ` data-motion="${motion}"` : ''}><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style><link rel="stylesheet" href="/hero_creator.css"></head><body>
+// Site tokens for the tests that measure colour.
+const TOKENS = '*,::before,::after{box-sizing:border-box}:root{--color-accent:#4f46e5;--color-accent-link:#4338ca;--color-bg-primary:#f9fafb;--color-bg-secondary:#f3f4f6;--color-card-bg:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-secondary:#4b5563;--color-accent-rgb:79 70 229;--dur-micro:120ms;--dur-standard:200ms;--ease-out:cubic-bezier(.16,1,.3,1);--ease-in:cubic-bezier(.4,0,1,1)}'
+  + 'html.dark{--color-accent-link:#a5b4fc;--color-bg-primary:#111827;--color-bg-secondary:#1f2937;--color-card-bg:#1f2937;--color-bg-tertiary:#374151;--color-border:#374151;--color-text-primary:#f9fafb;--color-text-secondary:#c4c9d2}';
+const html = (attrs, motion, o = {}) => `<!doctype html><html data-gm-term="Director"${motion ? ` data-motion="${motion}"` : ''}${o.dark ? ' class="dark"' : ''}><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}${o.tokens ? TOKENS : ''}</style><link rel="stylesheet" href="/hero_creator.css">${o.stage ? '<link rel="stylesheet" href="/hero_stage.css"><link rel="stylesheet" href="/hero_borders.css">' : ''}</head><body>
 <div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true" ${attrs}><p class="hc-loading__text">Opening</p></div>
 <script>window.Chronicle = { register: (n, d) => document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)), escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => 'Director',
   apiFetch: (url, o) => fetch(url, { method: (o && o.method) || 'GET', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': (o && o.csrfToken) || '' }, body: o && o.body ? JSON.stringify(o.body) : undefined }) };</script>
-<script src="/hero_rules_lines.js"></script><script src="/own_entry_editor.js"></script><script src="/hero_creator.js"></script></body></html>`;
+<script src="/hero_rules_lines.js"></script>${o.scripts === false ? '' : pickerScripts}<script src="/own_entry_editor.js"></script>${o.stage ? '<script src="/hero_stage.js"></script>' : ''}<script src="/hero_creator.js"></script></body></html>`;
 
 // A stand-in for the entry API: the player's one permission, the entries they
 // have written, and what a save answers.
 async function open(t, o = {}) {
-  const { width = 390, attrs = '', plan = PLAN(), grants = [{ id: 1, fieldKey: 'ancestry', userId: 'u1', budget: 3 }], entries = [], failWith = null, motion = null } = o;
+  const { width = 390, attrs: baseAttrs = '', plan = PLAN(), grants = [{ id: 1, fieldKey: 'ancestry', userId: 'u1', budget: 3 }], entries = [], failWith = null, motion = null,
+    lib = false, pick = true, stage = false, scripts = true, tokens = false, dark = false, reduced = true } = o;
+  // lib: the page hands the form the border library; pick: and the picker's lists; scripts: and the two scripts.
+  const attrs = baseAttrs + (stage ? ' data-look="stage"' : '') + (lib ? bordersAttrs({ pick }) : '');
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
-  const pg = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
-  const seen = { post: [], put: [], created: [] };
+  const pg = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
+  const errors = [];
+  pg.on('pageerror', (e) => errors.push(e.message));
+  const seen = { post: [], put: [], created: [], errors };
   const store = entries.slice();
   await pg.route('http://t.test/**', (route) => {
     const req = route.request(), p = new URL(req.url()).pathname, m = req.method();
     const ok = (b, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(b) });
+    if (serveBorders(route, p)) return;
+    if (p === '/hero_stage.js') return route.fulfill({ contentType: 'text/javascript', body: read('js/hero_stage.js') });
+    if (p === '/hero_stage.css') return route.fulfill({ contentType: 'text/css', body: read('css/hero_stage.css') });
     if (p === '/hero_creator.js') return route.fulfill({ contentType: 'text/javascript', body: read('js/hero_creator.js') });
     if (p === '/hero_creator.css') return route.fulfill({ contentType: 'text/css', body: read('css/hero_creator.css') });
     if (p === '/own_entry_editor.js') return route.fulfill({ contentType: 'text/javascript', body: read('js/own_entry_editor.js') });
@@ -79,7 +91,7 @@ async function open(t, o = {}) {
       return ok({});
     }
     if (p === C + '/characters/new' && m === 'POST') { seen.created.push(JSON.parse(req.postData())); return ok({ id: 'e9', url: C + '/entities/e9' }, 201); }
-    return route.fulfill({ contentType: 'text/html', body: html(attrs, motion) });
+    return route.fulfill({ contentType: 'text/html', body: html(attrs, motion, { stage, scripts, tokens, dark }) });
   });
   await pg.goto('http://t.test/');
   await pg.waitForSelector('.hc-app');
@@ -295,4 +307,297 @@ test('the editor follows the Calm and Off motion settings', { skip }, async (t) 
   await pg.click('[data-list="purchased_traits"] [data-oed="additem"]');
   const anim = await pg.locator('.oed-item.is-new').first().evaluate((e) => getComputedStyle(e).animationName);
   assert.equal(anim, 'none', 'Off plays nothing');
+});
+
+// --- The Card border row ---
+
+const FIELD = '[data-hcw-f]';
+const mineWith = (props, extra = {}) => {
+  const e = { id: 41, fieldKey: 'ancestry', slug: 'ashborn', name: 'Ashborn', summary: 'Born of ash.', description: '', status: 'draft', createdBy: 'u1',
+    properties: { size: '1M', speed: 5, ancestry_points: 3, ...props }, ...extra };
+  const plan = PLAN({ canMake: false }, [{ key: '41', slug: 'ashborn', name: 'Ashborn', summary: 'Born of ash.', source: 'campaign', status: 'draft', mine: true, entryId: 41, properties: e.properties }].concat(ANCESTRY()));
+  return { plan, entries: [e] };
+};
+// Opens a new entry's form (phone sheet), or edits the player's one.
+const newForm = async (o) => { const r = await open(o.t, o.o); await r.pg.click(o.o && o.o.width > 900 ? '.hc-gcard--own' : '.hc-hand .hc-card--own'); await r.pg.waitForSelector(FIELD); return r; };
+const editForm = async (t, props, o = {}) => {
+  const r = await open(t, { ...mineWith(props), ...o });
+  await r.pg.locator('.hc-hand .hc-card[data-i]').first().click();
+  await r.pg.waitForSelector('.hc-sheet [data-act="ownedit"]');
+  await r.pg.click('.hc-sheet [data-act="ownedit"]');
+  await r.pg.waitForSelector('.hc-sheet [data-oed-form]');
+  return r;
+};
+const row = (pg) => pg.evaluate(() => {
+  const f = document.querySelector('[data-hcw-f]');
+  const sm = f.querySelector('[data-frow] .hc-gcard'), live = f.querySelector('[data-flive]');
+  return { name: f.querySelector('[data-fname]').textContent, col: f.querySelector('[data-fcol]').textContent, word: f.querySelector('[data-fword]').textContent,
+    expanded: f.querySelector('[data-hcw="fold"]').getAttribute('aria-expanded'),
+    rowTrim: sm.getAttribute('data-trim'), rowK: sm.style.getPropertyValue('--k').trim(), liveTrim: live.getAttribute('data-trim'), liveK: live.style.getPropertyValue('--k').trim(),
+    liveName: f.querySelector('[data-flname]').textContent, liveSum: f.querySelector('[data-flsum]').textContent, liveKind: f.querySelector('[data-flive] .hc-top').textContent };
+});
+const shown = (pg, sel) => pg.locator(sel).first().isVisible();
+
+test('Card border: one closed row right after "A few words about it", reading None, unfolding in place and folding back', { skip }, async (t) => {
+  const { pg, seen } = await newForm({ t, o: { lib: true, stage: true } });
+  const after = await pg.evaluate(() => document.querySelector('#oed-s').closest('.oed-field').nextElementSibling.matches('[data-hcw-f]'));
+  assert.ok(after, 'right after the few words');
+  assert.match(await text(pg, FIELD + ' .oed-k'), /^Card border$/);
+  let r = await row(pg);
+  assert.deepEqual([r.name, r.col, r.word, r.expanded], ['None', 'A plain card', 'Change', 'false']);
+  assert.equal(await shown(pg, FIELD + ' .hcw-pk'), false, 'closed, the picker is out of reach');
+  await pg.click(FIELD + ' [data-hcw="fold"]');
+  r = await row(pg);
+  assert.deepEqual([r.word, r.expanded], ['Done', 'true']);
+  assert.equal(await shown(pg, FIELD + ' .hcw-t[data-b="fire"]'), true);
+  assert.equal(await pg.locator(FIELD + ' .hcw-t').count(), 17, 'None and sixteen samples');
+  assert.equal(await pg.locator(FIELD + ' .hcw-t[data-b=""]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await pg.locator(FIELD + ' [data-lay="field"]').count(), 1);
+  await pg.click(FIELD + ' [data-hcw="fold"]');
+  r = await row(pg);
+  assert.deepEqual([r.word, r.expanded], ['Change', 'false']);
+  assert.equal(await shown(pg, FIELD + ' .hcw-t[data-b="fire"]'), false);
+  assert.deepEqual(seen.errors, []);
+});
+
+test('Card border: a choice repaints the row, the live card and the words at once; the card follows the typing', { skip }, async (t) => {
+  const { pg, seen } = await newForm({ t, o: { lib: true, stage: true, tokens: true } });
+  await pg.click(FIELD + ' [data-hcw="fold"]');
+  let r = await row(pg);
+  assert.equal(r.liveKind, 'Ancestry');
+  assert.equal(r.liveName, 'Your ancestry');
+  assert.equal(r.liveSum, 'What a player reads before opening it.');
+  await pg.fill('[data-k="name"]', 'Ashborn');
+  await pg.fill('[data-k="summary"]', 'Born of ash and ember.');
+  r = await row(pg);
+  assert.deepEqual([r.liveName, r.liveSum], ['Ashborn', 'Born of ash and ember.']);
+  await pg.click(FIELD + ' .hcw-t[data-b="fire"]');
+  r = await row(pg);
+  assert.deepEqual([r.name, r.col, r.rowTrim, r.liveTrim, r.rowK, r.liveK], ['Fire', 'Its own colour', 'fire', 'fire', INFO.fire[1], INFO.fire[1]]);
+  await pg.click(FIELD + ' .hcw-c[data-c="#b3243a"]');
+  r = await row(pg);
+  assert.deepEqual([r.name, r.col, r.rowK, r.liveK], ['Fire', 'Crimson', '#b3243a', '#b3243a']);
+  assert.equal(await pg.locator(FIELD + ' .hcw-c[data-c="#b3243a"]').getAttribute('aria-pressed'), 'true');
+  await pg.click(FIELD + ' .hcw-c--own');
+  assert.equal((await row(pg)).col, 'Its own colour');
+  await pg.click(FIELD + ' .hcw-t[data-b=""]');
+  r = await row(pg);
+  assert.deepEqual([r.name, r.col, r.rowTrim, r.liveTrim], ['None', 'A plain card', null, null]);
+  assert.deepEqual(seen.errors, []);
+});
+
+test('Card border: saving sends card_border and card_colour; the border’s own colour sends no colour; None sends neither', { skip }, async (t) => {
+  const save = async (steps) => {
+    const { pg, seen } = await newForm({ t, o: { lib: true, stage: true } });
+    await writeDraft(pg);
+    await pg.click(FIELD + ' [data-hcw="fold"]');
+    await steps(pg);
+    await pg.click('.hc-sfoot [data-oed="draft"]');
+    await pg.waitForSelector('.hc-sheet', { state: 'detached' });
+    assert.equal(seen.post.length, 1);
+    return seen.post[0].properties;
+  };
+  let p = await save(async (pg) => { await pg.click(FIELD + ' .hcw-t[data-b="fire"]'); await pg.click(FIELD + ' .hcw-c[data-c="#B3243A" i]'); });
+  assert.equal(p.card_border, 'fire');
+  assert.equal(p.card_colour, '#b3243a');
+  p = await save(async (pg) => { await pg.click(FIELD + ' .hcw-t[data-b="ice"]'); });
+  assert.equal(p.card_border, 'ice');
+  assert.ok(!('card_colour' in p), 'its own colour is not a stored colour');
+  p = await save(async () => {});
+  assert.ok(!('card_border' in p) && !('card_colour' in p), 'None writes neither');
+  p = await save(async (pg) => { await pg.click(FIELD + ' .hcw-t[data-b="fire"]'); await pg.click(FIELD + ' .hcw-t[data-b=""]'); });
+  assert.ok(!('card_border' in p) && !('card_colour' in p), 'choosing None again writes neither');
+});
+
+test('Card border: an edit PUTs the choice, and reopening shows it with no Card border or Card colour fact', { skip }, async (t) => {
+  const { pg, seen } = await editForm(t, { card_border: 'storm', card_colour: '#2FB5A4' }, { lib: true, stage: true });
+  let r = await row(pg);
+  assert.deepEqual([r.name, r.col, r.rowTrim, r.rowK], ['Storm', 'Teal', 'storm', '#2fb5a4']);
+  const labels = await pg.locator('.oed-fact input[data-part="label"]').evaluateAll((els) => els.map((e) => e.value));
+  assert.ok(!labels.some((l) => /card/i.test(l)), 'not among the facts: ' + labels);
+  await pg.click(FIELD + ' [data-hcw="fold"]');
+  await pg.click(FIELD + ' .hcw-t[data-b="vine"]');
+  await pg.click('.hc-sfoot [data-oed="draft"]');
+  await pg.waitForSelector('.hc-sheet', { state: 'detached' });
+  const put = seen.put.find((x) => x.path.endsWith('/system-entries/41')).body.properties;
+  assert.equal(put.card_border, 'vine');
+  assert.equal(put.card_colour, '#2fb5a4', 'the colour the writer had carries to the new border');
+  // The saved entry's card wears it at once, and is reopened with the same choice.
+  assert.equal(await pg.locator('.hc-hand .hc-card[data-i]').first().getAttribute('data-trim'), 'vine');
+  await pg.locator('.hc-hand .hc-card[data-i]').first().click();
+  await pg.click('.hc-sheet [data-act="ownedit"]');
+  await pg.waitForSelector(FIELD);
+  r = await row(pg);
+  assert.deepEqual([r.name, r.col], ['Vine and wood', 'Teal']);
+  assert.ok(!(await pg.locator('.oed-fact input[data-part="label"]').evaluateAll((els) => els.some((e) => /card/i.test(e.value)))));
+  assert.deepEqual(seen.errors, []);
+});
+
+test('Card border: a border that left the library reads None and goes back untouched; a hostile colour reaches no markup', { skip }, async (t) => {
+  const { pg, seen } = await editForm(t, { card_border: 'gone-border', card_colour: '#abcdef' }, { lib: true, stage: true });
+  const r = await row(pg);
+  assert.deepEqual([r.name, r.col, r.rowTrim], ['None', 'A plain card', null]);
+  assert.equal(await pg.locator('.oed-fact').count() >= 2, true);
+  await pg.click('.hc-sfoot [data-oed="draft"]');
+  await pg.waitForSelector('.hc-sheet', { state: 'detached' });
+  const p = seen.put.find((x) => x.path.endsWith('/system-entries/41')).body.properties;
+  assert.equal(p.card_border, 'gone-border');
+  assert.equal(p.card_colour, '#abcdef');
+  const bad = await editForm(t, { card_border: 'fire', card_colour: 'red;background:url(x)' }, { lib: true, stage: true });
+  const markup = await bad.pg.evaluate(() => document.querySelector('[data-hcw-f]').outerHTML + document.querySelector('.hc-sheet').outerHTML);
+  assert.ok(!/url\(x\)|red;background/.test(markup), 'the stored colour is not in the page');
+  const br = await row(bad.pg);
+  assert.deepEqual([br.name, br.col, br.rowK], ['Fire', 'Its own colour', INFO.fire[1]], 'the border’s own colour stands in');
+  // Picking changes what is saved: the unusable value is then replaced.
+  const again = await editForm(t, { card_border: 'gone-border', card_colour: '#abcdef' }, { lib: true, stage: true });
+  await again.pg.click(FIELD + ' [data-hcw="fold"]');
+  await again.pg.click(FIELD + ' .hcw-t[data-b="ice"]');
+  await again.pg.click('.hc-sfoot [data-oed="draft"]');
+  await again.pg.waitForFunction(() => document.querySelectorAll('.hc-sheet').length === 0);
+  const p2 = again.seen.put.filter((x) => x.path.endsWith('/system-entries/41')).pop().body.properties;
+  assert.deepEqual([p2.card_border, 'card_colour' in p2], ['ice', false]);
+});
+
+test('Card border: a fact the writer names Card border or Card colour is refused in plain words', { skip }, async (t) => {
+  for (const label of ['Card border', 'card colour']) {
+    const { pg, seen } = await newForm({ t, o: { lib: true, stage: true } });
+    await pg.fill('[data-k="name"]', 'Ashborn');
+    await pg.click('[data-oed="addfact"]');
+    await pg.locator('.oed-fact input[data-part="label"]').last().fill(label);
+    await pg.locator('.oed-fact input[data-part="value"]').last().fill('fire');
+    await pg.click('.hc-sfoot [data-oed="draft"]');
+    await pg.waitForSelector('.hc-sfoot [data-error]:not([hidden])');
+    assert.match(await text(pg, '.hc-sfoot [data-error]'), /is set in the Card border field, not as a fact/);
+    assert.equal(seen.post.length, 0);
+  }
+});
+
+test('Card border: without a library on the mount, or without the picker script, there is no field and the stored values are kept', { skip }, async (t) => {
+  for (const o of [{ lib: true, pick: false }, { lib: false }, { lib: true, scripts: false }]) {
+    const { pg, seen } = await editForm(t, { card_border: 'fire', card_colour: '#abcdef' }, { stage: true, ...o });
+    assert.equal(await pg.locator(FIELD).count(), 0, JSON.stringify(o));
+    const labels = await pg.locator('.oed-fact input[data-part="label"]').evaluateAll((els) => els.map((e) => e.value));
+    assert.ok(!labels.some((l) => /card/i.test(l)), 'not shown as facts either');
+    await pg.click('.hc-sfoot [data-oed="draft"]');
+    await pg.waitForSelector('.hc-sheet', { state: 'detached' });
+    const p = seen.put.find((x) => x.path.endsWith('/system-entries/41')).body.properties;
+    assert.deepEqual([p.card_border, p.card_colour], ['fire', '#abcdef'], JSON.stringify(o));
+    assert.deepEqual(seen.errors, [], JSON.stringify(o));
+  }
+});
+
+test('Card border: the stage look draws a just-written entry’s border; the classic look draws none and lists no such fact', { skip }, async (t) => {
+  for (const stage of [true, false]) {
+    const { pg, seen } = await newForm({ t, o: { lib: true, stage } });
+    await writeDraft(pg);
+    await pg.click(FIELD + ' [data-hcw="fold"]');
+    await pg.click(FIELD + ' .hcw-t[data-b="fire"]');
+    await pg.click('.hc-sfoot [data-oed="draft"]');
+    await pg.waitForSelector('.hc-sheet', { state: 'detached' });
+    assert.equal(seen.post[0].properties.card_border, 'fire');
+    const first = pg.locator('.hc-hand .hc-card[data-i]').first();
+    assert.match(await first.innerText(), /Ashborn/);
+    assert.equal(await first.getAttribute('data-trim'), stage ? 'fire' : null, stage ? 'the card wears it' : 'classic draws no border');
+    assert.equal(await pg.locator('[data-trim]').count() > 0, stage);
+    assert.ok(!/card border|card colour/i.test(await pg.locator('.hc-app').innerText()), 'no such fact in the creator');
+    assert.deepEqual(seen.errors, []);
+  }
+});
+
+test('Card border: the hint names the campaign’s word for the Director', { skip }, async (t) => {
+  const { pg } = await newForm({ t, o: { lib: true, stage: true } });
+  assert.equal((await text(pg, FIELD + ' .oed-hint')).trim(), 'How your card looks in the creator. Your Director can change it.');
+});
+
+test('Card border: at 360 wide every sample, swatch and the row are 44 high, and nothing scrolls sideways', { skip }, async (t) => {
+  const { pg } = await editForm(t, { card_border: 'fire', card_colour: '#b3243a' }, { width: 360, lib: true, stage: true, tokens: true });
+  await pg.click(FIELD + ' [data-hcw="fold"]');
+  const m = await pg.evaluate(() => {
+    const h = (sel) => Array.from(document.querySelectorAll(sel)).map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    const sheet = document.querySelector('.hc-sheet [data-ssc]');
+    return { row: h('[data-hcw="fold"]'), tiles: h('[data-hcw-f] .hcw-t'), swatches: h('[data-hcw-f] .hcw-c'),
+      doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, sheet: sheet.scrollWidth - sheet.clientWidth };
+  });
+  assert.ok(m.row[0][1] >= 44, 'row ' + m.row);
+  assert.ok(m.tiles.length === 17 && m.tiles.every((x) => x[1] >= 44), 'tiles ' + JSON.stringify(m.tiles));
+  assert.ok(m.swatches.length >= 12 && m.swatches.every((x) => x[0] >= 44 && x[1] >= 44), 'swatches ' + JSON.stringify(m.swatches));
+  assert.ok(m.doc <= 0 && m.sheet <= 0, 'no sideways scroll ' + JSON.stringify(m));
+});
+
+test('Card border: keyboard only — Tab reaches the row, Enter unfolds it, Tab walks colours then samples, Enter picks, with a focus ring', { skip }, async (t) => {
+  const { pg } = await editForm(t, { card_border: 'fire', card_colour: '#d9622b' }, { lib: true, stage: true, tokens: true });
+  await pg.focus('#oed-s');
+  await pg.keyboard.press('Tab');
+  assert.equal(await pg.evaluate(() => document.activeElement.getAttribute('data-hcw')), 'fold', 'Tab from the few words reaches the row');
+  const ring = await pg.evaluate(() => { const s = getComputedStyle(document.activeElement); return [s.outlineStyle, parseFloat(s.outlineWidth)]; });
+  assert.ok(ring[0] !== 'none' && ring[1] >= 2, 'a visible focus ring ' + ring);
+  await pg.keyboard.press('Enter');
+  assert.equal(await pg.getAttribute(FIELD + ' [data-hcw="fold"]', 'aria-expanded'), 'true');
+  const order = [];
+  for (let i = 0; i < 40; i++) {
+    await pg.keyboard.press('Tab');
+    const k = await pg.evaluate(() => { const a = document.activeElement; return a.matches('.hcw-c') ? 'c' : a.matches('[data-any]') ? 'any' : a.matches('.hcw-t') ? 't:' + a.getAttribute('data-b') : 'x'; });
+    order.push(k);
+    if (k === 't:vine') break;
+  }
+  const firstTile = order.findIndex((k) => k.startsWith('t:'));
+  assert.ok(firstTile > 10 && order.slice(0, firstTile).every((k) => k === 'c' || k === 'any'), 'colours first: ' + order.join(' '));
+  assert.equal(order[firstTile], 't:', 'then the samples, None first');
+  // Enter on a focused sample picks it.
+  await pg.focus(FIELD + ' .hcw-t[data-b="ice"]');
+  await pg.keyboard.press('Enter');
+  assert.equal(await pg.getAttribute(FIELD + ' .hcw-t[data-b="ice"]', 'aria-pressed'), 'true');
+  assert.equal((await row(pg)).name, 'Ice');
+});
+
+test('Card border: the row’s words and the hint reach 4.5:1 in light and dark', { skip }, async (t) => {
+  for (const dark of [false, true]) {
+    const { pg } = await editForm(t, { card_border: 'fire', card_colour: '#b3243a' }, { lib: true, stage: true, tokens: true, dark });
+    const got = await pg.evaluate(() => {
+      const rgb = (c) => (c.match(/[\d.]+/g) || []).slice(0, 4).map(Number);
+      const bg = (el) => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c.length === 3 || (c.length === 4 && c[3] > 0.95)) return c.slice(0, 3); } return [255, 255, 255]; };
+      const pairs = {};
+      [['name', '[data-fname]'], ['colour', '[data-fcol]'], ['word', '[data-fword]'], ['hint', '[data-hcw-f] .oed-hint'], ['label', '[data-hcw-f] .oed-k']].forEach(([k, sel]) => {
+        const el = document.querySelector(sel);
+        pairs[k] = [rgb(getComputedStyle(el).color).slice(0, 3), bg(el)];
+      });
+      return pairs;
+    });
+    for (const [k, [fg, bgc]] of Object.entries(got)) assert.ok(contrast(fg, bgc) >= 4.5, `${dark ? 'dark' : 'light'} ${k} ${contrast(fg, bgc).toFixed(2)}`);
+  }
+});
+
+test('Card border: the fold follows the motion level — Off is open at once, full eases', { skip }, async (t) => {
+  // Seconds; Off may be the site's 1ms floor, which is still no movement.
+  const dur = (pg) => pg.evaluate(() => { const f = document.querySelector('[data-ffold]'); f.classList.add('is-open'); const d = parseFloat(getComputedStyle(f).transitionDuration); f.classList.remove('is-open'); return d; });
+  const off = await newForm({ t, o: { lib: true, stage: true, motion: 'off', reduced: false } });
+  assert.ok(await dur(off.pg) <= 0.001);
+  await off.pg.click(FIELD + ' [data-hcw="fold"]');
+  assert.equal(await off.pg.evaluate(() => getComputedStyle(document.querySelector('[data-ffold]')).gridTemplateRows !== '0px'), true, 'open at once');
+  const calm = await newForm({ t, o: { lib: true, stage: true, motion: 'calm', reduced: false } });
+  assert.ok(await dur(calm.pg) <= 0.001, 'Calm opens at once too');
+  const full = await newForm({ t, o: { lib: true, stage: true, reduced: false } });
+  assert.ok(await dur(full.pg) >= 0.15, 'full motion measures its content and eases');
+});
+
+// ROW_SHOTS=<dir> also writes the review pictures of the row (skipped otherwise).
+test('Card border: review pictures', { skip: skip || !process.env.ROW_SHOTS }, async (t) => {
+  const shot = async (name, o, closed) => {
+    const { pg } = await newForm({ t, o: { lib: true, stage: true, tokens: true, reduced: true, ...o } });
+    await pg.setViewportSize({ width: o.width, height: o.width > 900 ? 800 : 844 });
+    await pg.fill('[data-k="name"]', 'Ashborn');
+    await pg.fill('[data-k="summary"]', 'Born of ash and ember.');
+    await pg.click(FIELD + ' [data-hcw="fold"]');
+    await pg.click(FIELD + ' .hcw-t[data-b="fire"]');
+    await pg.click(FIELD + ' .hcw-c[data-c="#2fb5a4"]');
+    await pg.waitForTimeout(600);
+    if (closed) { await pg.click(FIELD + ' [data-hcw="fold"]'); await pg.waitForTimeout(300); }
+    await pg.locator(FIELD + ' .oed-k, ' + FIELD + ' .oe-k').first().evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await pg.waitForTimeout(150);
+    await pg.screenshot({ path: join(process.env.ROW_SHOTS, name) });
+  };
+  await shot('row-phone-light.png', { width: 390 });
+  await shot('row-phone-dark.png', { width: 390, dark: true });
+  await shot('row-desk-light.png', { width: 1280 });
+  await shot('row-closed-phone.png', { width: 390 }, true);
 });

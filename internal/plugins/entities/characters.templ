@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -138,6 +139,8 @@ templ heroBuilder(b *HeroBuilderView) {
 		data-campaign-id={ b.CampaignID }
 		data-csrf={ b.CSRFToken }
 		data-heroes={ b.HeroesJSON() }
+		data-borders={ cardborders.LibraryJSON(layouts.AssetURL) }
+		data-border-picker={ cardborders.PickerJSON() }
 	>
 		<p class="hb-wait">Opening the hero builder…</p>
 	</section>

@@ -86,8 +86,15 @@ func TestNewHero_StageBorders(t *testing.T) {
 	if !strings.Contains(stage, "/static/plugins/entities/img/borders/fire-mask.webp?v=") {
 		t.Error("the library's pictures must carry the content hash")
 	}
-	if strings.Contains(classic, "hero_borders.css") || strings.Contains(classic, "data-borders") {
-		t.Error("the classic page must not carry borders")
+	if strings.Contains(classic, "hero_borders.css") || strings.Contains(classic, `data-look="stage"`) {
+		t.Error("the classic page must not link the borders stylesheet or name the stage look")
+	}
+	// The entry form's Card border row reads the library on either look; the
+	// classic creator's cards still draw none (hero_creator.js never reads it).
+	for name, body := range map[string]string{"stage": stage, "classic": classic} {
+		if !strings.Contains(body, "data-borders=") || !strings.Contains(body, "data-border-picker=") {
+			t.Errorf("the %s creator mount must carry data-borders and data-border-picker", name)
+		}
 	}
 }
 
@@ -157,8 +164,11 @@ func TestPracticeAndTryout_StageLook(t *testing.T) {
 				if got := has("/static/plugins/entities/css/hero_borders.css"); got != tt.want {
 					t.Errorf("borders stylesheet linked = %v, want %v", got, tt.want)
 				}
-				if got := has("data-borders="); got != tt.want {
-					t.Errorf("border library on the mount = %v, want %v", got, tt.want)
+				// Practice carries the library on both looks (a draft is editable
+				// there); the try-out, where nothing is written, only for the stage.
+				wantLib := tt.want || pg.name == "practice"
+				if got := has("data-borders="); got != wantLib {
+					t.Errorf("border library on the mount = %v, want %v", got, wantLib)
 				}
 				if tt.want {
 					if !has("/static/plugins/entities/img/borders/fire-mask.webp?v=") {

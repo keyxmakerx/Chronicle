@@ -56,6 +56,52 @@
   // Numbers stay numbers so the creator can do sums with them ("3" points).
   function factValue(v) { v = v.trim(); return /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }
 
+  // --- The card's border ----------------------------------------------------
+
+  var CARD_B = 'card_border', CARD_C = 'card_colour';
+  var HEX6 = /^#[0-9a-f]{6}$/i;
+  function has(o, k) { return !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k); }
+  function cardKey(k) { return k === CARD_B || k === CARD_C; }
+
+  // The two details as the form holds them: the look when the border is in
+  // the library (the stored colour when it is six hex digits, else the
+  // border's own), or what was stored when it is not usable here, so a save
+  // can write it back untouched. borders is the picker's border list; without
+  // one the form has no such field and the caller carries both as stored.
+  function lookFromProps(props, borders) {
+    var b = props[CARD_B], c = props[CARD_C];
+    if (b === undefined && c === undefined) return { look: null, kept: null };
+    if (borders && typeof b === 'string' && has(borders, b)) {
+      var base = borders[b] && HEX6.test(borders[b].colour) ? String(borders[b].colour).toLowerCase() : '#888888';
+      var col = typeof c === 'string' && HEX6.test(c) ? c.toLowerCase() : base;
+      return { look: { border: b, colour: col, own: col === base }, kept: null };
+    }
+    var kept = {};
+    if (b !== undefined) kept[CARD_B] = b;
+    if (c !== undefined) kept[CARD_C] = c;
+    return { look: null, kept: kept };
+  }
+
+  // What a mount hands over: the library the cards are drawn from and the
+  // picker's lists. Read from the nearest element that carries each, else the
+  // page's. Null (no field) when either is missing or unreadable, or the two
+  // scripts are not on the page.
+  function readJSON(el, attr) {
+    var m = (el && el.closest && el.closest('[' + attr + ']')) || document.querySelector('[' + attr + ']');
+    if (!m) return null;
+    try {
+      var v = JSON.parse(m.getAttribute(attr));
+      return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+    } catch (e) { return null; }
+  }
+  function cardLib(el) {
+    if (typeof window.ChronicleBorderPicker !== 'function' || typeof window.ChronicleHeroBorders !== 'function') return null;
+    var lib = readJSON(el, 'data-borders'), pick = readJSON(el, 'data-border-picker');
+    if (!lib || !pick || !pick.borders || typeof pick.borders !== 'object' || !Array.isArray(pick.groups)) return null;
+    return { lib: lib, pick: pick };
+  }
+  function cardMap(el) { var k = cardLib(el); return k ? k.pick.borders : null; }
+
   // --- What the form holds -------------------------------------------------
 
   // The facts a system's own entries share: scalar properties present on at
@@ -65,7 +111,7 @@
     var count = {};
     pkg.forEach(function (c) {
       Object.keys(c.properties || {}).forEach(function (k) {
-        if (/(_display|_points)$/.test(k) || !isFact(c.properties[k])) return;
+        if (/(_display|_points)$/.test(k) || cardKey(k) || !isFact(c.properties[k])) return;
         count[k] = (count[k] || 0) + 1;
       });
     });
@@ -140,19 +186,23 @@
   // word lists as lines, and the points budget. A list the system doesn't
   // share is edited too (extraLists); anything else the form cannot edit
   // (an object, a yes/no, an empty list) is carried as loaded.
-  function draftOf(e, f, budget0) {
+  function draftOf(e, f, budget0, borders) {
     var lists = {};
     f.lists.forEach(function (l) { lists[l.key] = []; });
     if (!e) {
-      return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '',
+      return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '', look: null,
         facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }), wordLists: [], extraLists: [], carried: {} };
     }
     var props = e.properties || {}, facts = [], wls = [], extra = [], carried = {}, budget = f.budget;
     var shared = {};
     f.lists.forEach(function (l) { shared[l.key] = true; });
+    var lk = lookFromProps(props, borders);
     Object.keys(props).forEach(function (k) {
       var v = props[k];
-      if (creditKey(k)) carried[k] = v;
+      // With the Card border field the two details are its look; without it they
+      // go back as stored, never as free-text facts.
+      if (cardKey(k)) { if (!borders) carried[k] = v; }
+      else if (creditKey(k)) carried[k] = v;
       else if (namedList(v)) {
         lists[k] = v.map(itemOf);
         if (!shared[k]) extra.push({ key: k, label: words(k), buy: v.every(function (it) { return typeof it.cost === 'number'; }) });
@@ -167,6 +217,7 @@
     if (isDraft(e)) who = e.visibility === 'character' ? 'character' : 'everyone';
     return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: who,
       forName: e.visibility === 'character' ? (e.forName || '') : undefined,
+      look: lk.look, lookKept: borders && lk.kept || undefined, lookTouched: false,
       budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried,
       standsFor: e.standsFor || '', standsForName: e.standsForName || '', savedWho: e.visibility || 'everyone',
       status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
@@ -189,9 +240,16 @@
       // An untouched label keeps the key it came with, so a fact the system
       // spells differently is not renamed by a save.
       var k = (p.key && words(p.key) === p.label) ? p.key : keyOf(p.label);
+      if (cardKey(k)) return { error: '“' + p.label.trim() + '” is set in the Card border field, not as a fact. Rename or remove this fact.' };
       if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
       seen[k] = true;
       props[k] = (p.orig !== undefined && k === p.key && p.value === String(p.orig)) ? p.orig : factValue(p.value);
+    }
+    // A border the form could not show goes back as stored until the writer picks.
+    if (d.lookKept && !d.lookTouched) Object.keys(d.lookKept).forEach(function (k) { props[k] = d.lookKept[k]; });
+    else if (d.look) {
+      props[CARD_B] = d.look.border;
+      if (!d.look.own) props[CARD_C] = String(d.look.colour).toLowerCase();
     }
     if (f.budgetKey) props[f.budgetKey] = d.budget;
     (d.wordLists || []).forEach(function (w) {
@@ -330,6 +388,141 @@
     if (!on && Chronicle.markClean) Chronicle.markClean(DIRTY);
   }
 
+  // --- The Card border row --------------------------------------------------
+
+  var cardCssReady = null;
+  function cssHref(name) {
+    // Beside this script, in css/ where the page serves the plugin's files.
+    return HERE ? HERE.replace(/[?#].*$/, '').replace(/[^\/]*$/, '').replace(/\/js\/$/, '/css/') + name : '/static/plugins/entities/css/' + name;
+  }
+  // The stylesheets the samples and the picker need when the page has not
+  // linked them already. hero_creator.css is not one of them: its names
+  // (.hc-row, .hc-btn, .hc-page) are other screens' too, so the card's few
+  // base rules come with this form's own sheet where the creator's is absent.
+  function ensureCardCss() {
+    if (cardCssReady) return cardCssReady;
+    cardCssReady = Promise.all(['hero_borders.css', 'hero_border_picker.css'].map(function (n) {
+      return new Promise(function (resolve) {
+        if (document.querySelector('link[href*="' + n + '"]')) { resolve(); return; }
+        var l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.onload = l.onerror = function () { resolve(); };
+        l.href = cssHref(n);
+        document.head.appendChild(l);
+        setTimeout(resolve, 1500);
+      });
+    }));
+    return cardCssReady;
+  }
+  function creatorSheet() { return !!document.querySelector('link[href*="hero_creator.css"]'); }
+
+  // CardRow draws and runs the field. o: root (an element that stays while the
+  // form is redrawn, which the borders instance colours inside), borders (a
+  // shared instance, when the host already has one that covers root), label
+  // (the kind of entry), director, and the field's class names for hosts that
+  // style forms their own way (field, k, hint).
+  function CardRow(kit, o) {
+    this.kit = kit;
+    this.o = o;
+    this.mine = !o.borders;
+    this.borders = o.borders || window.ChronicleHeroBorders(kit.lib, o.root);
+    this.picker = window.ChronicleBorderPicker(kit.pick, this.borders);
+    this.open = false;
+    this.cleanup = null;
+    this.raf = 0;
+  }
+  CardRow.prototype.nameOf = function (look) {
+    return look ? String(this.kit.pick.borders[look.border].name == null ? look.border : this.kit.pick.borders[look.border].name) : 'None';
+  };
+  CardRow.prototype.colourOf = function (look) {
+    return look ? (this.picker.isOwn(look) ? 'Its own colour' : this.picker.colourName(look.colour)) : 'A plain card';
+  };
+  CardRow.prototype.html = function (d) {
+    var p = this.picker, look = d.look, open = this.open, o = this.o;
+    var cls = o.field || 'oed-field', kc = o.k || 'oed-k', hc = o.hint || 'oed-hint';
+    var base = creatorSheet() ? '' : ' hcw-f--base';
+    return '<div class="' + cls + ' hcw-f' + base + '" data-hcw-f><span class="' + kc + '" id="hcw-f-k">Card border</span>' +
+      '<button type="button" class="hcw-f__row" data-hcw="fold" aria-expanded="' + open + '" aria-describedby="hcw-f-k">' +
+      '<span class="hc" style="container-type:normal;position:static" data-frow>' + p.sample(look) + '</span>' +
+      '<span class="hcw-f__tx"><b data-fname>' + esc(this.nameOf(look)) + '</b><small data-fcol>' + esc(this.colourOf(look)) + '</small></span>' +
+      '<span class="hcw-f__w" data-fword>' + (open ? 'Done' : 'Change') + '</span></button>' +
+      '<div class="hcw-f__fold' + (open ? ' is-open' : '') + '" data-ffold><div class="hcw-f__in"><div class="hcw-f__pad">' +
+      '<div class="hcw-f__live hc" data-look="stage" style="container-type:normal;position:static"><div class="hc-gcard" data-flive><span class="hc-top"><span>' + esc(o.label) + '</span></span><h3 class="hc-disp" data-flname></h3><p class="hc-sum" data-flsum></p></div></div>' +
+      p.html({ look: look, sys: undefined }, { none: 'None', lay: 'field', top: true }) + '</div></div></div>' +
+      '<span class="' + hc + '">' + (o.director ? 'How this card looks in the creator.' : 'How your card looks in the creator. Your ' + gm() + ' can change it.') + '</span></div>';
+  };
+  // Brings a drawn row, its live card and its picker in line with the draft.
+  CardRow.prototype.sync = function (box, d) {
+    var f = box && box.querySelector('[data-hcw-f]');
+    if (!f || !d) return;
+    var p = this.picker, look = d.look, open = this.open;
+    var row = f.querySelector('[data-frow] .hc-gcard'), live = f.querySelector('[data-flive]'), pk = f.querySelector('[data-pk]');
+    if (row) p.paint(row, look);
+    if (live) p.paint(live, look);
+    if (pk) p.sync(pk, { look: look, sys: undefined });
+    f.querySelector('[data-fname]').textContent = this.nameOf(look);
+    f.querySelector('[data-fcol]').textContent = this.colourOf(look);
+    f.querySelector('[data-fword]').textContent = open ? 'Done' : 'Change';
+    f.querySelector('[data-hcw="fold"]').setAttribute('aria-expanded', String(open));
+    f.querySelector('[data-ffold]').classList.toggle('is-open', open);
+    var nm = box.querySelector('[data-k="name"]'), sm = box.querySelector('[data-k="summary"]');
+    f.querySelector('[data-flname]').textContent = (nm && nm.value.trim()) || 'Your ' + lower(this.o.label);
+    f.querySelector('[data-flsum]').textContent = (sm && sm.value.trim()) || 'What a player reads before opening it.';
+  };
+  // hooks: get() the draft being written, changed() after a pick.
+  CardRow.prototype.attach = function (box, hooks) {
+    var self = this, p = this.picker;
+    this.detach();
+    function now() { self.sync(box, hooks.get()); }
+    function onClick(ev) {
+      var b = ev.target.closest && ev.target.closest('[data-hcw="fold"]');
+      if (!b || !box.contains(b)) return;
+      ev.preventDefault();
+      self.open = !self.open;
+      now();
+    }
+    function onInput(ev) {
+      var t = ev.target;
+      if (t.matches && t.matches('[data-k="name"], [data-k="summary"]')) now();
+    }
+    box.addEventListener('click', onClick);
+    box.addEventListener('input', onInput);
+    var unbind = p.bind(box, {
+      state: function () { var d = hooks.get(); return d ? { look: d.look, sys: undefined } : null; },
+      change: function (pk, look, merge) {
+        var d = hooks.get();
+        if (!d) return;
+        d.look = look ? { border: look.border, colour: String(look.colour).toLowerCase(), own: p.isOwn(look) } : null;
+        d.lookTouched = true;
+        // A colour being dragged repaints once a frame, the last value winning.
+        if (merge) { if (!self.raf) self.raf = requestAnimationFrame(function () { self.raf = 0; now(); }); }
+        else now();
+        hooks.changed();
+      }
+    });
+    this.cleanup = function () {
+      box.removeEventListener('click', onClick);
+      box.removeEventListener('input', onInput);
+      unbind();
+    };
+  };
+  CardRow.prototype.detach = function () {
+    if (this.cleanup) { this.cleanup(); this.cleanup = null; }
+    if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
+  };
+  CardRow.prototype.destroy = function () {
+    this.detach();
+    if (this.mine && this.borders && this.borders.destroy) this.borders.destroy();
+  };
+  // A row for a host, or null (no field) when the library is missing or the
+  // pieces cannot be made.
+  function makeRow(el, o) {
+    try {
+      var kit = cardLib(el);
+      return kit ? new CardRow(kit, o) : null;
+    } catch (e) { return null; }
+  }
+
   // --- The editor ----------------------------------------------------------
 
   function scroller(el) {
@@ -377,8 +570,8 @@
     var self = this, reads = [api(this.base + '/grants').then(json)];
     var id = this.o.entry && this.o.entry.entryId;
     if (id) reads.push(api(this.base + '?fieldKey=' + encodeURIComponent(this.f.key)).then(json));
-    this.loading = Promise.all([ensureCss(), Promise.all(reads)]).then(function (r) {
-      var res = r[1];
+    this.loading = Promise.all([ensureCss(), cardMap(this.o.root) ? ensureCardCss() : null, Promise.all(reads)]).then(function (r) {
+      var res = r[2];
       if (!res[0].ok || (res[1] && !res[1].ok)) throw new Error('load');
       var key = self.f.key;
       self.grant = ((res[0].body && res[0].body.grants) || []).filter(function (g) { return g.fieldKey === key; })[0] || null;
@@ -388,7 +581,7 @@
       }
       if (!self.entry && !self.grant) self.failed = 'Your ' + gm() + ' hasn’t let you write one here.';
       else {
-        self.d = draftOf(self.entry, self.f, self.grant && self.grant.budget);
+        self.d = draftOf(self.entry, self.f, self.grant && self.grant.budget, self.cardMap());
         self.saved = clone(self.d);
       }
       self.ready = true;
@@ -408,6 +601,8 @@
     this.footEl = foot || null;
     if (foot) foot.classList.add('oed-foot');
     var self = this;
+    this.card = this.cardRow();
+    if (this.card) this.card.attach(body, { get: function () { return self.d; }, changed: function () { self.touched(); } });
     function on(el, type, fn) { el.addEventListener(type, fn); self.listeners.push([el, type, fn]); }
     on(body, 'click', function (e) { self.onClick(e); });
     on(body, 'input', function (e) { self.onInput(e); });
@@ -417,7 +612,21 @@
   Editor.prototype.unmount = function () {
     this.listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2]); });
     this.listeners = [];
+    if (this.card) { this.card.destroy(); this.card = null; }
     this.bodyEl = this.footEl = null;
+  };
+
+  // The picker's border list, or null when this form has no Card border field.
+  Editor.prototype.cardMap = function () { return cardMap(this.bodyEl || this.o.root); };
+  // The field, made once for a mounted body. A creator that already colours
+  // borders for its cards, and holds this body, lends its instance, so a border
+  // in a colour is made once; otherwise one is made on the body and ended with it.
+  Editor.prototype.cardRow = function () {
+    var body = this.bodyEl, o = this.o;
+    if (!body) return null;
+    if (this.card) return this.card;
+    var shared = o.borders && o.bordersRoot && o.bordersRoot.contains(body) ? o.borders : null;
+    return makeRow(body, { root: body, borders: shared, label: this.f.label, director: !!o.director });
   };
   Editor.prototype.destroy = function () { this.unmount(); dirty(false); };
 
@@ -461,7 +670,10 @@
     else if (this.failed) {
       b.innerHTML = '<div class="oed"><p class="oed-fail" role="alert">' + this.failed + '</p>' +
         (this.d ? '' : '<button type="button" class="oed-link" data-oed="retry">Try again</button>') + '</div>';
-    } else b.innerHTML = this.formHTML();
+    } else {
+      b.innerHTML = this.formHTML();
+      if (this.card) this.card.sync(b, this.d);
+    }
     if (sc) sc.scrollTop = top;
   };
 
@@ -525,7 +737,7 @@
       '<div class="oed-field"><label for="oed-n">Name</label><input id="oed-n" class="oed-big" data-k="name" maxlength="100" autocomplete="off" value="' + esc(d.name) + '" placeholder="For example, Ashborn">' +
       '<span class="oed-ferr" id="oed-n-err" data-ferr="name" hidden>Give it a name first.</span></div>' +
       '<div class="oed-field"><label for="oed-s">A few words about it</label><textarea id="oed-s" rows="2" data-k="summary" maxlength="300" placeholder="What a player reads before opening it">' + esc(d.summary) + '</textarea></div>' +
-      this.factsHTML() + this.textHTML() + this.wordsHTML() + this.budgetHTML() +
+      (this.card ? this.card.html(d) : '') + this.factsHTML() + this.textHTML() + this.wordsHTML() + this.budgetHTML() +
       listsOf(d, f).map(function (l) { return self.listHTML(l); }).join('') + '<div data-prev>' + this.prevHTML() + '</div>';
     var kept = keptLine(d, f);
     h += (kept ? '<p class="oed-hint oed-kept">' + esc(kept) + '</p>' : '') + '<div class="oed-checks" data-checks>' + this.checksHTML() + '</div>' +
@@ -824,7 +1036,7 @@
         }
         var e = res.body.entry;
         self.entry = e;
-        self.d = draftOf(e, f, self.grant && self.grant.budget);
+        self.d = draftOf(e, f, self.grant && self.grant.budget, self.cardMap());
         self.saved = clone(self.d);
         dirty(false);
         self.paintFoot();
@@ -840,8 +1052,14 @@
   // other: the same fields the plan carries for a player's own entry.
   function choiceOf(e) {
     var sum = e.summary || tidy(e.description).textContent.trim().slice(0, 160);
-    return { key: String(e.id), slug: e.slug || '', name: e.name, summary: sum, source: 'campaign', description: e.description || '',
-      properties: e.properties || {}, status: e.status !== 'accepted' ? e.status : '', mine: true, entryId: e.id, reviewNote: e.reviewNote || '' };
+    // The border is the card's look, not a fact to list.
+    var props = {}, all = e.properties || {};
+    Object.keys(all).forEach(function (k) { if (!cardKey(k)) props[k] = all[k]; });
+    var lk = lookFromProps(all, cardMap(null)).look;
+    var ch = { key: String(e.id), slug: e.slug || '', name: e.name, summary: sum, source: 'campaign', description: e.description || '',
+      properties: props, status: e.status !== 'accepted' ? e.status : '', mine: true, entryId: e.id, reviewNote: e.reviewNote || '' };
+    if (lk) ch.look = { border: lk.border, colour: lk.colour };
+    return ch;
   }
 
   Editor.choiceOf = choiceOf;
@@ -850,6 +1068,7 @@
     shapeOf: shapeOf, draftOf: draftOf, propsOf: propsOf, problems: problems, tidy: tidy, listsOf: listsOf, keptLine: keptLine,
     isDraft: isDraft, itemOf: itemOf, extraKeys: extraKeys, suggestedFacts: suggestedFacts, namedList: namedList, wordList: wordList,
     longFact: longFact, creditKey: creditKey, factValue: factValue, keyOf: keyOf, words: words, sing: sing, motion: motion,
-    ensureCss: ensureCss, Editor: Editor, choiceOf: choiceOf
+    ensureCss: ensureCss, ensureCardCss: ensureCardCss, cardMap: cardMap, cardLib: cardLib, makeRow: makeRow, lookFromProps: lookFromProps,
+    Editor: Editor, choiceOf: choiceOf
   };
 })();

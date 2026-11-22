@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -78,6 +79,8 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 				data-new={ fmt.Sprint(v.New) }
 				data-made={ fmt.Sprint(v.Made) }
 				data-return-url={ v.Return }
+				data-borders={ cardborders.LibraryJSON(layouts.AssetURL) }
+				data-border-picker={ cardborders.PickerJSON() }
 			>
 				<div class="hc-wrap paper-stack">
 					<div class="hc-page paper hc-loading" role="status">

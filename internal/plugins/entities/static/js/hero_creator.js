@@ -1697,6 +1697,8 @@
     var desk = this.desk();
     var ed = new Own.Editor({
       campaignId: this.campaignId, csrf: this.csrf, step: st, entry: c || null, closeButton: desk,
+      // The stage look's borders instance (absent in the classic look), which covers the whole mount.
+      borders: this.borders || null, bordersRoot: this.root,
       say: function (t) { self.say(t); },
       onSaved: function (e, mode, isNew) { self.ownSaved(st, c, e, mode, isNew); },
       onClose: function () { self.closeOwn(); }

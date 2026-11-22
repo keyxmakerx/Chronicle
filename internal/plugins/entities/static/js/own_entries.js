@@ -94,6 +94,8 @@
     this.startNew = root.getAttribute('data-new') === 'true';
     this.made = root.getAttribute('data-made') === 'true';
     this.returnUrl = root.getAttribute('data-return-url') || '';
+    // The Card border row's sheets are fetched with the page, so the form never opens bare.
+    if (OE.cardMap(root)) { OE.ensureCss(); OE.ensureCardCss(); }
     this.grants = [];   // permissions: all for a Director, the player's own
     this.members = [];  // a Director's list of who can be given one
     this.giving = false;
@@ -790,6 +792,7 @@
     return '<div class="oe-ed">' +
       '<label class="oe-f"><span class="oe-k">Name</span><input class="oe-big" data-k="name" maxlength="100" autocomplete="off" value="' + esc(d.name) + '" placeholder="' + esc(f.label) + ' name"></label>' +
       '<label class="oe-f"><span class="oe-k">One line for the list</span><input data-k="summary" maxlength="300" autocomplete="off" value="' + esc(d.summary) + '" placeholder="What a player reads before opening it"></label>' +
+      (this.card ? this.card.html(d) : '') +
       '<div class="oe-f"><span class="oe-k" id="oe-text-k">The whole entry</span><div class="oe-tool">' +
         '<button type="button" data-act="bold" title="Bold"><b>B</b></button><button type="button" data-act="italic" title="Italic"><i>I</i></button>' +
         // A player's own entry has no hidden passages: players never read them, its writer included.
@@ -920,6 +923,7 @@
       '<button type="button" class="oe-x" data-act="close" aria-label="Close">×</button></div></header>' +
       '<div class="oe-pop__body">' + body + '</div>' +
       (this.tell ? this.tellHTML() : this.footHTML(d, isNew));
+    if (this.card) this.card.sync(pop, d);
   };
 
   Entries.prototype.footHTML = function (d, isNew) {
@@ -989,7 +993,7 @@
 
   Entries.prototype.openPop = function (e, from) {
     var f = this.cur(), g = this.director ? null : this.grantFor(f.key);
-    this.draft = draftOf(e, f, g && g.budget);
+    this.draft = draftOf(e, f, g && g.budget, OE.cardMap(this.root));
     this.saved = JSON.parse(JSON.stringify(this.draft));
     this.open = e ? String(e.id) : 'new';
     this.confirm = false;
@@ -997,6 +1001,7 @@
     this.tryBuy = [];
     var desk = this.root.querySelector('.oe-desk'), pop = this.root.querySelector('.oe-pop');
     this.root.querySelectorAll('.hc-row').forEach(function (r) { r.setAttribute('aria-expanded', String(r === from)); });
+    this.cardUp(pop);
     this.fillPop();
     pop.hidden = false;
     // It grows out of the row (or button) that opened it.
@@ -1033,6 +1038,7 @@
     var desk = this.root.querySelector('.oe-desk'), pop = this.root.querySelector('.oe-pop'), self = this;
     this.open = null;
     this.draft = null;
+    this.cardDown();
     this.confirm = false;
     this.tell = null;
     // Opened from a page by address: closing goes back to that page.
@@ -1045,6 +1051,23 @@
     setTimeout(done, ms);
     var back = this.from && document.body.contains(this.from) ? this.from : this.root.querySelector('[data-act="add"]');
     if (back) back.focus({ preventScroll: true });
+  };
+
+  // The Card border row, made for the open form and ended with it (the page
+  // itself may be drawn again, so nothing outlives the form). None when the
+  // page carries no border library.
+  Entries.prototype.cardUp = function (pop) {
+    var self = this, f = this.cur();
+    this.cardDown();
+    if (OE.cardMap(this.root)) OE.ensureCardCss();
+    this.card = OE.makeRow(this.root, { root: pop, label: f.label, director: this.director, field: 'oe-f', k: 'oe-k', hint: 'oe-hint' });
+    if (this.card) {
+      OE.ensureCss();
+      this.card.attach(pop, { get: function () { return self.draft; }, changed: function () { self.touched(); } });
+    }
+  };
+  Entries.prototype.cardDown = function () {
+    if (this.card) { this.card.destroy(); this.card = null; }
   };
 
   Entries.prototype.isDirty = function () { return !!this.draft && !sameDraft(this.draft, this.saved); };
@@ -1167,7 +1190,7 @@
           var q = res.body.tellPlayers;
           self.busy = false;
           self.tell = { q: q, id: e.id, line: q.line || '' };
-          self.draft = draftOf(e, f);
+          self.draft = draftOf(e, f, undefined, OE.cardMap(self.root));
           self.saved = JSON.parse(JSON.stringify(self.draft));
           dirty(false);
           self.redraw();

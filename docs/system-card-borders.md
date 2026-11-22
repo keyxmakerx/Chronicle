@@ -71,6 +71,14 @@ the parts of a border made to take colour (carved lines, runes, glowing cracks, 
 vine, the dye of the scales) take the entry's colour, and the rest of the picture
 stays as drawn. The "make your own" card and the list view stay plain.
 
+## The writer of an entry picks its border
+
+Whoever writes a campaign's own entry (a player with permission, or a Director)
+picks the border its card wears in the entry form, in the "Card border" row
+under the short description: a small sample, the border's name and Change. It
+unfolds to a live card and the same colours and samples the Customizer uses.
+The choice is saved with the entry, and a Director can change it afterwards.
+
 ## The campaign's owner can change a card's border
 
 A campaign's owner can pick a different border, or none, for any card, a game
