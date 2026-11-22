@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"math"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -49,6 +51,9 @@ type FromReport struct {
 	Merged int `json:"merged"`
 	// NotMade counts usable lines left out because a deck is full.
 	NotMade int `json:"notMade"`
+	// LinesUsed counts the table's usable lines that went into cards, which is
+	// more than Made when lines of one name became one card.
+	LinesUsed int `json:"linesUsed"`
 	// Made is how many cards the new deck has.
 	Made  int      `json:"made"`
 	Notes []string `json:"notes"`
@@ -134,6 +139,10 @@ func (s *service) copyOf(ctx context.Context, campaignID string, v Viewer, srcID
 		return nil, rep, err
 	}
 	d.Settings = src.Settings
+	// Who may draw stays behind with the chosen players: a copy that said
+	// "chosen players draw" with nobody chosen would be a deck nobody can draw
+	// from until the Director noticed.
+	d.Settings.Draws = defaultSettings(d.Kind).Draws
 	d.Look = src.Look
 	d.Look.Kinds = append([]KindDef{}, src.Look.Kinds...)
 	old, err := s.repo.ListCards(ctx, campaignID, src.ID)
@@ -233,8 +242,9 @@ func (s *service) fromTable(ctx context.Context, campaignID, tableID string, d *
 	var cards []Card
 	at := map[string]int{}
 	total := 0
+	rep.LinesUsed = len(use)
 	for i, u := range use {
-		key := strings.ToLower(u.card.Name)
+		key := nameKey(u.card.Name)
 		if j, dup := at[key]; dup {
 			add := cards[j].Copies + u.card.Copies
 			if add > MaxCopiesPerCard {
@@ -243,6 +253,7 @@ func (s *service) fromTable(ctx context.Context, campaignID, tableID string, d *
 			add -= cards[j].Copies
 			if total+add > MaxCopiesPerDeck {
 				rep.NotMade += len(use) - i
+				rep.LinesUsed = i
 				break
 			}
 			cards[j].Copies += add
@@ -251,6 +262,7 @@ func (s *service) fromTable(ctx context.Context, campaignID, tableID string, d *
 		} else {
 			if len(cards) >= MaxCardsPerDeck || total+u.card.Copies > MaxCopiesPerDeck {
 				rep.NotMade += len(use) - i
+				rep.LinesUsed = i
 				break
 			}
 			at[key] = len(cards)
@@ -262,6 +274,24 @@ func (s *service) fromTable(ctx context.Context, campaignID, tableID string, d *
 		}
 	}
 	return cards, rep, nil
+}
+
+// nameKey is a name as the database compares card names: without regard to
+// case or accents, and with a sharp s as two. Two lines whose names differ only
+// that way would be refused as one name by the cards table, so they are one
+// card here.
+func nameKey(name string) string {
+	var b strings.Builder
+	for _, r := range norm.NFKD.String(name) {
+		switch {
+		case unicode.Is(unicode.Mn, r):
+		case r == 'ß' || r == 'ẞ':
+			b.WriteString("ss")
+		default:
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
 }
 
 // validTableID is the shape a rolling table's id has, so nothing else is
@@ -307,7 +337,7 @@ func (r FromReport) sentences() []string {
 	}
 	if n := r.NotMade; n > 0 {
 		out = append(out, fmt.Sprintf("A deck can't hold the whole table. The first %d %s made into cards and the last %d %s left out.",
-			r.Made, plural(r.Made, "line was", "lines were"), n, plural(n, "line was", "lines were")))
+			r.LinesUsed, plural(r.LinesUsed, "line was", "lines were"), n, plural(n, "line was", "lines were")))
 	}
 	if n := r.Merged; n > 0 {
 		out = append(out, fmt.Sprintf("%d %s the same name as an earlier line, so %s added copies to that card instead of a card of %s own.",

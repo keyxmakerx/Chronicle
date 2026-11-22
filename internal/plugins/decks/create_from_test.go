@@ -122,8 +122,11 @@ func TestCopyKeepsLookRulesAndCardsAndDropsTheRest(t *testing.T) {
 	if nu.Look.Border != "metal" || nu.Look.Shape != "small" || nu.Look.Back.Pattern != "iron" || nu.Look.Back.Words != "OMENS" || len(nu.Look.Kinds) != 1 {
 		t.Errorf("the look did not come: %+v", nu.Look)
 	}
-	if nu.Settings != old.Settings {
-		t.Errorf("the rules differ: %+v vs %+v", nu.Settings, old.Settings)
+	// Who may draw stays behind with the chosen players; every other rule comes.
+	want := old.Settings
+	want.Draws = "directors"
+	if nu.Settings != want {
+		t.Errorf("the rules differ: %+v, want %+v", nu.Settings, want)
 	}
 	if nu.Kind != KindParty || nu.Name != "Iron omens, again" || nu.HolderEntityID != "" {
 		t.Errorf("the new deck is not what was typed: %+v", nu)
@@ -436,15 +439,56 @@ func TestFromATableOverTheLimitSaysHowManyWereLeft(t *testing.T) {
 	}
 }
 
-// Two lines with one name make one card whose copies add up.
+// Lines the cards table would call one name make one card whose copies add
+// up: the table compares names without regard to case or accents, so a second
+// card would be refused and the whole deck with it.
 func TestFromATableMergesLinesThatShareAName(t *testing.T) {
-	fx, _, tb, _ := fromFixture(t)
-	tb.add("t", "T", TableLine{Name: "Wolf", Weight: 2}, TableLine{Name: "wolf", Weight: 3}, TableLine{Name: "Bear", Weight: 1})
-	got, rep, err := fx.from(CreateFromInput{Name: "T deck", Kind: KindEvent, TableID: "t"})
-	fx.must(err)
-	cards := fx.cardsOf(got.ID)
-	if len(cards) != 2 || cards["Wolf"].Copies != 5 || rep.Merged != 1 || len(rep.Notes) != 1 {
-		t.Errorf("cards %v, report %+v", cards, rep)
+	tests := []struct {
+		name   string
+		second string
+	}{
+		{"another case", "wolf"},
+		{"an accent", "Wölf"},
+		{"an accent written as two marks", "Wo\u0308lf"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fx, _, tb, _ := fromFixture(t)
+			tb.add("t", "T", TableLine{Name: "Wolf", Weight: 2}, TableLine{Name: tt.second, Weight: 3}, TableLine{Name: "Bear", Weight: 1})
+			got, rep, err := fx.from(CreateFromInput{Name: "T deck", Kind: KindEvent, TableID: "t"})
+			fx.must(err)
+			cards := fx.cardsOf(got.ID)
+			if len(cards) != 2 || cards["Wolf"].Copies != 5 || rep.Merged != 1 || rep.LinesUsed != 3 || len(rep.Notes) != 1 {
+				t.Errorf("cards %v, report %+v", cards, rep)
+			}
+		})
+	}
+}
+
+// The sentence for a full deck counts lines, not cards: lines of one name
+// became one card, and saying the smaller number would leave lines unaccounted
+// for.
+func TestTheFullDeckSentenceCountsLines(t *testing.T) {
+	got := FromReport{Made: 2, LinesUsed: 3, NotMade: 4}.sentences()
+	want := "A deck can't hold the whole table. The first 3 lines were made into cards and the last 4 lines were left out."
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestNameKeyFoldsWhatTheCardsTableFolds(t *testing.T) {
+	tests := []struct{ a, b string }{
+		{"Cafe", "CAFÉ"},
+		{"Straße", "strasse"},
+		{"Ash on the wind", "ash on the wind"},
+	}
+	for _, tt := range tests {
+		if nameKey(tt.a) != nameKey(tt.b) {
+			t.Errorf("%q and %q are one name to the cards table and two here", tt.a, tt.b)
+		}
+	}
+	if nameKey("Wolf") == nameKey("Wolves") {
+		t.Error("two different names share a key")
 	}
 }
 
