@@ -8,6 +8,9 @@
 .dkm-head { display: flex; align-items: flex-start; gap: 8px; }
 .dkm-title { flex: 1; min-width: 0; margin: 0; font-size: 0.9375rem; font-weight: 700; line-height: 1.35; color: var(--color-text-primary); overflow-wrap: anywhere; }
 .dkm-x { flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; margin: -4px -6px 0 0; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--color-text-secondary); cursor: pointer; }
+/* In the phone's sheet the Table's own close mark is the one close; a second
+   one a card's height above it would close something else under the same sign. */
+.tt-moment-sheet .dkm-x { display: none; }
 .dkm-x:hover { border-color: var(--color-border); color: var(--color-text-primary); }
 .dkm-x svg { width: 16px; height: 16px; }
 .dkm-from { margin: 0; font-size: 0.8125rem; color: var(--color-text-secondary); }

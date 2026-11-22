@@ -185,11 +185,14 @@
 
 .dk-kind { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .09em; text-transform: uppercase; color: var(--color-text-secondary); }
 .dk-kind .dk-sg { width: 9px; height: 9px; }
-.dk-name { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; font-weight: 700; line-height: 1.2; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.dk-name { display: block; font-size: 13px; font-weight: 700; line-height: 1.2; color: var(--color-text-primary); overflow-wrap: anywhere; }
 .dk-words { display: block; font-size: 12px; line-height: 1.4; color: var(--color-text-body); overflow-wrap: anywhere; }
-.dk-sz-hand .dk-name { -webkit-line-clamp: 2; }
-.dk-sz-row .dk-name { -webkit-line-clamp: 3; }
-.dk-sz-open .dk-name { -webkit-line-clamp: unset; }
+/* The name is clamped on an inner box that has no padding: a padded box shows
+   the next line in its padding. The box is a whole number of lines tall, and
+   the type never shrinks to fit. */
+.dk-sz-hand .dk-nt, .dk-sz-row .dk-nt { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: var(--dk-nl); line-clamp: var(--dk-nl); max-height: calc(var(--dk-nl) * 1lh); }
+.dk-sz-hand { --dk-nl: 2; }
+.dk-sz-row { --dk-nl: 3; }
 
 /* the compact card: standard and small */
 .dk-compact { border-top: 4px solid var(--dk-k); }

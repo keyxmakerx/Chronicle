@@ -197,3 +197,95 @@ test('a turned-down ask is said once and the card is askable again', { skip }, a
   assert.equal(await page.$$eval('.dkh-chip-wait', (n) => n.length), 0);
   await page.context().close();
 });
+
+// A hand the way hand_panel.templ writes it: the section's label, the fanned
+// row, and the one alert at the end. `after` is whatever follows the row.
+const handOf = (n, { after = '', label = 'Your hand' } = {}) => `<div class="dkh" data-widget="deck-hand" data-dkh-root data-src="${BASE}/hand" data-base="${BASE}" data-campaign-id="c1">
+<div class="dkh-body" data-dkh-body><section class="dkh-sec"><h3 class="dkh-lab">${label}</h3>
+<div class="dkh-row dkh-fan" role="list" data-dkh-held>${Array.from({ length: n }, (_, i) => `<div class="dkh-item" role="listitem">${down('c' + (i + 1))}</div>`).join('')}</div>${after}</section></div>
+<div class="dkh-notes" data-dkh-notes role="status"></div><p class="dkh-err" role="alert" data-dkh-err hidden></p></div>`;
+const SPACER = '<div style="height:1400px"></div>';
+
+test('an offline tap says its line right under the row, inside the screen, and a refetch leaves one line', { skip }, async () => {
+  const page = await open(handOf(12, { after: SPACER }), { [`POST ${BASE}/hand/d1/copies/c3/turn`]: { status: 500, body: '' } });
+  await page.click('[data-copy="c3"] .dk-turn');
+  await page.waitForSelector('[data-dkh-err]:not([hidden])');
+  const r = await page.evaluate(() => {
+    const e = document.querySelector('[data-dkh-err]'), b = e.getBoundingClientRect();
+    return { n: document.querySelectorAll('[data-dkh-err]').length, role: e.getAttribute('role'), text: e.textContent, under: e.previousElementSibling === document.querySelector('.dkh-row'), top: b.top, bottom: b.bottom, h: innerHeight };
+  });
+  assert.equal(r.n, 1);
+  assert.equal(r.role, 'alert');
+  assert.match(r.text, /That did not go through\. Check your connection and try again\./);
+  assert.ok(r.under, 'the line is not directly under the row that holds the tapped card');
+  assert.ok(r.top >= 0 && r.bottom <= r.h, `the line is off screen: ${r.top}..${r.bottom} of ${r.h}`);
+  // The hand is read again: the line is not stranded in the body that was replaced, nor twice.
+  await page.evaluate(([b, html]) => { window.__answers['GET ' + b + '/hand'] = { status: 200, body: html }; }, [BASE, handOf(12, { after: SPACER })]);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:decks-changed')));
+  await page.waitForFunction(() => window.__calls.some((c) => c === 'GET /campaigns/c1/decks/hand'));
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => ({ n: document.querySelectorAll('[data-dkh-err]').length, inBody: !!document.querySelector('[data-dkh-body] [data-dkh-err]'), home: document.querySelector('[data-dkh-err]').parentNode.hasAttribute('data-dkh-root') }));
+  assert.equal(after.n, 1, 'the alert was duplicated or lost');
+  assert.equal(after.inBody, false, 'the alert is stranded in the redrawn body');
+  assert.ok(after.home);
+  // The next tap that fails says it again, under the row.
+  await page.click('[data-copy="c5"] .dk-turn');
+  await page.waitForSelector('[data-dkh-err]:not([hidden])');
+  assert.equal(await page.evaluate(() => document.querySelector('[data-dkh-err]').previousElementSibling === document.querySelector('.dkh-row')), true);
+  await page.context().close();
+});
+
+test('a line said below the fold is brought into view', { skip }, async () => {
+  const page = await open(handOf(4, { after: SPACER }), { [`GET ${BASE}/hand`]: { status: 500, body: '' } });
+  // A refresh that fails says its line at the alert's own place, far down the page.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:decks-changed')));
+  await page.waitForSelector('[data-dkh-err]:not([hidden])');
+  await page.waitForTimeout(100);
+  const r = await page.evaluate(() => { const b = document.querySelector('[data-dkh-err]').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight }; });
+  assert.ok(r.top >= 0 && r.bottom <= r.h, `the line is off screen: ${JSON.stringify(r)}`);
+  await page.context().close();
+});
+
+test('a hand of 12 on a phone scrolls inside its row, fades where more waits and counts in its label', { skip }, async () => {
+  const page = await open(handOf(12), {});
+  const info = () => page.evaluate(() => {
+    const row = document.querySelector('.dkh-row');
+    return { more: row.getAttribute('data-dkh-more'), sw: row.scrollWidth, cw: row.clientWidth, x: row.scrollLeft, label: document.querySelector('.dkh-lab').textContent.replace(/\s+/g, ' ').trim(), mask: getComputedStyle(row).maskImage, page: document.documentElement.scrollWidth - innerWidth };
+  });
+  let r = await info();
+  assert.ok(r.sw > r.cw + 100, `the row does not overflow: ${r.sw} in ${r.cw}`);
+  assert.equal(r.more, 'end');
+  assert.match(r.mask, /gradient/, 'no fade on the trailing edge');
+  assert.equal(r.label, 'Your hand · 12');
+  assert.ok(r.page <= 0, `the page scrolls sideways by ${r.page}px`);
+  // Touch and keyboard both move along the row, and the leading edge fades once it has.
+  await page.focus('[data-copy="c12"] .dk-turn');
+  await page.waitForFunction(() => document.querySelector('.dkh-row').getAttribute('data-dkh-more') === 'start');
+  r = await info();
+  assert.ok(r.x > 0, 'focus at the last card did not scroll the row');
+  await page.evaluate(() => { const row = document.querySelector('.dkh-row'); row.scrollLeft = (row.scrollWidth - row.clientWidth) / 2; });
+  await page.waitForFunction(() => document.querySelector('.dkh-row').getAttribute('data-dkh-more') === 'both');
+  assert.ok((await info()).page <= 0);
+  await page.context().close();
+});
+
+test('a small hand keeps its fan with no fade and no count, and a live redraw adds the count when the hand grows', { skip }, async () => {
+  const page = await open(handOf(3), { [`GET ${BASE}/hand`]: html200(handOf(12)) });
+  const r = await page.evaluate(() => ({ more: document.querySelector('.dkh-row').hasAttribute('data-dkh-more'), label: document.querySelector('.dkh-lab').textContent.trim() }));
+  assert.equal(r.more, false);
+  assert.equal(r.label, 'Your hand');
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:decks-changed')));
+  await page.waitForFunction(() => document.querySelectorAll('[data-dkh-slot]').length === 12);
+  await page.waitForFunction(() => /Your hand · 12/.test(document.querySelector('.dkh-lab').textContent.replace(/\s+/g, ' ')));
+  assert.equal(await page.evaluate(() => document.querySelectorAll('[data-dkh-count]').length), 1);
+  await page.context().close();
+});
+
+test('the opened card is dimmed by the site scrim, not a mix of the text colour', { skip }, async () => {
+  const page = await open(body(up('c1')), { [`GET ${BASE}/hand/d1/copies/c1`]: html200(opened()) });
+  await page.addStyleTag({ content: ':root { --surface-overlay: rgb(6 7 11 / 0.55); }' });
+  await page.click('[data-dkh-open]');
+  await page.waitForSelector('[data-dkh-over]');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-dkh-over]')).backgroundColor), 'rgba(6, 7, 11, 0.55)');
+  await page.context().close();
+});

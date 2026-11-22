@@ -133,6 +133,15 @@
       var overlay = null;
       var opener = null;
       var said = {};
+      var errEl = $('[data-dkh-err]', el);
+      var ro = null;
+
+      /** reveal: a line said below the fold is brought into view, without motion. */
+      function reveal(box) {
+        var r = box.getBoundingClientRect();
+        var h = window.innerHeight || document.documentElement.clientHeight;
+        if ((r.top < 0 || r.bottom > h) && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+      }
 
       function say(box, msg) {
         if (!box) return;
@@ -147,8 +156,31 @@
           box.appendChild(document.createTextNode(' '));
           box.appendChild(b);
         }
+        if (msg) reveal(box);
       }
-      function errBox() { return (overlay && $('[data-dkh-err]', overlay)) || $('[data-dkh-err]', el); }
+      /** homeErr: the alert's own place, after the hand's notes; a redraw of the body never takes it along. */
+      function homeErr() { if (errEl && errEl.parentNode !== el) el.appendChild(errEl); }
+      /**
+       * errBox: where a refusal is said. The opened card has its own line; for
+       * anything done from the hand it is the one alert, moved under the row (or
+       * the draw section) that holds what the player touched.
+       */
+      function errBox(near) {
+        if (overlay) return $('[data-dkh-err]', overlay) || errEl;
+        if (!errEl) return null;
+        var spot = near && near.closest && (near.closest('[data-dkh-draw-sec]') || near.closest('.dkh-row'));
+        if (!spot || !el.contains(spot)) homeErr();
+        else if (spot.classList.contains('dkh-row')) spot.insertAdjacentElement('afterend', errEl);
+        else spot.appendChild(errEl);
+        return errEl;
+      }
+      function clearErr() {
+        say(errEl, '');
+        if (overlay) say($('[data-dkh-err]', overlay), '');
+      }
+      function slotFor(copy) {
+        return $$('[data-dkh-slot]', el).filter(function (s) { return s.getAttribute('data-copy') === copy; })[0] || null;
+      }
       function slotOf(node) { return node && node.closest ? node.closest('[data-dkh-slot]') : null; }
 
       // ---- Refreshing the hand ----
@@ -192,6 +224,7 @@
         if (!body || !oldBody) throw new Error('no body');
         var keep = focusKey();
         var before = copiesIn(el), waiting = waitingIn(el);
+        homeErr();
         // What this page told the player stays until they dismiss it; the
         // server's own lines under the hand are redrawn.
         var kept = oldNotes ? $$('[data-dkh-told]', oldNotes) : [];
@@ -203,6 +236,7 @@
         adopt(body);
         restoreFocus(keep);
         arrive(before);
+        layout();
         turnedDown(waiting, el).forEach(function (id) {
           if (said[id]) return;
           said[id] = true;
@@ -236,10 +270,10 @@
           return r.text();
         }).then(function (html) {
           swap(html);
-          say($('[data-dkh-err]', el), '');
+          say(errEl, '');
           if (overlay) return reopen();
         }).catch(function () {
-          say($('[data-dkh-err]', el), REFRESH_FAIL);
+          say(errEl, REFRESH_FAIL);
         }).then(function () {
           inFlight = false;
           el.removeAttribute('aria-busy');
@@ -271,13 +305,14 @@
         if (!slot || !card || !DC || !DC.turnOver) return;
         var u = urls(base, slot.getAttribute('data-deck'), slot.getAttribute('data-copy'));
         var failure = null;
+        var copy = slot.getAttribute('data-copy');
         function loadFace() {
           return send('POST', u.turn).then(function (r) { return r.text(); }, function (e) { failure = e; throw e; });
         }
-        say(errBox(), '');
+        clearErr();
         DC.turnOver(card, loadFace).then(function () {
           if (failure) {
-            say(errBox(), words(failure));
+            say(errBox(slotFor(copy) || btn), words(failure));
             // A stale card (already turned, moved, gone) is read again; the words stay.
             if (failure.status === 404 || failure.status === 409) later();
             return;
@@ -324,7 +359,7 @@
         var u = urls(base, slot.getAttribute('data-deck'), slot.getAttribute('data-copy'));
         opener = btn;
         working(btn, true);
-        say(errBox(), '');
+        clearErr();
         fetch(u.open, { credentials: 'same-origin', headers: HEADERS }).then(function (r) {
           return r.ok ? r.text() : refusal(r);
         }).then(function (html) {
@@ -332,7 +367,7 @@
           place(html, true);
         }, function (e) {
           working(btn, false);
-          say(errBox(), words(e));
+          say(errBox(btn), words(e));
           btn.focus({ preventScroll: true });
         });
       }
@@ -363,7 +398,7 @@
         var asked = btn.hasAttribute('data-dkh-ask');
         var u = urls(base, overlay.getAttribute('data-deck'), overlay.getAttribute('data-copy'));
         var big = $('[data-dkh-big] [data-dk-card]', overlay);
-        say(errBox(), '');
+        clearErr();
         working(btn, true);
         send('POST', u.verb(verb), {}).then(function () {
           working(btn, false);
@@ -392,18 +427,66 @@
         var sec = btn.closest('[data-dkh-draw-sec]');
         var sel = sec && $('[data-dkh-hero]', sec);
         var hero = (sel && sel.value) || btn.getAttribute('data-hero');
-        var box = (sec && $('[data-dkh-err]', sec)) || errBox();
-        say(box, '');
+        clearErr();
         working(btn, true);
         send('POST', urls(base, deck, '').draw, { heroId: hero, count: 1 }).then(function () {
           working(btn, false);
           return refresh();
         }, function (e) {
           working(btn, false);
-          say(errBox(), words(e));
+          say(errBox(btn), words(e));
           btn.focus({ preventScroll: true });
         });
       }
+
+      // ---- A row wider than its box ----
+
+      /**
+       * layout: a row that does not fit scrolls along itself, fades where more
+       * cards wait, and its label says how many cards it holds. The count is of
+       * the cards already drawn in that row, nothing more.
+       */
+      function setMore(row) {
+        var max = row.scrollWidth - row.clientWidth, x = row.scrollLeft;
+        var m = max <= 1 ? '' : x > 1 ? (x < max - 1 ? 'both' : 'start') : 'end';
+        if (m) row.setAttribute('data-dkh-more', m); else row.removeAttribute('data-dkh-more');
+      }
+      function layout() {
+        $$('.dkh-row', el).forEach(function (row) {
+          setMore(row);
+          var over = row.hasAttribute('data-dkh-more');
+          var head = row.previousElementSibling;
+          if (head && !/^H[34]$/.test(head.tagName)) head = null;
+          var tag = head && $('[data-dkh-count]', head);
+          if (over && head && !tag) {
+            tag = document.createElement('span');
+            tag.className = 'dkh-count';
+            tag.setAttribute('data-dkh-count', '');
+            head.appendChild(tag);
+          }
+          if (tag) {
+            if (over) tag.textContent = ' · ' +$$('.dkh-item', row).length;
+            else tag.parentNode.removeChild(tag);
+          }
+          // A row with nothing to focus still has to be reachable by keyboard.
+          if (over && !$('button', row)) row.setAttribute('tabindex', '0'); else row.removeAttribute('tabindex');
+        });
+      }
+      inst.layout = layout;
+      inst.onScroll = function (ev) {
+        var t = ev.target;
+        if (t && t.classList && t.classList.contains('dkh-row')) setMore(t);
+      };
+      el.addEventListener('scroll', inst.onScroll, { capture: true, passive: true });
+      if (window.ResizeObserver) {
+        ro = new window.ResizeObserver(layout);
+        ro.observe(el);
+        inst.ro = ro;
+      } else {
+        window.addEventListener('resize', layout);
+        inst.onResize = layout;
+      }
+      layout();
 
       // ---- Events ----
 
@@ -446,6 +529,9 @@
       if (w.onCapture) el.removeEventListener('click', w.onCapture, true);
       if (w.onClick) el.removeEventListener('click', w.onClick);
       if (w.onKey) el.removeEventListener('keydown', w.onKey);
+      if (w.onScroll) el.removeEventListener('scroll', w.onScroll, true);
+      if (w.onResize) window.removeEventListener('resize', w.onResize);
+      if (w.ro) w.ro.disconnect();
     }
   });
 

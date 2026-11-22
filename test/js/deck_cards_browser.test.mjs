@@ -104,3 +104,51 @@ test('a move on a card that is mid-turn finishes the turn first', { skip }, asyn
   assert.deepEqual(r, { state: 'up', plate: 1, parts: 0, spent: true, running: 0 });
   await page.context().close();
 });
+
+// A name is clamped to whole lines: the box that shows it is a whole number of
+// line heights tall at every size, so no sliver of the next line shows, and the
+// type never shrinks to make a name fit.
+const NAMES = {
+  'a long one-word name': 'Supercalifragilisticexpialidocious',
+  'a long many-word name': 'The Wandering Cartographer of the Salt Marsh Who Never Sleeps Or Rests',
+  'a CJK name': '月影に舞う白銀の龍と千年の約束を交わした旅人の物語',
+  'a short name': 'Moon',
+};
+const nameCard = (shape, size, name) => shape === 'plate'
+  ? `<div class="dk-wrap dk-sz-${size} dk-s-tall"><div class="dk-card dk-plate dk-s-tall"><span class="dk-fr"><b class="dk-name"><span class="dk-nt">${name}</span></b></span></div></div>`
+  : `<div class="dk-wrap dk-sz-${size} dk-s-standard"><div class="dk-card dk-compact dk-s-standard"><b class="dk-name"><span class="dk-nt">${name}</span></b></div></div>`;
+
+test('a card name is a whole number of lines tall at hand, row and open size, tall or compact', { skip }, async () => {
+  browser = browser || await pw.chromium.launch({ executablePath: chromePath });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  const page = await ctx.newPage();
+  const cards = [];
+  for (const shape of ['plate', 'compact']) for (const size of ['hand', 'row', 'open']) for (const [what, name] of Object.entries(NAMES)) cards.push({ shape, size, what, html: nameCard(shape, size, name) });
+  await page.route('**/names.html', (r) => r.fulfill({ contentType: 'text/html', body: `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="file://${root}/static/css/decks_card.css"><body style="padding:20px">${cards.map((c, i) => `<div data-i="${i}" style="margin:12px 0">${c.html}</div>`).join('')}` }));
+  await page.goto('file:///x/names.html');
+  const got = await page.evaluate(() => [...document.querySelectorAll('[data-i]')].map((d) => {
+    const nt = d.querySelector('.dk-nt'), cs = getComputedStyle(nt);
+    const lh = parseFloat(cs.lineHeight);
+    return { h: nt.getBoundingClientRect().height, lh, fs: cs.fontSize, clamp: cs.webkitLineClamp, mh: cs.maxHeight, over: nt.scrollHeight > nt.clientHeight + 0.5 };
+  }));
+  const want = { hand: 2, row: 3 };
+  const sizes = {}, filled = {};
+  got.forEach((g, i) => {
+    const c = cards[i], lines = g.h / g.lh;
+    if (c.size !== 'open') {
+      assert.ok(Math.abs(lines - Math.round(lines)) < 0.02, `${c.shape} ${c.size} ${c.what}: ${g.h}px is ${lines} lines of ${g.lh}px`);
+      assert.ok(Math.round(lines) <= want[c.size], `${c.shape} ${c.size} ${c.what}: ${lines} lines, more than ${want[c.size]}`);
+      assert.equal(g.clamp, String(want[c.size]), `${c.shape} ${c.size}: the clamp is not the line count the box is cut to`);
+      filled[c.shape + c.size] = Math.max(filled[c.shape + c.size] || 0, Math.round(lines));
+    } else {
+      assert.equal(g.over, false, `${c.shape} open ${c.what}: the open card cuts its name`);
+    }
+    // Words never shrink: one type size per shape and size, whatever the name.
+    const key = c.shape + c.size;
+    sizes[key] = sizes[key] || g.fs;
+    assert.equal(g.fs, sizes[key], `${c.shape} ${c.size} ${c.what}: the type size changed with the name`);
+  });
+  // Some long name reaches the clamp at each clamped size, so the clamp is what cuts it.
+  for (const shape of ['plate', 'compact']) for (const size of ['hand', 'row']) assert.equal(filled[shape + size], want[size], `${shape} ${size}: no long name reached its clamp`);
+  await ctx.close();
+});

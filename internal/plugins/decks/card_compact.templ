@@ -23,7 +23,7 @@ templ CardCompact(l Look, s CardState, size CardSize) {
 					{ k.Name }
 				</span>
 			}
-			<b class="dk-name">{ s.face.Name }</b>
+			<b class="dk-name"><span class="dk-nt">{ s.face.Name }</span></b>
 			if hasKind {
 				@cardKindLine(l, k)
 			}

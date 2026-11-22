@@ -272,6 +272,51 @@ test('by keyboard: turning and opening need no mouse', async () => {
   await walk('dhk', { width: 1280, height: 900, scheme: 'light' }, { keyboard: true });
 });
 
+test('on a phone, a hand of twelve scrolls inside its row, says its count, and an offline tap answers in view', async () => {
+  const view = { width: 390, height: 844, scheme: 'dark' };
+  const w = await table('dhc', view);
+  const { owner, tam, cid, A } = w;
+  const errors = watchErrors(tam);
+  const crowd = await j(owner, `${A}/${w.omens}/cards`, 'POST', { name: 'Crowdzz', words: 'One of many', copies: 12 });
+  assert.ok(crowd.ok, 'the twelve-copy card was not made: ' + JSON.stringify(crowd.body));
+  const card = crowd.body.cards.find((c) => c.name === 'Crowdzz').id;
+  for (let i = 0; i < 12; i++) {
+    const dealt = await j(owner, `${A}/${w.omens}/deal-card`, 'POST', { cardId: card, to: 'hand', heroId: w.heroTam });
+    assert.ok(dealt.ok, 'a deal failed: ' + JSON.stringify(dealt.body));
+  }
+  await openHand(tam, cid);
+  await tam.page.waitForFunction(() => document.querySelectorAll('#tt-drawer [data-dkh-slot]').length === 12);
+  const row = tam.page.locator('#tt-drawer [data-dkh-held]').first();
+  const read = () => row.evaluate((r) => ({ sw: r.scrollWidth, cw: r.clientWidth, more: r.getAttribute('data-dkh-more'), label: r.parentNode.querySelector('.dkh-lab').textContent.replace(/\s+/g, ' ').trim() }));
+  await tam.page.waitForFunction(() => /· 12/.test(document.querySelector('#tt-drawer .dkh-lab').textContent));
+  let r = await read();
+  assert.ok(r.sw > r.cw, 'the row of twelve does not scroll inside itself');
+  assert.equal(r.more, 'end', 'the trailing edge does not fade');
+  assert.equal(r.label, 'Your hand · 12');
+  await noSideways(tam.page, 'a hand of twelve');
+  await shot(tam, 'twelve', view);
+  await row.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+  await tam.page.waitForFunction(() => document.querySelector('#tt-drawer [data-dkh-held]').getAttribute('data-dkh-more') === 'start');
+  await row.evaluate((el) => { el.scrollLeft = 0; });
+  await tam.page.waitForFunction(() => document.querySelector('#tt-drawer [data-dkh-held]').getAttribute('data-dkh-more') === 'end');
+
+  // Offline, a tap on a face-down card says so under the row, inside the screen.
+  await tam.page.context().setOffline(true);
+  await row.locator('.dk-turn').nth(2).click();
+  const err = tam.page.locator('#tt-drawer [data-dkh-err]:not([hidden])');
+  await err.waitFor();
+  assert.match(await err.innerText(), /That did not go through\. Check your connection and try again\./);
+  assert.equal(await err.getAttribute('role'), 'alert');
+  const box = await err.evaluate((e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, under: e.previousElementSibling === document.querySelector('#tt-drawer [data-dkh-held]') }; });
+  assert.ok(box.under, 'the line is not right under the hand');
+  assert.ok(box.top >= 0 && box.bottom <= box.h, `the line is off screen: ${box.top}..${box.bottom} of ${box.h}`);
+  await shot(tam, 'twelve-offline', view);
+  await tam.page.context().setOffline(false);
+  assert.equal(await tam.page.locator('#tt-drawer [data-dkh-err]').count(), 1, 'the alert was duplicated');
+  await noSideways(tam.page, 'the offline line');
+  assert.deepEqual(errors.filter((e) => !/Failed to fetch|ERR_INTERNET_DISCONNECTED/i.test(e)), [], 'Tam saw console errors');
+});
+
 test('a stranger to the table and a signed-out visitor are told nothing is there', async () => {
   const owner = await person({ tag: 'dhs-d', name: 'Director Dara' });
   const stranger = await person({ tag: 'dhs-s', name: 'Stranger Sol' });
