@@ -1158,8 +1158,11 @@
         }, function (e) {
           if (isStale(e && e.message)) return stale();
           // Back to what is stored, with the refusal in the row that caused it.
+          // While a condition that points at nothing is still in the list the
+          // server refuses every save, so say that and not its test number.
+          var stuck = next.some(function (t) { return t && t.broken; });
           drawWhen(sec, focus);
-          rowSay(sec, idx, words(e));
+          rowSay(sec, idx, stuck ? 'A condition here no longer points at anything. Remove it, then change the others.' : words(e));
         });
       }
 

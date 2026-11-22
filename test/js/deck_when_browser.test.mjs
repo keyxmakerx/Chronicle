@@ -153,3 +153,13 @@ test('a test that points at nothing says so, and can be removed', { skip }, asyn
   assert.deepEqual((await puts(page))[0].body, { when: [] });
   await page.context().close();
 });
+
+test('while a test that points at nothing is in the list, a refused change says to remove it first', { skip }, async () => {
+  const page = await open([STORED[0], BROKEN[0]]);
+  await page.evaluate(() => { window.__answer = { fail: 'test 2: that tag is not in this campaign' }; });
+  await page.selectOption('[data-when-row="0"] [aria-label="How it compares"]', 'lte');
+  await page.waitForFunction(() => !document.querySelector('[data-when-row="0"] [data-dkw-err]').hidden);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-when-row="0"] [data-dkw-err]').textContent),
+    'A condition here no longer points at anything. Remove it, then change the others.');
+  await page.context().close();
+});

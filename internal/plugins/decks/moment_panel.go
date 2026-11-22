@@ -21,8 +21,7 @@ const noticeSlide = "slide"
 // momentsPage is what the notice fragment draws: every open moment (for the
 // Table's count and its "Waiting on you" rows) and the one shown.
 type momentsPage struct {
-	CampaignID string
-	Moments    []MomentView
+	Moments []MomentView
 	// At is the index of the moment shown.
 	At  int
 	Now time.Time
@@ -48,10 +47,6 @@ func (p momentsPage) cur() *MomentView {
 	return &p.Moments[p.At]
 }
 
-func (p momentsPage) base() string {
-	return "/campaigns/" + p.CampaignID + "/decks/moments"
-}
-
 // MomentsPanel handles GET /campaigns/:id/decks/moments/panel: the open
 // moments as the Table draws them. ?at= names the moment to show. A non-Director
 // is told the page is not there, before anything is read.
@@ -64,7 +59,7 @@ func (h *Handler) MomentsPanel(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	p := momentsPage{CampaignID: cid, Moments: list, Now: time.Now(), Looks: map[string]Look{}}
+	p := momentsPage{Moments: list, Now: time.Now(), Looks: map[string]Look{}}
 	if len(list) > 0 {
 		decks, err := h.svc.List(c.Request().Context(), cid, v)
 		if err != nil {
@@ -198,9 +193,6 @@ func (m MomentView) fitsIn() string {
 	}
 	return strconv.Itoa(n) + " " + noun + " " + place + " " + verb
 }
-
-// rowWords is a moment as one line in "Waiting on you".
-func (m MomentView) rowWords() string { return m.DeckName + ": " + m.title() }
 
 // neighbour is the id of the moment a step away from the one shown, wrapping.
 func (p momentsPage) neighbour(step int) string {

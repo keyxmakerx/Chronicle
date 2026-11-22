@@ -1410,17 +1410,26 @@
     if (h) h.focus({ preventScroll: true });
   };
 
+  // loadMomentAt redraws the notice at one moment, after an answer or a step.
+  // It is the newest word on what is waiting, so a list asked for earlier and
+  // answered later is dropped; an answer that leaves nothing waiting hands
+  // focus back to the Table tab, since the button that held it is gone.
   Table.prototype.loadMomentAt = function (id, then) {
-    var self = this;
+    var self = this, seq = ++this.momSeq;
     return this.fetchMoments(id).then(function (html) {
-      if (!self.alive || !self.momOpen) return;
+      if (seq !== self.momSeq || !self.alive || !self.momOpen) return;
       var got = self.parseMoments(html);
       self.momKnown = {};
       got.rows.forEach(function (r) { self.momKnown[r.id] = true; });
       self.moments = { count: got.rows.length, rows: got.rows };
       self.paintCount(false);
       self.paintWait();
-      if (!got.rows.length) { self.closeMoment(false); return; }
+      if (!got.rows.length) {
+        self.closeMoment(false);
+        var back = then && (self.sheet ? $('[data-tt-grab]') : self.tab);
+        if (back) back.focus();
+        return;
+      }
       self.momOpen = got.at;
       self.paintMoment(html);
       if (then) then();

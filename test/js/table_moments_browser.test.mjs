@@ -20,7 +20,7 @@ let browser;
 after(async () => { if (browser) await browser.close(); });
 
 const panel = (rows, at = '') => `<div class="dkm" data-dkm data-at="${at}"><ul data-dkm-index hidden>${rows.map((r) =>
-  `<li data-id="${r.id}" data-slide="${!!r.slide}" data-deck="${r.deck || 'Omens'}" data-reading="${r.reading || 'A card is waiting'}"></li>`).join('')}</ul>${at ? `<section class="dkm-panel" data-moment="${at}"><h2 tabindex="-1">A card’s moment</h2><button type="button" data-dkm-close>Close</button></section>` : ''}</div>`;
+  `<li data-id="${r.id}" data-slide="${!!r.slide}" data-deck="${r.deck || 'Omens'}" data-reading="${r.reading || 'A card is waiting'}"></li>`).join('')}</ul>${at ? `<section class="dkm-panel" data-dkm-panel data-moment="${at}"><h2 id="dkm-h" tabindex="-1">A card’s moment</h2><button type="button" data-dkm-close>Close</button><button type="button" data-dkm-act="dismiss">Not now</button></section>` : ''}</div>`;
 
 const PAGE = (director) => `<!doctype html><html><head><meta charset="utf-8"><style>:root{--dur-slide:360ms}header{display:flex;justify-content:flex-end}[hidden]{display:none!important}${tableCSS}</style></head><body>
 <header><div class="tt-host" data-widget="table" data-campaign-id="c1" data-user-id="u1" data-director="${director}" data-decks="true" data-gm-term="Director">
@@ -34,6 +34,8 @@ window.Chronicle = {
   register: function (n, o) { window.__reg = o; },
   apiFetch: function (u) {
     window.__asked.push(String(u));
+    var answered = String(u).match(/decks\\/moments\\/([^/]+)\\/(deal|dismiss)$/);
+    if (answered) { window.__moments = window.__moments.filter(function (m) { return m.id !== answered[1]; }); return respond({}); }
     if (/decks\\/moments\\/panel/.test(u)) {
       var at = (String(u).match(/at=([^&]+)/) || [])[1] || '';
       return respond(null, window.__panel(window.__moments, decodeURIComponent(at)));
@@ -103,6 +105,20 @@ test('a moment that was waiting when the page opened is counted, not slid in', {
   const { p, close } = await open('true', [{ id: 'm1', slide: true }]);
   await p.waitForFunction(() => document.querySelector('[data-tt-count]').textContent === '1');
   assert.equal(await p.evaluate(() => !!document.getElementById('tt-moment')), false);
+  await close();
+});
+
+test('answering the last waiting moment closes the notice and hands focus to the Table tab', { skip }, async () => {
+  const { p, close } = await open('true', [{ id: 'm1' }]);
+  await p.waitForFunction(() => document.querySelector('[data-tt-count]').textContent === '1');
+  await p.click('[data-tt-tab]');
+  await p.click('[data-tt-moment="m1"]');
+  await p.waitForSelector('#tt-moment [data-dkm-act="dismiss"]');
+  assert.equal(await p.evaluate(() => document.activeElement.id), 'dkm-h', 'a notice the Director opened takes focus on its heading');
+  await p.click('#tt-moment [data-dkm-act="dismiss"]');
+  await p.waitForFunction(() => !document.getElementById('tt-moment'));
+  assert.equal(await p.evaluate(() => document.activeElement.hasAttribute('data-tt-tab')), true, 'focus was dropped when the notice closed');
+  assert.equal(await count(p), '');
   await close();
 });
 
