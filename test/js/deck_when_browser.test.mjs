@@ -83,7 +83,7 @@ test('the stored tests are drawn as rows with their marks, the hint and the Now 
     now: document.querySelector('[data-dkw-now]').textContent,
   }));
   assert.deepEqual(r.rows, ['On the card', 'Only you']);
-  assert.equal(r.hint, 'Every condition must hold. Up to 4.');
+  assert.equal(r.hint, 'Every condition must hold. Up to four.');
   assert.equal(r.add, 'And another condition');
   assert.match(r.now, /Waiting: Tam is above half\./);
   assert.equal(await blankValue(page, 0, 'How it compares'), 'gte');

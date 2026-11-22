@@ -1069,7 +1069,7 @@
         box.textContent = '';
         if (!w.opts) return;
         var count = w.tests.length + (w.draft ? 1 : 0);
-        box.appendChild(node('span', 'dkw-quiet dkw-whenhint', 'Every condition must hold. Up to ' + MAX_TESTS + '.'));
+        box.appendChild(node('span', 'dkw-quiet dkw-whenhint', 'Every condition must hold. Up to four.'));
         if (count >= MAX_TESTS) return;
         var sel = node('select', 'dkw-addsel');
         sel.setAttribute('aria-label', count ? 'And another condition' : 'Add a condition');

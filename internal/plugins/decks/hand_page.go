@@ -148,16 +148,20 @@ func (d HandDraw) drawsLine() string {
 // kindsLine names the pile's kinds and how many of each, when the deck lets
 // the viewer know them.
 func (d HandDraw) kindsLine() string {
-	out := ""
+	out, named := "", false
 	for _, k := range d.Kinds {
 		name := "No kind"
 		if def, ok := kindOf(d.Look, k.KindKey); ok {
-			name = def.Name
+			name, named = def.Name, true
 		}
 		if out != "" {
 			out += ", "
 		}
 		out += name + " " + strconv.Itoa(k.Count)
+	}
+	// A deck with no kinds has nothing to add to the count of the pile.
+	if !named {
+		return ""
 	}
 	return out
 }

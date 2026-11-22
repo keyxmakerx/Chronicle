@@ -594,6 +594,10 @@ func possessive(who string) string {
 	return who + "'s"
 }
 
+// missingNumber stands in a sentence for a field the page no longer has, so the
+// row reads "Orrin's missing number is at or below 3".
+const missingNumber = "missing number"
+
 func (n *namer) fieldLabel(who, key string) string {
 	page := who
 	switch who {
@@ -605,7 +609,7 @@ func (n *namer) fieldLabel(who, key string) string {
 				}
 			}
 		}
-		return "a number"
+		return missingNumber
 	case WhoHolder:
 		page = n.deck.HolderEntityID
 	}
@@ -624,7 +628,7 @@ func (n *namer) fieldLabel(who, key string) string {
 	if l := labels[key]; l != "" {
 		return l
 	}
-	return "a number"
+	return missingNumber
 }
 
 func (n *namer) trackerName(kind string) string {
@@ -635,7 +639,7 @@ func (n *namer) trackerName(kind string) string {
 			}
 		}
 	}
-	return "a tracker"
+	return "missing tracker"
 }
 
 func (n *namer) tagName(id int) string {
@@ -646,7 +650,7 @@ func (n *namer) tagName(id int) string {
 			}
 		}
 	}
-	return "a tag"
+	return "that is gone"
 }
 
 func fmtNum(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }

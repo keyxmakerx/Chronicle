@@ -177,7 +177,7 @@ func TestSentenceWriter(t *testing.T) {
 		{WhenTest{Test: TestTag, Who: WhoAny, Tag: it(7), Has: bl(true)}, "any hero has the tag Cursed"},
 		{WhenTest{Test: TestTag, Who: WhoAny, Tag: it(7), Has: bl(false)}, "any hero does not have the tag Cursed"},
 		{WhenTest{Test: TestLayer, Who: "h-tam", Name: "Revenant", On: bl(false)}, "Tam is not Revenant"},
-		{WhenTest{Test: TestTag, Who: "h-gone", Tag: it(99), Has: bl(true)}, "a page has the tag a tag"},
+		{WhenTest{Test: TestTag, Who: "h-gone", Tag: it(99), Has: bl(true)}, "a page has the tag that is gone"},
 	}
 	for _, tt := range tests {
 		if got := n.sentence(tt.in); got != tt.want {

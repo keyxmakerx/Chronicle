@@ -167,7 +167,7 @@ async function walk(tag, view, { keyboard = false } = {}) {
   assert.equal(await rows.count(), 2);
   assert.deepEqual(await rows.locator('.dkw-mark').allTextContents(), ['On the card', 'Only you']);
   const section = await owner.page.locator('[data-dkw-when]').textContent();
-  assert.match(section, /Every condition must hold\. Up to 4\./);
+  assert.match(section, /Every condition must hold\. Up to four\./);
   assert.equal(await rows.first().locator('select[aria-label="Which number"]').inputValue(), 'hp');
   assert.equal(await rows.first().locator('select[aria-label="How it compares"]').inputValue(), 'lte');
   assert.match(await owner.page.locator('#dkw-preview').innerText(), /The second condition is yours alone, so the card shows only the first\./);
