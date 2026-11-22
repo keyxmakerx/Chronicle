@@ -85,9 +85,11 @@
       spacer = document.createElement('div');
       spacer.setAttribute('aria-hidden', 'true');
       spacer.setAttribute('data-page-live-hold', '');
-      spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;pointer-events:none';
+      // The whole old height until the swap settles: the new markup can still
+      // shrink in that time (htmx puts its settled attributes back), and
+      // a hold sized to it would let the scroll position fall.
+      spacer.style.cssText = 'display:block;height:' + height + 'px;margin:0;padding:0;border:0;pointer-events:none';
       m.appendChild(spacer);
-      size();
       if (!moved) m.scrollTop = top;
     }
     // htmx scrolls the target to the top when the swap settles; put it back
@@ -112,7 +114,7 @@
     }
     function frame() {
       if (done) return;
-      var h = size();
+      var h = landed ? size() : height;
       var off = m.scrollTop !== top;
       if (!moved && off) m.scrollTop = top;
       // Watched for a moment after the page has grown back too, since the
