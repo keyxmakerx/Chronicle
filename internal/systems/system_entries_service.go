@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
@@ -97,6 +99,9 @@ type SystemEntryService interface {
 	// words: ties, left-out entries, old names and notes
 	// (system_entries_reading.go).
 	EntryReading
+	// SetCardLook sets or clears the card border and colour of one ACCEPTED
+	// entry, as a Director's change; nothing else on the entry changes.
+	SetCardLook(ctx context.Context, campaignID string, actor EntryActor, id int64, border, colour string) (*SystemEntry, error)
 	// EntryCatalog is the one per-reader list every consumer draws on
 	// (entry_catalog.go).
 	EntryCatalog
@@ -107,6 +112,7 @@ type systemEntryService struct {
 	manifest EntryManifestResolver
 	chars    EntryCharacters
 	rules    EntryRuleForgetter
+	looks    EntryLookForgetter
 	standard StandardSystemResolver
 	people   EntryPeople
 }
@@ -693,7 +699,71 @@ func (s *systemEntryService) Delete(ctx context.Context, campaignID string, acto
 			slog.Warn("deleting an entry's hero rules failed", slog.Int64("entry_id", id), slog.Any("error", err))
 		}
 	}
+	// Subclass cards derived from this entry are keyed by its slug, which a
+	// new entry of the same name would reuse, so their looks go with it.
+	if s.looks != nil {
+		if _, err := s.looks.ForgetDerived(ctx, campaignID, e.SystemID, e.Slug); err != nil {
+			slog.Warn("deleting an entry's derived card looks failed", slog.Int64("entry_id", id), slog.Any("error", err))
+		}
+	}
 	return nil
+}
+
+// SetCardLook is the owner's choice of border for a campaign's own entry,
+// written into the entry's own properties so the entry stays the one truth.
+// Only an accepted entry can be changed this way: a draft or sent one is its
+// writer's until a Director accepts it. The entry goes through the normal
+// normalising and validation, and is saved only when the two properties
+// actually change.
+func (s *systemEntryService) SetCardLook(ctx context.Context, campaignID string, actor EntryActor, id int64, border, colour string) (*SystemEntry, error) {
+	if err := requireDirector(actor); err != nil {
+		return nil, err
+	}
+	e, err := s.repo.Get(ctx, campaignID, id)
+	if err != nil {
+		return nil, err
+	}
+	e.Status = entryStatusOrAccepted(e.Status)
+	if e.Status != EntryStatusAccepted {
+		return nil, apperror.NewValidation("Accept this entry first: a card's border is its writer's until a Director accepts the entry.")
+	}
+	stored := e.Properties
+	props := make(map[string]any, len(stored)+2)
+	for k, v := range stored {
+		if k != cardborders.PropBorder && k != cardborders.PropColour {
+			props[k] = v
+		}
+	}
+	if border != "" {
+		props[cardborders.PropBorder] = border
+		if colour != "" {
+			props[cardborders.PropColour] = colour
+		}
+	}
+	if sameLookProps(stored, props) {
+		return e, nil
+	}
+	e.Properties = props
+	if err := normalizeEntryCarrying(e, stored); err != nil {
+		return nil, err
+	}
+	if err := s.repo.Update(ctx, e); err != nil {
+		return nil, err
+	}
+	return s.repo.Get(ctx, campaignID, id)
+}
+
+// sameLookProps reports whether two property maps hold the same border and
+// colour, so an unchanged choice does not rewrite the entry.
+func sameLookProps(a, b map[string]any) bool {
+	for _, k := range []string{cardborders.PropBorder, cardborders.PropColour} {
+		av, aok := a[k]
+		bv, bok := b[k]
+		if aok != bok || !reflect.DeepEqual(av, bv) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *systemEntryService) Grants(ctx context.Context, campaignID string, actor EntryActor) ([]EntryGrant, error) {

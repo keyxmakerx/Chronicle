@@ -1321,3 +1321,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A new source of change for a fact is a new `Poke`; until it exists the Director's own read is the backstop. Known gaps: a tag deleted outright, a page cloned with its tags, a page deleted through a path that publishes no event.
 - The trackers plugin gains an observer interface beside its owned-kind listener; the listener is unchanged.
 - A printed test is the player's to read, but whether it holds is not: what a player is sent about a deck does not depend on it.
+
+## ADR-080: A campaign's card borders are kept where the card's own truth is, and applied in the pick list
+
+**Status:** Accepted; operator decision on an owner choosing a card's border (#2650).
+
+**Context:** A hero creator card can wear a border from the `cardborders` library. A campaign's owner wants to choose the border of any card, a game system's own entry as much as the campaign's homebrew. A package entry is a file the campaign cannot write to, and its property map is shared and cached across campaigns. A campaign's own entry already holds `card_border` / `card_colour` and is checked by `validateCardLook` on every write.
+
+**Decision:**
+1. A package entry's choice (including a derived entry, key `parent--child`) is a row in `campaign_card_looks`, keyed `(campaign, system, field, entry key)`. No row means the game system's own look; a row with an empty border means no border.
+2. A campaign's own entry has no row: the choice is written into that entry's own `card_border` / `card_colour` as a Director's change (`SetCardLook`), so the entry stays the one truth and nothing shadows it. Only an accepted entry can be changed this way; a draft or sent entry is its writer's until a Director accepts it.
+3. The row is laid over the package entry inside `CharacterChoiceList` (after the overlay, before the limiter, and on the derived-entry path), on a copy of the property map, so the creator, the try-out, Foundry sync and the AI lookup all read the owner's choice with no adapter of their own. The package's own look is kept on the choice (`SystemLook`) and `LookChanged` is set; only a Director's plan carries them.
+4. A failing look read is logged and the package looks are served: a look is not a rule, and the pick list must stay up.
+5. The Customizer section `herolooks` checks every item against the campaign's real list before writing anything, and stores nothing for a choice equal to the game system's own look.
+
+**Consequences:**
+- Deleting a campaign entry also deletes the rows of the entries derived from its slug.
+- A player's own entry shows the border its writer chose until a Director accepts it; after that the owner's change to it is an ordinary edit of the entry.
+- An AI `system-entry` write of `card_border` to a campaign entry is that entry's truth; it is not shadowed by a row.

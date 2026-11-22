@@ -6108,12 +6108,19 @@ func (a *App) RegisterRoutes() {
 		characterChoiceSvc, systems.EntryManifestResolver(manifestFor),
 		systems.WithChoiceHeroes(choiceHeroesAdapter{entities: entityService, lists: characterListService, members: campaignService}))
 	characterChoiceSvc.SetChoiceLimiter(choiceRuleSvc)
+	// The owner's card borders for package entries are laid over every list.
+	cardLookSvc := systems.NewCardLookService(systems.NewCardLookRepository(a.DB), characterChoiceSvc)
+	characterChoiceSvc.SetChoiceLooks(cardLookSvc)
 	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
 		systems.WithEntryRules(choiceRuleSvc),
+		systems.WithEntryLooks(cardLookSvc),
 		systems.WithStandardSystem(systems.StandardSystemFor(campaignSystemMgr, systems.EntryManifestResolver(manifestFor))),
 		systems.WithEntryPeople(entryPeopleAdapter{entities: entityService, lists: characterListService}))
 	campaignHandler.RegisterDeskProvider(systems.NewEntriesDeskProvider(systemEntrySvc, choiceRuleSvc))
+	// A campaign's own entry takes the owner's border in its own properties.
+	cardLookSvc.SetEntries(systemEntrySvc)
+	campaignHandler.RegisterCustomizeSection(newHeroLooksSection(cardLookSvc))
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).

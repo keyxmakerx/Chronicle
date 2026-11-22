@@ -216,6 +216,7 @@ func (t *testChoices) RulesTerms(context.Context, string) (*RulesTerms, error) {
 }
 
 func (t *testChoices) SetChoiceLimiter(l ChoiceLimiter) { t.limiter = l }
+func (t *testChoices) SetChoiceLooks(CardLookReader) {}
 
 type fakeHeroes struct {
 	heroes  []ChoiceHero

@@ -70,3 +70,11 @@ The stage look draws the border on the entry's card on a phone and on a computer
 the parts of a border made to take colour (carved lines, runes, glowing cracks, a
 vine, the dye of the scales) take the entry's colour, and the rest of the picture
 stays as drawn. The "make your own" card and the list view stay plain.
+
+## The campaign's owner can change a card's border
+
+A campaign's owner can pick a different border, or none, for any card, a game
+system's own entry included, in the Customizer. Their choice wins over the
+package's `card_border` and `card_colour` for everyone who sees the card, and
+choosing the package's own look again, or resetting, hands the card back to the
+package.
