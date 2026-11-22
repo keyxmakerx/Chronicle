@@ -204,8 +204,12 @@ a.stg-eyebrow:focus-visible { outline: 2px solid var(--stg-acc); outline-offset:
   .stg-tabs { flex-wrap: wrap; overflow-x: visible; gap: 0; }
   .stg-tab { padding: 0 0.625rem; letter-spacing: 0.05em; }
   .stg-fact:nth-child(n + 4) { display: none; }
+  /* Touch gets 44: the eyebrow's hit area grows without moving the name. */
+  .stg-find .manage-find { min-height: 2.75rem; }
+  a.stg-eyebrow { padding-block: 0.875rem; margin-block: -0.875rem; }
 }
 @media (pointer: coarse) {
   .stg-find .manage-find { min-height: 2.75rem; }
+  a.stg-eyebrow { padding-block: 0.875rem; margin-block: -0.875rem; }
 }
 html[data-motion="off"] .stg-tab, html[data-motion="off"] .stg-tab::after { transition: none; }

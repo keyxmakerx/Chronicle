@@ -60,7 +60,7 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 		<div class="card p-4">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="text-sm font-semibold text-fg">API Keys</h2>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) } class="text-xs text-fg-muted hover:text-accent">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) } class="inline-flex items-center min-h-11 text-xs text-fg-muted hover:text-accent">
 					View All <i class="fa-solid fa-arrow-right text-[10px] ml-0.5"></i>
 				</a>
 			</div>
@@ -80,7 +80,7 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 
 		// Create Key form.
 		<div class="card p-4" x-data="{ expanded: false }">
-			<button @click="expanded = !expanded" class="flex items-center justify-between w-full text-left">
+			<button @click="expanded = !expanded" class="flex items-center justify-between w-full min-h-11 text-left">
 				<h2 class="text-sm font-semibold text-fg"><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create New Key</h2>
 				<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="expanded && 'rotate-180'"></i>
 			</button>

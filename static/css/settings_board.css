@@ -458,7 +458,6 @@ textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
   .sb-board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
   .sb-t { min-height: 6.5rem; }
   .sb-tv { font-size: 1.1875rem; }
-  .sb-chip { min-height: 2.5rem; }
   .sb-face { width: 2.875rem; }
   /* The flip's knob moves under the words, so a long label never meets it. */
   .sb-flip .sb-tl { padding-right: 0; }
@@ -470,9 +469,18 @@ textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
 @container sbpage (max-width: 26rem) {
   .sb-w2 { grid-column: 1 / -1; }
 }
+/* Touch gets 44. A page as narrow as a phone is a touch screen in practice,
+   so there every control is at least 44 tall, as on any touch screen; with a
+   mouse on a wide page they keep their size. */
+@container sbpage (max-width: 40rem) {
+  .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
+  .sb-av { width: 2.75rem; height: 2.75rem; }
+  .sb-chip, .sb-word, .sb-delete, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+}
 @media (pointer: coarse) {
   .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
-  .sb-word { min-height: 2.75rem; }
+  .sb-av { width: 2.75rem; height: 2.75rem; }
+  .sb-chip, .sb-word, .sb-delete, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
 }
 
 /* Calm keeps the colours and drops the travel; Off keeps neither. */
