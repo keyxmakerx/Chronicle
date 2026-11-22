@@ -45,13 +45,15 @@ const LIB = {
   'glass-midnight': mk('glass-midnight.webp'),
   'rune-metal': mk('rune-metal.webp', { mask: 'rune-metal-mask.webp', peak: 0.96, gain: 1.3 }),
   'great-rune': mk('great-rune.webp', { mask: 'great-rune-mask.webp', peak: 0, gain: 0.85 }),
+  mechanical: mk('mechanical.webp', { mask: 'mechanical-mask.webp', corner: 'mechanical-corners.webp', cornerMask: 'mechanical-corners-mask.webp', ground: 'mechanical-steam.webp', peak: 0, gain: 1, glow: 1.4 }),
   'thorn-glass': mk('thorn-glass.webp', { mask: 'thorn-glass-mask.webp', peak: 0.92, gain: 1.3 }),
   scales: mk('scales.webp', { over: 'scales-boss.webp', dye: true }),
   vine: mk('vine.webp', { mask: 'vine-mask.webp', peak: 0.74, gain: 1.3 }),
 };
-const URLS = ['img', 'mask', 'over', 'corner', 'cornerMask'];
-const libJSON = () => JSON.stringify(Object.fromEntries(Object.entries(LIB).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).map(([p, x]) => [p, URLS.includes(p) ? '/borders/' + x + '?v=abc123' : x]))])));
-const DEFAULT = { 'carved-stone': '#e0a030', fire: '#d9622b', 'great-rune': '#b48cf2', scales: '#2fb5a4', 'rune-metal': '#3fc8d4', vine: '#6fae4f', ice: '#8fd8ff' };
+const URLS = ['img', 'mask', 'over', 'corner', 'cornerMask', 'ground'];
+// patch: { key: { part: address } } replaces a served address, to hand the script one it must refuse.
+const libJSON = (patch = {}) => JSON.stringify(Object.fromEntries(Object.entries(LIB).map(([k, v]) => [k, { ...Object.fromEntries(Object.entries(v).map(([p, x]) => [p, URLS.includes(p) ? '/borders/' + x + '?v=abc123' : x])), ...(patch[k] || {}) }])));
+const DEFAULT = { 'carved-stone': '#e0a030', fire: '#d9622b', 'great-rune': '#b48cf2', mechanical: '#6fa8dc', scales: '#2fb5a4', 'rune-metal': '#3fc8d4', vine: '#6fae4f', ice: '#8fd8ff' };
 
 const ch = (name, look, props = {}) => ({ key: name.toLowerCase(), slug: name.toLowerCase(), name, summary: name + ' summary, a line or two of words.', source: 'package', properties: props, ...(look ? { look } : {}) });
 const KEYS = Object.keys(LIB);
@@ -67,12 +69,12 @@ const MAIN = plan([
 const LIGHT = ':root{--color-bg-primary:#f9fafb;--color-card-bg:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-secondary:#4b5563;--dur-micro:120ms;--dur-standard:200ms;--dur-large:280ms;--ease-out:cubic-bezier(.16,1,.3,1);--z-popup:50;--z-sheet:60}';
 const DARK = 'html.dark{--color-bg-primary:#111827;--color-card-bg:#1f2937;--color-bg-tertiary:#374151;--color-border:#374151;--color-text-primary:#f9fafb;--color-text-secondary:#c4c9d2}';
 
-function page({ accent = '#6366f1', look = true, dark = false, borders = true }) {
+function page({ accent = '#6366f1', look = true, dark = false, borders = true, patch }) {
   return `<!doctype html><html data-gm-term="Director"${dark ? ' class="dark"' : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${LIGHT}${DARK}:root{--color-accent:${accent}}*,::before,::after{box-sizing:border-box}body{margin:0;font-family:sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style>
 <link rel="stylesheet" href="/hero_creator.css">${look ? '<link rel="stylesheet" href="/hero_stage.css"><link rel="stylesheet" href="/hero_borders.css">' : ''}</head><body>
 <div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
-  data-csrf="tok" data-type-name="Character" data-for-self="true"${look ? ' data-look="stage"' : ''}${borders ? " data-borders='" + libJSON() + "'" : ''}><p class="hc-loading__text">Opening</p></div>
+  data-csrf="tok" data-type-name="Character" data-for-self="true"${look ? ' data-look="stage"' : ''}${borders ? " data-borders='" + libJSON(patch) + "'" : ''}><p class="hc-loading__text">Opening</p></div>
 <script>window.Chronicle = { register: (n, d) => { window.hcImpl = d; document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)); }, escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => 'Director' };</script>
 <script src="/hero_rules_lines.js"></script><script src="/hero_borders.js"></script><script src="/hero_stage.js"></script><script src="/hero_creator.js"></script></body></html>`;
 }
@@ -550,6 +552,173 @@ test('no sideways scroll at 360 wide with bordered cards', { skip }, async (t) =
   assert.deepEqual(await fits(), { page: true, app: true }, 'the list');
 });
 
+// --- Boiler works ---
+
+const BOILER = plan([ch('Boiler', { border: 'mechanical', colour: '#6fa8dc' }, { speed: 5 }), ch('Plain')]);
+const pseudoOf = (pg, sel, pseudo) => pg.locator(sel).first().evaluate((e, ps) => { const c = getComputedStyle(e, ps); return { slice: c.borderImageSlice, repeat: c.borderImageRepeat, source: c.borderImageSource, top: c.borderTopWidth, bottom: c.borderBottomWidth, left: c.borderLeftWidth, right: c.borderRightWidth }; }, pseudo);
+
+for (const [label, width, desk] of sizes) {
+  test(`${label}: a Boiler works card has its steam ground and its coloured pictures`, { skip }, async (t) => {
+    const { pg, errors } = await open(t, { width, p: BOILER });
+    const sel = `${cards(desk)}[data-trim="mechanical"]`;
+    assert.equal(await pg.locator(sel).count(), 1);
+    const ground = await pg.locator(sel).evaluate((e) => ({ prop: e.style.getPropertyValue('--trim-ground').trim(), bg: getComputedStyle(e).backgroundImage }));
+    assert.equal(ground.prop, 'url("/borders/mechanical-steam.webp?v=abc123")');
+    assert.ok(ground.bg.includes('/borders/mechanical-steam.webp?v=abc123'), 'the steam is among the card\'s backgrounds: ' + ground.bg);
+    await madeOn(pg, desk, 'Boiler', '--trim-img');
+    await madeOn(pg, desk, 'Boiler', '--trim-corner');
+    const c = (await trimOf(pg, cards(desk))).find((x) => x.name === 'Boiler');
+    assert.match(c.img, /^url\("blob:/);
+    assert.match(c.corner, /^url\("blob:/);
+    assert.equal(errors.length, 0, errors.join('\n'));
+  });
+
+  test(`${label}: the Boiler works corner sheet is a nine-slice drawn as a second border image`, { skip }, async (t) => {
+    const { pg } = await open(t, { width, p: BOILER });
+    const sel = `${cards(desk)}[data-trim="mechanical"]`;
+    await madeOn(pg, desk, 'Boiler', '--trim-corner');
+    const b = await pseudoOf(pg, sel, '::before');
+    assert.equal(b.slice, '240 265');
+    assert.equal(b.repeat, 'stretch');
+    assert.match(b.source, /^url\("blob:/);
+    const [v, h] = desk ? ['43px', '48px'] : ['64px', '70px'];
+    assert.deepEqual([b.top, b.bottom, b.left, b.right], [v, v, h, h]);
+  });
+}
+
+// The film curve, written out from its published form (Narkowicz-style ACES fit
+// with the RRT/ODT matrices) as an independent check on the script's own.
+const ACES_IN = [[0.59719, 0.35458, 0.04823], [0.076, 0.90834, 0.01566], [0.0284, 0.13383, 0.83777]];
+const ACES_OUT = [[1.60475, -0.53108, -0.07367], [-0.10208, 1.10813, -0.00605], [-0.00327, -0.07276, 1.07602]];
+const mul = (m, v) => m.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+const toLin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const toSrgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
+const acesShown = (rgb, strength) => {
+  const lin = rgb.map((c) => toLin(c) * strength / 0.6);
+  const fit = mul(ACES_IN, lin).map((v) => (v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.4329510) + 0.238081));
+  return mul(ACES_OUT, fit).map((v) => toSrgb(Math.min(1, Math.max(0, v))));
+};
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+// What the glow colouring leaves of a colour, as a share of 255 per channel.
+const glowFactors = (hex, strength) => { const w = acesShown([255, 255, 255], strength), g = acesShown(hexRgb(hex), strength); return g.map((v, i) => v / w[i]); };
+
+// The made picture against the served one and its mask: at the mask's brightest
+// pixel and at the darkest base pixel the mask half-covers, so a clamp at white
+// cannot hide a wrong factor.
+async function samplePixels(pg, { made, base, mask }) {
+  return pg.evaluate(async ({ made, base, mask }) => {
+    const load = (u) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error(u)); i.src = u; });
+    const [M, B, K] = await Promise.all([load(made), load(base), load(mask)]);
+    const w = B.naturalWidth, h = B.naturalHeight;
+    const px = (im) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0, w, h); return x.getImageData(0, 0, w, h).data; };
+    const m = px(M), b = px(B), k = px(K);
+    let top = -1, mid = -1, topA = 0, midBase = 999;
+    for (let i = 0; i < k.length; i += 4) {
+      if (b[i + 3] !== 255) continue;
+      if (k[i] > topA) { topA = k[i]; top = i; }
+      const dark = Math.max(b[i], b[i + 1], b[i + 2]);
+      if (k[i] >= 100 && k[i] <= 200 && dark < midBase) { midBase = dark; mid = i; }
+    }
+    const at = (i) => ({ made: [m[i], m[i + 1], m[i + 2]], base: [b[i], b[i + 1], b[i + 2]], mask: k[i] });
+    return { size: [w, h], top: top < 0 ? null : at(top), mid: mid < 0 ? null : at(mid) };
+  }, { made, base, mask });
+}
+
+// Makes the border at the given colour and hands back what the colouring did at the two sample pixels.
+async function sampleOf(t, { key, colour, name }) {
+  const { pg } = await open(t, { width: 390, p: plan([ch('Only', { border: key, colour }, { speed: 5 })]) });
+  await madeOn(pg, false, 'Only', '--trim-img');
+  const made = (await trimOf(pg, cards(false)))[0].img.match(/url\("(blob:[^"]+)"\)/)[1];
+  const dir = '/borders/';
+  return samplePixels(pg, { made, base: dir + LIB[key].img + '?v=abc123', mask: dir + LIB[key].mask + '?v=abc123' });
+}
+
+const within = (got, want, tol, msg) => got.forEach((g, i) => assert.ok(Math.abs(g - want[i]) <= tol, `${msg}: channel ${i} is ${g}, wanted ${want[i].toFixed(1)}`));
+
+test('the film curve written here keeps white white and lifts the weaker channels of a strong colour', () => {
+  within(glowFactors('#ffffff', 1.4), [1, 1, 1], 1e-9, 'white');
+  within(glowFactors('#6fa8dc', 1.4), [0.69, 0.86, 0.96], 0.01, 'blue');
+  within(glowFactors('#c4243a', 1.4), [0.99, 0.17, 0.29], 0.01, 'red');
+});
+
+for (const colour of ['#6fa8dc', '#c4243a', '#ffffff']) {
+  test(`Boiler works colouring at ${colour}: the made frame is the base plus the mask times the glowed colour`, { skip }, async (t) => {
+    const f = glowFactors(colour, 1.4);
+    const got = await sampleOf(t, { key: 'mechanical', colour });
+    assert.ok(got.top && got.mid, 'the mask has pixels to sample');
+    for (const which of ['top', 'mid']) {
+      const s = got[which], want = s.base.map((b, i) => Math.min(255, b + s.mask * f[i]));
+      within(s.made, want, 3, `${which} pixel (mask ${s.mask}, base ${s.base})`);
+      // The test must be able to tell a wrong factor: the glowed colour adds something on at least one channel.
+      assert.ok(want.some((w, i) => w - s.base[i] > 20), which + ' pixel is lit by the colour');
+    }
+  });
+}
+
+test('a border without glow is coloured as before: base plus mask times colour times the peak and gain scale', { skip }, async (t) => {
+  const col = '#d9622b', rgb = hexRgb(col), k = 1.3 / Math.max(...rgb, 13);
+  const got = await sampleOf(t, { key: 'fire', colour: col });
+  for (const which of ['top', 'mid']) {
+    const s = got[which], want = s.base.map((b, i) => Math.min(255, b + s.mask * rgb[i] * k));
+    within(s.made, want, 3, `${which} pixel (mask ${s.mask}, base ${s.base})`);
+  }
+});
+
+test('phone: a bordered card in the hand is layout-contained only, a plain one keeps paint containment', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, p: BOILER });
+  const contain = (sel) => pg.locator(sel).first().evaluate((e) => getComputedStyle(e).contain);
+  assert.equal(await contain('.hc-hand .hc-card[data-trim]'), 'layout');
+  assert.equal(await contain('.hc-hand .hc-card[data-i]:not([data-trim])'), 'layout paint');
+});
+
+// A corner piece lies over the frame, outside the card's padding box. The strip
+// between the card's border-box corner and its padding-box corner is where
+// paint containment would cut it, so the test photographs a few pixels of it
+// with the piece and without it.
+for (const key of ['carved-stone', 'mechanical']) {
+  test(`phone: the ${key} corner piece is painted outside the card's padding box`, { skip }, async (t) => {
+    const { pg } = await open(t, { width: 390, p: plan([ch('Only', { border: key, colour: colourOf(key) }, { speed: 5 })]) });
+    await madeOn(pg, false, 'Only', '--trim-corner');
+    await idle(pg, 300);
+    const sel = '.hc-hand .hc-card[data-trim]';
+    await pg.locator(sel).scrollIntoViewIfNeeded();
+    const r = await pg.locator(sel).evaluate((e) => {
+      const b = e.getBoundingClientRect(), cs = getComputedStyle(e), pb = e.querySelector('.hc-top').getBoundingClientRect();
+      return { left: b.left, top: b.top, bl: parseFloat(cs.borderLeftWidth), bt: parseFloat(cs.borderTopWidth), inset: pb.left - b.left };
+    });
+    // The piece starts fw + 5px outside the padding box (21px on a phone) and the padding box starts bl in from the border box.
+    const lo = Math.max(2, Math.ceil(r.bl - 16)), size = 6, x = Math.round(r.left + lo + 2), y = Math.round(r.top + Math.max(2, Math.ceil(r.bt - 16)) + 2);
+    assert.ok(lo + 2 + size < r.bl, `the sample (${lo + 2}..${lo + 2 + size}) lies in the border strip (${r.bl}px)`);
+    const clip = { x, y, width: size, height: size };
+    const withPiece = await pg.screenshot({ clip });
+    await pg.addStyleTag({ content: `.hc-hand .hc-card[data-trim]::before { display: none !important; }` });
+    await idle(pg, 100);
+    const without = await pg.screenshot({ clip });
+    assert.notDeepEqual(withPiece, without, 'the piece shows in the strip outside the padding box');
+  });
+}
+
+// An address the script cannot put safely in a style leaves the card plain.
+for (const [part, key, bad] of [
+  ['ground', 'mechanical', '/borders/a b.webp'],
+  ['ground', 'mechanical', '/borders/a".webp'],
+  ['ground', 'mechanical', '/borders/a).webp'],
+  ['img', 'fire', '/borders/a b.webp'],
+  ['corner', 'mechanical', '/borders/a b.webp'],
+]) {
+  test(`an unsafe ${part} address (${bad}) leaves a ${key} card plain`, { skip }, async (t) => {
+    const p = plan([ch('Only', { border: key, colour: colourOf(key) }, { speed: 5 }), ch('Other', { border: 'earth', colour: '#b08a5a' })]);
+    const { pg, errors } = await open(t, { width: 390, p, patch: { [key]: { [part]: bad } } });
+    await idle(pg, 300);
+    const by = Object.fromEntries((await trimOf(pg, cards(false))).map((c) => [c.name, c]));
+    assert.equal(by.Only.trim, null);
+    assert.equal(by.Only.img, '');
+    assert.equal(await pg.locator(`${cards(false)}[style*="--trim-ground"]`).count(), 0);
+    assert.equal(by.Other.trim, 'earth', 'a safe border is not held up');
+    assert.deepEqual(errors, []);
+  });
+}
+
 // --- The Go list and this table agree ---
 
 test('the test library matches the Go library', () => {
@@ -559,7 +728,11 @@ test('the test library matches the Go library', () => {
     for (const p of URLS) if (v[p]) assert.ok(src.includes(`"${v[p]}"`), `Go lacks ${v[p]}`);
     if (v.peak != null) assert.ok(src.includes(`Peak: num(${v.peak})`), k + ' peak');
     if (v.gain != null) assert.ok(src.includes(`Gain: num(${v.gain})`), k + ' gain');
+    if (v.glow != null) assert.ok(src.includes(`Glow: num(${v.glow})`), k + ' glow');
     for (const p of URLS) if (v[p]) assert.ok(existsSync(join(STATIC, 'img/borders', v[p])), v[p] + ' is shipped');
   }
   assert.equal((src.match(/\{Key: "/g) || []).length, Object.keys(LIB).length);
+  // Both ways: an entry the Go side gives a ground or glow that this table lacks is drift too.
+  assert.equal((src.match(/Ground: "/g) || []).length, Object.values(LIB).filter((v) => v.ground).length, 'grounds');
+  assert.equal((src.match(/Glow: num\(/g) || []).length, Object.values(LIB).filter((v) => v.glow != null).length, 'glows');
 });

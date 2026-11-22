@@ -72,9 +72,26 @@ html:not(.dark) .hc-card[data-trim^="glass"], html:not(.dark) .hc-gcard[data-tri
 /* The vine hangs into the card at the bottom, so the last line keeps clear of it. */
 .hc-card[data-trim="vine"] { padding: 28px 38px 48px; }
 
+/* A corner piece lies over the frame, outside the card's padding box. Paint containment would cut it at that
+   edge, so a bordered card in the hand keeps only its layout contained. */
+.hc-hand .hc-card[data-trim] { contain: layout; }
+
 /* Carved stone: the corner where the rock is being worked lies over the ring's top left corner, at the ring's scale. */
 .hc-card[data-trim="carved-stone"]::before, .hc-gcard[data-trim="carved-stone"]::before {
   content: ""; position: absolute; z-index: 3; pointer-events: none; top: calc(-1 * var(--fw) - 5px); left: calc(-1 * var(--fw) - 5px);
   width: calc((var(--fw) + var(--trim-over)) * 700 / 132); height: calc((var(--fw) + var(--trim-over)) * 900 / 132);
   background: var(--trim-corner) 0 0 / 100% 100% no-repeat;
+}
+
+/* Boiler works: steam drifts on the dark field, and one instrument lies over each corner of the frame, larger
+   than the frame. Their picture is a nine-slice with nothing in it but its four corners, each 212 by 192 of the
+   frame's own pixels, so it is drawn as a second border image on top of the first. */
+.hc-card[data-trim="mechanical"], .hc-gcard[data-trim="mechanical"] {
+  background: linear-gradient(var(--trim-wash), var(--trim-wash)) padding-box, var(--trim-glow), var(--trim-ground, none) 0 0 / 256px 256px padding-box, linear-gradient(#1b1d22, #131418) padding-box;
+}
+.hc-card[data-trim="mechanical"]::before, .hc-gcard[data-trim="mechanical"]::before {
+  --u: calc((var(--fw) + var(--trim-over)) / 132);
+  content: ""; position: absolute; z-index: 3; pointer-events: none; inset: calc(-1 * var(--fw) - 5px);
+  border: solid transparent; border-width: calc(192 * var(--u)) calc(212 * var(--u));
+  border-image: var(--trim-corner, none) 240 265 / calc(192 * var(--u)) calc(212 * var(--u)) stretch;
 }

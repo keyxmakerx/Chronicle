@@ -13,7 +13,7 @@
  *
  * window.ChronicleHeroBorders(lib, root) returns { attrs, destroy }.
  *   lib   the library as the page hands it over, by key:
- *         { img, mask, over, corner, cornerMask, dye, peak, gain }
+ *         { img, mask, over, corner, cornerMask, ground, dye, peak, gain, glow }
  *   root  the element the cards are drawn inside
  *
  * Loaded before the scripts that use it.
@@ -40,17 +40,37 @@
 
   function sheet(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
+  // A lit part of a modelled border glows: its renderer passed the colour
+  // through a film tone curve (ACES), which lifts a strong colour's weaker
+  // channels toward white. The same curve here gives the colour that part
+  // would have been drawn in, for any entry; strength is how hard it is lit.
+  // The result is scaled so white stays white.
+  var FILM_IN = [0.59719, 0.35458, 0.04823, 0.07600, 0.90834, 0.01566, 0.02840, 0.13383, 0.83777];
+  var FILM_OUT = [1.60475, -0.53108, -0.07367, -0.10208, 1.10813, -0.00605, -0.00327, -0.07276, 1.07602];
+  function mix(m, v) { return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]]; }
+  function lit(rgb, strength) {
+    function shown(c) {
+      var light = c.map(function (v) { v /= 255; return (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)) * strength / 0.6; });
+      var film = mix(FILM_IN, light).map(function (v) { return (v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.4329510) + 0.238081); });
+      return mix(FILM_OUT, film).map(function (v) { v = Math.min(1, Math.max(0, v)); return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; });
+    }
+    var white = shown([255, 255, 255]), got = shown(rgb);
+    return [255 * got[0] / white[0], 255 * got[1] / white[1], 255 * got[2] / white[2]];
+  }
+
   // Adds the colour to the picture wherever the mask says, and by how much.
   // peak sets how bright the colour's strongest channel is drawn (0 leaves the
   // colour as it is), so a dark entry colour still lights a rune; gain is the
-  // mask's own scale.
-  function inlay(base, mask, colour, peak, gain) {
+  // mask's own scale; glow, where a border has it, is the strength its lit
+  // parts glow at.
+  function inlay(base, mask, colour, peak, gain, glow) {
     var w = base.naturalWidth, h = base.naturalHeight, c = sheet(w, h), x = c.getContext('2d', { willReadFrequently: true });
     x.drawImage(mask, 0, 0, w, h);
     var m = x.getImageData(0, 0, w, h).data;
     x.clearRect(0, 0, w, h);
     x.drawImage(base, 0, 0);
     var img = x.getImageData(0, 0, w, h), d = img.data, rgb = rgbOf(colour);
+    if (glow) rgb = lit(rgb, glow);
     var k = (peak ? peak * 255 / Math.max(rgb[0], rgb[1], rgb[2], 13) : 1) * (gain || 1) / 255;
     var r = rgb[0] * k, g = rgb[1] * k, b = rgb[2] * k;
     for (var i = 0; i < d.length; i += 4) {
@@ -90,8 +110,8 @@
     function colour(b, col) {
       if (b.dye) return load(b.img).then(function (base) { return (b.over ? load(b.over) : Promise.resolve(null)).then(function (ov) { return toUrl(dye(base, ov, col)); }); }).then(function (u) { return { img: u }; });
       var jobs = [];
-      if (b.mask) jobs.push(Promise.all([load(b.img), load(b.mask)]).then(function (p) { return toUrl(inlay(p[0], p[1], col, b.peak, b.gain)); }).then(function (u) { return ['img', u]; }));
-      if (b.cornerMask) jobs.push(Promise.all([load(b.corner), load(b.cornerMask)]).then(function (p) { return toUrl(inlay(p[0], p[1], col, b.peak, b.gain)); }).then(function (u) { return ['corner', u]; }));
+      if (b.mask) jobs.push(Promise.all([load(b.img), load(b.mask)]).then(function (p) { return toUrl(inlay(p[0], p[1], col, b.peak, b.gain, b.glow)); }).then(function (u) { return ['img', u]; }));
+      if (b.cornerMask) jobs.push(Promise.all([load(b.corner), load(b.cornerMask)]).then(function (p) { return toUrl(inlay(p[0], p[1], col, b.peak, b.gain, b.glow)); }).then(function (u) { return ['corner', u]; }));
       if (!jobs.length) return Promise.resolve(null);
       return Promise.all(jobs).then(function (parts) { var o = {}; parts.forEach(function (p) { o[p[0]] = p[1]; }); return o; });
     }
@@ -130,7 +150,7 @@
     // leaves the card plain.
     function attrs(look) {
       var b = look && lib[look.border], col = look && String(look.colour || '').toLowerCase();
-      if (!b || !HEX.test(col) || !/^[a-z0-9-]+$/.test(look.border) || !SAFE.test(b.img) || (b.corner && !SAFE.test(b.corner))) return '';
+      if (!b || !HEX.test(col) || !/^[a-z0-9-]+$/.test(look.border) || !SAFE.test(b.img) || (b.corner && !SAFE.test(b.corner)) || (b.ground && !SAFE.test(b.ground))) return '';
       var id = look.border + ' ' + col, out = made[id] || {};
       if ((b.dye || b.mask || b.cornerMask) && !asked[id]) {
         asked[id] = true;
@@ -139,6 +159,7 @@
       }
       var style = '--k:' + col + ';--trim-img:' + cssUrl(out.img || b.img);
       if (b.corner) style += ';--trim-corner:' + cssUrl(out.corner || b.corner);
+      if (b.ground) style += ';--trim-ground:' + cssUrl(b.ground);
       return ' data-trim="' + look.border + '" style="' + style + '"';
     }
 
