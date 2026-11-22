@@ -6,9 +6,11 @@
  * The server sends a content-free `page.changed` message for a page everyone
  * may read. This reloads the page's own markup through the same boosted swap
  * the sidebar uses, so what a reader sees is still filtered per reader on the
- * server. A refresh never replaces something a person is working on: it waits
- * while a page editor is open, a form has unsaved changes, focus is in a field
- * or a dialog is open, and tries again until the moment is quiet.
+ * server; when the page's arrangement came back the same, only the parts that
+ * changed are replaced (see "Updating in place"). A refresh never replaces
+ * something a person is working on: it waits while a page editor is open, a
+ * form has unsaved changes, focus is in a field or a dialog is open, drops one
+ * that lands after such work began, and tries again until the moment is quiet.
  *
  * Widgets on the fresh markup often draw themselves only after their own
  * data arrives, so for a moment the page is shorter than it was. The old
@@ -112,12 +114,15 @@
     evs.forEach(function (t) { m.addEventListener(t, touched, { passive: true }); });
     // In before the new markup is painted, so the reader never sees the page
     // shrink under them.
+    // Called with no event when the refresh updated the page in place.
     function swapped(e) {
-      if (done || !ours(e, m)) return;
-      spacer = document.createElement('div');
-      spacer.setAttribute('aria-hidden', 'true');
-      spacer.setAttribute('data-page-live-hold', '');
-      spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;pointer-events:none';
+      if (done || (e && !ours(e, m))) return;
+      if (!spacer || spacer.parentNode !== m) {
+        spacer = document.createElement('div');
+        spacer.setAttribute('aria-hidden', 'true');
+        spacer.setAttribute('data-page-live-hold', '');
+        spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;pointer-events:none';
+      }
       m.appendChild(spacer);
       // Until the swap settles the new markup can still shrink by any amount
       // (htmx puts its settled attributes back), so a reader who could be
@@ -129,7 +134,7 @@
     // htmx scrolls the target to the top when the swap settles; put it back
     // before anything is painted.
     function settled(e) {
-      if (done || !ours(e, m)) return;
+      if (done || (e && !ours(e, m))) return;
       landed = true;
       size();
       if (!moved) m.scrollTop = top;
@@ -165,6 +170,7 @@
       m: m,
       height: height,
       spacer: function () { return spacer; },
+      land: function () { swapped(); settled(); },
       follow: function () { start = Date.now(); requestAnimationFrame(frame); },
       end: end
     };
@@ -202,6 +208,144 @@
   }
   var STEPS = { 'htmx:beforeSend': 'send', 'htmx:beforeSwap': 'swap', 'htmx:afterSwap': 'swapped', 'htmx:afterRequest': 'ended', 'htmx:afterSettle': 'settled' };
   Object.keys(STEPS).forEach(function (n) { document.addEventListener(n, function (e) { track(e, STEPS[n]); }); });
+
+  // ---- Updating in place ----
+  // A refresh compares the page as the server sent it last (Chronicle.served,
+  // kept by boot.js and here) with the fresh copy, part by part. The parts are
+  // the children of #main-content, going down through the page frame, its
+  // rows and its columns. When that arrangement is the same, only the parts
+  // whose markup changed are replaced, and a widget that can take a fresh
+  // copy of its mount (update) keeps its drawing; anything else is the whole
+  // swap. Comparing server copy with server copy means nothing a widget drew
+  // is ever mistaken for a change.
+  var CONTAINERS = '[data-page-frame], [data-page-row], [data-page-col]';
+  function mainOf(html) {
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    return { root: doc.getElementById('main-content') || doc.body, title: doc.querySelector('title') };
+  }
+  // The arrangement of root as a string, with its parts pushed in order.
+  function arrangement(root, parts) {
+    var out = [];
+    Array.prototype.forEach.call(root.children, function (c) {
+      if (c.hasAttribute('data-page-live-hold') || c.tagName === 'SCRIPT') return;
+      if (c.matches(CONTAINERS)) { out.push('[' + arrangement(c, parts) + ']'); return; }
+      parts.push(c);
+      out.push(c.tagName + '|' + (c.getAttribute('data-block') || '') + '|' + (c.getAttribute('data-widget') || '') + '|' + c.id);
+    });
+    return out.join(',');
+  }
+  function widgetsIn(el) {
+    var all = Array.prototype.slice.call(el.querySelectorAll('[data-widget]'));
+    if (el.hasAttribute('data-widget')) all.unshift(el);
+    return all.filter(function (w) { return w.getAttribute('data-widget') !== 'page-live'; });
+  }
+  // Returns the element now in the page.
+  function replacePart(live, fresh) {
+    var n = document.importNode(fresh, true);
+    Array.prototype.forEach.call(n.querySelectorAll('script'), function (s) { s.remove(); });
+    widgetsIn(live).forEach(function (w) { Chronicle.destroyWidget(w); });
+    // Nothing is arriving, so a frame inside waits for no widget to draw.
+    if (n.matches('[data-whole]')) n.setAttribute('data-whole-ready', '');
+    Array.prototype.forEach.call(n.querySelectorAll('[data-whole]'), function (f) { f.setAttribute('data-whole-ready', ''); });
+    live.replaceWith(n);
+    if (window.htmx.process) window.htmx.process(n);
+    if (n.hasAttribute('data-widget')) Chronicle.mountWidget(n);
+    Chronicle.mountWidgets(n);
+    return n;
+  }
+  // A mounted widget that can take a fresh copy of its mount keeps its
+  // drawing; false when it can't.
+  function updateWidget(el, fresh) {
+    var impl = Chronicle.isMounted(el) && Chronicle.widgets[el.getAttribute('data-widget')];
+    if (!impl || typeof impl.update !== 'function') return false;
+    impl.update(el, fresh);
+    return true;
+  }
+  function sameWidget(a, b) { return a.getAttribute('data-widget') === b.getAttribute('data-widget'); }
+  function pathTo(el, root) {
+    var p = [];
+    for (; el !== root; el = el.parentElement) p.unshift(Array.prototype.indexOf.call(el.parentElement.children, el));
+    return p;
+  }
+  function at(root, p) {
+    for (var i = 0; root && i < p.length; i++) root = root.children[p[i]];
+    return root;
+  }
+  // Brings one part up to date. A part whose markup changed is replaced,
+  // unless it is one widget that can take its fresh mount (update). A part
+  // whose markup is the same keeps it, but widgets fetch their own data, so
+  // one whose mount reads the same may still have changed: each widget in it
+  // updates itself or is mounted afresh, one by one. Returns the part's
+  // element now in the page.
+  function updatePart(live, before, fresh) {
+    var ws = widgetsIn(fresh);
+    if (before.outerHTML !== fresh.outerHTML) {
+      if (fresh.hasAttribute('data-widget') && ws.length === 1 && sameWidget(live, fresh) && updateWidget(live, fresh)) return live;
+      return replacePart(live, fresh);
+    }
+    var pairs = ws.map(function (w) { return [at(live, pathTo(w, fresh)), w]; });
+    if (pairs.some(function (p) { return !p[0] || !p[0].hasAttribute('data-widget') || !sameWidget(p[0], p[1]); })) return replacePart(live, fresh);
+    pairs.forEach(function (p) {
+      // A widget inside one mounted afresh went with it.
+      if (!p[0].isConnected || updateWidget(p[0], p[1])) return;
+      var n = replacePart(p[0], p[1]);
+      if (p[0] === live) live = n;
+    });
+    return live;
+  }
+  // The live element of each part of the served copy: boot.js kept the
+  // page's elements as served, in document order, and the parsed copy holds
+  // the same elements in the same order. After an update in place the parts
+  // are known from it. A part no longer in the page (a mount that removed
+  // itself, having nothing for this reader) is null.
+  var known = null;
+  function liveParts(m, root, before) {
+    var els = known && known.html === Chronicle.served ? null : Chronicle.servedEls || [];
+    var all = els && Array.prototype.slice.call(root.querySelectorAll('*'));
+    if (els && all.length !== els.length) return null;
+    return before.map(function (p, i) {
+      var e = els ? els[all.indexOf(p)] : known.parts[i];
+      return e && e.isConnected && m.contains(e) ? e : null;
+    });
+  }
+  // Returns false, having changed nothing, when the page needs the whole swap.
+  function updateInPlace(m, html) {
+    if (typeof Chronicle.served !== 'string' || !Chronicle.widgets || !Chronicle.isMounted || !Chronicle.mountWidgets || !Chronicle.destroyWidget) return false;
+    var was = mainOf(Chronicle.served), now = mainOf(html);
+    var before = [], after = [], i;
+    if (arrangement(was.root, before) !== arrangement(now.root, after)) return false;
+    var live = liveParts(m, was.root, before);
+    if (!live || (after.length && !live.some(Boolean))) return false;
+    // A part that removed itself stays gone while its markup is the same;
+    // changed, there is no place left to put it back, so the page takes the
+    // whole swap.
+    for (i = 0; i < after.length; i++) if (!live[i] && before[i].outerHTML !== after[i].outerHTML) return false;
+    for (i = 0; i < after.length; i++) if (live[i]) live[i] = updatePart(live[i], before[i], after[i]);
+    if (now.title && now.title.textContent) document.title = now.title.textContent;
+    Chronicle.served = html;
+    known = { html: html, parts: live };
+    if (active && active.m === m) active.land();
+    return true;
+  }
+  // The watcher's way to try again later, for a refresh dropped on landing.
+  var again = null;
+  document.addEventListener('htmx:beforeOnLoad', function (e) {
+    var d = e.detail, m = main(), from = liveFrom(e);
+    if (!from || !m || d.target !== m || !d.xhr || d.xhr.status !== 200) return;
+    if (from !== location.pathname + location.search) return;
+    // The reader started work while the page was on its way: nothing they
+    // are typing in is replaced, and the refresh comes again once it's quiet.
+    if (!isQuiet(state())) {
+      e.preventDefault();
+      if (active && active.m === m) active.end();
+      if (again) again();
+      return;
+    }
+    var done = false;
+    try { done = updateInPlace(m, d.xhr.responseText); } catch (err) { done = false; }
+    // htmx then neither swaps nor tears the page down; the request still ends.
+    if (done) e.preventDefault();
+  });
 
   // One refresh at a time across every watcher on the page.
   var refreshing = false;
@@ -243,8 +387,8 @@
         refreshing = true;
         var top = m.scrollTop;
         var place = holdPlace(m, top);
-        // The swap replaces this widget, which ends this connection and
-        // starts a new one on the fresh markup.
+        // A whole swap replaces this widget, which ends this connection and
+        // starts a new one on the fresh markup; an update in place keeps it.
         window.htmx.ajax('GET', url, {
           target: m,
           select: '#main-content > *',
@@ -255,6 +399,8 @@
           else place.end();
         }, function () { place.end(); }).then(function () { refreshing = false; });
       }
+
+      again = function () { schedule(RETRY); };
 
       function connect() {
         if (destroyed) return;
@@ -288,6 +434,7 @@
       // every refresh before it.
       el._pageLive = function () {
         destroyed = true;
+        again = null;
         if (pending) clearTimeout(pending);
         if (wsTimer) clearTimeout(wsTimer);
         if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } }
