@@ -280,6 +280,10 @@ leaving the list for another page.
   sheet below it, over the page. Esc closes the open thing first, then leaves
   editing. Each field saves as it is typed, and the page says Saving… then
   Saved.
+- **A setting may be a sentence with its value as the blank.** A rule such
+  as how a deck behaves reads as a sentence ("After it is used it goes ..."),
+  and its value is a dashed-underline blank (`.dw-blank`) that opens its own
+  choices, so the setting is read in words, not found in a form.
 - **An editor never covers what it edits.** It opens from the part (a
   popover for a few fields, a panel docked beside the page for a long form)
   and moves aside rather than sit on the part. A small part may edit in
