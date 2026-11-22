@@ -11,13 +11,16 @@
 // in light and dark, by mouse and by keyboard, with no sideways scroll and no
 // console error.
 //
+// The Cards part of a hero's page when a game system draws the page is the last
+// walk, in a campaign of its own with the same three people.
+//
 // Set LIVE_SHOTS to a folder to also save pictures there.
 //
 // RUN: tools/live-checks.sh test/live/deck_hand.spec.mjs
 
-import { test, after } from 'node:test';
+import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, newCampaign, addMember, enableAddons, done } from './_live.mjs';
+import { person, siteAdmin, newCampaign, addMember, enableAddons, done, once, resetErrors, ADMIN } from './_live.mjs';
 
 after(done);
 
@@ -70,14 +73,14 @@ async function addCardsBlock(owner, cid, etid) {
   assert.ok(put.ok, 'could not put the Cards part on the layout: ' + JSON.stringify(put.body));
 }
 
-// A table of one Director and two players, two heroes (claimed), a hero deck
-// that lets others see shown faces, and a party deck with a card that asks first.
-async function table(tag, { width, height, scheme }) {
-  const ctx = { viewport: { width, height }, colorScheme: scheme, reducedMotion: 'no-preference' };
-  const owner = await person({ tag: tag + '-d', name: 'Director Dara', context: { reducedMotion: 'no-preference' } });
-  const tam = await person({ tag: tag + '-t', name: 'Tam Player', context: ctx });
-  const ilse = await person({ tag: tag + '-i', name: 'Ilse Player', context: ctx });
-  const cid = await newCampaign(owner, 'Hands ' + tag);
+// One Director, two players with a claimed hero each and one campaign serve every
+// walk in the file; each walk makes its own decks, so the people and heroes are
+// signed up and made once.
+const world = once(async () => {
+  const owner = await person({ tag: 'dh-d', name: 'Director Dara', context: { reducedMotion: 'no-preference' } });
+  const tam = await person({ tag: 'dh-t', name: 'Tam Player', context: { reducedMotion: 'no-preference' } });
+  const ilse = await person({ tag: 'dh-i', name: 'Ilse Player', context: { reducedMotion: 'no-preference' } });
+  const cid = await newCampaign(owner, 'Hands');
   await enableAddons(owner, cid, '*');
   await addMember(owner, cid, tam, 'player');
   await addMember(owner, cid, ilse, 'player');
@@ -88,8 +91,27 @@ async function table(tag, { width, height, scheme }) {
     const claim = await who.api(`/campaigns/${cid}/entities/${hero.id}/claim`, { method: 'POST' });
     assert.ok(claim.ok, 'could not claim a hero: ' + JSON.stringify(claim.body));
   }
+  await addCardsBlock(owner, cid, heroTam.etid);
+  return { owner, tam, ilse, cid, heroTam, heroIlse, decks: [] };
+});
 
+beforeEach(async () => { const w = await world(); resetErrors(w.owner, w.tam, w.ilse); });
+
+// The decks of one walk: a hero deck that lets others see shown faces, and a
+// party deck with a card that asks first. The players are shown at `view`'s size
+// and in its colour scheme.
+async function table(tag, { width, height, scheme }) {
+  const base = await world();
+  const { owner, tam, ilse, cid } = base;
+  void tag;
+  for (const who of [tam, ilse]) {
+    await who.page.setViewportSize({ width, height });
+    await who.page.emulateMedia({ colorScheme: scheme });
+  }
   const A = `/campaigns/${cid}/decks`;
+  // An earlier walk's decks would put their cards in this walk's hands.
+  for (const old of base.decks.splice(0)) await owner.api(`${A}/${old}`, { method: 'DELETE' });
+
   const omens = (await j(owner, A, 'POST', { name: 'Omens', kind: 'hero', settings: { knows: 'count', othersSee: 'face', arrives: 'down' } })).body.id;
   await j(owner, `${A}/${omens}`, 'PUT', { version: 1, look: { kinds: [{ key: 'bane', name: 'Zzbane', colour: 'rose', sign: 'star' }] } });
   const pic = await owner.page.evaluate(async ({ cid, PNG }) => {
@@ -105,6 +127,7 @@ async function table(tag, { width, height, scheme }) {
   await j(owner, `${A}/${omens}/cards/${moon}`, 'PUT', { picture: pic });
   const fates = (await j(owner, A, 'POST', { name: 'Fates', kind: 'party', settings: { arrives: 'up', fate: 'play' } })).body.id;
   const fav = (await j(owner, `${A}/${fates}/cards`, 'POST', { name: 'Favourowed', words: 'A debt is called in', copies: 1, askFirst: true })).body.cards[0].id;
+  base.decks.push(omens, fates);
 
   // Both players are chosen for both decks.
   const ids = {};
@@ -117,8 +140,7 @@ async function table(tag, { width, height, scheme }) {
     const put = await j(owner, `${A}/${d}/players`, 'PUT', { version: v, players: [{ userId: ids.tam }, { userId: ids.ilse }] });
     assert.ok(put.ok, 'could not choose the players: ' + JSON.stringify(put.body));
   }
-  await addCardsBlock(owner, cid, heroTam.etid);
-  return { owner, tam, ilse, cid, A, omens, fates, moon, fav, pic, heroTam: heroTam.id, heroIlse: heroIlse.id, scheme, width };
+  return { owner, tam, ilse, cid, A, omens, fates, moon, fav, pic, heroTam: base.heroTam.id, heroIlse: base.heroIlse.id, scheme, width };
 }
 
 const noSideways = (page, what) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
@@ -211,13 +233,15 @@ async function walk(tag, view, { keyboard = false } = {}) {
 
   // The Director takes it back: Tam is told on the bell, and the card is named
   // because it was face up to Tam.
+  // The bell keeps earlier walks' lines, so a new one is counted, not just found.
+  const bellHas = async (who, line) => JSON.stringify((await who.api('/notifications')).body).split(line).length - 1;
+  const TAKEN = 'A card was taken back from Omens: Moonwellzz';
+  const takenBefore = await bellHas(tam, TAKEN);
   const dd = await owner.api(`${A}/${w.omens}`);
   const copy = dd.body.copies.find((c) => c.zone === 'hand').id;
   assert.ok((await j(owner, `${A}/${w.omens}/copies/${copy}/take-back`, 'POST', {})).ok);
   await hand(tam).locator('[data-dkh-slot]').first().waitFor({ state: 'detached' });
-  const bell = (await tam.api('/notifications')).body;
-  const text = JSON.stringify(bell);
-  assert.match(text, /A card was taken back from Omens: Moonwellzz/);
+  assert.equal(await bellHas(tam, TAKEN), takenBefore + 1, 'the bell did not say the card was taken back');
 
   // The party's deck: a card that asks first, from the party's hand.
   const fd = await j(owner, `${A}/${w.fates}/deal-card`, 'POST', { cardId: w.fav, to: 'hand' });
@@ -225,6 +249,7 @@ async function walk(tag, view, { keyboard = false } = {}) {
   await tam.page.locator('#tt-drawer').getByText("The party's hand").first().waitFor();
   await ilse.page.locator('#tt-drawer').getByText("The party's hand").first().waitFor();
   await shot(tam, 'party', view);
+  const askedBefore = await bellHas(owner, 'asks to play Favourowed from Fates');
   await hand(tam).locator('[data-dkh-open]').first().click();
   await over.getByRole('button', { name: 'Ask to play' }).click();
   await over.getByText('Waiting for your Director').first().waitFor();
@@ -235,8 +260,7 @@ async function walk(tag, view, { keyboard = false } = {}) {
   // The Director sees who asks, and lets them.
   await owner.go(`${A}/workshop/${w.fates}`);
   await owner.page.getByText('asks to play this').first().waitFor();
-  const asked = JSON.stringify((await owner.api('/notifications')).body);
-  assert.match(asked, /asks to play Favourowed from Fates/);
+  assert.equal(await bellHas(owner, 'asks to play Favourowed from Fates'), askedBefore + 1, 'the bell did not say who asks to play');
   await owner.page.getByRole('button', { name: 'Let them' }).click();
   await owner.page.getByText('asks to play this').first().waitFor({ state: 'detached' });
   for (const p of [tam, ilse]) {
@@ -318,10 +342,8 @@ test('on a phone, a hand of twelve scrolls inside its row, says its count, and a
 });
 
 test('a stranger to the table and a signed-out visitor are told nothing is there', async () => {
-  const owner = await person({ tag: 'dhs-d', name: 'Director Dara' });
+  const { owner, cid } = await world();
   const stranger = await person({ tag: 'dhs-s', name: 'Stranger Sol' });
-  const cid = await newCampaign(owner, 'Hands closed');
-  await enableAddons(owner, cid, '*');
   const url = `/campaigns/${cid}/decks/hand`;
   assert.equal((await stranger.api(url)).status, 403, 'a non-member read the hand');
   const out = await owner.page.context().browser().newContext();
@@ -329,4 +351,171 @@ test('a stranger to the table and a signed-out visitor are told nothing is there
   const res = await anon.goto(new URL(url, owner.page.url()).href);
   assert.ok(res.status() !== 200 || /login|sign in/i.test(await anon.content()), 'a signed-out visitor read the hand');
   await out.close();
+});
+
+// The Cards part as a tab on a hero page a game system draws. The walk installs
+// the Draw Steel package (the server fetches it from GitHub; with GitHub out of
+// reach it is skipped). With no Cards block on any layout: nothing dealt, no
+// Cards tab for anyone; a card dealt face down gives the hero's player the tab,
+// open on load, counting 1, with the card's back and the turn control; a
+// Director has the tab and no control; another player has the tab (counts only)
+// and no control; a card dealt while the tab is not showing arrives in it and
+// the count follows; with the Card decks add-on off, no tab for anyone.
+// The package is added once for the whole server; the admin must have
+// confirmed their password within the last minutes first.
+async function installDrawSteel() {
+  const admin = await siteAdmin();
+  await admin.go('/admin/packages');
+  const reauth = await admin.api('/account/reauth', { method: 'POST', form: { password: ADMIN.password } });
+  assert.ok(reauth.ok, 'the admin could not confirm their password: ' + JSON.stringify(reauth.body));
+  const have = await admin.api('/admin/packages', { headers: { Accept: 'application/json' } });
+  if (!/Chronicle-Draw-Steel/i.test(typeof have.body === 'string' ? have.body : JSON.stringify(have.body))) {
+    const added = await admin.api('/admin/packages', { method: 'POST', form: { repo_url: 'https://github.com/keyxmakerx/Chronicle-Draw-Steel', type: 'system' } });
+    const said = JSON.stringify(added.body).slice(0, 300);
+    // GitHub out of reach or rate limited is the run's surroundings, not a
+    // fault in the page: the walk is skipped and says why.
+    if (!added.ok && /GitHub (didn't respond|had a temporary problem)|GitHub's rate limit/.test(said)) {
+      await admin.ctx.close();
+      return said;
+    }
+    assert.ok(added.ok, 'the Draw Steel package was not added: ' + said);
+  }
+  admin.assertClean();
+  await admin.ctx.close();
+  return '';
+}
+
+async function newSystemHero(owner, cid, name) {
+  await owner.go(`/campaigns/${cid}/entities/new`);
+  const etid = await owner.page.locator('select#entity_type_id').evaluate((el) => (([...el.options].find((o) => o.value && /character|hero/i.test(o.textContent)) || {}).value));
+  const id = await owner.page.evaluate(async ({ cid, etid, name }) => {
+    const form = new FormData();
+    form.append('name', name); form.append('entity_type_id', etid); form.append('is_private', 'false');
+    const res = await Chronicle.apiFetch(`/campaigns/${cid}/entities`, { method: 'POST', body: form });
+    return (res.url.match(/entities\/([0-9a-f-]{36})/) || [])[1] || '';
+  }, { cid, etid, name });
+  assert.ok(id, 'the hero page was not made');
+  await owner.api(`/campaigns/${cid}/entities/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ visibility: 'default', is_private: false, permissions: [] }), headers: JSON_HEADERS });
+  await owner.api(`/campaigns/${cid}/characters/playable`, { method: 'POST', form: { entity_id: id, playable: '1' } });
+  return id;
+}
+
+const dsTab = (who) => who.page.locator('[data-widget="page-tabs"] [data-pt-tab="hero_cards"]');
+const dsPane = (who) => who.page.locator('[data-widget="page-tabs"] [data-pt-pane="hero_cards"]');
+
+// The hero page, once the tabbed panel is on it.
+async function openDsHero(who, cid, hero) {
+  await who.go(`/campaigns/${cid}/entities/${hero}`);
+  await who.page.locator('[data-widget="page-tabs"] [data-pt-tab]').first().waitFor();
+}
+
+test('the Cards part is a tab under a hero page a game system draws', async (t) => {
+  const unreachable = await installDrawSteel();
+  if (unreachable) { t.skip('this server could not fetch the Draw Steel package: ' + unreachable); return; }
+
+  // The same three people, in a campaign of their own: the game system draws
+  // every hero page of the campaign it is on, which would change the walks above.
+  const { owner, tam, ilse } = await world();
+  for (const who of [owner, tam, ilse]) {
+    await who.page.setViewportSize({ width: 1280, height: 800 });
+    await who.page.emulateMedia({ colorScheme: 'light' });
+  }
+  const cid = await newCampaign(owner, 'Cards tab');
+  await enableAddons(owner, cid, '*');
+  await enableAddons(owner, cid, ['drawsteel']);
+  await addMember(owner, cid, tam, 'player');
+  await addMember(owner, cid, ilse, 'player');
+  const hero = await newSystemHero(owner, cid, 'Tam Hero');
+  await tam.go(`/campaigns/${cid}`);
+  const claim = await tam.api(`/campaigns/${cid}/entities/${hero}/claim`, { method: 'POST' });
+  assert.ok(claim.ok, 'could not claim the hero: ' + JSON.stringify(claim.body));
+
+  const A = `/campaigns/${cid}/decks`;
+  const omens = (await j(owner, A, 'POST', { name: 'Omens', kind: 'hero', settings: { knows: 'count', othersSee: 'face', arrives: 'down' } })).body.id;
+  const made = await j(owner, `${A}/${omens}/cards`, 'POST', { name: 'Moonwellzz', words: 'Wordsofthemoonwell', copies: 3 });
+  const card = made.body.cards.find((c) => c.name === 'Moonwellzz').id;
+  await owner.go(`${A}/workshop/${omens}?tab=players`);
+  const ids = {};
+  for (const [n, k] of [['Tam Player', 'tam'], ['Ilse Player', 'ilse']]) {
+    ids[k] = await owner.page.evaluate((name) => [...document.querySelectorAll('.dkw-prow')].find((r) => r.textContent.includes(name)).getAttribute('data-user'), n);
+  }
+  const v = (await owner.api(`${A}/${omens}`)).body.version;
+  const put = await j(owner, `${A}/${omens}/players`, 'PUT', { version: v, players: [{ userId: ids.tam }, { userId: ids.ilse }] });
+  assert.ok(put.ok, 'could not choose the players: ' + JSON.stringify(put.body));
+
+  // The page is drawn by the game system: one tabbed panel, and no layout block.
+  await openDsHero(tam, cid, hero);
+  assert.ok(await tam.page.locator('[data-widget="page-tabs"]').count(), 'the page has no tabbed panel, so the game system did not draw it');
+  assert.equal(await tam.page.locator('.dkh-strip').count(), 0, 'a Cards strip is on the page before anything is dealt');
+
+  // Nothing dealt: no tab for anyone.
+  for (const who of [tam, owner, ilse]) {
+    await openDsHero(who, cid, hero);
+    assert.equal(await dsTab(who).count(), 0, 'the Cards tab is offered with no cards to show');
+  }
+
+  // A card dealt face down.
+  const dealt = await j(owner, `${A}/${omens}/deal-card`, 'POST', { cardId: card, to: 'hand', heroId: hero });
+  assert.ok(dealt.ok, 'the deal failed: ' + JSON.stringify(dealt.body));
+
+  // The hero's player: the tab, open on load, counting one, the back of the card.
+  await openDsHero(tam, cid, hero);
+  await dsTab(tam).waitFor();
+  assert.match(await dsTab(tam).innerText(), /^Cards\s*1$/i);
+  await tam.page.waitForFunction(() => document.querySelector('[data-pt-tab="hero_cards"]')?.getAttribute('aria-selected') === 'true');
+  await dsPane(tam).locator('[data-widget="deck-hand"] .dkh-item').first().waitFor();
+  assert.equal(await dsPane(tam).locator('.dkh-item').count(), 1);
+  assert.equal(await dsPane(tam).locator('[data-pt-press]').count() + await tam.page.locator('[data-pt-press]:visible').count(), 0, 'the Cards tab offers the panel an action button');
+  const html = await tam.page.content();
+  assert.ok(!html.includes('Moonwellzz') && !html.includes('Wordsofthemoonwell'), 'the page holds the card before the tap');
+  const turn = dsPane(tam).locator('.dk-turn').first();
+  await turn.waitFor();
+  const turnReq = tam.page.waitForRequest((r) => r.method() === 'POST' && /\/turn$/.test(r.url()));
+  await turn.click();
+  await turnReq;
+  await dsPane(tam).locator('.dk-plate').first().waitFor();
+  assert.match(await dsPane(tam).innerText(), /moonwellzz/i);
+
+  // A Director reads it and has no control.
+  await openDsHero(owner, cid, hero);
+  await dsTab(owner).waitFor();
+  assert.match(await dsTab(owner).innerText(), /^Cards\s*1$/i);
+  await dsPane(owner).locator('.dkh-item').first().waitFor();
+  assert.equal(await dsPane(owner).locator('[data-dkh-open], .dk-turn').count(), 0, 'a Director was offered a control on the hero’s cards');
+
+  // Another player: counts and faces only, and no control.
+  await openDsHero(ilse, cid, hero);
+  await dsTab(ilse).waitFor();
+  await dsPane(ilse).locator('.dkh-item').first().waitFor();
+  assert.equal(await dsPane(ilse).locator('[data-dkh-open], .dk-turn').count(), 0, 'another player was offered a control on Tam’s cards');
+  assert.ok(!(await ilse.page.content()).includes('Wordsofthemoonwell'), 'another player was sent the words of a card');
+
+  // A card dealt while another tab is showing arrives in the Cards pane, and
+  // the count follows.
+  await openDsHero(tam, cid, hero);
+  await tam.page.locator('[data-pt-tab="notes"]').click();
+  assert.ok(await dsPane(tam).isHidden(), 'the Cards pane is still showing');
+  const second = await j(owner, `${A}/${omens}/deal-card`, 'POST', { cardId: card, to: 'hand', heroId: hero });
+  assert.ok(second.ok, 'the second deal failed: ' + JSON.stringify(second.body));
+  await tam.page.waitForFunction(() => document.querySelector('[data-pt-tab="hero_cards"] [data-pt-n]')?.textContent === '2');
+  await dsTab(tam).click();
+  assert.equal(await dsPane(tam).locator('.dkh-item').count(), 2);
+  const turnNew = dsPane(tam).locator('.dk-turn').first();
+  await turnNew.waitFor();
+  await turnNew.click();
+  await dsPane(tam).locator('.dk-plate').nth(1).waitFor();
+
+  // Card decks off: no tab for anyone.
+  const list = (await owner.api(`/campaigns/${cid}/addons`)).body;
+  const decksAddon = list.find((a) => (a.addon_slug || a.slug) === 'decks');
+  assert.ok(decksAddon, 'the Card decks add-on is not listed');
+  const off = await owner.api(`/campaigns/${cid}/addons/${decksAddon.addon_id}/toggle`, { method: 'PUT', form: { action: 'disable' } });
+  assert.ok(off.ok, 'turning the add-on off answered ' + off.status);
+  for (const who of [tam, owner, ilse]) {
+    await openDsHero(who, cid, hero);
+    assert.equal(await dsTab(who).count(), 0, 'the Cards tab is offered with the add-on off');
+    assert.equal(await who.page.locator('.dkh-strip').count(), 0, 'a Cards strip is drawn with the add-on off');
+  }
+
+  tam.assertClean(); ilse.assertClean(); owner.assertClean();
 });
