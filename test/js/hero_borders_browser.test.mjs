@@ -370,6 +370,121 @@ test('"Read the rules" sits wholly inside the padding of a bordered card on a 36
   assert.equal(await cl.pg.locator('[data-trim]').count(), 0);
 });
 
+// --- A card reads whole as the room shrinks ---
+
+// Where each part of a card sits against the card's padding box, for the card
+// at index j (brought to the middle of the hand first).
+const insideOf = (pg, j) => pg.evaluate((n) => {
+  const h = document.querySelector('[data-hand]'), c = h.querySelectorAll('.hc-card[data-i]')[n];
+  h.scrollLeft = c.offsetLeft - (h.clientWidth - c.offsetWidth) / 2;
+  const cs = getComputedStyle(c), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom);
+  const top = c.querySelector('.hc-top'), h3 = c.querySelector('h3'), more = c.querySelector('.hc-more');
+  return { name: h3.textContent, foot: c.clientHeight - pb - (more.offsetTop + more.offsetHeight), label: top.offsetTop - pt, nameTop: h3.offsetTop - pt, nameGap: more.offsetTop - (h3.offsetTop + h3.offsetHeight) };
+}, j);
+
+const roomState = (pg) => pg.evaluate(() => {
+  const app = document.querySelector('.hc-app'), body = document.querySelector('.hc-body'), stg = document.querySelector('[data-stage]'), hand = document.querySelector('.hc-hand');
+  const intro = document.querySelector('.hc-intro p');
+  return { short: app.classList.contains('is-short'), introShown: !!intro && getComputedStyle(intro).display !== 'none', tucked: stg.classList.contains('is-tuck'), figuresShown: stg.querySelector('.hc-sstw').getBoundingClientRect().height > 20,
+    scrolls: body.scrollHeight > body.clientHeight + 1, hand: Math.round(hand.clientHeight), page: document.documentElement.scrollWidth <= document.documentElement.clientWidth && app.scrollWidth <= app.clientWidth };
+});
+
+for (const room of [400, 450, 505, 540, 579, 580, 592, 616, 640, 700]) {
+  test(`a card of every border reads whole in a room of ${room} on a 360 wide phone`, { skip }, async (t) => {
+    const { pg, errors } = await open(t, { width: 360, height: room, p: every() });
+    await idle(pg, 300);
+    const bad = [];
+    for (let i = 0; i < KEYS.length; i++) {
+      const r = await insideOf(pg, i);
+      await idle(pg, 60);
+      const again = await insideOf(pg, i);
+      if (again.foot < -1 || again.label < -1 || again.nameTop < -1 || again.nameGap < -1) bad.push(again);
+      assert.equal(r.name, again.name);
+    }
+    assert.deepEqual(bad, []);
+    const st = await roomState(pg);
+    assert.ok(st.page, 'no sideways scroll');
+    // The page gives way in order: the intro line, then the figures, then the body scrolls.
+    if (room >= 630) assert.deepEqual([st.short, st.introShown, st.tucked, st.figuresShown, st.scrolls], [false, true, false, true, false], 'a roomy phone gives nothing up');
+    if (room === 616) assert.deepEqual([st.short, st.introShown, st.tucked, st.figuresShown, st.scrolls], [true, false, false, true, false], 'only the intro line goes');
+    if (room === 540) assert.deepEqual([st.short, st.tucked, st.figuresShown, st.scrolls], [true, true, false, false], 'the figures go next');
+    if (room === 400) assert.deepEqual([st.short, st.tucked, st.scrolls], [true, true, true], 'last, the body scrolls');
+    assert.deepEqual(errors, []);
+  });
+}
+
+test('on a 400 room the body scrolls to the position line under the cards', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 360, height: 400, p: every() });
+  await idle(pg, 300);
+  const r = await pg.evaluate(() => {
+    const body = document.querySelector('.hc-body'), under = document.querySelector('.hc-under');
+    const before = under.getBoundingClientRect().bottom > window.innerHeight;
+    body.scrollTop = body.scrollHeight;
+    const u = under.getBoundingClientRect(), b = body.getBoundingClientRect();
+    return { before, inBody: u.top >= b.top - 1 && u.bottom <= b.bottom + 1, inWindow: u.bottom <= window.innerHeight + 1, oy: getComputedStyle(body).overflowY };
+  });
+  assert.deepEqual(r, { before: true, inBody: true, inWindow: true, oy: 'auto' });
+});
+
+test('growing the window back gives the intro line and the open figures back', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 360, height: 540, p: every() });
+  await idle(pg, 300);
+  let st = await roomState(pg);
+  assert.deepEqual([st.short, st.tucked], [true, true]);
+  await pg.setViewportSize({ width: 360, height: 400 });
+  await idle(pg, 300);
+  st = await roomState(pg);
+  assert.equal(st.scrolls, true);
+  await pg.setViewportSize({ width: 360, height: 844 });
+  await idle(pg, 400);
+  st = await roomState(pg);
+  assert.deepEqual([st.short, st.introShown, st.tucked, st.figuresShown, st.scrolls], [false, true, false, true, false]);
+  assert.equal(await pg.evaluate(() => document.querySelector('[data-hand]').style.minHeight), '');
+  assert.deepEqual(errors, []);
+});
+
+test('a step change settles the room again: bordered cards tuck the stage, plain ones do not need to', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 360, height: 540, p: every() });
+  await idle(pg, 300);
+  assert.deepEqual(await pg.evaluate(() => [document.querySelector('[data-stage]').classList.contains('is-tuck'), document.querySelector('.hc-app').classList.contains('is-short')]), [true, true]);
+  const go = async (n) => { await pg.click('.hc-sbtn'); await idle(pg, 200); await pg.click('.hc-drape [data-go="' + n + '"]'); await idle(pg, 400); };
+  await go(1);
+  const st1 = await roomState(pg);
+  assert.deepEqual([st1.short, st1.tucked, st1.figuresShown, st1.scrolls], [true, false, true, false], 'plain cards fit with the figures open');
+  await go(0);
+  const st0 = await roomState(pg);
+  assert.deepEqual([st0.short, st0.tucked, st0.scrolls], [true, true, false], 'and back on the bordered step');
+  assert.deepEqual(errors, []);
+});
+
+for (const room of [400, 500, 592]) {
+  test(`a plain card of the stage look reads whole in a room of ${room}`, { skip }, async (t) => {
+    const { pg, errors } = await open(t, { width: 360, height: room, p: plan(['Elf', 'Gnome', 'Orc', 'Human'].map((n) => ch(n, null, { speed: 5 }))) });
+    await idle(pg, 300);
+    for (let i = 0; i < 4; i++) {
+      const r = await insideOf(pg, i);
+      assert.ok(r.foot >= -1 && r.label >= -1 && r.nameTop >= -1 && r.nameGap >= -1, JSON.stringify(r));
+    }
+    assert.ok((await roomState(pg)).page);
+    assert.deepEqual(errors, []);
+  });
+}
+
+test('making room does not loop with the size watcher', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 360, height: 400, p: every() });
+  await pg.evaluate(() => {
+    window.__fits = 0;
+    const set = CSSStyleDeclaration.prototype.setProperty;
+    CSSStyleDeclaration.prototype.setProperty = function (k, ...a) { if (k === '--hc-h') window.__fits++; return set.call(this, k, ...a); };
+  });
+  await pg.setViewportSize({ width: 360, height: 420 });
+  await idle(pg, 300);
+  const first = await pg.evaluate(() => window.__fits);
+  await idle(pg, 600);
+  assert.ok(first >= 1 && first <= 3, 'a resize fits a few times: ' + first);
+  assert.equal(await pg.evaluate(() => window.__fits), first, 'and then rests');
+});
+
 test('no sideways scroll at 360 wide with bordered cards', { skip }, async (t) => {
   const { pg } = await open(t, { width: 360, height: 640, p: every() });
   await idle(pg, 300);
