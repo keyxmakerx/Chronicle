@@ -49,6 +49,13 @@ type ShopPayAPI interface {
 	PaysByWealth(ctx context.Context, campaignID string) bool
 }
 
+// ShopPriceChecker is the optional second half of ShopPayAPI: it refuses a
+// price the Armory would refuse (negative, not a number, too large to charge),
+// so the limits stay the Armory's and the problem shows at review.
+type ShopPriceChecker interface {
+	CheckPrice(price float64) error
+}
+
 // maxLikelyWealth is where a Wealth price starts to look like a coin price
 // typed by mistake. The game's own Wealth range is not available here, so
 // this is a deliberately generous bound: it only catches figures such as 25.
@@ -188,6 +195,13 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	src, item, link, err := k.resolve(ctx, campaignID, r)
 	if err != nil {
 		return Plan{Error: planError(err)}
+	}
+	if pc, ok := k.Pay.(ShopPriceChecker); ok && k.name == "shop-stock" && r.Action != ActionDelete {
+		if f, has, _ := r.Float("price"); has {
+			if err := pc.CheckPrice(f); err != nil {
+				return Plan{Error: "price: " + err.Error()}
+			}
+		}
 	}
 	wealth := k.name == "shop-stock" && r.Action != ActionDelete && k.Pay != nil && k.Pay.PaysByWealth(ctx, campaignID)
 	p := Plan{Summary: k.summary(r, wealth)}
