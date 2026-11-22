@@ -475,7 +475,7 @@ func TestLayoutsLookup(t *testing.T) {
 // The lookup is found by its aliases and shows up as an owner-only tool.
 func TestLayoutsLookup_PluggedInfo(t *testing.T) {
 	in := LayoutsLookup{}.LookupInfo()
-	if in.What != "layouts" || in.Tool.Name != "page_layouts" || !in.Tool.Owner || len(in.Tool.Args) != 2 {
+	if in.What != "layouts" || in.Tool.Name != "templates" || !in.Tool.Owner || len(in.Tool.Args) != 4 {
 		t.Fatalf("%+v", in)
 	}
 	l := &Lookups{Plugged: []aiplug.Lookup{LayoutsLookup{Svc: newLayoutFake()}}}

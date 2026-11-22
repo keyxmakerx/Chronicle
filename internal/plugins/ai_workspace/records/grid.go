@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
@@ -278,4 +279,71 @@ func writeGrid(b *strings.Builder, rows []gridRow, spec func(HomeBlock) string) 
 			}
 		}
 	}
+}
+
+// keepTiles reads a row written `tiles: kept`: tile sections are arranged only
+// in Customize, so a record can keep the ones the arrangement already has, in
+// order, and never add one.
+func keepTiles(was []gridRow) func(ri int, v any) (gridRow, error) {
+	var wasTiles []gridRow
+	for _, row := range was {
+		if row.IsTiles {
+			wasTiles = append(wasTiles, row)
+		}
+	}
+	used := 0
+	return func(ri int, v any) (gridRow, error) {
+		if s, _ := v.(string); strings.ToLower(strings.TrimSpace(s)) != "kept" {
+			return gridRow{}, badRequestf("row %d: a tile section is written as `tiles: kept`; tiles are arranged only in Customize", ri+1)
+		}
+		if used >= len(wasTiles) {
+			return gridRow{}, badRequestf("row %d: there is no tile section to keep (it has %d); tiles can only be added in Customize", ri+1, len(wasTiles))
+		}
+		used++
+		return wasTiles[used-1], nil
+	}
+}
+
+// renderGridWords turns the markdown parseGrid left on written blocks into the
+// HTML they are stored with, so a plan can stay markdown and only an approved
+// record renders.
+func renderGridWords(rows []gridRow, text aiplug.Text, kind string) error {
+	for ri := range rows {
+		for ci := range rows[ri].Columns {
+			blocks := rows[ri].Columns[ci].Blocks
+			for bi := range blocks {
+				md, ok := blocks[bi].Config["_md"].(string)
+				if !ok {
+					continue
+				}
+				delete(blocks[bi].Config, "_md")
+				if text == nil {
+					return fmt.Errorf("%s: a text block was applied without its Text", kind)
+				}
+				html, err := text.HTML(md)
+				if err != nil {
+					return err
+				}
+				content := ""
+				if html != nil {
+					content = *html
+				}
+				blocks[bi].Config["content"] = content
+			}
+		}
+	}
+	return nil
+}
+
+// gridWordsSummary is the words a record really changes, for a plan's line.
+func gridWordsSummary(words []homeWordsChange) string {
+	var s string
+	for _, w := range words {
+		if w.was == "" {
+			s += "; " + w.typ + " words: " + quoted(w.now)
+		} else {
+			s += "; " + w.typ + " words: " + quoted(w.now) + " (was " + quoted(w.was) + ")"
+		}
+	}
+	return s
 }

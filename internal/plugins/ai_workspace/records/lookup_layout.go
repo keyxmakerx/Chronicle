@@ -9,26 +9,62 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
-// LayoutsLookup answers `what: layouts`: each category's page layouts as the
-// owner has them, written as the `kind: layout` blocks that send them back
-// changed, with the blocks the campaign can place. It is a plugged lookup so
-// the connector gets its tool from LookupInfo; later arrangements that live
-// beside page layouts (category homes, presets, starter text) can join this
-// answer or sit next to it. Owner only, as writing a layout is: the layouts
-// name Director-only blocks, and a co-DM may not change them.
-type LayoutsLookup struct{ Svc LayoutsAPI }
+// LayoutsLookup answers `what: layouts`, the campaign's templates: each
+// category's page layouts as the owner has them, written as the `kind: layout`
+// blocks that send them back changed, with the blocks the campaign can place.
+// `part` picks the others that sit beside them, each in its own answer so one
+// stays under the size cap: category homes, saved layouts and page templates.
+// It is a plugged lookup so the connector gets its tool from LookupInfo. Owner
+// only, as writing any of them is: the layouts name Director-only blocks, and
+// a co-DM may not change them. An API left nil leaves its part out.
+type LayoutsLookup struct {
+	Svc       LayoutsAPI
+	Homes     CategoryHomesAPI
+	Saved     SavedLayoutsAPI
+	Templates PageTemplatesAPI
+}
+
+// The parts of the answer, each with the words that ask for it.
+const (
+	partPageLayouts   = "page-layouts"
+	partCategoryHomes = "category-homes"
+	partSavedLayouts  = "saved-layouts"
+	partPageTemplates = "page-templates"
+)
+
+// layoutParts is every part in the order the answer offers them.
+var layoutParts = []string{partPageLayouts, partCategoryHomes, partSavedLayouts, partPageTemplates}
+
+// partOf reads the `part` an AI wrote; "" is the page layouts, as before.
+func partOf(word string) (string, bool) {
+	w := strings.ToLower(strings.TrimSpace(word))
+	w = strings.NewReplacer("_", "-", " ", "-").Replace(w)
+	switch w {
+	case "", "layouts", "page-layouts", "page-layout":
+		return partPageLayouts, true
+	case "category-homes", "category-home", "homes":
+		return partCategoryHomes, true
+	case "saved-layouts", "saved-layout", "presets":
+		return partSavedLayouts, true
+	case "page-templates", "page-template", "starter-text":
+		return partPageTemplates, true
+	}
+	return "", false
+}
 
 func (LayoutsLookup) LookupInfo() aiplug.LookupInfo {
 	return aiplug.LookupInfo{
 		What: "layouts", Aliases: []string{"layout", "page-layouts", "page-layout", "templates"},
-		Keys:  "optional `category` (its name) and `layout` (a layout's name)",
-		Brief: "the page layout each category's pages wear, written as `layout` blocks to send back changed: its rows, columns and blocks, which blocks only the DM team sees, the words in Text blocks, and what each block the campaign can place is (owner only)",
+		Keys:  "optional `part` (page-layouts, category-homes, saved-layouts or page-templates; page-layouts without it), `category` (its name), `layout` (a layout's name) and `name` (a saved layout's or page template's name)",
+		Brief: "the templates, each written as a block to send back changed: the page layout each category's pages wear (`layout` blocks: rows, columns and blocks, which blocks only the DM team sees, the words in Text blocks, and what each block the campaign can place is), and with `part` each category's own home (`category-home`), the saved layouts (`saved-layout`) and the page templates, the starter text of a new page (`page-template`) (owner only)",
 		Tool: aiplug.Tool{
-			Name: "page_layouts", Title: "Page layouts", Did: "Looked at the page layouts", Owner: true,
-			Desc: "The page layout each category's pages wear: rows, columns and blocks, which pages use which layout, and a block to send back changed. Also lists the blocks a layout can place, and what each one is.",
+			Name: "templates", Title: "Templates", Did: "Looked at the templates", Owner: true,
+			Desc: "The campaign's templates, each as a block to send back changed with ask_for_changes. By default the page layout each category's pages wear: rows, columns and blocks, which pages use which layout, and the blocks a layout can place. Give part for the others: category-homes (each category's landing page), saved-layouts (the arrangements a category's layout starts from) or page-templates (the starter text a new page begins with).",
 			Args: []aiplug.Arg{
+				{Key: "part", Desc: "Which templates: page-layouts (the default), category-homes, saved-layouts or page-templates."},
 				{Key: "category", Desc: "A category's name, to answer for that category only."},
-				{Key: "layout", Desc: "A layout's name within the category, to answer for that layout only."},
+				{Key: "layout", Desc: "For page-layouts: a layout's name within the category, to answer for that layout only."},
+				{Key: "name", Desc: "For saved-layouts and page-templates: one's name, to answer for it only."},
 			},
 		},
 	}
@@ -36,7 +72,19 @@ func (LayoutsLookup) LookupInfo() aiplug.LookupInfo {
 
 func (l LayoutsLookup) Answer(ctx context.Context, campaignID string, a Actor, r Record) (string, string, error) {
 	chip := "Page layouts"
-	k := LayoutKind(l)
+	part, ok := partOf(r.Str("part"))
+	if !ok {
+		return chip, "", badRequestf("%s is not a part; use %s", quote(r.Str("part")), strings.Join(layoutParts, ", "))
+	}
+	switch part {
+	case partCategoryHomes:
+		return l.categoryHomes(ctx, campaignID, a, r)
+	case partSavedLayouts:
+		return l.savedLayouts(ctx, campaignID, a, r)
+	case partPageTemplates:
+		return l.pageTemplates(ctx, campaignID, a, r)
+	}
+	k := LayoutKind{Svc: l.Svc}
 	if k.Svc == nil {
 		return chip, "", badRequestf("page layouts can't be looked up on this server")
 	}
@@ -119,6 +167,7 @@ func (l LayoutsLookup) Answer(ctx context.Context, campaignID string, a Actor, r
 			b.WriteString(line + "\n")
 		}
 	}
+	b.WriteString(l.otherParts())
 	if only != nil {
 		chip = "Page layouts · " + only.NamePlural
 	} else {

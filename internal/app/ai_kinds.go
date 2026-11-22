@@ -64,6 +64,8 @@ type aiDeps struct {
 	Systems         *systems.SystemHandler
 	Tags            tags.TagService
 	PageLayouts     entities.PageLayoutService       // nil while its tables are degraded
+	SavedLayouts    entities.LayoutPresetService     // nil while its tables are degraded
+	PageTemplates   entities.ContentTemplateService  // nil while its tables are degraded
 	PageTests       pagetests.Service                // nil while the Tests block is degraded
 	Trackers        trackers.Service                 // nil while the Trackers block is degraded
 	FoundryMonsters syncapi.FoundryMonsterRepository // nil while syncapi's tables are degraded
@@ -225,7 +227,14 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 			out = append(out, records.GalleryLookup{Svc: g, Owners: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}})
 		}
 	}
-	out = append(out, records.LayoutsLookup{Svc: d.layouts()})
+	templates := records.LayoutsLookup{Svc: d.layouts(), Homes: d.categoryHomes()}
+	if svc := d.savedLayouts(); svc != nil {
+		templates.Saved = svc
+	}
+	if svc := d.pageTemplates(); svc != nil {
+		templates.Templates = svc
+	}
+	out = append(out, templates)
 	if d.LayersAI != nil {
 		out = append(out, d.LayersAI)
 	}

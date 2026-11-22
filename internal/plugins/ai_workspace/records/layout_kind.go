@@ -196,61 +196,52 @@ func (k LayoutKind) resolve(ctx context.Context, campaignID string, r Record) (l
 	// A block the palette no longer offers (its add-on is off, or another
 	// block replaced it) can still be kept where it is.
 	onLayout := map[string]bool{}
-	var wasTiles []gridRow
 	for _, row := range t.loc.was {
-		if row.IsTiles {
-			wasTiles = append(wasTiles, row)
-		}
 		for _, c := range row.Columns {
 			for _, b := range c.Blocks {
 				onLayout[b.Type] = true
 			}
 		}
 	}
-	usedTiles := 0
 	rules := gridRules{
 		valid:    func(typ string) bool { return palette[typ] || onLayout[typ] },
 		notBlock: "a block this campaign's pages can hold",
 		words:    layoutWords,
-		tileRow: func(ri int, v any) (gridRow, error) {
-			if s, _ := v.(string); strings.ToLower(strings.TrimSpace(s)) != "kept" {
-				return gridRow{}, badRequestf("row %d: a tile section is written as `tiles: kept`; tiles are arranged only in Customize", ri+1)
-			}
-			if usedTiles >= len(wasTiles) {
-				return gridRow{}, badRequestf("row %d: this layout has no tile section to keep (it has %d); tiles can only be added in Customize", ri+1, len(wasTiles))
-			}
-			usedTiles++
-			return wasTiles[usedTiles-1], nil
-		},
-		block: func(raw any, spec homeSpec, b *HomeBlock, kept bool) error {
-			if spec.typ == "ext_widget" && !kept {
-				return fmt.Errorf("an extension widget block can only be kept where it is, not added")
-			}
-			m, ok := raw.(map[string]any)
-			if !ok {
-				return nil
-			}
-			dv, has := m["directors_only"]
-			if !has {
-				return nil
-			}
-			on, ok := dv.(bool)
-			if !ok {
-				return fmt.Errorf("`directors_only` is true or false")
-			}
-			if on {
-				if b.Config == nil {
-					b.Config = map[string]any{}
-				}
-				b.Config["visibility"] = "dm_only"
-			} else {
-				delete(b.Config, "visibility")
-			}
-			return nil
-		},
+		tileRow:  keepTiles(t.loc.was),
+		block:    layoutBlockRule,
 	}
 	t.next, t.words, err = parseGrid(items, t.loc.was, rules)
 	return t, err
+}
+
+// layoutBlockRule is what a page layout adds to one block: an extension
+// widget can only stay where it is, and `directors_only` sets or clears the
+// block's DM-only visibility (left out keeps it).
+func layoutBlockRule(raw any, spec homeSpec, b *HomeBlock, kept bool) error {
+	if spec.typ == "ext_widget" && !kept {
+		return fmt.Errorf("an extension widget block can only be kept where it is, not added")
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	dv, has := m["directors_only"]
+	if !has {
+		return nil
+	}
+	on, ok := dv.(bool)
+	if !ok {
+		return fmt.Errorf("`directors_only` is true or false")
+	}
+	if on {
+		if b.Config == nil {
+			b.Config = map[string]any{}
+		}
+		b.Config["visibility"] = "dm_only"
+	} else {
+		delete(b.Config, "visibility")
+	}
+	return nil
 }
 
 func (k LayoutKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
