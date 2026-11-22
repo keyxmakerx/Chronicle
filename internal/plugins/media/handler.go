@@ -168,7 +168,14 @@ func NewHandler(service MediaService) *Handler {
 // A refusal of a real file runs the access checks a missing id skips, so
 // without the hold its response time would tell a caller that a guessed id
 // names a real file. Anything else is answered at once.
+//
+// Every refusal is also marked uncacheable. A refusal is an answer for this
+// viewer at this moment, and one that fails after the file's own headers were
+// written would otherwise carry the long public lifetime meant for the file.
 func (h *Handler) holdRefusal(c *echo.Context, start time.Time, err error) error {
+	if err != nil {
+		c.Response().Header().Set("Cache-Control", "no-store")
+	}
 	if err == nil || h.refusalFloor <= 0 || !isNotFound(err) {
 		return err
 	}

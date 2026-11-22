@@ -168,5 +168,7 @@ test('what a new deck left off is carried to its page and said once', { skip }, 
   await page.waitForFunction(() => /decks\/workshop\/new1/.test(location.href));
   const stored = await page.evaluate(() => sessionStorage.getItem('dkw-left-new1'));
   assert.deepEqual(JSON.parse(stored), ['3 lines only come up on certain days.']);
+  // The deck's page reads this once to put focus on its heading.
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('dkw-made')), 'new1');
   await page.context().close();
 });

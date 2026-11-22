@@ -242,7 +242,8 @@ async function walk(tag, view, { keyboard = false } = {}) {
   assert.equal(await tam.page.locator('[data-tt-count]').evaluate((c) => c.hidden), true, 'Tam’s count moved');
 
   // Closing the notice (by Escape or the button) keeps the count.
-  if (keyboard) { await notice(owner).locator('[data-dkm-close]').focus(); await owner.page.keyboard.press('Escape'); } else { await notice(owner).locator('[data-dkm-close]').click(); }
+  // On a phone the Table's own mark is the only close on screen, so the notice is put away from its heading.
+  if (keyboard) { await notice(owner).locator('[data-dkm-close]').focus(); await owner.page.keyboard.press('Escape'); } else if (view.width < 700) { await notice(owner).locator('#dkm-h').focus(); await owner.page.keyboard.press('Escape'); } else { await notice(owner).locator('[data-dkm-close]').click(); }
   await notice(owner).waitFor({ state: 'detached' });
   await waitCount(owner, 1);
 
@@ -353,4 +354,64 @@ test('a player and a stranger are told no notice is there', async () => {
   assert.equal((await owner.api(url)).status, 200, 'the Director was refused');
   assert.equal((await tam.api(url)).status, 404, 'a player read the notice');
   assert.equal((await stranger.api(url)).status, 403, 'a non-member read the notice');
+});
+
+// A moment is waiting; the Director opens the Table and clicks its line in
+// "Waiting on you". `slidIn` leaves the notice that slid in open until the
+// Table is opened; `tableOpen` has the Table open before the moment comes.
+async function clickWaiting(tag, view, { slidIn, tableOpen = false }) {
+  const w = await table(tag, view);
+  const { owner, cid, hero } = w;
+  const errors = watchErrors(owner);
+  await owner.go(`/campaigns/${cid}`);
+  await waitCount(owner, 0);
+  // With the Table already open the drawer lists the moment itself; a notice
+  // hung beside it would cover that list, so none comes.
+  if (tableOpen) await openTable(owner);
+  await setHP(owner, cid, hero, 4);
+  await waitCount(owner, 1);
+  if (tableOpen) {
+    await owner.page.waitForTimeout(400);
+    assert.equal(await notice(owner).count(), 0, 'a notice slid in over the open Table');
+  } else {
+    await notice(owner).waitFor();
+  }
+  if (!tableOpen && !slidIn) {
+    await notice(owner).locator('#dkm-h').focus();
+    await owner.page.keyboard.press('Escape');
+    await notice(owner).waitFor({ state: 'detached' });
+  }
+  if (!tableOpen) await openTable(owner);
+  const row = owner.page.locator('[data-tt-wait] [data-tt-moment]').first();
+  await row.waitFor();
+  // The line is what a click lands on, not something laid over it.
+  const covered = await row.evaluate((el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(hit && el.contains(hit)); });
+  assert.equal(covered, false, 'the waiting line is covered by something else');
+  await row.click({ timeout: 4000 });
+  return { owner, errors };
+}
+const visibleCloseMarks = (who) => who.page.evaluate(() => [...document.querySelectorAll('[data-dkm-close], [data-tt-close]')]
+  .filter((b) => { const r = b.getBoundingClientRect(); const cs = getComputedStyle(b); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && !b.closest('[inert]') && r.bottom > 0 && r.top < innerHeight; })
+  .map((b) => b.getAttribute('aria-label')));
+
+for (const [slidIn, tableOpen] of [[true, false], [false, false], [true, true]]) {
+  test(`on a desktop, a click on the waiting line opens the notice (notice ${slidIn ? 'left open' : 'closed'} first, Table ${tableOpen ? 'already open' : 'opened after'})`, async () => {
+    const { owner, errors } = await clickWaiting(`dmr${slidIn ? 'o' : 'c'}${tableOpen ? 't' : 'n'}`, { width: 1280, height: 900, scheme: 'light' }, { slidIn, tableOpen });
+    await notice(owner).locator('#dkm-h').waitFor({ timeout: 4000 });
+    // It stays: nothing puts it away a moment later.
+    await owner.page.waitForTimeout(600);
+    assert.equal(await notice(owner).locator('#dkm-h').count(), 1, 'the notice went away after it opened');
+    await shot(owner, `notice-from-row-${slidIn}-${tableOpen}`, { scheme: 'light', width: 1280 });
+    assert.deepEqual(errors, []);
+  });
+}
+
+test('on a phone, the opened notice has one close mark on screen', async () => {
+  const { owner, errors } = await clickWaiting('dmrp', { width: 390, height: 844, scheme: 'light' }, { slidIn: false });
+  await notice(owner).locator('#dkm-h').waitFor({ timeout: 4000 });
+  await owner.page.waitForTimeout(400);
+  await shot(owner, 'notice-from-row', { scheme: 'light', width: 390 });
+  const marks = await visibleCloseMarks(owner);
+  assert.equal(marks.length, 1, 'close marks on screen: ' + JSON.stringify(marks));
+  assert.deepEqual(errors, []);
 });

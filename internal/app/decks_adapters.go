@@ -249,7 +249,7 @@ func (a *decksBellAdapter) Ring(ctx context.Context, campaignID string, e decks.
 // registerDecksBlock registers the Cards part of a hero's page, behind the
 // Card decks add-on. What it draws is decided by the decks service for the
 // viewer; a page they may not read the hand of draws nothing.
-func registerDecksBlock(blockRegistry *entities.BlockRegistry, svc decks.Service) {
+func registerDecksBlock(blockRegistry *entities.BlockRegistry, svc decks.Service, addons decksAddonSwitch) {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: decks.BlockType, Label: "Cards", Icon: "fa-layer-group", Picture: entities.PictureGrid,
 		Description: "The cards this hero holds, as the viewer may read them",
@@ -257,6 +257,7 @@ func registerDecksBlock(blockRegistry *entities.BlockRegistry, svc decks.Service
 		Contexts:    []string{"template"},
 		TileSizes:   []string{"2x2", "4x2", "1x2"},
 		Singleton:   true,
+		PageTab:     decksPageTab(svc, addons),
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
 			return templ.NopComponent
@@ -267,6 +268,38 @@ func registerDecksBlock(blockRegistry *entities.BlockRegistry, svc decks.Service
 		}
 		return part
 	})
+}
+
+// decksAddonSwitch is the slice of the add-on service the Cards tab needs.
+type decksAddonSwitch interface {
+	IsEnabledForCampaign(ctx context.Context, campaignID, slug string) (bool, error)
+}
+
+// decksPageTab offers the Cards part as a tab under a page a game system
+// draws, where no layout can place it. The panel does not apply the block's
+// add-on, so the switch is asked here: with it off no tab is offered, not an
+// empty one. What the viewer has comes from the service's own hero read, so
+// who sees what stays the service's rule. Count is one element per card the
+// strip draws (a face or a back each), the same cards Shown counts; the strip
+// has no add button, so Act is empty.
+func decksPageTab(svc decks.Service, addons decksAddonSwitch) *entities.BlockPageTab {
+	return &entities.BlockPageTab{
+		Label: "Cards", Count: ".dkh-strip .dkh-item",
+		State: func(ctx context.Context, rc entities.BlockRenderContext) (int, bool, error) {
+			if svc == nil || addons == nil || rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+				return 0, false, nil
+			}
+			on, err := addons.IsEnabledForCampaign(ctx, rc.CC.Campaign.ID, decks.AddonSlug)
+			if err != nil || !on {
+				return 0, false, err
+			}
+			view, err := svc.HeroHand(ctx, rc.CC.Campaign.ID, rc.Entity.ID, decks.ViewerOf(rc.CC, rc.UserID))
+			if err != nil {
+				return 0, false, err
+			}
+			return view.Shown(), false, nil
+		},
+	}
 }
 
 // decksTablesAdapter implements decks.Tables over the rolling tables service,

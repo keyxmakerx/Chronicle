@@ -167,3 +167,55 @@ func TestCheckMediaAccessSaysWhenAFileIsGuarded(t *testing.T) {
 		}
 	})
 }
+
+// A refusal is never cacheable, whatever was decided on the way to it: a
+// face-down card's picture refused to a player, and a public picture whose
+// bytes are gone, which fails only after the file's own long public header
+// was written. A file that is served keeps the header it was given.
+func TestRefusalsAreNeverCacheable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "original.png"), []byte("png"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	onPage := func(context.Context, string, string) ([]MediaRef, error) {
+		return []MediaRef{{EntityID: "page-1"}}, nil
+	}
+
+	cases := []struct {
+		name    string
+		cards   *fakeCardPictureGuard
+		dir     string
+		user    string
+		refused bool
+		want    string
+	}{
+		{name: "a face-down card's picture, to a player", cards: &fakeCardPictureGuard{isPic: true}, dir: dir, user: "player", refused: true, want: "no-store"},
+		{name: "a public picture whose bytes are gone", cards: &fakeCardPictureGuard{}, dir: filepath.Join(dir, "missing"), user: "owner", refused: true, want: "no-store"},
+		{name: "a public picture that is served", cards: &fakeCardPictureGuard{}, dir: dir, user: "owner", want: cachePublic},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, _ := cardGuardFixture(tc.cards)
+			h.refusalFloor = 0
+			svc := &servedFileService{file: publicMediaFileIn("camp-1"), dir: tc.dir}
+			if !tc.cards.isPic {
+				svc.findReferencesFn = onPage
+				h.entityVisibility = &fakeEntityVisibilityFilter{viewableIDs: map[string]bool{"page-1": true}}
+			}
+			h.service = svc
+
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/media/file-1", nil), rec)
+			c.SetPathValues(echo.PathValues{{Name: "id", Value: "file-1"}})
+			auth.SetSession(c, sessionOf(tc.user))
+
+			err := h.Serve(c)
+			if (err != nil) != tc.refused {
+				t.Fatalf("refused = %v, want %v (err %v)", err != nil, tc.refused, err)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != tc.want {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -78,6 +78,9 @@ templ reviewRecordRow(campaignID string, r RecordRow, fromAI bool) {
 			if r.Plan.Client != "" {
 				<input type="hidden" name={ fmt.Sprintf("rec_%d_generated", r.Index) } value=""/>
 			}
+			if r.Plan.Seen != "" {
+				<input type="hidden" name={ fmt.Sprintf("rec_%d_seen", r.Index) } value={ r.Plan.Seen }/>
+			}
 			// Shown and required only while the removal is answered Yes;
 			// the committer refuses a removal without it either way.
 			if r.Action == records.ActionDelete {

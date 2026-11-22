@@ -138,8 +138,6 @@ func TestAIDeckPlan(t *testing.T) {
 			err: "`colour` is not a key a deck block takes"},
 		{name: "two spellings of one key", rec: aiRec("deck", "create", "Omens", map[string]any{"for": "events", "others_see": "back", "OthersSee": "face"}),
 			err: "are the same key; write one"},
-		{name: "delete is refused", rec: aiRec("deck", "delete", "Omens", nil),
-			err: "The AI does not remove a deck. Delete it in the deck workshop."},
 		{name: "a deck needs for", rec: aiRec("deck", "create", "Omens", nil), err: "a deck needs `for`: hero, party or events"},
 		{name: "a hero deck needs its hero", rec: aiRec("deck", "create", "Boons", map[string]any{"for": "hero"}),
 			err: "a hero deck needs `hero`, the page name of the hero it is for"},
@@ -225,8 +223,8 @@ func TestAIDeckApply(t *testing.T) {
 	if err := r.deck.Apply(bg, camp, aiDirector, aiRec("deck", "update", "Omens", map[string]any{"fate": "used"})); err == nil {
 		t.Error("an update of a deck that is gone was applied")
 	}
-	if err := r.deck.Apply(bg, camp, aiDirector, aiRec("deck", "delete", "Portents", nil)); err == nil || r.director("Portents").ID == "" {
-		t.Error("a delete was applied")
+	if err := r.deck.Apply(bg, camp, aiPlayer, aiRec("deck", "delete", "Portents", nil)); err == nil || r.director("Portents").ID == "" {
+		t.Error("a player's key deleted a deck")
 	}
 	if err := r.deck.Apply(bg, camp, aiPlayer, aiRec("deck", "create", "Mine", map[string]any{"for": "party"})); err == nil {
 		t.Error("a player's key made a deck")
@@ -492,7 +490,7 @@ func TestAIKindsAreBriefedAndDocumented(t *testing.T) {
 		}
 	}
 	// The Director is told what the AI does not do.
-	for _, want := range []string{"does not remove a deck", "who may draw", "comes up next", "move a card"} {
+	for _, want := range []string{"`action: delete` removes the deck", "does not remove a single card", "who may draw", "comes up next", "move a card"} {
 		if !strings.Contains(r.deck.Doc(), want) {
 			t.Errorf("the deck's format does not say %q", want)
 		}

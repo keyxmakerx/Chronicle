@@ -7143,7 +7143,7 @@ func (a *App) RegisterRoutes() {
 		// pokes do nothing.
 		decksWatch.bind(decksSvc)
 		decksStory.bindDecks(decksSvc)
-		registerDecksBlock(blockRegistry, decksSvc)
+		registerDecksBlock(blockRegistry, decksSvc, addonService)
 	} else {
 		slog.Warn("decks plugin degraded — card decks are not available")
 	}

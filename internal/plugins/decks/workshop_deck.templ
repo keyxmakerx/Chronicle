@@ -26,7 +26,7 @@ templ WorkshopDeckPage(p deckPage) {
 				<header class="dkw-head">
 					<p class="dkw-crumb"><a href={ templ.SafeURL(p.base() + "/workshop") }>Card decks</a></p>
 					<div class="dkw-headrow">
-						<h1 class="cb-title text-2xl font-bold text-fg dkw-h1">
+						<h1 class="cb-title text-2xl font-bold text-fg dkw-h1" tabindex="-1" data-dkw-heading>
 							<input class="dkw-title" type="text" value={ p.Deck.Name } maxlength="120" aria-label="The deck's name" data-dkw-name autocomplete="off"/>
 						</h1>
 						<p class="dkw-quiet dkw-sub">
@@ -81,7 +81,7 @@ func cardsWords(n int) string {
 
 // deckTabPanel is the open tab's content.
 templ deckTabPanel(p deckPage) {
-	@versionMark(p.Deck.Version)
+	@versionMark(p.Deck.Version, p.Deck.Name)
 	switch p.Tab {
 		case "look":
 			@DeckLookTab(p)
@@ -96,7 +96,9 @@ templ deckTabPanel(p deckPage) {
 
 // versionMark carries the deck's current version in every fragment, so a page
 // whose save was refused as stale takes the new version from the reload and
-// its next change saves. The widget reads it from the fragment text.
-templ versionMark(v int) {
-	<span hidden data-dkw-version={ strconv.Itoa(v) }></span>
+// its next change saves. The widget reads it from the fragment text. It also
+// carries the deck's current name, so that same reload can replace a name the
+// page still shows from before.
+templ versionMark(v int, name string) {
+	<span hidden data-dkw-version={ strconv.Itoa(v) } data-dkw-deckname={ name }></span>
 }

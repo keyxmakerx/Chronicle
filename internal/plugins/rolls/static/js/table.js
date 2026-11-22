@@ -1391,9 +1391,10 @@
       if (!self.alive) return;
       var got = self.parseMoments(html);
       if (got.at !== id) return;
-      self.momOpen = id;
       if (opt.slide) self.say('A card’s moment has come in ' + (opt.deck || 'a deck') + '.');
-      if (!opt.slide && self.open && !self.sheet) self.closeTable(false);
+      // The open drawer already lists it, and a notice hung beside the drawer covers that list.
+      if (self.open && !self.sheet) { if (opt.slide) return; self.closeTable(false); }
+      self.momOpen = id;
       if (self.sheet && self.h === 'rest') self.setHeight('lift');
       self.paintMoment(html);
       var box = document.getElementById('tt-moment');

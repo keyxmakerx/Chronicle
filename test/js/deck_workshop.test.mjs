@@ -106,6 +106,7 @@ test('a failed request is said in plain words', () => {
   assert.match(DW.words(new Error('Failed to fetch')), /did not go through/);
   assert.equal(DW.words(new Error('That card is gone')), 'That card is gone.');
   assert.equal(DW.words(new Error('Already ends.')), 'Already ends.');
+  assert.equal(DW.words(new Error('that hero page is not in this campaign')), 'That hero page is not in this campaign.');
 });
 
 test('a fragment carries the deck version the widget reads, under the name the server writes', () => {
@@ -116,8 +117,8 @@ test('a fragment carries the deck version the widget reads, under the name the s
   const templ = readFileSync(join(decks, 'workshop_deck.templ'), 'utf8');
   assert.match(templ, /data-dkw-version=\{ strconv\.Itoa\(v\) \}/);
   // Every fragment (the four tabs through deckTabPanel, and the table row) writes the mark.
-  assert.match(templ, /templ deckTabPanel\(p deckPage\) \{\s*@versionMark\(p\.Deck\.Version\)/);
-  assert.match(readFileSync(join(decks, 'workshop_table.templ'), 'utf8'), /@versionMark\(p\.Deck\.Version\)/);
+  assert.match(templ, /templ deckTabPanel\(p deckPage\) \{\s*@versionMark\(p\.Deck\.Version, p\.Deck\.Name\)/);
+  assert.match(readFileSync(join(decks, 'workshop_table.templ'), 'utf8'), /@versionMark\(p\.Deck\.Version, p\.Deck\.Name\)/);
 });
 
 test('the widget takes a newer version from a reload and never goes back', () => {

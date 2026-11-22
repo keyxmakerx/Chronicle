@@ -9,7 +9,7 @@ import "strconv"
 templ DeckTable(p deckPage) {
 	{{ t := p.table() }}
 	<div id="dkw-table">
-	@versionMark(p.Deck.Version)
+	@versionMark(p.Deck.Version, p.Deck.Name)
 	<section class="dkw-table" data-dkw-table aria-label="The table" data-pile={ strconv.Itoa(t.Pile) } data-maxdraw={ strconv.Itoa(t.MaxDraw) }>
 		<div class="dkw-col dkw-pile">
 			<h2 class="dkw-lab">The pile</h2>
@@ -88,15 +88,22 @@ templ DeckTable(p deckPage) {
 			if len(t.Play) == 0 {
 				<span class="dkw-slot dkw-slot-s">None</span>
 			}
-			<ul class="dkw-playlist">
-				for _, c := range t.Play {
-					<li data-copy={ c.CopyID }>
-						@CardView(p.Deck.Look, upState(c.Card, SizeHand), CardOpts{Size: SizeHand})
-						<span class="dkw-quiet">In play, { c.Where }</span>
-						<button type="button" class="dkw-word" data-act="take-off">Take it off</button>
-					</li>
-				}
-			</ul>
+			for _, g := range t.playGroups() {
+				<section class="dkw-hand">
+					<p class="dkw-holder"><b>{ upperFirst(g.Where) }</b> <span class="dkw-quiet">{ strconv.Itoa(len(g.Cards)) } in play</span></p>
+					<div class="dkw-strip" data-dkw-strip role="group" aria-label={ "Cards in play at " + g.Where }>
+						<ul class="dkw-handlist">
+							for _, c := range g.Cards {
+								<li data-copy={ c.CopyID }>
+									@CardView(p.Deck.Look, upState(c.Card, SizeHand), CardOpts{Size: SizeHand})
+									<span class="dkw-quiet dkw-cap">In play, { c.Where }</span>
+									<button type="button" class="dkw-word" data-act="take-off">Take it off</button>
+								</li>
+							}
+						</ul>
+					</div>
+				</section>
+			}
 			if t.InHands > 0 {
 				<span class="dkw-quiet">{ strconv.Itoa(t.InHands) } held in hands</span>
 			}
@@ -104,21 +111,28 @@ templ DeckTable(p deckPage) {
 		if len(t.Held) > 0 {
 			<div class="dkw-col dkw-held" data-dm-only>
 				<h2 class="dkw-lab">In hands <span class="dkw-quiet">only Directors see these</span></h2>
-				<ul class="dkw-playlist" data-dkw-held>
-					for _, h := range t.Held {
-						<li data-copy={ h.CopyID }>
-							@CardView(p.Deck.Look, upState(h.Card, SizeHand), CardOpts{Size: SizeHand})
-							<span class="dkw-quiet">{ h.Where }: { heldWords(h) }</span>
-							if h.Asked {
-								<span class="dkw-ask" data-dkw-ask>{ askWho(h.Where) } asks to play this</span>
-								<span class="dkw-acts">
-									<button type="button" class="dkw-btn" data-act="approve" data-working-label="Letting them…">Let them</button>
-									<button type="button" class="dkw-word" data-act="turn-down" data-working-label="Telling them…">Not now</button>
-								</span>
-							}
-						</li>
-					}
-				</ul>
+				for _, g := range t.heldGroups() {
+					<section class="dkw-hand">
+						<p class="dkw-holder"><b>{ upperFirst(g.Where) }</b> <span class="dkw-quiet">{ holdsWords(len(g.Cards)) }</span></p>
+						<div class="dkw-strip" data-dkw-strip role="group" aria-label={ "Cards held by " + g.Where }>
+							<ul class="dkw-handlist" data-dkw-held>
+								for _, h := range g.Cards {
+									<li data-copy={ h.CopyID }>
+										@CardView(p.Deck.Look, upState(h.Card, SizeHand), CardOpts{Size: SizeHand})
+										<span class="dkw-quiet dkw-cap">{ heldWords(h) }</span>
+										if h.Asked {
+											<span class="dkw-ask" data-dkw-ask>{ askWho(h.Where) } asks to play this</span>
+											<span class="dkw-acts">
+												<button type="button" class="dkw-btn" data-act="approve" data-working-label="Letting them…">Let them</button>
+												<button type="button" class="dkw-word" data-act="turn-down" data-working-label="Telling them…">Not now</button>
+											</span>
+										}
+									</li>
+								}
+							</ul>
+						</div>
+					</section>
+				}
 			</div>
 		}
 		<p class="dkw-nudges">

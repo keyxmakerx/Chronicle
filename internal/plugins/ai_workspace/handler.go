@@ -982,6 +982,7 @@ func (h *Handler) commitRecord(c *echo.Context, cc *campaigns.CampaignContext, i
 		out.Status, out.Reason = importer.StatusFailed, records.OffFeatureReason(off.For(rec))
 	default:
 		rec.Generated = c.FormValue(prefix + "generated")
+		rec.Seen = c.FormValue(prefix + "seen")
 		ctx, actor := c.Request().Context(), actorFor(c, cc)
 		// What the thing was is read before Apply changes it; only a request
 		// a connected AI sent keeps one, since only those show Undo.

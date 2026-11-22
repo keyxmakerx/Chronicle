@@ -284,7 +284,7 @@ type deckKind struct{ *aiCore }
 func (*deckKind) Name() string  { return "deck" }
 func (*deckKind) Label() string { return "Card deck" }
 func (*deckKind) Brief() string {
-	return "card decks: make a hero, party or event deck in one of the starting styles and change its rules and look; who draws, which card comes up next and moving cards stay with the Director at the table"
+	return "card decks: make a hero, party or event deck in one of the starting styles and change its rules and look, or delete it with its cards (the review warns what players lose); who draws, which card comes up next and moving cards stay with the Director at the table"
 }
 
 // aiPick is one rule or look key a deck block takes: the key as the block
@@ -538,6 +538,7 @@ type deckWork struct {
 	create *CreateDeckInput
 	update *UpdateDeckInput
 	staged *stagedDeck
+	remove bool
 }
 
 func refuse(msg string) deckWork { return deckWork{plan: aiplug.Plan{Error: msg}} }
@@ -547,7 +548,7 @@ func (k *deckKind) work(ctx context.Context, campaignID string, a aiplug.Actor, 
 		return refuse(msg)
 	}
 	if r.Action == aiplug.ActionDelete {
-		return refuse("The AI does not remove a deck. Delete it in the deck workshop.")
+		return k.workDelete(ctx, campaignID, a, r)
 	}
 	rec, err := aiNormalise(r, "deck", deckOwn)
 	if err != nil {
@@ -569,6 +570,47 @@ func (k *deckKind) work(ctx context.Context, campaignID string, a aiplug.Actor, 
 		return k.workUpdate(e, hit, r)
 	}
 	return k.workCreate(e, hit, r)
+}
+
+// workDelete plans removing a deck. A delete takes the deck's name and nothing
+// else, so a pasted row cannot carry a change along with the removal.
+func (k *deckKind) workDelete(ctx context.Context, campaignID string, a aiplug.Actor, r aiplug.Record) deckWork {
+	keys := make([]string, 0, len(r.Fields))
+	for key := range r.Fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !aiEngineKeys[aiKey(key)] {
+			return refuse("a delete takes a deck's name and nothing else; remove `" + key + "` from the block")
+		}
+	}
+	if r.Name == "" {
+		return refuse("a deck needs a name")
+	}
+	hit, err := k.deckNamed(ctx, campaignID, directorViewer(a), r.Name)
+	if err != nil {
+		return refuse(aiplug.PlanError(err))
+	}
+	if hit == nil {
+		return refuse("no deck called " + aiplug.Quote(r.Name))
+	}
+	// The list's counts are copies by zone: their sum is every card the deck
+	// holds as players count them, and hands plus the table are what players
+	// lose with it.
+	c := hit.Counts
+	total := c.Pile + c.Shown + c.Hand + c.Play + c.Used + c.Gone
+	held := c.Hand + c.Play
+	s := fmt.Sprintf("deletes the deck %s for good: %d %s, %d of them in hands or on the table",
+		aiplug.Quote(hit.Name), total, plural(total, "card", "cards"), held)
+	return deckWork{plan: aiplug.Plan{Summary: s, Warnings: []string{
+		"Deleting this deck removes its cards and anything players hold from it.",
+		"This cannot be undone.",
+	}, Seen: aiplug.Hash(struct {
+		ID      string
+		Version int
+		Counts  ZoneCounts
+	}{hit.ID, hit.Version, hit.Counts})}, id: hit.ID, remove: true}
 }
 
 func (k *deckKind) workCreate(e deckEdit, hit *DirectorDeck, r aiplug.Record) deckWork {
@@ -720,6 +762,15 @@ func (k *deckKind) Apply(ctx context.Context, campaignID string, a aiplug.Actor,
 		return apperror.NewBadRequest(w.plan.Error)
 	}
 	v := directorViewer(a)
+	if w.remove {
+		// The owner said yes to this deck as it was reviewed; one that has since
+		// gained cards or had a card move is a different removal. An empty Seen
+		// fails closed.
+		if r.Seen == "" || r.Seen != w.plan.Seen {
+			return apperror.NewBadRequest("this deck changed since its removal was reviewed; nothing was removed. Ask for the change again to review it as it is now.")
+		}
+		return k.svc.Delete(ctx, campaignID, w.id, v)
+	}
 	if w.create != nil {
 		_, err := k.svc.Create(ctx, campaignID, v, *w.create)
 		return err
@@ -729,11 +780,11 @@ func (k *deckKind) Apply(ctx context.Context, campaignID string, a aiplug.Actor,
 }
 
 // Export is empty: decks are read with `what: decks`, which also says what
-// the Director may not ask the AI to change.
+// the Director may not ask the AI to change (the deck block's format says so).
 func (*deckKind) Export(context.Context, string, aiplug.Actor) (string, error) { return "", nil }
 
 func (*deckKind) Doc() string {
-	return fmt.Sprintf("A deck of cards, matched by `name`. Keys: `for` (hero, party or events; needed to make one), `hero` (the page name of a hero deck's hero, needed for a hero deck; `none` takes a deck off its hero), `style` (a starting look: %s; it fills the whole look first and the single look keys below then override it), `rename_to`. Rules, each with the values the deck workshop offers: `knows` (what a player who sees the deck may know: %s), `others_see` (what others see of a card dealt to one hero: %s), `arrives` (how a card dealt to a hero lands: %s), `fate` (where a played card goes: %s), `empty` (a draw from an empty pile: %s), `discard` (yes or no, may players discard from their own hand), `notice` (how loudly a card's moment tells the Director: %s). Look: `shape` (%s), `border` (%s), `turn` (%s), `window` (%s), `name_position` (%s), `lettering` (%s), `corner` (the corner mark: %s), `marker` (%s), `finish` (%s), `back_pattern` (%s), `back_sign` (%s), `back_colour` (a palette colour: %s; empty is the campaign's colour), `back_words` (at most %d characters), and `kinds`, a list of `{key, name, colour, sign}` that replaces the deck's whole list (at most %d; the key is lowercase letters, digits and hyphens, the sign is one of %s). On update only the keys written change. The AI does not choose who may draw (the `draws` rule, the chosen players and their draws left), which card comes up next or is kept for last, or move a card (draw, deal, play, shuffle, gather): a block naming any of these is refused, and those are done in the deck workshop and at the table. The AI does not remove a deck; `action: delete` is refused and a deck is deleted in the deck workshop. Cards go in `card` blocks.\n\n```\n---\nkind: deck\nname: Omens\nfor: events\nstyle: iron-omens\nknows: count\nfate: used\nborder: metal\nkinds:\n  - {key: bane, name: Bane, colour: rose}\n---\n```",
+	return fmt.Sprintf("A deck of cards, matched by `name`. Keys: `for` (hero, party or events; needed to make one), `hero` (the page name of a hero deck's hero, needed for a hero deck; `none` takes a deck off its hero), `style` (a starting look: %s; it fills the whole look first and the single look keys below then override it), `rename_to`. Rules, each with the values the deck workshop offers: `knows` (what a player who sees the deck may know: %s), `others_see` (what others see of a card dealt to one hero: %s), `arrives` (how a card dealt to a hero lands: %s), `fate` (where a played card goes: %s), `empty` (a draw from an empty pile: %s), `discard` (yes or no, may players discard from their own hand), `notice` (how loudly a card's moment tells the Director: %s). Look: `shape` (%s), `border` (%s), `turn` (%s), `window` (%s), `name_position` (%s), `lettering` (%s), `corner` (the corner mark: %s), `marker` (%s), `finish` (%s), `back_pattern` (%s), `back_sign` (%s), `back_colour` (a palette colour: %s; empty is the campaign's colour), `back_words` (at most %d characters), and `kinds`, a list of `{key, name, colour, sign}` that replaces the deck's whole list (at most %d; the key is lowercase letters, digits and hyphens, the sign is one of %s). On update only the keys written change. The AI does not choose who may draw (the `draws` rule, the chosen players and their draws left), which card comes up next or is kept for last, or move a card (draw, deal, play, shuffle, gather): a block naming any of these is refused, and those are done in the deck workshop and at the table. `action: delete` removes the deck named by `name` and takes no other key; the review line says how many cards go and how many are in hands or on the table, warns that the deck's cards and anything players hold from it go with it and that this cannot be undone, and nothing is removed until the owner says yes. The AI never deals, draws, plays, shuffles or gathers, and it does not remove a single card. Cards go in `card` blocks.\n\n```\n---\nkind: deck\nname: Omens\nfor: events\nstyle: iron-omens\nknows: count\nfate: used\nborder: metal\nkinds:\n  - {key: bane, name: Bane, colour: rose}\n---\n```",
 		styleKeys(), strings.Join(knowsValues, ", "), strings.Join(othersSeeValues, ", "), strings.Join(arrivesValues, ", "),
 		strings.Join(fateValues, ", "), strings.Join(emptyValues, ", "), strings.Join(noticeValues, ", "),
 		strings.Join(shapeValues, ", "), strings.Join(borderValues, ", "), strings.Join(turnValues, ", "), strings.Join(windowValues, ", "),

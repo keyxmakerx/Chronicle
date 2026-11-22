@@ -215,6 +215,26 @@ func (h *HeroHandView) Empty() bool {
 	return len(h.Others) == 0
 }
 
+// Shown is how many cards the strip draws for this viewer: the cards held and
+// in play for a holder or Director, and for anyone else what each deck lets
+// them see, a face or a back apiece. It counts what the viewer is shown and
+// nothing more, so a caller can offer the strip without reading its fields.
+func (h *HeroHandView) Shown() int {
+	if h == nil {
+		return 0
+	}
+	n := 0
+	if h.Own != nil {
+		n += len(h.Own.Hand) + len(h.Own.Play)
+	}
+	for _, o := range h.Others {
+		// The strip draws every face and then backs up to Count; a Count below
+		// the faces cannot hide a face it draws.
+		n += max(o.Count, len(o.Faces))
+	}
+	return n
+}
+
 // HeroHand reads the strip for one hero page. The hero's player reads what the
 // Hand leaf shows for that hero. A Director reads the hand as its holder does
 // (a face-down copy is its back) and acts on it in the workshop, not here.

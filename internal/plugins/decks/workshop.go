@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v5"
 
@@ -420,6 +422,69 @@ func (p deckPage) table() tableView {
 		t.MaxDraw = 0
 	}
 	return t
+}
+
+// heldGroup is the cards one holder keeps in hand, in the order they were
+// last moved, so a long hand is one line and one row instead of a column.
+type heldGroup struct {
+	Where string
+	Cards []heldCard
+}
+
+// playGroup is the cards in play in one place, grouped the same way.
+type playGroup struct {
+	Where string
+	Cards []playCard
+}
+
+// heldGroups groups the held cards by holder, holders in the order they first appear.
+func (t tableView) heldGroups() []heldGroup {
+	var out []heldGroup
+	at := map[string]int{}
+	for _, h := range t.Held {
+		i, ok := at[h.Where]
+		if !ok {
+			i = len(out)
+			at[h.Where] = i
+			out = append(out, heldGroup{Where: h.Where})
+		}
+		out[i].Cards = append(out[i].Cards, h)
+	}
+	return out
+}
+
+// playGroups groups the cards in play by where they lie.
+func (t tableView) playGroups() []playGroup {
+	var out []playGroup
+	at := map[string]int{}
+	for _, c := range t.Play {
+		i, ok := at[c.Where]
+		if !ok {
+			i = len(out)
+			at[c.Where] = i
+			out = append(out, playGroup{Where: c.Where})
+		}
+		out[i].Cards = append(out[i].Cards, c)
+	}
+	return out
+}
+
+// holdsWords is the line under a holder's name: how many cards they hold.
+func holdsWords(n int) string {
+	if n == 1 {
+		return "holds 1 card"
+	}
+	return "holds " + strconv.Itoa(n) + " cards"
+}
+
+// upperFirst starts a place's name with a capital where it opens a line
+// ("the party's hand" is named at the head of its group).
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r, n := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[n:]
 }
 
 // left says how many are in the pile, in words.

@@ -423,6 +423,10 @@ func TestEveryFragmentCarriesTheDecksCurrentVersion(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("fragment %s does not carry %s", tail, want)
 		}
+		// The current name rides with it, so a stale page's name field can take it.
+		if !strings.Contains(body, `data-dkw-deckname="Renamed"`) {
+			t.Errorf("fragment %s does not carry the deck's current name", tail)
+		}
 	}
 }
 

@@ -315,3 +315,23 @@ test('the requested picture address is rebuilt from the validated parts', () => 
   assert.equal(DC.pictureSrcOf('//evil.example/x'), '');
   assert.equal(DC.pictureSrcOf('javascript:1'), '');
 });
+
+test('a card name is clamped on an inner box with no padding, to a whole number of lines', () => {
+  const css = readFileSync(join(root, 'static', 'css', 'decks_card.css'), 'utf8');
+  const rule = css.match(/\.dk-sz-hand \.dk-nt, \.dk-sz-row \.dk-nt \{([^}]*)\}/);
+  assert.ok(rule, 'no clamp rule on .dk-nt');
+  assert.match(rule[1], /-webkit-line-clamp: var\(--dk-nl\)/);
+  assert.match(rule[1], /max-height: calc\(var\(--dk-nl\) \* 1lh\)/);
+  assert.match(css, /\.dk-sz-hand \{ --dk-nl: 2; \}/);
+  assert.match(css, /\.dk-sz-row \{ --dk-nl: 3; \}/);
+  // The padded name box itself must not clamp: a padded box shows the next line in its padding.
+  assert.doesNotMatch(css.match(/\n\.dk-name \{[^}]*\}/)[0], /line-clamp|webkit-box|overflow: hidden/);
+  for (const f of ['card_compact.templ', 'card_plate.templ']) {
+    assert.match(readFileSync(join(decks, f), 'utf8'), /<b class="dk-name"><span class="dk-nt">\{ s\.face\.Name \}<\/span><\/b>/, f);
+  }
+});
+
+test('the opened card is dimmed with the site scrim token', () => {
+  const css = readFileSync(join(root, 'static', 'css', 'decks_hand.css'), 'utf8');
+  assert.match(css.match(/\.dkh-over \{[^}]*\}/)[0], /background: var\(--surface-overlay\)/);
+});
