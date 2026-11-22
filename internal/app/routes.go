@@ -6920,7 +6920,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -6929,7 +6929,9 @@ func (a *App) RegisterRoutes() {
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
-		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
+		rollsHandler := rolls.NewHandler(rollsSvc)
+		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService})
+		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
 		campaignHandler.RegisterCustomizeTab(rolls.CustomizeTabFactory(rollsSvc))

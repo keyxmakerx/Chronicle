@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
@@ -79,4 +81,54 @@ func (l *craftingRollLog) ProjectRolled(ctx context.Context, campaignID string, 
 	if err != nil {
 		slog.Warn("rolls: a crafting roll was not added to the roll log", slog.String("campaign_id", campaignID), slog.Any("error", err))
 	}
+}
+
+// rollsPowerAdapter tells the Table the campaign's power roll (the game
+// system's crafting declaration) and the characteristics on the viewer's own
+// claimed hero. It reads only a character the viewer owns, so no one's sheet
+// is shown to anyone else.
+type rollsPowerAdapter struct {
+	sys interface {
+		EnabledSystem(ctx context.Context, campaignID string) systems.System
+	}
+	entities entities.EntityService
+}
+
+func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID string) (rolls.PowerRollLine, error) {
+	if a.sys == nil {
+		return rolls.PowerRollLine{}, nil
+	}
+	s := a.sys.EnabledSystem(ctx, campaignID)
+	if s == nil {
+		return rolls.PowerRollLine{}, nil
+	}
+	rules, ok := s.Info().PowerRoll()
+	if !ok {
+		return rolls.PowerRollLine{}, nil
+	}
+	out := rolls.PowerRollLine{Declared: true, Dice: rules.Dice, Edge: rules.Edge, Bane: rules.Bane, Tiers: rules.Tiers,
+		Characteristics: make([]rolls.PowerStat, len(rules.Characteristics))}
+	for i, c := range rules.Characteristics {
+		out.Characteristics[i] = rolls.PowerStat{Key: c.Key, Label: c.Label}
+	}
+	if a.entities == nil || userID == "" {
+		return out, nil
+	}
+	mine, err := a.entities.ListByOwner(ctx, campaignID, userID)
+	if err != nil || len(mine) == 0 {
+		// The numbers are a convenience: without them the line still rolls.
+		if err != nil {
+			slog.Warn("rolls: cannot read the viewer's hero", slog.Any("error", err))
+		}
+		return out, nil
+	}
+	hero := mine[0]
+	out.Hero = hero.Name
+	for i, c := range rules.Characteristics {
+		if n, ok, _ := sheetNumber(hero.FieldsData[c.Key]); ok {
+			v := n
+			out.Characteristics[i].Value = &v
+		}
+	}
+	return out, nil
 }

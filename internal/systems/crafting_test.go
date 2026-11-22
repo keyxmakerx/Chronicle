@@ -113,3 +113,32 @@ func manyStats(n int) []CraftingStat {
 	}
 	return out
 }
+
+// A system has a power roll only when its crafting block names
+// characteristics and rolls 2d10; the defaults every system gets are not one.
+func TestPowerRoll(t *testing.T) {
+	stats := []CraftingStat{{Key: "might", Label: "Might"}}
+	tests := []struct {
+		name string
+		m    *SystemManifest
+		want bool
+	}{
+		{"no manifest", nil, false},
+		{"no crafting block", &SystemManifest{}, false},
+		{"a block with no characteristics", &SystemManifest{Crafting: &CraftingRules{Dice: "2d10"}}, false},
+		{"another die", &SystemManifest{Crafting: &CraftingRules{Dice: "1d20", Characteristics: stats}}, false},
+		{"2d10 and characteristics", &SystemManifest{Crafting: &CraftingRules{Dice: "2d10", Edge: 2, Bane: -2, Tiers: []int{11, 16}, Characteristics: stats}}, true},
+		{"dice left to the default", &SystemManifest{Crafting: &CraftingRules{Characteristics: stats}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := tt.m.PowerRoll()
+			if ok != tt.want {
+				t.Fatalf("PowerRoll ok = %v, want %v", ok, tt.want)
+			}
+			if ok && (got.Dice != "2d10" || len(got.Tiers) != 2 || len(got.Characteristics) != 1) {
+				t.Fatalf("PowerRoll = %+v", got)
+			}
+		})
+	}
+}
