@@ -130,6 +130,7 @@ type Handler struct {
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
+	heroChanges        *HeroChangeService
 	visitorPlanner     VisitorPlanner
 	heroTerms          HeroTermsReader
 	heroRules          HeroRules
@@ -2511,8 +2512,9 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	// A claimed owner's patch past the identity keys can only be hero builder
 	// picks, checked against the plan a player sees.
 	var picks builderPicks
+	var plan *HeroPlan
 	if h.heroPlanner != nil && IsClaimedOwnerPlayer(cc.MemberRole, entity, auth.GetUserID(c)) && needsBuilderPicks(fieldsPatch) {
-		plan, err := h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), false)
+		plan, err = h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), false)
 		if err != nil {
 			return err
 		}
@@ -2533,6 +2535,15 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	if len(picks) > 0 && fieldsPatch != nil {
 		for _, t := range takeAskFirst(entity, fieldsPatch, picks) {
 			asks = append(asks, HeroAsk{FieldKey: t.fieldKey, EntryName: t.name})
+		}
+	}
+	// What is left changes the hero's picks outright, which the Director's
+	// times allow or refuse. An ask-first pick waits for a Director's yes
+	// anyway, so it was taken out above and is never locked.
+	var heroChanges []HeroPickChange
+	if len(picks) > 0 && fieldsPatch != nil {
+		if heroChanges, err = h.heroChanges.CheckPicks(c.Request().Context(), entity, fieldsPatch, picks, plan); err != nil {
+			return err
 		}
 	}
 
@@ -2565,6 +2576,7 @@ func (h *Handler) UpdateFieldsAPI(c *echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+	h.heroChanges.Changed(c.Request().Context(), entity, auth.GetUserID(c), heroChanges)
 
 	if len(asks) > 0 {
 		requests, failed := h.recordAsks(c, cc.Campaign.ID, entity, asks)
@@ -4300,6 +4312,7 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 		}
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID, int(cc.VisibilityRole())), charTypes)
 		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
+		view.HeroChanges = h.heroChangesSection(c, cc, view.Party)
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
 			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
@@ -4354,6 +4367,23 @@ func (h *Handler) buildHeroBuilder(c *echo.Context, cc *campaigns.CampaignContex
 	// the viewer already has.
 	if len(heroes) == 0 {
 		return nil
+	}
+	// A player's picks follow the Director's times; staff change any hero
+	// whenever they like, so their builder carries no lock.
+	if h.heroChanges != nil && cc.MemberRole < campaigns.RoleScribe {
+		mine := make([]Entity, 0, len(yours))
+		for _, m := range yours {
+			mine = append(mine, m.Entity)
+		}
+		if locks, err := h.heroChanges.Locks(c.Request().Context(), cc.Campaign.ID, mine); err == nil {
+			for i := range heroes {
+				if l, ok := locks[heroes[i].ID]; ok && l.Ruled {
+					heroes[i].Lock = &l
+				}
+			}
+		} else {
+			slog.Warn("cast page: hero locks failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		}
 	}
 	return &HeroBuilderView{
 		CampaignID: cc.Campaign.ID,

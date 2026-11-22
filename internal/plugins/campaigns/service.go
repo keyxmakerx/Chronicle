@@ -217,6 +217,10 @@ type CampaignService interface {
 	// UpdateCharacterLists stores the page types the campaign lists as
 	// characters and as NPCs. Callers validate the IDs; this only persists.
 	UpdateCharacterLists(ctx context.Context, campaignID string, characterTypeIDs, npcTypeIDs []int) error
+
+	// UpdateHeroChanges stores when players may change their own hero's
+	// picks; nil means any time.
+	UpdateHeroChanges(ctx context.Context, campaignID string, rule *HeroChangeRule) error
 	// ClearCharacterLists removes both lists, so the campaign is seeded from
 	// its own page types the next time they are read.
 	ClearCharacterLists(ctx context.Context, campaignID string) error
@@ -475,6 +479,28 @@ func (s *campaignService) UpdateCharacterLists(ctx context.Context, campaignID s
 	settings := campaign.ParseSettings()
 	settings.CharacterTypeIDs = &characterTypeIDs
 	settings.NPCTypeIDs = &npcTypeIDs
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	return s.saveSettingsChanges(ctx, campaign, campaignID, settingsJSON)
+}
+
+// UpdateHeroChanges stores when players may change their own hero's picks;
+// nil means any time. Every other setting is left as it was.
+func (s *campaignService) UpdateHeroChanges(ctx context.Context, campaignID string, rule *HeroChangeRule) error {
+	if err := rule.Validate(); err != nil {
+		return err
+	}
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+	settings := campaign.ParseSettings()
+	settings.HeroChanges = rule
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
