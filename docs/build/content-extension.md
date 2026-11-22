@@ -102,6 +102,9 @@ Files in `migrations/` (`001_init.up.sql`, `001_init.down.sql`) run at install
 and roll back at uninstall. Every table they create, alter or write must be
 named `ext_<id>_…` (hyphens in the id become underscores).
 
+The upload refuses `.sql` files today, and Rescan does not run migrations, so
+no install path reaches this yet ([#2552](https://github.com/keyxmakerx/Chronicle/issues/2552)).
+
 ## Install and test
 
 1. Zip the folder.

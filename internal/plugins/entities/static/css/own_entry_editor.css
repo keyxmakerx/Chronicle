@@ -174,7 +174,7 @@ html[data-motion="off"] .oed *, html[data-motion="off"] .oed *::before, html[dat
 
 /* Phone: every word at least 16px and every control at least 44px. */
 @media (max-width: 899px) {
-  .oed-kind, .oed-mark, .oed-asked, .oed-field label, .oed-k, .oed-ferr, .oed-link, .oed-hint, .oed-ro dt, .oed-cost button, .oed-lab2 span, .oed-pc,
+  .oed-add, .oed-kind, .oed-mark, .oed-asked, .oed-field label, .oed-k, .oed-ferr, .oed-link, .oed-hint, .oed-ro dt, .oed-cost button, .oed-lab2 span, .oed-pc,
   .oed-tcard p, .oed-tbuy, .oed-ready, .oed-problems, .oed-who, .oed-error, .oed-confirm p { font-size: 16px; }
   .oed-kind, .oed-ro dt { letter-spacing: 0.02em; }
   .oed-cost button { min-height: 44px; }

@@ -54,7 +54,7 @@ Read §11 before exposing it.
 | **MariaDB tablespace** | volume `chronicle-dbdata` (`/var/lib/mysql`) | **Yes, primary** | Total data loss. |
 | **User uploads** | volume `chronicle-data`, `/app/data/media/uploads` | **Yes** | Broken image references. |
 | **User avatars** | volume `chronicle-data`, `/app/data/media/avatars` | **Yes** | Avatars revert to default. |
-| Installed system packages | `/app/data/media/packages/systems/` | No | Re-install via Admin > Packages. |
+| Installed system packages | `/app/data/media/packages/systems/` | No | Re-install via Site admin > Game systems & modules. |
 | Foundry module package | `/app/data/media/packages/foundry-module/` | No | Same. |
 | Pre-migration auto-backups | `/app/data/backups/chronicle_pre_migrate_*` | Operator's call | No safety net for the next migration. |
 | Operator backups | `/app/data/backups/chronicle_db_*` etc. | n/a | n/a |
@@ -86,8 +86,9 @@ yours at once if the host is publicly reachable.
 ### Bare metal
 
 Needs Go 1.27+, MariaDB 10.11+, Redis 7+, Tailwind and templ (targets in
-`Makefile`). Not recommended for production: the compose stack pins versions
-and ships a matching `mariadb-client` for backups.
+`Makefile`). Not recommended for production: the Docker image ships the
+`mariadb-client` that backups need. The compose file uses `mariadb:latest` and
+`redis:alpine`; pin those tags yourself if you want fixed versions.
 
 ### Cosmos Cloud
 
@@ -114,7 +115,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `DB_MAX_IDLE_CONNS` | `5` | |
 | `DB_CONN_MAX_LIFETIME` | `5m` | |
 | `REDIS_URL` | `redis://localhost:6379` | |
-| **`SECRET_KEY`** | required | 32+ bytes base64 (`openssl rand -base64 32`). PASETO session signing key; rotating it logs everyone out. It also derives the keys for stored two-factor secrets and the sign-in provider's client secret: after a rotation users sign in with a recovery code (or an admin switches their two-factor off), and the provider secret is re-entered under Admin > Sign-ins & sessions > Sign-in provider. |
+| **`SECRET_KEY`** | required | 32+ bytes base64 (`openssl rand -base64 32`). PASETO session signing key; rotating it logs everyone out. It also derives the keys for stored two-factor secrets and the sign-in provider's client secret: after a rotation users sign in with a recovery code (or an admin switches their two-factor off), and the provider secret is re-entered under Site admin > Sign-ins & sessions > Sign-in provider. |
 | `SESSION_TTL` | `720h` | |
 | `EXTENSIONS_PATH` | `./extensions` | User-installable content extensions. |
 | `MAX_UPLOAD_SIZE` | `10485760` | Plain integer bytes; `10MB` does not parse and silently falls back to the default. |
@@ -122,7 +123,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_SIGNING_SECRET` | (auto) | HMAC-SHA256 key for signed media URLs; generated if empty. |
 | `MEDIA_SIGNING_SECRET_FILE` | `./data/.signing-secret` | Where the generated secret is persisted. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`; per-IP only works if `TRUSTED_PROXY_CIDRS` is right. |
-| `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed (which header: Admin > Security > Visitor addresses). **Replaces** the default. See "Client IP behind a reverse proxy". |
+| `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed (which header: Site admin > Sign-ins & sessions > Visitor addresses). **Replaces** the default. See "Client IP behind a reverse proxy". |
 | `BACKUP_DIR` | `/app/data/backups` | Empty is unsupported: the admin UI reports "not configured" and the pre-migration backup is skipped. |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The pre-migration rotator has its own fixed 7 days. |
 | `BACKUP_REQUIRED` | `1` when `ENV=production`, else `0` (compose sets `1`) | `1`/`true` makes the pre-migration backup mandatory: any failure (no `mysqldump`, empty dump, manifest write failure) aborts startup before migrations apply, for pending core and plugin migrations. Unset, development warns and proceeds; set `0` to opt out in production. |
@@ -153,8 +154,8 @@ Echo's `IPExtractor` believes `X-Real-IP` / `X-Forwarded-For` **only** from a
 peer inside `TRUSTED_PROXY_CIDRS`; otherwise it records the peer. Per-IP rate
 limits, the media serve limit and the address on every audit row depend on it.
 
-Which header is believed is a site setting under **Admin > Security > Visitor
-addresses** (`/admin/security?tab=addresses`): `X-Real-IP`, `X-Forwarded-For`
+Which header is believed is a site setting under **Site admin > Sign-ins &
+sessions > Visitor addresses** (`/admin/security?tab=addresses`): `X-Real-IP`, `X-Forwarded-For`
 read from the right (the first address not in the trusted list, so an entry the
 visitor wrote ahead of the proxy's own is never used), the connection's own
 address when nothing sits in front, or Automatic (`X-Real-IP` if sent, else
@@ -209,9 +210,10 @@ Step 5 is the only one that reports the running software; steps 1-4 can all
 succeed while the container never changes. `--no-deps` keeps MariaDB and Redis
 up.
 
-A server built from a version tag tells its site admins on Admin > Home when a
-newer release is out, from a once-a-day look at the GitHub releases. Admin >
-Security > Overview turns that look off for a server that must not call out.
+A server built from a version tag tells its site admins on Site admin > Home
+when a newer release is out, from a once-a-day look at the GitHub releases. Site
+admin > Sign-ins & sessions > Overview turns that look off for a server that
+must not call out.
 
 `docker compose up -d` alone is not an upgrade: it does not re-pull a tag that
 exists locally. The `chronicle` service sets `pull_policy: always`, but keep
@@ -226,21 +228,22 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 # or: make docker-all-local
 ```
 
-Step 4 logs, in order (backup lines only when the release ships pending
-migrations, otherwise `no pending migrations`; a plugin-only release logs
-`pending plugin migration(s) detected — backing up before applying` between the
-health checks and the plugin migrations):
+Step 4 logs, in order (the backup lines only when the release ships pending
+migrations, otherwise `database schema is up to date — no pending migrations`; a
+plugin-only release logs `pending plugin migration(s) detected — backing up
+before applying` between the health checks and the plugin migrations):
 
 ```
-creating pre-migration backup file=/app/data/backups/chronicle_pre_migrate_<TS>.sql.gz
-pre-migration backup completed file=...
-migrations applied
-migration version validated version=N
+pending migration(s) detected — backing up before applying from_version=N-1 to_version=N
+pre-migration backup starting dir=/app/data/backups timestamp=<TS>
+pre-migration backup complete manifest=/app/data/backups/chronicle_pre_migrate_manifest_<TS>.txt
+migrations applied version=N dirty=false
+health check passed check=migration_version detail="at version N (expected >=N)"
 health check summary passed=K warnings=0 failures=0
 ```
 
 If `failures=0` is missing and the container exits, the release is broken: go
-to §7. For `pre-migration backup skipped: mysqldump not found`, see §10.
+to §7. For `pre-migration backup skipped: mysqldump not on PATH`, see §10.
 
 ### One-way migrations: the calendar clean slate
 
@@ -264,8 +267,8 @@ Chronicle, the Foundry module and each system package ship separately. In this
 order:
 
 1. **Back up**, set `BACKUP_REQUIRED=1`, and set `BASE_URL` to the public
-   `https://` address. The Foundry connect line (Campaign > Campaign settings > Foundry)
-   is built from `BASE_URL`; make a new line after fixing it. Older keys are not
+   `https://` address. The Foundry connect line (the campaign's **Foundry** page,
+   `/campaigns/:id/foundry`, under **Connection**) is built from `BASE_URL`; make a new line after fixing it. Older keys are not
    revoked.
 2. **Deploy Chronicle** (steps 1-5). New tables and columns are added at boot,
    each guarded so a re-run is harmless; the pre-migration snapshot comes first.
@@ -273,7 +276,7 @@ order:
    version), then update it inside Foundry. Chronicle shows the module version a
    key last reported.
 4. **Release the system packages** (Draw Steel 0.13.14 or later, and 5e), then
-   Admin > Packages > check for updates and update each. An update adds only the
+   Site admin > Game systems & modules > **Check now**, and update each. An update adds only the
    sheet fields it introduced to existing campaigns; it never restores a field a
    GM deleted and never touches pages.
 5. Match each Foundry user to their Chronicle member, then check the status dot
@@ -285,7 +288,7 @@ Ask the process:
 
 ```sh
 curl -s localhost:8080/api/version        # commit SHA (or the tag on a release build)
-# Admin > Diagnostics > host.build        # binary path, size, mtime, uptime, VCS stamp
+# Site admin > Health & diagnostics > AI helper > "Which build this server is running" (host.build): binary path, size, mtime, uptime, VCS stamp
 ```
 
 For the image identity:
@@ -315,8 +318,8 @@ An older image does not crash-loop. When the database's recorded version is
 ahead of the build, `MigrateWithBackup` logs `database is AHEAD of this build —
 skipping migrations and starting anyway` and starts. Migrations are additive, so
 the older binary runs on the newer schema; features from newer migrations are
-unavailable until you redeploy. The state shows at `/admin/database` ("DB ahead
-of build" banner) and `GET /admin/database/status`.
+unavailable until you redeploy. The state shows at `/admin/database` ("Database
+is newer than this app") and `GET /admin/database/status`.
 
 A DB rollback (restore a pre-migration backup) is needed only if the newer
 version dropped or renamed a column the older build reads; the startup health
@@ -386,7 +389,8 @@ docker compose up -d --no-deps chronicle
 
 ```sh
 docker compose stop chronicle
-make restore RESTORE_ARGS="--manifest=/app/data/backups/chronicle_manifest_<TS>.txt"
+docker compose run --rm chronicle sh /app/scripts/restore.sh \
+  --manifest /app/data/backups/chronicle_manifest_<TS>.txt --force
 # Type RESTORE when prompted.
 docker compose start chronicle
 ```
@@ -479,8 +483,10 @@ make backup-list   # 1. pick the newest chronicle_manifest_<TS>.txt you trust
 # 2. The script refuses if /healthz answers.
 docker compose stop chronicle
 
-# 3. RESTORE_ARGS is required; type "RESTORE" at the prompt.
-make restore RESTORE_ARGS="--manifest=/app/data/backups/chronicle_manifest_<TS>.txt"
+# 3. --manifest is required; type "RESTORE" at the prompt. --force restores
+#    over a database that still has tables, which a live site's always does.
+docker compose run --rm chronicle sh /app/scripts/restore.sh \
+  --manifest /app/data/backups/chronicle_manifest_<TS>.txt --force
 
 # 4. RunStartupHealthChecks validates the schema; an incompatible image refuses to boot.
 docker compose start chronicle
@@ -539,7 +545,7 @@ Most operators skip this; sessions regenerate on next login.
 
 Headings are the log strings the code emits.
 
-### `migration <N> in DIRTY state` / `forcing migration version <N>`
+### `database migration <N> is DIRTY` / `migration <N> is in DIRTY state`
 
 A migration failed partway. Chronicle fails fast because a partly applied
 migration can be unsafe to re-run. Restore the latest `chronicle_pre_migrate_*`
@@ -547,10 +553,10 @@ backup (§7 Scenario A) or repair `schema_migrations` by hand, then redeploy.
 
 ### `database at migration <N> but code requires <M>`
 
-The recorded version differs from the image's. DB older after an upgrade: wait
-for migrations (over 30s, check `docker compose logs chronicle-db`). DB newer
-than the code (rolled-back image): restore the matching pre-migration backup
-(§7 Scenario A).
+The database is older than the image. Migrations did not finish: check
+`docker compose logs chronicle` for the migration error and
+`docker compose logs chronicle-db`. A database newer than the image does not
+fail here; it starts with a warning (§7, Downgrade behavior).
 
 ### `<K> critical column(s) missing`
 
@@ -558,14 +564,14 @@ Migrations have not run, or a column was dropped by hand. Run `make migrate-up`
 from a host shell; if the migration itself fails, read `docker compose logs
 chronicle` and roll back per §7.
 
-### `pre-migration backup skipped: mysqldump not found`
+### `pre-migration backup skipped: mysqldump not on PATH`
 
 The image lacks `mariadb-client`. Pull a current image (`docker compose pull
 chronicle`) or rebuild:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache chronicle`.
 Until then upgrades have no automatic safety net.
 
-### `pre-migration backup failed (non-fatal)`
+### `pre-migration backup failed (non-fatal in default mode)`
 
 Usually `BACKUP_DIR` is not writable or the disk is full. Check
 `docker compose exec chronicle df -h /app/data` and the directory's ownership.

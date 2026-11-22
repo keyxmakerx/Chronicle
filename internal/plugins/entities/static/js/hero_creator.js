@@ -435,9 +435,26 @@
   // --- Draft kept on this device ---
   Creator.prototype.restore = function () {
     try {
-      var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null');
-      if (d) this.adopt(d);
+      var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null') || (!this.practice && this.sentenceDraft());
+      if (d) { this.adopt(d); this.resumed = true; }
     } catch (e) { /* no storage: start fresh */ }
+  };
+  // The Characters page once offered a new hero as a sentence, kept on this
+  // device as { name, values } with bought options in "<key>_choices_json".
+  // A sentence left there carries over here once, as the creator's draft.
+  var SENTENCE = 'chronicle:hero-builder:';
+  Creator.prototype.sentenceDraft = function () {
+    var raw = window.localStorage.getItem(SENTENCE + this.campaignId);
+    if (!raw) return null;
+    window.localStorage.removeItem(SENTENCE + this.campaignId);
+    var s = JSON.parse(raw) || {}, v = s.values || {}, picks = {}, O = '_choices_json';
+    Object.keys(v).forEach(function (k) {
+      if (k.slice(-O.length) === O || typeof v[k] !== 'string') return;
+      var opts = [];
+      try { opts = JSON.parse(v[k + O] || '[]'); } catch (e) { /* none */ }
+      picks[k] = { name: v[k], options: Array.isArray(opts) ? opts.filter(function (o) { return typeof o === 'string'; }) : [] };
+    });
+    return Object.keys(picks).length || (s.name || '').trim() ? { picks: picks, name: typeof s.name === 'string' ? s.name : '' } : null;
   };
   // Takes a draft or a preload ({picks, name}) as the starting point, keeping
   // only what the plan still offers.
@@ -511,9 +528,14 @@
     return !!(want && p && lower(p.name) === lower(want));
   };
   // The first step a hero still has something to choose in; a step the rules
-  // fill in for everyone is not a place to start.
+  // fill in for everyone is not a place to start. A player coming back to a
+  // saved draft carries on at the first step without a pick, or at Name and
+  // review when every step has one. A copy, a change or a kept try-out starts
+  // at the top, where the player looks it over.
   Creator.prototype.firstStep = function () {
-    for (var i = 0; i < this.plan.steps.length; i++) if (!this.locked(this.plan.steps[i])) return i;
+    var self = this, steps = this.plan.steps;
+    var open = function (i) { return !self.locked(steps[i]) && (!self.resumed || !self.picked(i)); };
+    for (var i = 0; i < steps.length; i++) if (open(i)) return i;
     return this.last();
   };
   // A step is settled once it holds a pick or was skipped on purpose.
@@ -940,11 +962,10 @@
 
   Creator.prototype.statsHTML = function (stacked) {
     var s = this.stats(), items = [['stamina', 'Stamina'], ['speed', 'Speed'], ['size', 'Size'], ['stab', 'Stability']];
-    if (!stacked) items.push(['rec', 'Recov.']);
+    if (!stacked) items.push(['rec', 'Recoveries']);
     var any = items.some(function (it) { return s[it[0]] != null; });
     if (!any) return '';
-    var shown = items.filter(function (it) { return s[it[0]] != null; });
-    return '<div class="hc-stats" style="--hc-n:' + (stacked ? 2 : shown.length) + '">' + items.map(function (it) {
+    return '<div class="hc-stats">' + items.map(function (it) {
       var v = s[it[0]];
       return v == null ? '' : '<div class="hc-stat"><span>' + it[1] + '</span><b data-stat="' + it[0] + '">' + esc(v) + '</b></div>';
     }).join('') + '</div>';
@@ -1157,8 +1178,8 @@
       .filter(function (j) { return j.c._fitted !== j.size; });
     jobs.forEach(function (j) {
       var c = j.c, sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts'), h3 = c.querySelector('h3');
-      j.sum = sum; j.dl = dl; j.h3 = h3;
-      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) h3.style.fontSize = '';
+      j.sum = sum; j.dl = dl; j.h3 = h3; j.ix = c.querySelector('.hc-top .hc-ix');
+      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) { h3.style.fontSize = ''; h3.style.webkitLineClamp = ''; h3.classList.remove('is-clamp'); } if (j.ix) j.ix.hidden = false;
       if (dl) { dl.hidden = false; qa('div', dl).forEach(function (d) { d.hidden = false; }); }
     });
     jobs.forEach(function (j) {
@@ -1166,28 +1187,39 @@
       j.lh = parseFloat(getComputedStyle(j.sum).lineHeight) || 24;
       j.lines = Math.round(j.sum.scrollHeight / j.lh);
       j.facts = j.dl ? qa('div', j.dl).map(function (d) { return d.offsetHeight + 1; }) : [];
+      j.ixWrap = !!j.ix && j.ix.offsetTop > j.ix.parentNode.firstElementChild.offsetTop; j.ixH = j.ix ? j.ix.offsetHeight : 0;
     });
     // "Read the rules" at the foot always stays on the card: the summary and
-    // facts give way first, down to the name alone on the smallest phones.
+    // facts give way first, down to the name alone on the smallest phones,
+    // and last of all a long name is cut to two lines, then one.
     var steps = function (j) {
       var shown = function () { return j.dl ? qa('div', j.dl).filter(function (d) { return !d.hidden; }) : []; };
       var clamp = function (n) { return { save: Math.max(0, j.lines - n) * j.lh - Math.max(0, j.lines - (j.clamp || j.lines)) * j.lh, run: function () { j.sum.style.webkitLineClamp = n; j.clamp = n; } }; };
       var drop = function (keep) { return { save: shown().length > keep ? j.facts[shown().length - 1] + (shown().length === 1 ? 10 : 0) : 0, run: function () { var f = shown(); if (f.length > keep) f[f.length - 1].hidden = true; } }; };
-      return [function () { return clamp(4); }, function () { return clamp(3); }, function () { return drop(2); }, function () { return clamp(2); },
+      // The "n / 100" count goes first, and only when it has wrapped to a line of its own.
+      return [function () { return { skip: !j.ixWrap, save: j.ixWrap ? j.ixH + 6 : 0, run: function () { if (j.ixWrap) j.ix.hidden = true; } }; }, function () { return clamp(4); }, function () { return clamp(3); }, function () { return drop(2); }, function () { return clamp(2); },
         function () { return drop(1); }, function () { return drop(0); }, function () { return clamp(1); },
         function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '24px'; } }; },
         function () { return { save: 0, run: function () { j.sum.hidden = true; } }; },
-        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; }];
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; },
+        function () { return { save: 0, run: function () { if (j.h3) { j.h3.classList.add('is-clamp'); j.h3.style.webkitLineClamp = 2; } } }; },
+        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.webkitLineClamp = 1; } }; }];
     };
     jobs.forEach(function (j) {
       j.list = steps(j); j.i = 0;
       var left = j.over - 1;
-      while (left > 0 && j.i < j.list.length) { var s = j.list[j.i++](); left -= s.save; s.run(); if (!s.save && left > 0) break; }
+      while (left > 0 && j.i < j.list.length) { var s = j.list[j.i++](); if (s.skip) continue; left -= s.save; s.run(); if (!s.save && left > 0) break; }
     });
     // A card the estimate left long is finished one step at a time.
     jobs.forEach(function (j) {
       while (j.i < j.list.length && j.c.scrollHeight > j.c.clientHeight + 1) j.list[j.i++]().run();
       if (j.dl) j.dl.hidden = !qa('div', j.dl).some(function (d) { return !d.hidden; });
+      // A one-word name wider than the card cannot wrap, so it is set smaller
+      // until it fits across; a smaller name only ever frees height.
+      if (j.h3 && j.h3.scrollWidth > j.h3.clientWidth + 1) {
+        var px = parseFloat(getComputedStyle(j.h3).fontSize);
+        j.h3.style.fontSize = Math.max(14, Math.floor(px * j.h3.clientWidth / j.h3.scrollWidth)) + 'px';
+      }
       j.c._fitted = j.size;
     });
   };
@@ -1861,7 +1893,9 @@
     tip.className = 'hc-tip' + (pin ? ' is-pinned' : '');
     tip.id = 'hc-tip';
     tip.setAttribute('role', 'tooltip');
-    tip.innerHTML = '<div class="hc-cat">' + info.cat + '</div><div class="hc-tipnm hc-disp">' + info.name + '</div><p>' + info.html + '</p>' + (pin ? X : '');
+    tip.innerHTML = '<div class="hc-tipb"><div class="hc-cat">' + info.cat + '</div><div class="hc-tipnm hc-disp">' + info.name + '</div><p>' + info.html + '</p></div>' + (pin ? X : '');
+    var tb = tip.querySelector('.hc-tipb');
+    tb.addEventListener('scroll', function () { tb.classList.toggle('is-more', tb.scrollTop + tb.clientHeight < tb.scrollHeight - 1); }, { passive: true });
     tip.addEventListener('pointerenter', function () { clearTimeout(self.tipHide); });
     tip.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse' && !self.tipPinned) self.tipHide = setTimeout(function () { self.closeTip(); }, 160); });
     app.appendChild(tip);
@@ -1892,6 +1926,10 @@
     // under the paragraph or over it, and when neither has room it sits at
     // the foot and the reading scrolls up clear of it.
     if (!this.desk()) {
+      // A long explanation scrolls inside a card at most under half the
+      // visible height, so the card always has somewhere to go.
+      var body = tip.querySelector('.hc-tipb');
+      if (body) { body.style.maxHeight = Math.max(120, Math.floor(H * 0.45) - 25) + 'px'; h = tip.offsetHeight; body.classList.toggle('is-more', body.scrollTop + body.clientHeight < body.scrollHeight - 1); }
       var para = el.closest('p, li, dd, .hc-lede') || el, pr = rel(app, para.getBoundingClientRect());
       tip.style.left = '8px';
       tip.removeAttribute('data-side');
@@ -1900,8 +1938,19 @@
       var foot = H - h - 6, sc = el.closest('.hc-sc, .hc-rev, .hc-list');
       tip.style.top = Math.max(6, foot) + 'px';
       tip.setAttribute('data-below', '1');
+      // The paragraph scrolls clear as far as the word stays in view, and the
+      // word itself always does: near the end of the text the scroller gets
+      // room at its foot for that, given back when the card closes.
       var over = pr.top + pr.height + 8 - foot, room = r.top - (sc ? rel(app, sc.getBoundingClientRect()).top : 0) - 6;
-      if (sc && over > 0 && room > 0) sc.scrollTop += Math.min(over, room);
+      var want = Math.max(Math.min(over, room), r.top + r.height + 8 - foot);
+      if (sc && want > 0) {
+        var left = sc.scrollHeight - sc.clientHeight - sc.scrollTop;
+        if (left < want && !this.tipPad) {
+          this.tipPad = { sc: sc, was: sc.style.paddingBottom };
+          sc.style.paddingBottom = ((parseFloat(getComputedStyle(sc).paddingBottom) || 0) + Math.ceil(want - left)) + 'px';
+        }
+        sc.scrollTop += want;
+      }
       return;
     }
     var below = r.top + r.height + 8 + h <= H - 6 || r.top - 8 - h < 6;
@@ -1926,6 +1975,7 @@
     var el = this.tip, f = this.tipFor;
     if (!el) return;
     this.tip = null; this.tipFor = null; this.tipPinned = false;
+    if (this.tipPad) { this.tipPad.sc.style.paddingBottom = this.tipPad.was; this.tipPad = null; }
     if (f) { f.setAttribute('aria-expanded', 'false'); f.removeAttribute('aria-describedby'); if (refocus) f.focus(); }
     if (now || this.still() || !el.animate) { el.remove(); return; }
     var a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(90), easing: 'ease-in', fill: 'forwards' });

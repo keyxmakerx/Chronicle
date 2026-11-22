@@ -93,8 +93,8 @@ parts:
   a rule shows the chapter's page torn out of the book, in the book's own look,
   with Previous and Next among the chapter's pages and a link that opens the
   book at the chapter.
-- A book's `look`, colours and fonts belong to its system; the site's Customize
-  settings never change them.
+- A book's `look`, colours and fonts belong to its system; the Customizer's
+  **Look** settings never change them.
 - `cover` is a drawn cover. On first open in a visit the book shows closed; a
   click, Enter or Space opens it, and **Close the book** in the top bar closes
   it. Draw the whole cover, title lettering included; Chronicle adds only an
@@ -257,7 +257,7 @@ numbers and notes never leave the server.
 
 ## Editing a campaign's copy
 
-Directors see an **Edit** link on the Rules page to change their campaign's
+Directors see an **Edit** button on the Rules page to change their campaign's
 copy: rewrite a page, add pages to a chapter, add a house-rules chapter. The
 package files are never touched, so a package update does not overwrite
 campaign edits; a page edited by the campaign and since changed by the package
