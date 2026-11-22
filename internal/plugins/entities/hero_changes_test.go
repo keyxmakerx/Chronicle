@@ -111,7 +111,7 @@ func TestHeroLevel(t *testing.T) {
 		want int
 	}{{float64(3), 3}, {4, 4}, {" 5 ", 5}, {"x", 0}, {nil, 0}}
 	for _, tc := range cases {
-		if got := heroLevel(map[string]any{heroLevelKey: tc.v}); got != tc.want {
+		if got := heroLevel(map[string]any{HeroLevelKey: tc.v}); got != tc.want {
 			t.Errorf("heroLevel(%v) = %d, want %d", tc.v, got, tc.want)
 		}
 	}
@@ -197,7 +197,13 @@ func (f *fakeHeroStore) Reopen(_ context.Context, _, _ string, until time.Time, 
 
 // fakeHeroBell counts what rang.
 type fakeHeroBell struct {
-	rang [][]HeroPickChange
+	rang   [][]HeroPickChange
+	levels []int
+}
+
+func (f *fakeHeroBell) LevelRaised(_ context.Context, _ *Entity, _ string, level int) error {
+	f.levels = append(f.levels, level)
+	return nil
 }
 
 func (f *fakeHeroBell) HeroChanged(_ context.Context, _ *Entity, _ string, ch []HeroPickChange) error {
@@ -233,7 +239,7 @@ func TestHeroChangeService_FieldsChanged(t *testing.T) {
 			if tc.owned {
 				e.OwnerUserID = &owner
 			}
-			if err := s.FieldsChanged(context.Background(), e, map[string]any{heroLevelKey: tc.was}, map[string]any{heroLevelKey: tc.now}); err != nil {
+			if err := s.FieldsChanged(context.Background(), e, map[string]any{HeroLevelKey: tc.was}, map[string]any{HeroLevelKey: tc.now}); err != nil {
 				t.Fatal(err)
 			}
 			if len(st.levels) != tc.wantLevels {
@@ -241,6 +247,45 @@ func TestHeroChangeService_FieldsChanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHeroLevelRaised(t *testing.T) {
+	hero := &Entity{ID: "e1", FieldsData: map[string]any{HeroLevelKey: float64(2), "class": "Fury"}}
+	cases := []struct {
+		name  string
+		patch map[string]any
+		want  int
+	}{
+		{"a raise", map[string]any{HeroLevelKey: float64(3)}, 3},
+		{"a raise written as text", map[string]any{HeroLevelKey: "4"}, 4},
+		{"the same level", map[string]any{HeroLevelKey: float64(2)}, 0},
+		{"a lower level", map[string]any{HeroLevelKey: float64(1)}, 0},
+		{"no level in the write", map[string]any{"class": "Censor"}, 0},
+		{"the level cleared", map[string]any{HeroLevelKey: nil}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := HeroLevelRaised(hero, tc.patch); got != tc.want {
+				t.Errorf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
+	if got := HeroLevelRaised(&Entity{ID: "e2"}, map[string]any{HeroLevelKey: float64(1)}); got != 1 {
+		t.Errorf("a hero with no level yet: got %d, want 1", got)
+	}
+}
+
+func TestHeroChangeService_LevelRaised(t *testing.T) {
+	s, _, bell := newTestHeroChanges(nil)
+	e := &Entity{ID: "e1", CampaignID: "c1"}
+	s.LevelRaised(context.Background(), e, "pat", 3)
+	s.LevelRaised(context.Background(), e, "pat", 0) // no raise
+	s.LevelRaised(context.Background(), e, "", 4)    // no acting player
+	if len(bell.levels) != 1 || bell.levels[0] != 3 {
+		t.Fatalf("rang %v, want only [3]", bell.levels)
+	}
+	var none *HeroChangeService
+	none.LevelRaised(context.Background(), e, "pat", 3) // not wired: nothing, no panic
 }
 
 func TestHeroChangeService_HeldPicks(t *testing.T) {

@@ -28,9 +28,9 @@ import (
 // Only a change counts: filling a blank finishes the hero rather than
 // changing it, so it is always allowed and rings nothing.
 
-// heroLevelKey is the field that holds a hero's level in the game systems
+// HeroLevelKey is the field that holds a hero's level in the game systems
 // that have one. A system without it never opens a level window.
-const heroLevelKey = "level"
+const HeroLevelKey = "level"
 
 // HeroReopenMaxDays bounds how long a Director may reopen one hero.
 const HeroReopenMaxDays = campaigns.HeroChangeMaxDays
@@ -63,9 +63,11 @@ type HeroChangeRules interface {
 }
 
 // HeroChangeNotifier tells the campaign's Directors that a player changed
-// their hero. A failure is logged by the caller; the change stands.
+// their hero, or raised its level themselves. A failure is logged by the
+// caller; the change stands.
 type HeroChangeNotifier interface {
 	HeroChanged(ctx context.Context, e *Entity, userID string, changes []HeroPickChange) error
+	LevelRaised(ctx context.Context, e *Entity, userID string, level int) error
 }
 
 // HeroPickChange is one pick a player changed, as the Directors read it.
@@ -157,7 +159,7 @@ func dayWord(n int) string {
 // heroLevel reads a hero's level, which a sheet may hold as a number or as
 // text; 0 when it has none.
 func heroLevel(fields map[string]any) int {
-	switch v := fields[heroLevelKey].(type) {
+	switch v := fields[HeroLevelKey].(type) {
 	case float64:
 		return int(v)
 	case int:
@@ -352,6 +354,33 @@ func (s *HeroChangeService) Changed(ctx context.Context, e *Entity, userID strin
 	}
 	if err := s.notify.HeroChanged(ctx, e, userID, changes); err != nil {
 		slog.Warn("hero change bell failed", slog.String("entity_id", e.ID), slog.Any("error", err))
+	}
+}
+
+// HeroLevelRaised is the level patch gives the hero when that is higher than
+// the stored one; 0 when patch leaves the level alone, keeps it or lowers it.
+func HeroLevelRaised(e *Entity, patch map[string]any) int {
+	if e == nil {
+		return 0
+	}
+	if _, ok := patch[HeroLevelKey]; !ok {
+		return 0
+	}
+	if now := heroLevel(patch); now > heroLevel(e.FieldsData) {
+		return now
+	}
+	return 0
+}
+
+// LevelRaised rings the Directors' bell for a level a player gave their own
+// hero. The level-up still counts, since tables that level outside Chronicle
+// rely on it; the bell is so it is seen. 0 rings nothing.
+func (s *HeroChangeService) LevelRaised(ctx context.Context, e *Entity, userID string, level int) {
+	if s == nil || s.notify == nil || e == nil || level <= 0 || userID == "" {
+		return
+	}
+	if err := s.notify.LevelRaised(ctx, e, userID, level); err != nil {
+		slog.Warn("hero level bell failed", slog.String("entity_id", e.ID), slog.Any("error", err))
 	}
 }
 
