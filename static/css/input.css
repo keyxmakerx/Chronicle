@@ -3197,9 +3197,11 @@
 @keyframes whole-release { to { opacity: 1; } }
 html[data-motion="off"] [data-whole] { transition: none; }
 /* A refresh after a save redraws the page the reader is on (page_live.js):
-   nothing arrives, so nothing fades in. */
-[data-page-live-swap] .htmx-added,
-[data-page-live-swap] [data-whole] { transition: none; }
+   nothing arrives, so nothing fades in. Important, and keyed to the scroller's
+   id, so it outranks the Calm and Off rules below, which put the opacity
+   transition back and would show the frame unseen for a frame or two. */
+#main-content[data-page-live-swap] .htmx-added,
+#main-content[data-page-live-swap] [data-whole] { transition: none !important; }
 
 /* Settle: a new step of a form (the sign-in code step, the two-factor
    setup panel) fades in with a 6px rise. Calm keeps the fade only. */
