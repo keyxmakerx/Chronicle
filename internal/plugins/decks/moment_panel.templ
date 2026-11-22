@@ -1,0 +1,97 @@
+package decks
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// MomentsPanel is the Director's notice for a card's moment: the reading, the
+// card the deck picked and the answers. It also carries, hidden, one row per
+// open moment so the Table can show its count and its "Waiting on you" list
+// from the same request. It is drawn only for a Director.
+templ MomentsPanel(p momentsPage) {
+	@CardSheet()
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_moments.css") }/>
+	<div class="dkm" data-dkm data-count={ strconv.Itoa(len(p.Moments)) } data-at={ atID(p) }>
+		<ul class="dkm-index" data-dkm-index hidden>
+			for _, m := range p.Moments {
+				<li data-id={ m.ID } data-slide={ boolWord(m.slides()) } data-deck={ m.DeckName } data-reading={ m.title() }></li>
+			}
+		</ul>
+		if cur := p.cur(); cur != nil {
+			@momentBody(p, *cur)
+		}
+	</div>
+}
+
+func atID(p momentsPage) string {
+	if m := p.cur(); m != nil {
+		return m.ID
+	}
+	return ""
+}
+
+templ momentBody(p momentsPage, m MomentView) {
+	<section class="dkm-panel" aria-labelledby="dkm-h" data-dkm-panel data-moment={ m.ID } data-dm-only>
+		<div class="dkm-head">
+			<h2 class="dkm-title" id="dkm-h" tabindex="-1">{ m.title() }</h2>
+			<button type="button" class="dkm-x" data-dkm-close aria-label="Close this notice">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+			</button>
+		</div>
+		<p class="dkm-from">{ p.fromLine(m) }</p>
+		if m.State == "invited" {
+			<p class="dkm-state">
+				if m.InvitedName != "" {
+					{ m.InvitedName } is invited to draw. Nothing leaves the pile until they do or you deal it.
+				} else {
+					The player is invited to draw. Nothing leaves the pile until they do or you deal it.
+				}
+			</p>
+		}
+		if m.Card != nil {
+			{{ f := dirFace(*m.Card) }}
+			<div class="dkm-pick">
+				<div class="dkm-card">
+					@CardView(p.cardLook(m), FaceUp(f, pictureURL(f.Picture, SizeRow)), CardOpts{Size: SizeRow})
+				</div>
+				<div class="dkm-col">
+					<p class="dkm-note">{ m.pickNote() }</p>
+					<div class="dkm-acts">
+						if m.can(AnswerDeal) {
+							<button type="button" class="btn-primary dkm-deal" data-dkm-act="deal" data-working-label="Dealing…">{ m.dealLabel() }</button>
+						}
+						if m.can(AnswerAnother) {
+							<button type="button" class="dkm-word" data-dkm-act="another" data-working-label="Drawing…">Draw another</button>
+						}
+						if m.can(AnswerInvite) {
+							<button type="button" class="dkm-word" data-dkm-act="invite" data-working-label="Inviting…">{ m.inviteLabel() }</button>
+						}
+						if m.can(AnswerDismiss) {
+							<button type="button" class="dkm-word" data-dkm-act="dismiss" data-working-label="Putting it away…">
+								if m.State == "invited" {
+									Take the invitation back
+								} else {
+									Not now
+								}
+							</button>
+						}
+					</div>
+				</div>
+			</div>
+		}
+		<p class="dkm-msg" role="status" data-dkm-msg hidden></p>
+		if len(p.Moments) > 1 {
+			<div class="dkm-nav">
+				<button type="button" class="dkm-step" data-dkm-nav={ p.neighbour(-1) } aria-label="The previous waiting card">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>
+				</button>
+				<span class="dkm-of">{ strconv.Itoa(p.At+1) } of { strconv.Itoa(len(p.Moments)) }</span>
+				<button type="button" class="dkm-step" data-dkm-nav={ p.neighbour(1) } aria-label="The next waiting card">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+				</button>
+			</div>
+		}
+	</section>
+}

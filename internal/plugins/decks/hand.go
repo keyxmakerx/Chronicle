@@ -70,6 +70,10 @@ type HandDraw struct {
 	CanDraw   bool
 	// Heroes are the viewer's own heroes a draw may go to.
 	Heroes []Hero
+	// Invited is set only for the player the Director invited to draw: the draw
+	// goes into the invited hero's hand and spends no draw, so the count of draws
+	// left is not shown.
+	Invited bool
 }
 
 // HandView is everything the Hand leaf draws.
@@ -162,7 +166,21 @@ func (s *service) Hand(ctx context.Context, campaignID string, v Viewer) (*HandV
 			out.Others = append(out.Others, HandOther{HeroID: o.HeroID, HeroName: name, DeckID: d.ID, DeckName: d.Name,
 				Look: pd.Look, Count: o.Count, Faces: o.Faces})
 		}
-		if pd.DrawsOpen {
+		// An invitation is the one thing a player is told of a moment. It names the
+		// hero the card goes to, who must be one of the viewer's own.
+		var invited []Hero
+		if pd.InvitedHeroID != "" {
+			for _, h := range owned {
+				if h.ID == pd.InvitedHeroID {
+					invited = append(invited, h)
+				}
+			}
+		}
+		switch {
+		case len(invited) > 0:
+			out.Draws = append(out.Draws, HandDraw{DeckID: d.ID, DeckName: d.Name, Look: pd.Look, Pile: pd.Pile, Kinds: pd.Kinds,
+				CanDraw: true, Heroes: invited, Invited: true})
+		case pd.DrawsOpen:
 			out.Draws = append(out.Draws, HandDraw{DeckID: d.ID, DeckName: d.Name, Look: pd.Look, Pile: pd.Pile, Kinds: pd.Kinds,
 				DrawsLeft: pd.DrawsLeft, CanDraw: pd.CanDraw, Heroes: owned})
 		}

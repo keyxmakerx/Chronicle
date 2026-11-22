@@ -34,6 +34,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// The Director's moments and the card editor's options; static paths win
 	// over :did, so neither is read as a deck id.
 	cg.GET("/decks/moments", h.Moments)
+	cg.GET("/decks/moments/panel", h.MomentsPanel)
 	cg.GET("/decks/when-options", h.WhenOptions)
 	// The workshop pages sit beside the JSON routes under /workshop, as the
 	// rolling tables page sits beside its JSON; static paths win over :did.

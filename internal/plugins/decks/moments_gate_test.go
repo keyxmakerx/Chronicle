@@ -55,6 +55,7 @@ type momentRoute struct{ method, path, body string }
 var momentRoutes = []momentRoute{
 	{http.MethodGet, "/campaigns/camp-1/decks/moments", ""},
 	{http.MethodGet, "/campaigns/camp-1/decks/when-options", ""},
+	{http.MethodGet, "/campaigns/camp-1/decks/moments/panel", ""},
 	{http.MethodPost, "/campaigns/camp-1/decks/moments/m-1/deal", `{}`},
 	{http.MethodPost, "/campaigns/camp-1/decks/moments/m-1/another", `{}`},
 	{http.MethodPost, "/campaigns/camp-1/decks/moments/m-1/invite", `{}`},

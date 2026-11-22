@@ -45,8 +45,11 @@ type MomentView struct {
 	Notice string        `json:"notice"`
 	Card   *DirectorCard `json:"card"`
 	// SubjectID and Subject are the hero the card's "any" tests held for.
-	SubjectID     string     `json:"subjectId,omitempty"`
-	Subject       string     `json:"subject,omitempty"`
+	SubjectID string `json:"subjectId,omitempty"`
+	Subject   string `json:"subject,omitempty"`
+	// Hero is the name of the hero the card would go to, "" when it goes to the
+	// party's hand or the table (or the page cannot be read).
+	Hero          string     `json:"hero,omitempty"`
 	FitCount      int        `json:"fitCount"`
 	Reading       string     `json:"reading,omitempty"`
 	ReadingSource string     `json:"readingSource,omitempty"`
@@ -346,6 +349,9 @@ func (r *request) momentView(m Moment, members map[string]Member) (MomentView, e
 	}
 	if m.SubjectID != "" {
 		out.Subject = nm.hero(m.SubjectID)
+	}
+	if h := momentHero(d, m); h != "" {
+		out.Hero = nm.hero(h)
 	}
 	if mem, ok := members[m.InvitedUserID]; ok {
 		out.InvitedName = mem.Name

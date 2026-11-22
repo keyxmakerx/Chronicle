@@ -133,6 +133,8 @@ func (d HandDraw) knownLine() string {
 
 func (d HandDraw) drawsLine() string {
 	switch {
+	case d.Invited:
+		return "Your Director invites you to draw."
 	case d.DrawsLeft == nil:
 		return "You can draw as often as you like."
 	case *d.DrawsLeft == 1:
