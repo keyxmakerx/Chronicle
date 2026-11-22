@@ -25,6 +25,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
@@ -84,6 +85,7 @@ type aiDeps struct {
 	Decks           decks.Service                    // nil while the decks plugin is degraded
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
 	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
+	SystemState     systemstate.Service              // nil while the system state plugin is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
@@ -259,7 +261,25 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if d.DecksAI != nil {
 		out = append(out, d.DecksAI.Lookup())
 	}
+	if d.SystemState != nil {
+		out = append(out, systemstate.NewAIPageState(d.SystemState, aiEnabledSystem{systems: d.Systems}))
+	}
 	return out
+}
+
+// aiEnabledSystem names the campaign's game system for the page-state
+// lookup; "" when none is on or the systems handler is absent.
+type aiEnabledSystem struct{ systems *systems.SystemHandler }
+
+func (a aiEnabledSystem) EnabledSystemID(ctx context.Context, campaignID string) string {
+	if a.systems == nil {
+		return ""
+	}
+	sys := a.systems.EnabledSystem(ctx, campaignID)
+	if sys == nil {
+		return ""
+	}
+	return sys.Info().ID
 }
 
 // Transformations follow the game nights and tags.

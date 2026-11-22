@@ -7296,6 +7296,7 @@ func (a *App) RegisterRoutes() {
 		aiTimelines = timelineSvc
 	}
 	aiWiring := newAIDeps(aiDeps{
+		SystemState:     systemStateSvc,
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
 		CharacterChoice: characterChoiceSvc,
