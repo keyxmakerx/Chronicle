@@ -135,7 +135,9 @@ func (s *decksStory) fire(campaignID, event string, e decks.CardEvent) {
 		// stays the one named as having set it off. Scope is the hero's page,
 		// so a tracker action lands on the hero who played or drew.
 		v := homebrew.Viewer{UserID: e.By.UserID, Director: true, VisibilityRole: permissions.RoleOwner}
-		if err := hb.Fire(ctx, campaignID, v, homebrew.Fired{Event: event, Scope: e.HeroID, Payload: payload}); err != nil {
+		// Once: a player can draw and play the same card all night, and a rule
+		// that waits for the Director is asked once, not once per play.
+		if err := hb.Fire(ctx, campaignID, v, homebrew.Fired{Event: event, Scope: e.HeroID, Payload: payload, Once: true}); err != nil {
 			slog.Warn("decks: a rule could not be started", slog.String("campaign_id", campaignID), slog.String("event", event), slog.Any("error", err))
 		}
 	})

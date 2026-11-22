@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 
@@ -30,6 +32,10 @@ const (
 	// recentRuns and maxWaiting are what the drawer shows.
 	recentRuns = 20
 	maxWaiting = 50
+	// maxHeldRuns is how many runs may wait in one campaign. A held run stays
+	// until a Director answers it, so without a bound anything that can set a
+	// held rule off again and again would fill the table.
+	maxHeldRuns = 200
 )
 
 // Fired is an event an owner says happened.
@@ -44,6 +50,10 @@ type Fired struct {
 	Scope string
 	// Payload is what happened, for the event's Match.
 	Payload json.RawMessage
+	// Once is for an event a player can set off as often as they like: a rule
+	// it would hold is not held again while the same rule already waits for
+	// the same scope and payload. The Director answers it once.
+	Once bool
 }
 
 // Run is one rule set off by one firing, with what it did.
@@ -161,6 +171,7 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 	}
 	ctx, b := withBudget(ctx)
 	wrote := false
+	var waiting *[]Run
 	for _, r := range recipes {
 		for _, rule := range r.Doc.Rules {
 			if rule.When.Event != f.Event || rule.When.Part != f.Part {
@@ -189,6 +200,22 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 			b.left--
 			if s.holds(rule) {
 				run.Status = RunHeld
+				if waiting == nil {
+					held, err := s.runs.ListRuns(ctx, campaignID, true, maxHeldRuns)
+					if err != nil {
+						return fmt.Errorf("homebrew: list held runs: %w", err)
+					}
+					waiting = &held
+				}
+				if len(*waiting) >= maxHeldRuns {
+					slog.Warn("homebrew: a rule was not held because too many already wait",
+						slog.String("campaign_id", campaignID), slog.String("event", f.Event))
+					continue
+				}
+				if f.Once && alreadyWaits(*waiting, run) {
+					continue
+				}
+				*waiting = append(*waiting, run)
 			} else {
 				run.Status, run.Lines = s.execute(ctx, campaignID, r, rule, f.Scope, v)
 				now := run.CreatedAt
@@ -206,6 +233,37 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 		}
 	}
 	return nil
+}
+
+// alreadyWaits says whether a held run of the same rule, for the same scope
+// and payload, is among those waiting.
+func alreadyWaits(waiting []Run, run Run) bool {
+	rule, err := json.Marshal(run.Rule)
+	if err != nil {
+		return false
+	}
+	for _, w := range waiting {
+		if w.RecipeID != run.RecipeID || w.Scope != run.Scope || !sameJSON(w.Payload, run.Payload) {
+			continue
+		}
+		if got, err := json.Marshal(w.Rule); err == nil && sameJSON(got, rule) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameJSON compares two JSON values by what they say, not how they are
+// written, since a stored value may come back spaced differently.
+func sameJSON(a, b json.RawMessage) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return len(a) == len(b)
+	}
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }
 
 func (s *service) saveRun(ctx context.Context, run Run) error {

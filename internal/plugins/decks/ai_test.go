@@ -2,6 +2,7 @@ package decks
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -513,5 +514,137 @@ func TestAILookupInfo(t *testing.T) {
 	}
 	if info.Tool.Name != "card_decks" || strings.TrimSpace(info.Tool.PlayerDesc) == "" {
 		t.Errorf("tool=%q playerDesc=%q", info.Tool.Name, info.Tool.PlayerDesc)
+	}
+}
+
+// A change that alters who can see a deck or what players are told says so on
+// the review line; a change that does not stays quiet.
+func TestAIDeckUpdateWarnsWhenSightChanges(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]any
+		want   string
+	}{
+		{"who it is for", map[string]any{"for": "party"}, "Who a deck is for decides which players can see it and its used cards."},
+		{"what players know", map[string]any{"knows": "faces"}, "This changes what players are told about the pile or about each other's cards."},
+		{"what others see", map[string]any{"others_see": "face"}, "This changes what players are told about the pile or about each other's cards."},
+		{"a rule that changes no sight", map[string]any{"fate": "gone"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newAIRig(t)
+			r.fx.deck("Omens", KindEvent, nil)
+			p := r.deck.Plan(bg, camp, aiDirector, aiRec("deck", "update", "Omens", tt.fields))
+			if p.Error != "" {
+				t.Fatalf("plan = %+v", p)
+			}
+			got := strings.Join(p.Warnings, "|")
+			if got != tt.want {
+				t.Errorf("warnings = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A tracker name two trackers share is refused, as a tag's is, where it used
+// to bind whichever came first.
+func TestAICardTrackerNameSharedByTwoIsRefused(t *testing.T) {
+	fx := newFixture(t)
+	facts := newFakeFacts()
+	facts.opts.Trackers = append(facts.opts.Trackers, TrackerKindOption{ID: "k-doom-2", Name: "doom"})
+	newFactsFixture(t, fx, facts)
+	ai := NewAI(fx.svc, aiPages{"tam": {"h-tam", "Tam"}}, func(context.Context, string) bool { return true })
+	fx.deck("Omens", KindEvent, nil)
+	p := ai.Kinds()[1].Plan(bg, camp, aiDirector, aiRec("card", "create", "Dread", map[string]any{"deck": "Omens",
+		"when": []any{yaml{"test": "tracker", "who": "Tam", "kind": "Doom", "op": "gte", "value": 3}}}))
+	if want := `test 1: more than one tracker is called "Doom"`; !strings.Contains(p.Error, want) || p.Summary != "" {
+		t.Errorf("plan = %+v, want error containing %q", p, want)
+	}
+}
+
+// A deck with more cards than one answer may list is read in parts, and each
+// part says where the next begins, so no card is out of the AI's reach.
+func TestAILookupReadsALongDeckInParts(t *testing.T) {
+	r := newAIRig(t)
+	deck := r.fx.deck("Omens", KindEvent, nil)
+	for i := 1; i <= cardsPerAnswer+5; i++ {
+		r.fx.card(deck, CreateCardInput{Name: fmt.Sprintf("Card %03d", i)})
+	}
+	last := fmt.Sprintf("Card %03d", cardsPerAnswer+5)
+	tests := []struct {
+		name string
+		from any
+		has  []string
+		not  []string
+		err  string
+	}{
+		{name: "the first part", has: []string{"- Card 001 ", fmt.Sprintf("Cards 1 to %d of %d. Ask again with `from: %d` for the next.", cardsPerAnswer, cardsPerAnswer+5, cardsPerAnswer+1)},
+			not: []string{"- " + last + " "}},
+		{name: "the rest", from: cardsPerAnswer + 1, has: []string{"- " + last + " ", fmt.Sprintf("Cards %d to %d of %d.", cardsPerAnswer+1, cardsPerAnswer+5, cardsPerAnswer+5)},
+			not: []string{"- Card 001 ", "Ask again"}},
+		{name: "past the end", from: 999, has: []string{fmt.Sprintf("This deck has %d cards, so there is none from 999 on.", cardsPerAnswer+5)}},
+		{name: "not a count", from: -3, err: "`from` is the number of the first card to list"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fields := map[string]any{"deck": "Omens"}
+			if tt.from != nil {
+				fields["from"] = tt.from
+			}
+			_, text, err := r.ai.Lookup().Answer(bg, camp, aiDirector, aiplug.Record{Fields: fields})
+			if tt.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.err) {
+					t.Fatalf("err = %v, want %q", err, tt.err)
+				}
+				return
+			}
+			r.fx.must(err)
+			for _, want := range tt.has {
+				if !strings.Contains(text, want) {
+					t.Errorf("the answer lacks %q:\n%s", want, text)
+				}
+			}
+			for _, no := range tt.not {
+				if strings.Contains(text, no) {
+					t.Errorf("the answer holds %q", no)
+				}
+			}
+			// Where the copies are is said in full whichever part is asked for.
+			if !strings.Contains(text, fmt.Sprintf("In the pile (%d)", cardsPerAnswer+5)) {
+				t.Errorf("the copies line is missing:\n%s", text)
+			}
+		})
+	}
+}
+
+// With card decks switched off, no key reads anything: the refusal comes
+// before any deck is read.
+func TestAILookupIsRefusedForEveryKeyWhenTheAddOnIsOff(t *testing.T) {
+	r := newAIRig(t)
+	deck := r.fx.deck("Omens", KindEvent, nil)
+	r.fx.card(deck, CreateCardInput{Name: "Doom"})
+	r.on = false
+	scribe := aiplug.Actor{UserID: "u-scribe", Role: 2, ReadsOwnNotes: true}
+	for name, a := range map[string]aiplug.Actor{"the Director": aiDirector, "a player's own key": aiPlayer, "a scribe's own key": scribe, "what players see": aiSafe} {
+		_, text, err := r.ai.Lookup().Answer(bg, camp, a, aiplug.Record{Fields: map[string]any{}})
+		if err == nil || !strings.Contains(err.Error(), "switched off") || text != "" {
+			t.Errorf("%s: text %q, err %v", name, text, err)
+		}
+	}
+}
+
+// A scribe's own key reads as any member's: their own hand, and nothing of a
+// deck only Directors see.
+func TestAILookupAScribesKeyReadsOnlyTheirOwnHand(t *testing.T) {
+	r := newAIRig(t)
+	deck := r.fx.deck("Omens", KindEvent, nil)
+	r.fx.card(deck, CreateCardInput{Name: "Doom", Words: "DOOMWORDS"})
+	scribe := aiplug.Actor{UserID: "u-scribe", Role: 2, ReadsOwnNotes: true}
+	for _, fields := range []map[string]any{{}, {"deck": "Omens"}, {"deck": "Omens", "from": 1}} {
+		_, text, err := r.ai.Lookup().Answer(bg, camp, scribe, aiplug.Record{Fields: fields})
+		r.fx.must(err)
+		if strings.Contains(text, "Doom") || strings.Contains(text, "DOOMWORDS") || strings.Contains(text, "pile") {
+			t.Errorf("a scribe's key was told of a Director's deck (%v):\n%s", fields, text)
+		}
 	}
 }

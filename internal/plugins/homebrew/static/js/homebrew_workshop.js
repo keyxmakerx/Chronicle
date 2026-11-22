@@ -197,6 +197,11 @@
 
   var LIMIT = 50;
 
+  // waitsForYou: whether a rule has an action marked as the Director's call.
+  function waitsForYou(cat, rule) {
+    return (rule.then || []).some(function (d) { var a = findDef(cat, 'actions', d.action); return !!(a && a.waits); });
+  }
+
   // run starts a rule. A rule timed for later waits; one that runs now does
   // each Then in order. Returns the cards it lit, in order.
   function run(doc, cat, st, i, now, ctx) {
@@ -205,9 +210,12 @@
     var ev = findDef(cat, 'events', rule.when.event), p = rule.when.part ? doc.parts.filter(function (x) { return x.key === rule.when.part; })[0] : null;
     var what = (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '');
     ctx.lit.push('r' + i);
-    if (rule.timing !== 'now' && !now) {
-      st.waiting.push({ rule: i, ref: rule, what: what, timing: rule.timing });
-      st.log.push(what + ', waits' + (rule.timing === 'held' ? ' for you to run it' : ' for the encounter to end'));
+    // A rule that ends in an action that is the Director's call is held at
+    // the table however it is timed, so it waits here too.
+    var yours = rule.timing === 'now' && waitsForYou(cat, rule);
+    if ((rule.timing !== 'now' || yours) && !now) {
+      st.waiting.push({ rule: i, ref: rule, what: what, timing: yours ? 'held' : rule.timing });
+      st.log.push(what + ', waits' + (rule.timing === 'encounter_end' ? ' for the encounter to end' : ' for you to run it'));
       return;
     }
     rule.then.forEach(function (d, j) {
@@ -1119,7 +1127,8 @@
     append(box, [
       seg('Runs', TIMING, rule.timing, function (v) { rule.timing = v; changed(S); drawInspector(S); }),
       h('p', 'hbw-muted', rule.timing === 'held' ? 'It waits in the Homebrew drawer until you run it.'
-        : rule.timing === 'encounter_end' ? 'It waits until the encounter it happened in is over.' : 'It happens as soon as the When does.'),
+        : rule.timing === 'encounter_end' ? 'It waits until the encounter it happened in is over.'
+          : waitsForYou(S.catalog, rule) ? 'It waits in the Homebrew drawer until you run it, because one of its steps is your call.' : 'It happens as soon as the When does.'),
       rule.then.length ? null : h('p', 'hbw-warn', 'This rule does nothing yet. Add a Then from the left.'),
       append(h('div', 'hbw-row'), [quiet('Remove this rule', function () {
         keepPlaces(S.cur.doc, function () { S.cur.doc.rules.splice(i, 1); });
@@ -1138,6 +1147,7 @@
     partChoice(S, box, act, d.part, function (v) { d.part = v; changed(S); });
     argFields(S, box, act, d.args);
     if (act && act.clientRun) box.appendChild(h('p', 'hbw-muted', 'This runs in your browser when you press Run in the Homebrew drawer.'));
+    if (act && act.waits) box.appendChild(h('p', 'hbw-muted', 'This is your call: a rule that ends in it waits in the Homebrew drawer until you press Run.'));
     append(box, [
       h('p', 'hbw-muted', 'Part of the rule that starts on: ' + ((def(S, 'events', rule.when.event) || {}).label || rule.when.event) + '.'),
       append(h('div', 'hbw-row'), [quiet('Remove this step', function () {

@@ -489,6 +489,87 @@ func TestWaitsActionIsHeldThenRun(t *testing.T) {
 	}
 }
 
+// An event a player can set off at will holds a rule once: the same rule for
+// the same page and payload is not stacked while it waits, a different page or
+// payload still is, and it can be held again once the Director has answered.
+func TestOnceHoldsARuleOnceWhileItWaits(t *testing.T) {
+	ctx := context.Background()
+	rg := newRunRig(t)
+	rg.save(t, "Big", nil, Rule{When: When{Event: "quiet"}, Timing: TimingNow, Then: []Do{{Action: "big"}}})
+	fire := func(scope, payload string, once bool) {
+		t.Helper()
+		if err := rg.svc.Fire(ctx, camp, dm, Fired{Event: "quiet", Scope: scope, Payload: raw(payload), Once: once}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held := func() int {
+		t.Helper()
+		rs, err := rg.runs.ListRuns(ctx, camp, true, 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(rs)
+	}
+	tests := []struct {
+		name    string
+		scope   string
+		payload string
+		once    bool
+		want    int
+	}{
+		{"the first is held", "page-1", `{"card":"Ash"}`, true, 1},
+		{"the same again is not stacked", "page-1", `{"card":"Ash"}`, true, 1},
+		{"spaced differently is still the same", "page-1", `{ "card" : "Ash" }`, true, 1},
+		{"another page is its own", "page-2", `{"card":"Ash"}`, true, 2},
+		{"another payload is its own", "page-1", `{"card":"Ember"}`, true, 3},
+		{"a firing that does not ask for it stacks as before", "page-1", `{"card":"Ash"}`, false, 4},
+	}
+	for _, tt := range tests {
+		fire(tt.scope, tt.payload, tt.once)
+		if got := held(); got != tt.want {
+			t.Fatalf("%s: %d held, want %d", tt.name, got, tt.want)
+		}
+	}
+	d, err := rg.svc.Drawer(ctx, camp, dm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range d.Waiting {
+		if _, err := rg.svc.RunHeld(ctx, camp, w.ID, dm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fire("page-1", `{"card":"Ash"}`, true)
+	if got := held(); got != 1 {
+		t.Errorf("after the Director answered, the rule is held again: %d held, want 1", got)
+	}
+}
+
+// Held runs stay until a Director answers them, so a campaign holds only so
+// many: past that a rule is not held, and rules that run at once still run.
+func TestHeldRunsAreBounded(t *testing.T) {
+	ctx := context.Background()
+	rg := newRunRig(t)
+	rg.save(t, "Big", []Part{counter("a")},
+		Rule{When: When{Event: "quiet"}, Timing: TimingNow, Then: []Do{{Action: "big"}}},
+		Rule{When: When{Event: "quiet"}, Timing: TimingNow, Then: []Do{{Action: "add", Part: "a"}}})
+	for i := 0; i < maxHeldRuns+5; i++ {
+		if err := rg.svc.Fire(ctx, camp, dm, Fired{Event: "quiet", Payload: raw(fmt.Sprintf(`{"n":%d}`, i))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rs, err := rg.runs.ListRuns(ctx, camp, true, maxHeldRuns*2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rs) != maxHeldRuns {
+		t.Errorf("%d runs wait, want the bound of %d", len(rs), maxHeldRuns)
+	}
+	if rg.values["a"] != maxHeldRuns+5 {
+		t.Errorf("the rule that runs at once ran %d times, want %d", rg.values["a"], maxHeldRuns+5)
+	}
+}
+
 // Waits is not a way to give a browser action a server run, and a held
 // Waits action fails its run with the owner's plain sentence.
 func TestWaitsRegistration(t *testing.T) {

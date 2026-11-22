@@ -25,13 +25,14 @@ const tableViewerID = "ai-players-view"
 
 func (*decksLookup) LookupInfo() aiplug.LookupInfo {
 	return aiplug.LookupInfo{
-		What: "decks", Aliases: []string{"deck", "cards", "card-decks"}, Keys: "`deck` (a deck's name, optional)",
+		What: "decks", Aliases: []string{"deck", "cards", "card-decks"}, Keys: "`deck` (a deck's name, optional), `from` (with `deck`, the first card to list; a long deck is read in parts)",
 		Brief: "the campaign's card decks. The owner's full read lists every deck, and with `deck` its rules, cards, where each copy is and any open moment; a player's own key and the owner's what-players-see key get only what that player's own screens show",
 		Tool: aiplug.Tool{
 			Name: "card_decks", Title: "Card decks", Did: "Looked at the card decks",
-			Desc:       "The campaign's card decks. Without `deck`, every deck with who it is for and how many cards are in the pile, in hands, on the table, used and out of the game. With `deck` (a deck's name), its rules in words, its cards (words, kind, copies, the Director's note and each test for when it comes up, with whether it fits now), where every copy is, which card comes up next and is kept for last, and any moment waiting on the Director. On a key set to what players see, only the cards lying face up on the table. Decks and cards are made and changed with deck and card blocks in ask_for_changes.",
+			Desc:       "The campaign's card decks. Without `deck`, every deck with who it is for and how many cards are in the pile, in hands, on the table, used and out of the game. With `deck` (a deck's name), its rules in words, its cards (words, kind, copies, the Director's note and each test for when it comes up, with whether it fits now), where every copy is, which card comes up next and is kept for last, and any moment waiting on the Director. A deck with many cards is read in parts: the answer says which cards it holds and what `from` to ask for next. On a key set to what players see, only the cards lying face up on the table. Decks and cards are made and changed with deck and card blocks in ask_for_changes.",
 			PlayerDesc: "The cards in your own hand: your heroes' cards and the party's hand. A face-up card shows its name, kind, words and the line printed on it; a face-down card is only \"a face-down card from\" its deck. Nothing about other players' hands, the piles or the table. `deck` narrows it to one deck.",
-			Args:       []aiplug.Arg{{Key: "deck", Desc: "A deck's name; leave out for every deck"}},
+			Args: []aiplug.Arg{{Key: "deck", Desc: "A deck's name; leave out for every deck"},
+				{Key: "from", Desc: "With `deck`, the number of the first card to list; leave out to start at the first"}},
 		},
 	}
 }
@@ -51,7 +52,11 @@ func (l *decksLookup) Answer(ctx context.Context, campaignID string, a aiplug.Ac
 	case a.ReadsOwnNotes:
 		return l.ownCards(ctx, campaignID, a, want)
 	case a.CanAuthorDmOnly():
-		return l.directorAnswer(ctx, campaignID, a, want)
+		from, _, err := r.Int("from")
+		if err != nil || from < 0 {
+			return chip, "", aiplug.BadRequestf("`from` is the number of the first card to list")
+		}
+		return l.directorAnswer(ctx, campaignID, a, want, from)
 	}
 	return l.tableAnswer(ctx, campaignID, want)
 }
@@ -138,7 +143,7 @@ func (n deckNames) forWhom(d DirectorDeck) string {
 	return w
 }
 
-func (l *decksLookup) directorAnswer(ctx context.Context, campaignID string, a aiplug.Actor, want string) (string, string, error) {
+func (l *decksLookup) directorAnswer(ctx context.Context, campaignID string, a aiplug.Actor, want string, from int) (string, string, error) {
 	chip := "Card decks"
 	v := directorViewer(a)
 	view, err := l.svc.List(ctx, campaignID, v)
@@ -182,7 +187,7 @@ func (l *decksLookup) directorAnswer(ctx context.Context, campaignID string, a a
 	if !ok {
 		return chip, "", aiplug.BadRequestf("the deck could not be read")
 	}
-	return directorDeckText(d, names, moments, momErr)
+	return directorDeckText(d, names, moments, momErr, from)
 }
 
 func (l *decksLookup) directorList(list DirectorList, names deckNames, moments []MomentView, momErr error) (string, string, error) {
@@ -235,7 +240,12 @@ func (n deckNames) place(c DirectorCopy) string {
 	return "out of the game"
 }
 
-func directorDeckText(d DirectorDeck, names deckNames, moments []MomentView, momErr error) (string, string, error) {
+// cardsPerAnswer is how many cards one answer lists. A card is up to six
+// lines (itself, four tests, whether it fits), so this keeps the list inside
+// what one answer may hold, and the rest is asked for with `from`.
+const cardsPerAnswer = 40
+
+func directorDeckText(d DirectorDeck, names deckNames, moments []MomentView, momErr error, from int) (string, string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## %s (%s)\n\n", aiplug.OneLine(d.Name, 120), names.forWhom(d))
 	fmt.Fprintf(&b, "Rules: %s.\n\nLook: %s.\n", rulesIn(d.Settings), lookIn(d.Look))
@@ -274,14 +284,26 @@ func directorDeckText(d DirectorDeck, names deckNames, moments []MomentView, mom
 	fmt.Fprintf(&b, "Comes up next: %s. Kept for last: %s.\n", next, last)
 
 	fmt.Fprintf(&b, "\n### Cards (%d, %d copies)\n\n", len(d.Cards), copiesOf(d.Cards))
+	first := max(from, 1)
+	end := min(first-1+cardsPerAnswer, len(d.Cards))
 	var lines []string
-	for _, c := range d.Cards {
-		lines = append(lines, cardLines(d, c)...)
+	for i := first - 1; i < end; i++ {
+		lines = append(lines, cardLines(d, d.Cards[i])...)
 	}
-	if len(lines) == 0 {
+	switch {
+	case len(d.Cards) == 0:
 		b.WriteString("None yet.\n")
+	case first > len(d.Cards):
+		fmt.Fprintf(&b, "This deck has %d %s, so there is none from %d on.\n", len(d.Cards), plural(len(d.Cards), "card", "cards"), first)
 	}
 	aiplug.WriteLines(&b, lines)
+	if len(lines) > 0 && (first > 1 || end < len(d.Cards)) {
+		fmt.Fprintf(&b, "\nCards %d to %d of %d.", first, end, len(d.Cards))
+		if end < len(d.Cards) {
+			fmt.Fprintf(&b, " Ask again with `from: %d` for the next.", end+1)
+		}
+		b.WriteString("\n")
+	}
 
 	b.WriteString("\n### Where the copies are\n\n")
 	b.WriteString(copiesText(d, byID, names))
@@ -457,7 +479,8 @@ func (l *decksLookup) ownCards(ctx context.Context, campaignID string, a aiplug.
 	if err != nil {
 		return chip, "", err
 	}
-	keep := func(h HandCard) bool { return want == "" || aiplug.SameName(h.DeckName, want) }
+	fromDeck := func(name string) bool { return want == "" || aiplug.SameName(name, want) }
+	keep := func(h HandCard) bool { return fromDeck(h.DeckName) }
 	var b strings.Builder
 	title := "Your cards"
 	if want != "" {
@@ -492,7 +515,7 @@ func (l *decksLookup) ownCards(ctx context.Context, campaignID string, a aiplug.
 		section("The party's hand ("+aiplug.OneLine(p.DeckName, 80)+"):", p.Hand)
 	}
 	for _, d := range hand.Draws {
-		if !d.Invited || !(want == "" || aiplug.SameName(d.DeckName, want)) {
+		if !d.Invited || !fromDeck(d.DeckName) {
 			continue
 		}
 		into := ""

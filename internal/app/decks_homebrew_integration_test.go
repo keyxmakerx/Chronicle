@@ -332,12 +332,21 @@ func TestEveryKindOfDrawFiresOncePerCard(t *testing.T) {
 	say := w.card(deck, "Said so", 2, decks.CreateCardInput{When: decks.WhenList{{Test: decks.TestSay}}})
 	w.recipe(rule(cardDrawnEvent, `{"deck":"omens"}`, homebrew.TimingNow, doAct(deckShuffleBack, `{"deck":"Omens"}`)))
 
-	waiting := 0
+	// Counted at the Workshop's door: a rule that waits is held once however
+	// often the same card arrives, so the drawer is not a count of events.
+	var fired []homebrew.Fired
+	w.story.bindHomebrew(countedFires{Service: w.homebrew, fired: &fired})
+	total := 0
 	step := func(what string, want int) {
 		t.Helper()
-		waiting += want
-		if got := len(w.drawer().Waiting); got != waiting {
-			t.Fatalf("%s: %d runs waiting, want %d", what, got, waiting)
+		total += want
+		if len(fired) != total {
+			t.Fatalf("%s: %d events fired, want %d", what, len(fired), total)
+		}
+		for _, f := range fired {
+			if f.Event != cardDrawnEvent || !f.Once {
+				t.Fatalf("%s: fired %+v, want a once-held %s", what, f, cardDrawnEvent)
+			}
 		}
 	}
 	drew, err := w.decks.Draw(storyCtx, w.camp, deck, w.dir, decks.DrawInput{Count: 3})
@@ -394,6 +403,54 @@ func TestEveryKindOfDrawFiresOncePerCard(t *testing.T) {
 		t.Fatal("drew from an empty deck")
 	}
 	step("a draw that failed", 0)
+}
+
+// countedFires records each firing on its way into the Workshop.
+type countedFires struct {
+	homebrew.Service
+	fired *[]homebrew.Fired
+}
+
+func (c countedFires) Fire(ctx context.Context, campaignID string, v homebrew.Viewer, f homebrew.Fired) error {
+	*c.fired = append(*c.fired, f)
+	return c.Service.Fire(ctx, campaignID, v, f)
+}
+
+// A player may draw and play the same card as often as the deck lets them. A
+// rule that waits for the Director is asked once for it, not once per play, so
+// a player cannot bury the Directors' drawer; another hero's play is its own.
+func TestAPlayerPlayingACardAgainAndAgainHoldsARuleOnce(t *testing.T) {
+	w := newStoryWorld(t)
+	deck := w.deck("Omens", decks.KindParty, "", &decks.SettingsInput{Arrives: ptrTo("up"), Fate: ptrTo("back")})
+	ash := w.card(deck, "Ash", 1, decks.CreateCardInput{})
+	w.recipe(rule(cardPlayedEvent, `{"card":"ash"}`, homebrew.TimingNow, doAct(deckShuffleBack, `{"deck":"Omens"}`)))
+	play := func(hero string, by decks.Viewer) {
+		t.Helper()
+		copyID := w.deal(deck, ash, hero)
+		_, err := w.decks.Act(storyCtx, w.camp, deck, copyID, "play", by, decks.ActInput{})
+		w.must(err)
+	}
+	for i := 0; i < 5; i++ {
+		play(w.tamHero, w.tam)
+	}
+	if got := len(w.drawer().Waiting); got != 1 {
+		t.Fatalf("five plays of one card by one hero: %d runs waiting, want 1", got)
+	}
+	play(w.orrinHero, w.ilse)
+	d := w.drawer()
+	if len(d.Waiting) != 2 {
+		t.Fatalf("another hero's play is its own: %d runs waiting, want 2", len(d.Waiting))
+	}
+	// Once the Director has answered, the next play asks again.
+	for _, r := range d.Waiting {
+		if _, err := w.homebrew.RunHeld(storyCtx, w.camp, r.ID, w.hbDirector); err != nil {
+			t.Fatal(err)
+		}
+	}
+	play(w.tamHero, w.tam)
+	if got := len(w.drawer().Waiting); got != 1 {
+		t.Errorf("after the Director ran it: %d runs waiting, want 1", got)
+	}
 }
 
 func TestDeckActionsWaitForADirectorThenRun(t *testing.T) {

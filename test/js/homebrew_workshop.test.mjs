@@ -266,6 +266,21 @@ test('a When from outside the recipe is a button, and actions it can\'t act out 
   assert.equal(st.log.at(-1), 'You would be asked to run: Rise as its variant, Mark');
 });
 
+test('a rule that ends in an action marked as your call waits, though it is timed for now', () => {
+  const { H } = load();
+  const doc = sample();
+  const cat = { ...CAT, actions: CAT.actions.concat([{ name: 'deck.shuffle-back', label: 'Shuffle the used pile back into a deck', waits: true }]) };
+  doc.rules[0].then.push({ action: 'deck.shuffle-back', part: '', args: { deck: 'Omens' } });
+  const st = H.simStart(doc, cat);
+  H.simSetTo(doc, cat, st, 'need', 4);
+  assert.equal(st.v.doom, 0, 'nothing ran: at the table the whole rule is held');
+  assert.deepEqual(plain(st.waiting.map((w) => [w.rule, w.timing])), [[0, 'held']]);
+  assert.equal(st.log.at(-1), 'A tracker reaches: Need, waits for you to run it');
+  H.simRunWaiting(doc, cat, st, 0);
+  assert.equal(st.v.doom, 1, 'running it does every step');
+  assert.equal(st.waiting.length, 0);
+});
+
 test('rules that set each other off stop instead of hanging the page', () => {
   const { H } = load();
   const doc = sample();

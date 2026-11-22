@@ -640,6 +640,9 @@ func (k *deckKind) workUpdate(e deckEdit, hit *DirectorDeck, r aiplug.Record) de
 		kind = *e.kind
 		in.Kind = patch.Of(kind)
 		parts = append(parts, "makes it "+say(deckKindWords, kind))
+		if kind != hit.Kind {
+			warns = append(warns, "Who a deck is for decides which players can see it and its used cards.")
+		}
 	}
 	holder := hit.HolderEntityID
 	if e.hero != nil {
@@ -661,6 +664,9 @@ func (k *deckKind) workUpdate(e deckEdit, hit *DirectorDeck, r aiplug.Record) de
 		}
 		in.Settings = patch.Of(*e.settings)
 		parts = append(parts, "rules: "+strings.Join(e.rules, ", "))
+		if e.settings.Knows != nil || e.settings.OthersSee != nil {
+			warns = append(warns, "This changes what players are told about the pile or about each other's cards.")
+		}
 	}
 	if li := e.styledLook(); li != nil {
 		if _, err := applyLook(hit.Look, li); err != nil {

@@ -367,7 +367,10 @@ type CatalogEntry struct {
 	Widget    string   `json:"widget,omitempty"`
 	PartKinds []string `json:"partKinds,omitempty"`
 	ClientRun bool     `json:"clientRun,omitempty"`
-	Fields    []Field  `json:"fields,omitempty"`
+	// Waits is an action's Waits, so the editor can say a rule that ends in it
+	// is held for the Director however it is timed.
+	Waits  bool    `json:"waits,omitempty"`
+	Fields []Field `json:"fields,omitempty"`
 	// Preview is a part kind's PreviewShape, or an event's or action's op.
 	Preview any `json:"preview,omitempty"`
 }
@@ -393,7 +396,7 @@ func (r *Registry) Catalog() Catalog {
 		c.Events = append(c.Events, ce)
 	}
 	for _, a := range r.actions {
-		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Fields: a.Fields}
+		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Fields: a.Fields}
 		if a.Preview != nil {
 			ce.Preview = a.Preview
 		}

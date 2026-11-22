@@ -264,11 +264,20 @@ func (k *cardKind) resolveTest(ctx context.Context, campaignID string, n int, m 
 		if err != nil {
 			return err
 		}
+		// A name no tracker has is left as written: it may be a tracker's id,
+		// and the one check refuses it if it is neither.
+		var hits []string
 		for _, tk := range o.Trackers {
 			if aiplug.SameName(tk.Name, name) {
-				m["kind"] = tk.ID
-				break
+				hits = append(hits, tk.ID)
 			}
+		}
+		switch len(hits) {
+		case 0:
+		case 1:
+			m["kind"] = hits[0]
+		default:
+			return aiplug.BadRequestf("test %d: more than one tracker is called %q", n, name)
 		}
 	}
 	return nil
