@@ -9,6 +9,12 @@
  * server. A refresh never replaces something a person is working on: it waits
  * while a page editor is open, a form has unsaved changes, focus is in a field
  * or a dialog is open, and tries again until the moment is quiet.
+ *
+ * Widgets on the fresh markup often draw themselves only after their own
+ * data arrives, so for a moment the page is shorter than it was. The old
+ * height is held by an empty block under the content while they draw, and the
+ * reader's scroll position is put back each frame until they scroll
+ * themselves, the page has grown back, or HOLD_MS has passed.
  */
 (function () {
   'use strict';
@@ -18,12 +24,20 @@
     return !(s.dirty || s.editing || s.fieldFocused || s.dialogOpen);
   }
 
-  var api = { isQuiet: isQuiet };
+  // The held height that keeps the page as tall as it was: what the content
+  // now lacks of the old height, never negative.
+  function holdFor(oldHeight, natural) {
+    return Math.max(0, Math.round(oldHeight - natural));
+  }
+
+  var api = { isQuiet: isQuiet, holdFor: holdFor };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
 
   var DEBOUNCE = 1200;  // a quick burst of saves is one refresh
   var RETRY = 4000;
+  var HOLD_MS = 4000;
+  var SETTLED_FRAMES = 20;
 
   function main() { return document.getElementById('main-content'); }
 
@@ -34,6 +48,80 @@
       if (all[i].getClientRects().length > 0) return true;
     }
     return false;
+  }
+
+  // Keeps m at least `height` tall and its scroll at `top` while the swapped-in
+  // widgets draw: follow() starts after the swap, end() lets go. The height is
+  // held by an empty block after the new content, which works whatever the
+  // scroller's box sizing and padding.
+  function holdPlace(m, height, top) {
+    var spacer = null, moved = false, done = false, still = 0, landed = false;
+    var start = 0;
+    // The browser's own scroll anchoring would move the page when a widget
+    // grows above the reader; the position is kept here instead.
+    var anchor = m.style.overflowAnchor;
+    m.style.overflowAnchor = 'none';
+    function held() { return spacer ? spacer.offsetHeight : 0; }
+    function size() {
+      if (!spacer) return 0;
+      if (spacer.parentNode !== m) m.appendChild(spacer);
+      // A second pass when the content was shorter than the scroller itself,
+      // since scrollHeight never reads less than the visible height.
+      var h = 0;
+      for (var i = 0; i < 2; i++) {
+        h = holdFor(height, m.scrollHeight - held());
+        spacer.style.height = h + 'px';
+        if (m.scrollHeight >= height) break;
+      }
+      return h;
+    }
+    function touched() { moved = true; }
+    var evs = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+    evs.forEach(function (t) { m.addEventListener(t, touched, { passive: true }); });
+    // In before the new markup is painted, so the reader never sees the page
+    // shrink under them.
+    function swapped(e) {
+      if (done || !e.detail || e.detail.target !== m) return;
+      spacer = document.createElement('div');
+      spacer.setAttribute('aria-hidden', 'true');
+      spacer.setAttribute('data-page-live-hold', '');
+      spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;pointer-events:none';
+      m.appendChild(spacer);
+      size();
+      if (!moved) m.scrollTop = top;
+    }
+    // htmx scrolls the target to the top when the swap settles; put it back
+    // before anything is painted.
+    function settled(e) {
+      if (done || !e.detail || e.detail.target !== m) return;
+      landed = true;
+      size();
+      if (!moved) m.scrollTop = top;
+    }
+    document.addEventListener('htmx:afterSwap', swapped);
+    document.addEventListener('htmx:afterSettle', settled);
+    function end() {
+      if (done) return;
+      done = true;
+      document.removeEventListener('htmx:afterSwap', swapped);
+      document.removeEventListener('htmx:afterSettle', settled);
+      evs.forEach(function (t) { m.removeEventListener(t, touched); });
+      if (spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
+      spacer = null;
+      m.style.overflowAnchor = anchor;
+    }
+    function frame() {
+      if (done) return;
+      var h = size();
+      var off = m.scrollTop !== top;
+      if (!moved && off) m.scrollTop = top;
+      // Watched for a moment after the page has grown back too, since the
+      // settle comes a frame or two after the swap.
+      still = landed && !h && !off ? still + 1 : 0;
+      if (moved || still >= SETTLED_FRAMES || Date.now() - start > HOLD_MS) { end(); return; }
+      requestAnimationFrame(frame);
+    }
+    return { follow: function () { start = Date.now(); requestAnimationFrame(frame); }, end: end };
   }
 
   function state() {
@@ -71,6 +159,7 @@
         if (!m || !window.htmx || typeof window.htmx.ajax !== 'function') return;
         busy = true;
         var top = m.scrollTop;
+        var place = holdPlace(m, m.scrollHeight, top);
         // The swap replaces this widget, which ends this connection and
         // starts a new one on the fresh markup.
         window.htmx.ajax('GET', url, {
@@ -79,9 +168,9 @@
           swap: 'innerHTML',
           headers: { 'HX-Boosted': 'true' }
         }).then(function () {
-          var m2 = main();
-          if (m2 && location.pathname + location.search === url) m2.scrollTop = top;
-        }, function () { /* the next change tries again */ }).then(function () { busy = false; });
+          if (main() === m && location.pathname + location.search === url) place.follow();
+          else place.end();
+        }, function () { place.end(); }).then(function () { busy = false; });
       }
 
       function connect() {
