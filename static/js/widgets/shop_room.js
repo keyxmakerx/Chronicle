@@ -1,12 +1,14 @@
 /**
  * shop_room.js -- Chronicle Shop Room Widget
  *
- * Draws a shop as an isometric room: furniture, the shop's goods on shelves
- * and tables, the keeper's portrait, light and shadow. The wares list sits
- * under the room. Owners get Arrange: drag furniture and the portrait, change
- * an item's icon and colour, and run the room generator from a panel that
- * slides out inside the room (keep pin and reroll dice per part, like the
- * other generators). Arrange changes wait for "Save room"; leaving with
+ * Opens a shop at the counter (shop_room_counter.js): the keeper, the goods
+ * on the shelves and in the case, buying and the rolls. Owners get Arrange,
+ * a panel that slides out inside the room, where the Counter room section
+ * dresses it. The isometric room engine below (createRoom) is what the
+ * paper look stands up as cut card; it is no longer shown as a look of its
+ * own, and paper is under construction. TODO(#2615): remove the engine and
+ * the lit drawing once nothing reads them. Arrange changes wait for
+ * "Save room"; leaving with
  * unsaved changes shakes the panel and says so instead of losing them. The
  * layout is saved per shop; the goods themselves are the shop's "sells"
  * relations, so stock and prices always come from the inventory, never from
@@ -1107,7 +1109,7 @@
     var L = {
       version: 1, roomType: S.roomType, setting: S.setting, size: S.size, furniture: S.full, decorations: S.deco, palette: S.pal,
       seeds: { room: S.seeds.room, goods: S.seeds.goods, deco: S.seeds.deco },
-      look: S.look === 'paper' || S.look === 'counter' ? S.look : 'lit',
+      look: S.look === 'paper' ? 'paper' : 'counter',
       mood: S.mood || '', effects: S.efx ? JSON.parse(JSON.stringify(S.efx)) : null,
       pieces: S.pieces.map(function (p) {
         var o = { id: p.id, kind: p.kind, wall: p.wall || '', x: p.x || 0, y: p.y || 0, off: p.off || 0, len: p.len || 0, w: p.w || 0, d: p.d || 0, pinned: !!p.pinned };
@@ -1145,7 +1147,9 @@
     if (!L) return false;
     S.roomType = L.roomType || S.roomType; S.setting = L.setting || 'room'; S.size = L.size || 'm'; S.full = L.furniture || 'normal';
     S.deco = L.decorations || 'some'; S.pal = L.palette || S.pal;
-    S.look = L.look === 'paper' || L.look === 'counter' ? L.look : 'lit';
+    // The lit room is retired: a room saved as lit, or before there was a
+    // choice, opens at the counter and saves as counter next time.
+    S.look = L.look === 'paper' ? 'paper' : 'counter';
     S.mood = MOODS[L.mood] ? L.mood : '';
     S.rolls = L.rolls ? normRolls(L.rolls) : null;
     S.efx = null;
@@ -1603,7 +1607,7 @@
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
       var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null, shopBase = (ds.roomEndpoint || '').replace(/\/room$/, ''), rollsState = null;
-      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
+      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'counter', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
       var campaignId = (campaignUrl.match(/\/campaigns\/([^/]+)/) || [])[1] || '', words = {};
@@ -2358,15 +2362,15 @@
         if (canArrange) loadOwnerRolls();
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length, mood = MOODS[S.mood] ? S.mood : 'cozy', M = MOODS[mood], e = efxNow();
         var typeName = (ROOM_TYPES.filter(function (t) { return t[0] === S.roomType; })[0] || [0, ''])[1];
-        var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [paperReady() ? ['paper', 'Paper'] : ['paper', 'Paper', 'Under construction']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
+        var looks = (window.ShopRoomCounter ? [['counter', 'Counter']] : []).concat(window.ShopRoomPaper ? [paperReady() ? ['paper', 'Paper'] : ['paper', 'Paper', 'Under construction']] : []);
         var room1 = (looks.length > 1 ? '<div class="shr-field"><span>Look</span>' + seg('look', looks) + '</div>' : '') +
-          (window.ShopRoomPaper && !paperReady() ? '<p class="shr-note">Paper is under construction while it is redesigned, so it can’t be picked for now.' + (S.look === 'paper' && counterOn() ? ' This shop was set to Paper, so it opens at the counter until Paper is back. Pick another look to change that for good.' : '') + '</p>' : '') +
-          (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the Counter room section builds the counter room, the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
+          (window.ShopRoomPaper && !paperReady() ? '<p class="shr-note">Paper is under construction while it is redesigned, so it can’t be picked for now.' + (S.look === 'paper' && counterOn() ? ' This shop was set to Paper, so it opens at the counter until Paper is back. Pick Counter to change that for good.' : '') + '</p>' : '') +
+          (counterOn() ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. The Counter room section builds the room, and the shop type picks the shop floor’s working piece.</p>' : '') +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
-          '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
+          (paperOn() ? '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<div class="shr-field"><span>Room size</span>' + seg('size', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) + '</div>' +
           '<div class="shr-field"><span>Furniture</span>' + seg('full', [['sparse', 'Sparse'], ['normal', 'Normal'], ['packed', 'Packed']]) + '</div>' +
-          '<div class="shr-field"><span>Decorations</span>' + seg('deco', [['none', 'None'], ['some', 'Some'], ['lots', 'Lots']]) + '</div>';
+          '<div class="shr-field"><span>Decorations</span>' + seg('deco', [['none', 'None'], ['some', 'Some'], ['lots', 'Lots']]) + '</div>' : '');
         var mood1 = '<div class="shr-moods">' + MOOD_ORDER.map(function (m) { var x = MOODS[m]; return '<button type="button" class="shr-mood" data-mood="' + m + '" aria-pressed="' + (m === mood) + '"><span class="sw">' + x.sw.map(function (c) { return '<i style="background:' + c + '"></i>'; }).join('') + '</span><b title="' + esc(x.name) + '">' + esc(x.short || x.name) + '</b></button>'; }).join('') + '</div>' +
           (M.pal ? '<p class="shr-note">The mood sets the colours, walls, floor and light, and brings its own furniture. Anything you moved by hand stays put.</p>'
             : '<div class="shr-field"><span>Colours</span><span class="shr-chips">' + room.PALS.map(function (p) { return '<button type="button" class="shr-chip" data-k="pal" data-v="' + p[0] + '" aria-pressed="' + (S.pal === p[0]) + '"><span class="shr-sw" style="background:' + p[2] + '"></span>' + p[1] + '</button>'; }).join('') + '</span></div>');
@@ -2387,12 +2391,14 @@
           genRow('deco', 'fa-wand-magic-sparkles', 'Decorations', { none: 'None', some: 'Some', lots: 'Lots' }[S.deco] || '');
         var fineSum = S.efx ? 'Changed by you' : 'As the mood sets it';
         panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
-          sec('room', 'fa-house', 'Room', typeName + ' · ' + ({ paper: paperOn() ? 'Paper' : 'Paper, under construction', counter: 'Counter' }[S.look] || 'Lit room'), room1) +
+          sec('room', 'fa-house', 'Room', typeName + ' · ' + (S.look === 'paper' ? (paperOn() ? 'Paper' : 'Paper, under construction') : 'Counter'), room1) +
           (cbOn() ? sec('cr', 'fa-store', 'Counter room', cbApi.theme().name, '<div data-cb></div>') : '') +
-          sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
-          sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
-          sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
-          sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
+          // Moods, furniture, atmosphere and the generator shape the room the
+          // paper look stands up; the counter is dressed in Counter room.
+          (paperOn() ? sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
+            sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
+            sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
+            sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) : '') +
           sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
           sec('rolls', 'fa-dice-d20', 'Rolls at the counter', rollsSum(), rollsBody()) +
           '<span class="shr-status" aria-live="polite">' + (paperOn() ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +

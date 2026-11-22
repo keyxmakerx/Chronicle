@@ -157,15 +157,16 @@ var (
 	roomFurnitures  = wordsOf("sparse", "normal", "packed")
 	roomDecorations = wordsOf("none", "some", "lots")
 	roomPalettes    = wordsOf("oak", "ember", "moss", "gilt", "slate", "dusk")
-	roomLooks       = with(wordsOf("lit", "paper", "counter"), "lit room", "lit", "pop-up book", "paper", "at the counter", "counter")
-	roomMoods       = with(wordsOf("cozy", "eldritch", "candy", "haunted", "festive", "underwater", "fey", "desert", "dwarven"), "none", "")
-	roomManners     = with(wordsOf("warm", "gruff", "shrewd", "nervous", "grand"), "none", "")
-	roomMoments     = []string{"hello", "look", "buy", "poor", "bye", "refuse"}
+	// The lit room is retired, so "lit" is not a look a block can ask for.
+	roomLooks   = with(wordsOf("paper", "counter"), "pop-up book", "paper", "at the counter", "counter")
+	roomMoods   = with(wordsOf("cozy", "eldritch", "candy", "haunted", "festive", "underwater", "fey", "desert", "dwarven"), "none", "")
+	roomManners = with(wordsOf("warm", "gruff", "shrewd", "nervous", "grand"), "none", "")
+	roomMoments = []string{"hello", "look", "buy", "poor", "bye", "refuse"}
 )
 
 // emptyRoom is the room a shop has before anyone arranges it, as the shop
 // room widget starts it; its furniture is laid out when it first opens.
-const emptyRoom = `{"version":1,"roomType":"general","setting":"room","size":"m","furniture":"normal","decorations":"some","palette":"oak","look":"lit","mood":"","effects":null,"seeds":{"room":1,"goods":1,"deco":1},"pieces":[],"decor":[],"items":{},"portrait":null,"lines":[]}`
+const emptyRoom = `{"version":1,"roomType":"general","setting":"room","size":"m","furniture":"normal","decorations":"some","palette":"oak","look":"counter","mood":"","effects":null,"seeds":{"room":1,"goods":1,"deco":1},"pieces":[],"decor":[],"items":{},"portrait":null,"lines":[]}`
 
 // ShopRoomKind dresses a shop's room: what kind of shop it is, its look and
 // mood, and what the keeper says. Pieces are never moved: a change to what
@@ -182,15 +183,14 @@ func (ShopRoomKind) Name() string  { return "shop-room" }
 func (ShopRoomKind) Label() string { return "Shop room" }
 func (ShopRoomKind) Doc() string {
 	return "The room players step into from a shop page's Shop block, matched by `shop` (the shop's page name). Keys, each optional: " +
-		"`type` (forge, apothecary, jeweler, market, library, general), `setting` (room, tower, tree, burrow, cave), `size` (small, medium, large), " +
-		"`furniture` (sparse, normal, packed), `decorations` (none, some, lots), `palette` (oak, ember, moss, gilt, slate, dusk), " +
-		"`look` (lit, the lit room; counter, standing at the counter; paper, a pop-up book that is under construction, so a paper shop opens at the counter until it is back), `mood` (cozy, eldritch, candy, haunted, festive, underwater, fey, desert, dwarven, or none), " +
+		"`type` (forge, apothecary, jeweler, market, library, general), " +
+		"`look` (counter, standing at the counter, which every shop opens at; paper, a pop-up book that is under construction, so a paper shop opens at the counter until it is back), " +
 		"`manner` (the keeper's manner, which gives them lines for every moment: warm, gruff, shrewd, nervous, grand, or none), " +
 		"`says` (the keeper's own lines for a moment of the visit, up to 5 each, which win over the manner's: `hello` on arriving, `look` when something goes on the pile, `buy` after a purchase, `poor` when the pile outgrows the purse, `bye` on leaving, `refuse` for a shop that won't serve the party; `none` gives a moment back to the manner) " +
 		"`chatter` (up to 10 lines the keeper says when pressed) and `counter` (the theme of the counter look, below). " +
-		"A key you leave out keeps what the room has; `says` changes only the moments it names. Changing `type`, `setting`, `size`, `furniture` or `mood` lays the furniture out again the next time the room opens, keeping every piece the owner moved by hand; the goods, prices and stock are `shop-stock`. A room can't be removed by a block.\n\n" +
+		"A key you leave out keeps what the room has; `says` changes only the moments it names. The goods, prices and stock are `shop-stock`. A room can't be removed by a block.\n\n" +
 		counterDoc + "\n\n" +
-		"```\n---\nkind: shop-room\nshop: The Rusty Anchor\ntype: general\nmood: cozy\nmanner: gruff\nsays:\n  hello: [\"Wipe your boots.\", \"We're open. Barely.\"]\n  poor: [\"Coin first, then rope.\"]\nchatter: [\"Storm's coming. Always is.\"]\ncounter:\n  start: smithy\n  display: pegboard\n  accent: \"#ff9a50\"\n  add: [sparks]\n---\n```"
+		"```\n---\nkind: shop-room\nshop: The Rusty Anchor\ntype: general\nmanner: gruff\nsays:\n  hello: [\"Wipe your boots.\", \"We're open. Barely.\"]\n  poor: [\"Coin first, then rope.\"]\nchatter: [\"Storm's coming. Always is.\"]\ncounter:\n  start: smithy\n  display: pegboard\n  accent: \"#ff9a50\"\n  add: [sparks]\n---\n```"
 }
 
 // Title names the review row: "Room of The Rusty Anchor".
@@ -232,6 +232,9 @@ func (k ShopRoomKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 	} {
 		if !r.Has(f.key) {
 			continue
+		}
+		if f.key == "look" && strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Str("look"))), "lit") {
+			return Plan{Error: "look: the lit room is retired; every shop opens at the counter, dressed with `counter`"}, "", nil
 		}
 		v, err := pickWord(f.key, r.Str(f.key), f.words)
 		if err != nil {
@@ -358,18 +361,24 @@ func (ShopRoomKind) Export(context.Context, string, Actor) (string, error) { ret
 // it back changed.
 func roomBlock(shop string, raw json.RawMessage) string {
 	var room struct {
-		RoomType, Setting, Size, Furniture, Decorations, Palette, Look, Mood, Manner string
-		Moments                                                                      map[string][]string
-		Lines                                                                        []string
-		Counter                                                                      json.RawMessage
+		RoomType, Look, Manner string
+		Moments                map[string][]string
+		Lines                  []string
+		Counter                json.RawMessage
 	}
 	if json.Unmarshal(raw, &room) != nil {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("---\nkind: shop-room\naction: update\nshop: " + quote(shop) + "\n")
-	for _, kv := range [][2]string{{"type", room.RoomType}, {"setting", room.Setting}, {"size", map[string]string{"s": "small", "m": "medium", "l": "large"}[room.Size]},
-		{"furniture", room.Furniture}, {"decorations", room.Decorations}, {"palette", room.Palette}, {"look", room.Look}, {"mood", room.Mood}, {"manner", room.Manner}} {
+	// Only what still shows: the lit room's setting, size, furniture,
+	// decorations, palette and mood shape nothing a player sees, and a lit or
+	// empty look opens at the counter.
+	look := room.Look
+	if look != "paper" && look != "counter" {
+		look = ""
+	}
+	for _, kv := range [][2]string{{"type", room.RoomType}, {"look", look}, {"manner", room.Manner}} {
 		if kv[1] != "" {
 			b.WriteString(kv[0] + ": " + kv[1] + "\n")
 		}

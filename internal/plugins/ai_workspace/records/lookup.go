@@ -1049,7 +1049,7 @@ func (run *lookupRun) shopLooks(b *strings.Builder, e *entities.Entity) {
 	switch {
 	case err != nil:
 	case room == nil:
-		b.WriteString("\n### The shop's room\n\nNobody has arranged it yet, so it opens as a general shop. A `shop-room` block sets what kind of shop it is, its mood and what the keeper says.\n")
+		b.WriteString("\n### The shop's room\n\nNobody has arranged it yet, so it opens at the counter as a general shop. A `shop-room` block sets what kind of shop it is, its counter room and what the keeper says.\n")
 	default:
 		if blk := roomBlock(e.Name, room); blk != "" {
 			b.WriteString("\n### The shop's room\n\n```\n" + blk + "```\n")

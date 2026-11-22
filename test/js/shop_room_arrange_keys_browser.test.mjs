@@ -2,13 +2,14 @@
 // mouse, and the paper keeper's place on the counter
 // (static/js/widgets/shop_room.js and shop_room_paper.js), in a real Chromium.
 //
-// While arranging, every piece takes focus; arrow keys nudge the focused piece
-// a quarter square and Shift with an arrow a whole one, in the lit room and in
-// paper. Arrows typed into the panel's text never move anything, and Escape
-// lets go of the piece before it leaves Arrange. In paper, three marks over
-// the counter pick where the keeper stands, and that is saved with the room.
-// Paper is under construction, so Arrange offers it switched off with the
-// reason; the paper tests switch it back on to keep its drawing covered.
+// While arranging paper, every piece takes focus; arrow keys nudge the
+// focused piece a quarter square and Shift with an arrow a whole one. Arrows
+// typed into the panel's text never move anything, and Escape lets go of the
+// piece before it leaves Arrange. Three marks over the counter pick where the
+// keeper stands, and that is saved with the room. Paper is under
+// construction, so Arrange offers it switched off with the reason; the paper
+// tests switch it back on to keep its drawing covered. The lit room is
+// retired, so a shop opens at the counter until paper is picked.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -43,7 +44,7 @@ async function page(t, vp, paper) {
       return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(body); } });
     }
   };` });
-  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_keeper.js', 'shop_room.js']) {
+  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_counter.js', 'shop_room_keeper.js', 'shop_room.js']) {
     if (f === 'shop_room.js' && paper) await p.addScriptTag({ content: 'window.ShopRoomPaper.building = false;' });
     await p.addScriptTag({ content: read(f) });
   }
@@ -71,11 +72,11 @@ async function pressOnSomePiece(p, sel, key) {
   return 0;
 }
 
-for (const look of ['lit', 'paper']) {
-  test(`${look}: arrows nudge the focused piece, Shift moves it a whole square, and it keeps focus`, { skip }, async (t) => {
-    const p = await page(t, null, look === 'paper');
-    if (look === 'paper') await click(p, 'button[data-k="look"][data-v="paper"]');
-    const sel = look === 'paper' ? '.srp-pc' : '.piece';
+{
+  test('paper: arrows nudge the focused piece, Shift moves it a whole square, and it keeps focus', { skip }, async (t) => {
+    const p = await page(t, null, true);
+    await click(p, 'button[data-k="look"][data-v="paper"]');
+    const sel = '.srp-pc';
     assert.equal(await p.evaluate((s) => [...document.querySelectorAll(s)].every((g) => g.getAttribute('tabindex') === '0' && /Arrow keys move it/.test(g.getAttribute('aria-label'))), sel), true, 'every piece is focusable and says how');
     // A baseline save (a colour change makes there be something to save), so
     // the nudge can be measured against it.
@@ -97,13 +98,17 @@ for (const look of ['lit', 'paper']) {
 }
 
 test('arrows typed into the panel never move a piece, and Escape lets go of a piece first', { skip }, async (t) => {
-  const p = await page(t);
+  const p = await page(t, null, true);
+  // Picking paper is itself a change, so save it before measuring "nothing changed".
+  await click(p, 'button[data-k="look"][data-v="paper"]');
+  await save(p); await p.waitForFunction(() => window.saved.length === 1);
+  await p.evaluate(() => document.querySelector('[data-mode="arr"]').click());
   await p.evaluate(() => { const ta = document.querySelector('[data-lines]'); ta.closest('details, section') && ta.closest('details') && (ta.closest('details').open = true); ta.focus(); });
   for (const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift+ArrowLeft']) await p.keyboard.press(k);
   assert.equal(await p.evaluate(() => document.querySelector('.shr-save').disabled), true, 'nothing changed');
-  await p.evaluate(() => document.querySelector('.piece').focus());
+  await p.evaluate(() => document.querySelector('.srp-pc').focus());
   await p.keyboard.press('Escape');
-  const s = await p.evaluate(() => ({ arr: document.querySelector('.shr').classList.contains('arr'), focused: !!document.activeElement.closest('.piece') }));
+  const s = await p.evaluate(() => ({ arr: document.querySelector('.shr').classList.contains('arr'), focused: !!document.activeElement.closest('.srp-pc') }));
   assert.deepEqual(s, { arr: true, focused: false }, 'Escape lets go of the piece and stays in Arrange');
 });
 
