@@ -327,6 +327,53 @@ func TestLookupSearch(t *testing.T) {
 	}
 }
 
+// A Director's search hits say who sees each page, as the page index does;
+// a player's never carry a mark or the legend.
+func TestLookupSearch_SightMarks(t *testing.T) {
+	shared := page("s", "Wolf Den", "Place", false)
+	shared.Visibility = entities.VisibilityCustom
+	adventure := page("a", "Wolf Hunt", "Adventure", false)
+	adventure.TypeDMOnly = true
+	pages := &searchPages{fakePages: fakePages{all: []entities.Entity{
+		page("p", "Wolf Pack", "Creature", false),
+		page("g", "Wolf Secret", "Note", true),
+		shared, adventure,
+	}}}
+	l := &Lookups{Pages: pages}
+	tests := []struct {
+		name    string
+		actor   Actor
+		query   string
+		want    []string
+		notWant []string
+	}{
+		{"director sees the marks and the legend", owner, "wolf",
+			[]string{sightLegend, "- Wolf Secret (Note) (GM only):", "- Wolf Den (Place) (shared with some):", "- Wolf Hunt (Adventure) (GM only):", "- Wolf Pack (Creature):"},
+			[]string{"Wolf Pack (Creature) ("}},
+		{"no mark, no legend", owner, "pack", []string{"- Wolf Pack (Creature):"}, []string{"(GM only)", "Neither is part of the name"}},
+		{"a player gets no marks", player, "wolf", []string{"- Wolf Den (Place):", "- Wolf Pack (Creature):"},
+			[]string{"(GM only)", "(shared with some)", "Neither is part of the name", "Wolf Secret"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := answerOne(l, tc.actor, "search", map[string]any{"query": tc.query})
+			if got.Error != "" {
+				t.Fatalf("error: %s", got.Error)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got.Text, w) {
+					t.Errorf("missing %q in:\n%s", w, got.Text)
+				}
+			}
+			for _, w := range tc.notWant {
+				if strings.Contains(got.Text, w) {
+					t.Errorf("unexpected %q in:\n%s", w, got.Text)
+				}
+			}
+		})
+	}
+}
+
 func TestLookupSearch_PiecesAndCaps(t *testing.T) {
 	var all []entities.Entity
 	for i := 0; i < 60; i++ {
@@ -356,5 +403,101 @@ func TestLookupSearch_NeedsASearchableServer(t *testing.T) {
 	}
 	if got := answerOne(&Lookups{}, owner, "search", map[string]any{"query": "dragon"}); got.Error == "" {
 		t.Errorf("an unwired server answered a search")
+	}
+}
+
+// piecedPlug is a plugged lookup that cuts its own list, as game nights do.
+type piecedPlug struct{ lines []string }
+
+func (piecedPlug) LookupInfo() aiplug.LookupInfo {
+	return aiplug.LookupInfo{What: "long-list", Keys: "none", Brief: "a long list"}
+}
+
+func (p piecedPlug) Answer(_ context.Context, _ string, _ Actor, r Record) (string, string, error) {
+	var b strings.Builder
+	b.WriteString("## Long list\n\n")
+	aiplug.WriteLinesPiece(&b, p.lines, aiplug.PieceOf(r))
+	return "Long list", b.String(), nil
+}
+
+func (piecedPlug) Pieced() {}
+
+// longName is a unique name padded to about n bytes, so a list of them
+// outgrows the answer cap well before it reaches the line cap.
+func longName(prefix string, i, n int) string {
+	head := fmt.Sprintf("%s %04d ", prefix, i)
+	return head + strings.Repeat("w", max(n-len(head), 0))
+}
+
+// Every line of a long-lined list is reachable by stepping through `piece`:
+// no piece is cut by the answer cap with its tail out of reach.
+func TestLookups_LongLinesAreAllReachable(t *testing.T) {
+	pagesOf := func(n int) *Lookups {
+		var all []entities.Entity
+		for i := 0; i < n; i++ {
+			all = append(all, page(fmt.Sprintf("p%04d", i), longName("Page", i, 120), "Place", false))
+		}
+		return &Lookups{Pages: &fakePages{all: all}}
+	}
+	pinsOf := func(n int) *Lookups {
+		var pins []PinRef
+		for i := 0; i < n; i++ {
+			pins = append(pins, PinRef{ID: fmt.Sprint(i), Name: longName("Pin", i, 140), Category: "location"})
+		}
+		return &Lookups{Maps: &fakeMaps{maps: []MapRef{{ID: "m1", CampaignID: camp, Name: "World"}}, pins: pins}}
+	}
+	plugOf := func(n int) *Lookups {
+		var lines []string
+		for i := 0; i < n; i++ {
+			lines = append(lines, "- "+longName("Line", i, 100))
+		}
+		return &Lookups{Plugged: []aiplug.Lookup{piecedPlug{lines: lines}}}
+	}
+	tests := []struct {
+		name   string
+		l      *Lookups
+		what   string
+		fields map[string]any
+		prefix string
+		n      int
+	}{
+		{"pages index under the line cap", pagesOf(250), "pages", nil, "Page", 250},
+		{"pages index over the line cap", pagesOf(700), "pages", nil, "Page", 700},
+		{"pins under the line cap", pinsOf(250), "pins", map[string]any{"map": "World"}, "Pin", 250},
+		{"pins over the line cap", pinsOf(650), "pins", map[string]any{"map": "World"}, "Pin", 650},
+		{"a plugged list that cuts itself", plugOf(650), "long-list", nil, "Line", 650},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var seen strings.Builder
+			pieces := 0
+			for p := 1; p <= 50; p++ {
+				fields := map[string]any{"piece": fmt.Sprint(p)}
+				for k, v := range tc.fields {
+					fields[k] = v
+				}
+				got := answerOne(tc.l, owner, tc.what, fields)
+				if got.Error != "" {
+					t.Fatalf("piece %d: %s", p, got.Error)
+				}
+				if len(got.Text) > maxAnswerBytes || strings.Contains(got.Text, "cut here") {
+					t.Fatalf("piece %d was cut (%d bytes)", p, len(got.Text))
+				}
+				seen.WriteString(got.Text)
+				pieces = p
+				if !strings.Contains(got.Text, fmt.Sprintf("`piece: %d`", p+1)) {
+					break
+				}
+			}
+			if pieces < 2 {
+				t.Fatalf("the list was not cut into pieces")
+			}
+			all := seen.String()
+			for i := 0; i < tc.n; i++ {
+				if w := fmt.Sprintf("%s %04d ", tc.prefix, i); strings.Count(all, w) != 1 {
+					t.Fatalf("%q appears %d times across %d pieces", w, strings.Count(all, w), pieces)
+				}
+			}
+		})
 	}
 }

@@ -16,11 +16,26 @@ type listOnly struct {
 	items     map[string][]ListItem // system/key → rows
 	truncated bool
 	asked     string
+	// beyond are rows past the listing's cap: ListByKey never returns them.
+	beyond []ListItem
 }
 
 func (f *listOnly) ListByKey(_ context.Context, _, systemID, key string) ([]ListItem, bool, error) {
 	f.asked = systemID + "/" + key
 	return f.items[f.asked], f.truncated, nil
+}
+
+// ListByKeyForPage reads the named page from every row, as the SQL's name
+// filter does, rather than from the capped listing ListByKey gives.
+func (f *listOnly) ListByKeyForPage(_ context.Context, _, systemID, key, name string) ([]ListItem, bool, error) {
+	f.asked = systemID + "/" + key + "@" + name
+	var out []ListItem
+	for _, it := range append(f.items[systemID+"/"+key], f.beyond...) {
+		if strings.EqualFold(it.EntityName, name) {
+			out = append(out, it)
+		}
+	}
+	return out, false, nil
 }
 func (*listOnly) Get(context.Context, string, string, string, string) (State, error) {
 	panic("the lookup lists, it never reads one page")
@@ -46,7 +61,9 @@ func TestAIPageState(t *testing.T) {
 			{EntityID: "e1", EntityName: "Lord Vex", GM: json.RawMessage(`{"attitude":"neutral","interest":2,"patience":3,"motivations":["power"],"pitfalls":["legacy"]}`), Public: json.RawMessage(`{"shown":false,"motivationsFound":[]}`), UpdatedAt: at},
 			{EntityID: "e2", EntityName: "Mira", Public: json.RawMessage(`{"shown":true}`), UpdatedAt: at},
 		},
-	}}
+	}, beyond: []ListItem{
+		{EntityID: "e999", EntityName: "Zora", GM: json.RawMessage(`{"late":true}`), UpdatedAt: at},
+	}, truncated: true}
 	director := aiplug.Actor{UserID: "o", Role: 3}
 	player := aiplug.Actor{UserID: "p", Role: 1}
 	rec := func(f map[string]any) aiplug.Record { return aiplug.Record{Kind: "lookup", Fields: f} }
@@ -65,7 +82,9 @@ func TestAIPageState(t *testing.T) {
 				`"motivations":["power"]`, `"pitfalls":["legacy"]`, `{"shown":false,"motivationsFound":[]}`, "### Mira", "Director's half:\n```json\n{}\n```"},
 			asked: "drawsteel/negotiation"},
 		{name: "one page", system: "drawsteel", actor: director, rec: rec(map[string]any{"key": "negotiation", "page": "mira"}),
-			want: []string{"(1)", "### Mira"}, notWant: []string{"Lord Vex"}},
+			want: []string{"(1)", "### Mira"}, notWant: []string{"Lord Vex"}, asked: "drawsteel/negotiation@mira"},
+		{name: "a page past the listing's cap is still found", system: "drawsteel", actor: director, rec: rec(map[string]any{"key": "negotiation", "page": "Zora"}),
+			want: []string{"(1)", "### Zora", `{"late":true}`}, notWant: []string{"None on", "Lord Vex", "Only the first"}},
 		{name: "a page without it", system: "drawsteel", actor: director, rec: rec(map[string]any{"key": "negotiation", "page": "Nobody"}),
 			want: []string{"(0)", `None on "Nobody".`}},
 		{name: "a named system", system: "", actor: director, rec: rec(map[string]any{"key": "negotiation", "system": "drawsteel"}),

@@ -31,6 +31,23 @@ var ownedRelationTypes = map[string]string{
 	"has item": "carried-item", "in inventory of": "carried-item",
 }
 
+// ownedLinkError refuses a picked link that another kind keeps, read from the
+// link's own type and reverse rather than the record's words: a delete that
+// names no type picks the only link between two pages, whatever it is, and
+// must not take away a shop's stock or a character's item without the
+// bookkeeping that goes with it.
+func ownedLinkError(link *relations.Relation) error {
+	if link == nil {
+		return nil
+	}
+	for _, w := range []string{link.RelationType, link.ReverseRelationType} {
+		if kind, owned := ownedRelationTypes[strings.ToLower(strings.TrimSpace(w))]; owned {
+			return badRequestf("%s links are written with kind `%s`", quote(link.RelationType), kind)
+		}
+	}
+	return nil
+}
+
 // PageLinkKind is a free-text link between two pages: the Relations box on a
 // page ("ally of", "remnant of"). Each link is stored as a pair, one row per
 // end, so a link has a type and a reverse type.
@@ -213,6 +230,11 @@ func (k PageLinkKind) Plan(ctx context.Context, campaignID string, a Actor, r Re
 	if err != nil {
 		return Plan{Error: planError(err)}
 	}
+	if r.Action == ActionDelete {
+		if err := ownedLinkError(link); err != nil {
+			return Plan{Error: planError(err)}
+		}
+	}
 	switch r.Action {
 	case ActionCreate:
 		if link != nil {
@@ -264,6 +286,11 @@ func (k PageLinkKind) Apply(ctx context.Context, campaignID string, a Actor, r R
 		if link == nil {
 			return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 		}
+		// Checked again on the link read now, which may not be the one
+		// the review showed.
+		if err := ownedLinkError(link); err != nil {
+			return err
+		}
 		return k.Rels.Delete(ctx, link.ID)
 	}
 	if link != nil {
@@ -308,7 +335,7 @@ func (k PageLinkKind) Before(ctx context.Context, campaignID string, a Actor, r 
 	}
 	typ := strings.TrimSpace(r.Str("type"))
 	link, err := pickLink(links, typ)
-	if err != nil {
+	if err != nil || (r.Action == ActionDelete && ownedLinkError(link) != nil) {
 		return nil, nil
 	}
 	name := "the link between " + quote(src.Name) + " and " + quote(dst.Name)

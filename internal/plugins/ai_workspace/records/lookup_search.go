@@ -66,23 +66,39 @@ func (run *lookupRun) search(query, typeName string) (LookupAnswer, error) {
 		}
 	}
 	quotes := s.SearchSnippets(run.ctx, run.campaignID, query, ids, run.a.Role, run.a.UserID)
-	var b strings.Builder
-	fmt.Fprintf(&b, "## Search: %s (%d)\n\n", quote(query), total)
-	if pieces > 1 {
-		fmt.Fprintf(&b, "Hits %d to %d of %d (piece %d of %d).\n\n", (piece-1)*searchPerPiece+1, (piece-1)*searchPerPiece+len(hits), total, piece, pieces)
-	}
+	// A Director's hits carry the page index's marks, so a GM-only page found
+	// by its text is not repeated to players; nobody else reads a marked page.
+	director := run.director()
+	var lines []string
+	marked := false
 	for _, h := range hits {
 		if h.CampaignID != run.campaignID {
 			continue
 		}
-		fmt.Fprintf(&b, "- %s", h.Name)
+		line := "- " + h.Name
 		if kind := firstNonEmpty(h.TypeName, h.TypeSlug); kind != "" {
-			fmt.Fprintf(&b, " (%s)", kind)
+			line += " (" + kind + ")"
 		}
-		if line := snippetLine(quotes[h.ID]); line != "" {
-			b.WriteString(": " + line)
+		if director {
+			if m := searchSightMark(&h); m != "" {
+				line, marked = line+m, true
+			}
 		}
-		b.WriteString("\n")
+		if q := snippetLine(quotes[h.ID]); q != "" {
+			line += ": " + q
+		}
+		lines = append(lines, line)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "## Search: %s (%d)\n\n", quote(query), total)
+	if marked {
+		b.WriteString(sightLegend + "\n")
+	}
+	if pieces > 1 {
+		fmt.Fprintf(&b, "Hits %d to %d of %d (piece %d of %d).\n\n", (piece-1)*searchPerPiece+1, (piece-1)*searchPerPiece+len(hits), total, piece, pieces)
+	}
+	for _, l := range lines {
+		b.WriteString(l + "\n")
 	}
 	if piece < pieces {
 		fmt.Fprintf(&b, "\n…%d more; ask again with `piece: %d` for the next, or narrow it with `type`.\n", total-piece*searchPerPiece, piece+1)
@@ -90,6 +106,15 @@ func (run *lookupRun) search(query, typeName string) (LookupAnswer, error) {
 	b.WriteString("\nRead any hit in full with read_page.\n")
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// searchSightMark is a search hit's mark. Hits are not grouped by kind, so a
+// page of a DM-only category carries the mark on its own line.
+func searchSightMark(e *entities.Entity) string {
+	if m := kindSightMark(e); m != "" {
+		return m
+	}
+	return pageSightMark(e)
 }
 
 // searchType is the id of the page kind named, or 0 for every kind.

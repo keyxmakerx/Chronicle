@@ -53,11 +53,11 @@ func aiKindNames(d aiDeps) string {
 	return strings.Join(names, " ")
 }
 
-// TestAIKindsPromptOrder pins the prompt order of AI Import's kinds and that
-// a degraded plugin's kinds are left out.
 // stubChoiceRules wires the hero-choice rules, so their kind is registered.
 type stubChoiceRules struct{ systems.ChoiceRuleService }
 
+// TestAIKindsPromptOrder pins the prompt order of AI Import's kinds and that
+// a degraded plugin's kinds are left out.
 func TestAIKindsPromptOrder(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/keyxmakerx/chronicle/internal/aiplug"
 )
 
 // A lookup answer is capped, and a list is capped in lines. Neither cap may
@@ -33,34 +35,46 @@ func readPiece(r Record) (int, error) {
 	return n, nil
 }
 
-// pieceWindow is the lines of a list that piece shows: from start up to end.
-func pieceWindow(piece int) (start, end int) {
-	return (piece - 1) * maxAnswerLines, piece * maxAnswerLines
-}
-
-// writeLines writes the piece of a list the lookup asked for, up to
-// maxAnswerLines of it, and says how to read the rest. A list that fits is
-// written whole, exactly as before.
+// writeLines writes the piece of a list the lookup asked for and says how to
+// read the rest. A list longer than one piece, by count or by size, cuts
+// itself into pieces (aiplug.LinePieces), and the byte cap then leaves it
+// alone. A list that fits one piece is written whole, and when the answer
+// around it is still too long, the answer as a whole is stepped through.
 func (run *lookupRun) writeLines(b *strings.Builder, lines []string) {
-	if len(lines) <= maxAnswerLines && run.piece <= 1 {
+	starts := aiplug.LinePieces(lines, aiplug.PieceBudget(b.Len()))
+	if len(starts) <= 1 {
 		writeLines(b, lines)
 		return
 	}
 	run.linesPaged = true
-	pieces := (len(lines) + maxAnswerLines - 1) / maxAnswerLines
-	start, end := pieceWindow(run.piece)
-	if start >= len(lines) {
-		fmt.Fprintf(b, "There is no piece %d: this list has %d (%s).\n", run.piece, len(lines), plural(pieces, "piece", "pieces"))
-		return
+	aiplug.WritePiece(b, lines, starts, run.piece)
+}
+
+// groupedLine is one line of a list written under group headings.
+type groupedLine struct{ group, head, line string }
+
+// groupedPieces cuts a grouped list as aiplug.LinePieces cuts a plain one,
+// counting each piece's group headings in its size so no piece outgrows the
+// answer cap.
+func groupedPieces(items []groupedLine, budget int) []int {
+	if len(items) == 0 {
+		return nil
 	}
-	end = min(end, len(lines))
-	fmt.Fprintf(b, "Lines %d to %d of %d (piece %d of %d).\n\n", start+1, end, len(lines), run.piece, pieces)
-	for _, l := range lines[start:end] {
-		b.WriteString(l + "\n")
+	starts := []int{0}
+	n, size := 0, 0
+	for i, it := range items {
+		line, head := len(it.line)+1, 0
+		if n == 0 || items[i-1].group != it.group {
+			head = len(it.head) + 1
+		}
+		if n > 0 && (n >= maxAnswerLines || size+line+head > budget) {
+			starts = append(starts, i)
+			n, size, head = 0, 0, len(it.head)+1
+		}
+		n++
+		size += line + head
 	}
-	if end < len(lines) {
-		fmt.Fprintf(b, "…%d more; ask again with `piece: %d` for the next.\n", len(lines)-end, run.piece+1)
-	}
+	return starts
 }
 
 // pieceOf cuts s into pieces of at most limit bytes, at line boundaries so no

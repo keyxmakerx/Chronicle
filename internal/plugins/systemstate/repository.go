@@ -23,6 +23,9 @@ type Repository interface {
 	// ListByKey returns up to limit rows for the key in one campaign, ordered
 	// by entity name. Trashed pages are excluded.
 	ListByKey(ctx context.Context, campaignID, systemID, key string, limit int) ([]ListItem, error)
+	// ListByKeyForPage is ListByKey for the pages with one name only, so a
+	// page past the listing's limit can still be read by its name.
+	ListByKeyForPage(ctx context.Context, campaignID, systemID, key, name string, limit int) ([]ListItem, error)
 	// GetCampaign returns the campaign-wide row, or nil when there is none.
 	GetCampaign(ctx context.Context, campaignID, systemID, key string) (*State, error)
 	// UpsertCampaign writes the campaign-wide row with Upsert's partial
@@ -104,20 +107,34 @@ func (r *sqlRepository) Upsert(ctx context.Context, w Write) error {
 }
 
 func (r *sqlRepository) ListByKey(ctx context.Context, campaignID, systemID, key string, limit int) ([]ListItem, error) {
+	return r.listByKey(ctx, campaignID, systemID, key, "", limit)
+}
+
+func (r *sqlRepository) ListByKeyForPage(ctx context.Context, campaignID, systemID, key, name string, limit int) ([]ListItem, error) {
+	return r.listByKey(ctx, campaignID, systemID, key, name, limit)
+}
+
+// listByKey is both listings; name "" lists every page. The name compares
+// under the column's collation, as the page's name reads everywhere else.
+func (r *sqlRepository) listByKey(ctx context.Context, campaignID, systemID, key, name string, limit int) ([]ListItem, error) {
 	// Both tables are filtered on campaign_id so a row whose entity moved or
 	// was mis-stored can never surface under another campaign. deleted_at is
 	// the entities plugin's live-only rule; with it this matches what an
 	// Owner-level viewer (the only audience of this listing) can see.
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT s.entity_id, e.name, s.gm_data, s.public_data, s.updated_at
+	q := `SELECT s.entity_id, e.name, s.gm_data, s.public_data, s.updated_at
 		   FROM entity_system_state s
 		   JOIN entities e ON e.id = s.entity_id
 		  WHERE s.campaign_id = ? AND e.campaign_id = ?
 		    AND s.system_id = ? AND s.state_key = ?
-		    AND e.deleted_at IS NULL
-		  ORDER BY e.name, s.entity_id
-		  LIMIT ?`,
-		campaignID, campaignID, systemID, key, limit)
+		    AND e.deleted_at IS NULL`
+	args := []any{campaignID, campaignID, systemID, key}
+	if name != "" {
+		q += ` AND e.name = ?`
+		args = append(args, name)
+	}
+	q += ` ORDER BY e.name, s.entity_id LIMIT ?`
+	args = append(args, limit)
+	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list system state: %w", err)
 	}

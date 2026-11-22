@@ -220,3 +220,84 @@ func TestPageLinkKind_NoViewerRefusesEverything(t *testing.T) {
 		t.Error("without a view check no page may be linked")
 	}
 }
+
+// swapAfterPlan answers the plan's read with one store and every later read
+// with another, as a link changed between the review and the apply would.
+type swapAfterPlan struct {
+	*linkStore
+	plan  *linkStore
+	reads int
+}
+
+func (s *swapAfterPlan) ListByEntity(ctx context.Context, c, id string) ([]relations.Relation, error) {
+	s.reads++
+	if s.reads == 1 {
+		return s.plan.ListByEntity(ctx, c, id)
+	}
+	return s.linkStore.ListByEntity(ctx, c, id)
+}
+
+// A delete that names no type picks the only link between two pages; when
+// that link is shop stock or a carried item, from either end, it is refused,
+// since removing it here would skip the stock and Armory bookkeeping.
+func TestPageLinkKind_DeleteNeverTakesAnOwnedLink(t *testing.T) {
+	ctx := context.Background()
+	pages := fakeEntities{
+		"forge":  {ID: "f", Name: "Forge", CampaignID: camp},
+		"sword":  {ID: "s", Name: "Sword", CampaignID: camp},
+		"hero":   {ID: "h", Name: "Hero", CampaignID: camp},
+		"friend": {ID: "r", Name: "Friend", CampaignID: camp},
+	}
+	views := seeing{"f": true, "s": true, "h": true, "r": true}
+	linked := func(src, dst, typ, rev string) *linkStore {
+		s := &linkStore{}
+		_, _ = s.Create(ctx, camp, src, dst, typ, rev, "o", json.RawMessage(`{"price":"5 gp"}`))
+		return s
+	}
+	tests := []struct {
+		name     string
+		page, to string
+		store    *linkStore
+		wantErr  string
+	}{
+		{"a shop's stock", "Forge", "Sword", linked("f", "s", "sells", "sold by"), "shop-stock"},
+		{"the stock read from the item's end", "Sword", "Forge", linked("f", "s", "sells", "sold by"), "shop-stock"},
+		{"a character's item", "Hero", "Sword", linked("h", "s", "Has Item", "In Inventory Of"), "carried-item"},
+		{"the item read from its end", "Sword", "Hero", linked("h", "s", "Has Item", "In Inventory Of"), "carried-item"},
+		{"a free-text link still goes", "Hero", "Friend", linked("h", "r", "ally of", ""), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k := PageLinkKind{Entities: pages, Rels: tt.store, Views: views}
+			del := linkRec(ActionDelete, map[string]any{"page": tt.page, "to": tt.to})
+			p := k.Plan(ctx, camp, owner, del)
+			snap, _ := k.Before(ctx, camp, owner, del)
+			err := k.Apply(ctx, camp, owner, del)
+			if tt.wantErr == "" {
+				if p.Error != "" || err != nil || len(tt.store.rels) != 0 || snap == nil {
+					t.Fatalf("plan %q, apply %v, left %d rows", p.Error, err, len(tt.store.rels))
+				}
+				return
+			}
+			if !strings.Contains(p.Error, tt.wantErr) {
+				t.Errorf("plan error = %q, want %q", p.Error, tt.wantErr)
+			}
+			if err == nil || len(tt.store.rels) != 2 {
+				t.Errorf("apply removed an owned link: err %v, %d rows left", err, len(tt.store.rels))
+			}
+			if snap != nil {
+				t.Errorf("a refused delete kept an undo snapshot")
+			}
+		})
+	}
+
+	t.Run("a link that became stock after the review", func(t *testing.T) {
+		now := linked("f", "s", "sells", "sold by")
+		rels := &swapAfterPlan{linkStore: now, plan: linked("f", "s", "ally of", "")}
+		k := PageLinkKind{Entities: pages, Rels: rels, Views: views}
+		err := k.Apply(ctx, camp, owner, linkRec(ActionDelete, map[string]any{"page": "Forge", "to": "Sword"}))
+		if err == nil || !strings.Contains(err.Error(), "shop-stock") || len(now.rels) != 2 {
+			t.Errorf("apply err %v, %d rows left", err, len(now.rels))
+		}
+	})
+}

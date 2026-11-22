@@ -28,7 +28,7 @@ const KindLookup = "lookup"
 // each answer, all answers together, and the lines in one list.
 const (
 	maxLookups      = 20
-	maxAnswerBytes  = 24 * 1024
+	maxAnswerBytes  = aiplug.MaxAnswerBytes
 	maxAnswersBytes = 120 * 1024
 	maxAnswerLines  = aiplug.MaxAnswerLines
 	maxPagesWalk    = 50 // pages of 100, as the AI export walks them
@@ -797,35 +797,38 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 	if marked {
 		b.WriteString(sightLegend + "\n")
 	}
-	// The list is walked in order and only this piece's lines are written;
-	// a group's heading is written once its first line is.
-	start, end := pieceWindow(max(run.piece, 1))
-	if start >= n {
-		return LookupAnswer{Chip: chip}, badRequestf("there is no piece %d: this list has %d lines (%s)", run.piece, n, plural((n+maxAnswerLines-1)/maxAnswerLines, "piece", "pieces"))
-	}
-	if n > maxAnswerLines {
-		run.linesPaged = true
-		fmt.Fprintf(&b, "Lines %d to %d of %d (piece %d of %d).\n\n", start+1, min(end, n), n, max(run.piece, 1), (n+maxAnswerLines-1)/maxAnswerLines)
-	}
-	idx := 0
+	// The list is cut into pieces by count and by size, a piece paying for
+	// the heading of each group it shows; a group's heading is written once
+	// its first line in the piece is.
+	var items []groupedLine
 	for _, label := range order {
-		headed := false
+		head := fmt.Sprintf("### %s (%d)%s\n\n", label, len(groups[label]), kindMark[label])
 		for _, name := range groups[label] {
-			if idx >= start && idx < end {
-				if !headed {
-					fmt.Fprintf(&b, "### %s (%d)%s\n\n", label, len(groups[label]), kindMark[label])
-					headed = true
-				}
-				b.WriteString("- " + name + "\n")
-			}
-			idx++
+			items = append(items, groupedLine{group: label, head: head, line: "- " + name})
 		}
-		if headed {
+	}
+	starts := groupedPieces(items, aiplug.PieceBudget(b.Len()))
+	piece := max(run.piece, 1)
+	start, end, ok := aiplug.PieceRange(starts, n, piece)
+	if !ok {
+		return LookupAnswer{Chip: chip}, badRequestf("there is no piece %d: this list has %d lines (%s)", piece, n, plural(len(starts), "piece", "pieces"))
+	}
+	if len(starts) > 1 {
+		run.linesPaged = true
+		fmt.Fprintf(&b, "Lines %d to %d of %d (piece %d of %d).\n\n", start+1, end, n, piece, len(starts))
+	}
+	for i := start; i < end; i++ {
+		it := items[i]
+		if i == start || items[i-1].group != it.group {
+			b.WriteString(it.head)
+		}
+		b.WriteString(it.line + "\n")
+		if i == end-1 || items[i+1].group != it.group {
 			b.WriteString("\n")
 		}
 	}
 	if end < n {
-		fmt.Fprintf(&b, "…%d more; ask again with `piece: %d` for the next, or with `type:` or `tag:` to narrow it.\n", n-end, max(run.piece, 1)+1)
+		fmt.Fprintf(&b, "…%d more; ask again with `piece: %d` for the next, or with `type:` or `tag:` to narrow it.\n", n-end, piece+1)
 	}
 	return LookupAnswer{Chip: chip, Text: b.String()}, nil
 }

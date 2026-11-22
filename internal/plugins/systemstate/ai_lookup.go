@@ -72,27 +72,30 @@ func (l *AIPageState) Answer(ctx context.Context, campaignID string, a aiplug.Ac
 	if !idPattern.MatchString(key) || !idPattern.MatchString(system) {
 		return chip, "", aiplug.BadRequestf("`key` and `system` are lower-case letters, digits, - and _")
 	}
-	items, truncated, err := l.svc.ListByKey(ctx, campaignID, system, key)
+	// A named page is read directly: picked out of the capped listing, a
+	// page past its end would read as carrying nothing.
+	page := strings.TrimSpace(r.Str("page"))
+	var items []ListItem
+	var truncated bool
+	var err error
+	if page != "" {
+		items, truncated, err = l.svc.ListByKeyForPage(ctx, campaignID, system, key, page)
+	} else {
+		items, truncated, err = l.svc.ListByKey(ctx, campaignID, system, key)
+	}
 	if err != nil {
 		return chip, "", err
-	}
-	page := r.Str("page")
-	if page != "" {
-		kept := items[:0:0]
-		for _, it := range items {
-			if strings.EqualFold(strings.TrimSpace(it.EntityName), page) {
-				kept = append(kept, it)
-			}
-		}
-		items = kept
-		truncated = false
 	}
 	chip = fmt.Sprintf("Page state · %s · %d", key, len(items))
 	var b strings.Builder
 	fmt.Fprintf(&b, "## %s on pages (%d)\n\n", key, len(items))
 	fmt.Fprintf(&b, "As the %s game system's widgets keep it. The Director's half is never shown to players; the players' half is what anyone who can open the page reads.\n\n", system)
 	if truncated {
-		fmt.Fprintf(&b, "Only the first %d pages are listed; name one with `page`.\n\n", MaxListItems)
+		if page != "" {
+			fmt.Fprintf(&b, "Only the first %d pages called %s are listed.\n\n", MaxListItems, aiplug.Quote(page))
+		} else {
+			fmt.Fprintf(&b, "Only the first %d pages are listed; name one with `page`.\n\n", MaxListItems)
+		}
 	}
 	if len(items) == 0 {
 		if page != "" {
