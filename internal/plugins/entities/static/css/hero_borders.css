@@ -1,0 +1,80 @@
+/* hero_borders.css — the borders a card may wear in the hero creator.
+   A card with data-trim has a nine-slice picture for its border (--trim-img,
+   set by hero_borders.js), a dark themed field that shows only near the
+   frame, and the entry's colour (--k). Every picture is 132 pixels deep at
+   the corners; its sides repeat, or stretch where the design never repeats.
+   The colours, sizes and shadows here are the signed look of each border,
+   so they are fixed values rather than theme tokens. */
+
+.hc-card[data-trim], .hc-gcard[data-trim] {
+  --fw: 16px; --trim-over: 28px; --bleed: 54px; --k: #b3243a;
+  --trim-glow: radial-gradient(70% 34% at 0 0, color-mix(in srgb, var(--k) 20%, transparent), transparent 70%);
+  --trim-rock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.025 .04' numOctaves='5' seed='9' stitchTiles='stitch' result='n'/%3E%3CfeColorMatrix in='n' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.1 0 0 0 0' result='a'/%3E%3CfeDiffuseLighting in='a' surfaceScale='5' diffuseConstant='1.1' lighting-color='%238d8f94'%3E%3CfeDistantLight azimuth='225' elevation='50'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='240' height='240' filter='url%28%23f%29'/%3E%3C/svg%3E");
+  /* the middle of the card fades out to the field over --bleed, on every side */
+  --trim-fade: transparent 0, rgb(0 0 0 / 0.3) calc(var(--bleed) * 0.35), rgb(0 0 0 / 0.72) calc(var(--bleed) * 0.7), rgb(0 0 0 / 0.93) var(--bleed), #000 calc(var(--bleed) * 1.35),
+    #000 calc(100% - var(--bleed) * 1.35), rgb(0 0 0 / 0.93) calc(100% - var(--bleed)), rgb(0 0 0 / 0.72) calc(100% - var(--bleed) * 0.7), rgb(0 0 0 / 0.3) calc(100% - var(--bleed) * 0.35), transparent 100%;
+  /* a light page lays a pale wash over the dark field, so the card does not sit as a black hole on it */
+  --trim-wash: color-mix(in srgb, #fff 60%, transparent);
+  /* the small label takes the entry's colour, held dark enough on a light page and light enough on a dark one to read */
+  --trim-ink: color-mix(in srgb, var(--k) 45%, var(--hc-text));
+  isolation: isolate; overflow: visible; outline: 0; border: var(--fw) solid transparent; border-radius: 0;
+  border-image: var(--trim-img) 132 / calc(var(--fw) + var(--trim-over)) / 5px round;
+  background: linear-gradient(var(--trim-wash), var(--trim-wash)) padding-box, var(--trim-glow), linear-gradient(rgb(16 17 20 / 0.42), rgb(16 17 20 / 0.62)), var(--trim-rock) 0 0 / 240px 240px padding-box;
+  box-shadow: inset 0 0 30px 6px rgb(0 0 0 / 0.5);
+  filter: drop-shadow(0 10px 12px rgb(0 0 0 / 0.22));
+}
+html.dark .hc-card[data-trim], html.dark .hc-gcard[data-trim] { --trim-wash: transparent; }
+@supports (color: oklch(from red l c h)) {
+  .hc-card[data-trim], .hc-gcard[data-trim] { --trim-ink: oklch(from color-mix(in srgb, var(--k) 62%, var(--hc-text)) min(l, 0.38) c h); }
+  html.dark .hc-card[data-trim], html.dark .hc-gcard[data-trim] { --trim-ink: oklch(from color-mix(in srgb, var(--k) 62%, var(--hc-text)) max(l, 0.78) c h); }
+}
+.hc-gcard[data-trim] { --fw: 11px; --trim-over: 19px; --bleed: 34px; padding: 24px 26px 28px; }
+.hc-card[data-trim] { padding: 28px 36px 38px; gap: 6px; }
+.hc-card[data-trim] h3 { font-size: 27px; }
+.hc-card[data-trim] .hc-facts div { padding: 5px 12px; }
+.hc-card[data-trim] .hc-top > span:first-child, .hc-gcard[data-trim] .hc-top > span:first-child { color: var(--trim-ink); font-weight: 700; }
+
+/* The middle is the page's own surface, so the words read as they do on a plain card. */
+.hc-card[data-trim]::after, .hc-gcard[data-trim]::after {
+  content: ""; position: absolute; z-index: -1; inset: 0; pointer-events: none;
+  background: color-mix(in srgb, var(--hc-surface) 91%, transparent);
+  -webkit-mask: linear-gradient(90deg, var(--trim-fade)), linear-gradient(var(--trim-fade)); -webkit-mask-composite: source-in;
+  mask: linear-gradient(90deg, var(--trim-fade)), linear-gradient(var(--trim-fade)); mask-composite: intersect;
+}
+
+/* Chosen, in front or being read: the accent hugs the border's own outline, with the entry's colour behind it. */
+.hc-card[data-trim].is-picked, .hc-card[data-trim].is-reading, .hc-gcard[data-trim].is-focus {
+  box-shadow: inset 0 0 30px 6px rgb(0 0 0 / 0.5);
+  filter: drop-shadow(0 0 2px var(--hc-accent)) drop-shadow(0 0 3px var(--hc-accent)) drop-shadow(0 0 10px color-mix(in srgb, var(--k) 60%, transparent)) drop-shadow(0 12px 14px rgb(0 0 0 / 0.3));
+}
+
+/* Smooth metal sits on a plain field, and its straight inner edge lets the words come a little closer. */
+.hc-card[data-trim="great-rune"], .hc-gcard[data-trim="great-rune"] {
+  background: linear-gradient(var(--trim-wash), var(--trim-wash)) padding-box, var(--trim-glow), linear-gradient(#1e2026, #17181c) padding-box;
+  border-image-repeat: stretch;
+}
+.hc-card[data-trim="great-rune"] { padding: 26px 31px 27px; }
+
+/* Glass and ice are see-through, so the card runs on under them to the border's outer edge, darkening
+   toward it, and nothing is shaded inside the frame. */
+.hc-card[data-trim^="glass"], .hc-gcard[data-trim^="glass"], .hc-card[data-trim="ice"], .hc-gcard[data-trim="ice"] {
+  --trim-edge: rgb(0 0 0 / 0.34); --trim-edge-from: 52%; --trim-a: #1a222d; --trim-b: #141a22;
+  background: linear-gradient(var(--trim-wash), var(--trim-wash)), var(--trim-glow), radial-gradient(farthest-side, transparent var(--trim-edge-from), var(--trim-edge)), linear-gradient(var(--trim-a), var(--trim-b));
+  background-origin: border-box; background-clip: border-box; background-repeat: no-repeat; box-shadow: none;
+}
+.hc-card[data-trim^="glass"], .hc-gcard[data-trim^="glass"] { --trim-a: #202228; --trim-b: #191a1f; border-radius: 4px; border-image-outset: calc((var(--fw) + var(--trim-over)) * 5 / 132); }
+.hc-card[data-trim^="glass"] { padding: 24px 28px; }
+html:not(.dark) .hc-card[data-trim="ice"], html:not(.dark) .hc-gcard[data-trim="ice"] { --trim-edge: rgb(40 120 215 / 0.62); --trim-edge-from: 50%; }
+html:not(.dark) .hc-card[data-trim^="glass"], html:not(.dark) .hc-gcard[data-trim^="glass"] { --trim-edge: rgb(62 104 128 / 0.5); --trim-edge-from: 55%; }
+.hc-card[data-trim^="glass"].is-picked, .hc-card[data-trim^="glass"].is-reading, .hc-gcard[data-trim^="glass"].is-focus,
+.hc-card[data-trim="ice"].is-picked, .hc-card[data-trim="ice"].is-reading, .hc-gcard[data-trim="ice"].is-focus { box-shadow: none; }
+
+/* The vine hangs into the card at the bottom, so the last line keeps clear of it. */
+.hc-card[data-trim="vine"] { padding: 28px 38px 48px; }
+
+/* Carved stone: the corner where the rock is being worked lies over the ring's top left corner, at the ring's scale. */
+.hc-card[data-trim="carved-stone"]::before, .hc-gcard[data-trim="carved-stone"]::before {
+  content: ""; position: absolute; z-index: 3; pointer-events: none; top: calc(-1 * var(--fw) - 5px); left: calc(-1 * var(--fw) - 5px);
+  width: calc((var(--fw) + var(--trim-over)) * 700 / 132); height: calc((var(--fw) + var(--trim-over)) * 900 / 132);
+  background: var(--trim-corner) 0 0 / 100% 100% no-repeat;
+}

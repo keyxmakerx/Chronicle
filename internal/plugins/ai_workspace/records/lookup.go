@@ -55,7 +55,9 @@ type PageLayoutsAPI interface {
 // SystemEntry is one game-system pick-list entry (an ancestry, a kit…).
 // Status is "" for an accepted entry, or "draft"/"sent" for a player's entry
 // no Director has accepted, which only a Director's lookup lists.
-type SystemEntry struct{ Name, Slug, Source, Summary, Status string }
+// Border and Colour are the card border and colour the entry names, empty when
+// it names no border in the library.
+type SystemEntry struct{ Name, Slug, Source, Summary, Status, Border, Colour string }
 
 // SystemEntriesAPI lists the campaign system's entries for one character
 // field, package and campaign-made alike. director includes entries kept
@@ -1402,6 +1404,9 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 			line += ", a player's entry handed in and not accepted yet"
 		case "draft":
 			line += ", a player's draft, not accepted yet"
+		}
+		if e.Border != "" {
+			line += ", card border " + e.Border + " in " + e.Colour
 		}
 		if s := strings.TrimSpace(e.Summary); s != "" {
 			line += ": " + oneLine(s, 140)

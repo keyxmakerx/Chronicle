@@ -931,7 +931,13 @@
 
   // --- Dragging a row (pointer events: mouse, pen and touch) -----------------
 
-  function scroller() { return nav(); }
+  // What a drag scrolls: the categories area, or the whole sidebar where it
+  // is the one scroller (the phone drawer, phone_shell.css).
+  function scroller() {
+    var n = nav(), sb = sidebarEl();
+    if (n && sb && getComputedStyle(n).overflowY === 'visible') return sb;
+    return n;
+  }
 
   function onPointerDown(e) {
     if (!S || S.saving || D || e.button !== 0) return;

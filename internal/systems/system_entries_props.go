@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 )
 
 // A campaign entry's details are shaped like a package entry's, so every
@@ -38,6 +39,9 @@ func ValidateEntryPropertiesOnto(p, stored map[string]any) error {
 func validateEntryProperties(p, stored map[string]any) error {
 	if len(p) > maxEntryProps {
 		return apperror.NewValidation(fmt.Sprintf("At most %d details are allowed.", maxEntryProps))
+	}
+	if err := validateCardLook(p); err != nil {
+		return err
 	}
 	lists, wordLists := 0, 0
 	for k, v := range p {
@@ -87,6 +91,36 @@ func validateEntryProperties(p, stored map[string]any) error {
 		return apperror.NewValidation("The details are too large.")
 	}
 	return nil
+}
+
+// validateCardLook refuses a card border that is not in the library and a
+// card colour that is not six hex digits, naming the valid keys, so the hero
+// creator's stage look never meets a value it would silently draw plain.
+func validateCardLook(p map[string]any) error {
+	if v, ok := p[cardborders.PropBorder]; ok {
+		key, isText := v.(string)
+		if _, known := cardborders.Get(key); !isText || !known {
+			return apperror.NewValidation(fmt.Sprintf("The detail %q must be one of: %s.", cardborders.PropBorder, strings.Join(cardborders.Keys(), ", ")))
+		}
+	}
+	if v, ok := p[cardborders.PropColour]; ok {
+		if col, isText := v.(string); !isText || !cardborders.ValidColour(col) {
+			return apperror.NewValidation(fmt.Sprintf("The detail %q must be a colour written as # and six hex digits, for example #c4243a.", cardborders.PropColour))
+		}
+	}
+	return nil
+}
+
+// CardBorderGuide is the plain-words note on the two card details, with every
+// border key and its shown name, for the people and tools that write entries.
+func CardBorderGuide() string {
+	var parts []string
+	for _, b := range cardborders.All() {
+		parts = append(parts, b.Key+" ("+b.Name+")")
+	}
+	return "`" + cardborders.PropBorder + "` names a card border from this list: " + strings.Join(parts, ", ") +
+		". `" + cardborders.PropColour + "` is the colour its coloured parts take, written as # and six hex digits (for example #c4243a); leave it out for the border's own colour. " +
+		"Only the hero creator's stage look draws borders, and an entry that names none is a plain card. A key or colour outside these is refused."
 }
 
 // isWordList reports whether every item is a string (an empty list is not

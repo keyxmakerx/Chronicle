@@ -31,6 +31,10 @@ type HeroChoice struct {
 	Source      string         `json:"source"`
 	Description string         `json:"description,omitempty"`
 	Properties  map[string]any `json:"properties,omitempty"`
+	// Look is the card border and colour the entry names, set only when it
+	// names a border in the library. The two properties it comes from are
+	// left out of Properties, so neither creator shows them as facts.
+	Look *HeroLook `json:"look,omitempty"`
 	// Status is "draft" or "sent" for a player's own entry a Director has
 	// not accepted yet; Mine and EntryID are set for the player who wrote it.
 	Status  string `json:"status,omitempty"`
@@ -47,6 +51,13 @@ type HeroChoice struct {
 	// so a hero that already holds it stays editable. Never served, and never
 	// a valid new pick.
 	Held bool `json:"-"`
+}
+
+// HeroLook is the border a card is drawn in (a key of the cardborders
+// library) and the colour its coloured parts take (#rrggbb, lower-case).
+type HeroLook struct {
+	Border string `json:"border"`
+	Colour string `json:"colour"`
 }
 
 // HeroStep is one question: a character field and the entries it offers.

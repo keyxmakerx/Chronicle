@@ -129,3 +129,68 @@ test('phone: All pages fits at 360 wide without sliding sideways', async () => {
   assert.ok(await fits(), '#main-content slides sideways on the gallery');
   owner.assertClean();
 });
+
+test('phone: the menu scrolls as one list, an open category included', async () => {
+  const PHONE_SHORT = { viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true };
+  const owner = await person({ tag: 'pm', name: 'Mara Vell', context: PHONE_SHORT });
+  const cid = await newCampaign(owner, 'Phone Menu');
+  let eid;
+  for (let i = 0; i < 16; i++) eid = await newPage(owner, cid, 'Character', 'Hero ' + String(i).padStart(2, '0'));
+  const { page } = owner;
+  // A page of the category paints its panel already open in the menu.
+  await owner.go(`/campaigns/${cid}/entities/${eid}`);
+  await page.locator('#nav-toggle').tap();
+  await page.waitForFunction(() => document.getElementById('nav-toggle').getAttribute('aria-expanded') === 'true');
+  await page.waitForTimeout(500);
+  assert.ok(await page.locator('#sidebar-drill.is-open').count(), 'the category panel is not open on its page');
+
+  // A real finger drag, as touch events: Playwright's wheel is not a swipe.
+  const cdp = await page.context().newCDPSession(page);
+  const swipe = async (dy) => {
+    const x = 120, y = 520;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let i = 1; i <= 12; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - (dy * i) / 12 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(400);
+  };
+  const scrolled = () => page.evaluate(() => document.getElementById('sidebar').scrollTop);
+  for (let i = 0; i < 6; i++) await swipe(400);
+  assert.ok(await scrolled() > 300, 'a swipe on the open category did not move the menu');
+
+  // Only the menu scrolls in the drawer, and its last page row comes clear
+  // of the foot.
+  const inner = await page.evaluate(() => [...document.querySelectorAll('#sidebar *')].filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 2).map((e) => e.id || e.className));
+  assert.deepEqual(inner, [], 'parts of the menu scroll on their own: ' + inner.join(', '));
+  const last = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#sidebar-drill a')].filter((a) => a.getClientRects().length);
+    const a = rows[rows.length - 1], r = a.getBoundingClientRect();
+    return a.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  assert.ok(last, 'the open category\'s last row cannot be reached');
+  await picture(page, 'shell-phone-menu-scrolled', { about: 'The phone menu scrolled to the end of an open category', mask: ['main'] });
+
+  // Back to the categories: the list is there, and still scrolls.
+  await page.locator('[data-drill-back]').tap();
+  await page.waitForTimeout(400);
+  assert.ok(await page.locator('#sidebar-nav-list [data-drill-open]').first().isVisible(), 'the categories did not come back');
+
+  // Scrolled down, the close button still answers a tap (no row button
+  // shows through the brand row), and a category tapped from there opens
+  // with its top in view under the brand row.
+  await swipe(600);
+  const closeHit = await page.evaluate(() => {
+    const b = document.querySelector('#sidebar .nav-x-close'), r = b.getBoundingClientRect();
+    return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  assert.ok(closeHit, 'something in the menu covers its close button once scrolled');
+  await page.locator('#sidebar-nav-list [data-drill-open]').last().tap();
+  await page.locator('#sidebar-cat-content [data-drill-back]').waitFor();
+  await page.waitForTimeout(400);
+  const backHit = await page.evaluate(() => {
+    const b = document.querySelector('#sidebar-cat-content [data-drill-back]'), r = b.getBoundingClientRect();
+    return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  assert.ok(backHit, 'a category opened from a scrolled menu starts out of view');
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page scrolls sideways');
+  owner.assertClean();
+});
