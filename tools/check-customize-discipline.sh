@@ -26,6 +26,7 @@ TEMPL_FILES=(
   "internal/plugins/campaigns/customize.templ"
   "internal/plugins/campaigns/customize_look.templ"
   "internal/plugins/campaigns/customize_shell.templ"
+  "internal/plugins/campaigns/customize_wall.templ"
 )
 JS_FILES=(
   "static/js/widgets/customize_look.js"

@@ -25,6 +25,12 @@ type CustomizeCategory struct {
 	IsDefault bool `json:"isDefault"`
 	// DMOnly marks the Adventures category, which only the DM team sees.
 	DMOnly bool `json:"dmOnly"`
+	// Fields counts the category's fields, HomeLayout says its category home
+	// has an arrangement of its own, and Sample names one real page; the
+	// Customize wall words and draws the category from them.
+	Fields     int    `json:"fields"`
+	HomeLayout bool   `json:"homeLayout"`
+	Sample     string `json:"sample,omitempty"`
 }
 
 // CustomizeCategoryLister lists a campaign's categories for the Customize

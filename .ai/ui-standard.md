@@ -65,9 +65,9 @@ Every screen is one of two kinds, and is designed in that kind's register.
 - **Workshops** are where the owner arranges and configures: the
   Customizer, the calendar, map and book editors, settings, Site admin.
   They are framed tools on the theme tokens (`customize_shell.css` is the
-  model: index tabs across the top, each area's parts in a drawer hanging
-  from its tab, the work in the middle, an inspector on the right, one save
-  bar). A workshop shows the page it changes as the real
+  model: a bar that names where you are, "Everything" back to the wall,
+  the part's name and its own tabs as index tabs, the work in the middle, an
+  inspector on the right, one save bar). A workshop shows the page it changes as the real
   page, never an abstract grid or a form describing it.
 - **Paper is an optional extra, mostly for players.** Every surface already
   behaves like a sheet (The material rules); paper is only the optional
@@ -793,6 +793,26 @@ The standard above is the base every campaign starts from. A campaign owner's
 Customize choices (`AppearanceData`, emitted as `data-cz-*` on the page) can
 make it richer, never break it: Calm and Off still win, and the tools keep
 their tokens.
+
+- **Customize opens on a wall of pictures** of everything the owner can
+  change, each a miniature of that surface in the campaign's own look (its
+  colours, faces, menu and header, unsaved draft included) and its real
+  names, with the name and what is set now beneath it. Groups: Shared by
+  every page (Site frame, Colours and type, Page style, Hover cards,
+  Character sheets, Emails), Each kind of page (one per category, with a
+  quiet "All categories"), Home pages, and Apps (one per Customize tab a
+  plugin registers, so a new tab adds a picture). Hovering or focusing a
+  shared picture lights the part it changes in every other picture and dims
+  the pictures it does not touch (touch has no hover). Pressing a picture
+  grows it into its workshop (a view transition: the picture travels to the
+  workshop's stage, `data-czs-stage`, while the rest of the wall steps back
+  to 97%; then the bar's tabs, 30ms apart, and the workshop's controls come
+  in), opening over 0.92 of `--dur-slide` on `--ease-out`; "Everything" runs
+  it back over 0.9 of `--dur-large` on `--ease-in-out`. Calm is a short
+  cross-fade, Off is instant, and a browser without view transitions fades.
+  Inside a part the bar names where you are: "‹ Everything", the part's name
+  (a category's opens the switcher), the part's own tabs (a category's five,
+  Look's rooms, the homes), then Find.
 
 - **Page look** (`data-cz-page`, `static/css/page_look_annals.css`, chosen in
   Customize › Look › Pages, where Annals is named Material): Annals

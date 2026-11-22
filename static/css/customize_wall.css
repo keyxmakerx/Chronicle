@@ -1,0 +1,270 @@
+/* Customize's wall: a picture of everything the owner can change, each drawn
+   in the campaign's own look, and the grow that opens one into its workshop.
+   The frame around the wall takes the theme tokens (customize_shell.css); the
+   miniatures take only the --x-* values the server sets on each one, so they
+   show the campaign's look and not the tool's. */
+
+.czw { padding: 28px 32px 120px; max-width: 1280px; }
+.czw-head { display: flex; gap: 12px 24px; align-items: flex-start; flex-wrap: wrap; }
+.czw-head > div { flex: 1; min-width: 220px; }
+.czw-head .czs-find { margin-top: 2px; flex: none; }
+.czw-group { margin-top: 28px; }
+.czw-g {
+  display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; margin: 0 0 12px;
+  font-size: 11px; line-height: 1.3; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.czw-note, .czw-more { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.czw-note { color: var(--color-text-muted, var(--color-text-secondary)); }
+.czw-more { color: var(--color-accent-link, var(--color-accent)); text-decoration: none; padding: 4px 2px; }
+.czw-more:hover { text-decoration: underline; }
+.czw-more:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--shape-r-small); }
+.czw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px 14px; }
+
+/* ---------- A picture and its two lines ---------- */
+.czw-tile {
+  display: flex; flex-direction: column; min-width: 0; min-height: 44px;
+  color: inherit; text-decoration: none; border-radius: var(--shape-r-panel);
+}
+.czw-pic {
+  position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden;
+  border: 1px solid var(--color-border); border-radius: var(--shape-r-panel);
+  background: var(--color-bg-secondary); box-shadow: var(--elev-resting);
+  container-type: inline-size;
+  transition: transform var(--dur-standard) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out);
+}
+@media (hover: hover) {
+  .czw-tile:hover .czw-pic { transform: translateY(-3px); box-shadow: var(--elev-hover); }
+}
+.czw-tile:active .czw-pic { transform: scale(0.985); transition-duration: 60ms; }
+.czw-tile:focus-visible { outline: none; }
+.czw-tile:focus-visible .czw-pic { outline: 2px solid var(--color-accent); outline-offset: 3px; transform: translateY(-3px); box-shadow: var(--elev-hover); }
+.czw-name { margin-top: 9px; font-size: 13.5px; font-weight: 600; color: var(--color-text-primary); line-height: 1.3; overflow-wrap: anywhere; }
+.czw-line { font-size: 12px; color: var(--color-text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.czw-pic .czs-dot { position: absolute; top: 8px; right: 8px; z-index: 3; width: 8px; height: 8px; border-radius: 50%; background: var(--czs-warn); box-shadow: 0 0 0 2px var(--color-bg-secondary); }
+
+/* ---------- What a shared picture changes, lit in the others ----------
+   The ring is a pseudo-element that fades in, so only opacity moves. */
+.czw-mini [data-share] { position: relative; }
+.czw-mini [data-share]::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; opacity: 0;
+  border: 8px solid var(--color-accent); transition: opacity var(--dur-micro) var(--ease-out);
+}
+.czw-mini [data-share="colours"]::after, .czw-mini [data-share="type"]::after { inset: -6px; border-width: 6px; border-radius: 10px; }
+.czw-pic::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0;
+  background: var(--color-bg-secondary); transition: opacity var(--dur-micro) var(--ease-out);
+}
+.czw[data-hl="frame"] .czw-mini [data-share="frame"]::after,
+.czw[data-hl="colours"] .czw-mini [data-share="colours"]::after,
+.czw[data-hl="colours"] .czw-mini [data-share="type"]::after { opacity: 1; }
+.czw[data-hl="frame"] .czw-tile:not(:has([data-share="frame"])) .czw-pic::after,
+.czw[data-hl="colours"] .czw-tile:not(:has([data-share="colours"], [data-share="type"])) .czw-pic::after { opacity: 0.62; }
+.czw[data-hl] .czw-tile[data-czw-shares]:is(:hover, :focus-visible) .czw-pic { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.czw[data-hl] .czw-tile[data-czw-shares]:is(:hover, :focus-visible) .czw-pic::after { opacity: 0; }
+
+/* ---------- The miniatures ----------
+   Drawn at 720 x 450 and scaled to the tile: --s is the tile's width over 720,
+   from customize_shell.js, or from the tile itself where the browser divides
+   lengths. */
+.czw-mini {
+  --x-acc: #6366f1; --x-sb: #1a1c23; --x-sbt: #cfd3dc; --x-fb: system-ui, sans-serif; --x-fh: var(--x-fb);
+  --x-r: 10px; --x-br: 8px; --x-sh: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --x-page: var(--xl-page); --x-card: var(--xl-card); --x-ink: var(--xl-ink); --x-txt: var(--xl-txt);
+  --x-mut: var(--xl-mut); --x-line: var(--xl-line); --x-hd: var(--xl-hd); --x-hdt: var(--xl-hdt);
+  position: absolute; left: 0; top: 0; width: 720px; height: 450px; display: flex; overflow: hidden;
+  transform-origin: 0 0; transform: scale(var(--s, 0.24)); pointer-events: none;
+  background: var(--x-page); color: var(--x-txt); font: 12.5px/1.45 var(--x-fb);
+}
+.dark .czw-mini {
+  --x-page: var(--xd-page); --x-card: var(--xd-card); --x-ink: var(--xd-ink); --x-txt: var(--xd-txt);
+  --x-mut: var(--xd-mut); --x-line: var(--xd-line); --x-hd: var(--xd-hd); --x-hdt: var(--xd-hdt);
+}
+@supports (transform: scale(calc(10px / 2px))) {
+  .czw-pic .czw-mini { --s: calc(100cqw / 720px); }
+}
+.czw-mini * { box-sizing: border-box; margin: 0; }
+.czw-side { flex: none; width: 150px; background: var(--x-sb); color: var(--x-sbt); display: flex; flex-direction: column; padding: 8px 6px; gap: 2px; border-right: 1px solid var(--x-line); }
+.czw-brand { display: flex; align-items: center; gap: 8px; padding: 6px 8px 10px; font-weight: 700; white-space: nowrap; }
+.czw-brand b { overflow: hidden; text-overflow: ellipsis; }
+.czw-brand i, .czw-mail-top i {
+  flex: none; width: 22px; height: 22px; border-radius: 6px; background: var(--x-acc); color: #fff;
+  font: 700 11px/22px var(--x-fb); text-align: center; font-style: normal;
+}
+.czw-nav { display: flex; flex-direction: column; gap: 1px; }
+.czw-nav span { display: block; padding: 5px 9px; border-radius: 6px; white-space: nowrap; opacity: 0.82; overflow: hidden; text-overflow: ellipsis; }
+.czw-nav span.on { opacity: 1; background: color-mix(in srgb, var(--x-acc) 22%, transparent); box-shadow: inset 2px 0 0 var(--x-acc); }
+.czw-nav small { display: block; font: 700 9px/1 var(--x-fb); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.55; padding: 10px 9px 4px; }
+.czw-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.czw-headrow { flex: none; display: flex; align-items: center; background: var(--x-hd); color: var(--x-hdt); border-bottom: 1px solid var(--x-line); }
+.czw-top { flex: 1; display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px; font-weight: 600; min-width: 0; }
+.czw-top span { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.czw-dotic { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; opacity: 0.6; }
+.czw-ppl { display: flex; padding: 0 16px 0 10px; height: 36px; align-items: center; }
+.czw-ppl b { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--x-hd); margin-left: -6px; }
+.czw-page { flex: 1; min-height: 0; overflow: hidden; padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; }
+.czw-bare { display: block; }
+.czw-bare .czw-page { height: 100%; padding: 26px 34px; }
+.czw-hero { flex: none; height: 62px; border-radius: var(--x-r); background: linear-gradient(120deg, color-mix(in srgb, var(--x-acc) 55%, #0b1020), color-mix(in srgb, var(--x-acc) 25%, #7dd3fc)); }
+.czw-title { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.czw-h { display: block; font: 600 24px/1.05 var(--x-fh); letter-spacing: 0.02em; color: var(--x-ink); text-transform: var(--x-tt, none); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.czw-btns { display: flex; gap: 6px; margin-left: auto; padding: 2px; }
+.czw-flat { margin-left: 0; }
+.czw-end { margin-left: auto; }
+.czw-b { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: var(--x-br); font-weight: 600; font-size: 11.5px; border: 1px solid var(--x-line); background: var(--x-card); color: var(--x-ink); white-space: nowrap; }
+.czw-b.pri { background: var(--x-acc); border-color: transparent; color: #fff; box-shadow: 0 2px 6px color-mix(in srgb, var(--x-acc) 35%, transparent); }
+.czw-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 2px; }
+.czw-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.czw-card { background: var(--x-card); border: 1px solid var(--x-line); border-radius: var(--x-r); box-shadow: var(--x-sh); padding: 10px 12px; min-width: 0; }
+.czw-card p { font: 700 9.5px/1 var(--x-fb); letter-spacing: 0.1em; text-transform: uppercase; color: var(--x-mut); margin-bottom: 8px; }
+.czw-bar { display: block; height: 7px; border-radius: 4px; background: var(--x-line); width: 100%; margin-top: 7px; }
+.czw-bar.czw-short { width: 58%; }
+.czw-bar.czw-wide { height: 9px; margin-top: 8px; }
+.czw-rows { list-style: none; padding: 0; }
+.czw-rows li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--x-line); }
+.czw-rows li:first-child { border-top: 0; }
+.czw-link { height: 7px; width: 55%; border-radius: 4px; background: color-mix(in srgb, var(--x-acc) 55%, var(--x-card)); }
+.czw-rows em { height: 6px; width: 22%; border-radius: 3px; background: var(--x-line); }
+.czw-day { display: flex; gap: 10px; align-items: center; }
+.czw-day i { flex: none; width: 34px; height: 34px; border-radius: 7px; border: 1.5px solid var(--x-acc); }
+.czw-day i.czw-round { border-radius: 50%; }
+.czw-day > div { flex: 1; min-width: 0; }
+.czw-big { display: block; width: 44%; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--x-ink) 22%, var(--x-card)); margin-bottom: 4px; }
+.czw-ent { display: flex; gap: 16px; min-height: 0; }
+.czw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.czw-kind { align-self: flex-start; font: 600 10px/1 var(--x-fb); color: var(--x-acc); background: color-mix(in srgb, var(--x-acc) 14%, transparent); padding: 4px 8px; border-radius: 99px; }
+.czw-words { display: flex; gap: 12px; font-size: 11px; color: var(--x-mut); }
+.czw-sec { font: 600 13px/1 var(--x-fh); text-transform: var(--x-tt, none); color: var(--x-ink); margin-top: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--x-line); }
+.czw-aside { flex: none; width: 190px; display: flex; flex-direction: column; gap: 10px; }
+.czw-img { display: block; height: 120px; border-radius: var(--x-r); background: linear-gradient(135deg, var(--x-acc), color-mix(in srgb, var(--x-acc) 40%, #fff)); }
+.czw-round { border-radius: 50%; }
+.czw-hover { position: absolute; left: 300px; top: 150px; width: 250px; z-index: 1; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22); }
+.czw-hv { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.czw-hv .czw-img { flex: none; width: 40px; height: 40px; }
+.czw-hv b { display: block; color: var(--x-ink); }
+.czw-hv span { font-size: 11px; color: var(--x-mut); }
+.czw-mailbg { background: color-mix(in srgb, var(--x-page) 70%, #94a3b8); }
+.czw-mail { width: 420px; margin: 0 auto; background: var(--x-card); border-radius: var(--x-r); overflow: hidden; box-shadow: var(--x-sh); }
+.czw-mail-top { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: var(--x-acc); color: #fff; font-weight: 700; }
+.czw-mail-top i { background: rgba(255, 255, 255, 0.25); }
+.czw-mail-b { padding: 18px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.czw-mail-b .czw-b { margin-top: 10px; }
+.czw-spec { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: center; }
+.czw-aa { display: block; font: 600 96px/1 var(--x-fh); color: var(--x-ink); text-transform: none; }
+.czw-sw { display: flex; gap: 12px; }
+.czw-sw i { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 0 0 1px var(--x-line); }
+.czw-h2 { grid-column: 1 / -1; font: 600 22px/1.1 var(--x-fh); color: var(--x-ink); text-transform: var(--x-tt, none); }
+.czw-spec .czw-wide { grid-column: 1 / -1; margin: 0; }
+.czw-sheet { display: flex; flex-direction: column; gap: 14px; }
+.czw-sh-h { display: flex; gap: 14px; align-items: center; }
+.czw-big-av { width: 54px; height: 54px; flex: none; }
+.czw-sh-h > div { flex: 1; min-width: 0; }
+.czw-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; text-align: center; }
+.czw-stats .czw-big { margin: 0 auto; width: 60%; }
+.czw-meter { display: grid; gap: 10px; }
+.czw-meter i { height: 8px; border-radius: 4px; background: var(--x-line); overflow: hidden; }
+.czw-meter s { display: block; height: 100%; background: var(--x-acc); }
+.czw-map { height: 100%; border-radius: var(--x-r); padding: 8px; background: #e9dcc0; box-shadow: inset 0 0 0 3px #8b6b3d; }
+.czw-map-in { position: relative; height: 100%; border-radius: 4px; background: radial-gradient(ellipse at 30% 40%, #c9d8b6, #a9c49a 35%, #7fa3a0 62%, #4f7f92); overflow: hidden; }
+.czw-map-in i { position: absolute; width: 16px; height: 16px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--x-acc); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); }
+.czw-felt { background: radial-gradient(ellipse at 50% 40%, #1f5d4a, #123a30); }
+.czw-dice { display: flex; align-items: center; justify-content: center; gap: 26px; height: 100%; }
+.czw-d20 { width: 120px; height: 132px; display: grid; place-items: center; background: linear-gradient(160deg, #f7f1e3, #d6c9ad); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+.czw-d20 b { font: 700 38px/1 var(--x-fh); color: var(--x-acc); }
+.czw-d6 { width: 84px; height: 84px; clip-path: none; border-radius: 16px; }
+.czw-roll { width: 190px; }
+.czw-steps { display: flex; gap: 8px; }
+.czw-steps span { flex: 1; font-size: 11px; font-weight: 600; color: var(--x-mut); padding-top: 8px; border-top: 3px solid var(--x-line); }
+.czw-steps span.on { color: var(--x-ink); border-top-color: var(--x-acc); }
+.czw-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.czw-pick .czw-card.on { box-shadow: 0 0 0 2px var(--x-acc), var(--x-sh); }
+.czw-pick .czw-img { height: 80px; }
+.czw-deck { position: relative; height: 330px; display: flex; justify-content: center; align-items: center; }
+.czw-pcard { width: 150px; height: 220px; margin: 0 -22px; border-radius: 12px; background: var(--x-card); border: 1px solid var(--x-line); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18); display: flex; flex-direction: column; padding: 14px; }
+.czw-pcard i { display: block; flex: 1; border-radius: 8px; background: linear-gradient(160deg, var(--x-acc), color-mix(in srgb, var(--x-acc) 30%, #0b1020)); margin-bottom: 10px; }
+.czw-app { display: flex; flex-direction: column; gap: 4px; max-width: 360px; margin: 60px auto 0; align-items: flex-start; }
+.czw-app-ic { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 16px; background: var(--x-acc); color: #fff; font-size: 28px; margin-bottom: 10px; }
+
+/* ---------- Opening a part: the grow ----------
+   customize_shell.js names the pressed picture and, on the way in, the
+   workshop's stage (the part's preview, or its whole body), and sets
+   html[data-czs-vt]. The picture then travels to the stage's place and the
+   rest of the wall steps back; the bar's tabs and the workshop's own controls
+   follow once it has landed. Opening takes 0.92 of --dur-slide on --ease-out;
+   closing runs back over 0.9 of --dur-large on --ease-in-out. The tokens carry
+   the owner's Motion speed. */
+html[data-czs-vt="open"] { --czs-vt-dur: calc(var(--dur-slide) * 0.92); --czs-vt-ease: var(--ease-out); }
+html[data-czs-vt="close"] { --czs-vt-dur: calc(var(--dur-large) * 0.9); --czs-vt-ease: var(--ease-in-out); }
+html[data-czs-vt="open"] .czs-is-workshop [data-czs-stage] { view-transition-name: czs-grow; }
+html[data-czs-vt="open"]::view-transition-group(czs-grow),
+html[data-czs-vt="close"]::view-transition-group(czs-grow) {
+  animation-duration: var(--czs-vt-dur); animation-timing-function: var(--czs-vt-ease);
+  overflow: clip; border-radius: var(--shape-r-panel);
+}
+html[data-czs-vt="open"]::view-transition-image-pair(czs-grow),
+html[data-czs-vt="close"]::view-transition-image-pair(czs-grow) { isolation: auto; }
+html[data-czs-vt="open"]::view-transition-old(czs-grow),
+html[data-czs-vt="open"]::view-transition-new(czs-grow),
+html[data-czs-vt="close"]::view-transition-old(czs-grow),
+html[data-czs-vt="close"]::view-transition-new(czs-grow) {
+  width: 100%; height: 100%; object-fit: cover; object-position: top left; mix-blend-mode: normal;
+  animation-duration: var(--czs-vt-dur); animation-timing-function: var(--czs-vt-ease); animation-fill-mode: both;
+}
+html[data-czs-vt="open"]::view-transition-old(czs-grow) { animation-name: czs-vt-fade-out; }
+html[data-czs-vt="open"]::view-transition-new(czs-grow) { animation-name: czs-vt-fade-in-late; }
+html[data-czs-vt="close"]::view-transition-old(czs-grow) { animation-name: czs-vt-fade-out-early; }
+html[data-czs-vt="close"]::view-transition-new(czs-grow) { animation-name: czs-vt-fade-in; }
+/* The rest of the page: the wall steps back, then the workshop's frame arrives. */
+html[data-czs-vt="open"]::view-transition-old(root),
+html[data-czs-vt="open"]::view-transition-new(root),
+html[data-czs-vt="close"]::view-transition-old(root),
+html[data-czs-vt="close"]::view-transition-new(root) {
+  mix-blend-mode: normal; animation-duration: var(--czs-vt-dur); animation-timing-function: var(--czs-vt-ease); animation-fill-mode: both;
+}
+html[data-czs-vt="open"]::view-transition-old(root) { animation-name: czs-vt-step-back; }
+html[data-czs-vt="open"]::view-transition-new(root) { animation-name: czs-vt-arrive; }
+html[data-czs-vt="close"]::view-transition-old(root) { animation-name: czs-vt-fade-out-early; }
+html[data-czs-vt="close"]::view-transition-new(root) { animation-name: czs-vt-step-forward; }
+@keyframes czs-vt-step-back { to { opacity: 0; transform: scale(0.97); } }
+@keyframes czs-vt-step-forward { from { opacity: 0; transform: scale(0.97); } }
+@keyframes czs-vt-arrive { 0%, 55% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes czs-vt-fade-out { 0%, 25% { opacity: 1; } 75%, 100% { opacity: 0; } }
+@keyframes czs-vt-fade-in-late { 0%, 35% { opacity: 0; } 85%, 100% { opacity: 1; } }
+@keyframes czs-vt-fade-out-early { 0% { opacity: 1; } 55%, 100% { opacity: 0; } }
+@keyframes czs-vt-fade-in { 0%, 20% { opacity: 0; } 100% { opacity: 1; } }
+/* Calm is a short cross-fade; Off is instant (the script cancels the transition). */
+html[data-czs-vt="calm"]::view-transition-old(root),
+html[data-czs-vt="calm"]::view-transition-new(root) { animation-duration: var(--dur-standard); animation-timing-function: var(--ease-out); }
+/* The tabs and the workshop's controls come in after the picture has landed. */
+html[data-czs-vt="open"] .czs-is-workshop .czs-top .czs-tabw,
+html[data-czs-vt="open"] .czs-is-workshop .czs-top .czs-find {
+  animation: czs-tab-in var(--dur-standard) var(--ease-out) backwards;
+  animation-delay: calc(var(--czs-vt-dur) * 0.72 + var(--czs-i, 0) * 30ms);
+}
+html[data-czs-vt="open"] .czs-is-workshop .czs-body { animation: none; }
+html[data-czs-vt="open"] .czs-is-workshop .czs-body > * {
+  animation: czs-controls-in var(--dur-standard) var(--ease-out) backwards;
+  animation-delay: calc(var(--czs-vt-dur) * 0.8);
+}
+@keyframes czs-tab-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes czs-controls-in { from { opacity: 0; transform: translateY(6px); } }
+html[data-czs-vt="close"] .czs-is-wall .czw-head,
+html[data-czs-vt="close"] .czs-is-wall .czw-group { animation: none; }
+
+/* Calm: the lift and the ring fade only; Off: nothing moves. */
+html[data-motion="calm"] .czw-tile .czw-pic, html[data-cz-reduce] .czw-tile .czw-pic, html[data-view-motion="calm"] .czw-tile .czw-pic { transition-property: box-shadow; }
+html[data-motion="calm"] .czw-tile:is(:hover, :focus-visible) .czw-pic,
+html[data-cz-reduce] .czw-tile:is(:hover, :focus-visible) .czw-pic,
+html[data-view-motion="calm"] .czw-tile:is(:hover, :focus-visible) .czw-pic { transform: none; }
+html[data-motion="off"] .czw-pic, html[data-motion="off"] .czw-pic::after, html[data-motion="off"] .czw-mini [data-share]::after { transition: none; }
+html[data-motion="off"] .czw-tile:is(:hover, :focus-visible, :active) .czw-pic { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .czw-pic, .czw-pic::after, .czw-mini [data-share]::after { transition: none; }
+  .czw-tile:is(:hover, :focus-visible, :active) .czw-pic { transform: none; }
+}
+
+@media (max-width: 640px) {
+  .czw { padding: 20px 16px 120px; }
+  .czw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
+  .czw-head .czs-find { margin-top: 0; }
+}

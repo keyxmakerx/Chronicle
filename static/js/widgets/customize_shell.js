@@ -8,6 +8,11 @@
  * section (POST .../customize/publish); each section is applied by the
  * plugin that owns its data, and a section that fails stays in the draft.
  *
+ * The frame also runs the wall's behaviour (Customize's first page): it scales
+ * each picture to its tile, lights the part a shared picture changes in the
+ * others, and, at module level, asks for the view transition that grows a
+ * pressed picture into its workshop and back (see "The grow" below).
+ *
  * Areas talk to the frame through the page, not through each other:
  *   - An area changes its section with Chronicle.customizeSet(key, value)
  *     (value null removes the section). A value may carry `_changes`, a list
@@ -75,6 +80,91 @@
   // moment after "Saved." appears; the new frame takes over the notes still
   // showing so they stay long enough to read.
   var lastToasts = null;
+
+
+  /* ---------- The grow ----------
+   * A picture on the wall is a boosted link whose swap asks for a view
+   * transition (hx-swap "transition:true"). Just before htmx starts it, this
+   * names the pressed picture "czs-grow" (the old state) and sets
+   * html[data-czs-vt]; customize_wall.css names the workshop's stage the same
+   * (the new state), so the browser flies one to the other while the rest of
+   * the page steps back. "Everything" runs it the other way. Calm gets a short
+   * cross-fade and Off cancels the transition. Browser Back restores the wall
+   * from htmx's history without a transition, so it plays the reverse itself
+   * on the tile it left from. */
+  var G = document.documentElement;
+  var growClear = 0, growStyle = null, growFrom = '', left = null;
+  function motionLevel() {
+    var m = G.getAttribute('data-motion');
+    if (m === 'off' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return 'off';
+    if (m === 'calm' || G.hasAttribute('data-cz-reduce') || G.getAttribute('data-view-motion') === 'calm') return 'calm';
+    return 'full';
+  }
+  function cssMs(name, dflt) {
+    var v = parseFloat(getComputedStyle(G).getPropertyValue(name));
+    return isFinite(v) && v > 0 ? v : dflt;
+  }
+  function keyAttr(k) { return String(k || '').replace(/[^a-z0-9-]/gi, ''); }
+  function growReset() {
+    clearTimeout(growClear);
+    G.removeAttribute('data-czs-vt');
+    if (growStyle) { growStyle.remove(); growStyle = null; }
+  }
+  // The wall picture a workshop returns to: the one pressed to get here, or
+  // the one its own address names after a reload.
+  function returnKey(frame) {
+    var own = frame ? frame.getAttribute('data-wall-key') : '';
+    var look = frame && frame.getAttribute('data-area') === 'look';
+    if (look && growFrom && !/^(cat|home|app)-/.test(growFrom)) return growFrom;
+    return own || growFrom || 'frame';
+  }
+  document.addEventListener('htmx:beforeTransition', function (e) {
+    var cfg = e.detail && e.detail.requestConfig, elt = cfg && cfg.elt;
+    var link = elt && elt.closest ? elt.closest('.czw-tile, [data-czs-back]') : null;
+    if (!link) return;
+    var lv = motionLevel();
+    if (lv === 'off') { e.preventDefault(); return; }
+    growReset();
+    if (lv === 'calm') G.setAttribute('data-czs-vt', 'calm');
+    else if (link.classList.contains('czw-tile')) {
+      growFrom = link.getAttribute('data-czw-key') || '';
+      var pic = link.querySelector('[data-czw-pic]');
+      if (pic) pic.style.viewTransitionName = 'czs-grow';
+      G.setAttribute('data-czs-vt', 'open');
+    } else {
+      var stage = document.querySelector('[data-czs-stage]');
+      if (stage) stage.style.viewTransitionName = 'czs-grow';
+      growStyle = document.createElement('style');
+      growStyle.textContent = 'html[data-czs-vt="close"] .czw-tile[data-czw-key="' + keyAttr(returnKey(document.querySelector('.czs'))) +
+        '"] [data-czw-pic]{view-transition-name:czs-grow}';
+      document.head.appendChild(growStyle);
+      G.setAttribute('data-czs-vt', 'close');
+    }
+    growClear = setTimeout(growReset, 1200);
+  });
+  // Browser Back from a part: htmx restores the wall at once, so the picture
+  // travels back from where the stage was.
+  window.addEventListener('popstate', function () {
+    var frame = document.querySelector('.czs-is-workshop'), stage = frame && frame.querySelector('[data-czs-stage]');
+    left = stage ? { key: returnKey(frame), rect: stage.getBoundingClientRect(), t: Date.now() } : null;
+  }, true);
+  document.addEventListener('htmx:historyRestore', function () {
+    var l = left; left = null;
+    var wall = document.querySelector('.czs-is-wall');
+    if (!l || !wall || Date.now() - l.t > 4000 || motionLevel() !== 'full') return;
+    var pic = wall.querySelector('.czw-tile[data-czw-key="' + keyAttr(l.key) + '"] [data-czw-pic]');
+    var dur = cssMs('--dur-large', 280) * 0.9;
+    var ease = getComputedStyle(G).getPropertyValue('--ease-in-out').trim() || 'ease-in-out';
+    if (wall.animate) wall.animate([{ opacity: 0, transform: 'scale(0.97)' }, { opacity: 1, transform: 'none' }], { duration: dur, easing: ease });
+    if (!pic || !pic.animate) return;
+    var to = pic.getBoundingClientRect();
+    if (!to.width || !to.height) return;
+    pic.style.zIndex = '5'; pic.style.transformOrigin = '0 0';
+    var a = pic.animate([{ transform: 'translate(' + (l.rect.left - to.left) + 'px,' + (l.rect.top - to.top) + 'px) scale(' + (l.rect.width / to.width) + ',' + (l.rect.height / to.height) + ')', opacity: 0.4 },
+      { transform: 'none', opacity: 1 }], { duration: dur, easing: ease });
+    var done = function () { pic.style.zIndex = ''; pic.style.transformOrigin = ''; };
+    a.onfinish = done; a.oncancel = done;
+  });
 
   function mount(el) {
     var CID = el.getAttribute('data-campaign-id');
@@ -397,6 +487,38 @@
       });
     }
 
+    /* ---------- The wall ----------
+     * Each miniature is drawn 720 wide and scaled to its tile. Where the
+     * browser can divide lengths the CSS does it from the tile; elsewhere the
+     * width is read here. Hovering or focusing a shared picture lights the part
+     * it changes in every other picture (touch has no hover). */
+    var wall = $('[data-czw]'), picRO = null;
+    if (wall) {
+      var cssFit = window.CSS && CSS.supports && CSS.supports('transform', 'scale(calc(10px / 2px))');
+      if (!cssFit) {
+        var fit = function (pic) {
+          var m = pic.querySelector('.czw-mini');
+          if (m && pic.clientWidth) m.style.setProperty('--s', (pic.clientWidth / 720).toFixed(4));
+        };
+        var pics = Array.prototype.slice.call(wall.querySelectorAll('[data-czw-pic]'));
+        pics.forEach(fit);
+        if (window.ResizeObserver) {
+          picRO = new ResizeObserver(function (es) { es.forEach(function (x) { fit(x.target); }); });
+          pics.forEach(function (p) { picRO.observe(p); });
+        }
+      }
+      var lit = function (e, onTile) {
+        if (e.pointerType === 'touch') return;
+        var t = e.target.closest && e.target.closest('.czw-tile[data-czw-shares]');
+        if (!t) return;
+        if (onTile) wall.setAttribute('data-hl', t.getAttribute('data-czw-shares')); else wall.removeAttribute('data-hl');
+      };
+      on(wall, 'pointerover', function (e) { lit(e, true); });
+      on(wall, 'pointerout', function (e) { lit(e, false); });
+      on(wall, 'focusin', function (e) { lit(e, true); });
+      on(wall, 'focusout', function (e) { lit(e, false); });
+    }
+
     /* ---------- Wiring ---------- */
     on(bar, 'click', function (e) {
       var b = e.target.closest('button');
@@ -409,10 +531,9 @@
     });
     on($('[data-czs-find]'), 'click', openFind);
 
-    /* ---------- Index tabs and their drawers ----------
-     * A tab opens its area; its chevron, or the open area's own tab, drapes
-     * the drawer of the area's parts down from the tab's side line. Escape,
-     * the drawer's Close and a click outside put it away. */
+    /* ---------- The bar and the category drawer ----------
+     * A category's name drapes the drawer of every category down from the
+     * bar. Escape, the drawer's Close and a click outside put it away. */
     var topBar = $('[data-czs-top]'), openDr = null;
     // Content that pins itself under the bar (the Look's example) needs its height.
     var topRO = null;
@@ -434,16 +555,20 @@
       // last item rather than leaving a cut-off word at the left.
       var right = w.offsetLeft - x0 + w.offsetWidth;
       var parts = Array.prototype.slice.call(strip.children);
-      for (var i = 0; i < parts.length; i++) {
+      // "Everything" stays pinned at the row's start, so the landing leaves
+      // room for it and the first item is the one after it.
+      var pin = strip.querySelector('.czs-back-all'), pinW = pin ? pin.offsetWidth : 0, first = pin ? 1 : 0;
+      for (var i = first; i < parts.length; i++) {
         var left = Math.max(0, parts[i].offsetLeft - x0);
-        if (right - left <= strip.clientWidth || parts[i] === w) {
+        if (right - left <= strip.clientWidth - pinW || parts[i] === w) {
           // Measured from the items, not scrollWidth, which can still hold
           // the room the last call added.
-          var end = parts[parts.length - 1], tail = Math.max(0, left - (end.offsetLeft - x0 + end.offsetWidth - strip.clientWidth));
+          var end = parts[parts.length - 1], at = Math.max(0, left - pinW);
+          var tail = Math.max(0, at - (end.offsetLeft - x0 + end.offsetWidth - strip.clientWidth));
           strip.style.paddingRight = tail ? tail + 'px' : '';
-          strip.scrollLeft = left;
+          strip.scrollLeft = at;
           // The new room only counts once a frame has been drawn with it.
-          if (tail) requestAnimationFrame(function () { requestAnimationFrame(function () { strip.scrollLeft = left; }); });
+          if (tail) requestAnimationFrame(function () { requestAnimationFrame(function () { strip.scrollLeft = at; }); });
           return;
         }
       }
@@ -509,18 +634,15 @@
       if (first) first.focus();
     }
     if (topBar) {
-      // Capture, so the open area's own tab opens its drawer before htmx
-      // would follow the link.
+      // Capture, so a Look tab changes the address's # before htmx would
+      // follow the link.
       on(topBar, 'click', function (e) {
         var c = e.target.closest('[data-czs-drawer]');
         if (c) { e.preventDefault(); openDrawer(c.getAttribute('data-czs-drawer')); return; }
         if (e.target.closest('[data-czs-drawer-close]')) { e.preventDefault(); closeDrawer(true); return; }
-        var t = e.target.closest('.czs-tab[aria-current="page"]');
-        var id = t && t.getAttribute('data-czs-area');
-        if (id && drawerFor(id)) { e.preventDefault(); e.stopPropagation(); openDrawer(id); return; }
         // A part on this same page (a Look room) changes the address's #
         // only, which the area follows.
-        var a = e.target.closest('.czs-drawer a');
+        var a = e.target.closest('.czs-drawer a, .czs-tab[data-czs-room]');
         if (a && a.hash && a.pathname === location.pathname) {
           e.preventDefault(); e.stopPropagation();
           closeDrawer(false);
@@ -528,29 +650,27 @@
           else location.hash = a.hash;
           return;
         }
-        if (a) closeDrawer(false);
+        if (a && a.closest('.czs-drawer')) closeDrawer(false);
       }, true);
       on(document, 'pointerdown', function (e) {
-        if (openDr && !e.target.closest('.czs-drawer, [data-czs-drawer], .czs-tab[aria-current="page"]')) closeDrawer(false);
+        if (openDr && !e.target.closest('.czs-drawer, [data-czs-drawer]')) closeDrawer(false);
       }, true);
       on(document, 'keydown', function (e) {
         if (e.key === 'Escape' && openDr) { e.preventDefault(); closeDrawer(true); }
       });
       on(window, 'resize', function () { if (openDr) placeDrawer(openDr); });
       // An area that keeps its open part in the page (the Look's rooms)
-      // names it, and which of its parts hold unsaved changes.
+      // names it, and which of its parts hold unsaved changes: its tabs in the
+      // bar carry the open mark and the dots.
       on(document, 'chronicle:customize-part', function (e) {
         var dt = (e && e.detail) || {};
-        var tab = $('.czs-tab[data-czs-area="' + dt.area + '"]'), d = drawerFor(dt.area);
-        var part = tab && tab.querySelector('[data-czs-part]');
-        if (part && typeof dt.label === 'string') part.textContent = dt.label;
-        if (!d) return;
-        Array.prototype.forEach.call(d.querySelectorAll('a[data-czs-room]'), function (a) {
+        Array.prototype.forEach.call(topBar.querySelectorAll('.czs-tab[data-czs-room]'), function (a) {
           var k = a.getAttribute('data-czs-room');
           if (k === dt.key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
           var dot = a.querySelector('.czs-dot');
           if (dot) dot.hidden = !(dt.changed && dt.changed.indexOf(k) >= 0);
         });
+        revealTab();
       });
     }
     on(document, 'keydown', function (e) {
@@ -589,6 +709,7 @@
       if (rowRO) { rowRO.disconnect(); rowRO = null; }
       if (topRO) { topRO.disconnect(); topRO = null; }
       if (cueMO) cueMO.disconnect();
+      if (picRO) picRO.disconnect();
     };
   }
 

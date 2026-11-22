@@ -98,6 +98,9 @@ type CustomizeCategoryInfo struct {
 	Claimable bool
 	Pages     int
 	Trashed   int
+	// Sample is the name of one real page in the category (its most recently
+	// changed), for the Customize wall's picture of that kind of page.
+	Sample string
 }
 
 // CustomizeCategories lists a campaign's entity types with their effective
@@ -112,10 +115,20 @@ func (s *entityService) CustomizeCategories(ctx context.Context, campaignID stri
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("counting entities by type: %w", err))
 	}
+	// One read names a real page for each category; the wall draws without a
+	// name when it fails.
+	sample := map[int]string{}
+	if recent, rerr := s.entities.ListRecent(ctx, campaignID, 3, "", 200); rerr == nil {
+		for _, e := range recent {
+			if _, ok := sample[e.EntityTypeID]; !ok {
+				sample[e.EntityTypeID] = e.Name
+			}
+		}
+	}
 	out := make([]CustomizeCategoryInfo, 0, len(types))
 	for i := range types {
 		t := types[i]
-		info := CustomizeCategoryInfo{Type: t, Claimable: isClaimableType(&t), Pages: counts[t.ID]}
+		info := CustomizeCategoryInfo{Type: t, Claimable: isClaimableType(&t), Pages: counts[t.ID], Sample: sample[t.ID]}
 		if s.safety != nil {
 			if info.Trashed, err = s.safety.CountTrashedByType(ctx, t.ID); err != nil {
 				return nil, apperror.NewInternal(err)

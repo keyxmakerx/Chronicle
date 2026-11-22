@@ -1,64 +1,14 @@
 // customize.templ: the bodies of Customize's areas. The frame around them
-// (rail, header, save bar) is customize_shell.templ; the pages that pick an
+// (bar, save bar) is customize_shell.templ; the pages that pick an
 // area are customize_pages.go.
 
 package campaigns
 
 import (
-	"context"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
 	"strconv"
 )
-
-// customizeAreaBlurbs says what each of Customize's own areas holds; the
-// home blurb carries a %s for the game master's word.
-var customizeAreaBlurbs = map[string]string{
-	"look":       "Colours, fonts, buttons, motion, the header and the sidebar. Eight whole looks to start from.",
-	"categories": "What kinds of pages you keep, and how each kind of page is set up.",
-	"home":       "The campaign home everyone lands on, and your own %s dashboard.",
-}
-
-// customizeAreaBlurb returns the blurb for an area, with the game master's
-// word filled in.
-func customizeAreaBlurb(ctx context.Context, id string) (string, bool) {
-	b, ok := customizeAreaBlurbs[id]
-	if ok && id == "home" {
-		b = fmt.Sprintf(b, layouts.GMTerm(ctx))
-	}
-	return b, ok
-}
-
-// customizeOverview is Customize's front page: one card per area. A plugin's
-// area says what is chosen now when its tab gives a summary.
-templ customizeOverview(areas []CustomizeArea, sums map[string]CustomizeSummary) {
-	<div class="czs-pad" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
-		<h1 class="czs-h1">Customize</h1>
-		<p class="czs-lede">Everything about how the campaign looks and how its pages are set up, in one place. Pick what you want to change, or press <kbd>/</kbd> and type it. Changes wait in one draft until you save them.</p>
-		<div class="czs-ov-grid">
-			for _, a := range areas {
-				if a.ID != "overview" {
-					<a class="czs-ov" href={ templ.SafeURL(a.Href) } data-czs-area={ a.ID }>
-						<span class="czs-t">
-							<span class="czs-ic"><i class={ "fa-solid " + a.Icon } aria-hidden="true"></i></span>
-							{ a.Label }
-							<span class="czs-dot" title="Unsaved changes" hidden></span>
-						</span>
-						if b, ok := customizeAreaBlurb(ctx, a.ID); ok {
-							<p>{ b }</p>
-						} else if a.Blurb != "" {
-							<p>{ a.Blurb }</p>
-						} else if sum := sums[a.ID]; sum.Text != "" {
-							<p>{ joinParts(sum.Text, sum.Sub) }</p>
-						} else {
-							<p>The { a.Label } settings for this campaign.</p>
-						}
-					</a>
-				}
-			}
-		</div>
-	</div>
-}
 
 // customizeSavesAlone marks a part that saves each change as it is made,
 // outside the one draft and its save bar.

@@ -1,7 +1,8 @@
-// customize_pages.go: the pages of Customize. Customize is a set of areas
-// (Overview, Look, Categories, Home pages, and any a plugin contributes),
-// each with its own address, drawn inside one frame that carries the one
-// draft and its save bar (customize_shell.templ, customize_shell.js).
+// customize_pages.go: the pages of Customize. Customize opens on a wall of
+// pictures (customize_wall.go); each picture leads to a part (Look, a
+// category, a home, an app a plugin contributes), each with its own address,
+// drawn inside one frame that carries the one draft and its save bar
+// (customize_shell.templ, customize_shell.js).
 
 package campaigns
 
@@ -26,7 +27,7 @@ import (
 // "Players can claim" switch only means something while it is on.
 const addonCharacterClaiming = "player-character-claiming"
 
-// CustomizeArea is one of Customize's index tabs.
+// CustomizeArea is one part of Customize as Find and the save bar know it.
 type CustomizeArea struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
@@ -98,9 +99,31 @@ type customizeShellData struct {
 	Version    int
 	Draft      string // The draft as JSON, never empty ("{}" when there is none).
 	Find       string // The Find palette's entries as JSON.
-	// Cat is set inside a category: its one bar then takes the place of
-	// the area tabs.
+	// Cat is set inside a category: its one bar. Bar is the bar of any other
+	// part. Both are nil on the wall, which has no bar.
 	Cat *customizeCatBar
+	Bar *customizeBar
+	// Wall marks the first page; PartKey is the wall picture this page grew
+	// from, so the way back lands on it.
+	Wall    bool
+	PartKey string
+}
+
+// customizeBar is the bar inside a part: the way back to the wall, the part's
+// name and its own tabs.
+type customizeBar struct {
+	Base string
+	Name string
+	// Dot is the area whose unsaved changes mark the way back.
+	Dot  string
+	Tabs []customizeBarTab
+}
+
+// customizeBarTab is one of a part's tabs. Key names a Look room, so the Look
+// editor can mark the one open and the ones holding unsaved changes.
+type customizeBarTab struct {
+	Label, Href, Key string
+	Current          bool
 }
 
 // customizeCatBar is a category's bar: the way back to Categories, its name
@@ -174,12 +197,11 @@ func (h *Handler) customizeBase(cc *CampaignContext) string {
 	return fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)
 }
 
-// customizeAreas is the rail: Customize's own areas, then any a plugin
+// customizeAreas lists Customize's parts: its own, then any a plugin
 // contributes.
 func (h *Handler) customizeAreas(ctx context.Context, cc *CampaignContext) []CustomizeArea {
 	base := h.customizeBase(cc)
 	areas := []CustomizeArea{
-		{ID: "overview", Label: "Overview", Icon: "fa-compass", Href: base},
 		{ID: "look", Label: "Look", Icon: "fa-palette", Href: base + "/look", Section: "look"},
 		{ID: "categories", Label: "Categories", Icon: "fa-shapes", Href: base + "/categories", Section: "categories"},
 		{ID: "home", Label: "Home pages", Icon: "fa-table-cells-large", Href: base + "/home"},
@@ -192,10 +214,9 @@ func (h *Handler) customizeAreas(ctx context.Context, cc *CampaignContext) []Cus
 	return areas
 }
 
-// customizeParts fills each tab's drawer and names the part open now. The
-// part comes from the trail the area passed: its second step is the part
-// (a category, a home). The Look's room lives in the address's #, so the
-// Look editor names it itself.
+// customizeParts fills the Categories drawer, the switcher in a category's
+// bar, and names the category open now. The part comes from the trail the
+// area passed: its second step is the category.
 func (h *Handler) customizeParts(ctx context.Context, cc *CampaignContext, areas []CustomizeArea, area string, crumbs []CustomizeCrumb, cats []CustomizeCategory) {
 	base := h.customizeBase(cc)
 	open := ""
@@ -206,10 +227,6 @@ func (h *Handler) customizeParts(ctx context.Context, cc *CampaignContext, areas
 		a := &areas[i]
 		here := a.ID == area
 		switch a.ID {
-		case "look":
-			for _, r := range lookRooms {
-				a.Parts = append(a.Parts, CustomizePart{Label: r.Label, Href: base + "/look#" + r.Key, Key: r.Key})
-			}
 		case "categories":
 			a.Parts = append(a.Parts, CustomizePart{Label: "All categories", Href: base + "/categories", Quiet: true, Current: here && open == ""})
 			for _, c := range cats {
@@ -229,14 +246,6 @@ func (h *Handler) customizeParts(ctx context.Context, cc *CampaignContext, areas
 				if a.Part == "" {
 					a.Part = "All categories"
 				}
-			}
-		case "home":
-			for _, t := range homeTabs {
-				name := t.label(ctx)
-				a.Parts = append(a.Parts, CustomizePart{Label: name, Href: base + "/home/" + t.Key, Current: here && open == name})
-			}
-			if here {
-				a.Part = open
 			}
 		}
 	}
@@ -311,25 +320,81 @@ func (h *Handler) renderCustomizeIn(c *echo.Context, cc *CampaignContext, area, 
 		Draft:      string(draft),
 		Find:       h.customizeFind(cc, areas, cats),
 		Cat:        cat,
+		Wall:       area == "overview",
 	}
+	if !d.Wall && cat == nil {
+		d.Bar = h.customizePartBar(ctx, cc, area, crumbs)
+	}
+	d.PartKey = h.customizePartKey(ctx, area, crumbs, cat)
 	if d.Draft == "" {
 		d.Draft = "{}"
 	}
 	return middleware.Render(c, http.StatusOK, CustomizeShell(d, body))
 }
 
-// Customize is the Overview: GET /campaigns/:id/customize.
+// customizePartBar is the bar of a part other than a category: its name and
+// its own tabs. Look's rooms are tabs on the same page; the homes are tabs
+// that open each home.
+func (h *Handler) customizePartBar(ctx context.Context, cc *CampaignContext, area string, crumbs []CustomizeCrumb) *customizeBar {
+	base := h.customizeBase(cc)
+	b := &customizeBar{Base: base}
+	switch {
+	case area == "look":
+		b.Name, b.Dot = "Look", "look"
+		for _, r := range lookRooms {
+			b.Tabs = append(b.Tabs, customizeBarTab{Label: r.Label, Href: base + "/look#" + r.Key, Key: r.Key})
+		}
+	case area == "categories":
+		b.Name, b.Dot = "Categories", "categories"
+	case area == "home":
+		b.Name = "Home pages"
+		open := ""
+		if len(crumbs) > 1 {
+			open = crumbs[1].Label
+		}
+		for _, t := range homeTabs {
+			name := t.label(ctx)
+			b.Tabs = append(b.Tabs, customizeBarTab{Label: name, Href: base + "/home/" + t.Key, Current: name == open})
+		}
+	default:
+		if len(crumbs) > 0 {
+			b.Name = crumbs[0].Label
+		}
+	}
+	return b
+}
+
+// customizePartKey names the wall picture a part grew from, for the way back
+// when the page was opened without pressing one (a reload, a Find result).
+func (h *Handler) customizePartKey(ctx context.Context, area string, crumbs []CustomizeCrumb, cat *customizeCatBar) string {
+	switch {
+	case cat != nil && !cat.New:
+		return "cat-" + cat.Key
+	case area == "look":
+		return "frame"
+	case area == "home" && len(crumbs) > 1:
+		for _, t := range homeTabs {
+			if t.label(ctx) == crumbs[1].Label {
+				return "home-" + t.Key
+			}
+		}
+	case strings.HasPrefix(area, "x-"):
+		return "app-" + strings.TrimPrefix(area, "x-")
+	}
+	return ""
+}
+
+// Customize is the wall: GET /campaigns/:id/customize.
 func (h *Handler) Customize(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	areas := h.customizeAreas(c.Request().Context(), cc)
-	sums := map[string]CustomizeSummary{}
-	for _, t := range h.shownCustomizeTabs(c.Request().Context(), cc) {
-		sums["x-"+t.ID] = t.summary(c.Request().Context())
-	}
-	return h.renderCustomize(c, cc, "overview", "Customize", nil, nil, customizeOverview(areas, sums))
+	ctx := c.Request().Context()
+	_, draft := h.CustomizeDraftFor(ctx, cc.Campaign.ID, auth.GetUserID(c))
+	cats := h.CustomizeCategories(ctx, cc.Campaign.ID)
+	groups, skin := h.customizeWall(ctx, cc, cats, draft)
+	return h.renderCustomize(c, cc, "overview", "Customize", nil, cats, customizeWall(cc.Campaign.Name, groups, skin))
 }
 
 // CustomizeLook is the signed Look editor: GET /campaigns/:id/customize/look.

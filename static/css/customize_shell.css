@@ -71,20 +71,21 @@
 .czs-tab[aria-current="page"] { color: var(--color-text-primary); }
 .czs-tabw:has(.czs-tab[aria-current="page"])::before { content: ""; position: absolute; left: 0; top: 9px; bottom: -1px; width: 1px; background: var(--color-text-primary); opacity: 0.55; }
 .czs-tabw:has(.czs-tab[aria-current="page"])::after { content: ""; position: absolute; left: 0; right: 4px; bottom: -1px; height: 1px; background: var(--color-text-primary); opacity: 0.55; }
-.czs-part { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px; color: var(--color-accent-link, var(--color-accent)); max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
-.czs-part:empty { display: none; }
 .czs-tab .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
-.czs-chev { display: inline-grid; place-items: center; width: 24px; height: 28px; margin: 8px 2px 0 -6px; border: 0; border-radius: 6px; background: none; color: var(--color-text-secondary); cursor: pointer; font-size: 10px; transition: color var(--dur-micro), background var(--dur-micro); }
-.czs-chev:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
-.czs-chev i { transition: transform var(--dur-standard) var(--ease-out); }
-.czs-chev[aria-expanded="true"] i { transform: rotate(180deg); }
-.czs-tsep { flex: none; width: 1px; height: 16px; align-self: center; margin: 8px 6px 0; background: var(--color-border); }
 .czs-top .czs-find { align-self: center; margin-block: 7px; width: auto; min-width: 120px; flex: 0 20 220px; }
 
-/* Inside a category the bar is the category's own: back to Categories, its
-   name (which opens the Categories drawer to switch), and its five tabs. The
-   page layout puts its layout picker in the slot at the bar's right. */
+/* Inside a part the bar says where you are: "Everything" back to the wall, the
+   part's name (a category's opens the Categories drawer to switch), and the
+   part's own tabs. The page layout puts its layout picker in the slot at the
+   bar's right. */
 .czs-back { position: relative; flex: none; display: inline-grid; place-items: center; width: 36px; min-height: 44px; margin-left: -10px; border-radius: var(--shape-r-ctl); color: var(--color-text-secondary); text-decoration: none; font-size: 13px; transition: color var(--dur-micro), background-color var(--dur-micro); }
+.czs-back-all { display: inline-flex; align-items: center; gap: 7px; width: auto; padding: 0 10px 0 8px; font-weight: 600; color: var(--color-text-primary); }
+.czs-back-all i { font-size: 11px; color: var(--color-text-secondary); transition: transform var(--dur-micro) var(--ease-out); }
+.czs-back-all:hover i { transform: translateX(-2px); }
+.czs-catbar .czs-back-all { position: sticky; left: 0; z-index: 2; background: var(--color-bg-secondary); }
+.czs-back-all .czs-dot { top: 12px; right: 3px; }
+.czs-catname.is-static { cursor: default; padding-left: 8px; }
+.czs-catname.is-static:hover { background: none; }
 .czs-back:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
 .czs-back:active { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
 .czs-back .czs-dot { position: absolute; top: 10px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
@@ -110,6 +111,7 @@
 [data-motion="off"] :is(.czs-catname, .czs-lay-pick) > i { transition: none; }
 @media (prefers-reduced-motion: reduce) { :is(.czs-catname, .czs-lay-pick) > i { transition: none; } }
 @media (max-width: 640px) {
+  .czs-back-all { padding: 0 8px 0 6px; }
   .czs-catname { font-size: 14px; }
   .czs-catname > span { max-width: 14ch; }
   /* On a phone the picker is the last part of the swipeable row
@@ -158,8 +160,8 @@
 .czs-drawer .czs-cnt { margin-left: auto; color: var(--color-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .czs-drawer .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
 @keyframes czs-drape { from { clip-path: inset(0 -40px 100% -40px); } }
-[data-motion="off"] .czs-drawer, [data-motion="off"] .czs-chev i { animation: none; transition: none; }
-@media (prefers-reduced-motion: reduce) { .czs-drawer { animation: none; } .czs-chev i { transition: none; } }
+[data-motion="off"] .czs-drawer { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) { .czs-drawer { animation: none; } }
 
 /* The Look's example stays pinned while its panels scroll; pinned from the
    scroller's content edge it would sit under the frame's own tab bar, so it
@@ -224,28 +226,6 @@
   font-size: 12.5px;
 }
 .czs-note i { margin-top: 2px; }
-
-/* ---------- Overview ---------- */
-.czs-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; }
-.czs-ov {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg-secondary);
-  box-shadow: var(--elev-resting);
-  color: inherit;
-  text-decoration: none;
-  min-width: 0;
-  transition: transform var(--dur-standard) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out), border-color var(--dur-micro);
-}
-.czs-ov:hover { transform: translateY(-2px); box-shadow: var(--elev-hover); border-color: rgb(var(--color-accent-rgb) / 0.45); }
-.czs-ov .czs-t { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--color-text-primary); font-size: 15px; }
-.czs-ov .czs-t .czs-ic { flex: none; width: 1.25em; text-align: center; color: inherit; font-size: inherit; }
-.czs-ov p { color: var(--color-text-secondary); font-size: 13px; margin: 0; }
-.czs-ov .czs-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--czs-warn); margin-left: auto; }
 
 /* ---------- Categories ---------- */
 .czs-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; margin-top: 24px; }

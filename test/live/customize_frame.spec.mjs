@@ -25,15 +25,19 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   const cid = await newCampaign(owner, 'Frame Check');
   const { page } = owner;
 
-  // 1. Frame: a rail with the five areas and a card for each.
+  // 1. The wall: a picture for the shared parts, each kind of page, each home and each app.
   await owner.go(`/campaigns/${cid}/customize`);
-  for (const area of ['Overview', 'Look', 'Categories', 'Home pages', 'Maps']) {
-    await page.locator('.czs-tab', { hasText: area }).first().waitFor();
+  for (const pic of ['Site frame', 'Colours and type', 'Hover cards', 'Locations', 'Everyone', 'Maps']) {
+    assert.ok(await page.locator('.czw-tile .czw-name', { hasText: pic }).count(), `no picture for ${pic}`);
   }
-  for (const card of ['Look', 'Categories', 'Home pages', 'Maps']) {
-    assert.ok(await page.locator('main').getByText(card, { exact: true }).count(), `no card for ${card}`);
-  }
-  await picture(page, 'customize-frame', { check: '#1366', about: 'Customize overview: rail and cards', mask: ['.sidebar', '[data-sidebar]'] });
+  assert.equal(await page.locator('.czs-top').count(), 0, 'the wall has a bar of tabs');
+  await picture(page, 'customize-frame', { check: '#1366', about: 'Customize wall: a picture of everything that can be changed', mask: ['.sidebar', '[data-sidebar]'] });
+  // Pressing a picture opens its workshop; the bar names it and "Everything" comes back.
+  await page.locator('.czw-tile', { hasText: 'Colours and type' }).click();
+  await page.locator('.czs-top [data-czs-back]').waitFor();
+  assert.match(page.url(), /\/customize\/look#style$/);
+  await page.locator('.czs-top [data-czs-back]').click();
+  await page.locator('[data-czw]').waitFor();
 
   // 2. A draft survives a reload: rename a category.
   const href = await categoryHref(page, cid, 'Locations');
@@ -46,8 +50,8 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   await page.waitForTimeout(600);
   await page.reload({ waitUntil: 'networkidle' });
   await bar(page).filter({ hasText: '1 change' }).waitFor();
-  // Inside a category the bar's back mark carries the Categories dot.
-  assert.ok(await page.locator('[data-czs-area="categories"] .czs-dot:not([hidden])').count(), 'the bar shows no dot for the changed area');
+  // Inside a category the bar's "Everything" carries the Categories dot.
+  assert.ok(await page.locator('[data-czs-back] .czs-dot:not([hidden])').count(), 'the bar shows no dot for the changed area');
   await picture(page, 'customize-draft-bar', { check: '#1366', about: 'Save bar with one change waiting', mask: ['.sidebar', '[data-sidebar]'] });
 
   // 3. Save: a Saved note, the bar goes, the sidebar shows the new name.

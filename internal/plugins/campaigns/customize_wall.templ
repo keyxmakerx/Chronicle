@@ -1,0 +1,347 @@
+package campaigns
+
+import "strconv"
+
+// customizeWall is Customize's first page: a heading, Find, and the groups of
+// pictures. Each picture is a link to its workshop; customize_shell.js grows
+// it into that workshop and lights the part a shared picture changes in every
+// other one.
+templ customizeWall(name string, groups []wallGroup, skin wallSkin) {
+	<div class="czw" data-czw hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
+		<div class="czw-head">
+			<div>
+				<h1 class="czs-h1">Customize { name }</h1>
+				<p class="czs-lede">Everything you can change, as it looks now. Press one to work on it, or press <kbd>/</kbd> and type it. Changes wait in one draft until you save them.</p>
+			</div>
+			<button type="button" class="czs-find" data-czs-find aria-haspopup="dialog" aria-keyshortcuts="/">
+				<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+				<span>Find a setting</span>
+				<kbd>/</kbd>
+			</button>
+		</div>
+		for _, g := range groups {
+			<section class="czw-group" aria-labelledby={ "czw-g-" + g.ID }>
+				<h2 class="czw-g" id={ "czw-g-" + g.ID }>
+					<span>{ g.Title }</span>
+					if g.Note != "" {
+						<span class="czw-note">{ g.Note }</span>
+					}
+					if g.MoreHref != "" {
+						<a class="czw-more" href={ templ.SafeURL(g.MoreHref) }>{ g.MoreLabel }</a>
+					}
+				</h2>
+				<div class="czw-grid">
+					for _, t := range g.Tiles {
+						@wallTileLink(t, skin)
+					}
+				</div>
+			</section>
+		}
+	</div>
+}
+
+// wallTileLink is one picture and its two lines. The link carries the grow:
+// its swap asks for a view transition, and the way back from the workshop
+// finds this tile again by its key.
+templ wallTileLink(t wallTile, skin wallSkin) {
+	<a
+		class="czw-tile"
+		href={ templ.SafeURL(t.Href) }
+		hx-swap="innerHTML transition:true show:window:top"
+		data-czw-key={ t.Key }
+		if t.Share != "" {
+			data-czw-shares={ t.Share }
+		}
+	>
+		<span class="czw-pic" data-czw-pic>
+			@wallMini(t, skin)
+			if t.Dot != "" {
+				<span class="czs-dot" title="Unsaved changes" data-czs-area-dot={ t.Dot } hidden></span>
+			}
+		</span>
+		<b class="czw-name">{ t.Name }</b>
+		<span class="czw-line">{ t.Line }</span>
+	</a>
+}
+
+// wallMini draws a picture's miniature at its fixed size; the script scales it
+// to the tile. It is inert: the tile is the one control.
+templ wallMini(t wallTile, skin wallSkin) {
+	switch t.Kind {
+		case "frame":
+			@wallSite(skin, "Home", "Home") {
+				@wallHomePage(skin, "")
+			}
+		case "colours":
+			@wallBare(skin, "") {
+				@wallColoursPage()
+			}
+		case "page":
+			@wallSite(skin, firstNav(skin), skin.Campaign) {
+				@wallEntityPage(skin.Campaign, "Page", skin.Campaign, "", 3)
+			}
+		case "hover":
+			@wallSite(skin, firstNav(skin), skin.Campaign) {
+				@wallEntityPage(skin.Campaign, "Page", skin.Campaign, "", 3)
+				<div class="czw-hover czw-card">
+					<div class="czw-hv"><span class="czw-img czw-round"></span><div><b>{ skin.Campaign }</b><span>Page</span></div></div>
+					<span class="czw-bar"></span><span class="czw-bar czw-short"></span>
+				</div>
+			}
+		case "sheet":
+			@wallBare(skin, "") {
+				@wallSheetPage(skin.Campaign)
+			}
+		case "email":
+			@wallBare(skin, "czw-mailbg") {
+				@wallEmailPage(skin)
+			}
+		case "category":
+			@wallSite(skin, t.Name, entityTitle(t)) {
+				@wallEntityPage(entityTitle(t), t.Cat, t.Name, t.Colour, t.Fields)
+			}
+		case "home":
+			@wallSite(skin, "Home", t.Name) {
+				@wallHomePage(skin, t.Home)
+			}
+		default:
+			switch appKind(t.Cat) {
+				case "maps":
+					@wallSite(skin, "Maps", t.Name) {
+						@wallMapPage()
+					}
+				case "dice":
+					@wallBare(skin, "czw-felt") {
+						@wallDicePage()
+					}
+				case "hero":
+					@wallBare(skin, "") {
+						@wallHeroPage()
+					}
+				case "cards":
+					@wallBare(skin, "") {
+						@wallCardsPage()
+					}
+				default:
+					@wallBare(skin, "") {
+						@wallAppPage(t)
+					}
+			}
+	}
+}
+
+// wallSite is the campaign's site: menu with its name and categories, a header
+// and the page. The menu and header carry data-share="frame", the parts the
+// Site frame picture changes.
+templ wallSite(skin wallSkin, active, title string) {
+	<div class="czw-mini czw-site" style={ skin.Style } aria-hidden="true">
+		<aside class="czw-side" data-share="frame">
+			<div class="czw-brand"><i>{ skin.Initial }</i><b>{ skin.Campaign }</b></div>
+			<div class="czw-nav">
+				for _, n := range []string{"Home", "Journal", "Calendar", "Maps"} {
+					<span class={ templ.KV("on", n == active) }>{ n }</span>
+				}
+				if len(skin.Nav) > 0 {
+					<small>Categories</small>
+					for _, n := range skin.Nav {
+						<span class={ templ.KV("on", n == active) }>{ n }</span>
+					}
+				}
+			</div>
+		</aside>
+		<div class="czw-body">
+			<div class="czw-headrow" data-share="frame">
+				<div class="czw-top"><span>{ title }</span><i class="czw-dotic"></i><i class="czw-dotic"></i></div>
+				<div class="czw-ppl"><b style="background:#0f766e"></b><b style="background:#b45309"></b><b style="background:#7c3aed"></b></div>
+			</div>
+			<div class="czw-page">
+				{ children... }
+			</div>
+		</div>
+	</div>
+}
+
+// wallBare is a surface with no site around it: a sheet, an email, an app.
+templ wallBare(skin wallSkin, cls string) {
+	<div class={ "czw-mini czw-bare", cls } style={ skin.Style } aria-hidden="true">
+		<div class="czw-page">
+			{ children... }
+		</div>
+	</div>
+}
+
+templ wallHomePage(skin wallSkin, who string) {
+	switch who {
+		case HomePlayer, HomeScribe, HomeGuest:
+			<div class="czw-title"><span class="czw-h" data-share="type">{ skin.Campaign }</span></div>
+			<div class="czw-cards">
+				<div class="czw-card"><p>Your character</p><div class="czw-day"><i class="czw-round"></i><div><span class="czw-bar"></span><span class="czw-bar czw-short"></span></div></div></div>
+				<div class="czw-card"><p>Next session</p><div class="czw-day"><i></i><div><span class="czw-bar"></span><span class="czw-bar czw-short"></span></div></div></div>
+			</div>
+			<div class="czw-card"><p>Notes</p>@wallRows(2)</div>
+		case HomeDirector:
+			<div class="czw-title"><span class="czw-h" data-share="type">{ skin.Campaign }</span><div class="czw-btns" data-share="colours"><span class="czw-b pri">Start session</span></div></div>
+			<div class="czw-tiles">
+				for i := 0; i < 3; i++ {
+					<div class="czw-card"><p>Waiting</p><span class="czw-big"></span><span class="czw-bar czw-short"></span></div>
+				}
+			</div>
+			<div class="czw-card"><p>Prep</p>@wallRows(3)</div>
+		default:
+			<div class="czw-hero" data-share="colours"></div>
+			<div class="czw-title"><span class="czw-h" data-share="type">{ skin.Campaign }</span><div class="czw-btns" data-share="colours"><span class="czw-b pri">New page</span><span class="czw-b">Invite players</span></div></div>
+			<div class="czw-cards">
+				<div class="czw-card"><p>Next session</p><div class="czw-day"><i></i><div><span class="czw-bar"></span><span class="czw-bar czw-short"></span></div></div></div>
+				<div class="czw-card"><p>Recent pages</p>@wallRows(3)</div>
+			</div>
+	}
+}
+
+// wallRows is lines of a list, drawn as bars: the wall shows the shape of a
+// list, never invented content.
+templ wallRows(n int) {
+	<ul class="czw-rows">
+		for i := 0; i < n; i++ {
+			<li><span class="czw-link"></span><em></em></li>
+		}
+	</ul>
+}
+
+// wallEntityPage is one page of a kind: its category chip, its name, a story
+// and an attributes card with as many rows as the category has fields (up to
+// four).
+templ wallEntityPage(title, kind, cat, colour string, fields int) {
+	<div class="czw-ent">
+		<div class="czw-main">
+			<span class="czw-kind" data-share="colours">{ kind }</span>
+			<span class="czw-h" data-share="type">{ title }</span>
+			<div class="czw-words"><span>Edit name</span><span>History</span></div>
+			<p class="czw-sec" data-share="type">Story</p>
+			<span class="czw-bar"></span><span class="czw-bar"></span><span class="czw-bar czw-short"></span>
+		</div>
+		<div class="czw-aside">
+			<div class="czw-img" style={ entityImage(colour) }></div>
+			<div class="czw-card"><p>Attributes</p>@wallRows(min(max(fields, 1), 4))</div>
+		</div>
+	</div>
+}
+
+templ wallColoursPage() {
+	<div class="czw-spec">
+		<div><span class="czw-aa" data-share="type">Aa</span><span class="czw-bar czw-short"></span></div>
+		<div class="czw-sw"><i style="background:var(--x-acc)"></i><i style="background:var(--x-ink)"></i><i style="background:var(--x-line)"></i><i style="background:var(--x-sb)"></i></div>
+		<div class="czw-btns czw-flat" data-share="colours"><span class="czw-b pri">Save</span><span class="czw-b">Cancel</span></div>
+		<div class="czw-card"><p>Card</p><span class="czw-bar"></span></div>
+		<span class="czw-h2" data-share="type">The heading face</span>
+		<span class="czw-bar czw-wide"></span><span class="czw-bar czw-wide"></span>
+	</div>
+}
+
+templ wallSheetPage(name string) {
+	<div class="czw-sheet">
+		<div class="czw-sh-h"><span class="czw-img czw-round czw-big-av"></span><div><span class="czw-h" data-share="type">{ name }</span><span class="czw-bar czw-short"></span></div></div>
+		<div class="czw-stats">
+			for i := 0; i < 5; i++ {
+				<div class="czw-card"><p>Stat</p><span class="czw-big"></span></div>
+			}
+		</div>
+		<div class="czw-meter"><i><s style="width:80%"></s></i><i><s style="width:60%"></s></i></div>
+	</div>
+}
+
+templ wallEmailPage(skin wallSkin) {
+	<div class="czw-mail">
+		<div class="czw-mail-top" data-share="colours"><i>{ skin.Initial }</i><b>{ skin.Campaign }</b></div>
+		<div class="czw-mail-b">
+			<span class="czw-h" data-share="type">Session reminder</span>
+			<span class="czw-bar"></span><span class="czw-bar czw-short"></span>
+			<span class="czw-b pri" data-share="colours">I'm coming</span>
+		</div>
+	</div>
+}
+
+templ wallMapPage() {
+	<div class="czw-map"><div class="czw-map-in"><i style="left:38%;top:42%"></i><i style="left:63%;top:60%"></i><i style="left:24%;top:70%"></i></div></div>
+}
+
+templ wallDicePage() {
+	<div class="czw-dice"><div class="czw-d20"><b>17</b></div><div class="czw-d20 czw-d6"><b>4</b></div><div class="czw-card czw-roll"><p>Rolled</p><span class="czw-big"></span><span class="czw-bar czw-short"></span></div></div>
+}
+
+templ wallHeroPage() {
+	<div class="czw-steps">
+		for i, n := range []string{"Name", "Ancestry", "Culture", "Career", "Class"} {
+			<span class={ templ.KV("on", i < 3) }>{ n }</span>
+		}
+	</div>
+	<span class="czw-h" data-share="type">Choose one</span>
+	<div class="czw-pick">
+		for i := 0; i < 3; i++ {
+			<div class={ "czw-card", templ.KV("on", i == 1) }><span class="czw-img"></span><span class="czw-bar"></span></div>
+		}
+	</div>
+	<div class="czw-btns czw-end" data-share="colours"><span class="czw-b">Back</span><span class="czw-b pri">Next</span></div>
+}
+
+templ wallCardsPage() {
+	<div class="czw-deck">
+		for _, r := range []int{-12, 0, 12} {
+			<div class="czw-pcard" style={ "transform:rotate(" + strconv.Itoa(r) + "deg) translateY(" + strconv.Itoa(abs(r)) + "px)" }><i data-share="colours"></i><span class="czw-bar"></span></div>
+		}
+	</div>
+}
+
+// wallAppPage is any app the wall has no drawing for: its icon and name on a
+// card, so a plugin's new tab still gets a picture.
+templ wallAppPage(t wallTile) {
+	<div class="czw-app">
+		<span class="czw-app-ic" data-share="colours"><i class={ "fa-solid " + t.Icon } aria-hidden="true"></i></span>
+		<span class="czw-h" data-share="type">{ t.Name }</span>
+		<span class="czw-bar"></span><span class="czw-bar czw-short"></span>
+	</div>
+}
+
+func firstNav(s wallSkin) string {
+	if len(s.Nav) > 0 {
+		return s.Nav[0]
+	}
+	return "Home"
+}
+
+// entityTitle is a real page's name when the category has one, else the
+// kind's own name.
+func entityTitle(t wallTile) string {
+	if t.Page != "" {
+		return t.Page
+	}
+	return t.Cat
+}
+
+func entityImage(colour string) templ.SafeCSS {
+	if colour == "" {
+		return templ.SafeCSS("")
+	}
+	return templ.SafeCSS("background:linear-gradient(135deg," + colour + "," + mixHex(colour, "#ffffff", 0.55) + ")")
+}
+
+// appKind picks the drawing for a plugin's tab from its id.
+func appKind(id string) string {
+	switch {
+	case id == "maps":
+		return "maps"
+	case id == "dice":
+		return "dice"
+	case len(id) >= 4 && id[:4] == "hero":
+		return "hero"
+	case id == "cards" || id == "decks":
+		return "cards"
+	}
+	return ""
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
