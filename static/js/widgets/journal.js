@@ -2914,7 +2914,7 @@
    * per press, and hands focus back to whatever opened it.
    */
   Journal.prototype.handleKey = function (e) {
-    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(document.activeElement)) {
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(document.activeElement) && !document.documentElement.hasAttribute('data-full-surface')) {
       if (isPhone()) this.setPane('list');
       if (this.size === 'collapsed') this.applySize(this.lastOpenSize);
       e.preventDefault();

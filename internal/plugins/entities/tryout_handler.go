@@ -67,7 +67,12 @@ func (h *Handler) TryoutNew(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	if cc.IsMember && cc.MemberRole == campaigns.RolePlayer {
-		return c.Redirect(http.StatusFound, practiceNewURL(cc.Campaign.ID, ""))
+		// The look asked for goes with the member to the creator they have.
+		query := ""
+		if heroLookFrom(c.QueryParam("look")) == HeroLookStage {
+			query = "?look=" + HeroLookStage
+		}
+		return c.Redirect(http.StatusFound, practiceNewURL(cc.Campaign.ID, query))
 	}
 	if err := h.tryoutReady(c, cc); err != nil {
 		return err
@@ -78,6 +83,7 @@ func (h *Handler) TryoutNew(c *echo.Context) error {
 	return middleware.Render(c, http.StatusOK, TryoutCreatorPage(cc, TryoutCreatorView{
 		CampaignID: cc.Campaign.ID, UserID: auth.GetUserID(c),
 		TermsURL: h.termsURLIf(c.Request().Context(), cc.Campaign.ID, "/campaigns/"+cc.Campaign.ID+"/characters/try/terms"),
+		Look:     heroLookFrom(c.QueryParam("look")),
 	}))
 }
 

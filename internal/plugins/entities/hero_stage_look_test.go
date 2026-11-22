@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -100,6 +101,97 @@ func TestCardBorderPicturesEmbedded(t *testing.T) {
 	for _, f := range []string{"static/css/hero_borders.css", "static/js/hero_borders.js"} {
 		if _, err := StaticAssetsFS.Open(f); err != nil {
 			t.Errorf("%s not embedded: %v", f, err)
+		}
+	}
+}
+
+// The practice and try-out pages take the look the way the new-hero page does:
+// only the exact value "stage" counts, and then the stage and borders
+// stylesheets, data-look and the border library all come with it.
+func TestPracticeAndTryout_StageLook(t *testing.T) {
+	future := time.Now().Add(time.Hour)
+	pages := []struct {
+		name string
+		get  func(t *testing.T, query string) string
+	}{
+		{"practice", func(t *testing.T, query string) string {
+			r := newPracticeRig()
+			rec, err := r.call(t, vPat, http.MethodGet, "/x"+query, nil, "", func(h *Handler, c *echo.Context) error { return h.PracticeNew(c) })
+			if err != nil || rec.Code != http.StatusOK {
+				t.Fatalf("practice page for %q: %v %d", query, err, rec.Code)
+			}
+			return rec.Body.String()
+		}},
+		{"try-out", func(t *testing.T, query string) string {
+			r, _ := tryRig()
+			visitor := tryoutViewer{user: "u9", role: campaigns.RoleNone, until: &future}
+			rec, err := visitor.run(t, r.h, http.MethodGet, "/x"+query, func(h *Handler, c *echo.Context) error { return h.TryoutNew(c) })
+			if err != nil || rec.Code != http.StatusOK {
+				t.Fatalf("try-out page for %q: %v %d", query, err, rec.Code)
+			}
+			return rec.Body.String()
+		}},
+	}
+	tests := []struct {
+		name  string
+		query string
+		want  bool
+	}{
+		{"stage", "?look=stage", true},
+		{"no parameter", "", false},
+		{"another value", "?look=neon", false},
+		{"not the exact value", "?look=Stage", false},
+		{"empty", "?look=", false},
+	}
+	for _, pg := range pages {
+		for _, tt := range tests {
+			t.Run(pg.name+" "+tt.name, func(t *testing.T) {
+				body := pg.get(t, tt.query)
+				has := func(s string) bool { return strings.Contains(body, s) }
+				if got := has(`data-look="stage"`); got != tt.want {
+					t.Errorf("data-look on the mount = %v, want %v", got, tt.want)
+				}
+				if got := has("/static/plugins/entities/css/hero_stage.css"); got != tt.want {
+					t.Errorf("stage stylesheet linked = %v, want %v", got, tt.want)
+				}
+				if got := has("/static/plugins/entities/css/hero_borders.css"); got != tt.want {
+					t.Errorf("borders stylesheet linked = %v, want %v", got, tt.want)
+				}
+				if got := has("data-borders="); got != tt.want {
+					t.Errorf("border library on the mount = %v, want %v", got, tt.want)
+				}
+				if tt.want {
+					if !has("/static/plugins/entities/img/borders/fire-mask.webp?v=") {
+						t.Error("the library's pictures must carry the content hash")
+					}
+					if strings.Index(body, "hero_stage.css") > strings.Index(body, "hero_borders.css") {
+						t.Error("hero_borders.css must follow hero_stage.css")
+					}
+				}
+				if !has("/static/plugins/entities/css/hero_creator.css") || !has(`data-widget="hero-creator"`) {
+					t.Error("the creator's own stylesheet and the mount are always there")
+				}
+			})
+		}
+	}
+}
+
+// A player sent from the try-out to the creator they have keeps the look.
+func TestTryout_PlayerRedirectKeepsTheLook(t *testing.T) {
+	player := tryoutViewer{user: "u1", member: true, role: campaigns.RolePlayer}
+	tests := []struct{ query, want string }{
+		{"?look=stage", "/campaigns/camp-1/characters/practice/new?look=stage"},
+		{"", "/campaigns/camp-1/characters/practice/new"},
+		{"?look=neon", "/campaigns/camp-1/characters/practice/new"},
+	}
+	for _, tt := range tests {
+		r, _ := tryRig()
+		rec, err := player.run(t, r.h, http.MethodGet, "/x"+tt.query, func(h *Handler, c *echo.Context) error { return h.TryoutNew(c) })
+		if err != nil || rec.Code != http.StatusFound {
+			t.Fatalf("%q: %v %d", tt.query, err, rec.Code)
+		}
+		if got := rec.Header().Get("Location"); got != tt.want {
+			t.Errorf("%q: redirect = %q, want %q", tt.query, got, tt.want)
 		}
 	}
 }

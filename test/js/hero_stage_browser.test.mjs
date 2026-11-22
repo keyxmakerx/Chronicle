@@ -61,13 +61,14 @@ const DRAFT_FULL = {
 const LIGHT = ':root{--color-bg-primary:#f9fafb;--color-card-bg:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-secondary:#4b5563;--dur-micro:120ms;--dur-standard:200ms;--dur-large:280ms;--ease-out:cubic-bezier(.16,1,.3,1);--z-popup:50;--z-sheet:60}';
 const DARK = 'html.dark{--color-bg-primary:#111827;--color-card-bg:#1f2937;--color-bg-tertiary:#374151;--color-border:#374151;--color-text-primary:#f9fafb;--color-text-secondary:#c4c9d2}';
 
-function page({ accent = '#6366f1', attrs = '', look = true, chrome = false, drawer = false, dark = false }) {
+function page({ accent = '#6366f1', attrs = '', look = true, chrome = false, drawer = false, dark = false, extras = false }) {
   return `<!doctype html><html data-gm-term="Director"${dark ? ' class="dark"' : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${LIGHT}${DARK}:root{--color-accent:${accent}}*,::before,::after{box-sizing:border-box}body{margin:0;font-family:sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}${drawer ? '#tt-drawer{position:fixed;left:0;right:0;bottom:0;height:48px;background:#222;z-index:60}' : ''}</style>
 <link rel="stylesheet" href="/hero_creator.css">${look ? '<link rel="stylesheet" href="/hero_stage.css">' : ''}</head><body>
-${chrome ? '<nav id="sidebar"' + (chrome === 'inert' ? ' inert' : '') + '>side</nav><header id="app-topbar">top</header>' : ''}${drawer ? '<div id="tt-drawer">The table</div>' : ''}
-<div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
+${chrome ? '<nav id="sidebar"' + (chrome === 'inert' ? ' inert' : '') + '>side</nav><header id="app-topbar">top</header>' : ''}${drawer ? '<div id="tt-drawer"><button type="button" id="tt-grab">The table</button></div>' : ''}${extras ? '<a id="skip" href="#main-content">Skip to content</a><div id="notice" role="region"><button type="button">Set zone</button><button type="button">Later</button><button type="button">Never</button></div><div id="pre" inert><button type="button">Held by the page</button></div>' : ''}
+${extras ? '<div id="shell"><main id="main-content" tabindex="-1">' : ''}<div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true"${look ? ' data-look="stage"' : ''} ${attrs}><p class="hc-loading__text">Opening</p></div>
+${extras ? '</main><footer id="foot"><a href="/elsewhere">Footer link</a></footer></div><div id="chronicle-toasts" aria-live="polite"><button type="button">Undo</button></div>' : ''}
 <script>window.Chronicle = { register: (n, d) => { window.hcImpl = d; document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)); }, escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => 'Director' };</script>
 <script src="/hero_rules_lines.js"></script><script src="/hero_stage.js"></script><script src="/hero_creator.js"></script></body></html>`;
 }
@@ -466,3 +467,193 @@ for (const [label, width] of [['phone', 390], ['computer', 1100]]) {
     if (width >= 900) assert.equal(await pg.locator('.hc-rail [data-stage]').count(), 1, 'the rail is redrawn with the stage in it');
   });
 }
+
+// --- Everything outside the creator is out of reach ---
+
+// Where a Tab press lands, for as many presses as there are controls and then
+// some, so a loop through the page is seen whole.
+async function tabStops(pg, key, n) {
+  const seen = [];
+  for (let i = 0; i < n; i++) {
+    await pg.keyboard.press(key);
+    seen.push(await pg.evaluate(() => {
+      const a = document.activeElement;
+      if (!a || a === document.body) return 'body';
+      if (a.closest('.hc')) return 'creator';
+      if (a.closest('#tt-drawer')) return 'table';
+      if (a.closest('#chronicle-toasts')) return 'toasts';
+      return 'OUTSIDE ' + (a.id || a.textContent.trim());
+    }));
+  }
+  return seen;
+}
+
+test('Tab and Shift+Tab only land on the creator, the Table bar and the toasts', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 1100, height: 720, chrome: true, drawer: true, extras: true });
+  const inertNow = () => pg.evaluate(() => [...document.querySelectorAll('[inert]')].map((e) => e.id).sort());
+  assert.deepEqual(await inertNow(), ['app-topbar', 'foot', 'notice', 'pre', 'sidebar', 'skip'].sort(), 'every sibling up the tree is inert; the page\'s own inert stays');
+  assert.equal(await pg.locator('#tt-drawer').getAttribute('inert'), null, 'the Table bar stays usable');
+  assert.equal(await pg.locator('#chronicle-toasts').getAttribute('inert'), null, 'the toasts stay usable');
+  assert.equal(await pg.locator('#shell').getAttribute('inert'), null, 'the creator\'s own ancestors are never inert');
+  for (const key of ['Tab', 'Shift+Tab']) {
+    const stops = await tabStops(pg, key, 90);
+    assert.deepEqual([...new Set(stops)].filter((x) => x !== 'creator' && x !== 'table' && x !== 'toasts' && x !== 'body'), [], key + ' never lands outside: ' + [...new Set(stops)]);
+    assert.ok(stops.includes('creator'), key + ' reaches the creator');
+    assert.ok(stops.includes('table'), key + ' reaches the Table bar');
+  }
+  // A bar that arrives later (HTMX) is covered too.
+  await pg.evaluate(() => {
+    const b = document.createElement('div'); b.id = 'late'; b.innerHTML = '<button type="button">Late</button>';
+    document.getElementById('shell').insertBefore(b, document.getElementById('main-content'));
+    const c = document.createElement('div'); c.id = 'latest'; c.innerHTML = '<button type="button">Later</button>';
+    document.body.insertBefore(c, document.body.firstChild);
+  });
+  await pg.waitForFunction(() => document.getElementById('late').hasAttribute('inert') && document.getElementById('latest').hasAttribute('inert'), null, { timeout: 2000 });
+  // Leaving gives back exactly what it took.
+  await pg.evaluate(() => window.hcImpl.destroy(document.querySelector('.hc')));
+  assert.deepEqual(await inertNow(), ['pre'], 'only the page\'s own inert is left');
+  assert.equal(await pg.evaluate(() => document.documentElement.hasAttribute('data-full-surface')), false);
+  // After leaving, a bar that arrives is left alone.
+  await pg.evaluate(() => { const b = document.createElement('div'); b.id = 'after'; document.body.appendChild(b); });
+  await pg.waitForTimeout(100);
+  assert.equal(await pg.locator('#after').getAttribute('inert'), null);
+});
+
+test('the Table bar that arrives after the creator, unstyled at first, is not made inert', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, extras: true });
+  await pg.evaluate(() => {
+    const d = document.createElement('div'); d.id = 'tt-drawer'; d.innerHTML = '<button type="button">Table</button>'; document.body.appendChild(d);
+  });
+  await pg.waitForTimeout(100);
+  assert.equal(await pg.locator('#tt-drawer').getAttribute('inert'), null);
+  assert.equal(await pg.locator('#notice').getAttribute('inert'), '');
+});
+
+test('the creator marks the page as covered while open, so page shortcuts stand down', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 1100 });
+  const mark = () => pg.evaluate(() => document.documentElement.hasAttribute('data-full-surface'));
+  assert.equal(await mark(), true);
+  await pg.evaluate(() => window.hcImpl.destroy(document.querySelector('.hc')));
+  assert.equal(await mark(), false);
+});
+
+// --- The practice and try-out pages take the look ---
+
+for (const [label, attrs, word] of [
+  ['try-out', 'data-tryout="true" data-user-id="u1"', 'Leave'],
+  ['practice copy', `data-practice="true" data-preload='${JSON.stringify({ picks: {}, name: 'Copy' })}'`, 'Leave'],
+  ['practice', 'data-practice="true"', 'Save and leave'],
+]) {
+  test(`${label} with data-look="stage" draws the stage look, and ${word} goes where the classic back goes`, { skip }, async (t) => {
+    const stage = await open(t, { attrs, width: 1100 });
+    assert.equal(await stage.pg.locator('.hc').getAttribute('data-look'), 'stage');
+    assert.equal(await stage.pg.locator('[data-stage]').count(), 1);
+    assert.equal((await stage.pg.locator('.hc-lv').innerText()).trim(), word);
+    const classic = await open(t, { attrs, width: 1100, look: false });
+    assert.equal(await classic.pg.locator('[data-stage]').count(), 0, 'without the look it is the classic creator');
+    const back = await classic.pg.locator('.hc-ibtn').first().getAttribute('href');
+    assert.equal(await stage.pg.locator('.hc-lv').getAttribute('href'), back);
+    assert.equal(await stage.pg.locator('.hc-lv').getAttribute('href'), C + '/characters');
+  });
+}
+
+// --- Long words ---
+
+const LONG_ENTRY = 'Wandering Keeper of the Seventh Lantern in the Hollow Marsh';
+const longPlan = () => {
+  const p = PLAN();
+  p.steps[0].choices.push(ch(LONG_ENTRY, { speed: 7, size: '1M', stability: 2 }));
+  return p;
+};
+// Nothing in the creator is wider than the box that holds it, and nothing
+// scrolls sideways.
+const noSpill = (pg) => pg.evaluate(() => {
+  const bad = [];
+  document.querySelectorAll('.hc-app *').forEach((el) => {
+    const p = el.parentElement, cs = getComputedStyle(el);
+    if (!p || cs.display === 'none' || cs.position === 'fixed' || cs.position === 'absolute') return;
+    if (/hc-(sheet|drape|scrim|tip|live)/.test(el.className) || el.closest('.hc-hand, [data-hand], .hc-drape, .hc-sheet')) return;
+    const a = el.getBoundingClientRect(), b = p.getBoundingClientRect();
+    if (a.width > 0 && (a.right > b.right + 1 || a.left < b.left - 1) && getComputedStyle(p).overflowX === 'visible') bad.push((el.className || el.tagName) + ' ' + Math.round(a.left) + '-' + Math.round(a.right) + ' in ' + Math.round(b.left) + '-' + Math.round(b.right));
+  });
+  const d = document.documentElement;
+  return { bad, page: d.scrollWidth <= d.clientWidth, app: document.querySelector('.hc-app').scrollWidth <= document.querySelector('.hc-app').clientWidth };
+});
+
+for (const width of [1280, 1100]) {
+  test(`computer ${width}: the "If you choose" line stays on one line and ends in an ellipsis`, { skip }, async (t) => {
+    const { pg } = await open(t, { width, height: 800, plan: longPlan, draft: DRAFT_ANCESTRY, motion: 'reduce' });
+    await pg.click('.hc-rail .hc-row[data-k="ancestry"]');
+    await pg.locator('.hc-gcard', { hasText: LONG_ENTRY }).click();
+    await pg.waitForFunction(() => /If you choose/.test(document.querySelector('.hc-stg__pv').textContent));
+    const r = await pg.evaluate(() => {
+      const l = document.querySelector('.hc-stg__pv'), box = l.closest('.hc-rail').getBoundingClientRect(), b = l.getBoundingClientRect(), cs = getComputedStyle(l);
+      return { overflow: cs.textOverflow, white: cs.whiteSpace, left: b.left, right: b.right, boxL: box.left, boxR: box.right, cut: l.scrollWidth > l.clientWidth, scrollLeft: l.scrollLeft, h: b.height, text: l.textContent };
+    });
+    assert.equal(r.overflow, 'ellipsis');
+    assert.equal(r.white, 'nowrap');
+    assert.ok(r.left >= r.boxL - 0.5 && r.right <= r.boxR + 0.5, 'the line sits inside the rail: ' + JSON.stringify(r));
+    assert.ok(r.cut, 'the long name does not fit, so it is cut');
+    assert.equal(r.scrollLeft, 0, 'cut at the end only: the start of the line shows');
+    assert.ok(r.h <= 20, 'one line');
+    assert.match(r.text, /^If you choose Wandering/);
+    // The start of the line is at the rail's left edge, not before it.
+    const fit = await noSpill(pg);
+    assert.deepEqual(fit.bad, [], 'no element wider than its container');
+    assert.equal(fit.page && fit.app, true);
+  });
+}
+
+test('phone 360: an unbroken 99-character hero name wraps on the review card', { skip }, async (t) => {
+  const name = 'W'.repeat(99);
+  const { pg } = await open(t, { width: 360, height: 780, draft: { ...DRAFT_FULL, name } });
+  await pg.waitForSelector('.hc-hero');
+  const r = await pg.evaluate(() => {
+    const h = document.querySelector('.hc-hero h2'), card = document.querySelector('.hc-hero').getBoundingClientRect(), b = h.getBoundingClientRect(), d = document.documentElement;
+    return { left: b.left, right: b.right, cl: card.left, cr: card.right, sw: h.scrollWidth, cw: h.clientWidth, lines: Math.round(b.height / parseFloat(getComputedStyle(h).lineHeight)), page: d.scrollWidth <= d.clientWidth, rev: document.querySelector('.hc-rev').scrollWidth <= document.querySelector('.hc-rev').clientWidth };
+  });
+  assert.ok(r.left >= r.cl - 0.5 && r.right <= r.cr + 0.5, 'the name sits inside the card: ' + JSON.stringify(r));
+  assert.ok(r.sw <= r.cw + 0.5, 'nothing of the name is cut');
+  assert.ok(r.lines >= 2, 'it wraps');
+  assert.equal(r.page && r.rev, true, 'nothing scrolls sideways');
+  const fit = await noSpill(pg);
+  assert.deepEqual(fit.bad, [], 'no element wider than its container');
+  // The banner's name wraps too.
+  assert.equal(await pg.evaluate(() => getComputedStyle(document.querySelector('.hc-hero .hc-line')).overflowWrap), 'anywhere');
+});
+
+// --- The Table bar's box ---
+
+test('the creator follows the Table bar when its height or place changes after it drew', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, height: 844, drawer: true });
+  const bottom = () => pg.locator('.hc-app').evaluate((e) => Math.round(e.getBoundingClientRect().bottom));
+  const frames = () => pg.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
+  assert.equal(await bottom(), 844 - 48);
+  await pg.evaluate(() => { document.getElementById('tt-drawer').style.height = '80px'; });
+  await frames();
+  assert.equal(await bottom(), 844 - 80, 'a taller bar: the creator stops higher');
+  await pg.evaluate(() => { document.getElementById('tt-drawer').style.height = '38px'; });
+  await frames();
+  assert.equal(await bottom(), 844 - 38, 'a shorter bar: the creator reaches lower');
+  // A bar that slides into its place (a transform, no resize) is followed when
+  // the slide ends at rest, and left alone while it is lifted.
+  await pg.evaluate(() => {
+    const d = document.getElementById('tt-drawer');
+    d.style.height = '300px'; d.setAttribute('data-h', 'rest');
+    d.style.transition = 'transform 120ms linear'; d.style.transform = 'translateY(100%)';
+  });
+  await frames();
+  await pg.waitForFunction(() => Math.round(document.querySelector('.hc-app').getBoundingClientRect().bottom) === 844, null, { timeout: 2000 });
+  await pg.evaluate(() => { const d = document.getElementById('tt-drawer'); d.setAttribute('data-h', 'lift'); d.style.transform = 'translateY(40%)'; });
+  await pg.waitForTimeout(400);
+  assert.equal(await bottom(), 844, 'a lifted bar covers the creator, which does not jump');
+  await pg.evaluate(() => { const d = document.getElementById('tt-drawer'); d.setAttribute('data-h', 'rest'); d.style.transform = 'translateY(100%)'; });
+  await pg.waitForTimeout(400);
+  assert.equal(await bottom(), 844, 'back at rest: reaches the bottom again');
+  await pg.evaluate(() => { const d = document.getElementById('tt-drawer'); d.style.transform = 'none'; d.style.height = '48px'; });
+  await frames();
+  await pg.waitForTimeout(300);
+  assert.equal(await bottom(), 844 - 48);
+  // Leaving stops the watching.
+  await pg.evaluate(() => window.hcImpl.destroy(document.querySelector('.hc')));
+});
