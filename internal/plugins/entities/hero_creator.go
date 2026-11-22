@@ -311,31 +311,44 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 		}
 	}
 	// First every pick is matched to its entry, so a step's parent and count
-	// can be read whatever order the picks arrive in.
+	// can be read whatever order the picks arrive in. Steps without a parent
+	// go first: two parents can list a child of the same name, and the
+	// dependent pick must match the entry under the parent actually picked.
 	found := make(map[string]*HeroChoice, len(picks))
-	for key, pick := range picks {
-		step := steps[key]
-		if step == nil {
-			return nil, apperror.NewBadRequest("the creator has no step for " + key)
-		}
-		name := strings.TrimSpace(pick.Name)
-		if name == "" {
-			if len(pick.Options) > 0 {
-				return nil, apperror.NewBadRequest("choose the " + strings.ToLower(step.Label) + " before its options")
+	for _, dependent := range []bool{false, true} {
+		for key, pick := range picks {
+			step := steps[key]
+			if step == nil {
+				return nil, apperror.NewBadRequest("the creator has no step for " + key)
 			}
-			continue
-		}
-		var choice *HeroChoice
-		for i := range step.Choices {
-			if strings.EqualFold(step.Choices[i].Name, name) {
-				choice = &step.Choices[i]
-				break
+			if (step.Parent != "") != dependent {
+				continue
 			}
+			name := strings.TrimSpace(pick.Name)
+			if name == "" {
+				if len(pick.Options) > 0 {
+					return nil, apperror.NewBadRequest("choose the " + strings.ToLower(step.Label) + " before its options")
+				}
+				continue
+			}
+			var choice *HeroChoice
+			for i := range step.Choices {
+				if !strings.EqualFold(step.Choices[i].Name, name) {
+					continue
+				}
+				if choice == nil {
+					choice = &step.Choices[i]
+				}
+				if p := found[step.Parent]; dependent && p != nil && strings.EqualFold(step.Choices[i].Parent, p.Name) {
+					choice = &step.Choices[i]
+					break
+				}
+			}
+			if choice == nil {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
+			}
+			found[key] = choice
 		}
-		if choice == nil {
-			return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
-		}
-		found[key] = choice
 	}
 	chosen := func(k string) *HeroChoice { return found[k] }
 	out := make(map[string]heroPickResult, len(picks))

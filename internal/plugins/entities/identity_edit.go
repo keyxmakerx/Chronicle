@@ -105,6 +105,9 @@ type builderStep struct {
 	// parent is the step this one's entries live inside; a value must then
 	// belong to the parent entry the hero holds (or the patch sets).
 	parent string
+	// parentsOf lists, by lower-case entry name, every parent that lists an
+	// entry of that name: two classes can share a subclass name.
+	parentsOf map[string]map[string]bool
 }
 
 // builderPicks is what the hero builder lets a player choose: for each step's
@@ -122,8 +125,21 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 	}
 	for _, st := range plan.Steps {
 		names := make(map[string]HeroChoice, len(st.Choices)+len(st.Held))
+		var parentsOf map[string]map[string]bool
 		for _, ch := range st.Choices {
-			names[strings.ToLower(strings.TrimSpace(ch.Name))] = ch
+			k := strings.ToLower(strings.TrimSpace(ch.Name))
+			if _, on := names[k]; !on {
+				names[k] = ch
+			}
+			if ch.Parent != "" {
+				if parentsOf == nil {
+					parentsOf = map[string]map[string]bool{}
+				}
+				if parentsOf[k] == nil {
+					parentsOf[k] = map[string]bool{}
+				}
+				parentsOf[k][strings.ToLower(strings.TrimSpace(ch.Parent))] = true
+			}
 		}
 		for _, ch := range st.Held {
 			k := strings.ToLower(strings.TrimSpace(ch.Name))
@@ -132,7 +148,7 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 				names[k] = ch
 			}
 		}
-		bs := builderStep{names: names, parent: st.Parent}
+		bs := builderStep{names: names, parent: st.Parent, parentsOf: parentsOf}
 		if st.Rules != nil {
 			bs.limited, bs.required = st.Rules.Limited, st.Rules.Required
 		}
@@ -305,7 +321,8 @@ func checkParentFit(entity *Entity, patch map[string]any, k string, v any, step 
 	if step.parent == "" || val == "" {
 		return nil
 	}
-	ch, on := step.names[strings.ToLower(val)]
+	key := strings.ToLower(val)
+	ch, on := step.names[key]
 	if !on || ch.Parent == "" {
 		return nil
 	}
@@ -316,7 +333,7 @@ func checkParentFit(entity *Entity, patch map[string]any, k string, v any, step 
 	} else if entity != nil {
 		parentVal, _ = entity.FieldsData[step.parent].(string)
 	}
-	if strings.EqualFold(strings.TrimSpace(parentVal), ch.Parent) {
+	if pv := strings.ToLower(strings.TrimSpace(parentVal)); strings.EqualFold(pv, ch.Parent) || step.parentsOf[key][pv] {
 		return nil
 	}
 	if holdsValue(entity, k, val) && !parentInPatch {

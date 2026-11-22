@@ -167,6 +167,7 @@ func practiceCopyFields(plan *HeroPlan, data map[string]any, hidden map[string]b
 		}
 		picks[st.FieldKey] = pick
 	}
+	dropUnfitPicks(plan, picks)
 	var level *int
 	if !hidden["level"] {
 		switch v := data["level"].(type) {
@@ -205,4 +206,51 @@ func practiceBoughtNames(raw string, choice *HeroChoice) []string {
 		}
 	}
 	return out
+}
+
+// dropUnfitPicks removes copied picks the hero's other picks no longer allow,
+// such as a subclass under a class it has since changed or a kit on a class
+// that uses none. A hero saved before its system declared these steps can
+// hold such a pair, and the copy must still be savable.
+func dropUnfitPicks(plan *HeroPlan, picks map[string]HeroPick) {
+	steps := make(map[string]*HeroStep, len(plan.Steps))
+	found := map[string]*HeroChoice{}
+	for i := range plan.Steps {
+		st := &plan.Steps[i]
+		steps[st.FieldKey] = st
+	}
+	for _, dependent := range []bool{false, true} {
+		for key, pick := range picks {
+			st := steps[key]
+			if st == nil || (st.Parent != "") != dependent {
+				continue
+			}
+			for i := range st.Choices {
+				if !strings.EqualFold(st.Choices[i].Name, pick.Name) {
+					continue
+				}
+				if found[key] == nil {
+					found[key] = &st.Choices[i]
+				}
+				if p := found[st.Parent]; dependent && p != nil && strings.EqualFold(st.Choices[i].Parent, p.Name) {
+					found[key] = &st.Choices[i]
+					break
+				}
+			}
+		}
+	}
+	// Dropping one pick can change what another is allowed (a dropped
+	// subclass no longer overrides its class's kit count), so repeat until
+	// nothing more is dropped.
+	chosen := func(k string) *HeroChoice { return found[k] }
+	for dropped := true; dropped; {
+		dropped = false
+		for key := range picks {
+			if c := found[key]; c != nil && checkHeroStepFit(steps[key], steps, c, chosen) != nil {
+				delete(picks, key)
+				delete(found, key)
+				dropped = true
+			}
+		}
+	}
 }

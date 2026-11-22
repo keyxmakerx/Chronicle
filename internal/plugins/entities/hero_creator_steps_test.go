@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"sort"
 	"strings"
 	"testing"
 )
@@ -18,6 +19,7 @@ func stepsPlan() *HeroPlan {
 			{Name: "Berserker", Parent: "Fury", Properties: map[string]any{"kits": float64(0)}},
 			{Name: "Reaver", Parent: "Fury"},
 			{Name: "Light", Parent: "Conduit"},
+			{Name: "Light", Parent: "Fury"},
 		}},
 		{FieldKey: "kit", Label: "Kit", CountFrom: []HeroCount{
 			{Step: "class", Property: "kits", Note: "kit_note"},
@@ -47,6 +49,8 @@ func TestResolveHeroPicksDependentAndCounted(t *testing.T) {
 	}{
 		{"subclass under its class", pick("class", "Fury", "subclass", "Reaver"), ""},
 		{"parent matches by case", pick("class", "fury", "subclass", "reaver"), ""},
+		{"a child name two classes share, under the second", pick("class", "Fury", "subclass", "Light"), ""},
+		{"a child name two classes share, under the first", pick("class", "Conduit", "subclass", "Light"), ""},
 		{"subclass of another class", pick("class", "Conduit", "subclass", "Reaver"), `not a subclass of Conduit`},
 		{"subclass with no class", pick("subclass", "Reaver"), "choose the class before the subclass"},
 		{"subclass under a class that lists none", pick("class", "Beastheart", "subclass", "Reaver"), "A Beastheart doesn't use a subclass"},
@@ -138,6 +142,8 @@ func TestClaimedOwnerPatchDependentStep(t *testing.T) {
 		{"subclass with no class held", nil, map[string]any{"subclass": "Reaver"}, `belongs to Fury`},
 		{"parent set in the same patch", map[string]any{"class": "Conduit"}, map[string]any{"class": "Fury", "subclass": "Reaver"}, ""},
 		{"patch moves the parent away", map[string]any{"class": "Fury", "subclass": "Reaver"}, map[string]any{"class": "Conduit", "subclass": "Reaver"}, `belongs to Fury`},
+		{"a child name two classes share, under the second", map[string]any{"class": "Fury"}, map[string]any{"subclass": "Light"}, ""},
+		{"a shared child name under a class listing neither", map[string]any{"class": "Beastheart"}, map[string]any{"subclass": "Light"}, `belongs to Conduit`},
 		{"clearing a subclass", map[string]any{"class": "Fury", "subclass": "Reaver"}, map[string]any{"subclass": nil}, ""},
 		{"a held value re-sent while the parent stays", map[string]any{"class": "Fury", "subclass": "Reaver"}, map[string]any{"subclass": "Reaver"}, ""},
 		// Not offering a kit on count 0 is the builder's job; the door lets it be written.
@@ -173,5 +179,34 @@ func TestPracticeAndTryoutPlansKeepStepShape(t *testing.T) {
 		if sub == nil || kit == nil || sub.Parent != "class" || sub.Choices[0].Parent == "" || len(kit.CountFrom) != 2 {
 			t.Errorf("%s plan lost the step declarations: %+v", name, plan.Steps)
 		}
+	}
+}
+
+func TestPracticeCopyDropsUnfitPicks(t *testing.T) {
+	cases := []struct {
+		name string
+		data map[string]any
+		want []string
+	}{
+		{"a fitting set is kept", map[string]any{"class": "Fury", "subclass": "Reaver", "kit": "Panther"}, []string{"class", "kit", "subclass"}},
+		{"a subclass of another class is dropped", map[string]any{"class": "Conduit", "subclass": "Reaver"}, []string{"class"}},
+		{"a kit on a class that uses none is dropped", map[string]any{"class": "Conduit", "kit": "Panther"}, []string{"class"}},
+		{"a kit the subclass rules out is dropped", map[string]any{"class": "Fury", "subclass": "Berserker", "kit": "Panther"}, []string{"class", "subclass"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			picks, _ := practiceCopyFields(stepsPlan(), tc.data, nil)
+			got := make([]string, 0, len(picks))
+			for k := range picks {
+				got = append(got, k)
+			}
+			sort.Strings(got)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("kept %v, want %v", got, tc.want)
+			}
+			if _, err := resolveHeroPicks(stepsPlan(), picks, true); err != nil {
+				t.Fatalf("the copy is not savable: %v", err)
+			}
+		})
 	}
 }
