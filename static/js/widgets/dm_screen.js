@@ -817,7 +817,9 @@
       function cardTarget(e, id) {
         var o = under(e);
         var other = o && o.closest('[data-dms-sec]');
-        if (other && other.getAttribute('data-dms-sec') !== id && !other.hidden) {
+        // Over its own card a drop does nothing.
+        if (other && other.getAttribute('data-dms-sec') === id) return null;
+        if (other && !other.hidden) {
           var r = other.getBoundingClientRect();
           return { id: other.getAttribute('data-dms-sec'), after: e.clientY > r.top + r.height / 2, el: other };
         }
@@ -828,10 +830,9 @@
         return null;
       }
 
-      // Moves a card to the place the drop chose, keeping it whole. The
+      // Moves a card to the place the drop chose, folded or open as it was. The
       // column lists its newest card first, so its order is read reversed.
       function moveCard(id, t) {
-        setFolded(id, false);
         var toLeaf = t.leaf !== undefined ? t.leaf : (t.id ? leafOf(t.id) : -1);
         var targetList = toLeaf >= 0 ? st.leaves[toLeaf] : null;
         st.open = st.open.filter(function (x) { return x !== id; });

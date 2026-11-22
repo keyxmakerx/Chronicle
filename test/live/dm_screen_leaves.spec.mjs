@@ -140,6 +140,21 @@ test('a rail icon dragged toward the page opens its section on a leaf, and the l
   await dragCard('reveal', '.dms-leaf [data-dms-sec="adventures"]', true);
   assert.deepEqual(await leaves(page), [['adventures', 'reveal'], ['homebrew']]);
 
+  // A folded card dropped on itself stays where it is, and stays folded.
+  await page.locator('[data-dms-sec="party"] [data-dms-fold]').click();
+  const before = await column(page);
+  const gr = await page.locator('[data-dms-sec="party"] [data-dms-grip]').boundingBox();
+  const own = await page.locator('[data-dms-sec="party"]').boundingBox();
+  const gx = gr.x + gr.width / 2, gy = gr.y + gr.height / 2;
+  await page.mouse.move(gx, gy);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(gx + (own.x + own.width / 2 - gx) * i / 8, gy + 2 * i);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  assert.deepEqual(await column(page), before, 'a drop on its own card moved it');
+  assert.equal(await page.locator('[data-dms-sec="party"]').evaluate((e) => e.classList.contains('dms-folded')), true, 'a drop on its own card unfolded it');
+  await page.locator('[data-dms-sec="party"] [data-dms-fold]').click();
+
   // A plain click on a rail icon still opens the card in the column.
   await page.locator('.dms-rail [data-dms-open="notes"]').click();
   assert.deepEqual(await column(page), ['notes', 'party', 'world']);
