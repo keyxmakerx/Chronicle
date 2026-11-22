@@ -1172,7 +1172,10 @@
     $$('.mk, .more', cell).forEach(function (m) {
       stopAnims(m);
       if (going.indexOf(m) >= 0) { m.classList.add('away'); return; }
-      anim(m, back ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], { duration: 200, delay: back ? 200 : 60, easing: 'ease-out', fill: 'both' });
+      // From and back to the mark's own opacity: a hidden event's is faded.
+      var own = parseFloat(getComputedStyle(m).opacity);
+      if (!(own >= 0)) own = 1;
+      anim(m, back ? [{ opacity: 0 }, { opacity: own }] : [{ opacity: own }, { opacity: 0 }], { duration: 200, delay: back ? 200 : 60, easing: 'ease-out', fill: 'both' });
     });
   }
   function unpackMarks(cell) {
@@ -1186,7 +1189,7 @@
     var cr = calEl.getBoundingClientRect();
     return (P.pairs || []).map(function (p, i) {
       var a = (back ? p.ric : p.mk).getBoundingClientRect(), b = (back ? p.mk : p.ric).getBoundingClientRect(), f = document.createElement('span');
-      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '') + (p.mk.classList.contains('wait') ? ' wait' : '');
+      f.className = 'flyer';
       f.setAttribute('style', (p.mk.getAttribute('style') || '') + ';width:' + a.width.toFixed(1) + 'px;height:' + a.height.toFixed(1) + 'px');
       if (p.mk.classList.contains('gnm')) f.innerHTML = p.mk.innerHTML;
       else f.textContent = p.mk.textContent;
@@ -1194,7 +1197,10 @@
       p.f = f;
       var sx = a.left - cr.left, sy = a.top - cr.top, ex = b.left - cr.left, ey = b.top - cr.top, k = b.width / a.width;
       var lift = Math.min(26, 8 + Math.hypot(ex - sx, ey - sy) * 0.07), t = { duration: o.dur, delay: o.delay + i * o.stagger, fill: 'both' };
-      var trip = anim(f, [{ transform: 'translate(' + sx.toFixed(1) + 'px,' + sy.toFixed(1) + 'px)' }, { transform: 'translate(' + ex.toFixed(1) + 'px,' + ey.toFixed(1) + 'px)' }], Object.assign({ easing: 'cubic-bezier(.45,0,.2,1)' }, t));
+      // A hidden event's mark is faded in the cell and full in the card, so
+      // its flyer brightens on the way in and dims on the way back.
+      var faded = parseFloat(getComputedStyle(p.mk).opacity), fo = p.mk.classList.contains('dir') && faded < 1 ? (back ? [1, faded] : [faded, 1]) : [1, 1];
+      var trip = anim(f, [{ transform: 'translate(' + sx.toFixed(1) + 'px,' + sy.toFixed(1) + 'px)', opacity: fo[0] }, { transform: 'translate(' + ex.toFixed(1) + 'px,' + ey.toFixed(1) + 'px)', opacity: fo[1] }], Object.assign({ easing: 'cubic-bezier(.45,0,.2,1)' }, t));
       [trip,
         anim(f, [{ transform: 'translateY(0px)', easing: 'cubic-bezier(.25,.6,.45,1)' }, { transform: 'translateY(' + (-lift).toFixed(1) + 'px)', offset: 0.42, easing: 'cubic-bezier(.55,0,.75,.4)' }, { transform: 'translateY(0px)' }], Object.assign({ composite: 'add' }, t)),
         anim(f, [{ transform: 'scale(1)' }, { transform: 'scale(' + (Math.max(k, 1) * 1.16).toFixed(3) + ')', offset: 0.45 }, { transform: 'scale(' + k.toFixed(3) + ')' }], Object.assign({ composite: 'add', easing: 'ease-in-out' }, t))

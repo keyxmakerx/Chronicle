@@ -1,8 +1,8 @@
 // calendar_on_their_day.spec.mjs — an event can reveal itself when its day
 // comes. The owner fills the year with "On their day" and keeps it: a player
 // reads none of the future ones, and as the date moves forward the player
-// sees exactly those dated on or before it. The owner's month marks a waiting
-// event with a half ring. The chosen days' row sets one to show now, or hides
+// sees exactly those dated on or before it. The owner's month says a waiting
+// event waits, in its title, and draws a hidden one faded. The chosen days' row sets one to show now, or hides
 // it again, and a player sees each change at once.
 //
 // RUN: tools/live-checks.sh test/live/calendar_on_their_day.spec.mjs
@@ -87,14 +87,14 @@ test('a fill kept "On their day" stays hidden until its day, then shows by itsel
   assert.deepEqual(early.filter((e) => startOf(e) > today).map((e) => e.name), [], 'a player can read an event before its day');
   assert.ok(kept.some((e) => startOf(e) > today), 'the fill made nothing after today');
 
-  // The owner's month marks a waiting event with a half ring, and says so in words.
+  // The owner's month marks a waiting event, and says so in words.
   await page.locator('#cal5-looktab').click();
   const wait = page.locator('.cal-v5 .mk.wait');
   for (let i = 0; i < 4 && !(await wait.count()); i++) { await page.locator('#cal5-next').click(); await page.waitForTimeout(400); }
   assert.ok(await wait.count(), 'no waiting event is marked on the owner’s month');
-  assert.equal(await page.locator('.cal-v5 .mk.wait.dir').count(), 0, 'a waiting mark also carries the hidden ring');
+  assert.equal(await page.locator('.cal-v5 .mk.wait.dir').count(), 0, 'a waiting mark is also drawn as hidden');
   assert.match(await wait.first().getAttribute('title'), /players see it on the day/);
-  await picture(page, 'calendar-waiting-half-ring', { check: '#2441', about: 'Owner month with events waiting for their day marked by a half ring', locator: page.locator('#cal5-cal') });
+  await picture(page, 'calendar-waiting-marks', { check: '#2441', about: 'Owner month with events waiting for their day', locator: page.locator('#cal5-cal') });
 
   // The date moves forward: the player sees exactly what is dated on or before it.
   const cur = cal.current_month;
@@ -159,6 +159,6 @@ test('Show now, Show on the day and Hide on chosen days change what a player rea
   got = (await owner.api(`${base}/events/${id}`)).body;
   assert.equal(got.visibility, 'dm_only');
   assert.equal(await seen(), false, 'Hide left it readable');
-  assert.ok(await page.locator(`.cal-v5 .mk.dir[data-ev="${id}"]`).count(), 'a hidden event lost its dashed ring');
+  assert.ok(await page.locator(`.cal-v5 .mk.dir[data-ev="${id}"]`).count(), 'a hidden event is not marked as hidden');
   owner.assertClean();
 });
