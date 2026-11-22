@@ -400,9 +400,6 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
   .glow, .cpe-wait i, .cpe-tile { animation: none !important; }
 }
 
-/* The Page layout tab: the editor runs edge to edge under the tabs. */
-.czs-ped-host { padding-top: 12px; }
-
 /* The faded draft: suggested blocks under the page, kept one by one. */
 .cpe-draft { margin-bottom: 16px; padding: 12px; border: 1px dashed var(--color-border); border-radius: 10px; display: flex; flex-direction: column; gap: 10px; }
 .cpe-draft-lab { margin: 0; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-secondary); }
@@ -432,6 +429,14 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
   border-radius: var(--shape-r-panel); box-shadow: var(--elev-dragged);
 }
 .cpe-dock::-webkit-scrollbar { display: none; }
+/* The dock is a floating pill, so its cue is a fade into its own fill on the
+   side with more tools (a mask would also cut its shadow). The sticky ends
+   take no room: width and negative margin cancel. */
+.cpe-dock.cue-l::before, .cpe-dock.cue-r::after {
+  content: ""; position: sticky; flex: none; align-self: stretch; width: 40px; pointer-events: none; z-index: 1;
+}
+.cpe-dock.cue-l::before { left: 0; margin-right: -40px; background: linear-gradient(to left, transparent, var(--color-text-primary)); }
+.cpe-dock.cue-r::after { right: 0; margin-left: -40px; background: linear-gradient(to right, transparent, var(--color-text-primary)); }
 .cpe-editor.panel-open .cpe-dock { max-width: calc(100% - var(--cpe-panel-w) - 12px); }
 .cpe-dk {
   flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px;

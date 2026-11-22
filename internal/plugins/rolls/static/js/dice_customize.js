@@ -113,8 +113,11 @@
     if (this.stage && C.dice && typeof C.dice.stop === 'function') C.dice.stop(this.stage);
   };
 
+  // The workshop is busy until the settings and the dice have arrived, which
+  // screen readers hear and Customize's grow waits for.
   Dice.prototype.load = function () {
     var self = this;
+    self.el.setAttribute('aria-busy', 'true');
     var settings = C.apiFetch(this.base).then(function (r) { if (!r.ok) throw new Error('status ' + r.status); return r.json(); });
     var catalogue = C.dice && typeof C.dice.catalogue === 'function' ? C.dice.catalogue() : Promise.reject(new Error('no dice'));
     Promise.all([settings, catalogue]).then(function (v) {
@@ -125,8 +128,10 @@
       self.frame();
       self.render();
       self.trayRest();
+      self.el.removeAttribute('aria-busy');
     }).catch(function () {
       if (!self.alive) return;
+      self.el.removeAttribute('aria-busy');
       self.el.innerHTML = '<p class="dcz-hint dcz-bad" role="alert">The dice settings couldn’t be read. Reload the page to try again.</p>';
     });
   };
@@ -342,8 +347,8 @@
       '<span class="dcz-what">Each player can change the die, colours and animations for their own rolls. Everyone else still sees the campaign’s.</span></span></label>' +
       (s.playersPick ? '<div class="dcz-offer"><p class="dcz-lab">Sets on offer to players</p><div class="dcz-chks">' + this.offerList() + '</div></div>' : '') + '</section>' +
 
-      '<section class="dcz-sec" aria-labelledby="dcz-h-look"><h2 id="dcz-h-look" class="dcz-h">The table’s dice</h2>' +
-      '<p class="dcz-hint">What a player who hasn’t picked starts on.</p>' + seg('data-dcz-look', LOOKS, s.look || 'quick', 'The table’s dice') + '</section>';
+      '<section class="dcz-sec" aria-labelledby="dcz-h-look"><h2 id="dcz-h-look" class="dcz-h">Players’ starting dice</h2>' +
+      '<p class="dcz-hint">What a player who hasn’t picked starts on.</p>' + seg('data-dcz-look', LOOKS, s.look || 'quick', 'Players’ starting dice') + '</section>';
 
     this.el.querySelector('[data-dcz-tray-lab]').textContent = set.name + ' · ' + colour.name;
     if (keep) {

@@ -37,6 +37,7 @@ func (a *customizeCategoryAdapter) ListCustomizeCategories(ctx context.Context, 
 			Icon: in.Type.Icon, Color: in.Type.Color, ParentID: in.Type.ParentTypeID,
 			Claimable: in.Claimable, Pages: in.Pages, Trashed: in.Trashed, IsDefault: in.Type.IsDefault,
 			DMOnly: in.Type.DMOnly(),
+			Fields: len(in.Type.Fields), HomeLayout: in.Type.DashboardLayout != nil && *in.Type.DashboardLayout != "", Sample: in.Sample,
 		}
 	}
 	return out, nil

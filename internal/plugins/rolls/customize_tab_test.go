@@ -26,6 +26,9 @@ func TestCustomizeTabFactory(t *testing.T) {
 			t.Fatalf("%s: tab = %+v", tt.name, tab)
 		}
 	}
+	if len(tab.Paths) != 1 || tab.Paths[0] != "/rolls" || tab.Here == "" {
+		t.Errorf("the brush needs the dice pages and a row's words: paths %v, here %q", tab.Paths, tab.Here)
+	}
 	var buf bytes.Buffer
 	if err := tab.Content.Render(context.Background(), &buf); err != nil {
 		t.Fatal(err)
@@ -107,7 +110,7 @@ func TestDiceFinds_NameWhatIsInsideTheTab(t *testing.T) {
 	for _, f := range diceFinds() {
 		have[f.Label] = true
 	}
-	for _, want := range []string{"Crit success", "Crit fail", "Die colour", "Players may pick their own dice", "The table’s dice", "Ember obsidian dice", "Nebula resin dice"} {
+	for _, want := range []string{"Crit success", "Crit fail", "Die colour", "Players may pick their own dice", "Players’ starting dice", "Ember obsidian dice", "Nebula resin dice"} {
 		if !have[want] {
 			t.Errorf("Find does not know %q", want)
 		}

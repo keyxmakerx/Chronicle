@@ -32,7 +32,7 @@ test('the control is in Character sheets and covered by Save, Discard and Reset'
   assert.match(src, /sheet:\['sheet\.style', 'sheet\.craftArt', 'builder\.look', 'access\.sheet'\]/, 'SEC_KEYS must list builder.look');
   assert.match(src, /builder:clone\(d\.builder\)/, 'toInput must send the look');
   assert.match(src, /if \(!d\.builder \|\| !d\.builder\.look\) d\.builder = \{ look:'plain' \};/, 'a missing look reads as Plain');
-  assert.match(src, /opts\('sh-builder', 'builder\.look', 'sh-builder-l', BUILDER_LOOKS\)/, 'a control must bind builder.look');
+  assert.match(src, /opts\('sh-builder', 'builder\.look', 'sh-builder-l', BUILDER_LOOKS, 'builder'\)/, 'a control must bind builder.look');
   assert.match(src, /'Hero builder look'/);
   assert.match(src, /How the hero builder looks to your players\./);
 });

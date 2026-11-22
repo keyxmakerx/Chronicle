@@ -190,8 +190,7 @@
         '<p class="czs-lede">Each category is a kind of page. Open one to set up its page, its home, its fields and the text new pages start with.</p></div>' +
         '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i>New category</button></div>' +
         '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">' +
-        top.map(card).join('') +
-        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>';
+        top.map(card).join('') + '</div>';
       if (window.htmx) window.htmx.process(el);
     }
     function card(c) {
@@ -244,7 +243,7 @@
       var blocked = c.isNew ? '' : (c.pages > 0 ? 'Move or delete its ' + pagesText(c.pages) + ' first.' :
         c.trashed > 0 ? pagesText(c.trashed) + ' of it ' + (c.trashed === 1 ? 'is' : 'are') + ' in the Trash. Restore or empty ' + (c.trashed === 1 ? 'it' : 'them') + ' first.' :
         kids.length ? 'Delete its kinds first.' : '');
-      body.innerHTML = '<div class="czs-form">' +
+      body.innerHTML = '<h1 class="czs-h1">Settings</h1><p class="czs-lede">The name, icon and colour of ' + esc(c.plural || 'this category') + ', and who sees it in the menu.</p><div class="czs-form mt-6">' +
         '<div class="czs-split"><div class="czs-field"><label for="czc-plural">Name</label><input class="input" id="czc-plural" maxlength="100" value="' + esc(c.plural) + '"><p class="czs-err" id="czc-plural-e" hidden>A category needs a name.</p></div>' +
         '<div class="czs-field"><label for="czc-one">One of them is called</label><input class="input" id="czc-one" maxlength="100" value="' + esc(c.name) + '"><p class="czs-hint">Used in “New ' + esc((c.name || 'page').toLowerCase()) + '”.</p><p class="czs-err" id="czc-one-e" hidden>Give one of them a name too.</p></div></div>' +
         '<div class="czs-field"><span class="czs-lab" id="czc-ic-l">Icon and colour</span><div><button type="button" class="btn-secondary btn-sm" id="czc-icon" aria-haspopup="dialog">' + chip(c, 'sm') + '<span class="ml-2">Change icon</span></button></div>' +

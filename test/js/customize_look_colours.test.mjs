@@ -38,10 +38,10 @@ test('Find a setting reaches Colours by what the colours paint', () => {
   for (const w of ['menus', 'links', 'headers', 'events', 'tags', 'marks']) assert.ok(line.includes(w), w);
 });
 
-test('the colour rows put a hairline between them and fold on a phone', () => {
+test('the colour rows put a hairline between them and fold inside the panel', () => {
   assert.match(css, /\.czp \.crow \+ \.crow\{ border-top:1px solid var\(--line-2\); \}/);
-  // The phone rule that folds every .fld comes after the row's own columns.
-  assert.ok(css.indexOf('.czp .crow{') < css.lastIndexOf('.czp .fld{ grid-template-columns:minmax(0, 1fr); }'));
+  // The panel is one column wide: its rule that folds the row comes after the row's own columns.
+  assert.ok(css.indexOf('.czp .crow{') < css.indexOf('.czp .lk-pb .crow{ grid-template-columns:minmax(0, 1fr); }'));
 });
 
 test('the blur layer undoes the site scale and its clip is in screen pixels', () => {

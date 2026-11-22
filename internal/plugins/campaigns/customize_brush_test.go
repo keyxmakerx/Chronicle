@@ -21,7 +21,7 @@ func TestBrushRowFor(t *testing.T) {
 		},
 		Tabs: []CustomizeTab{
 			{ID: "maps", Label: "Maps", Paths: []string{"/maps"}, Here: "The frame around maps"},
-			{ID: "dice", Label: "Dice"},
+			{ID: "dice", Label: "Dice", Paths: []string{"/rolls"}, Here: "The dice everyone rolls"},
 		},
 		pageCategory: func(eid string) (int, bool) {
 			switch eid {
@@ -47,6 +47,8 @@ func TestBrushRowFor(t *testing.T) {
 		{"the campaign home with a slash", "/", &brushRow{"How the campaign home is laid out", "Customize › Home pages", "/campaigns/c1/customize/home"}},
 		{"the maps list", "/maps", &brushRow{"The frame around maps", "Customize › Maps", "/campaigns/c1/customize/x/maps"}},
 		{"a map", "/maps/abc", &brushRow{"The frame around maps", "Customize › Maps", "/campaigns/c1/customize/x/maps"}},
+		{"the dice page", "/rolls", &brushRow{"The dice everyone rolls", "Customize › Dice", "/campaigns/c1/customize/x/dice"}},
+		{"the dice settings page", "/rolls/settings", &brushRow{"The dice everyone rolls", "Customize › Dice", "/campaigns/c1/customize/x/dice"}},
 		{"a look-alike path is not the plugin's", "/mapsfoo", nil},
 		{"anywhere else", "/journal", nil},
 	}

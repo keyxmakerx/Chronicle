@@ -65,9 +65,9 @@ Every screen is one of two kinds, and is designed in that kind's register.
 - **Workshops** are where the owner arranges and configures: the
   Customizer, the calendar, map and book editors, settings, Site admin.
   They are framed tools on the theme tokens (`customize_shell.css` is the
-  model: index tabs across the top, each area's parts in a drawer hanging
-  from its tab, the work in the middle, an inspector on the right, one save
-  bar). A workshop shows the page it changes as the real
+  model: a bar that names where you are, "Everything" back to the wall,
+  the part's name and its own tabs as index tabs, the work in the middle, an
+  inspector on the right, one save bar). A workshop shows the page it changes as the real
   page, never an abstract grid or a form describing it.
 - **Paper is an optional extra, mostly for players.** Every surface already
   behaves like a sheet (The material rules); paper is only the optional
@@ -794,6 +794,37 @@ Customize choices (`AppearanceData`, emitted as `data-cz-*` on the page) can
 make it richer, never break it: Calm and Off still win, and the tools keep
 their tokens.
 
+- **Customize opens on a wall of pictures** of everything the owner can
+  change, each a miniature of that surface in the campaign's own look (its
+  colours, faces, menu and header, unsaved draft included) and its real
+  names, with the name and what is set now beneath it. Groups: Shared by
+  every page (Site frame, Colours and type, Page style, Hover cards,
+  Character sheets, Emails), Each kind of page (one per category, with a
+  quiet "All categories"), Home pages, and Apps (one per Customize tab a
+  plugin registers, so a new tab adds a picture). Hovering or focusing a
+  shared picture lights the part it changes in every other picture and dims
+  the pictures it does not touch (touch has no hover). Pressing a picture
+  grows it into its workshop: in the frame of the press the picture lifts off
+  its tile and flies to where the workshop's stage will be (`data-czs-stage`,
+  below the bar across the content column), growing to its width, while the
+  rest of the wall steps back to 97% and fades, over 0.92 of `--dur-slide` on
+  `--ease-out`. It stays there, whole, while the workshop loads, and fades
+  into it once the workshop has drawn (no `aria-busy` left in the stage, or
+  1.5 s at most); the bar's tabs come in 30ms apart as the workshop arrives.
+  "Everything" and the browser's Back step the workshop back at once (60%,
+  98.5%, `--dur-micro`), and when the wall arrives the picture flies from the
+  stage into its tile over 0.9 of `--dur-large` on `--ease-in-out` while the
+  wall steps forward. Calm fades the picture in place instead of flying it;
+  Off and reduced motion swap at once. Escape, a second press or Back during
+  a move ends it cleanly. Focus lands on the workshop's name going in and on
+  the picture you came from coming back, in view.
+  Inside a part the bar names where you are: "‹ Everything", the part's name
+  (a category's opens the switcher), the part's own tabs (a category's five,
+  Look's rooms, the homes), then Find. On a phone the bar takes two rows:
+  "‹ Everything", the name and Find as a 44-square search mark on the first,
+  the tabs on the second, scrolling sideways with the edge fade, each 44
+  tall.
+
 - **Page look** (`data-cz-page`, `static/css/page_look_annals.css`, chosen in
   Customize › Look › Pages, where Annals is named Material): Annals
   is the Material page look described under Look, and the one new pages and
@@ -859,6 +890,25 @@ their tokens.
   (`static/js/widgets/player_view.js`). Calm fades, Off swaps. A secret
   never shows as a gap: a view built for players leaves out the link or row
   that would point at it.
+- **Look is a workshop with the example in the middle.** The example site is
+  the work, as large as the space left of the panel allows. The open part's
+  settings live in a ~300px panel on the right, Page layout's own slide-out
+  frame (a 58% sheet from the foot on a phone, Done and a grab line close it),
+  with the four rooms as quiet words at its top and the room's parts under
+  them. Pressing a part of the example opens it: the part gets a ring and the
+  rest softens; settings that dress the whole site (Colours, Type, a starting
+  look) leave the example sharp. With nothing open, the room's parts wear
+  pencil marks beside them, never over a word; each mark is a button
+  ("Change the header") that Tab reaches and Enter or Space opens, as a press
+  on the part does. Escape anywhere in the workshop puts the panel away,
+  unless focus is in a text field; an open picker or menu closes first. The
+  tools float at the foot in Page layout's
+  dock: Settings, Looks (the eight starting looks in the panel), Light and
+  Dark, the page switch and Hold to see saved (the example shows the saved
+  look while it is held, with Space or Enter too); on a phone they wrap onto
+  centred rows rather than scroll. Every choice that was
+  words carries a sample of what it looks like. The panel's contents swap
+  with a fade of at most 150 ms; Calm fades only, Off shows the end state.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
