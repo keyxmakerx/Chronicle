@@ -619,6 +619,8 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			Announced: evt.Announced, Tier: evt.Tier, Color: evt.Color, Icon: evt.Icon,
 			AllDay: evt.AllDay, Payload: evt.Payload,
 			Ref: evt.ID, RecurrenceRule: rule, Overrides: eventOverrides,
+			Status: backupStatus(evt.Status), Outcome: evt.Outcome,
+			MovedFromYear: evt.MovedFromYear, MovedFromMonth: evt.MovedFromMonth, MovedFromDay: evt.MovedFromDay,
 		})
 		if r, ok := rolls[evt.ID]; ok {
 			roll, err := exportEventRoll(r)
@@ -2373,6 +2375,9 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 		Icon:                     evt.Icon,
 		AllDay:                   evt.AllDay,
 		Payload:                  evt.Payload,
+		Status:                   evt.Status,
+		Outcome:                  evt.Outcome,
+		MovedFrom:                backupMovedFrom(evt),
 		CanAuthorDmOnly:          true,
 		Author:                   permissions.SystemViewer(3),
 	})
@@ -2382,6 +2387,24 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 		return ""
 	}
 	return created.ID
+}
+
+// backupStatus is the status a backup writes: planned (and an older row's
+// empty status) is left out, so the file reads as before.
+func backupStatus(s string) string {
+	if s == calendar.EventStatusPlanned {
+		return ""
+	}
+	return s
+}
+
+// backupMovedFrom is the day a backed-up moved event was planned for, or
+// nil. The calendar keeps it only on a moved event and checks it there.
+func backupMovedFrom(evt campaigns.ExportCalendarEvent) *calendar.DayDate {
+	if evt.MovedFromYear == nil || evt.MovedFromMonth == nil || evt.MovedFromDay == nil {
+		return nil
+	}
+	return &calendar.DayDate{Year: *evt.MovedFromYear, Month: *evt.MovedFromMonth, Day: *evt.MovedFromDay}
 }
 
 // eraStartMonthDay resolves an imported era's start month/day: a modern

@@ -505,6 +505,16 @@ type ExportCalendarEvent struct {
 	// Roll is the event's dice or table roll and its stored nights.
 	// Additive.
 	Roll *ExportCalendarEventRoll `json:"roll,omitempty"`
+	// Status is what became of the event: happened, moved or called_off.
+	// Planned is left out, so a file from before it existed, or an event
+	// nobody answered, reads as planned. Outcome is the line on what
+	// happened; MovedFrom* is the day a moved event was planned for. All
+	// additive.
+	Status         string  `json:"status,omitempty"`
+	Outcome        *string `json:"outcome,omitempty"`
+	MovedFromYear  *int    `json:"moved_from_year,omitempty"`
+	MovedFromMonth *int    `json:"moved_from_month,omitempty"`
+	MovedFromDay   *int    `json:"moved_from_day,omitempty"`
 }
 
 // ExportCalendarEventRoll is an event's roll. Config is the calendar
