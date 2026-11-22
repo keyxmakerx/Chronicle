@@ -17,6 +17,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
@@ -441,6 +442,8 @@ func TestUndoConfirm(t *testing.T) {
 		{"one page", []connector.Before{b("page", "update", "A")}, 1, "Puts back “A” as it was before."},
 		{"removed and a home", []connector.Before{b("page", "delete", "A"), b("home", "update", "players home")}, 2,
 			"Brings back “A” from the Trash. Puts back “players home” as it was before."},
+		{"nothing kept: no confirm, so the row reads No undo", nil, 3, ""},
+		{"nothing kept of one change", []connector.Before{}, 1, ""},
 		{"part of the request", []connector.Before{b("page", "update", "A")}, 4,
 			"Puts back “A” as it was before. The request's other changes stay as they are."},
 	}
@@ -533,5 +536,73 @@ func TestUndo_CreatedPageWithPagesInsideIsRefused(t *testing.T) {
 	}
 	if len(r.pages.trashed) != 0 || len(r.pages.restored) != 0 {
 		t.Errorf("a refused undo changed pages: %+v", r.pages)
+	}
+}
+
+// The same two asks (one summary, inside a minute), one applied and one still
+// waiting: the waiting row reads "Waiting for you" with no Undo, the applied
+// row carries the request's Undo, and no two rows share a request.
+func TestSittingRows_TwinAsksNeverShareARequest(t *testing.T) {
+	t0 := time.Date(2026, 11, 21, 14, 0, 0, 0, time.UTC)
+	calls := []connector.Call{
+		{ID: 1, Tool: toolAskName, At: t0, Summary: "Asked for 1 change: “Mill news”", OK: true},
+		{ID: 2, Tool: toolAskName, At: t0.Add(20 * time.Second), Summary: "Asked for 1 change: “Mill news”", OK: true},
+	}
+	v := ConnectView{
+		Calls: calls,
+		// 19 was applied (asked with the first call), 20 waits (the second).
+		Applied:  []connector.Request{{ID: 19, Summary: "Mill news", CreatedAt: t0.Add(time.Second)}},
+		Requests: []connector.Request{{ID: 20, Summary: "Mill news", CreatedAt: t0.Add(19 * time.Second)}},
+		Undo:     map[int64]undoCell{19: {RequestID: 19, Confirm: "Puts back “Lyra” as it was before."}},
+		Now:      t0, Loc: time.UTC,
+	}
+	rows := sittingRows(v, connector.Sitting{Start: t0, End: t0.Add(20 * time.Second), Calls: calls})
+	if rows[0].Waiting || rows[0].Undo == nil || rows[0].Undo.RequestID != 19 {
+		t.Errorf("the applied ask = waiting %v, undo %+v", rows[0].Waiting, rows[0].Undo)
+	}
+	if !rows[1].Waiting || rows[1].Undo != nil {
+		t.Errorf("the waiting ask = waiting %v, undo %+v", rows[1].Waiting, rows[1].Undo)
+	}
+
+	// Two applied requests with one summary, one call: one request only, once.
+	v = ConnectView{Calls: calls[:1], Loc: time.UTC,
+		Applied: []connector.Request{{ID: 5, Summary: "Mill news", CreatedAt: t0.Add(30 * time.Second)}, {ID: 6, Summary: "Mill news", CreatedAt: t0.Add(2 * time.Second)}},
+		Undo:    map[int64]undoCell{5: {RequestID: 5, Confirm: "x"}, 6: {RequestID: 6, Confirm: "y"}}}
+	one := sittingRows(v, connector.Sitting{Start: t0, End: t0, Calls: calls[:1]})
+	if one[0].Undo == nil || one[0].Undo.RequestID != 6 {
+		t.Errorf("the nearest request should win: %+v", one[0].Undo)
+	}
+}
+
+// Requests whose changes are not covered, or that were applied before
+// anything was kept, give a row that reads No undo, never an Undo that would
+// be refused.
+func TestFillUndo_NothingKeptReadsNoUndo(t *testing.T) {
+	r := newUndoRig(t)
+	r.answer(t) // applied, no befores at all
+	h := r.h
+	v := ConnectView{Now: time.Now(), Loc: time.UTC}
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}}
+	if err := h.fillUndo(context.Background(), cc, "user-1", &v); err != nil {
+		t.Fatal(err)
+	}
+	cell, ok := v.Undo[r.id]
+	if !ok || cell.Can() {
+		t.Fatalf("cell = %+v, %v", cell, ok)
+	}
+	if html := renderTempl(t, aiUndoCell(cell)); !strings.Contains(html, "No undo") || strings.Contains(html, "<button") {
+		t.Errorf("row:\n%s", html)
+	}
+}
+
+// Inside refusal says what to do.
+func TestUndo_PagesInsideRefusalSaysWhatToDo(t *testing.T) {
+	r := newUndoRig(t)
+	r.keepPages(t)
+	r.answer(t)
+	r.pages.inside = map[string]int{"p2": 1}
+	_, body := undo(t, r)
+	if !strings.Contains(body, "Move or remove the pages inside, then press Undo again.") || strings.Contains(body, "History") {
+		t.Errorf("refusal: %s", body)
 	}
 }

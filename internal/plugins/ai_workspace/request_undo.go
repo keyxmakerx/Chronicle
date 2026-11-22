@@ -116,6 +116,10 @@ func (u undoCell) undoneText() string {
 // undoConfirm is the plain line before Undo: what is put back and what is
 // not. blocks is how many changes the request had.
 func undoConfirm(left []connector.Before, blocks int) string {
+	// Nothing kept, so nothing to offer: the row reads "No undo".
+	if len(left) == 0 {
+		return ""
+	}
 	var upd, created, removed, other []string
 	for _, b := range left {
 		switch {
@@ -199,24 +203,56 @@ func (h *Handler) fillUndo(ctx context.Context, cc *campaigns.CampaignContext, u
 	return nil
 }
 
-// appliedFor is the applied request a logged ask_for_changes call made: sent
-// within a minute of it, quoting the same line. The nearest wins.
-func appliedFor(v ConnectView, c connector.Call) (int64, bool) {
-	var best int64
-	var bestGap time.Duration
-	for _, q := range v.Applied {
+// askPair is the request a logged ask_for_changes call made.
+type askPair struct {
+	Request int64
+	Waiting bool
+}
+
+// pairAsks pairs each request, waiting or applied, with the logged
+// ask_for_changes call that made it: sent within a minute of it, quoting the
+// same line. Pairs are taken nearest first and each call and each request is
+// used once, so two asks with one summary never both wear one request's
+// Undo (or both read "Waiting for you"), and a waiting request is never
+// shown as an applied one. The result is call id to pair.
+func pairAsks(v ConnectView) map[int64]askPair {
+	type cand struct {
+		call int64
+		askPair
+		gap time.Duration
+	}
+	var cands []cand
+	add := func(c connector.Call, q connector.Request, waiting bool) {
 		d := q.CreatedAt.Sub(c.At)
 		if d < 0 {
 			d = -d
 		}
 		if d > time.Minute || (q.Summary != "" && !strings.Contains(c.Summary, q.Summary)) {
+			return
+		}
+		cands = append(cands, cand{c.ID, askPair{q.ID, waiting}, d})
+	}
+	for _, c := range v.Calls {
+		if c.Tool != toolAskName || !c.OK {
 			continue
 		}
-		if best == 0 || d < bestGap {
-			best, bestGap = q.ID, d
+		for _, q := range v.Requests {
+			add(c, q, true)
+		}
+		for _, q := range v.Applied {
+			add(c, q, false)
 		}
 	}
-	return best, best != 0
+	sort.SliceStable(cands, func(i, j int) bool { return cands[i].gap < cands[j].gap })
+	out := map[int64]askPair{}
+	used := map[int64]bool{}
+	for _, c := range cands {
+		if _, taken := out[c.call]; taken || used[c.Request] {
+			continue
+		}
+		out[c.call], used[c.Request] = c.askPair, true
+	}
+	return out
 }
 
 // UndoRequest puts back what an applied request changed.
@@ -307,7 +343,7 @@ func (h *Handler) undoRefusal(ctx context.Context, campaignID string, actor aipl
 		parts = append(parts, joinNames(quoted(changed))+" "+haveHas(len(changed))+" been changed since the AI applied it.")
 	}
 	if len(inside) > 0 {
-		parts = append(parts, joinNames(quoted(inside))+" now "+haveHas(len(inside))+" pages inside, which would go to the Trash too.")
+		parts = append(parts, joinNames(quoted(inside))+" now "+haveHas(len(inside))+" pages inside, which would go to the Trash too. Move or remove the pages inside, then press Undo again.")
 	}
 	if len(gone) > 0 {
 		parts = append(parts, joinNames(quoted(gone))+" can't be found or brought back any more.")
@@ -315,8 +351,11 @@ func (h *Handler) undoRefusal(ctx context.Context, campaignID string, actor aipl
 	if len(parts) == 0 {
 		return ""
 	}
-	return "Nothing was put back. " + strings.Join(parts, " ") +
-		" Undo won't overwrite later work; for a page, open its History to choose an earlier version."
+	out := "Nothing was put back. " + strings.Join(parts, " ")
+	if len(changed) > 0 {
+		out += " Undo won't overwrite later work; for a page, open its History to choose an earlier version."
+	}
+	return out
 }
 
 func haveHas(n int) string {

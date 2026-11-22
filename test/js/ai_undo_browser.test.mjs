@@ -128,8 +128,8 @@ test('A row with nothing kept says No undo, with no button or icon', { skip }, a
 test('Each Undo target is 44px on touch', { skip }, async () => {
   const { browser, page } = await open(360, 'done', { touch: true });
   try {
-    const h = await page.evaluate(() => document.querySelector('.aic-undo-btn').getBoundingClientRect().height);
-    assert.ok(h >= 44, `Undo is ${h}px tall`);
+    const r = await page.evaluate(() => { const b = document.querySelector('.aic-undo-btn').getBoundingClientRect(); return [b.width, b.height]; });
+    assert.ok(r[0] >= 44 && r[1] >= 44, `Undo is ${r[0]} x ${r[1]}px`);
     await page.click('.aic-undo-btn');
     await page.waitForSelector('.aic-ask', { state: 'visible' });
     const hs = await page.evaluate(() => [...document.querySelectorAll('.aic-ask button')].map((b) => b.getBoundingClientRect().height));

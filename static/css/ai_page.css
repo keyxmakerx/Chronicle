@@ -412,4 +412,5 @@ label.aic-row { cursor: pointer; }
 .aic-undo .aic-ask { margin-top: 6px; }
 @media (pointer: coarse) {
   .aic-undo-btn, .aic-undo .aic-ask .btn-secondary { min-height: 44px; }
+  .aic-undo-btn { min-width: 44px; }
 }

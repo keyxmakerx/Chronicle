@@ -6,7 +6,6 @@ package ai_workspace
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
@@ -120,6 +119,7 @@ const toolAskName = "ask_for_changes"
 func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 	span := s.End.Sub(s.Start)
 	out := make([]callRow, 0, len(s.Calls))
+	paired := pairAsks(v)
 	for _, c := range s.Calls {
 		r := callRow{Call: c, Kind: "look", Icon: callIcon(c), Left: 50}
 		if span > 0 {
@@ -127,9 +127,9 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 		}
 		if c.Tool == toolAskName {
 			r.Kind = "ask"
-			r.Waiting = c.OK && callWaiting(v, c)
-			if id, ok := appliedFor(v, c); ok && c.OK {
-				if u, has := v.Undo[id]; has {
+			if p, ok := paired[c.ID]; ok {
+				r.Waiting = p.Waiting
+				if u, has := v.Undo[p.Request]; has && !p.Waiting {
 					r.Undo = &u
 				}
 			}
@@ -137,21 +137,6 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 		out = append(out, r)
 	}
 	return out
-}
-
-// callWaiting reports whether a request call is one still waiting for the
-// owner: a waiting request sent within a minute of it, whose own line the
-// call quotes.
-func callWaiting(v ConnectView, c connector.Call) bool {
-	for _, q := range v.Requests {
-		if d := q.CreatedAt.Sub(c.At); d < -time.Minute || d > time.Minute {
-			continue
-		}
-		if q.Summary == "" || strings.Contains(c.Summary, q.Summary) {
-			return true
-		}
-	}
-	return false
 }
 
 // callIcon is a call's icon: what kind of thing it read, a request, or the
