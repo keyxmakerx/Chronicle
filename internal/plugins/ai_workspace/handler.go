@@ -82,6 +82,9 @@ type Handler struct {
 	// importFolders lets the review check a page's `folder:` name. Optional —
 	// nil refuses a page that names a folder.
 	importFolders importer.FolderAccess
+	// heroPicks checks a hero page's pick-list values for the review.
+	// Optional: nil skips the warning.
+	heroPicks HeroPickChecker
 	// zone is the owner's time zone, for the Your AI page's times.
 	zone func(ctx context.Context, userID string) *time.Location
 
@@ -120,6 +123,14 @@ type AuditLogger interface {
 // a panic.
 func NewHandler(renderer *aiexport.Service) *Handler {
 	return &Handler{renderer: renderer}
+}
+
+// HeroPickChecker is the hero creator's check of a hero's pick-list values,
+// implemented by the composition root so this plugin never reads the
+// entities plugin's creator or the game system's lists. director says
+// whether the viewer may see entries kept from players.
+type HeroPickChecker interface {
+	HeroPickWarnings(ctx context.Context, campaignID, userID string, director bool, fields map[string]any, written []string) []string
 }
 
 // SetAuditLogger wires the audit hook. Optional — see AuditLogger
@@ -161,6 +172,13 @@ func (h *Handler) SetImportEras(l importer.EraLookup) {
 // pages. The committer gets its own through Committer.SetFolders.
 func (h *Handler) SetImportFolders(f importer.FolderAccess) {
 	h.importFolders = f
+}
+
+// SetHeroPicks wires the hero creator's check, so the review can warn when a
+// hero page sets a pick-list field to a name the campaign's list lacks.
+// Optional: nil skips the warning.
+func (h *Handler) SetHeroPicks(c HeroPickChecker) {
+	h.heroPicks = c
 }
 
 // SetRecords wires the record kinds.
@@ -441,6 +459,12 @@ func (h *Handler) ParseImport(c *echo.Context) error {
 	}
 	classifier.WithFolders(h.importFolders, pendingFolderNames(recs))
 	classifier.WithRollTables(rollTables)
+	if h.heroPicks != nil {
+		a, ctx, campaignID := actorFor(c, cc), c.Request().Context(), cc.Campaign.ID
+		classifier.WithHeroPicks(func(fields map[string]any, written []string) []string {
+			return h.heroPicks.HeroPickWarnings(ctx, campaignID, a.UserID, a.CanAuthorDmOnly(), fields, written)
+		})
+	}
 	if has := h.foundryHas(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc)); has != nil {
 		classifier.WithFoundryMonsters(has)
 	}

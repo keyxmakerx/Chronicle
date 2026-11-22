@@ -120,6 +120,17 @@ type Classifier struct {
 	// foundryHas says where the campaign's Foundry world keeps a monster of
 	// that name, or "" when it reported none; nil skips the check.
 	foundryHas func(name string) string
+	// heroWarnings words what is off about a hero's pick-list values; nil
+	// skips the check.
+	heroWarnings func(fields map[string]any, written []string) []string
+}
+
+// WithHeroPicks lets the classifier warn when a hero page sets a pick-list
+// field to a value the campaign's list does not hold. check is given the
+// sheet as the page will stand and the keys the paste writes.
+func (c *Classifier) WithHeroPicks(check func(fields map[string]any, written []string) []string) *Classifier {
+	c.heroWarnings = check
+	return c
 }
 
 // WithFoundryMonsters lets the classifier warn when a new creature page
@@ -170,7 +181,23 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 	c.checkEras(ctx, pages, out)
 	c.checkFields(pages, out)
 	c.checkFoundryDoubles(pages, out)
+	c.checkHeroPicks(pages, out)
 	return out, nil
+}
+
+// checkHeroPicks adds a warning to a hero row whose pick-list values are not
+// on the campaign's list. It only warns: a home-made value, or one Foundry
+// made, is legitimate, so the row stays importable.
+func (c *Classifier) checkHeroPicks(pages []ParsedPage, cls []Classification) {
+	if c.heroWarnings == nil {
+		return
+	}
+	for i := range pages {
+		if cls[i].SheetKind != "character" || len(cls[i].SheetWritten) == 0 {
+			continue
+		}
+		pages[i].Warnings = append(pages[i].Warnings, c.heroWarnings(cls[i].SheetFields, cls[i].SheetWritten)...)
+	}
 }
 
 // checkFoundryDoubles tells the DM when a new creature page has the name of
