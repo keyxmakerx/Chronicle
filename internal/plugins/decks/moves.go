@@ -295,7 +295,11 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
 			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: c.ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
 	}
-	s.toldDrawn(ctx, campaignID, d, cards, got, plan.To.HolderEntityID, v)
+	// A Director's draw lands in the shown spot, which is the Director looking
+	// and private everywhere else in decks, so only a draw into a hand is told.
+	if !v.Director {
+		s.toldDrawn(ctx, campaignID, d, cards, got, plan.To.HolderEntityID, v)
+	}
 	return r.drawResult(d, got)
 }
 
@@ -419,7 +423,6 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		}
 		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
 			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
-		s.toldDrawn(ctx, campaignID, d, all, got, "", v)
 		return r.drawResult(d, got)
 
 	case verbTurn:

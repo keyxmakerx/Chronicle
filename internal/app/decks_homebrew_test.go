@@ -103,7 +103,7 @@ func TestDecksHomebrewRegistration(t *testing.T) {
 			t.Errorf("event %s = %+v", name, e)
 		}
 	}
-	for _, name := range []string{deckAddCopies, deckTakeOut, deckGatherAction} {
+	for _, name := range []string{deckAddCopies, deckTakeOut, deckShuffleBack} {
 		if _, ok := actions[name]; !ok {
 			t.Errorf("action %s is not registered", name)
 		}
@@ -114,7 +114,7 @@ func TestDecksHomebrewRegistration(t *testing.T) {
 	for _, a := range []struct{ name, args string }{
 		{deckAddCopies, `{"deck":"Omens","card":"Ash","copies":2}`},
 		{deckTakeOut, `{"deck":"Omens","card":"Ash"}`},
-		{deckGatherAction, `{"deck":"Omens"}`},
+		{deckShuffleBack, `{"deck":"Omens"}`},
 	} {
 		r, err := saveDoc(t, svc, homebrew.Doc{Rules: []homebrew.Rule{{When: homebrew.When{Event: cardPlayedEvent}, Timing: homebrew.TimingNow,
 			Then: []homebrew.Do{{Action: a.name, Args: json.RawMessage(a.args)}}}}})
@@ -123,7 +123,7 @@ func TestDecksHomebrewRegistration(t *testing.T) {
 		}
 	}
 	for name := range actions {
-		if strings.HasPrefix(name, "deck.") && name != deckAddCopies && name != deckTakeOut && name != deckGatherAction {
+		if strings.HasPrefix(name, "deck.") && name != deckAddCopies && name != deckTakeOut && name != deckShuffleBack {
 			t.Errorf("an unexpected deck action %s", name)
 		}
 	}
@@ -146,9 +146,9 @@ func TestDeckActionChecks(t *testing.T) {
 		{"add copies, over the limit", checkAddCopies, fmt.Sprintf(`{"deck":"Omens","card":"Ash","copies":%d}`, decks.MaxCopiesPerCard+1), ""},
 		{"take out", checkDeckAndCard, `{"deck":"Omens","card":"Ash"}`, `{"deck":"Omens","card":"Ash"}`},
 		{"take out, no card", checkDeckAndCard, `{"deck":"Omens"}`, ""},
-		{"gather", checkDeckOnly, `{"deck":"Omens"}`, `{"deck":"Omens"}`},
-		{"gather, no deck", checkDeckOnly, `{}`, ""},
-		{"gather, a card is not a field", checkDeckOnly, `{"deck":"Omens","card":"Ash"}`, ""},
+		{"shuffle back", checkDeckOnly, `{"deck":"Omens"}`, `{"deck":"Omens"}`},
+		{"shuffle back, no deck", checkDeckOnly, `{}`, ""},
+		{"shuffle back, a card is not a field", checkDeckOnly, `{"deck":"Omens","card":"Ash"}`, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

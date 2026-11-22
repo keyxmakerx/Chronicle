@@ -30,7 +30,10 @@ type CardEvent struct {
 // fail nor hold up the move; whatever it does with the event is its own
 // business, and nothing about the event is sent to any browser from here.
 type Story interface {
-	// CardDrawn is told once per card a draw or a deal put somewhere.
+	// CardDrawn is told once per card that arrives where people play it from:
+	// a hero's hand, the party's hand or the table. A Director's draw to the
+	// shown spot, "another" and a put back are the Director looking and tell
+	// nothing; the deal that follows does.
 	CardDrawn(ctx context.Context, campaignID string, e CardEvent)
 	// CardPlayed is told when a card is really played: for an "ask first"
 	// card that is when a Director lets it through, not when the player asks.

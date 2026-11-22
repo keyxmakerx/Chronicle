@@ -70,17 +70,13 @@ func TestStoryIsToldOncePerCardAfterTheMoveIsStored(t *testing.T) {
 
 	res, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 3})
 	fx.must(err)
-	if len(st.drawn) != 3 || len(res.CopyIDs) != 3 {
-		t.Fatalf("a draw of three told %d, took %d", len(st.drawn), len(res.CopyIDs))
+	if len(res.CopyIDs) != 3 {
+		t.Fatalf("a draw of three took %d", len(res.CopyIDs))
 	}
-	for _, e := range st.drawn {
-		if e.HeroID != "" || e.DeckID != deck || e.DeckName != "Omens" || e.CardID == "" || e.By.UserID != "u-dir" {
-			t.Errorf("a Director's draw to the shown spot told %+v", e)
-		}
-	}
-	st.drawn = nil
+	// A Director's draw to the shown spot is a look, not an arrival.
+	check("a Director's draw to the shown spot", nil, nil)
 
-	// Deal from the shown spot.
+	// A card looked at and then dealt fires exactly once, on the deal.
 	_, err = fx.svc.Act(bg, camp, deck, res.CopyIDs[0], "deal", fx.dir, ActInput{To: "hand", HeroID: "h-tam"})
 	fx.must(err)
 	check("deal from shown", []string{"Ash@h-tam by u-dir"}, nil)
@@ -90,13 +86,13 @@ func TestStoryIsToldOncePerCardAfterTheMoveIsStored(t *testing.T) {
 	fx.must(err)
 	check("deal by name to the table", []string{"Ash@ by u-dir"}, nil)
 
-	// Another: the shown copy goes back and one new card is drawn.
+	// Another and a put back are the Director looking again.
 	_, err = fx.svc.Act(bg, camp, deck, res.CopyIDs[1], "another", fx.dir, ActInput{})
 	fx.must(err)
-	if len(st.drawn) != 1 || st.drawn[0].HeroID != "" {
-		t.Errorf("another told %v", eventLines(st.drawn))
-	}
-	st.drawn = nil
+	check("another", nil, nil)
+	_, err = fx.svc.Act(bg, camp, deck, res.CopyIDs[2], "put-back", fx.dir, ActInput{})
+	fx.must(err)
+	check("a put back", nil, nil)
 
 	// A player's own draw.
 	pr, err := fx.svc.Draw(bg, camp, deck, fx.tam, DrawInput{HeroID: "h-tam"})

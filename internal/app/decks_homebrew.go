@@ -24,11 +24,11 @@ import (
 
 // The deck events and actions a recipe names.
 const (
-	cardPlayedEvent  = "card.played"
-	cardDrawnEvent   = "card.drawn"
-	deckAddCopies    = "deck.add-copies"
-	deckTakeOut      = "deck.take-out"
-	deckGatherAction = "deck.gather"
+	cardPlayedEvent = "card.played"
+	cardDrawnEvent  = "card.drawn"
+	deckAddCopies   = "deck.add-copies"
+	deckTakeOut     = "deck.take-out"
+	deckShuffleBack = "deck.shuffle-back"
 )
 
 // decksStoryBudget bounds one firing: a move carries no request context that
@@ -218,12 +218,12 @@ func registerDecksHomebrew(reg *homebrew.Registry, st *decksStory) error {
 				Check:  checkAddCopies, Run: st.addCopies})
 		},
 		func() error {
-			return reg.RegisterAction(homebrew.ActionDef{Name: deckTakeOut, Label: "Take a card out of a deck", Waits: true,
+			return reg.RegisterAction(homebrew.ActionDef{Name: deckTakeOut, Label: "Take a card out of a deck for good", Waits: true,
 				Fields: names, Check: checkDeckAndCard, Run: st.takeOut})
 		},
 		func() error {
-			return reg.RegisterAction(homebrew.ActionDef{Name: deckGatherAction, Label: "Gather a deck's cards back into its pile", Waits: true,
-				Fields: names[:1], Check: checkDeckOnly, Run: st.gather})
+			return reg.RegisterAction(homebrew.ActionDef{Name: deckShuffleBack, Label: "Shuffle the used pile back into a deck", Waits: true,
+				Fields: names[:1], Check: checkDeckOnly, Run: st.shuffleBack})
 		},
 	}
 	for _, r := range regs {
@@ -510,28 +510,33 @@ func heroName(heroes map[string]string, id string) string {
 	return "a hero"
 }
 
-func (s *decksStory) gather(ctx context.Context, campaignID string, a homebrew.Act) (string, error) {
+func (s *decksStory) shuffleBack(ctx context.Context, campaignID string, a homebrew.Act) (string, error) {
 	var args struct {
 		Deck string `json:"deck"`
 	}
 	if err := json.Unmarshal(a.Args, &args); err != nil {
-		return "", fmt.Errorf("deck.gather args: %v", err)
+		return "", fmt.Errorf("deck.shuffle-back args: %v", err)
 	}
 	sc, err := s.open(ctx, campaignID, a.By, args.Deck, "")
 	if err != nil {
 		return "", err
 	}
-	away := 0
+	used := 0
 	for _, c := range sc.deck.Copies {
-		if c.Zone != decks.ZonePile {
-			away++
+		if c.Zone == decks.ZoneUsed {
+			used++
 		}
 	}
-	if _, err := sc.svc.Gather(ctx, campaignID, sc.deck.ID, sc.v); err != nil {
+	if used == 0 {
+		return fmt.Sprintf("%s has no used cards, so nothing changed.", sc.deck.Name), nil
+	}
+	// Shuffle moves only the used pile, so no card leaves a hand or the table.
+	if _, err := sc.svc.Shuffle(ctx, campaignID, sc.deck.ID, sc.v); err != nil {
 		return "", err
 	}
-	if away == 0 {
-		return fmt.Sprintf("Every card of %s was already in the pile.", sc.deck.Name), nil
+	word := "cards"
+	if used == 1 {
+		word = "card"
 	}
-	return fmt.Sprintf("Gathered %s: %s went back into the pile.", sc.deck.Name, copyWord(away)), nil
+	return fmt.Sprintf("Shuffled %d used %s back into %s.", used, word, sc.deck.Name), nil
 }

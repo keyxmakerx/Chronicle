@@ -17,6 +17,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/database/dbtest"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
@@ -329,7 +330,7 @@ func TestEveryKindOfDrawFiresOncePerCard(t *testing.T) {
 	w.choose(deck, decks.PlayerInput{UserID: w.tamUser})
 	ash := w.card(deck, "Ash", 6, decks.CreateCardInput{})
 	say := w.card(deck, "Said so", 2, decks.CreateCardInput{When: decks.WhenList{{Test: decks.TestSay}}})
-	w.recipe(rule(cardDrawnEvent, `{"deck":"omens"}`, homebrew.TimingNow, doAct(deckGatherAction, `{"deck":"Omens"}`)))
+	w.recipe(rule(cardDrawnEvent, `{"deck":"omens"}`, homebrew.TimingNow, doAct(deckShuffleBack, `{"deck":"Omens"}`)))
 
 	waiting := 0
 	step := func(what string, want int) {
@@ -341,15 +342,15 @@ func TestEveryKindOfDrawFiresOncePerCard(t *testing.T) {
 	}
 	drew, err := w.decks.Draw(storyCtx, w.camp, deck, w.dir, decks.DrawInput{Count: 3})
 	w.must(err)
-	step("a Director's draw of three", len(drew.CopyIDs))
+	step("a Director's draw of three is only a look", 0)
 	_, err = w.decks.Act(storyCtx, w.camp, deck, drew.CopyIDs[0], "deal", w.dir, decks.ActInput{To: "hand", HeroID: w.tamHero})
 	w.must(err)
-	step("a deal from the shown spot", 1)
+	step("a card looked at, then dealt, fires once on the deal", 1)
 	w.deal(deck, ash, w.orrinHero)
 	step("a deal by name", 1)
 	_, err = w.decks.Act(storyCtx, w.camp, deck, drew.CopyIDs[1], "another", w.dir, decks.ActInput{})
 	w.must(err)
-	step("another", 1)
+	step("another is only a look", 0)
 	_, err = w.decks.Draw(storyCtx, w.camp, deck, w.tam, decks.DrawInput{HeroID: w.tamHero})
 	w.must(err)
 	step("a player's own draw", 1)
@@ -404,9 +405,9 @@ func TestDeckActionsWaitForADirectorThenRun(t *testing.T) {
 	w.recipe(
 		rule(cardPlayedEvent, `{"card":"fire"}`, homebrew.TimingNow, doAct(deckAddCopies, `{"deck":"omens","card":"ash on the wind","copies":2}`)),
 		rule(cardPlayedEvent, `{"card":"ice"}`, homebrew.TimingNow, doAct(deckTakeOut, `{"deck":"Omens","card":"Ash on the wind"}`)),
-		rule(cardPlayedEvent, `{"card":"all"}`, homebrew.TimingNow, doAct(deckGatherAction, `{"deck":"Omens"}`)),
+		rule(cardPlayedEvent, `{"card":"all"}`, homebrew.TimingNow, doAct(deckShuffleBack, `{"deck":"Omens"}`)),
 		rule(cardPlayedEvent, `{"card":"last"}`, homebrew.TimingNow, doAct(deckTakeOut, `{"deck":"Omens","card":"Dust"}`)),
-		rule(cardPlayedEvent, `{"card":"nodeck"}`, homebrew.TimingNow, doAct(deckGatherAction, `{"deck":"Nope"}`)),
+		rule(cardPlayedEvent, `{"card":"nodeck"}`, homebrew.TimingNow, doAct(deckShuffleBack, `{"deck":"Nope"}`)),
 		rule(cardPlayedEvent, `{"card":"nocard"}`, homebrew.TimingNow, doAct(deckTakeOut, `{"deck":"Omens","card":"Nothing"}`)))
 	fire := func(card string) {
 		t.Helper()
@@ -476,17 +477,33 @@ func TestDeckActionsWaitForADirectorThenRun(t *testing.T) {
 		}
 	}
 
+	// Shuffling back moves only the used pile: a copy in a hand stays put.
 	fire("all")
-	if v = run(); v.Status != homebrew.RunDone || strings.Join(v.Lines, "|") != "Gathered Omens: 1 copy went back into the pile." {
-		t.Errorf("gather: %+v", v)
+	if v = run(); strings.Join(v.Lines, "|") != "Omens has no used cards, so nothing changed." {
+		t.Errorf("shuffle back with nothing used: %+v", v)
 	}
-	if total, pile := copies("Ash on the wind"); total != 1 || pile != 1 {
-		t.Errorf("after gather: %d copies, %d in the pile", total, pile)
+	usedCopy := w.copyOf(deck, w.cardID(deck, "Ash on the wind"), decks.ZoneHand)
+	if _, err := w.decks.Act(storyCtx, w.camp, deck, usedCopy, "play", w.dir, decks.ActInput{}); err != nil {
+		t.Fatal(err)
+	}
+	// A second copy goes to Orrin's hand while the first lies in the used pile.
+	_, err := w.decks.UpdateCard(storyCtx, w.camp, deck, w.cardID(deck, "Ash on the wind"), w.dir, decks.UpdateCardInput{Copies: patch.Of(2)})
+	w.must(err)
+	w.deal(deck, w.cardID(deck, "Ash on the wind"), w.orrinHero)
+	fire("all")
+	if v = run(); v.Status != homebrew.RunDone || strings.Join(v.Lines, "|") != "Shuffled 1 used card back into Omens." {
+		t.Errorf("shuffle back: %+v", v)
+	}
+	if total, pile := copies("Ash on the wind"); total != 2 || pile != 1 {
+		t.Errorf("after shuffle back: %d copies, %d in the pile", total, pile)
+	}
+	if got := w.copyOf(deck, w.cardID(deck, "Ash on the wind"), decks.ZoneHand); got == "" {
+		t.Error("the copy in the hand was taken")
 	}
 
 	for _, tc := range []struct{ card, line string }{
-		{"nodeck", "Gather a deck's cards back into its pile did not run: There is no deck called Nope."},
-		{"nocard", "Take a card out of a deck did not run: There is no card called Nothing in Omens."},
+		{"nodeck", "Shuffle the used pile back into a deck did not run: There is no deck called Nope."},
+		{"nocard", "Take a card out of a deck for good did not run: There is no card called Nothing in Omens."},
 	} {
 		fire(tc.card)
 		v = run()
@@ -503,7 +520,7 @@ func TestDeckActionsNeverHaveMoreStandingThanTheDirectorWhoRanThem(t *testing.T)
 	deck := w.deck("Omens", decks.KindEvent, "", nil)
 	w.card(deck, "Ash", 2, decks.CreateCardInput{})
 	act := func(by homebrew.Viewer) error {
-		_, err := w.story.gather(storyCtx, w.camp, homebrew.Act{By: by, Args: json.RawMessage(`{"deck":"Omens"}`)})
+		_, err := w.story.shuffleBack(storyCtx, w.camp, homebrew.Act{By: by, Args: json.RawMessage(`{"deck":"Omens"}`)})
 		return err
 	}
 	if err := act(homebrew.Viewer{UserID: w.tamUser}); hbCode(err) != 403 {
@@ -522,18 +539,16 @@ func TestDeckActionsNeverHaveMoreStandingThanTheDirectorWhoRanThem(t *testing.T)
 func TestAddOnOffFiresNothingAndAFailingOrPanickingRuleNeverFailsAMove(t *testing.T) {
 	w := newStoryWorld(t)
 	deck := w.deck("Omens", decks.KindHero, w.tamHero, &decks.SettingsInput{Arrives: ptrTo("up")})
-	w.card(deck, "Ash", 4, decks.CreateCardInput{})
+	ash := w.card(deck, "Ash", 4, decks.CreateCardInput{})
 	w.recipe(rule(cardDrawnEvent, `{}`, homebrew.TimingNow, doomBy(1)))
 
 	w.on = false
-	_, err := w.decks.Draw(storyCtx, w.camp, deck, w.dir, decks.DrawInput{})
-	w.must(err)
+	w.deal(deck, ash, w.tamHero)
 	if d := w.drawer(); len(d.Recent)+len(d.Waiting) != 0 {
 		t.Fatalf("a campaign with card decks off fired a rule: %+v", d)
 	}
 	w.on = true
-	_, err = w.decks.Draw(storyCtx, w.camp, deck, w.dir, decks.DrawInput{})
-	w.must(err)
+	w.deal(deck, ash, w.tamHero)
 	if d := w.drawer(); len(d.Recent) != 1 {
 		t.Fatalf("with the add-on on, runs = %+v", d)
 	}
@@ -545,15 +560,15 @@ func TestAddOnOffFiresNothingAndAFailingOrPanickingRuleNeverFailsAMove(t *testin
 		bad.bindHomebrew(hb)
 		svc := decks.NewService(decks.NewRepository(w.db), w.heroes, w.members,
 			decks.WithRandom(func(int) int { return 0 }), decks.WithStory(bad))
-		if _, err := svc.Draw(storyCtx, w.camp, deck, w.dir, decks.DrawInput{}); err != nil {
+		if _, err := svc.DealCard(storyCtx, w.camp, deck, w.dir, decks.DealCardInput{CardID: ash, To: "hand", HeroID: w.tamHero}); err != nil {
 			t.Errorf("%s: a draw failed because its rule did: %v", name, err)
 		}
 	}
 	if got := len(w.view(deck).Copies); got != 4 {
 		t.Fatalf("copies = %d", got)
 	}
-	if shown := w.view(deck).Counts.Shown; shown != 4-w.view(deck).Counts.Pile {
-		t.Errorf("shown %d, pile %d", shown, w.view(deck).Counts.Pile)
+	if hand := w.view(deck).Counts.Hand; hand != 4 {
+		t.Errorf("hand = %d, want all four deals stored", hand)
 	}
 }
 
@@ -588,7 +603,7 @@ func TestAPlayersFaceDownDrawIsTheSameWithARuleListeningOrNot(t *testing.T) {
 	}
 	w.recipe(
 		rule(cardDrawnEvent, `{"deck":"Heard omens","card":"The dragon stirs"}`, homebrew.TimingNow, doomBy(1)),
-		rule(cardDrawnEvent, `{"deck":"heard omens"}`, homebrew.TimingNow, doAct(deckGatherAction, `{"deck":"Heard omens"}`)))
+		rule(cardDrawnEvent, `{"deck":"heard omens"}`, homebrew.TimingNow, doAct(deckShuffleBack, `{"deck":"Heard omens"}`)))
 
 	play := func(deck, name string) []string {
 		t.Helper()
