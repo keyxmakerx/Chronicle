@@ -136,6 +136,22 @@ Entity types do not record their source system, so when two installed systems de
 
 `play` is only a declaration; the play-edit guard and sheet controls read it.
 
+### Hero Creator Steps (`creator_order`, `creator`)
+
+The hero creator, the builder sentence on the Characters page, practice heroes and the try-out ask one step per text field of the character preset that has a list of entries. By default they come in field order and every step is optional. A system shapes them with manifest declarations; core holds none of a system's field names. A system that declares nothing behaves as before.
+
+On the preset, `creator_order` names the step keys asked first, in order; any other step follows in field order, and unknown keys are ignored.
+
+On a preset field, `creator` may carry:
+
+| Key | Meaning |
+|---|---|
+| `needed` | The rules expect this pick. The step does not read "Optional", has no Skip, and the review lists it under "Still to choose". A hero without it is still accepted; only a Director's hero-choice rule refuses. |
+| `from` `{step, property}` | The step's entries are the items in `property` of the entry chosen at `step`: names, or objects with a `name` (plus optional `summary`, `description`, and other keys that become the entry's properties). The step offers nothing until the parent is chosen, is cleared when the parent changes, and is not asked when the chosen parent lists none. |
+| `count_from` `[{step, property, note}]` | How many of this step the chosen entry allows, read from a number in `property`. A later list item whose chosen entry defines the number overrides an earlier one. `note` names a text property on the same entry, shown in the step. `0` means the step is not asked (the creator says so with the note, the builder leaves the blank out, and the server refuses a new hero that sends a pick there); `1` or more makes it needed. Only one pick is stored either way. No chosen entry defining the number leaves the step as it was. |
+
+A part is dropped at load, with a log line and the field kept, when `from` or `count_from` names a step that is not another string field of the same preset, a property or note is not a plain identifier, or `from` steps depend on each other in a loop.
+
 ### Crafting (`crafting`)
 
 An optional top-level block saying how the game rolls and counts a crafting project in the Crafting app. Recipes, benches and steps are each campaign's own and work under any system; this is only the arithmetic and the words.

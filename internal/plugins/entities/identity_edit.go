@@ -102,6 +102,12 @@ type builderStep struct {
 	limited bool
 	// required: the list is a short list; the step can't be emptied.
 	required bool
+	// parent is the step this one's entries live inside; a value must then
+	// belong to the parent entry the hero holds (or the patch sets).
+	parent string
+	// parentsOf lists, by lower-case entry name, every parent that lists an
+	// entry of that name: two classes can share a subclass name.
+	parentsOf map[string]map[string]bool
 }
 
 // builderPicks is what the hero builder lets a player choose: for each step's
@@ -119,8 +125,21 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 	}
 	for _, st := range plan.Steps {
 		names := make(map[string]HeroChoice, len(st.Choices)+len(st.Held))
+		var parentsOf map[string]map[string]bool
 		for _, ch := range st.Choices {
-			names[strings.ToLower(strings.TrimSpace(ch.Name))] = ch
+			k := strings.ToLower(strings.TrimSpace(ch.Name))
+			if _, on := names[k]; !on {
+				names[k] = ch
+			}
+			if ch.Parent != "" {
+				if parentsOf == nil {
+					parentsOf = map[string]map[string]bool{}
+				}
+				if parentsOf[k] == nil {
+					parentsOf[k] = map[string]bool{}
+				}
+				parentsOf[k][strings.ToLower(strings.TrimSpace(ch.Parent))] = true
+			}
 		}
 		for _, ch := range st.Held {
 			k := strings.ToLower(strings.TrimSpace(ch.Name))
@@ -129,7 +148,7 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 				names[k] = ch
 			}
 		}
-		bs := builderStep{names: names}
+		bs := builderStep{names: names, parent: st.Parent, parentsOf: parentsOf}
 		if st.Rules != nil {
 			bs.limited, bs.required = st.Rules.Limited, st.Rules.Required
 		}
@@ -227,6 +246,8 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 		default:
 			if err := checkOwnerValue(entity, k, v, listed, isStep, refuseAsk); err != nil {
 				held[k] = err
+			} else if err := checkParentFit(entity, patch, k, v, listed); err != nil {
+				held[k] = err
 			}
 		}
 	}
@@ -286,6 +307,39 @@ func checkOwnerValue(entity *Entity, k string, v any, step builderStep, isStep, 
 		}
 	}
 	return nil
+}
+
+// checkParentFit refuses a value on a dependent step (a subclass) that does
+// not belong to the hero's current parent value (a class), which is the
+// patch's own when the same patch sets it. A hero keeps what it already
+// holds while its parent is not being changed. A step with no parent, a
+// value off the list (other checks judge that) and an empty value pass.
+// Offering nothing for a count-0 step is the builder's job, not a refusal here.
+func checkParentFit(entity *Entity, patch map[string]any, k string, v any, step builderStep) error {
+	val, _ := v.(string)
+	val = strings.TrimSpace(val)
+	if step.parent == "" || val == "" {
+		return nil
+	}
+	key := strings.ToLower(val)
+	ch, on := step.names[key]
+	if !on || ch.Parent == "" {
+		return nil
+	}
+	parentVal, parentInPatch := "", false
+	if pv, has := patch[step.parent]; has {
+		parentInPatch = true
+		parentVal, _ = pv.(string)
+	} else if entity != nil {
+		parentVal, _ = entity.FieldsData[step.parent].(string)
+	}
+	if pv := strings.ToLower(strings.TrimSpace(parentVal)); strings.EqualFold(pv, ch.Parent) || step.parentsOf[key][pv] {
+		return nil
+	}
+	if holdsValue(entity, k, val) && !parentInPatch {
+		return nil
+	}
+	return apperror.NewBadRequest(fmt.Sprintf("%q belongs to %s; choose that %s first", val, ch.Parent, step.parent))
 }
 
 // askYourDirector is the refusal for writing an ask-first entry where the
