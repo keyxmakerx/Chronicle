@@ -1,0 +1,47 @@
+package entities
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// heroLooksSection is the body of the Hero creator tab: the workshop mount.
+// hero_looks.js (the "hero-looks" widget) makes the creator inside the frame
+// and draws the panel and the dock; the markup follows the Customizer's page
+// editor so its panel, dock and canvas are that editor's own classes. The
+// borders library and the picker's groups are the server's JSON, never built
+// here by hand.
+templ heroLooksSection(campaignID string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_stage.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_borders.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_border_picker.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_looks.css") }/>
+	<div
+		class="cpe hcw"
+		data-widget="hero-looks"
+		data-campaign-id={ campaignID }
+		data-plan-url={ heroLooksPlanURL(campaignID) }
+		data-tab-url={ heroLooksTabURL(campaignID) }
+		data-borders={ cardborders.LibraryJSON(layouts.AssetURL) }
+		data-border-picker={ cardborders.PickerJSON() }
+		data-view="desk"
+	>
+		<p class="hcw-empty" data-hl-empty hidden>This campaign’s game system has no hero creator, so there are no cards to dress.</p>
+		<div class="cpe-editor hcw-editor" data-hl-editor>
+			<div class="cpe-main">
+				<div class="cpe-canvas hcw-canvas" data-hl-canvas>
+					<p class="hcw-cap" data-hl-cap></p>
+					<div class="hcw-fit" data-hl-fit>
+						<div class="hcw-frame" data-hl-frame></div>
+					</div>
+				</div>
+			</div>
+			<aside class="cpe-insp hcw-insp" data-hl-insp aria-label="Card border" tabindex="-1"></aside>
+			<div class="cpe-dock-wrap hcw-dockw">
+				<div class="cpe-dock" data-hl-dock role="toolbar" aria-label="Workshop tools"></div>
+			</div>
+		</div>
+		<noscript><p class="hcw-empty">The hero creator needs JavaScript.</p></noscript>
+	</div>
+}

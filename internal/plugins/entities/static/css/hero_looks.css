@@ -1,0 +1,76 @@
+/* hero_looks.css — the Customizer's Hero creator page (hero_looks.js): the real
+   creator in a frame, and the panel where a card's border is picked. The panel,
+   dock and canvas are the page editor's own classes (customize_page_editor.css);
+   the samples and colours are hero_border_picker.css. This sheet holds only what
+   this page adds. Tool chrome takes the site's theme tokens; the creator in the
+   frame and every border sample are the creator's own markup and styles. */
+
+/* The workshop fills the Customizer's body. */
+.czs-body:has(> .hcw) { padding: 0; display: flex; animation: none; }
+.hcw { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hcw-empty { margin: 0; padding: 28px 32px; font-size: 14px; line-height: 1.5; color: var(--color-text-secondary); max-width: 68ch; }
+.hcw-empty[hidden], .hcw-editor[hidden] { display: none; }
+.hcw-editor { flex: none; min-height: 0; height: 640px; border-top: 0; overflow: clip; }
+.hcw-canvas { overflow: clip; padding: 12px 16px 0; display: flex; flex-direction: column; align-items: center; position: relative; }
+.hcw-cap { flex: none; margin: 0 0 10px; min-height: 20px; font-size: 13px; line-height: 20px; color: var(--color-text-secondary); text-align: center; transition: transform var(--dur-slide) var(--ease-slide); }
+.hcw-editor.panel-open .hcw-cap { transform: translateX(-186px); }
+.hcw-fit { flex: none; position: relative; width: var(--fw, 100%); height: var(--fh, 400px); transition: transform var(--dur-slide) var(--ease-slide); }
+.hcw-frame {
+  position: absolute; left: 0; top: 0; width: var(--nw, 1180px); height: var(--nh, 700px); transform: scale(var(--s, 1)); transform-origin: 0 0;
+  overflow: hidden; border-radius: var(--shape-r-panel); background: var(--color-bg-primary); box-shadow: var(--elev-dragged);
+}
+.hcw[data-view="phone"] .hcw-frame { border-radius: 26px; box-shadow: 0 0 0 9px var(--color-bg-secondary), 0 0 0 10px var(--color-border), var(--elev-dragged); }
+.hcw-dockw { z-index: calc(var(--z-raised) + 1); }
+.hcw-dockw[hidden] { display: none; }
+
+/* The creator in the frame measures the frame, not the window. */
+.hcw-frame .hc[data-look="stage"] .hc-app[data-view="desk"] .hc-cols { grid-template-columns: 232px minmax(0, 1fr) 340px; }
+.hcw-frame .hc-app { z-index: 0; }
+.hcw-frame :is(.hc-gcard, .hc-card)[data-i] { transition: opacity var(--dur-standard) var(--ease-out), transform var(--dur-standard) var(--ease-out), border-color var(--dur-micro), box-shadow var(--dur-micro); }
+.hcw.is-picking .hcw-frame :is(.hc-gcard, .hc-card, .hc-lrow)[data-i]:not(.hcw-on) { opacity: 0.42; }
+.hcw-frame .hc-lv { pointer-events: none; }
+
+/* ---------- The panel ---------- */
+.hcw-insp { --cpe-panel-w: 360px; }
+.hcw-ih .cpe-insp-head { gap: 4px; }
+.hcw-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.hcw-kind { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); font-weight: 600; }
+.hcw-who h3 { margin: 0; font-size: 17px; line-height: 1.25; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hcw :is(.cpe-insp-x, .hcw-word)[aria-disabled="true"] { opacity: 0.38; cursor: default; }
+.hcw .cpe-insp-x[aria-disabled="true"]:hover { background: none; color: var(--color-text-secondary); }
+.hcw-done { display: none; }
+.hcw-word { border: 0; background: none; padding: 6px 2px; min-height: 32px; font: inherit; font-size: 13px; color: var(--color-accent-link, var(--color-accent)); cursor: pointer; }
+.hcw-word:hover { text-decoration: underline; text-underline-offset: 3px; }
+.hcw-word:focus-visible { outline: 2px solid var(--cpe-accent, var(--color-accent)); outline-offset: 1px; border-radius: 4px; }
+.hcw-pending { padding: 16px; }
+/* The colours sit under the samples in their own band; the save bar floats over its foot. */
+.czs-stage:has(> [data-czs-savebar]:not([hidden])) .hcw-foot { padding-bottom: 76px; }
+
+/* ---------- Narrow screens: the panel is a sheet, the tools a full row ---------- */
+@media (max-width: 640px) {
+  .hcw-canvas { padding: 8px 0 var(--hcw-cover, 16px); overflow-x: clip; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .hcw-canvas::-webkit-scrollbar { display: none; }
+  .hcw-editor.panel-open .hcw-cap { transform: none; }
+  .hcw-cap { margin: 0 12px 8px; font-size: 14px; }
+  .hcw .hcw-frame, .hcw[data-view="phone"] .hcw-frame { border-radius: 0; box-shadow: none; }
+  .hcw-insp { height: 58%; }
+  .czs-stage:has(> [data-czs-savebar]:not([hidden])) .hcw-insp .hcw-wall { padding-bottom: 84px; }
+  .hcw-insp .cpe-handle { margin-bottom: 4px; }
+  .hcw-ih .cpe-insp-head .cpe-insp-x[data-hl="close"] { display: none; }
+  .hcw-done { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; font-size: 16px; font-weight: 600; }
+  .hcw-kind { font-size: 13px; letter-spacing: 0.02em; }
+  .hcw-word { font-size: 14px; min-height: 44px; }
+}
+
+/* ---------- Motion ----------
+   Full: the panel slides out and the frame steps aside (the page editor's own
+   moves). Calm fades the panel in place and the frame does not travel; Off, and
+   a device that asks for less motion, show the end state. */
+html[data-motion="calm"] .hcw .hcw-insp, html[data-cz-reduce] .hcw .hcw-insp, html.nav-rm .hcw .hcw-insp { transform: none; transition: opacity var(--dur-standard) var(--ease-in), visibility 0s linear var(--dur-standard); }
+html[data-motion="calm"] .hcw .hcw-insp.open, html[data-cz-reduce] .hcw .hcw-insp.open, html.nav-rm .hcw .hcw-insp.open { transition: opacity var(--dur-slide) var(--ease-slide), visibility 0s; }
+html[data-motion] .hcw-fit, html[data-motion] .hcw-cap, html[data-motion] .hcw-dockw { transition: none; }
+html[data-motion="off"] .hcw .hcw-insp, html[data-motion="off"] .hcw .hcw-insp.open { transition: none; }
+html[data-motion="off"] .hcw-frame :is(.hc-gcard, .hc-card)[data-i] { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hcw-fit, .hcw-cap, .hcw-dockw, .hcw .hcw-insp, .hcw .hcw-insp.open, .hcw-frame :is(.hc-gcard, .hc-card)[data-i] { transition: none; }
+}

@@ -70,3 +70,26 @@ The stage look draws the border on the entry's card on a phone and on a computer
 the parts of a border made to take colour (carved lines, runes, glowing cracks, a
 vine, the dye of the scales) take the entry's colour, and the rest of the picture
 stays as drawn. The "make your own" card and the list view stay plain.
+
+## The writer of an entry picks its border
+
+Whoever writes a campaign's own entry (a player with permission, or a Director)
+picks the border its card wears in the entry form, in the "Card border" row
+under the short description: a small sample, the border's name and Change. It
+unfolds to a live card and the same colours and samples the Customizer uses.
+The choice is saved with the entry, and a Director can change it afterwards.
+
+## The campaign's owner can change a card's border
+
+A campaign's owner can pick a different border, or none, for any card, a game
+system's own entry included, in the Customizer. Their choice wins over the
+package's `card_border` and `card_colour` for everyone who sees the card, and
+choosing the package's own look again, or resetting, hands the card back to the
+package.
+
+The owner does this on the Customizer's Hero creator page: the real creator
+stands in a frame with the campaign's cards, and pressing a card opens a panel
+with the samples and colours. "The game system's" sample is the look the package
+gives that card; "None" shows the card with no border even when the package gives
+one. The change waits in the Customizer's save bar like any other. A campaign's
+own entry keeps its border in the entry itself, not in this list.

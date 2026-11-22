@@ -17,6 +17,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { pw, chromePath, skip } from './_browser_env.mjs';
+import { bordersAttrs, serveBorders, contrast, INFO } from './_card_border_fixture.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const C = '/campaigns/c1';
@@ -29,7 +30,7 @@ const plan = (canMake, extra = []) => ({
   ],
 });
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
-const page = (heroes) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
+const page = (heroes, o = {}) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
 <style>:root{--color-accent:#4f46e5;--color-bg-primary:#f9fafb;--color-bg-secondary:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-body:#374151;--color-text-secondary:#6b7280;
 --dur-micro:120ms;--dur-standard:200ms;--dur-large:280ms;--dur-slide:360ms;--ease-out:cubic-bezier(.16,1,.3,1);--ease-slide:cubic-bezier(.22,.8,.24,1)}
 html,body{margin:0;font:14px system-ui}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style></head><body>
@@ -38,18 +39,18 @@ html,body{margin:0;font:14px system-ui}.sr-only{position:absolute;width:1px;heig
 <link rel="stylesheet" href="/static/plugins/entities/css/hero_builder.css">
 <section class="hb" data-widget="hero-builder" data-plan-url="${C}/characters/new/plan"
   data-fields-base="${C}/entities/" data-campaign-id="c1" data-csrf="tok"
-  data-heroes='${attr(heroes)}'><p class="hb-wait">Opening the hero builder…</p></section>
+  data-heroes='${attr(heroes)}'${o.lib ? bordersAttrs({ pick: o.pick !== false }) : ''}><p class="hb-wait">Opening the hero builder…</p></section>
 </div></main>
-<script type="application/json" id="chronicle-widget-scripts">{"hero-builder":["/static/plugins/entities/js/hero_rules_lines.js","/static/plugins/entities/js/own_entry_editor.js","/static/plugins/entities/js/hero_builder.js"]}</script>
+<script type="application/json" id="chronicle-widget-scripts">{"hero-builder":["/static/plugins/entities/js/hero_rules_lines.js"${o.scripts === false ? '' : ',"/static/plugins/entities/js/hero_borders.js","/static/plugins/entities/js/hero_border_picker.js"'},"/static/plugins/entities/js/own_entry_editor.js","/static/plugins/entities/js/hero_builder.js"]}</script>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
 <script src="/static/js/boot.js"></script></body></html>`;
 
 const staticFile = (p) => p.startsWith('/static/plugins/entities/') ? join(root, 'internal/plugins/entities/static', p.slice('/static/plugins/entities/'.length)) : join(root, p);
 
-async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ id: 'e1', name: 'Tess', values: {}, hidden: [] }], width = 1280 } = {}) {
+async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ id: 'e1', name: 'Tess', values: {}, hidden: [] }], width = 1280, lib = false, pick = true, scripts = true, dark = false } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
-  const p = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
+  const p = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce', colorScheme: dark ? 'dark' : 'light' });
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
@@ -58,7 +59,8 @@ async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ i
   await p.route('**/*', (route) => {
     const req = route.request(), u = new URL(req.url()), m = req.method();
     const ok = (b, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(b) });
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes) });
+    if (serveBorders(route, u.pathname)) return;
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes, { lib, pick, scripts }) });
     if (u.pathname === C + '/characters/new/plan') return ok(plan(canMake, extra));
     if (u.pathname === C + '/system-entries/grants') return ok({ grants: [{ id: 1, fieldKey: 'ancestry', userId: 'u1', budget: 3 }] });
     if (u.pathname === C + '/system-entries' && m === 'GET') return ok({ entries: store });
@@ -144,4 +146,97 @@ test('editing a draft the hero has not picked never changes the hero', { skip },
   assert.equal(await p.locator('.hb-panel .hb-opt', { hasText: 'Ashborn' }).count(), 1, 'the panel stays open on the list');
   assert.ok(seen.put.some((x) => x.path === C + '/system-entries/41'), 'the entry itself is saved');
   assert.equal(seen.put.filter((x) => x.path === C + '/entities/e1/fields').length, 0, 'the hero keeps Human');
+});
+
+// --- The Card border row (the builder hands the form its library on its own mount) ---
+
+const FIELD = '[data-hcw-f]';
+const form = async (t, o = {}) => {
+  const r = await open(t, { lib: true, ...o });
+  await r.p.click('[data-blank="ancestry"]');
+  await r.p.click('[data-own-new]');
+  await r.p.waitForSelector('.hb-panel [data-k="name"]');
+  return r;
+};
+const look = (p) => p.evaluate(() => {
+  const f = document.querySelector('[data-hcw-f]');
+  return { name: f.querySelector('[data-fname]').textContent, col: f.querySelector('[data-fcol]').textContent, word: f.querySelector('[data-fword]').textContent,
+    rowTrim: f.querySelector('[data-frow] .hc-gcard').getAttribute('data-trim'), liveTrim: f.querySelector('[data-flive]').getAttribute('data-trim'),
+    liveK: f.querySelector('[data-flive]').style.getPropertyValue('--k').trim() };
+});
+
+test('Card border: the builder’s form has the closed row, opens it, and a choice repaints the row and the live card', { skip }, async (t) => {
+  const { p } = await form(t);
+  assert.equal(await p.evaluate(() => document.querySelector('#oed-s').closest('.oed-field').nextElementSibling.matches('[data-hcw-f]')), true);
+  assert.deepEqual(await look(p), { name: 'None', col: 'A plain card', word: 'Change', rowTrim: null, liveTrim: null, liveK: '' });
+  assert.equal(await p.locator(FIELD + ' .hcw-pk').isVisible(), false);
+  await p.click(FIELD + ' [data-hcw="fold"]');
+  assert.equal(await p.locator(FIELD + ' [data-hcw="fold"]').getAttribute('aria-expanded'), 'true');
+  await p.click(FIELD + ' .hcw-t[data-b="storm"]');
+  await p.click(FIELD + ' .hcw-c[data-c="#4aa3e0"]');
+  assert.deepEqual(await look(p), { name: 'Storm', col: 'Sky', word: 'Done', rowTrim: 'storm', liveTrim: 'storm', liveK: '#4aa3e0' });
+  // hero_creator.css is not on this page: the form's own base rules draw the live card.
+  const card = await p.evaluate(() => { const c = document.querySelector('[data-flive]'); const s = getComputedStyle(c); return { w: c.getBoundingClientRect().width, h: c.getBoundingClientRect().height, display: s.display }; });
+  assert.ok(card.w >= 150 && card.h >= 120 && card.display === 'flex', JSON.stringify(card));
+  assert.equal(await p.locator('link[href*="hero_creator.css"]').count(), 0, 'the creator’s sheet is not pulled onto this page');
+  assert.equal(await p.locator('link[href*="hero_border_picker.css"]').count(), 1);
+});
+
+test('Card border: the builder sends the border and colour with the entry, and the own colour sends none', { skip }, async (t) => {
+  const { p, seen } = await form(t);
+  await p.fill('.hb-panel [data-k="name"]', 'Ashborn');
+  await p.click(FIELD + ' [data-hcw="fold"]');
+  await p.click(FIELD + ' .hcw-t[data-b="fire"]');
+  await p.click(FIELD + ' .hcw-c[data-c="#b3243a"]');
+  await p.click('.hb-panel [data-oed="draft"]');
+  await p.waitForSelector('.hb-toast');
+  assert.equal(seen.post[0].properties.card_border, 'fire');
+  assert.equal(seen.post[0].properties.card_colour, '#b3243a');
+  const own = await form(t);
+  await own.p.fill('.hb-panel [data-k="name"]', 'Ashborn');
+  await own.p.click(FIELD + ' [data-hcw="fold"]');
+  await own.p.click(FIELD + ' .hcw-t[data-b="fire"]');
+  await own.p.click('.hb-panel [data-oed="draft"]');
+  await own.p.waitForSelector('.hb-toast');
+  assert.deepEqual([own.seen.post[0].properties.card_border, 'card_colour' in own.seen.post[0].properties], ['fire', false]);
+});
+
+test('Card border: a stored border that left the library goes back untouched; no library or no script means no field', { skip }, async (t) => {
+  const mine = { slug: 'ashborn', name: 'Ashborn', summary: 'Born of ash.', source: 'campaign', mine: true, status: 'draft', entryId: 41, properties: {} };
+  const stored = [{ id: 41, fieldKey: 'ancestry', name: 'Ashborn', summary: 'Born of ash.', properties: { card_border: 'gone', card_colour: '#abcdef' }, status: 'draft' }];
+  for (const o of [{ lib: true }, { lib: true, pick: false }, { lib: false }, { lib: true, scripts: false }]) {
+    const { p, seen } = await open(t, { canMake: false, extra: [mine], entries: stored, ...o });
+    await p.click('[data-blank="ancestry"]');
+    await p.locator('.hb-opt', { hasText: 'Ashborn' }).click();
+    await p.click('[data-own-edit]');
+    await p.waitForSelector('.hb-panel [data-k="name"]');
+    const field = await p.locator(FIELD).count();
+    assert.equal(field, o.lib && o.pick !== false && o.scripts !== false ? 1 : 0, JSON.stringify(o));
+    if (field) assert.equal((await look(p)).name, 'None');
+    assert.ok(!(await p.locator('.oed-fact input[data-part="label"]').evaluateAll((els) => els.some((e) => /card/i.test(e.value)))));
+    await p.click('.hb-panel [data-oed="draft"]');
+    await p.waitForSelector('.hb-toast:not([hidden])');
+    const put = seen.put.find((x) => x.path === C + '/system-entries/41').body.properties;
+    assert.deepEqual([put.card_border, put.card_colour], ['gone', '#abcdef'], JSON.stringify(o));
+  }
+});
+
+test('Card border: at 360 wide the builder’s row, samples and swatches are 44 high with no sideways scroll; light and dark words reach 4.5:1', { skip }, async (t) => {
+  for (const dark of [false, true]) {
+    const { p } = await form(t, { width: 360, dark });
+    await p.click(FIELD + ' [data-hcw="fold"]');
+    await p.click(FIELD + ' .hcw-t[data-b="fire"]');
+    const m = await p.evaluate(() => {
+      const hs = (sel) => Array.from(document.querySelectorAll(sel)).map((e) => Math.round(e.getBoundingClientRect().height));
+      const rgb = (c) => (c.match(/[\d.]+/g) || []).slice(0, 4).map(Number);
+      const bg = (el) => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c.length === 3 || (c.length === 4 && c[3] > 0.95)) return c.slice(0, 3); } return [255, 255, 255]; };
+      const words = {};
+      ['[data-fname]', '[data-fcol]', '[data-fword]', '[data-hcw-f] .oed-hint'].forEach((s) => { const el = document.querySelector(s); words[s] = [rgb(getComputedStyle(el).color).slice(0, 3), bg(el)]; });
+      return { row: hs('[data-hcw="fold"]'), tiles: hs('[data-hcw-f] .hcw-t'), sw: hs('[data-hcw-f] .hcw-c'), x: document.documentElement.scrollWidth - document.documentElement.clientWidth, words };
+    });
+    assert.ok(m.row[0] >= 44 && m.tiles.every((h) => h >= 44) && m.sw.every((h) => h >= 44) && m.sw.length >= 12, JSON.stringify(m));
+    assert.ok(m.x <= 0, 'no sideways scroll');
+    // Colour pairs are checked where the page has the site's tokens; here the page has only its own light ones.
+    if (!dark) for (const [k, [fg, bgc]] of Object.entries(m.words)) assert.ok(contrast(fg, bgc) >= 4.5, k + ' ' + contrast(fg, bgc).toFixed(2));
+  }
 });

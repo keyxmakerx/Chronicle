@@ -26,6 +26,7 @@ type Border struct {
 	Key    string
 	Name   string
 	Colour string // the colour used when an entry names none, or a bad one
+	Group  string // the heading the picker lists it under; one of Groups
 
 	Img        string
 	Mask       string
@@ -46,22 +47,22 @@ const StaticDir = "/static/plugins/entities/img/borders/"
 func num(v float64) *float64 { return &v }
 
 var library = []Border{
-	{Key: "carved-stone", Name: "Carved stone", Colour: "#e0a030", Img: "earth.webp", Corner: "carved-stone-corner.webp", CornerMask: "carved-stone-corner-mask.webp", Peak: num(0.93), Gain: num(1.3)},
-	{Key: "earth", Name: "Earth", Colour: "#b08a5a", Img: "earth.webp"},
-	{Key: "fire", Name: "Fire", Colour: "#d9622b", Img: "fire.webp", Mask: "fire-mask.webp", Peak: num(1), Gain: num(1.3)},
-	{Key: "ice", Name: "Ice", Colour: "#8fd8ff", Img: "ice.webp"},
-	{Key: "storm", Name: "Storm", Colour: "#6fa8dc", Img: "storm.webp", Mask: "storm-mask.webp", Peak: num(1), Gain: num(1.3)},
-	{Key: "glass", Name: "Glass", Colour: "#58c4d8", Img: "glass.webp"},
-	{Key: "glass-smoke", Name: "Smoke glass", Colour: "#9aa3ad", Img: "glass-smoke.webp"},
-	{Key: "glass-sea", Name: "Sea glass", Colour: "#4fb8a8", Img: "glass-sea.webp"},
-	{Key: "glass-rose", Name: "Rose glass", Colour: "#e58fb0", Img: "glass-rose.webp"},
-	{Key: "glass-midnight", Name: "Midnight glass", Colour: "#a78bfa", Img: "glass-midnight.webp"},
-	{Key: "rune-metal", Name: "Rune metal", Colour: "#3fc8d4", Img: "rune-metal.webp", Mask: "rune-metal-mask.webp", Peak: num(0.96), Gain: num(1.3)},
-	{Key: "great-rune", Name: "Great rune", Colour: "#b48cf2", Img: "great-rune.webp", Mask: "great-rune-mask.webp", Peak: num(0), Gain: num(0.85)},
-	{Key: "mechanical", Name: "Boiler works", Colour: "#6fa8dc", Img: "mechanical.webp", Mask: "mechanical-mask.webp", Corner: "mechanical-corners.webp", CornerMask: "mechanical-corners-mask.webp", Ground: "mechanical-steam.webp", Peak: num(0), Gain: num(1), Glow: num(1.4)},
-	{Key: "thorn-glass", Name: "Thorn glass", Colour: "#c4243a", Img: "thorn-glass.webp", Mask: "thorn-glass-mask.webp", Peak: num(0.92), Gain: num(1.3)},
-	{Key: "scales", Name: "Scales", Colour: "#2fb5a4", Img: "scales.webp", Over: "scales-boss.webp", Dye: true},
-	{Key: "vine", Name: "Vine and wood", Colour: "#6fae4f", Img: "vine.webp", Mask: "vine-mask.webp", Peak: num(0.74), Gain: num(1.3)},
+	{Key: "carved-stone", Name: "Carved stone", Colour: "#e0a030", Group: "Stone and metal", Img: "earth.webp", Corner: "carved-stone-corner.webp", CornerMask: "carved-stone-corner-mask.webp", Peak: num(0.93), Gain: num(1.3)},
+	{Key: "earth", Name: "Earth", Colour: "#b08a5a", Group: "Elements", Img: "earth.webp"},
+	{Key: "fire", Name: "Fire", Colour: "#d9622b", Group: "Elements", Img: "fire.webp", Mask: "fire-mask.webp", Peak: num(1), Gain: num(1.3)},
+	{Key: "ice", Name: "Ice", Colour: "#8fd8ff", Group: "Elements", Img: "ice.webp"},
+	{Key: "storm", Name: "Storm", Colour: "#6fa8dc", Group: "Elements", Img: "storm.webp", Mask: "storm-mask.webp", Peak: num(1), Gain: num(1.3)},
+	{Key: "glass", Name: "Glass", Colour: "#58c4d8", Group: "Glass", Img: "glass.webp"},
+	{Key: "glass-smoke", Name: "Smoke glass", Colour: "#9aa3ad", Group: "Glass", Img: "glass-smoke.webp"},
+	{Key: "glass-sea", Name: "Sea glass", Colour: "#4fb8a8", Group: "Glass", Img: "glass-sea.webp"},
+	{Key: "glass-rose", Name: "Rose glass", Colour: "#e58fb0", Group: "Glass", Img: "glass-rose.webp"},
+	{Key: "glass-midnight", Name: "Midnight glass", Colour: "#a78bfa", Group: "Glass", Img: "glass-midnight.webp"},
+	{Key: "rune-metal", Name: "Rune metal", Colour: "#3fc8d4", Group: "Stone and metal", Img: "rune-metal.webp", Mask: "rune-metal-mask.webp", Peak: num(0.96), Gain: num(1.3)},
+	{Key: "great-rune", Name: "Great rune", Colour: "#b48cf2", Group: "Stone and metal", Img: "great-rune.webp", Mask: "great-rune-mask.webp", Peak: num(0), Gain: num(0.85)},
+	{Key: "mechanical", Name: "Boiler works", Colour: "#6fa8dc", Group: "Stone and metal", Img: "mechanical.webp", Mask: "mechanical-mask.webp", Corner: "mechanical-corners.webp", CornerMask: "mechanical-corners-mask.webp", Ground: "mechanical-steam.webp", Peak: num(0), Gain: num(1), Glow: num(1.4)},
+	{Key: "thorn-glass", Name: "Thorn glass", Colour: "#c4243a", Group: "Wild", Img: "thorn-glass.webp", Mask: "thorn-glass-mask.webp", Peak: num(0.92), Gain: num(1.3)},
+	{Key: "scales", Name: "Scales", Colour: "#2fb5a4", Group: "Wild", Img: "scales.webp", Over: "scales-boss.webp", Dye: true},
+	{Key: "vine", Name: "Vine and wood", Colour: "#6fae4f", Group: "Wild", Img: "vine.webp", Mask: "vine-mask.webp", Peak: num(0.74), Gain: num(1.3)},
 }
 
 // All returns every border in the order the library lists them. The slice is
@@ -160,6 +161,59 @@ func LibraryJSON(url func(path string) string) string {
 			Img: at(b.Img), Mask: at(b.Mask), Over: at(b.Over), Corner: at(b.Corner), CornerMask: at(b.CornerMask), Ground: at(b.Ground),
 			Dye: b.Dye, Peak: b.Peak, Gain: b.Gain, Glow: b.Glow,
 		}
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+// pickerGroups is the order the picker lists borders in: each heading and its
+// members. It is data of its own so the library's order can change without
+// moving the picker.
+var pickerGroups = []struct {
+	Name string
+	Keys []string
+}{
+	{"Elements", []string{"earth", "fire", "ice", "storm"}},
+	{"Stone and metal", []string{"carved-stone", "rune-metal", "great-rune", "mechanical"}},
+	{"Glass", []string{"glass", "glass-smoke", "glass-sea", "glass-rose", "glass-midnight"}},
+	{"Wild", []string{"thorn-glass", "scales", "vine"}},
+}
+
+// Groups returns the picker's headings in order, each with its border keys in
+// order.
+func Groups() []PickerGroup {
+	out := make([]PickerGroup, len(pickerGroups))
+	for i, g := range pickerGroups {
+		out[i] = PickerGroup{Name: g.Name, Keys: append([]string(nil), g.Keys...)}
+	}
+	return out
+}
+
+// PickerGroup is one heading of the picker and the keys listed under it.
+type PickerGroup struct {
+	Name string   `json:"name"`
+	Keys []string `json:"keys"`
+}
+
+// PickerJSON is what the border picker needs beyond LibraryJSON: the groups,
+// and each border's name, default colour and whether it has a part that takes
+// the entry's colour (tints), so the picker can say when a colour will barely
+// show.
+func PickerJSON() string {
+	type info struct {
+		Name   string `json:"name"`
+		Colour string `json:"colour"`
+		Tints  bool   `json:"tints"`
+	}
+	out := struct {
+		Groups  []PickerGroup   `json:"groups"`
+		Borders map[string]info `json:"borders"`
+	}{Groups: Groups(), Borders: make(map[string]info, len(library))}
+	for _, b := range library {
+		out.Borders[b.Key] = info{Name: b.Name, Colour: b.Colour, Tints: b.Mask != "" || b.CornerMask != "" || b.Dye}
 	}
 	raw, err := json.Marshal(out)
 	if err != nil {

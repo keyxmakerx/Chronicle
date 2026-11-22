@@ -35,6 +35,13 @@ type HeroChoice struct {
 	// names a border in the library. The two properties it comes from are
 	// left out of Properties, so neither creator shows them as facts.
 	Look *HeroLook `json:"look,omitempty"`
+	// SystemLook is the look the game system itself gives the entry, and
+	// LookChanged says the campaign's owner has chosen another (or none) over
+	// it. Both are set only on a Director's plan: the Customizer needs them to
+	// show what a reset gives back; players never see them. SystemLook is nil
+	// when the game system gives the entry no border.
+	SystemLook  *HeroLook `json:"systemLook,omitempty"`
+	LookChanged bool      `json:"lookChanged,omitempty"`
 	// Status is "draft" or "sent" for a player's own entry a Director has
 	// not accepted yet; Mine and EntryID are set for the player who wrote it.
 	Status  string `json:"status,omitempty"`

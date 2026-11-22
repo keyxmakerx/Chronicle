@@ -32,10 +32,25 @@ type HeroCreatorView struct {
 // the hero-on-stage look.
 const HeroLookStage = "stage"
 
-// heroLookAttrs is what the mount carries for a look: only the stage look has
-// any, its name and the card-border library. The new-hero, practice and try-out
-// pages share it so they cannot drift.
+// heroLookAttrs is what the mount carries for a look. Both looks carry the
+// card-border library and the picker's lists, which the "Card border" row of
+// the entry form reads; only the stage look draws borders on its cards and
+// names itself. The classic creator ignores the library, so its cards stay
+// plain. The new-hero and practice pages share it so they cannot drift.
 func heroLookAttrs(look string) templ.Attributes {
+	attrs := templ.Attributes{
+		"data-borders":       cardborders.LibraryJSON(layouts.AssetURL),
+		"data-border-picker": cardborders.PickerJSON(),
+	}
+	if look == HeroLookStage {
+		attrs["data-look"] = HeroLookStage
+	}
+	return attrs
+}
+
+// tryoutLookAttrs is the try-out page's: no one writes an entry there, so it
+// carries the library only for the stage look's cards.
+func tryoutLookAttrs(look string) templ.Attributes {
 	if look != HeroLookStage {
 		return nil
 	}

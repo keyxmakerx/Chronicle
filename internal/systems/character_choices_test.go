@@ -222,6 +222,7 @@ func (s *stubChoiceSvc) RulesTerms(context.Context, string) (*RulesTerms, error)
 }
 
 func (s *stubChoiceSvc) SetChoiceLimiter(ChoiceLimiter) {}
+func (s *stubChoiceSvc) SetChoiceLooks(CardLookReader) {}
 
 func TestValidChoiceFieldKey(t *testing.T) {
 	cases := []struct {

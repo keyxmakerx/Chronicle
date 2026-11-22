@@ -31,7 +31,7 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 	for _, s := range p.Steps {
 		step := entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake,
-			Choices: heroChoices(s.Choices), Held: heroChoices(s.Excluded), Rules: heroStepRules(s.Rules),
+			Choices: heroChoices(cctx, s.Choices), Held: heroChoices(cctx, s.Excluded), Rules: heroStepRules(s.Rules),
 			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom),
 		}
 		out.Steps = append(out.Steps, step)
@@ -52,18 +52,32 @@ func (a heroPlannerAdapter) VisitorPlan(ctx context.Context, campaignID string) 
 	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
 	for _, s := range p.Steps {
 		out.Steps = append(out.Steps, entities.HeroStep{
-			FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(s.Choices),
+			FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(ctx, s.Choices),
 			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom),
 		})
 	}
 	return out, nil
 }
 
-func heroChoices(in []systems.Choice) []entities.HeroChoice {
+// heroChoices copies a list into the plan. What the game system itself gives
+// a card, and whether the owner has changed it, are copied only for a
+// Director (ctx): the Customizer needs them, and a player's plan has no use
+// for them.
+func heroChoices(ctx context.Context, in []systems.Choice) []entities.HeroChoice {
+	director := systems.ChoiceViewerIsDirector(ctx)
 	out := make([]entities.HeroChoice, 0, len(in))
 	for _, c := range in {
 		props, look := heroLook(c.Properties)
+		var sysLook *entities.HeroLook
+		changed := false
+		if director && c.LookChanged {
+			changed = true
+			if c.SystemLook != nil {
+				sysLook = &entities.HeroLook{Border: c.SystemLook.Border, Colour: c.SystemLook.Colour}
+			}
+		}
 		out = append(out, entities.HeroChoice{
+			SystemLook: sysLook, LookChanged: changed,
 			Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
 			Description: c.Description, Properties: props, Look: look,
 			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State, Parent: c.Parent,

@@ -1,6 +1,7 @@
 package cardborders
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"reflect"
@@ -123,5 +124,89 @@ func TestLibraryJSON(t *testing.T) {
 	}
 	if strings.Contains(got, "Carved stone") || strings.Contains(got, "#e0a030") {
 		t.Error("names and default colours stay on the server")
+	}
+}
+
+func TestGroups(t *testing.T) {
+	want := []PickerGroup{
+		{"Elements", []string{"earth", "fire", "ice", "storm"}},
+		{"Stone and metal", []string{"carved-stone", "rune-metal", "great-rune", "mechanical"}},
+		{"Glass", []string{"glass", "glass-smoke", "glass-sea", "glass-rose", "glass-midnight"}},
+		{"Wild", []string{"thorn-glass", "scales", "vine"}},
+	}
+	if got := Groups(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Groups = %v, want %v", got, want)
+	}
+	in := map[string]string{}
+	for _, g := range Groups() {
+		for _, k := range g.Keys {
+			if prev, dup := in[k]; dup {
+				t.Errorf("%s is in %s and %s", k, prev, g.Name)
+			}
+			in[k] = g.Name
+			if b, ok := Get(k); !ok || b.Group != g.Name {
+				t.Errorf("%s: library says group %q, picker lists it under %q", k, b.Group, g.Name)
+			}
+		}
+	}
+	for _, b := range All() {
+		if in[b.Key] == "" {
+			t.Errorf("%s is in no group", b.Key)
+		}
+	}
+	// The picker's order is its own data: the library's order is untouched.
+	if got := Keys(); got[0] != "carved-stone" || got[1] != "earth" || got[len(got)-1] != "vine" {
+		t.Errorf("library order changed: %v", got)
+	}
+	g := Groups()
+	g[0].Keys[0] = "changed"
+	if Groups()[0].Keys[0] != "earth" {
+		t.Error("Groups hands out its own data")
+	}
+}
+
+func TestPickerJSON(t *testing.T) {
+	var got struct {
+		Groups  []PickerGroup `json:"groups"`
+		Borders map[string]struct {
+			Name   string `json:"name"`
+			Colour string `json:"colour"`
+			Tints  bool   `json:"tints"`
+		} `json:"borders"`
+	}
+	if err := json.Unmarshal([]byte(PickerJSON()), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Groups, Groups()) {
+		t.Errorf("groups = %v", got.Groups)
+	}
+	if len(got.Borders) != len(All()) {
+		t.Errorf("%d borders, want %d", len(got.Borders), len(All()))
+	}
+	for _, b := range All() {
+		g, ok := got.Borders[b.Key]
+		if !ok || g.Name != b.Name || g.Colour != b.Colour {
+			t.Errorf("%s = %+v, want %s %s", b.Key, g, b.Name, b.Colour)
+		}
+		if want := b.Mask != "" || b.CornerMask != "" || b.Dye; g.Tints != want {
+			t.Errorf("%s tints = %v, want %v", b.Key, g.Tints, want)
+		}
+	}
+	for key, tints := range map[string]bool{"fire": true, "scales": true, "carved-stone": true, "mechanical": true, "ice": false, "earth": false, "glass-rose": false} {
+		if got.Borders[key].Tints != tints {
+			t.Errorf("%s tints = %v, want %v", key, got.Borders[key].Tints, tints)
+		}
+	}
+	if !strings.Contains(PickerJSON(), `"fire":{"name":"Fire","colour":"#d9622b","tints":true}`) {
+		t.Errorf("shape: %s", PickerJSON())
+	}
+}
+
+func TestLibraryJSONCarriesNoPickerData(t *testing.T) {
+	got := LibraryJSON(func(p string) string { return p })
+	for _, b := range All() {
+		if strings.Contains(got, b.Name) || strings.Contains(got, b.Colour) || strings.Contains(got, b.Group) {
+			t.Errorf("LibraryJSON carries %s data", b.Key)
+		}
 	}
 }

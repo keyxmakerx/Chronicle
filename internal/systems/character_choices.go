@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 )
 
 // ChoiceSourcePackage marks entries that come from a system's own data file.
@@ -81,6 +82,14 @@ type Choice struct {
 	// on entries of a step that declares creator.from (a subclass lists the
 	// class it comes with). Empty on every other entry.
 	Parent string `json:"parent,omitempty"`
+	// SystemLook is the card look the game system itself gives a package entry
+	// the campaign's owner has laid their own look over (LookChanged); nil when
+	// the package names no valid border. A Director's plan carries it so the
+	// owner can compare and reset; it is never served to players.
+	SystemLook *cardborders.Look `json:"-"`
+	// LookChanged marks a package entry whose card_border / card_colour are the
+	// owner's choice, not the package's.
+	LookChanged bool `json:"-"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -353,6 +362,9 @@ type CharacterChoiceService interface {
 	// SetChoiceLimiter plugs in the hero-choice rules. Every list is then
 	// narrowed for the viewer after its sources are merged.
 	SetChoiceLimiter(l ChoiceLimiter)
+	// SetChoiceLooks plugs in the owner's card borders for package entries.
+	// Every list then carries them, whoever reads it.
+	SetChoiceLooks(r CardLookReader)
 }
 
 type characterChoiceService struct {
@@ -361,9 +373,12 @@ type characterChoiceService struct {
 	manifests func() []*SystemManifest
 	dirOf     func(id string) string
 	limiter   ChoiceLimiter
+	looks     CardLookReader
 }
 
 func (s *characterChoiceService) SetChoiceLimiter(l ChoiceLimiter) { s.limiter = l }
+
+func (s *characterChoiceService) SetChoiceLooks(r CardLookReader) { s.looks = r }
 
 // NewCharacterChoiceService wires the service to the live system registry,
 // the campaign's addon switches and its custom uploaded system (either may
@@ -504,6 +519,10 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 		}
 		res.Choices = append(res.Choices, extra...)
 	}
+	// The owner's card borders go on before the rules narrow the list, so the
+	// limiter's held-back entries carry them too, and on every reader's list
+	// (a Director's, a visitor's), which is why they are not the limiter's job.
+	s.applyLooks(ctx, campaignID, res)
 	// The rules narrow the merged list last, so package and campaign entries
 	// are limited by the same code and every reader of the list agrees.
 	if s.limiter != nil {
@@ -545,6 +564,9 @@ func (s *characterChoiceService) dependentChoiceList(ctx context.Context, campai
 		return nil, err
 	}
 	res := &ChoiceList{FieldKey: fieldKey, SystemID: parent.SystemID, SystemName: parent.SystemName, Choices: []Choice{}}
+	// Derived entries bypass the overlay and the limiter, but an owner's card
+	// border still applies to them.
+	defer s.applyLooks(ctx, campaignID, res)
 	for _, pe := range parent.Choices {
 		items, _ := pe.Properties[from.Property].([]any)
 		seen := map[string]bool{}
@@ -604,4 +626,53 @@ var nonSlugRun = regexp.MustCompile(`[^a-z0-9]+`)
 // slugifyName makes a lower-case, hyphen-joined key from an item's name.
 func slugifyName(name string) string {
 	return strings.Trim(nonSlugRun.ReplaceAllString(strings.ToLower(name), "-"), "-")
+}
+
+// applyLooks lays the owner's card borders over the package entries of a list.
+// A package entry's properties map is shared and cached across campaigns, so a
+// changed entry gets a copy; the package's own look is recorded first so a
+// Director can see what a reset would give back. A campaign's own entries are
+// untouched: their look is their own properties. A failed read leaves the
+// package looks in place, since a look is not a rule and must not take the
+// pick list down.
+func (s *characterChoiceService) applyLooks(ctx context.Context, campaignID string, l *ChoiceList) {
+	if s.looks == nil || l == nil || l.SystemID == "" || len(l.Choices) == 0 {
+		return
+	}
+	rows, err := s.looks.CardLooks(ctx, campaignID, l.SystemID, l.FieldKey)
+	if err != nil {
+		slog.Warn("card looks could not be read; serving the package looks",
+			slog.String("field", l.FieldKey), slog.Any("error", err))
+		return
+	}
+	for i := range l.Choices {
+		c := &l.Choices[i]
+		row, ok := rows[c.Key]
+		if !ok || c.Source != ChoiceSourcePackage {
+			continue
+		}
+		// A border that has since left the library is ignored: the package look stands.
+		if row.Border != "" {
+			if _, known := cardborders.Get(row.Border); !known {
+				continue
+			}
+		}
+		if own, has := cardborders.LookFrom(c.Properties); has {
+			c.SystemLook = &own
+		}
+		c.LookChanged = true
+		props := make(map[string]any, len(c.Properties)+2)
+		for k, v := range c.Properties {
+			if k != cardborders.PropBorder && k != cardborders.PropColour {
+				props[k] = v
+			}
+		}
+		if row.Border != "" {
+			props[cardborders.PropBorder] = row.Border
+			if cardborders.ValidColour(row.Colour) {
+				props[cardborders.PropColour] = strings.ToLower(row.Colour)
+			}
+		}
+		c.Properties = props
+	}
 }

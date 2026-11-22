@@ -35,6 +35,10 @@ func (f *fakeEntrySvc) FindByName(_ context.Context, _, field, name string, _ sy
 	}
 	return nil, nil
 }
+// SetCardLook is the owner's Customizer path, never an AI record's.
+func (f *fakeEntrySvc) SetCardLook(context.Context, string, systems.EntryActor, int64, string, string) (*systems.SystemEntry, error) {
+	panic("an AI record must not set a card look")
+}
 func (f *fakeEntrySvc) Grants(context.Context, string, systems.EntryActor) ([]systems.EntryGrant, error) {
 	return nil, nil
 }

@@ -41,6 +41,11 @@ import (
 //     when it has no summary to show ("The dice everyone rolls, ...").
 //   - Finds: optional. The named things inside the tab, so Find can open the
 //     tab by what it holds and not only by its name.
+//   - Section: optional. The draft section the tab's changes live in. The tab
+//     then saves with the Customize save bar, so its rail entry shows the
+//     unsaved-changes dot, the bar names it when its section carries no
+//     labels of its own, and its body fills the page instead of sitting under
+//     a "saves by itself" note. Empty for a tab that saves by itself.
 //
 // The Customize page is Owner-only, so a contributed tab needs no role of its
 // own: every viewer of it is already an Owner.
@@ -56,6 +61,7 @@ type CustomizeTab struct {
 	Here      string
 	Blurb     string
 	Finds     []CustomizeFind
+	Section   string
 }
 
 // CustomizeFind is one thing inside a contributed tab that Find should know:

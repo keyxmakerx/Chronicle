@@ -17,7 +17,7 @@ func TestHeroChoicesServeKey(t *testing.T) {
 		{Key: "fury", Slug: "fury", Name: "Fury", Source: systems.ChoiceSourcePackage},
 		{Key: "12", Slug: "mothfolk", Name: "Mothfolk", Source: systems.ChoiceSourceCampaign},
 	}
-	raw, err := json.Marshal(heroChoices(in))
+	raw, err := json.Marshal(heroChoices(context.Background(), in))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestHeroChoicesLiftLook(t *testing.T) {
 	noColour := map[string]any{"card_border": "vine"}
 	colourOnly := map[string]any{"card_colour": "#112233", "size": "1M"}
 	plain := map[string]any{"speed": 6.0}
-	out := heroChoices([]systems.Choice{
+	out := heroChoices(context.Background(), []systems.Choice{
 		{Name: "Good", Properties: good}, {Name: "NoColour", Properties: noColour},
 		{Name: "Unknown", Properties: src}, {Name: "ColourOnly", Properties: colourOnly}, {Name: "Plain", Properties: plain},
 	})

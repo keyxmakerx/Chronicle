@@ -30,7 +30,7 @@ templ TryoutCreatorPage(cc *campaigns.CampaignContext, view TryoutCreatorView) {
 				data-type-name="practice hero"
 				data-for-self="false"
 				data-skin={ layouts.BuilderSkin(ctx) }
-				{ heroLookAttrs(view.Look)... }
+				{ tryoutLookAttrs(view.Look)... }
 				if view.TermsURL != "" {
 					data-terms-url={ view.TermsURL }
 				}
