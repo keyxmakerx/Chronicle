@@ -37,8 +37,12 @@ func (run *lookupRun) encountersLookup(page string) (LookupAnswer, error) {
 		ans.Chip = "Encounters · " + page
 	}
 	report, haveReport := run.foundryReport()
+	ev := run.encounterEV()
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Encounters (%d)\n\n", len(list))
+	if ev != nil && len(list) > 0 {
+		b.WriteString(evNote)
+	}
 	if len(list) == 0 {
 		if page != "" {
 			b.WriteString("None on " + quote(page) + ".\n")
@@ -55,6 +59,12 @@ func (run *lookupRun) encountersLookup(page string) (LookupAnswer, error) {
 			b.WriteString("Plays now: the base creatures, until " + strings.Join(e.Open, ", ") + " has a result.\n")
 		case len(e.Versions) > 0:
 			b.WriteString("Plays now: the base creatures; the DM can pick a version in Foundry.\n")
+		}
+		if ev != nil {
+			b.WriteString(ev.line("", e.Creatures))
+			for _, v := range e.Versions {
+				b.WriteString(ev.line(v.Name, v.Creatures))
+			}
 		}
 		if haveReport {
 			missing, unchecked := cannotPlace(e, report)

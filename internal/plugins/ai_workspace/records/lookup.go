@@ -302,7 +302,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"note", "`name` (its title); optional `page` (for a jot) and `by` (the writer)", "one note's full text"},
 	{"house-rules", "optional `name` (one chapter's title)", "the house-rules chapters, whole while they fit in one answer; a longer rulebook lists every title, and `name` reads any one chapter"},
 	{"system-entries", "optional `field` (e.g. ancestry, kit, race) and `name` (part of an entry's name)", "the game system's entries for a character field, narrowed to those whose name holds `name`; without `field`, the fields that have entries"},
-	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now and any creature Foundry can't place (owner and co-DM only)"},
+	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now, any creature Foundry can't place and the EV written on the creature pages added up (owner and co-DM only)"},
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
 	{"trackers", "optional `page`", "the counters, steps and clocks kept on pages, hidden ones included: each one's value, what it means now and its latest changes (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},

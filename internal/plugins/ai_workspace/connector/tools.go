@@ -123,7 +123,7 @@ var tools = []tool{
 		Desc: "The home page each audience sees (everyone, players, scribes, directors, guests), written as home blocks you can send back changed: its rows, columns and blocks, the words in its Text, Table agreement and Making a hero blocks, and the Where we play address. It says which audiences have no home of their own and use the Everyone home, and which are arranged in Customize and can't be written back.",
 		Args: []arg{{Key: "audience", Desc: "One audience: everyone, players, scribes, directors or guests"}}},
 	{Name: "encounters", Owner: true, Title: "Encounters", Did: "Looked at the encounters", What: "encounters",
-		Desc: "The fights planned on pages, written as encounter blocks you can send back changed: heroes, creatures, groups, starts and versions, the version that plays now, and any creature Foundry can't place.",
+		Desc: "The fights planned on pages, written as encounter blocks you can send back changed: heroes, creatures, groups, starts and versions, the version that plays now, any creature Foundry can't place, and the EV written on the creature pages added up (not the party's budget or the difficulty, which the encounter builder works out).",
 		Args: []arg{{Key: "page", Desc: "Only the fights on this page"}}},
 	{Name: "tests", Owner: true, Title: "Tests", Did: "Looked at the tests", What: "tests",
 		Desc: "The montages and other tests on pages, with their results and the one recorded. An encounter version names one of these results to be picked by it.",
