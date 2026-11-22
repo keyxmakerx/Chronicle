@@ -244,10 +244,18 @@ jobs:
       - name: JS tests
         env:
           GROUP: ${{ matrix.group }}
+        # Explicit bash for pipefail, so the step fails on the tests' own exit
+        # code rather than on tee's.
+        shell: bash
         run: |
           mapfile -t files < <(./tools/js-test-files.sh "$GROUP")
           [ "${#files[@]}" -gt 0 ] || { echo "::error::no JS test files in group $GROUP"; exit 1; }
-          NODE_PATH="$(npm root -g)" node --test "${files[@]}"
+          # A failed run ends by naming its failed tests again: the stream
+          # names each only where it happens, far above the end of a long log.
+          if ! NODE_PATH="$(npm root -g)" node --test "${files[@]}" 2>&1 | tee js-tests.log; then
+            ./tools/js-test-failures.sh js-tests.log
+            exit 1
+          fi
 
   # --- Fresh-database migration replay ---
   # Every other integration test assumes `make migrate-up` already ran, so

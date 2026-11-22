@@ -53,7 +53,9 @@ again; CI runs the same command.
 - `make verify` runs what the CI "Build & Test" and "JS tests" jobs run: templ,
   build, vet, the repository guards, `go test ./... -short`, and the JS tests.
   Run it before you push. CI splits the JS tests into groups on separate
-  runners (`tools/js-test-files.sh`); locally they run as one suite.
+  runners (`tools/js-test-files.sh`); locally they run as one suite. A failed
+  run in CI ends by naming its failed tests again
+  (`tools/js-test-failures.sh`), so look at the end of the job's log first.
 - `make test-e2e` runs the Playwright specs in `test/e2e/` against Chromium.
 - `make test-live` runs the live checks in `test/live/`: it starts the real
   binary on an emptied scratch database (`tools/live-checks.sh`; defaults suit
