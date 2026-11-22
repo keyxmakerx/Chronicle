@@ -149,7 +149,7 @@ func (s *service) Hand(ctx context.Context, campaignID string, v Viewer) (*HandV
 			sp.Play = append(sp.Play, handCards(pd, h.Play)...)
 		}
 		if d.Kind == KindParty {
-			out.Party = append(out.Party, HandParty{DeckID: d.ID, DeckName: d.Name, Look: d.Look, Pile: pd.Pile,
+			out.Party = append(out.Party, HandParty{DeckID: d.ID, DeckName: d.Name, Look: pd.Look, Pile: pd.Pile,
 				Hand: handCards(pd, pd.PartyHand), Used: handCards(pd, pd.Used)})
 		}
 		for _, o := range pd.Others {
@@ -160,10 +160,10 @@ func (s *service) Hand(ctx context.Context, campaignID string, v Viewer) (*HandV
 				name = h.Name
 			}
 			out.Others = append(out.Others, HandOther{HeroID: o.HeroID, HeroName: name, DeckID: d.ID, DeckName: d.Name,
-				Look: d.Look, Count: o.Count, Faces: o.Faces})
+				Look: pd.Look, Count: o.Count, Faces: o.Faces})
 		}
 		if pd.DrawsOpen {
-			out.Draws = append(out.Draws, HandDraw{DeckID: d.ID, DeckName: d.Name, Look: d.Look, Pile: pd.Pile, Kinds: pd.Kinds,
+			out.Draws = append(out.Draws, HandDraw{DeckID: d.ID, DeckName: d.Name, Look: pd.Look, Pile: pd.Pile, Kinds: pd.Kinds,
 				DrawsLeft: pd.DrawsLeft, CanDraw: pd.CanDraw, Heroes: owned})
 		}
 	}
@@ -199,7 +199,8 @@ func (h *HeroHandView) Empty() bool {
 
 // HeroHand reads the strip for one hero page. The hero's player reads what the
 // Hand leaf shows for that hero. A Director reads the hand as its holder does
-// (a face-down copy is its back), and may act on it. Anyone else reads only
+// (a face-down copy is its back) and acts on it in the workshop, not here.
+// Anyone else reads only
 // what each deck lets them see of it, and only when they may open the page; a
 // page they may not open, or one that is not a hero of this campaign, is a 404
 // like a missing one.
@@ -262,7 +263,9 @@ func (s *service) HeroHand(ctx context.Context, campaignID, heroID string, v Vie
 }
 
 // holderSpot is a hero's hand as its holder sees it, for a Director reading
-// a hero page: faces for face-up copies, a back for the rest.
+// a hero page: faces for face-up copies, a back for the rest. It is to read:
+// turning a card over is its holder's to do, and a Director who must act on a
+// hand does it in the workshop, where every move is deliberate.
 func (s *service) holderSpot(ctx context.Context, campaignID string, hero Hero, r *request) (*HandSpot, error) {
 	held, err := s.repo.ListHeldBy(ctx, campaignID, []string{hero.ID})
 	if err != nil {
@@ -274,7 +277,7 @@ func (s *service) holderSpot(ctx context.Context, campaignID string, hero Hero, 
 		}
 		return held[i].ID < held[j].ID
 	})
-	sp := &HandSpot{HeroID: hero.ID, Name: hero.Name, Acts: true}
+	sp := &HandSpot{HeroID: hero.ID, Name: hero.Name}
 	decks := map[string]Deck{}
 	cards := map[string]map[string]Card{}
 	for _, c := range held {
@@ -324,10 +327,6 @@ type OpenedCard struct {
 	Shown bool
 }
 
-// Open reads a face-up copy the viewer may read: one in their own hero's hand
-// or play, in a party deck's hand or used pile, or on the table. A face-down
-// copy has no face to open and says so; any other copy is a 404 like a
-// missing one.
 // sameNotFound makes every "not there" answer of a player's fragment read the
 // same, so a deck, copy or card that is hidden cannot be told from one that is
 // missing by the words of the refusal.
@@ -339,10 +338,17 @@ func sameNotFound(err error) error {
 	return err
 }
 
+// Open reads a face-up copy the viewer may read: one in their own hero's hand
+// or play, in a party deck's hand or used pile, or on the table. A face-down
+// copy has no face to open and says so; any other copy is a 404 like a
+// missing one.
 func (s *service) Open(ctx context.Context, campaignID, deckID, copyID string, v Viewer) (*OpenedCard, error) {
 	r := s.newRequest(ctx, campaignID, v)
 	d, err := r.deck(deckID)
 	if err != nil {
+		if card, onTable, terr := r.openOnTable(deckID, copyID); terr != nil || onTable {
+			return card, terr
+		}
 		return nil, sameNotFound(err)
 	}
 	c, err := r.lookupCopy(d, copyID)
@@ -354,6 +360,42 @@ func (s *service) Open(ctx context.Context, campaignID, deckID, copyID string, v
 	}
 	card, err := r.opened(d, c)
 	return card, sameNotFound(err)
+}
+
+// openOnTable reads a card lying on the table from a deck the viewer may not
+// list. The table is every member's to read (Table sends the same face), so
+// such a card opens to read and nothing more; anything else of that deck stays
+// as hidden as the deck is.
+func (r *request) openOnTable(deckID, copyID string) (*OpenedCard, bool, error) {
+	if !r.member() || !validToken(deckID) || !validToken(copyID) {
+		return nil, false, nil
+	}
+	d, found, err := r.s.repo.GetDeck(r.ctx, r.cid, deckID)
+	if err != nil {
+		return nil, false, apperrorInternal(err)
+	}
+	if !found {
+		return nil, false, nil
+	}
+	c, found, err := r.s.repo.GetCopy(r.ctx, r.cid, d.ID, copyID)
+	if err != nil {
+		return nil, false, apperrorInternal(err)
+	}
+	if !found || c.Zone != ZonePlay || c.HolderEntityID != "" || !c.FaceUp {
+		return nil, false, nil
+	}
+	card, found, err := r.s.repo.GetCard(r.ctx, r.cid, d.ID, c.CardID)
+	if err != nil {
+		return nil, false, apperrorInternal(err)
+	}
+	if !found {
+		return nil, false, nil
+	}
+	look := d.Look
+	look.Kinds = kindsOf(d.Look, map[string]bool{card.KindKey: true})
+	f := faceOf(card)
+	return &OpenedCard{DeckID: d.ID, DeckName: d.Name, Look: look,
+		Copy: PlayerCopy{ID: c.ID, DeckID: c.DeckID, FaceUp: true, Face: &f}}, true, nil
 }
 
 func (r *request) opened(d Deck, c Copy) (*OpenedCard, error) {

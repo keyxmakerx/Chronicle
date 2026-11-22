@@ -4,8 +4,9 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 // HeroStrip is the Cards part of a hero's page: the hero's hand as the
 // viewer may read it, with the same cards and the same widget as the Hand
-// leaf. It acts only for the hero's player and Directors (HeroHandView.Own
-// carries Acts); everyone else reads what the decks let them see.
+// leaf. It acts only for the hero's player (HeroHandView.Own carries Acts). A
+// Director reads the hand as its holder does and everyone else reads what the
+// decks let them see; neither is offered a control.
 templ HeroStrip(p stripPage) {
 	@CardSheet()
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_hand.css") }/>
@@ -22,7 +23,7 @@ templ StripBody(p stripPage) {
 		}
 		if p.View.Own != nil {
 			if len(p.View.Own.Hand) > 0 {
-				@handRow(p.View.Own.Hand, p.View.Own.Acts, p.base())
+				@handFan(p.View.Own.Hand, p.View.Own.Acts, p.base())
 			}
 			if len(p.View.Own.Play) > 0 {
 				<h4 class="dkh-sub">In play</h4>
@@ -48,7 +49,7 @@ templ StripBody(p stripPage) {
 	<div class="dkh-notes" data-dkh-notes role="status" aria-live="polite">
 		if p.View.Own != nil && p.View.Own.Acts {
 			for _, line := range handNote([]HandSpot{*p.View.Own}, nil) {
-				<p class="dkh-note">{ line }</p>
+				<p class="dkh-note sr-only">{ line }</p>
 			}
 		}
 	</div>

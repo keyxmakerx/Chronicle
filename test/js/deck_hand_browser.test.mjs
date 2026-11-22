@@ -28,17 +28,19 @@ const down = (copy) => `<div class="dkh-slot" data-dkh-slot data-copy="${copy}" 
 const up = (copy, chip = '') => `<div class="dkh-slot" data-dkh-slot data-copy="${copy}" data-deck="d1" data-deck-name="Omens">
 <div class="dk-wrap dk-sz-hand dk-s-tall" data-dk-card data-state="up"><div class="dk-card dk-plate dk-s-tall" aria-label="Moon, Bane"><b class="dk-name">Moon</b></div></div>
 <button type="button" class="dkh-hit" data-dkh-open aria-label="Open Moon"></button>${chip}</div>`;
-const body = (...slots) => `<div class="dkh" data-widget="deck-hand" data-dkh-root data-src="${BASE}/hand" data-base="${BASE}" data-campaign-id="c1">
-<div class="dkh-body" data-dkh-body><div class="dkh-row">${slots.map((s) => `<div class="dkh-item">${s}</div>`).join('')}</div></div>
+const rowOf = (slots, held) => `<div class="dkh-row"${held ? ' data-dkh-held' : ''}>${slots.map((s) => `<div class="dkh-item">${s}</div>`).join('')}</div>`;
+// bodyOf draws a hand (held) and, after it, cards lying in play.
+const bodyOf = (held, play = []) => `<div class="dkh" data-widget="deck-hand" data-dkh-root data-src="${BASE}/hand" data-base="${BASE}" data-campaign-id="c1">
+<div class="dkh-body" data-dkh-body>${rowOf(held, true)}${play.length ? rowOf(play, false) : ''}</div>
 <div class="dkh-notes" data-dkh-notes role="status"></div><p class="dkh-err" role="alert" data-dkh-err hidden></p></div>`;
+const body = (...slots) => bodyOf(slots);
 const FACE = '<div class="dk-card dk-plate dk-s-tall" aria-label="Moon, Bane"><b class="dk-name">Moon</b></div>';
 const opened = ({ ask = false, waiting = false, shown = false, discard = false } = {}) => `<div class="dkh-over" role="dialog" data-dkh-over data-copy="c1" data-deck="d1"><div class="dkh-sheet">
 <button type="button" class="dkh-x" data-dkh-close aria-label="Close this card">x</button>
 <div class="dkh-big" data-dkh-big><div class="dk-wrap dk-sz-open" data-dk-card data-state="up"><div class="dk-card dk-plate">Moon</div></div></div>
 <p class="dkh-state" data-dkh-state>${waiting ? 'Waiting for your Director' : shown ? 'Shown to the table' : ''}</p>
-<div class="dkh-acts">${waiting ? '<button type="button" class="dkh-btn" disabled>Waiting for your Director</button>'
-    : `<button type="button" class="dkh-btn" data-dkh-act="play" ${ask ? 'data-dkh-ask' : ''}>${ask ? 'Ask to play' : 'Play it'}</button>`}
-${shown ? '<button type="button" class="dkh-btn" disabled>Shown to the table</button>' : '<button type="button" class="dkh-btn" data-dkh-act="show">Show the table</button>'}
+<div class="dkh-acts">${waiting ? '' : `<button type="button" class="dkh-btn" data-dkh-act="play" ${ask ? 'data-dkh-ask' : ''}>${ask ? 'Ask to play' : 'Play it'}</button>`}
+${shown ? '' : '<button type="button" class="dkh-btn" data-dkh-act="show">Show the table</button>'}
 ${discard ? '<button type="button" class="dkh-btn" data-dkh-act="discard">Throw it away</button>' : ''}
 <button type="button" class="dkh-btn" data-dkh-close>Keep it</button></div><p class="dkh-err" role="alert" data-dkh-err hidden></p></div></div>`;
 
@@ -152,7 +154,6 @@ test('asking sends the play verb, then the card says it is waiting and cannot be
   await page.click('[data-dkh-act="play"]');
   await page.waitForFunction(() => /Waiting for your Director/.test(document.querySelector('[data-dkh-state]').textContent));
   assert.equal(await page.$('[data-dkh-act="play"]'), null, 'the card can be asked again');
-  assert.equal(await page.evaluate(() => [...document.querySelectorAll('.dkh-acts button:disabled')].some((b) => /Waiting/.test(b.textContent))), true);
   assert.ok((await calls(page)).includes(`POST ${BASE}/d1/copies/c1/play {}`));
   await page.context().close();
 });
@@ -168,6 +169,17 @@ test('a refused move changes nothing and says why', { skip }, async () => {
   assert.match(await page.textContent('.dkh-sheet [data-dkh-err]'), /does not let you show/);
   assert.equal(await page.evaluate(() => document.querySelector('[data-dkh-state]').textContent.trim()), '');
   assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-dkh-act')), 'show');
+  await page.context().close();
+});
+
+test('a play a Director let through is not read as turned down', { skip }, async () => {
+  const waitingChip = '<span class="dkh-chip dkh-chip-wait">Waiting</span>';
+  // The card keeps its id and lands in play in front of the hero.
+  const page = await open(body(up('c1', waitingChip)), { [`GET ${BASE}/hand`]: html200(bodyOf([], [up('c1')])) });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:decks-changed')));
+  await page.waitForFunction(() => !document.querySelector('.dkh-chip-wait'));
+  await page.waitForTimeout(300);
+  assert.equal(await page.$$eval('[data-dkh-notes] .dkh-note', (n) => n.length), 0, 'an approved play was called a refusal');
   await page.context().close();
 });
 

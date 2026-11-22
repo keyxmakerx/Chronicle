@@ -28,12 +28,16 @@ type openedPage struct {
 
 func (p openedPage) base() string { return "/campaigns/" + p.CampaignID + "/decks" }
 
-// handNote is the line under a hand: which decks have a card still face down,
-// by deck name alone. Nothing about the card is in it.
-func handNote(spots []HandSpot, party []HandParty) []string {
+// newLine says a deck has a card waiting face down in a hand: the head names
+// the deck and the tail says what to do. Nothing about the card is in it.
+type newLine struct{ Head, Tail string }
+
+// newLines reads rows of a hand for cards still face down, by deck name alone,
+// in the order the decks first appear.
+func newLines(rows ...[]HandCard) []newLine {
 	var order []string
 	count := map[string]int{}
-	add := func(cards []HandCard) {
+	for _, cards := range rows {
 		for _, c := range cards {
 			if c.Copy.FaceUp {
 				continue
@@ -44,21 +48,62 @@ func handNote(spots []HandSpot, party []HandParty) []string {
 			count[c.DeckName]++
 		}
 	}
-	for _, sp := range spots {
-		add(sp.Hand)
-	}
-	for _, pt := range party {
-		add(pt.Hand)
-	}
-	out := make([]string, 0, len(order))
+	out := make([]newLine, 0, len(order))
 	for _, name := range order {
 		if n := count[name]; n == 1 {
-			out = append(out, "A new card from "+name+". Tap it to turn it over.")
+			out = append(out, newLine{"A new card from " + name, "Tap it to turn it over."})
 		} else {
-			out = append(out, strconv.Itoa(n)+" new cards from "+name+". Tap one to turn it over.")
+			out = append(out, newLine{strconv.Itoa(n) + " new cards from " + name, "Tap one to turn it over."})
 		}
 	}
 	return out
+}
+
+// handNote is what the hand's status line announces: every deck with a card
+// still face down, across the viewer's hands and the party's.
+func handNote(spots []HandSpot, party []HandParty) []string {
+	var rows [][]HandCard
+	for _, sp := range spots {
+		rows = append(rows, sp.Hand)
+	}
+	for _, pt := range party {
+		rows = append(rows, pt.Hand)
+	}
+	lines := newLines(rows...)
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		out = append(out, l.Head+". "+l.Tail)
+	}
+	return out
+}
+
+// pileLine is the caption under a pile a player may see: how many are left
+// when the deck lets them know, and only that it is the pile when it does not.
+func pileLine(pile *int) string {
+	switch {
+	case pile == nil:
+		return "The pile"
+	case *pile == 0:
+		return "None left"
+	}
+	return strconv.Itoa(*pile) + " left"
+}
+
+// pileEmpty says a pile the player may count has nothing left, so its back is
+// drawn as a faint place where the pile was.
+func pileEmpty(pile *int) bool { return pile != nil && *pile == 0 }
+
+// stateLine is what an opened card says about itself under the card.
+func (c *OpenedCard) stateLine() string {
+	switch {
+	case c.Copy.Waiting && c.Shown:
+		return "Waiting for your Director. Shown to the table."
+	case c.Copy.Waiting:
+		return "Waiting for your Director"
+	case c.Shown:
+		return "Shown to the table"
+	}
+	return ""
 }
 
 // position is "2 of 5" for the turn-over button of a face-down card.
@@ -85,7 +130,7 @@ func (d HandDraw) knownLine() string {
 	if d.Pile == nil {
 		return ""
 	}
-	return strconv.Itoa(*d.Pile) + " left"
+	return countWords(*d.Pile, "card in the pile", "cards in the pile")
 }
 
 func (d HandDraw) drawsLine() string {

@@ -212,12 +212,18 @@ func TestAnotherHeroIsSeenOnlyAsTheDeckAllows(t *testing.T) {
 	if rec := w.get(strip, "u-tam"); rec.Code != http.StatusNotFound && rec.Code != http.StatusOK {
 		t.Errorf("Tam's own strip: %d", rec.Code)
 	}
-	// The player's own strip carries controls; the Director's does too.
+	// The player's own strip carries controls. A Director reads the hand as
+	// its holder does and is offered none: turning a card is its holder's.
 	w.fx.heroes.hidden["h-tam"] = false
-	for _, user := range []string{"u-tam", "u-dir"} {
-		if b := w.get(strip, user).Body.String(); !strings.Contains(b, "data-dkh-open") {
-			t.Errorf("%s was offered no controls on the strip", user)
-		}
+	if b := w.get(strip, "u-tam").Body.String(); !strings.Contains(b, "data-dkh-open") {
+		t.Error("Tam was offered no controls on their own strip")
+	}
+	dir := w.get(strip, "u-dir").Body.String()
+	if !strings.Contains(dir, "Moonwell") {
+		t.Errorf("a Director cannot read the hero's turned card: %.400s", dir)
+	}
+	if strings.Contains(dir, "data-dkh-open") || strings.Contains(dir, `class="dk-turn"`) || strings.Contains(dir, "dkh-chip-new") {
+		t.Errorf("a Director is offered controls on a player's hand: %.600s", dir)
 	}
 }
 
@@ -368,5 +374,44 @@ func TestTwoWorldsTheHandFragmentIsTheSameBytes(t *testing.T) {
 				t.Errorf("only %d fragments compared", len(ax))
 			}
 		})
+	}
+}
+
+// A card on the table opens for every member, whatever decks they may list:
+// the Hand leaf draws it with an open button, so the button has to work. The
+// rest of such a deck stays as hidden as the deck is.
+func TestATableCardOpensForAMemberWhoCannotListItsDeck(t *testing.T) {
+	r := newWorkshopRig(t, true)
+	fx := r.fx
+	vault := fx.deck("Vault", KindEvent, &SettingsInput{Fate: ptr(FatePlay)})
+	_, err := fx.svc.Update(bg, camp, vault, fx.dir, UpdateDeckInput{Version: patchOf(1), Look: patchOf(LookInput{
+		Kinds: []KindDef{{Key: "boon", Name: "Boon", Colour: "teal"}, {Key: "bane", Name: "VAULTKIND", Colour: "rose"}}})})
+	fx.must(err)
+	onTable := fx.card(vault, CreateCardInput{Name: "Stormfront", KindKey: "boon", Words: "STORM-WORDS"})
+	hidden := fx.card(vault, CreateCardInput{Name: "Buried", KindKey: "bane", Words: "BURIED-WORDS", Copies: ptr(2)})
+	res, err := fx.svc.DealCard(bg, camp, vault, fx.dir, DealCardInput{CardID: onTable, To: "table"})
+	fx.must(err)
+	open := func(copyID string) string { return handBase + "/" + vault + "/copies/" + copyID }
+
+	got := r.get(open(res.CopyID), "u-ilse")
+	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "STORM-WORDS") {
+		t.Fatalf("a table card of a deck Ilse cannot list: %d %.300s", got.Code, got.Body.String())
+	}
+	for _, bad := range []string{"VAULTKIND", "BURIED-WORDS", "data-dkh-act"} {
+		if strings.Contains(got.Body.String(), bad) {
+			t.Errorf("the opened table card carries %q", bad)
+		}
+	}
+	// A copy of the same deck that is not on the table, and one that does not
+	// exist, answer alike.
+	inPile := fx.copiesOf(hidden)[0]
+	missing := r.get(open("00000000-0000-0000-0000-00000000dead"), "u-ilse")
+	pile := r.get(open(inPile), "u-ilse")
+	if pile.Code != http.StatusNotFound || missing.Code != http.StatusNotFound || pile.Body.String() != missing.Body.String() {
+		t.Errorf("a pile copy of a hidden deck: %d %q; a missing copy: %d %q", pile.Code, pile.Body.String(), missing.Code, missing.Body.String())
+	}
+	// The turn request never works on it.
+	if rec := r.post(open(res.CopyID)+"/turn", "u-ilse"); rec.Code == http.StatusOK {
+		t.Errorf("a table card of a hidden deck was turned: %d", rec.Code)
 	}
 }

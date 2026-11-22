@@ -378,7 +378,7 @@ func applyLook(cur Look, in *LookInput) (Look, error) {
 			out.Back.Colour = *b.Colour
 		}
 		if b.Picture != nil {
-			// TODO(#2567): card backs take a picture once the workshop can upload one.
+			// TODO(#2575): card backs take a picture once the workshop can upload one.
 			if *b.Picture != "" {
 				return Look{}, errInvalid("a card back can't have a picture yet")
 			}

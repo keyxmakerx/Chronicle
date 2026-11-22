@@ -40,6 +40,25 @@ templ handRow(cards []HandCard, acts bool, base string) {
 	</div>
 }
 
+// handFan is a hand: the same row, fanned and centred, with the line that
+// says a card is waiting face down set under it. The line is for the eye; the
+// hand's status region says the same thing aloud once. The row is marked as a
+// hand so the widget can tell a card still held from one that was played.
+templ handFan(cards []HandCard, acts bool, base string) {
+	<div class="dkh-row dkh-fan" role="list" data-dkh-held>
+		for i, c := range cards {
+			<div class="dkh-item" role="listitem">
+				@handSlot(c, i, len(cards), acts, base)
+			</div>
+		}
+	</div>
+	if acts {
+		for _, l := range newLines(cards) {
+			<p class="dkh-new" aria-hidden="true"><strong>{ l.Head }</strong><span>{ l.Tail }</span></p>
+		}
+	}
+}
+
 // handBacks is a count of face-down cards the viewer may see but not turn.
 templ handBacks(l Look, deck string, n int) {
 	<div class="dkh-row" role="list">

@@ -74,10 +74,21 @@
     return out;
   }
 
-  /** turnedDown: copies that were waiting, are still here and are no longer waiting. */
+  /** heldIn: the copy ids a root shows in a hand (not in play, on the table or used). */
+  function heldIn(root) {
+    var out = [];
+    Array.prototype.forEach.call(root.querySelectorAll('[data-dkh-held] [data-dkh-slot]'), function (s) { out.push(s.getAttribute('data-copy')); });
+    return out;
+  }
+
+  /**
+   * turnedDown: copies that were waiting, are still in a hand and are no
+   * longer waiting. A play a Director let through leaves the hand (it lands in
+   * play, on the table or in the used pile), so it is never read as a refusal.
+   */
   function turnedDown(before, rootAfter) {
-    var here = copiesIn(rootAfter), still = waitingIn(rootAfter);
-    return before.filter(function (id) { return here.indexOf(id) >= 0 && still.indexOf(id) < 0; });
+    var held = heldIn(rootAfter), still = waitingIn(rootAfter);
+    return before.filter(function (id) { return held.indexOf(id) >= 0 && still.indexOf(id) < 0; });
   }
 
   // ---- Small DOM helpers ----
@@ -241,9 +252,16 @@
         clearTimeout(timer);
         timer = setTimeout(refresh, REFRESH_WAIT);
       }
-      function onLive() { if (el.isConnected) later(); else close(false); }
+      function onLive() {
+        if (el.isConnected) { later(); return; }
+        // Taken off the page without a teardown: stop listening for good.
+        clearTimeout(timer);
+        window.removeEventListener(LIVE_EVENT, onLive);
+        close(false);
+      }
       window.addEventListener(LIVE_EVENT, onLive);
       inst.onLive = onLive;
+      inst.stop = function () { clearTimeout(timer); };
 
       // ---- Turning a face-down card over ----
 
@@ -422,6 +440,7 @@
       var w = el.__dkhInst;
       if (!w) return;
       el.__dkhInst = null;
+      if (w.stop) w.stop();
       if (w.close) w.close(false);
       window.removeEventListener(LIVE_EVENT, w.onLive);
       if (w.onCapture) el.removeEventListener('click', w.onCapture, true);
@@ -430,5 +449,5 @@
     }
   });
 
-  window.DeckHand = { urls: urls, words: words, moveFor: moveFor, waitingIn: waitingIn, copiesIn: copiesIn, turnedDown: turnedDown, TURNED_DOWN: TURNED_DOWN };
+  window.DeckHand = { urls: urls, words: words, moveFor: moveFor, waitingIn: waitingIn, copiesIn: copiesIn, heldIn: heldIn, turnedDown: turnedDown, TURNED_DOWN: TURNED_DOWN };
 })();

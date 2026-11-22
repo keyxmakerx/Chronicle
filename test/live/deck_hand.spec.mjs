@@ -204,7 +204,8 @@ async function walk(tag, view, { keyboard = false } = {}) {
   // Show the table: another player's screen shows the face without a reload.
   await open.click();
   await over.getByRole('button', { name: 'Show the table' }).click();
-  await over.getByRole('button', { name: 'Shown to the table' }).waitFor();
+  await over.locator('[data-dkh-state]').getByText('Shown to the table').waitFor();
+  assert.equal(await over.getByRole('button', { name: 'Show the table' }).count(), 0, 'a shown card can be shown again');
   await ilse.page.locator('#tt-drawer').getByText('Moonwellzz').first().waitFor();
   await over.getByRole('button', { name: 'Keep it' }).click();
 
@@ -241,6 +242,8 @@ async function walk(tag, view, { keyboard = false } = {}) {
   for (const p of [tam, ilse]) {
     await p.page.locator('#tt-drawer').getByText('On the table').first().waitFor();
     assert.match(await p.page.locator('#tt-drawer').innerText(), /favourowed/i);
+    // A play the Director let through is never called a refusal.
+    assert.doesNotMatch(await p.page.locator('#tt-drawer').innerText(), /turned that down/i);
   }
 
   // The Cards part of Tam's hero page: Tam's own strip, and Ilse's read-only one.

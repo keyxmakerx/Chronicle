@@ -4,6 +4,8 @@
  * here sets a card colour. Only transform and opacity move. */
 
 .dkh { --dkh-gap: 12px; max-width: 100%; min-width: 0; }
+/* In the Table the leaf gives no padding of its own. */
+.tt-hand .dkh { padding: 10px 12px 12px; }
 .dkh :focus-visible, .dkh-over :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .dkh button, .dkh select, .dkh-over button { font-family: inherit; }
 .dkh[aria-busy="true"] .dkh-body { opacity: 0.7; transition: opacity var(--dur-everyday, 160ms) var(--ease-standard, ease); }
@@ -22,6 +24,23 @@
 .dkh-item:last-child { margin-right: 0; }
 .dkh-item:hover, .dkh-item:focus-within { position: relative; z-index: 1; }
 .dkh-slot { position: relative; display: inline-block; }
+
+/* A hand the viewer holds is fanned and centred: the outer cards lean out a
+   little. The lean is on the slot's holder, so the card's own moves are not
+   disturbed. Under it, the line that says a card waits face down. */
+.dkh-fan { justify-content: safe center; padding-top: 10px; }
+.dkh-fan .dkh-item { transform-origin: 50% 100%; }
+.dkh-fan .dkh-item:first-child:not(:only-child) { transform: rotate(-4deg); }
+.dkh-fan .dkh-item:last-child:not(:only-child) { transform: rotate(4deg); }
+.dkh-new { display: grid; gap: 2px; margin: 2px 0 6px; text-align: center; }
+.dkh-new strong { font-size: 0.9375rem; font-weight: 500; color: var(--color-text-primary); }
+.dkh-new span { font-size: 0.8125rem; color: var(--color-text-muted); }
+
+/* A party deck: its pile on the left, the party's hand beside it. */
+.dkh-party { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+.dkh-pilefig { flex: 0 0 auto; display: grid; gap: 4px; justify-items: center; margin: 6px 0 0; }
+.dkh-partyhand { flex: 1 1 0; min-width: 0; }
+.dkh-partyhand .dkh-sub { margin-top: 0; }
 
 /* A face-up card is opened by a button laid over it; 44 tall at least. */
 .dkh-hit { position: absolute; inset: 0; min-height: 44px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
@@ -45,6 +64,7 @@
 /* A deck opened to draw from: its pile as a back, what the deck lets them know, and Draw. */
 .dkh-pile { display: flex; align-items: flex-start; gap: 14px; }
 .dkh-stack { flex: 0 0 auto; }
+.dkh-stack-none { opacity: 0.3; }
 .dkh-pilebody { display: grid; gap: 6px; justify-items: start; min-width: 0; }
 .dkh-pick { min-height: 32px; padding: 4px 8px; border: 1px solid var(--color-input-border); border-radius: 8px; background: var(--color-input-bg); color: var(--color-text-primary); font-size: 0.875rem; max-width: 100%; }
 
@@ -62,6 +82,7 @@
 .dkh-x { position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 8px; background: none; color: var(--color-text-secondary); cursor: pointer; }
 .dkh-x:hover { color: var(--color-text-primary); }
 .dkh-x svg { width: 20px; height: 20px; }
+.dkh-big { display: flex; justify-content: center; width: 100%; min-width: 0; }
 .dkh-big .dk-sz-open { --dk-w: min(224px, 62vw); }
 .dkh-state { margin: 0; min-height: 1.25em; font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; }
 .dkh-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
@@ -73,6 +94,12 @@ html[data-motion="calm"] .dkh-sheet { animation: dkh-fade var(--dur-everyday, 16
 html[data-motion="off"] .dkh-over, html[data-motion="off"] .dkh-sheet { animation: none; }
 @media (prefers-reduced-motion: reduce) { .dkh-over, .dkh-sheet { animation: none; } }
 .dkh-again, .dkh-again .dkh-sheet { animation: none; }
+
+/* On a phone the leaf sits under the plate, as wide as the plate, both centred. */
+@media (max-width: 440px) {
+  .dkh-big .dk-wrap.dk-open { flex-direction: column; align-items: center; gap: 8px; }
+  .dkh-big .dk-leaf { width: min(224px, 62vw); margin: 0; }
+}
 
 @media (min-width: 640px) {
   .dkh-over { align-items: center; }

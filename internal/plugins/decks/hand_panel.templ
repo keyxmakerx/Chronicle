@@ -25,7 +25,7 @@ templ HandBody(p handPage) {
 			<section class="dkh-sec" aria-label={ "Your hand" + heroSuffix(sp.Name, len(p.View.Mine)) }>
 				<h3 class="dkh-lab">Your hand{ heroSuffix(sp.Name, len(p.View.Mine)) }</h3>
 				if len(sp.Hand) > 0 {
-					@handRow(sp.Hand, sp.Acts, p.base())
+					@handFan(sp.Hand, sp.Acts, p.base())
 				}
 				if len(sp.Play) > 0 {
 					<h4 class="dkh-sub">In play in front of { sp.Name }</h4>
@@ -36,13 +36,22 @@ templ HandBody(p handPage) {
 		for _, pt := range p.View.Party {
 			<section class="dkh-sec" aria-label={ "The party's " + pt.DeckName }>
 				<h3 class="dkh-lab">{ pt.DeckName } <span class="dkh-quiet">the party's deck</span></h3>
-				if pt.Pile != nil {
-					<p class="dkh-quiet">{ countWords(*pt.Pile, "card left to draw", "cards left to draw") }</p>
-				}
-				if len(pt.Hand) > 0 {
-					<h4 class="dkh-sub">The party's hand</h4>
-					@handRow(pt.Hand, true, p.base())
-				}
+				<div class="dkh-party">
+					<figure class="dkh-pilefig">
+						<span class={ "dkh-stack", templ.KV("dkh-stack-none", pileEmpty(pt.Pile)) } aria-hidden="true">
+							@CardBack(pt.Look, SizeHand)
+						</span>
+						<figcaption class="dkh-quiet">{ pileLine(pt.Pile) }</figcaption>
+					</figure>
+					<div class="dkh-partyhand">
+						<h4 class="dkh-sub">The party's hand</h4>
+						if len(pt.Hand) > 0 {
+							@handFan(pt.Hand, true, p.base())
+						} else {
+							<p class="dkh-quiet">Nothing in it yet.</p>
+						}
+					</div>
+				</div>
 				if len(pt.Used) > 0 {
 					<h4 class="dkh-sub">Used, which everyone can see</h4>
 					@handRow(pt.Used, false, p.base())
@@ -87,7 +96,7 @@ templ HandBody(p handPage) {
 			<section class="dkh-sec dkh-draw" aria-label={ "Draw from " + d.DeckName } data-dkh-draw-sec data-deck={ d.DeckID }>
 				<h3 class="dkh-lab">{ d.DeckName } <span class="dkh-quiet">you can draw from this deck</span></h3>
 				<div class="dkh-pile">
-					<span class="dkh-stack" aria-hidden="true">
+					<span class={ "dkh-stack", templ.KV("dkh-stack-none", pileEmpty(d.Pile)) } aria-hidden="true">
 						@CardBack(d.Look, SizeHand)
 					</span>
 					<div class="dkh-pilebody">
@@ -117,7 +126,7 @@ templ HandBody(p handPage) {
 	</div>
 	<div class="dkh-notes" data-dkh-notes role="status" aria-live="polite">
 		for _, line := range handNote(p.View.Mine, p.View.Party) {
-			<p class="dkh-note">{ line }</p>
+			<p class="dkh-note sr-only">{ line }</p>
 		}
 	</div>
 	<p class="dkh-err" role="alert" data-dkh-err hidden></p>
