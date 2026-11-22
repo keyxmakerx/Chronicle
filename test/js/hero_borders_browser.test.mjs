@@ -795,7 +795,10 @@ for (const [width, height] of [[360, 844], [360, 640]]) {
     for (const g of got) {
       assert.ok(g.pastName <= 0 && g.pastCard <= 0 && g.nameWide <= 1, `${g.trim}: the name stays in its box (${g.pastName}px past the name's box, ${g.pastCard}px past the card's words)`);
       assert.ok(g.px >= 14, `${g.trim}: the name is ${g.px}px, never under 14`);
-      assert.ok(g.lines >= 1 && g.lines <= 2, `${g.trim}: the name takes ${g.lines} lines`);
+      // Two lines, unless the name is already at the smallest size: there it
+      // takes the lines it needs, and how many depends on how wide the face
+      // this machine draws with sets forty letters.
+      assert.ok(g.lines >= 1 && (g.lines <= 2 || g.px === 14), `${g.trim}: the name takes ${g.lines} lines at ${g.px}px`);
       assert.ok(g.sumWide <= 1, `${g.trim}: no word of the summary is cut (${g.sumWide}px)`);
       assert.ok(g.over <= 1, `${g.trim}: nothing runs past the card (${g.over}px)`);
     }
@@ -815,8 +818,10 @@ test('computer: a forty-letter name breaks inside its card, bordered or plain', 
   for (const g of got) assert.ok(g.past <= 0 && g.wide <= 0, `${g.trim}: the name stays in its card (${g.past}px past its box, the card ${g.wide}px wider inside than out)`);
 });
 
+// Sixteen letters are too wide at the name's full size and fit at the smallest
+// in a narrow face and in a wide one alike.
 test('phone 390x844: a one-word name that fits at a smaller size is set smaller, not broken', { skip }, async (t) => {
-  const { pg } = await open(t, { width: 390, height: 844, p: only('fire', FACTS, 'Abcdefghijklmnopqrst') });
+  const { pg } = await open(t, { width: 390, height: 844, p: only('fire', FACTS, 'Abcdefghijklmnop') });
   await idle(pg, 300);
   const h3 = await pg.locator('.hc-hand .hc-card[data-i] h3').first().evaluate((h) => ({ px: parseFloat(getComputedStyle(h).fontSize), wrap: h.style.overflowWrap, lines: Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)), wide: h.scrollWidth - h.clientWidth }));
   assert.ok(h3.px >= 14 && h3.px < 27, `the name is set at ${h3.px}px`);
