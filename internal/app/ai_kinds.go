@@ -81,6 +81,7 @@ type aiDeps struct {
 	Layers          transformations.Service          // nil while the transformations plugin is degraded
 	Designs         records.DesignsAPI               // nil while the designs plugin is degraded
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
+	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
@@ -238,7 +239,7 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if svc := d.pageTemplates(); svc != nil {
 		templates.Templates = svc
 	}
-	out = append(out, templates)
+	out = append(out, templates, d.look())
 	if d.LayersAI != nil {
 		out = append(out, d.LayersAI)
 	}
