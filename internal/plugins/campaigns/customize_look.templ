@@ -2,8 +2,9 @@ package campaigns
 
 import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
-// lookTab is the Customize page's look editor: whole looks, four rooms
-// of settings, a live example site and one Save for everything. The
+// lookTab is the Customize page's look editor: a live example site in the
+// middle, the settings of the open part in a panel that slides out on the
+// right, floating tools at the foot, and one Save for everything. The
 // controls and the example site are built by customize_look.js from
 // data-state; this markup is the frame they fill. Inside Customize's frame
 // its Save is the frame's save bar (customize_shell.js).
@@ -18,44 +19,65 @@ templ lookTab(cc *CampaignContext, csrfToken, state string) {
 		data-state={ state }
 		data-sky-calendar={ layouts.GetSkyCalendarID(ctx) }
 	>
-		<div class="cz" id="cz">
-			<section class="looks" aria-labelledby="looks-h">
-				<div class="looks-h">
-					<h2 id="looks-h">Start from a look</h2>
-					<p>One click sets colours, type, buttons, depth, motion, the header and the menu highlight together. Your name, logo, words and pictures stay as they are. Nothing changes for your players until you save.</p>
-				</div>
-				<div class="lk-row" id="lk-row" role="radiogroup" aria-labelledby="looks-h"></div>
-			</section>
-			<div class="cz-grid">
-				<nav class="cz-tabs" aria-label="Customize rooms">
-					<div class="tl" id="tl" role="tablist" aria-orientation="horizontal"></div>
-					<p class="tabs-foot"><span class="chg-k"></span>Changed since your last save.</p>
-				</nav>
-				<div class="cz-panels" id="panels"></div>
-				<aside class="cz-preview" id="pv-col" aria-label="Preview">
+		<div class="cz lk-cz" id="cz">
+			<div class="cpe cpe-editor lk-ws" id="lk-ws">
+				<div class="lk-work" id="pv-col">
 					<div class="pvw">
-						<div class="pv-bar">
-							<span class="pv-title"><span class="live"></span>Example site · your draft</span>
-							<div class="zseg" role="radiogroup" aria-label="Preview zoom">
+						<div class="pv-frame pv" id="preview" data-zoom="site"></div>
+						<div class="pv-cap" id="pv-cap"></div>
+					</div>
+					<span class="lk-held-tag" id="lk-held" hidden>Saved look</span>
+				</div>
+				<aside class="cpe-insp lk-panel" id="lk-panel" aria-label="Settings for the part you pressed" inert>
+					<div class="cpe-insp-tabs lk-ph">
+						<button type="button" class="cpe-handle" id="lk-handle" tabindex="-1" aria-hidden="true"></button>
+						<div class="cpe-insp-head">
+							<div class="lk-rooms" id="tl" role="tablist" aria-orientation="horizontal" aria-label="Customize rooms"></div>
+							<button type="button" class="cpe-insp-x lk-x" id="lk-x" aria-label="Done, put the settings away" title="Done (Esc)">
+								<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+								<span class="lk-x-t">Done</span>
+							</button>
+						</div>
+					</div>
+					<div class="cpe-insp-body lk-pb" id="lk-pb">
+						<div class="cz-panels" id="panels"></div>
+						<div class="lk-zoomw" id="lk-zoom" hidden>
+							<p class="grp-l" id="lk-zoom-l">Show in the example</p>
+							<div class="zseg lk-zoom" role="radiogroup" aria-labelledby="lk-zoom-l">
 								<label><input type="radio" name="zoom" value="site" id="z-site" checked/><span>Whole site</span></label>
 								<label><input type="radio" name="zoom" value="pieces" id="z-pieces"/><span>Pieces</span></label>
 								<label><input type="radio" name="zoom" value="type" id="z-type"/><span>Type</span></label>
 							</div>
-							<div class="zseg pv-opt" role="radiogroup" aria-label="Page shown in the preview">
-								<label><input type="radio" name="dpage" value="dash" id="dp-dash" checked/><span>Home</span></label>
-								<label><input type="radio" name="dpage" value="city" id="dp-city"/><span>City page</span></label>
-								<label><input type="radio" name="dpage" value="sheet" id="dp-sheet"/><span>Character sheet</span></label>
-							</div>
-							<div class="zseg pv-opt" role="radiogroup" aria-label="Preview in light or dark mode">
-								<label><input type="radio" name="ptheme" value="light" id="pt-light" checked/><span>Light</span></label>
-								<label><input type="radio" name="ptheme" value="dark" id="pt-dark"/><span>Dark</span></label>
-							</div>
-							<button type="button" class="czb czb-g czb-sm pv-hide" id="pv-hide" aria-expanded="true" aria-controls="preview">Hide</button>
 						</div>
-						<div class="pv-frame pv" id="preview" data-zoom="site"></div>
-						<div class="pv-cap" id="pv-cap"></div>
+						<section class="lk-looks" id="lk-looks" aria-labelledby="looks-h" hidden>
+							<div class="looks-h">
+								<h2 id="looks-h">Start from a look</h2>
+								<p>One click sets colours, type, buttons, depth, motion, the header and the menu highlight together. Your name, logo, words and pictures stay as they are. Nothing changes for your players until you save.</p>
+							</div>
+							<div class="lk-row" id="lk-row" role="radiogroup" aria-labelledby="looks-h"></div>
+						</section>
+						<p class="tabs-foot"><span class="chg-k"></span>Changed since your last save.</p>
 					</div>
 				</aside>
+				<div class="cpe-dock-wrap">
+					<div class="cpe-dock" id="lk-dock" role="toolbar" aria-label="Look tools">
+						<button type="button" class="cpe-dk cpe-dk-main" id="lk-open" aria-expanded="false" aria-controls="lk-panel">Settings</button>
+						<button type="button" class="cpe-dk" id="lk-looks-btn" aria-pressed="false" aria-controls="lk-panel">Looks</button>
+						<span class="cpe-dk-sep" aria-hidden="true"></span>
+						<div class="lk-dg" role="radiogroup" aria-label="Preview in light or dark mode">
+							<label class="cpe-dk"><input class="sr" type="radio" name="ptheme" value="light" id="pt-light" checked/><span>Light</span></label>
+							<label class="cpe-dk"><input class="sr" type="radio" name="ptheme" value="dark" id="pt-dark"/><span>Dark</span></label>
+						</div>
+						<span class="cpe-dk-sep" aria-hidden="true"></span>
+						<div class="lk-dg" role="radiogroup" aria-label="Page shown in the example">
+							<label class="cpe-dk"><input class="sr" type="radio" name="dpage" value="dash" id="dp-dash" checked/><span>Home</span></label>
+							<label class="cpe-dk"><input class="sr" type="radio" name="dpage" value="city" id="dp-city"/><span>City page</span></label>
+							<label class="cpe-dk"><input class="sr" type="radio" name="dpage" value="sheet" id="dp-sheet"/><span>Character sheet</span></label>
+						</div>
+						<span class="cpe-dk-sep" aria-hidden="true"></span>
+						<button type="button" class="cpe-dk" id="lk-hold" aria-pressed="false" title="Hold to see the look as it is saved. Release to come back to your draft.">Hold to see saved</button>
+					</div>
+				</div>
 			</div>
 			<div class="cz-save" id="save" role="region" aria-label="Save">
 				<div class="sv-st"><span class="sv-dot" aria-hidden="true"></span><b id="sv-t" role="status" aria-live="polite">No unsaved changes</b><span id="sv-d"></span></div>
