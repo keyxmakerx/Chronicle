@@ -491,7 +491,7 @@
       return '<button type="button" data-tt-crits="' + c[0] + '" aria-pressed="' + ((c[0] === 'on') === self.crits) + '">' + c[1] + '</button>';
     }).join('');
     out += '<div><p class="tt-k">Crit animations</p></div><div class="tt-seg" role="group" aria-label="Crit animations">' + cseg + '</div>' +
-      '<p class="tt-from">Off keeps crits marked in the log and on the dice, without the effects. Only for you.</p>';
+      '<p class="tt-from">Off keeps a crit’s coloured edge on the dice, without the effects. Only for you.</p>';
     if (this.director) {
       out += '<div><p class="tt-k">The table’s dice</p><p class="tt-from">What a player who hasn’t picked starts on.</p></div>' +
         '<div class="tt-seg" role="group" aria-label="The table’s dice">' + seg('data-tt-tablelook', self.tableLook) + '</div>';
@@ -915,7 +915,7 @@
         describe: function () { return ''; }
       }).then(function () {}, function () {});
     }
-    return C.tableDice.throwInto(tray || this.tray(), dice, { fromLeft: !!r.mine });
+    return C.tableDice.throwInto(tray || this.tray(), dice, { fromLeft: !!r.mine, flash: this.crits });
   };
 
   Table.prototype.play = function (r) {

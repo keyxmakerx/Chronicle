@@ -9,6 +9,11 @@
  * value; nothing bounces back up. opts.fromLeft picks the side (the roller's
  * own rolls come from the left). html[data-motion] decides how much moves:
  * calm sets them down with a fade, off (or reduced motion) draws nothing.
+ * A die the server marked as a crit (d.crit 'succ' or 'fail') gets a coloured
+ * edge when it lands, not before, so the throw doesn't give the result away.
+ * With opts.flash the edge flashes: the first crit of the roll fully, any
+ * others once and fainter, as the 3D dice's echoes are quieter than their
+ * grand crit. Only the edge's opacity animates, so it costs the GPU nothing.
  */
 (function () {
   'use strict';
@@ -62,6 +67,11 @@
 
   function randomFace(sides) { return 1 + Math.floor(Math.random() * sides); }
 
+  function critIndex(dice, kind) {
+    for (var i = 0; i < dice.length; i++) if (dice[i].crit === kind) return i;
+    return -1;
+  }
+
   // How long the dice stay after landing, in ms, before they fade.
   var STAY = 1800;
 
@@ -76,9 +86,13 @@
       var cx = w * 0.5, cy = h * (opts.y || 0.42);
       var side = opts.fromLeft ? -1 : 1;
       var longest = 0;
+      // The first crit flashes fully, a success ahead of a fail; the rest quietly.
+      var grand = critIndex(shown, 'succ');
+      if (grand < 0) grand = critIndex(shown, 'fail');
       shown.forEach(function (d, i) {
         var el = document.createElement('div');
-        el.className = 'td-die' + (d.crit === 'succ' ? ' td-hi' : d.crit === 'fail' ? ' td-lo' : '');
+        el.className = 'td-die';
+        var mark = d.crit === 'succ' ? 'td-hi' : d.crit === 'fail' ? 'td-lo' : '';
         var ex = cx + (i - (shown.length - 1) / 2) * gap, ey = cy + (i % 2 ? 12 : -8);
         el.style.left = (ex - 28) + 'px';
         el.style.top = (ey - 28) + 'px';
@@ -103,6 +117,12 @@
           [0.18, 0.4, 0.62, 0.8].forEach(function (at, k, all) {
             setTimeout(function () { text.textContent = k === all.length - 1 ? d.value : randomFace(d.sides); }, dur * at);
           });
+        }
+        if (mark) {
+          setTimeout(function () {
+            el.classList.add(mark);
+            if (opts.flash && m === 'full') el.classList.add(i === grand ? 'td-flash' : 'td-flash2');
+          }, m === 'calm' ? 0 : dur);
         }
         setTimeout(function () {
           var a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, fill: 'forwards' });
