@@ -665,6 +665,7 @@ var defaultEntityTypes = withAdventures([]EntityType{
 			{Key: "type", Label: "Type", Type: "text", Section: "Basics"},
 			{Key: "population", Label: "Population", Type: "text", Section: "Basics"},
 			{Key: "region", Label: "Region", Type: "text", Section: "Basics"},
+			climateFieldDef,
 		}},
 	{Slug: "organization", Name: "Organization", NamePlural: "Organizations", Icon: "fa-building", Color: "#f59e0b", SortOrder: 3, IsDefault: true, Enabled: true,
 		Fields: []FieldDefinition{

@@ -407,6 +407,8 @@ func fieldLines(defs []entities.FieldDefinition, typeNames map[int]string, notes
 			}
 		case entities.FieldTypeRule:
 			takes = "worked out by its rule; leave it out unless setting it by hand"
+		case entities.FieldTypeClimate:
+			takes = "a climate id from the weather-kinds lookup (desert, cold-coast, ...); leave it out to share the climate of the place around it"
 		case entities.FieldTypeCalendarDate:
 			takes = "a date on the campaign calendar as year-month-day, month by number (1043-3-22)"
 			var picks []string

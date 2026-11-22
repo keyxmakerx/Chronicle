@@ -264,6 +264,19 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 	// the service; it has the same gate as the day readings it is built from.
 	g.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
+	// Each place's weather and the party's marks: the Director's alone. A
+	// player reads the party's weather through weather/days above.
+	dmPlaces := func(what string) echo.MiddlewareFunc {
+		return campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may "+what)
+	}
+	g.GET("/calendars/:calid/weather/places", h.PlaceWeatherYearAPI, dmPlaces("read each place's weather"))
+	g.PUT("/calendars/:calid/weather/places/:pid/days", h.SetPlaceDayWeatherAPI, dmPlaces("set a place's weather"))
+	g.POST("/calendars/:calid/weather/places/:pid/days/clear", h.ClearPlaceDayWeatherAPI, dmPlaces("clear a place's weather"))
+	g.POST("/calendars/:calid/weather/places/:pid/days/lock", h.LockPlaceDayWeatherAPI, dmPlaces("lock a place's weather"))
+	g.POST("/calendars/:calid/weather/party", h.SetPartyPlaceAPI, dmPlaces("say where the party is"))
+	g.POST("/calendars/:calid/weather/party/clear", h.ClearPartyPlaceAPI, dmPlaces("say where the party is"))
+
 	// Event rolls: read Player (the service gives a player only the player
 	// text of a told night that has arrived); every write is gated
 	// CanAuthorDmOnly like the day weather, since a result can reveal what

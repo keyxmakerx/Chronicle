@@ -477,6 +477,10 @@ type calendarService struct {
 	batchRepo   EventBatchRepository
 	markRepo    MoonMarkRepository
 	rollTables  RollTableSource
+	// placeRepo and places give each place with a climate its own weather
+	// (place_weather.go); both nil leaves the calendar one weather.
+	placeRepo PlaceWeatherRepository
+	places    PlaceDirectory
 	// forecastKey keys the players' weather forecast blur; see
 	// weather_forecast.go.
 	forecastKey []byte
@@ -3316,17 +3320,29 @@ func dayOnOrBefore(y, m, d, cy, cm, cd int) bool {
 // ListDayWeather returns a year's (or one month's) day readings for v. A
 // viewer who cannot see dm_only content gets only days up to today, and no
 // lock state: future days reach players only as a blurred forecast
-// (ListWeatherForecast), never as the stored reading.
+// (ListWeatherForecast), never as the stored reading. They also get the
+// party's weather (place_weather.go): on a day the party was somewhere with
+// a climate of its own, that place's reading stands in for the world's. The
+// Director gets the stored world readings, which the weather calendar edits.
 func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
 		return nil, err
 	}
+	out, err := s.listWorldDays(ctx, cal, year, month, v)
+	if err != nil || v.SkipsPerUserRules() {
+		return out, err
+	}
+	return s.overlayParty(ctx, cal, out, year, month, v)
+}
+
+// listWorldDays is the calendar's own readings cut to what v may see.
+func (s *calendarService) listWorldDays(ctx context.Context, cal *Calendar, year, month int, v permissions.Viewer) ([]DayWeather, error) {
 	director := v.SkipsPerUserRules()
 	if !director && year > cal.CurrentYear {
 		return []DayWeather{}, nil
 	}
-	days, err := s.weatherRepo.ListDays(ctx, calendarID, year, month)
+	days, err := s.weatherRepo.ListDays(ctx, cal.ID, year, month)
 	if err != nil {
 		return nil, fmt.Errorf("list day weather: %w", err)
 	}
@@ -3464,6 +3480,12 @@ func (s *calendarService) ListWeatherForecast(ctx context.Context, calendarID, c
 		horizon = settings.ForecastDays
 	}
 
+	// The forecast follows the party: every day ahead is read from the
+	// region the party is in today, never from a mark still to come.
+	region, err := s.forecastRegion(ctx, cal, today)
+	if err != nil {
+		return nil, err
+	}
 	// A month's readings are fetched once however many forecast days land in it.
 	type monthKey struct{ year, month int }
 	byMonth := map[monthKey]map[int]DayWeather{}
@@ -3475,9 +3497,9 @@ func (s *calendarService) ListWeatherForecast(ctx context.Context, calendarID, c
 		key := monthKey{date.Year, date.Month}
 		days, seen := byMonth[key]
 		if !seen {
-			rows, err := s.weatherRepo.ListDays(ctx, calendarID, date.Year, date.Month)
+			rows, err := s.forecastRows(ctx, cal, region, date.Year, date.Month)
 			if err != nil {
-				return nil, fmt.Errorf("list day weather: %w", err)
+				return nil, err
 			}
 			days = make(map[int]DayWeather, len(rows))
 			for _, r := range rows {

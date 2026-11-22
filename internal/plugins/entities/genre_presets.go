@@ -54,6 +54,7 @@ func fantasyPreset() GenrePreset {
 					{Key: "population", Label: "Population", Type: "text", Section: "Basics"},
 					{Key: "region", Label: "Region", Type: "text", Section: "Basics"},
 					{Key: "ruler", Label: "Ruler", Type: "text", Section: "Basics"},
+					climateFieldDef,
 				}},
 			{Slug: "faction", Name: "Faction", NamePlural: "Factions", Icon: "fa-flag", Color: "#f59e0b", SortOrder: 3, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
@@ -173,6 +174,7 @@ func horrorPreset() GenrePreset {
 					{Key: "danger_level", Label: "Danger Level", Type: "select", Section: "Basics",
 						Options: []string{"Safe", "Uneasy", "Dangerous", "Deadly", "Unknown"}},
 					{Key: "last_visited", Label: "Last Visited", Type: "text", Section: "Basics"},
+					climateFieldDef,
 				}},
 			{Slug: "clue", Name: "Clue", NamePlural: "Clues", Icon: "fa-magnifying-glass", Color: "#f59e0b", SortOrder: 3, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
@@ -222,6 +224,7 @@ func modernPreset() GenrePreset {
 					{Key: "type", Label: "Type", Type: "text", Section: "Basics"},
 					{Key: "address", Label: "Address", Type: "text", Section: "Basics"},
 					{Key: "district", Label: "District / Area", Type: "text", Section: "Basics"},
+					climateFieldDef,
 				}},
 			{Slug: "organization", Name: "Organization", NamePlural: "Organizations", Icon: "fa-building", Color: "#f59e0b", SortOrder: 3, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{

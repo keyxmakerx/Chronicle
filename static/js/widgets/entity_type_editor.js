@@ -38,7 +38,9 @@
     { value: 'select', label: 'Select' },
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'url', label: 'URL' },
-    { value: 'calendar_date', label: 'Calendar date' }
+    { value: 'calendar_date', label: 'Calendar date' },
+    // A place's climate: the calendar's list, followed by the pages inside it.
+    { value: 'climate', label: 'Climate' }
   ];
   var KEPT_TYPES = { link: 'Link to a page', rule: 'Worked out' };
 

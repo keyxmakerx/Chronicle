@@ -126,6 +126,7 @@ type Handler struct {
 	eraPages           EraPages
 	fieldWords         FieldWords    // Optional: homebrew rules and local words; see field_kinds.go.
 	fieldCalendar      FieldCalendar // Optional: the campaign calendar for date fields; see field_dates.go.
+	fieldClimate       FieldClimate  // Optional: the calendar's climates and weather for climate fields; see field_climate.go.
 	pageMoons          PageMoons
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
@@ -2438,6 +2439,9 @@ func (h *Handler) fieldsPayload(c *echo.Context, cc *campaigns.CampaignContext, 
 	}
 	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
 		response["dateBook"] = cal
+	}
+	if book := h.climateBook(c.Request().Context(), cc.Campaign.ID, entity, effectiveFields, int(cc.VisibilityRole()), userID); book != nil {
+		response["climateBook"] = book
 	}
 	if keys := h.ownerFieldsFor(c.Request().Context(), cc, entity, et, userID); len(keys) > 0 {
 		response["owner_fields"] = keys

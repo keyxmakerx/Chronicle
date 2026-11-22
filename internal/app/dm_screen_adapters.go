@@ -293,7 +293,7 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 		return nil, err
 	}
 	w := &dmscreen.WorldView{CalendarID: cal.ID, DateLabel: cal.FullDateLabel(), TimeLabel: cal.FormatCurrentTime(), CanStep: !cal.UsesRealTime()}
-	days, err := a.svc.ListDayWeather(ctx, cal.ID, campaignID, cal.CurrentYear, cal.CurrentMonth, pv)
+	days, err := calendar.PartyDays(ctx, a.svc, cal.ID, campaignID, cal.CurrentYear, cal.CurrentMonth, pv)
 	if err != nil {
 		return w, err
 	}

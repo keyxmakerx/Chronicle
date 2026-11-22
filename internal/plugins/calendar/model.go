@@ -1925,7 +1925,11 @@ type DayWeather struct {
 	Source             string         `json:"source"`
 	// Locked is set only for a viewer who can author Director-only content;
 	// a player's reading omits the key so they never learn a day is locked.
-	Locked    *bool     `json:"locked,omitempty"`
+	Locked *bool `json:"locked,omitempty"`
+	// Place names the place whose weather this is, when it is the party's
+	// weather from a place with its own climate and the viewer may open
+	// that page.
+	Place     *string   `json:"place,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 

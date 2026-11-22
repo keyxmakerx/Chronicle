@@ -6834,6 +6834,30 @@ func (a *App) RegisterRoutes() {
 		fc.SetFieldCalendar(fieldDates)
 	}
 
+	// A place's climate is a field on its page; the calendar keeps weather
+	// for each place that has one, reaching pages only through the entities
+	// service. One-time, idempotent: every Location category gets the Climate
+	// field. Best-effort, never blocks startup.
+	if pw, ok := calendarService.(interface {
+		SetPlaceWeather(calendar.PlaceWeatherRepository, calendar.PlaceDirectory)
+	}); ok {
+		pw.SetPlaceWeather(calendar.NewPlaceWeatherRepository(a.DB), placeDirectoryAdapter{pages: entityService})
+	}
+	fieldClimates := fieldClimateAdapter{svc: calendarService, addons: addonService}
+	entityHandler.SetFieldClimate(fieldClimates)
+	if fc, ok := entityService.(interface{ SetFieldClimate(entities.FieldClimate) }); ok {
+		fc.SetFieldClimate(fieldClimates)
+	}
+	if ec, ok := entityService.(interface {
+		EnsureClimateFields(context.Context) (int, error)
+	}); ok {
+		if n, err := ec.EnsureClimateFields(context.Background()); err != nil {
+			slog.Error("entities: climate field reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("entities: climate field reconcile added fields", slog.Int("categories", n))
+		}
+	}
+
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
 	// so it loads first in each list (ADR-063).

@@ -82,6 +82,7 @@ Chronicle.register('attributes', {
       state.eraChanged = data.era_changed || null;
       state.shown = data.shown || {};
       state.calendar = data.dateBook || null;
+      state.climates = data.climateBook || null;
       state.ownerFields = data.owner_fields || null;
       // The Director's hero-choice rules, for the player's page: what the
       // hero keeps that is no longer offered, and picks waiting for an answer.
@@ -323,6 +324,10 @@ Chronicle.register('attributes', {
           renderDate(group, row, value, sh);
           return;
         }
+        if (field.type === 'climate' && sh && !blank && !marked) {
+          renderClimate(group, row, value, sh);
+          return;
+        }
 
         // Format value based on field type.
         if (field.type === 'checkbox') {
@@ -441,6 +446,60 @@ Chronicle.register('attributes', {
         r.appendChild(v);
         group.appendChild(r);
       });
+    }
+
+    // renderClimate shows a place's climate: its name, the page it comes
+    // from when this page has none of its own, today's weather there, and
+    // that the pages inside follow it. The server has already left out the
+    // weather a player may not see and any page they may not open.
+    function renderClimate(group, row, value, sh) {
+      var c = sh.climate || {};
+      value.textContent = sh.text;
+      if (!c.own) {
+        var from = document.createElement('span');
+        from.className = 'cd-when';
+        if (c.from && c.fromHref) {
+          from.appendChild(document.createTextNode('From '));
+          var a = document.createElement('a');
+          a.href = c.fromHref;
+          a.textContent = c.from;
+          a.className = 'text-accent hover:underline';
+          a.setAttribute('hx-boost', 'true');
+          from.appendChild(a);
+        } else {
+          from.textContent = 'From the place around it';
+        }
+        value.appendChild(from);
+      }
+      row.appendChild(value);
+      group.appendChild(row);
+      if (c.today) {
+        var words = c.today.words || 'No weather yet';
+        var t = factRow('Today, ' + c.today.date, words);
+        if (!c.today.words) t.lastChild.style.color = 'var(--color-text-muted)';
+        if (c.today.partyHere && canEdit()) t.lastChild.appendChild(whenSpan('The party is here'));
+        group.appendChild(t);
+      }
+      if (c.own && c.covers) {
+        group.appendChild(factRow('Places here', 'Use this climate unless they set their own'));
+      }
+    }
+
+    // factRow is one label and value pair in the facts' own look.
+    function factRow(label, text) {
+      var r = document.createElement('div');
+      r.className = 'cb-fact';
+      var l = document.createElement('dt');
+      l.className = 'cb-fact-l text-xs font-medium uppercase tracking-wider';
+      l.style.color = 'var(--color-text-secondary)';
+      l.textContent = label;
+      r.appendChild(l);
+      var v = document.createElement('dd');
+      v.className = 'cb-fact-v text-sm mt-0.5';
+      v.style.color = 'var(--color-text-primary)';
+      v.textContent = text;
+      r.appendChild(v);
+      return r;
     }
 
     function whenSpan(text) {
@@ -567,6 +626,10 @@ Chronicle.register('attributes', {
               container.appendChild(row);
               return;
 
+            case 'climate':
+              input = buildClimatePicker(String(currentVal));
+              break;
+
             case 'rule':
               // Empty follows the rule; anything typed wins over it.
               var sh = shownOf(field.key);
@@ -619,6 +682,46 @@ Chronicle.register('attributes', {
           container.appendChild(row);
         });
       });
+    }
+
+    // buildClimatePicker lists the calendar's climates. Empty is "the same
+    // as around it": the nearest parent's climate, else the world's, so the
+    // first choice says which that would be.
+    function buildClimatePicker(cur) {
+      var book = state.climates || {};
+      var sel = document.createElement('select');
+      sel.className = 'input';
+      var none = document.createElement('option');
+      none.value = '';
+      var inh = book.inherits, world = book.world;
+      none.textContent = inh ? 'Same as around it (' + (inh.name || inh.climate) + (inh.from ? ', from ' + inh.from : '') + ')'
+        : (world ? 'The world\u2019s climate (' + world.name + ')' : 'None');
+      sel.appendChild(none);
+      var groups = [['Natural', false], ['Magic', true]];
+      var known = false;
+      groups.forEach(function (g) {
+        var og = document.createElement('optgroup');
+        og.label = g[0];
+        (book.choices || []).forEach(function (c) {
+          if (!!c.magic !== g[1]) return;
+          var o = document.createElement('option');
+          o.value = c.id;
+          o.textContent = c.name;
+          if (c.id === cur) { o.selected = true; known = true; }
+          og.appendChild(o);
+        });
+        if (og.children.length) sel.appendChild(og);
+      });
+      // A stored id the list no longer has stays selectable, so a save of
+      // other fields never drops it silently.
+      if (cur && !known) {
+        var keep = document.createElement('option');
+        keep.value = cur;
+        keep.textContent = cur;
+        keep.selected = true;
+        sel.appendChild(keep);
+      }
+      return sel;
     }
 
     // usualButton puts a field the era version changes back to its usual
@@ -1245,7 +1348,7 @@ Chronicle.register('attributes', {
           // Links, rules and local words are worked out by the server, so
           // they are read back too.
           if (config.era || Object.keys(state.shown || {}).length ||
-            state.fields.some(function (f) { return f.type === 'link' || f.type === 'rule' || f.type === 'calendar_date'; })) reload();
+            state.fields.some(function (f) { return f.type === 'link' || f.type === 'rule' || f.type === 'calendar_date' || f.type === 'climate'; })) reload();
           });
         })
         .catch(function (err) {
