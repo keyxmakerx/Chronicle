@@ -42,6 +42,14 @@
 @media (min-width: 768px) { .czs-top { top: -1rem; } }
 .czs-tabs-top { display: flex; align-items: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 12px; }
 .czs-tabs-top::-webkit-scrollbar { display: none; }
+
+/* A row that scrolls sideways fades on the edge that has more beyond it;
+   customize_shell.js sets .cue-l and .cue-r while there is more that way, so
+   a cut word never looks like the end of the row. */
+.czs { --czs-cue: 40px; }
+.czs .cue-r:not(.cpe-dock) { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--czs-cue)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--czs-cue)), transparent); }
+.czs .cue-l:not(.cpe-dock) { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - var(--czs-cue)), transparent); mask-image: linear-gradient(to left, #000 calc(100% - var(--czs-cue)), transparent); }
+.czs .cue-l.cue-r:not(.cpe-dock) { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--czs-cue), #000 calc(100% - var(--czs-cue)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--czs-cue), #000 calc(100% - var(--czs-cue)), transparent); }
 .czs-tabw { position: relative; display: inline-flex; align-items: center; flex: none; }
 .czs-tab {
   position: relative;
@@ -71,7 +79,7 @@
 .czs-chev i { transition: transform var(--dur-standard) var(--ease-out); }
 .czs-chev[aria-expanded="true"] i { transform: rotate(180deg); }
 .czs-tsep { flex: none; width: 1px; height: 16px; align-self: center; margin: 8px 6px 0; background: var(--color-border); }
-.czs-top .czs-find { align-self: center; margin-block: 7px; width: 220px; flex: none; }
+.czs-top .czs-find { align-self: center; margin-block: 7px; width: auto; min-width: 120px; flex: 0 20 220px; }
 
 /* Inside a category the bar is the category's own: back to Categories, its
    name (which opens the Categories drawer to switch), and its five tabs. The
@@ -163,6 +171,9 @@
   .czs .czp .cz-preview { top: calc(var(--czs-top-h, 49px) - var(--czs-pad-y)); }
 }
 
+/* The Look editor's left edge is the frame's one edge. */
+.czs .czp .cz { padding-inline: 32px; }
+
 /* Inside this frame the Look's rooms are the Look tab's drawer. */
 .czs .czp .cz-tabs { display: none; }
 
@@ -232,7 +243,7 @@
 }
 .czs-ov:hover { transform: translateY(-2px); box-shadow: var(--elev-hover); border-color: rgb(var(--color-accent-rgb) / 0.45); }
 .czs-ov .czs-t { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--color-text-primary); font-size: 15px; }
-.czs-ov .czs-t .czs-ic { width: 30px; height: 30px; border-radius: 8px; background: var(--czs-accent-soft); color: var(--color-accent-link, var(--color-accent)); display: grid; place-items: center; }
+.czs-ov .czs-t .czs-ic { flex: none; width: 1.25em; text-align: center; color: inherit; font-size: inherit; }
 .czs-ov p { color: var(--color-text-secondary); font-size: 13px; margin: 0; }
 .czs-ov .czs-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--czs-warn); margin-left: auto; }
 
@@ -261,20 +272,6 @@
 .czs-cat-card .czs-sub { font-size: 12.5px; color: var(--color-text-secondary); }
 .czs-cat-card .czs-foot { display: flex; gap: 6px; flex-wrap: wrap; }
 .czs-cat-card .czs-kids { font-size: 12.5px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.czs-cat-card.czs-add {
-  align-items: center;
-  justify-content: center;
-  min-height: 132px;
-  border-style: dashed;
-  background: none;
-  box-shadow: none;
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  cursor: pointer;
-  font: inherit;
-}
-.czs-cat-card.czs-add:hover { color: var(--color-accent-link, var(--color-accent)); }
-.czs-plus { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--czs-accent-soft); color: var(--color-accent-link, var(--color-accent)); }
 .czs-cat-ic { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; font-size: 14px; }
 .czs-cat-ic.sm { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
 .czs-cat-ic.lg { width: 40px; height: 40px; border-radius: 10px; font-size: 17px; }
@@ -284,7 +281,8 @@
 .czs-pill.is-dm { background: var(--czs-accent-soft); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
 
 /* Workspace: the category's header and tabs. */
-.czs-ws-head { display: flex; align-items: center; gap: 12px; padding: 16px 24px 0; min-width: 0; flex-wrap: wrap; }
+.czs-ws-head { display: flex; align-items: center; gap: 12px; padding: 16px 32px 0; min-width: 0; flex-wrap: wrap; }
+.czs-ws-head[hidden] { display: none; }
 .czs-ident { display: flex; align-items: center; gap: 12px; padding: 4px 10px 4px 4px; border-radius: 10px; border: 1px solid transparent; color: inherit; text-decoration: none; min-width: 0; transition: background var(--dur-micro), border-color var(--dur-micro); }
 .czs-ident:hover { background: var(--color-bg-tertiary); border-color: var(--color-border); }
 .czs-ident h1 { font-size: 22px; font-weight: 700; color: var(--color-text-primary); margin: 0; line-height: 1.2; }
@@ -292,7 +290,7 @@
 .czs-icon-btn { width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--color-text-secondary); text-decoration: none; cursor: pointer; transition: background var(--dur-micro), color var(--dur-micro); }
 .czs-icon-btn:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
 .czs-icon-btn:disabled { opacity: 0.4; cursor: default; background: none; }
-.czs-tabs { display: flex; gap: 4px; padding: 12px 24px 0; border-bottom: 1px solid var(--color-border); overflow-x: auto; scrollbar-width: none; }
+.czs-tabs { display: flex; gap: 4px; padding: 12px 32px 0; border-bottom: 1px solid var(--color-border); overflow-x: auto; scrollbar-width: none; }
 .czs-tabs > a, .czs-tabs > span {
   padding: 9px 12px 11px;
   font-weight: 500;
@@ -310,34 +308,36 @@
 .czs-tabs a[aria-current="page"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
 .czs-tabs > span { opacity: 0.5; cursor: not-allowed; }
 .czs-tabs .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
-.czs-legacy { padding: 20px 24px 120px; }
+.czs-legacy { padding: 28px 32px 120px; }
 /* A category's Fields tab: the field editor wearing the frame's tokens, with
    a name over every column. Scoped here because the same widget still draws
    itself in the older hub, which loads no Customize sheet. */
-.czs-fields { padding: 8px 24px 120px; max-width: 880px; color: var(--color-text-body); }
-.czs-fields h2 { font-size: 18px; font-weight: 600; color: var(--color-text-primary); }
+.czs-fields { padding: 28px 32px 120px; max-width: 880px; color: var(--color-text-body); }
 .czs-fields .czf-title { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); }
 .czs-fields :is(.text-gray-400, .text-gray-500, .text-fg-secondary) { color: var(--color-text-secondary); }
 .czs-fields .czf-add { color: var(--color-accent-link, var(--color-accent)); min-height: 44px; padding: 0 8px; }
 .czs-fields .czf-add:hover { text-decoration: underline; }
 .czs-fields .czf-list { display: flex; flex-direction: column; gap: 6px; }
-.czs-fields .czf-cols, .czs-fields .czf-row { display: grid; grid-template-columns: minmax(0, 1fr) 9rem 8rem 5.5rem; gap: 8px; align-items: center; }
+.czs-fields .czf-cols, .czs-fields .czf-row { display: grid; grid-template-columns: minmax(0, 1fr) 9rem 8rem 6.75rem; gap: 8px; align-items: center; }
 .czs-fields .czf-cols { padding: 0 9px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
 .czs-fields .czf-row { padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-secondary); }
 .czs-fields .czf-row .input { width: 100%; min-width: 0; }
-.czs-fields .czf-acts { justify-content: flex-end; }
+.czs-fields .czf-acts { justify-content: flex-end; gap: 0; }
+.czs-fields .czf-acts button { display: inline-grid; place-items: center; }
+.czs-fields .czf-acts button:disabled { opacity: 0.3; cursor: default; }
+.czs-fields .czf-acts button:disabled:hover { color: var(--color-text-secondary); }
 .czs-fields .czf-acts button { min-width: 28px; min-height: 28px; color: var(--color-text-secondary); }
 .czs-fields .czf-acts button:hover { color: var(--color-text-primary); }
 .czs-fields .czf-acts button:last-child:hover { color: var(--czs-bad); }
 @media (max-width: 640px) {
-  .czs-fields { padding: 8px 16px 120px; }
+  .czs-fields { padding: 20px 16px 120px; }
   .czs-fields .czf-cols { display: none; }
   .czs-fields .czf-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .czs-fields .czf-row > .input:first-child, .czs-fields .czf-acts { grid-column: 1 / -1; }
   .czs-fields .czf-acts button { min-width: 44px; min-height: 44px; }
 }
 /* Who sees the open home, under the Home pages tabs. */
-.czs-home-hint { font-size: 12.5px; color: var(--color-text-secondary); margin: 0; padding: 12px 24px 0; max-width: 80ch; }
+.czs-home-hint { font-size: 12.5px; color: var(--color-text-secondary); margin: 0; padding: 12px 32px 0; max-width: 80ch; }
 
 /* Settings form. */
 .czs-form { display: flex; flex-direction: column; gap: 18px; max-width: 640px; }
@@ -441,7 +441,8 @@
   .czs-find span, .czs-find kbd { display: none; }
   .czs-pad { padding: 20px 16px 120px; }
   .czs-ws-head, .czs-tabs, .czs-home-hint { padding-left: 16px; padding-right: 16px; }
-  .czs-legacy { padding: 16px 12px 120px; }
+  .czs-legacy { padding: 20px 16px 120px; }
+  .czs .czp .cz { padding-inline: 16px; }
   .czs-split { grid-template-columns: 1fr; }
   .czs-savebar .czs-what { max-width: 38vw; }
 }

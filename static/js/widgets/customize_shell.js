@@ -452,6 +452,24 @@
     // Widths settle once the web fonts arrive; land on a whole item again.
     // Widths settle as fonts and styles arrive, so the row lands again
     // whenever its items change size, until the person moves it themselves.
+    // A row that scrolls sideways fades on the side that has more beyond it,
+    // so a cut word never reads as the end of the row. Rows are drawn by
+    // several scripts, so this watches the frame rather than each row.
+    var CUE_ROWS = '.czs-tabs-top, .czs-tabs, .czp .parts-row, .czp .lk-row, .cpe-dock';
+    function cueRow(r) {
+      var max = r.scrollWidth - r.clientWidth, x = Math.abs(r.scrollLeft);
+      r.classList.toggle('cue-l', x > 1);
+      r.classList.toggle('cue-r', x < max - 1);
+    }
+    function cueAll() { Array.prototype.forEach.call(el.querySelectorAll(CUE_ROWS), cueRow); }
+    var cueRaf = 0;
+    function cueSoon() { if (!cueRaf) cueRaf = requestAnimationFrame(function () { cueRaf = 0; if (alive) cueAll(); }); }
+    on(el, 'scroll', function (e) { if (e.target.matches && e.target.matches(CUE_ROWS)) cueRow(e.target); }, true);
+    on(window, 'resize', cueSoon);
+    var cueMO = window.MutationObserver ? new MutationObserver(cueSoon) : null;
+    if (cueMO) cueMO.observe(el, { childList: true, subtree: true });
+    cueSoon();
+
     var rowRO = null, rowStrip = topBar && topBar.querySelector('[data-czs-catbar]');
     if (rowStrip && window.ResizeObserver) {
       rowRO = new ResizeObserver(function () { if (alive && rowRO) revealTab(); });
@@ -570,6 +588,7 @@
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
       if (rowRO) { rowRO.disconnect(); rowRO = null; }
       if (topRO) { topRO.disconnect(); topRO = null; }
+      if (cueMO) cueMO.disconnect();
     };
   }
 

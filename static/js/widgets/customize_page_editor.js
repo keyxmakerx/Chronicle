@@ -322,7 +322,7 @@
     var VAR = 'main';
     var W = {};               // palette entries by key (type, or ext_widget:slug)
     var paletteState = 'loading';
-    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, panel: false, shown: false, shift: 0, shiftCss: 0, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
+    var UI = { device: window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? 'phone' : 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, panel: false, shown: false, shift: 0, shiftCss: 0, reading: false, look: lookNow(), addAt: null, peekKeep: false, pageQ: '', pageHits: null };
     // The page the layout is drawn with, and each widget's look on it, by
     // pvKey. A look is a node, or null when the widget draws nothing there.
     var PV = { entityId: '', pages: [], looks: {}, idx: {}, n: 0, pending: {}, busy: false, failed: false, loaded: false, timer: 0 };

@@ -341,10 +341,15 @@ templ EntityTypeAttributesFragmentTmpl(cc *campaigns.CampaignContext, et *Entity
 templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string, inDraft bool) {
 	<div class="space-y-6">
 		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Fields</h2>
-			<p class="text-sm text-fg-secondary">
-				The fields every { et.Name } page has. Each page keeps its own answers.
-			</p>
+			if inDraft {
+				<h1 class="czs-h1">Fields</h1>
+				<p class="czs-lede">The fields every { et.Name } page has. Each page keeps its own answers.</p>
+			} else {
+				<h2 class="text-lg font-semibold text-fg mb-1">Fields</h2>
+				<p class="text-sm text-fg-secondary">
+					The fields every { et.Name } page has. Each page keeps its own answers.
+				</p>
+			}
 		</div>
 
 		<!-- Mount the entity-type-editor widget for field management -->
