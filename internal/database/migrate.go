@@ -40,6 +40,10 @@ func RunMigrations(appDB *sql.DB, dsn string, migrationsPath string) error {
 	if err != nil {
 		return fmt.Errorf("creating migration driver: %w", err)
 	}
+	// The driver takes a connection of its own out of the pool and gives it
+	// back only when it is closed; closing the pool alone leaves that one open
+	// for as long as the process lives.
+	defer func() { _ = driver.Close() }()
 
 	m, err := migrate.NewWithDatabaseInstance(
 		"file://"+migrationsPath,
