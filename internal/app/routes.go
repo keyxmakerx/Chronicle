@@ -50,6 +50,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -4738,7 +4739,19 @@ func (a *App) RegisterRoutes() {
 		},
 		stashEvents,
 	)}
-	entityService.SetFieldChangeObserver(armoryObserver)
+	// When players may change their hero's picks, and the Directors' bell for
+	// a change. Its table belongs to its own schema; while that is unhealthy
+	// the service is left out, so every hero stays open rather than a level
+	// window never opening.
+	var heroChangeSvc *entities.HeroChangeService
+	if a.PluginHealth.IsHealthy(herochangeschema.SchemaSlug) {
+		heroChangeSvc = entities.NewHeroChangeService(heroChangeRules{camps: campaignService},
+			entities.NewHeroChangeRepository(a.DB), heroChangeBell{camps: campaignService, bell: sessionsService})
+		entityHandler.SetHeroChanges(heroChangeSvc)
+	} else {
+		slog.Warn("hero changes schema degraded — players' hero picks are never locked")
+	}
+	entityService.SetFieldChangeObserver(fieldObservers{armoryObserver, heroChangeSvc})
 	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
 	stashAPIHandler := syncapi.NewStashAPIHandler(
 		&syncStashAPIAdapter{api: stashAPI},
@@ -4756,6 +4769,7 @@ func (a *App) RegisterRoutes() {
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
+	syncAPIHandler.SetHeroChanges(heroChangeSvc)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
 	syncAPIHandler.SetFolderLister(folderService)
 	if urlSigner != nil {
@@ -5149,7 +5163,7 @@ func (a *App) RegisterRoutes() {
 		keepMonths := func(ctx context.Context) int { return settingsService.LongTermTrashMonths(ctx) }
 		playerChangesSvc := playerchanges.NewService(playerchanges.NewRepository(a.DB),
 			&playerChangePages{entities: entityService, safety: pageSafetyService}, keepMonths)
-		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver,
+		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver, heroChangeSvc,
 			&playerChangeRecorder{svc: playerChangesSvc, members: campaignService, types: entityService}})
 		playerchanges.RegisterRoutes(e, playerchanges.NewHandler(playerChangesSvc,
 			func(c *echo.Context) int { return keepMonths(c.Request().Context()) },
@@ -6104,7 +6118,7 @@ func (a *App) RegisterRoutes() {
 	}
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
-	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}, heroChanges: heroChangeSvc,
 		gmTerm: func(ctx context.Context, campaignID string) string {
 			if m := manifestFor(ctx, campaignID); m != nil {
 				return m.GMTerm()
@@ -7220,6 +7234,8 @@ func (a *App) RegisterRoutes() {
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
+		SavedLayouts:    layoutPresetService,
+		PageTemplates:   contentTemplateService,
 		PageTests:       pageTests,
 		Trackers:        trackersSvc,
 		FoundryMonsters: aiFoundryMonsters,

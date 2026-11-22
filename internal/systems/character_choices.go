@@ -77,6 +77,10 @@ type Choice struct {
 	// ToldRecently marks a campaign entry the players were told changed
 	// within the last two weeks (ToldWindow).
 	ToldRecently bool `json:"toldRecently,omitempty"`
+	// Parent is the name of the parent step's entry this one belongs to, set
+	// on entries of a step that declares creator.from (a subclass lists the
+	// class it comes with). Empty on every other entry.
+	Parent string `json:"parent,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -436,6 +440,9 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 	res := &ChoiceList{FieldKey: fieldKey, Choices: []Choice{}}
 
 	cands := s.candidates(ctx, campaignID)
+	if from := s.creatorFromOf(cands, fieldKey); from != nil {
+		return s.dependentChoiceList(ctx, campaignID, fieldKey, from)
+	}
 	// A system whose own preset declares the field is the best owner of the
 	// answer and of the name shown in "<System> doesn't list these yet".
 	sort.SliceStable(cands, func(i, j int) bool {
@@ -506,4 +513,95 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 	}
 	res.CanMake = !choiceVisitor(ctx) && canMakeOwn(ctx, campaignID, fieldKey)
 	return res, nil
+}
+
+// creatorFromOf returns the creator.from declaration of a character preset
+// field, nil when no active system declares one. Only the character preset
+// counts: other presets' fields never become hero steps.
+func (s *characterChoiceService) creatorFromOf(cands []choiceSystem, fieldKey string) *CreatorFrom {
+	for _, c := range cands {
+		p := characterPresetOf(c.manifest)
+		if p == nil {
+			continue
+		}
+		for _, f := range p.Fields {
+			if f.Key == fieldKey && f.Creator != nil && f.Creator.From != nil {
+				return f.Creator.From
+			}
+		}
+	}
+	return nil
+}
+
+// dependentChoiceList builds the list of a step whose entries live inside
+// the entries of another step (subclasses inside classes). It reads the
+// parent through CharacterChoiceList, so whatever the viewer may not pick at
+// the parent (Director limits, visitor reach) never yields children either.
+// The hero-choice rules and campaign entries do not apply to the derived
+// entries: they have no list of their own to be named by.
+func (s *characterChoiceService) dependentChoiceList(ctx context.Context, campaignID, fieldKey string, from *CreatorFrom) (*ChoiceList, error) {
+	parent, err := s.CharacterChoiceList(ctx, campaignID, from.Step)
+	if err != nil {
+		return nil, err
+	}
+	res := &ChoiceList{FieldKey: fieldKey, SystemID: parent.SystemID, SystemName: parent.SystemName, Choices: []Choice{}}
+	for _, pe := range parent.Choices {
+		items, _ := pe.Properties[from.Property].([]any)
+		seen := map[string]bool{}
+		for _, it := range items {
+			c, ok := derivedChoice(pe, it)
+			if !ok || seen[strings.ToLower(c.Name)] {
+				continue
+			}
+			seen[strings.ToLower(c.Name)] = true
+			res.Choices = append(res.Choices, c)
+			if len(res.Choices) >= maxChoices {
+				return res, nil
+			}
+		}
+	}
+	return res, nil
+}
+
+// derivedChoice turns one item of a parent entry's list (a name, or an
+// object with a name) into an entry. An object's other keys become the
+// entry's properties, so a creator leaf can show them like any entry's.
+func derivedChoice(parent Choice, item any) (Choice, bool) {
+	var name, summary, desc string
+	var props map[string]any
+	switch t := item.(type) {
+	case string:
+		name = strings.TrimSpace(t)
+	case map[string]any:
+		name = scalarString(t["name"])
+		summary = scalarString(t["summary"])
+		desc, _ = t["description"].(string)
+		if summary == "" {
+			summary = scalarString(t["description"])
+		}
+		for k, v := range t {
+			if k == "name" || k == "summary" || k == "description" {
+				continue
+			}
+			if props == nil {
+				props = map[string]any{}
+			}
+			props[k] = v
+		}
+	}
+	if name == "" {
+		return Choice{}, false
+	}
+	key := parent.Slug + "--" + slugifyName(name)
+	return Choice{
+		Key: key, Slug: key, Name: name, Summary: cleanSummary(summary),
+		Source: ChoiceSourcePackage, Description: desc, Properties: props, Parent: parent.Name,
+	}, true
+}
+
+var nonSlugRun = regexp.MustCompile(`[^a-z0-9]+`)
+
+// slugifyName makes a lower-case, hyphen-joined key from an item's name.
+func slugifyName(name string) string {
+	return strings.Trim(nonSlugRun.ReplaceAllString(strings.ToLower(name), "-"), "-")
 }

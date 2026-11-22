@@ -53,6 +53,8 @@ type WaitingAsk struct {
 	TurnedDown bool
 	// Outcome is what applying it did, in the review screen's words.
 	Outcome string
+	// Undone is set once the owner put an applied request's changes back.
+	Undone bool
 }
 
 // WaitingEntry is one player's unaccepted pick-list entry.
@@ -116,6 +118,7 @@ func (run *lookupRun) waiting(r Record) (LookupAnswer, error) {
 	writeOrNone(&b, lines, "None. The owner reviews them on the campaign's Your AI page.")
 
 	b.WriteString("\n### Your AI's requests the owner answered, " + decidedWindow(older) + "\n\n")
+	b.WriteString("For 30 days after applying a request the owner can undo it from the Your AI page (What it did); an undone one says so below.\n\n")
 	lines = lines[:0]
 	for _, q := range w.Decided {
 		verdict := "applied"
@@ -123,6 +126,9 @@ func (run *lookupRun) waiting(r Record) (LookupAnswer, error) {
 			// Said plainly, so the AI doesn't take the owner's No for a
 			// fault and send the same changes again.
 			verdict = "turned down by the owner, nothing changed; that was their choice, not an error"
+		} else if q.Undone {
+			// Said plainly, so the AI doesn't build on changes that are gone.
+			verdict = "applied, then undone by the owner, so none of its changes stand now"
 		} else if o := strings.TrimSpace(q.Outcome); o != "" {
 			verdict += ": " + oneLine(o, 1000)
 		}

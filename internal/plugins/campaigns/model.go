@@ -8,12 +8,14 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
@@ -831,6 +833,56 @@ type CampaignSettings struct {
 	// Empty/nil at read time returns the platform default trio
 	// (major / standard / detail) via GetEventTierDefinitions.
 	EventTierDefinitions []TierDefinition `json:"event_tier_definitions,omitempty"`
+
+	// HeroChanges is when players may change their own hero's picks. Nil
+	// means any time, as before the Director chose.
+	HeroChanges *HeroChangeRule `json:"hero_changes,omitempty"`
+}
+
+// HeroChangeRule is the Director's choice of when a player may change the
+// picks of their own hero: for some days after making it, after reaching a
+// level, or both. Outside those times the picks are locked until a Director
+// reopens one hero. Players may always write their hero's name and story.
+type HeroChangeRule struct {
+	// AfterMakingDays opens the picks for this many days after the hero is
+	// made; 0 does not.
+	AfterMakingDays int `json:"after_making_days,omitempty"`
+	// AfterLevel opens them for AfterLevelDays days each time the hero
+	// reaches a new level of FromLevel or more (every level-up when FromLevel
+	// is 0, 1 or 2). A level window always has a length, so a Director never
+	// has to remember to close it.
+	AfterLevel     bool `json:"after_level,omitempty"`
+	FromLevel      int  `json:"from_level,omitempty"`
+	AfterLevelDays int  `json:"after_level_days,omitempty"`
+}
+
+// HeroChangeMaxDays and HeroChangeMaxLevel bound what a Director may set.
+const (
+	HeroChangeMaxDays  = 365
+	HeroChangeMaxLevel = 100
+)
+
+// Validate refuses a rule that opens nothing or holds numbers out of range.
+func (r *HeroChangeRule) Validate() error {
+	if r == nil {
+		return nil
+	}
+	if r.AfterMakingDays < 0 || r.AfterMakingDays > HeroChangeMaxDays || r.AfterLevelDays < 0 || r.AfterLevelDays > HeroChangeMaxDays {
+		return apperror.NewBadRequest(fmt.Sprintf("days must be between 1 and %d", HeroChangeMaxDays))
+	}
+	if r.AfterLevel && r.AfterLevelDays == 0 {
+		return apperror.NewBadRequest("say how many days a new level keeps the picks open")
+	}
+	if r.FromLevel < 0 || r.FromLevel > HeroChangeMaxLevel {
+		return apperror.NewBadRequest(fmt.Sprintf("the level must be between 1 and %d", HeroChangeMaxLevel))
+	}
+	if r.AfterMakingDays == 0 && !r.AfterLevel {
+		return apperror.NewBadRequest("choose after making the hero, after a new level, or both")
+	}
+	if !r.AfterLevel {
+		r.FromLevel, r.AfterLevelDays = 0, 0
+	}
+	return nil
 }
 
 // --- Default visibility for newly created content ---

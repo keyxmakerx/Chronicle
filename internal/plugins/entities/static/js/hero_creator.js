@@ -472,6 +472,7 @@
       var kept = bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [];
       self.picks[k] = { name: c.name, options: kept };
     });
+    this.scrub();
     this.name = typeof d.name === 'string' ? d.name : '';
     var ab = d.about && typeof d.about === 'object' ? d.about : {};
     this.about = {};
@@ -542,8 +543,81 @@
   Creator.prototype.choice = function (key, name) {
     var st = this.stepByKey(key);
     if (!st) return null;
-    for (var i = 0; i < st.choices.length; i++) if (lower(st.choices[i].name) === lower(name)) return st.choices[i];
-    return null;
+    // Two parents may list an entry of the same name; the one under the
+    // parent picked now wins, else the first of that name.
+    var pp = st.parent && this.picks[st.parent] && this.picks[st.parent].name, first = null;
+    for (var i = 0; i < st.choices.length; i++) {
+      if (lower(st.choices[i].name) !== lower(name)) continue;
+      if (!pp || lower(st.choices[i].parent) === lower(pp)) return st.choices[i];
+      first = first || st.choices[i];
+    }
+    return first;
+  };
+  // --- Steps a system shapes: parents and counts ---
+
+  // The entry picked at a step, whatever its position, or null.
+  Creator.prototype.pickedAt = function (key) {
+    var p = this.picks[key];
+    return p && p.name ? this.choice(key, p.name) : null;
+  };
+  // How many of this step the picked parent entries allow. A later countFrom
+  // entry whose picked entry defines the number overrides an earlier one;
+  // known is false when none does, and the step then reads as it always did.
+  Creator.prototype.allowance = function (st) {
+    var out = { known: false, count: 0, by: '', note: '' }, self = this;
+    (st.countFrom || []).forEach(function (cf) {
+      var e = self.pickedAt(cf.step), n = e && e.properties && e.properties[cf.property];
+      if (typeof n !== 'number' || n < 0) return;
+      var note = cf.note && e.properties[cf.note];
+      out = { known: true, count: Math.floor(n), by: e.name, note: typeof note === 'string' ? note : '' };
+    });
+    return out;
+  };
+  // The entries a step offers now: all of them, or for a dependent step only
+  // those under the parent entry picked.
+  Creator.prototype.pool = function (st) {
+    if (!st.parent) return st.choices;
+    var p = this.picks[st.parent];
+    if (!p || !p.name) return [];
+    return st.choices.filter(function (c) { return lower(c.parent) === lower(p.name); });
+  };
+  // 'wait': the parent is not picked yet. 'unused': the picked entries leave
+  // this step nothing to ask (a count of 0, or a parent that lists none).
+  // Otherwise 'open'.
+  Creator.prototype.stepState = function (st) {
+    if (st.parent) {
+      var p = this.picks[st.parent];
+      if (!p || !p.name) return 'wait';
+      if (!this.pool(st).length && !(st.canMake && !this.practice)) return 'unused';
+    }
+    var a = this.allowance(st);
+    return a.known && a.count === 0 ? 'unused' : 'open';
+  };
+  Creator.prototype.unused = function (st) { return this.stepState(st) === 'unused'; };
+  // The plain sentence for a step the picked entries do not use.
+  Creator.prototype.unusedLine = function (st) {
+    var a = this.allowance(st), by = a.known && a.count === 0 ? a.by : (this.picks[st.parent] && this.picks[st.parent].name) || '';
+    var line = by ? cap(an(by)) + ' ' + by + ' doesn\u2019t use ' + an(st.label) + ' ' + lower(st.label) + '.' : cap(st.label) + ' isn\u2019t used here.';
+    return line + (a.known && a.count === 0 && a.note ? ' ' + a.note : '');
+  };
+  // Takes off every pick that no longer fits what is picked at its parent or
+  // what its parent allows, until nothing more changes; returns the labels.
+  Creator.prototype.scrub = function () {
+    var self = this, gone = [], again = true, guard = 0;
+    while (again && guard++ < 8) {
+      again = false;
+      this.plan.steps.forEach(function (st) {
+        var p = self.picks[st.fieldKey];
+        if (!p || !p.name) return;
+        var c = self.choice(st.fieldKey, p.name);
+        var fits = c && !self.unused(st) && (!st.parent || (self.picks[st.parent] && self.picks[st.parent].name && lower(c.parent) === lower(self.picks[st.parent].name)));
+        if (fits) return;
+        delete self.picks[st.fieldKey];
+        gone.push(st.label);
+        again = true;
+      });
+    }
+    return gone;
   };
   // A required step the rules leave one entry on starts filled in.
   Creator.prototype.prefill = function () {
@@ -564,14 +638,14 @@
   // at the top, where the player looks it over.
   Creator.prototype.firstStep = function () {
     var self = this, steps = this.plan.steps;
-    var open = function (i) { return !self.locked(steps[i]) && (!self.resumed || !self.picked(i)); };
+    var open = function (i) { return !self.locked(steps[i]) && !self.unused(steps[i]) && (!self.resumed || !self.picked(i)); };
     for (var i = 0; i < steps.length; i++) if (open(i)) return i;
     return this.last();
   };
   // A step is settled once it holds a pick or was skipped on purpose.
   Creator.prototype.settled = function (i) {
     var st = this.plan.steps[i];
-    return !!(st && ((this.picks[st.fieldKey] && this.picks[st.fieldKey].name) || this.skipped[st.fieldKey]));
+    return !!(st && ((this.picks[st.fieldKey] && this.picks[st.fieldKey].name) || this.skipped[st.fieldKey] || this.unused(st)));
   };
   Creator.prototype.picked = function (i) {
     var st = this.plan.steps[i], p = st && this.picks[st.fieldKey];
@@ -591,7 +665,21 @@
   };
   Creator.prototype.stepWord = function (i) { return i >= this.last() ? 'Name and review' : i >= this.plan.steps.length ? 'About your hero' : this.plan.steps[i].label; };
   // A step the rules require can't be left empty; practice forces nothing.
-  Creator.prototype.optional = function (st) { return this.practice || !(st.rules && st.rules.required); };
+  // The system's own expectations still show in practice: a step it needs
+  // reads as not optional, though nothing refuses a hero without it.
+  Creator.prototype.needed = function (st) {
+    if (this.unused(st)) return false;
+    var a = this.allowance(st);
+    return !!st.needed || (a.known && a.count >= 1);
+  };
+  Creator.prototype.optional = function (st) {
+    if (this.unused(st)) return true;
+    return !this.needed(st) && (this.practice || !(st.rules && st.rules.required));
+  };
+  // What a step reads as before it has a pick.
+  Creator.prototype.stateWord = function (st) {
+    return this.skipped[st.fieldKey] ? 'None' : this.unused(st) ? 'Not used' : this.optional(st) ? 'Optional' : 'Not chosen yet';
+  };
   Creator.prototype.missing = function () {
     var self = this;
     return this.plan.steps.map(function (st, i) { return !self.picked(i) && !self.optional(st) ? i : -1; }).filter(function (i) { return i >= 0; });
@@ -634,8 +722,10 @@
   // The entries of a step the find box lets through.
   Creator.prototype.entries = function (si) {
     var st = this.plan.steps[si], q = lower((this.find[st.fieldKey] || '').trim());
-    if (!q) return st.choices;
-    return st.choices.filter(function (c) {
+    if (this.unused(st)) return [];
+    var pool = this.pool(st);
+    if (!q) return pool;
+    return pool.filter(function (c) {
       var f = factsOf(c).map(function (x) { return x[1]; }).join(' ');
       return lower(c.name + ' ' + plain(c.summary) + ' ' + f).indexOf(q) >= 0;
     });
@@ -715,10 +805,14 @@
     var back = this.backUrl || ('/campaigns/' + encodeURIComponent(this.campaignId) + '/characters');
     // A redraw keeps the height and shortness the last fit measured, so the
     // cards are laid out once at their real size rather than twice.
+    // The live region outlives a redraw, or what a pick just announced (and
+    // anything it cleared) would be wiped before a screen reader read it.
+    var liveEl = this.root.querySelector('.hc-live');
     this.root.innerHTML = '<div class="hc-app' + (this.short ? ' is-short' : '') + '" data-view="' + this.view + '" data-step="' + this.step + '" data-mo="' + motion() + '"' + (this.fitH ? ' style="--hc-h:' + this.fitH + 'px"' : '') + '>' +
       '<header class="hc-abar"><a class="hc-ibtn" href="' + esc(back) + '" aria-label="Back to characters">' + I.back + '</a>' +
       '<div class="hc-abar__t"><h1>' + esc(this.title()) + '</h1><small>' + esc(this.plan.systemName || 'Game system') + '</small></div></header>' +
       this.bandHTML() + cols + '</div>';
+    if (liveEl) this.root.appendChild(liveEl);
     this.fit();
     this.after();
     // Redrawing shrinks the page for a moment, which can scroll it back; the
@@ -790,10 +884,15 @@
   };
 
   Creator.prototype.introHTML = function () {
-    var st = this.cur(), n = st.choices.length, desk = this.view === 'desk';
+    var st = this.cur(), n = this.pool(st).length, desk = this.view === 'desk', state = this.stepState(st);
+    if (state !== 'open') {
+      return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + '</div>' : '') +
+        '<h2 class="hc-disp" tabindex="-1">' + (state === 'unused' ? esc(cap(st.label)) + ': not used' : 'Choose your ' + esc(lower(st.label))) + '</h2></div>';
+    }
+    var al = this.allowance(st), alNote = al.known && al.count >= 1 && al.note ? ' ' + esc(al.note) : '';
     var hint = this.locked(st) ? 'Everyone starts with this. Open it to read the whole entry.' : desk ? 'Pick a card to read its rules on the right.' : 'Tap a card to read its rules.';
     return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + ' · ' + n + ' to choose from</div>' : '') +
-      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + '</p></div>' + this.notesHTML(st);
+      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + alNote + '</p></div>' + this.notesHTML(st);
   };
 
   Creator.prototype.toolsHTML = function () {
@@ -817,7 +916,12 @@
     return !(this.find[st.fieldKey] || '').trim() && st.rules && st.rules.notHereCount;
   };
   Creator.prototype.emptyHTML = function () {
-    var st = this.cur(), q = this.find[st.fieldKey] || '';
+    var st = this.cur(), q = this.find[st.fieldKey] || '', state = this.stepState(st);
+    if (state === 'unused') return '<div class="hc-empty">' + esc(this.unusedLine(st)) + '</div>';
+    if (state === 'wait') {
+      var ps = this.stepByKey(st.parent);
+      return '<div class="hc-empty">Choose ' + (ps ? an(ps.label) + ' ' + esc(lower(ps.label)) : 'the earlier step') + ' first.</div>';
+    }
     if (q) return '<div class="hc-empty">No ' + esc(lower(st.label)) + ' matches “' + esc(q) + '”. <button type="button" class="hc-qw" data-act="clear">Clear the search</button></div>';
     return '<div class="hc-empty">Nothing is on this list for you right now.</div>';
   };
@@ -902,9 +1006,9 @@
     if (this.mode === 'cards' && n) {
       if (n <= 12) { mid = '<span class="hc-dots" aria-hidden="true">'; for (var j = 0; j < n; j++) mid += '<i class="' + (j === i ? 'is-on' : '') + '"></i>'; mid += '</span>'; }
       else mid = '<span class="hc-pos"><span data-posn>' + (i + 1) + '</span> of ' + n + '</span>';
-    } else mid = '<span class="hc-pos">' + n + ' ' + (n === 1 ? 'entry' : 'entries') + '</span>';
+    } else mid = n || this.stepState(st) === 'open' ? '<span class="hc-pos">' + n + ' ' + (n === 1 ? 'entry' : 'entries') + '</span>' : '';
     var right = '';
-    if (this.picked(this.step)) right = '<button type="button" class="hc-qw" data-act="next">Next ' + I.next + '</button>';
+    if (this.picked(this.step) || this.unused(st)) right = '<button type="button" class="hc-qw" data-act="next">Next ' + I.next + '</button>';
     else if (this.optional(st)) right = '<button type="button" class="hc-qw" data-act="skip">Skip</button>';
     return '<div class="hc-under"><button type="button" class="hc-qw" data-act="back"' + (this.step === 0 ? ' disabled' : '') + '>' + I.back +
       (this.step > 0 ? esc(this.plan.steps[this.step - 1].label) : '') + '</button>' + mid + (right || '<span class="hc-qw-sp"></span>') + '</div>';
@@ -912,10 +1016,10 @@
 
   Creator.prototype.bodyInner = function () {
     if (this.isExtra()) return this.extraHTML();
-    return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.handHTML() : this.listHTML()) + this.underHTML();
+    return this.introHTML() + (this.stepState(this.cur()) === 'open' ? this.toolsHTML() : '') + (this.mode === 'cards' ? this.handHTML() : this.listHTML()) + this.underHTML();
   };
   Creator.prototype.midInner = function () {
-    return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.gridHTML() : this.listHTML());
+    return this.introHTML() + (this.stepState(this.cur()) === 'open' ? this.toolsHTML() : '') + (this.mode === 'cards' ? this.gridHTML() : this.listHTML());
   };
 
   // --- The open entry ---
@@ -983,7 +1087,7 @@
     this.plan.steps.forEach(function (st, i) {
       var p = self.picked(i), cur = i === self.step, note = self.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '" data-k="' + esc(st.fieldKey) + '"' + (cur ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : cur ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span>' +
-        '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.skipped[st.fieldKey] ? 'None' : self.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+        '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.stateWord(st)) + '</span></span></button>';
     });
     if (this.hasAbout()) {
       var a = this.plan.steps.length, al = this.aboutLine();
@@ -1063,10 +1167,10 @@
       var bl = c && buyList(c.properties);
       if (bl) { var mine = self.mine(st.fieldKey, c); extra.push(mine.length ? mine.join(', ') : 'No ' + lower(words(bl.key)) + ' bought yet'); }
       if (note) extra.push(note);
-      var miss = !p && !self.optional(st);
-      h += '<li class="' + (miss ? 'is-miss' : '') + '"><span class="hc-lb"><small>' + esc(st.label) + '</small><b>' + (p ? esc(p) : self.optional(st) ? 'None' : 'Not chosen yet') + '</b>' +
+      var miss = !p && !self.optional(st), off = !p && self.unused(st);
+      h += '<li class="' + (miss ? 'is-miss' : '') + '"><span class="hc-lb"><small>' + esc(st.label) + '</small><b>' + (p ? esc(p) : off ? 'Not used' : self.optional(st) ? 'None' : 'Not chosen yet') + '</b>' +
         (extra.length ? '<em>' + esc(extra.join(' · ')) + '</em>' : '') + '</span>' +
-        (self.locked(st) ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
+        (self.locked(st) || off ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
     });
     if (this.hasAbout()) {
       var al = this.aboutLine();
@@ -1639,7 +1743,7 @@
     for (var i = 0; i <= this.last(); i++) {
       var st = this.plan.steps[i], ab = !st && i < this.last(), p = ab ? this.aboutLine() : this.picked(i), note = st && this.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '"' + (i === this.step ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : i === this.step ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span><span class="hc-lb"><b>' + esc(this.stepWord(i)) + '</b><span>' +
-        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : ab ? (p ? esc(p) : 'Optional') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.skipped[st.fieldKey] ? 'None' : this.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : ab ? (p ? esc(p) : 'Optional') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.stateWord(st)) + '</span></span></button>';
     }
     d.innerHTML = h;
     app.appendChild(scrim); app.appendChild(d);
@@ -1657,6 +1761,9 @@
     var arr = this.mine(st.fieldKey, c);
     this.picks[st.fieldKey] = { name: c.name, options: arr };
     delete this.skipped[st.fieldKey];
+    // A pick elsewhere may no longer fit what this one changed (a subclass
+    // under another class, a kit a class does not use).
+    this.cleared = this.scrub();
     this.save();
   };
 
@@ -1668,7 +1775,7 @@
     if (!c || this.chooseDisabled(c, st)) return;
     this.commitPick(st, c);
     var nx = this.nextOpen(si);
-    this.say(c.name + ' chosen');
+    this.say(c.name + ' chosen' + (this.cleared && this.cleared.length ? '. Cleared ' + lower(this.cleared.join(' and ')) + ', which no longer fit.' : ''));
     this.root.querySelector('.hc-app').setAttribute('data-mo', motion());
     if (this.desk()) return this.chooseDesk(c, st, si, i, nx);
     var src = this.mode === 'cards' ? this.$$('.hc-hand .hc-card[data-i]')[i] : this.$$('.hc-lrow[data-i]')[i];

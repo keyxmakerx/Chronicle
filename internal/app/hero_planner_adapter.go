@@ -31,6 +31,7 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 		step := entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake,
 			Choices: heroChoices(s.Choices), Held: heroChoices(s.Excluded), Rules: heroStepRules(s.Rules),
+			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom),
 		}
 		out.Steps = append(out.Steps, step)
 	}
@@ -49,7 +50,10 @@ func (a heroPlannerAdapter) VisitorPlan(ctx context.Context, campaignID string) 
 	}
 	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
 	for _, s := range p.Steps {
-		out.Steps = append(out.Steps, entities.HeroStep{FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(s.Choices)})
+		out.Steps = append(out.Steps, entities.HeroStep{
+			FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(s.Choices),
+			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom),
+		})
 	}
 	return out, nil
 }
@@ -60,8 +64,19 @@ func heroChoices(in []systems.Choice) []entities.HeroChoice {
 		out = append(out, entities.HeroChoice{
 			Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
 			Description: c.Description, Properties: c.Properties,
-			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State,
+			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State, Parent: c.Parent,
 		})
+	}
+	return out
+}
+
+func heroCounts(in []systems.CreatorCount) []entities.HeroCount {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]entities.HeroCount, 0, len(in))
+	for _, c := range in {
+		out = append(out, entities.HeroCount{Step: c.Step, Property: c.Property, Note: c.Note})
 	}
 	return out
 }

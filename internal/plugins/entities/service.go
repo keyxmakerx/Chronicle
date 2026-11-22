@@ -180,6 +180,9 @@ type EntityService interface {
 	// Category dashboard layout
 	GetCategoryDashboardLayout(ctx context.Context, id int) (*string, error)
 	UpdateCategoryDashboardLayout(ctx context.Context, id int, layoutJSON string) error
+	// CheckCategoryDashboardLayout runs the rules a saved category home
+	// meets, without saving.
+	CheckCategoryDashboardLayout(ctx context.Context, id int, layout campaigns.DashboardLayout) error
 	ResetCategoryDashboardLayout(ctx context.Context, id int) error
 
 	// Auto-linking — returns lightweight name entries for all visible entities.
@@ -3078,6 +3081,18 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 		return err
 	}
 	return s.types.UpdateDashboardLayout(ctx, id, &layoutJSON)
+}
+
+// CheckCategoryDashboardLayout is the rules a category home's save meets,
+// size included, for a caller that wants the answer before it writes.
+func (s *entityService) CheckCategoryDashboardLayout(ctx context.Context, id int, layout campaigns.DashboardLayout) error {
+	if err := s.validateCategoryDashboardLayout(ctx, id, layout); err != nil {
+		return err
+	}
+	if b, err := json.Marshal(layout); err != nil || len(b) > maxLayoutSize {
+		return apperror.NewBadRequest("the category home's layout is too big")
+	}
+	return nil
 }
 
 // validateCategoryDashboardLayout checks a category home's layout the way

@@ -29,6 +29,17 @@ var categoryHomeTypes = []string{
 	"recent_pages", "text_block", "calendar_preview", "timeline_preview",
 }
 
+// CategoryHomeBlockTypes are the widgets a category's home can hold: the ones
+// the Customizer's editor offers, in its order. A caller that saves a home
+// offers no others, so what it writes is what the editor could have placed.
+func CategoryHomeBlockTypes() []string {
+	return append(append([]string(nil), categoryHomeTypes...), extraCategoryBlockTypes()...)
+}
+
+// DefaultCategoryHomeLayout is the home the editor starts a category from
+// while it has none of its own.
+func DefaultCategoryHomeLayout() *campaigns.DashboardLayout { return defaultCategoryHomeLayout() }
+
 // categoryHomePreviewPages is how many of the category's pages the preview
 // draws its lists with, the same as the landing page's first page.
 const categoryHomePreviewPages = 24
@@ -72,7 +83,7 @@ func categoryHomeEditorState(cc *campaigns.CampaignContext, et *EntityType) stri
 		"plural":      et.NamePlural,
 		"layout":      layout,
 		"description": desc,
-		"only":        append(append([]string(nil), categoryHomeTypes...), extraCategoryBlockTypes()...),
+		"only":        CategoryHomeBlockTypes(),
 		"blockTypes":  base + "/entity-types/block-types?context=category",
 		"preview":     fmt.Sprintf("%s/entity-types/%d/home-preview", base, et.ID),
 	})

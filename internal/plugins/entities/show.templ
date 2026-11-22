@@ -800,15 +800,16 @@ templ blockEntityNotes(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 }
 
 // blockTextBlock renders a static rich text / HTML content block.
-// The content is stored in the block config under the "content" key.
+// The content is stored in the block config under the "content" key. An
+// empty one draws nothing: every page of the category would otherwise carry
+// an empty card, and the Customizer's preview names a block that draws
+// nothing in its place.
 templ blockTextBlock(config map[string]any) {
-	<div class="card cb-card p-4 prose prose-sm dark:prose-invert max-w-none">
-		if entityBlockTextContent(config) != "" {
-			@templ.Raw(entityBlockTextContent(config))
-		} else {
-			<p class="text-sm text-fg-muted italic">No content configured.</p>
-		}
-	</div>
+	if html := entityBlockTextContent(config); html != "" {
+		<div class="card cb-card p-4 prose prose-sm dark:prose-invert max-w-none">
+			@templ.Raw(html)
+		</div>
+	}
 }
 
 // entityBlockTextContent extracts and sanitizes the HTML content from a
