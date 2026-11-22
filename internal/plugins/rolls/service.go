@@ -65,12 +65,13 @@ type service struct {
 	roll  func(int) int
 	now   func() time.Time
 	limit *limiter
+	crits CritSource
 }
 
 // NewService creates the roll log service. pub may be nil (nothing is sent
-// live).
-func NewService(repo Repository, pub Publisher) Service {
-	return &service{repo: repo, pub: pub, roll: cryptoRoll, now: time.Now, limit: newLimiter(tableBurst, tableWindow)}
+// live); crits may be nil (the default crit rules apply).
+func NewService(repo Repository, pub Publisher, crits CritSource) Service {
+	return &service{repo: repo, pub: pub, crits: crits, roll: cryptoRoll, now: time.Now, limit: newLimiter(tableBurst, tableWindow)}
 }
 
 // How many Table rolls one person may make in a window, so a held key or a
@@ -119,6 +120,7 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer, in Tab
 		return nil, apperror.NewTooManyRequests("That's a lot of rolls at once. Wait a moment and roll again.")
 	}
 	dice, mod, total := throw(terms, s.roll)
+	markCrits(s.critRules(ctx, campaignID), dice, termGroups(terms))
 	label := clip(in.Label, LabelMax)
 	if label == "" {
 		label = shown
@@ -162,6 +164,9 @@ func (s *service) Report(ctx context.Context, campaignID string, in ReportInput)
 	if in.Total < -MaxTotal || in.Total > MaxTotal {
 		return "", false, errInvalid("total is out of range")
 	}
+	// Copied so judging never writes into the caller's slice.
+	dice := append([]Die(nil), in.Dice...)
+	markCrits(s.critRules(ctx, campaignID), dice, runGroups(dice))
 	name := clip(in.RollerName, NameMax)
 	if name == "" {
 		name = "Someone in Foundry"
@@ -169,7 +174,7 @@ func (s *service) Report(ctx context.Context, campaignID string, in ReportInput)
 	r := Roll{
 		ID: uuid.New().String(), CampaignID: campaignID, Origin: in.Origin, OriginID: id, Source: SourceFoundry,
 		RollerID: in.RollerID, RollerName: name, Label: clip(in.Label, LabelMax), Formula: clip(in.Formula, FormulaMax),
-		Dice: in.Dice, Modifier: in.Total - sum, Total: in.Total, Mode: in.Mode, CreatedAt: s.now().UTC(),
+		Dice: dice, Modifier: in.Total - sum, Total: in.Total, Mode: in.Mode, CreatedAt: s.now().UTC(),
 	}
 	if r.Label == "" {
 		r.Label = r.Formula
@@ -195,10 +200,12 @@ func (s *service) Record(ctx context.Context, campaignID string, in LogInput) (s
 	if !validMode(mode) {
 		return "", errInvalid("unknown roll mode")
 	}
+	dice := append([]Die(nil), in.Dice...)
+	markCrits(s.critRules(ctx, campaignID), dice, runGroups(dice))
 	r := Roll{
 		ID: uuid.New().String(), CampaignID: campaignID, Origin: OriginChronicle, Source: in.Source,
 		RollerID: in.RollerID, RollerName: clip(in.RollerName, NameMax), Label: clip(in.Label, LabelMax),
-		Formula: clip(in.Formula, FormulaMax), Dice: in.Dice, Modifier: in.Modifier, Total: in.Total,
+		Formula: clip(in.Formula, FormulaMax), Dice: dice, Modifier: in.Modifier, Total: in.Total,
 		Outcome: clip(in.Outcome, OutcomeMax), Why: clip(in.Why, WhyMax), From: clip(in.From, FromMax),
 		Mode: mode, CreatedAt: s.now().UTC(),
 	}

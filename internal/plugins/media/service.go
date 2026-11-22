@@ -60,7 +60,7 @@ type MediaService interface {
 	SetEntityVisibilityFilter(f EntityVisibilityFilter)
 	// SetCardPictureGuard wires the card-picture rule onto the merge decision, so
 	// an upload of the bytes of a card's picture is never merged into it for
-	// someone below Director (ADR-077). CardPictureGuardWired lets the app's
+	// someone below Director (ADR-078). CardPictureGuardWired lets the app's
 	// wiring test prove production sets it.
 	SetCardPictureGuard(g CardPictureGuard)
 	CardPictureGuardWired() bool
@@ -498,7 +498,7 @@ func (s *mediaService) canMergeWithExisting(ctx context.Context, campaignID, exi
 	// No page references the file, so decision 3 would merge it. A card's
 	// picture is referenced by a deck, not a page: merging would tell a player
 	// who uploads the same bytes that the image is in a deck they cannot see
-	// (ADR-077). A Director merges. A file a page references is left to the
+	// (ADR-078). A Director merges. A file a page references is left to the
 	// page rule above, which already proved the uploader can see every page.
 	refused, err := s.cardRefusesMerge(ctx, campaignID, existingFileID, uploaderID)
 	if err != nil {

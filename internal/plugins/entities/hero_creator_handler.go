@@ -21,6 +21,10 @@ import (
 // the creator asks only for a name.
 func (h *Handler) SetHeroPlanner(p HeroPlanner) { h.heroPlanner = p }
 
+// SetHeroChanges wires when players may change their hero's picks. Without
+// it every hero is open and no change rings the Directors' bell.
+func (h *Handler) SetHeroChanges(s *HeroChangeService) { h.heroChanges = s }
+
 // heroTarget works out the page type a new hero becomes for this viewer and
 // whether they may make one. A player's hero must be a type they may claim.
 func (h *Handler) heroTarget(c *echo.Context, cc *campaigns.CampaignContext) (*EntityType, heroAccess, error) {
@@ -202,13 +206,23 @@ func (h *Handler) HeroPlanAPI(c *echo.Context) error {
 		if err != nil {
 			return err
 		}
+		h.addHeroAbout(c, cc, plan)
 		return c.JSON(http.StatusOK, plan)
 	}
 	plan, err := h.heroPlan(c, cc)
 	if err != nil {
 		return err
 	}
+	h.addHeroAbout(c, cc, plan)
 	return c.JSON(http.StatusOK, plan)
+}
+
+// addHeroAbout gives the plan its "About your hero" step, from the fields of
+// the page type the hero will be. A viewer who may not make one gets none.
+func (h *Handler) addHeroAbout(c *echo.Context, cc *campaigns.CampaignContext, plan *HeroPlan) {
+	if target, access, err := h.heroTarget(c, cc); err == nil && access.Allowed {
+		plan.About = heroAbout(target)
+	}
 }
 
 // CreateHero makes the hero from the creator's picks
@@ -242,6 +256,13 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 	fields, asks, err := buildHeroFields(plan, req.Picks)
 	if err != nil {
 		return err
+	}
+	about, err := heroAboutValues(heroAbout(target), req.About)
+	if err != nil {
+		return err
+	}
+	for k, v := range about {
+		fields[k] = v
 	}
 
 	userID := auth.GetUserID(c)

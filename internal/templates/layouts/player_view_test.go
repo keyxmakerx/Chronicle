@@ -45,6 +45,7 @@ func TestTopbar_GuestPreviewEye(t *testing.T) {
 		{"owner", SetIsOwner(base, true), true, false, true},
 		{"player preview", SetViewingAsPlayer(base, true), true, true, true},
 		{"guest preview", SetPreviewAs(base, "guest"), true, true, false},
+		{"guest-code preview", SetPreviewAs(base, "guestcode"), true, true, false},
 	}
 	for _, tt := range tests {
 		var buf bytes.Buffer
@@ -55,7 +56,7 @@ func TestTopbar_GuestPreviewEye(t *testing.T) {
 		if got := strings.Contains(out, "/toggle-view-mode"); got != tt.wantEye {
 			t.Errorf("%s: eye = %v, want %v", tt.name, got, tt.wantEye)
 		}
-		if got := strings.Contains(out, "Viewing as a guest — click to go back to your own view"); got != (tt.name == "guest preview") {
+		if got := strings.Contains(out, "Viewing as a guest — click to go back to your own view"); got != strings.HasPrefix(tt.name, "guest") {
 			t.Errorf("%s: guest title = %v", tt.name, got)
 		}
 		if got := strings.Contains(out, "data-pv-toggle"); got != tt.wantAnim {

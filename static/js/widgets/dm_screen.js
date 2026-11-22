@@ -5,8 +5,9 @@
  * fragment (GET /campaigns/:id/dm-screen) that refetches itself after an
  * Armory change. This widget docks it at the right edge of the page: a rail
  * of section icons and a column of section cards beside it. Several cards
- * can be open at once; the newest is shown whole and the older ones fold to
- * one line. The rail's top icon tucks the dock away to a small edge tab that
+ * can be open at once, each whole or folded to one line on its own, and a
+ * card's grip (or its title, with a mouse) drags it within or between the
+ * column and the leaves. The rail's top icon tucks the dock away to a small edge tab that
  * carries the waiting count.
  *
  * A rail icon dragged out toward the page opens its section on a leaf of
@@ -93,6 +94,10 @@
     }).filter(function (l) { return l.length; }).slice(0, MAX_LEAVES);
   }
 
+  function cleanIds(v) {
+    return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : [];
+  }
+
   // Off (and a device asking for less motion) shows the end state; Calm fades.
   function motionOff() {
     var h = document.documentElement;
@@ -118,6 +123,9 @@
       var LINES_KEY = 'chronicle.dms.lines.' + cid;
       // Each leaf beside the column is a list of section ids, front card last.
       var LEAVES_KEY = 'chronicle.dms.leaves.' + cid;
+      // Cards the person folded to their one line. Each card folds on its own,
+      // so any number can sit open in the column or on a leaf.
+      var FOLDED_KEY = 'chronicle.dms.folded.' + cid;
 
       var savedOpen = readJSON(OPEN_KEY, DEFAULT_OPEN);
       var savedLines = readJSON(LINES_KEY, DEFAULT_LINES);
@@ -126,6 +134,7 @@
         out: readJSON(OUT_KEY, false) === true,
         open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : DEFAULT_OPEN.slice(),
         leaves: cleanLeaves(readJSON(LEAVES_KEY, [])),
+        folded: cleanIds(readJSON(FOLDED_KEY, [])),
         dock: null, tab: null, loading: null, loaded: false, brewPv: false
       };
 
@@ -222,7 +231,7 @@
         var fold = t.closest('[data-dms-fold]');
         if (fold) {
           var fid = fold.closest('[data-dms-sec]').getAttribute('data-dms-sec');
-          if (phone()) lineToggle(fid); else if (leafOf(fid) >= 0) leafHeaderPick(fid); else headerPick(fid);
+          if (phone()) lineToggle(fid); else headerPick(fid);
           return;
         }
         var lmerge = t.closest('[data-dms-lmerge]');
@@ -253,22 +262,28 @@
         if (i === st.open.length - 1 && i >= 0) st.open.pop();
         else {
           if (i >= 0) st.open.splice(i, 1);
+          else setFolded(id, false);
           st.open.push(id);
         }
         saveOpen();
         applyOpen(id);
       }
 
-      // A folded card's header brings it to the front; the front card's
-      // header folds it behind the others.
+      function isFolded(id) { return st.folded.indexOf(id) >= 0; }
+
+      function setFolded(id, on) {
+        var i = st.folded.indexOf(id);
+        if (on && i < 0) st.folded.push(id);
+        else if (!on && i >= 0) st.folded.splice(i, 1);
+        else return;
+        writeJSON(FOLDED_KEY, st.folded);
+      }
+
+      // A card's header folds it to its one line or opens it whole; the others
+      // stay as they are.
       function headerPick(id) {
-        var i = st.open.indexOf(id);
-        if (i < 0) return;
-        st.open.splice(i, 1);
-        if (i === st.open.length) st.open.unshift(id); // was the front card
-        else st.open.push(id);
-        saveOpen();
-        applyOpen(st.open[st.open.length - 1]);
+        setFolded(id, !isFolded(id));
+        applyOpen();
       }
 
       function closeSection(id) {
@@ -374,7 +389,7 @@
           var id = s.getAttribute('data-dms-sec'), i = st.open.indexOf(id);
           if (leafOf(id) >= 0) return; // drawn onto its leaf below
           homeCard(s);
-          var front = i === n - 1 && i >= 0;
+          var front = i >= 0 && !isFolded(id);
           s.hidden = i < 0;
           s.classList.toggle('dms-folded', i >= 0 && !front);
           s.style.order = i < 0 ? '' : String(n - i);
@@ -530,9 +545,9 @@
           l.style.visibility = '';
           l.setAttribute('aria-label', 'Leaf ' + (i + 2) + ': ' + list.map(sectionTitle).join(', '));
           var body = l.querySelector('.dms-leaf-b');
-          list.forEach(function (id, k) {
+          list.forEach(function (id) {
             var s = sectionEl(id); if (!s) return;
-            var front = k === list.length - 1;
+            var front = !isFolded(id);
             body.appendChild(s);
             s.hidden = false;
             s.style.order = '';
@@ -618,6 +633,7 @@
       // Pulling a section out opens a new leaf with it; it leaves the column
       // and any other leaf.
       function unfold(id) {
+        setFolded(id, false);
         st.open = st.open.filter(function (x) { return x !== id; });
         var was = leafOf(id);
         if (was >= 0) {
@@ -633,6 +649,7 @@
       // With every leaf open, a pulled section joins the leaf it is dropped on
       // as its front card.
       function dropOnLeaf(i, id) {
+        setFolded(id, false);
         st.open = st.open.filter(function (x) { return x !== id; });
         st.leaves = st.leaves.map(function (l, k) { return k === i ? l : l.filter(function (x) { return x !== id; }); });
         st.leaves[i] = st.leaves[i].filter(function (x) { return x !== id; }).concat([id]);
@@ -678,18 +695,6 @@
         setTimeout(closeAll, reduce() ? 0 : standardMs() + 20);
       }
 
-      // A folded card on a leaf comes to the leaf's front; the front card
-      // folds behind the others.
-      function leafHeaderPick(id) {
-        var i = leafOf(id); if (i < 0) return;
-        var l = st.leaves[i], k = l.indexOf(id);
-        if (l.length < 2) return;
-        l.splice(k, 1);
-        if (k === l.length) l.unshift(id); else l.push(id);
-        saveLeaves();
-        applyOpen();
-      }
-
       // ---- Dragging ----------------------------------------------------
       // A rail icon dragged toward the page swings a new leaf open after the
       // pointer, past a third of the way it settles open, short of that it
@@ -702,6 +707,15 @@
         var ic = e.target.closest('.dms-rail [data-dms-open]');
         if (ic) {
           st.drag = { kind: 'sec', id: ic.getAttribute('data-dms-open'), x: e.clientX, y: e.clientY, live: false, p: 0 };
+          return;
+        }
+        // A card moves by its grip (any pointer, since the grip never scrolls)
+        // or, with a mouse or pen, by its title, past a short travel.
+        var grip = e.target.closest('[data-dms-grip]');
+        var title = !grip && e.pointerType !== 'touch' && e.target.closest('.dms-sec-t');
+        var card = (grip || title) && (grip || title).closest('[data-dms-sec]');
+        if (card && !phone()) {
+          st.drag = { kind: 'card', id: card.getAttribute('data-dms-sec'), x: e.clientX, y: e.clientY, live: false };
           return;
         }
         var bar = e.target.closest('[data-dms-leafdrag]');
@@ -784,8 +798,79 @@
         d.chip = makeChip('fa-solid fa-table-columns', 'Leaf ' + (d.i + 2) + ' · ' + n + (n === 1 ? ' card' : ' cards'));
       }
 
+      function startCardDrag(d) {
+        d.live = true;
+        document.documentElement.classList.add('dms-dragging');
+        var s = sectionEl(d.id);
+        if (s) s.classList.add('dms-lifting');
+        d.chip = makeChip(sectionIcon(d.id), sectionTitle(d.id));
+      }
+
+      function clearDrop() {
+        st.dock.querySelectorAll('.dms-drop-before, .dms-drop-after').forEach(function (x) {
+          x.classList.remove('dms-drop-before', 'dms-drop-after');
+        });
+      }
+
+      // Where a dragged card would land under the pointer: next to another
+      // card, at the end of a leaf, or at the end of the column.
+      function cardTarget(e, id) {
+        var o = under(e);
+        var other = o && o.closest('[data-dms-sec]');
+        // Over its own card a drop does nothing.
+        if (other && other.getAttribute('data-dms-sec') === id) return null;
+        if (other && !other.hidden) {
+          var r = other.getBoundingClientRect();
+          return { id: other.getAttribute('data-dms-sec'), after: e.clientY > r.top + r.height / 2, el: other };
+        }
+        var lf = o && o.closest('.dms-leaf:not(.dms-leaf-ghost)');
+        if (lf) return { leaf: parseInt(lf.getAttribute('data-dms-leaf'), 10), el: lf };
+        var col = o && o.closest('.dms-col');
+        if (col) return { col: true, el: col };
+        return null;
+      }
+
+      // Moves a card to the place the drop chose, folded or open as it was. The
+      // column lists its newest card first, so its order is read reversed.
+      function moveCard(id, t) {
+        var toLeaf = t.leaf !== undefined ? t.leaf : (t.id ? leafOf(t.id) : -1);
+        var targetList = toLeaf >= 0 ? st.leaves[toLeaf] : null;
+        st.open = st.open.filter(function (x) { return x !== id; });
+        st.leaves = st.leaves.map(function (l) { return l.filter(function (x) { return x !== id; }); });
+        targetList = toLeaf >= 0 ? st.leaves[toLeaf] : null;
+        if (targetList) {
+          var at = t.id ? targetList.indexOf(t.id) + (t.after ? 1 : 0) : targetList.length;
+          targetList.splice(at < 0 ? targetList.length : at, 0, id);
+        } else {
+          var disp = st.open.slice().reverse();
+          var k = t.id ? disp.indexOf(t.id) + (t.after ? 1 : 0) : disp.length;
+          disp.splice(k < 0 ? disp.length : k, 0, id);
+          st.open = disp.reverse();
+        }
+        st.leaves = st.leaves.filter(function (l) { return l.length; });
+        saveOpen();
+        saveLeaves();
+        applyOpen(id);
+      }
+
       function dragMove(e) {
         var d = st.drag; if (!d) return;
+        if (!d.live && d.kind === 'card') {
+          if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 8) return;
+          startCardDrag(d);
+        }
+        if (d.live && d.kind === 'card') {
+          e.preventDefault();
+          placeChip(d, e);
+          clearHot();
+          clearDrop();
+          d.to = cardTarget(e, d.id);
+          if (d.to) {
+            if (d.to.id) d.to.el.classList.add(d.to.after ? 'dms-drop-after' : 'dms-drop-before');
+            else d.to.el.classList.add('dms-hot');
+          }
+          return;
+        }
         if (!d.live) {
           if (d.kind === 'sec' && Math.abs(e.clientX - d.x) < 10) return;
           if (d.kind === 'leaf' && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 8) return;
@@ -823,6 +908,11 @@
         if (!d || !st.dock) return d;
         if (d.chip) d.chip.remove();
         if (d.el) d.el.classList.remove('dms-lifting');
+        if (d.kind === 'card') {
+          var ls = sectionEl(d.id);
+          if (ls) ls.classList.remove('dms-lifting');
+          clearDrop();
+        }
         clearHot();
         return d;
       }
@@ -835,6 +925,10 @@
         st.eatClick = true;
         setTimeout(function () { st.eatClick = false; }, 0);
         if (e.type === 'pointercancel') { if (d.ghost) d.ghost.remove(); return; }
+        if (d.kind === 'card') {
+          if (e.type !== 'pointercancel' && d.to) moveCard(d.id, d.to);
+          return;
+        }
         if (d.kind === 'leaf') {
           if (d.to !== null && d.to !== undefined) mergeLeaf(d.i, d.to);
           return;

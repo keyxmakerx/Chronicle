@@ -18,6 +18,13 @@ type aiAskLister interface {
 	Decided(ctx context.Context, campaignID, userID string, olderDays int) ([]connector.Request, error)
 }
 
+// aiUndoReader is the Undo state of applied requests, so the AI can tell a
+// change the owner put back from one that still stands. Optional: a lister
+// without it leaves every applied request reading as applied.
+type aiUndoReader interface {
+	UndoSummaries(ctx context.Context, campaignID, userID string, ids []int64) (map[int64]connector.UndoSummary, error)
+}
+
 // aiEntryLister is the system entries service's list.
 type aiEntryLister interface {
 	List(ctx context.Context, campaignID, fieldKey string, actor systems.EntryActor) ([]systems.SystemEntry, error)
@@ -62,6 +69,7 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 			if d, err := w.asks.Decided(ctx, campaignID, a.UserID, olderDays); err != nil {
 				missing("the AI's answered requests", err)
 			} else {
+				undone := w.undone(ctx, campaignID, a.UserID, d)
 				for _, q := range d {
 					at := q.CreatedAt
 					if q.DecidedAt != nil {
@@ -70,6 +78,7 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 					out.Decided = append(out.Decided, records.WaitingAsk{
 						Summary: q.Summary, Counts: q.Counts, At: at,
 						TurnedDown: q.Status == connector.RequestTurnedDown, Outcome: q.Outcome,
+						Undone: undone[q.ID],
 					})
 				}
 			}
@@ -133,4 +142,32 @@ func (w aiWaitingAdapter) addEntries(ctx context.Context, campaignID, userID str
 	}
 	sort.SliceStable(out.Entries, func(i, j int) bool { return out.Entries[i].HandedIn && !out.Entries[j].HandedIn })
 	return nil
+}
+
+// undone reports which applied requests the owner has put back with Undo. A
+// failed read is logged and leaves them reading as applied.
+func (w aiWaitingAdapter) undone(ctx context.Context, campaignID, userID string, d []connector.Request) map[int64]bool {
+	u, ok := w.asks.(aiUndoReader)
+	if !ok || len(d) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(d))
+	for _, q := range d {
+		if q.Status == connector.RequestAnswered {
+			ids = append(ids, q.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	sums, err := u.UndoSummaries(ctx, campaignID, userID, ids)
+	if err != nil {
+		slog.Warn("ai waiting lookup: undo state", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	out := make(map[int64]bool, len(sums))
+	for id, s := range sums {
+		out[id] = s.UndoneAt != nil
+	}
+	return out
 }

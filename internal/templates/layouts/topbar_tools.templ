@@ -55,7 +55,7 @@ templ topbarToolsTab() {
 				}
 				if topbarHasViewAs(ctx) {
 					@topbarToolEntry("pv", topbarViewAsLabel(ctx), false) {
-						<i class={ "fa-solid tb-ico", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest"), templ.KV("fa-eye", !IsViewingAsPlayer(ctx) && PreviewAs(ctx) != "guest") } aria-hidden="true"></i>
+						<i class={ "fa-solid tb-ico", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx) || InGuestPreview(ctx)), templ.KV("fa-eye", !IsViewingAsPlayer(ctx) && !InGuestPreview(ctx)) } aria-hidden="true"></i>
 					}
 				}
 				if topbarHasBell(ctx) {

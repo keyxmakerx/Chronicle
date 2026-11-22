@@ -383,7 +383,7 @@ func (DirectorList) deckListView() {}
 
 // Face is what a player reads on a card that is face up: never the Director's
 // note or a condition. Picture is the card's media file id; the media server
-// decides who may fetch it (ADR-077), and a face-down copy carries none.
+// decides who may fetch it (ADR-078), and a face-down copy carries none.
 type Face struct {
 	CardID  string `json:"cardId"`
 	Name    string `json:"name"`

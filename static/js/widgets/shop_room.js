@@ -1,12 +1,14 @@
 /**
  * shop_room.js -- Chronicle Shop Room Widget
  *
- * Draws a shop as an isometric room: furniture, the shop's goods on shelves
- * and tables, the keeper's portrait, light and shadow. The wares list sits
- * under the room. Owners get Arrange: drag furniture and the portrait, change
- * an item's icon and colour, and run the room generator from a panel that
- * slides out inside the room (keep pin and reroll dice per part, like the
- * other generators). Arrange changes wait for "Save room"; leaving with
+ * Opens a shop at the counter (shop_room_counter.js): the keeper, the goods
+ * on the shelves and in the case, buying and the rolls. Owners get Arrange,
+ * a panel that slides out inside the room, where the Counter room section
+ * dresses it. The isometric room engine below (createRoom) is what the
+ * paper look stands up as cut card; it is no longer shown as a look of its
+ * own, and paper is under construction. TODO(#2615): remove the engine and
+ * the lit drawing once nothing reads them. Arrange changes wait for
+ * "Save room"; leaving with
  * unsaved changes shakes the panel and says so instead of losing them. The
  * layout is saved per shop; the goods themselves are the shop's "sells"
  * relations, so stock and prices always come from the inventory, never from
@@ -1107,7 +1109,7 @@
     var L = {
       version: 1, roomType: S.roomType, setting: S.setting, size: S.size, furniture: S.full, decorations: S.deco, palette: S.pal,
       seeds: { room: S.seeds.room, goods: S.seeds.goods, deco: S.seeds.deco },
-      look: S.look === 'paper' || S.look === 'counter' ? S.look : 'lit',
+      look: S.look === 'paper' ? 'paper' : 'counter',
       mood: S.mood || '', effects: S.efx ? JSON.parse(JSON.stringify(S.efx)) : null,
       pieces: S.pieces.map(function (p) {
         var o = { id: p.id, kind: p.kind, wall: p.wall || '', x: p.x || 0, y: p.y || 0, off: p.off || 0, len: p.len || 0, w: p.w || 0, d: p.d || 0, pinned: !!p.pinned };
@@ -1145,7 +1147,9 @@
     if (!L) return false;
     S.roomType = L.roomType || S.roomType; S.setting = L.setting || 'room'; S.size = L.size || 'm'; S.full = L.furniture || 'normal';
     S.deco = L.decorations || 'some'; S.pal = L.palette || S.pal;
-    S.look = L.look === 'paper' || L.look === 'counter' ? L.look : 'lit';
+    // The lit room is retired: a room saved as lit, or before there was a
+    // choice, opens at the counter and saves as counter next time.
+    S.look = L.look === 'paper' ? 'paper' : 'counter';
     S.mood = MOODS[L.mood] ? L.mood : '';
     S.rolls = L.rolls ? normRolls(L.rolls) : null;
     S.efx = null;
@@ -1234,7 +1238,7 @@
       if (!h || !(Number(h.price) > 0) || Number(h.price) === it.p) return it;
       var o = {}; for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) o[k] = it[k];
       var tail = it.price.slice(String(it.p).length);
-      o.was = it.price; o.p = Number(h.price); o.price = o.p + tail;
+      o.was = it.price; o.wasP = it.p; o.p = Number(h.price); o.price = o.p + tail;
       if (it.priceUsual) o.priceUsual = o.p + it.priceUsual.slice(String(it.p).length);
       return o;
     });
@@ -1306,7 +1310,20 @@
     };
   }
 
-  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  // A hero who pays with Wealth is not charged coin: a listing's number is the
+  // Wealth the hero needs, so it reads as that rather than as a price in coin.
+  function payingWithWealth(buyer) { return !!buyer && buyer.kind === 'wealth'; }
+  function wealthPrices(its) {
+    return its.map(function (it) {
+      var o = {};
+      Object.keys(it).forEach(function (k) { o[k] = it[k]; });
+      o.price = 'Wealth ' + it.p; o.priceUsual = '';
+      if (it.was) o.was = 'Wealth ' + it.wasP;
+      return o;
+    });
+  }
+
+  window.ShopRoom = { wealthPrices: wealthPrices, payingWithWealth: payingWithWealth, signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1396,6 +1413,7 @@
     '.shr-fx{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:#bfb3a0}.shr-top .shr-seg{border-color:rgb(243 233 216/.3)}.shr-top .shr-seg button{color:#bfb3a0}.shr-top .shr-seg button[aria-pressed="true"]{background:#f3e9d8;color:#1a120c}',
     '.shr-seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;overflow:hidden}',
     '.shr-seg button{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:4px 8px;cursor:pointer;font-size:.8rem}',
+    '.shr-seg button:disabled{opacity:.5;cursor:not-allowed}',
     '.shr-seg button[aria-pressed="true"]{background:var(--color-text-primary,#111827);color:var(--color-bg-primary,#fff);font-weight:600}',
     '.shr-tabs{display:flex;gap:4px;flex-wrap:wrap}',
     '.shr-tab{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:5px 10px;border-radius:6px;cursor:pointer}',
@@ -1589,7 +1607,7 @@
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
       var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy'), todayEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/today'), today = null, shopBase = (ds.roomEndpoint || '').replace(/\/room$/, ''), rollsState = null;
-      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
+      var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'counter', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true, counter: null,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], manner: '', moments: {}, mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
       var campaignId = (campaignUrl.match(/\/campaigns\/([^/]+)/) || [])[1] || '', words = {};
@@ -1632,6 +1650,8 @@
         // Arranging shows every good, so a GM can place one that is not out today.
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
         if (S.mode !== 'arr') S.its = haggled(todayShelf(S.its, today), rollsState && rollsState.goods);
+        // After the haggle, which builds its text from the coin price.
+        if (payingWithWealth(buyer())) S.its = wealthPrices(S.its);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
         fitScene();
@@ -1667,8 +1687,11 @@
           if (a.effect && a.effect.getComputedTiming().iterations === Infinity && Math.abs(a.currentTime - now) > 1) a.currentTime = now;
         });
       }
-      function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
-      function counterOn() { return S.look === 'counter' && !!window.ShopRoomCounter; }
+      // While the paper look is under construction a shop saved as paper opens
+      // at the counter; its saved choice stays paper for when paper is back.
+      function paperReady() { return !!window.ShopRoomPaper && !window.ShopRoomPaper.building; }
+      function paperOn() { return S.look === 'paper' && paperReady(); }
+      function counterOn() { return (S.look === 'counter' || (S.look === 'paper' && !paperReady())) && !!window.ShopRoomCounter; }
       // The builder is for the owner, in Arrange, and only while the counter is the look.
       function cbOn() { return canArrange && counterOn() && !!window.ShopRoomBuilder; }
       function counterModel() {
@@ -1798,8 +1821,8 @@
         renderPeek();
         if (!buy || !buy.buyers.length) { bk.innerHTML = ''; return; }
         var who = buyer(), sm = basketSummary(basket, S.its, who), h = '';
-        var coin = localCoin(words, sm.currency);
-        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price"' + (coin.usual ? ' title="' + esc(sm.total + ' ' + coin.usual) + '"' : '') + '>' + esc(sm.total + ' ' + coin.text) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
+        var coin = localCoin(words, sm.currency), wl = sm.kind === 'wealth';
+        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price"' + (!wl && coin.usual ? ' title="' + esc(sm.total + ' ' + coin.usual) + '"' : '') + '>' + esc(wl ? 'needs Wealth ' + sm.need : sm.total + ' ' + coin.text) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
         var money = sm.moneyText === null ? '' : ' · ' + esc(sm.moneyText);
         if (buy.buyers.length > 1) {
           h += '<label>Paying: <select data-payer="1">' + buy.buyers.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === payer ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' + money + '</label>';
@@ -1872,7 +1895,7 @@
         if (sm.count) {
           h = '<b>In your basket</b>' + S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) {
             return '<p><span>' + basket[String(it.id)] + ' × ' + esc(it.n) + '</span></p>';
-          }).join('') + '<p><b>Total</b><b>' + esc(sm.total + ' ' + coin.text) + '</b></p>';
+          }).join('') + (sm.kind === 'wealth' ? '<p><b>Needs</b><b>Wealth ' + esc(sm.need) + '</b></p>' : '<p><b>Total</b><b>' + esc(sm.total + ' ' + coin.text) + '</b></p>');
         } else h = '<b>' + (buy && buy.buyers.length ? 'Your basket is empty.' : S.its.length + (S.its.length === 1 ? ' thing' : ' things') + ' for sale.') + '</b><p>Press to see the wares.</p>';
         peekEl.innerHTML = h;
       }
@@ -2221,7 +2244,8 @@
       function onKeeperClick() { if (S.mode === 'arr') return; setOpen(true); talk(); }
 
       // ---- Owner panel: the generator and the keeper's lines ----
-      function seg(key, opts) { return '<span class="shr-seg" role="group">' + opts.map(function (o) { return '<button type="button" data-k="' + key + '" data-v="' + o[0] + '" aria-pressed="' + (S[key] === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span>'; }
+      // An option's third entry, when there is one, is why it is off.
+      function seg(key, opts) { return '<span class="shr-seg" role="group">' + opts.map(function (o) { return '<button type="button" data-k="' + key + '" data-v="' + o[0] + '" aria-pressed="' + (S[key] === o[0]) + '"' + (o[2] ? ' disabled title="' + esc(o[2]) + '"' : '') + '>' + o[1] + '</button>'; }).join('') + '</span>'; }
       // One generator row: a part of the room with its keep pin and reroll dice.
       function genRow(part, icon, name, sub) {
         var k = partKeep[part];
@@ -2338,20 +2362,21 @@
         if (canArrange) loadOwnerRolls();
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length, mood = MOODS[S.mood] ? S.mood : 'cozy', M = MOODS[mood], e = efxNow();
         var typeName = (ROOM_TYPES.filter(function (t) { return t[0] === S.roomType; })[0] || [0, ''])[1];
-        var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [['paper', 'Paper']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
+        var looks = (window.ShopRoomCounter ? [['counter', 'Counter']] : []).concat(window.ShopRoomPaper ? [paperReady() ? ['paper', 'Paper'] : ['paper', 'Paper', 'Under construction']] : []);
         var room1 = (looks.length > 1 ? '<div class="shr-field"><span>Look</span>' + seg('look', looks) + '</div>' : '') +
-          (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the Counter room section builds the counter room, the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
+          (window.ShopRoomPaper && !paperReady() ? '<p class="shr-note">Paper is under construction while it is redesigned, so it can’t be picked for now.' + (S.look === 'paper' && counterOn() ? ' This shop was set to Paper, so it opens at the counter until Paper is back. Pick Counter to change that for good.' : '') + '</p>' : '') +
+          (counterOn() ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. The Counter room section builds the room, and the shop type picks the shop floor’s working piece.</p>' : '') +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
-          '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
+          (paperOn() ? '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<div class="shr-field"><span>Room size</span>' + seg('size', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) + '</div>' +
           '<div class="shr-field"><span>Furniture</span>' + seg('full', [['sparse', 'Sparse'], ['normal', 'Normal'], ['packed', 'Packed']]) + '</div>' +
-          '<div class="shr-field"><span>Decorations</span>' + seg('deco', [['none', 'None'], ['some', 'Some'], ['lots', 'Lots']]) + '</div>';
+          '<div class="shr-field"><span>Decorations</span>' + seg('deco', [['none', 'None'], ['some', 'Some'], ['lots', 'Lots']]) + '</div>' : '');
         var mood1 = '<div class="shr-moods">' + MOOD_ORDER.map(function (m) { var x = MOODS[m]; return '<button type="button" class="shr-mood" data-mood="' + m + '" aria-pressed="' + (m === mood) + '"><span class="sw">' + x.sw.map(function (c) { return '<i style="background:' + c + '"></i>'; }).join('') + '</span><b title="' + esc(x.name) + '">' + esc(x.short || x.name) + '</b></button>'; }).join('') + '</div>' +
           (M.pal ? '<p class="shr-note">The mood sets the colours, walls, floor and light, and brings its own furniture. Anything you moved by hand stays put.</p>'
             : '<div class="shr-field"><span>Colours</span><span class="shr-chips">' + room.PALS.map(function (p) { return '<button type="button" class="shr-chip" data-k="pal" data-v="' + p[0] + '" aria-pressed="' + (S.pal === p[0]) + '"><span class="shr-sw" style="background:' + p[2] + '"></span>' + p[1] + '</button>'; }).join('') + '</span></div>');
         var add1 = '<span class="shr-seg" role="group" style="display:grid"><button type="button" data-addtab="m" aria-pressed="' + (addTab === 'm') + '">Mood pieces</button><button type="button" data-addtab="f" aria-pressed="' + (addTab === 'f') + '">Furniture</button><button type="button" data-addtab="d" aria-pressed="' + (addTab === 'd') + '">Decorations</button></span>' +
           '<div class="shr-addl' + (addTab === 'd' ? ' dec' : '') + '">' + addTiles() + '</div>' +
-          '<small class="shr-hint">' + (addTab === 'd' ? 'Drop a decoration on a shelf, table or wall spot.' : 'Drag a piece onto the floor.') + ' Drag anything in the room onto the bin to remove it. With a keyboard, Tab to a piece and move it with the arrow keys; Shift moves it further.' + (S.look === 'paper' ? ' The marks over the counter choose where the keeper stands.' : '') + '</small>';
+          '<small class="shr-hint">' + (addTab === 'd' ? 'Drop a decoration on a shelf, table or wall spot.' : 'Drag a piece onto the floor.') + ' Drag anything in the room onto the bin to remove it. With a keyboard, Tab to a piece and move it with the arrow keys; Shift moves it further.' + (paperOn() ? ' The marks over the counter choose where the keeper stands.' : '') + '</small>';
         var rng = function (k, label) { return '<label class="shr-rng"><span>' + label + '</span><input type="range" min="0" max="250" step="5" data-efx="' + k + '" value="' + e[k] + '"><output>' + e[k] + '%</output></label>'; };
         var tg = function (k, label) { return '<button type="button" data-eft="' + k + '" aria-pressed="' + !!e[k] + '">' + label + '</button>'; };
         var es = function (k, opts) { return '<span class="shr-seg" role="group" style="display:grid">' + opts.map(function (o) { return '<button type="button" data-efs="' + k + '" data-v="' + o[0] + '" aria-pressed="' + (e[k] === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span>'; };
@@ -2366,15 +2391,17 @@
           genRow('deco', 'fa-wand-magic-sparkles', 'Decorations', { none: 'None', some: 'Some', lots: 'Lots' }[S.deco] || '');
         var fineSum = S.efx ? 'Changed by you' : 'As the mood sets it';
         panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
-          sec('room', 'fa-house', 'Room', typeName + ' · ' + ({ paper: 'Paper', counter: 'Counter' }[S.look] || 'Lit room'), room1) +
+          sec('room', 'fa-house', 'Room', typeName + ' · ' + (S.look === 'paper' ? (paperOn() ? 'Paper' : 'Paper, under construction') : 'Counter'), room1) +
           (cbOn() ? sec('cr', 'fa-store', 'Counter room', cbApi.theme().name, '<div data-cb></div>') : '') +
-          sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
-          sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
-          sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
-          sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
+          // Moods, furniture, atmosphere and the generator shape the room the
+          // paper look stands up; the counter is dressed in Counter room.
+          (paperOn() ? sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
+            sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
+            sec('fine', 'fa-sliders', 'Fine-tune', fineSum, fine1) +
+            sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) : '') +
           sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
           sec('rolls', 'fa-dice-d20', 'Rolls at the counter', rollsSum(), rollsBody()) +
-          '<span class="shr-status" aria-live="polite">' + (S.look === 'paper' ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
+          '<span class="shr-status" aria-live="polite">' + (paperOn() ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
           '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');

@@ -8,12 +8,14 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
@@ -273,16 +275,29 @@ type CampaignContext struct {
 	// visibility or pick a role from them; every access decision reads
 	// MemberRole, IsMember and IsDmGranted, which a preview has already
 	// lowered.
-	Preview        string // "", PreviewPlayer or PreviewGuest
+	Preview        string // "", PreviewPlayer, PreviewGuest or PreviewGuestCode
 	PreviewerRole  Role   // The viewer's real role while Preview is set.
 	PreviewerCanDM bool   // Whether the viewer is really on the DM team.
 }
 
-// The two ways the DM team can look at the campaign as someone else.
+// The ways the DM team can look at the campaign as someone else: as a
+// player, as a visitor with no code, and as a visitor who came in on a guest
+// code (a look-around pass).
 const (
-	PreviewPlayer = "player"
-	PreviewGuest  = "guest"
+	PreviewPlayer    = "player"
+	PreviewGuest     = "guest"
+	PreviewGuestCode = "guestcode"
 )
+
+// previewPassDays is how long the pass in a guest-code preview runs. A real
+// pass lasts at most a week, so the preview shows the longest one.
+const previewPassDays = 7
+
+// InGuestPreview reports whether this context is either guest preview.
+// Chrome only (see Preview).
+func (cc *CampaignContext) InGuestPreview() bool {
+	return cc.Preview == PreviewGuest || cc.Preview == PreviewGuestCode
+}
 
 // DMTeamChrome reports whether the viewer is really on the DM team, even
 // while a preview has lowered their role. Chrome only (see Preview).
@@ -325,6 +340,19 @@ func (cc *CampaignContext) GuestPreviewContext() *CampaignContext {
 		PreviewerRole:  cc.MemberRole,
 		PreviewerCanDM: cc.CanAuthorDmOnly(),
 	}
+}
+
+// GuestCodePreviewContext is GuestPreviewContext for a visitor who came in on
+// a guest code: the same visitor, holding a look-around pass that ends a week
+// from now. A pass gives exactly what a public visit gives (RoleNone) and
+// opens a private campaign for reading, so this lowers a DM-team member as
+// far as GuestPreviewContext does; ADR-076.
+func (cc *CampaignContext) GuestCodePreviewContext(now time.Time) *CampaignContext {
+	out := cc.GuestPreviewContext()
+	out.Preview = PreviewGuestCode
+	until := now.Add(previewPassDays * 24 * time.Hour)
+	out.VisitUntil = &until
+	return out
 }
 
 // EffectiveRole returns the permission level to use for route-level authorization.
@@ -805,6 +833,56 @@ type CampaignSettings struct {
 	// Empty/nil at read time returns the platform default trio
 	// (major / standard / detail) via GetEventTierDefinitions.
 	EventTierDefinitions []TierDefinition `json:"event_tier_definitions,omitempty"`
+
+	// HeroChanges is when players may change their own hero's picks. Nil
+	// means any time, as before the Director chose.
+	HeroChanges *HeroChangeRule `json:"hero_changes,omitempty"`
+}
+
+// HeroChangeRule is the Director's choice of when a player may change the
+// picks of their own hero: for some days after making it, after reaching a
+// level, or both. Outside those times the picks are locked until a Director
+// reopens one hero. Players may always write their hero's name and story.
+type HeroChangeRule struct {
+	// AfterMakingDays opens the picks for this many days after the hero is
+	// made; 0 does not.
+	AfterMakingDays int `json:"after_making_days,omitempty"`
+	// AfterLevel opens them for AfterLevelDays days each time the hero
+	// reaches a new level of FromLevel or more (every level-up when FromLevel
+	// is 0, 1 or 2). A level window always has a length, so a Director never
+	// has to remember to close it.
+	AfterLevel     bool `json:"after_level,omitempty"`
+	FromLevel      int  `json:"from_level,omitempty"`
+	AfterLevelDays int  `json:"after_level_days,omitempty"`
+}
+
+// HeroChangeMaxDays and HeroChangeMaxLevel bound what a Director may set.
+const (
+	HeroChangeMaxDays  = 365
+	HeroChangeMaxLevel = 100
+)
+
+// Validate refuses a rule that opens nothing or holds numbers out of range.
+func (r *HeroChangeRule) Validate() error {
+	if r == nil {
+		return nil
+	}
+	if r.AfterMakingDays < 0 || r.AfterMakingDays > HeroChangeMaxDays || r.AfterLevelDays < 0 || r.AfterLevelDays > HeroChangeMaxDays {
+		return apperror.NewBadRequest(fmt.Sprintf("days must be between 1 and %d", HeroChangeMaxDays))
+	}
+	if r.AfterLevel && r.AfterLevelDays == 0 {
+		return apperror.NewBadRequest("say how many days a new level keeps the picks open")
+	}
+	if r.FromLevel < 0 || r.FromLevel > HeroChangeMaxLevel {
+		return apperror.NewBadRequest(fmt.Sprintf("the level must be between 1 and %d", HeroChangeMaxLevel))
+	}
+	if r.AfterMakingDays == 0 && !r.AfterLevel {
+		return apperror.NewBadRequest("choose after making the hero, after a new level, or both")
+	}
+	if !r.AfterLevel {
+		r.FromLevel, r.AfterLevelDays = 0, 0
+	}
+	return nil
 }
 
 // --- Default visibility for newly created content ---

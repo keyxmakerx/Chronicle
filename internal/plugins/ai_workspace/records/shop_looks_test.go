@@ -98,6 +98,7 @@ func TestShopRoomKind(t *testing.T) {
 			"changes nothing in Ember Forge's room", false, ""},
 		{"an unknown type", craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "Ember Forge", "type": "tavern"}), owner, "", false, `type: "tavern" is not one of apothecary, forge, general, jeweler, library, market`},
 		{"an unknown moment", craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "Ember Forge", "says": map[string]any{"haggle": "No."}}), owner, "", false, `"haggle" is not a moment`},
+		{"the lit room is retired", craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "Ember Forge", "look": "Lit room"}), owner, "", false, "lit room is retired"},
 		{"not a shop page", craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "The Inn", "mood": "cozy"}), owner, "", false, "is not a shop page"},
 		{"no such page", craftRec("shop-room", ActionUpdate, "", map[string]any{"shop": "Nowhere", "mood": "cozy"}), owner, "", false, "no page called"},
 		{"removing is refused", craftRec("shop-room", ActionDelete, "", map[string]any{"shop": "Ember Forge"}), owner, "", false, "can't be removed by a block"},

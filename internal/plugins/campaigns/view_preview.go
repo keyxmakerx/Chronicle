@@ -1,9 +1,10 @@
 package campaigns
 
 // view_preview.go is the DM team's "look as someone else" switch: the player
-// preview (a display cookie, see ViewingAsPlayer) and the guest preview (a
-// middleware downgrade, see AllowPublicCampaignAccess and ADR-074). Both are
-// session cookies, only one is on at a time, and neither can grant anything:
+// preview (a display cookie, see ViewingAsPlayer) and the two guest previews,
+// a visitor with no code and a visitor on a guest code (a middleware
+// downgrade, see AllowPublicCampaignAccess, ADR-074 and ADR-076). All are
+// session cookies, only one is on at a time, and none can grant anything:
 // the cookies are honoured only for the owner and co-DMs, and a preview can
 // only lower what a request may see.
 
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -26,6 +28,9 @@ const (
 	// (HttpOnly): no script needs it, the page reads the preview from the
 	// server-rendered chrome.
 	viewAsGuestCookie = "chronicle_view_as_guest"
+	// viewAsGuestCodeCookie is the cookie for the guest-code preview, the
+	// visitor who came in on a guest code. Server-only, like the guest one.
+	viewAsGuestCodeCookie = "chronicle_view_as_guestcode"
 )
 
 // ViewingAsPlayer reports whether the owner or a co-DM has "view as player"
@@ -48,6 +53,13 @@ func ViewingAsPlayer(c *echo.Context, cc *CampaignContext) bool {
 // Display only: never use it to grant.
 func ViewingAsGuest(c *echo.Context, cc *CampaignContext) bool {
 	return cc != nil && cc.CanAuthorDmOnly() && cc.Campaign != nil && previewCookieFor(c, viewAsGuestCookie, cc.Campaign.ID)
+}
+
+// viewingAsGuestCode reports whether the REAL owner or co-DM has the
+// guest-code cookie on. A pass opens a private campaign too, so unlike the
+// plain guest preview this one has an effect everywhere.
+func viewingAsGuestCode(c *echo.Context, cc *CampaignContext) bool {
+	return cc != nil && cc.CanAuthorDmOnly() && cc.Campaign != nil && previewCookieFor(c, viewAsGuestCodeCookie, cc.Campaign.ID)
 }
 
 // homeGuestsNoteParam and homeGuestsNoteValue are the query that asks a
@@ -83,15 +95,40 @@ func isReadMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead
 }
 
-// guestPreviewActive decides, from the REAL context of a request, whether it
-// is lowered to a visitor's: the DM team's own request, a read, a public
-// campaign (a private one admits no guest, so there is nothing to look at)
-// and the guest cookie. The cookie from anyone else has no effect at all.
+// guestPreviewMode decides, from the REAL context of a request, whether it
+// is lowered to a visitor's and which one: "" for no preview, PreviewGuest or
+// PreviewGuestCode. It needs the DM team's own request and a read. The plain
+// guest preview needs a public campaign too (a private one admits no guest
+// without a code, so there is nothing to look at); a guest code opens any
+// campaign. The cookies from anyone else have no effect at all.
+func guestPreviewMode(c *echo.Context, real *CampaignContext) string {
+	if !real.IsMember || !real.CanAuthorDmOnly() || !isReadMethod(c.Request().Method) {
+		return ""
+	}
+	switch {
+	case previewCookieFor(c, viewAsGuestCodeCookie, real.Campaign.ID):
+		return PreviewGuestCode
+	case real.Campaign.IsPublic && previewCookieFor(c, viewAsGuestCookie, real.Campaign.ID):
+		return PreviewGuest
+	}
+	return ""
+}
+
+// guestPreviewActive reports whether either guest preview lowers this request.
 func guestPreviewActive(c *echo.Context, real *CampaignContext) bool {
-	return real.IsMember && real.CanAuthorDmOnly() &&
-		isReadMethod(c.Request().Method) &&
-		real.Campaign.IsPublic &&
-		previewCookieFor(c, viewAsGuestCookie, real.Campaign.ID)
+	return guestPreviewMode(c, real) != ""
+}
+
+// lowerForGuestPreview is the visitor's context for a request a guest
+// preview lowers, or real unchanged when none applies.
+func lowerForGuestPreview(c *echo.Context, real *CampaignContext) *CampaignContext {
+	switch guestPreviewMode(c, real) {
+	case PreviewGuestCode:
+		return real.GuestCodePreviewContext(time.Now())
+	case PreviewGuest:
+		return real.GuestPreviewContext()
+	}
+	return real
 }
 
 // GuestPreviewAsked is the cheap first test for a door that does not run
@@ -102,7 +139,8 @@ func GuestPreviewAsked(c *echo.Context) bool {
 		return false
 	}
 	_, err := c.Cookie(viewAsGuestCookie)
-	return err == nil
+	_, errCode := c.Cookie(viewAsGuestCodeCookie)
+	return err == nil || errCode == nil
 }
 
 // GuestPreviewLowers reports whether the guest preview lowers this member's
@@ -137,7 +175,7 @@ func refuseDuringGuestPreview(c *echo.Context, real *CampaignContext) (handled b
 	}
 	// The page is drawn as the visitor, with the preview's chrome, so the
 	// way back is in the same place as everywhere else.
-	c.Set(contextKeyCampaign, real.GuestPreviewContext())
+	c.Set(contextKeyCampaign, lowerForGuestPreview(c, real))
 	return true, middleware.Render(c, http.StatusForbidden, GuestPreviewRefusalPage(real.Campaign.ID, middleware.GetCSRFToken(c)))
 }
 
@@ -181,6 +219,7 @@ func setPreview(c *echo.Context, campaignID, as string) {
 	// The player cookie keeps its long-standing shape (readable by script).
 	writePreviewCookie(c, viewAsPlayerCookie, campaignID, as == PreviewPlayer, false)
 	writePreviewCookie(c, viewAsGuestCookie, campaignID, as == PreviewGuest, true)
+	writePreviewCookie(c, viewAsGuestCodeCookie, campaignID, as == PreviewGuestCode, true)
 }
 
 // anyPreviewOn reports whether the eye would show as on for this DM-team
@@ -188,7 +227,7 @@ func setPreview(c *echo.Context, campaignID, as string) {
 // On a private campaign a guest cookie left by another campaign changes
 // nothing, so it does not count; the eye starts the player preview there.
 func anyPreviewOn(c *echo.Context, cc *CampaignContext) bool {
-	return ViewingAsPlayer(c, cc) || (cc.Campaign.IsPublic && ViewingAsGuest(c, cc))
+	return ViewingAsPlayer(c, cc) || (cc.Campaign.IsPublic && ViewingAsGuest(c, cc)) || viewingAsGuestCode(c, cc)
 }
 
 // ToggleViewAsPlayer is the header eye (POST /campaigns/:id/toggle-view-mode)
@@ -210,7 +249,7 @@ func (h *Handler) ToggleViewAsPlayer(c *echo.Context) error {
 // viewAsRequest is the body of POST /campaigns/:id/view-as. Next and Home are
 // enums, never addresses, so the endpoint cannot be used to redirect anywhere.
 type viewAsRequest struct {
-	As   string `json:"as" form:"as"`     // self, player or guest.
+	As   string `json:"as" form:"as"`     // self, player, guest or guestcode.
 	Next string `json:"next" form:"next"` // "", home or arrange.
 	Home string `json:"home" form:"home"` // player or guest; only with next=arrange.
 }
@@ -230,9 +269,9 @@ func (h *Handler) ViewAs(c *echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 	switch req.As {
-	case "self", PreviewPlayer, PreviewGuest:
+	case "self", PreviewPlayer, PreviewGuest, PreviewGuestCode:
 	default:
-		return apperror.NewBadRequest("as must be self, player or guest")
+		return apperror.NewBadRequest("as must be self, player, guest or guestcode")
 	}
 	base := "/campaigns/" + cc.Campaign.ID
 	to := ""

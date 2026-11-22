@@ -185,6 +185,22 @@
       "additionalProperties": false,
       "description": "How the game rolls and counts a crafting project. Recipes and benches are the campaign's own; this is only the arithmetic."
     },
+    "crits": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["dice"],
+        "properties": {
+          "dice": {"type": "string", "pattern": "^([1-4])?d(4|6|8|10|12|20)$", "description": "The dice the rule covers, like \"d20\" or, with a count, \"2d10\"."},
+          "judge": {"type": "string", "enum": ["each", "total"], "description": "each: every die by its own face (default). total: a group of exactly the written count is judged by its sum; needs a count in dice."},
+          "succ": {"type": "array", "maxItems": 20, "items": {"type": "integer"}, "description": "The faces or sums that are a critical success."},
+          "fail": {"type": "array", "maxItems": 20, "items": {"type": "integer"}, "description": "The faces or sums that are a critical failure."}
+        },
+        "additionalProperties": false
+      },
+      "description": "Which dice results the game counts as crits. Absent: a natural 20 or 1 on a d20. An empty list: the game has no crits."
+    },
     "goods": {
       "type": "array",
       "maxItems": 8,
@@ -420,6 +436,39 @@
             }
           },
           "additionalProperties": false
+        },
+        "creator": {
+          "type": "object",
+          "description": "How the hero creator treats this character field as a step. Parts that fail validation are dropped at load; see docs/system-plugin-marketplace.md.",
+          "properties": {
+            "needed": {
+              "type": "boolean",
+              "description": "The rules expect this pick: the step reads as not optional, but a hero without it is still accepted."
+            },
+            "from": {
+              "type": "object",
+              "required": ["step", "property"],
+              "properties": {
+                "step": { "type": "string", "description": "Another string field of the same preset." },
+                "property": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$", "description": "Property of the entry chosen at that step: a list of names or of objects with a name." }
+              },
+              "additionalProperties": false
+            },
+            "count_from": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["step", "property"],
+                "properties": {
+                  "step": { "type": "string" },
+                  "property": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$", "description": "A number on the chosen entry: how many of this step it allows." },
+                  "note": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$", "description": "A text property on the same entry, shown in the step." }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -503,6 +552,11 @@
         "foundry_actor_type": {
           "type": "string",
           "description": "Foundry VTT Actor type (e.g., 'character', 'hero', 'npc')."
+        },
+        "creator_order": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Field keys the hero creator asks first, in this order; the rest follow in field order."
         },
         "foundry_pull_fields": {
           "type": "array",

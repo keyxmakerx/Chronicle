@@ -32,6 +32,9 @@ type BuilderHero struct {
 	// Sheet is true when the game system draws this hero's page as its
 	// sheet, so the link can promise one; otherwise it opens the plain page.
 	Sheet bool `json:"sheet"`
+	// Lock is whether the Director's times let the player change the picks
+	// now; nil when the campaign has no times, so the builder says nothing.
+	Lock *HeroLock `json:"lock,omitempty"`
 }
 
 // builderHeroes picks the viewer's heroes the builder can fill in: their own

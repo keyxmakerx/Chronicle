@@ -51,6 +51,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -4738,7 +4739,19 @@ func (a *App) RegisterRoutes() {
 		},
 		stashEvents,
 	)}
-	entityService.SetFieldChangeObserver(armoryObserver)
+	// When players may change their hero's picks, and the Directors' bell for
+	// a change. Its table belongs to its own schema; while that is unhealthy
+	// the service is left out, so every hero stays open rather than a level
+	// window never opening.
+	var heroChangeSvc *entities.HeroChangeService
+	if a.PluginHealth.IsHealthy(herochangeschema.SchemaSlug) {
+		heroChangeSvc = entities.NewHeroChangeService(heroChangeRules{camps: campaignService},
+			entities.NewHeroChangeRepository(a.DB), heroChangeBell{camps: campaignService, bell: sessionsService})
+		entityHandler.SetHeroChanges(heroChangeSvc)
+	} else {
+		slog.Warn("hero changes schema degraded — players' hero picks are never locked")
+	}
+	entityService.SetFieldChangeObserver(fieldObservers{armoryObserver, heroChangeSvc})
 	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
 	stashAPIHandler := syncapi.NewStashAPIHandler(
 		&syncStashAPIAdapter{api: stashAPI},
@@ -4756,6 +4769,7 @@ func (a *App) RegisterRoutes() {
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
+	syncAPIHandler.SetHeroChanges(heroChangeSvc)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
 	syncAPIHandler.SetFolderLister(folderService)
 	if urlSigner != nil {
@@ -5157,7 +5171,7 @@ func (a *App) RegisterRoutes() {
 		keepMonths := func(ctx context.Context) int { return settingsService.LongTermTrashMonths(ctx) }
 		playerChangesSvc := playerchanges.NewService(playerchanges.NewRepository(a.DB),
 			&playerChangePages{entities: entityService, safety: pageSafetyService}, keepMonths)
-		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver,
+		entityService.SetFieldChangeObserver(fieldObservers{armoryObserver, heroChangeSvc,
 			&playerChangeRecorder{svc: playerChangesSvc, members: campaignService, types: entityService}})
 		playerchanges.RegisterRoutes(e, playerchanges.NewHandler(playerChangesSvc,
 			func(c *echo.Context) int { return keepMonths(c.Request().Context()) },
@@ -5675,6 +5689,7 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceRenderer.Folders = aiFolderNames{folders: folderService}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
+	aiWorkspaceHandler.SetPageUndo(aiPageUndo{pages: entityService, safety: pageSafetyService})
 	// Which parts of a split AI answer were applied; left out when its table
 	// did not migrate, so labels are still read but earlier pastes unknown.
 	// So are the owner's switches for which shared notes the AI may change;
@@ -5700,6 +5715,10 @@ func (a *App) RegisterRoutes() {
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
 		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
+		// What an applied request changed is kept for 30 days so the owner can
+		// undo it from Your AI; the purge removes it once the time is up.
+		aiConnectorSvc.SetUndo(connector.NewUndoRepository(a.DB))
+		go aiConnectorSvc.StartBeforePurger(a.ShutdownCtx)
 		aiConnectorSvc.SetNotes(aiWorkspaceHandler.ConnectorNotes)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
@@ -6107,7 +6126,7 @@ func (a *App) RegisterRoutes() {
 	}
 	// A player's AI changes only that player's own character, through the
 	// same claimed-owner checks and hero builder plan as the sheet editor.
-	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc},
+	aiWorkspaceHandler.SetPlayerSheets(aiPlayerSheets{entities: entityService, planner: heroPlannerAdapter{choices: characterChoiceSvc}, heroChanges: heroChangeSvc,
 		gmTerm: func(ctx context.Context, campaignID string) string {
 			if m := manifestFor(ctx, campaignID); m != nil {
 				return m.GMTerm()
@@ -6391,8 +6410,8 @@ func (a *App) RegisterRoutes() {
 			// below is built from the visitor's values. The preview is noted
 			// only to draw its own chrome, and the site-admin flag, which the
 			// session carries, is blanked so the shell is a visitor's too.
-			if cc.Preview == campaigns.PreviewGuest {
-				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewGuest)
+			if cc.InGuestPreview() {
+				ctx = layouts.SetPreviewAs(ctx, cc.Preview)
 				ctx = layouts.SetIsAdmin(ctx, false)
 			} else if viewingAsPlayer {
 				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewPlayer)
@@ -6400,6 +6419,7 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
+			ctx = layouts.SetCampaignPublic(ctx, cc.Campaign.IsPublic)
 
 			// Entity types, per-type counts and the enabled addons: what the
 			// sidebar is built from. Use the request context (not the
@@ -6930,7 +6950,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -6938,8 +6958,10 @@ func (a *App) RegisterRoutes() {
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
-		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
-		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
+		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler})
+		rollsHandler := rolls.NewHandler(rollsSvc)
+		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
+		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
 		campaignHandler.RegisterCustomizeTab(rolls.CustomizeTabFactory(rollsSvc))
@@ -7236,6 +7258,8 @@ func (a *App) RegisterRoutes() {
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
+		SavedLayouts:    layoutPresetService,
+		PageTemplates:   contentTemplateService,
 		PageTests:       pageTests,
 		Trackers:        trackersSvc,
 		FoundryMonsters: aiFoundryMonsters,

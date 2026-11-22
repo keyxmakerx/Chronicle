@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -98,5 +99,36 @@ func TestHeroTermsAdapterCopiesWords(t *testing.T) {
 	}
 	if string(raw) != `{"terms":{"save-ends":{"name":"Save Ends","category":"duration","text":"Roll at end of turn."}}}` {
 		t.Errorf("wire = %s", raw)
+	}
+}
+
+// shapedSpy answers a plan whose steps carry a system's declarations.
+type shapedSpy struct{ systems.CharacterChoiceService }
+
+func (shapedSpy) CreatorPlan(context.Context, string) (*systems.CreatorPlan, error) {
+	return &systems.CreatorPlan{Steps: []systems.CreatorStep{{
+		FieldKey: "subclass", Label: "Subclass", Needed: true, Parent: "class",
+		Choices:   []systems.Choice{{Key: "fury--reaver", Name: "Reaver", Parent: "Fury"}},
+		CountFrom: []systems.CreatorCount{{Step: "class", Property: "kits", Note: "kit_note"}},
+	}}}, nil
+}
+
+// The needed flag, the parent step, the counts and each entry's parent reach
+// the creator for a player and for a visitor alike; none of it holds a secret.
+func TestPlansCarryStepDeclarations(t *testing.T) {
+	a := heroPlannerAdapter{choices: shapedSpy{}}
+	player, err := a.HeroPlan(context.Background(), "camp", "u1", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visitor, err := a.VisitorPlan(context.Background(), "camp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, plan := range map[string]*entities.HeroPlan{"player": player, "visitor": visitor} {
+		st := plan.Steps[0]
+		if !st.Needed || st.Parent != "class" || len(st.CountFrom) != 1 || st.CountFrom[0].Note != "kit_note" || st.Choices[0].Parent != "Fury" {
+			t.Errorf("%s plan dropped a declaration: %+v", name, st)
+		}
 	}
 }

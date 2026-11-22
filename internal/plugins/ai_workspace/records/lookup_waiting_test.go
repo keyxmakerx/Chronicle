@@ -39,7 +39,7 @@ func TestLookups_Waiting(t *testing.T) {
 	at := time.Date(2026, 10, 26, 18, 0, 0, 0, time.UTC)
 	full := WaitingList{
 		Asks:    []WaitingAsk{{Summary: "Five characters for Coral Court", Counts: "5 to add", At: at}},
-		Decided: []WaitingAsk{{Summary: "Rename the inn", At: at, Outcome: "1 changed"}, {Summary: "Drop the moon", At: at, TurnedDown: true}},
+		Decided: []WaitingAsk{{Summary: "Rename the inn", At: at, Outcome: "1 changed"}, {Summary: "Drop the moon", At: at, TurnedDown: true}, {Summary: "Add Umbra", At: at, Outcome: "1 added", Undone: true}},
 		Entries: []WaitingEntry{
 			{Name: "Fairy", Field: "ancestry", Writer: "Sam", For: "Ash", HandedIn: true},
 			{Name: "Gnome", Field: "ancestry", Writer: "Lee", Note: "Wings cost 3"},
@@ -60,6 +60,8 @@ func TestLookups_Waiting(t *testing.T) {
 			"### Changes your AI asked for, waiting on the owner (1)\n\n- \"Five characters for Coral Court\" (5 to add), sent 2026-10-26",
 			"- \"Rename the inn\", applied: 1 changed (2026-10-26)",
 			"- \"Drop the moon\", turned down by the owner, nothing changed; that was their choice, not an error (2026-10-26)",
+			"- \"Add Umbra\", applied, then undone by the owner, so none of its changes stand now (2026-10-26)",
+			"the owner can undo it from the Your AI page (What it did)",
 			"### Entries players wrote (1 handed in, 1 still being written)",
 			"- \"Fairy\" (ancestry) by Sam, for Ash: handed in, waiting for a Director",
 			"- \"Gnome\" (ancestry) by Lee: still being written; the Director asked: \"Wings cost 3\"",

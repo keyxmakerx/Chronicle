@@ -1,6 +1,7 @@
 package rolls
 
 import (
+	"context"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -60,10 +61,13 @@ const (
 	tableTermsMax = 20
 )
 
-// Die is one die as it fell.
+// Die is one die as it fell. Crit is the server's judgement under the
+// campaign's game system ("succ", "fail" or empty); it is stored with the die
+// and never taken from a client.
 type Die struct {
-	Sides int `json:"sides"`
-	Value int `json:"value"`
+	Sides int    `json:"sides"`
+	Value int    `json:"value"`
+	Crit  string `json:"crit,omitempty"`
 }
 
 // Roll is one roll in the log.
@@ -212,4 +216,35 @@ type UpdateSettingsInput struct {
 	PlayersPick patch.Field[bool]   `json:"playersPick"`
 	// DiceOffered replaces the whole list; an empty list offers every set.
 	DiceOffered patch.Field[[]string] `json:"diceOffered"`
+}
+
+// PowerRollLine is the Table's power roll line for one viewer: the game
+// system's declared roll (2d10 plus a characteristic), and the viewer's own
+// hero's numbers when they are known. Declared is false for a campaign whose
+// system declares no power roll, and the Table then shows no line.
+type PowerRollLine struct {
+	Declared        bool        `json:"declared"`
+	Dice            string      `json:"dice,omitempty"`
+	Edge            int         `json:"edge,omitempty"`
+	Bane            int         `json:"bane,omitempty"`
+	Tiers           []int       `json:"tiers,omitempty"`
+	Characteristics []PowerStat `json:"characteristics,omitempty"`
+	Hero            string      `json:"hero,omitempty"`
+}
+
+// PowerStat is one characteristic of the power roll. Value is nil when the
+// viewer has no hero or the hero's sheet holds no number there.
+type PowerStat struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Value *int   `json:"value"`
+}
+
+// PowerRollSource reads a campaign's power roll and the viewer's own hero.
+// It is implemented in internal/app over the game system and the claimed
+// character, so this plugin reaches neither directly. canSeeGM is whether the
+// viewer sees GM content; without it, a number the GM marked GM-only is left
+// out.
+type PowerRollSource interface {
+	PowerRoll(ctx context.Context, campaignID, userID string, canSeeGM bool) (PowerRollLine, error)
 }

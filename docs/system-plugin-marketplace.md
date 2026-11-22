@@ -136,6 +136,22 @@ Entity types do not record their source system, so when two installed systems de
 
 `play` is only a declaration; the play-edit guard and sheet controls read it.
 
+### Hero Creator Steps (`creator_order`, `creator`)
+
+The hero creator, the builder sentence on the Characters page, practice heroes and the try-out ask one step per text field of the character preset that has a list of entries. By default they come in field order and every step is optional. A system shapes them with manifest declarations; core holds none of a system's field names. A system that declares nothing behaves as before.
+
+On the preset, `creator_order` names the step keys asked first, in order; any other step follows in field order, and unknown keys are ignored.
+
+On a preset field, `creator` may carry:
+
+| Key | Meaning |
+|---|---|
+| `needed` | The rules expect this pick. The step does not read "Optional", has no Skip, and the review lists it under "Still to choose". A hero without it is still accepted; only a Director's hero-choice rule refuses. |
+| `from` `{step, property}` | The step's entries are the items in `property` of the entry chosen at `step`: names, or objects with a `name` (plus optional `summary`, `description`, and other keys that become the entry's properties). The step offers nothing until the parent is chosen, is cleared when the parent changes, and is not asked when the chosen parent lists none. |
+| `count_from` `[{step, property, note}]` | How many of this step the chosen entry allows, read from a number in `property`. A later list item whose chosen entry defines the number overrides an earlier one. `note` names a text property on the same entry, shown in the step. `0` means the step is not asked (the creator says so with the note, the builder leaves the blank out, and the server refuses a new hero that sends a pick there); `1` or more makes it needed. Only one pick is stored either way. No chosen entry defining the number leaves the step as it was. |
+
+A part is dropped at load, with a log line and the field kept, when `from` or `count_from` names a step that is not another string field of the same preset, a property or note is not a plain identifier, or `from` steps depend on each other in a loop.
+
 ### Crafting (`crafting`)
 
 An optional top-level block saying how the game rolls and counts a crafting project in the Crafting app. Recipes, benches and steps are each campaign's own and work under any system; this is only the arithmetic and the words.
@@ -162,6 +178,28 @@ An optional top-level block saying how the game rolls and counts a crafting proj
 | `goals` | The project goals the game publishes, up to 64, each an `echelon` (1 to 4), a `goal` (1 to 999) and optionally `for`, what is made (`consumable`, `weapon`, `gear`). The recipe generator uses them, the entry for what it makes first, then the one with no `for`; with none it leaves goals to the Director |
 
 Every key is optional; a missing one, or a system with no block, takes the default (2d10, no characteristic, +2 and -2, `[11, 16]`, "Goal", "Item prerequisite", "Project source"). A block that breaks these rules fails manifest validation, so the system does not load.
+
+### Crits (`crits`)
+
+An optional top-level list saying which dice results the game counts as a critical success or failure. Chronicle's server applies it to every roll it records, so the Table's dice (both looks), the log and Foundry's rolls agree; a browser never decides a crit.
+
+```json
+"crits": [
+  {"dice": "2d10", "judge": "total", "succ": [19, 20]}
+]
+```
+
+| Key | Meaning |
+|-----|---------|
+| `dice` | The dice the rule covers: `d4`, `d6`, `d8`, `d10`, `d12` or `d20` (every such die), or with a count of one to four, like `2d10` |
+| `judge` | `each` (default): every die by its own face. `total`: a group of exactly `dice`'s count is judged by its sum, and every die of the group is a crit of that kind. A `total` rule needs the count written |
+| `succ`, `fail` | The faces (for `each`) or sums (for `total`) that count, at most 20 values each, each one the dice can show; a rule lists at least one of them |
+
+Up to 8 rules; the first rule that covers a die decides it, so a die no rule covers is never a crit. A roll made at the Table groups dice by the terms of its formula (the `2d10` in `2d10+1d20` is one group). A roll another app reports has no terms, so consecutive dice of one size are taken as a group.
+
+With no `crits` block, or no system, a natural 20 on a d20 is a success and a natural 1 a failure. `"crits": []` means the game has no crits at all. Draw Steel's power roll is the example above: a total of 19 or 20 on 2d10, no failure. A block that breaks these rules fails manifest validation, so the system does not load.
+
+Each person can turn crit animations off for themselves in the Table's My dice leaf; the dice stay marked, only the effects stop.
 
 ### Data Files
 

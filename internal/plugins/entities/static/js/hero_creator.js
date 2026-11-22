@@ -339,6 +339,7 @@
     this.at = {};
     this.nh = {};
     this.name = '';
+    this.about = {};
     this.terms = null;
     this.busy = false;
     this.sheet = null;
@@ -435,8 +436,11 @@
   // --- Draft kept on this device ---
   Creator.prototype.restore = function () {
     try {
-      var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null') || (!this.practice && this.sentenceDraft());
+      var own = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null'), d = own || (!this.practice && this.sentenceDraft());
       if (d) { this.adopt(d); this.resumed = true; }
+      // A carried-over sentence is removed as it is read, so it is kept as
+      // this creator's own draft at once, or a reload would lose it.
+      if (d && !own) this.save();
     } catch (e) { /* no storage: start fresh */ }
   };
   // The Characters page once offered a new hero as a sentence, kept on this
@@ -468,14 +472,18 @@
       var kept = bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [];
       self.picks[k] = { name: c.name, options: kept };
     });
+    this.scrub();
     this.name = typeof d.name === 'string' ? d.name : '';
+    var ab = d.about && typeof d.about === 'object' ? d.about : {};
+    this.about = {};
+    this.aboutFields().forEach(function (f) { if (typeof ab[f.key] === 'string') self.about[f.key] = ab[f.key]; });
   };
   Creator.prototype.save = function () {
     // A copy or a change starts from the server's hero, so it keeps no draft
     // that a later blank start would pick up.
     // A try-out has one place to live, written only when it is kept.
     if (this.preload || this.tryout) return;
-    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name })); } catch (e) { /* ignore */ }
+    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name, about: this.about })); } catch (e) { /* ignore */ }
   };
   // The try-out kept in this browser, or null when there is none, it is not
   // one of ours, or the browser will not say.
@@ -500,10 +508,33 @@
 
   // --- Lookups ---
   Creator.prototype.steps = function () { return this.plan.steps; };
-  Creator.prototype.stepCount = function () { return this.plan.steps.length + 1; };
-  // The last step, name and review, sits one past the plan's steps.
-  Creator.prototype.last = function () { return this.plan.steps.length; };
-  Creator.prototype.isDetails = function () { return this.step >= this.plan.steps.length; };
+  Creator.prototype.stepCount = function () { return this.last() + 1; };
+  // The boxes of "About your hero": who the hero is in the player's words,
+  // all optional. A practice hero or a try-out never joins the party, so it
+  // isn't asked.
+  Creator.prototype.aboutFields = function () {
+    var a = this.plan && this.plan.about;
+    return !this.practice && Array.isArray(a) ? a.filter(function (f) { return f && typeof f.key === 'string'; }) : [];
+  };
+  Creator.prototype.hasAbout = function () { return this.aboutFields().length > 0; };
+  // After the plan's steps come About your hero, when the hero's page has
+  // those fields, and last Name and review.
+  Creator.prototype.last = function () { return this.plan.steps.length + (this.hasAbout() ? 1 : 0); };
+  Creator.prototype.isDetails = function () { return this.step >= this.last(); };
+  Creator.prototype.isAbout = function () { return this.hasAbout() && this.step === this.plan.steps.length; };
+  // Past the steps that pick from a list.
+  Creator.prototype.isExtra = function () { return this.step >= this.plan.steps.length; };
+  // What the About boxes hold, in a line: the short ones, then a count.
+  Creator.prototype.aboutLine = function () {
+    var self = this, short = [], long = 0;
+    this.aboutFields().forEach(function (f) {
+      var v = String(self.about[f.key] || '').trim();
+      if (!v) return;
+      if (f.long) long++; else short.push(v);
+    });
+    if (long) short.push(long === 1 ? (short.length ? 'and more' : 'Written') : long + ' written');
+    return short.join(' · ');
+  };
   Creator.prototype.cur = function () { return this.plan.steps[this.step]; };
   Creator.prototype.stepByKey = function (k) {
     for (var i = 0; i < this.plan.steps.length; i++) if (this.plan.steps[i].fieldKey === k) return this.plan.steps[i];
@@ -512,8 +543,81 @@
   Creator.prototype.choice = function (key, name) {
     var st = this.stepByKey(key);
     if (!st) return null;
-    for (var i = 0; i < st.choices.length; i++) if (lower(st.choices[i].name) === lower(name)) return st.choices[i];
-    return null;
+    // Two parents may list an entry of the same name; the one under the
+    // parent picked now wins, else the first of that name.
+    var pp = st.parent && this.picks[st.parent] && this.picks[st.parent].name, first = null;
+    for (var i = 0; i < st.choices.length; i++) {
+      if (lower(st.choices[i].name) !== lower(name)) continue;
+      if (!pp || lower(st.choices[i].parent) === lower(pp)) return st.choices[i];
+      first = first || st.choices[i];
+    }
+    return first;
+  };
+  // --- Steps a system shapes: parents and counts ---
+
+  // The entry picked at a step, whatever its position, or null.
+  Creator.prototype.pickedAt = function (key) {
+    var p = this.picks[key];
+    return p && p.name ? this.choice(key, p.name) : null;
+  };
+  // How many of this step the picked parent entries allow. A later countFrom
+  // entry whose picked entry defines the number overrides an earlier one;
+  // known is false when none does, and the step then reads as it always did.
+  Creator.prototype.allowance = function (st) {
+    var out = { known: false, count: 0, by: '', note: '' }, self = this;
+    (st.countFrom || []).forEach(function (cf) {
+      var e = self.pickedAt(cf.step), n = e && e.properties && e.properties[cf.property];
+      if (typeof n !== 'number' || n < 0) return;
+      var note = cf.note && e.properties[cf.note];
+      out = { known: true, count: Math.floor(n), by: e.name, note: typeof note === 'string' ? note : '' };
+    });
+    return out;
+  };
+  // The entries a step offers now: all of them, or for a dependent step only
+  // those under the parent entry picked.
+  Creator.prototype.pool = function (st) {
+    if (!st.parent) return st.choices;
+    var p = this.picks[st.parent];
+    if (!p || !p.name) return [];
+    return st.choices.filter(function (c) { return lower(c.parent) === lower(p.name); });
+  };
+  // 'wait': the parent is not picked yet. 'unused': the picked entries leave
+  // this step nothing to ask (a count of 0, or a parent that lists none).
+  // Otherwise 'open'.
+  Creator.prototype.stepState = function (st) {
+    if (st.parent) {
+      var p = this.picks[st.parent];
+      if (!p || !p.name) return 'wait';
+      if (!this.pool(st).length && !(st.canMake && !this.practice)) return 'unused';
+    }
+    var a = this.allowance(st);
+    return a.known && a.count === 0 ? 'unused' : 'open';
+  };
+  Creator.prototype.unused = function (st) { return this.stepState(st) === 'unused'; };
+  // The plain sentence for a step the picked entries do not use.
+  Creator.prototype.unusedLine = function (st) {
+    var a = this.allowance(st), by = a.known && a.count === 0 ? a.by : (this.picks[st.parent] && this.picks[st.parent].name) || '';
+    var line = by ? cap(an(by)) + ' ' + by + ' doesn\u2019t use ' + an(st.label) + ' ' + lower(st.label) + '.' : cap(st.label) + ' isn\u2019t used here.';
+    return line + (a.known && a.count === 0 && a.note ? ' ' + a.note : '');
+  };
+  // Takes off every pick that no longer fits what is picked at its parent or
+  // what its parent allows, until nothing more changes; returns the labels.
+  Creator.prototype.scrub = function () {
+    var self = this, gone = [], again = true, guard = 0;
+    while (again && guard++ < 8) {
+      again = false;
+      this.plan.steps.forEach(function (st) {
+        var p = self.picks[st.fieldKey];
+        if (!p || !p.name) return;
+        var c = self.choice(st.fieldKey, p.name);
+        var fits = c && !self.unused(st) && (!st.parent || (self.picks[st.parent] && self.picks[st.parent].name && lower(c.parent) === lower(self.picks[st.parent].name)));
+        if (fits) return;
+        delete self.picks[st.fieldKey];
+        gone.push(st.label);
+        again = true;
+      });
+    }
+    return gone;
   };
   // A required step the rules leave one entry on starts filled in.
   Creator.prototype.prefill = function () {
@@ -534,14 +638,14 @@
   // at the top, where the player looks it over.
   Creator.prototype.firstStep = function () {
     var self = this, steps = this.plan.steps;
-    var open = function (i) { return !self.locked(steps[i]) && (!self.resumed || !self.picked(i)); };
+    var open = function (i) { return !self.locked(steps[i]) && !self.unused(steps[i]) && (!self.resumed || !self.picked(i)); };
     for (var i = 0; i < steps.length; i++) if (open(i)) return i;
     return this.last();
   };
   // A step is settled once it holds a pick or was skipped on purpose.
   Creator.prototype.settled = function (i) {
     var st = this.plan.steps[i];
-    return !!(st && ((this.picks[st.fieldKey] && this.picks[st.fieldKey].name) || this.skipped[st.fieldKey]));
+    return !!(st && ((this.picks[st.fieldKey] && this.picks[st.fieldKey].name) || this.skipped[st.fieldKey] || this.unused(st)));
   };
   Creator.prototype.picked = function (i) {
     var st = this.plan.steps[i], p = st && this.picks[st.fieldKey];
@@ -559,9 +663,23 @@
     for (i = 0; i < n; i++) if (!this.settled(i) && i !== from) return i;
     return n;
   };
-  Creator.prototype.stepWord = function (i) { return i >= this.plan.steps.length ? 'Name and review' : this.plan.steps[i].label; };
+  Creator.prototype.stepWord = function (i) { return i >= this.last() ? 'Name and review' : i >= this.plan.steps.length ? 'About your hero' : this.plan.steps[i].label; };
   // A step the rules require can't be left empty; practice forces nothing.
-  Creator.prototype.optional = function (st) { return this.practice || !(st.rules && st.rules.required); };
+  // The system's own expectations still show in practice: a step it needs
+  // reads as not optional, though nothing refuses a hero without it.
+  Creator.prototype.needed = function (st) {
+    if (this.unused(st)) return false;
+    var a = this.allowance(st);
+    return !!st.needed || (a.known && a.count >= 1);
+  };
+  Creator.prototype.optional = function (st) {
+    if (this.unused(st)) return true;
+    return !this.needed(st) && (this.practice || !(st.rules && st.rules.required));
+  };
+  // What a step reads as before it has a pick.
+  Creator.prototype.stateWord = function (st) {
+    return this.skipped[st.fieldKey] ? 'None' : this.unused(st) ? 'Not used' : this.optional(st) ? 'Optional' : 'Not chosen yet';
+  };
   Creator.prototype.missing = function () {
     var self = this;
     return this.plan.steps.map(function (st, i) { return !self.picked(i) && !self.optional(st) ? i : -1; }).filter(function (i) { return i >= 0; });
@@ -604,8 +722,10 @@
   // The entries of a step the find box lets through.
   Creator.prototype.entries = function (si) {
     var st = this.plan.steps[si], q = lower((this.find[st.fieldKey] || '').trim());
-    if (!q) return st.choices;
-    return st.choices.filter(function (c) {
+    if (this.unused(st)) return [];
+    var pool = this.pool(st);
+    if (!q) return pool;
+    return pool.filter(function (c) {
       var f = factsOf(c).map(function (x) { return x[1]; }).join(' ');
       return lower(c.name + ' ' + plain(c.summary) + ' ' + f).indexOf(q) >= 0;
     });
@@ -676,8 +796,8 @@
     this.closeTip(true);
     var desk = this.view === 'desk', cols;
     if (desk) {
-      cols = '<div class="hc-cols">' + this.railHTML() + (this.isDetails()
-        ? '<section class="hc-mid hc-mid--wide">' + this.reviewHTML() + '</section>'
+      cols = '<div class="hc-cols">' + this.railHTML() + (this.isExtra()
+        ? '<section class="hc-mid hc-mid--wide">' + this.extraHTML() + '</section>'
         : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
     } else {
       cols = this.sheadHTML() + '<ul class="hc-chips" aria-label="Your picks">' + this.chipsHTML() + '</ul><div class="hc-body" data-body>' + this.bodyInner() + '</div>';
@@ -685,10 +805,14 @@
     var back = this.backUrl || ('/campaigns/' + encodeURIComponent(this.campaignId) + '/characters');
     // A redraw keeps the height and shortness the last fit measured, so the
     // cards are laid out once at their real size rather than twice.
+    // The live region outlives a redraw, or what a pick just announced (and
+    // anything it cleared) would be wiped before a screen reader read it.
+    var liveEl = this.root.querySelector('.hc-live');
     this.root.innerHTML = '<div class="hc-app' + (this.short ? ' is-short' : '') + '" data-view="' + this.view + '" data-step="' + this.step + '" data-mo="' + motion() + '"' + (this.fitH ? ' style="--hc-h:' + this.fitH + 'px"' : '') + '>' +
       '<header class="hc-abar"><a class="hc-ibtn" href="' + esc(back) + '" aria-label="Back to characters">' + I.back + '</a>' +
       '<div class="hc-abar__t"><h1>' + esc(this.title()) + '</h1><small>' + esc(this.plan.systemName || 'Game system') + '</small></div></header>' +
       this.bandHTML() + cols + '</div>';
+    if (liveEl) this.root.appendChild(liveEl);
     this.fit();
     this.after();
     // Redrawing shrinks the page for a moment, which can scroll it back; the
@@ -714,7 +838,8 @@
     var self = this, n = this.stepCount();
     var pr = this.plan.steps.map(function (s, i) {
       return '<i class="' + (self.picked(i) ? 'is-ok' : '') + (i === self.step ? ' is-cur' : '') + '"></i>';
-    }).join('') + '<i class="' + (this.isDetails() ? 'is-cur' : '') + '"></i>';
+    }).join('') + (this.hasAbout() ? '<i class="' + (this.aboutLine() ? 'is-ok' : '') + (this.isAbout() ? ' is-cur' : '') + '"></i>' : '') +
+      '<i class="' + (this.isDetails() ? 'is-cur' : '') + '"></i>';
     return '<div class="hc-shead"><button class="hc-sbtn" type="button" aria-expanded="false" aria-label="All steps" data-act="steps">' +
       '<span class="hc-of">Step ' + (this.step + 1) + ' of ' + n + ' ·</span><span class="hc-nm">' + esc(this.stepWord(this.step)) + '</span>' + I.chev + '</button>' +
       '<div class="hc-prog" aria-hidden="true">' + pr + '</div></div>';
@@ -725,7 +850,7 @@
     var self = this, h = '';
     this.plan.steps.forEach(function (st, i) {
       var p = self.picked(i), cur = i === self.step, e = self.pickedEntry(i);
-      if (!p && !cur && !self.isDetails() && !self.skipped[st.fieldKey]) return;
+      if (!p && !cur && !self.isExtra() && !self.skipped[st.fieldKey]) return;
       var ask = e && (e.state === 'ask_first' ? !self.practice : e.state === 'not_offered');
       var on = (cur ? ' is-cur' : '') + (ask ? ' is-ask' : '');
       if (p) h += '<li><button type="button" class="hc-chip' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + esc(p) + '</b></button></li>';
@@ -759,10 +884,15 @@
   };
 
   Creator.prototype.introHTML = function () {
-    var st = this.cur(), n = st.choices.length, desk = this.view === 'desk';
+    var st = this.cur(), n = this.pool(st).length, desk = this.view === 'desk', state = this.stepState(st);
+    if (state !== 'open') {
+      return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + '</div>' : '') +
+        '<h2 class="hc-disp" tabindex="-1">' + (state === 'unused' ? esc(cap(st.label)) + ': not used' : 'Choose your ' + esc(lower(st.label))) + '</h2></div>';
+    }
+    var al = this.allowance(st), alNote = al.known && al.count >= 1 && al.note ? ' ' + esc(al.note) : '';
     var hint = this.locked(st) ? 'Everyone starts with this. Open it to read the whole entry.' : desk ? 'Pick a card to read its rules on the right.' : 'Tap a card to read its rules.';
     return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + ' · ' + n + ' to choose from</div>' : '') +
-      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + '</p></div>' + this.notesHTML(st);
+      '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + alNote + '</p></div>' + this.notesHTML(st);
   };
 
   Creator.prototype.toolsHTML = function () {
@@ -786,7 +916,12 @@
     return !(this.find[st.fieldKey] || '').trim() && st.rules && st.rules.notHereCount;
   };
   Creator.prototype.emptyHTML = function () {
-    var st = this.cur(), q = this.find[st.fieldKey] || '';
+    var st = this.cur(), q = this.find[st.fieldKey] || '', state = this.stepState(st);
+    if (state === 'unused') return '<div class="hc-empty">' + esc(this.unusedLine(st)) + '</div>';
+    if (state === 'wait') {
+      var ps = this.stepByKey(st.parent);
+      return '<div class="hc-empty">Choose ' + (ps ? an(ps.label) + ' ' + esc(lower(ps.label)) : 'the earlier step') + ' first.</div>';
+    }
     if (q) return '<div class="hc-empty">No ' + esc(lower(st.label)) + ' matches “' + esc(q) + '”. <button type="button" class="hc-qw" data-act="clear">Clear the search</button></div>';
     return '<div class="hc-empty">Nothing is on this list for you right now.</div>';
   };
@@ -871,20 +1006,20 @@
     if (this.mode === 'cards' && n) {
       if (n <= 12) { mid = '<span class="hc-dots" aria-hidden="true">'; for (var j = 0; j < n; j++) mid += '<i class="' + (j === i ? 'is-on' : '') + '"></i>'; mid += '</span>'; }
       else mid = '<span class="hc-pos"><span data-posn>' + (i + 1) + '</span> of ' + n + '</span>';
-    } else mid = '<span class="hc-pos">' + n + ' ' + (n === 1 ? 'entry' : 'entries') + '</span>';
+    } else mid = n || this.stepState(st) === 'open' ? '<span class="hc-pos">' + n + ' ' + (n === 1 ? 'entry' : 'entries') + '</span>' : '';
     var right = '';
-    if (this.picked(this.step)) right = '<button type="button" class="hc-qw" data-act="next">Next ' + I.next + '</button>';
+    if (this.picked(this.step) || this.unused(st)) right = '<button type="button" class="hc-qw" data-act="next">Next ' + I.next + '</button>';
     else if (this.optional(st)) right = '<button type="button" class="hc-qw" data-act="skip">Skip</button>';
     return '<div class="hc-under"><button type="button" class="hc-qw" data-act="back"' + (this.step === 0 ? ' disabled' : '') + '>' + I.back +
       (this.step > 0 ? esc(this.plan.steps[this.step - 1].label) : '') + '</button>' + mid + (right || '<span class="hc-qw-sp"></span>') + '</div>';
   };
 
   Creator.prototype.bodyInner = function () {
-    if (this.isDetails()) return this.reviewHTML();
-    return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.handHTML() : this.listHTML()) + this.underHTML();
+    if (this.isExtra()) return this.extraHTML();
+    return this.introHTML() + (this.stepState(this.cur()) === 'open' ? this.toolsHTML() : '') + (this.mode === 'cards' ? this.handHTML() : this.listHTML()) + this.underHTML();
   };
   Creator.prototype.midInner = function () {
-    return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.gridHTML() : this.listHTML());
+    return this.introHTML() + (this.stepState(this.cur()) === 'open' ? this.toolsHTML() : '') + (this.mode === 'cards' ? this.gridHTML() : this.listHTML());
   };
 
   // --- The open entry ---
@@ -952,8 +1087,13 @@
     this.plan.steps.forEach(function (st, i) {
       var p = self.picked(i), cur = i === self.step, note = self.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '" data-k="' + esc(st.fieldKey) + '"' + (cur ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : cur ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span>' +
-        '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.skipped[st.fieldKey] ? 'None' : self.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+        '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.stateWord(st)) + '</span></span></button>';
     });
+    if (this.hasAbout()) {
+      var a = this.plan.steps.length, al = this.aboutLine();
+      h += '<button type="button" class="hc-row" data-go="' + a + '"' + (this.isAbout() ? ' aria-current="step"' : '') + '><span class="hc-num' + (al ? ' is-done' : this.isAbout() ? ' is-now' : '') + '">' + (al ? '✓' : a + 1) + '</span>' +
+        '<span class="hc-lb"><b>About your hero</b><span data-about-line>' + (al ? esc(al) : 'Optional') + '</span></span></button>';
+    }
     var n = this.last();
     h += '<button type="button" class="hc-row" data-go="' + n + '"' + (this.isDetails() ? ' aria-current="step"' : '') + '><span class="hc-num' + (this.isDetails() ? ' is-now' : '') + '">' + (n + 1) + '</span>' +
       '<span class="hc-lb"><b>Name and review</b><span>' + (this.name.trim() ? esc(this.name.trim()) : 'Last') + '</span></span></button></nav>';
@@ -982,6 +1122,27 @@
       this.chooseLabel(c, st) + '</button><span class="hc-hint">or press Enter on a card</span></div>';
   };
 
+  // --- About your hero ---
+
+  Creator.prototype.extraHTML = function () { return this.isAbout() ? this.aboutHTML() : this.reviewHTML(); };
+  // Every box is optional, and each stays editable on the sheet. The
+  // backstory is the one Foundry's Biography carries.
+  var ABOUT_HINT = { pronouns: 'she/her, he/him, they/them…', appearance: 'Height, hair, scars, what they wear…', backstory: 'Where they come from, who they left behind…' };
+  Creator.prototype.aboutHTML = function () {
+    var self = this, fields = this.aboutFields(), bio = fields.some(function (f) { return f.key === 'backstory'; });
+    var h = '<div class="hc-rev hc-about" data-about-step><h2 class="hc-disp hc-rev__t" tabindex="-1">About your hero</h2>';
+    fields.forEach(function (f) {
+      var id = 'hc-ab-' + esc(f.key), v = self.about[f.key] || '', ph = ABOUT_HINT[f.key] || 'Optional';
+      h += '<div class="hc-field"><label for="' + id + '">' + esc(f.label) + '</label>' + (f.long
+        ? '<textarea id="' + id + '" rows="' + (f.key === 'backstory' ? 6 : 3) + '" maxlength="' + (f.key === 'backstory' ? 20000 : 2000) + '" placeholder="' + esc(ph) + '" data-about="' + esc(f.key) + '">' + esc(v) + '</textarea>'
+        : '<input id="' + id + '" type="text" maxlength="60" autocomplete="off" placeholder="' + esc(ph) + '" data-about="' + esc(f.key) + '" value="' + esc(v) + '">') + '</div>';
+    });
+    h += '<p class="hc-note hc-plain">All optional, and you can change any of it on the sheet later.' + (bio ? ' The backstory goes to Foundry’s Biography.' : '') + '</p>';
+    var back = this.plan.steps.length ? this.stepWord(this.step - 1) : '';
+    return h + '<div class="hc-under hc-under--about">' + (back ? '<button type="button" class="hc-qw" data-act="back">' + I.back + esc(back) + '</button>' : '<span class="hc-qw-sp"></span>') +
+      '<button type="button" class="hc-btn" data-act="next">Next: Name and review</button></div></div>';
+  };
+
   // --- Name and review ---
 
   Creator.prototype.heroCard = function () {
@@ -993,7 +1154,7 @@
     var whose = this.tryout ? 'This stays in this browser: only you can see it, and nothing is sent to the campaign.' : this.practice ? 'This stays a practice hero: only you and the Directors see it, and it never joins the party.' : this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
     var none = this.plan.steps.length ? '' : '<p class="hc-empty">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
-      ' choices for heroes yet, so the creator only asks for a name. ' + gm() + 's can add their own entries.</p>';
+      ' choices for heroes yet, so the creator only asks for a name' + (this.hasAbout() ? ' and a little about them' : '') + '. ' + gm() + 's can add their own entries.</p>';
     var h = '<div class="hc-rev" data-rev><h2 class="hc-disp hc-rev__t" tabindex="-1">Name your ' + (this.practice ? 'practice ' : '') + 'hero</h2>' + none + (desk ? '<div class="hc-revgrid"><div>' : '');
     h += '<div class="hc-field"><label for="hc-nm">Your hero’s name</label><input id="hc-nm" type="text" maxlength="200" autocomplete="off" placeholder="Type a name" data-name value="' + esc(this.name) + '" required></div>';
     h += this.heroCard();
@@ -1006,11 +1167,16 @@
       var bl = c && buyList(c.properties);
       if (bl) { var mine = self.mine(st.fieldKey, c); extra.push(mine.length ? mine.join(', ') : 'No ' + lower(words(bl.key)) + ' bought yet'); }
       if (note) extra.push(note);
-      var miss = !p && !self.optional(st);
-      h += '<li class="' + (miss ? 'is-miss' : '') + '"><span class="hc-lb"><small>' + esc(st.label) + '</small><b>' + (p ? esc(p) : self.optional(st) ? 'None' : 'Not chosen yet') + '</b>' +
+      var miss = !p && !self.optional(st), off = !p && self.unused(st);
+      h += '<li class="' + (miss ? 'is-miss' : '') + '"><span class="hc-lb"><small>' + esc(st.label) + '</small><b>' + (p ? esc(p) : off ? 'Not used' : self.optional(st) ? 'None' : 'Not chosen yet') + '</b>' +
         (extra.length ? '<em>' + esc(extra.join(' · ')) + '</em>' : '') + '</span>' +
-        (self.locked(st) ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
+        (self.locked(st) || off ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
     });
+    if (this.hasAbout()) {
+      var al = this.aboutLine();
+      h += '<li><span class="hc-lb"><small>About your hero</small><b>' + (al ? esc(al) : 'None') + '</b></span>' +
+        '<button type="button" class="hc-qw" data-go="' + this.plan.steps.length + '">' + (al ? 'Change' : 'Add') + '</button></li>';
+    }
     h += '</ul><div class="hc-fin">';
     var mi = this.missing();
     if (mi.length) h += '<p class="hc-hint hc-hint--l">Still to choose: ' + esc(mi.map(function (i) { return lower(self.plan.steps[i].label); }).join(', ')) + '.</p>';
@@ -1575,9 +1741,9 @@
     d = document.createElement('div'); d.className = 'hc-drape'; d.setAttribute('data-drape', ''); d.setAttribute('role', 'group'); d.setAttribute('aria-label', 'All steps'); d.style.top = y + 'px';
     var h = '';
     for (var i = 0; i <= this.last(); i++) {
-      var p = this.picked(i), st = this.plan.steps[i], note = st && this.pickNote(st);
+      var st = this.plan.steps[i], ab = !st && i < this.last(), p = ab ? this.aboutLine() : this.picked(i), note = st && this.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '"' + (i === this.step ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : i === this.step ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span><span class="hc-lb"><b>' + esc(this.stepWord(i)) + '</b><span>' +
-        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.skipped[st.fieldKey] ? 'None' : this.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : ab ? (p ? esc(p) : 'Optional') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.stateWord(st)) + '</span></span></button>';
     }
     d.innerHTML = h;
     app.appendChild(scrim); app.appendChild(d);
@@ -1595,18 +1761,21 @@
     var arr = this.mine(st.fieldKey, c);
     this.picks[st.fieldKey] = { name: c.name, options: arr };
     delete this.skipped[st.fieldKey];
+    // A pick elsewhere may no longer fit what this one changed (a subclass
+    // under another class, a kit a class does not use).
+    this.cleared = this.scrub();
     this.save();
   };
 
   Creator.prototype.choose = function (i) {
-    if (this.busy || this.isDetails()) return;
+    if (this.busy || this.isExtra()) return;
     var l = this.entries(this.step), st = this.cur(), si = this.step;
     if (i == null) i = this.curIdx();
     var c = l[i];
     if (!c || this.chooseDisabled(c, st)) return;
     this.commitPick(st, c);
     var nx = this.nextOpen(si);
-    this.say(c.name + ' chosen');
+    this.say(c.name + ' chosen' + (this.cleared && this.cleared.length ? '. Cleared ' + lower(this.cleared.join(' and ')) + ', which no longer fit.' : ''));
     this.root.querySelector('.hc-app').setAttribute('data-mo', motion());
     if (this.desk()) return this.chooseDesk(c, st, si, i, nx);
     var src = this.mode === 'cards' ? this.$$('.hc-hand .hc-card[data-i]')[i] : this.$$('.hc-lrow[data-i]')[i];
@@ -1721,7 +1890,7 @@
       if (!keepChips) this.render();
       else {
         var cols = this.$('.hc-cols'), tmp = document.createElement('div');
-        tmp.innerHTML = '<div class="hc-cols">' + this.railHTML() + (this.isDetails() ? '<section class="hc-mid hc-mid--wide">' + this.reviewHTML() + '</section>'
+        tmp.innerHTML = '<div class="hc-cols">' + this.railHTML() + (this.isExtra() ? '<section class="hc-mid hc-mid--wide">' + this.extraHTML() + '</section>'
           : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
         cols.parentNode.replaceChild(tmp.firstElementChild, cols);
         app.setAttribute('data-step', this.step);
@@ -2045,7 +2214,9 @@
   // change to the practice hero being edited. The one place a hero is kept.
   Creator.prototype.persist = function (name, picks) {
     var edit = this.practice && this.updateUrl, url = edit ? this.updateUrl : this.createUrl, method = edit ? 'PUT' : 'POST';
-    var body = { name: name, picks: picks };
+    var body = { name: name, picks: picks }, self = this, about = {};
+    this.aboutFields().forEach(function (f) { var v = String(self.about[f.key] || '').trim(); if (v) about[f.key] = v; });
+    if (Object.keys(about).length) body.about = about;
     // A copy of the player's own hero: the server reads that hero again.
     if (this.practice && !edit && this.preload && this.preload.copy) body.copy = true;
     return window.Chronicle && Chronicle.apiFetch
@@ -2176,6 +2347,12 @@
         self.refreshList();
         return;
       }
+      if (t.hasAttribute && t.hasAttribute('data-about')) {
+        self.about[t.getAttribute('data-about')] = t.value;
+        var line = self.$('[data-about-line]'); if (line) line.textContent = self.aboutLine() || 'Optional';
+        self.save();
+        return;
+      }
       if (t.hasAttribute && t.hasAttribute('data-name')) {
         self.name = t.value;
         var nm = self.name.trim(), h = self.$('[data-hname]');
@@ -2205,7 +2382,7 @@
         }
         return;
       }
-      if (inField || !self.plan || self.isDetails()) return;
+      if (inField || !self.plan || self.isExtra()) return;
       var card = t.closest && t.closest('.hc-hand .hc-card[data-i]');
       if (card && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); self.openSheet(+card.getAttribute('data-i')); return; }
       if (card && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) {

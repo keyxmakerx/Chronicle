@@ -231,3 +231,23 @@ test('Calm sets each die down showing its decided face, on the table', () => {
     }
   }
 });
+
+test('a person who turned crit animations off gets no crit on any roll', async () => {
+  const win = loadWindow();
+  const dice = win.Chronicle.dice, wt = dice._internal.withTable;
+  assert.equal(wt({}).critsOff, undefined, 'on by default');
+  win.Chronicle.diceTable = { crits: true };
+  assert.equal(wt({}).critsOff, undefined, 'only an explicit false turns them off');
+  win.Chronicle.diceTable = { crits: false };
+  assert.deepEqual(plain(wt({})), { critsOff: true, crits: false });
+  assert.equal(wt({ crits: () => [] }).crits instanceof Function, true, 'a caller\'s own rule is kept');
+  assert.equal(wt({ crits: () => [] }).critsOff, true, 'but the person\'s setting still wins');
+  assert.equal(wt({ table: {} }).critsOff, undefined, 'a roll that names its own table is the caller\'s to settle');
+  // A die the server marked, and a natural 20, are both quiet.
+  const groups = [{ dice: [{ sides: 10, crit: 'succ' }, { sides: 10, crit: 'succ' }, { sides: 20 }] }];
+  const out = [{ values: [9, 10, 20] }];
+  assert.deepEqual(plain(dice._internal.critsOf(groups, out, wt({}))), [[null, null, null]]);
+  assert.deepEqual(plain(dice._internal.critsOf(groups, out, {})), [['succ', 'succ', 'succ']], 'with them on, the marks and the d20 rule stand');
+  const rolled = await dice.roll([{ dice: [{ sides: 20, crit: 'succ' }] }], { results: [[20]] });
+  assert.deepEqual(plain(rolled[0].crits), [null]);
+});

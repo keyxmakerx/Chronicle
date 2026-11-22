@@ -70,7 +70,7 @@ func (p *fakePub) RollMade(_ string, v View, a Audience) { p.got = append(p.got,
 
 func newTestService() (*service, *fakeRepo, *fakePub) {
 	repo, pub := &fakeRepo{}, &fakePub{}
-	s := NewService(repo, pub).(*service)
+	s := NewService(repo, pub, nil).(*service)
 	s.roll = func(n int) int { return n } // every die shows its highest face
 	s.now = func() time.Time { return time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC) }
 	return s, repo, pub
@@ -247,7 +247,7 @@ func TestListPagesOldestFirst(t *testing.T) {
 func TestReportFromFoundry(t *testing.T) {
 	ctx := context.Background()
 	good := ReportInput{Origin: OriginFoundry, OriginID: "msg1", RollerID: "u-player", RollerName: "Jun", Formula: "2d10+1",
-		Dice: []Die{{10, 3}, {10, 4}}, Total: 8, Mode: ModePublic}
+		Dice: []Die{{Sides: 10, Value: 3}, {Sides: 10, Value: 4}}, Total: 8, Mode: ModePublic}
 
 	t.Run("records once and replays harmlessly", func(t *testing.T) {
 		s, repo, pub := newTestService()
@@ -274,8 +274,8 @@ func TestReportFromFoundry(t *testing.T) {
 	}{
 		{"self", func(r *ReportInput) { r.Mode = ModeSelf }},
 		{"no origin id", func(r *ReportInput) { r.OriginID = "" }},
-		{"value off the die", func(r *ReportInput) { r.Dice = []Die{{6, 7}} }},
-		{"one-sided die", func(r *ReportInput) { r.Dice = []Die{{1, 1}} }},
+		{"value off the die", func(r *ReportInput) { r.Dice = []Die{{Sides: 6, Value: 7}} }},
+		{"one-sided die", func(r *ReportInput) { r.Dice = []Die{{Sides: 1, Value: 1}} }},
 		{"too many dice", func(r *ReportInput) { r.Dice = make([]Die, MaxDice+1) }},
 		{"total out of range", func(r *ReportInput) { r.Total = MaxTotal + 1 }},
 		{"unknown origin", func(r *ReportInput) { r.Origin = OriginChronicle }},
@@ -310,7 +310,7 @@ func TestReportFromFoundry(t *testing.T) {
 func TestLogFromAnotherPlugin(t *testing.T) {
 	s, repo, pub := newTestService()
 	err := s.Log(context.Background(), "c1", LogInput{Source: SourceCrafting, RollerID: "u-player", RollerName: "Vessa",
-		Label: "Project roll", Formula: "2d10", Dice: []Die{{10, 5}, {10, 6}}, Modifier: 2, Total: 13, Outcome: "14 of 30"})
+		Label: "Project roll", Formula: "2d10", Dice: []Die{{Sides: 10, Value: 5}, {Sides: 10, Value: 6}}, Modifier: 2, Total: 13, Outcome: "14 of 30"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestLogFromAnotherPlugin(t *testing.T) {
 func TestRecordReturnsTheLoggedRollsID(t *testing.T) {
 	s, repo, pub := newTestService()
 	id, err := s.Record(context.Background(), "c1", LogInput{Source: SourceShop, RollerName: "Thorin", Label: "Haggle: Potion",
-		Formula: "1d20", Dice: []Die{{20, 18}}, Modifier: 2, Total: 20, Outcome: "20% off", From: "The Gilded Cup"})
+		Formula: "1d20", Dice: []Die{{Sides: 20, Value: 18}}, Modifier: 2, Total: 20, Outcome: "20% off", From: "The Gilded Cup"})
 	if err != nil || id == "" {
 		t.Fatalf("id %q err %v", id, err)
 	}

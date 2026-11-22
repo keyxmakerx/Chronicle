@@ -217,7 +217,7 @@ func TestUpdateMetadataAPI_OwnerRenameLeavesOtherFieldsAbsent(t *testing.T) {
 }
 
 func TestOwnerIdentityAllowlist(t *testing.T) {
-	want := []string{"ancestry", "background", "career", "culture", "heritage", "kit", "race", "species"}
+	want := []string{"ancestry", "background", "career", "culture", "gender", "heritage", "kit", "pronouns", "race", "species"}
 	got := OwnerIdentityFieldKeys()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("allowlist changed: %v", got)

@@ -529,7 +529,7 @@ func (h *Handler) checkMediaAccess(c *echo.Context, file *MediaFile, isThumb boo
 	return h.checkCardPictureGuard(c, file, isThumb, thumbSize)
 }
 
-// checkCardPictureGuard (ADR-077) refuses the original (and any thumbnail) of a card's
+// checkCardPictureGuard (ADR-078) refuses the original (and any thumbnail) of a card's
 // picture unless the viewer is a Director or a copy of a card wearing it is
 // face up to them right now. A card is referenced by a deck, not a page, so
 // without this the file would reach the "no page references it" branch of

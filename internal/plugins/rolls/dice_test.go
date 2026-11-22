@@ -53,7 +53,7 @@ func TestThrowAddsDiceAndModifier(t *testing.T) {
 	terms, _, _ := parseFormula("2d10+3-1")
 	n := 0
 	dice, mod, total := throw(terms, func(sides int) int { n++; return n })
-	want := []Die{{10, 1}, {10, 2}}
+	want := []Die{{Sides: 10, Value: 1}, {Sides: 10, Value: 2}}
 	if !reflect.DeepEqual(dice, want) || mod != 2 || total != 5 {
 		t.Fatalf("got dice %v mod %d total %d", dice, mod, total)
 	}

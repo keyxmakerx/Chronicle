@@ -117,6 +117,11 @@ type SystemManifest struct {
 	// (crafting.go). Nil means DefaultCraftingRules.
 	Crafting *CraftingRules `json:"crafting,omitempty"`
 
+	// Crits are the dice faces or totals the system counts as critical
+	// successes and failures (crits.go). Nil means DefaultCritRules; a
+	// present empty list means the system has no crits.
+	Crits *[]CritRule `json:"crits,omitempty"`
+
 	// ShopTests is how a player's haggle or closer look at a shop counter is
 	// thrown (shop_tests.go). Nil falls back to the crafting block, then to a
 	// d20 against a DC.
@@ -422,6 +427,45 @@ type FieldDef struct {
 	// fails validation is dropped at load (see sanitizePlayBlocks) and the
 	// rest of the field survives.
 	Play *PlayDef `json:"play,omitempty"`
+
+	// Creator declares how the hero creator treats this field as a step:
+	// whether the rules expect it, where its list comes from and how many
+	// the chosen parent allows. Optional; a part that fails validation is
+	// dropped at load (see sanitizeCreatorBlocks) and the field survives.
+	Creator *CreatorDef `json:"creator,omitempty"`
+}
+
+// CreatorDef is a preset field's declaration for the hero creator. It only
+// DECLARES: the plan builder and the creator act on it, so core keeps no
+// game system's step names.
+type CreatorDef struct {
+	// Needed marks a pick the system's rules expect. The creator no longer
+	// calls the step optional, but the server still accepts a hero without
+	// it; only a Director's rule refuses.
+	Needed bool `json:"needed,omitempty"`
+
+	// From makes the step's entries the items of a property of the entry
+	// chosen at another step (subclasses inside a class entry).
+	From *CreatorFrom `json:"from,omitempty"`
+
+	// CountFrom says how many of this step the chosen parent entries allow,
+	// read from a number in their property. Later entries override earlier.
+	CountFrom []CreatorCount `json:"count_from,omitempty"`
+}
+
+// CreatorFrom names the step and the entry property a dependent step reads.
+type CreatorFrom struct {
+	Step     string `json:"step"`
+	Property string `json:"property"`
+}
+
+// CreatorCount names a step and a number property that sets how many of
+// this step the entry chosen there allows; Note names a text property on the
+// same entry that explains it to the player.
+type CreatorCount struct {
+	Step     string `json:"step"`
+	Property string `json:"property"`
+	Note     string `json:"note,omitempty"`
 }
 
 // Play edit modes: who may change a field during play.
@@ -529,6 +573,11 @@ type EntityPresetDef struct {
 
 	// Fields are the default field definitions for entities of this type.
 	Fields []FieldDef `json:"fields,omitempty"`
+
+	// CreatorOrder names the character fields the hero creator asks first,
+	// in this order; any other step follows in field order. Unknown keys are
+	// ignored, so a system can name a step a campaign has no list for.
+	CreatorOrder []string `json:"creator_order,omitempty"`
 }
 
 // RelationPresetDef describes a relation type template that a module provides.
@@ -977,6 +1026,7 @@ func ValidateManifest(m *SystemManifest) error {
 	}
 
 	m.sanitizePlayBlocks()
+	m.sanitizeCreatorBlocks()
 
 	// Validate widgets.
 	if len(m.Widgets) > maxWidgets {
@@ -1100,6 +1150,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateCrafting(m.Crafting); err != nil {
 		return fmt.Errorf("crafting: %w", err)
+	}
+
+	if err := validateCrits(m.Crits); err != nil {
+		return fmt.Errorf("crits: %w", err)
 	}
 
 	if err := validateShopTests(m.ShopTests); err != nil {
@@ -1254,6 +1308,90 @@ func validatePlayDef(f FieldDef, siblings []FieldDef) string {
 		}
 		if target.Type != "number" {
 			return fmt.Sprintf("max_field %q is a %s field, not a number", p.MaxField, target.Type)
+		}
+	}
+	return ""
+}
+
+// sanitizeCreatorBlocks drops the parts of a field's creator block that do
+// not hold together, logging each. A bad part must not refuse the system or
+// the field: the step then behaves as if the part were never declared.
+func (m *SystemManifest) sanitizeCreatorBlocks() {
+	for i := range m.EntityPresets {
+		preset := &m.EntityPresets[i]
+		textField := map[string]bool{}
+		for _, f := range preset.Fields {
+			if f.Type == "string" {
+				textField[f.Key] = true
+			}
+		}
+		drop := func(f *FieldDef, part, reason string) {
+			slog.Warn("system manifest: creator part dropped",
+				slog.String("system", m.ID),
+				slog.String("preset", preset.Slug),
+				slog.String("field", f.Key),
+				slog.String("part", part),
+				slog.String("reason", reason))
+		}
+		for j := range preset.Fields {
+			f := &preset.Fields[j]
+			c := f.Creator
+			if c == nil {
+				continue
+			}
+			if c.From != nil {
+				switch {
+				case !textField[c.From.Step] || c.From.Step == f.Key:
+					drop(f, "from", "step is not another string field of this preset")
+					c.From = nil
+				case !ValidChoiceFieldKey(c.From.Property):
+					drop(f, "from", "property is not a plain identifier")
+					c.From = nil
+				}
+			}
+			kept := c.CountFrom[:0:0]
+			for _, cf := range c.CountFrom {
+				switch {
+				case !textField[cf.Step] || cf.Step == f.Key:
+					drop(f, "count_from", "step is not another string field of this preset")
+				case !ValidChoiceFieldKey(cf.Property):
+					drop(f, "count_from", "property is not a plain identifier")
+				case cf.Note != "" && !ValidChoiceFieldKey(cf.Note):
+					drop(f, "count_from", "note is not a plain identifier")
+				default:
+					kept = append(kept, cf)
+				}
+			}
+			c.CountFrom = kept
+		}
+		// A chain of from steps that loops would never finish building its
+		// lists, so the step that closes the loop loses its from.
+		for j := range preset.Fields {
+			f := &preset.Fields[j]
+			if f.Creator == nil || f.Creator.From == nil {
+				continue
+			}
+			seen := map[string]bool{f.Key: true}
+			cur := f.Creator.From.Step
+			for cur != "" {
+				if seen[cur] {
+					drop(f, "from", "steps depend on each other in a loop")
+					f.Creator.From = nil
+					break
+				}
+				seen[cur] = true
+				cur = creatorParentOf(preset, cur)
+			}
+		}
+	}
+}
+
+// creatorParentOf returns the step a field's list is read from, "" when it
+// has none.
+func creatorParentOf(p *EntityPresetDef, key string) string {
+	for i := range p.Fields {
+		if p.Fields[i].Key == key && p.Fields[i].Creator != nil && p.Fields[i].Creator.From != nil {
+			return p.Fields[i].Creator.From.Step
 		}
 	}
 	return ""

@@ -499,7 +499,7 @@ templ aiActivityList(v ConnectView) {
 		hx-get={ fmt.Sprintf("/campaigns/%s/ai/activity?shown=%d&seen=%s", v.CampaignID, v.Shown, activitySeen(v)) }
 		hx-trigger="every 30s"
 		hx-swap="outerHTML"
-		@htmx:before-request="if ($event.detail.elt === $el && document.activeElement && $el.contains(document.activeElement) && document.activeElement.matches('input')) $event.preventDefault()"
+		@htmx:before-request="if ($event.detail.elt === $el && ((document.activeElement && $el.contains(document.activeElement) && document.activeElement.matches('input')) || $el.querySelector('[data-undo-open]'))) $event.preventDefault()"
 		x-init="count()"
 	>
 		if len(v.Sittings) == 0 {
@@ -534,6 +534,9 @@ templ aiActivityList(v ConnectView) {
 				<span><i data-fail aria-hidden="true"></i>couldn't answer</span>
 				<span class="aic-legend-gap"></span>
 				<span>A sitting ends after 30 quiet minutes.</span>
+				if v.Applied != nil {
+					<span>Undo puts back a page's title and text, a home page or a tracker's settings, for 30 days. Maps, pins, folders, shop looks, calendar events, a tracker's value and players' sheets are changed by hand.</span>
+				}
 				if len(v.Sittings) > v.Shown {
 					<button
 						type="button"
@@ -645,6 +648,9 @@ templ aiLogRow(v ConnectView, r callRow) {
 				{ r.Note }
 			}
 		</span>
+		if r.Undo != nil {
+			@aiUndoCell(*r.Undo)
+		}
 	</div>
 }
 
@@ -751,4 +757,44 @@ templ reviewIn(d ImportReviewData) {
 		<div id={ pasteReviewHost } hx-swap-oob="innerHTML"></div>
 		<div id={ requestResultHost } hx-swap-oob="innerHTML"></div>
 	}
+}
+
+// aiUndoCell is the Undo part of an applied request's row in What it did: the
+// Undo word that asks first (the same quiet confirm as Turn down), "Undone
+// <when>" once it ran, and the reason inline when it changed nothing. The
+// confirm's state lives in this fragment, so the swap that answers a press
+// replaces it whole.
+templ aiUndoCell(u undoCell) {
+	<div id={ fmt.Sprintf("aic-undo-%d", u.RequestID) } class="aic-undo" x-data="{ asking: false }" :data-undo-open="asking ? '' : null">
+		if u.UndoneAt != nil {
+			<p class="aic-undone" role="status">{ u.undoneText() }</p>
+		} else {
+			if u.Refusal != "" {
+				<p class="aic-why aic-undo-why" role="alert">{ u.Refusal }</p>
+			}
+			if !u.Can() && u.Refusal == "" {
+				<p class="aic-undo-none">No undo</p>
+			}
+			if u.Can() {
+				<button type="button" class="quiet-word aic-undo-btn" @click="asking = !asking" :aria-expanded="asking">
+					Undo
+				</button>
+				<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
+					<p>{ u.Confirm }</p>
+					<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
+					<button
+						type="button"
+						class="btn-secondary"
+						hx-post={ fmt.Sprintf("/campaigns/%s/ai/requests/%d/undo", u.CampaignID, u.RequestID) }
+						hx-target={ fmt.Sprintf("#aic-undo-%d", u.RequestID) }
+						hx-swap="outerHTML"
+						hx-disabled-elt="this"
+					>
+						<span class="aic-idle">Undo it</span>
+						<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Putting back…</span>
+					</button>
+				</div>
+			}
+		}
+	</div>
 }
