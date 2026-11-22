@@ -785,6 +785,10 @@ test('a page with a pop-up book on it glows in the Sections list, and Calm still
     assert.equal(anim, 'rb-bm-glow');
     assert.ok(glows);
     assert.ok(star.includes('\u2726'), star);
+    // The stars sit around the title, out of the flow: the row is one line tall
+    // for a short title and the stars are positioned, not inline.
+    const pos = await page.$eval('.rb-bm-live', (b) => [getComputedStyle(b, '::before').position, getComputedStyle(b, '::after').position, getComputedStyle(b.querySelector('span'), '::before').position]);
+    assert.deepEqual(pos, ['absolute', 'absolute', 'absolute']);
     await page.evaluate(() => document.documentElement.setAttribute('data-motion', 'calm'));
     const [calmAnim, calmGlows] = await css();
     assert.equal(calmAnim, 'none');
