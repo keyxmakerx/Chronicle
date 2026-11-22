@@ -23,6 +23,9 @@ templ CardLeaf(l Look, s CardState, foot string) {
 				if s.face.Words != "" {
 					<span class="dk-words">{ s.face.Words }</span>
 				}
+				if s.face.When != "" {
+					<span class="dk-when">{ s.face.When }</span>
+				}
 				if foot != "" {
 					<span class="dk-foot">{ foot }</span>
 				}

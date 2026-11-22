@@ -108,6 +108,9 @@ type WhenOptions struct {
 	Fields   []NumberField       `json:"fields"`
 	Trackers []TrackerKindOption `json:"trackers"`
 	Tags     []TagOption         `json:"tags"`
+	// Layers are the transformation names now on any hero, for the editor to
+	// offer; a test may still name one that is not on a page yet.
+	Layers []string `json:"layers"`
 }
 
 // Reading is what a notice says about the first test that names a number or a

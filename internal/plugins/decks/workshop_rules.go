@@ -61,8 +61,7 @@ func ruleGroups() []ruleGroup {
 			{Parts: []rulePart{words("Players "), blank("discard", opts("false", "may not", "true", "may")), words(" throw away cards in their own hand.")}},
 		}},
 		{"Telling you", []rule{
-			{Parts: []rulePart{words("When a card's moment comes, tell me with "), blank("notice", opts("slide", "a notice that slides in", "count", "a count on the Table", "quiet", "nothing, quietly")), words(".")},
-				Quiet: "This is saved now and takes effect in a later step."},
+			{Parts: []rulePart{words("When a card's moment comes, tell me with "), blank("notice", opts("slide", "a notice that slides in", "count", "a count on the Table", "quiet", "nothing, quietly")), words(".")}},
 		}},
 	}
 }

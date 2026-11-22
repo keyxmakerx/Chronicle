@@ -129,6 +129,48 @@
 .dkw-sentence label { font-weight: 400; white-space: nowrap; }
 .dkw-sentence .dw-blank { flex: 1 1 15rem; min-width: 15rem; font-family: inherit; font-size: 1rem; min-height: 32px; }
 
+/* Comes up when: a card's tests, one row each. A row says whose it is (on the
+   card, or only the Director's, in amber with words), then the sentence with
+   its blanks, then a remove mark. */
+.dkw-when { margin: 4px 0 12px; }
+.dkw-whens { margin: 0; padding: 0; list-style: none; }
+.dkw-when-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--color-border-light); }
+.dkw-when-row.is-own { padding-left: 10px; box-shadow: inset 3px 0 0 color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, transparent); }
+.dkw-mark { align-self: center; min-height: 24px; padding: 0 9px; border: 1px solid var(--color-border); border-radius: 999px; background: none; color: var(--color-text-secondary); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+.dkw-mark:hover { border-color: var(--color-accent); }
+.dkw-mark.is-own { border-color: rgb(var(--color-warn-rgb)); background: color-mix(in srgb, rgb(var(--color-warn-rgb)) 14%, transparent); color: var(--color-text-primary); }
+.dkw-when-s { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin: 0; min-width: 0; font-size: 1rem; line-height: 1.9; color: var(--color-text-primary); }
+.dkw-when-s .dw-blank, .dkw-numblank, .dkw-textblank { flex: none; width: auto; min-width: 0; max-width: 100%; font-family: inherit; font-size: 1rem; min-height: 32px; }
+.dkw-when-s .dw-blank.is-filled { color: var(--color-accent-link, var(--color-accent)); border-bottom-style: dashed; }
+.dkw-when-s .dw-blank.is-filled:focus { border-bottom-style: solid; }
+.dkw-numblank, .dkw-textblank { padding: 2px 2px; border: 0; border-bottom: 1px dashed var(--color-accent); border-radius: 0; background: transparent; color: var(--color-accent-link, var(--color-accent)); outline: none; }
+.dkw-numblank { width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+.dkw-textblank { width: 12rem; }
+.dkw-numblank:focus, .dkw-textblank:focus { border-bottom-style: solid; }
+.dkw-numblank:disabled, .dkw-textblank:disabled { opacity: 0.5; }
+.dkw-lead { font-weight: 400; }
+.dkw-gone { font-weight: 600; }
+.dkw-was { flex-basis: 100%; line-height: 1.4; }
+.dkw-rm { align-self: center; display: inline-grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--color-text-secondary); cursor: pointer; }
+.dkw-rm:hover:not(:disabled) { border-color: var(--color-border); color: var(--color-text-primary); }
+.dkw-rm svg { width: 14px; height: 14px; }
+.dkw-when-rowerr { grid-column: 2 / -1; margin: 2px 0 0; }
+/* On a phone the mark sits above its sentence, so the blanks have the whole width. */
+@media (max-width: 30rem) {
+  .dkw-when-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .dkw-when-row .dkw-mark { grid-column: 1 / -1; justify-self: start; }
+  .dkw-when-rowerr { grid-column: 1 / -1; }
+}
+.dkw-whenadd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding-top: 6px; }
+.dkw-addsel { flex: none; appearance: none; -webkit-appearance: none; min-height: 32px; padding: 0 2px; border: 0; background: none; color: var(--color-accent-link, var(--color-accent)); font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+.dkw-addsel:hover { text-decoration: underline; }
+.dkw-addsel option { color: var(--color-text-primary); background: var(--color-bg-secondary); }
+.dkw-whennow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; margin: 6px 0 0; font-size: 0.875rem; color: var(--color-text-secondary); }
+.dkw-whennow:empty { display: none; }
+.dkw-printed-hint { max-width: 26rem; margin: 6px 0 0; }
+.dkw-fitmark { display: block; margin-top: 2px; font-size: 0.6875rem; line-height: 1.2; color: var(--color-text-muted); text-align: center; }
+.dkw-fitmark.is-fits { color: var(--color-ok-fg, var(--color-text-secondary)); }
+
 /* Look tab. */
 .dkw-startrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border-light); }
 .dkw-startrow .dkw-lab { margin: 0; }
@@ -282,6 +324,8 @@
 }
 @media (pointer: coarse), (max-width: 760px) {
   .dkw-word, .dkw-pick, .dkw-select, .dkw-chip, .dkw-btn { min-height: 44px; }
+  .dkw-mark, .dkw-addsel, .dkw-when-s .dw-blank, .dkw-numblank, .dkw-textblank { min-height: 44px; }
+  .dkw-rm { width: 44px; height: 44px; }
   .dkw-stepbtn { width: 44px; height: 44px; }
   .dkw-switch { min-height: 44px; }
   .dkw-opt { min-height: 44px; }

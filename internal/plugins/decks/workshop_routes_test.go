@@ -250,7 +250,7 @@ func TestWorkshopRendersEmptyFullAndTwelveKinds(t *testing.T) {
 		}
 	}
 	ed := r.get(base+kinds+"/cards?card="+card, "u-dir").Body.String()
-	for _, want := range []string{"data-dkw-editor", "Note for the Directors", "data-dm-only", "Conditions for when this card can come up arrive in a later step.", "Remove picture"} {
+	for _, want := range []string{"data-dkw-editor", "Note for the Directors", "data-dm-only", "Comes up when", "data-dkw-when", "Remove picture"} {
 		if want == "Remove picture" {
 			continue // no picture on this card
 		}

@@ -195,6 +195,351 @@
     });
   }
 
+
+  // ---- Comes up when: a card's tests (pinned to when.go by test/js/deck_workshop.test.mjs) ----
+
+  var MAX_TESTS = 4; // MaxTests in when.go
+  var KIND_ORDER = ['number', 'tracker', 'tag', 'layer', 'say'];
+  // The keys each kind of test may carry besides "test" and "open"; the server refuses any other.
+  var TEST_KEYS = {
+    number: ['who', 'field', 'op', 'value', 'of', 'share'],
+    tracker: ['who', 'kind', 'op', 'value'],
+    tag: ['who', 'tag', 'has'],
+    layer: ['who', 'name', 'on'],
+    say: []
+  };
+  var ORDINALS = ['first', 'second', 'third', 'fourth'];
+
+  function copy(o) {
+    var out = {};
+    Object.keys(o || {}).forEach(function (k) { out[k] = o[k]; });
+    return out;
+  }
+
+  /** whenBody: the list the card update takes: each test with only its own kind's keys, never a draft. */
+  function whenBody(tests) {
+    return (tests || []).filter(function (t) { return !t._draft; }).map(function (t) {
+      var o = { test: t.test, open: !!t.open };
+      (TEST_KEYS[t.test] || []).forEach(function (k) {
+        if (t[k] !== undefined && t[k] !== null && t[k] !== '') o[k] = t[k];
+      });
+      return o;
+    });
+  }
+
+  function possessive(n, on) {
+    if (!on) return n;
+    return /s$/.test(n) ? n + '’' : n + '’s';
+  }
+
+  /** shareLabel: a share as the editor says it ("half"), from the server's phrase ("half of"). */
+  function shareLabel(w) {
+    var p = String(w.phrase || '').replace(/ of$/, '');
+    return p || 'all';
+  }
+
+  function firstWith(list, key) {
+    for (var i = 0; i < (list || []).length; i++) if (list[i][key]) return list[i];
+    return null;
+  }
+
+  /**
+   * kindAvailable: whether the add menu can offer a kind now. A kind that
+   * needs something the campaign has none of is left off rather than offered
+   * and refused.
+   */
+  function kindAvailable(kind, o) {
+    if (kind === 'say' || kind === 'layer') return kind === 'say' || !!o.available;
+    if (!o.available) return false;
+    if (kind === 'number') return (o.fields || []).length > 0;
+    if (kind === 'tracker') return (o.trackers || []).length > 0;
+    if (kind === 'tag') return (o.tags || []).length > 0;
+    return false;
+  }
+
+  /**
+   * newTest: a test of a kind with sensible first values. On a hero deck it is
+   * about that hero; a number test starts at "at or below half of" the first
+   * field that has a max field. A layer with no name on any hero yet starts as
+   * a draft, which is not saved until it has a name.
+   */
+  function newTest(kind, c, o) {
+    var t = { test: kind, open: false };
+    if (kind === 'say') return t;
+    t.who = c.heroDeck && c.holder ? 'holder' : 'any';
+    if (kind === 'number') {
+      var f = firstWith(o.fields, 'maxKey') || (o.fields || [])[0];
+      if (!f) return null;
+      t.field = f.key;
+      t.op = 'lte';
+      if (f.maxKey) { t.of = f.maxKey; t.share = 'half'; } else { t.value = 0; }
+    } else if (kind === 'tracker') {
+      var k = (o.trackers || [])[0];
+      if (!k) return null;
+      t.kind = k.id; t.op = 'gte'; t.value = 1;
+    } else if (kind === 'tag') {
+      var g = (o.tags || [])[0];
+      if (!g) return null;
+      t.tag = g.id; t.has = true;
+    } else if (kind === 'layer') {
+      t.name = (o.layers || [])[0] || '';
+      t.on = true;
+      if (!t.name) t._draft = true;
+    }
+    return t;
+  }
+
+  function fieldOf(o, key) {
+    var f = (o.fields || []).filter(function (x) { return x.key === key; })[0];
+    return f || null;
+  }
+
+  /** otherField: what a share is "of" when none is set: the field's max field, else another field. */
+  function otherField(o, field) {
+    var f = fieldOf(o, field);
+    if (f && f.maxKey) return f.maxKey;
+    var other = (o.fields || []).filter(function (x) { return x.key !== field; })[0];
+    return other ? other.key : field;
+  }
+
+  /**
+   * changeTest: the test after one blank changes, as a new object. Choosing a
+   * share turns "a number" into a share of another field and back.
+   */
+  function changeTest(t, key, val, o) {
+    var n = copy(t);
+    switch (key) {
+      case 'who': case 'op': case 'field': case 'of': case 'kind': case 'name':
+        n[key] = val;
+        if (key === 'field' && n.of !== undefined && n.share) {
+          var f = fieldOf(o, val);
+          if (f && f.maxKey) n.of = f.maxKey;
+        }
+        if (key === 'name') delete n._draft;
+        break;
+      case 'tag': n.tag = parseInt(val, 10); break;
+      case 'has': n.has = val === 'true'; break;
+      case 'on': n.on = val === 'true'; break;
+      case 'value': n.value = val; break;
+      case 'compare':
+        if (val === 'number') {
+          delete n.of; delete n.share;
+          n.value = t.value != null ? t.value : 0;
+        } else {
+          delete n.value;
+          n.share = val;
+          if (!n.of) n.of = otherField(o, n.field);
+        }
+        break;
+      default: break;
+    }
+    return n;
+  }
+
+  /** parseNumber: what was typed in a number blank, or null when it is not a number. */
+  function parseNumber(s) {
+    var x = String(s == null ? '' : s).trim().replace(',', '.');
+    if (x === '' || !/^[-+]?(\d+\.?\d*|\.\d+)$/.test(x)) return null;
+    var v = Number(x);
+    return isFinite(v) ? v : null;
+  }
+
+  /** whenHint: the words under the card that say which conditions it does not show. */
+  function whenHint(tests) {
+    var printed = [], own = [];
+    (tests || []).forEach(function (t, i) { if (i < ORDINALS.length) (t.open ? printed : own).push(ORDINALS[i]); });
+    if (!printed.length || !own.length) return '';
+    var and = function (w) { return w.length > 1 ? w.slice(0, -1).join(', ') + ' and ' + w[w.length - 1] : w[0]; };
+    return 'The ' + and(own) + (own.length > 1 ? ' conditions are' : ' condition is') + ' yours alone, so the card shows only the ' + and(printed) + '.';
+  }
+
+  /** nowLine: the one line of state under the rows. */
+  function nowLine(tests, st) {
+    if (!(tests || []).length) return '';
+    if (st && st.fitsNow) return 'Fits now.';
+    var why = (st && st.whyNot) || 'not yet';
+    return 'Waiting: ' + (/[.!?]$/.test(why) ? why : why + '.');
+  }
+
+  function hasSay(tests) { return (tests || []).some(function (t) { return t.test === 'say'; }); }
+
+  // ---- Small DOM helpers for the rows ----
+
+  function node(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  /** blank: a select drawn as an underlined blank, the same control the Rules tab uses. */
+  function blank(label, choices, current, onPick) {
+    var sel = node('select', 'dw-blank is-filled');
+    sel.setAttribute('aria-label', label);
+    var group = null;
+    var seen = false;
+    choices.forEach(function (c) {
+      var op = node('option', '', c.l);
+      op.value = String(c.v);
+      if (String(c.v) === String(current)) { op.selected = true; seen = true; }
+      if (c.group) {
+        if (!group) { group = node('optgroup'); group.label = c.group; sel.appendChild(group); }
+        group.appendChild(op);
+      } else {
+        sel.appendChild(op);
+      }
+    });
+    if (!seen) {
+      var gone = node('option', '', 'something that is gone');
+      gone.value = String(current);
+      gone.selected = true;
+      sel.insertBefore(gone, sel.firstChild);
+    }
+    sel.addEventListener('change', function () { onPick(sel.value); });
+    return sel;
+  }
+
+  function numberBlank(label, current, onPick) {
+    var inp = node('input', 'dkw-numblank');
+    inp.type = 'text';
+    inp.setAttribute('inputmode', 'decimal');
+    inp.setAttribute('autocomplete', 'off');
+    inp.setAttribute('aria-label', label);
+    inp.value = current == null ? '' : String(current);
+    inp.addEventListener('change', function () { onPick(inp.value); });
+    return inp;
+  }
+
+  function whoChoices(kind, env) {
+    var poss = kind === 'number' || kind === 'tracker';
+    var out = [];
+    var c = env.ctx;
+    if (c.heroDeck && c.holder) out.push({ v: 'holder', l: possessive(c.holderName || 'the hero', poss) });
+    out.push({ v: 'any', l: poss ? 'any hero’s' : 'any hero' });
+    (env.opts.heroes || []).forEach(function (h) {
+      if (h.id !== c.holder) out.push({ v: h.id, l: possessive(h.name, poss), group: 'A page' });
+    });
+    return out;
+  }
+
+  /** rowSentence fills a row's sentence node with words and blanks for a test. */
+  function rowSentence(p, t, env) {
+    var o = env.opts, n = 0;
+    function say(w) { p.appendChild(node('span', 'dkw-w', w)); }
+    // slot adds one blank; make gets the blank's number, which a redraw uses to put focus back.
+    function slot(make) {
+      var k = n;
+      var el = make(k);
+      el.setAttribute('data-bk', String(k));
+      p.appendChild(el);
+      n++;
+      return el;
+    }
+    function pickOf(key, k) { return function (v) { env.change(changeTest(t, key, v, o), 'b' + k); }; }
+    function numberOf(key, k) {
+      return function (v) {
+        var x = parseNumber(v);
+        if (x == null) { env.refuse('Type a number.', 'b' + k); return; }
+        env.change(changeTest(t, key, x, o), 'b' + k);
+      };
+    }
+    function choose(label, list, cur, key) {
+      slot(function (k) { return blank(label, list, cur, pickOf(key, k)); });
+    }
+    var opChoices = (o.ops || []).map(function (w) { return { v: w.key, l: w.phrase }; });
+    if (t.test === 'say') { say('the Director says so'); return; }
+    choose('Whose page', whoChoices(t.test, env), t.who, 'who');
+    if (t.test === 'number') {
+      choose('Which number', (o.fields || []).map(function (f) { return { v: f.key, l: f.label }; }), t.field, 'field');
+      say('is');
+      choose('How it compares', opChoices, t.op, 'op');
+      var cmp = [{ v: 'number', l: 'a number' }].concat((o.shares || []).map(function (w) { return { v: w.key, l: shareLabel(w) }; }));
+      choose('A number or a share', cmp, t.value != null ? 'number' : (t.share || 'all'), 'compare');
+      if (t.value != null) {
+        slot(function (k) { return numberBlank('The number', t.value, numberOf('value', k)); });
+      } else {
+        say('of');
+        var f = fieldOf(o, t.field);
+        var rest = (o.fields || []).slice();
+        // The field's own max field comes first.
+        if (f && f.maxKey) rest.sort(function (a, b) { return (b.key === f.maxKey ? 1 : 0) - (a.key === f.maxKey ? 1 : 0); });
+        choose('Of which number', rest.map(function (x) { return { v: x.key, l: x.label }; }), t.of, 'of');
+      }
+    } else if (t.test === 'tracker') {
+      choose('Which tracker', (o.trackers || []).map(function (k) { return { v: k.id, l: k.name }; }), t.kind, 'kind');
+      say('is');
+      choose('How it compares', opChoices, t.op, 'op');
+      slot(function (k) { return numberBlank('The number', t.value, numberOf('value', k)); });
+    } else if (t.test === 'tag') {
+      choose('Has or does not have', [{ v: 'true', l: 'has' }, { v: 'false', l: 'does not have' }], String(t.has !== false), 'has');
+      say('the tag');
+      choose('Which tag', (o.tags || []).map(function (g) { return { v: g.id, l: g.name }; }), t.tag, 'tag');
+    } else if (t.test === 'layer') {
+      choose('Is or is not', [{ v: 'true', l: 'is' }, { v: 'false', l: 'is not' }], String(t.on !== false), 'on');
+      slot(function (k) {
+        var nm = node('input', 'dkw-textblank');
+        nm.type = 'text';
+        nm.maxLength = 80;
+        nm.setAttribute('autocomplete', 'off');
+        nm.setAttribute('aria-label', 'The transformation’s name');
+        nm.placeholder = 'a transformation';
+        nm.value = t.name || '';
+        var dl = node('datalist');
+        dl.id = 'dkw-layers-' + env.index;
+        (o.layers || []).forEach(function (l) { var op = node('option'); op.value = l; dl.appendChild(op); });
+        nm.setAttribute('list', dl.id);
+        nm.addEventListener('change', function () {
+          var v = nm.value.trim();
+          if (!v) { env.refuse('Type the name of a transformation.', 'b' + k); return; }
+          env.change(changeTest(t, 'name', v, o), 'b' + k);
+        });
+        p.appendChild(dl);
+        return nm;
+      });
+    }
+  }
+
+  /**
+   * buildRow: one test as a row: whose it is, the sentence with its blanks and
+   * a remove button. env carries the options, the deck's hero and the
+   * callbacks that save.
+   */
+  function buildRow(t, i, env) {
+    var li = node('li', 'dkw-when-row' + (t.open ? '' : ' is-own') + (t.broken ? ' is-broken' : ''));
+    li.setAttribute('data-when-row', String(i));
+    var mark = node('button', 'dkw-mark' + (t.open ? '' : ' is-own'), t.open ? 'On the card' : 'Only you');
+    mark.type = 'button';
+    mark.setAttribute('data-act', 'when-mark');
+    mark.setAttribute('aria-label', (t.open ? 'On the card' : 'Only you') + '. Press to make it ' + (t.open ? 'only yours' : 'show on the card') + '.');
+    mark.addEventListener('click', function () { var n = copy(t); n.open = !t.open; env.change(n, 'mark'); });
+    li.appendChild(mark);
+    var p = node('p', 'dkw-when-s');
+    p.appendChild(node('span', 'dkw-lead', i === 0 ? 'When' : 'and'));
+    env.index = i;
+    if (t.broken) {
+      p.appendChild(node('span', 'dkw-gone', 'This no longer points at anything.'));
+      if (t.sentence) p.appendChild(node('span', 'dkw-quiet dkw-was', t.sentence));
+    } else if (env.plain) {
+      p.appendChild(node('span', 'dkw-w', t.sentence || ''));
+    } else {
+      rowSentence(p, t, env);
+    }
+    li.appendChild(p);
+    var rm = node('button', 'dkw-rm');
+    rm.type = 'button';
+    rm.setAttribute('data-act', 'when-remove');
+    rm.setAttribute('aria-label', 'Remove this condition' + (t.sentence ? ': ' + t.sentence : ''));
+    rm.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>';
+    rm.addEventListener('click', function () { env.remove(); });
+    li.appendChild(rm);
+    var err = node('p', 'dkw-err dkw-when-rowerr');
+    err.setAttribute('role', 'alert');
+    err.setAttribute('data-dkw-err', '');
+    err.hidden = true;
+    li.appendChild(err);
+    return li;
+  }
+
   // ---- deck-new ----
 
   function initNew(el) {
@@ -381,6 +726,7 @@
         var k = $('[data-dkw-kinds]', panel);
         if (k && kindsOpen) { k.hidden = false; var t = $('[data-act=toggle-kinds]', panel); if (t) t.setAttribute('aria-expanded', 'true'); }
         $$('[data-dkw-rules] select, [data-dkw-look] select', panel).forEach(function (s) { s.setAttribute('data-prev', s.value); });
+        initWhen();
       }
       afterPanel();
 
@@ -637,10 +983,211 @@
         }, function (e) { failed(e, $('[data-dkw-players]', panel), null); loadTab('players'); });
       }
 
+      // ---- Comes up when (the Cards tab's card editor) ----
+      function whenSec() { return $('[data-dkw-when]', panel); }
+      function readJSON(text, fallback) {
+        try { var v = JSON.parse(text); return v == null ? fallback : v; } catch (e) { return fallback; }
+      }
+
+      /** loadOptions: what the blanks may offer, read fresh each time a card's editor opens. */
+      function loadOptions() {
+        return fetch(base + 'when-options', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (r) {
+          if (!r.ok) throw new Error('The choices for a condition could not be read. Close the card and open it again.');
+          return r.json();
+        });
+      }
+
+      function initWhen() {
+        var sec = whenSec();
+        if (!sec) return;
+        var w = {
+          tests: readJSON(sec.getAttribute('data-when'), []),
+          state: readJSON(sec.getAttribute('data-state'), {}),
+          opts: null, draft: null,
+          ctx: { heroDeck: sec.getAttribute('data-hero-deck') === 'true', holder: sec.getAttribute('data-holder') || '', holderName: sec.getAttribute('data-holder-name') || '' }
+        };
+        sec.__w = w;
+        drawWhen(sec);
+        loadOptions().then(function (o) {
+          if (sec.__w !== w) return;
+          w.opts = o;
+          drawWhen(sec);
+        }, function (e) {
+          if (sec.__w !== w) return;
+          sectionSay(sec, words(e));
+        });
+      }
+
+      function sectionSay(sec, msg) {
+        var box = $('[data-dkw-when-err]', sec);
+        if (!box) return;
+        box.textContent = msg || '';
+        box.hidden = !msg;
+      }
+
+      /** rowSay: a refusal in the server's words, in the row it belongs to. */
+      function rowSay(sec, idx, msg) {
+        var row = idx == null ? null : $('[data-when-row="' + idx + '"]', sec);
+        var box = row && $('[data-dkw-err]', row);
+        if (!box) { sectionSay(sec, msg); return; }
+        box.textContent = msg;
+        box.hidden = false;
+      }
+
+      function lock(sec) { $$('select, input, button', sec).forEach(function (n) { n.disabled = true; }); }
+
+      function drawWhen(sec, focus) {
+        var w = sec.__w;
+        if (!w) return;
+        var list = $('[data-dkw-whens]', sec);
+        var all = w.tests.concat(w.draft ? [w.draft] : []);
+        list.textContent = '';
+        sectionSay(sec, '');
+        all.forEach(function (t, i) {
+          var env = {
+            opts: w.opts || {}, ctx: w.ctx, plain: !w.opts, index: i,
+            change: function (n, key) { commit(sec, i, n, key); },
+            refuse: function (msg, key) { drawWhen(sec, { row: i, key: key }); rowSay(sec, i, msg); },
+            remove: function () { removeAt(sec, i); }
+          };
+          list.appendChild(buildRow(t, i, env));
+        });
+        drawAdd(sec);
+        drawNow(sec);
+        if (!focus) return;
+        var target = null;
+        if (focus.key === 'add') target = $('.dkw-addsel', sec) || $('.dkw-mark', sec);
+        else {
+          var row = $('[data-when-row="' + (focus.key === 'new' ? all.length - 1 : focus.row) + '"]', sec);
+          if (row) target = focus.key === 'mark' ? $('.dkw-mark', row) : $('[data-bk="' + (focus.key === 'new' ? '0' : focus.key.slice(1)) + '"]', row) || $('.dkw-mark', row);
+        }
+        if (target) target.focus({ preventScroll: true });
+      }
+
+      function drawAdd(sec) {
+        var w = sec.__w, box = $('[data-dkw-whenadd]', sec);
+        box.textContent = '';
+        if (!w.opts) return;
+        var count = w.tests.length + (w.draft ? 1 : 0);
+        box.appendChild(node('span', 'dkw-quiet dkw-whenhint', 'Every condition must hold. Up to ' + MAX_TESTS + '.'));
+        if (count >= MAX_TESTS) return;
+        var sel = node('select', 'dkw-addsel');
+        sel.setAttribute('aria-label', count ? 'And another condition' : 'Add a condition');
+        var head = node('option', '', count ? 'And another condition' : 'Add a condition');
+        head.value = '';
+        head.selected = true;
+        head.disabled = true;
+        sel.appendChild(head);
+        var words2 = {};
+        (w.opts.testKinds || []).forEach(function (k) { words2[k.key] = k.phrase; });
+        KIND_ORDER.forEach(function (k) {
+          var ok = kindAvailable(k, w.opts);
+          var op = node('option', '', (words2[k] || k) + (ok ? '' : ' (none yet)'));
+          op.value = k;
+          op.disabled = !ok;
+          sel.appendChild(op);
+        });
+        sel.addEventListener('change', function () {
+          var kind = sel.value;
+          sel.value = '';
+          var t = newTest(kind, w.ctx, w.opts);
+          if (!t) return;
+          if (t._draft) { w.draft = t; drawWhen(sec, { key: 'new' }); return; }
+          saveWhen(sec, w.tests.concat([t]), w.tests.length, { key: 'new' });
+        });
+        box.insertBefore(sel, box.firstChild);
+      }
+
+      function drawNow(sec) {
+        var w = sec.__w, box = $('[data-dkw-now]', sec);
+        box.textContent = '';
+        var line = nowLine(w.tests, w.state);
+        if (!line) return;
+        box.appendChild(node('span', 'dkw-nowline', line));
+        if (!hasSay(w.tests)) return;
+        var said = !!(w.state && w.state.saidAt);
+        if (said) box.appendChild(node('span', 'dkw-nowline', ' You said so.'));
+        var b = node('button', 'dkw-word', said ? 'Take it back' : 'Say so');
+        b.type = 'button';
+        b.setAttribute('data-act', 'when-say');
+        b.addEventListener('click', function () { say2(sec, !said); });
+        box.appendChild(b);
+      }
+
+      function adoptCard(sec, deck, id) {
+        var w = sec.__w;
+        var c = ((deck && deck.cards) || []).filter(function (x) { return x.id === id; })[0];
+        if (!c) return;
+        w.tests = c.when || [];
+        w.state = { fitsNow: !!c.fitsNow, whyNot: c.whyNot || '', saidAt: c.saidAt || null };
+      }
+
+      /** commit: one row changed; a draft row becomes a test once it has its name. */
+      function commit(sec, i, n, key) {
+        var w = sec.__w;
+        if (i >= w.tests.length) {
+          if (n._draft) { w.draft = n; drawWhen(sec, { row: i, key: key }); return; }
+          w.draft = null;
+          saveWhen(sec, w.tests.concat([n]), w.tests.length, { row: i, key: key });
+          return;
+        }
+        var next = w.tests.slice();
+        next[i] = n;
+        saveWhen(sec, next, i, { row: i, key: key });
+      }
+
+      function removeAt(sec, i) {
+        var w = sec.__w;
+        if (i >= w.tests.length) { w.draft = null; drawWhen(sec, { key: 'add' }); return; }
+        saveWhen(sec, w.tests.filter(function (t, j) { return j !== i; }), null, { key: 'add' });
+      }
+
+      /** saveWhen: the whole list goes in one card update; the server's check is the only check. */
+      function saveWhen(sec, next, idx, focus) {
+        var ed = editor();
+        if (!ed) return Promise.resolve();
+        var id = ed.getAttribute('data-card-id');
+        lock(sec);
+        return api('PUT', cardURL(id), { when: whenBody(next) }).then(function (deck) {
+          setVersion(deck);
+          clearErr();
+          saved();
+          adoptCard(sec, deck, id);
+          drawWhen(sec, focus);
+          return refreshParts(base + 'workshop/' + did + '/cards?card=' + encodeURIComponent(id), ['#dkw-grid', '#dkw-preview']).then(function () { return refreshTable(); });
+        }, function (e) {
+          if (isStale(e && e.message)) return stale();
+          // Back to what is stored, with the refusal in the row that caused it.
+          drawWhen(sec, focus);
+          rowSay(sec, idx, words(e));
+        });
+      }
+
+      function say2(sec, said) {
+        var ed = editor();
+        if (!ed) return;
+        var id = ed.getAttribute('data-card-id');
+        lock(sec);
+        api('POST', cardURL(id) + '/say', { said: said }).then(function (deck) {
+          adoptCard(sec, deck, id);
+          drawWhen(sec, null);
+          var b = $('[data-act=when-say]', sec);
+          if (b) b.focus({ preventScroll: true });
+          return refreshParts(base + 'workshop/' + did + '/cards?card=' + encodeURIComponent(id), ['#dkw-grid']);
+        }, function (e) {
+          drawWhen(sec, null);
+          sectionSay(sec, words(e));
+          var b = $('[data-act=when-say]', sec);
+          if (b) b.focus({ preventScroll: true });
+        });
+      }
+
       // ---- events ----
       // Enter in a field saves nothing by itself (each field saves as it changes), and never sends the form.
       el.addEventListener('submit', function (ev) { ev.preventDefault(); });
       el.addEventListener('click', function (ev) {
+        // The condition rows act through their own handlers.
+        if (ev.target.closest('[data-dkw-when]')) return;
         var tab = ev.target.closest('.dkw-tab');
         if (tab) { showTab(tab.getAttribute('data-tab')); return; }
         var link = ev.target.closest('.dkw-cardlink');
@@ -788,6 +1335,7 @@
 
       el.addEventListener('change', function (ev) {
         var t = ev.target;
+        if (t.closest && t.closest('[data-dkw-when]')) return;
         var act = t.getAttribute && t.getAttribute('data-act');
         if (act === 'deal-hero') {
           if (!t.value) return;
@@ -845,6 +1393,8 @@
 
   window.DeckWorkshop = {
     LISTS: LISTS, PALETTE: PALETTE, DRAW_MIN: DRAW_MIN, DRAW_MAX: DRAW_MAX, COPIES_MAX: COPIES_MAX, MAX_KINDS: MAX_KINDS,
-    clampCount: clampCount, stepCount: stepCount, lookPatch: lookPatch, kindKey: kindKey, nextKindName: nextKindName, isStale: isStale, words: words, parseVersion: parseVersion
+    clampCount: clampCount, stepCount: stepCount, lookPatch: lookPatch, kindKey: kindKey, nextKindName: nextKindName, isStale: isStale, words: words, parseVersion: parseVersion,
+    MAX_TESTS: MAX_TESTS, KIND_ORDER: KIND_ORDER, TEST_KEYS: TEST_KEYS, whenBody: whenBody, newTest: newTest, changeTest: changeTest, parseNumber: parseNumber,
+    whenHint: whenHint, nowLine: nowLine, kindAvailable: kindAvailable, shareLabel: shareLabel, buildRow: buildRow
   };
 })();

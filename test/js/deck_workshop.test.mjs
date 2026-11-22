@@ -125,3 +125,95 @@ test('the widget takes a newer version from a reload and never goes back', () =>
   assert.match(src, /versionSink = function \(v\) \{ if \(v > version\(\)\)/);
   assert.match(src, /var v = parseVersion\(text\);\s*if \(v && versionSink\) versionSink\(v\);/);
 });
+
+// ---- Comes up when ----
+
+function goKeys() {
+  const src = readFileSync(join(decks, 'when.go'), 'utf8');
+  const block = src.match(/var keysOf = map\[string\]\[\]string\{([\s\S]*?)\n\}/);
+  assert.ok(block, 'no keysOf in when.go');
+  const out = {};
+  for (const m of block[1].matchAll(/Test(\w+):\s*\{([^}]*)\}/g)) {
+    out[m[1].toLowerCase()] = [...m[2].matchAll(/"([^"]*)"/g)].map((x) => x[1]);
+  }
+  return out;
+}
+
+const opts = {
+  available: true,
+  fields: [{ key: 'hp', label: 'Hit points', maxKey: 'hpmax' }, { key: 'stamina', label: 'Stamina' }],
+  trackers: [{ id: 'k-doom', name: 'Doom' }],
+  tags: [{ id: 7, name: 'Cursed' }],
+  layers: ['Haunted'],
+};
+const plain = (v) => JSON.parse(JSON.stringify(v));
+const heroDeck = { heroDeck: true, holder: 'h-tam' };
+
+test('the editor offers the keys and the limit the server accepts', () => {
+  assert.equal(DW.MAX_TESTS, Number(readFileSync(join(decks, 'when.go'), 'utf8').match(/MaxTests\s*=\s*(\d+)/)[1]));
+  const go = goKeys();
+  for (const kind of Object.keys(DW.TEST_KEYS)) {
+    assert.deepEqual([...DW.TEST_KEYS[kind]], go[kind] || [], kind);
+  }
+});
+
+test('each kind of test starts with values the server accepts', () => {
+  const n = DW.newTest('number', heroDeck, opts);
+  assert.deepEqual(plain(DW.whenBody([n])), [{ test: 'number', open: false, who: 'holder', field: 'hp', op: 'lte', of: 'hpmax', share: 'half' }]);
+  const tr = DW.newTest('tracker', { heroDeck: false }, opts);
+  assert.deepEqual(plain(DW.whenBody([tr])), [{ test: 'tracker', open: false, who: 'any', kind: 'k-doom', op: 'gte', value: 1 }]);
+  const tg = DW.newTest('tag', heroDeck, opts);
+  assert.deepEqual(plain(DW.whenBody([tg])), [{ test: 'tag', open: false, who: 'holder', tag: 7, has: true }]);
+  const ly = DW.newTest('layer', heroDeck, opts);
+  assert.deepEqual(plain(DW.whenBody([ly])), [{ test: 'layer', open: false, who: 'holder', name: 'Haunted', on: true }]);
+  assert.deepEqual(plain(DW.whenBody([DW.newTest('say', heroDeck, opts)])), [{ test: 'say', open: false }]);
+});
+
+test('a layer with no name to offer is a draft and is not sent', () => {
+  const ly = DW.newTest('layer', heroDeck, { available: true, layers: [] });
+  assert.equal(ly._draft, true);
+  assert.deepEqual(plain(DW.whenBody([ly])), []);
+  assert.deepEqual(plain(DW.whenBody([DW.changeTest(ly, 'name', 'Hexed', opts)])), [{ test: 'layer', open: false, who: 'holder', name: 'Hexed', on: true }]);
+});
+
+test('a kind the campaign has nothing for is not offered', () => {
+  assert.equal(DW.kindAvailable('say', {}), true);
+  assert.equal(DW.kindAvailable('layer', { available: false }), false);
+  assert.equal(DW.kindAvailable('tag', { available: true, tags: [] }), false);
+  assert.equal(DW.kindAvailable('tracker', { available: true, trackers: [{}] }), true);
+  assert.equal(DW.kindAvailable('number', { available: false, fields: [{}] }), false);
+});
+
+test('changing one blank changes only that blank', () => {
+  const n = DW.newTest('number', heroDeck, opts);
+  const op = DW.changeTest(n, 'op', 'gte', opts);
+  assert.equal(op.op, 'gte');
+  assert.equal(n.op, 'lte', 'the old test is not edited in place');
+  const num = DW.changeTest(n, 'compare', 'number', opts);
+  assert.equal(num.value, 0);
+  assert.equal(num.of, undefined);
+  assert.equal(num.share, undefined);
+  const back = DW.changeTest(num, 'compare', 'quarter', opts);
+  assert.equal(back.share, 'quarter');
+  assert.equal(back.of, 'hpmax');
+  assert.equal(back.value, undefined);
+  assert.equal(DW.changeTest(DW.newTest('tag', heroDeck, opts), 'has', 'false', opts).has, false);
+  assert.equal(DW.changeTest(DW.newTest('tag', heroDeck, opts), 'tag', '7', opts).tag, 7);
+});
+
+test('a typed number is read the way a person writes it', () => {
+  assert.equal(DW.parseNumber('12'), 12);
+  assert.equal(DW.parseNumber(' -3,5 '), -3.5);
+  assert.equal(DW.parseNumber('.5'), 0.5);
+  for (const bad of ['', 'abc', '1e3', '1 2', null]) assert.equal(DW.parseNumber(bad), null, String(bad));
+});
+
+test('the hint and the Now line say what a Director needs', () => {
+  assert.equal(DW.whenHint([{ open: true }]), '');
+  assert.equal(DW.whenHint([{ open: false }]), '');
+  assert.equal(DW.whenHint([{ open: true }, { open: false }]), 'The second condition is yours alone, so the card shows only the first.');
+  assert.equal(DW.whenHint([{ open: true }, { open: false }, { open: false }]), 'The second and third conditions are yours alone, so the card shows only the first.');
+  assert.equal(DW.nowLine([], { fitsNow: true }), '');
+  assert.equal(DW.nowLine([{}], { fitsNow: true }), 'Fits now.');
+  assert.equal(DW.nowLine([{}], { fitsNow: false, whyNot: 'Tam is above half' }), 'Waiting: Tam is above half.');
+});

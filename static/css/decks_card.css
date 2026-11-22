@@ -416,6 +416,12 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 .dk-lfi { position: relative; flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 12px 10px; }
 .dk-dn { font-size: 13px; line-height: 1.2; color: var(--color-text-primary); overflow-wrap: anywhere; }
 .dk-leaf .dk-kl { justify-content: flex-start; margin: 0; }
+/* The printed line: what a card says about when it can come up. On the leaf it
+   sits in the foot's place; on a compact card it is the last line of the words. */
+.dk-when { display: block; font-size: 11.5px; line-height: 1.4; color: var(--color-text-muted); overflow-wrap: anywhere; }
+.dk-leaf .dk-when { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--color-border); }
+.dk-leaf .dk-when + .dk-foot { margin-top: 0; border-top: 0; padding-top: 2px; }
+.dk-words .dk-when { margin-top: 4px; }
 .dk-foot { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--color-border); font-size: 11.5px; color: var(--color-text-muted); }
 .dk-leaf.dk-b-double { padding: 6px 6px 6px 0; }
 .dk-leaf.dk-b-double .dk-lfi { border: 1px solid var(--dk-k); border-left: 0; border-radius: 0 8px 8px 0; outline: 1px solid var(--color-border); outline-offset: 2px; clip-path: inset(-4px -4px -4px 0); }
@@ -425,8 +431,8 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 .dk-leaf.dk-mat .dk-lfi { background: var(--dk-field); border: 1px solid var(--dk-black); border-left: 0; border-radius: 0 3px 3px 0; box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px var(--dk-black-a8); color: var(--dk-ink2); }
 .dk-leaf.dk-mat .dk-dn { color: var(--dk-ink); }
 .dk-leaf.dk-mat .dk-words { color: var(--dk-ink2); }
-.dk-leaf.dk-mat .dk-kl, .dk-leaf.dk-mat .dk-foot { color: var(--dk-ink2); }
-.dk-leaf.dk-mat .dk-foot { border-top-color: var(--dk-white-a14); }
+.dk-leaf.dk-mat .dk-kl, .dk-leaf.dk-mat .dk-foot, .dk-leaf.dk-mat .dk-when, .dk-mat .dk-words .dk-when { color: var(--dk-ink2); }
+.dk-leaf.dk-mat .dk-foot, .dk-leaf.dk-mat .dk-when { border-top-color: var(--dk-white-a14); }
 .dk-leaf.dk-mat::after { display: none; }
 .dk-leaf.dk-b-none { box-shadow: var(--elev-resting); }
 .dk-leaf.dk-rare { border-color: var(--dk-gold-edge); box-shadow: 0 0 0 2px var(--dk-gold), 0 6px 18px var(--dk-gold-glow); }

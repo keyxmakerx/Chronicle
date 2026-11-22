@@ -268,14 +268,26 @@ func (a *decksFactsAdapter) Layers(ctx context.Context, campaignID, pageID strin
 // party's category, and the tracker kinds and tags that exist. A part whose
 // plugin is not running is left empty rather than failing the whole list.
 func (a *decksFactsAdapter) Options(ctx context.Context, campaignID string) (decks.WhenOptions, error) {
-	out := decks.WhenOptions{Heroes: []decks.OptionHero{}, Fields: []decks.NumberField{}, Trackers: []decks.TrackerKindOption{}, Tags: []decks.TagOption{}}
+	out := decks.WhenOptions{Heroes: []decks.OptionHero{}, Fields: []decks.NumberField{}, Trackers: []decks.TrackerKindOption{}, Tags: []decks.TagOption{}, Layers: []string{}}
 	party, err := a.entities.ListClaimed(ctx, campaignID, permissions.RoleOwner, "")
 	if err != nil {
 		return out, err
 	}
+	named := map[string]bool{}
 	for _, e := range party {
 		out.Heroes = append(out.Heroes, decks.OptionHero{ID: e.ID, Name: e.Name})
+		// A layer that cannot be read just is not offered; the editor still lets
+		// the Director type a name.
+		if list, err := a.Layers(ctx, campaignID, e.ID); err == nil {
+			for _, l := range list {
+				if l.Name != "" && !named[l.Name] {
+					named[l.Name] = true
+					out.Layers = append(out.Layers, l.Name)
+				}
+			}
+		}
 	}
+	sort.Strings(out.Layers)
 	if a.characters != nil {
 		ids, err := a.characters.CharacterTypeIDs(ctx, campaignID)
 		if err != nil && !errors.Is(err, context.Canceled) {

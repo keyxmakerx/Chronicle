@@ -33,7 +33,7 @@ func (s *service) WhenOptions(ctx context.Context, campaignID string, v Viewer) 
 		return WhenOptionsView{}, err
 	}
 	out := WhenOptionsView{
-		WhenOptions: WhenOptions{Heroes: []OptionHero{}, Fields: []NumberField{}, Trackers: []TrackerKindOption{}, Tags: []TagOption{}},
+		WhenOptions: WhenOptions{Heroes: []OptionHero{}, Fields: []NumberField{}, Trackers: []TrackerKindOption{}, Tags: []TagOption{}, Layers: []string{}},
 		Ops:         opPhrases, Shares: sharePhrases, TestKinds: testKindWords, MaxTests: MaxTests,
 	}
 	if s.facts == nil {
@@ -55,6 +55,9 @@ func (s *service) WhenOptions(ctx context.Context, campaignID string, v Viewer) 
 	}
 	if o.Tags != nil {
 		out.Tags = o.Tags
+	}
+	if o.Layers != nil {
+		out.Layers = o.Layers
 	}
 	return out, nil
 }
