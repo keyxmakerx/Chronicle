@@ -102,7 +102,8 @@ html.dark .hc[data-skin="ornate"] {
 /* step header (phone): the step name wraps to a second line rather than being cut */
 .hc-shead { flex: none; position: relative; z-index: 2; background-color: var(--hc-surface); background-image: var(--hc-texture); border-bottom: var(--hc-edge) solid var(--hc-line); }
 .hc-sbtn { width: 100%; min-height: 50px; display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; padding: 6px 16px 4px; border: 0; background: transparent; cursor: pointer; text-align: left; transition: background-color var(--dur-micro) var(--ease-out); }
-.hc-sbtn:hover { background: var(--hc-surface-2); }
+/* A tap leaves :hover set on a touch screen, and the wash is the colour of the bars under it. */
+@media (hover: hover) { .hc-sbtn:hover { background: var(--hc-surface-2); } }
 .hc-sbtn .hc-of { font-size: 14px; color: var(--hc-muted); white-space: nowrap; flex: none; }
 .hc-sbtn .hc-nm { font-size: 17px; font-weight: 600; line-height: 1.25; min-width: 0; overflow-wrap: break-word; }
 .hc-sbtn .hc-chev { margin-left: auto; color: var(--hc-muted); transition: transform var(--dur-standard) var(--ease-out); }
