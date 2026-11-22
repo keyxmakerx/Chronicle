@@ -7222,6 +7222,12 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
    takes the same cap and the same centring: it starts and ends where the sheet's content does. Index tabs per the standard's Tab
    weight (small capitals, a hairline under the row, the open tab's line up its side and down its pane's side), no box of its own. */
 :root { --sheet-width: 920px; }
+/* A system sheet that can use more room marks its root data-sheet-wide; on a screen with room beside the sidebar the folio and the
+   strip widen together, so they still start and end in the same place. */
+@media (min-width: 1480px) { body:has([data-sheet][data-sheet-wide]) { --sheet-width: 1160px; } }
+/* A sheet that prints the page's name as its own heading marks its root data-sheet-names-page while it does; the header's name then
+   stays for screen readers only, so the name is read once and seen once. */
+body:has([data-sheet][data-sheet-names-page]) [data-page-h1] { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .pt { display: grid; grid-template-columns: minmax(0, 1fr) auto; max-width: var(--sheet-width); margin: 12px auto 0; min-width: 0; transition: transform var(--dur-slide) var(--ease-slide); }
 /* While a paper is out beside the sheet the sheet's folio slides left (sheet_motion.css); the strip follows by the same amount (page_tabs.js). */
 .pt.is-shifted { transform: translateX(calc(var(--shift, 0px) * -1)); }
