@@ -804,15 +804,26 @@ their tokens.
   plugin registers, so a new tab adds a picture). Hovering or focusing a
   shared picture lights the part it changes in every other picture and dims
   the pictures it does not touch (touch has no hover). Pressing a picture
-  grows it into its workshop (a view transition: the picture travels to the
-  workshop's stage, `data-czs-stage`, while the rest of the wall steps back
-  to 97%; then the bar's tabs, 30ms apart, and the workshop's controls come
-  in), opening over 0.92 of `--dur-slide` on `--ease-out`; "Everything" runs
-  it back over 0.9 of `--dur-large` on `--ease-in-out`. Calm is a short
-  cross-fade, Off is instant, and a browser without view transitions fades.
+  grows it into its workshop: in the frame of the press the picture lifts off
+  its tile and flies to where the workshop's stage will be (`data-czs-stage`,
+  below the bar across the content column), growing to its width, while the
+  rest of the wall steps back to 97% and fades, over 0.92 of `--dur-slide` on
+  `--ease-out`. It stays there, whole, while the workshop loads, and fades
+  into it once the workshop has drawn (no `aria-busy` left in the stage, or
+  1.5 s at most); the bar's tabs come in 30ms apart as the workshop arrives.
+  "Everything" and the browser's Back step the workshop back at once (60%,
+  98.5%, `--dur-micro`), and when the wall arrives the picture flies from the
+  stage into its tile over 0.9 of `--dur-large` on `--ease-in-out` while the
+  wall steps forward. Calm fades the picture in place instead of flying it;
+  Off and reduced motion swap at once. Escape, a second press or Back during
+  a move ends it cleanly. Focus lands on the workshop's name going in and on
+  the picture you came from coming back, in view.
   Inside a part the bar names where you are: "‹ Everything", the part's name
   (a category's opens the switcher), the part's own tabs (a category's five,
-  Look's rooms, the homes), then Find.
+  Look's rooms, the homes), then Find. On a phone the bar takes two rows:
+  "‹ Everything", the name and Find as a 44-square search mark on the first,
+  the tabs on the second, scrolling sideways with the edge fade, each 44
+  tall.
 
 - **Page look** (`data-cz-page`, `static/css/page_look_annals.css`, chosen in
   Customize › Look › Pages, where Annals is named Material): Annals
@@ -886,10 +897,16 @@ their tokens.
   with the four rooms as quiet words at its top and the room's parts under
   them. Pressing a part of the example opens it: the part gets a ring and the
   rest softens; settings that dress the whole site (Colours, Type, a starting
-  look) leave the example sharp. The tools float at the foot in Page layout's
+  look) leave the example sharp. With nothing open, the room's parts wear
+  pencil marks beside them, never over a word; each mark is a button
+  ("Change the header") that Tab reaches and Enter or Space opens, as a press
+  on the part does. Escape anywhere in the workshop puts the panel away,
+  unless focus is in a text field; an open picker or menu closes first. The
+  tools float at the foot in Page layout's
   dock: Settings, Looks (the eight starting looks in the panel), Light and
   Dark, the page switch and Hold to see saved (the example shows the saved
-  look while it is held, with Space or Enter too). Every choice that was
+  look while it is held, with Space or Enter too); on a phone they wrap onto
+  centred rows rather than scroll. Every choice that was
   words carries a sample of what it looks like. The panel's contents swap
   with a fade of at most 150 ms; Calm fades only, Off shows the end state.
 - The editor's example site (`static/js/widgets/customize_look.js`,
