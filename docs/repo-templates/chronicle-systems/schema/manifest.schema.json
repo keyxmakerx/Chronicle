@@ -185,6 +185,22 @@
       "additionalProperties": false,
       "description": "How the game rolls and counts a crafting project. Recipes and benches are the campaign's own; this is only the arithmetic."
     },
+    "crits": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["dice"],
+        "properties": {
+          "dice": {"type": "string", "pattern": "^([1-4])?d(4|6|8|10|12|20)$", "description": "The dice the rule covers, like \"d20\" or, with a count, \"2d10\"."},
+          "judge": {"type": "string", "enum": ["each", "total"], "description": "each: every die by its own face (default). total: a group of exactly the written count is judged by its sum; needs a count in dice."},
+          "succ": {"type": "array", "maxItems": 20, "items": {"type": "integer"}, "description": "The faces or sums that are a critical success."},
+          "fail": {"type": "array", "maxItems": 20, "items": {"type": "integer"}, "description": "The faces or sums that are a critical failure."}
+        },
+        "additionalProperties": false
+      },
+      "description": "Which dice results the game counts as crits. Absent: a natural 20 or 1 on a d20. An empty list: the game has no crits."
+    },
     "goods": {
       "type": "array",
       "maxItems": 8,

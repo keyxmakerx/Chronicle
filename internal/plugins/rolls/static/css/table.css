@@ -121,6 +121,12 @@
 .tdr { fill: none; stroke: transparent; stroke-width: 2.5; }
 .td-hi .tdr { stroke: var(--color-accent); }
 .td-lo .tdr { stroke: rgb(var(--color-bad-rgb)); }
+/* A crit's edge flashes as the die lands: the roll's first crit twice, any others once and fainter. */
+.td-flash .tdr { animation: td-flash 0.7s var(--ease-out, ease-out) 1; }
+.td-flash2 .tdr { animation: td-flash2 0.5s var(--ease-out, ease-out) 1; }
+@keyframes td-flash { 0%, 50% { stroke-opacity: 0; } 25%, 75%, 100% { stroke-opacity: 1; } }
+@keyframes td-flash2 { 0% { stroke-opacity: 0; } 50% { stroke-opacity: 0.6; } 100% { stroke-opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .td-flash .tdr, .td-flash2 .tdr { animation: none; } }
 .td-die text, .tt-mini text { font: 600 17px Inter, system-ui, sans-serif; fill: var(--td-ink); text-anchor: middle; dominant-baseline: central; font-variant-numeric: tabular-nums; }
 .tt-mini { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; }
 .tt-mini-l { width: 24px; height: 24px; }

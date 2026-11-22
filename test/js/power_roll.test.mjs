@@ -82,6 +82,15 @@ test('Critical comes only from the server\'s crit mark', () => {
   assert.equal(P.headline(P.read(roll('Agility', 6, 6, 2), rules)), 'Tier 2 · 14');
 });
 
+// The dice exactly as the server sends a Draw Steel crit (TestPowerRollCritWire in
+// internal/plugins/rolls/crits_test.go pins the same text). The headline reads the result,
+// so it says Critical whether or not this person turned crit animations off.
+test('a natural 19 marked by the server reads as Critical · Tier 3', () => {
+  const wire = JSON.parse('[{"sides":10,"value":9,"crit":"succ"},{"sides":10,"value":10,"crit":"succ"}]');
+  assert.equal(P.headline(P.read({ label: 'Might', dice: wire, total: 21 }, rules)), 'Critical · Tier 3 · 21');
+  assert.equal(P.headline(P.read({ label: 'Might', dice: wire.map((x) => ({ sides: x.sides, value: x.value, crit: '' })), total: 21 }, rules)), 'Tier 3 · 21');
+});
+
 test('only a power roll reads as one', () => {
   assert.equal(P.read(roll('Fade', 5, 5, 0), rules), null, 'not a characteristic');
   assert.equal(P.read({ label: 'Might', dice: [{ sides: 20, value: 5 }], total: 5 }, rules), null);

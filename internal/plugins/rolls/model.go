@@ -61,10 +61,13 @@ const (
 	tableTermsMax = 20
 )
 
-// Die is one die as it fell.
+// Die is one die as it fell. Crit is the server's judgement under the
+// campaign's game system ("succ", "fail" or empty); it is stored with the die
+// and never taken from a client.
 type Die struct {
-	Sides int `json:"sides"`
-	Value int `json:"value"`
+	Sides int    `json:"sides"`
+	Value int    `json:"value"`
+	Crit  string `json:"crit,omitempty"`
 }
 
 // Roll is one roll in the log.

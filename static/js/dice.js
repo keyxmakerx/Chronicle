@@ -43,9 +43,10 @@
  *
  *   Chronicle.dice.catalogue() -> Promise<{ sets, crits, defaults }>   every look, for pickers
  *   Chronicle.dice.defaults    { set, colour, succ, fail, quality }
- *   Chronicle.diceTable        optional { set, colour, succ, fail, quality (a string) }: the look of
+ *   Chronicle.diceTable        optional { set, colour, succ, fail, quality (a string), crits }: the look of
  *                     this person's own rolls on the page, set by the Table tab. An empty or missing
- *                     name means the default.
+ *                     name means the default. crits: false is the person's "Crit animations: Off":
+ *                     no die of any roll on the page plays a crit, even one marked by the server.
  *   Chronicle.dice.stop(host)   clear the page's table, or the dice thrown into host
  *   Chronicle.dice.portrait({ set, colour, value, px }) -> Promise<data URL>   a still picture of one
  *                     d20 of that set and colour, value up, drawn by the same engine as a throw, for
@@ -125,8 +126,11 @@
     if (at) out[at[0]].values[at[1]] = kind === 'succ' ? 20 : 1;
   }
 
-  // Whether each die crits. A die's own crit field wins, then the caller's rule, then the d20 one.
+  // Whether each die crits. The person's own "no crit animations" setting (opts.critsOff, from
+  // Chronicle.diceTable) beats everything, a die's own crit field included; otherwise a die's own
+  // crit field wins, then the caller's rule, then the d20 one.
   function critsOf(groups, out, opts) {
+    if (opts.critsOff) return groups.map(function (g) { return g.dice.map(function () { return null; }); });
     var counts = anyCounts(groups);
     return groups.map(function (g, gi) {
       var values = out[gi].values, rule = typeof opts.crits === 'function' ? opts.crits(g, values.slice(), gi) || [] : null;
@@ -254,6 +258,12 @@
     ['set', 'succ', 'fail'].forEach(function (k) { if (!r[k] && t[k]) r[k] = t[k]; });
     if (!r.colour && t.colour && (!o.set || o.set === t.set)) r.colour = t.colour;
     if (!r.quality && t.quality) r.quality = { mode: t.quality };
+    // A person who turned crit animations off gets none from any roll on the page, whatever the
+    // roll's own dice say, so the flag is separate from opts.crits (which a die's own crit beats).
+    if (t.crits === false) {
+      r.critsOff = true;
+      if (r.crits === undefined) r.crits = false;
+    }
     return r;
   }
 

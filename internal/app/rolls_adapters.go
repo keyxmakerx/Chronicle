@@ -84,6 +84,25 @@ func (l *craftingRollLog) ProjectRolled(ctx context.Context, campaignID string, 
 	}
 }
 
+// rollsCritAdapter gives the roll log the crit rules of the campaign's enabled
+// game system; with none enabled the default (natural 20 and 1 on a d20) applies.
+type rollsCritAdapter struct {
+	sys interface {
+		EnabledSystem(ctx context.Context, campaignID string) systems.System
+	}
+}
+
+func (a *rollsCritAdapter) CritRules(ctx context.Context, campaignID string) []systems.CritRule {
+	if a.sys == nil {
+		return systems.DefaultCritRules()
+	}
+	s := a.sys.EnabledSystem(ctx, campaignID)
+	if s == nil || s.Info() == nil {
+		return systems.DefaultCritRules()
+	}
+	return s.Info().CritRules()
+}
+
 // rollsPowerAdapter tells the Table the campaign's power roll (the game
 // system's crafting declaration) and the characteristics on the viewer's own
 // claimed hero. It reads only a character the viewer owns, so no one's sheet

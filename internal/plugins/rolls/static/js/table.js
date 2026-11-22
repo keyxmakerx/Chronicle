@@ -99,6 +99,8 @@
     this.leaves = this.readLeaves(store('leaves.' + key));
     this.phoneLeaf = 0;
     this.look = store('look.' + key) || '';
+    // Crit animations are on unless this person turned them off in this browser.
+    this.crits = store('crits.' + key) !== 'off';
     this.tableLook = 'quick';
     // The campaign's dice settings, once read; rolls use the defaults until then.
     this.camp = null;
@@ -254,7 +256,12 @@
   };
 
   // The page-wide look for this person's rolls from other places (shop, crafting, hero builder).
-  Table.prototype.applyDice = function () { C.diceTable = this.myDice(); };
+  // Only an explicit false turns crit effects off (see dice.js withTable), so the field is left out while they are on.
+  Table.prototype.applyDice = function () {
+    var t = this.myDice();
+    if (!this.crits) t.crits = false;
+    C.diceTable = t;
+  };
 
   // ---------- Live rolls ----------
 
@@ -576,6 +583,11 @@
     var out = '<div class="tt-mydice"><div><p class="tt-k">Your dice</p><p class="tt-from">How dice are drawn for you. It changes nothing anyone else sees.</p></div>' +
       '<div class="tt-seg" role="group" aria-label="How your dice are drawn">' + seg('data-tt-look', mine) + '</div><p class="tt-from">' + note + '</p>';
     if (this.look) out += '<button type="button" class="tt-quiet" data-tt-look-reset>Use the table’s choice (' + esc(lookName(this.tableLook)) + ')</button>';
+    var cseg = [['on', 'On'], ['off', 'Off']].map(function (c) {
+      return '<button type="button" data-tt-crits="' + c[0] + '" aria-pressed="' + ((c[0] === 'on') === self.crits) + '">' + c[1] + '</button>';
+    }).join('');
+    out += '<div><p class="tt-k">Crit animations</p></div><div class="tt-seg" role="group" aria-label="Crit animations">' + cseg + '</div>' +
+      '<p class="tt-from">Off keeps a crit’s coloured edge on the dice, without the effects. Only for you.</p>';
     if (this.director) {
       out += '<div><p class="tt-k">The table’s dice</p><p class="tt-from">What a player who hasn’t picked starts on.</p></div>' +
         '<div class="tt-seg" role="group" aria-label="The table’s dice">' + seg('data-tt-tablelook', self.tableLook) + '</div>';
@@ -989,12 +1001,17 @@
     // Rune dice are thrown full screen whether or not a preview tray was offered: the tray is for
     // quick 2D. Your own rolls wear your dice; everyone else's wear the campaign's.
     if (rune) {
-      return C.dice.roll([{ label: r.label || r.formula, dice: dice.map(function (d) { return { sides: d.sides, value: d.value }; }) }], {
+      // The server decides which dice crit under the campaign's game system. With animations off
+      // every die says 'none', which dice.js treats as a die's own word, so nothing plays.
+      var crits = this.crits;
+      return C.dice.roll([{ label: r.label || r.formula, dice: dice.map(function (d) {
+        return { sides: d.sides, value: d.value, crit: crits && (d.crit === 'succ' || d.crit === 'fail') ? d.crit : 'none' };
+      }) }], {
         table: r.mine ? this.myDice() : this.campDice(),
         describe: function () { return ''; }
       }).then(function () {}, function () {});
     }
-    return C.tableDice.throwInto(tray || this.tray(), dice, { fromLeft: !!r.mine });
+    return C.tableDice.throwInto(tray || this.tray(), dice, { fromLeft: !!r.mine, flash: this.crits });
   };
 
   Table.prototype.play = function (r) {
@@ -1212,6 +1229,13 @@
       if (b.hasAttribute('data-tt-older')) { self.older(); return; }
       if (d.ttRow) { self.toggleRow(b, d.ttRow); return; }
       if (d.ttQuick) { self.roll('1' + d.ttQuick, ''); return; }
+      if (d.ttCrits) {
+        self.crits = d.ttCrits !== 'off';
+        store('crits.' + self.key, self.crits ? 'on' : 'off');
+        self.applyDice();
+        self.renderSection('dice');
+        return;
+      }
       if (self.power && d.ttPstat !== undefined) {
         var st = self.power.characteristics.filter(function (c) { return c.key === d.ttPstat; })[0];
         if (st) self.powerRoll(st.label, st.value == null ? 0 : num(st.value), st.key);

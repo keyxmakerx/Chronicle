@@ -117,6 +117,11 @@ type SystemManifest struct {
 	// (crafting.go). Nil means DefaultCraftingRules.
 	Crafting *CraftingRules `json:"crafting,omitempty"`
 
+	// Crits are the dice faces or totals the system counts as critical
+	// successes and failures (crits.go). Nil means DefaultCritRules; a
+	// present empty list means the system has no crits.
+	Crits *[]CritRule `json:"crits,omitempty"`
+
 	// ShopTests is how a player's haggle or closer look at a shop counter is
 	// thrown (shop_tests.go). Nil falls back to the crafting block, then to a
 	// d20 against a DC.
@@ -1100,6 +1105,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateCrafting(m.Crafting); err != nil {
 		return fmt.Errorf("crafting: %w", err)
+	}
+
+	if err := validateCrits(m.Crits); err != nil {
+		return fmt.Errorf("crits: %w", err)
 	}
 
 	if err := validateShopTests(m.ShopTests); err != nil {

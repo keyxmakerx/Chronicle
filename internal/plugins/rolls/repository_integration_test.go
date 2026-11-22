@@ -89,7 +89,7 @@ func TestRepoIntegration(t *testing.T) {
 	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	add := func(mode, roller, originID string, i int) string {
 		r := Roll{ID: uuid.New().String(), CampaignID: campaign, Origin: OriginChronicle, Source: SourceTable, RollerID: roller,
-			RollerName: "Ana", Label: mode, Formula: "1d20", Dice: []Die{{20, 7}}, Total: 7, Mode: mode, CreatedAt: at.Add(time.Duration(i) * time.Second)}
+			RollerName: "Ana", Label: mode, Formula: "1d20", Dice: []Die{{Sides: 20, Value: 7}}, Total: 7, Mode: mode, CreatedAt: at.Add(time.Duration(i) * time.Second)}
 		if originID != "" {
 			r.Origin, r.OriginID = OriginFoundry, originID
 		}
