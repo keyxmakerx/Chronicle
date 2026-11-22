@@ -416,6 +416,33 @@ test('a style asks first only when the look has been changed since it, and says 
   void owner;
 });
 
+test('on a desktop the Look stage sticks, fits the screen, and its leaf spans it whole', async () => {
+  const { owner, cid, page, errors } = await director();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await makeDeck(page, cid, 'Desk deck', 'Plain');
+  await addCard(page, 'One');
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('[data-row=border]').waitFor();
+  const stage = page.locator('.dkw-stagecol');
+  const box = await stage.boundingBox();
+  assert.ok(box.height < 800, `the stage is ${box.height}px, taller than the screen`);
+  assert.ok(box.width >= 380, `the stage column is ${box.width}px, not about 24rem`);
+  const leaf = page.locator('.dkw-stagecol .dk-leaf');
+  const lb = await leaf.boundingBox();
+  assert.ok(lb.width >= box.width - 40, `the leaf is ${lb.width}px in a ${box.width}px stage`);
+  assert.equal(await leaf.evaluate((n) => getComputedStyle(n).borderBottomWidth), '1px', 'the leaf lost its bottom border');
+  await page.evaluate(() => {
+    for (let a = document.querySelector('.dkw-stagecol').parentElement; a; a = a.parentElement) {
+      if (a.scrollHeight > a.clientHeight && /auto|scroll/.test(getComputedStyle(a).overflowY)) { a.style.scrollBehavior = 'auto'; a.scrollTop = 1200; }
+    }
+  });
+  await page.waitForTimeout(400);
+  const top = (await stage.boundingBox()).y;
+  assert.ok(top > 0 && top + box.height <= 800, `the stage did not stick (top ${top})`);
+  assert.deepEqual(errors, []);
+  void owner;
+});
+
 test('on a phone the table row is compact, the card stays at the top of Look, inputs are 44 tall and Delete is last', async () => {
   const { owner, cid, page, errors } = await director();
   await page.setViewportSize({ width: 390, height: 800 });

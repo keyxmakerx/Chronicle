@@ -108,11 +108,13 @@
 /* Too narrow for the card and its leaf beside the form: the card sits above the form at row size, without its leaf. */
 .dkw-preview .dk-sz-open { --dk-w: 128px; }
 .dkw-preview .dk-leaf { display: none; }
+@container dke (min-width: 30rem) {
+  .dkw-preview .dk-leaf { display: flex; }
+}
 @container dke (min-width: 42rem) {
   .dkw-ed-body { grid-template-columns: auto minmax(20rem, 1fr); gap: 20px; }
   .dkw-preview { position: sticky; top: 12px; }
   .dkw-preview .dk-sz-open { --dk-w: 176px; }
-  .dkw-preview .dk-leaf { display: block; }
 }
 .dkw-row2 { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 24px; }
 .dkw-row2 > .dkw-field:first-child { flex: 1 1 10rem; }
@@ -144,7 +146,7 @@
 .dkw-style-s .dkw-fan-a { transform: translateX(calc(-50% - 11px)) rotate(-6deg) scale(0.4); top: 3px; }
 .dkw-style-s .dkw-fan-b { transform: translateX(calc(-50% + 11px)) rotate(4deg) scale(0.4); }
 .dkw-styles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 12px; }
-.dkw-lookgrid { display: grid; grid-template-columns: minmax(15rem, 19rem) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 16px; }
+.dkw-lookgrid { display: grid; grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 16px; }
 .dkw-stagecol { display: grid; gap: 12px; justify-items: center; padding: 16px; border-radius: 12px; background: var(--color-bg-tertiary); position: sticky; top: 8px; }
 .dkw-stage { display: grid; gap: 12px; justify-items: center; }
 .dkw-pair { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 16px; }
@@ -213,6 +215,28 @@
 .dkw-newform { display: grid; gap: 4px; max-width: 64rem; margin-top: 16px; }
 .dkw-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .dkw-hero[hidden] { display: none; }
+
+/* The Look tab beside the choices: the card stays in view while the rows scroll past it. The plate and the back sit side by side at the top, the leaf under them across the stage's width. Below 1024 wide the stage stacks above the rows and does not stick. */
+@media (min-width: 1024px) {
+  .dkw-stagecol { max-height: calc(100vh - 16px); justify-items: stretch; }
+  .dkw-stagecol > p { text-align: center; }
+  .dkw-pair { position: relative; display: block; width: 100%; }
+  .dkw-pair > .dkw-fig:first-child { justify-items: start; width: 100%; }
+  .dkw-pair > .dkw-fig:last-child { position: absolute; top: 0; right: 0; }
+  .dkw-fig figcaption { order: -1; }
+  .dkw-stagecol [data-dk-slot], .dkw-stagecol #dkw-bigcard { width: 100%; }
+  .dkw-stagecol .dk-wrap.dk-open { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; width: 100%; }
+  .dkw-stagecol .dk-wrap.dk-open > .dk-card { align-self: flex-start; }
+  .dkw-stagecol .dk-leaf { width: 100%; margin: 12px 0 0; border-left: 1px solid var(--color-border); border-radius: 12px; }
+  .dkw-stagecol .dk-leaf.dk-b-double, .dkw-stagecol .dk-leaf.dk-b-line { padding: 6px; }
+  .dkw-stagecol .dk-leaf.dk-mat { padding: 9px; border-radius: 8px; }
+  .dkw-stagecol .dk-leaf.dk-mat .dk-lfi, .dkw-stagecol .dk-leaf.dk-b-double .dk-lfi, .dkw-stagecol .dk-leaf.dk-b-line .dk-lfi { border-left: 1px solid currentColor; border-radius: 6px; clip-path: none; }
+  .dkw-stagecol .dk-leaf.dk-f-sheen::before, .dkw-stagecol .dk-leaf.dk-f-foil::before { border-radius: 12px; }
+}
+@media (max-width: 1023px) {
+  .dkw-lookgrid { grid-template-columns: minmax(0, 1fr); }
+  .dkw-stagecol { position: static; }
+}
 
 /* A phone: the table row folds to one column, the card stays at the top of the Look tab and each choice is a strip that scrolls sideways and snaps. */
 @media (max-width: 760px) {
