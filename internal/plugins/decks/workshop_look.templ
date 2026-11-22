@@ -28,10 +28,7 @@ templ DeckLookTab(p deckPage) {
 				}
 			</div>
 			<p class="dkw-quiet dkw-stylenote" data-dkw-stylenote data-changed={ boolWord(changed) }>
-				{ styleName }
-				if changed {
-					, changed
-				}
+				{ styleLine(styleName, changed) }
 			</p>
 		</div>
 		<div class="dkw-lookgrid">

@@ -78,8 +78,19 @@
 .dkw-shown { padding-left: 12px; box-shadow: inset 3px 0 0 color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, transparent); }
 .dkw-held { grid-column: 1 / -1; padding-left: 12px; box-shadow: inset 3px 0 0 color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, transparent); }
 .dkw-ask { font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
-.dkw-shownlist, .dkw-playlist { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; padding: 0; list-style: none; }
-.dkw-shownone, .dkw-playlist > li { display: grid; gap: 4px; justify-items: start; max-width: 14rem; }
+.dkw-shownlist { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.dkw-shownone { display: grid; gap: 4px; justify-items: start; max-width: 14rem; }
+/* A holder's cards: one line naming the holder, then their cards in one row that scrolls inside itself, on every width, so a long hand never makes the page tall. Its trailing edge fades while more cards remain. */
+.dkw-hand { display: grid; gap: 4px; justify-self: stretch; min-width: 0; }
+.dkw-holder { margin: 0; font-size: 0.875rem; color: var(--color-text-primary); }
+.dkw-holder b { margin-right: 6px; font-weight: 600; }
+.dkw-strip { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: 4px; padding-bottom: 6px; scrollbar-width: thin; }
+.dkw-strip[data-more] { -webkit-mask-image: linear-gradient(to right, var(--color-text-primary) calc(100% - 2.5rem), transparent); mask-image: linear-gradient(to right, var(--color-text-primary) calc(100% - 2.5rem), transparent); }
+.dkw-handlist { display: flex; gap: 12px 16px; width: max-content; margin: 0; padding: 0; list-style: none; }
+.dkw-handlist > li { display: grid; flex: none; gap: 4px; justify-items: start; align-content: start; width: 8rem; scroll-snap-align: start; }
+.dkw-cap { line-height: 1.3; overflow-wrap: break-word; }
+.dkw-cap::first-letter { text-transform: uppercase; }
+.dkw-play { max-width: 30rem; }
 .dkw-acts { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
 .dkw-nudges { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 0; padding-top: 8px; border-top: 1px solid var(--color-border-light); }
 .dkw-nudge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--color-text-muted); }
@@ -315,8 +326,8 @@
   .dkw-used > .dkw-lab, .dkw-play > .dkw-lab { flex-basis: 100%; margin: 0; }
   .dkw-used .dk-sz-hand, .dkw-play .dk-sz-hand { --dk-w: 36px; }
   .dkw-used .dkw-slot, .dkw-play .dkw-slot { min-height: 0; min-width: 0; padding: 4px 10px; }
-  .dkw-playlist { flex-direction: column; flex-wrap: nowrap; gap: 4px; }
-  .dkw-playlist > li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; max-width: none; }
+  .dkw-hand { flex-basis: 100%; }
+  .dkw-play .dkw-handlist > li { width: 7rem; }
   .dkw-cards:has(.dkw-editor) { grid-template-columns: minmax(0, 1fr); }
   .dkw-lookgrid { grid-template-columns: minmax(0, 1fr); }
   .dkw-stagecol { position: sticky; top: 0; z-index: 5; padding: 8px; gap: 6px; box-shadow: var(--elev-resting); }
@@ -343,6 +354,10 @@
   .dkw-rm { width: 44px; height: 44px; }
   .dkw-stepbtn { width: 44px; height: 44px; }
   .dkw-switch { min-height: 44px; }
+  /* The small visible switch keeps its size; its hit area grows to 44 high. A check box is answered through its row. */
+  .dkw-switch .toggle::before { content: ""; position: absolute; inset: -10px 0; }
+  .btn-primary, .dkw-sentence .dw-blank { min-height: 44px; }
+  .dkw-crumb a { display: inline-flex; align-items: center; min-height: 44px; }
   .dkw-opt { min-height: 44px; }
   .dkw-tab { min-height: 44px; }
   .dkw-choice { min-height: 44px; }

@@ -182,7 +182,7 @@ test('draw three, deal one to the table, put one back, keep one in a second deck
   await page.waitForFunction(() => document.querySelectorAll('.dkw-shownone').length === 2);
   await page.locator('.dkw-shownone').first().getByRole('button', { name: 'Put back' }).click();
   await page.waitForFunction(() => document.querySelectorAll('.dkw-shownone').length === 1);
-  assert.match(await page.locator('.dkw-playlist').textContent(), /In play/);
+  assert.match(await page.locator('.dkw-play .dkw-handlist').textContent(), /In play/);
 
   await page.locator('.dkw-shownone').first().locator('select[data-act=keep]').selectOption({ label: 'Second deck' });
   await page.waitForFunction(() => document.querySelectorAll('.dkw-shownone').length === 0);
@@ -661,4 +661,271 @@ test('the New deck tabs draw in light, dark and at 390 wide, empty and full, wit
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/new-leftoff-${mode}.png`, fullPage: true });
   }
   assert.deepEqual(errors, []);
+});
+
+// ---- Fixes from the look check: tap targets, a refused draw, the name after a stale save, a long hand, focus ----
+
+// holdCards draws and deals n copies of a party deck to a hero's hand (or to the table), four at a time because
+// the shown spot holds five.
+async function holdCards(owner, cid, deck, hero, n, to = 'hand') {
+  const { page } = owner;
+  for (let left = n; left > 0; left -= 4) {
+    const drew = await post(owner, `/campaigns/${cid}/decks/${deck}/draw`, { count: Math.min(4, left) });
+    assert.equal(drew.status, 200, JSON.stringify(drew.body));
+    const ids = await page.evaluate(async ({ cid, deck }) => {
+      const r = await fetch(`/campaigns/${cid}/decks/workshop/${deck}/table`, { headers: { 'HX-Request': 'true' } });
+      const d = new DOMParser().parseFromString(await r.text(), 'text/html');
+      return [...d.querySelectorAll('.dkw-shownone[data-copy]')].map((x) => x.dataset.copy);
+    }, { cid, deck });
+    for (const c of ids) {
+      const r = await post(owner, `/campaigns/${cid}/decks/${deck}/copies/${c}/deal`, to === 'hand' ? { to: 'hand', heroId: hero } : { to: 'table' });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+    }
+  }
+}
+
+// claimedHero makes a hero page that a player has claimed, so it is in the party and a Director can deal to it by name.
+async function claimedHero(owner, cid, name, tag) {
+  const player = await person({ tag, name: 'Player ' + name });
+  await addMember(owner, cid, player, 'player');
+  await owner.go(`/campaigns/${cid}/entities/new`);
+  const etid = await owner.page.locator('select#entity_type_id').evaluate((el) => (([...el.options].find((o) => o.value && /character/i.test(o.textContent)) || {}).value));
+  const hero = await owner.page.evaluate(async ({ cid, etid, name }) => {
+    const form = new FormData();
+    form.append('name', name); form.append('entity_type_id', etid); form.append('is_private', 'false');
+    const res = await Chronicle.apiFetch(`/campaigns/${cid}/entities`, { method: 'POST', body: form });
+    return (res.url.match(/entities\/([0-9a-f-]{36})/) || [])[1] || '';
+  }, { cid, etid, name });
+  assert.ok(hero, 'the hero page was not made');
+  await owner.api(`/campaigns/${cid}/entities/${hero}/permissions`, { method: 'PUT', body: JSON.stringify({ visibility: 'default', is_private: false, permissions: [] }), headers: JSON_HEADERS });
+  await owner.api(`/campaigns/${cid}/characters/playable`, { method: 'POST', form: { entity_id: hero, playable: '1' } });
+  await player.go(`/campaigns/${cid}`);
+  const claim = await player.api(`/campaigns/${cid}/entities/${hero}/claim`, { method: 'POST' });
+  assert.ok(claim.ok, 'could not claim a hero: ' + JSON.stringify(claim.body));
+  return { hero, player };
+}
+
+// partyDeck makes a party deck with n one-copy cards and returns its id.
+async function partyDeck(owner, cid, name, n) {
+  const made = await post(owner, `/campaigns/${cid}/decks`, { name, kind: 'party' });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  for (let i = 1; i <= n; i++) {
+    const c = await post(owner, `/campaigns/${cid}/decks/${made.body.id}/cards`, { name: `Card ${i}`, copies: 1 });
+    assert.equal(c.status, 201, JSON.stringify(c.body));
+  }
+  return made.body.id;
+}
+
+// smallTargets lists every visible control in the page's main area that is under 44 by 44 as a tap target. A
+// control counts at the size of its own box; a check box counts through its row; a small control also counts when
+// a 44 by 44 square around its centre still lands on it (a larger hit area around a small visible control).
+const smallTargets = (page) => page.evaluate(() => {
+  const MIN = 43.5;
+  const sel = ['button', 'select', 'input:not([type=hidden])', 'textarea', 'a[href]', '[role=tab]', '[role=radio]', '[role=switch]'].map((s) => '#main-content ' + s).join(',');
+  const bad = [];
+  for (const el of document.querySelectorAll(sel)) {
+    if (el.closest('[hidden]') || getComputedStyle(el).visibility === 'hidden') continue;
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    const own = el.getBoundingClientRect();
+    if (!own.width || !own.height) continue;
+    const row = (el.type === 'checkbox' || el.type === 'radio') && el.closest('label');
+    const r = (row || el).getBoundingClientRect();
+    let ok = r.width >= MIN && r.height >= MIN;
+    if (!ok) {
+      const cx = own.left + own.width / 2, cy = own.top + own.height / 2;
+      ok = [[-1, -1], [1, -1], [-1, 1], [1, 1]].every(([dx, dy]) => {
+        const hit = document.elementFromPoint(cx + dx * 21.5, cy + dy * 21.5);
+        return !!hit && (hit === el || el.contains(hit) || (!!row && row.contains(hit)));
+      });
+    }
+    if (!ok) bad.push(`${el.tagName.toLowerCase()}.${String(el.className).trim().split(/\s+/).join('.')} ${Math.round(r.width)}x${Math.round(r.height)} "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30)}"`);
+  }
+  return bad;
+});
+
+test('on a phone every control on the four tabs, the New deck page and the Decks list is a 44 by 44 tap target', async () => {
+  const { owner, cid, page, errors } = await director('dkw-tap');
+  const { hero } = await claimedHero(owner, cid, 'Brannoc', 'dkw-tap-player');
+  await partyDeck(owner, cid, 'Other deck', 1);
+  const id = await partyDeck(owner, cid, 'Tap deck', 8);
+  await holdCards(owner, cid, id, hero, 3);
+  await holdCards(owner, cid, id, hero, 1, 'table');
+  await post(owner, `/campaigns/${cid}/decks/${id}/draw`, { count: 1 });
+  const cardId = (await deckOf(owner, cid, id)).cards[0].id;
+  const origin = new URL(page.url()).origin;
+  await page.setViewportSize({ width: 390, height: 800 });
+
+  const found = {};
+  const scan = async (label) => {
+    if (SHOTS) {
+      await page.evaluate(() => { const m = document.querySelector('#main-content'); if (m) m.scrollTop = 0; window.scrollTo(0, 0); });
+      for (const scheme of ['light', 'dark']) {
+        await setScheme(page, scheme);
+        await page.screenshot({ path: `${SHOTS}/tap-${label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${scheme}.png` });
+      }
+      await setScheme(page, 'light');
+    }
+    found[label] = await smallTargets(page);
+  };
+  await page.goto(`${origin}/campaigns/${cid}/decks/workshop/${id}?tab=cards&card=${cardId}`);
+  await page.locator('[data-dkw-editor]').waitFor();
+  await scan('cards tab with a card open, and the table row');
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('[data-row=border]').waitFor();
+  await page.locator('[data-act=toggle-kinds]').last().click();
+  await page.getByRole('button', { name: 'Add a kind' }).click();
+  await page.locator('.dkw-kindrow').waitFor();
+  await openLookAgain(page);
+  await page.locator('[data-act=toggle-kinds]').last().click();
+  await scan('look tab with the kinds open');
+  await page.getByRole('tab', { name: 'Rules' }).click();
+  await page.locator('[data-dkw-rules]').waitFor();
+  await scan('rules tab');
+  await page.getByRole('tab', { name: 'Players' }).click();
+  await page.locator('[data-dkw-players] .dkw-prow').first().waitFor();
+  await scan('players tab');
+  await page.goto(`${origin}/campaigns/${cid}/decks/workshop/new`);
+  for (const name of ['A style', 'Copy a deck', 'From a rolling table']) {
+    await startTab(page, name);
+    await scan(`new deck, ${name}`);
+  }
+  await page.goto(`${origin}/campaigns/${cid}/decks/workshop`);
+  await page.locator('[data-dkw-list]').waitFor();
+  await scan('the Decks list');
+  await page.goto(`${origin}/campaigns/${cid}/decks/workshop/${id}?tab=cards`);
+  await page.locator('#dkw-panel').waitFor();
+  await scan('the breadcrumb and the deck page head');
+  const short = Object.entries(found).filter(([, bad]) => bad.length);
+  assert.deepEqual(short, [], 'controls under 44 by 44 on a 390 wide phone');
+  assert.deepEqual(errors, []);
+});
+
+test('a draw the server refuses because nothing is left shows the pile as it is now', async () => {
+  const { owner, cid, page, errors } = await director('dkw-empty');
+  await makeDeck(page, cid, 'Short deck', 'Plain');
+  for (const n of ['One', 'Two']) await addCard(page, n);
+  await page.getByRole('tab', { name: 'Cards' }).click();
+  await page.waitForFunction(() => /2 left/.test(document.querySelector('[data-dkw-left]')?.textContent || ''));
+  // Someone else draws the whole pile; this page does not know.
+  const gone = await post(owner, `/campaigns/${cid}/decks/${idFromUrl(page)}/draw`, { count: 2 });
+  assert.equal(gone.status, 200, JSON.stringify(gone.body));
+  assert.match(await page.locator('[data-dkw-left]').textContent(), /2 left/, 'the page should still be out of date here');
+  await page.getByRole('button', { name: 'Draw', exact: true }).click();
+  const line = page.locator('#dkw-table [data-dkw-err]:not([hidden])');
+  await line.waitFor();
+  assert.match(await line.textContent(), /Nothing left in this deck/);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/empty-draw-desk-light.png` });
+  assert.equal((await page.locator('[data-dkw-left]').textContent()).trim(), '0 left');
+  assert.equal(await page.getByRole('button', { name: 'Draw', exact: true }).isDisabled(), true, 'Draw is still live on an empty pile');
+  assert.equal(await page.locator('.dkw-shownone').count(), 2, 'the cards drawn elsewhere are not shown');
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.closest('#dkw-table') !== null), true, 'focus left the table row');
+  assert.deepEqual(errors.filter((e) => !/409/.test(e)), []);
+});
+
+test('after a stale save the name field, and the tab title, show the deck\'s current name', async () => {
+  const { owner, cid, page } = await director('dkw-name');
+  await makeDeck(page, cid, 'First name', 'Plain');
+  const other = await page.context().newPage();
+  await other.goto(page.url());
+  const name = other.locator('[data-dkw-name]');
+  await name.fill('Named elsewhere');
+  await name.blur();
+  await other.locator('[data-dkw-saved].is-on').waitFor();
+  // This page still holds the old version: its own rename is refused and the newer name takes the field.
+  const mine = page.locator('[data-dkw-name]');
+  await mine.fill('My late name');
+  await mine.blur();
+  await page.locator('#dkw-panel [data-dkw-err]:not([hidden])').first().waitFor();
+  assert.match(await page.locator('#dkw-panel [data-dkw-err]:not([hidden])').first().textContent(), /changed somewhere else/i);
+  assert.equal(await mine.inputValue(), 'Named elsewhere');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/stale-name-desk-light.png` });
+  assert.match(await page.title(), /Named elsewhere/);
+  // The next rename carries the new version and saves.
+  await mine.fill('Third name');
+  await mine.blur();
+  await page.locator('[data-dkw-saved].is-on').waitFor();
+  await page.reload();
+  assert.equal(await page.locator('[data-dkw-name]').inputValue(), 'Third name');
+  void owner;
+});
+
+test('twelve cards held by one hero are one line and one row, the part stays short, and the tabs are close', async () => {
+  const { owner, cid, page, errors } = await director('dkw-hand');
+  const { hero } = await claimedHero(owner, cid, 'Brannoc', 'dkw-hand-player');
+  const id = await partyDeck(owner, cid, 'Big hand', 14);
+  await holdCards(owner, cid, id, hero, 12);
+  await holdCards(owner, cid, id, hero, 2, 'table');
+  const origin = new URL(page.url()).origin;
+  const open = async (w) => {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.goto(`${origin}/campaigns/${cid}/decks/workshop/${id}?tab=cards`);
+    await page.locator('.dkw-held').waitFor();
+    await page.waitForTimeout(200);
+  };
+
+  await open(390);
+  assert.equal(await page.locator('.dkw-held .dkw-hand').count(), 1, 'one holder, one group');
+  assert.match(await page.locator('.dkw-held .dkw-holder').textContent(), /Brannoc\s+holds 12 cards/);
+  assert.equal(await page.locator('.dkw-held [data-dkw-held] > li').count(), 12);
+  const held = await page.locator('.dkw-held').boundingBox();
+  assert.ok(held.height < 320, `In hands is ${held.height}px tall on a phone with 12 held`);
+  const tabs = await page.locator('.dkw-tabs').boundingBox();
+  assert.ok(tabs.y - (held.y + held.height) < 250, `the tabs are ${Math.round(tabs.y - held.y - held.height)}px under the In hands part`);
+  await noSideways(page, 'a long hand on a phone');
+  const strip = page.locator('.dkw-held .dkw-strip');
+  const s0 = await strip.evaluate((n) => ({ over: n.scrollWidth > n.clientWidth + 1, more: n.hasAttribute('data-more'), tab: n.tabIndex, left: n.scrollLeft }));
+  assert.deepEqual([s0.over, s0.more, s0.tab], [true, true, 0], 'the row scrolls inside itself and fades at its end');
+  const fade = await strip.evaluate((n) => getComputedStyle(n).maskImage);
+  assert.match(fade, /linear-gradient/, 'the trailing edge does not fade');
+  if (SHOTS) {
+    await page.locator('.dkw-held').scrollIntoViewIfNeeded();
+    for (const scheme of ['light', 'dark', 'light']) {
+      await setScheme(page, scheme);
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: `${SHOTS}/hands-phone-${scheme}.png`, fullPage: true });
+    }
+  }
+  // The keyboard scrolls the row; at its far end the fade is gone.
+  await strip.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => document.querySelector('.dkw-held .dkw-strip').scrollLeft > 0);
+  await strip.evaluate((n) => { n.scrollLeft = n.scrollWidth; });
+  await page.waitForFunction(() => !document.querySelector('.dkw-held .dkw-strip').hasAttribute('data-more'));
+  // Every caption keeps its words, in at most two lines.
+  const caps = await page.locator('.dkw-held .dkw-cap').evaluateAll((ns) => ns.map((n) => [n.textContent.trim(), Math.round(n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).lineHeight))]));
+  assert.ok(caps.every(([t, lines]) => t.length > 0 && lines <= 2), `a caption is cut or runs past two lines: ${JSON.stringify(caps)}`);
+  // The play row is the same shape for the cards on the table.
+  assert.equal(await page.locator('.dkw-play .dkw-hand').count(), 1);
+  // The tabs are reachable and work.
+  await page.getByRole('tab', { name: 'Rules' }).click();
+  await page.locator('[data-dkw-rules]').waitFor();
+
+  await open(1280);
+  await noSideways(page, 'a long hand on a desktop');
+  const wide = await page.locator('.dkw-held').boundingBox();
+  assert.ok(wide.height < 400, `In hands is ${wide.height}px tall at 1280 with 12 held`);
+  if (SHOTS) {
+    for (const scheme of ['light', 'dark']) {
+      await setScheme(page, scheme);
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: `${SHOTS}/hands-desk-${scheme}.png`, fullPage: true });
+    }
+  }
+  assert.deepEqual(errors, []);
+});
+
+test('after Make the deck, keyboard focus is on the new page\'s heading', async () => {
+  const { owner, cid, page } = await director('dkw-focus');
+  await makeDeck(page, cid, 'Focus deck', 'Plain');
+  const on = await page.evaluate(() => {
+    const a = document.activeElement;
+    return { heading: !!a && a.matches('h1[data-dkw-heading]'), name: a && a.querySelector('input') ? a.querySelector('input').value : '' };
+  });
+  assert.deepEqual(on, { heading: true, name: 'Focus deck' });
+  // The note is read once: a reload does not pull focus back to the heading.
+  await page.reload();
+  await page.locator('#dkw-panel').waitFor();
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('h1[data-dkw-heading]')), false);
+  void owner;
 });

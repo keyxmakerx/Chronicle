@@ -154,6 +154,15 @@ func (r lookRow) folded(l Look) int {
 // poseClass is the static pose a turning-over choice is drawn in.
 func poseClass(turn string) string { return "dkw-pose-" + turn }
 
+// styleLine is the style's name with ", changed" joined to it directly; a
+// template would put whitespace between the name and the comma.
+func styleLine(name string, changed bool) string {
+	if changed {
+		return name + ", changed"
+	}
+	return name
+}
+
 // styleNote names the style closest to the deck's look and says "changed"
 // once the look no longer matches it. A deck stores no style, only values, so
 // the nearest style is the one it most likely started from.

@@ -36,6 +36,8 @@
     'back.sign': ['star', 'sun', 'moon', 'eye', 'crown', 'anchor', 'flame', 'sword', 'none'],
     'back.colour': [''].concat(PALETTE)
   };
+  // Set by the making page for the deck it made, read once by that deck's page.
+  var MADE_KEY = 'dkw-made';
   var DRAW_MIN = 1;
   var DRAW_MAX = 5; // MaxDrawCount in model.go
   var COPIES_MAX = 20; // MaxCopiesPerCard
@@ -689,6 +691,8 @@
         api('POST', '/campaigns/' + cid + '/decks' + (start.url ? '/' + start.url : ''), body).then(function (made) {
           var deck = start.url ? made.deck : made;
           if (start.url && made.report) rememberLeftOff(deck.id, made.report.notes);
+          // The new page puts focus on its heading, so a keyboard does not start again from the top.
+          try { sessionStorage.setItem(MADE_KEY, deck.id); } catch (err) { /* focus is a convenience */ }
           location.assign('/campaigns/' + cid + '/decks/workshop/' + encodeURIComponent(deck.id) + '?tab=cards');
         }, function (e) {
           btn.disabled = false;
@@ -718,6 +722,13 @@
       var cid = el.getAttribute('data-campaign-id');
       var did = el.getAttribute('data-deck-id');
       showLeftOff(el, did);
+      try {
+        if (sessionStorage.getItem(MADE_KEY) === did) {
+          sessionStorage.removeItem(MADE_KEY);
+          var heading = $('[data-dkw-heading]', el);
+          if (heading) heading.focus({ preventScroll: true });
+        }
+      } catch (err) { /* focus is a convenience */ }
       var base = '/campaigns/' + cid + '/decks/';
       var deckURL = base + did;
       var panel = $('#dkw-panel', el);
@@ -780,6 +791,24 @@
         count = clampCount(count, isNaN(max) ? DRAW_MAX : max);
         var out = $('[data-dkw-count]', t);
         if (out) out.textContent = String(count);
+        $$('[data-dkw-strip]', t).forEach(watchStrip);
+      }
+
+      /**
+       * watchStrip: a holder's row of cards scrolls inside itself.
+       * While it overflows it takes a tab stop (so arrow keys scroll it) and
+       * data-more marks that cards remain past its trailing edge, which the
+       * stylesheet fades.
+       */
+      function watchStrip(s) {
+        function fit() {
+          var over = s.scrollWidth > s.clientWidth + 1;
+          if (over) s.tabIndex = 0; else s.removeAttribute('tabindex');
+          s.toggleAttribute('data-more', over && s.scrollLeft + s.clientWidth < s.scrollWidth - 1);
+        }
+        s.addEventListener('scroll', fit, { passive: true });
+        if (window.ResizeObserver) new ResizeObserver(fit).observe(s);
+        fit();
       }
       wireTable();
 
@@ -792,7 +821,44 @@
       /** stale: the deck changed under the page; reload what is shown and say so. */
       function stale() {
         return Promise.all([loadTab(currentTab(), true), refreshTable()]).then(function () {
+          showCurrentName();
           say(panel, 'This deck changed somewhere else, so it was reloaded. Your last change was not saved.');
+        });
+      }
+
+      /**
+       * showCurrentName: the reload carries the deck's current name and the
+       * name field takes it. The typed text was refused and the line on the
+       * page says the newer deck won, so keeping it would show a name the
+       * server does not have.
+       */
+      function showCurrentName() {
+        var mark = $('[data-dkw-deckname]', el);
+        var field = $('[data-dkw-name]', el);
+        if (!mark || !field) return;
+        var name = mark.getAttribute('data-dkw-deckname');
+        if (!name || field.value === name) return;
+        field.value = name;
+        field.defaultValue = name;
+        document.title = name;
+      }
+
+      /**
+       * refused: the server turned a move down. Fetch the table row again so
+       * the pile, Draw and the stepper show what is true now, then say why and
+       * put focus on the control with the same job, else Draw, else the line.
+       */
+      function refused(e, node) {
+        if (isStale(e && e.message)) { stale(); return Promise.resolve(); }
+        var act = node.getAttribute('data-act');
+        var li = row(node);
+        var copy = li && li.getAttribute('data-copy');
+        return refreshTable().then(null, function () { node.disabled = false; }).then(function () {
+          say(table(), words(e));
+          var same = copy && act && $('[data-copy="' + copy + '"] [data-act="' + act + '"]', el);
+          var draw = $('[data-act=draw]', el);
+          var again = node.isConnected ? node : same || (draw && !draw.disabled ? draw : $('[data-dkw-err] button', table()));
+          if (again && !again.disabled) again.focus({ preventScroll: true });
         });
       }
       function failed(e, scope, focusSel) {
@@ -863,9 +929,7 @@
           clearErr();
           return play(cardEl || $('[data-dk-card]', li), moveName, at);
         }).then(function () { return refreshTable(); }).then(function () { focusAfter(focusSel || '[data-act=draw]'); }, function (e) {
-          node.disabled = false;
-          failed(e, table(), null);
-          node.focus();
+          return refused(e, node);
         });
       }
 
@@ -877,9 +941,7 @@
           clearErr();
           return play($('[data-dkw-pile] [data-dk-card]', t), 'draw', MOVE_AT.draw);
         }).then(function () { return refreshTable(); }).then(function () { focusAfter('[data-act=draw]'); }, function (e) {
-          btn.disabled = false;
-          failed(e, t, null);
-          btn.focus();
+          return refused(e, btn);
         });
       }
 
@@ -1354,7 +1416,7 @@
               var DC = window.DeckCards;
               return DC && DC.shuffle ? DC.shuffle(cards) : null;
             }).then(function () { return refreshTable(); }).then(function () { focusAfter('[data-act=draw]'); }, function (e) {
-              btn.disabled = false; failed(e, table(), null); btn.focus();
+              return refused(e, btn);
             });
             break;
           }
