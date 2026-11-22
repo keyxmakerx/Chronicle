@@ -22,12 +22,22 @@ type HeroCreatorView struct {
 	// TermsURL is where the builder reads the system's rules words; empty
 	// when the system has no glossary, which leaves the attribute off.
 	TermsURL string
+	// Look is "stage" when the page asks for the hero-on-stage look; any other
+	// value is the classic look and leaves the attribute and stylesheet off.
+	Look string
 }
+
+// HeroLookStage is the one value of ?look= that switches the hero creator to
+// the hero-on-stage look.
+const HeroLookStage = "stage"
 
 // HeroCreatorPage renders the creator inside the App shell.
 templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 	@layouts.App("Create hero - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		if view.Look == HeroLookStage {
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_stage.css") }/>
+		}
 		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
 				class="hc"
@@ -42,6 +52,9 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 				data-skin={ layouts.BuilderSkin(ctx) }
 				if view.TermsURL != "" {
 					data-terms-url={ view.TermsURL }
+				}
+				if view.Look == HeroLookStage {
+					data-look={ HeroLookStage }
 				}
 			>
 				<div class="hc-loading" role="status">

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
 func TestImportReview_SimilarLine(t *testing.T) {
@@ -152,5 +153,39 @@ func TestImportReview_SimilarFixture(t *testing.T) {
 	}
 	if string(want) != out {
 		t.Fatal("the review's markup changed; refresh test/js/fixtures/ai_import_similar_review.html (see the comment above this test)")
+	}
+}
+
+// The browser test test/js/ai_import_answer_all_browser.test.mjs drives the
+// "Yes to all but removals" button on a connected AI's record rows, so it
+// reads this fixture. Refresh it with CHRONICLE_UPDATE_FIXTURES=1 go test
+// -run AnswerAllFixture ./internal/plugins/ai_workspace/.
+func TestImportReview_AnswerAllFixture(t *testing.T) {
+	d := ImportReviewData{
+		CampaignID: "camp-1",
+		RequestID:  7,
+		Records: []RecordRow{
+			{Index: 0, Label: "Recipe", Action: records.ActionUpdate, Name: "Healing draught", Block: 1, Plan: records.Plan{Summary: "changes the recipe"}},
+			{Index: 1, Label: "Table", Action: records.ActionCreate, Name: "Tavern names", Block: 2, Plan: records.Plan{Summary: "new table"}},
+			{Index: 2, Label: "Table", Action: records.ActionDelete, Name: "Old names", Block: 3, Plan: records.Plan{Summary: "removes the table"}},
+			{Index: 3, Label: "Recipe", Action: records.ActionUpdate, Name: "Applied before", Block: 4, Repeat: "13 November 2026", Plan: records.Plan{Summary: "changes the recipe"}},
+		},
+		SummaryCounts: ReviewSummary{Total: 4, Repeats: 1},
+		Repeats:       map[int]string{3: "13 November 2026"},
+	}
+	out := regexp.MustCompile(`\?v=[0-9a-f]+`).ReplaceAllString(renderReview(t, d), "")
+	path := filepath.Join("..", "..", "..", "test", "js", "fixtures", "ai_import_answer_all_review.html")
+	if os.Getenv("CHRONICLE_UPDATE_FIXTURES") == "1" {
+		if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(want) != out {
+		t.Fatal("the review's markup changed; refresh test/js/fixtures/ai_import_answer_all_review.html (see the comment above this test)")
 	}
 }

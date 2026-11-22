@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 )
@@ -40,6 +41,39 @@ func (c aiCarriedAdapter) Counts(ctx context.Context, campaignID string, a recor
 func (c aiCarriedAdapter) SetCarried(ctx context.Context, campaignID string, a records.Actor, characterID, itemID string, qty int) error {
 	_, err := c.stash.SetCarried(ctx, campaignID, armory.Actor{UserID: a.UserID, Role: a.Role}, characterID, itemID, qty)
 	return err
+}
+
+var _ records.ShopPayAPI = aiCarriedAdapter{}
+
+// CheckPrice refuses a shop price the Armory would refuse, so the owner sees
+// the problem at review and not when applying.
+func (c aiCarriedAdapter) CheckPrice(price float64) error { return armory.CheckStockPrice(price) }
+
+// PaysByWealth is true only when the campaign's characters unambiguously pay
+// by Wealth: the Armory is on, at least one character keeps Wealth, and none
+// keeps a different money field. With mixed purses a price cannot be said to
+// be a level or a coin amount, so it answers false and shop prices are
+// described as they were. The owner's view is used because the answer is about
+// the game, not about who is looking.
+func (c aiCarriedAdapter) PaysByWealth(ctx context.Context, campaignID string) bool {
+	if on, err := c.addons.IsEnabledForCampaign(ctx, campaignID, armory.AddonSlug); err != nil || !on {
+		return false
+	}
+	chars, err := c.dir.ListCharacters(ctx, campaignID, permissions.RoleOwner, "")
+	if err != nil {
+		return false
+	}
+	wealth := false
+	for i := range chars {
+		switch chars[i].MoneyKey {
+		case "":
+		case armory.MoneyKeyWealth:
+			wealth = true
+		default:
+			return false
+		}
+	}
+	return wealth
 }
 
 var _ records.CopiesAPI = aiCarriedAdapter{}
