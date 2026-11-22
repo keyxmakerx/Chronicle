@@ -508,14 +508,15 @@
 
   // --- Lifecycle ---
 
+  // The page as served and its elements then, before anything draws, for
+  // page_live.js: kept here and as a swap of #main-content lands.
+  function keepServed(m, html) { Chronicle.served = html; Chronicle.servedEls = [].slice.call(m.querySelectorAll('*')); }
+  var servedMain = document.getElementById('main-content');
+  if (servedMain) keepServed(servedMain, servedMain.outerHTML);
+
   // Mount all widgets on initial page load, then (once the load has settled)
   // report any mount whose implementation never showed up.
-  // The page as the server sent it, kept before any widget draws into it:
-  // a page refresh compares a fresh copy with it (page_live.js).
-  function keepServed(html) { Chronicle.served = html; }
   document.addEventListener('DOMContentLoaded', function () {
-    var main = document.getElementById('main-content');
-    if (main) keepServed(main.innerHTML);
     mountWidgets(document);
     holdWhole(document);
     scheduleUnmatchedWidgetScan(document);
@@ -622,6 +623,7 @@
   document.addEventListener('htmx:afterSwap', function (event) {
     var d = event.detail || {}, cfg = d.requestConfig || {};
     var main = document.getElementById('main-content');
+    if (main && d.target === main && d.xhr) keepServed(main, d.xhr.responseText);
     if (!main || d.target !== main || !(d.boosted || cfg.boosted) || (cfg.verb && cfg.verb !== 'get')) return;
     main.scrollTop = 0;
   });
@@ -667,7 +669,6 @@
   // old content in place; only a swap that will happen may destroy it.
   document.addEventListener('htmx:beforeSwap', function (event) {
     if (event.detail && event.detail.target && event.detail.shouldSwap !== false) {
-      if (event.detail.target.id === 'main-content') keepServed(event.detail.serverResponse);
       var elements = event.detail.target.querySelectorAll('[data-widget]');
       for (var i = 0; i < elements.length; i++) {
         destroyElement(elements[i]);
@@ -943,17 +944,11 @@
   Chronicle.startAlpine = startAlpine;
 
   // Expose mount/destroy for manual use if needed.
+  // The registry, read by page_live.js for a widget's update hook.
+  Chronicle.widgets = widgets;
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.mountWidget = mountElement;
   Chronicle.destroyWidget = destroyElement;
-  // A widget that can take a fresh copy of its mount in place keeps its
-  // drawing through a page refresh; false when it can't.
-  Chronicle.updateWidget = function (el, fresh) {
-    var impl = widgets[mounted.get(el)];
-    if (!impl || typeof impl.update !== 'function') return false;
-    impl.update(el, fresh);
-    return true;
-  };
   // Whether a mount has its widget running yet (its script may still be on
   // the way), for a script that waits until a swapped-in page has drawn.
   Chronicle.isMounted = function (el) { return mounted.has(el); };

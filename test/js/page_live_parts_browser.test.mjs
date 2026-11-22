@@ -33,26 +33,34 @@ function page(v, motion = 'full') {
   const entry = '<section data-block="entry"><p>' + v.entry + '</p><input id="note"></section>';
   const details = '<section data-block="details" style="height:900px"><p>Details</p></section>';
   const probe = '<div data-widget="' + (v.widget || 'probe') + '" data-v="' + (v.probe || 1) + '" style="min-height:0"></div>';
-  const col1 = v.swapped ? details : entry + probe;
+  // A mount with nothing to offer this reader, which removes itself, as an
+  // image upload does for a player.
+  const gone = '<div data-widget="gone" data-g="' + (v.gone || 1) + '"></div>';
+  // A block htmx fills on load, which marks it while the request is out.
+  const lazy = '<div data-block="lazy" hx-get="/frag" hx-trigger="load"></div>';
+  const col1 = v.swapped ? details : gone + entry + probe + lazy;
   // A tabbed panel, as under a hero sheet: it keeps itself (update) and holds
   // a widget that does not.
   const panel = '<section data-widget="panel"><h2 id="tabs">Tabs</h2><div data-widget="probe" data-inner data-v="9"></div></section>';
-  const col2 = (v.swapped ? entry + probe : details) + panel;
+  const col2 = (v.swapped ? gone + entry + probe + lazy : details) + panel;
   return '<!doctype html><html' + MOTION[motion] + '><head><title>' + (v.title || 'Bren') + '</title><style>' + STYLE + '</style></head><body style="margin:0">' +
     '<main id="main-content" style="height:600px;overflow-y:auto;padding:16px">' +
     '<div hidden data-widget="page-live" data-entity-id="e1" data-campaign-id="c1"></div>' +
     '<div data-page-frame data-whole><h1 id="name">Bren</h1><div data-page-row><div data-page-col>' + col1 + '</div><div data-page-col>' + col2 + '</div></div>' +
     '<p id="foot">Footer</p></div></main>' +
-    '<script src="/static/vendor/htmx.min.js"></script><script src="/static/js/boot.js"></script>' +
-    '<script>' +
-    'window._inits = 0; window._updates = 0;' +
+    // The scripts load as the layout loads them: deferred, so a widget
+    // script registers (and its widgets draw) before DOMContentLoaded.
+    '<script src="/static/vendor/htmx.min.js" defer></script><script src="/static/js/boot.js" defer></script>' +
+    '<script src="/test/widgets.js" defer></script><script src="/static/js/widgets/page_live.js" defer></script></body></html>';
+}
+const WIDGETS =
+    'window._inits = 0; window._updates = 0; window._gone = 0;' +
     'function draw(el, word) { el.textContent = ""; el.style.height = "0"; setTimeout(function () { el.style.height = "700px"; el.textContent = word + " " + el.getAttribute("data-v"); }, 120); }' +
     'Chronicle.register("probe", { init: function (el) { window._inits++; draw(el, "drawn"); } });' +
+    'Chronicle.register("gone", { init: function (el) { window._gone++; el.remove(); } });' +
     'Chronicle.register("panel", { init: function () { window._panels = (window._panels || 0) + 1; }, update: function () {} });' +
     'Chronicle.register("probe-up", { init: function (el) { window._inits++; draw(el, "drawn"); },' +
-    '  update: function (el, fresh) { window._updates++; el.setAttribute("data-v", fresh.getAttribute("data-v")); el.textContent = "updated " + el.getAttribute("data-v"); } });' +
-    '</script><script src="/static/js/widgets/page_live.js"></script></body></html>';
-}
+    '  update: function (el, fresh) { window._updates++; el.setAttribute("data-v", fresh.getAttribute("data-v")); el.textContent = "updated " + el.getAttribute("data-v"); } });';
 
 // versions: the server's copy for the first load, then for each refresh.
 async function setup(t, versions, slow = 150, motion = 'full') {
@@ -69,6 +77,8 @@ async function setup(t, versions, slow = 150, motion = 'full') {
       const f = join(root, u.pathname);
       return existsSync(f) ? r.fulfill({ path: f }) : r.fulfill({ status: 404, body: '' });
     }
+    if (u.pathname === '/test/widgets.js') return r.fulfill({ contentType: 'text/javascript', body: WIDGETS });
+    if (u.pathname === '/frag') return r.fulfill({ contentType: 'text/html', body: '<p>Loaded</p>' });
     if (u.pathname === '/campaigns/c1/entities') {
       return r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><head><title>Pages</title></head><body><main id="main-content"><h1>Pages</h1></main></body></html>' });
     }
@@ -99,7 +109,7 @@ async function refresh(p, frames = 150, top) {
     const m = document.getElementById('main-content');
     if (top != null) m.scrollTop = top;
     window._top = m.scrollTop;
-    ['#name', '[data-block="entry"]', '[data-block="details"]', '[data-v]', '#foot', '[data-page-frame]', '#tabs', '[data-inner]'].forEach((q) => { document.querySelector(q)._kept = true; });
+    ['#name', '[data-block="entry"]', '[data-block="details"]', '[data-v]', '#foot', '[data-page-frame]', '#tabs', '[data-inner]', '[data-block="lazy"]'].forEach((q) => { document.querySelector(q)._kept = true; });
     window._low = Infinity; window._dim = 1; window._n = 0;
     (function tick() {
       window._low = Math.min(window._low, m.scrollTop);
@@ -118,6 +128,8 @@ async function refresh(p, frames = 150, top) {
     return {
       kept: { name: kept('#name'), entry: kept('[data-block="entry"]'), details: kept('[data-block="details"]'), probe: kept('[data-v]'), frame: kept('[data-page-frame]') },
       panel: { tabs: kept('#tabs'), inner: kept('[data-inner]'), inits: window._panels },
+      lazy: { kept: kept('[data-block="lazy"]'), text: document.querySelector('[data-block="lazy"]').textContent },
+      gone: { inits: window._gone, here: !!document.querySelector('[data-widget="gone"]') },
       entry: document.querySelector('[data-block="entry"]').textContent,
       probe: document.querySelector('[data-v]').textContent,
       inits: window._inits, updates: window._updates,
@@ -243,3 +255,33 @@ for (const motion of ['full', 'calm', 'off']) {
     assert.equal(b.dim, 1, 'swapped whole');
   });
 }
+
+test('a part that removed itself, as a mount a player has no use for does, still lets the page update in place', { skip }, async (t) => {
+  const p = await setup(t, [{ entry: 'Before' }, { entry: 'After' }, { entry: 'Again' }]);
+  for (const want of ['After', 'Again']) {
+    const r = await refresh(p);
+    assert.equal(r.entry, want);
+    assert.equal(r.kept.frame, true, 'updated in place, not swapped whole');
+    assert.equal(r.kept.name, true);
+    assert.deepEqual(r.gone, { inits: 1, here: false }, 'it stays gone and is not mounted again');
+    assert.equal(r.panel.tabs, true, 'the tab panel kept its place');
+    assert.equal(r.watchers, 1, 'no new socket');
+  }
+});
+
+test('a part that removed itself and then changed takes the whole swap', { skip }, async (t) => {
+  const p = await setup(t, [{ entry: 'Before' }, { entry: 'Before', gone: 2 }]);
+  const r = await refresh(p);
+  assert.equal(r.kept.frame, false);
+  assert.deepEqual(r.gone, { inits: 2, here: false });
+  assert.equal(r.dim, 1);
+});
+
+test('the first refresh after a direct load leaves the parts that did not change', { skip }, async (t) => {
+  const p = await setup(t, [{ entry: 'Before' }, { entry: 'After' }]);
+  const r = await refresh(p);
+  assert.equal(r.entry, 'After');
+  assert.deepEqual(r.kept, { name: true, entry: false, details: true, probe: false, frame: true });
+  assert.equal(r.panel.tabs, true, 'the tab panel, whose widget drew before the page finished loading, is kept');
+  assert.deepEqual(r.lazy, { kept: true, text: 'Loaded' }, 'the block htmx filled on load is kept, filled');
+});

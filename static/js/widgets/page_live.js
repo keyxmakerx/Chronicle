@@ -223,16 +223,14 @@
     var doc = new DOMParser().parseFromString(html, 'text/html');
     return { root: doc.getElementById('main-content') || doc.body, title: doc.querySelector('title') };
   }
-  // The arrangement of root as a string, with its parts pushed in order. With
-  // `shape` only the containers and how many parts each holds count, since
-  // a lazy block that has loaded is no longer the element the server sent.
-  function arrangement(root, parts, shape) {
+  // The arrangement of root as a string, with its parts pushed in order.
+  function arrangement(root, parts) {
     var out = [];
     Array.prototype.forEach.call(root.children, function (c) {
       if (c.hasAttribute('data-page-live-hold') || c.tagName === 'SCRIPT') return;
-      if (c.matches(CONTAINERS)) { out.push('[' + arrangement(c, parts, shape) + ']'); return; }
+      if (c.matches(CONTAINERS)) { out.push('[' + arrangement(c, parts) + ']'); return; }
       parts.push(c);
-      out.push(shape ? '.' : c.tagName + '|' + (c.getAttribute('data-block') || '') + '|' + (c.getAttribute('data-widget') || '') + '|' + c.id);
+      out.push(c.tagName + '|' + (c.getAttribute('data-block') || '') + '|' + (c.getAttribute('data-widget') || '') + '|' + c.id);
     });
     return out.join(',');
   }
@@ -241,6 +239,7 @@
     if (el.hasAttribute('data-widget')) all.unshift(el);
     return all.filter(function (w) { return w.getAttribute('data-widget') !== 'page-live'; });
   }
+  // Returns the element now in the page.
   function replacePart(live, fresh) {
     var n = document.importNode(fresh, true);
     Array.prototype.forEach.call(n.querySelectorAll('script'), function (s) { s.remove(); });
@@ -252,6 +251,15 @@
     if (window.htmx.process) window.htmx.process(n);
     if (n.hasAttribute('data-widget')) Chronicle.mountWidget(n);
     Chronicle.mountWidgets(n);
+    return n;
+  }
+  // A mounted widget that can take a fresh copy of its mount keeps its
+  // drawing; false when it can't.
+  function updateWidget(el, fresh) {
+    var impl = Chronicle.isMounted(el) && Chronicle.widgets[el.getAttribute('data-widget')];
+    if (!impl || typeof impl.update !== 'function') return false;
+    impl.update(el, fresh);
+    return true;
   }
   function sameWidget(a, b) { return a.getAttribute('data-widget') === b.getAttribute('data-widget'); }
   function pathTo(el, root) {
@@ -267,31 +275,55 @@
   // unless it is one widget that can take its fresh mount (update). A part
   // whose markup is the same keeps it, but widgets fetch their own data, so
   // one whose mount reads the same may still have changed: each widget in it
-  // updates itself or is mounted afresh, one by one.
+  // updates itself or is mounted afresh, one by one. Returns the part's
+  // element now in the page.
   function updatePart(live, before, fresh) {
     var ws = widgetsIn(fresh);
     if (before.outerHTML !== fresh.outerHTML) {
-      if (!(fresh.hasAttribute('data-widget') && ws.length === 1 && sameWidget(live, fresh) && Chronicle.updateWidget(live, fresh))) replacePart(live, fresh);
-      return;
+      if (fresh.hasAttribute('data-widget') && ws.length === 1 && sameWidget(live, fresh) && updateWidget(live, fresh)) return live;
+      return replacePart(live, fresh);
     }
     var pairs = ws.map(function (w) { return [at(live, pathTo(w, fresh)), w]; });
-    if (pairs.some(function (p) { return !p[0] || !p[0].hasAttribute('data-widget') || !sameWidget(p[0], p[1]); })) { replacePart(live, fresh); return; }
+    if (pairs.some(function (p) { return !p[0] || !p[0].hasAttribute('data-widget') || !sameWidget(p[0], p[1]); })) return replacePart(live, fresh);
     pairs.forEach(function (p) {
       // A widget inside one mounted afresh went with it.
-      if (!p[0].isConnected) return;
-      if (!Chronicle.updateWidget(p[0], p[1])) replacePart(p[0], p[1]);
+      if (!p[0].isConnected || updateWidget(p[0], p[1])) return;
+      var n = replacePart(p[0], p[1]);
+      if (p[0] === live) live = n;
+    });
+    return live;
+  }
+  // The live element of each part of the served copy: boot.js kept the
+  // page's elements as served, in document order, and the parsed copy holds
+  // the same elements in the same order. After an update in place the parts
+  // are known from it. A part no longer in the page (a mount that removed
+  // itself, having nothing for this reader) is null.
+  var known = null;
+  function liveParts(m, root, before) {
+    var els = known && known.html === Chronicle.served ? null : Chronicle.servedEls || [];
+    var all = els && Array.prototype.slice.call(root.querySelectorAll('*'));
+    if (els && all.length !== els.length) return null;
+    return before.map(function (p, i) {
+      var e = els ? els[all.indexOf(p)] : known.parts[i];
+      return e && e.isConnected && m.contains(e) ? e : null;
     });
   }
   // Returns false, having changed nothing, when the page needs the whole swap.
   function updateInPlace(m, html) {
-    if (typeof Chronicle.served !== 'string' || !Chronicle.mountWidgets || !Chronicle.destroyWidget || !Chronicle.updateWidget) return false;
+    if (typeof Chronicle.served !== 'string' || !Chronicle.widgets || !Chronicle.isMounted || !Chronicle.mountWidgets || !Chronicle.destroyWidget) return false;
     var was = mainOf(Chronicle.served), now = mainOf(html);
-    var before = [], after = [], live = [];
+    var before = [], after = [], i;
     if (arrangement(was.root, before) !== arrangement(now.root, after)) return false;
-    if (arrangement(m, live, true) !== arrangement(was.root, [], true)) return false;
-    for (var i = 0; i < after.length; i++) updatePart(live[i], before[i], after[i]);
+    var live = liveParts(m, was.root, before);
+    if (!live || (after.length && !live.some(Boolean))) return false;
+    // A part that removed itself stays gone while its markup is the same;
+    // changed, there is no place left to put it back, so the page takes the
+    // whole swap.
+    for (i = 0; i < after.length; i++) if (!live[i] && before[i].outerHTML !== after[i].outerHTML) return false;
+    for (i = 0; i < after.length; i++) if (live[i]) live[i] = updatePart(live[i], before[i], after[i]);
     if (now.title && now.title.textContent) document.title = now.title.textContent;
     Chronicle.served = html;
+    known = { html: html, parts: live };
     if (active && active.m === m) active.land();
     return true;
   }
