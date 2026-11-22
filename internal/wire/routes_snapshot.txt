@@ -791,6 +791,42 @@ PUT	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).UpdateD
 GET	/campaigns/:id/dashboard/find	session	plugins/campaigns.(*Handler).DeskFind	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/needs	session	plugins/campaigns.(*Handler).DeskNeedsCount	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/data	session	plugins/campaigns.(*Handler).DataPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/decks	session	plugins/decks.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/decks	session	plugins/decks.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+DELETE	/campaigns/:id/decks/:did	session	plugins/decks.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/:did	session	plugins/decks.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+PUT	/campaigns/:id/decks/:did	session	plugins/decks.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/decks/:did/cards	session	plugins/decks.(*Handler).CreateCard	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+DELETE	/campaigns/:id/decks/:did/cards/:cid	session	plugins/decks.(*Handler).DeleteCard	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+PUT	/campaigns/:id/decks/:did/cards/:cid	session	plugins/decks.(*Handler).UpdateCard	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/decks/:did/cards/:cid/say	session	plugins/decks.(*Handler).Say	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/:did/copies/:copy/:verb	session	plugins/decks.(*Handler).Act	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/:did/deal-card	session	plugins/decks.(*Handler).DealCard	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/:did/draw	session	plugins/decks.(*Handler).Draw	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/:did/gather	session	plugins/decks.(*Handler).Gather	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+PUT	/campaigns/:id/decks/:did/players	session	plugins/decks.(*Handler).SetPlayers	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/decks/:did/shuffle	session	plugins/decks.(*Handler).Shuffle	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/from	session	plugins/decks.(*Handler).CreateFrom	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/hand	session	plugins/decks.(*Handler).HandFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/hand/:did/copies/:copy	session	plugins/decks.(*Handler).OpenCardFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/decks/hand/:did/copies/:copy/turn	session	plugins/decks.(*Handler).TurnFaceFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+GET	/campaigns/:id/decks/hand/hero/:eid	session	plugins/decks.(*Handler).HeroStripFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/moments	session	plugins/decks.(*Handler).Moments	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/decks/moments/:mid/another	session	plugins/decks.(*Handler).MomentAnother	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/moments/:mid/deal	session	plugins/decks.(*Handler).MomentDeal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/moments/:mid/dismiss	session	plugins/decks.(*Handler).MomentDismiss	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+POST	/campaigns/:id/decks/moments/:mid/invite	session	plugins/decks.(*Handler).MomentInvite	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+GET	/campaigns/:id/decks/moments/panel	session	plugins/decks.(*Handler).MomentsPanel	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/table	session	plugins/decks.(*Handler).Table	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/when-options	session	plugins/decks.(*Handler).WhenOptions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop	session	plugins/decks.(*Handler).WorkshopList	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/:did	session	plugins/decks.(*Handler).WorkshopDeck	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/:did/cards	session	plugins/decks.(*Handler).WorkshopTab	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/:did/look	session	plugins/decks.(*Handler).WorkshopTab	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/:did/players	session	plugins/decks.(*Handler).WorkshopTab	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/:did/rules	session	plugins/decks.(*Handler).WorkshopTab	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/:did/table	session	plugins/decks.(*Handler).WorkshopTable	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+GET	/campaigns/:id/decks/workshop/new	session	plugins/decks.(*Handler).WorkshopNew	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/designs	session	plugins/designs.(*Handler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1437,6 +1473,7 @@ GET	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).RedeemSuggestToken	-
 POST	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).ApplySuggestToken	-
 GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
 GET	/static/plugins/crafting*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/decks*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/static/plugins/encounters*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/static/plugins/entities*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-

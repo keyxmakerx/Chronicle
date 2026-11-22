@@ -109,7 +109,53 @@ async function seedCampaign() {
     await submit(n);
     entity = entity || (page.url().match(/\/entities\/([0-9a-f-]{36})/) || [])[1] || '';
   }
-  return { id, entity };
+  // One deck with a card and a drawn card, so the Director's deck pages have
+  // something to draw. Uses the page's own Chronicle.apiFetch for the CSRF token.
+  const deck = await page.evaluate(async (cid) => {
+    const post = async (url, body) => {
+      const r = await Chronicle.apiFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      return r.ok ? r.json() : null;
+    };
+    const d = await post(`/campaigns/${cid}/decks`, { name: 'Smoke deck', kind: 'event' });
+    if (!d) return '';
+    await post(`/campaigns/${cid}/decks/${d.id}/cards`, { name: 'Smoke card', copies: 2 });
+    await post(`/campaigns/${cid}/decks/${d.id}/draw`, { count: 1 });
+    // The two other ways to start a deck: copy this one, and read a rolling table.
+    // The New deck page then has something under each tab.
+    const put = await Chronicle.apiFetch(`/campaigns/${cid}/roll-tables`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tables: [{ id: 'smoke-omens', name: 'Smoke omens', entries: [{ name: 'Gulls', weight: 2 }, { name: 'Tide', weight: 1 }] }] }) });
+    const copy = await post(`/campaigns/${cid}/decks/from`, { name: 'Smoke copy', kind: 'event', deckId: d.id });
+    const table = put.ok ? await post(`/campaigns/${cid}/decks/from`, { name: 'Smoke from a table', kind: 'event', tableId: 'smoke-omens' }) : null;
+    return copy && table ? d.id : '';
+  }, id);
+  if (!deck) throw new Error('the smoke deck, its copy or its deck from a rolling table could not be made, so the deck pages would go unchecked');
+  return { id, entity, deck };
+}
+
+// The Director's deck workshop: every full page, and each tab and the table row
+// as the fragment a tab swap fetches. Tabs are buttons, so the link walk
+// never reaches them.
+async function deckPages(ids) {
+  if (!ids.deck) return 0;
+  const base = `${BASE}/campaigns/${ids.id}/decks/workshop`;
+  const pages = [base, `${base}/new`, `${base}/${ids.deck}`];
+  const frags = ['table', 'cards', 'look', 'rules', 'players'].map((t) => `${base}/${ids.deck}/${t}`);
+  for (const u of pages) {
+    const res = await visit(u);
+    if (res && res.status() !== 200) problems.push(`${u.replace(BASE, '')}: answered ${res.status()} for the Director`);
+  }
+  // The player's hand: the Hand leaf's fragment and a page's Cards part.
+  const hand = `${BASE}/campaigns/${ids.id}/decks/hand`;
+  frags.push(hand);
+  // The Director's notice fragment the Table fetches (empty when nothing waits).
+  frags.push(`${BASE}/campaigns/${ids.id}/decks/moments/panel`);
+  if (ids.entity) frags.push(`${hand}/hero/${ids.entity}`);
+  for (const u of frags) {
+    at = u.replace(BASE, '');
+    const res = await page.request.get(u, { headers: { 'HX-Request': 'true' }, timeout: 15000 }).catch(() => null);
+    if (!res || res.status() !== 200) problems.push(`${at}: fragment answered ${res ? res.status() : 'nothing'} for the Director`);
+  }
+  return pages.length + frags.length;
 }
 
 async function visit(u) {
@@ -197,7 +243,7 @@ try {
   const ids = await seedCampaign();
   // /admin answers only a site admin; on a fresh instance the first account is one.
   const walked = (await walk(`${BASE}/campaigns/${ids.id}`)) + (await walk(BASE + '/admin'));
-  const probed = await probe(ids);
+  const probed = (await probe(ids)) + (await deckPages(ids));
   const unique = [...new Set(problems)];
   console.log(`smoke-crawl: walked ${walked} pages, probed ${probed} routes, ${unique.length} problem(s)`);
   for (const p of unique) console.log('  ' + p);

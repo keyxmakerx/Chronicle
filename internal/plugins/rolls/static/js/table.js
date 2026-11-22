@@ -28,8 +28,10 @@
 
   // The sections a leaf can show. Rules, Conditions, Party and Notes join
   // this list as they are built (TODO(#1475)).
-  var SECTIONS = [['rolls', 'Rolls'], ['tonight', 'Tonight'], ['dice', 'My dice']];
-  var SECTION_NAME = { rolls: 'Rolls', tonight: 'Tonight', dice: 'My dice' };
+  var BASE_SECTIONS = [['rolls', 'Rolls'], ['tonight', 'Tonight'], ['dice', 'My dice']];
+  // With the Card decks add-on on, the Hand leaf joins, second in the default order.
+  var HAND_SECTIONS = [['rolls', 'Rolls'], ['hand', 'Hand'], ['tonight', 'Tonight'], ['dice', 'My dice']];
+  var SECTION_NAME = { rolls: 'Rolls', hand: 'Hand', tonight: 'Tonight', dice: 'My dice' };
   var LOOKS = [['quick', 'Quick 2D'], ['rune', 'Rune 3D'], ['none', 'Numbers only']];
   var QUICK = [4, 6, 8, 10, 12, 20];
   // A game with a power roll puts its own dice first; the rest wait behind "Other dice".
@@ -90,6 +92,8 @@
     this.userId = host.getAttribute('data-user-id');
     this.director = host.getAttribute('data-director') === 'true';
     this.gm = host.getAttribute('data-gm-term') || 'Director';
+    this.decks = host.getAttribute('data-decks') === 'true';
+    this.sections = this.decks ? HAND_SECTIONS : BASE_SECTIONS;
     this.tab = $('[data-tt-tab]', host);
     this.count = $('[data-tt-count]', host);
     this.header = host.closest('header') || host.parentNode;
@@ -123,6 +127,16 @@
     this.open = false;
     this.openRow = '';
     this.unseen = 0;
+    // A card's moment (Card decks, Directors only): what is waiting, from the
+    // server, and the notice that shows one of them. The Table's count is the
+    // rolls not yet seen plus these.
+    this.momentsOn = this.decks && this.director;
+    this.moments = { count: 0, rows: [] };
+    this.momKnown = null;
+    this.momOpen = '';
+    this.momHTML = '';
+    this.momSeq = 0;
+    this.momEl = null;
     this.isl = null;
     this.queue = [];
     this.ws = null;
@@ -134,18 +148,34 @@
     this.mql = W.matchMedia ? W.matchMedia(SHEET_QUERY) : { matches: false };
     this.wire();
     this.connect();
+    if (this.momentsOn) {
+      this.on(W, 'chronicle:decks-moment', function () { me.askMoments(); });
+      this.loadMoments();
+    }
     this.loadSettings();
     this.loadPower();
     this.syncSheet();
     if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
+    this.openFromLink();
   }
 
+  // A bell notice opens the Table on a leaf with ?table=<leaf>.
+  Table.prototype.openFromLink = function () {
+    var want = '';
+    try { want = new URLSearchParams(W.location.search).get('table') || ''; } catch (e) { return; }
+    if (this.leaves.indexOf(want) < 0 || want === 'rolls') return;
+    var me = this;
+    setTimeout(function () { if (me.alive) me.openTable(want); }, 0);
+  };
+
   // A remembered layout keeps only sections that exist, each once.
+  // On the phone's sheet every section is a tab, so none is out of reach; on
+  // a desktop the drawer shows at most three side by side.
   Table.prototype.readLeaves = function (raw) {
-    var out = [];
-    (raw || '').split(',').forEach(function (s) { if (SECTION_NAME[s] && out.indexOf(s) < 0) out.push(s); });
-    SECTIONS.forEach(function (s) { if (out.indexOf(s[0]) < 0) out.push(s[0]); });
-    return out.slice(0, Math.min(3, SECTIONS.length));
+    var out = [], all = this.sections.map(function (s) { return s[0]; });
+    (raw || '').split(',').forEach(function (s) { if (all.indexOf(s) >= 0 && out.indexOf(s) < 0) out.push(s); });
+    all.forEach(function (s) { if (out.indexOf(s) < 0) out.push(s); });
+    return out.slice(0, this.sheet ? all.length : Math.min(3, all.length));
   };
 
   Table.prototype.on = function (target, type, fn, opt) {
@@ -164,6 +194,8 @@
     var c = $('.tt-isl-clip', this.header); if (c) c.remove();
     var t = $('#tt-tray'); if (t) t.remove();
     var det = $('#tt-isl-detail'); if (det) det.remove();
+    var mo = $('#tt-moment'); if (mo) mo.remove();
+    clearTimeout(this.momTimer);
   };
 
   // The dice this person sees: their own pick, else the table's.
@@ -276,12 +308,18 @@
       self.wsDelay = 0;
       // Rolls made while the socket was down are in the log, not replayed.
       if (self.loaded) self.reload();
+      // Nor are moments that came while it was down.
+      if (self.momentsOn && self.momKnown) self.askMoments();
     });
     sock.addEventListener('message', function (ev) {
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg && msg.type === 'roll.made' && msg.payload) self.receive(msg.payload, true);
       if (msg && msg.type === 'table.shown' && msg.payload) self.receiveShown(msg.payload, true);
+      // Carries nothing: the hand and the hero strips fetch their own view.
+      if (msg && msg.type === 'decks.changed') W.dispatchEvent(new CustomEvent('chronicle:decks-changed'));
+      // Directors only; carries nothing, the moments panel fetches its own list.
+      if (msg && msg.type === 'decks.moment') W.dispatchEvent(new CustomEvent('chronicle:decks-moment'));
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;
@@ -418,6 +456,45 @@
         self.shownBody(it) + '</li>';
     }).join('');
     return '<ul class="tt-log tt-tonight" id="tt-tonight" aria-label="Shown tonight">' + rows + '</ul>';
+  };
+
+  // ---------- Hand: the Card decks leaf ----------
+
+  // The leaf is a place the server's hand fragment is put in; the deck-hand
+  // widget (decks plugin) owns everything inside it.
+  Table.prototype.handHTML = function () {
+    var self = this;
+    Promise.resolve().then(function () { self.fillHand(); });
+    return '<div class="tt-hand" id="tt-hand" data-tt-hand aria-busy="true"><p class="tt-from">Reading your hand…</p></div>';
+  };
+
+  Table.prototype.fillHand = function () {
+    var self = this;
+    $$('[data-tt-hand]').forEach(function (box) {
+      if (box.hasAttribute('data-tt-filling')) return;
+      box.setAttribute('data-tt-filling', '');
+      var url = '/campaigns/' + encodeURIComponent(self.campaignId) + '/decks/hand';
+      C.apiFetch(url, { headers: { 'HX-Request': 'true', 'Accept': 'text/html' } }).then(function (res) {
+        if (!res.ok) throw new Error('status ' + res.status);
+        return res.text();
+      }).then(function (html) {
+        if (!box.isConnected) return;
+        box.innerHTML = html;
+        box.removeAttribute('aria-busy');
+        if (C.mountWidgets) C.mountWidgets(box);
+      }).catch(function () {
+        if (!box.isConnected) return;
+        box.removeAttribute('aria-busy');
+        box.innerHTML = '<p class="tt-from">Your hand could not be read.</p><button type="button" class="tt-quiet" data-tt-handretry>Try again</button>';
+        var b = box.querySelector('[data-tt-handretry]');
+        b.addEventListener('click', function () {
+          box.innerHTML = '<p class="tt-from">Reading your hand…</p>';
+          box.setAttribute('aria-busy', 'true');
+          self.fillHand();
+        });
+        b.focus();
+      }).then(function () { box.removeAttribute('data-tt-filling'); });
+    });
   };
 
   Table.prototype.older = function () {
@@ -640,12 +717,13 @@
   Table.prototype.sectionHTML = function (id) {
     if (id === 'rolls') return this.logHTML() + this.rollerHTML();
     if (id === 'tonight') return this.tonightHTML();
+    if (id === 'hand') return this.handHTML();
     return this.diceHTML();
   };
 
   Table.prototype.leafHTML = function (i) {
     var cur = this.leaves[i], self = this;
-    var menu = SECTIONS.map(function (s) {
+    var menu = this.sections.map(function (s) {
       var j = self.leaves.indexOf(s[0]);
       var note = s[0] === cur ? 'Showing here' : j >= 0 ? 'Swaps with leaf ' + (j + 1) : '';
       return '<button type="button" role="menuitemradio" aria-checked="' + (s[0] === cur) + '" data-tt-leaf="' + i + '" data-tt-sec="' + s[0] + '"><span>' + s[1] + '</span><span class="tt-mnote">' + note + '</span></button>';
@@ -662,12 +740,12 @@
     var sw = '<div class="tt-phone-sw" role="group" aria-label="Leaves">' + this.leaves.map(function (s, i) {
       return '<button type="button" class="tt-ptab" data-tt-phone="' + i + '" aria-pressed="' + (self.phoneLeaf === i) + '">' + SECTION_NAME[s] + '</button>';
     }).join('') + '</div>';
-    var body = '<div class="tt-dhead"><h2>Table</h2><button type="button" class="tt-icon" data-tt-close aria-label="Close the Table">' + X + '</button></div>' + sw +
+    var body = '<div class="tt-dhead"><h2>Table</h2><button type="button" class="tt-icon" data-tt-close aria-label="Close the Table">' + X + '</button></div>' + this.waitHTML() + sw +
       '<div class="tt-leaves" style="--tt-n:' + this.leaves.length + '">' + this.leaves.map(function (s, i) { return self.leafHTML(i); }).join('') + '</div>';
     if (!this.sheet) return body;
     // Resting, the sheet's contents sit off screen: inert keeps them out of
     // the tab order until it is lifted.
-    return this.grabHTML() + '<div class="tt-sheetbody" id="tt-sheetbody"' + (this.h === 'rest' ? ' inert' : '') + '>' + body + '</div>';
+    return this.grabHTML() + '<div class="tt-sheetbody" id="tt-sheetbody"' + (this.h === 'rest' ? ' inert' : '') + '>' + this.sheetMomentHTML() + body + '</div>';
   };
 
   // ---------- The phone's sheet ----------
@@ -676,6 +754,7 @@
     var on = !!this.mql.matches;
     if (on === this.sheet) return;
     this.sheet = on;
+    this.leaves = this.readLeaves(store('leaves.' + this.key));
     var d = this.drawer(); if (d) d.remove();
     this.open = false;
     this.h = 'rest';
@@ -730,8 +809,9 @@
       if (move && motion() !== 'off') { last.classList.remove('tt-grow'); void last.offsetWidth; last.classList.add('tt-grow'); }
     }
     if (n) {
-      n.hidden = !this.unseen;
-      n.textContent = this.unseen > 99 ? '99+' : String(this.unseen);
+      var total = this.total();
+      n.hidden = !total;
+      n.textContent = total > 99 ? '99+' : String(total);
     }
   };
 
@@ -835,7 +915,7 @@
       if (sec) {
         var k = this.leaves.indexOf(sec);
         if (k < 0) { k = this.leaves.length - 1; this.leaves[k] = sec; this.saveLeaves(); }
-        if (sec !== 'rolls') this.phoneLeaf = k;
+        if (sec !== 'rolls') this.leafTo(sec);
       }
       this.setHeight(sec && sec !== 'rolls' ? 'full' : this.h === 'full' ? 'full' : 'lift');
       if (!this.loaded) this.load();
@@ -848,6 +928,8 @@
     }
     var was = this.open;
     this.open = true;
+    // The drawer lists what is waiting, so a notice hanging beside it goes.
+    if (this.momOpen && !this.sheet) this.closeMoment(false);
     this.tab.setAttribute('aria-expanded', 'true');
     var d = this.drawer();
     if (!d) {
@@ -955,21 +1037,33 @@
     return W.matchMedia('(min-width: 761px)').matches || this.phoneLeaf === i;
   };
 
+  // The Table's count has two sources: rolls this browser has not seen, and
+  // the moments the server says are waiting on a Director. Looking at the roll
+  // log clears only the first.
+  Table.prototype.total = function () { return this.unseen + this.moments.count; };
+
+  Table.prototype.paintCount = function (grow) {
+    var c = this.count, n = this.total();
+    c.hidden = !n;
+    c.textContent = n > 99 ? '99+' : String(n);
+    if (grow && n) {
+      c.classList.remove('hdr-n-grow');
+      void c.offsetWidth;
+      c.classList.add('hdr-n-grow');
+    }
+    this.refreshGrab(false);
+  };
+
   Table.prototype.seen = function () {
     if (!this.logVisible()) return;
     this.unseen = 0;
-    this.count.hidden = true;
+    this.paintCount(false);
   };
 
   Table.prototype.bump = function () {
     if (this.logVisible()) return;
     this.unseen++;
-    var c = this.count;
-    c.hidden = false;
-    c.textContent = this.unseen > 99 ? '99+' : String(this.unseen);
-    c.classList.remove('hdr-n-grow');
-    void c.offsetWidth;
-    c.classList.add('hdr-n-grow');
+    this.paintCount(true);
   };
 
   Table.prototype.closeMenus = function () {
@@ -1163,6 +1257,262 @@
     me.timer = setTimeout(function () { self.retire(me); }, 900);
   };
 
+
+  // ---------- A card's moment: what is waiting on a Director ----------
+
+  // askMoments asks again soon, so a burst of messages is one request.
+  Table.prototype.askMoments = function () {
+    var self = this;
+    clearTimeout(this.momTimer);
+    this.momTimer = setTimeout(function () { if (self.alive) self.loadMoments(); }, 80);
+  };
+
+  Table.prototype.momentURL = function (tail) {
+    return '/campaigns/' + encodeURIComponent(this.campaignId) + '/decks/moments' + tail;
+  };
+
+  // fetchMoments gets the Director's notice fragment: the open moments and the
+  // one shown. Only a Director's Table ever calls it; the server answers anyone
+  // else with a 404 and nothing.
+  Table.prototype.fetchMoments = function (at) {
+    return C.apiFetch(this.momentURL('/panel' + (at ? '?at=' + encodeURIComponent(at) : '')), { headers: { 'HX-Request': 'true', 'Accept': 'text/html' } }).then(function (res) {
+      if (!res.ok) throw new Error('status ' + res.status);
+      return res.text();
+    });
+  };
+
+  Table.prototype.parseMoments = function (html) {
+    var doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
+    var rows = $$('[data-dkm-index] li', doc).map(function (li) {
+      return { id: li.getAttribute('data-id'), slide: li.getAttribute('data-slide') === 'true', deck: li.getAttribute('data-deck') || '', reading: li.getAttribute('data-reading') || '' };
+    });
+    var root = $('[data-dkm]', doc);
+    return { rows: rows, at: root ? root.getAttribute('data-at') : '' };
+  };
+
+  Table.prototype.loadMoments = function () {
+    if (!this.momentsOn || !this.alive) return Promise.resolve();
+    var self = this, seq = ++this.momSeq;
+    return this.fetchMoments(this.momOpen).then(function (html) {
+      if (seq !== self.momSeq || !self.alive) return;
+      self.receiveMoments(html);
+    }).catch(function () { /* the count stays as it was */ });
+  };
+
+  // receiveMoments takes the server's list: it sets the count, redraws "Waiting
+  // on you", keeps an open notice current (or closes it when its moment went
+  // away) and slides in one that is new and not quiet.
+  Table.prototype.receiveMoments = function (html) {
+    var got = this.parseMoments(html), first = this.momKnown === null;
+    var known = this.momKnown || {};
+    var fresh = got.rows.filter(function (r) { return !known[r.id]; });
+    this.momKnown = {};
+    var self = this;
+    got.rows.forEach(function (r) { self.momKnown[r.id] = true; });
+    this.moments = { count: got.rows.length, rows: got.rows };
+    this.paintCount(!first && fresh.length > 0);
+    this.paintWait();
+    if (this.momOpen) {
+      var still = got.rows.some(function (r) { return r.id === self.momOpen; });
+      if (still && got.at === this.momOpen) this.paintMoment(html);
+      else if (still) this.loadMomentAt(this.momOpen);
+      else this.closeMoment(false);
+      return;
+    }
+    // A moment that was already waiting when the page opened is in the count;
+    // only one that comes while the page is open slides in.
+    var slide = first ? [] : fresh.filter(function (r) { return r.slide; });
+    if (slide.length) this.openMoment(slide[0].id, { slide: true, deck: slide[0].deck });
+  };
+
+  Table.prototype.waitHTML = function () {
+    if (!this.momentsOn || !this.moments.rows.length) return '';
+    return '<div class="tt-wait" data-tt-wait><h3>Waiting on you</h3><ul>' + this.moments.rows.map(function (r) {
+      return '<li><button type="button" class="tt-waitrow" data-tt-moment="' + esc(r.id) + '"><b>' + esc(r.deck) + '</b><span>' + esc(r.reading) + '</span></button></li>';
+    }).join('') + '</ul></div>';
+  };
+
+  Table.prototype.paintWait = function () {
+    var d = this.drawer();
+    if (!d) return;
+    var old = $('[data-tt-wait]', d), html = this.waitHTML();
+    if (!html) { if (old) old.remove(); return; }
+    if (old) { old.outerHTML = html; return; }
+    var head = $('.tt-dhead', d);
+    if (head) head.insertAdjacentHTML('afterend', html);
+  };
+
+  Table.prototype.sheetMomentHTML = function () {
+    if (!this.momentsOn || !this.momOpen) return '';
+    return '<div class="tt-moment tt-moment-sheet" id="tt-moment" role="region" aria-label="A card’s moment">' + this.momHTML + '</div>';
+  };
+
+  // momentBox is the notice's surface: under the Table tab on a wide screen, the
+  // top of the sheet on a phone.
+  Table.prototype.momentBox = function () {
+    var box = document.getElementById('tt-moment');
+    if (box) return box;
+    box = document.createElement('div');
+    box.id = 'tt-moment';
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', 'A card’s moment');
+    if (this.sheet) {
+      box.className = 'tt-moment tt-moment-sheet';
+      var body = $('.tt-sheetbody', this.ensureSheet());
+      body.insertBefore(box, body.firstChild);
+    } else {
+      box.className = 'tt-moment';
+      document.body.appendChild(box);
+    }
+    return box;
+  };
+
+  Table.prototype.placeMoment = function (box) {
+    if (this.sheet) return;
+    var r = this.tab.getBoundingClientRect();
+    box.style.right = Math.max(10, W.innerWidth - r.right) + 'px';
+  };
+
+  Table.prototype.paintMoment = function (html) {
+    this.momHTML = html;
+    var box = this.momentBox();
+    box.innerHTML = html;
+    this.placeMoment(box);
+    if (C.mountWidgets) C.mountWidgets(box);
+  };
+
+  // openMoment shows one waiting moment. A slide-in comes by itself, so it
+  // takes no focus and is said once in the live region; one the Director opened
+  // (from "Waiting on you") puts focus on the notice's heading.
+  Table.prototype.openMoment = function (id, opt) {
+    opt = opt || {};
+    var self = this, was = this.momOpen;
+    return this.fetchMoments(id).then(function (html) {
+      if (!self.alive) return;
+      var got = self.parseMoments(html);
+      if (got.at !== id) return;
+      self.momOpen = id;
+      if (opt.slide) self.say('A card’s moment has come in ' + (opt.deck || 'a deck') + '.');
+      if (!opt.slide && self.open && !self.sheet) self.closeTable(false);
+      if (self.sheet && self.h === 'rest') self.setHeight('lift');
+      self.paintMoment(html);
+      var box = document.getElementById('tt-moment');
+      if (!was && box && motion() !== 'off' && !self.sheet) {
+        box.classList.add('tt-opening');
+        box.addEventListener('animationend', function () { box.classList.remove('tt-opening'); }, { once: true });
+      }
+      if (!opt.slide) self.focusMoment();
+    }).catch(function () { /* nothing to show */ });
+  };
+
+  Table.prototype.focusMoment = function () {
+    var h = document.getElementById('dkm-h');
+    if (h) h.focus({ preventScroll: true });
+  };
+
+  // loadMomentAt redraws the notice at one moment, after an answer or a step.
+  // It is the newest word on what is waiting, so a list asked for earlier and
+  // answered later is dropped; an answer that leaves nothing waiting hands
+  // focus back to the Table tab, since the button that held it is gone.
+  Table.prototype.loadMomentAt = function (id, then) {
+    var self = this, seq = ++this.momSeq;
+    return this.fetchMoments(id).then(function (html) {
+      if (seq !== self.momSeq || !self.alive || !self.momOpen) return;
+      var got = self.parseMoments(html);
+      self.momKnown = {};
+      got.rows.forEach(function (r) { self.momKnown[r.id] = true; });
+      self.moments = { count: got.rows.length, rows: got.rows };
+      self.paintCount(false);
+      self.paintWait();
+      if (!got.rows.length) {
+        self.closeMoment(false);
+        var back = then && (self.sheet ? $('[data-tt-grab]') : self.tab);
+        if (back) back.focus();
+        return;
+      }
+      self.momOpen = got.at;
+      self.paintMoment(html);
+      if (then) then();
+    }).catch(function () { /* the notice stays as it was */ });
+  };
+
+  // closeMoment puts the notice away. The count stays: the moment is still
+  // waiting. Focus goes to the Table tab only if it was inside the notice.
+  Table.prototype.closeMoment = function (refocus) {
+    var box = document.getElementById('tt-moment');
+    if (!this.momOpen && !box) return;
+    var inside = box && box.contains(document.activeElement);
+    this.momOpen = '';
+    this.momHTML = '';
+    var finish = function () { if (box && box.parentNode && !box.hasAttribute('data-keep')) box.remove(); };
+    if (box && motion() !== 'off' && !this.sheet) { box.classList.remove('tt-opening'); box.classList.add('tt-closing'); setTimeout(finish, 120); } else finish();
+    if (inside && refocus !== false) { var t = this.sheet ? $('[data-tt-grab]') : this.tab; if (t) t.focus(); }
+  };
+
+  Table.prototype.momentSay = function (msg) {
+    var box = document.getElementById('tt-moment'), line = box && $('[data-dkm-msg]', box);
+    if (!line) return;
+    line.textContent = msg || '';
+    line.hidden = !msg;
+  };
+
+  // answerMoment sends one answer and redraws the notice from the server's
+  // reply: the next waiting moment, or nothing. A 409 (someone else answered, or
+  // the card has gone) is said in a line and the notice redraws.
+  Table.prototype.answerMoment = function (btn) {
+    var self = this, box = document.getElementById('tt-moment');
+    var panel = box && $('[data-dkm-panel]', box);
+    if (!panel || btn.disabled) return;
+    var id = panel.getAttribute('data-moment'), act = btn.getAttribute('data-dkm-act');
+    var label = btn.textContent;
+    $$('button', panel).forEach(function (b) { b.disabled = true; });
+    btn.setAttribute('aria-busy', 'true');
+    btn.setAttribute('data-working', '');
+    if (btn.getAttribute('data-working-label')) btn.textContent = btn.getAttribute('data-working-label');
+    this.momentSay('');
+    C.apiFetch(this.momentURL('/' + encodeURIComponent(id) + '/' + act), { method: 'POST', body: {} }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+    }).then(function (out) {
+      if (!self.alive) return;
+      if (!out.ok) {
+        var said = (out.data && out.data.message) || 'That did not go through. Try again.';
+        return self.loadMomentAt(id, function () { self.momentSay(said); self.focusMoment(); });
+      }
+      // Dealt or put away: the next waiting moment shows. Another card or an
+      // invitation: the same moment, redrawn.
+      var next = act === 'deal' || act === 'dismiss' ? '' : id;
+      return self.loadMomentAt(next, function () {
+        var again = $('[data-dkm-act="' + (act === 'invite' ? 'dismiss' : act) + '"]', document.getElementById('tt-moment') || document);
+        if (again && act !== 'deal' && act !== 'dismiss') again.focus({ preventScroll: true }); else self.focusMoment();
+      });
+    }).catch(function () {
+      btn.textContent = label;
+      btn.removeAttribute('aria-busy');
+      btn.removeAttribute('data-working');
+      $$('button', panel).forEach(function (b) { b.disabled = false; });
+      self.momentSay('That did not go through. Check your connection and try again.');
+    });
+  };
+
+  Table.prototype.wireMoments = function () {
+    var self = this;
+    this.on(document, 'click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-dkm-act], [data-dkm-nav], [data-dkm-close], [data-tt-moment]');
+      if (!b || !self.momentsOn) return;
+      if (b.hasAttribute('data-dkm-close')) { self.closeMoment(); return; }
+      if (b.hasAttribute('data-dkm-act')) { self.answerMoment(b); return; }
+      if (b.hasAttribute('data-dkm-nav')) { self.loadMomentAt(b.getAttribute('data-dkm-nav'), function () { self.focusMoment(); }); return; }
+      if (b.hasAttribute('data-tt-moment')) { self.openMoment(b.getAttribute('data-tt-moment'), {}); }
+    });
+    // A press outside puts the notice away, and the count stays.
+    this.on(document, 'pointerdown', function (ev) {
+      var t = ev.target;
+      if (!self.momOpen || self.sheet || ev.button !== 0 || !t || !t.closest) return;
+      if (!t.closest('#tt-moment, [data-tt-tab], .tt-island, [data-dkh-over]')) self.closeMoment(false);
+    }, true);
+    this.on(W, 'resize', function () { var box = document.getElementById('tt-moment'); if (box) self.placeMoment(box); });
+  };
+
   // ---------- Rolling ----------
 
   Table.prototype.roll = function (formula, label) {
@@ -1188,6 +1538,7 @@
   Table.prototype.wire = function () {
     var self = this;
     this.on(this.tab, 'click', function () { if (self.open) self.closeTable(); else self.openTable(); });
+    if (this.momentsOn) this.wireMoments();
 
     this.on(document, 'click', function (ev) {
       var t = ev.target;
@@ -1287,7 +1638,7 @@
       var t = ev.target;
       if (ev.button !== 0 || !t || !t.closest) return;
       if (self.isl && self.isl.expanded && !t.closest('#tt-isl-detail, .tt-island')) self.collapse(self.isl);
-      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail')) self.closeTable(false);
+      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail, [data-dkh-over]')) self.closeTable(false);
     }, true);
 
     // A pick of your own rune dice: the die, its colour, or a crit animation.
@@ -1329,6 +1680,8 @@
         var menu = open;
         if (menu) { var op = $('.tt-lpick[aria-expanded="true"]'); self.closeMenus(); if (op) op.focus(); return; }
         if (self.isl && self.isl.expanded) { self.collapse(self.isl); return; }
+        var mb = document.getElementById('tt-moment');
+        if (self.momOpen && mb && mb.contains(document.activeElement)) { self.closeMoment(); return; }
         if (self.open) { self.closeTable(); }
         return;
       }

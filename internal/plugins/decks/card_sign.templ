@@ -1,0 +1,9 @@
+package decks
+
+// KindSign draws a kind's sign, a small shape in the kind's colour, so no kind
+// depends on colour alone. An unknown sign draws nothing.
+templ KindSign(sign string) {
+	if d, ok := kindSignPath[sign]; ok {
+		<svg class="dk-sg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d={ d }></path></svg>
+	}
+}

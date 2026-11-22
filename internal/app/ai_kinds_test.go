@@ -7,6 +7,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
@@ -33,6 +34,11 @@ type stubPlayerNotes struct{ entity_notes.Service }
 type stubCrafting struct{ records.CraftingAPI }
 
 type stubShopLooks struct{ records.ShopLooksAPI }
+
+// stubDecks stands in for the decks service; no method is called while the
+// kinds are listed.
+type stubDecks struct{ decks.Service }
+
 type stubSavedLayouts struct{ entities.LayoutPresetService }
 type stubPageTemplates struct {
 	entities.ContentTemplateService
@@ -62,8 +68,8 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		{
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home look layout category-home saved-layout page-template material recipe drops bench shop-room storefront page-map generator",
+				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}},
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home look layout category-home saved-layout page-template material recipe drops bench deck card shop-room storefront page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
@@ -86,7 +92,7 @@ func TestAIKindsEachHaveABrief(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
 	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}}))...)
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}}))...)
 	caps := reg.Capabilities()
 	for _, k := range reg.Kinds() {
 		if strings.Contains(caps, "`kind: "+k.Name()+"`: "+k.Label()+"\n") {
@@ -102,7 +108,7 @@ func TestAIKindDocsHoldNoSectionHeadings(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
 	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}}))...)
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}}))...)
 	for _, k := range reg.Kinds() {
 		for _, line := range strings.Split(k.Doc(), "\n") {
 			if strings.HasPrefix(line, "## ") {

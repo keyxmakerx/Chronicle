@@ -1020,6 +1020,7 @@ templ Topbar() {
 					data-user-id={ GetUserID(ctx) }
 					data-director={ fmt.Sprint(GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) }
 					data-gm-term={ GMTerm(ctx) }
+					data-decks={ fmt.Sprint(IsAddonEnabled(ctx, "decks")) }
 					data-css={ AssetURL("/static/plugins/rolls/css/table.css") }
 				>
 					<button type="button" class="btn-ghost btn-icon tt-tab" data-tt-tab aria-expanded="false" aria-controls="tt-drawer" aria-label="The table: rolls and dice" title="The table: rolls and dice (T)">

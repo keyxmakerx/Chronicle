@@ -141,6 +141,8 @@ func TestRegistryCatalog(t *testing.T) {
 	for _, a := range []ActionDef{
 		{Name: "run", Label: "Run", ClientRun: true, Check: okCheck},
 		{Name: "act", Label: "Act", PartKinds: []string{"zeta"}, Check: okCheck},
+		{Name: "wait", Label: "Wait", Waits: true, Check: okCheck,
+			Run: func(context.Context, string, Act) (string, error) { return "", nil }},
 	} {
 		if err := r.RegisterAction(a); err != nil {
 			t.Fatal(err)
@@ -161,7 +163,7 @@ func TestRegistryCatalog(t *testing.T) {
 	if got, want := names(c.Events), []string{"a.ev", "b.ev"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("events = %v, want %v", got, want)
 	}
-	if got, want := names(c.Actions), []string{"act", "run"}; !reflect.DeepEqual(got, want) {
+	if got, want := names(c.Actions), []string{"act", "run", "wait"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("actions = %v, want %v", got, want)
 	}
 	if c.Parts[0].ForceSee != SeeDirector || c.Parts[0].Label != "alpha!" {
@@ -172,6 +174,9 @@ func TestRegistryCatalog(t *testing.T) {
 	}
 	if c.Actions[0].ClientRun || !c.Actions[1].ClientRun || !reflect.DeepEqual(c.Actions[0].PartKinds, []string{"zeta"}) {
 		t.Errorf("action entries wrong: %+v", c.Actions)
+	}
+	if c.Actions[0].Waits || c.Actions[1].Waits || !c.Actions[2].Waits {
+		t.Errorf("only the action that is the Director's call says it waits: %+v", c.Actions)
 	}
 }
 

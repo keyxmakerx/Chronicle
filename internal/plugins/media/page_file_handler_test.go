@@ -244,7 +244,7 @@ func TestMediaRoutes_RefusePageFiles(t *testing.T) {
 	})
 	t.Run("access check backstop", func(t *testing.T) {
 		c, _ := pageFileCtx(http.MethodGet, "/media/pf1", nil, "", "owner", campaigns.RoleOwner, nil)
-		if apperror.SafeCode(h.checkMediaAccess(c, stored, false, "")) != http.StatusNotFound {
+		if apperror.SafeCode(accessErr(h.checkMediaAccess(c, stored, false, ""))) != http.StatusNotFound {
 			t.Error("checkMediaAccess allowed a page file")
 		}
 	})

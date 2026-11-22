@@ -13,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar/calendarai"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -80,6 +81,7 @@ type aiDeps struct {
 	Carried         records.CarriedAPI               // the Armory's give and take for carried items; nil writes relations
 	Layers          transformations.Service          // nil while the transformations plugin is degraded
 	Designs         records.DesignsAPI               // nil while the designs plugin is degraded
+	Decks           decks.Service                    // nil while the decks plugin is degraded
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
 	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
 
@@ -90,6 +92,7 @@ type aiDeps struct {
 	Homebrew   records.HomebrewAPI       // nil while field rules are degraded
 	Nights     *sessions.AIGameNights    // the game nights' own AI part
 	LayersAI   *transformations.AILayers // the transformations' own AI part; nil without the plugin
+	DecksAI    *decks.AI                 // the card decks' own AI part; nil without the plugin
 	CalLookups *calendarai.Lookups       // the calendar's own lookups
 	PageMaps   records.PageMapsAPI       // nil while page blocks are degraded
 	Tests      records.TestsAPI          // nil without the Tests block
@@ -118,6 +121,13 @@ func newAIDeps(d aiDeps) *aiDeps {
 		addons := d.Addons
 		d.LayersAI = transformations.NewAILayers(d.Layers, aiLayerPages{pages: d.Entities}, func(ctx context.Context, campaignID string) bool {
 			on, err := addons.IsEnabledForCampaign(ctx, campaignID, transformations.AddonSlug)
+			return err == nil && on
+		})
+	}
+	if d.Decks != nil {
+		addons := d.Addons
+		d.DecksAI = decks.NewAI(d.Decks, aiLayerPages{pages: d.Entities}, func(ctx context.Context, campaignID string) bool {
+			on, err := addons.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
 			return err == nil && on
 		})
 	}
@@ -246,6 +256,9 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if d.LayersAI != nil {
 		out = append(out, d.LayersAI)
 	}
+	if d.DecksAI != nil {
+		out = append(out, d.DecksAI.Lookup())
+	}
 	return out
 }
 
@@ -256,6 +269,16 @@ func init() {
 			return nil
 		}
 		return []records.Kind{d.LayersAI}
+	})
+}
+
+// Card decks follow crafting and sit before the item looks.
+func init() {
+	addAIKinds(195, func(d *aiDeps) []records.Kind {
+		if d.DecksAI == nil {
+			return nil
+		}
+		return d.DecksAI.Kinds()
 	})
 }
 
@@ -380,7 +403,7 @@ type aiAddonChecker interface {
 // aiFeatureGate names, by kind, the features a campaign has switched off,
 // using the same add-ons their pages are gated on: the calendar and what is
 // written onto it, game nights (which need the calendar too), maps, Player
-// Notes and Crafting. A failed check counts the feature as on, so a lookup
+// Notes, Crafting and card decks. A failed check counts the feature as on, so a lookup
 // error never blocks an import; the feature's own routes still gate it.
 func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID string) records.OffFeatures {
 	return func(ctx context.Context, campaignID string) records.OffFeatures {
@@ -399,6 +422,9 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		if off(transformations.AddonSlug) {
 			out["layer"] = "Transformations"
+		}
+		if off(decks.AddonSlug) {
+			out["deck"], out["card"] = "Card decks", "Card decks"
 		}
 		if off("maps") {
 			out["map"], out["hex-map"], out["pin"] = "Maps", "Maps", "Maps"

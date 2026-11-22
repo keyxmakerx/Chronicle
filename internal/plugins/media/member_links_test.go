@@ -106,7 +106,7 @@ func TestSignedLinksForMember_OpenWithoutACookie(t *testing.T) {
 	q := req.URL.Query()
 	c := newAccessTestContext(map[string]string{"expires": q.Get("expires"), "sig": q.Get("sig")}, nil)
 	file, _ := h.service.GetByID(context.Background(), linkNoteAudio)
-	if err := h.checkMediaAccess(c, file, false, ""); err != nil {
+	if err := accessErr(h.checkMediaAccess(c, file, false, "")); err != nil {
 		t.Fatalf("the signed link didn't open without a cookie: %v", err)
 	}
 }

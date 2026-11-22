@@ -1,0 +1,62 @@
+package decks
+
+// cardMarker is how a card shows its kind at its edge: a gem, a banner, a
+// corner tab or a ribbon with the kind's name. The "line" marker is drawn
+// under the name instead (cardKindLine).
+templ cardMarker(l Look, k KindDef) {
+	if l.Marker == "banner" {
+		<span class="dk-mk dk-ban" aria-hidden="true">@KindSign(k.Sign)</span>
+	} else if l.Marker == "tab" {
+		<span class="dk-mk dk-tab" aria-hidden="true">@KindSign(k.Sign)</span>
+	} else if l.Marker == "ribbon" {
+		<span class="dk-mk dk-rib" aria-hidden="true"><i>
+			@KindSign(k.Sign)
+			{ k.Name }
+		</i></span>
+	} else if l.Marker != "line" {
+		<span class="dk-mk dk-gem" aria-hidden="true">@KindSign(k.Sign)</span>
+	}
+}
+
+// cardKindLine is the "line" marker: the kind in words under the card's name.
+templ cardKindLine(l Look, k KindDef) {
+	if l.Marker == "line" {
+		<span class="dk-kl">
+			@KindSign(k.Sign)
+			{ k.Name }
+		</span>
+	}
+}
+
+// cardCorner is the corner mark: the card's own text in the deck's style.
+templ cardCorner(l Look, text string) {
+	{{ shown, pips := cornerMark(l.Corner, text) }}
+	if pips > 0 {
+		<span class="dk-num dk-pips" role="img" aria-label={ shown }>
+			for i := 0; i < pips; i++ {
+				<i></i>
+			}
+		</span>
+	} else if shown != "" {
+		<span class="dk-num">
+			{ shown }
+			if l.Corner == "suit" {
+				@Emblem(l.Back.Sign)
+			}
+		</span>
+	}
+}
+
+// cardFittings are the rivets, chains, lock and keystone of a forged border.
+templ cardFittings(border string) {
+	for _, c := range fittingsFor[border] {
+		<span class={ c } aria-hidden="true"></span>
+	}
+}
+
+// cardSeal is the star seal a rare card wears.
+templ cardSeal(rare bool) {
+	if rare {
+		<span class="dk-seal" aria-hidden="true"><svg viewBox="0 0 20 20" focusable="false"><path d={ kindSignPath["star"] }></path></svg></span>
+	}
+}

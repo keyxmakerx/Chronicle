@@ -1255,3 +1255,69 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - The preview's pass date is made up (a week out), so the visitor banner shows a date a real pass holder would see their own version of.
 - `tools/player-crawl` still walks the no-code preview only.
+
+## ADR-077: Decks are their own plugin, the server draws, a card has copies, the pile has no order
+
+**Status:** Accepted; operator signed the design (#2561, #2566).
+
+**Context:** Card decks look like a rolling table with a fancier face, so extending the rolling tables was the obvious start. A rolling table is saved as a whole set with the last write winning, is rolled in the browser, and is readable by Scribes. A deck needs the opposite on every count: two people move cards at once, a hidden card must never reach a player's browser, and a Scribe is a player here.
+
+**Decision:**
+1. Decks are a plugin of their own (`internal/plugins/decks`), behind the Card decks add-on, with their own tables, not an extension of rolling tables.
+2. The server draws. A draw picks uniformly at random among the pile's copies at that moment with crypto randomness, inside one transaction that holds the deck's row lock, so no browser ever holds the pile.
+3. A card has copies, not weights: a card at three copies is three rows in `deck_copies`, and a copy is in exactly one zone. A weighted pick cannot be a physical deck with a used pile.
+4. The pile has no stored order, so there is no order to leak, reorder or replay. Shuffling the used pile back is a zone change. A shuffle is never stored and every draw is random at that moment, except that a Director may name one card to come up next and one to come up last; those two fields are Director-only, are on no player type, and change nothing a player reads.
+5. Every move claims its copy with a conditional update on its zone, holder, face and open mark, and checks the rows it changed. A player and a Director get separate response types with no hidden field on the player ones; a thing a player may not see answers 404.
+
+**Consequences:**
+- A new field on a card is hidden from players until it is added to a player type on purpose; there is no blanking step to forget.
+- Anything that needs the pile's contents to leave the server (a "peek", a client-side shuffle) is a new decision, not a setting.
+- A copy returning to the pile gets a fresh id, so a remembered id cannot be tracked through the pile.
+- Turning a card over and showing it are separate marks (`face_up`, `is_open`). One mark would make a player's private turn the same event as a show, so every other player would be told that a card was turned, and which hero turned it; with two, a turned card and an unturned one are the same bytes to everyone but the holder and the Directors.
+- A change to the zones or the claim rule changes the move table in `internal/plugins/decks/.ai.md` and its tests first.
+- Who is told of a move, live and on the bell, is a function of the move and the deck's settings alone (`audience.go`), never of which card a copy is, and a live message carries no payload. A player's socket therefore receives the same messages, in the same order, whatever a Director does out of sight; a Director's private acts tell Directors only. A new action or setting changes that function and its table test first.
+
+## ADR-078: A card's picture is decided by the card's visibility, and the guard overrides a signature but narrows nothing a page shows
+
+**Status:** Accepted; the card picture step of decks (#2567).
+
+**Context:** A face-down card's face is never sent to a player until they turn it over, and its picture is part of the face. The picture is a campaign media file, and the media server has its own rules: ADR-058 decision 3 serves a file that no page references to any campaign member who has its id, and `/media/list` lists the campaign's pictures to Scribes. A card is referenced by a deck, not a page, so without a rule of its own a Scribe could browse the art of a hidden deck, and a member who once saw a card face up could fetch its picture again while it lies face down.
+
+**Decision:**
+1. A card's picture is a campaign media file id, never a URL or path. The decks plugin checks it on save through an interface it declares (`Pictures`), implemented in `internal/app` over the media service: an image of this campaign, not a note picture or page file, not in the campaign Trash. Every refusal reads the same.
+2. The media plugin declares `CardPictureGuard`, set and wired like `MapImageGuard` on the media server and the sync media API. The media server refuses the original and every thumbnail of a card's picture, with the usual 404, to anyone below Director unless a copy of a card wearing it is face up to them now. The decks plugin answers by building what the viewer would be sent and looking for the card in it, so the picture is open exactly when the face is.
+3. The guard runs even for a validly signed link, like the map guard: a signature proves the link is genuine, not that its holder may see a face-down card. The cookieless links the media server and the notes app mint for the owner's tools stay Director-equivalent, so no path that signs one may sign a card's picture for a member the card rule refuses; `SignedLinksForMember` applies the rule.
+4. The guard only replaces the "no page references it, so any member may fetch it" grant. A file that is also on a page the viewer can see stays visible through the page rule; the guard narrows nothing a page already shows.
+5. Listings below Director leave every card picture out in the query (`NOT IN`), so totals stay right: the picker and the sync media API alike. Listings are stricter than the fetch on purpose: the page exception would cost a full reference scan per picture, and a listing is not how a page shows a picture. "Where is this used" names a card to Directors only.
+6. Any error in a card-picture check refuses and logs. Nothing about a card-picture decision is cached.
+7. An upload of the bytes of a card's picture is not merged into it for anyone below Director, when no page references the file; it is stored as a separate file by the same branch as ADR-058 decision 5's refused merge, with the same lookups so timing matches. Otherwise decision 3 would merge it and tell the uploader the image is in a deck they cannot see. A failing check takes the same branch. Decision 5 itself is unchanged.
+
+**What the guard does not claim:** a viewer who has been shown a face has seen its picture and may keep a copy. Cookieless API-key links live 15 minutes and are not tied to a viewer. The guard exists so that a picture nobody has been shown cannot be fetched or listed.
+
+**Consequences:**
+- Every campaign file request costs one extra lookup of `deck_cards` on `(campaign_id, picture)`, whoever asks; the viewer's role and the card's visibility are looked up only for a file that is a card's picture. A campaign without decks tables answers "no card pictures" rather than failing.
+- A trashed picture opens until its purge, as it does for a page, so a card keeps showing it until then; after a purge the card keeps a dangling id and renders without a picture.
+- A new way to read a face (a new zone, a new setting) changes `playerDeck` and so changes the picture rule with it; there is no second copy of the rules to update.
+- A new place that mints cookieless media links for members must ask the card rule first.
+
+
+## ADR-079: A card's tests are the Director's by default, judged on facts read as a Director, and a moment never deals
+
+**Status:** Accepted; the server half of card conditions in decks (#2569).
+
+**Context:** A Director wants a card to come up when its moment comes: a hero's stamina falls, a tag goes on, a layer is applied, a tracker rises, or the Director says so. The facts live in four other plugins. The draw is also the place where a hidden condition is most likely to leak: a player who is refused a draw, or who is told a deck is empty, must not be able to learn which hidden test is why.
+
+**Decision:**
+1. A card has up to four tests that must all hold: `number`, `tracker`, `tag`, `layer` or `say`. Each is printed on the card (a player reads it with the face) or the Director's own (never sent to a player). They are one JSON list in `deck_cards.when_json`; `when_open`, `has_when` and `fits_since` are derived. No formulas, no "any of".
+2. One function checks a list of tests (`ValidateWhen`); one writer says a test in words, for the editor, the notice and the card face. A typo in a request is refused by name at decode, never stored as a test that does nothing.
+3. The facts come through an interface decks declares (`Facts`) and `internal/app` implements over the entities, tags, trackers and transformations services. Every read is as a Director would see it. A fact that cannot be read is a missing fact and a test on it does not hold, so a failing or degraded source can never make a card come up. Numbers are the stored sheet with the page's layers applied (`set` and `add` in order); what only the browser works out is not judged.
+4. A Director's draw and "draw another" pick among cards that fit; nothing fitting is a 409 and reshuffles nothing (a reshuffle is for a truly empty pile). Deal by name ignores conditions. A player's own draw only pulls cards with no test or with printed tests that all hold; a card with a Director-only test is never in the set, whether or not it holds, and its facts are not read. The player's reply when nothing is eligible is the empty-pile reply, byte for byte.
+5. A moment is a waiting notice for one deck, with at most one open per deck (a unique key on `open_deck_id`, NULL once closed). It is raised on the rising edge of "some card fits" (`fits_since`), picked blind and weighted by copies, re-picked while another card fits, and lapses when none does. Chronicle never deals on its own: the Director answers (deal, draw another, let them draw, not now). An answer that deals is claimed inside the draw's transaction, so two Directors cannot both answer. "Let them draw" invites the hero's claimed player; the invited draw picks among cards that fit, spends no draw and closes the moment.
+6. Rechecks are woken, not polled. A watcher coalesces pokes per campaign from the entity events, the tag hooks, the layers notifier, a new always-on trackers observer and decks' own writes; the recheck begins with one indexed question so a campaign that watches nothing costs one lookup after a page save. A Director's read looks again at most every 5 seconds per campaign, which covers a change no hook saw.
+7. That a moment came, which card, whether a hidden test holds and what was read are Directors-only by every channel: the websocket message `decks.moment` is `RequiresDM` with no payload, and the moment routes answer 404 to anyone else. Only the invited player learns of an invitation (a bell entry on the existing card-decks choice and a payload-free `decks.changed`).
+
+**Consequences:**
+- A new kind of test is a new key set in `keysOf`, a branch in `check`, `sentence` and the judge, and a row in the two-worlds leak test.
+- A new source of change for a fact is a new `Poke`; until it exists the Director's own read is the backstop. Known gaps: a tag deleted outright, a page cloned with its tags, a page deleted through a path that publishes no event.
+- The trackers plugin gains an observer interface beside its owned-kind listener; the listener is unchanged.
+- A printed test is the player's to read, but whether it holds is not: what a player is sent about a deck does not depend on it.

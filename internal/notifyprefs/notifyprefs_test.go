@@ -85,3 +85,11 @@ func TestEveryBellTypeHasABellRow(t *testing.T) {
 		}
 	}
 }
+
+// An invitation to draw rides on the card decks choice, so a player who turned
+// those notices off is not rung, and nothing new appears in the settings.
+func TestADrawInvitationRidesOnTheCardDecksChoice(t *testing.T) {
+	if got := CategoryForBellType("deck_draw_invited"); got != CardDecks {
+		t.Errorf("deck_draw_invited maps to %q, want %q", got, CardDecks)
+	}
+}

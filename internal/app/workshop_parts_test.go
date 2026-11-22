@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
@@ -19,7 +20,7 @@ func TestRegisterWorkshopParts(t *testing.T) {
 		labels = append(labels, s.Label)
 	}
 	sort.Strings(labels)
-	if want := []string{"ancestries", "crafting recipes", "creature variants", "field rules", "respite", "the calendar", "trackers", "transformations"}; !reflect.DeepEqual(labels, want) {
+	if want := []string{"ancestries", "card decks", "crafting recipes", "creature variants", "field rules", "respite", "the calendar", "trackers", "transformations"}; !reflect.DeepEqual(labels, want) {
 		t.Fatalf("workshop sources = %v, want %v", labels, want)
 	}
 
@@ -53,6 +54,39 @@ func TestRegisterWorkshopParts(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parts = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Card events and deck actions join the Workshop only while the decks plugin
+// is healthy and its service is bound.
+func TestCardDecksJoinTheWorkshopOnlyWhileHealthy(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		healthy bool
+		bound   bool
+		want    bool
+	}{
+		{"degraded", false, true, false},
+		{"healthy but unbound", true, false, false},
+		{"healthy", true, true, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			health := database.NewPluginHealthRegistry()
+			health.Register(decks.PluginSlug, tt.healthy, nil, 1, 1)
+			d := workshopDeps{Health: health}
+			if tt.bound {
+				d.Decks = newDecksStory(nil)
+			}
+			reg := homebrew.NewRegistry()
+			registerWorkshopParts(reg, d)
+			joined := false
+			for _, e := range reg.Catalog().Events {
+				joined = joined || e.Name == cardPlayedEvent || e.Name == cardDrawnEvent
+			}
+			if joined != tt.want {
+				t.Errorf("card events joined = %v, want %v", joined, tt.want)
 			}
 		})
 	}

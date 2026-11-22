@@ -28,7 +28,7 @@
   }
 
   // A notification type with its own icon; the rest show only the unread dot.
-  var TYPE_ICON = { item_given: 'fa-gift' };
+  var TYPE_ICON = { item_given: 'fa-gift', deck_card_dealt: 'fa-layer-group', deck_card_taken_back: 'fa-layer-group', deck_card_asked: 'fa-layer-group', deck_ask_answered: 'fa-layer-group' };
   // Types only a DM is sent carry the Director's amber edge.
   var DM_TYPES = { game_night_checkin: true };
 

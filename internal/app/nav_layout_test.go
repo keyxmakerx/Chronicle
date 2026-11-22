@@ -13,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -648,7 +649,7 @@ func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
 	for _, o := range owner.Off {
 		off = append(off, o.Key)
 	}
-	if !reflect.DeepEqual(off, []string{"app:armory", "app:crafting", "app:timeline"}) {
+	if !reflect.DeepEqual(off, []string{"app:armory", "app:crafting", "app:decks", "app:timeline"}) {
 		t.Errorf("the owner's turned-off apps = %v", off)
 	}
 	for _, o := range owner.Off {
@@ -716,4 +717,43 @@ func TestSidebar_DrawerSwitchesReachOnlyTheOwner(t *testing.T) {
 	if strings.Contains(player, "data-apd-off-ids") || strings.Contains(player, "data-apd-on-ids") || strings.Contains(player, "Turned off") || strings.Contains(player, "data-apd-owner") {
 		t.Errorf("a player's drawer carries the owner's switches")
 	}
+}
+
+// Card decks is a Director's page: its sidebar row is offered to the owner and
+// a co-Director with the add-on on, never to a player or a scribe, who would
+// only be told the page is not there.
+func TestNavAccessFor_CardDecksIsForDirectors(t *testing.T) {
+	enabled := navTestEnabled()
+	enabled[decks.AddonSlug] = true
+	rows := func(cc *campaigns.CampaignContext) map[string]layouts.NavRowView {
+		in := navInputsFor(cc, navTestTypes(), nil, enabled, navTestSystem)
+		viewer := campaigns.NavViewer{Owner: cc.IsMember && cc.MemberRole >= campaigns.RoleOwner, Access: navAccessFor(cc)}
+		return rowsByKey(navSectionViews(campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)))
+	}
+	owner := navTestContext(nil, campaigns.RoleOwner, true, false)
+	granted := navTestContext(nil, campaigns.RolePlayer, true, false)
+	granted.IsDmGranted = true
+	scribe := navTestContext(nil, campaigns.RoleScribe, true, false)
+	player := navTestContext(nil, campaigns.RolePlayer, true, false)
+	if _, ok := rows(owner)["app:decks"]; !ok {
+		t.Error("the owner's sidebar lists Card decks")
+	}
+	if _, ok := rows(granted)["app:decks"]; !ok {
+		t.Error("a co-Director's sidebar lists Card decks")
+	}
+	for name, cc := range map[string]*campaigns.CampaignContext{"scribe": scribe, "player": player} {
+		if _, ok := rows(cc)["app:decks"]; ok {
+			t.Errorf("a %s is never offered Card decks", name)
+		}
+	}
+	off := navTestEnabled()
+	if _, ok := rowsByKeyFor(owner, off)["app:decks"]; ok {
+		t.Error("with the add-on off the row is not offered")
+	}
+}
+
+func rowsByKeyFor(cc *campaigns.CampaignContext, enabled map[string]bool) map[string]layouts.NavRowView {
+	in := navInputsFor(cc, navTestTypes(), nil, enabled, navTestSystem)
+	viewer := campaigns.NavViewer{Owner: true, Access: navAccessFor(cc)}
+	return rowsByKey(navSectionViews(campaigns.ViewNav(in.layout, in.apps, in.cats, viewer)))
 }

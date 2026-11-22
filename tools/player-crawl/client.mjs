@@ -60,6 +60,17 @@ export class Client {
     throw new Error('too many redirects ' + path);
   }
 
+  // Sends a file as multipart form data (the media upload). Returns {status, text}.
+  async upload(path, fields, bytes, name = 'picture.png', type = 'image/png') {
+    if (!this.csrf()) this.store(await fetch(this.base + '/login', { redirect: 'manual' }));
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    form.append('file', new Blob([bytes], { type }), name);
+    const res = await fetch(this.base + path, { method: 'POST', body: form, redirect: 'manual', headers: { Cookie: this.cookieHeader(), 'X-CSRF-Token': this.csrf() } });
+    this.store(res);
+    return { status: res.status, text: await res.text() };
+  }
+
   get(path, opts) { return this.req('GET', path, opts); }
   post(path, o) { return this.req('POST', path, o); }
   put(path, o) { return this.req('PUT', path, o); }

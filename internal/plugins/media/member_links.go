@@ -82,6 +82,20 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 		if !allowed {
 			continue
 		}
+		// A link signed for the cookieless viewer opens the original without
+		// asking who holds it, so a card's picture gets one only when the card
+		// rule admits this member now.
+		if h.cardPictures != nil {
+			ok, err := h.cardPictureAllowed(ctx, file, userID)
+			if err != nil {
+				slog.Error("media: member link card picture check failed; leaving it out",
+					slog.String("file_id", file.ID), slog.Any("error", err))
+				continue
+			}
+			if !ok {
+				continue
+			}
+		}
 		link := h.signer.Sign(file.ID, ViewerAPIKey, SignedURLTTL)
 		if m[2] != "" {
 			link = h.signer.SignThumb(file.ID, m[2], ViewerAPIKey, SignedURLTTL)

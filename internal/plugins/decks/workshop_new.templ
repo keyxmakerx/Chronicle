@@ -1,0 +1,123 @@
+package decks
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// WorkshopNewPage is making a deck: a name, who it is for and one of three ways
+// to start it (a style, a copy of a deck, a rolling table), as tabs. The
+// widget (deck_workshop.js) sends the choices to the same JSON route as any
+// other deck write; picking a style only fills in values.
+templ WorkshopNewPage(p newPage) {
+	@layouts.App("New deck") {
+		@CardSheet()
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_workshop.css") }/>
+		@layouts.AppFrame() {
+			<div class="dkw" data-widget="deck-workshop" data-dkw-new-page data-campaign-id={ p.CampaignID }>
+				<p class="dkw-crumb"><a href={ templ.SafeURL("/campaigns/" + p.CampaignID + "/decks/workshop") }>Card decks</a></p>
+				<h1 class="cb-title text-2xl font-bold text-fg">New deck</h1>
+				<form class="dkw-newform" data-dkw-new novalidate>
+					<div class="dkw-newtop">
+						<div class="dkw-field">
+							<label for="dkw-name">Name</label>
+							<input id="dkw-name" class="dkw-line" type="text" name="name" maxlength="120" autocomplete="off" required/>
+						</div>
+						<fieldset class="dkw-field">
+							<legend>Who it is for</legend>
+							<div class="dkw-chips" role="radiogroup" aria-label="Who the deck is for">
+								<button type="button" class="dkw-chip" role="radio" aria-checked="true" data-kind="hero">A hero</button>
+								<button type="button" class="dkw-chip" role="radio" aria-checked="false" data-kind="party">The party</button>
+								<button type="button" class="dkw-chip" role="radio" aria-checked="false" data-kind="event">Events</button>
+							</div>
+							<div class="dkw-hero" data-dkw-hero>
+								if len(p.Heroes) > 0 {
+									<label for="dkw-hero" class="dkw-quiet">Which hero</label>
+									<select id="dkw-hero" class="dkw-select" name="holderEntityId">
+										<option value="">No hero yet</option>
+										for _, h := range p.Heroes {
+											<option value={ h.ID }>{ h.Name }</option>
+										}
+									</select>
+								} else {
+									<span class="dkw-quiet">No hero pages are claimed yet. You can give the deck a hero later.</span>
+								}
+							</div>
+						</fieldset>
+					</div>
+					<nav class="dkw-tabs" role="tablist" aria-label="How to start the deck">
+						for i, t := range newStarts {
+							<button
+								type="button"
+								role="tab"
+								id={ "dkw-start-" + t.Key }
+								class="dkw-tab"
+								aria-selected={ boolWord(i == 0) }
+								aria-controls={ "dkw-startbody-" + t.Key }
+								tabindex={ tabIndex(i == 0) }
+								data-tab={ t.Key }
+							>{ t.Name }</button>
+						}
+					</nav>
+					<div id="dkw-startbody-style" class="dkw-panel" role="tabpanel" aria-labelledby="dkw-start-style" data-start="style">
+						<div class="dkw-styles" role="radiogroup" aria-label="A style to start from">
+							for i, s := range p.Styles {
+								@styleOption(s, i == 0)
+							}
+						</div>
+					</div>
+					<div id="dkw-startbody-copy" class="dkw-panel" role="tabpanel" aria-labelledby="dkw-start-copy" data-start="copy" hidden>
+						if len(p.Decks) > 0 {
+							<ul class="dkw-decks" role="radiogroup" aria-label="A deck to copy" data-dkw-decks>
+								for _, d := range p.Decks {
+									<li role="none">
+										<button type="button" class="dkw-deck dkw-choice" role="radio" aria-checked="false" data-deck={ d.ID }>
+											@deckFace(d)
+										</button>
+									</li>
+								}
+							</ul>
+						} else {
+							<p class="dkw-quiet" data-dkw-none>No decks to copy yet.</p>
+						}
+					</div>
+					<div id="dkw-startbody-table" class="dkw-panel" role="tabpanel" aria-labelledby="dkw-start-table" data-start="table" hidden>
+						if len(p.Tables.Tables) > 0 {
+							<ul class="dkw-tablepicks" role="radiogroup" aria-label="A rolling table to make cards from" data-dkw-tables>
+								for _, t := range p.Tables.Tables {
+									<li role="none">
+										<button type="button" class="dkw-choice dkw-tablepick" role="radio" aria-checked="false" data-table={ t.ID }>
+											<b>{ t.Name }</b>
+											<span class="dkw-quiet">{ linesWords(t.Lines) }</span>
+										</button>
+									</li>
+								}
+							</ul>
+						} else {
+							<p class="dkw-quiet" data-dkw-none>No rolling tables yet.</p>
+						}
+					</div>
+					<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+					<div class="dkw-actions dkw-newfoot">
+						for i, t := range newStarts {
+							<p class="dkw-quiet dkw-hint" data-hint={ t.Key } hidden?={ i != 0 }>{ newHint(t.Key) }</p>
+						}
+						<button type="submit" class="btn-primary text-sm" data-working-label="Making the deck…">Make the deck</button>
+						<a class="dkw-word" href={ templ.SafeURL("/campaigns/" + p.CampaignID + "/decks/workshop") }>Cancel</a>
+					</div>
+				</form>
+			</div>
+		}
+	}
+}
+
+// styleOption is one style, drawn as a small fan of real cards: a back and a
+// face in the style's own look.
+templ styleOption(s DeckStyle, on bool) {
+	{{ l := fanLook(s) }}
+	<button type="button" class="dkw-style" role="radio" aria-checked={ boolWord(on) } data-style={ s.Key } data-look={ styleJSON(s) }>
+		<span class="dkw-fan" aria-hidden="true">
+			<span class="dkw-fan-a">@CardBack(l, SizeHand)</span>
+			<span class="dkw-fan-b">@CardView(l, FaceUp(fanFace(), ""), CardOpts{Size: SizeHand})</span>
+		</span>
+		<b>{ s.Name }</b>
+		<span class="dkw-quiet">{ s.Line }</span>
+	</button>
+}

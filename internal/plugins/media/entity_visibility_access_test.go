@@ -62,6 +62,11 @@ func (f *fakeAccessMediaService) SetEntityVisibilityFilter(v EntityVisibilityFil
 func (f *fakeAccessMediaService) ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeAccessMediaService) SetCardPictureGuard(CardPictureGuard) {}
+func (f *fakeAccessMediaService) CardPictureGuardWired() bool { return false }
+func (f *fakeAccessMediaService) ListCampaignMediaExcluding(ctx context.Context, campaignID string, _ []string, page, perPage int) ([]MediaFile, int, error) {
+	return nil, 0, nil
+}
 func (f *fakeAccessMediaService) GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error) {
 	return nil, nil
 }
@@ -205,7 +210,7 @@ func TestADR058_HiddenPageOnly_PlayerDenied(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "Player reading an image used only by a dm_only page")
 
 	if vis.callCount != 1 {
@@ -229,7 +234,7 @@ func TestADR058_VisiblePage_PlayerAllowed(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustAllow(t, err, "Player reading an image used by a page they can see")
 }
 
@@ -251,7 +256,7 @@ func TestADR058_SharedHiddenAndVisible_ReadableAtAll(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustAllow(t, err, "image shared by a hidden AND a visible page")
 
 	if len(vis.lastEntityIDs) != 2 {
@@ -278,7 +283,7 @@ func TestADR058_CoverImage_BehavesLikeMainImage(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "Player reading a cover image used only by a dm_only page")
 	if vis.callCount != 1 {
 		t.Errorf("cover-image reference must reach the visibility filter same as a main image; calls=%d", vis.callCount)
@@ -305,7 +310,7 @@ func TestADR058_CoDM_SeesWhatDMSees(t *testing.T) {
 	)
 	c := newADR058TestContext(testCoDMID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustAllow(t, err, "co-DM reading what the DM can read")
 	if vis.lastRole != int(campaigns.RoleOwner) {
 		t.Errorf("expected co-DM promoted to RoleOwner(%d) reaching the filter, got %d", campaigns.RoleOwner, vis.lastRole)
@@ -346,7 +351,7 @@ func TestADR058_PlainPlayer_NotPromoted(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "plain Player (no DM grant) must not be promoted")
 }
 
@@ -368,7 +373,7 @@ func TestADR058_Unreferenced_MembershipStillApplies(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustAllow(t, err, "unreferenced file (avatar/backdrop/fresh upload) via plain membership")
 	if vis.callCount != 0 {
 		t.Errorf("visibility filter must not even be consulted for an unreferenced file, got %d calls", vis.callCount)
@@ -389,7 +394,7 @@ func TestADR058_Unreferenced_NonMemberStillDenied(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID) // authenticated, but not a member
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "non-member reading an unreferenced file")
 }
 
@@ -408,7 +413,7 @@ func TestADR058_ReferenceLookupError_Denies(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "reference lookup error, even for a campaign member")
 }
 
@@ -425,7 +430,7 @@ func TestADR058_VisibilityFilterError_Denies(t *testing.T) {
 	)
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "visibility filter error, even for a campaign member")
 }
 
@@ -443,7 +448,7 @@ func TestADR058_NilEntityVisibilityFilter_Denies(t *testing.T) {
 	h.entityVisibility = nil // simulate a missed wiring line
 	c := newADR058TestContext(testPlayerID)
 
-	err := h.checkMediaAccess(c, adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(c, adr058File(), false, ""))
 	mustDeny(t, err, "referenced file with the visibility seam unwired")
 }
 
@@ -493,13 +498,13 @@ func TestADR058_Cache_HitSkipsBothLookups(t *testing.T) {
 	h, svc, _ := newMiniredisHandler(t, findRefs, vis)
 
 	c1 := newADR058TestContext(testPlayerID)
-	mustAllow(t, h.checkMediaAccess(c1, adr058File(), false, ""), "first request (cache miss)")
+	mustAllow(t, accessErr(h.checkMediaAccess(c1, adr058File(), false, "")), "first request (cache miss)")
 	if svc.findReferencesCalls != 1 || vis.callCount != 1 {
 		t.Fatalf("first request: want 1 reference lookup + 1 filter call, got %d/%d", svc.findReferencesCalls, vis.callCount)
 	}
 
 	c2 := newADR058TestContext(testPlayerID)
-	mustAllow(t, h.checkMediaAccess(c2, adr058File(), false, ""), "second request (expected cache hit)")
+	mustAllow(t, accessErr(h.checkMediaAccess(c2, adr058File(), false, "")), "second request (expected cache hit)")
 	if svc.findReferencesCalls != 1 || vis.callCount != 1 {
 		t.Errorf("second request: cache hit should skip both lookups; reference lookups=%d filter calls=%d", svc.findReferencesCalls, vis.callCount)
 	}
@@ -527,12 +532,12 @@ func TestADR058_Cache_DifferentViewersNotConflated(t *testing.T) {
 
 	// Allowed viewer first — populates the cache with "allow" for THIS
 	// viewer's key.
-	mustAllow(t, h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, ""), "allowed viewer")
+	mustAllow(t, accessErr(h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, "")), "allowed viewer")
 
 	// A denied viewer for the SAME file must still be denied, not read
 	// back the other viewer's cached "allow".
 	vis.viewableIDs = map[string]bool{} // this viewer can't see anything
-	mustDeny(t, h.checkMediaAccess(newADR058TestContext("user-outsider"), adr058File(), false, ""), "different viewer, same file, must not share the cache entry")
+	mustDeny(t, accessErr(h.checkMediaAccess(newADR058TestContext("user-outsider"), adr058File(), false, "")), "different viewer, same file, must not share the cache entry")
 }
 
 // TestADR058_Cache_UnreferencedFile_NeverCached: decision 3's branch must
@@ -544,7 +549,7 @@ func TestADR058_Cache_UnreferencedFile_NeverCached(t *testing.T) {
 	}
 	h, svc, mr := newMiniredisHandler(t, findRefs, &fakeEntityVisibilityFilter{})
 
-	mustAllow(t, h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, ""), "unreferenced file")
+	mustAllow(t, accessErr(h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, "")), "unreferenced file")
 	if svc.findReferencesCalls != 1 {
 		t.Fatalf("expected exactly 1 reference lookup, got %d", svc.findReferencesCalls)
 	}
@@ -565,7 +570,7 @@ func TestADR058_Cache_Unavailable_FailsSafe(t *testing.T) {
 	h, svc, mr := newMiniredisHandler(t, findRefs, vis)
 	mr.Close() // cache is now unreachable
 
-	err := h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, "")
+	err := accessErr(h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, ""))
 	mustDeny(t, err, "hidden-page image with the cache unreachable — must still deny")
 	if svc.findReferencesCalls != 1 || vis.callCount != 1 {
 		t.Errorf("cache being down must not skip the real lookup: reference lookups=%d filter calls=%d", svc.findReferencesCalls, vis.callCount)
@@ -576,7 +581,7 @@ func TestADR058_Cache_Unavailable_FailsSafe(t *testing.T) {
 	// both ways (a cache outage can't turn into a denial-of-service on
 	// legitimate access either).
 	vis.viewableIDs = map[string]bool{"ent-hidden": true}
-	err = h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, "")
+	err = accessErr(h.checkMediaAccess(newADR058TestContext(testPlayerID), adr058File(), false, ""))
 	mustAllow(t, err, "visible-page image with the cache unreachable — must still allow")
 }
 

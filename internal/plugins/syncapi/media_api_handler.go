@@ -26,6 +26,10 @@ type MediaAPIHandler struct {
 	// mapImages withholds the links of a shadowed map's picture from callers
 	// below owner. Nil means unwired (tests); production wiring is pinned in app.
 	mapImages media.MapImageGuard
+	// cardPictures hides a card's picture from callers below owner: no link,
+	// no listing, no lookup. Nil means unwired (tests); production wiring is
+	// pinned in app.
+	cardPictures media.CardPictureGuard
 }
 
 // NewMediaAPIHandler creates a new media API handler.
@@ -53,6 +57,35 @@ func (h *MediaAPIHandler) SetCampaignService(svc campaigns.CampaignService) {
 // app/routes.go.
 func (h *MediaAPIHandler) SetMapImageGuard(g media.MapImageGuard) {
 	h.mapImages = g
+}
+
+// SetCardPictureGuard wires the card-picture check. Called during wiring in
+// app/routes.go.
+func (h *MediaAPIHandler) SetCardPictureGuard(g media.CardPictureGuard) {
+	h.cardPictures = g
+}
+
+// CardPictureGuardWired reports whether the guard is set, so the app's wiring
+// test can prove production never serves card pictures without it.
+func (h *MediaAPIHandler) CardPictureGuardWired() bool {
+	return h.cardPictures != nil
+}
+
+// hidesCardPicture is true when the file is a card's picture and the caller is
+// below owner. This API has no page-visibility filter, so unlike the picker it
+// makes no exception for a picture also on a page: it withholds the card's
+// picture from such a caller outright. A failed check hides too.
+func (h *MediaAPIHandler) hidesCardPicture(c *echo.Context, file *media.MediaFile) bool {
+	if h.cardPictures == nil || file.CampaignID == nil || h.resolveRole(c) >= int(campaigns.RoleOwner) {
+		return false
+	}
+	isPicture, err := h.cardPictures.IsCardPicture(c.Request().Context(), *file.CampaignID, file.ID)
+	if err != nil {
+		slog.Error("api: card picture check failed; hiding the file",
+			slog.String("file_id", file.ID), slog.Any("error", err))
+		return true
+	}
+	return isPicture
 }
 
 // response is toAPIResponse minus every link, for a caller below owner, when the
@@ -195,7 +228,25 @@ func (h *MediaAPIHandler) ListMedia(c *echo.Context) error {
 		})
 	}
 
-	files, total, err := h.mediaSvc.ListCampaignMedia(ctx, campaignID, page, perPage)
+	// A caller below owner never lists a card's picture; the exclusion is part
+	// of the query so the total and the pages stay right.
+	var hidden []string
+	if h.cardPictures != nil && h.resolveRole(c) < int(campaigns.RoleOwner) {
+		ids, err := h.cardPictures.CardPictureIDs(ctx, campaignID)
+		if err != nil {
+			slog.Error("api: failed to list card pictures", slog.Any("error", err))
+			return apperror.NewInternal(fmt.Errorf("failed to list media"))
+		}
+		hidden = ids
+	}
+	var files []media.MediaFile
+	var total int
+	var err error
+	if len(hidden) == 0 {
+		files, total, err = h.mediaSvc.ListCampaignMedia(ctx, campaignID, page, perPage)
+	} else {
+		files, total, err = h.mediaSvc.ListCampaignMediaExcluding(ctx, campaignID, hidden, page, perPage)
+	}
 	if err != nil {
 		slog.Error("api: failed to list media", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list media"))
@@ -238,6 +289,9 @@ func (h *MediaAPIHandler) GetMedia(c *echo.Context) error {
 	// page file is answered like a missing file: this route mints a link for any
 	// caller with a key, but only readers of the note or page may open it.
 	if file.CampaignID == nil || *file.CampaignID != c.Param("id") || file.IsBound() {
+		return apperror.NewNotFound("media file not found")
+	}
+	if h.hidesCardPicture(c, file) {
 		return apperror.NewNotFound("media file not found")
 	}
 

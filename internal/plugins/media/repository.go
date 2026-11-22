@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -51,6 +52,9 @@ type MediaRepository interface {
 	SetContentHash(ctx context.Context, id, hash string) error
 	Delete(ctx context.Context, id string) error
 	ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
+	// ListByCampaignExcluding is ListByCampaign without the named files, in the
+	// same query, so the total and the page agree.
+	ListByCampaignExcluding(ctx context.Context, campaignID string, excludeIDs []string, limit, offset int) ([]MediaFile, int, error)
 	GetStorageStats(ctx context.Context) (*StorageStats, error)
 	ListAll(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
 
@@ -322,20 +326,34 @@ func (r *mediaRepository) Delete(ctx context.Context, id string) error {
 // that only its note's or page's readers can open.
 // Pictures in the campaign Trash are left out too.
 func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error) {
+	return r.ListByCampaignExcluding(ctx, campaignID, nil, limit, offset)
+}
+
+// ListByCampaignExcluding is ListByCampaign minus excludeIDs. The exclusion is
+// part of both the count and the page query; filtering a fetched page instead
+// would leave short pages and a wrong total.
+func (r *mediaRepository) ListByCampaignExcluding(ctx context.Context, campaignID string, excludeIDs []string, limit, offset int) ([]MediaFile, int, error) {
+	where := `campaign_id = ? AND usage_type NOT IN (?, ?) AND deleted_at IS NULL`
+	args := []any{campaignID, UsageNoteImage, UsagePageFile}
+	if len(excludeIDs) > 0 {
+		where += ` AND id NOT IN (?` + strings.Repeat(`,?`, len(excludeIDs)-1) + `)`
+		for _, id := range excludeIDs {
+			args = append(args, id)
+		}
+	}
+
 	var total int
-	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?) AND deleted_at IS NULL`, campaignID, UsageNoteImage, UsagePageFile,
-	).Scan(&total)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_files WHERE `+where, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting media files: %w", err)
 	}
 
 	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
 	                 mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at
-	          FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?) AND deleted_at IS NULL
+	          FROM media_files WHERE ` + where + `
 	          ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID, UsageNoteImage, UsagePageFile, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing media files: %w", err)
 	}

@@ -80,7 +80,7 @@ func TestCheckMediaAccess_ShadowedMapPicture(t *testing.T) {
 			if tc.thumb {
 				size = "300"
 			}
-			err := h.checkMapImageGuard(c, privateMediaFile(), tc.thumb, size)
+			err := accessErr(h.checkMapImageGuard(c, privateMediaFile(), tc.thumb, size))
 			if tc.allowed {
 				mustAllow(t, err, tc.name)
 			} else {
@@ -99,17 +99,17 @@ func TestCheckMediaAccess_SignedURLDoesNotBypassMapPictureRule(t *testing.T) {
 	h := &Handler{signer: signer, memberChecker: checker, service: &fakeAccessMediaService{},
 		entityVisibility: &fakeEntityVisibilityFilter{}, mapImages: &fakeMapImageGuard{hidden: true}}
 	c := newAccessTestContext(map[string]string{"expires": exp, "sig": sig}, &auth.Session{UserID: "player"})
-	mustDeny(t, h.checkMediaAccess(c, privateMediaFile(), false, ""), "signed player link to a shadowed map picture")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")), "signed player link to a shadowed map picture")
 
 	h.mapImages = &fakeMapImageGuard{hidden: false}
-	mustAllow(t, h.checkMediaAccess(c, privateMediaFile(), false, ""), "same link once no shadow covers the map")
+	mustAllow(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")), "same link once no shadow covers the map")
 }
 
 // Without a guard the handler behaves as before, and files with no campaign
 // are never sent to it.
 func TestCheckMapImageGuard_Unwired(t *testing.T) {
 	h := &Handler{}
-	mustAllow(t, h.checkMapImageGuard(newAccessTestContext(nil, nil), privateMediaFile(), false, ""), "unwired guard")
+	mustAllow(t, accessErr(h.checkMapImageGuard(newAccessTestContext(nil, nil), privateMediaFile(), false, "")), "unwired guard")
 	if h.MapImageGuardWired() {
 		t.Error("MapImageGuardWired must be false when unset")
 	}
@@ -118,7 +118,7 @@ func TestCheckMapImageGuard_Unwired(t *testing.T) {
 	if !h.MapImageGuardWired() {
 		t.Error("MapImageGuardWired must be true once set")
 	}
-	mustAllow(t, h.checkMapImageGuard(newAccessTestContext(nil, nil), &MediaFile{ID: "avatar", UsageType: UsageAvatar}, false, ""), "campaignless file")
+	mustAllow(t, accessErr(h.checkMapImageGuard(newAccessTestContext(nil, nil), &MediaFile{ID: "avatar", UsageType: UsageAvatar}, false, "")), "campaignless file")
 	if g.asked != 0 {
 		t.Error("a file with no campaign must not be sent to the guard")
 	}

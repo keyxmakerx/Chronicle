@@ -74,6 +74,15 @@ type ChangeListener interface {
 	TrackerChanged(ctx context.Context, campaignID string, v Viewer, c Change) error
 }
 
+// ChangeObserver hears that something a tracker-reading rule may judge has
+// changed on a campaign: a value, a placement, a kind's bounds or name. Unlike
+// ChangeListener it is told for every kind and carries nothing but the
+// campaign, so the observer must look again rather than trust the event. It is
+// told after the change is saved and must not block.
+type ChangeObserver interface {
+	TrackersChanged(campaignID string)
+}
+
 // PageRef is a page that has trackers.
 type PageRef struct {
 	ID   string `json:"id"`
@@ -86,6 +95,7 @@ type service struct {
 	members  MemberDirectory
 	clock    GameClock
 	listener ChangeListener
+	observer ChangeObserver
 	newID    func() string
 }
 
@@ -418,6 +428,7 @@ func (s *service) Place(ctx context.Context, campaignID, entityID string, v View
 		}
 		return nil, apperrorInternal(err)
 	}
+	s.touched(campaignID)
 	return s.one(ctx, campaignID, t, v)
 }
 
@@ -510,6 +521,7 @@ func (s *service) Patch(ctx context.Context, campaignID, trackerID string, v Vie
 			return nil, apperrorInternal(err)
 		}
 	}
+	s.touched(campaignID)
 	return s.one(ctx, campaignID, t, v)
 }
 
@@ -575,6 +587,7 @@ func (s *service) Remove(ctx context.Context, campaignID, trackerID string, v Vi
 	if err := s.repo.DeleteTracker(ctx, campaignID, t.ID); err != nil {
 		return apperrorInternal(err)
 	}
+	s.touched(campaignID)
 	return nil
 }
 
@@ -702,12 +715,20 @@ func (s *service) writeLine(ctx context.Context, campaignID string, t Tracker, v
 	if err := s.repo.AddEntry(ctx, campaignID, e); err != nil {
 		return nil, apperrorInternal(err)
 	}
+	s.touched(campaignID)
 	after, err := s.one(ctx, campaignID, t, v)
 	if err != nil {
 		return nil, err
 	}
 	s.changed(ctx, campaignID, t, v, before.Value, after.Value)
 	return after, nil
+}
+
+// touched tells the observer, if any, that a campaign's trackers changed.
+func (s *service) touched(campaignID string) {
+	if s.observer != nil {
+		s.observer.TrackersChanged(campaignID)
+	}
 }
 
 // changed tells the listener a tracker of an owned kind moved. The change
@@ -747,6 +768,7 @@ func (s *service) Strike(ctx context.Context, campaignID string, entryID int64, 
 	if err := s.repo.StrikeEntry(ctx, campaignID, entryID, struck, v.UserID); err != nil {
 		return nil, apperrorInternal(err)
 	}
+	s.touched(campaignID)
 	after, err := s.one(ctx, campaignID, t, v)
 	if err != nil {
 		return nil, err
@@ -758,6 +780,10 @@ func (s *service) Strike(ctx context.Context, campaignID string, entryID int64, 
 // SetChangeListener sets who hears that an owned kind's tracker moved.
 // It is called once while the app starts.
 func (s *service) SetChangeListener(l ChangeListener) { s.listener = l }
+
+// SetChangeObserver sets who hears that any tracker of the campaign changed.
+// It is called once while the app starts.
+func (s *service) SetChangeObserver(o ChangeObserver) { s.observer = o }
 
 func (s *service) LogOwned(ctx context.Context, campaignID, entityID, owner string, v Viewer, op string, amount int, note string) ([]TrackerView, error) {
 	if err := requireDirector(v); err != nil {
@@ -959,6 +985,7 @@ func (s *service) UpdateKind(ctx context.Context, campaignID, kindID string, v V
 		return nil, errConflict()
 	}
 	k.Version = old.Version + 1
+	s.touched(campaignID)
 	return &k, nil
 }
 
@@ -983,6 +1010,7 @@ func (s *service) DeleteKind(ctx context.Context, campaignID, kindID string, v V
 	if inUse {
 		return errInvalid("this kind is still on pages; remove those trackers first")
 	}
+	s.touched(campaignID)
 	return nil
 }
 

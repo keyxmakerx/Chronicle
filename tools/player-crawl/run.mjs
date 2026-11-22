@@ -75,6 +75,61 @@ try {
       if (routes.size > 6) console.log(`        ... and ${routes.size - 6} more`);
     }
   }
+  // A card's picture is a file: while its card is face down no one but a
+  // Director may be sent it, at full size or as a thumbnail, whatever the
+  // walk's markers say. The Director's own request proves the file is there.
+  for (const u of s.pictureUrls || []) {
+    const mine = await s.owner.get(u, { follow: false });
+    if (mine.status !== 200) { leaks++; console.log(`  PICTURE NOT REACHABLE by the Director: ${u} -> ${mine.status}`); }
+    // The owner previewing as a guest is left out: /media sits outside the campaign's
+    // routes, which are what the preview cookie lowers, and the owner is a Director.
+    for (const [who, client] of Object.entries(viewers)) {
+      if (who === 'owner previewing as a guest') continue;
+      const got = await client.get(u, { follow: false });
+      if (got.status === 200) { leaks++; console.log(`  LEAK  ${who} was sent a face-down card's picture: ${u}`); }
+    }
+  }
+  // The write probes (the turn request, starting a deck from a source): sent by people who may not, the first by people who may not turn that copy, it must be
+  // refused as if nothing were there, carry no marker, and leave the copy face
+  // down (checked from the Director's side afterwards).
+  for (const pr of s.postProbes || []) {
+    for (const who of pr.who) {
+      const client = viewers[who];
+      const res = await client.post(pr.path, { body: { csrf_token: client.csrf() }, headers: { Accept: 'text/html, application/json' }, follow: false });
+      const found = Object.keys({ ...s.markers, ...s.playerOnly }).filter((k) => res.text.includes(k));
+      console.log(`write probe ${pr.path.replace(s.C, '')} as ${who}: ${res.status}`);
+      if (res.status === 200 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} to a write probe (${pr.path.replace(s.C, '')})${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
+    }
+  }
+  // The moment and the card are as the Director left them: the answers and the
+  // say route, asked by people who may not, changed nothing.
+  if (s.ids.moment) {
+    const mo = await s.owner.get(`${s.C}/decks/moments`, { headers: { Accept: 'application/json' } });
+    const still = (JSON.parse(mo.text).moments || []).find((x) => x.id === s.ids.moment);
+    if (!still || still.state !== 'waiting') { leaks++; console.log('  LEAK  a moment was answered by a request from someone who may not answer it'); }
+    const dk = await s.owner.get(`${s.C}/decks/${s.ids.whenDeck}`, { headers: { Accept: 'application/json' } });
+    const card = (JSON.parse(dk.text).cards || []).find((c) => c.id === s.ids.whenCard);
+    if (!card || card.saidAt) { leaks++; console.log('  LEAK  a card was said so by a request from someone who may not say it'); }
+  }
+  // The Director's notice fragment is the Director's alone: everyone else is told
+  // the page is not there, and the Director's own read proves the probe is not blind.
+  if (s.ids.momentPanel) {
+    const ask = (client) => client.get(s.ids.momentPanel, { headers: { Accept: 'text/html', 'HX-Request': 'true' }, follow: false });
+    const mine = await ask(s.owner);
+    console.log(`moments panel as owner: ${mine.status}`);
+    if (mine.status !== 200) { leaks++; console.log('  LEAK  the Director was refused the moments panel (the probe is blind)'); }
+    for (const who of ['player', 'other player', 'scribe']) {
+      const res = await ask(viewers[who]);
+      console.log(`moments panel as ${who}: ${res.status}`);
+      const found = Object.keys(s.markers).filter((k) => res.text.includes(k));
+      if (res.status !== 404 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} for the moments panel${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
+    }
+  }
+  if ((s.postProbes || []).length) {
+    const d = await s.owner.get(`${s.C}/decks/${s.ids.handDeck}`, { headers: { Accept: 'application/json' } });
+    const copy = (JSON.parse(d.text).copies || []).find((c) => c.id === s.ids.handCopy);
+    if (!copy || copy.faceUp) { leaks++; console.log('  LEAK  the copy was turned over by a request from someone who may not turn it'); }
+  }
   // The preview must not open anything the stranger cannot: any page that
   // answers 2xx to the previewing owner and not to the stranger is a leak of
   // the owner's real access. The other direction (a page the stranger gets and
@@ -113,6 +168,16 @@ try {
     if (!ownerBlob.includes(k)) console.log(`  not carried live to the owner (nothing to compare): ${what}`);
     for (const who of ['player', 'scribe']) {
       if (socks[who].messages.some((x) => x.includes(k))) { leaks++; console.log(`  LEAK  ${who} socket received: ${what}`); }
+    }
+  }
+  // A moment is told to Directors only: the owner's socket must have heard one
+  // (or the check is blind), and neither the player's nor the scribe's may have.
+  if (!skippedLive.includes('a moment comes')) {
+    const heard = (k) => socks[k].messages.some((x) => x.includes('"decks.moment"'));
+    console.log(`  moment message: owner ${heard('owner') ? 'heard' : 'DID NOT HEAR (live check is blind)'}`);
+    if (!heard('owner')) leaks++;
+    for (const who of ['player', 'scribe']) {
+      if (heard(who)) { leaks++; console.log(`  LEAK  ${who} socket received a moment message`); }
     }
   }
   for (const k of Object.values(socks)) k.close();

@@ -43,6 +43,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
@@ -1390,6 +1391,7 @@ var navAppCatalog = []navAppDef{
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone, group: "table", line: "The party and the people they meet"},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone, group: "goods", line: "Every item, and who carries it"},
 	{slug: "crafting", label: "Crafting", icon: "fa-flask", path: "/crafting", addons: []string{crafting.AddonSlug}, needs: []string{"armory"}, access: campaigns.NavAccessMember, group: "goods", line: "Recipes, benches and tools"},
+	{slug: "decks", label: "Card decks", icon: "fa-layer-group", path: "/decks/workshop", addons: []string{decks.AddonSlug}, access: campaigns.NavAccessDirector, group: "table", line: "Hero, party and event decks"},
 	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone, group: "world", line: "What happened, and when"},
 	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin, group: "table", line: "The rulebook and your house rules"},
 }
@@ -4797,6 +4799,38 @@ func (a *App) RegisterRoutes() {
 	// Needed to resolve the caller's role for ListMedia's Scribe+ gate.
 	mediaAPIHandler.SetCampaignService(campaignService)
 	mediaAPIHandler.SetMapImageGuard(mapsService)
+	// The decks service is built here, ahead of its routes, because the media
+	// server must be able to refuse a card's picture from the first request. It
+	// asks even where the decks plugin is degraded: a campaign with no decks
+	// tables has no card pictures, and any other failure refuses.
+	decksLive := &decksLivePublisher{}
+	// Cards wait for their moment: the facts a card's tests read are bound to
+	// the trackers and layers services once they exist, and the watcher is told
+	// whenever one of them may have changed.
+	decksWatch := newDecksWatcher()
+	decksFacts := &decksFactsAdapter{entities: entityService, characters: characterListService, tags: tagService}
+	decksOn := func(ctx context.Context, campaignID string) bool {
+		on, err := addonService.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
+		return err == nil && on
+	}
+	// Told after each stored draw, deal and play; the Homebrew service joins it
+	// below, once it exists.
+	decksStory := newDecksStory(decksOn)
+	decksOpts := []decks.Option{
+		decks.WithPictures(&decksPictureAdapter{svc: mediaService}),
+		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
+		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
+		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
+		decks.WithSwitch(decksOn), decks.WithStory(decksStory),
+	}
+	// "From a rolling table" is offered only while the rolling tables plugin is
+	// healthy; without it the option says so and a create is refused.
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		decksOpts = append(decksOpts, decks.WithTables(&decksTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))}))
+	}
+	decksSvc := decks.NewService(decks.NewRepository(a.DB),
+		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService}, decksOpts...)
+	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
 	// Reuses the sync mapping service created earlier for the owner dashboard.
@@ -6012,7 +6046,7 @@ func (a *App) RegisterRoutes() {
 	campaignService.SetMediaCleaner(mediaService)
 	campaignService.SetHookDispatcher(wasmHookDispatcher)
 	entityService.SetHookDispatcher(wasmEntityHooks{d: wasmHookDispatcher})
-	tagService.SetHookDispatcher(wasmTagHooks{d: wasmHookDispatcher})
+	tagService.SetHookDispatcher(decksTagHooks{next: wasmTagHooks{d: wasmHookDispatcher}, poke: decksWatch.Poke})
 
 	// --- Game Systems ---
 	// System reference pages and tooltip API, gated by per-campaign addon checks.
@@ -6727,7 +6761,7 @@ func (a *App) RegisterRoutes() {
 	// The quests due-date events follow a page's visibility, so the entity
 	// events also reach them once the quests service exists (attached below).
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
-	entityService.SetEventPublisher(questEntityEvts)
+	entityService.SetEventPublisher(&decksEntityEvents{next: questEntityEvts, poke: decksWatch.Poke})
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	// Calendar writes reach the Foundry module live; without this it only
 	// sees them on reconnect or a manual Pull. Reached by type assertion like
@@ -6935,6 +6969,13 @@ func (a *App) RegisterRoutes() {
 		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
 		registerTrackersBlock(blockRegistry, trackersSvc)
 		registerRecipeBlock(blockRegistry)
+		// Every tracker change, of any kind, may bring a card's moment.
+		decksFacts.trackers = trackersSvc
+		if o, ok := trackersSvc.(interface{ SetChangeObserver(trackers.ChangeObserver) }); ok {
+			o.SetChangeObserver(decksTrackerObserver{poke: decksWatch.Poke})
+		} else {
+			slog.Error("decks: the trackers service cannot be observed, so cards will not hear tracker changes")
+		}
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
@@ -7074,11 +7115,37 @@ func (a *App) RegisterRoutes() {
 	var layersSvc transformations.Service // nil while degraded; the AI part is left out then
 	if a.PluginHealth.IsHealthy(transformations.PluginSlug) {
 		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages},
-			transformations.WithNotifier(&transformationsLayersPublisher{bus: wsEventBus}))
+			transformations.WithNotifier(decksLayersNotifier{next: &transformationsLayersPublisher{bus: wsEventBus}, poke: decksWatch.Poke}))
+		decksFacts.layers = layersSvc
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
 		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
 		slog.Warn("transformations plugin degraded — layers on heroes are not available")
+	}
+
+	// Card decks: server-side draws and hands, behind the Card decks add-on.
+	a.registerPlugin(PluginRegistration{
+		Slug:     decks.PluginSlug,
+		StaticFS: echo.MustSubFS(decks.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "deck-cards", Scripts: []string{"js/deck_cards.js"}},
+			{Name: "deck-workshop", Scripts: []string{"js/deck_cards.js", "js/deck_workshop.js"}},
+			{Name: "deck-hand", Scripts: []string{"js/deck_cards.js", "js/deck_hand.js"}},
+		},
+	})
+	// aiDecks stays nil while the plugin is degraded, so its AI part is left
+	// out then, as the transformations' is.
+	var aiDecks decks.Service
+	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
+		aiDecks = decksSvc
+		decks.RegisterRoutes(e, decks.NewHandler(decksSvc), campaignService, authService, addonService)
+		// Only a healthy plugin is rechecked: without its tables the watcher's
+		// pokes do nothing.
+		decksWatch.bind(decksSvc)
+		decksStory.bindDecks(decksSvc)
+		registerDecksBlock(blockRegistry, decksSvc)
+	} else {
+		slog.Warn("decks plugin degraded — card decks are not available")
 	}
 
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
@@ -7097,6 +7164,7 @@ func (a *App) RegisterRoutes() {
 		Trackers:       trackersSvc,
 		Respites:       craftingListener,
 		Crafting:       craftingWorkshop,
+		Decks:          decksStory,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -7111,6 +7179,7 @@ func (a *App) RegisterRoutes() {
 			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		craftingRespites.homebrew = homebrewSvc
+		decksStory.bindHomebrew(homebrewSvc)
 		// A saved recipe is placed with the Customizer only while the
 		// block that shows it exists.
 		if trackersSvc != nil {
@@ -7257,6 +7326,7 @@ func (a *App) RegisterRoutes() {
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 		Designs:         aiDesigns,
 		Layers:          layersSvc,
+		Decks:           aiDecks,
 		Timelines:       aiTimelines,
 		LookDrafts:      customizeDrafts,
 	})
@@ -7276,6 +7346,7 @@ func (a *App) RegisterRoutes() {
 	// The service was constructed earlier with a holder.Notify reference;
 	// setting holder.bus here makes future mutations broadcast over WS.
 	entityNotesNotifier.bus = wsEventBus
+	decksLive.bus = wsEventBus
 
 	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
 	drawingService.SetEventPublisher(mapEvents)

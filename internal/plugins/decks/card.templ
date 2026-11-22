@@ -1,0 +1,47 @@
+package decks
+
+// CardView is the one card every screen draws: the deck's look, what the card
+// shows, and how it is placed. A face-down card is drawn from the look alone;
+// FaceDown takes no card data, so a back cannot leak a face. A face-up tall
+// card at the open size gets its leaf beside it.
+//
+// The wrapper is what the motion widget (data-widget="deck-cards") plays: it
+// holds the back and an empty slot until a turn-over fetches the face.
+templ CardView(l Look, s CardState, o CardOpts) {
+	{{ size := sizeOf(o.Size) }}
+	<div
+		class={ "dk-wrap", sizeClassOf(size), classOf(shapeClass, shapeValues, l.Shape), classOf(turnClass, turnValues, l.Turn),
+			templ.KV("dk-open", s.up && size == SizeOpen && l.Shape == "tall") }
+		data-dk-card
+		data-widget="deck-cards"
+		data-turn={ l.Turn }
+		data-shape={ l.Shape }
+		if s.up {
+			data-state="up"
+		} else {
+			data-state="down"
+		}
+	>
+		if s.up {
+			@cardFace(l, s, size, o.Foot)
+		} else {
+			<span class="dk-turner">
+				@CardBack(l, size)
+				<span class="dk-faceslot"></span>
+			</span>
+			if o.Turnable {
+				<button type="button" class="dk-turn" aria-label={ turnButtonLabel(o) } data-face-src={ o.FaceSrc }></button>
+			} else {
+				<span class="dk-sr">{ backLabel(o) }</span>
+			}
+		}
+		<span class="dk-sr dk-live" role="status" aria-live="polite"></span>
+	</div>
+}
+
+// CardSheet links the card stylesheet. A page that draws cards puts it once,
+// before its first card; the motion widget loads on sight from each card's
+// data-widget.
+templ CardSheet() {
+	<link rel="stylesheet" href={ cardStylesheet() }/>
+}

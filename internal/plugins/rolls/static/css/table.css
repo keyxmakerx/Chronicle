@@ -159,6 +159,27 @@
 .tt-bignum { font-size: 2rem; font-weight: 600; line-height: 1; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
 .tt-foot { display: flex; justify-content: space-between; gap: 12px; }
 
+/* A card's moment (Directors only): the notice hangs from the Table tab like the
+   roll details and stays until it is answered or closed. On a phone it is the
+   top of the sheet. */
+.tt-moment { position: fixed; z-index: var(--z-popup); top: 52px; width: min(400px, calc(100vw - 20px)); background: var(--color-bg-secondary); color: var(--color-text-body); border: 1px solid var(--color-border); border-radius: 0 0 12px 12px;
+  box-shadow: var(--elev-dragged); clip-path: inset(0 -40px -40px -40px); font-size: 13px; }
+.tt-moment.tt-opening { animation: tt-drape var(--dur-standard) var(--ease-out); }
+.tt-moment.tt-closing { animation: tt-drape var(--dur-micro) var(--ease-in) reverse forwards; }
+[data-cz-kit="sharp"] .tt-moment { border-radius: 0; border-color: var(--color-text-primary); }
+.tt-moment-sheet { position: static; width: auto; margin: 0 8px 6px; border-radius: 12px; clip-path: none; box-shadow: none; z-index: auto; }
+.tt-moment-sheet.tt-opening, .tt-moment-sheet.tt-closing { animation: none; }
+/* Lifted, the sheet lays its tab switch over the top of its body; the notice starts below it. */
+.tt-sheet[data-h="lift"] .tt-moment-sheet { margin-top: 52px; }
+/* The drawer's first line for a Director: what is waiting. */
+.tt-wait { padding: 8px 12px 10px; border-bottom: 1px solid var(--color-border); background: var(--color-bg-secondary); }
+.tt-wait h3 { margin: 0 0 2px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
+.tt-wait ul { margin: 0; padding: 0; list-style: none; }
+.tt-waitrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; width: 100%; padding: 6px 4px; border: 0; background: none; color: var(--color-text-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
+.tt-waitrow:hover { background: var(--color-bg-tertiary); }
+.tt-waitrow b { font-weight: 600; }
+.tt-waitrow span { color: var(--color-text-secondary); min-width: 0; overflow-wrap: anywhere; }
+
 /* ---------- Phone: one leaf at a time, behind a switch ---------- */
 @media (max-width: 760px) {
   .tt-drawer { left: 0; right: 0; max-width: none; border-left: 0; border-right: 0; border-radius: 0 0 12px 12px; }
@@ -172,6 +193,7 @@
   /* The leaf switch above already names the section. */
   .tt-ltabs { display: none; }
   .tt-isl-detail { left: 10px; right: 10px !important; width: auto; }
+  .tt-moment { left: 10px; right: 10px !important; width: auto; }
 }
 
 /* ---------- Phone: the drawer is a sheet resting on the bottom edge ----------
@@ -226,7 +248,8 @@ html[data-tt-sheet]:has(#nav-toggle[aria-expanded="true"]) .tt-sheet { transform
 .tt-sheet[data-h="lift"] .tt-ptab[aria-pressed="true"] { color: var(--color-text-secondary); border-bottom-color: var(--color-border); }
 
 /* ---------- Motion: Calm fades in place, Off shows the end state ---------- */
-html[data-motion="calm"] .tt-drawer.tt-opening, html[data-motion="calm"] .tt-isl-detail.tt-opening { animation: tt-fade var(--dur-standard) linear; }
+html[data-motion="calm"] .tt-drawer.tt-opening, html[data-motion="calm"] .tt-isl-detail.tt-opening, html[data-motion="calm"] .tt-moment.tt-opening { animation: tt-fade var(--dur-standard) linear; }
+html[data-motion="calm"] .tt-moment.tt-closing { animation: tt-fade var(--dur-micro) linear reverse forwards; }
 html[data-motion="calm"] .tt-island { transform: none; opacity: 0; transition: opacity var(--dur-standard) linear; }
 html[data-motion="calm"] .tt-island.tt-in { opacity: 1; }
 html[data-motion="calm"] .tt-island.tt-out { transform: none; opacity: 0; }
@@ -234,16 +257,16 @@ html[data-motion="calm"] .tt-island.tt-out { transform: none; opacity: 0; }
 /* Calm: the sheet changes height at once and the new height fades in. */
 html[data-motion="calm"] .tt-sheet { transition: none; }
 html[data-motion="calm"] .tt-sheet.tt-fadein { animation: tt-fade var(--dur-standard) linear; }
-html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .hdr-n, .tt-last) { animation: none !important; transition: none !important; }
+html[data-motion="off"] :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-moment, .tt-lbody, .tt-log li, .hdr-n, .tt-last) { animation: none !important; transition: none !important; }
 html[data-motion="off"] .tt-island { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-lbody, .tt-log li, .hdr-n, .tt-last) { animation: none !important; transition: none !important; }
+  :is(.tt-drawer, .tt-island, .tt-isl-detail, .tt-moment, .tt-lbody, .tt-log li, .hdr-n, .tt-last) { animation: none !important; transition: none !important; }
   .tt-island { transform: none; }
 }
 
 /* ---------- Touch: every control answers over at least 44px ---------- */
 @media (pointer: coarse) {
-  :is(.tt-icon, .tt-quiet, .tt-dbtn, .tt-lpick, .tt-ptab, .tt-seg button, .tt-lmenu button, .tt-go, .tt-mode, .tt-field) { min-height: 44px; }
+  :is(.tt-icon, .tt-quiet, .tt-dbtn, .tt-lpick, .tt-ptab, .tt-seg button, .tt-lmenu button, .tt-go, .tt-mode, .tt-field, .tt-waitrow) { min-height: 44px; }
   .tt-icon { width: 44px; }
   .tt-dbtn { min-width: 44px; }
 }

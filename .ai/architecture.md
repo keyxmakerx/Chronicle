@@ -37,6 +37,7 @@ supplies tooltip data for `@mentions` of game content.
 - `calendar/`
 - `campaigns/`
 - `crafting/`
+- `decks/`
 - `designlab/`
 - `designs/`
 - `dmscreen/`

@@ -1,0 +1,41 @@
+package decks
+
+// CardCompact is the standard and small card: the picture above, then the
+// kind, the name and the words on the card itself. It draws a face only from a
+// face-up state.
+templ CardCompact(l Look, s CardState, size CardSize) {
+	if s.up {
+		{{ k, hasKind := kindOf(l, s.face.KindKey) }}
+		<div
+			class={ "dk-card dk-compact", lookClasses(l), paletteOf(k.Colour), sizeClassOf(size), templ.KV("dk-rare", s.face.Rare) }
+			role="group"
+			aria-label={ accessibleName(l, s.face) }
+		>
+			@cardFittings(l.Border)
+			if hasKind {
+				@cardMarker(l, k)
+			}
+			@cardCorner(l, s.face.Corner)
+			@cardArt(l, s, k, hasKind)
+			if hasKind && l.Marker != "line" {
+				<span class="dk-kind">
+					@KindSign(k.Sign)
+					{ k.Name }
+				</span>
+			}
+			<b class="dk-name">{ s.face.Name }</b>
+			if hasKind {
+				@cardKindLine(l, k)
+			}
+			if s.face.Words != "" || s.face.When != "" {
+				<span class="dk-words">
+					{ s.face.Words }
+					if s.face.When != "" {
+						<span class="dk-when">{ s.face.When }</span>
+					}
+				</span>
+			}
+			@cardSeal(s.face.Rare)
+		</div>
+	}
+}

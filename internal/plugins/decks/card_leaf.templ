@@ -1,0 +1,35 @@
+package decks
+
+// CardLeaf is the leaf beside a tall card at the open size: the kind in words,
+// the name and the words, in the deck's border, lettering and finish so the
+// two read as one object. It draws only from a face-up state.
+templ CardLeaf(l Look, s CardState, foot string) {
+	if s.up {
+		{{ k, hasKind := kindOf(l, s.face.KindKey) }}
+		<div class={ "dk-leaf", classOf(borderClass, borderValues, l.Border), classOf(letteringClass, letteringValues, l.Lettering),
+			classOf(finishClass, finishValues, effectiveFinish(l)), paletteOf(k.Colour), templ.KV("dk-rare", s.face.Rare) }>
+			if l.Border == "metal" {
+				<span class="dk-rv dk-rv-b" aria-hidden="true"></span>
+				<span class="dk-rv dk-rv-d" aria-hidden="true"></span>
+			}
+			<span class="dk-lfi">
+				if hasKind {
+					<span class="dk-kl">
+						@KindSign(k.Sign)
+						{ k.Name }
+					</span>
+				}
+				<b class="dk-dn">{ s.face.Name }</b>
+				if s.face.Words != "" {
+					<span class="dk-words">{ s.face.Words }</span>
+				}
+				if s.face.When != "" {
+					<span class="dk-when">{ s.face.When }</span>
+				}
+				if foot != "" {
+					<span class="dk-foot">{ foot }</span>
+				}
+			</span>
+		</div>
+	}
+}

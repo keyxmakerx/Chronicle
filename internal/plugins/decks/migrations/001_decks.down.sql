@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS deck_log;
+DROP TABLE IF EXISTS deck_copies;
+DROP TABLE IF EXISTS deck_cards;
+DROP TABLE IF EXISTS deck_players;
+DROP TABLE IF EXISTS decks;

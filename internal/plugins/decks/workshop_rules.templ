@@ -1,0 +1,40 @@
+package decks
+
+// DeckRulesTab is the Rules tab: each rule is a sentence with its choice as a
+// blank, in four groups, one blank for each of the deck's settings. A blank is
+// the existing dashed-underline select (.dw-blank); a change saves at once.
+templ DeckRulesTab(p deckPage) {
+	<div class="dkw-rules" data-dkw-rules>
+		for _, g := range ruleGroups() {
+			<section class="dkw-rgroup">
+				<h2 class="dkw-lab">{ g.Title }</h2>
+				for _, r := range g.Rules {
+					<div class="dkw-rule">
+						<p class="dkw-sentence">
+							for _, part := range r.Parts {
+								if part.Blank != nil {
+									@ruleSelect(p.Deck.Settings, *part.Blank)
+								} else {
+									{ part.Text }
+								}
+							}
+						</p>
+						if r.Quiet != "" {
+							<p class="dkw-quiet">{ r.Quiet }</p>
+						}
+					</div>
+				}
+			</section>
+		}
+		<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+	</div>
+}
+
+templ ruleSelect(s Settings, b ruleBlank) {
+	{{ cur := ruleValue(s, b.Key) }}
+	<select class="dw-blank is-filled" data-rule={ b.Key } aria-label={ ruleLabel(b.Key) }>
+		for _, o := range b.Options {
+			<option value={ o.Value } selected?={ o.Value == cur }>{ o.Label }</option>
+		}
+	</select>
+}

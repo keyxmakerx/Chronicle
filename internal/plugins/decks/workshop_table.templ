@@ -1,0 +1,165 @@
+package decks
+
+import "strconv"
+
+// DeckTable is the table row of a deck's page: the pile with Draw, the shown
+// spot (face-up cards only Directors see), the used pile and what is in play,
+// and a quiet line for the cards that come up next and last. It is a Director
+// view and uses Director types; nothing a player loads draws it.
+templ DeckTable(p deckPage) {
+	{{ t := p.table() }}
+	<div id="dkw-table">
+	@versionMark(p.Deck.Version)
+	<section class="dkw-table" data-dkw-table aria-label="The table" data-pile={ strconv.Itoa(t.Pile) } data-maxdraw={ strconv.Itoa(t.MaxDraw) }>
+		<div class="dkw-col dkw-pile">
+			<h2 class="dkw-lab">The pile</h2>
+			if t.Pile > 0 {
+				<span class="dkw-stack" data-dkw-pile>
+					<span class="dkw-stack-b">@CardBack(p.Deck.Look, SizeRow)</span>
+					<span class="dkw-stack-a">@CardView(p.Deck.Look, FaceDown(), CardOpts{Size: SizeRow, DeckName: p.Deck.Name})</span>
+				</span>
+			} else {
+				<span class="dkw-slot" data-dkw-pile>Empty</span>
+			}
+			<span class="dkw-quiet" data-dkw-left>{ t.left() }</span>
+			<div class="dkw-draw">
+				<span class="dkw-step" role="group" aria-label="How many to draw">
+					<button type="button" class="dkw-stepbtn" data-act="count-down" aria-label="Draw one fewer" disabled?={ t.MaxDraw < 2 }>−</button>
+					<output class="dkw-count" data-dkw-count aria-live="polite">1</output>
+					<button type="button" class="dkw-stepbtn" data-act="count-up" aria-label="Draw one more" disabled?={ t.MaxDraw < 2 }>+</button>
+				</span>
+				<button type="button" class="btn-primary text-sm" data-act="draw" data-working-label="Drawing…" disabled?={ t.Pile == 0 || t.MaxDraw == 0 }>Draw</button>
+			</div>
+			if t.Pile == 0 {
+				<span class="dkw-quiet">Nothing left to draw.</span>
+			} else if t.MaxDraw == 0 {
+				<span class="dkw-quiet">The shown spot is full. Deal one or put one back.</span>
+			}
+		</div>
+		<div class="dkw-col dkw-shown" data-dm-only>
+			<h2 class="dkw-lab">Shown <span class="dkw-quiet">only Directors see these</span></h2>
+			if len(t.Shown) == 0 {
+				<span class="dkw-slot">Nothing drawn yet. Draw to see cards here before anyone does.</span>
+			}
+			<ul class="dkw-shownlist">
+				for _, s := range t.Shown {
+					<li class="dkw-shownone" data-copy={ s.CopyID }>
+						@CardView(p.Deck.Look, upState(s.Card, SizeRow), CardOpts{Size: SizeRow})
+						<div class="dkw-acts">
+							if len(p.Roster.Heroes) > 0 {
+								<select class="dkw-pick" data-act="deal-hero" aria-label={ "Deal " + s.Card.Name + " to a hero" }>
+									<option value="">Deal to a hero…</option>
+									for _, h := range p.Roster.Heroes {
+										<option value={ h.ID }>{ h.Name }</option>
+									}
+								</select>
+							}
+							<button type="button" class="dkw-word" data-act="deal-table">Deal to the table</button>
+							if p.Deck.Kind == KindParty {
+								<button type="button" class="dkw-word" data-act="deal-party">Deal to the party's hand</button>
+							}
+							<button type="button" class="dkw-word" data-act="put-back">Put back</button>
+							<button type="button" class="dkw-word" data-act="another">Draw another</button>
+							if len(p.Others) > 0 {
+								<select class="dkw-pick" data-act="keep" aria-label={ "Put " + s.Card.Name + " in a deck for keeps" }>
+									<option value="">Put it in a deck for keeps…</option>
+									for _, o := range p.Others {
+										<option value={ o.ID }>{ o.Name }</option>
+									}
+								</select>
+							}
+						</div>
+					</li>
+				}
+			</ul>
+		</div>
+		<div class="dkw-col dkw-used">
+			<h2 class="dkw-lab">Used</h2>
+			if t.UsedTop != nil {
+				<span data-dkw-used>@CardView(p.Deck.Look, upState(*t.UsedTop, SizeHand), CardOpts{Size: SizeHand})</span>
+			} else {
+				<span class="dkw-slot dkw-slot-s">None</span>
+			}
+			<span class="dkw-quiet">{ strconv.Itoa(t.Used) } used</span>
+			<button type="button" class="dkw-word" data-act="shuffle" disabled?={ t.Used == 0 }>Shuffle them back in</button>
+		</div>
+		<div class="dkw-col dkw-play">
+			<h2 class="dkw-lab">In play</h2>
+			if len(t.Play) == 0 {
+				<span class="dkw-slot dkw-slot-s">None</span>
+			}
+			<ul class="dkw-playlist">
+				for _, c := range t.Play {
+					<li data-copy={ c.CopyID }>
+						@CardView(p.Deck.Look, upState(c.Card, SizeHand), CardOpts{Size: SizeHand})
+						<span class="dkw-quiet">In play, { c.Where }</span>
+						<button type="button" class="dkw-word" data-act="take-off">Take it off</button>
+					</li>
+				}
+			</ul>
+			if t.InHands > 0 {
+				<span class="dkw-quiet">{ strconv.Itoa(t.InHands) } held in hands</span>
+			}
+		</div>
+		if len(t.Held) > 0 {
+			<div class="dkw-col dkw-held" data-dm-only>
+				<h2 class="dkw-lab">In hands <span class="dkw-quiet">only Directors see these</span></h2>
+				<ul class="dkw-playlist" data-dkw-held>
+					for _, h := range t.Held {
+						<li data-copy={ h.CopyID }>
+							@CardView(p.Deck.Look, upState(h.Card, SizeHand), CardOpts{Size: SizeHand})
+							<span class="dkw-quiet">{ h.Where }: { heldWords(h) }</span>
+							if h.Asked {
+								<span class="dkw-ask" data-dkw-ask>{ askWho(h.Where) } asks to play this</span>
+								<span class="dkw-acts">
+									<button type="button" class="dkw-btn" data-act="approve" data-working-label="Letting them…">Let them</button>
+									<button type="button" class="dkw-word" data-act="turn-down" data-working-label="Telling them…">Not now</button>
+								</span>
+							}
+						</li>
+					}
+				</ul>
+			</div>
+		}
+		<p class="dkw-nudges">
+			@nudge(p, "next", "Comes up next", p.Deck.NextCardID)
+			@nudge(p, "last", "Kept for last", p.Deck.LastCardID)
+		</p>
+		<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+	</section>
+	</div>
+}
+
+// nudge is one of the two quiet card pickers: the card the next draw takes, and
+// the card left out while anything else is in the pile.
+templ nudge(p deckPage, which, label, current string) {
+	<span class="dkw-nudge">
+		<label for={ "dkw-nudge-" + which }>{ label }</label>
+		<select id={ "dkw-nudge-" + which } class="dkw-pick" data-act="nudge" data-which={ which }>
+			<option value="">No card</option>
+			for _, c := range p.Deck.Cards {
+				<option value={ c.ID } selected?={ c.ID == current }>{ c.Name }</option>
+			}
+		</select>
+		<button type="button" class="dkw-word" data-act="nudge-clear" data-which={ which } disabled?={ current == "" }>Clear</button>
+	</span>
+}
+
+// heldWords says how a hand's holder has treated a copy.
+func heldWords(h heldCard) string {
+	switch {
+	case h.Shown:
+		return "turned over and shown to the table"
+	case h.Turned:
+		return "turned over, not shown"
+	}
+	return "still face down"
+}
+
+// askWho names who asks: the hero, or "A player" when a hand has no hero.
+func askWho(where string) string {
+	if where == "" || where == "a hero" || where == "the party's hand" {
+		return "A player"
+	}
+	return where
+}

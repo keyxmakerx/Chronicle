@@ -185,6 +185,18 @@ would do.
   dashboard. A feature switch makes a widget *available*; it never draws
   one. `internal/plugins/entities/page_extras.go` is the pattern for moving
   an auto-drawn panel into a placed block without changing existing pages.
+- **A card is one object.** Every screen draws a Card deck's card with
+  `CardView` (`internal/plugins/decks/card.templ`) and `static/css/decks_card.css`:
+  a tall plate with the words on its leaf, or a compact card, in the deck's
+  border, finish and lettering. A card names its kind in words wherever the
+  card is read (the compact card at row and open size, the leaf of a tall
+  card) and in its accessible name at every size, and draws the kind's sign at
+  every size, so no kind depends on colour alone. At the hand size neither
+  card shows the kind's word: there is no room. Words never shrink: a smaller
+  size shows fewer lines, never smaller type, and at about 92px (the hand)
+  every frame thins and the corner mark goes. A face-down card is drawn from
+  the deck's look alone and carries no card data. A name over a picture sits
+  on a band at least 0.85 opaque.
 - **One copy.** A panel that can be placed is never also drawn automatically,
   so placing it never shows it twice.
 - **A switch is named for what you see**, and turns on one thing. Feature
@@ -220,14 +232,21 @@ would do.
   button, losing nothing: a half-typed roll is still there next time. T
   opens the table and R the rolls, never while typing; each person has quick
   2D dice. The Handbook's Rules ribbon and its
-  P key stay as they are. The Table shows Rolls and My dice; Rules,
+  P key stay as they are. The Table shows Rolls, Tonight and My dice, and
+  Hand when the Card decks add-on is on (a player's cards; a bell notice opens
+  it with `?table=hand`); Rules,
   Conditions, Party and Notes leaves are TODO(#1475). On a phone (under 640
   wide, or a touch screen under 900) the same drawer is a sheet on the bottom
   edge and the header button is gone: Resting is a 38 px line with the last
   roll, Lifted is the dice and the roll field at about 60% of the screen, Full
-  is the leaves under the header. A tap lifts one height, a drag follows the
+  is the leaves under the header, every section a tab. A tap lifts one height, a drag follows the
   finger, a roll changes the line and never lifts it, and the page keeps room
   for the line. It moves by transform only; Calm fades between heights.
+  With Card decks on, a Director's Table count also holds the cards whose
+  moment has come, and a deck set to slide the notice in drapes it from the Table
+  button (the top of the sheet on a phone) without taking focus. It stays until
+  the Director answers it or closes it, and closing it keeps the count: the
+  moment is still waiting, and the drawer's first line, Waiting on you, brings it back.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
@@ -268,6 +287,10 @@ leaving the list for another page.
   sheet below it, over the page. Esc closes the open thing first, then leaves
   editing. Each field saves as it is typed, and the page says Saving… then
   Saved.
+- **A setting may be a sentence with its value as the blank.** A rule such
+  as how a deck behaves reads as a sentence ("After it is used it goes ..."),
+  and its value is a dashed-underline blank (`.dw-blank`) that opens its own
+  choices, so the setting is read in words, not found in a form.
 - **An editor never covers what it edits.** It opens from the part (a
   popover for a few fields, a panel docked beside the page for a long form)
   and moves aside rather than sit on the part. A small part may edit in
@@ -533,6 +556,22 @@ place, and Off shows the end state.
   glides to its place over 340 ms. Calm keeps them still.
 - **Durations and easing come from the tokens** in `static/css/input.css`;
   the owner's Motion speed retimes all of them, the paper moves included.
+- **A card turn-over is a big moment, and the only one this long.** It takes
+  up to 900ms at normal Motion speed (`--ease-out` and `--ease-in-out`;
+  the owner's Motion speed scales every card duration through
+  `--dur-standard`, and the limits below are at normal speed), is played
+  once per card, and only when someone turns a card over, never on something done many times a
+  session. Cards that arrive, are dealt or are drawn are placed, not turned.
+  "Gone for good" may take up to 1s. "Its moment has come" breathes twice, 1s
+  each, and never loops. Moves that only say where a card went (draw, deal,
+  shuffle, play, used) stay under 500ms. A turn-over started from the
+  keyboard still plays. The deck picks its turn-over from a fixed list; the
+  other moves are the same for every deck. Calm fades the card in 200ms and
+  nothing travels; Off shows the end at once. A weak device, a screen with
+  more than twelve cards in view and the small shape play burn as sweep and
+  ink as a fade (a preview stage a Director plays on always shows the real
+  turn-over, except on the small shape or a weak device); at most one card turns at a time per viewer and a deal moves at most
+  seven cards, 60ms apart (`internal/plugins/decks/static/js/deck_cards.js`).
 - **Effects have depth and stay light**: no flat pastel fills, no bounces or
   overshoot outside Site admin's entrance, and nothing that loads a weak
   device. Heavy effects check what the device can do first.
@@ -604,6 +643,15 @@ second; the dice settle in under 480ms.
   `text-accent`), never hard-coded colours, and both light and dark. Dark mode
   uses the same rules with lighter surfaces and a lighter accent, not glows
   (Lumen's glow is its kit's character and the one exception).
+- **A card's materials are fixed colours.** Iron, brass, steel, stone and the
+  gold of a rare card, and the ten kind colours a deck paints its kinds and
+  backs from, are defined once in `static/css/decks_card.css` (`MATERIALS`
+  and `PALETTE`) and read the same in light and dark: a material is an
+  object, and it must look the same on either page. Fittings and effects
+  (rivets, chains, the ember, the bolt) are materials too, so the stylesheet
+  has no raw colour outside those two blocks. Everything else on a card is a token. A material's ink reaches 4.5:1 on its
+  own field (`test/js/deck_card_contrast.test.mjs`), and no card has a paper
+  or parchment texture.
 - **Colour roles**: page `--color-bg-primary`, panel `--color-bg-secondary`,
   hover and alternate rows `--color-bg-tertiary`, menu `--color-sidebar-bg`,
   headings `--color-text-primary`, labels `--color-text-secondary`, hints and

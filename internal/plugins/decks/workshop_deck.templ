@@ -1,0 +1,102 @@
+package decks
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// WorkshopDeckPage is one deck's page: its head, the table row (the pile, the
+// shown spot, the used pile and what is in play), and four tabs. A new deck
+// opens on Cards. Every write goes through the JSON routes by
+// deck_workshop.js; each tab and the table row are fragments it reloads.
+templ WorkshopDeckPage(p deckPage) {
+	@layouts.App(p.Deck.Name) {
+		@CardSheet()
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_workshop.css") }/>
+		@layouts.AppFrame() {
+			<div
+				class="dkw"
+				data-widget="deck-workshop"
+				data-campaign-id={ p.CampaignID }
+				data-deck-id={ p.Deck.ID }
+				data-version={ strconv.Itoa(p.Deck.Version) }
+				data-tab={ p.Tab }
+			>
+				<header class="dkw-head">
+					<p class="dkw-crumb"><a href={ templ.SafeURL(p.base() + "/workshop") }>Card decks</a></p>
+					<div class="dkw-headrow">
+						<h1 class="cb-title text-2xl font-bold text-fg dkw-h1">
+							<input class="dkw-title" type="text" value={ p.Deck.Name } maxlength="120" aria-label="The deck's name" data-dkw-name autocomplete="off"/>
+						</h1>
+						<p class="dkw-quiet dkw-sub">
+							<span data-dkw-forwhom>{ p.forWhom() }</span> <span aria-hidden="true">·</span> <span data-dkw-total>{ cardsWords(p.totalCards()) }</span>
+						</p>
+						<span class="dkw-saved" role="status" aria-live="polite" data-dkw-saved></span>
+					</div>
+					<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+				</header>
+				@DeckTable(p)
+				<nav class="dkw-tabs" role="tablist" aria-label="The deck">
+					for _, t := range workshopTabs {
+						<button
+							type="button"
+							role="tab"
+							id={ "dkw-tab-" + t.Key }
+							class="dkw-tab"
+							aria-selected={ boolWord(t.Key == p.Tab) }
+							aria-controls="dkw-panel"
+							tabindex={ tabIndex(t.Key == p.Tab) }
+							data-tab={ t.Key }
+							data-url={ p.frag(t.Key) }
+						>{ t.Name }</button>
+					}
+				</nav>
+				<div id="dkw-panel" class="dkw-panel" role="tabpanel" aria-labelledby={ "dkw-tab-" + p.Tab }>
+					@deckTabPanel(p)
+				</div>
+				<footer class="dkw-foot">
+					<p class="dkw-quiet">Deleting this deck removes its cards and anything players hold from it.</p>
+					<button type="button" class="dkw-btn dkw-btn-danger" data-act="delete-deck" data-copies={ strconv.Itoa(p.totalCards()) }>Delete this deck</button>
+					<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+				</footer>
+			</div>
+		}
+	}
+}
+
+func tabIndex(on bool) string {
+	if on {
+		return "0"
+	}
+	return "-1"
+}
+
+func cardsWords(n int) string {
+	if n == 1 {
+		return "1 card"
+	}
+	return strconv.Itoa(n) + " cards"
+}
+
+// deckTabPanel is the open tab's content.
+templ deckTabPanel(p deckPage) {
+	@versionMark(p.Deck.Version)
+	switch p.Tab {
+		case "look":
+			@DeckLookTab(p)
+		case "rules":
+			@DeckRulesTab(p)
+		case "players":
+			@DeckPlayersTab(p)
+		default:
+			@DeckCardsTab(p)
+	}
+}
+
+// versionMark carries the deck's current version in every fragment, so a page
+// whose save was refused as stale takes the new version from the reload and
+// its next change saves. The widget reads it from the fragment text.
+templ versionMark(v int) {
+	<span hidden data-dkw-version={ strconv.Itoa(v) }></span>
+}

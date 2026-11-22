@@ -107,6 +107,11 @@ type ActionDef struct {
 	// changed. Without it, and always for a ClientRun action, a rule that
 	// uses the action waits in the Homebrew drawer for the Director.
 	Run func(ctx context.Context, campaignID string, a Act) (string, error)
+	// Waits marks an action that is the Director's call even though the
+	// server can run it: a rule that uses it is held in the drawer however
+	// it is timed, and Run does it when the Director presses Run. It is for
+	// anything bigger than a number moving, which runs at once.
+	Waits bool
 }
 
 // Act is one action a rule is carrying out.
@@ -279,6 +284,9 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 	if a.ClientRun && a.Preview != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't preview", a.Name)
 	}
+	if a.ClientRun && a.Waits {
+		return fmt.Errorf("homebrew: action %q runs in the browser, which already waits for the Director, so it can't also be marked Waits", a.Name)
+	}
 	if a.ClientRun && a.Run != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't run on the server", a.Name)
 	}
@@ -359,7 +367,10 @@ type CatalogEntry struct {
 	Widget    string   `json:"widget,omitempty"`
 	PartKinds []string `json:"partKinds,omitempty"`
 	ClientRun bool     `json:"clientRun,omitempty"`
-	Fields    []Field  `json:"fields,omitempty"`
+	// Waits is an action's Waits, so the editor can say a rule that ends in it
+	// is held for the Director however it is timed.
+	Waits  bool    `json:"waits,omitempty"`
+	Fields []Field `json:"fields,omitempty"`
 	// Preview is a part kind's PreviewShape, or an event's or action's op.
 	Preview any `json:"preview,omitempty"`
 }
@@ -385,7 +396,7 @@ func (r *Registry) Catalog() Catalog {
 		c.Events = append(c.Events, ce)
 	}
 	for _, a := range r.actions {
-		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Fields: a.Fields}
+		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Fields: a.Fields}
 		if a.Preview != nil {
 			ce.Preview = a.Preview
 		}

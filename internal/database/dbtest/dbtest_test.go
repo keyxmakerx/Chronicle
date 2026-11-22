@@ -66,3 +66,21 @@ func TestRepoRootHoldsGoMod(t *testing.T) {
 		t.Fatalf("RepoRoot is not the module root: %v", err)
 	}
 }
+
+// Every database-backed test opens a schema this way, and a package with many
+// of them shares one server with the packages running beside it. A connection
+// left behind per schema adds up to the server's limit, so the only
+// connections to a scratch schema must be the ones in the handle returned.
+func TestOpen_LeavesNoConnectionBehind(t *testing.T) {
+	db := Open(t, Options{Prefix: "chronicle_dbtest_", RequireDSN: true})
+
+	var held int
+	if err := db.QueryRow(
+		"SELECT COUNT(*) FROM information_schema.processlist WHERE db = DATABASE()",
+	).Scan(&held); err != nil {
+		t.Fatalf("counting connections: %v", err)
+	}
+	if own := db.Stats().OpenConnections; held != own {
+		t.Fatalf("%d connections to the scratch schema, %d of them in the handle: something Open ran kept one", held, own)
+	}
+}

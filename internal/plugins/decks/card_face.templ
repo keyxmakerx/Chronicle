@@ -1,0 +1,21 @@
+package decks
+
+// cardFace is the face of a card: the plate for the tall shape, the compact
+// card for the others, and at the open size the leaf beside a plate. It is
+// what a card shows face up, and what the turn-over brings in.
+templ cardFace(l Look, s CardState, size CardSize, foot string) {
+	if l.Shape == "tall" {
+		@CardPlate(l, s, size)
+		if size == SizeOpen {
+			@CardLeaf(l, s, foot)
+		}
+	} else {
+		@CardCompact(l, s, size)
+	}
+}
+
+// CardFace is cardFace for a caller that holds a face and needs only its
+// markup, such as a response a face-down card fetches when it is turned.
+templ CardFace(l Look, s CardState, o CardOpts) {
+	@cardFace(l, s, sizeOf(o.Size), o.Foot)
+}

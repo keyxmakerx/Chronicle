@@ -292,7 +292,7 @@ func TestADR058Integration_HiddenEntityImage_PlayerDenied(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustDeny(t, h.checkMediaAccess(c, file, false, ""), "[real DB] Player reading an image used only by a dm_only entity")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] Player reading an image used only by a dm_only entity")
 }
 
 func TestADR058Integration_VisibleEntityImage_PlayerAllowed(t *testing.T) {
@@ -315,7 +315,7 @@ func TestADR058Integration_VisibleEntityImage_PlayerAllowed(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustAllow(t, h.checkMediaAccess(c, file, false, ""), "[real DB] Player reading an image used by a visible entity")
+	mustAllow(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] Player reading an image used by a visible entity")
 }
 
 // TestADR058Integration_SharedHiddenAndVisible_ReadableAtAll is decision 1
@@ -345,7 +345,7 @@ func TestADR058Integration_SharedHiddenAndVisible_ReadableAtAll(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustAllow(t, h.checkMediaAccess(c, file, false, ""), "[real DB] image shared by a hidden entity's image_path AND a visible entity's entry_html")
+	mustAllow(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] image shared by a hidden entity's image_path AND a visible entity's entry_html")
 }
 
 // TestADR058Integration_CoverImageOnly_PlayerDenied proves, against the
@@ -381,7 +381,7 @@ func TestADR058Integration_CoverImageOnly_PlayerDenied(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustDeny(t, h.checkMediaAccess(c, file, false, ""), "[real DB] Player reading a COVER image used only by a dm_only entity")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] Player reading a COVER image used only by a dm_only entity")
 }
 
 // TestADR058Integration_PathFormCoverImage_PlayerDenied: an image field
@@ -421,7 +421,7 @@ func TestADR058Integration_PathFormCoverImage_PlayerDenied(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustDeny(t, h.checkMediaAccess(c, file, false, ""), "[real DB] Player reading a path-form COVER image used only by a dm_only entity")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] Player reading a path-form COVER image used only by a dm_only entity")
 }
 
 // TestADR058Integration_CoDM_SeesWhatDMSees drives the real promotion
@@ -448,7 +448,7 @@ func TestADR058Integration_CoDM_SeesWhatDMSees(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(coDM)
 
-	mustAllow(t, h.checkMediaAccess(c, file, false, ""), "[real DB] co-DM reading a dm_only entity's image")
+	mustAllow(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] co-DM reading a dm_only entity's image")
 }
 
 // TestADR058Integration_Unreferenced_MembershipStillApplies confirms a
@@ -470,7 +470,7 @@ func TestADR058Integration_Unreferenced_MembershipStillApplies(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustAllow(t, h.checkMediaAccess(c, file, false, ""), "[real DB] unreferenced file via plain membership")
+	mustAllow(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB] unreferenced file via plain membership")
 }
 
 // TestADR058Integration_ReferenceLookupError_Denies forces a REAL query
@@ -494,5 +494,5 @@ func TestADR058Integration_ReferenceLookupError_Denies(t *testing.T) {
 	file := &MediaFile{ID: fileID, CampaignID: &mediaCampaignID, CampaignIsPublic: boolPtr(false)}
 	c := newADR058TestContext(player)
 
-	mustDeny(t, h.checkMediaAccess(c, file, false, ""), "[real DB, connection closed] reference lookup failure must deny, not grant via membership")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, file, false, "")), "[real DB, connection closed] reference lookup failure must deny, not grant via membership")
 }

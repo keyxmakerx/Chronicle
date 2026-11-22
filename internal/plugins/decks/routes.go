@@ -1,0 +1,77 @@
+// Route registration for decks.
+package decks
+
+import (
+	"time"
+
+	"github.com/labstack/echo/v5"
+
+	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// moveRateLimit is how many moves one user may make a minute.
+const moveRateLimit = 120
+
+// RegisterRoutes mounts the routes under the campaign group. Every route needs
+// a signed-in member of at least Player role and the Card decks add-on on; the
+// service then decides who may see and do what (the co-Director grant and the
+// per-deck player rules cannot be expressed by a role middleware), so the gate
+// here is not the only one. CSRF is enforced by the global middleware.
+func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		campaigns.RequireRole(campaigns.RolePlayer),
+		addons.RequireAddon(addonSvc, AddonSlug),
+	)
+	cg.GET("/decks", h.List)
+	cg.POST("/decks", h.Create)
+	// A deck made from another deck or a rolling table; Director only, 404
+	// for anyone else. Static, so it is never read as a deck id.
+	cg.POST("/decks/from", h.CreateFrom)
+	// Registered before /decks/:did so "table" is never read as a deck id.
+	cg.GET("/decks/table", h.Table)
+	// The Director's moments and the card editor's options; static paths win
+	// over :did, so neither is read as a deck id.
+	cg.GET("/decks/moments", h.Moments)
+	cg.GET("/decks/moments/panel", h.MomentsPanel)
+	cg.GET("/decks/when-options", h.WhenOptions)
+	// The workshop pages sit beside the JSON routes under /workshop, as the
+	// rolling tables page sits beside its JSON; static paths win over :did.
+	cg.GET("/decks/workshop", h.WorkshopList)
+	cg.GET("/decks/workshop/new", h.WorkshopNew)
+	cg.GET("/decks/workshop/:did", h.WorkshopDeck)
+	cg.GET("/decks/workshop/:did/table", h.WorkshopTable)
+	for _, t := range workshopTabs {
+		cg.GET("/decks/workshop/:did/"+t.Key, h.WorkshopTab(t.Key))
+	}
+	// The player's fragments: the Hand leaf, a hero's Cards part, an opened card
+	// and the turn-over request that brings a face. Static paths win over :did.
+	cg.GET("/decks/hand", h.HandFragment)
+	cg.GET("/decks/hand/hero/:eid", h.HeroStripFragment)
+	cg.GET("/decks/hand/:did/copies/:copy", h.OpenCardFragment)
+	cg.GET("/decks/:did", h.Get)
+	cg.PUT("/decks/:did", h.Update)
+	cg.DELETE("/decks/:did", h.Delete)
+	cg.PUT("/decks/:did/players", h.SetPlayers)
+	cg.POST("/decks/:did/cards", h.CreateCard)
+	cg.PUT("/decks/:did/cards/:cid", h.UpdateCard)
+	cg.DELETE("/decks/:did/cards/:cid", h.DeleteCard)
+	// The moves share one per-user limit, far above honest play, so flipping
+	// or drawing in a loop cannot flood the log or the database.
+	moves := middleware.UserRateLimit(func(c *echo.Context) string { return auth.GetUserID(c) }, moveRateLimit, time.Minute)
+	cg.POST("/decks/hand/:did/copies/:copy/turn", h.TurnFaceFragment, moves)
+	cg.POST("/decks/:did/draw", h.Draw, moves)
+	cg.POST("/decks/:did/copies/:copy/:verb", h.Act, moves)
+	cg.POST("/decks/:did/deal-card", h.DealCard, moves)
+	cg.POST("/decks/:did/shuffle", h.Shuffle, moves)
+	cg.POST("/decks/:did/gather", h.Gather, moves)
+	cg.POST("/decks/moments/:mid/deal", h.MomentDeal, moves)
+	cg.POST("/decks/moments/:mid/another", h.MomentAnother, moves)
+	cg.POST("/decks/moments/:mid/invite", h.MomentInvite, moves)
+	cg.POST("/decks/moments/:mid/dismiss", h.MomentDismiss, moves)
+	cg.POST("/decks/:did/cards/:cid/say", h.Say, moves)
+}

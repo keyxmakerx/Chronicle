@@ -1,0 +1,24 @@
+package decks
+
+// CardBack is a card's back. It takes the deck's look and a size and nothing
+// else, so a face-down card cannot carry a name, words, kind, picture or id.
+templ CardBack(l Look, size CardSize) {
+	<div
+		class={ "dk-card dk-back", classOf(shapeClass, shapeValues, l.Shape), classOf(patternClass, patternValues, l.Back.Pattern),
+			paletteOf(l.Back.Colour), classOf(letteringClass, letteringValues, l.Lettering), sizeClassOf(size) }
+		aria-hidden="true"
+	>
+		if l.Back.Pattern == "iron" {
+			<span class="dk-rv dk-rv-a"></span>
+			<span class="dk-rv dk-rv-b"></span>
+			<span class="dk-rv dk-rv-c"></span>
+			<span class="dk-rv dk-rv-d"></span>
+		}
+		<span class="dk-bfr">
+			@Emblem(l.Back.Sign)
+			if l.Back.Words != "" {
+				<span class="dk-bw">{ l.Back.Words }</span>
+			}
+		</span>
+	</div>
+}
