@@ -182,3 +182,37 @@ func TestHeroChoicesLiftLook(t *testing.T) {
 		t.Errorf("a plain entry serves no look: %s", raw)
 	}
 }
+
+type fakeHeroPlanner struct {
+	plan     *entities.HeroPlan
+	director bool
+	unlimit  bool
+}
+
+func (f *fakeHeroPlanner) HeroPlan(ctx context.Context, _, _ string, director bool) (*entities.HeroPlan, error) {
+	f.director, f.unlimit = director, entities.PlanUnlimited(ctx)
+	return f.plan, nil
+}
+
+// The review's check reads the plan the creator draws, without the player
+// limits for a Director only, and words what is off the list.
+func TestHeroPickChecker(t *testing.T) {
+	plan := &entities.HeroPlan{Steps: []entities.HeroStep{{FieldKey: "ancestry", Label: "Ancestry", Choices: []entities.HeroChoice{{Name: "Dwarf"}, {Name: "Elf"}}}}}
+	tests := []struct {
+		name     string
+		director bool
+	}{{"director", true}, {"player", false}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &fakeHeroPlanner{plan: plan}
+			got := heroPickChecker{planner: p}.HeroPickWarnings(context.Background(), "c1", "u1", tc.director,
+				map[string]any{"ancestry": "Dwarff"}, []string{"ancestry"})
+			if len(got) != 1 || !strings.Contains(got[0], `Ancestry: "Dwarff" is not on the ancestry list. Closest on the campaign's list: Dwarf`) {
+				t.Errorf("warnings = %q", got)
+			}
+			if p.director != tc.director || p.unlimit != tc.director {
+				t.Errorf("director %v unlimited %v, want both %v", p.director, p.unlimit, tc.director)
+			}
+		})
+	}
+}

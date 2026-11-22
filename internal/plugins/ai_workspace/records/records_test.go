@@ -259,9 +259,9 @@ func TestLinkKinds_ReviewWording(t *testing.T) {
 		fields      map[string]any
 		title, summ string
 	}{
-		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "price": 1, "quantity": 5}, "Rope at The Rusty Anchor", "1 gp · 5 in stock"},
-		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope"}, "Rope at The Rusty Anchor", "no price or quantity given"},
-		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "today": true}, "Rope at The Rusty Anchor", "on today's shelf some days"},
+		{ShopStockKind(nil, nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "price": 1, "quantity": 5}, "Rope at The Rusty Anchor", "1 gp · 5 in stock"},
+		{ShopStockKind(nil, nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope"}, "Rope at The Rusty Anchor", "no price or quantity given"},
+		{ShopStockKind(nil, nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "today": true}, "Rope at The Rusty Anchor", "on today's shelf some days"},
 		{CarriedItemKind(nil, nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion", "quantity": 2}, "Potion for Ser Aldric", "2 carried"},
 		{CarriedItemKind(nil, nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion"}, "Potion for Ser Aldric", "1 carried"},
 	}
@@ -271,7 +271,7 @@ func TestLinkKinds_ReviewWording(t *testing.T) {
 		if got := lk.Title(r); got != c.title {
 			t.Errorf("Title = %q, want %q", got, c.title)
 		}
-		if got := lk.summary(r); got != c.summ {
+		if got := lk.summary(r, false); got != c.summ {
 			t.Errorf("summary = %q, want %q", got, c.summ)
 		}
 	}

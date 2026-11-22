@@ -2873,6 +2873,10 @@ func (s *calendarService) SaveEraLook(ctx context.Context, calendarID, campaignI
 	return s.publishAfter(s.calRepo.SaveEraLook(ctx, calendarID, look, writes), PubStructureUpdated, campaignID, calendarID)
 }
 
+// ValidateEraLook is the check SaveEraLook runs, for a caller that must
+// refuse a bad look before it saves one.
+func ValidateEraLook(l EraLook) error { return validateEraLook(l) }
+
 // validateEraLook checks the calendar-wide era look: a known feel and
 // numbers inside the fine-tune sliders' range.
 func validateEraLook(l EraLook) error {

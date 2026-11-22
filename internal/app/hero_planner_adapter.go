@@ -147,3 +147,26 @@ func (a heroTermsAdapter) HeroTerms(ctx context.Context, campaignID string) (*en
 	}
 	return out, nil
 }
+
+// heroPickChecker gives AI Import's review the hero creator's check of a
+// hero's pick-list values, over the same plan the creator draws, so the
+// review and the creator cannot disagree on what is on a list.
+type heroPickChecker struct {
+	planner entities.HeroPlanner
+}
+
+// HeroPickWarnings is words for each written field that is off the list. A
+// Director is checked against the whole list, the hero-choice rules not
+// applied: the owner is reviewing what the AI proposed, not playing the
+// creator. Anyone else gets the plan their own account would see. A plan
+// that can't be read gives no warning.
+func (c heroPickChecker) HeroPickWarnings(ctx context.Context, campaignID, userID string, director bool, fields map[string]any, written []string) []string {
+	if director {
+		ctx = entities.WithUnlimitedPlan(ctx)
+	}
+	plan, err := c.planner.HeroPlan(ctx, campaignID, userID, director)
+	if err != nil {
+		return nil
+	}
+	return entities.HeroFieldWarnings(plan, fields, written)
+}

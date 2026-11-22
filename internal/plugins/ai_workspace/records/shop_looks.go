@@ -164,6 +164,15 @@ var (
 	roomMoments = []string{"hello", "look", "buy", "poor", "bye", "refuse"}
 )
 
+// paperLookPaused mirrors the shop room widget's switch for the paper look
+// (ShopRoomPaper.building); a test keeps the two in step. While it is on, a
+// saved paper look draws nothing: the shop opens at the counter.
+const paperLookPaused = true
+
+// paperOnlyKeys shape only the paper room, so they show nothing while paper
+// is paused. The room still accepts and saves them, as the product does.
+var paperOnlyKeys = []string{"setting", "size", "furniture", "decorations", "palette", "mood"}
+
 // emptyRoom is the room a shop has before anyone arranges it, as the shop
 // room widget starts it; its furniture is laid out when it first opens.
 const emptyRoom = `{"version":1,"roomType":"general","setting":"room","size":"m","furniture":"normal","decorations":"some","palette":"oak","look":"counter","mood":"","effects":null,"seeds":{"room":1,"goods":1,"deco":1},"pieces":[],"decor":[],"items":{},"portrait":null,"lines":[]}`
@@ -184,7 +193,8 @@ func (ShopRoomKind) Label() string { return "Shop room" }
 func (ShopRoomKind) Doc() string {
 	return "The room players step into from a shop page's Shop block, matched by `shop` (the shop's page name). Keys, each optional: " +
 		"`type` (forge, apothecary, jeweler, market, library, general), " +
-		"`look` (counter, standing at the counter, which every shop opens at; paper, a pop-up book that is under construction, so a paper shop opens at the counter until it is back), " +
+		"`look` (counter, standing at the counter, which every shop opens at; paper, a pop-up book that is switched off for now, so a paper shop opens at the counter until it is back), " +
+		"`setting`, `size`, `furniture`, `decorations`, `palette` and `mood`, which shape only the paper look: they are accepted and saved, but nothing changes on screen until the paper look is back, so leave them out for now, " +
 		"`manner` (the keeper's manner, which gives them lines for every moment: warm, gruff, shrewd, nervous, grand, or none), " +
 		"`says` (the keeper's own lines for a moment of the visit, up to 5 each, which win over the manner's: `hello` on arriving, `look` when something goes on the pile, `buy` after a purchase, `poor` when the pile outgrows the purse, `bye` on leaving, `refuse` for a shop that won't serve the party; `none` gives a moment back to the manner) " +
 		"`chatter` (up to 10 lines the keeper says when pressed) and `counter` (the theme of the counter look, below). " +
@@ -220,6 +230,7 @@ func (k ShopRoomKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 	}
 	var said []string
 	shape, mood := fresh, false
+	var paperSet []string
 	for _, f := range []struct {
 		key, field string
 		words      map[string]string
@@ -244,6 +255,10 @@ func (k ShopRoomKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 		// missing field reads as "" and "none" on it is no change.
 		if cur, _ := room[f.field].(string); cur == v {
 			continue
+		}
+		// Only a real change is worth a note; a repeat of what is saved shows nothing either way.
+		if paperLookPaused && (f.key == "look" && v == "paper" || oneOf(paperOnlyKeys, f.key)) {
+			paperSet = append(paperSet, f.key)
 		}
 		room[f.field] = v
 		shape = shape || f.shape
@@ -332,14 +347,18 @@ func (k ShopRoomKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 	if err := k.Svc.SaveRoom(ctx, campaignID, id, a, out, true); err != nil {
 		return Plan{Error: lookError("the room", err)}, "", nil
 	}
+	var paperNote []string
+	if len(paperSet) > 0 {
+		paperNote = []string{"Saved, but nothing changes on screen until the paper look is back (" + strings.Join(paperSet, ", ") + "): the paper look is switched off for now and every shop opens at the counter."}
+	}
 	if len(said) == 0 {
-		return Plan{Summary: "changes nothing in " + name + "'s room"}, id, out
+		return Plan{Summary: "changes nothing in " + name + "'s room", Warnings: paperNote}, id, out
 	}
 	sum := name + "'s room: " + strings.Join(said, "; ")
 	if fresh {
 		sum = "sets up " + sum
 	}
-	p := Plan{Summary: sum}
+	p := Plan{Summary: sum, Warnings: paperNote}
 	if (shape && !fresh) || mood {
 		p.Warnings = append(p.Warnings, "The furniture is laid out again the next time the room opens; pieces moved by hand stay where they are.")
 	}

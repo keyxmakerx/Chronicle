@@ -48,8 +48,19 @@ const (
 )
 
 // defaultTestResults is what a new test starts with when the block gives
-// none, the same three the page's block offers.
-var defaultTestResults = []TestSetupResult{{Label: "Success"}, {Label: "Partial success"}, {Label: "Failure"}}
+// none, the same three the page's block offers. Each needs an id: the
+// service refuses a result without one, and nothing at plan time would
+// otherwise notice. A fresh slice each call keeps creates from sharing it.
+func defaultTestResults() []TestSetupResult {
+	out := make([]TestSetupResult, 0, 3)
+	used := map[string]bool{}
+	for _, label := range []string{"Success", "Partial success", "Failure"} {
+		id := testResultID(label, used)
+		used[id] = true
+		out = append(out, TestSetupResult{ID: id, Label: label})
+	}
+	return out
+}
 
 // TestKind writes the tests (montages, chases, negotiations) on a page,
 // matched by name within that page.
@@ -114,7 +125,7 @@ func (k TestKind) read(ctx context.Context, campaignID string, a Actor, r Record
 	if r.Action == ActionDelete {
 		return d, nil
 	}
-	s := TestSetup{Name: r.Name, Results: defaultTestResults}
+	s := TestSetup{Name: r.Name, Results: defaultTestResults()}
 	if d.existing != nil {
 		s = *d.existing
 	}

@@ -198,6 +198,12 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 			if e.Visibility == "dm_only" {
 				who = "Directors only"
 			}
+			if t := timeText(e.StartHour, e.StartMinute); t != "" {
+				when += " from " + t
+			}
+			if t := timeText(e.EndHour, e.EndMinute); t != "" {
+				when += " until " + t
+			}
 			line := fmt.Sprintf("- %s: %s, %s", e.Name, when, who)
 			// What an event block can send back; a player's view (Safe)
 			// carries none of it, as in the export.
@@ -210,6 +216,9 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 				}
 				if e.EntityName != "" {
 					line += ", page " + e.EntityName
+				}
+				if e.Announced != nil && *e.Announced != "" {
+					line += ", announced " + *e.Announced
 				}
 			}
 			lines = append(lines, line)
@@ -328,4 +337,17 @@ func (run *lookupRun) rollLines(cal *calendar.Calendar, m, from, to calDate, evs
 		}
 	}
 	return out
+}
+
+// timeText is a time of day as the event keys write it ("19:30"); "" when the
+// event has no such time.
+func timeText(h, m *int) string {
+	if h == nil {
+		return ""
+	}
+	min := 0
+	if m != nil {
+		min = *m
+	}
+	return fmt.Sprintf("%02d:%02d", *h, min)
 }

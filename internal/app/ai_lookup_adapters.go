@@ -44,7 +44,7 @@ func (p *aiPartyAdapter) Party(ctx context.Context, campaignID string, a records
 		return out, err
 	}
 	for _, h := range heroes {
-		hero := records.PartyHero{ID: h.ID, Name: h.Name, Player: h.PlayerName, Subtitle: h.Subtitle, Conditions: h.Conditions}
+		hero := records.PartyHero{ID: h.ID, Name: h.Name, Player: h.PlayerName, Subtitle: h.Subtitle, Level: h.Level, Conditions: h.Conditions}
 		for _, m := range h.Meters {
 			pm := records.PartyMeter{Label: m.Label, Current: m.Current}
 			if m.HasMax {

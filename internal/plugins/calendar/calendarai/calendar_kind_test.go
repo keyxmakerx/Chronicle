@@ -23,6 +23,7 @@ type fakeStructure struct {
 	applied int
 	updates []calendar.UpdateCalendarInput
 	today   []int
+	looks   []calendar.EraLook
 	eras    []calendar.EraInput
 	eraUps  []calendar.UpdateEraInput
 	preview calendar.StructurePreview
@@ -122,6 +123,11 @@ func (f *fakeStructure) CreateEra(_ context.Context, _, _ string, in calendar.Er
 }
 func (f *fakeStructure) UpdateEra(_ context.Context, _ int, _, _ string, in calendar.UpdateEraInput) error {
 	f.eraUps = append(f.eraUps, in)
+	return nil
+}
+
+func (f *fakeStructure) SaveEraLook(_ context.Context, _, _ string, l calendar.EraLook, _ []calendar.EraLookEra) error {
+	f.looks = append(f.looks, l)
 	return nil
 }
 

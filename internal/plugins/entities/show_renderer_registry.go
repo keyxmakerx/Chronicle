@@ -405,6 +405,14 @@ func hasEntityShowRenderer(ctx context.Context, et *EntityType) bool {
 	return false
 }
 
+// SystemDrawsHeroes reports whether a game system draws a player's character
+// of this category in place of the category's layout. A page wearing a named
+// layout is still drawn from that layout, which a caller outside a page
+// render cannot see.
+func SystemDrawsHeroes(ctx context.Context, et *EntityType) bool {
+	return hasEntityShowRenderer(withNPCPage(ctx, false), et)
+}
+
 // CampaignSystemResolver names the game system a campaign runs (its module
 // id), "" for none.
 type CampaignSystemResolver func(ctx context.Context, campaignID string) string

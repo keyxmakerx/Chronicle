@@ -28,6 +28,9 @@ type LayoutsAPI interface {
 	Named(ctx context.Context, et *entities.EntityType) (pl entities.PageLayouts, ok bool)
 	// BlockTypes are the blocks a page layout can place in this campaign.
 	BlockTypes(ctx context.Context, campaignID string) []LayoutBlockInfo
+	// ShowsSheet reports whether a block type draws a page's sheet or its
+	// fields, as the block registry declares it.
+	ShowsSheet(blockType string) bool
 	// Check runs the rules a saved layout must meet, without saving.
 	Check(ctx context.Context, campaignID string, typeID int, l entities.EntityTypeLayout) error
 	// SaveMain makes l the category's main layout.
@@ -283,10 +286,49 @@ func (k LayoutKind) Plan(ctx context.Context, campaignID string, a Actor, r Reco
 			p.Summary += "; " + w.typ + " words: " + quoted(w.now) + " (was " + quoted(w.was) + ")"
 		}
 	}
-	if dropped := gridDropped(l.was, t.next); len(dropped) > 0 {
-		p.Warnings = append(p.Warnings, "left out, so removed: "+strings.Join(dropped, ", "))
-	}
+	p.Warnings = append(p.Warnings, k.removedWarnings(ctx, campaignID, l, t.next)...)
 	return p
+}
+
+// removedWarnings says, in the Customizer's words, which blocks the new
+// arrangement drops from the layout. A layout is replaced whole, so a block
+// the AI forgot to list is gone; when that takes the page's sheet or fields
+// with it, every page on the layout stops showing them, which is why that
+// gets its own plain line.
+func (k LayoutKind) removedWarnings(ctx context.Context, campaignID string, l layoutLoc, next []gridRow) []string {
+	labels := map[string]string{}
+	for _, b := range k.Svc.BlockTypes(ctx, campaignID) {
+		labels[b.Type] = b.Label
+	}
+	name := func(typ string) string {
+		if lb := labels[typ]; lb != "" {
+			return lb
+		}
+		// A block the palette no longer offers has no Customizer label.
+		return typ
+	}
+	dropped := gridDroppedAs(l.was, next, name)
+	if len(dropped) == 0 {
+		return nil
+	}
+	out := []string{"left out, so removed: " + strings.Join(dropped, ", ")}
+	// Judged by whole layout, not by count: dropping one of two copies leaves
+	// the sheet on the page.
+	kept := gridTypes(next)
+	var lost []string
+	for _, typ := range gridTypeOrder(l.was) {
+		if k.Svc.ShowsSheet(typ) && !kept[typ] {
+			lost = append(lost, name(typ))
+		}
+	}
+	if len(lost) > 0 {
+		who := "pages of " + l.et.NamePlural
+		if !l.isMain() {
+			who = "pages on " + l.where()
+		}
+		out = append(out, "no longer on the layout: "+strings.Join(lost, ", ")+". Once this is applied, "+who+" will stop showing their sheet or their fields, until the block is put back.")
+	}
+	return out
 }
 
 func (k LayoutKind) Apply(ctx context.Context, campaignID string, a Actor, r Record) error {

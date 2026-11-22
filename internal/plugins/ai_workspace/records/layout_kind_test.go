@@ -39,9 +39,11 @@ func (f *fakeLayoutAPI) BlockTypes(context.Context, string) []LayoutBlockInfo {
 		{"title", "Title", "The page's name"}, {"entry", "Entry", "The page's body text"},
 		{"image", "Image", "The page's picture"}, {"details", "Details", "The fields"},
 		{"trackers", "Trackers", "Counters and clocks"}, {"posts", "Posts", "Messages on the page"},
+		{"attributes", "Attributes", "Custom field values"}, {"system_panels", "Game system panels", "Panels the game system adds"},
 		{"text_block", "Text block", "Your own words"}, {"ext_widget", "Extension widget", "From an extension"},
 	}
 }
+func (f *fakeLayoutAPI) ShowsSheet(t string) bool { return t == "attributes" || t == "system_panels" }
 func (f *fakeLayoutAPI) Check(_ context.Context, _ string, _ int, l entities.EntityTypeLayout) error {
 	for i, r := range l.Rows {
 		if r.Kind == tilegrid.KindTiles {
@@ -133,6 +135,7 @@ func TestLayoutKind_Plan(t *testing.T) {
 		rec     Record
 		fake    func(*fakeLayoutAPI)
 		want    []string
+		notWant []string
 		wantErr string
 	}{
 		{name: "rearranged", a: layoutOwner,
@@ -140,7 +143,20 @@ func TestLayoutKind_Plan(t *testing.T) {
 			want: []string{"the Characters NPC layout becomes: image, details (directors only) | title, entry / [tile section: posts]", "(now: title, entry, trackers | image, details (directors only) / [tile section: posts])"}},
 		{name: "left out is removed with a warning", a: layoutOwner,
 			rec:  layoutRec("update", nil, row(col(12, "title", "entry"))),
-			want: []string{"left out, so removed: trackers, image, details, a tile section (posts)"}},
+			want: []string{"left out, so removed: Trackers, Image, Details, a tile section (Posts)"}, notWant: []string{"stop showing"}},
+		{name: "leaving out the sheet blocks says the pages lose their sheet", a: layoutOwner,
+			fake: func(f *fakeLayoutAPI) { addSheetBlocks(f) },
+			rec:  layoutRec("update", nil, row(col(12, "title", "entry"))),
+			want: []string{"left out, so removed: Trackers, Game system panels, Attributes, Image, Details",
+				"no longer on the layout: Game system panels, Attributes", "pages of Characters will stop showing their sheet or their fields"}},
+		{name: "a named layout names itself", a: layoutOwner,
+			fake: func(f *fakeLayoutAPI) { addSheetBlocks(f) },
+			rec:  layoutRec("update", map[string]any{"layout": "hero"}, row(col(12, "title"))),
+			want: []string{"left out, so removed: Entry"}, notWant: []string{"stop showing"}},
+		{name: "another copy keeping the sheet is no loss", a: layoutOwner,
+			fake: func(f *fakeLayoutAPI) { addSheetBlocks(f) },
+			rec:  layoutRec("update", nil, row(col(12, "title", "entry", "system_panels", "attributes"))),
+			want: []string{"left out, so removed: Trackers, Image, Details"}, notWant: []string{"stop showing"}},
 		{name: "unchanged", a: layoutOwner, rec: layoutRec("update", nil, sameRows()...), wantErr: "already has these blocks"},
 		{name: "same blocks on a visibility flip is a change", a: layoutOwner,
 			rec:  layoutRec("update", nil, row(col(8, "title", "entry", "trackers"), col(4, "image", blk("details", "directors_only", false))), tilesKept()),
@@ -196,6 +212,11 @@ func TestLayoutKind_Plan(t *testing.T) {
 				t.Fatal(p.Error)
 			}
 			all := p.Summary + " " + strings.Join(p.Warnings, " ")
+			for _, w := range tc.notWant {
+				if strings.Contains(all, w) {
+					t.Errorf("%q should not appear in %q", w, all)
+				}
+			}
 			for _, w := range tc.want {
 				if !strings.Contains(all, w) {
 					t.Errorf("missing %q in %q", w, all)
@@ -484,4 +505,12 @@ func TestLayoutsLookup_PluggedInfo(t *testing.T) {
 			t.Errorf("what: %s is not answered", what)
 		}
 	}
+}
+
+// addSheetBlocks puts the game's sheet blocks on the Characters main layout,
+// as a live character category has them.
+func addSheetBlocks(f *fakeLayoutAPI) {
+	main := f.types[0].Layout
+	main.Rows[0].Columns[0].Blocks = append(main.Rows[0].Columns[0].Blocks, tblock("sp1", "system_panels", nil), tblock("at1", "attributes", nil))
+	f.types[0].Layout = main
 }
