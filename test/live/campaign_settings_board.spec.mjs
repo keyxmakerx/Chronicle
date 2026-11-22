@@ -2,8 +2,8 @@
 // the banner and the tabs on every page, the Overview board's flips and
 // feature chips saving where they stand, the Campaign tab's fields and the
 // card that follows them, Connections and Data, old addresses landing on
-// their new tab, and the Danger zone's delete asking for the name. Players
-// and scribes never get the tabs.
+// their new tab, the Danger zone's delete asking for the name, and every
+// control 44 tall on a phone. Players and scribes never get the tabs.
 //
 // Set LIVE_SHOTS to a folder to also save pictures of the four tabs there,
 // light and dark, on a desktop and a phone.
@@ -13,7 +13,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { person, newCampaign, addMember, done, BASE } from './_live.mjs';
+import { person, newCampaign, addMember, uniqueEmail, done, BASE } from './_live.mjs';
 
 after(done);
 
@@ -140,6 +140,39 @@ test('Connections, Data and the old addresses; deleting asks for the name', asyn
   const res = await written(page, 'DELETE', `/campaigns/${cid}`, () => button.click());
   assert.ok(res.ok(), `delete answered ${res.status()}`);
   await page.waitForURL((u) => u.pathname === '/campaigns');
+  owner.assertClean();
+});
+
+test('on a phone every control is 44 tall; the keys page has the tabs; the log speaks in words', async () => {
+  const owner = await person({ tag: 'board-phone', name: 'Owner Ines' });
+  const cid = await newCampaign(owner, 'Narrowmere');
+  const page = owner.page;
+  const inv = await owner.api(`/campaigns/${cid}/invite-box/email`, { method: 'POST', form: { email: uniqueEmail('board-invitee'), role: 'player' } });
+  assert.ok(inv.status < 400, `the invite answered ${inv.status}`);
+
+  await owner.go(`/campaigns/${cid}/api-keys`);
+  assert.equal(await page.locator('.stg-tab[aria-current="page"]').textContent(), 'Connections', 'the full keys page sits under Connections');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const tab of ['dashboard', 'settings', 'connections', 'data']) {
+    await owner.go(`/campaigns/${cid}/${tab}`);
+    if (tab === 'connections') await page.locator('#integrations-keys button').first().waitFor();
+    if (tab === 'data') {
+      for (const s of await page.locator('.sb-step > summary, .sb-fold > summary').all()) await s.click();
+      await page.locator('#activity-content').scrollIntoViewIfNeeded();
+      await page.getByText('invited someone').first().waitFor();
+      assert.equal(await page.locator('#activity-content').getByText('member.invited').count(), 0, 'the log never shows a raw key');
+    }
+    const short = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('.sb a, .sb button, .sb summary, .stg a, .stg button')) {
+        const r = el.getBoundingClientRect();
+        if (r.width && r.height && r.height < 44) out.push(`${Math.round(r.height)}px "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30)}"`);
+      }
+      return out;
+    });
+    assert.deepEqual(short, [], `${tab}: controls under 44 tall on a phone`);
+  }
   owner.assertClean();
 });
 
