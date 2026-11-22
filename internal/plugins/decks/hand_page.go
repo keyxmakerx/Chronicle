@@ -26,8 +26,6 @@ type openedPage struct {
 	Card       *OpenedCard
 }
 
-func (p openedPage) base() string { return "/campaigns/" + p.CampaignID + "/decks" }
-
 // newLine says a deck has a card waiting face down in a hand: the head names
 // the deck and the tail says what to do. Nothing about the card is in it.
 type newLine struct{ Head, Tail string }
