@@ -3,6 +3,7 @@ package aiplug
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -80,5 +81,45 @@ func WriteLines(b *strings.Builder, lines []string) {
 			return
 		}
 		b.WriteString(l + "\n")
+	}
+}
+
+// Pieced is a lookup that reads its record's `piece` itself, cutting its long
+// lists with WriteLinesPiece. The engine then leaves its own byte paging off
+// for that lookup, so one answer is never cut to a piece twice.
+type Pieced interface {
+	Pieced()
+}
+
+// PieceOf is the piece a record asks for: 1 when it names none (the engine has
+// already refused one it can't read).
+func PieceOf(r Record) int {
+	n, err := strconv.Atoi(r.Str("piece"))
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
+// WriteLinesPiece writes the piece of lines asked for, MaxAnswerLines of them,
+// and says how to read the next. A list that fits is written as WriteLines
+// writes it.
+func WriteLinesPiece(b *strings.Builder, lines []string, piece int) {
+	if len(lines) <= MaxAnswerLines && piece <= 1 {
+		WriteLines(b, lines)
+		return
+	}
+	pieces := (len(lines) + MaxAnswerLines - 1) / MaxAnswerLines
+	start, end := (piece-1)*MaxAnswerLines, min(piece*MaxAnswerLines, len(lines))
+	if start >= len(lines) {
+		fmt.Fprintf(b, "There is no piece %d: this list has %d.\n", piece, pieces)
+		return
+	}
+	fmt.Fprintf(b, "Lines %d to %d of %d (piece %d of %d).\n\n", start+1, end, len(lines), piece, pieces)
+	for _, l := range lines[start:end] {
+		b.WriteString(l + "\n")
+	}
+	if end < len(lines) {
+		fmt.Fprintf(b, "…%d more; ask again with `piece: %d` for the next.\n", len(lines)-end, piece+1)
 	}
 }

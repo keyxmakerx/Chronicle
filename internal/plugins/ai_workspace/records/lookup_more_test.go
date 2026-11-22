@@ -53,8 +53,8 @@ func TestLookups_Plugged(t *testing.T) {
 
 	// The engine's size cap still applies to a plug's answer.
 	p.err, p.text = nil, "## Widgets\n\n"+strings.Repeat("- a widget with a long name\n", maxAnswerBytes/20)
-	if got := l.Answer(context.Background(), camp, owner, []Record{lookup("widgets", nil)})[0]; len(got.Text) > maxAnswerBytes+200 || !strings.Contains(got.Text, "cut here") {
-		t.Errorf("an oversized answer was not cut: %d bytes", len(got.Text))
+	if got := l.Answer(context.Background(), camp, owner, []Record{lookup("widgets", nil)})[0]; len(got.Text) > maxAnswerBytes || !strings.Contains(got.Text, "Piece 1 of") || !strings.Contains(got.Text, "`piece: 2`") {
+		t.Errorf("an oversized answer was not paged: %d bytes", len(got.Text))
 	}
 
 	// A built-in what is never handed to a plug.

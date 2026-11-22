@@ -306,6 +306,7 @@ type LookupAnswer struct {
 var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character) and `tag` (a tag's name)", "page names with their tags, by type or tag"},
 	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
+	{"search", "`query` (words to find), optional `type` (a kind of page)", "the pages whose name, other names or text hold the words, with a short quote from each, as far as you can see them; `piece` steps to the next hits"},
 	{"page", "`name`", "one page: its text, tags and links, its item look, and for a Director its quest notice and notice boards"},
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
 	{"pins", "optional `map`, and `rows` (like 0-19) for part of a big hex map", "maps, or one map's pins and, on a hex map, its hexes"},
@@ -405,6 +406,11 @@ type lookupRun struct {
 	// monsters caches foundryReport.
 	monsters     FoundryMonsterReport
 	monstersRead bool
+	// piece is the piece of a long answer or list the current lookup asked
+	// for (1 by default); linesPaged is set when a list already cut itself
+	// to that piece, so the byte cap does not cut it a second time.
+	piece      int
+	linesPaged bool
 }
 
 // Answer answers each lookup in order. A failing lookup gets an Error and
@@ -419,11 +425,28 @@ func (l *Lookups) Answer(ctx context.Context, campaignID string, a Actor, recs [
 			out = append(out, LookupAnswer{Chip: oneLine(what, 80), Error: fmt.Sprintf("only %d lookups are answered at once; ask again for the rest", maxLookups)})
 			continue
 		}
-		ans := run.one(what, r)
+		piece, perr := readPiece(r)
+		run.piece, run.linesPaged = piece, false
+		var ans LookupAnswer
+		if perr != nil {
+			ans = LookupAnswer{Chip: oneLine(what, 80), Error: planError(perr)}
+		} else {
+			ans = run.one(what, r)
+		}
 		ans.Chip = oneLine(ans.Chip, 80)
 		ans.Error = oneLine(ans.Error, 300)
 		if ans.Error == "" && run.pagesCut && ans.Text != "" {
 			ans.Text += fmt.Sprintf("\n(Only the first %d pages were read; this answer may miss some.)\n", maxPagesWalk*100)
+		}
+		if ans.Error == "" && !run.linesPaged {
+			// A long answer is stepped through by `piece`, never cut off
+			// with the rest out of reach.
+			paged, err := pageAnswer(ans.Text, piece)
+			if err != nil {
+				ans.Text, ans.Error = "", oneLine(planError(err), 300)
+			} else {
+				ans.Text = paged
+			}
 		}
 		if ans.Error == "" {
 			ans.Text = capText(ans.Text, maxAnswerBytes)
@@ -457,6 +480,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	switch what {
 	case "pages":
 		ans, err = run.pagesIndex(r.Str("type"), r.Str("tag"))
+	case "search", "find":
+		ans, err = run.search(firstNonEmpty(r.Str("query"), r.Name), r.Str("type"))
 	case "page":
 		ans, err = run.page(firstNonEmpty(r.Name, r.Str("page")))
 	case "table", "tables":
@@ -512,6 +537,9 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		p := run.l.pluggedFor(what)
 		if p == nil {
 			return LookupAnswer{Chip: what, Error: fmt.Sprintf("`what: %s` is not something Chronicle can look up", what)}
+		}
+		if _, ok := p.(aiplug.Pieced); ok {
+			run.linesPaged = true
 		}
 		ans.Chip, ans.Text, err = p.Answer(run.ctx, run.campaignID, run.a, r)
 	}
@@ -769,20 +797,35 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 	if marked {
 		b.WriteString(sightLegend + "\n")
 	}
-	lines := 0
-	for _, label := range order {
-		fmt.Fprintf(&b, "### %s (%d)%s\n\n", label, len(groups[label]), kindMark[label])
-		for _, name := range groups[label] {
-			if lines >= maxAnswerLines {
-				break
-			}
-			b.WriteString("- " + name + "\n")
-			lines++
-		}
-		b.WriteString("\n")
+	// The list is walked in order and only this piece's lines are written;
+	// a group's heading is written once its first line is.
+	start, end := pieceWindow(max(run.piece, 1))
+	if start >= n {
+		return LookupAnswer{Chip: chip}, badRequestf("there is no piece %d: this list has %d lines (%s)", run.piece, n, plural((n+maxAnswerLines-1)/maxAnswerLines, "piece", "pieces"))
 	}
-	if lines < n {
-		fmt.Fprintf(&b, "…and %d more; ask with `type:` or `tag:` to narrow it.\n", n-lines)
+	if n > maxAnswerLines {
+		run.linesPaged = true
+		fmt.Fprintf(&b, "Lines %d to %d of %d (piece %d of %d).\n\n", start+1, min(end, n), n, max(run.piece, 1), (n+maxAnswerLines-1)/maxAnswerLines)
+	}
+	idx := 0
+	for _, label := range order {
+		headed := false
+		for _, name := range groups[label] {
+			if idx >= start && idx < end {
+				if !headed {
+					fmt.Fprintf(&b, "### %s (%d)%s\n\n", label, len(groups[label]), kindMark[label])
+					headed = true
+				}
+				b.WriteString("- " + name + "\n")
+			}
+			idx++
+		}
+		if headed {
+			b.WriteString("\n")
+		}
+	}
+	if end < n {
+		fmt.Fprintf(&b, "…%d more; ask again with `piece: %d` for the next, or with `type:` or `tag:` to narrow it.\n", n-end, max(run.piece, 1)+1)
 	}
 	return LookupAnswer{Chip: chip, Text: b.String()}, nil
 }
@@ -1128,7 +1171,7 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	if shelf != nil && len(shelf.Pool) > 0 {
 		b.WriteString(shelfHead(shelf))
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	if relType == "sells" {
 		run.shopLooks(&b, e)
 	}
@@ -1229,7 +1272,11 @@ func (run *lookupRun) houseRules(name string) (LookupAnswer, error) {
 	chapters, tail := splitChapters(s)
 	n := len(chapters)
 	ans.Chip = fmt.Sprintf("House rules · %s", plural(n, "chapter", "chapters"))
+	told := tellChaptersApart(chapters)
 	if name = strings.TrimSpace(name); name != "" {
+		if labels := told[strings.ToLower(name)]; len(labels) > 1 {
+			return ans, badRequestf("%d chapters are called %s; ask for one as %s", len(labels), quote(name), strings.Join(labels, " or "))
+		}
 		for _, ch := range chapters {
 			if sameName(ch.title, name) {
 				ans.Chip = "House rules · " + ch.title
@@ -1255,6 +1302,31 @@ func (run *lookupRun) houseRules(name string) (LookupAnswer, error) {
 	fitParts(&b, parts, tail, "chapter", "chapters")
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// tellChaptersApart renames chapters that share a title to "Title (1 of 2)",
+// "Title (2 of 2)", in the listing and in the chapter's own heading, so each
+// can be asked for by `name`; the export carries no part name to use instead.
+// It returns, per lower-cased shared title, the labels now in use.
+func tellChaptersApart(chapters []houseChapter) map[string][]string {
+	count := map[string]int{}
+	for _, ch := range chapters {
+		count[strings.ToLower(ch.title)]++
+	}
+	seen := map[string]int{}
+	shared := map[string][]string{}
+	for i, ch := range chapters {
+		key := strings.ToLower(ch.title)
+		if count[key] < 2 {
+			continue
+		}
+		seen[key]++
+		label := fmt.Sprintf("%s (%d of %d)", ch.title, seen[key], count[key])
+		chapters[i].text = "### " + label + strings.TrimPrefix(ch.text, "### "+ch.title)
+		chapters[i].title = label
+		shared[key] = append(shared[key], quote(label))
+	}
+	return shared
 }
 
 // houseChapter is one chapter of the house-rules export: its title and its
@@ -1301,7 +1373,7 @@ func (run *lookupRun) table(name string) (LookupAnswer, error) {
 		for _, t := range doc.Tables {
 			lines = append(lines, fmt.Sprintf("- %s (%d entries)", t.Name, len(t.Entries)))
 		}
-		writeLines(&b, lines)
+		run.writeLines(&b, lines)
 		ans.Text = b.String()
 		return ans, nil
 	}
@@ -1319,7 +1391,7 @@ func (run *lookupRun) table(name string) (LookupAnswer, error) {
 			}
 			lines = append(lines, line)
 		}
-		writeLines(&b, lines)
+		run.writeLines(&b, lines)
 		ans.Text = b.String()
 		return ans, nil
 	}
@@ -1346,7 +1418,7 @@ func (run *lookupRun) pins(mapName, rows string) (LookupAnswer, error) {
 				lines = append(lines, "- "+m.Name)
 			}
 		}
-		writeLines(&b, lines)
+		run.writeLines(&b, lines)
 		ans.Text = b.String()
 		return ans, nil
 	}
@@ -1362,9 +1434,14 @@ func (run *lookupRun) pins(mapName, rows string) (LookupAnswer, error) {
 		fmt.Fprintf(&b, "## Pins on %s (%d)\n\n", m.Name, len(pins))
 		var lines []string
 		for _, p := range pins {
-			lines = append(lines, fmt.Sprintf("- %s (x %.1f, y %.1f)", p.Name, p.X, p.Y))
+			// The service already drops hidden pins for a player; this keeps
+			// the rule even if a map service were to hand one back.
+			if p.DMOnly && !run.director() {
+				continue
+			}
+			lines = append(lines, pinLine(p, run.director()))
 		}
-		writeLines(&b, lines)
+		run.writeLines(&b, lines)
 		hexes, err := run.hexes(m, rows)
 		if err != nil {
 			return ans, err
@@ -1375,6 +1452,41 @@ func (run *lookupRun) pins(mapName, rows string) (LookupAnswer, error) {
 	}
 	ans.Chip = "Pins · " + mapName
 	return ans, badRequestf("no map called %s", quote(mapName))
+}
+
+// maxPinNote is how much of a pin's description one line carries.
+const maxPinNote = 240
+
+// pinLine is one pin as a list line. Visibility words use the writer's own
+// values (`visibility: dm_only`) so the AI can send a pin back as it read it.
+// Who a pin is hidden from is a Director's knowledge, so a player's line never
+// carries it.
+func pinLine(p PinRef, director bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "- %s (x %.1f, y %.1f)", p.Name, p.X, p.Y)
+	if p.Category != "" {
+		b.WriteString(" · category: " + p.Category)
+	}
+	if p.PageName != "" {
+		b.WriteString(" · page: " + p.PageName)
+	}
+	if director {
+		if p.DMOnly {
+			b.WriteString(" · hidden from players (visibility: dm_only)")
+		} else {
+			b.WriteString(" · visibility: everyone")
+		}
+		if p.OnlyFor > 0 {
+			b.WriteString(" · only " + plural(p.OnlyFor, "chosen player", "chosen players") + " see it")
+		}
+		if p.HiddenFrom > 0 {
+			b.WriteString(" · hidden from " + plural(p.HiddenFrom, "chosen player", "chosen players"))
+		}
+	}
+	if note := oneLine(p.Description, maxPinNote); note != "" {
+		b.WriteString(" — " + note)
+	}
+	return b.String()
 }
 
 // hexes is the hex part of a map's answer: what the reader may see of its hex
@@ -1489,7 +1601,7 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 		ans.Text = b.String()
 		return ans, nil
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -1557,7 +1669,7 @@ func (run *lookupRun) systemEntryFields() (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("None listed. A campaign can still add entries for any character field key.\n")
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -1625,7 +1737,7 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("No player has claimed a character yet.\n")
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }

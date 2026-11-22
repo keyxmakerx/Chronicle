@@ -53,6 +53,24 @@ type tool struct {
 	PlayerDesc string
 }
 
+// pieceArg lets any lookup tool step through an answer too long for one read
+// (or a list past its line cap). It is not called `page`, which several tools
+// already use for a page's name.
+var pieceArg = arg{Key: "piece", Desc: "For an answer cut into pieces: which piece to read, like 2. Leave out for the first."}
+
+// withPiece is args plus the piece argument.
+func withPiece(args []arg) []arg {
+	return append(args[:len(args):len(args)], pieceArg)
+}
+
+func init() {
+	for i := range tools {
+		if tools[i].What != "" && !tools[i].Asks {
+			tools[i].Args = withPiece(tools[i].Args)
+		}
+	}
+}
+
 // toolConnect logs an AI app connecting; it is no tool the AI calls.
 const toolConnect = "connect"
 
@@ -71,6 +89,9 @@ var tools = []tool{
 	{Name: "list_pages", Title: "List pages", Did: "Listed pages", What: "pages",
 		Desc: "Page names with their tags, optionally only one kind of page or one tag.",
 		Args: []arg{{Key: "type", Desc: "A kind of page, for example \"Character\""}, {Key: "tag", Desc: "A tag's name"}}},
+	{Name: "search", Title: "Search the campaign", Did: "Searched the campaign", What: "search",
+		Desc: "Find pages by words: matches a page's name, other names, kind and text, and quotes a short line from each hit. Use it when you don't know a page's exact name; read_page then reads the hit in full. Only pages you can see are searched. A long list of hits comes in pieces: give piece for the next.",
+		Args: []arg{{Key: "query", Desc: "The words to look for (at least two characters)", Required: true}, {Key: "type", Desc: "Only this kind of page, for example \"Character\""}}},
 	{Name: "read_page", Title: "Read a page", Did: "Read the page", What: "page",
 		Desc: "One page: its text, tags, links and sheet, and its map when it has one.",
 		Args: []arg{{Key: "name", Desc: "The page's name", Required: true}}},
@@ -198,6 +219,7 @@ func pluggedTool(in aiplug.LookupInfo) *tool {
 	for _, a := range in.Tool.Args {
 		t.Args = append(t.Args, arg{Key: a.Key, Desc: a.Desc, Required: a.Required})
 	}
+	t.Args = withPiece(t.Args)
 	return t
 }
 
@@ -323,10 +345,16 @@ func (t *tool) readArgs(in map[string]any) (map[string]string, error) {
 // quoted, so they can never read as Chronicle's.
 func (t *tool) summary(args map[string]string) string {
 	var parts []string
+	// The piece argument rides on every lookup; it must not turn a
+	// one-argument tool's "Read rolling tables: “Loot”" into a keyed line.
+	own := len(t.Args)
+	if t.takes(pieceArg.Key) {
+		own--
+	}
 	for _, a := range t.Args {
 		if v := args[a.Key]; v != "" {
 			q := "“" + oneLine(v, 80) + "”"
-			if len(t.Args) == 1 {
+			if own == 1 && a.Key != pieceArg.Key {
 				parts = append(parts, q)
 			} else {
 				parts = append(parts, a.Key+" "+q)
