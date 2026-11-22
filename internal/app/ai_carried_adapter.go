@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 )
@@ -40,6 +41,28 @@ func (c aiCarriedAdapter) Counts(ctx context.Context, campaignID string, a recor
 func (c aiCarriedAdapter) SetCarried(ctx context.Context, campaignID string, a records.Actor, characterID, itemID string, qty int) error {
 	_, err := c.stash.SetCarried(ctx, campaignID, armory.Actor{UserID: a.UserID, Role: a.Role}, characterID, itemID, qty)
 	return err
+}
+
+var _ records.ShopPayAPI = aiCarriedAdapter{}
+
+// PaysByWealth is true when the Armory is on and any character's sheet keeps
+// Wealth as its money, the same test the shop uses to turn a price into a
+// level a hero needs. The owner's view is used because the answer is about
+// the game, not about who is looking.
+func (c aiCarriedAdapter) PaysByWealth(ctx context.Context, campaignID string) bool {
+	if on, err := c.addons.IsEnabledForCampaign(ctx, campaignID, armory.AddonSlug); err != nil || !on {
+		return false
+	}
+	chars, err := c.dir.ListCharacters(ctx, campaignID, permissions.RoleOwner, "")
+	if err != nil {
+		return false
+	}
+	for i := range chars {
+		if chars[i].MoneyKey == "wealth" {
+			return true
+		}
+	}
+	return false
 }
 
 var _ records.CopiesAPI = aiCarriedAdapter{}
