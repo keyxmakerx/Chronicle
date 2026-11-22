@@ -124,6 +124,58 @@
   .nav-sb .sidebar-pin-btn { display: none; }
 }
 
+/* In the drawer the campaign menu scrolls as one list. The docked sidebar's
+   split (a capped top part and a categories area with its own scroller) leaves
+   a phone two small scroll areas, and an open category's list almost no room
+   under its heading. Here the brand row stays at the top and the foot at the
+   bottom while everything between scrolls with one swipe. An open category's
+   panel takes the categories list's place in the flow, so the panel's own
+   rows scroll with the rest. The query is navDrawerQuery in app.templ. */
+@media (max-width: 767px), (max-width: 1023.98px) and (pointer: coarse) {
+  #sidebar {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+    /* Focus and scrollIntoView stop clear of the brand row and the foot. */
+    scroll-padding-block: 56px 40px;
+  }
+  :is([data-cz-corner="banner"], [data-cz-hdr="tall"]) #sidebar { scroll-padding-top: 6rem; }
+  /* Their own layers keep each part's row buttons under the brand row and
+     the foot as they scroll past. */
+  #sidebar > :not(.nav-brand, .nav-foot) { isolation: isolate; }
+  #sidebar > .nav-brand {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--nav-bg);
+  }
+  #sidebar > .nav-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    background: var(--nav-bg);
+  }
+  #sidebar .nav-top { max-height: none; overflow: visible; }
+  /* Grows to keep Campaign settings and the foot at the bottom of a short
+     menu, never shrinks below its rows. The panel slides in from the side,
+     so only that axis is clipped. */
+  #sidebar .nav-cat-zone {
+    flex: 1 0 auto;
+    min-height: auto;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+  #sidebar .nav-scroll { flex: none; overflow: visible; }
+  #sidebar .nav-drill { position: relative; inset: auto; }
+  #sidebar #sidebar-cat-content { flex: none; overflow: visible; }
+  /* Closed, the panel waits beside the list at the list's height, clipped so
+     its rows add no length. Open, the list steps out of the flow under it. */
+  #sidebar .nav-drill:not(.is-open) { position: absolute; inset: 0; overflow: hidden; }
+  #sidebar .nav-cat-zone:has(.nav-drill.is-open) .nav-scroll { position: absolute; inset: 0; overflow: hidden; }
+}
+
 /* The drawer's close control keeps its drawn size; an unseen margin around
    it brings what answers a tap to 44, stopping short of the button beside it. */
 @media (pointer: coarse) {
