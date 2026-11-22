@@ -1409,6 +1409,7 @@
     '.shr-fx{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:#bfb3a0}.shr-top .shr-seg{border-color:rgb(243 233 216/.3)}.shr-top .shr-seg button{color:#bfb3a0}.shr-top .shr-seg button[aria-pressed="true"]{background:#f3e9d8;color:#1a120c}',
     '.shr-seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;overflow:hidden}',
     '.shr-seg button{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:4px 8px;cursor:pointer;font-size:.8rem}',
+    '.shr-seg button:disabled{opacity:.5;cursor:not-allowed}',
     '.shr-seg button[aria-pressed="true"]{background:var(--color-text-primary,#111827);color:var(--color-bg-primary,#fff);font-weight:600}',
     '.shr-tabs{display:flex;gap:4px;flex-wrap:wrap}',
     '.shr-tab{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:5px 10px;border-radius:6px;cursor:pointer}',
@@ -1682,8 +1683,11 @@
           if (a.effect && a.effect.getComputedTiming().iterations === Infinity && Math.abs(a.currentTime - now) > 1) a.currentTime = now;
         });
       }
-      function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
-      function counterOn() { return S.look === 'counter' && !!window.ShopRoomCounter; }
+      // While the paper look is under construction a shop saved as paper opens
+      // at the counter; its saved choice stays paper for when paper is back.
+      function paperReady() { return !!window.ShopRoomPaper && !window.ShopRoomPaper.building; }
+      function paperOn() { return S.look === 'paper' && paperReady(); }
+      function counterOn() { return (S.look === 'counter' || (S.look === 'paper' && !paperReady())) && !!window.ShopRoomCounter; }
       // The builder is for the owner, in Arrange, and only while the counter is the look.
       function cbOn() { return canArrange && counterOn() && !!window.ShopRoomBuilder; }
       function counterModel() {
@@ -2236,7 +2240,8 @@
       function onKeeperClick() { if (S.mode === 'arr') return; setOpen(true); talk(); }
 
       // ---- Owner panel: the generator and the keeper's lines ----
-      function seg(key, opts) { return '<span class="shr-seg" role="group">' + opts.map(function (o) { return '<button type="button" data-k="' + key + '" data-v="' + o[0] + '" aria-pressed="' + (S[key] === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span>'; }
+      // An option's third entry, when there is one, is why it is off.
+      function seg(key, opts) { return '<span class="shr-seg" role="group">' + opts.map(function (o) { return '<button type="button" data-k="' + key + '" data-v="' + o[0] + '" aria-pressed="' + (S[key] === o[0]) + '"' + (o[2] ? ' disabled title="' + esc(o[2]) + '"' : '') + '>' + o[1] + '</button>'; }).join('') + '</span>'; }
       // One generator row: a part of the room with its keep pin and reroll dice.
       function genRow(part, icon, name, sub) {
         var k = partKeep[part];
@@ -2353,8 +2358,9 @@
         if (canArrange) loadOwnerRolls();
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length, mood = MOODS[S.mood] ? S.mood : 'cozy', M = MOODS[mood], e = efxNow();
         var typeName = (ROOM_TYPES.filter(function (t) { return t[0] === S.roomType; })[0] || [0, ''])[1];
-        var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [['paper', 'Paper']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
+        var looks = [['lit', 'Lit room']].concat(window.ShopRoomPaper ? [paperReady() ? ['paper', 'Paper'] : ['paper', 'Paper', 'Under construction']] : [], window.ShopRoomCounter ? [['counter', 'Counter']] : []);
         var room1 = (looks.length > 1 ? '<div class="shr-field"><span>Look</span>' + seg('look', looks) + '</div>' : '') +
+          (window.ShopRoomPaper && !paperReady() ? '<p class="shr-note">Paper is under construction while it is redesigned, so it can’t be picked for now.' + (S.look === 'paper' && counterOn() ? ' This shop was set to Paper, so it opens at the counter until Paper is back. Pick another look to change that for good.' : '') + '</p>' : '') +
           (S.look === 'counter' ? '<p class="shr-note">At the counter, the shop lays itself out from its goods. Furniture and moods shape the lit and paper rooms; the Counter room section builds the counter room, the shop type picks the shop floor’s working piece, and the time of day colours the window.</p>' : '') +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
@@ -2366,7 +2372,7 @@
             : '<div class="shr-field"><span>Colours</span><span class="shr-chips">' + room.PALS.map(function (p) { return '<button type="button" class="shr-chip" data-k="pal" data-v="' + p[0] + '" aria-pressed="' + (S.pal === p[0]) + '"><span class="shr-sw" style="background:' + p[2] + '"></span>' + p[1] + '</button>'; }).join('') + '</span></div>');
         var add1 = '<span class="shr-seg" role="group" style="display:grid"><button type="button" data-addtab="m" aria-pressed="' + (addTab === 'm') + '">Mood pieces</button><button type="button" data-addtab="f" aria-pressed="' + (addTab === 'f') + '">Furniture</button><button type="button" data-addtab="d" aria-pressed="' + (addTab === 'd') + '">Decorations</button></span>' +
           '<div class="shr-addl' + (addTab === 'd' ? ' dec' : '') + '">' + addTiles() + '</div>' +
-          '<small class="shr-hint">' + (addTab === 'd' ? 'Drop a decoration on a shelf, table or wall spot.' : 'Drag a piece onto the floor.') + ' Drag anything in the room onto the bin to remove it. With a keyboard, Tab to a piece and move it with the arrow keys; Shift moves it further.' + (S.look === 'paper' ? ' The marks over the counter choose where the keeper stands.' : '') + '</small>';
+          '<small class="shr-hint">' + (addTab === 'd' ? 'Drop a decoration on a shelf, table or wall spot.' : 'Drag a piece onto the floor.') + ' Drag anything in the room onto the bin to remove it. With a keyboard, Tab to a piece and move it with the arrow keys; Shift moves it further.' + (paperOn() ? ' The marks over the counter choose where the keeper stands.' : '') + '</small>';
         var rng = function (k, label) { return '<label class="shr-rng"><span>' + label + '</span><input type="range" min="0" max="250" step="5" data-efx="' + k + '" value="' + e[k] + '"><output>' + e[k] + '%</output></label>'; };
         var tg = function (k, label) { return '<button type="button" data-eft="' + k + '" aria-pressed="' + !!e[k] + '">' + label + '</button>'; };
         var es = function (k, opts) { return '<span class="shr-seg" role="group" style="display:grid">' + opts.map(function (o) { return '<button type="button" data-efs="' + k + '" data-v="' + o[0] + '" aria-pressed="' + (e[k] === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span>'; };
@@ -2381,7 +2387,7 @@
           genRow('deco', 'fa-wand-magic-sparkles', 'Decorations', { none: 'None', some: 'Some', lots: 'Lots' }[S.deco] || '');
         var fineSum = S.efx ? 'Changed by you' : 'As the mood sets it';
         panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
-          sec('room', 'fa-house', 'Room', typeName + ' · ' + ({ paper: 'Paper', counter: 'Counter' }[S.look] || 'Lit room'), room1) +
+          sec('room', 'fa-house', 'Room', typeName + ' · ' + ({ paper: paperOn() ? 'Paper' : 'Paper, under construction', counter: 'Counter' }[S.look] || 'Lit room'), room1) +
           (cbOn() ? sec('cr', 'fa-store', 'Counter room', cbApi.theme().name, '<div data-cb></div>') : '') +
           sec('mood', 'fa-masks-theater', 'Mood', M.name, mood1) +
           sec('add', 'fa-plus', 'Add pieces', 'Drag into the room', add1) +
@@ -2389,7 +2395,7 @@
           sec('gen', 'fa-dice', 'Generate', 'Reroll parts', gen1) +
           sec('keeper', 'fa-comment', 'Keeper', keeperSum(), keeperBody()) +
           sec('rolls', 'fa-dice-d20', 'Rolls at the counter', rollsSum(), rollsBody()) +
-          '<span class="shr-status" aria-live="polite">' + (S.look === 'paper' ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
+          '<span class="shr-status" aria-live="polite">' + (paperOn() ? (S.keeperSpot ? 'The keeper stands at the ' + S.keeperSpot + ' of the counter.' : '') : S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
           '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
           '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');

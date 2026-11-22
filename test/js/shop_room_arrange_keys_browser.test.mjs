@@ -7,6 +7,8 @@
 // paper. Arrows typed into the panel's text never move anything, and Escape
 // lets go of the piece before it leaves Arrange. In paper, three marks over
 // the counter pick where the keeper stands, and that is saved with the room.
+// Paper is under construction, so Arrange offers it switched off with the
+// reason; the paper tests switch it back on to keep its drawing covered.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -24,7 +26,8 @@ const read = (f) => readFileSync(join(root, 'static/js/widgets', f), 'utf8');
 const GOODS = [{ id: 11, relationType: 'sells', targetEntityId: 'e1', targetEntityName: 'Healing Potion', targetEntityType: 'Potion', metadata: { price: 2, currency: 'gp', quantity: 4 } }];
 const HOST = `<!doctype html><html><head><style>[hidden]{display:none} body{margin:0}</style></head><body><div id="w" data-widget="shop_room" data-room-endpoint="/campaigns/c1/armory/shops/s1/room" data-relations-endpoint="/rel" data-shop-name="Keys" data-campaign-url="/campaigns/c1" data-csrf-token="t" data-can-arrange="true"></div></body></html>`;
 
-async function page(t, vp) {
+// paper: true switches the paper look back on, as the redesigned paper will be.
+async function page(t, vp, paper) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: vp || { width: 1280, height: 860 } });
@@ -40,7 +43,10 @@ async function page(t, vp) {
       return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(body); } });
     }
   };` });
-  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_keeper.js', 'shop_room.js']) await p.addScriptTag({ content: read(f) });
+  for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_keeper.js', 'shop_room.js']) {
+    if (f === 'shop_room.js' && paper) await p.addScriptTag({ content: 'window.ShopRoomPaper.building = false;' });
+    await p.addScriptTag({ content: read(f) });
+  }
   await p.waitForSelector('#w:not([hidden]) .shr-front');
   await p.click('.shr-front');
   await p.waitForFunction(() => document.querySelector('.shr-dlg').open, null, { timeout: 4000 });
@@ -67,7 +73,7 @@ async function pressOnSomePiece(p, sel, key) {
 
 for (const look of ['lit', 'paper']) {
   test(`${look}: arrows nudge the focused piece, Shift moves it a whole square, and it keeps focus`, { skip }, async (t) => {
-    const p = await page(t);
+    const p = await page(t, null, look === 'paper');
     if (look === 'paper') await click(p, 'button[data-k="look"][data-v="paper"]');
     const sel = look === 'paper' ? '.srp-pc' : '.piece';
     assert.equal(await p.evaluate((s) => [...document.querySelectorAll(s)].every((g) => g.getAttribute('tabindex') === '0' && /Arrow keys move it/.test(g.getAttribute('aria-label'))), sel), true, 'every piece is focusable and says how');
@@ -101,8 +107,19 @@ test('arrows typed into the panel never move a piece, and Escape lets go of a pi
   assert.deepEqual(s, { arr: true, focused: false }, 'Escape lets go of the piece and stays in Arrange');
 });
 
-test('paper: the marks over the counter place the keeper, and the choice is saved', { skip }, async (t) => {
+test('paper is under construction: Arrange offers it switched off and says why', { skip }, async (t) => {
   const p = await page(t);
+  const s = await p.evaluate(() => {
+    const b = document.querySelector('button[data-k="look"][data-v="paper"]');
+    b.click();
+    return { off: b.disabled, why: b.title, pressed: b.getAttribute('aria-pressed'), note: [...document.querySelectorAll('.shr-note')].some((n) => /Paper is under construction/.test(n.textContent)) };
+  });
+  assert.deepEqual(s, { off: true, why: 'Under construction', pressed: 'false', note: true });
+  assert.equal(await p.evaluate(() => document.querySelector('.shr').classList.contains('paper')), false, 'pressing it changes nothing');
+});
+
+test('paper: the marks over the counter place the keeper, and the choice is saved', { skip }, async (t) => {
+  const p = await page(t, null, true);
   await click(p, 'button[data-k="look"][data-v="paper"]');
   const marks = await p.evaluate(() => [...document.querySelectorAll('.srp-kspot')].map((b) => [b.dataset.ks, b.getAttribute('aria-pressed'), Math.round(b.getBoundingClientRect().width)]));
   assert.deepEqual(marks.map((m) => m[0]), ['left', 'middle', 'right']);
@@ -120,7 +137,7 @@ test('paper: the marks over the counter place the keeper, and the choice is save
 });
 
 test('the marks only show while arranging', { skip }, async (t) => {
-  const p = await page(t);
+  const p = await page(t, null, true);
   await click(p, 'button[data-k="look"][data-v="paper"]');
   await save(p); await p.waitForFunction(() => window.saved.length === 1);
   assert.equal(await p.evaluate(() => document.querySelectorAll('.srp-kspot').length), 0);
@@ -128,7 +145,7 @@ test('the marks only show while arranging', { skip }, async (t) => {
 
 test('paper: a press just beside a small ware still finds it', { skip }, async (t) => {
   // A small window draws the wares smaller than the 32px a press needs.
-  const p = await page(t, { width: 760, height: 560 });
+  const p = await page(t, { width: 760, height: 560 }, true);
   await click(p, 'button[data-k="look"][data-v="paper"]');
   await click(p, 'button[data-k="deco"][data-v="none"]');
   // Points just outside each ware's own box, left and right, where no other card's own box is.

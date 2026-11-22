@@ -32,7 +32,7 @@ const ROOM = { layout: { version: 1, roomType: 'apothecary', setting: 'room', si
 const HOST = `<!doctype html><html data-motion="calm"><head><style>[hidden] { display: none } body { margin: 0 }</style></head><body>
 <div id="w" data-widget="shop_room" data-room-endpoint="/campaigns/c1/armory/shops/s1/room" data-relations-endpoint="/rel" data-shop-name="Hessa Ord's Workshop" data-campaign-url="/campaigns/c1" data-csrf-token="t"></div></body></html>`;
 
-async function shop(t) {
+async function shop(t, room) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -44,7 +44,7 @@ async function shop(t) {
     register: function (n, impl) { impl.init(document.getElementById('w')); },
     apiFetch: function (url, o) {
       if (o && o.method === 'POST') { window.__posts.push(o.body); return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ status: 'bought', spent: 3, currency: 'gp', moneyLeft: 497 }); } }); }
-      var body = /\\/room$/.test(url) ? ${JSON.stringify(ROOM)} : /\\/buyers$/.test(url) ? ${JSON.stringify(BUYERS)} : ${JSON.stringify(GOODS)};
+      var body = /\\/room$/.test(url) ? ${JSON.stringify(room || ROOM)} : /\\/buyers$/.test(url) ? ${JSON.stringify(BUYERS)} : ${JSON.stringify(GOODS)};
       return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(body); } });
     }
   };` });
@@ -74,6 +74,12 @@ test('the counter stands its goods on the shelves and shuts the finer ones in th
   assert.deepEqual(s.shelf, ['ware:11', 'ware:12', 'ware:14'], 'the unlimited tea waits in a barrel on the floor');
   assert.equal(s.caseShut, true);
   assert.equal(s.scene, 1.71, 'the scene keeps the counter look\'s 12 by 7 shape');
+});
+
+test('a shop saved as paper opens at the counter while paper is under construction', { skip }, async (t) => {
+  const p = await shop(t, { layout: { ...ROOM.layout, look: 'paper' } });
+  const s = await p.evaluate(() => ({ counter: document.querySelector('.shr').classList.contains('counter'), paper: document.querySelector('.shr').classList.contains('paper'), drawn: document.querySelector('.shr-paper').childElementCount }));
+  assert.deepEqual(s, { counter: true, paper: false, drawn: 0 });
 });
 
 test('a good comes to the cloth and goes on the pile only when you say so', { skip }, async (t) => {
