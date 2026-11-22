@@ -91,6 +91,15 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
     assert.ok(['events', 'sky'].includes(p.lane), `unexpected lane ${p.lane}`);
     assert.ok(p.sig, 'no sig');
   }
+  // A fill covers today to the year's end: nothing it keeps starts before the
+  // calendar's current day or in another year, however the comet's span fell.
+  const today = (await owner.api(base)).body;
+  const stampOf = (y, m, d) => y * 10000 + m * 100 + d;
+  const firstDay = stampOf(today.current_year, today.current_month, today.current_day);
+  for (const e of kept) {
+    assert.equal(e.year, today.current_year, `${e.name} starts in ${e.year}, not the current year`);
+    assert.ok(stampOf(e.year, e.month, e.day) >= firstDay, `${e.name} starts ${e.year}-${e.month}-${e.day}, before today ${firstDay}`);
+  }
   const seen = await yearEvents(player, base, cal.current_year, months);
   assert.equal(seen.length, 0, 'a player can read generated events');
 
