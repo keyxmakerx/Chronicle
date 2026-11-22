@@ -76,8 +76,11 @@
   function holdPlace(m, top) {
     var prev = active && active.m === m ? active : null;
     var height = prev ? Math.max(prev.height, contentEnd(m, prev.spacer())) : contentEnd(m, null);
-    if (active) active.end();
-    var spacer = null, moved = false, done = false, still = 0, landed = false;
+    // The last hold's block stays until this refresh's markup replaces it;
+    // dropping it now would let the page shrink, and the reader be pulled
+    // up, for as long as the request is on its way.
+    var spacer = active ? active.end(!!prev) : null;
+    var moved = false, done = false, still = 0, landed = false;
     var start = 0;
     // The browser's own scroll anchoring would move the page when a widget
     // grows above the reader; the position is kept here instead.
@@ -125,16 +128,19 @@
     }
     document.addEventListener('htmx:afterSwap', swapped);
     document.addEventListener('htmx:afterSettle', settled);
-    function end() {
-      if (done) return;
+    // Lets go; with `keep` the block stays where it is and is returned.
+    function end(keep) {
+      if (done) return null;
       done = true;
       if (active === self) active = null;
       document.removeEventListener('htmx:afterSwap', swapped);
       document.removeEventListener('htmx:afterSettle', settled);
       evs.forEach(function (t) { m.removeEventListener(t, touched); });
-      if (spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
+      var kept = keep ? spacer : null;
+      if (!kept && spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
       spacer = null;
       m.style.overflowAnchor = anchor;
+      return kept;
     }
     function frame() {
       if (done) return;

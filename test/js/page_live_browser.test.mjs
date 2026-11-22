@@ -51,7 +51,13 @@ async function setup(t, late, short) {
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
   let served = 0;
-  await p.route('http://chronicle.test/**', (r) => r.fulfill({ contentType: 'text/html', body: pageHtml(served++ > 0, short) }));
+  // Refreshes take a moment to arrive, as they do over a real network, so
+  // frames are painted while one is on its way.
+  await p.route('http://chronicle.test/**', async (r) => {
+    const fresh = served++ > 0;
+    if (fresh) await new Promise((ok) => setTimeout(ok, 150));
+    await r.fulfill({ contentType: 'text/html', body: pageHtml(fresh, short) });
+  });
   await p.goto('http://chronicle.test/campaigns/c1/entities/e1');
   await p.addScriptTag({ content: HTMX });
   // A stand-in for Chronicle's widget registry and the page's socket.
