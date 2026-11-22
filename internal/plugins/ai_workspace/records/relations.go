@@ -42,6 +42,18 @@ type CarriedAPI interface {
 	SetCarried(ctx context.Context, campaignID string, a Actor, characterID, itemID string, qty int) error
 }
 
+// ShopPayAPI tells whether the campaign's heroes pay by Wealth, so a shop
+// price is read as a Wealth level rather than coins. Implemented in
+// internal/app over the Armory; nil reads every price as coins.
+type ShopPayAPI interface {
+	PaysByWealth(ctx context.Context, campaignID string) bool
+}
+
+// maxLikelyWealth is where a Wealth price starts to look like a coin price
+// typed by mistake. The game's own Wealth range is not available here, so
+// this is a deliberately generous bound: it only catches figures such as 25.
+const maxLikelyWealth = 10
+
 // linkKind is a page-to-page relation with numeric metadata: a shop's stock
 // ("sells") or what a character carries ("Has Item"). The relation types
 // and metadata keys are the ones the armory and shop widgets read.
@@ -59,16 +71,19 @@ type linkKind struct {
 	Rels                 RelationsAPI
 	// Armory, on carried items only, writes counts through the Armory.
 	Armory CarriedAPI
+	// Pay, on shop stock only, says whether prices are Wealth levels.
+	Pay ShopPayAPI
 }
 
 // ShopStockKind is what a shop sells and for how much.
-func ShopStockKind(e EntityLookup, r RelationsAPI) Kind {
+func ShopStockKind(e EntityLookup, r RelationsAPI, pay ShopPayAPI) Kind {
 	return &linkKind{
+		Pay: pay,
 		name: "shop-stock", label: "Shop stock", ownerKey: "shop", joiner: "at", qtyWord: "in stock",
 		relType: "sells", reverseType: "sold by",
 		numbers: []string{"price", "quantity"}, strs: []string{"currency"}, flags: []string{"today"},
 		Entities: e, Rels: r,
-		doc: "An item a shop sells. Keys: `shop` (the shop's page name), `item` (the item's page name), `price` (number), `currency` (cp, sp, gp…; default gp), `quantity` (leave out for unlimited, 0 = sold out), `today` (true: it turns up on today's shelf on only some days, as `what: stock` shows; false: sold every day). Both pages must exist or be created in the same paste. `action: delete` stops selling it.\n\n```\n---\nkind: shop-stock\nshop: The Rusty Anchor\nitem: Rope (50 ft)\nprice: 1\nquantity: 5\n---\n```",
+		doc: "An item a shop sells. Keys: `shop` (the shop's page name), `item` (the item's page name), `price` (number), `currency` (cp, sp, gp…; default gp), `quantity` (leave out for unlimited, 0 = sold out), `today` (true: it turns up on today's shelf on only some days, as `what: stock` shows; false: sold every day). In a game that pays by Wealth (Draw Steel), `price` is the Wealth level a hero needs to buy the good, not coins: nothing is spent, `currency` is ignored (leave it out), and a hero can buy it when their Wealth is at least the price. A price of 0, or none, shows as \"No price\" and the good cannot be bought. Both pages must exist or be created in the same paste. `action: delete` stops selling it.\n\n```\n---\nkind: shop-stock\nshop: The Rusty Anchor\nitem: Rope (50 ft)\nprice: 1\nquantity: 5\n---\n```",
 	}
 }
 
@@ -126,14 +141,19 @@ func (k *linkKind) Title(r Record) string {
 	return r.Str("item") + " " + k.joiner + " " + r.Str(k.ownerKey)
 }
 
-func (k *linkKind) summary(r Record) string {
+// summary words the row; wealth reads the price as a Wealth level.
+func (k *linkKind) summary(r Record, wealth bool) string {
 	var parts []string
 	if k.name == "shop-stock" && r.Has("price") {
-		cur := r.Str("currency")
-		if cur == "" {
-			cur = "gp"
+		if wealth {
+			parts = append(parts, "Wealth "+r.Str("price"))
+		} else {
+			cur := r.Str("currency")
+			if cur == "" {
+				cur = "gp"
+			}
+			parts = append(parts, r.Str("price")+" "+cur)
 		}
-		parts = append(parts, r.Str("price")+" "+cur)
 	}
 	if r.Has("quantity") {
 		parts = append(parts, r.Str("quantity")+" "+k.qtyWord)
@@ -169,7 +189,11 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if err != nil {
 		return Plan{Error: planError(err)}
 	}
-	p := Plan{Summary: k.summary(r)}
+	wealth := k.name == "shop-stock" && r.Action != ActionDelete && k.Pay != nil && k.Pay.PaysByWealth(ctx, campaignID)
+	p := Plan{Summary: k.summary(r, wealth)}
+	if k.name == "shop-stock" && r.Action != ActionDelete {
+		p.Warnings = append(p.Warnings, priceNotes(r, wealth)...)
+	}
 	if src == nil || item == nil {
 		missing := r.Str(k.ownerKey)
 		if src != nil {
@@ -207,6 +231,27 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 		p.Summary = k.armorySummary(r, link, p.Summary)
 	}
 	return p
+}
+
+// priceNotes are the non-blocking warnings on a shop price. The shop refuses
+// to sell a good priced 0, so that is flagged in any game; a Wealth game
+// ignores the currency and gates on the level.
+func priceNotes(r Record, wealth bool) []string {
+	var out []string
+	f, ok, _ := r.Float("price")
+	if ok && f == 0 {
+		out = append(out, "A price of 0 shows as \"No price\" and the good cannot be bought until it has a price above 0.")
+	}
+	if !wealth {
+		return out
+	}
+	if r.Str("currency") != "" {
+		out = append(out, "This game pays by Wealth, so `currency` is ignored; the price is the Wealth level a hero needs.")
+	}
+	if ok && f > maxLikelyWealth {
+		out = append(out, fmt.Sprintf("Wealth %s is far above the Wealth levels heroes normally have, so almost no hero could buy it. If you meant a coin price, this game pays by Wealth instead.", r.Str("price")))
+	}
+	return out
 }
 
 // maxCarried is the Armory's largest count.

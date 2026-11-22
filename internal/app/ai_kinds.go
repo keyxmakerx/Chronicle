@@ -306,8 +306,9 @@ func init() {
 		return []records.Kind{d.Tables}
 	})
 	addAIKinds(70, func(d *aiDeps) []records.Kind {
+		pay, _ := d.Carried.(records.ShopPayAPI)
 		kinds := []records.Kind{
-			records.ShopStockKind(d.Entities, d.Relations),
+			records.ShopStockKind(d.Entities, d.Relations, pay),
 			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
