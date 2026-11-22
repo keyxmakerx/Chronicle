@@ -5,7 +5,8 @@
 // the "n not here" foot folding open names and reasons, a required step with
 // one entry filled in and locked, a short-list note, the Ask first mark with a
 // waiting line, the Director's suggestion, what reaches the server, and that a
-// new-hero sentence an older Characters page kept on the device seeds a hero.
+// new-hero sentence an older Characters page kept on the device seeds a hero,
+// and the optional About your hero step: kept in the draft, sent with the hero.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -40,7 +41,7 @@ const html = (term) => `<!doctype html><html data-gm-term="${term}"><head><meta 
 <script>window.Chronicle = { register: (n, d) => { window.hcImpl = d; document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)); }, escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => document.documentElement.getAttribute('data-gm-term') || 'GM' };</script>
 <script src="/hero_rules_lines.js"></script><script src="/hero_creator.js"></script></body></html>`;
 
-async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term = 'Director', width = 1100 } = {}) {
+async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term = 'Director', width = 1100, about = null } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const pg = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
@@ -51,7 +52,7 @@ async function open(t, { created = { id: 'e9', url: C + '/entities/e9' }, term =
     if (p === '/hero_creator.js') return route.fulfill({ contentType: 'text/javascript', body: js('hero_creator.js') });
     if (p === '/hero_creator.css') return route.fulfill({ contentType: 'text/css', body: css() });
     if (p === '/hero_rules_lines.js') return route.fulfill({ contentType: 'text/javascript', body: js('hero_rules_lines.js') });
-    if (p === C + '/characters/new/plan') return ok(PLAN());
+    if (p === C + '/characters/new/plan') return ok(about ? { ...PLAN(), about } : PLAN());
     if (p === C + '/characters/new' && req.method() === 'POST') { seen.post.push(JSON.parse(req.postData())); return ok(created, 201); }
     return route.fulfill({ contentType: 'text/html', body: html(term) });
   });
@@ -180,4 +181,60 @@ test('unmounting lets go of the window, the document and the size watcher', { sk
   assert.deepEqual(r.gone.sort(), ['document pointerdown', 'window resize']);
   assert.equal(r.cut, true, 'the ResizeObserver is disconnected');
   assert.equal(r.left, false);
+});
+
+const ABOUT = [{ key: 'pronouns', label: 'Pronouns' }, { key: 'gender', label: 'Gender' },
+  { key: 'appearance', label: 'What they look like', long: true }, { key: 'backstory', label: 'Backstory', long: true }];
+
+test('About your hero: optional boxes before Name and review, kept in the draft and sent with the hero', { skip }, async (t) => {
+  const { pg, seen } = await open(t, { about: ABOUT });
+  const row = pg.locator('.hc-rail .hc-row', { hasText: 'About your hero' });
+  assert.match(await row.innerText(), /Optional/);
+  await row.click();
+  assert.equal(await text(pg, '.hc-rev__t'), 'About your hero');
+  assert.equal(await pg.locator('[data-about-step] textarea').count(), 2, 'looks and backstory are paragraphs');
+  assert.match(await text(pg, '[data-about-step]'), /All optional.*Foundry’s Biography/s);
+  await pg.fill('[data-about="pronouns"]', '  she/her ');
+  await pg.fill('[data-about="backstory"]', 'Raised on the coast.');
+  await pg.fill('[data-about="gender"]', '   ');
+  assert.match(await row.innerText(), /she\/her/);
+  await pg.reload();
+  await pg.waitForSelector('.hc-app');
+  await pg.locator('.hc-rail .hc-row', { hasText: 'About your hero' }).click();
+  assert.equal(await pg.inputValue('[data-about="pronouns"]'), '  she/her ', 'the draft keeps what was written');
+  assert.equal(await pg.inputValue('[data-about="backstory"]'), 'Raised on the coast.');
+  await pg.click('[data-about-step] [data-act="next"]');
+  assert.equal(await text(pg, '.hc-rev__t'), 'Name your hero');
+  assert.match(await text(pg, '.hc-sum'), /About your hero\s*she\/her/i);
+  await rail(pg, 'kit').click();
+  await pick(pg, 'Arcane Archer');
+  await rail(pg, 'class').click();
+  await pick(pg, 'Fury');
+  await pg.locator('.hc-rail .hc-row', { hasText: 'Name and review' }).click();
+  await pg.fill('[data-name]', 'Tess');
+  await pg.click('[data-act="create"]');
+  await pg.waitForTimeout(100);
+  assert.deepEqual(seen.post[0].about, { pronouns: 'she/her', backstory: 'Raised on the coast.' }, 'trimmed, and empty boxes left out');
+});
+
+test('on a phone, About your hero is a step of its own with a way on', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, about: ABOUT.slice(0, 2) });
+  assert.match(await text(pg, '.hc-sbtn'), /Step 2 of 6/);
+  await pg.click('.hc-sbtn');
+  await pg.locator('.hc-drape .hc-row', { hasText: 'About your hero' }).click();
+  assert.match(await text(pg, '.hc-sbtn'), /Step 5 of 6\s*·\s*About your hero/);
+  assert.equal(await pg.locator('[data-about-step] textarea').count(), 0);
+  assert.doesNotMatch(await text(pg, '[data-about-step]'), /Biography/, 'no backstory box, so no word about Foundry');
+  await pg.click('[data-about-step] [data-act="back"]');
+  assert.match(await text(pg, '.hc-sbtn'), /Step 4 of 6\s*·\s*Culture/);
+  await pg.click('.hc-sbtn');
+  await pg.locator('.hc-drape .hc-row', { hasText: 'About your hero' }).click();
+  await pg.click('[data-about-step] [data-act="next"]');
+  assert.match(await text(pg, '.hc-sbtn'), /Step 6 of 6\s*·\s*Name and review/);
+});
+
+test('a plan without About boxes has no About step', { skip }, async (t) => {
+  const { pg } = await open(t, { about: [] });
+  assert.equal(await pg.locator('.hc-rail .hc-row', { hasText: 'About your hero' }).count(), 0);
+  assert.equal(await pg.locator('.hc-rail .hc-row').count(), 5);
 });

@@ -66,6 +66,9 @@ type HeroPlan struct {
 	SystemID   string     `json:"systemId,omitempty"`
 	SystemName string     `json:"systemName"`
 	Steps      []HeroStep `json:"steps"`
+	// About is the creator's optional "About your hero" step, set only for
+	// the new-hero creator: the hero's own words, never a pick.
+	About []HeroAboutField `json:"about,omitempty"`
 	// Practice marks the plan a practice hero is made from: every entry the
 	// rules keep from this player is back in the lists, labelled, and no rule
 	// locks or forces a step.
@@ -101,6 +104,8 @@ type HeroPick struct {
 type HeroRequest struct {
 	Name  string              `json:"name"`
 	Picks map[string]HeroPick `json:"picks"`
+	// About is the "About your hero" step's boxes, by field key.
+	About map[string]string `json:"about,omitempty"`
 }
 
 // heroAccess says whether the viewer may use the creator and, if so, whether
