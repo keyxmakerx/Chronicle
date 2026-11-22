@@ -31,8 +31,9 @@ test('holdFor is what the content lacks of the old height, never negative', () =
 // `late` ms after the swap, as a widget waiting on its data does.
 function pageHtml(fresh) {
   // A fresh copy also carries a block that is gone before the swap settles,
-  // as markup htmx is still settling can be.
-  const sheet = fresh ? '<div data-late style="height:0"></div><div data-brief style="height:600px"></div>' : '<div style="height:3000px"></div>';
+  // as markup htmx is still settling can be, and one a widget folds away
+  // soon after it.
+  const sheet = fresh ? '<div data-late style="height:0"></div><div data-brief style="height:600px"></div><div data-folds style="height:500px"></div>' : '<div style="height:3000px"></div>';
   // The scroller's size is on the element itself, as the app's classes are.
   return '<!doctype html><html><head></head><body style="margin:0">' +
     '<main id="main-content" style="height:600px;overflow-y:auto;padding:16px"><h1>Bren</h1>' + sheet + '<div id="notes" style="height:400px">Notes</div><div id="live"></div></main></body></html>';
@@ -58,6 +59,7 @@ async function setup(t, late) {
     window.WebSocket.prototype.close = function () {};
     document.addEventListener('htmx:afterSwap', () => {
       setTimeout(() => { const b = document.querySelector('[data-brief]'); if (b) b.style.height = '0'; }, 0);
+      setTimeout(() => { const f = document.querySelector('[data-folds]'); if (f) f.style.height = '0'; }, 150);
       setTimeout(() => { const s = document.querySelector('[data-late]'); if (s) s.style.height = '3000px'; }, lateMs);
     });
   }, late);

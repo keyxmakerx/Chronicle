@@ -62,17 +62,16 @@
     var anchor = m.style.overflowAnchor;
     m.style.overflowAnchor = 'none';
     function held() { return spacer ? spacer.offsetHeight : 0; }
+    // Returns what the content still lacks of the old height. The block also
+    // keeps a screen's worth of room under that, so a widget that folds away
+    // between two frames cannot pull a reader at the bottom up; the room goes
+    // when the hold ends. It also keeps scrollHeight from reading the
+    // scroller's own height when the content is shorter than that.
     function size() {
       if (!spacer) return 0;
       if (spacer.parentNode !== m) m.appendChild(spacer);
-      // A second pass when the content was shorter than the scroller itself,
-      // since scrollHeight never reads less than the visible height.
-      var h = 0;
-      for (var i = 0; i < 2; i++) {
-        h = holdFor(height, m.scrollHeight - held());
-        spacer.style.height = h + 'px';
-        if (m.scrollHeight >= height) break;
-      }
+      var h = holdFor(height, m.scrollHeight - held());
+      spacer.style.height = (h + m.clientHeight) + 'px';
       return h;
     }
     function touched() { moved = true; }
