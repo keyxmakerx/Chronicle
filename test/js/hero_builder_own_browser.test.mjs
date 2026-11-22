@@ -5,8 +5,8 @@
 // on-sight loader in a real Chromium, with the plan, grants and entry API
 // answered here. It pins that the make row shows only while a permission is
 // unspent, that the shared editor opens in the panel, that a saved or handed-in
-// entry is picked for the hero with a field save, that a draft is marked and
-// can be edited, and that a new hero's drafts are kept to it once it exists.
+// entry is picked for the hero with a field save, and that a draft is marked
+// and can be edited.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -29,16 +29,16 @@ const plan = (canMake, extra = []) => ({
   ],
 });
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
-const page = (heroes, canCreate) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
+const page = (heroes) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
 <style>:root{--color-accent:#4f46e5;--color-bg-primary:#f9fafb;--color-bg-secondary:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-body:#374151;--color-text-secondary:#6b7280;
 --dur-micro:120ms;--dur-standard:200ms;--dur-large:280ms;--dur-slide:360ms;--ease-out:cubic-bezier(.16,1,.3,1);--ease-slide:cubic-bezier(.22,.8,.24,1)}
 html,body{margin:0;font:14px system-ui}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style></head><body>
 <main id="main-content" style="padding:24px 16px"><div id="cast-content">
 <a href="/campaigns/c1/characters/new" data-create-hero="true">Create hero</a>
 <link rel="stylesheet" href="/static/plugins/entities/css/hero_builder.css">
-<section class="hb" data-widget="hero-builder" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
-  data-fields-base="${C}/entities/" data-campaign-id="c1" data-csrf="tok" data-can-create="${canCreate}" data-for-self="true"
-  data-type-name="Hero" data-heroes='${attr(heroes)}'><p class="hb-wait">Opening the hero builder…</p></section>
+<section class="hb" data-widget="hero-builder" data-plan-url="${C}/characters/new/plan"
+  data-fields-base="${C}/entities/" data-campaign-id="c1" data-csrf="tok"
+  data-heroes='${attr(heroes)}'><p class="hb-wait">Opening the hero builder…</p></section>
 </div></main>
 <script type="application/json" id="chronicle-widget-scripts">{"hero-builder":["/static/plugins/entities/js/hero_rules_lines.js","/static/plugins/entities/js/own_entry_editor.js","/static/plugins/entities/js/hero_builder.js"]}</script>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
@@ -46,7 +46,7 @@ html,body{margin:0;font:14px system-ui}.sr-only{position:absolute;width:1px;heig
 
 const staticFile = (p) => p.startsWith('/static/plugins/entities/') ? join(root, 'internal/plugins/entities/static', p.slice('/static/plugins/entities/'.length)) : join(root, p);
 
-async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ id: 'e1', name: 'Tess', values: {}, hidden: [] }], canCreate = false, width = 1280 } = {}) {
+async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ id: 'e1', name: 'Tess', values: {}, hidden: [] }], width = 1280 } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
@@ -58,7 +58,7 @@ async function open(t, { canMake = true, entries = [], extra = [], heroes = [{ i
   await p.route('**/*', (route) => {
     const req = route.request(), u = new URL(req.url()), m = req.method();
     const ok = (b, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(b) });
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes, canCreate) });
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes) });
     if (u.pathname === C + '/characters/new/plan') return ok(plan(canMake, extra));
     if (u.pathname === C + '/system-entries/grants') return ok({ grants: [{ id: 1, fieldKey: 'ancestry', userId: 'u1', budget: 3 }] });
     if (u.pathname === C + '/system-entries' && m === 'GET') return ok({ entries: store });
@@ -126,21 +126,6 @@ test('a draft is marked in the list, and can be edited from its detail', { skip 
   await p.click('[data-own-edit]');
   await p.waitForSelector('.hb-panel [data-k="name"]');
   assert.equal(await p.inputValue('.hb-panel [data-k="name"]'), 'Ashborn');
-});
-
-test('a new hero keeps its picked draft to it once it is made', { skip }, async (t) => {
-  const mine = { slug: 'ashborn', name: 'Ashborn', summary: 'Born of ash.', source: 'campaign', mine: true, status: 'draft', entryId: 41, properties: {} };
-  const { p, seen } = await open(t, { canMake: false, extra: [mine], heroes: [], canCreate: true });
-  await p.click('[data-create-hero]');
-  await p.fill('[data-hb-name]', 'Vex');
-  await p.click('[data-hero-card="new"] [data-blank="ancestry"]');
-  await p.locator('.hb-opt', { hasText: 'Ashborn' }).click();
-  await p.click('.hb-panel [data-choose]');
-  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
-  await p.click('[data-make]');
-  await nav;
-  const kept = seen.put.find((x) => x.path === C + '/system-entries/41');
-  assert.deepEqual(kept && kept.body, { forEntityId: 'e9' });
 });
 
 test('editing a draft the hero has not picked never changes the hero', { skip }, async (t) => {

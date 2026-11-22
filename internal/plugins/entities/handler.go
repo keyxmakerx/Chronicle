@@ -4263,12 +4263,9 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 	view.IsMember = cc.MemberRole >= campaigns.RolePlayer
 	view.CSRFToken = middleware.GetCSRFToken(c)
 	isOwner := cc.MemberRole >= campaigns.RoleOwner
-	var heroType *EntityType
-	var heroAcc heroAccess
 	if h.heroPlanner != nil {
-		if t, access, err := h.heroTarget(c, cc); err == nil {
+		if _, access, err := h.heroTarget(c, cc); err == nil {
 			view.CanCreateHero = access.Allowed
-			heroType, heroAcc = t, access
 		}
 	}
 
@@ -4288,7 +4285,7 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 
 	view.Yours = h.buildYours(ctx, campaignID, userID)
 	if h.heroPlanner != nil && view.IsMember {
-		view.Builder = h.buildHeroBuilder(c, cc, view.Yours, charTypes, heroType, heroAcc)
+		view.Builder = h.buildHeroBuilder(c, cc, view.Yours, charTypes)
 	}
 	if pcOn && view.IsMember {
 		view.Practice = h.practiceShelf(c, cc, view.Yours)
@@ -4346,27 +4343,23 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 // and, when they may make one, the new hero's page type. nil when there is
 // nothing to build. A failed type lookup leaves the builder out rather than
 // breaking the page.
-func (h *Handler) buildHeroBuilder(c *echo.Context, cc *campaigns.CampaignContext, yours []CastMember, charTypes []int, target *EntityType, access heroAccess) *HeroBuilderView {
+func (h *Handler) buildHeroBuilder(c *echo.Context, cc *campaigns.CampaignContext, yours []CastMember, charTypes []int) *HeroBuilderView {
 	types, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
 		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		return nil
 	}
 	heroes := builderHeroes(c.Request().Context(), yours, charTypes, types, cc.CanAuthorDmOnly())
-	if len(heroes) == 0 && !access.Allowed {
+	// A new hero is made in the creator, so the builder is only for heroes
+	// the viewer already has.
+	if len(heroes) == 0 {
 		return nil
 	}
-	b := &HeroBuilderView{
+	return &HeroBuilderView{
 		CampaignID: cc.Campaign.ID,
 		CSRFToken:  middleware.GetCSRFToken(c),
-		CanCreate:  access.Allowed,
-		ForSelf:    access.ForSelf,
 		Heroes:     heroes,
 	}
-	if target != nil {
-		b.TypeName = target.Name
-	}
-	return b
 }
 
 // fillCastRoster adds the Players box data: the full roster for staff who

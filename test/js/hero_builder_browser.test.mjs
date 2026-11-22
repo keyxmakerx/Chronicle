@@ -4,9 +4,10 @@
 // with the plan, fields and create endpoints answered here. It pins what the
 // player sees and what reaches the server: a blank opens every choice beside
 // the sentence, a pick saves only that field, rolling everything left saves
-// once and Undo clears what it set, a failed save puts the blank back, a new
-// hero is made from its sentence, and on a phone the panel opens under the
-// hero it fills in without widening the page.
+// once and Undo clears what it set, a failed save puts the blank back, and on
+// a phone the panel opens under the hero it fills in without widening the
+// page. A new hero is made in the creator: Create hero is a plain link to it,
+// and the builder offers no sentence for one.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -40,7 +41,7 @@ const PLAN = {
 const HEROES = [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human' }, hidden: ['secret'] }];
 
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
-const page = (heroes, canCreate) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
+const page = (heroes) => `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8">
 <style>:root{--color-accent:#4f46e5;--color-accent-rgb:79 70 229;--color-ok-rgb:22 163 74;--color-warn-rgb:217 119 6;--color-bad-rgb:220 38 38;
 --color-bg-primary:#f9fafb;--color-bg-secondary:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-body:#374151;--color-text-secondary:#6b7280;
 --elev-resting:0 1px 2px rgb(0 0 0/.05);--elev-hover:0 6px 16px -4px rgb(0 0 0/.12);--elev-dragged:0 16px 36px -8px rgb(0 0 0/.22);
@@ -49,9 +50,8 @@ html,body{margin:0;font:14px system-ui}.sr-only{position:absolute;width:1px;heig
 <main id="main-content" style="padding:24px 16px"><div id="cast-content">
 <a href="/campaigns/c1/characters/new" data-create-hero="true">Create hero</a>
 <link rel="stylesheet" href="/static/plugins/entities/css/hero_builder.css">
-<section class="hb" data-widget="hero-builder" data-plan-url="/campaigns/c1/characters/new/plan" data-create-url="/campaigns/c1/characters/new"
-  data-fields-base="/campaigns/c1/entities/" data-campaign-id="c1" data-csrf="tok" data-can-create="${canCreate}" data-for-self="true"
-  data-type-name="Hero" data-heroes='${attr(heroes)}'><p class="hb-wait">Opening the hero builder…</p></section>
+<section class="hb" data-widget="hero-builder" data-plan-url="/campaigns/c1/characters/new/plan"
+  data-fields-base="/campaigns/c1/entities/" data-campaign-id="c1" data-csrf="tok" data-heroes='${attr(heroes)}'><p class="hb-wait">Opening the hero builder…</p></section>
 <div style="height:1200px"></div></div></main>
 <script type="application/json" id="chronicle-widget-scripts">{"hero-builder":["/static/plugins/entities/js/hero_rules_lines.js","/static/plugins/entities/js/hero_builder.js"]}</script>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
@@ -63,7 +63,7 @@ function staticFile(path) {
   return join(root, path);
 }
 
-async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, canCreate = false, failSave = false, noSteps = false, plan = PLAN, putBody = '{"status":"ok"}', postBody = '{"id":"e9","url":"/campaigns/c1/entities/e9"}' } = {}) {
+async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROES, failSave = false, plan = PLAN, putBody = '{"status":"ok"}' } = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -73,11 +73,11 @@ async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROE
   const sent = [];
   await p.route('**/*', (route) => {
     const req = route.request(), u = new URL(req.url());
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes, canCreate) });
-    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(noSteps ? { ...plan, steps: [] } : plan) });
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes) });
+    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(plan) });
     if (u.pathname.startsWith('/campaigns/c1/')) {
       sent.push({ method: req.method(), path: u.pathname, csrf: req.headers()['x-csrf-token'], body: JSON.parse(req.postData() || 'null') });
-      if (req.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: postBody });
+      if (req.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: '{}' });
       if (failSave) return route.fulfill({ status: 400, contentType: 'application/json', body: '{"message":"\\"Fury\\" is not on the class list"}' });
       return route.fulfill({ contentType: 'application/json', body: putBody });
     }
@@ -151,26 +151,6 @@ test('a refused save puts the blank back and says why', { skip }, async (t) => {
   assert.equal(await p.locator('[data-blank="class"]').innerText(), 'class');
 });
 
-test('a new hero is made from its own sentence', { skip }, async (t) => {
-  const { p, sent } = await open(t, { heroes: [], canCreate: true });
-  await p.click('[data-create-hero]');
-  assert.equal(await p.evaluate(() => document.activeElement.hasAttribute('data-hb-name')), true);
-  await p.click('[data-make]');
-  assert.equal(await p.locator('[data-hb-error]').innerText(), 'Give your hero a name first.');
-  await p.fill('[data-hb-name]', 'Bram');
-  await p.click('[data-hero-card="new"] [data-blank="ancestry"]');
-  assert.equal(await p.locator('.hb-pt').innerText(), 'Choose Bram’s ancestry');
-  await p.click('.hb-opt:has-text("Gull-kin")');
-  assert.match(await p.locator('.hb-detail').innerHTML(), /<b>coast<\/b>/);
-  await p.click('.hb-panel [data-choose]');
-  assert.equal(sent.length, 0, 'a new hero saves nothing until it is made');
-  // Once made, the new hero's own page opens.
-  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
-  await p.click('[data-make]');
-  await nav;
-  assert.deepEqual(sent[0], { method: 'POST', path: '/campaigns/c1/characters/new', csrf: 'tok', body: { name: 'Bram', picks: { ancestry: { name: 'Gull-kin' } } } });
-});
-
 const DEVIL = { slug: 'devil', name: 'Devil', summary: 'Silver-tongued.', source: 'Draw Steel', properties: {
   ancestry_points: 3,
   purchased_traits: [{ name: 'Wings', cost: 2 }, { name: 'Silver Tongue', cost: 1 }, { name: 'Hellfire', cost: 2 }],
@@ -182,24 +162,24 @@ const BUY_PLAN = { systemName: 'Draw Steel', steps: [
 ] };
 
 test('an ancestry with points keeps the panel on it to buy traits, within its points', { skip }, async (t) => {
-  const { p, sent } = await open(t, { heroes: [], canCreate: true, plan: BUY_PLAN });
-  await p.click('[data-create-hero]');
-  await p.fill('[data-hb-name]', 'Vex');
-  await p.click('[data-hero-card="new"] [data-blank="ancestry"]');
+  const { p, sent } = await open(t, { heroes: [{ id: 'e1', name: 'Vex', values: {}, hidden: [] }], plan: BUY_PLAN });
+  await p.click('[data-blank="ancestry"]');
   await p.click('.hb-panel [data-choose]');
   assert.equal(await p.locator('.hb-pt').innerText(), 'Choose Vex’s ancestry', 'the panel stays on the ancestry');
   assert.match(await p.locator('[data-hb-buy] legend').innerText(), /Spend Devil’s 3 points/);
   await p.check('[data-buy="Wings"]');
-  assert.match(await p.locator('.hb-buy-left').innerText(), /1 of 3 left/);
+  await p.waitForFunction(() => /1 of 3 left/.test(document.querySelector('.hb-buy-left').textContent));
   assert.equal(await p.locator('[data-buy="Hellfire"]').isDisabled(), true, 'a trait that would overspend is off');
   await p.check('[data-buy="Silver Tongue"]');
+  await p.waitForFunction(() => /0 of 3/.test(document.querySelector('.hb-buy-left').textContent));
   // The culture's grants are chosen on the sheet, which the panel says.
   await p.click('.hb-panel [data-go="culture"]');
-  assert.match(await p.locator('.hb-detail').innerText(), /You choose the skills and languages this gives on your hero’s sheet once they’re made/);
-  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
-  await p.click('[data-make]');
-  await nav;
-  assert.deepEqual(sent[0].body, { name: 'Vex', picks: { ancestry: { name: 'Devil', options: ['Wings', 'Silver Tongue'] } } });
+  assert.match(await p.locator('.hb-detail').innerText(), /You choose the skills and languages this gives on Vex’s sheet\./);
+  assert.deepEqual(sent.map((x) => x.body), [
+    { fields_patch: { ancestry: 'Devil' } },
+    { fields_patch: { ancestry_choices_json: '["Wings"]' } },
+    { fields_patch: { ancestry_choices_json: '["Wings","Silver Tongue"]' } },
+  ]);
 });
 
 test('on a saved hero, bought traits save as one list, and a new ancestry drops them', { skip }, async (t) => {
@@ -220,33 +200,18 @@ test('on a saved hero, bought traits save as one list, and a new ancestry drops 
   assert.equal(await p.locator('[data-buy="Wings"]').isChecked(), false, 'traits from before are not brought back');
 });
 
-test('with no steps the new hero is just a name field, and its hidden label keeps the apostrophe', { skip }, async (t) => {
-  const { p } = await open(t, { heroes: [], canCreate: true, noSteps: true });
-  await p.click('[data-create-hero]');
-  const sentenceBox = p.locator('[data-hero-card="new"] .hb-sentence');
-  assert.equal(await sentenceBox.innerText(), 'Your new hero’s name', 'only the hidden label text, no stray visible "’s"');
-  assert.equal(await sentenceBox.locator('.sr-only').innerText(), 'Your new hero’s name');
-  assert.equal(await sentenceBox.evaluate((el) => el.querySelector('label').nextSibling), null, 'nothing follows the name field');
-});
-
-test('the new-hero sentence stays folded until Create hero, and Not now folds it back', { skip }, async (t) => {
-  const { p } = await open(t, { canCreate: true });
-  await p.waitForSelector('[data-hero-card="e1"]');
-  assert.equal(await p.locator('[data-hero-card="new"]').count(), 0, 'no open sentence for a hero nobody asked for');
-  await p.click('[data-create-hero]');
-  assert.equal(await p.locator('[data-hero-card="new"]').count(), 1);
-  await p.fill('[data-hb-name]', 'Bram');
-  await p.click('[data-act="fold"]');
-  assert.equal(await p.locator('[data-hero-card="new"]').count(), 0);
-  await p.click('[data-create-hero]');
-  assert.equal(await p.inputValue('[data-hb-name]'), 'Bram', 'the draft comes back with it');
-});
-
-test('with no heroes and nothing asked for, the builder takes no room', { skip }, async (t) => {
-  const { p } = await open(t, { heroes: [], canCreate: true });
-  await p.waitForFunction(() => document.querySelector('[data-widget="hero-builder"]').hidden);
-  await p.click('[data-create-hero]');
-  assert.equal(await p.evaluate(() => document.querySelector('[data-widget="hero-builder"]').hidden), false);
+test('Create hero leads to the creator, and a sentence kept on this device never opens one here', { skip }, async (t) => {
+  for (const heroes of [[], HEROES]) {
+    const { p } = await open(t, { heroes });
+    await p.evaluate(() => localStorage.setItem('chronicle:hero-builder:c1', JSON.stringify({ name: 'Kept', values: { ancestry: 'Human' }, open: true })));
+    await p.reload();
+    await p.waitForSelector('[data-hb-ready]', { state: 'attached' });
+    assert.equal(await p.locator('[data-hero-card="new"], [data-make], [data-hb-name]').count(), 0, 'no new-hero sentence');
+    if (!heroes.length) assert.equal(await p.evaluate(() => document.querySelector('[data-widget="hero-builder"]').hidden), true, 'with no heroes the builder takes no room');
+    const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/characters/new');
+    await p.click('[data-create-hero]');
+    await nav;
+  }
 });
 
 test('on a phone the panel opens under the hero and the page does not widen', { skip }, async (t) => {
@@ -325,34 +290,6 @@ test('what is not here folds open at the list foot with the Director\'s reason',
   assert.equal(await p.locator('.hb-nh-list').count(), 0);
   await foot.click();
   assert.match(await p.locator('.hb-nh-list').innerText(), /Null isn’t here\. Your Director says: “No psionics here”/);
-});
-
-test('a required step with one entry left is filled in and locked on a new hero', { skip }, async (t) => {
-  const { p, sent } = await open(t, { plan: RULED, heroes: [], canCreate: true });
-  await p.click('[data-create-hero]');
-  await p.fill('[data-hb-name]', 'Rook');
-  const lock = p.locator('[data-hero-card="new"] .hb-blank.is-locked');
-  assert.equal(await lock.innerText(), 'Human');
-  assert.equal(await p.locator('[data-hero-card="new"] [data-blank="ancestry"]').count(), 0, 'no button to change it');
-  assert.match(await p.locator('[data-hero-card="new"] .hb-lock').innerText(), /everyone starts with this/);
-  const nav = p.waitForRequest((r) => r.url() === 'http://chronicle.test/campaigns/c1/entities/e9');
-  await p.click('[data-make]');
-  await nav;
-  assert.deepEqual(sent[0].body.picks, { ancestry: { name: 'Human' } });
-});
-
-test('a pick the server could not send to the Director is said, not lost', { skip }, async (t) => {
-  const { p } = await open(t, { plan: RULED, heroes: [], canCreate: true,
-    postBody: '{"id":"e9","url":"/campaigns/c1/entities/e9","requestFailed":["class"]}' });
-  await p.click('[data-create-hero]');
-  await p.fill('[data-hb-name]', 'Rook');
-  await p.click('[data-hero-card="new"] [data-blank="class"]');
-  await p.locator('.hb-opt', { hasText: 'Fury' }).click();
-  await p.click('[data-choose]');
-  await p.click('[data-make]');
-  await p.waitForSelector('[data-hb-error]:not([hidden])');
-  assert.match(await p.locator('[data-hb-error]').innerText(), /pick for class could not be sent to your Director/);
-  assert.equal(await p.locator('[data-hb-error] a').getAttribute('href'), '/campaigns/c1/entities/e9');
 });
 
 test('the Director\'s note asking for another pick is shown, and a request waiting is shown beside a held pick', { skip }, async (t) => {
