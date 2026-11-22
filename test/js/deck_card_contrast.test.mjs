@@ -66,3 +66,12 @@ test('a name over a picture sits on a band that is at least 0.85 opaque and read
   const blended = '#' + [m[1], m[2], m[3]].map((x) => hex(+x * a + 255 * (1 - a))).join('');
   need(chip.contrast('#ffffff', blended), `white name on ${band} at ${a} over white`);
 });
+
+test('outside the MATERIALS and PALETTE blocks the stylesheet has no raw colour', () => {
+  const a = css.indexOf('---- MATERIALS');
+  const b = css.indexOf('---- end of the fixed colours');
+  assert.ok(a >= 0 && b > a, 'the fixed-colour blocks are missing their markers');
+  const outside = css.slice(0, a) + css.slice(b);
+  const raw = outside.match(/#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g) || [];
+  assert.deepEqual(raw, [], 'move raw colours into the MATERIALS block or use a token');
+});

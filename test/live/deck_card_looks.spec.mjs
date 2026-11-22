@@ -24,6 +24,21 @@ async function sheet(opts = {}) {
   const owner = await person({ tag: 'decks-dir', name: 'Director Dara', context: { reducedMotion: 'no-preference', ...(opts.context || {}) } });
   const cid = await newCampaign(owner, 'Card looks check');
   await enableAddons(owner, cid, ['decks']);
+  // A strong device, and a log of what each card animates, so a test can tell
+  // a turn that played its own effect from one that fell back to a fade.
+  await owner.page.addInitScript(() => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+    window.__anims = [];
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (frames, opts) {
+      try {
+        const keys = new Set();
+        (Array.isArray(frames) ? frames : []).forEach((f) => Object.keys(f).forEach((k) => keys.add(k + (k === 'filter' ? '=' + f[k] : ''))));
+        window.__anims.push({ on: String(this.className), keys: [...keys] });
+      } catch (e) { /* the log is only a test aid */ }
+      return animate.call(this, frames, opts);
+    };
+  });
   const errors = [];
   owner.page.on('console', (m) => {
     // Other hosts are cut off in these runs, so their failed loads are expected.
@@ -92,6 +107,12 @@ test('every turn-over, at Full, Calm and Off, ends face up with nothing still mo
       await page.keyboard.press('Enter'); // a turn started from the keyboard still plays
       await card.and(page.locator('[data-state=up]')).waitFor({ timeout: 4000 });
       await page.waitForTimeout(1000);
+      if (level === 'full' && (TURNS[i] === 'burn' || TURNS[i] === 'ink')) {
+        // Burn moves its own edge and ink blurs the back; a fade does neither.
+        const seen = await page.evaluate(() => window.__anims.map((a) => a.on + ' ' + a.keys.join(' ')).join('\n'));
+        if (TURNS[i] === 'burn') assert.match(seen, /--dk-r/, 'burn did not play its own effect');
+        else assert.match(seen, /dk-back[^\n]*filter=blur\(3px\)/, 'ink did not play its own effect');
+      }
       assert.deepEqual(await running(page), [], `${TURNS[i]} at ${level} left an animation running`);
       assert.equal(await card.locator('.dk-back, .dk-turner, .dk-fx, .dk-plain, .dk-turn').count(), 0, `${TURNS[i]} at ${level} left parts behind`);
       assert.equal(await card.locator('.dk-plate').count(), 1, `${TURNS[i]} at ${level} ended without the face`);

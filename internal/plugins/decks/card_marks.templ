@@ -9,7 +9,10 @@ templ cardMarker(l Look, k KindDef) {
 	} else if l.Marker == "tab" {
 		<span class="dk-mk dk-tab" aria-hidden="true">@KindSign(k.Sign)</span>
 	} else if l.Marker == "ribbon" {
-		<span class="dk-mk dk-rib" aria-hidden="true"><i>@KindSign(k.Sign){ k.Name }</i></span>
+		<span class="dk-mk dk-rib" aria-hidden="true"><i>
+			@KindSign(k.Sign)
+			{ k.Name }
+		</i></span>
 	} else if l.Marker != "line" {
 		<span class="dk-mk dk-gem" aria-hidden="true">@KindSign(k.Sign)</span>
 	}
@@ -18,7 +21,10 @@ templ cardMarker(l Look, k KindDef) {
 // cardKindLine is the "line" marker: the kind in words under the card's name.
 templ cardKindLine(l Look, k KindDef) {
 	if l.Marker == "line" {
-		<span class="dk-kl">@KindSign(k.Sign){ k.Name }</span>
+		<span class="dk-kl">
+			@KindSign(k.Sign)
+			{ k.Name }
+		</span>
 	}
 }
 

@@ -14,7 +14,10 @@ templ CardLeaf(l Look, s CardState, foot string) {
 			}
 			<span class="dk-lfi">
 				if hasKind {
-					<span class="dk-kl">@KindSign(k.Sign){ k.Name }</span>
+					<span class="dk-kl">
+						@KindSign(k.Sign)
+						{ k.Name }
+					</span>
 				}
 				<b class="dk-dn">{ s.face.Name }</b>
 				if s.face.Words != "" {

@@ -188,12 +188,15 @@ would do.
 - **A card is one object.** Every screen draws a Card deck's card with
   `CardView` (`internal/plugins/decks/card.templ`) and `static/css/decks_card.css`:
   a tall plate with the words on its leaf, or a compact card, in the deck's
-  border, finish and lettering. The kind is always named in words and drawn
-  as a sign, never by colour alone. Words never shrink: a smaller size shows
-  fewer lines, never smaller type, and at about 92px (the hand) every frame
-  thins and the corner mark goes. A face-down card is drawn from the deck's
-  look alone and carries no card data. A name over a picture sits on a band
-  at least 0.85 opaque.
+  border, finish and lettering. A card names its kind in words wherever the
+  card is read (the compact card at row and open size, the leaf of a tall
+  card) and in its accessible name at every size, and draws the kind's sign at
+  every size, so no kind depends on colour alone. At the hand size neither
+  card shows the kind's word: there is no room. Words never shrink: a smaller
+  size shows fewer lines, never smaller type, and at about 92px (the hand)
+  every frame thins and the corner mark goes. A face-down card is drawn from
+  the deck's look alone and carries no card data. A name over a picture sits
+  on a band at least 0.85 opaque.
 - **One copy.** A panel that can be placed is never also drawn automatically,
   so placing it never shows it twice.
 - **A switch is named for what you see**, and turns on one thing. Feature
@@ -538,9 +541,10 @@ place, and Off shows the end state.
 - **Durations and easing come from the tokens** in `static/css/input.css`;
   the owner's Motion speed retimes all of them, the paper moves included.
 - **A card turn-over is a big moment, and the only one this long.** It takes
-  up to 900ms (`--ease-out` and `--ease-in-out`, scaled with the owner's
-  Motion speed through `--dur-standard`), is played once per card, and only
-  when someone turns a card over, never on something done many times a
+  up to 900ms at normal Motion speed (`--ease-out` and `--ease-in-out`;
+  the owner's Motion speed scales every card duration through
+  `--dur-standard`, and the limits below are at normal speed), is played
+  once per card, and only when someone turns a card over, never on something done many times a
   session. Cards that arrive, are dealt or are drawn are placed, not turned.
   "Gone for good" may take up to 1s. "Its moment has come" breathes twice, 1s
   each, and never loops. Moves that only say where a card went (draw, deal,
@@ -548,8 +552,9 @@ place, and Off shows the end state.
   keyboard still plays. The deck picks its turn-over from a fixed list; the
   other moves are the same for every deck. Calm fades the card in 200ms and
   nothing travels; Off shows the end at once. A weak device, a screen with
-  more than twelve cards and the small shape play burn as sweep and ink as a
-  fade; at most one card turns at a time per viewer and a deal moves at most
+  more than twelve cards in view and the small shape play burn as sweep and
+  ink as a fade (a preview stage a Director plays on always shows the real
+  turn-over, except on the small shape or a weak device); at most one card turns at a time per viewer and a deal moves at most
   seven cards, 60ms apart (`internal/plugins/decks/static/js/deck_cards.js`).
 - **Effects have depth and stay light**: no flat pastel fills, no bounces or
   overshoot outside Site admin's entrance, and nothing that loads a weak
@@ -626,8 +631,9 @@ second; the dice settle in under 480ms.
   gold of a rare card, and the ten kind colours a deck paints its kinds and
   backs from, are defined once in `static/css/decks_card.css` (`MATERIALS`
   and `PALETTE`) and read the same in light and dark: a material is an
-  object, like the dark metal the owner signed, and does not follow the page.
-  Everything else on a card is a token. A material's ink reaches 4.5:1 on its
+  object, and it must look the same on either page. Fittings and effects
+  (rivets, chains, the ember, the bolt) are materials too, so the stylesheet
+  has no raw colour outside those two blocks. Everything else on a card is a token. A material's ink reaches 4.5:1 on its
   own field (`test/js/deck_card_contrast.test.mjs`), and no card has a paper
   or parchment texture.
 - **Colour roles**: page `--color-bg-primary`, panel `--color-bg-secondary`,

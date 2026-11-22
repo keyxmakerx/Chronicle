@@ -3,9 +3,11 @@
    internal/plugins/decks/static/js/deck_cards.js. One class prefix, dk-.
 
    Colours come from Chronicle's tokens. Two blocks are fixed colours on
-   purpose and read the same in light and dark, the way the signed dark metal
-   does: the MATERIALS (iron, brass, steel, stone, gold) and the kind PALETTE
-   (the ten keys a deck's kinds and back are painted from). */
+   purpose, the MATERIALS (iron, brass, steel, stone, gold, and the fittings
+   and effects lit with them) and the kind PALETTE (the ten keys a deck's
+   kinds and back are painted from). A material is a fixed colour because it
+   must look the same in light and dark. Outside those two blocks the
+   stylesheet has no raw colour (test/js/deck_card_contrast.test.mjs). */
 
 /* ---- MATERIALS: fixed colours, never themed -------------------------------- */
 :root {
@@ -32,6 +34,85 @@
   --dk-gold-glow: rgba(201, 162, 74, .45);
   --dk-gold-ink: #8a6414;
   --dk-gold-ink-night: #e8c66a;
+  /* fittings, effects and the neutrals they are lit with: fixed like the materials */
+  --dk-black: #000;
+  --dk-black-a25: rgba(0, 0, 0, .25);
+  --dk-black-a26: rgba(0, 0, 0, .26);
+  --dk-black-a28: rgba(0, 0, 0, .28);
+  --dk-black-a3: rgba(0, 0, 0, .3);
+  --dk-black-a34: rgba(0, 0, 0, .34);
+  --dk-black-a35: rgba(0, 0, 0, .35);
+  --dk-black-a4: rgba(0, 0, 0, .4);
+  --dk-black-a45: rgba(0, 0, 0, .45);
+  --dk-black-a5: rgba(0, 0, 0, .5);
+  --dk-black-a6: rgba(0, 0, 0, .6);
+  --dk-black-a65: rgba(0, 0, 0, .65);
+  --dk-black-a7: rgba(0, 0, 0, .7);
+  --dk-black-a8: rgba(0, 0, 0, .8);
+  --dk-c-050608: #050608;
+  --dk-c-0a0e14: #0a0e14;
+  --dk-c-0b0d10: #0b0d10;
+  --dk-c-0b0d12: #0b0d12;
+  --dk-c-0d0f13: #0d0f13;
+  --dk-c-101218: #101218;
+  --dk-c-22262c: #22262c;
+  --dk-c-2a1c08: #2a1c08;
+  --dk-c-3a3f47: #3a3f47;
+  --dk-c-4c0519: #4c0519;
+  --dk-c-5b616b: #5b616b;
+  --dk-c-5d6167: #5d6167;
+  --dk-c-6b4d10: #6b4d10;
+  --dk-c-6b727c: #6b727c;
+  --dk-c-6b7280: #6b7280;
+  --dk-c-7c8794: #7c8794;
+  --dk-c-80848a: #80848a;
+  --dk-c-881337: #881337;
+  --dk-c-8b929e: #8b929e;
+  --dk-c-9aa1ab: #9aa1ab;
+  --dk-c-a5b4fc: #a5b4fc;
+  --dk-c-aeb5c0: #aeb5c0;
+  --dk-c-b08a42: #b08a42;
+  --dk-c-be123c: #be123c;
+  --dk-c-e3bd5c: #e3bd5c;
+  --dk-c-eef2ff: #eef2ff;
+  --dk-c-f97316: #f97316;
+  --dk-c-fb7185: #fb7185;
+  --dk-fx-140c04-a8: rgba(20, 12, 4, .8);
+  --dk-fx-4c0519-a5: rgba(76, 5, 25, .5);
+  --dk-fx-6eaaff-a24: rgba(110, 170, 255, .24);
+  --dk-fx-78f0be-a2: rgba(120, 240, 190, .2);
+  --dk-fx-7c2d12-a75: rgba(124, 45, 18, .75);
+  --dk-fx-c8d7eb-a2: rgba(200, 215, 235, .2);
+  --dk-fx-dc2626-a45: rgba(220, 38, 38, .45);
+  --dk-fx-e0e7ff-a0: rgba(224, 231, 255, 0);
+  --dk-fx-f0cd82-a3: rgba(240, 205, 130, .3);
+  --dk-fx-f97316-a75: rgba(249, 115, 22, .75);
+  --dk-fx-fb7185-a22: rgba(251, 113, 133, .22);
+  --dk-fx-fde68a-a95: rgba(253, 230, 138, .95);
+  --dk-fx-ff6ebe-a22: rgba(255, 110, 190, .22);
+  --dk-fx-ffe1a0-a2: rgba(255, 225, 160, .2);
+  --dk-fx-ffe1a0-a32: rgba(255, 225, 160, .32);
+  --dk-fx-ffe278-a2: rgba(255, 226, 120, .2);
+  --dk-white: #fff;
+  --dk-white-a08: rgba(255, 255, 255, .08);
+  --dk-white-a09: rgba(255, 255, 255, .09);
+  --dk-white-a12: rgba(255, 255, 255, .12);
+  --dk-white-a13: rgba(255, 255, 255, .13);
+  --dk-white-a14: rgba(255, 255, 255, .14);
+  --dk-white-a15: rgba(255, 255, 255, .15);
+  --dk-white-a16: rgba(255, 255, 255, .16);
+  --dk-white-a2: rgba(255, 255, 255, .2);
+  --dk-white-a22: rgba(255, 255, 255, .22);
+  --dk-white-a25: rgba(255, 255, 255, .25);
+  --dk-white-a3: rgba(255, 255, 255, .3);
+  --dk-white-a35: rgba(255, 255, 255, .35);
+  --dk-white-a4: rgba(255, 255, 255, .4);
+  --dk-white-a45: rgba(255, 255, 255, .45);
+  --dk-white-a5: rgba(255, 255, 255, .5);
+  --dk-white-a6: rgba(255, 255, 255, .6);
+  --dk-white-a7: rgba(255, 255, 255, .7);
+  --dk-white-a8: rgba(255, 255, 255, .8);
+  --dk-white-a92: rgba(255, 255, 255, .92);
   --dk-band: rgba(8, 10, 20, .9);
   --dk-bar: #fff;
 }
@@ -61,6 +142,8 @@
 .dark .dk-pal-rose, .dark.dk-pal-rose { --dk-k: #fb7185; }
 .dark .dk-pal-umber, .dark.dk-pal-umber { --dk-k: #d6a064; }
 .dark .dk-pal-slate, .dark.dk-pal-slate { --dk-k: #94a3b8; }
+
+/* ---- end of the fixed colours ---- */
 
 /* The faces the lettering list names, from Chronicle's own fonts. */
 @font-face { font-family: 'DK Cinzel'; font-weight: 600; font-display: swap; src: url(/static/fonts/customize/cinzel-latin-600.woff2) format('woff2'); }
@@ -92,9 +175,9 @@
 .dk-em { fill: currentColor; }
 
 /* the picture window: the picture, or the material and the kind's sign */
-.dk-art { position: relative; display: block; overflow: hidden; min-height: 0; background: #0d0f13; }
-.dk-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--dk-k) 55%, #101218) 0, #0d0f13 78%); }
-.dk-ph .dk-sg { width: 38%; height: auto; max-height: 38%; fill: color-mix(in srgb, var(--dk-k) 60%, #fff); opacity: .5; }
+.dk-art { position: relative; display: block; overflow: hidden; min-height: 0; background: var(--dk-c-0d0f13); }
+.dk-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--dk-k) 55%, var(--dk-c-101218)) 0, var(--dk-c-0d0f13) 78%); }
+.dk-ph .dk-sg { width: 38%; height: auto; max-height: 38%; fill: color-mix(in srgb, var(--dk-k) 60%, var(--dk-white)); opacity: .5; }
 .dk-pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .dk-pic[data-src] { opacity: 0; }
 
@@ -114,7 +197,7 @@
 .dk-compact .dk-words { padding: 0 10px; margin: -4px 0 8px; }
 .dk-sz-hand.dk-compact .dk-words, .dk-s-small:not(.dk-sz-open) .dk-words { display: none; }
 .dk-sz-row .dk-words { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.dk-sz-hand .dk-kind, .dk-s-small.dk-sz-hand .dk-kind { display: none; }
+.dk-sz-hand .dk-kind, .dk-sz-hand .dk-kl, .dk-s-small.dk-sz-hand .dk-kind { display: none; }
 .dk-s-small .dk-name { padding: 5px 8px 7px; }
 .dk-sz-open.dk-compact { aspect-ratio: auto; min-height: calc(var(--dk-w) * 1.4); }
 .dk-sz-open.dk-compact .dk-art { flex: none; height: calc(var(--dk-w) * .6); }
@@ -138,7 +221,7 @@
 .dk-n-above .dk-name { order: -1; }
 .dk-n-above .dk-num { top: auto; bottom: 4px; }
 .dk-n-over .dk-fr, .dk-w-full .dk-fr { overflow: hidden; }
-.dk-n-over .dk-name, .dk-w-full .dk-name { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 8px 6px; color: #fff; background: var(--dk-band); border-radius: 0 0 7px 7px; text-shadow: none; }
+.dk-n-over .dk-name, .dk-w-full .dk-name { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 8px 6px; color: var(--dk-white); background: var(--dk-band); border-radius: 0 0 7px 7px; text-shadow: none; }
 .dk-n-over .dk-name::before, .dk-w-full .dk-name::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 18px; background: linear-gradient(to top, var(--dk-band), transparent); pointer-events: none; }
 .dk-n-over .dk-num, .dk-w-full .dk-num { z-index: 2; }
 .dk-w-square .dk-art { border-radius: 3px; }
@@ -146,11 +229,11 @@
    centred on the opposite springing point, drawn for a window 7 wide by 10
    tall and in percentages so it scales with the card. */
 .dk-w-pointed .dk-art { border-radius: 0; clip-path: polygon(0.0% 100.0%, 0.0% 60.6%, 3.1% 43.3%, 6.2% 36.3%, 9.4% 31.0%, 12.5% 26.7%, 15.6% 23.1%, 18.8% 19.8%, 21.9% 16.9%, 25.0% 14.3%, 28.1% 12.0%, 31.2% 9.8%, 34.4% 7.8%, 37.5% 6.0%, 40.6% 4.3%, 43.8% 2.7%, 46.9% 1.3%, 50.0% 0.0%, 53.1% 1.3%, 56.2% 2.7%, 59.4% 4.3%, 62.5% 6.0%, 65.6% 7.8%, 68.8% 9.8%, 71.9% 12.0%, 75.0% 14.3%, 78.1% 16.9%, 81.2% 19.8%, 84.4% 23.1%, 87.5% 26.7%, 90.6% 31.0%, 93.8% 36.3%, 96.9% 43.3%, 100.0% 60.6%, 100.0% 100.0%); }
-.dk-w-round .dk-fr { overflow: hidden; background: #0b0d12; }
+.dk-w-round .dk-fr { overflow: hidden; background: var(--dk-c-0b0d12); }
 .dk-w-round .dk-blur { position: absolute; inset: 0; filter: blur(3px) brightness(.5) saturate(.8); }
-.dk-w-round .dk-art { position: relative; flex: none; width: 86%; aspect-ratio: 1; margin: auto auto 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--dk-k), 0 0 0 5px rgba(0, 0, 0, .35), 0 0 0 6px rgba(255, 255, 255, .35); }
-.dk-w-round .dk-name { position: relative; margin-top: auto; color: #fff; background: var(--dk-band); text-shadow: none; }
-.dk-w-round .dk-num { z-index: 2; background: var(--dk-band); color: #fff; }
+.dk-w-round .dk-art { position: relative; flex: none; width: 86%; aspect-ratio: 1; margin: auto auto 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--dk-k), 0 0 0 5px var(--dk-black-a35), 0 0 0 6px var(--dk-white-a35); }
+.dk-w-round .dk-name { position: relative; margin-top: auto; color: var(--dk-white); background: var(--dk-band); text-shadow: none; }
+.dk-w-round .dk-num { z-index: 2; background: var(--dk-band); color: var(--dk-white); }
 .dk-w-full .dk-art { position: absolute; inset: 0; border-radius: inherit; }
 .dk-w-full .dk-fr { padding: 0; }
 .dk-compact .dk-art { clip-path: none; border-radius: 0; }
@@ -166,15 +249,15 @@
 /* kind markers: the deck picks the style, each kind brings a colour and a sign */
 .dk-mk { position: absolute; z-index: 4; pointer-events: none; }
 .dk-gem { top: 0; left: calc(50% - 8px); width: 16px; height: 16px; }
-.dk-gem .dk-sg { width: 100%; height: 100%; stroke: var(--color-bg-secondary); stroke-width: 2.2; paint-order: stroke; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .45)) drop-shadow(0 0 3px color-mix(in srgb, var(--dk-k) 60%, transparent)); }
-.dk-mat .dk-gem .dk-sg { stroke: #050608; }
+.dk-gem .dk-sg { width: 100%; height: 100%; stroke: var(--color-bg-secondary); stroke-width: 2.2; paint-order: stroke; filter: drop-shadow(0 1px 1px var(--dk-black-a45)) drop-shadow(0 0 3px color-mix(in srgb, var(--dk-k) 60%, transparent)); }
+.dk-mat .dk-gem .dk-sg { stroke: var(--dk-c-050608); }
 .dk-ban { top: 0; right: 14px; width: 18px; height: 28px; background: var(--dk-k); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%); display: flex; justify-content: center; padding-top: 5px; }
-.dk-ban .dk-sg, .dk-tab .dk-sg { fill: #fff; width: 10px; height: 10px; }
+.dk-ban .dk-sg, .dk-tab .dk-sg { fill: var(--dk-white); width: 10px; height: 10px; }
 .dk-tab { top: 0; right: 0; width: 30px; height: 30px; background: var(--dk-k); clip-path: polygon(0 0, 100% 0, 100% 100%); border-top-right-radius: 11px; }
 .dk-tab .dk-sg { position: absolute; top: 4px; right: 4px; }
-.dk-rib { top: 0; right: 0; width: 58px; height: 58px; border-top-right-radius: 11px; overflow: hidden; background: linear-gradient(45deg, transparent 46%, rgba(0, 0, 0, .25) 46% 47%, var(--dk-k) 47% 71%, rgba(0, 0, 0, .25) 71% 72%, transparent 72%); }
-.dk-rib i { position: absolute; left: 19px; top: 14px; width: 44px; transform: rotate(45deg); display: flex; justify-content: center; align-items: center; gap: 2px; font-size: 8px; font-style: normal; font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
-.dk-rib .dk-sg { fill: #fff; width: 7px; height: 7px; }
+.dk-rib { top: 0; right: 0; width: 58px; height: 58px; border-top-right-radius: 11px; overflow: hidden; background: linear-gradient(45deg, transparent 46%, var(--dk-black-a25) 46% 47%, var(--dk-k) 47% 71%, var(--dk-black-a25) 71% 72%, transparent 72%); }
+.dk-rib i { position: absolute; left: 19px; top: 14px; width: 44px; transform: rotate(45deg); display: flex; justify-content: center; align-items: center; gap: 2px; font-size: 8px; font-style: normal; font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; color: var(--dk-white); }
+.dk-rib .dk-sg { fill: var(--dk-white); width: 7px; height: 7px; }
 .dk-kl { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: -3px; font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-secondary); }
 .dk-kl .dk-sg { width: 9px; height: 9px; }
 .dk-compact .dk-kl { justify-content: flex-start; margin: -6px 10px 6px; }
@@ -190,61 +273,61 @@
 .dk-b-none .dk-name { padding: 7px 4px 8px; }
 
 /* ---- forged borders: iron, brass, steel, bound iron, stone -------------------- */
-.dk-b-metal { --dk-mat: var(--dk-iron); --dk-field: var(--dk-iron-field); --dk-ink: var(--dk-iron-ink); --dk-ink2: var(--dk-iron-ink2); --dk-lip: rgba(255, 255, 255, .14); }
-.dk-b-brass { --dk-mat: var(--dk-brass); --dk-field: var(--dk-brass-field); --dk-ink: var(--dk-brass-ink); --dk-ink2: var(--dk-brass-ink2); --dk-lip: rgba(240, 205, 130, .3); }
-.dk-b-steel { --dk-mat: var(--dk-steel); --dk-field: var(--dk-steel-field); --dk-ink: var(--dk-steel-ink); --dk-ink2: var(--dk-steel-ink2); --dk-lip: rgba(200, 215, 235, .2); }
-.dk-b-bound { --dk-mat: var(--dk-iron); --dk-field: var(--dk-iron-field); --dk-ink: var(--dk-iron-ink); --dk-ink2: var(--dk-iron-ink2); --dk-lip: rgba(255, 255, 255, .14); }
-.dk-b-stone { --dk-mat: var(--dk-stone); --dk-field: var(--dk-stone-field); --dk-ink: var(--dk-stone-ink); --dk-ink2: var(--dk-stone-ink2); --dk-lip: rgba(255, 255, 255, .2); }
-.dk-mat { --dk-pad: 11px; padding: var(--dk-pad); border-radius: 7px; border-color: #000; background: var(--dk-mat); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), inset 0 -2px 0 rgba(0, 0, 0, .6), 0 2px 3px rgba(0, 0, 0, .35), 0 10px 18px rgba(0, 0, 0, .3); }
-.dk-mat .dk-fr { z-index: 1; border: 1px solid #000; outline: 0; border-radius: 3px; padding: 4px; background: var(--dk-field); box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px rgba(0, 0, 0, .8); }
+.dk-b-metal { --dk-mat: var(--dk-iron); --dk-field: var(--dk-iron-field); --dk-ink: var(--dk-iron-ink); --dk-ink2: var(--dk-iron-ink2); --dk-lip: var(--dk-white-a14); }
+.dk-b-brass { --dk-mat: var(--dk-brass); --dk-field: var(--dk-brass-field); --dk-ink: var(--dk-brass-ink); --dk-ink2: var(--dk-brass-ink2); --dk-lip: var(--dk-fx-f0cd82-a3); }
+.dk-b-steel { --dk-mat: var(--dk-steel); --dk-field: var(--dk-steel-field); --dk-ink: var(--dk-steel-ink); --dk-ink2: var(--dk-steel-ink2); --dk-lip: var(--dk-fx-c8d7eb-a2); }
+.dk-b-bound { --dk-mat: var(--dk-iron); --dk-field: var(--dk-iron-field); --dk-ink: var(--dk-iron-ink); --dk-ink2: var(--dk-iron-ink2); --dk-lip: var(--dk-white-a14); }
+.dk-b-stone { --dk-mat: var(--dk-stone); --dk-field: var(--dk-stone-field); --dk-ink: var(--dk-stone-ink); --dk-ink2: var(--dk-stone-ink2); --dk-lip: var(--dk-white-a2); }
+.dk-mat { --dk-pad: 11px; padding: var(--dk-pad); border-radius: 7px; border-color: var(--dk-black); background: var(--dk-mat); box-shadow: inset 0 1px 0 var(--dk-white-a2), inset 0 -2px 0 var(--dk-black-a6), 0 2px 3px var(--dk-black-a35), 0 10px 18px var(--dk-black-a3); }
+.dk-mat .dk-fr { z-index: 1; border: 1px solid var(--dk-black); outline: 0; border-radius: 3px; padding: 4px; background: var(--dk-field); box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px var(--dk-black-a8); }
 .dk-mat .dk-art { border-radius: 2px; filter: saturate(.94) contrast(1.04); }
-.dk-mat .dk-name { color: var(--dk-ink); text-shadow: 0 1px 0 #000; }
+.dk-mat .dk-name { color: var(--dk-ink); text-shadow: 0 1px 0 var(--dk-black); }
 .dk-mat .dk-num { background: var(--dk-field); color: var(--dk-ink); top: 2px; left: 3px; }
 .dk-mat::before { content: ""; position: absolute; inset: 4px; border-radius: 4px; pointer-events: none; display: none; }
 .dk-b-metal.dk-plate { padding: 11px; }
-.dk-rv { position: absolute; z-index: 3; width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #8b929e 0, #3a3f47 40%, #0b0d10 80%); box-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
+.dk-rv { position: absolute; z-index: 3; width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--dk-c-8b929e) 0, var(--dk-c-3a3f47) 40%, var(--dk-c-0b0d10) 80%); box-shadow: 0 1px 1px var(--dk-black-a5); }
 .dk-rv-a { top: 3px; left: 3px; } .dk-rv-b { top: 3px; right: 3px; } .dk-rv-c { bottom: 3px; left: 3px; } .dk-rv-d { bottom: 3px; right: 3px; }
-.dk-rv-g { top: 1px; left: calc(50% - 5px); width: 10px; height: 10px; background: radial-gradient(circle at 35% 30%, #fff 0, var(--dk-k) 42%, #050608 115%); box-shadow: 0 0 5px color-mix(in srgb, var(--dk-k) 70%, transparent); }
+.dk-rv-g { top: 1px; left: calc(50% - 5px); width: 10px; height: 10px; background: radial-gradient(circle at 35% 30%, var(--dk-white) 0, var(--dk-k) 42%, var(--dk-c-050608) 115%); box-shadow: 0 0 5px color-mix(in srgb, var(--dk-k) 70%, transparent); }
 .dk-mat .dk-compact-fix, .dk-mat.dk-compact > .dk-art, .dk-mat.dk-compact > .dk-kind, .dk-mat.dk-compact > .dk-name, .dk-mat.dk-compact > .dk-words, .dk-mat.dk-compact > .dk-kl { position: relative; z-index: 1; }
 
 /* a faint sheen crosses metal when the pointer rests on it; borders never move otherwise */
-.dk-b-brass::after, .dk-b-steel::after, .dk-b-bound::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .09) 48%, rgba(255, 255, 255, .13) 50%, transparent 62%); transform: translateX(-110%); }
+.dk-b-brass::after, .dk-b-steel::after, .dk-b-bound::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; background: linear-gradient(115deg, transparent 38%, var(--dk-white-a09) 48%, var(--dk-white-a13) 50%, transparent 62%); transform: translateX(-110%); }
 .dk-b-brass:hover::after, .dk-b-steel:hover::after, .dk-b-bound:hover::after { transform: translateX(110%); transition: transform 1.1s var(--ease-in-out); }
 html[data-motion] .dk-mat::after, [data-dk-motion] .dk-mat::after { display: none; }
 @media (prefers-reduced-motion: reduce) { .dk-mat::after { display: none; } }
 
 /* tarnished brass */
 .dk-b-brass { padding-top: 14px; }
-.dk-b-brass::before { display: block; border: 1px solid rgba(20, 12, 4, .8); box-shadow: 0 1px 0 rgba(255, 225, 160, .32), inset 0 1px 0 rgba(255, 225, 160, .2); }
-.dk-b-brass .dk-rv-g { top: 1.5px; left: calc(50% - 5.5px); width: 11px; height: 11px; background: radial-gradient(circle at 35% 30%, #fff 0, color-mix(in srgb, var(--dk-k) 75%, #fff) 18%, var(--dk-k) 50%, color-mix(in srgb, var(--dk-k) 55%, #000) 100%); box-shadow: 0 0 0 1.5px #b08a42, 0 0 0 2.5px #2a1c08, 0 0 6px color-mix(in srgb, var(--dk-k) 65%, transparent); }
+.dk-b-brass::before { display: block; border: 1px solid var(--dk-fx-140c04-a8); box-shadow: 0 1px 0 var(--dk-fx-ffe1a0-a32), inset 0 1px 0 var(--dk-fx-ffe1a0-a2); }
+.dk-b-brass .dk-rv-g { top: 1.5px; left: calc(50% - 5.5px); width: 11px; height: 11px; background: radial-gradient(circle at 35% 30%, var(--dk-white) 0, color-mix(in srgb, var(--dk-k) 75%, var(--dk-white)) 18%, var(--dk-k) 50%, color-mix(in srgb, var(--dk-k) 55%, var(--dk-black)) 100%); box-shadow: 0 0 0 1.5px var(--dk-c-b08a42), 0 0 0 2.5px var(--dk-c-2a1c08), 0 0 6px color-mix(in srgb, var(--dk-k) 65%, transparent); }
 /* cold steel, the engraved line filled in the kind's colour */
-.dk-b-steel::before { display: block; inset: 5px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--dk-k) 65%, #fff); box-shadow: 0 0 0 1px rgba(0, 0, 0, .65), inset 0 0 0 1px rgba(0, 0, 0, .5), 0 0 5px color-mix(in srgb, var(--dk-k) 55%, transparent); }
-.dk-b-steel .dk-rv-g { top: 1px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 1px; transform: rotate(45deg); background: linear-gradient(135deg, color-mix(in srgb, var(--dk-k) 55%, #fff), var(--dk-k) 50%, color-mix(in srgb, var(--dk-k) 60%, #000)); box-shadow: 0 0 0 1px #0a0e14, 0 0 0 2px #7c8794, 0 0 5px var(--dk-k); }
+.dk-b-steel::before { display: block; inset: 5px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--dk-k) 65%, var(--dk-white)); box-shadow: 0 0 0 1px var(--dk-black-a65), inset 0 0 0 1px var(--dk-black-a5), 0 0 5px color-mix(in srgb, var(--dk-k) 55%, transparent); }
+.dk-b-steel .dk-rv-g { top: 1px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 1px; transform: rotate(45deg); background: linear-gradient(135deg, color-mix(in srgb, var(--dk-k) 55%, var(--dk-white)), var(--dk-k) 50%, color-mix(in srgb, var(--dk-k) 60%, var(--dk-black))); box-shadow: 0 0 0 1px var(--dk-c-0a0e14), 0 0 0 2px var(--dk-c-7c8794), 0 0 5px var(--dk-k); }
 /* bound iron: chains down the sides and a lock whose keyhole glows */
 .dk-b-bound { padding-top: 17px; }
-.dk-ch { position: absolute; top: 22px; bottom: 16px; width: 5px; z-index: 2; background: radial-gradient(ellipse 2.1px 3.4px at 50% 50%, transparent 52%, #9aa1ab 60%, #3a3f47 85%, transparent 96%) 0 0/5px 9px repeat-y, linear-gradient(90deg, transparent 1.9px, #6b727c 1.9px 3.1px, transparent 3.1px) 0 4.5px/5px 9px repeat-y; filter: drop-shadow(0 1px 0 #000); }
+.dk-ch { position: absolute; top: 22px; bottom: 16px; width: 5px; z-index: 2; background: radial-gradient(ellipse 2.1px 3.4px at 50% 50%, transparent 52%, var(--dk-c-9aa1ab) 60%, var(--dk-c-3a3f47) 85%, transparent 96%) 0 0/5px 9px repeat-y, linear-gradient(90deg, transparent 1.9px, var(--dk-c-6b727c) 1.9px 3.1px, transparent 3.1px) 0 4.5px/5px 9px repeat-y; filter: drop-shadow(0 1px 0 var(--dk-black)); }
 .dk-ch-l { left: 3px; } .dk-ch-r { right: 3px; }
-.dk-lk { position: absolute; top: 1px; left: calc(50% - 9px); width: 18px; height: 15px; z-index: 3; border-radius: 3px 3px 8px 8px; background: radial-gradient(circle at 35% 25%, #5b616b, #22262c 60%, #0b0d10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 1px 2px rgba(0, 0, 0, .7); }
-.dk-lk::before { content: ""; position: absolute; top: 3px; left: calc(50% - 2.5px); width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--dk-k) 55%, #fff); box-shadow: 0 0 4px var(--dk-k), 0 0 8px var(--dk-k); }
-.dk-lk::after { content: ""; position: absolute; top: 6px; left: calc(50% - 2px); width: 4px; height: 6px; background: color-mix(in srgb, var(--dk-k) 55%, #fff); clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); filter: drop-shadow(0 0 3px var(--dk-k)); }
+.dk-lk { position: absolute; top: 1px; left: calc(50% - 9px); width: 18px; height: 15px; z-index: 3; border-radius: 3px 3px 8px 8px; background: radial-gradient(circle at 35% 25%, var(--dk-c-5b616b), var(--dk-c-22262c) 60%, var(--dk-c-0b0d10)); box-shadow: inset 0 1px 0 var(--dk-white-a25), 0 1px 2px var(--dk-black-a7); }
+.dk-lk::before { content: ""; position: absolute; top: 3px; left: calc(50% - 2.5px); width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--dk-k) 55%, var(--dk-white)); box-shadow: 0 0 4px var(--dk-k), 0 0 8px var(--dk-k); }
+.dk-lk::after { content: ""; position: absolute; top: 6px; left: calc(50% - 2px); width: 4px; height: 6px; background: color-mix(in srgb, var(--dk-k) 55%, var(--dk-white)); clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); filter: drop-shadow(0 0 3px var(--dk-k)); }
 /* carved stone: granite blocks and a keystone whose rune glows in the kind's colour */
-.dk-b-stone { border-radius: 4px; padding-top: 14px; box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .3), inset -1px -1px 0 rgba(0, 0, 0, .45), 0 2px 3px rgba(0, 0, 0, .3), 0 10px 18px rgba(0, 0, 0, .26); }
-.dk-b-stone .dk-fr { box-shadow: 0 0 0 1px rgba(255, 255, 255, .22), -1px -1px 0 1px rgba(0, 0, 0, .4), inset 0 2px 5px rgba(0, 0, 0, .8); }
-.dk-ks { position: absolute; top: 0; left: calc(50% - 12px); width: 24px; height: 15px; z-index: 3; clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%); background: radial-gradient(circle, rgba(255, 255, 255, .12) .7px, transparent 1.1px) 1px 2px/5px 5px, linear-gradient(180deg, #80848a, #5d6167); }
-.dk-ks::before { content: ""; position: absolute; inset: 0; clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%, 22% 92%, 78% 92%, 96% 4%, 4% 4%, 22% 92%, 20% 100%); background: rgba(0, 0, 0, .45); }
-.dk-ks::after { content: ""; position: absolute; top: 3px; left: calc(50% - 3.5px); width: 7px; height: 7px; transform: rotate(45deg); border: 1.5px solid color-mix(in srgb, var(--dk-k) 50%, #fff); background: radial-gradient(circle, color-mix(in srgb, var(--dk-k) 40%, #fff) 0, var(--dk-k) 70%); box-shadow: 0 0 5px var(--dk-k), 0 0 9px color-mix(in srgb, var(--dk-k) 60%, transparent); }
+.dk-b-stone { border-radius: 4px; padding-top: 14px; box-shadow: inset 1px 1px 0 var(--dk-white-a3), inset -1px -1px 0 var(--dk-black-a45), 0 2px 3px var(--dk-black-a3), 0 10px 18px var(--dk-black-a26); }
+.dk-b-stone .dk-fr { box-shadow: 0 0 0 1px var(--dk-white-a22), -1px -1px 0 1px var(--dk-black-a4), inset 0 2px 5px var(--dk-black-a8); }
+.dk-ks { position: absolute; top: 0; left: calc(50% - 12px); width: 24px; height: 15px; z-index: 3; clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%); background: radial-gradient(circle, var(--dk-white-a12) .7px, transparent 1.1px) 1px 2px/5px 5px, linear-gradient(180deg, var(--dk-c-80848a), var(--dk-c-5d6167)); }
+.dk-ks::before { content: ""; position: absolute; inset: 0; clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%, 22% 92%, 78% 92%, 96% 4%, 4% 4%, 22% 92%, 20% 100%); background: var(--dk-black-a45); }
+.dk-ks::after { content: ""; position: absolute; top: 3px; left: calc(50% - 3.5px); width: 7px; height: 7px; transform: rotate(45deg); border: 1.5px solid color-mix(in srgb, var(--dk-k) 50%, var(--dk-white)); background: radial-gradient(circle, color-mix(in srgb, var(--dk-k) 40%, var(--dk-white)) 0, var(--dk-k) 70%); box-shadow: 0 0 5px var(--dk-k), 0 0 9px color-mix(in srgb, var(--dk-k) 60%, transparent); }
 
 /* the compact card in a forged frame */
-.dk-mat.dk-compact { border: 1px solid #000; padding: 7px; border-radius: 8px; }
+.dk-mat.dk-compact { border: 1px solid var(--dk-black); padding: 7px; border-radius: 8px; }
 .dk-b-brass.dk-compact, .dk-b-stone.dk-compact { padding-top: 13px; }
 .dk-mat.dk-compact::before { inset: 3px; border-radius: 5px; }
-.dk-mat.dk-compact > .dk-art { border-radius: 3px 3px 0 0; box-shadow: 0 0 0 1px #000; }
-.dk-mat.dk-compact > .dk-kind, .dk-mat.dk-compact > .dk-name, .dk-mat.dk-compact > .dk-words, .dk-mat.dk-compact > .dk-kl { margin: 0; background: var(--dk-field); box-shadow: -1px 0 0 #000, 1px 0 0 #000; }
+.dk-mat.dk-compact > .dk-art { border-radius: 3px 3px 0 0; box-shadow: 0 0 0 1px var(--dk-black); }
+.dk-mat.dk-compact > .dk-kind, .dk-mat.dk-compact > .dk-name, .dk-mat.dk-compact > .dk-words, .dk-mat.dk-compact > .dk-kl { margin: 0; background: var(--dk-field); box-shadow: -1px 0 0 var(--dk-black), 1px 0 0 var(--dk-black); }
 .dk-mat.dk-compact > .dk-kind { color: var(--dk-ink2); padding-top: 6px; }
 .dk-mat.dk-compact > .dk-name { color: var(--dk-ink); }
 .dk-mat.dk-compact > .dk-words { color: var(--dk-ink2); border-bottom: 9px solid var(--dk-field); }
 .dk-mat.dk-compact > .dk-kl { color: var(--dk-ink2); justify-content: flex-start; padding: 0 10px 8px; }
-.dk-mat.dk-compact > :last-child { box-shadow: -1px 0 0 #000, 1px 0 0 #000, 0 1px 0 #000; border-radius: 0 0 3px 3px; }
+.dk-mat.dk-compact > :last-child { box-shadow: -1px 0 0 var(--dk-black), 1px 0 0 var(--dk-black), 0 1px 0 var(--dk-black); border-radius: 0 0 3px 3px; }
 .dk-mat.dk-compact > .dk-seal:last-child, .dk-mat.dk-compact > .dk-seal { box-shadow: none; background: none; }
 .dk-s-small.dk-mat.dk-compact { padding: 5px; padding-top: 9px; }
 .dk-s-small.dk-mat.dk-compact::before { inset: 2px; }
@@ -283,9 +366,9 @@ html[data-motion] .dk-mat::after, [data-dk-motion] .dk-mat::after { display: non
 
 /* finishes: matte, a glow in the kind's colour, a slow sheen, foil */
 .dk-f-sheen::before, .dk-f-foil::before, .dk-rare::before, .dk-f-glow .dk-fr::after, .dk-f-sheen::after, .dk-f-foil::after, .dk-rare::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit; }
-.dk-f-sheen::before { background: linear-gradient(118deg, rgba(255, 255, 255, .22), transparent 34%, transparent 66%, rgba(255, 255, 255, .12)); }
-.dk-f-foil::before, .dk-rare::before { background: linear-gradient(120deg, transparent 8%, rgba(255, 110, 190, .22) 26%, rgba(255, 226, 120, .2) 40%, rgba(120, 240, 190, .2) 54%, rgba(110, 170, 255, .24) 70%, transparent 90%); mix-blend-mode: screen; }
-.dk-f-sheen::after, .dk-f-foil::after, .dk-rare::after { background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, .5) 50%, transparent 68%); transform: translateX(-140%); }
+.dk-f-sheen::before { background: linear-gradient(118deg, var(--dk-white-a22), transparent 34%, transparent 66%, var(--dk-white-a12)); }
+.dk-f-foil::before, .dk-rare::before { background: linear-gradient(120deg, transparent 8%, var(--dk-fx-ff6ebe-a22) 26%, var(--dk-fx-ffe278-a2) 40%, var(--dk-fx-78f0be-a2) 54%, var(--dk-fx-6eaaff-a24) 70%, transparent 90%); mix-blend-mode: screen; }
+.dk-f-sheen::after, .dk-f-foil::after, .dk-rare::after { background: linear-gradient(105deg, transparent 32%, var(--dk-white-a5) 50%, transparent 68%); transform: translateX(-140%); }
 .dk-f-sheen:hover::after, .dk-f-foil:hover::after, .dk-rare:hover::after { animation: dk-sheen 1.3s var(--ease-in-out) 1 both; }
 @keyframes dk-sheen { from { transform: translateX(-140%); } to { transform: translateX(140%); } }
 html[data-motion] :is(.dk-f-sheen, .dk-f-foil, .dk-rare)::after { animation: none !important; }
@@ -294,28 +377,28 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 .dk-f-glow .dk-fr::after { z-index: 3; box-shadow: inset 0 0 16px 2px color-mix(in srgb, var(--dk-k) 75%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--dk-k) 70%, transparent); }
 .dk-f-glow .dk-lfi::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 16px 2px color-mix(in srgb, var(--dk-k) 75%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--dk-k) 70%, transparent); }
 .dk-f-glow.dk-card:not(.dk-mat) { box-shadow: 0 0 0 1px color-mix(in srgb, var(--dk-k) 35%, transparent), 0 0 14px color-mix(in srgb, var(--dk-k) 40%, transparent), var(--elev-resting); }
-.dk-f-glow.dk-mat { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .7), 0 0 12px color-mix(in srgb, var(--dk-k) 30%, transparent), 0 10px 18px rgba(0, 0, 0, .34); }
+.dk-f-glow.dk-mat { box-shadow: inset 0 1px 0 var(--dk-white-a22), inset 0 -2px 0 var(--dk-black-a7), 0 0 12px color-mix(in srgb, var(--dk-k) 30%, transparent), 0 10px 18px var(--dk-black-a34); }
 .dk-card.dk-rare { border-color: var(--dk-gold-edge); box-shadow: 0 0 0 2px var(--dk-gold), 0 0 0 3px var(--dk-gold-deep), 0 6px 18px var(--dk-gold-glow); }
 .dk-rare .dk-name, .dk-rare .dk-dn { color: var(--dk-gold-ink); }
 .dk-rare.dk-mat .dk-name { color: var(--dk-gold-ink-night); }
 .dk-seal { position: absolute; z-index: 6; bottom: 2px; left: calc(50% - 7px); width: 14px; height: 14px; }
-.dk-seal svg { width: 100%; height: 100%; fill: #e3bd5c; stroke: #6b4d10; stroke-width: 1.2; paint-order: stroke; }
+.dk-seal svg { width: 100%; height: 100%; fill: var(--dk-c-e3bd5c); stroke: var(--dk-c-6b4d10); stroke-width: 1.2; paint-order: stroke; }
 
 /* ---- the back: one for every card of a deck ------------------------------------ */
-.dk-back { padding: 6px; border-color: rgba(0, 0, 0, .25); background-color: var(--dk-pd); background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .13) 0 2px, transparent 2px 11px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, .13) 0 2px, transparent 2px 11px); }
-.dk-bfr { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 4px; border: 1px solid rgba(255, 255, 255, .6); border-radius: 7px; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .1em; text-transform: uppercase; text-align: center; overflow-wrap: anywhere; }
-.dk-bfr .dk-em { width: 38%; height: auto; aspect-ratio: 1; fill: rgba(255, 255, 255, .92); color: rgba(255, 255, 255, .92); }
-.dk-p-rays { background-image: repeating-conic-gradient(from 0deg at 50% 44%, rgba(255, 255, 255, .16) 0 5deg, transparent 5deg 15deg); }
+.dk-back { padding: 6px; border-color: var(--dk-black-a25); background-color: var(--dk-pd); background-image: repeating-linear-gradient(45deg, var(--dk-white-a13) 0 2px, transparent 2px 11px), repeating-linear-gradient(-45deg, var(--dk-white-a13) 0 2px, transparent 2px 11px); }
+.dk-bfr { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 4px; border: 1px solid var(--dk-white-a6); border-radius: 7px; color: var(--dk-white); font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .1em; text-transform: uppercase; text-align: center; overflow-wrap: anywhere; }
+.dk-bfr .dk-em { width: 38%; height: auto; aspect-ratio: 1; fill: var(--dk-white-a92); color: var(--dk-white-a92); }
+.dk-p-rays { background-image: repeating-conic-gradient(from 0deg at 50% 44%, var(--dk-white-a16) 0 5deg, transparent 5deg 15deg); }
 .dk-p-rays .dk-bfr { background: radial-gradient(circle at 50% 44%, var(--dk-pd) 0 24%, transparent 25%); }
-.dk-p-waves { background-image: radial-gradient(circle at 50% 100%, transparent 5px, rgba(255, 255, 255, .2) 5.5px 7.5px, transparent 8px); background-size: 16px 9px; }
-.dk-p-stars { background-image: radial-gradient(1.2px 1.2px at 12% 18%, #fff 98%, transparent), radial-gradient(1px 1px at 70% 9%, rgba(255, 255, 255, .8) 98%, transparent), radial-gradient(1.6px 1.6px at 38% 62%, #fff 98%, transparent), radial-gradient(1px 1px at 86% 48%, rgba(255, 255, 255, .7) 98%, transparent), radial-gradient(1px 1px at 22% 88%, rgba(255, 255, 255, .8) 98%, transparent), radial-gradient(1.3px 1.3px at 62% 80%, #fff 98%, transparent), linear-gradient(170deg, rgba(255, 255, 255, .08), transparent 60%); background-size: 46px 52px, 46px 52px, 46px 52px, 46px 52px, 46px 52px, 46px 52px, auto; }
-.dk-p-check { background-image: linear-gradient(45deg, rgba(255, 255, 255, .15) 25%, transparent 25% 75%, rgba(255, 255, 255, .15) 75%), linear-gradient(-45deg, rgba(255, 255, 255, .15) 25%, transparent 25% 75%, rgba(255, 255, 255, .15) 75%); background-size: 12px 12px; }
-.dk-p-check .dk-bfr { outline: 1px solid rgba(255, 255, 255, .45); outline-offset: -5px; }
+.dk-p-waves { background-image: radial-gradient(circle at 50% 100%, transparent 5px, var(--dk-white-a2) 5.5px 7.5px, transparent 8px); background-size: 16px 9px; }
+.dk-p-stars { background-image: radial-gradient(1.2px 1.2px at 12% 18%, var(--dk-white) 98%, transparent), radial-gradient(1px 1px at 70% 9%, var(--dk-white-a8) 98%, transparent), radial-gradient(1.6px 1.6px at 38% 62%, var(--dk-white) 98%, transparent), radial-gradient(1px 1px at 86% 48%, var(--dk-white-a7) 98%, transparent), radial-gradient(1px 1px at 22% 88%, var(--dk-white-a8) 98%, transparent), radial-gradient(1.3px 1.3px at 62% 80%, var(--dk-white) 98%, transparent), linear-gradient(170deg, var(--dk-white-a08), transparent 60%); background-size: 46px 52px, 46px 52px, 46px 52px, 46px 52px, 46px 52px, 46px 52px, auto; }
+.dk-p-check { background-image: linear-gradient(45deg, var(--dk-white-a15) 25%, transparent 25% 75%, var(--dk-white-a15) 75%), linear-gradient(-45deg, var(--dk-white-a15) 25%, transparent 25% 75%, var(--dk-white-a15) 75%); background-size: 12px 12px; }
+.dk-p-check .dk-bfr { outline: 1px solid var(--dk-white-a45); outline-offset: -5px; }
 .dk-p-plain { background-image: none; }
-.dk-p-plain .dk-bfr { outline: 1px solid rgba(255, 255, 255, .4); outline-offset: -6px; }
-.dk-p-iron { padding: 10px; border-color: #000; background: var(--dk-iron); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .7), 0 2px 3px rgba(0, 0, 0, .4), 0 8px 16px rgba(0, 0, 0, .3); }
-.dk-p-iron .dk-bfr { border: 1px solid #000; border-radius: 3px; color: #aeb5c0; background: var(--dk-iron-field) radial-gradient(circle at 50% 44%, transparent 31%, rgba(255, 255, 255, .09) 32% 33%, transparent 34%); box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), inset 0 2px 5px rgba(0, 0, 0, .8); }
-.dk-p-iron .dk-bfr .dk-em { fill: #6b7280; color: #6b7280; filter: drop-shadow(0 0 5px var(--dk-k)) drop-shadow(0 1px 0 rgba(255, 255, 255, .2)); }
+.dk-p-plain .dk-bfr { outline: 1px solid var(--dk-white-a4); outline-offset: -6px; }
+.dk-p-iron { padding: 10px; border-color: var(--dk-black); background: var(--dk-iron); box-shadow: inset 0 1px 0 var(--dk-white-a22), inset 0 -2px 0 var(--dk-black-a7), 0 2px 3px var(--dk-black-a4), 0 8px 16px var(--dk-black-a3); }
+.dk-p-iron .dk-bfr { border: 1px solid var(--dk-black); border-radius: 3px; color: var(--dk-c-aeb5c0); background: var(--dk-iron-field) radial-gradient(circle at 50% 44%, transparent 31%, var(--dk-white-a09) 32% 33%, transparent 34%); box-shadow: 0 0 0 1px var(--dk-white-a14), inset 0 2px 5px var(--dk-black-a8); }
+.dk-p-iron .dk-bfr .dk-em { fill: var(--dk-c-6b7280); color: var(--dk-c-6b7280); filter: drop-shadow(0 0 5px var(--dk-k)) drop-shadow(0 1px 0 var(--dk-white-a2)); }
 .dk-sz-hand.dk-p-iron { padding: 7px; }
 .dk-back.dk-l-carved .dk-bw, .dk-back .dk-bw { color: inherit; }
 
@@ -336,12 +419,12 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 .dk-leaf.dk-b-double .dk-lfi { border: 1px solid var(--dk-k); border-left: 0; border-radius: 0 8px 8px 0; outline: 1px solid var(--color-border); outline-offset: 2px; clip-path: inset(-4px -4px -4px 0); }
 .dk-leaf.dk-b-line { padding: 6px 6px 6px 0; }
 .dk-leaf.dk-b-line .dk-lfi { border: 1px solid var(--dk-k); border-left: 0; border-radius: 0 8px 8px 0; }
-.dk-leaf.dk-mat { background: var(--dk-mat); border-color: #000; border-left: 0; padding: 9px 9px 9px 0; border-radius: 0 7px 7px 0; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .7), 0 6px 14px rgba(0, 0, 0, .3); }
-.dk-leaf.dk-mat .dk-lfi { background: var(--dk-field); border: 1px solid #000; border-left: 0; border-radius: 0 3px 3px 0; box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px rgba(0, 0, 0, .8); color: var(--dk-ink2); }
+.dk-leaf.dk-mat { background: var(--dk-mat); border-color: var(--dk-black); border-left: 0; padding: 9px 9px 9px 0; border-radius: 0 7px 7px 0; box-shadow: inset 0 1px 0 var(--dk-white-a22), inset 0 -2px 0 var(--dk-black-a7), 0 6px 14px var(--dk-black-a3); }
+.dk-leaf.dk-mat .dk-lfi { background: var(--dk-field); border: 1px solid var(--dk-black); border-left: 0; border-radius: 0 3px 3px 0; box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px var(--dk-black-a8); color: var(--dk-ink2); }
 .dk-leaf.dk-mat .dk-dn { color: var(--dk-ink); }
 .dk-leaf.dk-mat .dk-words { color: var(--dk-ink2); }
 .dk-leaf.dk-mat .dk-kl, .dk-leaf.dk-mat .dk-foot { color: var(--dk-ink2); }
-.dk-leaf.dk-mat .dk-foot { border-top-color: rgba(255, 255, 255, .14); }
+.dk-leaf.dk-mat .dk-foot { border-top-color: var(--dk-white-a14); }
 .dk-leaf.dk-mat::after { display: none; }
 .dk-leaf.dk-b-none { box-shadow: var(--elev-resting); }
 .dk-leaf.dk-rare { border-color: var(--dk-gold-edge); box-shadow: 0 0 0 2px var(--dk-gold), 0 6px 18px var(--dk-gold-glow); }
@@ -359,31 +442,31 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 .dk-turner.dk-3d > .dk-faceslot { transform: rotateY(180deg); }
 .dk-turner.dk-flat > .dk-faceslot { z-index: 1; }
 .dk-turner.dk-flat > .dk-back { z-index: 2; }
-.dk-turner.dk-burning > .dk-back { -webkit-mask-image: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 1%), #000 calc(var(--dk-r) + 3%)); mask-image: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 1%), #000 calc(var(--dk-r) + 3%)); }
+.dk-turner.dk-burning > .dk-back { -webkit-mask-image: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 1%), var(--dk-black) calc(var(--dk-r) + 3%)); mask-image: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 1%), var(--dk-black) calc(var(--dk-r) + 3%)); }
 /* starts below zero so the mask shows no dot at rest */
 @property --dk-r { syntax: '<percentage>'; inherits: true; initial-value: -4%; }
 
 /* effect layers the script adds for one move and takes away at its end */
 .dk-fx { position: absolute; pointer-events: none; }
-.dk-fx-shadow { left: 8%; right: 8%; bottom: -6px; height: 10px; border-radius: 50%; background: rgba(0, 0, 0, .28); filter: blur(5px); opacity: .5; }
-.dk-fx-bar { left: -4px; right: -4px; top: 0; height: 3px; border-radius: 2px; background: var(--dk-bar); box-shadow: 0 0 6px 2px var(--dk-k, var(--dk-bar)), 0 0 18px 6px color-mix(in srgb, var(--dk-k, #fff) 55%, transparent); opacity: 0; z-index: 4; }
+.dk-fx-shadow { left: 8%; right: 8%; bottom: -6px; height: 10px; border-radius: 50%; background: var(--dk-black-a28); filter: blur(5px); opacity: .5; }
+.dk-fx-bar { left: -4px; right: -4px; top: 0; height: 3px; border-radius: 2px; background: var(--dk-bar); box-shadow: 0 0 6px 2px var(--dk-k, var(--dk-bar)), 0 0 18px 6px color-mix(in srgb, var(--dk-k, var(--dk-white)) 55%, transparent); opacity: 0; z-index: 4; }
 .dk-fx-ring { inset: -3px; border-radius: 14px; border: 2px solid var(--color-text-primary); opacity: 0; z-index: 4; }
-.dk-fx-ember { inset: 0; z-index: 3; border-radius: inherit; opacity: 0; background: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 7%), rgba(253, 230, 138, .95) calc(var(--dk-r) - 1%), #f97316 calc(var(--dk-r) + 2%), rgba(124, 45, 18, .75) calc(var(--dk-r) + 6%), transparent calc(var(--dk-r) + 11%)); }
+.dk-fx-ember { inset: 0; z-index: 3; border-radius: inherit; opacity: 0; background: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 7%), var(--dk-fx-fde68a-a95) calc(var(--dk-r) - 1%), var(--dk-c-f97316) calc(var(--dk-r) + 2%), var(--dk-fx-7c2d12-a75) calc(var(--dk-r) + 6%), transparent calc(var(--dk-r) + 11%)); }
 .dk-fx-door { inset: 0; z-index: 3; opacity: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .dk-fx-door > .dk-card { position: absolute; inset: 0; width: 100%; }
 .dk-fx-door.dk-l { clip-path: inset(0 50% 0 0); transform-origin: 0 50%; }
 .dk-fx-door.dk-r { clip-path: inset(0 0 0 50%); transform-origin: 100% 50%; }
-.dk-fx-wax { z-index: 5; width: 31%; aspect-ratio: 1; left: 34.5%; top: 37%; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .45)); }
-.dk-fx-wax i { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fb7185 0, #be123c 36%, #881337 70%, #4c0519 100%); box-shadow: inset 0 0 0 3px rgba(76, 5, 25, .5), inset 0 0 0 6px rgba(251, 113, 133, .22); }
+.dk-fx-wax { z-index: 5; width: 31%; aspect-ratio: 1; left: 34.5%; top: 37%; filter: drop-shadow(0 2px 2px var(--dk-black-a45)); }
+.dk-fx-wax i { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 38% 32%, var(--dk-c-fb7185) 0, var(--dk-c-be123c) 36%, var(--dk-c-881337) 70%, var(--dk-c-4c0519) 100%); box-shadow: inset 0 0 0 3px var(--dk-fx-4c0519-a5), inset 0 0 0 6px var(--dk-fx-fb7185-a22); }
 .dk-fx-wax i.dk-l { clip-path: polygon(0 0, 56% 0, 46% 28%, 60% 52%, 45% 76%, 53% 100%, 0 100%); }
 .dk-fx-wax i.dk-r { clip-path: polygon(56% 0, 100% 0, 100% 100%, 53% 100%, 45% 76%, 60% 52%, 46% 28%); }
-.dk-fx-bolt { z-index: 5; left: 30%; top: -26%; width: 40%; height: 120%; opacity: 0; overflow: visible; filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 7px #a5b4fc); }
-.dk-fx-bolt path { fill: #fff; }
-.dk-fx-flash { inset: -6px; border-radius: 16px; z-index: 4; opacity: 0; background: radial-gradient(circle at 50% 46%, #fff 0, #eef2ff 55%, rgba(224, 231, 255, 0) 100%); }
-.dk-fx-heat { inset: -5px; border-radius: 15px; z-index: 0; opacity: 0; box-shadow: 0 0 14px 5px rgba(249, 115, 22, .75), 0 0 30px 10px rgba(220, 38, 38, .45); }
+.dk-fx-bolt { z-index: 5; left: 30%; top: -26%; width: 40%; height: 120%; opacity: 0; overflow: visible; filter: drop-shadow(0 0 2px var(--dk-white)) drop-shadow(0 0 7px var(--dk-c-a5b4fc)); }
+.dk-fx-bolt path { fill: var(--dk-white); }
+.dk-fx-flash { inset: -6px; border-radius: 16px; z-index: 4; opacity: 0; background: radial-gradient(circle at 50% 46%, var(--dk-white) 0, var(--dk-c-eef2ff) 55%, var(--dk-fx-e0e7ff-a0) 100%); }
+.dk-fx-heat { inset: -5px; border-radius: 15px; z-index: 0; opacity: 0; box-shadow: 0 0 14px 5px var(--dk-fx-f97316-a75), 0 0 30px 10px var(--dk-fx-dc2626-a45); }
 .dk-fx-glow { inset: -5px; border-radius: 16px; opacity: 0; box-shadow: 0 0 0 2px var(--dk-k), 0 0 16px 4px color-mix(in srgb, var(--dk-k) 60%, transparent); }
 .dk-fx-mote { width: 4px; height: 4px; border-radius: 50%; background: var(--color-text-muted); opacity: 0; }
-.dk-gone-mask { -webkit-mask-image: linear-gradient(to bottom, transparent var(--dk-g), #000 calc(var(--dk-g) + 20%)); mask-image: linear-gradient(to bottom, transparent var(--dk-g), #000 calc(var(--dk-g) + 20%)); }
+.dk-gone-mask { -webkit-mask-image: linear-gradient(to bottom, transparent var(--dk-g), var(--dk-black) calc(var(--dk-g) + 20%)); mask-image: linear-gradient(to bottom, transparent var(--dk-g), var(--dk-black) calc(var(--dk-g) + 20%)); }
 @property --dk-g { syntax: '<percentage>'; inherits: true; initial-value: -20%; }
 .dk-spent { filter: saturate(.35) brightness(.9); }
 
@@ -412,3 +495,13 @@ html:not([data-motion]) .dk-art > .dk-pic { transition: opacity var(--dur-standa
 .dk-pf-field .dk-wrap.dk-sz-hand { left: 58px; }
 .dk-pf-pile .dk-wrap:nth-child(2) { margin: 4px 0 0 5px; }
 .dk-pf-pile .dk-wrap:nth-child(3) { margin: 8px 0 0 10px; }
+
+/* the deck's turn-over sets how deep the card's perspective is; a flat turn has none */
+.dk-t-slow { perspective: 900px; }
+.dk-t-toss { perspective: 700px; }
+.dk-t-slam { perspective: 600px; }
+.dk-t-sweep, .dk-t-burn, .dk-t-ink, .dk-t-seal, .dk-t-bolt, .dk-t-forge { perspective: none; }
+/* the corner and marker choices, as classes the card carries */
+.dk-c-none .dk-num, .dk-m-line .dk-mk { display: none; }
+.dk-c-number .dk-num, .dk-c-suit .dk-num, .dk-c-pips .dk-num { font-variant-numeric: tabular-nums; }
+.dk-m-banner .dk-mk, .dk-m-tab .dk-mk, .dk-m-ribbon .dk-mk { transform-origin: top center; }

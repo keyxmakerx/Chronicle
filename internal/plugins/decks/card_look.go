@@ -58,7 +58,10 @@ type CardOpts struct {
 	// Turnable draws the turn-over button on a face-down card.
 	Turnable bool
 	// FaceSrc is the address the widget fetches the face from when the card is
-	// turned. It is never requested before.
+	// turned. It is never requested before. It must name a copy, never a card:
+	// the address sits in the markup of a face-down card, so one that named the
+	// card (by id, or by anything that identifies it) would tell the page which
+	// card it is before it is turned.
 	FaceSrc string
 	// Foot is a quiet last line on the leaf (a card's fate, say).
 	Foot string

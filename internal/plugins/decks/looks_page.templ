@@ -40,7 +40,7 @@ templ proofCellView(cell proofCell) {
 		if cell.Move != "" {
 			@proofMove(cell)
 		} else if cell.Turn != "" {
-			<div data-dk-slot>
+			<div data-dk-slot data-dk-stage>
 				@CardView(cell.Look, cell.State, cell.Opts)
 			</div>
 			<template class="dk-face-tpl" data-delay="0">

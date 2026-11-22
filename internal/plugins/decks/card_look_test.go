@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -39,9 +40,8 @@ func stylesheet(t *testing.T) string {
 // Every list in settings.go has a class (or a drawing) for each of its keys, and
 // the stylesheet has a rule for each class that carries the look, so a key
 // added on the server without a look cannot ship. A list's first value is its
-// default and may be drawn by the base rules alone. Corners and markers are
-// drawn by the markup they choose, and turn-overs by the script, so those lists
-// are checked for an effect instead (the next two tests).
+// default and may be drawn by the base rules alone. A class matches as a whole
+// name, so .dk-m-tab is not satisfied by .dk-m-tabs.
 func TestLookupTablesCoverEveryList(t *testing.T) {
 	css := stylesheet(t)
 	lists := []struct {
@@ -50,9 +50,9 @@ func TestLookupTablesCoverEveryList(t *testing.T) {
 		table map[string]string
 		rules bool
 	}{
-		{"shape", shapeValues, shapeClass, true}, {"border", borderValues, borderClass, true}, {"turn", turnValues, turnClass, false},
+		{"shape", shapeValues, shapeClass, true}, {"border", borderValues, borderClass, true}, {"turn", turnValues, turnClass, true},
 		{"window", windowValues, windowClass, true}, {"name", nameValues, nameClass, true}, {"lettering", letteringValues, letteringClass, true},
-		{"corner", cornerValues, cornerClass, false}, {"marker", markerValues, markerClass, false}, {"finish", finishValues, finishClass, true},
+		{"corner", cornerValues, cornerClass, true}, {"marker", markerValues, markerClass, true}, {"finish", finishValues, finishClass, true},
 		{"pattern", patternValues, patternClass, true}, {"palette", Palette, paletteClass, true},
 	}
 	for _, l := range lists {
@@ -66,7 +66,7 @@ func TestLookupTablesCoverEveryList(t *testing.T) {
 				continue
 			}
 			for _, c := range strings.Fields(cls) {
-				if !strings.Contains(css, "."+c) {
+				if !regexp.MustCompile(`\.` + regexp.QuoteMeta(c) + `([^A-Za-z0-9_-]|$)`).MatchString(css) {
 					t.Errorf("%s %q: the stylesheet has no rule for .%s", l.name, k, c)
 				}
 			}
@@ -134,34 +134,44 @@ func TestScriptNamesEveryTurnAndMove(t *testing.T) {
 	}
 }
 
-// A card with a name, words, kind, picture and id, passed alongside a face-down
-// card, must reach nothing of the back. The face-down state takes no card data
-// at all, so there is nothing to leak; the test proves the output and the shape
-// of the signature.
+// A face-down card is drawn from the deck's look and a size and nothing else.
+// What the signature guarantees: CardState has no exported field and FaceDown()
+// takes no argument, so a face-down state has no field that can hold card data,
+// and CardBack takes no card. This test renders the wrapper, through the call a
+// real page makes, for a deck whose card carries a poison string in every field
+// (name, words, kind key and name, corner, picture, id), and checks none of them
+// appears in any shape, size or border.
 func TestFaceDownCarriesNoCardData(t *testing.T) {
-	l := proofLook(func(l *Look) {
-		l.Kinds = append(l.Kinds, KindDef{Key: "poison-kind", Name: "Poison kind name", Colour: "rose", Sign: "drop"})
-		l.Border = "bound"
-	})
-	secret := Face{CardID: "poison-card-id", Name: "Poison card name", KindKey: "poison-kind", Words: "Poison words", Picture: "/poison/picture.jpg", Corner: "9", Rare: true}
-	_ = FaceUp(secret, "/poison/picture.jpg") // held alongside, never passed
-
-	for _, size := range []CardSize{SizeRow, SizeHand, SizeOpen} {
+	poison := Face{
+		CardID: "poison-id-0001", Name: "Poison name", KindKey: "poison-key", Words: "Poison words",
+		Picture: "/poison/picture.jpg", Corner: "poison-corner", Rare: true,
+	}
+	leaks := []string{poison.CardID, poison.Name, poison.KindKey, "Poison kind name", poison.Words, poison.Picture, poison.Corner, "poison"}
+	for _, border := range borderValues {
 		for _, sh := range shapeValues {
-			l.Shape = sh
-			for name, c := range map[string]templ.Component{
-				"view":   CardView(l, FaceDown(), CardOpts{Size: size, DeckName: "Deck", Position: "2 of 5", Turnable: true, FaceSrc: "/face"}),
-				"static": CardView(l, FaceDown(), CardOpts{Size: size, DeckName: "Deck"}),
-				"back":   CardBack(l, size),
-			} {
-				out := renderToString(t, c)
-				for _, leak := range []string{"Poison", "poison", "/poison/"} {
-					if strings.Contains(out, leak) {
-						t.Errorf("%s %s %s: face-down output contains %q", name, size, sh, leak)
+			l := proofLook(func(l *Look) {
+				l.Kinds = append(l.Kinds, KindDef{Key: poison.KindKey, Name: "Poison kind name", Colour: "rose", Sign: "drop"})
+				l.Border, l.Shape = border, sh
+			})
+			for _, size := range []CardSize{SizeRow, SizeHand, SizeOpen} {
+				// The page has the card in hand and draws it face down.
+				_ = poison
+				for name, c := range map[string]templ.Component{
+					"turnable": CardView(l, FaceDown(), CardOpts{Size: size, DeckName: "Deck", Position: "2 of 5", Turnable: true, FaceSrc: "/campaigns/c/decks/d/copies/copy-1/face"}),
+					"static":   CardView(l, FaceDown(), CardOpts{Size: size, DeckName: "Deck"}),
+					"back":     CardBack(l, size),
+				} {
+					out := renderToString(t, c)
+					for _, leak := range leaks {
+						if strings.Contains(out, leak) {
+							t.Errorf("%s %s %s %s: face-down output contains %q", name, border, sh, size, leak)
+						}
 					}
-				}
-				if strings.Contains(out, "dk-rare") || strings.Contains(out, "dk-plate") || strings.Contains(out, "dk-compact") {
-					t.Errorf("%s: a face-down card drew a face", name)
+					for _, drawn := range []string{"dk-rare", "dk-plate", "dk-compact", "dk-leaf"} {
+						if strings.Contains(out, drawn) {
+							t.Errorf("%s: a face-down card drew %s", name, drawn)
+						}
+					}
 				}
 			}
 		}
@@ -172,8 +182,11 @@ func TestFaceDownCarriesNoCardData(t *testing.T) {
 	if !reflect.DeepEqual(FaceDown(), CardState{}) {
 		t.Error("a zero card state must be face down")
 	}
-	if FaceDown().Up() {
-		t.Error("FaceDown reports up")
+	st := reflect.TypeOf(CardState{})
+	for i := 0; i < st.NumField(); i++ {
+		if st.Field(i).IsExported() {
+			t.Errorf("CardState.%s is exported; a state's card data must only come through FaceUp", st.Field(i).Name)
+		}
 	}
 }
 
@@ -235,21 +248,34 @@ func TestFoilIsSheenOnTheSmallShape(t *testing.T) {
 	}
 }
 
-// The kind is named in words on the face and in the card's accessible name,
-// and its sign is drawn, so no kind depends on colour alone.
+// A card names its kind in words wherever it is read (the compact card at row
+// and open size, the leaf of a tall card), in its accessible name at every
+// size, and draws the kind's sign at every size, so no kind depends on colour
+// alone. At the hand size neither build shows the word.
 func TestKindIsNamedInWords(t *testing.T) {
-	l := proofLook(nil)
 	for _, sh := range shapeValues {
-		l.Shape = sh
-		out := renderToString(t, CardView(l, proofUp("k-teal", "3", false), CardOpts{Size: SizeOpen}))
-		if !strings.Contains(out, "Kind teal") {
-			t.Errorf("%s: kind not named in words", sh)
+		for _, size := range []CardSize{SizeRow, SizeHand, SizeOpen} {
+			l := proofLook(func(l *Look) { l.Shape = sh })
+			out := renderToString(t, CardView(l, proofUp("k-teal", "3", false), CardOpts{Size: size}))
+			where := sh + " " + string(size)
+			if !strings.Contains(out, `aria-label="Sample card, Kind teal"`) {
+				t.Errorf("%s: accessible name lacks the kind", where)
+			}
+			if !strings.Contains(out, `class="dk-sg"`) {
+				t.Errorf("%s: no kind sign drawn", where)
+			}
+			// At the hand size the word is in the markup but the stylesheet
+			// hides it (checked below); everywhere else it is drawn.
+			wantWords := (sh != "tall" && size != SizeHand) || (sh == "tall" && size == SizeOpen)
+			if wantWords && !strings.Contains(out, "Kind teal</") {
+				t.Errorf("%s: the kind is not named in words", where)
+			}
 		}
-		if !strings.Contains(out, `aria-label="Sample card, Kind teal"`) && sh == "tall" {
-			t.Errorf("tall: accessible name missing the kind")
-		}
-		if !strings.Contains(out, "<svg") {
-			t.Errorf("%s: no kind sign drawn", sh)
+	}
+	css := stylesheet(t)
+	for _, sel := range []string{".dk-sz-hand .dk-kind", ".dk-sz-hand .dk-kl"} {
+		if !strings.Contains(css, sel) {
+			t.Errorf("the stylesheet does not hide %s at the hand size", sel)
 		}
 	}
 }

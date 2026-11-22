@@ -216,3 +216,58 @@ test('an unknown move does nothing', async () => {
   const a = card(); await d.move(a, 'nope', {});
   assert.equal(a.hidden, false);
 });
+
+// ---- Crowding, the stage, the timing table and stored values ----
+
+const box = (l, t, w = 100, h = 100) => ({ getBoundingClientRect: () => ({ left: l, top: t, right: l + w, bottom: t + h, width: w, height: h }) });
+const staged = { closest: (q) => (q === '[data-dk-stage]' ? {} : null), ...box(0, 0) };
+const plain = { closest: () => null, ...box(0, 0) };
+
+test('only cards in view count toward the crowd', () => {
+  const inView = Array.from({ length: 10 }, (_, i) => box(i * 10, 0));
+  const offscreen = Array.from({ length: 40 }, (_, i) => box(i * 10, 5000));
+  assert.equal(DC.crowdedFor(plain, [...inView, ...offscreen], 1280, 900), false);
+  assert.equal(DC.crowdedFor(plain, [...inView, ...Array.from({ length: 5 }, (_, i) => box(i * 10, 200))], 1280, 900), true);
+  assert.equal(DC.crowdedFor(plain, offscreen, 1280, 900), false);
+});
+
+test('a staged card ignores the crowd rule and plays burn with 40 cards on screen', () => {
+  const forty = Array.from({ length: 40 }, (_, i) => box(i * 10, 0));
+  assert.equal(DC.crowdedFor(plain, forty, 1280, 900), true);
+  const crowded = DC.crowdedFor(staged, forty, 1280, 900);
+  assert.equal(crowded, false);
+  const ctx = { level: 'full', shape: 'tall', weak: false, crowded, staged: true };
+  assert.equal(DC.planTurn('burn', ctx).name, 'burn');
+  assert.equal(DC.planTurn('ink', ctx).name, 'ink');
+  // the weak-device and small-shape twins still apply on a stage
+  assert.equal(DC.planTurn('burn', { ...ctx, weak: true }).name, 'sweep');
+  assert.equal(DC.planTurn('ink', { ...ctx, shape: 'small' }).name, 'fade');
+  // and the flag alone is enough even if a caller passes the raw crowd
+  assert.equal(DC.planTurn('burn', { ...ctx, crowded: true }).name, 'burn');
+});
+
+test('every turn-over fits 900ms at normal Motion speed, from the script table', () => {
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  for (const t of [...DC.TURNS, 'fade']) {
+    const ph = DC.PH[t];
+    assert.ok(ph, `no timing for ${t}`);
+    const total = sum(ph.a) + sum(ph.b);
+    assert.ok(total <= 900, `${t} takes ${total}ms`);
+  }
+});
+
+test('the fixed moves keep their limits: under 500 to say where, up to 1000 for gone', () => {
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  for (const m of ['draw', 'deal', 'shuffle', 'play', 'used']) assert.ok(sum(DC.MOVE_PHASES[m]) < 500, `${m} takes ${sum(DC.MOVE_PHASES[m])}ms`);
+  assert.ok(sum(DC.MOVE_PHASES.gone) <= 1000);
+  assert.deepEqual(Array.from(DC.MOVE_PHASES.ready), [1000, 1000]);
+});
+
+test('a stored shape or turn outside the lists reads as the default, as on the server', () => {
+  assert.deepEqual(Array.from(DC.SHAPES), goList('settings.go', 'shapeValues'));
+  assert.equal(DC.shapeOf('wide'), 'tall');
+  assert.equal(DC.shapeOf('small'), 'small');
+  assert.equal(DC.turnOf('spin'), 'flip');
+  assert.equal(DC.turnOf('forge'), 'forge');
+  assert.equal(DC.turnOf(null), 'flip');
+});
