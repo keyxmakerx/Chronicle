@@ -152,7 +152,7 @@ var lookKeys = []lookKey{
 	choiceKey("craft_art", "made item pictures", AppearanceCraftArts, func(d *customizeDraft) string { return d.Sheet.CraftArt }, func(in *AppearanceInput, v string) { in.Sheet.CraftArt = v }),
 	{key: "page_look", words: "page look", allowed: AppearancePageLooks, none: "not chosen yet",
 		get: func(d *customizeDraft) string { return d.Page.Look }, set: func(in *AppearanceInput, v string) { in.Page.Look = v },
-		note: "a look is never listed until the owner has chosen one"},
+		note: "the lookup leaves it out until the owner has chosen one"},
 	choiceKey("style_kit", "style kit", AppearanceStyleKits, func(d *customizeDraft) string { return d.Page.Kit }, func(in *AppearanceInput, v string) { in.Page.Kit = v }),
 	choiceKey("dmscreen_kit", "DM Screen kit", lookDmKits, func(d *customizeDraft) string { return d.Page.DmKit }, func(in *AppearanceInput, v string) { in.Page.DmKit = v }),
 	choiceKey("email_layout", "email layout", AppearanceEmailLayouts, func(d *customizeDraft) string { return d.Email.Layout }, func(in *AppearanceInput, v string) { in.Email.Layout = v }),
