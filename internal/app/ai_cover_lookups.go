@@ -5,6 +5,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -23,6 +24,9 @@ func (d *aiDeps) coverageLookups() []aiplug.Lookup {
 	}
 	if d.Quests != nil && d.Boards != nil {
 		out = append(out, quests.NewAIQuests(d.Quests, d.Boards))
+	}
+	if d.Homebrew != nil {
+		out = append(out, records.RulesLookup{Svc: d.Homebrew})
 	}
 	return out
 }

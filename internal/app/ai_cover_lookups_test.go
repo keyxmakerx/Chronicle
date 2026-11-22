@@ -23,8 +23,8 @@ func lookupNames(d *aiDeps) string {
 }
 
 // The settings lookup is always plugged; timelines only while the plugin is
-// up, and neither tool is owner-only (the lookups give a player's key the
-// player's part).
+// up, and only the Director-only sheet rules are owner-only (the others give a
+// player's key the player's part).
 func TestCoverageLookups_Plugged(t *testing.T) {
 	tests := []struct {
 		name string
@@ -34,6 +34,7 @@ func TestCoverageLookups_Plugged(t *testing.T) {
 		{"timeline degraded", aiDeps{}, "campaign_settings"},
 		{"timeline up", aiDeps{Timelines: struct{ timeline.TimelineService }{}}, "campaign_settings timelines"},
 		{"quests up", aiDeps{Quests: stubQuestSvc{}, Boards: stubBoardSvc{}}, "campaign_settings quests"},
+		{"field rules up", aiDeps{Homebrew: aiHomebrewAdapter{}}, "campaign_settings sheet_rules"},
 		{"quests half up", aiDeps{Quests: stubQuestSvc{}}, "campaign_settings"},
 	}
 	for _, tt := range tests {
@@ -42,8 +43,8 @@ func TestCoverageLookups_Plugged(t *testing.T) {
 				t.Errorf("tools = %q, want %q", got, tt.want)
 			}
 			for _, l := range tt.deps.coverageLookups() {
-				if l.LookupInfo().Tool.Owner {
-					t.Errorf("%s is owner-only", l.LookupInfo().What)
+				if in := l.LookupInfo(); in.Tool.Owner != (in.What == "rules") {
+					t.Errorf("%s has the wrong owner-only flag", in.What)
 				}
 			}
 		})
