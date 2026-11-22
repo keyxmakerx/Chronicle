@@ -698,6 +698,132 @@ for (const key of ['carved-stone', 'mechanical']) {
   });
 }
 
+// A corner piece's own box stays inside the card's padding box at the right and
+// the bottom. A box that passed them would count as the card's content running
+// over, and the fit would give up the summary and the facts to make room for it.
+const FACTS = { size: '1M', speed: 5, stability: 0 };
+// Facts that give the hero no figures, so a short phone has room for more than a name.
+const QUIET = { languages: 'Caelian', skill: 'Lore' };
+const only = (key, props, name = 'Entry') => plan([ch(name, { border: key, colour: colourOf(key) }, props)]);
+// What the fitted card in front shows, and how far its content runs past it.
+const front = (pg) => pg.locator('.hc-hand .hc-card[data-i]').first().evaluate((c) => {
+  const sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts'), b = getComputedStyle(c, '::before'), hand = c.closest('.hc-hand');
+  return {
+    over: c.scrollHeight - c.clientHeight, wide: c.scrollWidth - c.clientWidth,
+    sum: sum.hidden ? 0 : Math.round(sum.getBoundingClientRect().height), facts: dl && !dl.hidden ? Array.from(dl.children).filter((d) => !d.hidden).length : 0,
+    name: getComputedStyle(c.querySelector('h3')).fontSize,
+    piece: b.content === 'none' ? null : { height: parseFloat(b.height), bottom: parseFloat(b.bottom), right: parseFloat(b.right), outset: b.borderImageOutset },
+    below: hand.getBoundingClientRect().bottom - c.getBoundingClientRect().bottom,
+  };
+});
+
+for (const key of ['mechanical', 'carved-stone']) {
+  for (const [width, height, props, facts] of [[390, 844, FACTS, true], [360, 640, QUIET, false]]) {
+    test(`phone ${width}x${height}: a ${key} card keeps the summary and facts a card without a corner piece keeps`, { skip }, async (t) => {
+      const { pg } = await open(t, { width, height, p: only(key, props) });
+      await idle(pg, 300);
+      const got = await front(pg);
+      const { pg: plain } = await open(t, { width, height, p: only('fire', props) });
+      await idle(plain, 300);
+      const want = await front(plain);
+      assert.ok(got.over <= 1 && got.wide <= 0, `nothing runs past the card (${got.over}px down, ${got.wide}px across)`);
+      assert.ok(got.sum > 0, 'the summary shows');
+      if (facts) assert.ok(got.facts >= 1, 'at least one fact shows');
+      assert.deepEqual({ sum: got.sum, facts: got.facts, name: got.name }, { sum: want.sum, facts: want.facts, name: want.name }, 'the same as a Fire card of the same words');
+    });
+  }
+}
+
+// On a short phone a card is shorter than the worked corner of Carved stone. The
+// piece ends at the padding box's foot, inside the frame's bottom side, and the
+// four instruments of Boiler works reach no further than the frame's own outer
+// edge, which the hand's padding leaves room for.
+for (const height of [640, 540, 450, 400]) {
+  test(`phone 360x${height}: a corner piece stays inside a short card`, { skip }, async (t) => {
+    const { pg } = await open(t, { width: 360, height, p: only('carved-stone', FACTS) });
+    await idle(pg, 300);
+    const stone = await front(pg);
+    assert.ok(stone.piece.height < 300, `the piece (${stone.piece.height}px) is shorter than its whole 300px`);
+    assert.ok(Math.abs(stone.piece.bottom) <= 0.5, `it ends at the padding box's foot (${stone.piece.bottom}px from it)`);
+    assert.ok(stone.over <= 1 && stone.wide <= 0, `nothing runs past the card (${stone.over}px down, ${stone.wide}px across)`);
+    const { pg: other } = await open(t, { width: 360, height, p: only('mechanical', FACTS) });
+    await idle(other, 300);
+    const boiler = await front(other);
+    assert.deepEqual([boiler.piece.bottom, boiler.piece.right, boiler.piece.outset], [0, 0, '21px'], 'the instruments are drawn from the padding box out to the frame\'s outer edge');
+    assert.ok(boiler.over <= 1 && boiler.wide <= 0, `nothing runs past the card (${boiler.over}px down, ${boiler.wide}px across)`);
+    assert.ok(boiler.below >= 5, `the hand keeps ${boiler.below}px under the card for the 5px the frame overhangs`);
+  });
+}
+
+test('phone 390x844: on a tall card the Carved stone corner piece is whole', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, height: 844, p: only('carved-stone', FACTS) });
+  await idle(pg, 300);
+  const stone = await front(pg);
+  assert.equal(stone.piece.height, 300);
+  assert.ok(stone.piece.bottom > 28, 'it ends above the bottom side');
+});
+
+test('computer: the Carved stone corner piece is not cut short on a card of the usual height', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 1280, p: only('carved-stone', FACTS) });
+  await idle(pg, 300);
+  const got = await pg.locator('.hc-gcard[data-trim="carved-stone"]').first().evaluate((c) => { const b = getComputedStyle(c, '::before'); return { height: parseFloat(b.height), bottom: parseFloat(b.bottom), over: c.scrollHeight - c.clientHeight }; });
+  // The whole piece is 900/132 of the frame's 30px on a computer.
+  assert.ok(30 * 900 / 132 - got.height <= 2, `the piece is ${got.height}px of ${(30 * 900 / 132).toFixed(1)}`);
+  assert.ok(got.bottom >= 0 && got.over <= 1, `it does not pass the padding box (${got.bottom}px inside, ${got.over}px over)`);
+});
+
+// A name of one long word cannot wrap. Down to the smallest size it is set
+// smaller; past that it breaks, and no letter of it lies outside the name's own
+// box. A bordered card has no paint containment to hide one that did.
+const LONG_NAME = 'Abcdefghijklmnopqrstuvwxyzabcdefghijklmn';
+for (const [width, height] of [[360, 844], [360, 640]]) {
+  test(`phone ${width}x${height}: a forty-letter name breaks inside its card`, { skip }, async (t) => {
+    const p = plan([ch(LONG_NAME, { border: 'fire', colour: '#d9622b' }, FACTS), ch(LONG_NAME + 'o', { border: 'mechanical', colour: '#6fa8dc' }, FACTS), ch(LONG_NAME + 'p', null, FACTS)]);
+    const { pg, errors } = await open(t, { width, height, p });
+    await idle(pg, 300);
+    const got = await pg.evaluate(() => Array.from(document.querySelectorAll('.hc-hand .hc-card[data-i]')).map((c) => {
+      const h3 = c.querySelector('h3'), sum = c.querySelector('.hc-sum'), r = document.createRange();
+      r.selectNodeContents(h3);
+      const ink = r.getBoundingClientRect(), box = h3.getBoundingClientRect(), card = c.getBoundingClientRect(), cs = getComputedStyle(c);
+      return {
+        trim: c.getAttribute('data-trim') || 'plain', px: parseFloat(getComputedStyle(h3).fontSize), lines: Math.round(box.height / parseFloat(getComputedStyle(h3).lineHeight)),
+        pastName: Math.round(ink.right - box.right), pastCard: Math.round(ink.right - (card.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight))),
+        nameWide: h3.scrollWidth - h3.clientWidth, sumWide: sum.hidden ? 0 : sum.scrollWidth - sum.clientWidth, over: c.scrollHeight - c.clientHeight,
+      };
+    }));
+    assert.deepEqual(got.map((g) => g.trim), ['fire', 'mechanical', 'plain']);
+    for (const g of got) {
+      assert.ok(g.pastName <= 0 && g.pastCard <= 0 && g.nameWide <= 1, `${g.trim}: the name stays in its box (${g.pastName}px past the name's box, ${g.pastCard}px past the card's words)`);
+      assert.ok(g.px >= 14, `${g.trim}: the name is ${g.px}px, never under 14`);
+      assert.ok(g.lines >= 1 && g.lines <= 2, `${g.trim}: the name takes ${g.lines} lines`);
+      assert.ok(g.sumWide <= 1, `${g.trim}: no word of the summary is cut (${g.sumWide}px)`);
+      assert.ok(g.over <= 1, `${g.trim}: nothing runs past the card (${g.over}px)`);
+    }
+    assert.equal(errors.length, 0, errors.join('\n'));
+  });
+}
+
+test('computer: a forty-letter name breaks inside its card, bordered or plain', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 1280, p: plan([ch(LONG_NAME, { border: 'fire', colour: '#d9622b' }, FACTS), ch(LONG_NAME + 'o', null, FACTS)]) });
+  await idle(pg, 300);
+  const got = await pg.evaluate(() => Array.from(document.querySelectorAll('.hc-gcard[data-i]')).map((c) => {
+    const h3 = c.querySelector('h3'), r = document.createRange();
+    r.selectNodeContents(h3);
+    return { trim: c.getAttribute('data-trim') || 'plain', past: Math.round(r.getBoundingClientRect().right - h3.getBoundingClientRect().right), wide: c.scrollWidth - c.clientWidth };
+  }));
+  assert.deepEqual(got.map((g) => g.trim), ['fire', 'plain']);
+  for (const g of got) assert.ok(g.past <= 0 && g.wide <= 0, `${g.trim}: the name stays in its card (${g.past}px past its box, the card ${g.wide}px wider inside than out)`);
+});
+
+test('phone 390x844: a one-word name that fits at a smaller size is set smaller, not broken', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, height: 844, p: only('fire', FACTS, 'Abcdefghijklmnopqrst') });
+  await idle(pg, 300);
+  const h3 = await pg.locator('.hc-hand .hc-card[data-i] h3').first().evaluate((h) => ({ px: parseFloat(getComputedStyle(h).fontSize), wrap: h.style.overflowWrap, lines: Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)), wide: h.scrollWidth - h.clientWidth }));
+  assert.ok(h3.px >= 14 && h3.px < 27, `the name is set at ${h3.px}px`);
+  assert.deepEqual([h3.wrap, h3.lines], ['', 1], 'on one line, unbroken');
+  assert.ok(h3.wide <= 1);
+});
+
 // An address the script cannot put safely in a style leaves the card plain.
 for (const [part, key, bad] of [
   ['ground', 'mechanical', '/borders/a b.webp'],

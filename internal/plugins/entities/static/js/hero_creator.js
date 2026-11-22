@@ -1368,6 +1368,9 @@
     if (this.desk()) { var g = this.$('.hc-gcard.is-focus'); if (g && g.scrollIntoView) g.scrollIntoView({ block: 'nearest' }); }
   };
 
+  // The smallest a name on a card is ever set, in px.
+  var NAME_MIN = 14;
+
   // A card front must read whole: shorten the summary, then hide the last
   // fact, before anything is cut. Redone whenever the room changes.
   // Only the cards near the one in hand are fitted, each once for its size:
@@ -1386,7 +1389,7 @@
     jobs.forEach(function (j) {
       var c = j.c, sum = c.querySelector('.hc-sum'), dl = c.querySelector('.hc-facts'), h3 = c.querySelector('h3');
       j.sum = sum; j.dl = dl; j.h3 = h3; j.ix = c.querySelector('.hc-top .hc-ix');
-      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) { h3.style.fontSize = ''; h3.style.webkitLineClamp = ''; h3.classList.remove('is-clamp'); } if (j.ix) j.ix.hidden = false;
+      sum.style.webkitLineClamp = ''; sum.hidden = false; if (h3) { h3.style.fontSize = ''; h3.style.webkitLineClamp = ''; h3.style.overflowWrap = ''; h3.classList.remove('is-clamp'); } if (j.ix) j.ix.hidden = false;
       if (dl) { dl.hidden = false; qa('div', dl).forEach(function (d) { d.hidden = false; }); }
     });
     jobs.forEach(function (j) {
@@ -1406,9 +1409,9 @@
       // The "n / 100" count goes first, and only when it has wrapped to a line of its own.
       return [function () { return { skip: !j.ixWrap, save: j.ixWrap ? j.ixH + 6 : 0, run: function () { if (j.ixWrap) j.ix.hidden = true; } }; }, function () { return clamp(4); }, function () { return clamp(3); }, function () { return drop(2); }, function () { return clamp(2); },
         function () { return drop(1); }, function () { return drop(0); }, function () { return clamp(1); },
-        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '24px'; } }; },
+        function () { return { save: 0, size: true, run: function () { if (j.h3) j.h3.style.fontSize = '24px'; } }; },
         function () { return { save: 0, run: function () { j.sum.hidden = true; } }; },
-        function () { return { save: 0, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; },
+        function () { return { save: 0, size: true, run: function () { if (j.h3) j.h3.style.fontSize = '20px'; } }; },
         function () { return { save: 0, run: function () { if (j.h3) { j.h3.classList.add('is-clamp'); j.h3.style.webkitLineClamp = 2; } } }; },
         function () { return { save: 0, run: function () { if (j.h3) j.h3.style.webkitLineClamp = 1; } }; }];
     };
@@ -1424,8 +1427,18 @@
       // A one-word name wider than the card cannot wrap, so it is set smaller
       // until it fits across; a smaller name only ever frees height.
       if (j.h3 && j.h3.scrollWidth > j.h3.clientWidth + 1) {
-        var px = parseFloat(getComputedStyle(j.h3).fontSize);
-        j.h3.style.fontSize = Math.max(14, Math.floor(px * j.h3.clientWidth / j.h3.scrollWidth)) + 'px';
+        var px = parseFloat(getComputedStyle(j.h3).fontSize), across = px * j.h3.clientWidth / j.h3.scrollWidth;
+        j.h3.style.fontSize = Math.max(NAME_MIN, Math.floor(across)) + 'px';
+        // A word too long even at the smallest size breaks inside the card,
+        // set as large as lays it on two lines, and the card gives way again
+        // for the lines it now takes. The steps that set a name's size are
+        // passed over: they would set it larger.
+        if (across < NAME_MIN) {
+          j.h3.style.fontSize = Math.max(NAME_MIN, Math.min(px, Math.floor(across * 1.9))) + 'px';
+          j.h3.style.overflowWrap = 'break-word';
+          while (j.i < j.list.length && self.overflow(j.c) > 1) { var st = j.list[j.i++](); if (!st.size) st.run(); }
+          if (j.dl) j.dl.hidden = !qa('div', j.dl).some(function (d) { return !d.hidden; });
+        }
       }
       j.c._fitted = j.size;
     });

@@ -73,25 +73,33 @@ html:not(.dark) .hc-card[data-trim^="glass"], html:not(.dark) .hc-gcard[data-tri
 .hc-card[data-trim="vine"] { padding: 28px 38px 48px; }
 
 /* A corner piece lies over the frame, outside the card's padding box. Paint containment would cut it at that
-   edge, so a bordered card in the hand keeps only its layout contained. */
+   edge, so a bordered card in the hand keeps only its layout contained. The piece's own box never passes the
+   padding box's right or bottom edge: a box that did would count as the card's content running over, and the
+   card would give up its summary and facts to make room for it. */
 .hc-hand .hc-card[data-trim] { contain: layout; }
 
-/* Carved stone: the corner where the rock is being worked lies over the ring's top left corner, at the ring's scale. */
+/* Carved stone: the corner where the rock is being worked lies over the ring's top left corner, at the ring's
+   scale. On a card shorter than the piece it stops at the padding box's foot, inside the ring's bottom side,
+   fading into the rock there; a piece that is whole is not faded. */
 .hc-card[data-trim="carved-stone"]::before, .hc-gcard[data-trim="carved-stone"]::before {
+  --cw: calc((var(--fw) + var(--trim-over)) * 700 / 132); --ch: calc((var(--fw) + var(--trim-over)) * 900 / 132);
+  --cut: linear-gradient(to top, transparent, #000 min(var(--fw) * 0.75, (var(--ch) - 100%) * 4));
   content: ""; position: absolute; z-index: 3; pointer-events: none; top: calc(-1 * var(--fw) - 5px); left: calc(-1 * var(--fw) - 5px);
-  width: calc((var(--fw) + var(--trim-over)) * 700 / 132); height: calc((var(--fw) + var(--trim-over)) * 900 / 132);
-  background: var(--trim-corner) 0 0 / 100% 100% no-repeat;
+  width: min(var(--cw), calc(100% + var(--fw) + 5px)); height: min(var(--ch), calc(100% + var(--fw) + 5px));
+  background: var(--trim-corner) 0 0 / var(--cw) var(--ch) no-repeat;
+  -webkit-mask: var(--cut); mask: var(--cut);
 }
 
 /* Boiler works: steam drifts on the dark field, and one instrument lies over each corner of the frame, larger
    than the frame. Their picture is a nine-slice with nothing in it but its four corners, each 212 by 192 of the
-   frame's own pixels, so it is drawn as a second border image on top of the first. */
+   frame's own pixels, so it is drawn as a second border image on top of the first, reaching the frame's outer
+   edge by its outset. */
 .hc-card[data-trim="mechanical"], .hc-gcard[data-trim="mechanical"] {
   background: linear-gradient(var(--trim-wash), var(--trim-wash)) padding-box, var(--trim-glow), var(--trim-ground, none) 0 0 / 256px 256px padding-box, linear-gradient(#1b1d22, #131418) padding-box;
 }
 .hc-card[data-trim="mechanical"]::before, .hc-gcard[data-trim="mechanical"]::before {
   --u: calc((var(--fw) + var(--trim-over)) / 132);
-  content: ""; position: absolute; z-index: 3; pointer-events: none; inset: calc(-1 * var(--fw) - 5px);
+  content: ""; position: absolute; z-index: 3; pointer-events: none; inset: 0;
   border: solid transparent; border-width: calc(192 * var(--u)) calc(212 * var(--u));
-  border-image: var(--trim-corner, none) 240 265 / calc(192 * var(--u)) calc(212 * var(--u)) stretch;
+  border-image: var(--trim-corner, none) 240 265 / calc(192 * var(--u)) calc(212 * var(--u)) / calc(var(--fw) + 5px) stretch;
 }
