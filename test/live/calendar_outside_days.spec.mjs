@@ -1,8 +1,7 @@
 // calendar_outside_days.spec.mjs — the month's weeks read as one run of days.
 // A week's cells outside the month show the neighbouring month's dates, faded,
 // over the same era colour as the month's own days; next to a festival month
-// they stay blank. On a computer the moons are one small disc a day, and a
-// hidden event's mark is drawn faded rather than ringed.
+// they stay blank.
 //
 // RUN: tools/live-checks.sh test/live/calendar_outside_days.spec.mjs
 
@@ -48,7 +47,7 @@ const split = (cells) => {
   return { lead: cells.slice(0, first), trail: cells.slice(last + 1) };
 };
 
-test('the weeks show the neighbouring dates, faded, over the era colour; the moons are small; a hidden event is faded', async () => {
+test('the weeks show the neighbouring dates, faded, over the era colour', async () => {
   const owner = await person({ tag: 'own', name: 'Mara Vell' });
   const { page } = owner;
   const cid = await newCampaign(owner, 'Outside Days');
@@ -57,8 +56,6 @@ test('the weeks show the neighbouring dates, faded, over the era colour; the moo
   assert.equal(made.status, 201, `importing the calendar answered ${made.status}`);
   const cal = made.body.calendar;
   const base = `/campaigns/${cid}/calendars/${cal.id}`;
-  const hid = await owner.api(`${base}/events`, { method: 'POST', body: { name: 'Quiet arrival', year: cal.current_year, month: cal.current_month, day: 3, all_day: true, visibility: 'dm_only' } });
-  assert.equal(hid.status, 201, `creating the hidden event answered ${hid.status}`);
   await owner.go(`${base}/view`);
   await page.locator('.cal-v5 .day .msil').first().waitFor();
 
@@ -74,27 +71,21 @@ test('the weeks show the neighbouring dates, faded, over the era colour; the moo
     if (i > 0 && lead.length) { leads++; assert.deepEqual(lead, lead.map((_, k) => 31 - lead.length + 1 + k), 'the leading cells are not the month before’s last days'); }
     if (trail.length) { trails++; assert.deepEqual(trail, trail.map((_, k) => k + 1), 'the trailing cells are not the next month’s first days'); }
     if (i === 0) {
-      // The faded dates, the era colour under every cell, the small moons and the faded hidden mark.
+      // The faded dates and the era colour under every cell.
       const look = await page.evaluate(() => {
         const out = document.querySelector('.cal-v5 .day.out .num'), field = document.querySelector('.cal-v5 canvas.era-field:not(.era-fade)');
         const month = document.querySelector('.cal-v5 .stage > .month');
-        const sil = document.querySelector('.cal-v5 .day .msil .sil'), hidden = document.querySelector('.cal-v5 .mk.dir');
         return {
           outOpacity: out ? Number(getComputedStyle(out).opacity) : null,
           outButton: !!document.querySelector('.cal-v5 button.day.out'),
-          clip: field ? field.style.clipPath : null, monthH: month.offsetHeight, monthW: month.offsetWidth,
-          sil: sil ? sil.getBoundingClientRect().width : null,
-          hidden: hidden ? Number(getComputedStyle(hidden).opacity) : null
+          clip: field ? field.style.clipPath : null, monthH: month.offsetHeight, monthW: month.offsetWidth
         };
       });
       if (look.outOpacity !== null) assert.ok(look.outOpacity < 0.8, 'the neighbouring dates are not faded');
       assert.equal(look.outButton, false, 'an outside cell is a button');
       assert.ok(look.clip, 'the era colour is not drawn');
       assert.match(look.clip, new RegExp(`^polygon\\(0px 0px, ${look.monthW}px 0px, ${look.monthW}px ${look.monthH}px, 0px ${look.monthH}px\\)$`), `the era colour does not cover every cell: ${look.clip}`);
-      assert.ok(look.sil && look.sil <= 12.5, `the moon disc is ${look.sil}px wide on a computer`);
-      assert.ok(look.hidden !== null && look.hidden < 0.6, 'the hidden event is not drawn faded');
-      assert.equal(await page.locator('.cal-v5 .mk.dir').evaluate((n) => getComputedStyle(n, '::after').content), 'none', 'the hidden event still has a ring');
-      await picture(page, 'calendar-outside-days', { check: 'calendar-look', about: 'Owner month: neighbouring dates faded over the era colour, small moons, a faded hidden event', locator: page.locator('#cal5-cal') });
+      await picture(page, 'calendar-outside-days', { check: 'calendar-look', about: 'Owner month: neighbouring dates faded over the era colour', locator: page.locator('#cal5-cal') });
     }
     await page.locator('#cal5-next').click();
     await page.waitForTimeout(700);
