@@ -141,6 +141,8 @@ async function deckPages(ids) {
   // The player's hand: the Hand leaf's fragment and a page's Cards part.
   const hand = `${BASE}/campaigns/${ids.id}/decks/hand`;
   frags.push(hand);
+  // The Director's notice fragment the Table fetches (empty when nothing waits).
+  frags.push(`${BASE}/campaigns/${ids.id}/decks/moments/panel`);
   if (ids.entity) frags.push(`${hand}/hero/${ids.entity}`);
   for (const u of frags) {
     at = u.replace(BASE, '');

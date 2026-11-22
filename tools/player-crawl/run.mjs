@@ -111,6 +111,20 @@ try {
     const card = (JSON.parse(dk.text).cards || []).find((c) => c.id === s.ids.whenCard);
     if (!card || card.saidAt) { leaks++; console.log('  LEAK  a card was said so by a request from someone who may not say it'); }
   }
+  // The Director's notice fragment is the Director's alone: everyone else is told
+  // the page is not there, and the Director's own read proves the probe is not blind.
+  if (s.ids.momentPanel) {
+    const ask = (client) => client.get(s.ids.momentPanel, { headers: { Accept: 'text/html', 'HX-Request': 'true' }, follow: false });
+    const mine = await ask(s.owner);
+    console.log(`moments panel as owner: ${mine.status}`);
+    if (mine.status !== 200) { leaks++; console.log('  LEAK  the Director was refused the moments panel (the probe is blind)'); }
+    for (const who of ['player', 'other player', 'scribe']) {
+      const res = await ask(viewers[who]);
+      console.log(`moments panel as ${who}: ${res.status}`);
+      const found = Object.keys(s.markers).filter((k) => res.text.includes(k));
+      if (res.status !== 404 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} for the moments panel${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
+    }
+  }
   if ((s.postProbes || []).length) {
     const d = await s.owner.get(`${s.C}/decks/${s.ids.handDeck}`, { headers: { Accept: 'application/json' } });
     const copy = (JSON.parse(d.text).copies || []).find((c) => c.id === s.ids.handCopy);

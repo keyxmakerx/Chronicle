@@ -242,6 +242,11 @@ would do.
   is the leaves under the header, every section a tab. A tap lifts one height, a drag follows the
   finger, a roll changes the line and never lifts it, and the page keeps room
   for the line. It moves by transform only; Calm fades between heights.
+  With Card decks on, a Director's Table count also holds the cards whose
+  moment has come, and a deck set to slide the notice in drapes it from the Table
+  button (the top of the sheet on a phone) without taking focus. It stays until
+  the Director answers it or closes it, and closing it keeps the count: the
+  moment is still waiting, and the drawer's first line, Waiting on you, brings it back.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write

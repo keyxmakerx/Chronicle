@@ -513,7 +513,9 @@ export async function seed(base, log = console.log) {
     if (!moment.reading || !moment.reading.includes(kindName)) throw new Error('the moment carries no reading of the tracker');
     const base = `${C}/decks/workshop`;
     for (const tail of ['', '/cards', '/rules']) extraUrls.push(`${base}/${deck}${tail}`);
-    extraUrls.push(`${base}/${deck}/cards?card=${card}`, `${C}/decks/moments`, `${C}/decks/when-options`);
+    extraUrls.push(`${base}/${deck}/cards?card=${card}`, `${C}/decks/moments`, `${C}/decks/when-options`,
+      `${C}/decks/moments/panel`, `${C}/decks/moments/panel?at=${moment.id}`);
+    ids.momentPanel = `${C}/decks/moments/panel?at=${moment.id}`;
     // Answering and saying so: only a Director may; nobody else may even learn the route is there.
     const who = ['player', 'other player', 'scribe', 'signedout'];
     for (const tail of ['deal', 'another', 'invite', 'dismiss']) postProbes.push({ path: `${C}/decks/moments/${moment.id}/${tail}`, who });
