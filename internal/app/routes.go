@@ -3148,7 +3148,8 @@ func (a *App) RegisterRoutes() {
 	// choice to hide the brush.
 	campaignHandler.SetPageCategoryLookup(&pageCategoryAdapter{svc: entityService})
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
-	campaignHandler.SetCustomizeDrafts(campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB)))
+	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
+	campaignHandler.SetCustomizeDrafts(customizeDrafts)
 	// After the look, which NewHandler registers first: a category's menu
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
@@ -7249,6 +7250,7 @@ func (a *App) RegisterRoutes() {
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 		Designs:         aiDesigns,
 		Layers:          layersSvc,
+		LookDrafts:      customizeDrafts,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
