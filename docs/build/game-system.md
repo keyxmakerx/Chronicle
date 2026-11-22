@@ -234,4 +234,5 @@ drafted marked "Set a price" and cannot be bought until the Director sets one.
 
 - [../system-package-rendering.md](../system-package-rendering.md): how fields render.
 - [../system-rulebook-book.md](../system-rulebook-book.md): the `book/` format.
+- [../system-card-borders.md](../system-card-borders.md): `card_border` and `card_colour`, the hero creator's card borders.
 - [../system-plugin-marketplace.md](../system-plugin-marketplace.md): the submission and review flow.

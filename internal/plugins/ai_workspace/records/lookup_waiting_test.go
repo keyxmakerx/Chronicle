@@ -29,6 +29,7 @@ func (fakeEntryStatus) Entries(context.Context, string, string, bool) (string, [
 		{Name: "Dwarf", Slug: "dwarf", Source: "package"},
 		{Name: "Fairy", Slug: "fairy", Source: "campaign", Status: "sent"},
 		{Name: "Gnome", Slug: "gnome", Source: "campaign", Status: "draft"},
+		{Name: "Imp", Slug: "imp", Source: "campaign", Border: "fire", Colour: "#d9622b"},
 	}, nil
 }
 func (fakeEntryStatus) Fields(context.Context, string, bool) (string, []SystemEntryField, error) {
@@ -183,6 +184,7 @@ func TestLookups_SystemEntriesMarkDrafts(t *testing.T) {
 		"- Dwarf (dwarf), package\n",
 		"- Fairy (fairy), campaign, a player's entry handed in and not accepted yet",
 		"- Gnome (gnome), campaign, a player's draft, not accepted yet",
+		"- Imp (imp), campaign, card border fire in #d9622b\n",
 	} {
 		if !strings.Contains(ans.Text, want) {
 			t.Errorf("answer lacks %q:\n%s", want, ans.Text)

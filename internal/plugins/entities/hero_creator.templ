@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -37,6 +38,7 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
 		if view.Look == HeroLookStage {
 			<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_stage.css") }/>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_borders.css") }/>
 		}
 		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
@@ -55,6 +57,7 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 				}
 				if view.Look == HeroLookStage {
 					data-look={ HeroLookStage }
+					data-borders={ cardborders.LibraryJSON(layouts.AssetURL) }
 				}
 			>
 				<div class="hc-loading" role="status">

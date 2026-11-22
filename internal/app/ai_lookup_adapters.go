@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -139,7 +140,11 @@ func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field s
 	}
 	out := make([]records.SystemEntry, 0, len(l.Choices))
 	for _, c := range l.Choices {
-		out = append(out, records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary, Status: c.Status})
+		e := records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary, Status: c.Status}
+		if look, ok := cardborders.LookFrom(c.Properties); ok {
+			e.Border, e.Colour = look.Border, look.Colour
+		}
+		out = append(out, e)
 	}
 	return l.SystemName, out, nil
 }
