@@ -39,3 +39,12 @@ test('a Wealth basket summary asks for the dearest level', () => {
   assert.equal(sm.short, true);
   assert.equal(SR.basketSummary({ 1: 3 }, its, { kind: 'wealth', money: 2 }).short, false);
 });
+
+test('a haggled listing reads as Wealth, with the old level struck through', () => {
+  const listed = [{ id: 1, n: 'Healing Potion', p: 2, cur: 'sovereign', price: '2 Sovereign', priceUsual: '2 gp' }];
+  const won = SR.haggled(listed, { 1: { haggle: { tier: 3, pct: -50, price: 1, was: 2 } } });
+  const out = SR.wealthPrices(won)[0];
+  assert.equal(out.price, 'Wealth 1');
+  assert.equal(out.was, 'Wealth 2');
+  assert.equal(out.p, 1);
+});

@@ -1234,7 +1234,7 @@
       if (!h || !(Number(h.price) > 0) || Number(h.price) === it.p) return it;
       var o = {}; for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) o[k] = it[k];
       var tail = it.price.slice(String(it.p).length);
-      o.was = it.price; o.p = Number(h.price); o.price = o.p + tail;
+      o.was = it.price; o.wasP = it.p; o.p = Number(h.price); o.price = o.p + tail;
       if (it.priceUsual) o.priceUsual = o.p + it.priceUsual.slice(String(it.p).length);
       return o;
     });
@@ -1314,6 +1314,7 @@
       var o = {};
       Object.keys(it).forEach(function (k) { o[k] = it[k]; });
       o.price = 'Wealth ' + it.p; o.priceUsual = '';
+      if (it.was) o.was = 'Wealth ' + it.wasP;
       return o;
     });
   }
@@ -1643,8 +1644,9 @@
         S.dark = document.documentElement.classList.contains('dark');
         // Arranging shows every good, so a GM can place one that is not out today.
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
-        if (payingWithWealth(buyer())) S.its = wealthPrices(S.its);
         if (S.mode !== 'arr') S.its = haggled(todayShelf(S.its, today), rollsState && rollsState.goods);
+        // After the haggle, which builds its text from the coin price.
+        if (payingWithWealth(buyer())) S.its = wealthPrices(S.its);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
         fitScene();
