@@ -426,6 +426,59 @@ test('on a 400 room the body scrolls to the position line under the cards', { sk
   assert.deepEqual(r, { before: true, inBody: true, inWindow: true, oy: 'auto' });
 });
 
+// A finger put down at a point and moved in steps, as a swipe is, then lifted.
+async function swipe(pg, x, y, dx, dy) {
+  const cdp = await pg.context().newCDPSession(pg);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 10; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + dx * i / 10, y: y + dy * i / 10 }] });
+    await pg.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await pg.waitForTimeout(400);
+}
+const scrolled = (pg) => pg.evaluate(() => ({
+  body: Math.round(document.querySelector('.hc-body').scrollTop), hand: Math.round(document.querySelector('.hc-hand').scrollLeft), page: Math.round(window.scrollY),
+}));
+// The middle of the card at the middle of the hand, where a thumb lands.
+const midCard = (pg) => pg.evaluate(() => {
+  const h = document.querySelector('.hc-hand').getBoundingClientRect(), mid = h.left + h.width / 2;
+  const c = Array.from(document.querySelectorAll('.hc-hand .hc-card[data-i]')).map((x) => x.getBoundingClientRect()).sort((a, b) => Math.abs(a.left + a.width / 2 - mid) - Math.abs(b.left + b.width / 2 - mid))[0];
+  return { x: Math.round(c.left + c.width / 2), y: Math.round(Math.min(c.top + c.height / 2, window.innerHeight - 40)) };
+});
+
+for (const room of [450, 400]) {
+  test(`in a room of ${room} a swipe up that starts on a card scrolls the body, and the page behind stays`, { skip }, async (t) => {
+    const { pg } = await open(t, { width: 360, height: room, p: every() });
+    await idle(pg, 300);
+    // A page behind that could move if the swipe reached it.
+    await pg.evaluate(() => { const d = document.createElement('div'); d.style.height = '3000px'; document.body.appendChild(d); });
+    const at = await midCard(pg), before = await scrolled(pg);
+    assert.deepEqual([before.body, before.page], [0, 0]);
+    await swipe(pg, at.x, at.y, 0, -160);
+    const up = await scrolled(pg);
+    assert.ok(up.body > 0, 'the body moved under a finger that started on a card: ' + JSON.stringify(up));
+    assert.equal(up.hand, before.hand, 'an up swipe does not move the hand');
+    // Past the body's end the swipe stops there.
+    await swipe(pg, at.x, at.y, 0, -160);
+    await swipe(pg, at.x, at.y, 0, -160);
+    const end = await scrolled(pg);
+    const max = await pg.evaluate(() => { const b = document.querySelector('.hc-body'); return b.scrollHeight - b.clientHeight; });
+    assert.ok(end.body >= max - 1, 'the body reaches its end: ' + end.body + ' of ' + max);
+    assert.equal(end.page, 0, 'the page behind did not move');
+  });
+}
+
+test('in a room of 450 a sideways swipe on a card still moves the hand and not the body', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 360, height: 450, p: every() });
+  await idle(pg, 300);
+  const at = await midCard(pg), before = await scrolled(pg);
+  await swipe(pg, at.x, at.y, -170, 0);
+  const after = await scrolled(pg);
+  assert.ok(after.hand > before.hand, 'the hand moved on: ' + JSON.stringify([before, after]));
+  assert.deepEqual([after.body, after.page], [before.body, 0]);
+});
+
 test('growing the window back gives the intro line and the open figures back', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 360, height: 540, p: every() });
   await idle(pg, 300);

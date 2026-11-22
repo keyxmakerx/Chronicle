@@ -113,6 +113,9 @@
 
 /* A phone too short for the cards at their least height lets the body scroll. */
 .hc[data-look="stage"] .hc-app.is-scroll:not([data-view="desk"]) .hc-body { overflow-y: auto; overscroll-behavior: contain; }
+/* The hand only moves sideways, so an up-or-down swipe that starts on a card
+   passes to the body, which keeps it from the page behind. */
+.hc[data-look="stage"] .hc-app.is-scroll:not([data-view="desk"]) .hc-hand { overscroll-behavior-y: auto; }
 
 /* The line that just changed takes a white wash that fades. */
 .hc[data-look="stage"] .hc-stg__ln.is-lit { animation: hc-lit 1.1s var(--ease-out); }
