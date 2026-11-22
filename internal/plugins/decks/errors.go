@@ -42,8 +42,14 @@ var (
 	errEmptyPile = errors.New("pile is empty")
 	// errNoDraws is a player draw with nothing left to spend.
 	errNoDraws = errors.New("no draws left")
-	// errShownTaken is a draw to shown while a copy already sits there.
-	errShownTaken = errors.New("a card is already shown")
+	// errShownFull is a draw that would put more than MaxShown copies in the
+	// shown spot.
+	errShownFull = errors.New("the shown spot is full")
+	// errTargetFull, errTargetCopies and errCardCopies are a keep that would
+	// pass the target deck's card, copy or per-card copy limit.
+	errTargetFull   = errors.New("target deck has too many cards")
+	errTargetCopies = errors.New("target deck has too many copies")
+	errCardCopies   = errors.New("target card has too many copies")
 	// errLostClaim is a move whose copy was no longer where it was read.
 	errLostClaim = errors.New("copy moved first")
 )

@@ -3,6 +3,7 @@ package decks
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // Verbs a copy route accepts.
@@ -17,11 +18,20 @@ const (
 	verbTakeOff  = "take-off"
 	verbDiscard  = "discard"
 	verbTakeBack = "take-back"
+	verbShow     = "show"
+	verbKeep     = "keep"
 )
 
 var verbs = map[string]bool{
 	verbDeal: true, verbPutBack: true, verbAnother: true, verbTurn: true, verbPlay: true, verbApprove: true,
 	verbTurnDown: true, verbTakeOff: true, verbDiscard: true, verbTakeBack: true,
+	verbShow: true, verbKeep: true,
+}
+
+// inPartyHand is a copy in the party deck's own hand: in a hand, held by no
+// hero, on a party deck. Every member who may see the deck may handle it.
+func inPartyHand(d Deck, c Copy) bool {
+	return d.Kind == KindParty && c.Zone == ZoneHand && c.HolderEntityID == ""
 }
 
 // fateOf is where a card goes after use: its own fate, or the deck's.
@@ -60,7 +70,8 @@ func afterLeaving(fate string) Place {
 // lookupCopy finds a copy the viewer may know about. A Director knows every
 // copy. A player knows the copies in their own heroes' hands and play, the
 // cards lying on the table, and the used pile of a party deck; any other
-// copy answers like a missing one.
+// copy answers like a missing one. The party deck's own hand is every
+// member's.
 func (r *request) lookupCopy(d Deck, id string) (Copy, error) {
 	if !validToken(id) {
 		return Copy{}, errNotFound("card")
@@ -83,6 +94,7 @@ func (r *request) lookupCopy(d Deck, id string) (Copy, error) {
 	case (c.Zone == ZoneHand || c.Zone == ZonePlay) && own:
 	case c.Zone == ZonePlay && c.HolderEntityID == "":
 	case c.Zone == ZoneUsed && d.Kind == KindParty:
+	case inPartyHand(d, c):
 	default:
 		return Copy{}, errNotFound("card")
 	}
@@ -119,11 +131,31 @@ func (r *request) result(d Deck, copyID string) (*ActionResult, error) {
 	return &ActionResult{CopyID: copyID, Deck: view}, nil
 }
 
+// drawResult is the reply to a draw: the copies it took, always a list, and
+// the deck as the viewer now sees it. The first copy is also named as copyId so
+// a caller written for a single draw keeps working.
+func (r *request) drawResult(d Deck, got []Copy) (*ActionResult, error) {
+	ids := make([]string, 0, len(got))
+	for _, c := range got {
+		ids = append(ids, c.ID)
+	}
+	res, err := r.result(d, ids[0])
+	if err != nil {
+		return nil, err
+	}
+	res.CopyIDs = ids
+	return res, nil
+}
+
 // target resolves where a deal goes: a hero's hand (a page of this campaign)
 // or the whole table.
 func (s *service) target(ctx context.Context, campaignID string, d Deck, to, heroID string) (Place, error) {
 	switch to {
 	case "hand":
+		if heroID == "" && d.Kind == KindParty {
+			// A party deck's hand deal with no hero is the party's own hand.
+			return Place{Zone: ZoneHand, FaceUp: d.Settings.Arrives == "up"}, nil
+		}
 		if !validToken(heroID) {
 			return Place{}, errInvalid("name the hero page to deal to")
 		}
@@ -148,8 +180,8 @@ func (s *service) drawError(err error, named bool) error {
 		return errNothingLeft()
 	case errors.Is(err, errNoDraws):
 		return errForbidden("you have no draws left")
-	case errors.Is(err, errShownTaken):
-		return errConflictMsg("A card is already shown; deal it, put it back or draw another.")
+	case errors.Is(err, errShownFull):
+		return errConflictMsg(fmt.Sprintf("At most %d cards can be shown at once; deal some or put them back first.", MaxShown))
 	case errors.Is(err, errLostClaim):
 		return errMoved()
 	}
@@ -162,11 +194,17 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 	if err != nil {
 		return nil, err
 	}
-	plan := DrawPlan{CampaignID: campaignID, DeckID: d.ID, Reshuffle: d.Settings.Empty == "reshuffle",
+	plan := DrawPlan{CampaignID: campaignID, DeckID: d.ID, Count: 1, Reshuffle: d.Settings.Empty == "reshuffle",
 		Pick: s.pick, Log: LogLine{Action: ActDraw, ActorUserID: v.UserID}}
 	if v.Director {
 		if in.HeroID != "" {
 			return nil, errInvalid("a Director's draw goes to the shown spot; deal it from there")
+		}
+		if in.Count != 0 {
+			if in.Count < 1 || in.Count > MaxDrawCount {
+				return nil, errInvalid(fmt.Sprintf("count must be between 1 and %d", MaxDrawCount))
+			}
+			plan.Count = in.Count
 		}
 		plan.To = Place{Zone: ZoneShown}
 	} else {
@@ -176,6 +214,9 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 		}
 		if !ok || d.Settings.Draws != "players" {
 			return nil, errForbidden("you can't draw from this deck")
+		}
+		if in.Count > 1 || in.Count < 0 {
+			return nil, errInvalid("you draw one card at a time")
 		}
 		if p.DrawsLeft != nil && *p.DrawsLeft <= 0 {
 			return nil, errForbidden("you have no draws left")
@@ -195,8 +236,10 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 	if err != nil {
 		return nil, s.drawError(err, false)
 	}
-	s.moved(campaignID, Move{DeckID: d.ID, CopyID: got.ID, Log: plan.Log}, ActDraw)
-	return r.result(d, got.ID)
+	for _, c := range got {
+		s.moved(campaignID, Move{DeckID: d.ID, CopyID: c.ID, Log: plan.Log}, ActDraw)
+	}
+	return r.drawResult(d, got)
 }
 
 func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Viewer, in DealCardInput) (*ActionResult, error) {
@@ -223,8 +266,8 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 	if err != nil {
 		return nil, s.drawError(err, true)
 	}
-	s.moved(campaignID, Move{DeckID: d.ID, CopyID: got.ID, Log: plan.Log}, ActDeal)
-	return r.result(d, got.ID)
+	s.moved(campaignID, Move{DeckID: d.ID, CopyID: got[0].ID, Log: plan.Log}, ActDeal)
+	return r.result(d, got[0].ID)
 }
 
 func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput) (*ActionResult, error) {
@@ -248,7 +291,7 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		return nil, errNotFound("card")
 	}
 
-	here := Place{Zone: c.Zone, HolderEntityID: c.HolderEntityID, FaceUp: c.FaceUp}
+	here := Place{Zone: c.Zone, HolderEntityID: c.HolderEntityID, FaceUp: c.FaceUp, Open: c.Open}
 	m := Move{CampaignID: campaignID, DeckID: d.ID, CopyID: c.ID, From: here, To: here,
 		Log: LogLine{ActorUserID: v.UserID, HolderEntityID: c.HolderEntityID}}
 	// mine is whether the copy is in front of or in the hand of a hero the
@@ -257,7 +300,9 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 	if err != nil {
 		return nil, err
 	}
-	mine := v.Director || own
+	// The party's hand is held by every member, so it is "mine" to any of them.
+	party := inPartyHand(d, c)
+	mine := v.Director || own || party
 	wrongZone := func(want string) error {
 		return conflict("that card is not " + want)
 	}
@@ -294,15 +339,17 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if c.Zone != ZoneShown {
 			return nil, wrongZone("in the shown spot")
 		}
-		plan := DrawPlan{CampaignID: campaignID, DeckID: d.ID, To: Place{Zone: ZoneShown}, PutBackShown: true,
+		// Put this copy back and draw one more, in one step; the log reads as a
+		// put-back and a draw.
+		plan := DrawPlan{CampaignID: campaignID, DeckID: d.ID, Count: 1, To: Place{Zone: ZoneShown}, PutBackCopyID: c.ID,
 			Reshuffle: d.Settings.Empty == "reshuffle", Pick: s.pick,
-			Log: LogLine{Action: ActAnother, ActorUserID: v.UserID}}
+			Log: LogLine{Action: ActDraw, ActorUserID: v.UserID}}
 		got, err := s.repo.Draw(ctx, plan)
 		if err != nil {
 			return nil, s.drawError(err, false)
 		}
-		s.moved(campaignID, Move{DeckID: d.ID, CopyID: got.ID, Log: plan.Log}, ActAnother)
-		return r.result(d, got.ID)
+		s.moved(campaignID, Move{DeckID: d.ID, CopyID: got[0].ID, Log: plan.Log}, ActDraw)
+		return r.drawResult(d, got)
 
 	case verbTurn:
 		if c.Zone != ZoneHand {
@@ -316,7 +363,35 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 			// anything is written, so flipping cannot fill the log.
 			return nil, conflict("that card is already face up")
 		}
-		m.To.FaceUp, m.Turned, action = !c.FaceUp, true, ActTurn
+		// Turning is private: it changes what the holder and Directors see and
+		// nothing else. A card turned down is no longer open.
+		m.To.FaceUp, m.To.Open, m.Turned, action = !c.FaceUp, false, true, ActTurn
+
+	case verbShow:
+		if c.Zone != ZoneHand {
+			return nil, wrongZone("in a hand")
+		}
+		if party {
+			return nil, conflict("a card in the party's hand is already seen by the whole party")
+		}
+		if !mine {
+			return nil, errForbidden("you can only show a card in your own hero's hand")
+		}
+		if !c.FaceUp {
+			return nil, conflict("turn the card over before showing it")
+		}
+		if c.Open {
+			// A repeat is refused before anything is written, so it cannot fill
+			// the log or the notices.
+			return nil, conflict("that card is already shown to the table")
+		}
+		m.To.Open, action = true, ActShow
+
+	case verbKeep:
+		if err := requireDirector(v); err != nil {
+			return nil, err
+		}
+		return s.keep(r, d, c, here, in)
 
 	case verbPlay:
 		if c.Zone != ZoneHand {
@@ -371,7 +446,7 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if c.Zone != ZoneHand {
 			return nil, wrongZone("in a hand")
 		}
-		if !v.Director && !(own && d.Settings.Discard) {
+		if !v.Director && !((own || party) && d.Settings.Discard) {
 			return nil, errForbidden("you can't discard from this deck")
 		}
 		if !v.Director && !c.FaceUp {
@@ -430,4 +505,45 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 	}
 	s.moved(campaignID, Move{DeckID: d.ID, Log: log}, action)
 	return r.result(d, "")
+}
+
+// keep copies a card into another deck of the campaign and sends the source
+// copy to gone. Only a card in play, in a hand or in the shown spot can be
+// kept.
+func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*ActionResult, error) {
+	if c.Zone != ZoneShown && c.Zone != ZoneHand && c.Zone != ZonePlay {
+		return nil, conflict("that card is not shown, in a hand or in play")
+	}
+	pick := errInvalid("choose another deck of this campaign to keep the card in")
+	if !validToken(in.TargetDeckID) || in.TargetDeckID == d.ID {
+		return nil, pick
+	}
+	target, found, err := s.repo.GetDeck(r.ctx, r.cid, in.TargetDeckID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	if !found {
+		return nil, pick
+	}
+	kinds := make(map[string]bool, len(target.Look.Kinds))
+	for _, k := range target.Look.Kinds {
+		kinds[k.Key] = true
+	}
+	plan := KeepPlan{CampaignID: r.cid, DeckID: d.ID, CopyID: c.ID, From: here, TargetDeckID: target.ID, TargetKinds: kinds,
+		Log: LogLine{Action: ActKeep, ActorUserID: r.v.UserID, HolderEntityID: c.HolderEntityID}}
+	if err := s.repo.Keep(r.ctx, plan); err != nil {
+		switch {
+		case errors.Is(err, errLostClaim):
+			return nil, errMoved()
+		case errors.Is(err, errTargetFull):
+			return nil, errInvalid(fmt.Sprintf("that deck already has %d cards", MaxCardsPerDeck))
+		case errors.Is(err, errTargetCopies):
+			return nil, errInvalid(fmt.Sprintf("that deck already has %d copies in all", MaxCopiesPerDeck))
+		case errors.Is(err, errCardCopies):
+			return nil, errInvalid(fmt.Sprintf("that deck already has %d copies of this card", MaxCopiesPerCard))
+		}
+		return nil, apperrorInternal(err)
+	}
+	s.moved(r.cid, Move{DeckID: d.ID, CopyID: c.ID, Log: plan.Log}, ActKeep)
+	return r.result(d, c.ID)
 }

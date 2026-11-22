@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -345,7 +346,7 @@ func directorPlayers(ps []Player) []DirectorPlayer {
 
 func directorSummary(d Deck, counts ZoneCounts) DirectorDeck {
 	return DirectorDeck{ID: d.ID, Name: d.Name, Kind: d.Kind, HolderEntityID: d.HolderEntityID,
-		Settings: d.Settings, Look: d.Look, Version: d.Version, Players: directorPlayers(d.Players), Counts: counts}
+		NextCardID: d.NextCardID, LastCardID: d.LastCardID, Settings: d.Settings, Look: d.Look, Version: d.Version, Players: directorPlayers(d.Players), Counts: counts}
 }
 
 func (r *request) directorFull(d Deck) (DirectorDeck, error) {
@@ -366,14 +367,14 @@ func (r *request) directorFull(d Deck) (DirectorDeck, error) {
 	out.Cards = make([]DirectorCard, 0, len(cards))
 	for _, c := range cards {
 		out.Cards = append(out.Cards, DirectorCard{ID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words,
-			DirectorNote: c.DirectorNote, Picture: c.Picture, Corner: c.Corner, Copies: c.Copies, Fate: c.Fate,
+			DirectorNote: c.DirectorNote, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare, Copies: c.Copies, Fate: c.Fate,
 			When: c.When, WhenOpen: c.WhenOpen, AskFirst: c.AskFirst, SortOrder: c.SortOrder})
 	}
 	out.Copies = make([]DirectorCopy, 0, len(copies))
 	for _, c := range copies {
 		out.Counts.add(c.Zone, 1)
 		out.Copies = append(out.Copies, DirectorCopy{ID: c.ID, CardID: c.CardID, Zone: c.Zone,
-			HolderEntityID: c.HolderEntityID, FaceUp: c.FaceUp, AskedAt: c.AskedAt, DealtBy: c.DealtBy,
+			HolderEntityID: c.HolderEntityID, FaceUp: c.FaceUp, Open: c.Open, AskedAt: c.AskedAt, DealtBy: c.DealtBy,
 			DealtAt: c.DealtAt, TurnedAt: c.TurnedAt, MovedAt: c.MovedAt})
 	}
 	out.Log = log
@@ -381,7 +382,7 @@ func (r *request) directorFull(d Deck) (DirectorDeck, error) {
 }
 
 func faceOf(c Card) Face {
-	return Face{CardID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words, Picture: c.Picture, Corner: c.Corner}
+	return Face{CardID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare}
 }
 
 // playerCopy is a copy as a player may know it: the face only when it is
@@ -395,8 +396,24 @@ func playerCopy(c Copy, cards map[string]Card) PlayerCopy {
 		f := faceOf(card)
 		out.Face = &f
 		out.Waiting = c.AskedAt != nil
+		out.Open = c.Open
 	}
 	return out
+}
+
+// othersSeeFace says whether a player who does not hold a copy sees its face.
+// In a hand that takes the holder's second step, showing it: turning a card
+// over is private, so a turned card and an unturned one are the same to
+// everyone else. A card played in front of a hero is on the table, so face up
+// is enough.
+func othersSeeFace(d Deck, c Copy) bool {
+	if d.Settings.OthersSee != "face" {
+		return false
+	}
+	if c.Zone == ZoneHand {
+		return c.Open && c.FaceUp
+	}
+	return c.FaceUp
 }
 
 func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
@@ -473,6 +490,12 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 			pile++
 		case ZoneHand, ZonePlay:
 			switch {
+			case inPartyHand(d, c):
+				// The party's hand belongs to every member, so a face-up card in
+				// it is seen by all of them, and a face-down one is a face-down
+				// entry like any other.
+				out.PartyHand = append(out.PartyHand, playerCopy(c, byID))
+				seen = c.FaceUp
 			case c.HolderEntityID == "":
 				seen = c.Zone == ZonePlay && c.FaceUp
 			case mine[c.HolderEntityID] != nil:
@@ -486,7 +509,7 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 			default:
 				if viewable[c.HolderEntityID] {
 					others[c.HolderEntityID] = append(others[c.HolderEntityID], c)
-					seen = c.FaceUp && d.Settings.OthersSee == "face"
+					seen = othersSeeFace(d, c)
 				}
 			}
 		case ZoneUsed:
@@ -530,7 +553,7 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 			oh := OtherHolds{HeroID: id, Count: len(others[id])}
 			if d.Settings.OthersSee == "face" {
 				for _, c := range others[id] {
-					if pc := playerCopy(c, byID); pc.Face != nil {
+					if pc := playerCopy(c, byID); pc.Face != nil && othersSeeFace(d, c) {
 						oh.Faces = append(oh.Faces, *pc.Face)
 					}
 				}
@@ -696,7 +719,11 @@ func (s *service) Update(ctx context.Context, campaignID, deckID string, v Viewe
 			}
 		}
 	}
-	okSaved, err := s.repo.UpdateDeck(ctx, next, ver)
+	picks, err := s.checkPicks(ctx, campaignID, cur, in)
+	if err != nil {
+		return nil, err
+	}
+	okSaved, err := s.repo.UpdateDeck(ctx, next, ver, picks)
 	if errors.Is(err, errDuplicate) {
 		return nil, errTaken("deck")
 	}
@@ -707,6 +734,40 @@ func (s *service) Update(ctx context.Context, campaignID, deckID string, v Viewe
 		return nil, errStale()
 	}
 	return s.reread(ctx, campaignID, deckID, v)
+}
+
+// checkPicks reads the Director's next and last card from an update. Absent
+// keeps, null or "" clears, and a value must be a card of this deck.
+func (s *service) checkPicks(ctx context.Context, campaignID string, cur Deck, in UpdateDeckInput) (PickChange, error) {
+	var pc PickChange
+	one := func(f patch.Field[string], set *bool, dst *string, label string) error {
+		if !f.Present() {
+			return nil
+		}
+		*set = true
+		// An explicit null and "" both clear.
+		v, ok := f.Get()
+		if !ok || v == "" {
+			return nil
+		}
+		if !validToken(v) {
+			return errInvalid("the " + label + " card is not a card of this deck")
+		}
+		if _, found, err := s.repo.GetCard(ctx, campaignID, cur.ID, v); err != nil {
+			return apperrorInternal(err)
+		} else if !found {
+			return errInvalid("the " + label + " card is not a card of this deck")
+		}
+		*dst = v
+		return nil
+	}
+	if err := one(in.NextCardID, &pc.SetNext, &pc.Next, "next"); err != nil {
+		return PickChange{}, err
+	}
+	if err := one(in.LastCardID, &pc.SetLast, &pc.Last, "last"); err != nil {
+		return PickChange{}, err
+	}
+	return pc, nil
 }
 
 func (s *service) Delete(ctx context.Context, campaignID, deckID string, v Viewer) error {
@@ -844,7 +905,7 @@ func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v V
 		copies = *in.Copies
 	}
 	c := Card{ID: uuid.NewString(), DeckID: d.ID, CampaignID: campaignID, Name: in.Name, KindKey: in.KindKey,
-		Words: in.Words, DirectorNote: in.DirectorNote, Picture: in.Picture, Corner: in.Corner, Copies: copies,
+		Words: in.Words, DirectorNote: in.DirectorNote, Picture: in.Picture, Corner: in.Corner, Rare: in.Rare, Copies: copies,
 		Fate: in.Fate, When: in.When, WhenOpen: in.WhenOpen, AskFirst: in.AskFirst}
 	if err := checkCard(d, &c); err != nil {
 		return nil, err
@@ -891,6 +952,7 @@ func (s *service) UpdateCard(ctx context.Context, campaignID, deckID, cardID str
 	c.DirectorNote = in.DirectorNote.Val(c.DirectorNote)
 	c.Picture = in.Picture.Val(c.Picture)
 	c.Corner = in.Corner.Val(c.Corner)
+	c.Rare = in.Rare.Val(c.Rare)
 	c.Copies = in.Copies.Val(c.Copies)
 	c.Fate = in.Fate.Val(c.Fate)
 	c.When = in.When.Val(c.When)

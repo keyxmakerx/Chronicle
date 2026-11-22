@@ -138,6 +138,16 @@ func (fx *dbFixture) zones(t *testing.T, d Deck) ZoneCounts {
 
 func firstPick(int) int { return 0 }
 
+// draw1 is a draw of one copy, for the tests written before a draw could take
+// several.
+func (fx *dbFixture) draw1(p DrawPlan) (Copy, error) {
+	got, err := fx.repo.Draw(fx.ctx, p)
+	if err != nil {
+		return Copy{}, err
+	}
+	return got[0], nil
+}
+
 func drawPlan(fx *dbFixture, d Deck, to Place) DrawPlan {
 	return DrawPlan{CampaignID: fx.campaign, DeckID: d.ID, To: to, Pick: firstPick,
 		Log: LogLine{Action: ActDraw, ActorUserID: fx.owner}}
@@ -259,10 +269,10 @@ func TestIntegration_DeckVersionPlayersAndCascade(t *testing.T) {
 	fx := newDBFixture(t)
 	d := fx.deck(t, "Omens")
 	d.Name = "Omens 2"
-	if ok, err := fx.repo.UpdateDeck(fx.ctx, d, 1); err != nil || !ok {
+	if ok, err := fx.repo.UpdateDeck(fx.ctx, d, 1, PickChange{}); err != nil || !ok {
 		t.Fatalf("update = %v %v", ok, err)
 	}
-	if ok, _ := fx.repo.UpdateDeck(fx.ctx, d, 1); ok {
+	if ok, _ := fx.repo.UpdateDeck(fx.ctx, d, 1, PickChange{}); ok {
 		t.Error("a stale version saved")
 	}
 	three := 3
@@ -318,19 +328,16 @@ func TestIntegration_DrawZonesShownAndReshuffle(t *testing.T) {
 	fx.card(t, d, "A", 1)
 	fx.card(t, d, "A2", 1)
 	shown := Place{Zone: ZoneShown}
-	first, err := fx.repo.Draw(fx.ctx, drawPlan(fx, d, shown))
+	first, err := fx.draw1(drawPlan(fx, d, shown))
 	if err != nil || first.Zone != ZoneShown {
 		t.Fatalf("draw = %+v %v", first, err)
-	}
-	if _, err := fx.repo.Draw(fx.ctx, drawPlan(fx, d, shown)); err != errShownTaken {
-		t.Errorf("second shown draw: %v, want errShownTaken", err)
 	}
 	// Draw another returns the shown copy and never draws it again when another
 	// exists. The returned copy has a new id, so "the same copy" is the same card here.
 	plan := drawPlan(fx, d, shown)
-	plan.PutBackShown = true
 	for i := 0; i < 4; i++ {
-		got, err := fx.repo.Draw(fx.ctx, plan)
+		plan.PutBackCopyID = first.ID
+		got, err := fx.draw1(plan)
 		if err != nil || got.CardID == first.CardID || got.ID == first.ID {
 			t.Fatalf("another #%d = %+v %v (first %+v)", i, got, err, first)
 		}
@@ -342,17 +349,17 @@ func TestIntegration_DrawZonesShownAndReshuffle(t *testing.T) {
 	// Dealing to a hand stamps who dealt it.
 	hand := drawPlan(fx, d, Place{Zone: ZoneHand, HolderEntityID: fx.hero2})
 	hand.DealtBy = fx.owner
-	got, err := fx.repo.Draw(fx.ctx, hand)
+	got, err := fx.draw1(hand)
 	if err != nil || got.DealtBy != fx.owner || got.DealtAt == nil || got.HolderEntityID != fx.hero2 {
 		t.Fatalf("hand draw = %+v %v", got, err)
 	}
-	if _, err := fx.repo.Draw(fx.ctx, hand); err != errEmptyPile {
+	if _, err := fx.draw1(hand); err != errEmptyPile {
 		t.Errorf("empty pile: %v", err)
 	}
 	// Reshuffle brings the used pile back.
 	fx.exec(t, `UPDATE deck_copies SET zone='used', holder_entity_id=NULL, face_up=1 WHERE id = ?`, got.ID)
 	hand.Reshuffle = true
-	again, err := fx.repo.Draw(fx.ctx, hand)
+	again, err := fx.draw1(hand)
 	if err != nil || again.CardID != got.CardID || again.ID == got.ID {
 		t.Fatalf("reshuffled draw = %+v %v (was %+v)", again, err, got)
 	}
@@ -360,10 +367,10 @@ func TestIntegration_DrawZonesShownAndReshuffle(t *testing.T) {
 	other := fx.card(t, d, "B", 1)
 	named := drawPlan(fx, d, Place{Zone: ZonePlay, FaceUp: true})
 	named.CardID = other.ID
-	if c, err := fx.repo.Draw(fx.ctx, named); err != nil || c.CardID != other.ID {
+	if c, err := fx.draw1(named); err != nil || c.CardID != other.ID {
 		t.Fatalf("named draw = %+v %v", c, err)
 	}
-	if _, err := fx.repo.Draw(fx.ctx, named); err != errEmptyPile {
+	if _, err := fx.draw1(named); err != errEmptyPile {
 		t.Errorf("named draw of an empty card: %v", err)
 	}
 	// The table lists the face-up play copies with the face and no note.
@@ -391,7 +398,7 @@ func TestIntegration_RaceForTheLastCopy(t *testing.T) {
 				<-start
 				plan := drawPlan(fx, d, Place{Zone: ZoneHand, HolderEntityID: fx.hero2})
 				plan.DealtBy = fx.owner
-				_, results[i] = fx.repo.Draw(fx.ctx, plan)
+				_, results[i] = fx.draw1(plan)
 			}(i)
 		}
 		close(start)
@@ -441,7 +448,7 @@ func TestIntegration_RaceForTheLastDraw(t *testing.T) {
 			<-start
 			plan := drawPlan(fx, d, Place{Zone: ZoneHand, HolderEntityID: fx.hero2})
 			plan.SpendUserID, plan.DealtBy = fx.tam, fx.tam
-			_, results[i] = fx.repo.Draw(fx.ctx, plan)
+			_, results[i] = fx.draw1(plan)
 		}(i)
 	}
 	close(start)
@@ -473,7 +480,7 @@ func TestIntegration_RaceForTheLastDraw(t *testing.T) {
 	}
 	plan := drawPlan(fx, d2, Place{Zone: ZoneHand, HolderEntityID: fx.hero2})
 	plan.SpendUserID = fx.tam
-	if _, err := fx.repo.Draw(fx.ctx, plan); err != errEmptyPile {
+	if _, err := fx.draw1(plan); err != errEmptyPile {
 		t.Fatalf("err = %v", err)
 	}
 	after, _, _ := fx.repo.GetDeck(fx.ctx, fx.campaign, d2.ID)
@@ -668,7 +675,7 @@ func TestIntegration_ReturnedCopiesGetFreshIDs(t *testing.T) {
 	pile := Place{Zone: ZonePile}
 	toTable := func() Copy {
 		plan := drawPlan(fx, d, table)
-		if _, err := fx.repo.Draw(fx.ctx, plan); err != nil {
+		if _, err := fx.draw1(plan); err != nil {
 			t.Fatal(err)
 		}
 		return only()
@@ -707,8 +714,8 @@ func TestIntegration_ReturnedCopiesGetFreshIDs(t *testing.T) {
 				return err
 			}
 			plan := drawPlan(fx, d, Place{Zone: ZoneShown})
-			plan.PutBackShown = true
-			_, err := fx.repo.Draw(fx.ctx, plan)
+			plan.PutBackCopyID = c.ID
+			_, err := fx.draw1(plan)
 			return err
 		},
 		"reshuffle on empty": func(c Copy) error {
@@ -717,7 +724,7 @@ func TestIntegration_ReturnedCopiesGetFreshIDs(t *testing.T) {
 			}
 			plan := drawPlan(fx, d, Place{Zone: ZoneHand, HolderEntityID: fx.hero2})
 			plan.Reshuffle = true
-			_, err := fx.repo.Draw(fx.ctx, plan)
+			_, err := fx.draw1(plan)
 			return err
 		},
 	} {
@@ -728,7 +735,7 @@ func TestIntegration_ReturnedCopiesGetFreshIDs(t *testing.T) {
 				c = only()
 			}
 			c.Zone = ZonePile
-			if _, err := fx.repo.Draw(fx.ctx, drawPlan(fx, d, table)); err != nil {
+			if _, err := fx.draw1(drawPlan(fx, d, table)); err != nil {
 				t.Fatal(err)
 			}
 			c = only()
@@ -739,5 +746,374 @@ func TestIntegration_ReturnedCopiesGetFreshIDs(t *testing.T) {
 				t.Errorf("%s: the copy kept id %s", name, c.ID)
 			}
 		})
+	}
+}
+
+func TestIntegration_NewColumnsRoundTrip(t *testing.T) {
+	fx := newDBFixture(t)
+	var schema string
+	if err := fx.db.QueryRow(`SELECT DATABASE()`).Scan(&schema); err != nil {
+		t.Fatal(err)
+	}
+	for _, col := range [][2]string{{"deck_cards", "rare"}, {"deck_copies", "is_open"}, {"decks", "next_card_id"}, {"decks", "last_card_id"}} {
+		var n int
+		if err := fx.db.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
+			schema, col[0], col[1]).Scan(&n); err != nil || n != 1 {
+			t.Errorf("column %s.%s missing (%v)", col[0], col[1], err)
+		}
+	}
+	d := fx.deck(t, "Omens")
+	c := Card{ID: uuid.NewString(), DeckID: d.ID, CampaignID: fx.campaign, Name: "Rare one", Rare: true, Copies: 2}
+	if err := fx.repo.CreateCard(fx.ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := fx.repo.GetCard(fx.ctx, fx.campaign, d.ID, c.ID); !got.Rare {
+		t.Error("rare did not round trip through create")
+	}
+	c.Rare = false
+	if _, err := fx.repo.UpdateCard(fx.ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := fx.repo.GetCard(fx.ctx, fx.campaign, d.ID, c.ID); got.Rare {
+		t.Error("rare did not round trip through update")
+	}
+	table := fx.draw1
+	if _, err := table(drawPlan(fx, d, Place{Zone: ZonePlay, FaceUp: true})); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := fx.repo.ListTable(fx.ctx, fx.campaign)
+	if len(rows) != 1 || rows[0].Face.Rare {
+		t.Errorf("table rows = %+v", rows)
+	}
+
+	// The open mark is claimed like the rest of the copy's state, and a move
+	// that leaves the hand or turns the card down clears it.
+	copies, _ := fx.repo.ListCopies(fx.ctx, fx.campaign, d.ID)
+	var pile Copy
+	for _, cp := range copies {
+		if cp.Zone == ZonePile {
+			pile = cp
+		}
+	}
+	hand := Place{Zone: ZoneHand, HolderEntityID: fx.hero, FaceUp: true}
+	mv := func(from, to Place) error {
+		return fx.repo.Move(fx.ctx, Move{CampaignID: fx.campaign, DeckID: d.ID, CopyID: pile.ID, From: from, To: to,
+			Log: LogLine{Action: ActShow, ActorUserID: fx.owner}})
+	}
+	if err := mv(Place{Zone: ZonePile}, hand); err != nil {
+		t.Fatal(err)
+	}
+	open := hand
+	open.Open = true
+	if err := mv(hand, open); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := fx.repo.GetCopy(fx.ctx, fx.campaign, d.ID, pile.ID); !got.Open {
+		t.Error("the open mark was not stored")
+	}
+	if err := mv(hand, open); err != errLostClaim {
+		t.Errorf("a move claiming the old closed state: %v", err)
+	}
+	down := Place{Zone: ZoneHand, HolderEntityID: fx.hero, FaceUp: false, Open: true}
+	if err := mv(open, down); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := fx.repo.GetCopy(fx.ctx, fx.campaign, d.ID, pile.ID); got.Open || got.FaceUp {
+		t.Errorf("a card turned down is still open: %+v", got)
+	}
+}
+
+func TestIntegration_DrawSeveralWithNextAndLast(t *testing.T) {
+	fx := newDBFixture(t)
+	d := fx.deck(t, "Omens")
+	a := fx.card(t, d, "A", 3)
+	b := fx.card(t, d, "B", 1)
+	c := fx.card(t, d, "C", 3)
+	setPicks := func(next, last string) {
+		d.Version = fx.currentVersion(t, d)
+		if ok, err := fx.repo.UpdateDeck(fx.ctx, d, d.Version, PickChange{SetNext: true, SetLast: true, Next: next, Last: last}); err != nil || !ok {
+			t.Fatalf("set picks: %v %v", ok, err)
+		}
+	}
+	picks := func() (string, string) {
+		got, _, _ := fx.repo.GetDeck(fx.ctx, fx.campaign, d.ID)
+		return got.NextCardID, got.LastCardID
+	}
+	cardsOf := func(cs []Copy) []string {
+		var out []string
+		for _, cp := range cs {
+			out = append(out, cp.CardID)
+		}
+		return out
+	}
+	shown := Place{Zone: ZoneShown}
+
+	// Five at once, and a sixth is refused with nothing taken.
+	setPicks(c.ID, "")
+	plan := drawPlan(fx, d, shown)
+	plan.Count = 5
+	got, err := fx.repo.Draw(fx.ctx, plan)
+	if err != nil || len(got) != 5 {
+		t.Fatalf("draw of five = %d copies, %v", len(got), err)
+	}
+	if got[0].CardID != c.ID {
+		t.Errorf("the next card was not first: %v", cardsOf(got))
+	}
+	if n, _ := picks(); n != "" {
+		t.Errorf("next stayed set: %q", n)
+	}
+	if _, err := fx.repo.Draw(fx.ctx, drawPlan(fx, d, shown)); err != errShownFull {
+		t.Errorf("sixth shown card: %v, want errShownFull", err)
+	}
+	if z := fx.zones(t, d); z.Shown != 5 || z.Pile != 2 {
+		t.Errorf("zones = %+v", z)
+	}
+	// A refused draw of two (one place left after one is put back) takes nothing.
+	one := drawPlan(fx, d, shown)
+	one.PutBackCopyID = got[1].ID
+	if _, err := fx.repo.Draw(fx.ctx, one); err != nil {
+		t.Fatal(err)
+	}
+	two := drawPlan(fx, d, shown)
+	two.Count = 2
+	if _, err := fx.repo.Draw(fx.ctx, two); err != errShownFull {
+		t.Errorf("draw of two into one free place: %v", err)
+	}
+	if z := fx.zones(t, d); z.Shown != 5 {
+		t.Errorf("zones after refusal = %+v", z)
+	}
+
+	// Put everything back, then: the last card is drawn only when nothing else is left.
+	if _, err := fx.repo.Gather(fx.ctx, fx.campaign, d.ID, LogLine{Action: ActGather, ActorUserID: fx.owner}); err != nil {
+		t.Fatal(err)
+	}
+	setPicks("", a.ID)
+	plan = drawPlan(fx, d, shown)
+	plan.Count = 4
+	got, err = fx.repo.Draw(fx.ctx, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range cardsOf(got) {
+		if id == a.ID {
+			t.Errorf("the last card was drawn with %d other copies in the pile: %v", 7-4, cardsOf(got))
+		}
+	}
+	if _, l := picks(); l != a.ID {
+		t.Error("last cleared before it was drawn")
+	}
+	// Only the last card's copies are left in the pile, so the fifth draw takes
+	// one, and the field clears.
+	got, err = fx.repo.Draw(fx.ctx, drawPlan(fx, d, shown))
+	if err != nil || got[0].CardID != a.ID {
+		t.Fatalf("the last card should be drawn when it is all that is left: %v %v", cardsOf(got), err)
+	}
+	if _, l := picks(); l != "" {
+		t.Errorf("last stayed set after it was drawn: %q", l)
+	}
+
+	// Deleting the named card clears the field in the same transaction.
+	setPicks(b.ID, b.ID)
+	if err := fx.repo.DeleteCard(fx.ctx, fx.campaign, d.ID, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, l := picks(); n != "" || l != "" {
+		t.Errorf("deleting the card left next %q last %q", n, l)
+	}
+	// A save that names neither nudge never writes them back.
+	setPicks(c.ID, c.ID)
+	fresh, _, _ := fx.repo.GetDeck(fx.ctx, fx.campaign, d.ID)
+	fx.exec(t, `UPDATE decks SET next_card_id = NULL WHERE id = ?`, d.ID)
+	fresh.Name = "Omens renamed"
+	if ok, err := fx.repo.UpdateDeck(fx.ctx, fresh, fresh.Version, PickChange{}); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if n, l := picks(); n != "" || l != c.ID {
+		t.Errorf("a save with no picks wrote them: next %q last %q", n, l)
+	}
+}
+
+func (fx *dbFixture) currentVersion(t *testing.T, d Deck) int {
+	t.Helper()
+	got, ok, err := fx.repo.GetDeck(fx.ctx, fx.campaign, d.ID)
+	if err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	return got.Version
+}
+
+// keepWorld puts one card's copy in a hand of the source deck.
+func (fx *dbFixture) keepSetup(t *testing.T) (src, dst Deck, card Card, cp Copy) {
+	t.Helper()
+	suffix := uuid.NewString()[:8]
+	src, dst = fx.deck(t, "Src "+suffix), fx.deck(t, "Dst "+suffix)
+	card = Card{ID: uuid.NewString(), DeckID: src.ID, CampaignID: fx.campaign, Name: "Ember", KindKey: "boon", Words: "EMBERWORDS",
+		DirectorNote: "EMBERNOTE", Corner: "IV", Rare: true, Fate: FateGone, AskFirst: true, WhenOpen: true, Copies: 2}
+	if err := fx.repo.CreateCard(fx.ctx, card); err != nil {
+		t.Fatal(err)
+	}
+	copies, _ := fx.repo.ListCopies(fx.ctx, fx.campaign, src.ID)
+	cp = copies[0]
+	fx.exec(t, `UPDATE deck_copies SET zone = 'hand', holder_entity_id = ?, face_up = 1, is_open = 1 WHERE id = ?`, fx.hero, cp.ID)
+	return src, dst, card, cp
+}
+
+func (fx *dbFixture) keepPlan(src, dst Deck, cp Copy, kinds ...string) KeepPlan {
+	k := map[string]bool{}
+	for _, key := range kinds {
+		k[key] = true
+	}
+	return KeepPlan{CampaignID: fx.campaign, DeckID: src.ID, CopyID: cp.ID,
+		From:         Place{Zone: ZoneHand, HolderEntityID: fx.hero, FaceUp: true, Open: true},
+		TargetDeckID: dst.ID, TargetKinds: k, Log: LogLine{Action: ActKeep, ActorUserID: fx.owner, HolderEntityID: fx.hero}}
+}
+
+func TestIntegration_KeepCopiesTheCardInOneTransaction(t *testing.T) {
+	fx := newDBFixture(t)
+	src, dst, _, cp := fx.keepSetup(t)
+	if err := fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, cp, "boon")); err != nil {
+		t.Fatal(err)
+	}
+	cards, _ := fx.repo.ListCards(fx.ctx, fx.campaign, dst.ID)
+	if len(cards) != 1 {
+		t.Fatalf("target has %d cards", len(cards))
+	}
+	got := cards[0]
+	if got.Name != "Ember" || got.Words != "EMBERWORDS" || got.DirectorNote != "EMBERNOTE" || got.Corner != "IV" || !got.Rare ||
+		got.Fate != FateGone || !got.AskFirst || got.KindKey != "boon" || got.Copies != 1 || got.WhenOpen || got.When != "" {
+		t.Errorf("kept card = %+v", got)
+	}
+	if z := fx.zones(t, dst); z.Pile != 1 {
+		t.Errorf("target zones = %+v", z)
+	}
+	gone, _, _ := fx.repo.GetCopy(fx.ctx, fx.campaign, src.ID, cp.ID)
+	if gone.Zone != ZoneGone || gone.Open || gone.HolderEntityID != "" {
+		t.Errorf("source copy = %+v", gone)
+	}
+	if lines, _ := fx.repo.ListLog(fx.ctx, fx.campaign, src.ID, 5); len(lines) != 1 || lines[0].Action != ActKeep || lines[0].CardName != "Ember" {
+		t.Errorf("log = %+v", lines)
+	}
+	// A second keep of the other copy merges into the card now in the target,
+	// and a deck without that kind drops it.
+	copies, _ := fx.repo.ListCopies(fx.ctx, fx.campaign, src.ID)
+	var second Copy
+	for _, c := range copies {
+		if c.ID != cp.ID {
+			second = c
+		}
+	}
+	fx.exec(t, `UPDATE deck_copies SET zone = 'hand', holder_entity_id = ?, face_up = 1, is_open = 1 WHERE id = ?`, fx.hero, second.ID)
+	if err := fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, second)); err != nil {
+		t.Fatal(err)
+	}
+	cards, _ = fx.repo.ListCards(fx.ctx, fx.campaign, dst.ID)
+	if len(cards) != 1 || cards[0].Copies != 2 || cards[0].KindKey != "boon" {
+		t.Errorf("merged = %+v", cards)
+	}
+	if z := fx.zones(t, dst); z.Pile != 2 {
+		t.Errorf("target zones after the merge = %+v", z)
+	}
+	// The first copy is put back in a hand so a third keep can go to a deck
+	// that has no kind by that key.
+	other := fx.deck(t, "NoKinds")
+	fx.exec(t, `UPDATE deck_copies SET zone = 'hand', holder_entity_id = ?, face_up = 1, is_open = 1 WHERE id = ?`, fx.hero, cp.ID)
+	if err := fx.repo.Keep(fx.ctx, fx.keepPlan(src, other, cp)); err != nil {
+		t.Fatal(err)
+	}
+	if cards, _ := fx.repo.ListCards(fx.ctx, fx.campaign, other.ID); len(cards) != 1 || cards[0].KindKey != "" {
+		t.Errorf("a kind the target lacks was kept: %+v", cards)
+	}
+}
+
+// A refusal after the source copy was claimed rolls the claim back, so neither
+// deck, nor the log, shows any of it.
+func TestIntegration_KeepRefusedHalfwayChangesNothing(t *testing.T) {
+	fx := newDBFixture(t)
+	for _, tt := range []struct {
+		name string
+		fill func(t *testing.T, dst Deck)
+		want error
+	}{
+		{"card limit", func(t *testing.T, dst Deck) {
+			for i := 0; i < MaxCardsPerDeck; i++ {
+				fx.exec(t, `INSERT INTO deck_cards (id, deck_id, campaign_id, name, words, director_note, copies) VALUES (?, ?, ?, ?, '', '', 0)`,
+					uuid.NewString(), dst.ID, fx.campaign, fmt.Sprintf("Filler %03d", i))
+			}
+		}, errTargetFull},
+		{"copy limit", func(t *testing.T, dst Deck) {
+			for i := 0; i < 30; i++ {
+				fx.exec(t, `INSERT INTO deck_cards (id, deck_id, campaign_id, name, words, director_note, copies) VALUES (?, ?, ?, ?, '', '', 20)`,
+					uuid.NewString(), dst.ID, fx.campaign, fmt.Sprintf("Filler %03d", i))
+			}
+		}, errTargetCopies},
+		{"per card limit", func(t *testing.T, dst Deck) {
+			fx.exec(t, `INSERT INTO deck_cards (id, deck_id, campaign_id, name, words, director_note, copies) VALUES (?, ?, ?, 'Ember', '', '', 20)`,
+				uuid.NewString(), dst.ID, fx.campaign)
+		}, errCardCopies},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			src, dst, _, cp := fx.keepSetup(t)
+			tt.fill(t, dst)
+			var cardsBefore, copiesBefore, logBefore int
+			count := func() (int, int, int) {
+				var c, k, l int
+				_ = fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id IN (?, ?)`, src.ID, dst.ID).Scan(&c)
+				_ = fx.db.QueryRow(`SELECT COUNT(*) FROM deck_copies WHERE deck_id IN (?, ?)`, src.ID, dst.ID).Scan(&k)
+				_ = fx.db.QueryRow(`SELECT COUNT(*) FROM deck_log WHERE deck_id IN (?, ?)`, src.ID, dst.ID).Scan(&l)
+				return c, k, l
+			}
+			cardsBefore, copiesBefore, logBefore = count()
+			if err := fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, cp, "boon")); err != tt.want {
+				t.Fatalf("err = %v, want %v", err, tt.want)
+			}
+			c, k, l := count()
+			if c != cardsBefore || k != copiesBefore || l != logBefore {
+				t.Errorf("cards %d->%d copies %d->%d log %d->%d", cardsBefore, c, copiesBefore, k, logBefore, l)
+			}
+			back, _, _ := fx.repo.GetCopy(fx.ctx, fx.campaign, src.ID, cp.ID)
+			if back.Zone != ZoneHand || back.HolderEntityID != fx.hero || !back.FaceUp || !back.Open {
+				t.Errorf("the source copy was left changed: %+v", back)
+			}
+		})
+	}
+}
+
+// Two Directors keep the same copy at once: exactly one lands, and the target
+// holds exactly one new copy.
+func TestIntegration_KeepRaceForOneCopy(t *testing.T) {
+	fx := newDBFixture(t)
+	src, dst, _, cp := fx.keepSetup(t)
+	const racers = 6
+	var wg sync.WaitGroup
+	results := make([]error, racers)
+	start := make(chan struct{})
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			results[i] = fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, cp, "boon"))
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	wins := 0
+	for _, err := range results {
+		switch err {
+		case nil:
+			wins++
+		case errLostClaim:
+		default:
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if wins != 1 {
+		t.Fatalf("%d keeps landed, want 1", wins)
+	}
+	if z := fx.zones(t, dst); z.Pile != 1 {
+		t.Errorf("target zones = %+v, want one pile copy", z)
+	}
+	if lines, _ := fx.repo.ListLog(fx.ctx, fx.campaign, src.ID, 10); len(lines) != 1 {
+		t.Errorf("%d log lines for one keep", len(lines))
 	}
 }

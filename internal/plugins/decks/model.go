@@ -32,22 +32,24 @@ const (
 	FatePlay = "play"
 )
 
-// Log actions.
+// Log actions. The names are stable and plain on purpose: later they become
+// the triggers a rule can listen for, so changing one is a change to those.
 const (
-	ActDraw     = "draw"
-	ActDeal     = "deal"
+	ActDraw     = "drawn"
+	ActDeal     = "dealt"
+	ActTurn     = "turned"
+	ActShow     = "shown"
+	ActPlay     = "played"
+	ActAsk      = "asked"
+	ActApprove  = "approved"
+	ActTurnDown = "turned-down"
+	ActTakeOff  = "taken-off"
+	ActDiscard  = "discarded"
+	ActTakeBack = "taken-back"
 	ActPutBack  = "put-back"
-	ActAnother  = "another"
-	ActTurn     = "turn"
-	ActPlay     = "play"
-	ActAsk      = "ask"
-	ActApprove  = "approve"
-	ActTurnDown = "turn-down"
-	ActTakeOff  = "take-off"
-	ActDiscard  = "discard"
-	ActTakeBack = "take-back"
-	ActShuffle  = "shuffle"
-	ActGather   = "gather"
+	ActKeep     = "kept"
+	ActShuffle  = "shuffled"
+	ActGather   = "gathered"
 )
 
 // Limits. They bound what a Director can store; the service enforces them.
@@ -64,13 +66,17 @@ const (
 	MaxPictureChars     = 255
 	MaxBackWordsChars   = 24
 	MaxKinds            = 12
-	MaxKindNameChars    = 24
-	MaxPlayersChosen    = 200
-	MaxDraws            = 1000
-	LogKept             = 1000
-	LogShown            = 200
-	MaxBodyBytes        = 256 << 10
-	maxIDChars          = 64
+	// MaxShown is how many copies of one deck the shown spot holds at once.
+	MaxShown = 5
+	// MaxDrawCount is how many cards a Director takes in one draw.
+	MaxDrawCount     = 5
+	MaxKindNameChars = 24
+	MaxPlayersChosen = 200
+	MaxDraws         = 1000
+	LogKept          = 1000
+	LogShown         = 200
+	MaxBodyBytes     = 256 << 10
+	maxIDChars       = 64
 )
 
 // Viewer is who is asking, taken from the campaign context in the handler.
@@ -93,12 +99,17 @@ type Deck struct {
 	Name           string
 	Kind           string
 	HolderEntityID string
-	Settings       Settings
-	Look           Look
-	Version        int
-	SortOrder      int
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// NextCardID and LastCardID are the Director's two nudges to the draw: the
+	// card the next draw takes, and the card left out while anything else is in
+	// the pile. "" is unset. Players never receive either.
+	NextCardID string
+	LastCardID string
+	Settings   Settings
+	Look       Look
+	Version    int
+	SortOrder  int
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 	// Players is who a Director chose for the deck. The repository fills it
 	// on every deck read, so no caller can decide who sees a deck without it.
 	Players []Player
@@ -125,7 +136,9 @@ type Card struct {
 	DirectorNote string
 	Picture      string
 	Corner       string
-	Copies       int
+	// Rare is part of the card's face: it is sent only with a face.
+	Rare   bool
+	Copies int
 	// Fate is "" for the deck's default.
 	Fate string
 	// When holds a condition; it is always empty until conditions exist.
@@ -146,11 +159,14 @@ type Copy struct {
 	Zone           string
 	HolderEntityID string
 	FaceUp         bool
-	AskedAt        *time.Time
-	DealtBy        string
-	DealtAt        *time.Time
-	TurnedAt       *time.Time
-	MovedAt        time.Time
+	// Open is a face-up card in a hand that its holder has shown to the table.
+	// It implies FaceUp and is cleared whenever the copy leaves the hand.
+	Open     bool
+	AskedAt  *time.Time
+	DealtBy  string
+	DealtAt  *time.Time
+	TurnedAt *time.Time
+	MovedAt  time.Time
 }
 
 // LogLine is one move, for Directors.
@@ -197,6 +213,10 @@ type UpdateDeckInput struct {
 	HolderEntityID patch.Field[string]        `json:"holderEntityId"`
 	Settings       patch.Field[SettingsInput] `json:"settings"`
 	Look           patch.Field[LookInput]     `json:"look"`
+	// NextCardID and LastCardID are Director-only: absent keeps, null or ""
+	// clears, a card id of this deck sets.
+	NextCardID patch.Field[string] `json:"nextCardId"`
+	LastCardID patch.Field[string] `json:"lastCardId"`
 }
 
 // PlayerInput chooses one player and how many draws they have.
@@ -220,6 +240,7 @@ type CreateCardInput struct {
 	DirectorNote string `json:"directorNote"`
 	Picture      string `json:"picture"`
 	Corner       string `json:"corner"`
+	Rare         bool   `json:"rare"`
 	Copies       *int   `json:"copies"`
 	Fate         string `json:"fate"`
 	When         string `json:"when"`
@@ -235,6 +256,7 @@ type UpdateCardInput struct {
 	DirectorNote patch.Field[string] `json:"directorNote"`
 	Picture      patch.Field[string] `json:"picture"`
 	Corner       patch.Field[string] `json:"corner"`
+	Rare         patch.Field[bool]   `json:"rare"`
 	Copies       patch.Field[int]    `json:"copies"`
 	Fate         patch.Field[string] `json:"fate"`
 	When         patch.Field[string] `json:"when"`
@@ -243,16 +265,22 @@ type UpdateCardInput struct {
 }
 
 // DrawInput names the hero a player draws into; a Director's draw goes to the
-// shown spot and names none.
+// shown spot and names none. Count is how many cards a Director takes, 1 to 5,
+// and 0 means one; a player's draw is always one card.
 type DrawInput struct {
 	HeroID string `json:"heroId"`
+	Count  int    `json:"count"`
 }
 
-// ActInput carries what a verb needs: where a deal goes.
+// ActInput carries what a verb needs: where a deal goes, or the deck a card is
+// kept in.
 type ActInput struct {
-	// To is "hand" or "table" for deal.
+	// To is "hand" or "table" for deal. A hand deal on a party deck with no
+	// HeroID lands in the party's own hand.
 	To     string `json:"to"`
 	HeroID string `json:"heroId"`
+	// TargetDeckID is the deck `keep` copies the card into.
+	TargetDeckID string `json:"targetDeckId"`
 }
 
 // DealCardInput deals a named card's pile copy.
@@ -296,6 +324,7 @@ type DirectorCard struct {
 	DirectorNote string `json:"directorNote"`
 	Picture      string `json:"picture"`
 	Corner       string `json:"corner"`
+	Rare         bool   `json:"rare"`
 	Copies       int    `json:"copies"`
 	Fate         string `json:"fate"`
 	When         string `json:"when"`
@@ -311,6 +340,7 @@ type DirectorCopy struct {
 	Zone           string     `json:"zone"`
 	HolderEntityID string     `json:"holderEntityId,omitempty"`
 	FaceUp         bool       `json:"faceUp"`
+	Open           bool       `json:"open"`
 	AskedAt        *time.Time `json:"askedAt,omitempty"`
 	DealtBy        string     `json:"dealtBy,omitempty"`
 	DealtAt        *time.Time `json:"dealtAt,omitempty"`
@@ -325,6 +355,8 @@ type DirectorDeck struct {
 	Name           string           `json:"name"`
 	Kind           string           `json:"kind"`
 	HolderEntityID string           `json:"holderEntityId,omitempty"`
+	NextCardID     string           `json:"nextCardId"`
+	LastCardID     string           `json:"lastCardId"`
 	Settings       Settings         `json:"settings"`
 	Look           Look             `json:"look"`
 	Version        int              `json:"version"`
@@ -358,6 +390,7 @@ type Face struct {
 	Words   string `json:"words"`
 	Picture string `json:"picture"`
 	Corner  string `json:"corner"`
+	Rare    bool   `json:"rare"`
 }
 
 // PlayerCopy is a copy a player may know about. Face is present only for a
@@ -368,8 +401,12 @@ type PlayerCopy struct {
 	DeckID string `json:"deckId"`
 	FaceUp bool   `json:"faceUp"`
 	// Waiting is true while a play of this card waits for a Director.
-	Waiting bool  `json:"waiting"`
-	Face    *Face `json:"face,omitempty"`
+	Waiting bool `json:"waiting"`
+	// Open is true on a face-up card its holder has shown to the table. It is
+	// never set on a face-down copy, so a face-down entry is always the same
+	// four keys.
+	Open bool  `json:"open,omitempty"`
+	Face *Face `json:"face,omitempty"`
 }
 
 // PlayerHand is one of the viewer's own heroes and what they hold of a deck.
@@ -402,6 +439,9 @@ type PlayerDeck struct {
 	CanDraw   bool         `json:"canDraw"`
 	DrawsLeft *int         `json:"drawsLeft"`
 	Hands     []PlayerHand `json:"hands"`
+	// PartyHand is the party deck's own hand, held by no hero and seen by every
+	// member of the campaign. Face-down copies are face-down entries.
+	PartyHand []PlayerCopy `json:"partyHand,omitempty"`
 	// Pile is the pile's count, present when the deck lets players know it.
 	Pile *int `json:"pile,omitempty"`
 	// Kinds is the pile's count per kind, present for "kinds" and "faces".
@@ -426,8 +466,11 @@ func (PlayerList) deckListView() {}
 // ActionResult is what a move returns: the copy it touched and the deck as
 // the same viewer now sees it.
 type ActionResult struct {
-	CopyID string   `json:"copyId,omitempty"`
-	Deck   DeckView `json:"deck"`
+	CopyID string `json:"copyId,omitempty"`
+	// CopyIDs lists the copies a draw took, a list even when it holds one. A
+	// player's draw has the same shape.
+	CopyIDs []string `json:"copyIds,omitempty"`
+	Deck    DeckView `json:"deck"`
 }
 
 // TableCard is a card lying on the table, for every member.

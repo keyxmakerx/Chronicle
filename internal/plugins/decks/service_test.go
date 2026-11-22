@@ -57,15 +57,45 @@ func TestDrawsByDirectorAndEmptyPile(t *testing.T) {
 func TestDirectorDrawRules(t *testing.T) {
 	fx := newFixture(t)
 	deck := fx.deck("D", KindEvent, nil)
-	fx.card(deck, CreateCardInput{Name: "A", Copies: ptr(3)})
+	fx.card(deck, CreateCardInput{Name: "A", Copies: ptr(8)})
 	if _, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{HeroID: "h-tam"}); code(err) != http.StatusUnprocessableEntity {
 		t.Errorf("a Director naming a hero: code %d, want 422", code(err))
 	}
-	if _, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{}); err != nil {
-		t.Fatal(err)
+	for _, n := range []int{-1, MaxDrawCount + 1} {
+		if _, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: n}); code(err) != http.StatusUnprocessableEntity {
+			t.Errorf("count %d: code %d, want 422", n, code(err))
+		}
 	}
-	if _, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{}); code(err) != http.StatusConflict {
-		t.Errorf("drawing with a card already shown: code %d, want 409", code(err))
+	// No count is one card, and the reply is a list even then.
+	res, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{})
+	fx.must(err)
+	if len(res.CopyIDs) != 1 || res.CopyID != res.CopyIDs[0] {
+		t.Errorf("a one-card draw replied %v / %q", res.CopyIDs, res.CopyID)
+	}
+	// Four more fill the shown spot to five; a sixth card is refused plainly
+	// and takes nothing.
+	res, err = fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 4})
+	fx.must(err)
+	if len(res.CopyIDs) != 4 {
+		t.Errorf("a draw of four replied %d copies", len(res.CopyIDs))
+	}
+	lines, announced := len(fx.repo.logs), len(fx.cap.got)
+	_, err = fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{})
+	if code(err) != http.StatusConflict || !strings.Contains(err.Error(), "At most 5 cards can be shown at once") {
+		t.Errorf("a sixth shown card: %v", err)
+	}
+	if len(fx.repo.logs) != lines || len(fx.cap.got) != announced || fx.repo.ZoneCountsFor(deck).Shown != 5 {
+		t.Errorf("a refused draw changed something: %+v", fx.repo.ZoneCountsFor(deck))
+	}
+	// A draw that would pass five is refused whole, not cut short.
+	one := res.CopyIDs[0]
+	_, err = fx.svc.Act(bg, camp, deck, one, "put-back", fx.dir, ActInput{})
+	fx.must(err)
+	if _, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 2}); code(err) != http.StatusConflict {
+		t.Errorf("drawing two with one place left: code %d, want 409", code(err))
+	}
+	if got := fx.repo.ZoneCountsFor(deck).Shown; got != 4 {
+		t.Errorf("%d shown after a refused draw of two, want 4", got)
 	}
 }
 

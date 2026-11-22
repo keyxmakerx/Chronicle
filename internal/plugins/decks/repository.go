@@ -20,11 +20,14 @@ import (
 )
 
 // Place is where a copy sits: a zone, the hero page holding it (hand or play
-// in front of a hero; "" is nobody or the whole table) and which way up.
+// in front of a hero; "" is nobody, the whole table, or on a party deck the
+// party's own hand) and which way up. Open is a face-up card in a hand shown
+// to the table; every Place that leaves a hand has it false.
 type Place struct {
 	Zone           string
 	HolderEntityID string
 	FaceUp         bool
+	Open           bool
 }
 
 // AskedChange says what a move does to a copy's waiting-for-a-Director mark.
@@ -61,20 +64,29 @@ type Move struct {
 	Log LogLine
 }
 
-// DrawPlan is one random draw, done in one transaction.
+// PickChange says which of a deck's two draw nudges an update changes, so a
+// save that names neither never writes them back over a draw that cleared one.
+type PickChange struct {
+	SetNext, SetLast bool
+	Next, Last       string
+}
+
+// DrawPlan is one random draw of Count copies, done in one transaction.
 type DrawPlan struct {
 	CampaignID string
 	DeckID     string
-	// To is where the drawn copy lands.
+	// Count is how many copies to take; 0 is one.
+	Count int
+	// To is where each drawn copy lands.
 	To Place
 	// DealtBy stamps a copy that lands in a hand or in play.
 	DealtBy string
 	// CardID limits the draw to one card's copies in the pile ("deal a named
 	// card").
 	CardID string
-	// PutBackShown returns the shown copy to the pile first and never draws
+	// PutBackCopyID returns that shown copy to the pile first and never draws
 	// it again when another copy exists.
-	PutBackShown bool
+	PutBackCopyID string
 	// Reshuffle moves the used pile into the pile when the pile has nothing
 	// to draw.
 	Reshuffle bool
@@ -84,6 +96,20 @@ type DrawPlan struct {
 	// randomness and tests supply a fixed one.
 	Pick func(n int) int
 	Log  LogLine
+}
+
+// KeepPlan copies one card into another deck and sends the source copy to
+// gone, in one transaction.
+type KeepPlan struct {
+	CampaignID   string
+	DeckID       string
+	CopyID       string
+	From         Place
+	TargetDeckID string
+	// TargetKinds is the target deck's kind keys, so the card's kind carries
+	// over only where the target has one by that key.
+	TargetKinds map[string]bool
+	Log         LogLine
 }
 
 // ResizeResult reports a copies change.
@@ -98,8 +124,9 @@ type Repository interface {
 	// CreateDeck returns errDuplicate when the name is taken.
 	CreateDeck(ctx context.Context, d Deck) error
 	// UpdateDeck writes d if its stored version is still expected; ok is
-	// false on a lost race. errDuplicate when the new name is taken.
-	UpdateDeck(ctx context.Context, d Deck, expected int) (ok bool, err error)
+	// false on a lost race. errDuplicate when the new name is taken. The draw
+	// nudges are written only as picks says.
+	UpdateDeck(ctx context.Context, d Deck, expected int, picks PickChange) (ok bool, err error)
 	DeleteDeck(ctx context.Context, campaignID, id string) error
 	// SetPlayers replaces the chosen players if the stored version is still
 	// expected, and bumps it.
@@ -115,6 +142,8 @@ type Repository interface {
 	// returns a *heldError, changing nothing, when more would have to come
 	// out of a hand or out of play.
 	UpdateCard(ctx context.Context, c Card) (ResizeResult, error)
+	// DeleteCard removes the card and its copies, and clears the deck's next
+	// or last card when it was this one.
 	DeleteCard(ctx context.Context, campaignID, deckID, id string) error
 
 	ListCopies(ctx context.Context, campaignID, deckID string) ([]Copy, error)
@@ -127,8 +156,13 @@ type Repository interface {
 	// face of their card and their deck's name and look.
 	ListTable(ctx context.Context, campaignID string) ([]TableRow, error)
 
-	Draw(ctx context.Context, p DrawPlan) (Copy, error)
+	// Draw takes p.Count copies (one by default) or none at all.
+	Draw(ctx context.Context, p DrawPlan) ([]Copy, error)
 	Move(ctx context.Context, m Move) error
+	// Keep returns errLostClaim when the copy moved first, and errTargetFull,
+	// errTargetCopies or errCardCopies, changing nothing, when the target
+	// deck's limits would be passed.
+	Keep(ctx context.Context, k KeepPlan) error
 	// Shuffle moves the used pile back to the pile and returns how many.
 	Shuffle(ctx context.Context, campaignID, deckID string, log LogLine) (int, error)
 	// Gather moves every copy to the pile and returns how many moved.
@@ -183,19 +217,20 @@ func rollback(tx *sql.Tx) { _ = tx.Rollback() }
 
 // ---- decks ----------------------------------------------------------------
 
-const deckColumns = `id, campaign_id, name, kind, holder_entity_id, settings, look, version, sort_order, created_at, updated_at`
+const deckColumns = `id, campaign_id, name, kind, holder_entity_id, next_card_id, last_card_id, settings, look, version, sort_order, created_at, updated_at`
 
 type scanner interface{ Scan(...any) error }
 
 func scanDeck(sc scanner) (Deck, error) {
 	var d Deck
-	var holder sql.NullString
+	var holder, next, last sql.NullString
 	var settings, look string
-	if err := sc.Scan(&d.ID, &d.CampaignID, &d.Name, &d.Kind, &holder, &settings, &look,
+	if err := sc.Scan(&d.ID, &d.CampaignID, &d.Name, &d.Kind, &holder, &next, &last, &settings, &look,
 		&d.Version, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return Deck{}, err
 	}
 	d.HolderEntityID = fromNull(holder)
+	d.NextCardID, d.LastCardID = fromNull(next), fromNull(last)
 	d.Settings = readSettings(d.Kind, settings)
 	d.Look = readLook(look)
 	d.Players = []Player{}
@@ -311,7 +346,7 @@ func (s *sqlRepository) CreateDeck(ctx context.Context, d Deck) error {
 	return nil
 }
 
-func (s *sqlRepository) UpdateDeck(ctx context.Context, d Deck, expected int) (bool, error) {
+func (s *sqlRepository) UpdateDeck(ctx context.Context, d Deck, expected int, picks PickChange) (bool, error) {
 	settings, err := json.Marshal(d.Settings)
 	if err != nil {
 		return false, fmt.Errorf("encode settings: %w", err)
@@ -320,10 +355,19 @@ func (s *sqlRepository) UpdateDeck(ctx context.Context, d Deck, expected int) (b
 	if err != nil {
 		return false, fmt.Errorf("encode look: %w", err)
 	}
+	sets := `name = ?, kind = ?, holder_entity_id = ?, settings = ?, look = ?, version = version + 1`
+	args := []any{d.Name, d.Kind, nullString(d.HolderEntityID), string(settings), string(look)}
+	if picks.SetNext {
+		sets += `, next_card_id = ?`
+		args = append(args, nullString(picks.Next))
+	}
+	if picks.SetLast {
+		sets += `, last_card_id = ?`
+		args = append(args, nullString(picks.Last))
+	}
+	args = append(args, d.ID, d.CampaignID, expected)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE decks SET name = ?, kind = ?, holder_entity_id = ?, settings = ?, look = ?, version = version + 1
-		 WHERE id = ? AND campaign_id = ? AND version = ?`,
-		d.Name, d.Kind, nullString(d.HolderEntityID), string(settings), string(look), d.ID, d.CampaignID, expected)
+		`UPDATE decks SET `+sets+` WHERE id = ? AND campaign_id = ? AND version = ?`, args...)
 	if isDuplicate(err) {
 		return false, errDuplicate
 	}
@@ -380,13 +424,13 @@ func (s *sqlRepository) SetPlayers(ctx context.Context, campaignID, deckID strin
 
 // ---- cards ----------------------------------------------------------------
 
-const cardColumns = `id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, copies, fate, when_json, when_open, ask_first, sort_order, created_at, updated_at`
+const cardColumns = `id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, ask_first, sort_order, created_at, updated_at`
 
 func scanCard(sc scanner) (Card, error) {
 	var c Card
 	var when sql.NullString
 	if err := sc.Scan(&c.ID, &c.DeckID, &c.CampaignID, &c.Name, &c.KindKey, &c.Words, &c.DirectorNote,
-		&c.Picture, &c.Corner, &c.Copies, &c.Fate, &when, &c.WhenOpen, &c.AskFirst, &c.SortOrder,
+		&c.Picture, &c.Corner, &c.Rare, &c.Copies, &c.Fate, &when, &c.WhenOpen, &c.AskFirst, &c.SortOrder,
 		&c.CreatedAt, &c.UpdatedAt); err != nil {
 		return Card{}, err
 	}
@@ -432,9 +476,9 @@ func (s *sqlRepository) CreateCard(ctx context.Context, c Card) error {
 	}
 	defer rollback(tx)
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, copies, fate, when_json, when_open, ask_first, sort_order)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.ID, c.DeckID, c.CampaignID, c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner,
+		`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, ask_first, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.ID, c.DeckID, c.CampaignID, c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare,
 		c.Copies, c.Fate, nullString(c.When), c.WhenOpen, c.AskFirst, c.SortOrder)
 	if isDuplicate(err) {
 		return errDuplicate
@@ -474,10 +518,10 @@ func (s *sqlRepository) UpdateCard(ctx context.Context, c Card) (ResizeResult, e
 		return ResizeResult{}, err
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE deck_cards SET name = ?, kind_key = ?, words = ?, director_note = ?, picture = ?, corner = ?,
+		`UPDATE deck_cards SET name = ?, kind_key = ?, words = ?, director_note = ?, picture = ?, corner = ?, rare = ?,
 		   copies = ?, fate = ?, when_json = ?, when_open = ?, ask_first = ?
 		 WHERE id = ? AND deck_id = ? AND campaign_id = ?`,
-		c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Copies, c.Fate,
+		c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare, c.Copies, c.Fate,
 		nullString(c.When), c.WhenOpen, c.AskFirst, c.ID, c.DeckID, c.CampaignID)
 	if isDuplicate(err) {
 		return ResizeResult{}, errDuplicate
@@ -542,9 +586,31 @@ func (s *sqlRepository) UpdateCard(ctx context.Context, c Card) (ResizeResult, e
 }
 
 func (s *sqlRepository) DeleteCard(ctx context.Context, campaignID, deckID, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete card: %w", err)
+	}
+	defer rollback(tx)
+	if err := lockDeck(ctx, tx, campaignID, deckID); err != nil {
+		if errors.Is(err, errLostClaim) {
+			return nil
+		}
+		return err
+	}
+	// The deck's next and last card carry no foreign key, so they are cleared
+	// here, in the transaction that removes the card they name.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE decks SET next_card_id = IF(next_card_id = ?, NULL, next_card_id),
+		   last_card_id = IF(last_card_id = ?, NULL, last_card_id)
+		 WHERE id = ? AND campaign_id = ?`, id, id, deckID, campaignID); err != nil {
+		return fmt.Errorf("clear draw nudges: %w", err)
+	}
 	// The copies go with the card through the foreign key.
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM deck_cards WHERE id = ? AND deck_id = ? AND campaign_id = ?`, id, deckID, campaignID); err != nil {
+		return fmt.Errorf("delete card: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("delete card: %w", err)
 	}
 	return nil
@@ -552,13 +618,13 @@ func (s *sqlRepository) DeleteCard(ctx context.Context, campaignID, deckID, id s
 
 // ---- copies ---------------------------------------------------------------
 
-const copyColumns = `id, deck_id, campaign_id, card_id, zone, holder_entity_id, face_up, asked_at, dealt_by, dealt_at, turned_at, moved_at`
+const copyColumns = `id, deck_id, campaign_id, card_id, zone, holder_entity_id, face_up, is_open, asked_at, dealt_by, dealt_at, turned_at, moved_at`
 
 func scanCopy(sc scanner) (Copy, error) {
 	var c Copy
 	var holder, dealtBy sql.NullString
 	var asked, dealt, turned sql.NullTime
-	if err := sc.Scan(&c.ID, &c.DeckID, &c.CampaignID, &c.CardID, &c.Zone, &holder, &c.FaceUp,
+	if err := sc.Scan(&c.ID, &c.DeckID, &c.CampaignID, &c.CardID, &c.Zone, &holder, &c.FaceUp, &c.Open,
 		&asked, &dealtBy, &dealt, &turned, &c.MovedAt); err != nil {
 		return Copy{}, err
 	}
@@ -666,7 +732,7 @@ func (z *ZoneCounts) add(zone string, n int) {
 
 func (s *sqlRepository) ListTable(ctx context.Context, campaignID string) ([]TableRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT c.id, d.id, d.name, d.kind, d.look, k.id, k.name, k.kind_key, k.words, k.picture, k.corner
+		`SELECT c.id, d.id, d.name, d.kind, d.look, k.id, k.name, k.kind_key, k.words, k.picture, k.corner, k.rare
 		 FROM deck_copies c
 		 JOIN decks d ON d.id = c.deck_id
 		 JOIN deck_cards k ON k.id = c.card_id
@@ -681,7 +747,7 @@ func (s *sqlRepository) ListTable(ctx context.Context, campaignID string) ([]Tab
 		var r TableRow
 		var look string
 		if err := rows.Scan(&r.CopyID, &r.DeckID, &r.DeckName, &r.DeckKind, &look,
-			&r.Face.CardID, &r.Face.Name, &r.Face.KindKey, &r.Face.Words, &r.Face.Picture, &r.Face.Corner); err != nil {
+			&r.Face.CardID, &r.Face.Name, &r.Face.KindKey, &r.Face.Words, &r.Face.Picture, &r.Face.Corner, &r.Face.Rare); err != nil {
 			return nil, fmt.Errorf("scan table row: %w", err)
 		}
 		r.Look = readLook(look)
@@ -710,11 +776,11 @@ func lockDeck(ctx context.Context, tx *sql.Tx, campaignID, deckID string) error 
 // returns to the pile. The copy also gets a fresh id in the same statement:
 // players see copy ids beside faces, and an id seen on a face must never come
 // back attached to a hidden card.
-const resetFields = `id = UUID(), zone = 'pile', holder_entity_id = NULL, face_up = 0, asked_at = NULL, dealt_by = NULL, dealt_at = NULL, turned_at = NULL, moved_at = NOW()`
+const resetFields = `id = UUID(), zone = 'pile', holder_entity_id = NULL, face_up = 0, is_open = 0, asked_at = NULL, dealt_by = NULL, dealt_at = NULL, turned_at = NULL, moved_at = NOW()`
 
 // resetFieldsAs is resetFields with an id chosen by the caller, for a copy
 // the same transaction goes on to refer to.
-const resetFieldsAs = `id = ?, zone = 'pile', holder_entity_id = NULL, face_up = 0, asked_at = NULL, dealt_by = NULL, dealt_at = NULL, turned_at = NULL, moved_at = NOW()`
+const resetFieldsAs = `id = ?, zone = 'pile', holder_entity_id = NULL, face_up = 0, is_open = 0, asked_at = NULL, dealt_by = NULL, dealt_at = NULL, turned_at = NULL, moved_at = NOW()`
 
 func insertLog(ctx context.Context, tx *sql.Tx, campaignID string, l LogLine) error {
 	if _, err := tx.ExecContext(ctx,
@@ -746,8 +812,11 @@ func (s *sqlRepository) Move(ctx context.Context, m Move) error {
 	}
 	defer rollback(tx)
 
-	sets := []string{"zone = ?", "holder_entity_id = ?", "face_up = ?", "moved_at = NOW()"}
-	args := []any{m.To.Zone, nullString(m.To.HolderEntityID), m.To.FaceUp}
+	// An open mark only makes sense on a face-up card still in a hand, so a
+	// move that leaves either clears it.
+	open := m.To.Open && m.To.FaceUp && m.To.Zone == ZoneHand
+	sets := []string{"zone = ?", "holder_entity_id = ?", "face_up = ?", "is_open = ?", "moved_at = NOW()"}
+	args := []any{m.To.Zone, nullString(m.To.HolderEntityID), m.To.FaceUp, open}
 	switch m.Asked {
 	case AskedMark:
 		sets = append(sets, "asked_at = NOW()")
@@ -780,8 +849,8 @@ func (s *sqlRepository) Move(ctx context.Context, m Move) error {
 		sets = append(sets, "id = ?")
 		args = append(args, uuid.NewString())
 	}
-	where := `id = ? AND deck_id = ? AND campaign_id = ? AND zone = ? AND holder_entity_id <=> ? AND face_up = ?`
-	args = append(args, m.CopyID, m.DeckID, m.CampaignID, m.From.Zone, nullString(m.From.HolderEntityID), m.From.FaceUp)
+	where := `id = ? AND deck_id = ? AND campaign_id = ? AND zone = ? AND holder_entity_id <=> ? AND face_up = ? AND is_open = ?`
+	args = append(args, m.CopyID, m.DeckID, m.CampaignID, m.From.Zone, nullString(m.From.HolderEntityID), m.From.FaceUp, m.From.Open)
 	if m.ExpectAsked {
 		where += ` AND asked_at IS NOT NULL`
 	}
@@ -832,14 +901,50 @@ func pileCopies(ctx context.Context, tx *sql.Tx, p DrawPlan) ([]pileCopy, error)
 	return out, rows.Err()
 }
 
-func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) (Copy, error) {
+// onlyCard keeps the candidates that are copies of one card.
+func onlyCard(cands []pileCopy, cardID string) []pileCopy {
+	var out []pileCopy
+	for _, c := range cands {
+		if c.cardID == cardID {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// withoutCard drops the candidates that are copies of one card.
+func withoutCard(cands []pileCopy, cardID string) []pileCopy {
+	var out []pileCopy
+	for _, c := range cands {
+		if c.cardID != cardID {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// deckPicks reads the deck's next and last card. It is called with the deck
+// row already locked, so no draw sees a value another draw is about to clear.
+func deckPicks(ctx context.Context, tx *sql.Tx, deckID string) (next, last string, err error) {
+	var n, l sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT next_card_id, last_card_id FROM decks WHERE id = ?`, deckID).Scan(&n, &l); err != nil {
+		return "", "", fmt.Errorf("read draw nudges: %w", err)
+	}
+	return fromNull(n), fromNull(l), nil
+}
+
+func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
+	count := p.Count
+	if count < 1 {
+		count = 1
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Copy{}, fmt.Errorf("draw: %w", err)
+		return nil, fmt.Errorf("draw: %w", err)
 	}
 	defer rollback(tx)
 	if err := lockDeck(ctx, tx, p.CampaignID, p.DeckID); err != nil {
-		return Copy{}, err
+		return nil, err
 	}
 
 	if p.SpendUserID != "" {
@@ -847,52 +952,70 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) (Copy, error) {
 		err := tx.QueryRowContext(ctx,
 			`SELECT draws_left FROM deck_players WHERE deck_id = ? AND user_id = ? FOR UPDATE`, p.DeckID, p.SpendUserID).Scan(&left)
 		if errors.Is(err, sql.ErrNoRows) {
-			return Copy{}, errNoDraws
+			return nil, errNoDraws
 		}
 		if err != nil {
-			return Copy{}, fmt.Errorf("read draws: %w", err)
+			return nil, fmt.Errorf("read draws: %w", err)
 		}
 		if left.Valid {
 			res, err := tx.ExecContext(ctx,
 				`UPDATE deck_players SET draws_left = draws_left - 1 WHERE deck_id = ? AND user_id = ? AND draws_left > 0`,
 				p.DeckID, p.SpendUserID)
 			if err != nil {
-				return Copy{}, fmt.Errorf("spend draw: %w", err)
+				return nil, fmt.Errorf("spend draw: %w", err)
 			}
 			if n, err := res.RowsAffected(); err != nil || n != 1 {
 				if err != nil {
-					return Copy{}, fmt.Errorf("spend draw: %w", err)
+					return nil, fmt.Errorf("spend draw: %w", err)
 				}
-				return Copy{}, errNoDraws
+				return nil, errNoDraws
 			}
 		}
 	}
 
 	exclude := ""
-	if p.PutBackShown {
-		var id string
+	if p.PutBackCopyID != "" {
+		var cardID, cardName string
 		err := tx.QueryRowContext(ctx,
-			`SELECT id FROM deck_copies WHERE deck_id = ? AND campaign_id = ? AND zone = 'shown' FOR UPDATE`, p.DeckID, p.CampaignID).Scan(&id)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return Copy{}, fmt.Errorf("read shown: %w", err)
+			`SELECT c.card_id, k.name FROM deck_copies c JOIN deck_cards k ON k.id = c.card_id
+			 WHERE c.id = ? AND c.deck_id = ? AND c.campaign_id = ? AND c.zone = 'shown' FOR UPDATE`,
+			p.PutBackCopyID, p.DeckID, p.CampaignID).Scan(&cardID, &cardName)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errLostClaim
 		}
-		if err == nil {
-			fresh := uuid.NewString()
-			if _, err := tx.ExecContext(ctx, `UPDATE deck_copies SET `+resetFieldsAs+` WHERE id = ?`, fresh, id); err != nil {
-				return Copy{}, fmt.Errorf("put back shown: %w", err)
-			}
-			exclude = fresh
+		if err != nil {
+			return nil, fmt.Errorf("read shown: %w", err)
 		}
-	} else if p.To.Zone == ZoneShown {
+		fresh := uuid.NewString()
+		if _, err := tx.ExecContext(ctx, `UPDATE deck_copies SET `+resetFieldsAs+` WHERE id = ?`, fresh, p.PutBackCopyID); err != nil {
+			return nil, fmt.Errorf("put back shown: %w", err)
+		}
+		exclude = fresh
+		if err := insertLog(ctx, tx, p.CampaignID, LogLine{DeckID: p.DeckID, CardID: cardID, CardName: cardName,
+			CopyID: p.PutBackCopyID, Action: ActPutBack, ActorUserID: p.Log.ActorUserID}); err != nil {
+			return nil, err
+		}
+	}
+	if p.To.Zone == ZoneShown {
 		var n int
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM deck_copies WHERE deck_id = ? AND campaign_id = ? AND zone = 'shown'`, p.DeckID, p.CampaignID).Scan(&n); err != nil {
-			return Copy{}, fmt.Errorf("read shown: %w", err)
+			return nil, fmt.Errorf("read shown: %w", err)
 		}
-		if n > 0 {
-			return Copy{}, errShownTaken
+		if n+count > MaxShown {
+			return nil, errShownFull
 		}
 	}
+
+	// A named deal ignores the Director's next and last card: naming a card is
+	// already the stronger instruction.
+	next, last := "", ""
+	if p.CardID == "" {
+		if next, last, err = deckPicks(ctx, tx, p.DeckID); err != nil {
+			return nil, err
+		}
+	}
+	nextUsed, lastUsed := false, false
 
 	candidates := func() ([]pileCopy, error) {
 		all, err := pileCopies(ctx, tx, p)
@@ -914,56 +1037,193 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) (Copy, error) {
 		}
 		return rest, nil
 	}
-	cands, err := candidates()
-	if err != nil {
-		return Copy{}, err
-	}
-	if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && cands[0].id == exclude)) {
-		res, err := tx.ExecContext(ctx,
-			`UPDATE deck_copies SET `+resetFields+` WHERE deck_id = ? AND campaign_id = ? AND zone = 'used'`, p.DeckID, p.CampaignID)
+
+	var out []Copy
+	for i := 0; i < count; i++ {
+		cands, err := candidates()
 		if err != nil {
-			return Copy{}, fmt.Errorf("reshuffle: %w", err)
+			return nil, err
 		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			if cands, err = candidates(); err != nil {
-				return Copy{}, err
+		if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && cands[0].id == exclude)) {
+			res, err := tx.ExecContext(ctx,
+				`UPDATE deck_copies SET `+resetFields+` WHERE deck_id = ? AND campaign_id = ? AND zone = 'used'`, p.DeckID, p.CampaignID)
+			if err != nil {
+				return nil, fmt.Errorf("reshuffle: %w", err)
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				if cands, err = candidates(); err != nil {
+					return nil, err
+				}
 			}
 		}
-	}
-	if len(cands) == 0 {
-		return Copy{}, errEmptyPile
-	}
-	pick := cands[p.Pick(len(cands))]
+		if len(cands) == 0 {
+			return nil, errEmptyPile
+		}
+		// The next card is the first card of a draw, and only if a copy of it is
+		// in the pile; the last card is left out while anything else is.
+		pool, tookNext := cands, false
+		if i == 0 && next != "" {
+			if sub := onlyCard(cands, next); len(sub) > 0 {
+				pool, tookNext = sub, true
+			}
+		}
+		if !tookNext && last != "" {
+			if rest := withoutCard(cands, last); len(rest) > 0 {
+				pool = rest
+			}
+		}
+		pick := pool[p.Pick(len(pool))]
+		if tookNext {
+			nextUsed, next = true, ""
+		}
+		if last != "" && pick.cardID == last {
+			lastUsed, last = true, ""
+		}
 
-	sets := `zone = ?, holder_entity_id = ?, face_up = ?, asked_at = NULL, turned_at = NULL, moved_at = NOW()`
-	args := []any{p.To.Zone, nullString(p.To.HolderEntityID), p.To.FaceUp}
-	if p.DealtBy != "" {
-		sets += `, dealt_by = ?, dealt_at = NOW()`
-		args = append(args, p.DealtBy)
+		sets := `zone = ?, holder_entity_id = ?, face_up = ?, is_open = 0, asked_at = NULL, turned_at = NULL, moved_at = NOW()`
+		args := []any{p.To.Zone, nullString(p.To.HolderEntityID), p.To.FaceUp}
+		if p.DealtBy != "" {
+			sets += `, dealt_by = ?, dealt_at = NOW()`
+			args = append(args, p.DealtBy)
+		}
+		args = append(args, pick.id)
+		res, err := tx.ExecContext(ctx, `UPDATE deck_copies SET `+sets+` WHERE id = ? AND zone = 'pile'`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("claim copy: %w", err)
+		}
+		if n, err := res.RowsAffected(); err != nil || n != 1 {
+			if err != nil {
+				return nil, fmt.Errorf("claim copy: %w", err)
+			}
+			return nil, errLostClaim
+		}
+		line := p.Log
+		line.DeckID, line.CardID, line.CardName, line.CopyID = p.DeckID, pick.cardID, pick.cardName, pick.id
+		if err := insertLog(ctx, tx, p.CampaignID, line); err != nil {
+			return nil, err
+		}
+		got, err := scanCopy(tx.QueryRowContext(ctx, `SELECT `+copyColumns+` FROM deck_copies WHERE id = ?`, pick.id))
+		if err != nil {
+			return nil, fmt.Errorf("read drawn copy: %w", err)
+		}
+		out = append(out, got)
 	}
-	args = append(args, pick.id)
-	res, err := tx.ExecContext(ctx, `UPDATE deck_copies SET `+sets+` WHERE id = ? AND zone = 'pile'`, args...)
+	if nextUsed {
+		if _, err := tx.ExecContext(ctx, `UPDATE decks SET next_card_id = NULL WHERE id = ?`, p.DeckID); err != nil {
+			return nil, fmt.Errorf("clear next card: %w", err)
+		}
+	}
+	if lastUsed {
+		if _, err := tx.ExecContext(ctx, `UPDATE decks SET last_card_id = NULL WHERE id = ?`, p.DeckID); err != nil {
+			return nil, fmt.Errorf("clear last card: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("draw: %w", err)
+	}
+	return out, nil
+}
+
+func (s *sqlRepository) Keep(ctx context.Context, k KeepPlan) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Copy{}, fmt.Errorf("claim copy: %w", err)
+		return fmt.Errorf("keep card: %w", err)
+	}
+	defer rollback(tx)
+	// Both decks are locked in id order, so two keeps in opposite directions
+	// cannot wait on each other.
+	ids := []string{k.DeckID, k.TargetDeckID}
+	if ids[1] < ids[0] {
+		ids[0], ids[1] = ids[1], ids[0]
+	}
+	for _, id := range ids {
+		if err := lockDeck(ctx, tx, k.CampaignID, id); err != nil {
+			return err
+		}
+	}
+	var src Card
+	err = tx.QueryRowContext(ctx,
+		`SELECT k.id, k.name, k.kind_key, k.words, k.director_note, k.picture, k.corner, k.rare, k.fate, k.ask_first
+		 FROM deck_copies c JOIN deck_cards k ON k.id = c.card_id
+		 WHERE c.id = ? AND c.deck_id = ? AND c.campaign_id = ? FOR UPDATE`,
+		k.CopyID, k.DeckID, k.CampaignID).Scan(&src.ID, &src.Name, &src.KindKey, &src.Words, &src.DirectorNote,
+		&src.Picture, &src.Corner, &src.Rare, &src.Fate, &src.AskFirst)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errLostClaim
+	}
+	if err != nil {
+		return fmt.Errorf("read kept card: %w", err)
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE deck_copies SET zone = 'gone', holder_entity_id = NULL, face_up = 1, is_open = 0, asked_at = NULL, moved_at = NOW()
+		 WHERE id = ? AND deck_id = ? AND campaign_id = ? AND zone = ? AND holder_entity_id <=> ? AND face_up = ? AND is_open = ?`,
+		k.CopyID, k.DeckID, k.CampaignID, k.From.Zone, nullString(k.From.HolderEntityID), k.From.FaceUp, k.From.Open)
+	if err != nil {
+		return fmt.Errorf("keep card: %w", err)
 	}
 	if n, err := res.RowsAffected(); err != nil || n != 1 {
 		if err != nil {
-			return Copy{}, fmt.Errorf("claim copy: %w", err)
+			return fmt.Errorf("keep card: %w", err)
 		}
-		return Copy{}, errLostClaim
+		return errLostClaim
 	}
-	p.Log.DeckID, p.Log.CardID, p.Log.CardName, p.Log.CopyID = p.DeckID, pick.cardID, pick.cardName, pick.id
-	if err := insertLog(ctx, tx, p.CampaignID, p.Log); err != nil {
-		return Copy{}, err
+
+	var cards, copies int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(copies), 0) FROM deck_cards WHERE deck_id = ? AND campaign_id = ?`,
+		k.TargetDeckID, k.CampaignID).Scan(&cards, &copies); err != nil {
+		return fmt.Errorf("count target cards: %w", err)
 	}
-	out, err := scanCopy(tx.QueryRowContext(ctx, `SELECT `+copyColumns+` FROM deck_copies WHERE id = ?`, pick.id))
-	if err != nil {
-		return Copy{}, fmt.Errorf("read drawn copy: %w", err)
+	if copies+1 > MaxCopiesPerDeck {
+		return errTargetCopies
+	}
+	var targetID string
+	var have int
+	err = tx.QueryRowContext(ctx,
+		`SELECT id, copies FROM deck_cards WHERE deck_id = ? AND campaign_id = ? AND name = ? FOR UPDATE`,
+		k.TargetDeckID, k.CampaignID, src.Name).Scan(&targetID, &have)
+	switch {
+	case err == nil:
+		if have+1 > MaxCopiesPerCard {
+			return errCardCopies
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE deck_cards SET copies = copies + 1 WHERE id = ?`, targetID); err != nil {
+			return fmt.Errorf("add kept copy: %w", err)
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		if cards >= MaxCardsPerDeck {
+			return errTargetFull
+		}
+		kind := ""
+		if k.TargetKinds[src.KindKey] {
+			kind = src.KindKey
+		}
+		targetID = uuid.NewString()
+		// The condition (when_json, when_open) is left at its default: it was
+		// written against the source deck's cards and means nothing in another.
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, ask_first, sort_order)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+			targetID, k.TargetDeckID, k.CampaignID, src.Name, kind, src.Words, src.DirectorNote, src.Picture, src.Corner,
+			src.Rare, src.Fate, src.AskFirst, cards); err != nil {
+			return fmt.Errorf("add kept card: %w", err)
+		}
+	default:
+		return fmt.Errorf("find kept card: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO deck_copies (id, deck_id, campaign_id, card_id, zone) VALUES (?, ?, ?, ?, 'pile')`,
+		uuid.NewString(), k.TargetDeckID, k.CampaignID, targetID); err != nil {
+		return fmt.Errorf("add kept copy: %w", err)
+	}
+	k.Log.DeckID, k.Log.CardID, k.Log.CardName, k.Log.CopyID = k.DeckID, src.ID, src.Name, k.CopyID
+	if err := insertLog(ctx, tx, k.CampaignID, k.Log); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return Copy{}, fmt.Errorf("draw: %w", err)
+		return fmt.Errorf("keep card: %w", err)
 	}
-	return out, nil
+	return nil
 }
 
 func (s *sqlRepository) bulk(ctx context.Context, campaignID, deckID, where string, log LogLine) (int, error) {

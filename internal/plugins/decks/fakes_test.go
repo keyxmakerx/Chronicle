@@ -90,7 +90,7 @@ func (m *memRepo) CreateDeck(_ context.Context, d Deck) error {
 	return nil
 }
 
-func (m *memRepo) UpdateDeck(_ context.Context, d Deck, expected int) (bool, error) {
+func (m *memRepo) UpdateDeck(_ context.Context, d Deck, expected int, picks PickChange) (bool, error) {
 	cur, ok := m.decks[d.ID]
 	if !ok || cur.Version != expected {
 		return false, nil
@@ -100,6 +100,14 @@ func (m *memRepo) UpdateDeck(_ context.Context, d Deck, expected int) (bool, err
 	}
 	d.Version = expected + 1
 	d.Players = cur.Players
+	// Like the SQL, the draw nudges change only when the update names them.
+	d.NextCardID, d.LastCardID = cur.NextCardID, cur.LastCardID
+	if picks.SetNext {
+		d.NextCardID = picks.Next
+	}
+	if picks.SetLast {
+		d.LastCardID = picks.Last
+	}
 	m.decks[d.ID] = d
 	return true, nil
 }
@@ -221,8 +229,17 @@ func (m *memRepo) UpdateCard(_ context.Context, c Card) (ResizeResult, error) {
 	return res, nil
 }
 
-func (m *memRepo) DeleteCard(_ context.Context, _, _, id string) error {
+func (m *memRepo) DeleteCard(_ context.Context, _, deckID, id string) error {
 	delete(m.cards, id)
+	if d, ok := m.decks[deckID]; ok {
+		if d.NextCardID == id {
+			d.NextCardID = ""
+		}
+		if d.LastCardID == id {
+			d.LastCardID = ""
+		}
+		m.decks[deckID] = d
+	}
 	var kept []Copy
 	for _, cp := range m.copies {
 		if cp.CardID != id {
@@ -320,7 +337,7 @@ func (m *memRepo) writeLog(l LogLine) {
 func (m *memRepo) reset(i int) {
 	c := &m.copies[i]
 	c.ID = m.id("cp")
-	c.Zone, c.HolderEntityID, c.FaceUp, c.AskedAt, c.DealtBy, c.DealtAt, c.TurnedAt = ZonePile, "", false, nil, "", nil, nil
+	c.Zone, c.HolderEntityID, c.FaceUp, c.Open, c.AskedAt, c.DealtBy, c.DealtAt, c.TurnedAt = ZonePile, "", false, false, nil, "", nil, nil
 	c.MovedAt = m.tick()
 }
 
@@ -341,12 +358,13 @@ func (m *memRepo) Move(_ context.Context, mv Move) error {
 	}
 	c := m.copies[i]
 	if c.DeckID != mv.DeckID || c.Zone != mv.From.Zone || c.HolderEntityID != mv.From.HolderEntityID ||
-		c.FaceUp != mv.From.FaceUp || (mv.ExpectAsked && c.AskedAt == nil) {
+		c.FaceUp != mv.From.FaceUp || c.Open != mv.From.Open || (mv.ExpectAsked && c.AskedAt == nil) {
 		return errLostClaim
 	}
 	now := time.Now()
 	oldID := c.ID
 	c.Zone, c.HolderEntityID, c.FaceUp = mv.To.Zone, mv.To.HolderEntityID, mv.To.FaceUp
+	c.Open = mv.To.Open && mv.To.FaceUp && mv.To.Zone == ZoneHand
 	c.MovedAt = m.tick()
 	if mv.To.Zone == ZonePile {
 		c.ID = m.id("cp")
@@ -393,16 +411,22 @@ func (m *memRepo) pile(p DrawPlan, exclude string) []int {
 	return out
 }
 
-func (m *memRepo) Draw(_ context.Context, p DrawPlan) (Copy, error) {
+func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 	// Work on a snapshot so an error leaves nothing spent or moved, as the
 	// SQL transaction rolls back.
 	saved := append([]Copy(nil), m.copies...)
 	savedDeck := m.decks[p.DeckID]
 	savedPlayers := append([]Player(nil), savedDeck.Players...)
+	savedLogs, savedNext := append([]LogLine(nil), m.logs...), m.nextLog
 	undo := func() {
 		m.copies = saved
 		savedDeck.Players = savedPlayers
 		m.decks[p.DeckID] = savedDeck
+		m.logs, m.nextLog = savedLogs, savedNext
+	}
+	count := p.Count
+	if count < 1 {
+		count = 1
 	}
 	if p.SpendUserID != "" {
 		d := m.decks[p.DeckID]
@@ -414,7 +438,7 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) (Copy, error) {
 			found = true
 			if pl.DrawsLeft != nil {
 				if *pl.DrawsLeft <= 0 {
-					return Copy{}, errNoDraws
+					return nil, errNoDraws
 				}
 				n := *pl.DrawsLeft - 1
 				pls := append([]Player(nil), d.Players...)
@@ -424,53 +448,169 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) (Copy, error) {
 			}
 		}
 		if !found {
-			return Copy{}, errNoDraws
+			return nil, errNoDraws
 		}
 	}
 	exclude := ""
-	if p.PutBackShown {
-		for i, c := range m.copies {
-			if c.DeckID == p.DeckID && c.Zone == ZoneShown {
-				m.reset(i)
-				exclude = m.copies[i].ID
-			}
+	if p.PutBackCopyID != "" {
+		i := m.index(p.PutBackCopyID)
+		if i < 0 || m.copies[i].DeckID != p.DeckID || m.copies[i].Zone != ZoneShown {
+			undo()
+			return nil, errLostClaim
 		}
-	} else if p.To.Zone == ZoneShown {
+		old := m.copies[i]
+		m.reset(i)
+		exclude = m.copies[i].ID
+		m.writeLog(LogLine{DeckID: p.DeckID, CardID: old.CardID, CardName: m.cards[old.CardID].Name, CopyID: old.ID,
+			Action: ActPutBack, ActorUserID: p.Log.ActorUserID})
+	}
+	if p.To.Zone == ZoneShown {
+		shown := 0
 		for _, c := range m.copies {
 			if c.DeckID == p.DeckID && c.Zone == ZoneShown {
-				undo()
-				return Copy{}, errShownTaken
+				shown++
 			}
 		}
+		if shown+count > MaxShown {
+			undo()
+			return nil, errShownFull
+		}
 	}
-	cands := m.pile(p, exclude)
-	if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && m.copies[cands[0]].ID == exclude)) {
-		moved := false
-		for i, c := range m.copies {
-			if c.DeckID == p.DeckID && c.Zone == ZoneUsed {
-				m.reset(i)
-				moved = true
+	deck := m.decks[p.DeckID]
+	next, last := deck.NextCardID, deck.LastCardID
+	if p.CardID != "" {
+		next, last = "", ""
+	}
+	nextUsed, lastUsed := false, false
+	var out []Copy
+	for n := 0; n < count; n++ {
+		cands := m.pile(p, exclude)
+		if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && m.copies[cands[0]].ID == exclude)) {
+			moved := false
+			for i, c := range m.copies {
+				if c.DeckID == p.DeckID && c.Zone == ZoneUsed {
+					m.reset(i)
+					moved = true
+				}
+			}
+			if moved {
+				cands = m.pile(p, exclude)
 			}
 		}
-		if moved {
-			cands = m.pile(p, exclude)
+		if len(cands) == 0 {
+			undo()
+			return nil, errEmptyPile
+		}
+		pool, tookNext := cands, false
+		if n == 0 && next != "" {
+			var sub []int
+			for _, i := range cands {
+				if m.copies[i].CardID == next {
+					sub = append(sub, i)
+				}
+			}
+			if len(sub) > 0 {
+				pool, tookNext = sub, true
+			}
+		}
+		if !tookNext && last != "" {
+			var rest []int
+			for _, i := range cands {
+				if m.copies[i].CardID != last {
+					rest = append(rest, i)
+				}
+			}
+			if len(rest) > 0 {
+				pool = rest
+			}
+		}
+		i := pool[p.Pick(len(pool))]
+		c := &m.copies[i]
+		if tookNext {
+			nextUsed, next = true, ""
+		}
+		if last != "" && c.CardID == last {
+			lastUsed, last = true, ""
+		}
+		now := time.Now()
+		c.Zone, c.HolderEntityID, c.FaceUp, c.Open, c.AskedAt, c.TurnedAt = p.To.Zone, p.To.HolderEntityID, p.To.FaceUp, false, nil, nil
+		c.MovedAt = m.tick()
+		if p.DealtBy != "" {
+			c.DealtBy, c.DealtAt = p.DealtBy, &now
+		}
+		line := p.Log
+		line.DeckID, line.CardID, line.CardName, line.CopyID = p.DeckID, c.CardID, m.cards[c.CardID].Name, c.ID
+		m.writeLog(line)
+		out = append(out, *c)
+	}
+	if nextUsed || lastUsed {
+		d := m.decks[p.DeckID]
+		if nextUsed {
+			d.NextCardID = ""
+		}
+		if lastUsed {
+			d.LastCardID = ""
+		}
+		m.decks[p.DeckID] = d
+	}
+	return out, nil
+}
+
+// Keep mirrors the SQL: both decks change together or neither does.
+func (m *memRepo) Keep(_ context.Context, k KeepPlan) error {
+	i := m.index(k.CopyID)
+	if i < 0 {
+		return errLostClaim
+	}
+	c := m.copies[i]
+	if c.DeckID != k.DeckID || c.Zone != k.From.Zone || c.HolderEntityID != k.From.HolderEntityID ||
+		c.FaceUp != k.From.FaceUp || c.Open != k.From.Open {
+		return errLostClaim
+	}
+	src := m.cards[c.CardID]
+	var targetCards []Card
+	copies := 0
+	for _, x := range m.cards {
+		if x.DeckID == k.TargetDeckID {
+			targetCards = append(targetCards, x)
+			copies += x.Copies
 		}
 	}
-	if len(cands) == 0 {
-		undo()
-		return Copy{}, errEmptyPile
+	if copies+1 > MaxCopiesPerDeck {
+		return errTargetCopies
 	}
-	i := cands[p.Pick(len(cands))]
-	c := &m.copies[i]
-	now := time.Now()
-	c.Zone, c.HolderEntityID, c.FaceUp, c.AskedAt, c.TurnedAt = p.To.Zone, p.To.HolderEntityID, p.To.FaceUp, nil, nil
-	c.MovedAt = m.tick()
-	if p.DealtBy != "" {
-		c.DealtBy, c.DealtAt = p.DealtBy, &now
+	var existing *Card
+	for j := range targetCards {
+		if targetCards[j].Name == src.Name {
+			existing = &targetCards[j]
+		}
 	}
-	p.Log.DeckID, p.Log.CardID, p.Log.CardName, p.Log.CopyID = p.DeckID, c.CardID, m.cards[c.CardID].Name, c.ID
-	m.writeLog(p.Log)
-	return *c, nil
+	var target Card
+	if existing != nil {
+		if existing.Copies+1 > MaxCopiesPerCard {
+			return errCardCopies
+		}
+		target = *existing
+		target.Copies++
+	} else {
+		if len(targetCards) >= MaxCardsPerDeck {
+			return errTargetFull
+		}
+		kind := ""
+		if k.TargetKinds[src.KindKey] {
+			kind = src.KindKey
+		}
+		target = Card{ID: m.id("card"), DeckID: k.TargetDeckID, CampaignID: k.CampaignID, Name: src.Name, KindKey: kind,
+			Words: src.Words, DirectorNote: src.DirectorNote, Picture: src.Picture, Corner: src.Corner, Rare: src.Rare,
+			Copies: 1, Fate: src.Fate, AskFirst: src.AskFirst, SortOrder: len(targetCards)}
+	}
+	m.cards[target.ID] = target
+	m.copies[i].Zone, m.copies[i].HolderEntityID, m.copies[i].FaceUp, m.copies[i].Open, m.copies[i].AskedAt = ZoneGone, "", true, false, nil
+	m.copies[i].MovedAt = m.tick()
+	m.copies = append(m.copies, Copy{ID: m.id("cp"), DeckID: target.DeckID, CampaignID: target.CampaignID, CardID: target.ID, Zone: ZonePile, MovedAt: m.tick()})
+	k.Log.DeckID, k.Log.CardID, k.Log.CardName, k.Log.CopyID = k.DeckID, src.ID, src.Name, k.CopyID
+	m.writeLog(k.Log)
+	return nil
 }
 
 func (m *memRepo) bulk(deckID string, only func(Copy) bool, log LogLine) int {
@@ -543,4 +683,15 @@ type capture struct{ got []string }
 
 func (c *capture) Moved(_, deckID, copyID, action, holder, actor string) {
 	c.got = append(c.got, deckID+"|"+copyID+"|"+action+"|"+holder+"|"+actor)
+}
+
+// ZoneCountsFor counts one deck's copies by zone.
+func (m *memRepo) ZoneCountsFor(deckID string) ZoneCounts {
+	var z ZoneCounts
+	for _, c := range m.copies {
+		if c.DeckID == deckID {
+			z.add(c.Zone, 1)
+		}
+	}
+	return z
 }

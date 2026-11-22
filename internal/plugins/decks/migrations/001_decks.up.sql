@@ -9,6 +9,12 @@
 -- core tables run before plugin ones and the collation matches them, so the
 -- foreign keys are safe.
 --
+-- next_card_id and last_card_id are a Director's two nudges to the draw: the
+-- card the next draw takes, and the card left out while anything else is in
+-- the pile. They carry no foreign key because the repository clears them in
+-- the transaction that deletes the card, and nothing a player reads is built
+-- from them.
+--
 -- A deck's hero page (holder_entity_id) is cleared, not cascaded, when the
 -- page is purged: losing a hero page must not delete the table's deck. A copy
 -- held by a purged page goes with the page; a later copies change for its
@@ -21,6 +27,8 @@ CREATE TABLE IF NOT EXISTS decks (
     name             VARCHAR(120) NOT NULL,
     kind             VARCHAR(8)   NOT NULL DEFAULT 'event',
     holder_entity_id CHAR(36)     NULL,
+    next_card_id     CHAR(36)     NULL,
+    last_card_id     CHAR(36)     NULL,
     settings         TEXT         NOT NULL,
     look             TEXT         NOT NULL,
     version          INT          NOT NULL DEFAULT 1,
@@ -61,6 +69,7 @@ CREATE TABLE IF NOT EXISTS deck_cards (
     director_note TEXT         NOT NULL,
     picture       VARCHAR(255) NOT NULL DEFAULT '',
     corner        VARCHAR(12)  NOT NULL DEFAULT '',
+    rare          TINYINT(1)   NOT NULL DEFAULT 0,
     copies        INT          NOT NULL DEFAULT 1,
     fate          VARCHAR(8)   NOT NULL DEFAULT '',
     when_json     TEXT         NULL,
@@ -78,7 +87,11 @@ CREATE TABLE IF NOT EXISTS deck_cards (
 
 -- One physical card. zone is pile, shown, hand, play, used or gone.
 -- holder_entity_id is the hero page whose hand or play area holds the copy;
--- NULL in play means the whole table.
+-- NULL in play means the whole table, and NULL in hand on a party deck is the
+-- party's own hand. face_up is whether the holder sees the face; is_open is the
+-- separate step of showing a face-up card in a hand to the table, so turning a
+-- card over never tells anyone else anything. is_open implies face_up and is
+-- cleared whenever a copy leaves a hand.
 CREATE TABLE IF NOT EXISTS deck_copies (
     id               CHAR(36)    NOT NULL,
     deck_id          CHAR(36)    NOT NULL,
@@ -87,6 +100,7 @@ CREATE TABLE IF NOT EXISTS deck_copies (
     zone             VARCHAR(8)  NOT NULL DEFAULT 'pile',
     holder_entity_id CHAR(36)    NULL,
     face_up          TINYINT(1)  NOT NULL DEFAULT 0,
+    is_open          TINYINT(1)  NOT NULL DEFAULT 0,
     asked_at         DATETIME    NULL,
     dealt_by         CHAR(36)    NULL,
     dealt_at         DATETIME    NULL,

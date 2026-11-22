@@ -58,11 +58,20 @@ var (
 
 	// The look lists. Each is one list: a later step adds a value here and
 	// to nothing else. The first value is the default (defaultLook).
-	faceValues    = []string{"plate", "window", "full"}
-	shapeValues   = []string{"tall", "standard", "small"}
-	borderValues  = []string{"double", "line", "kit", "metal", "none"}
-	turnValues    = []string{"flip", "slow", "toss", "slam", "sweep", "burn", "ink"}
-	patternValues = []string{"lattice", "stripes", "dots", "stars", "plain"}
+	shapeValues     = []string{"tall", "standard", "small"}
+	borderValues    = []string{"double", "line", "kit", "metal", "brass", "steel", "bound", "stone", "none"}
+	turnValues      = []string{"flip", "slow", "toss", "slam", "sweep", "burn", "ink", "seal", "bolt", "forge"}
+	windowValues    = []string{"arch", "square", "pointed", "round", "full"}
+	nameValues      = []string{"below", "over"}
+	letteringValues = []string{"plain", "carved", "classic", "condensed", "hand"}
+	cornerValues    = []string{"roman", "number", "suit", "pips", "none"}
+	markerValues    = []string{"gem", "banner", "tab", "ribbon", "line"}
+	finishValues    = []string{"matte", "glow", "sheen", "foil"}
+	patternValues   = []string{"lattice", "rays", "waves", "stars", "check", "plain", "iron"}
+	backSignValues  = []string{"star", "sun", "moon", "eye", "crown", "anchor", "flame", "sword", "none"}
+	// signValues are the marks a card kind can wear; a kind saved without one
+	// is given the first not yet used by another kind of its deck.
+	signValues = []string{"round", "diamond", "point", "square", "star", "cross", "crescent", "drop"}
 )
 
 // Palette is the one list of colour keys. No hex colour is ever stored: the
@@ -161,11 +170,22 @@ func readSettings(kind, raw string) Settings {
 }
 
 // Look is how a deck's cards are drawn. Every value comes from a fixed list.
+// Shape decides the build (tall is the plate and the leaf, the others the
+// compact card), so there is no separate face key to contradict it.
 type Look struct {
-	Face   string    `json:"face"`
-	Shape  string    `json:"shape"`
-	Border string    `json:"border"`
-	Turn   string    `json:"turn"`
+	Shape  string `json:"shape"`
+	Border string `json:"border"`
+	Turn   string `json:"turn"`
+	// Window is only drawn on tall cards; it is kept for the others so a change
+	// of shape does not lose the choice.
+	Window string `json:"window"`
+	// Name is where the card's name sits.
+	Name      string `json:"name"`
+	Lettering string `json:"lettering"`
+	// Corner is the style of the corner mark, not a card's corner text.
+	Corner string    `json:"corner"`
+	Marker string    `json:"marker"`
+	Finish string    `json:"finish"`
 	Back   Back      `json:"back"`
 	Kinds  []KindDef `json:"kinds"`
 }
@@ -178,24 +198,32 @@ type Back struct {
 	// Picture is "" for now.
 	Picture string `json:"picture"`
 	Words   string `json:"words"`
+	Sign    string `json:"sign"`
 }
 
-// KindDef names a card kind and gives it a palette colour.
+// KindDef names a card kind, gives it a palette colour and a sign.
 type KindDef struct {
 	Key    string `json:"key"`
 	Name   string `json:"name"`
 	Colour string `json:"colour"`
+	// Sign is one of signValues; saved empty it is filled in by checkKinds.
+	Sign string `json:"sign"`
 }
 
 // LookInput is Look with every key optional: nil keeps what is there. Kinds
 // nil keeps the list and an empty list clears it.
 type LookInput struct {
-	Face   *string    `json:"face"`
-	Shape  *string    `json:"shape"`
-	Border *string    `json:"border"`
-	Turn   *string    `json:"turn"`
-	Back   *BackInput `json:"back"`
-	Kinds  []KindDef  `json:"kinds"`
+	Shape     *string    `json:"shape"`
+	Border    *string    `json:"border"`
+	Turn      *string    `json:"turn"`
+	Window    *string    `json:"window"`
+	Name      *string    `json:"name"`
+	Lettering *string    `json:"lettering"`
+	Corner    *string    `json:"corner"`
+	Marker    *string    `json:"marker"`
+	Finish    *string    `json:"finish"`
+	Back      *BackInput `json:"back"`
+	Kinds     []KindDef  `json:"kinds"`
 }
 
 // UnmarshalJSON refuses a key the look does not have, naming it, so a typo or
@@ -210,6 +238,28 @@ func (l *LookInput) UnmarshalJSON(b []byte) error {
 	}
 	*l = LookInput(p)
 	return nil
+}
+
+// lookField ties a look key to its value and its one list, so saving, reading
+// and salvaging a look all walk the same table.
+type lookField struct {
+	key     string
+	dst     *string
+	allowed []string
+}
+
+func lookFields(l *Look) []lookField {
+	return []lookField{
+		{"shape", &l.Shape, shapeValues},
+		{"border", &l.Border, borderValues},
+		{"turn", &l.Turn, turnValues},
+		{"window", &l.Window, windowValues},
+		{"name", &l.Name, nameValues},
+		{"lettering", &l.Lettering, letteringValues},
+		{"corner", &l.Corner, cornerValues},
+		{"marker", &l.Marker, markerValues},
+		{"finish", &l.Finish, finishValues},
+	}
 }
 
 // lookDecodeError turns a decoder failure into a message naming the field.
@@ -231,11 +281,19 @@ type BackInput struct {
 	Colour  *string `json:"colour"`
 	Picture *string `json:"picture"`
 	Words   *string `json:"words"`
+	Sign    *string `json:"sign"`
 }
 
+// defaultLook takes the first value of every list, so a list's order is its
+// default and a test pins both together.
 func defaultLook() Look {
-	return Look{Face: "plate", Shape: "tall", Border: "double", Turn: "flip",
-		Back: Back{Pattern: "lattice"}, Kinds: []KindDef{}}
+	var l Look
+	for _, f := range lookFields(&l) {
+		*f.dst = f.allowed[0]
+	}
+	l.Back = Back{Pattern: patternValues[0], Sign: backSignValues[0]}
+	l.Kinds = []KindDef{}
+	return l
 }
 
 func validColour(field, v string, allowEmpty bool) error {
@@ -288,24 +346,17 @@ func applyLook(cur Look, in *LookInput) (Look, error) {
 	if in == nil {
 		return out, nil
 	}
-	for _, f := range []struct {
-		field   string
-		dst     *string
-		src     *string
-		allowed []string
-	}{
-		{"face", &out.Face, in.Face, faceValues},
-		{"shape", &out.Shape, in.Shape, shapeValues},
-		{"border", &out.Border, in.Border, borderValues},
-		{"turn", &out.Turn, in.Turn, turnValues},
-	} {
-		if f.src == nil {
+	src := map[string]*string{"shape": in.Shape, "border": in.Border, "turn": in.Turn, "window": in.Window,
+		"name": in.Name, "lettering": in.Lettering, "corner": in.Corner, "marker": in.Marker, "finish": in.Finish}
+	for _, f := range lookFields(&out) {
+		v := src[f.key]
+		if v == nil {
 			continue
 		}
-		if err := oneOf(f.field, *f.src, f.allowed); err != nil {
+		if err := oneOf(f.key, *v, f.allowed); err != nil {
 			return Look{}, err
 		}
-		*f.dst = *f.src
+		*f.dst = *v
 	}
 	if b := in.Back; b != nil {
 		if b.Pattern != nil {
@@ -313,6 +364,12 @@ func applyLook(cur Look, in *LookInput) (Look, error) {
 				return Look{}, err
 			}
 			out.Back.Pattern = *b.Pattern
+		}
+		if b.Sign != nil {
+			if err := oneOf("back sign", *b.Sign, backSignValues); err != nil {
+				return Look{}, err
+			}
+			out.Back.Sign = *b.Sign
 		}
 		if b.Colour != nil {
 			if err := validColour("back colour", *b.Colour, true); err != nil {
@@ -345,6 +402,30 @@ func applyLook(cur Look, in *LookInput) (Look, error) {
 	return out, nil
 }
 
+// checkKind validates one kind on its own. The sign is checked only when
+// given; checkKinds fills a missing one in once it can see the whole list.
+func checkKind(k KindDef) (KindDef, error) {
+	if !kindKeyPattern.MatchString(k.Key) {
+		return KindDef{}, errInvalid("a card kind's key starts with a lowercase letter and uses only lowercase letters, digits and hyphens (at most 32)")
+	}
+	name, err := plainText("a card kind's name", k.Name, MaxKindNameChars)
+	if err != nil {
+		return KindDef{}, err
+	}
+	if name == "" {
+		return KindDef{}, errInvalid("a card kind needs a name")
+	}
+	if err := validColour("a card kind's colour", k.Colour, false); err != nil {
+		return KindDef{}, err
+	}
+	if k.Sign != "" {
+		if err := oneOf("a card kind's sign", k.Sign, signValues); err != nil {
+			return KindDef{}, err
+		}
+	}
+	return KindDef{Key: k.Key, Name: name, Colour: k.Colour, Sign: k.Sign}, nil
+}
+
 func checkKinds(in []KindDef) ([]KindDef, error) {
 	if len(in) > MaxKinds {
 		return nil, errInvalid(fmt.Sprintf("a deck can have at most %d card kinds", MaxKinds))
@@ -352,31 +433,50 @@ func checkKinds(in []KindDef) ([]KindDef, error) {
 	seen := map[string]bool{}
 	out := make([]KindDef, 0, len(in))
 	for _, k := range in {
-		if !kindKeyPattern.MatchString(k.Key) {
-			return nil, errInvalid("a card kind's key starts with a lowercase letter and uses only lowercase letters, digits and hyphens (at most 32)")
-		}
-		if seen[k.Key] {
-			return nil, errInvalid("two card kinds share the key " + k.Key)
-		}
-		seen[k.Key] = true
-		name, err := plainText("a card kind's name", k.Name, MaxKindNameChars)
+		one, err := checkKind(k)
 		if err != nil {
 			return nil, err
 		}
-		if name == "" {
-			return nil, errInvalid("a card kind needs a name")
+		if seen[one.Key] {
+			return nil, errInvalid("two card kinds share the key " + one.Key)
 		}
-		if err := validColour("a card kind's colour", k.Colour, false); err != nil {
-			return nil, err
-		}
-		out = append(out, KindDef{Key: k.Key, Name: name, Colour: k.Colour})
+		seen[one.Key] = true
+		out = append(out, one)
 	}
+	fillSigns(out)
 	return out, nil
+}
+
+// fillSigns gives every kind saved without a sign the first sign no other kind
+// of the deck wears. Signs a Director chose are never moved, so the fill
+// depends only on the list. With more kinds than signs a sign is reused, the
+// least worn first, rather than refusing the twelfth kind.
+func fillSigns(kinds []KindDef) {
+	worn := map[string]int{}
+	for _, k := range kinds {
+		if k.Sign != "" {
+			worn[k.Sign]++
+		}
+	}
+	for i := range kinds {
+		if kinds[i].Sign != "" {
+			continue
+		}
+		best := signValues[0]
+		for _, sg := range signValues {
+			if worn[sg] < worn[best] {
+				best = sg
+			}
+		}
+		kinds[i].Sign = best
+		worn[best]++
+	}
 }
 
 // readLook decodes a stored look. It never fails a read: each field is
 // checked on its own and falls back to that field's default, and the kinds
-// are checked one at a time, dropping only the bad one.
+// are repaired one at a time. A key a later version retired (the old face, a
+// pattern that left the list) simply does not survive the read.
 func readLook(raw string) Look {
 	def := defaultLook()
 	var got Look
@@ -385,16 +485,18 @@ func readLook(raw string) Look {
 		// read what can be read key by key.
 		got = salvageLook(raw)
 	}
-	fix := func(v *string, d string, allowed []string) {
-		if oneOf("", *v, allowed) != nil {
-			*v = d
+	defs := lookFields(&def)
+	for i, f := range lookFields(&got) {
+		if oneOf("", *f.dst, f.allowed) != nil {
+			*f.dst = *defs[i].dst
 		}
 	}
-	fix(&got.Face, def.Face, faceValues)
-	fix(&got.Shape, def.Shape, shapeValues)
-	fix(&got.Border, def.Border, borderValues)
-	fix(&got.Turn, def.Turn, turnValues)
-	fix(&got.Back.Pattern, def.Back.Pattern, patternValues)
+	if oneOf("", got.Back.Pattern, patternValues) != nil {
+		got.Back.Pattern = def.Back.Pattern
+	}
+	if oneOf("", got.Back.Sign, backSignValues) != nil {
+		got.Back.Sign = def.Back.Sign
+	}
 	if got.Back.Colour != "" && oneOf("", got.Back.Colour, Palette) != nil {
 		got.Back.Colour = ""
 	}
@@ -407,13 +509,23 @@ func readLook(raw string) Look {
 	kinds := make([]KindDef, 0, len(got.Kinds))
 	seen := map[string]bool{}
 	for _, k := range got.Kinds {
-		one, err := checkKinds([]KindDef{k})
-		if err != nil || seen[k.Key] || len(kinds) >= MaxKinds {
+		// A kind with a retired colour or sign keeps its place with that one
+		// field defaulted; only a kind with no usable key or name is dropped,
+		// because it cannot be repaired into something a card could point at.
+		if validColour("", k.Colour, false) != nil {
+			k.Colour = Palette[0]
+		}
+		if k.Sign != "" && oneOf("", k.Sign, signValues) != nil {
+			k.Sign = ""
+		}
+		one, err := checkKind(k)
+		if err != nil || seen[one.Key] || len(kinds) >= MaxKinds {
 			continue
 		}
-		seen[k.Key] = true
-		kinds = append(kinds, one[0])
+		seen[one.Key] = true
+		kinds = append(kinds, one)
 	}
+	fillSigns(kinds)
 	got.Kinds = kinds
 	return got
 }
@@ -426,26 +538,21 @@ func salvageLook(raw string) Look {
 		return Look{}
 	}
 	var l Look
-	for k, v := range keys {
-		switch k {
-		case "face":
-			_ = json.Unmarshal(v, &l.Face)
-		case "shape":
-			_ = json.Unmarshal(v, &l.Shape)
-		case "border":
-			_ = json.Unmarshal(v, &l.Border)
-		case "turn":
-			_ = json.Unmarshal(v, &l.Turn)
-		case "back":
-			_ = json.Unmarshal(v, &l.Back)
-		case "kinds":
-			var items []json.RawMessage
-			if json.Unmarshal(v, &items) == nil {
-				for _, it := range items {
-					var kd KindDef
-					if json.Unmarshal(it, &kd) == nil {
-						l.Kinds = append(l.Kinds, kd)
-					}
+	for _, f := range lookFields(&l) {
+		if v, ok := keys[f.key]; ok {
+			_ = json.Unmarshal(v, f.dst)
+		}
+	}
+	if v, ok := keys["back"]; ok {
+		_ = json.Unmarshal(v, &l.Back)
+	}
+	if v, ok := keys["kinds"]; ok {
+		var items []json.RawMessage
+		if json.Unmarshal(v, &items) == nil {
+			for _, it := range items {
+				var kd KindDef
+				if json.Unmarshal(it, &kd) == nil {
+					l.Kinds = append(l.Kinds, kd)
 				}
 			}
 		}
