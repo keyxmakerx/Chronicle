@@ -361,6 +361,7 @@ func init() {
 		kinds := []records.Kind{
 			records.ShopStockKind(d.Entities, d.Relations, pay),
 			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
+			records.PageLinkKind{Entities: d.Entities, Rels: d.Relations, Views: d.Entities},
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
 			records.HexMapKind{Svc: aiHexMapAdapter{maps: d.Maps, hexes: d.Hexes}, Maps: aiMapsAdapter{d.Maps}},
