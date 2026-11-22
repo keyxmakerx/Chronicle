@@ -18,7 +18,15 @@ func init() {
 		if d.Trackers == nil {
 			return nil
 		}
-		return []records.Kind{records.TrackerKind{Svc: aiTrackersAdapter{svc: d.Trackers, ents: d.Entities}, Entities: d.Entities}}
+		var dir trackers.MemberDirectory
+		if d.Campaigns != nil {
+			dir = &trackersMemberAdapter{svc: d.Campaigns}
+		}
+		ad := aiTrackersAdapter{svc: d.Trackers, ents: d.Entities, members: dir}
+		if d.Entities != nil {
+			ad.claims = d.Entities
+		}
+		return []records.Kind{records.TrackerKind{Svc: ad, Entities: d.Entities}}
 	})
 }
 
@@ -28,6 +36,16 @@ func init() {
 type aiTrackersAdapter struct {
 	svc  trackers.Service
 	ents entities.EntityService
+	// members is the same directory the trackers screen chooses players from;
+	// nil while campaigns is unavailable, which leaves nobody to name.
+	members trackers.MemberDirectory
+	// claims lists the claimed hero pages; nil leaves display names only.
+	claims heroClaims
+}
+
+// heroClaims is the one read the adapter needs to tie a hero to its player.
+type heroClaims interface {
+	ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]entities.Entity, error)
 }
 
 var _ records.TrackersAPI = aiTrackersAdapter{}
@@ -113,6 +131,11 @@ func (t aiTrackersAdapter) Page(ctx context.Context, campaignID, pageID string, 
 	for _, tv := range pv.Trackers {
 		on := records.TrackerOnPage{ID: tv.ID, KindID: tv.KindID, Name: tv.Name, Shape: tv.Shape,
 			Visibility: tv.Visibility, Value: tv.Value, Max: tv.Max, Now: tv.Now}
+		// The service fills Players for a Director's view only; a player's
+		// copy never carries them, so none can reach a lookup from here.
+		for _, p := range tv.Players {
+			on.Players = append(on.Players, records.TrackerPlayer{UserID: p.UserID, Name: p.Name, CanChange: p.CanChange})
+		}
 		for _, s := range tv.Steps {
 			on.Steps = append(on.Steps, records.TrackerStep{Name: s.Name, Text: s.Text})
 		}
@@ -147,6 +170,77 @@ func (t aiTrackersAdapter) Pages(ctx context.Context, campaignID string, a recor
 	return out, nil
 }
 
+// HasBlock says whether the page shows its trackers: its category's layout
+// places the block, or the page is a player's character a game system draws,
+// which shows them in a tab under the sheet whatever the layout holds.
 func (t aiTrackersAdapter) HasBlock(ctx context.Context, campaignID, pageID string) (bool, error) {
+	if t.sheetDrawn(ctx, campaignID, pageID) {
+		return true, nil
+	}
 	return categoryLayoutHas(ctx, t.ents, campaignID, pageID, trackers.BlockType)
+}
+
+func (t aiTrackersAdapter) sheetDrawn(ctx context.Context, campaignID, pageID string) bool {
+	if t.ents == nil {
+		return false
+	}
+	e, err := t.ents.GetByID(ctx, pageID)
+	if err != nil || e == nil || e.CampaignID != campaignID || (e.OwnerUserID == nil && !e.Playable) {
+		return false
+	}
+	et, err := t.ents.GetEntityTypeByID(ctx, e.EntityTypeID)
+	return err == nil && et != nil && entities.SystemDrawsHeroes(ctx, et)
+}
+
+// SetSeen changes who sees one placed tracker. The viewer carries the actor,
+// so the service's Director check is what allows or refuses it.
+func (t aiTrackersAdapter) SetSeen(ctx context.Context, campaignID, trackerID string, a records.Actor, in records.TrackerSeen) error {
+	patch := trackers.TrackerPatch{Visibility: &in.Visibility}
+	if in.Visibility == trackers.SeePlayers {
+		picks := make([]trackers.PlayerPick, len(in.Players))
+		for i, p := range in.Players {
+			picks[i] = trackers.PlayerPick{UserID: p.UserID, CanChange: p.CanChange}
+		}
+		patch.Players = &picks
+	}
+	_, err := t.svc.Patch(ctx, campaignID, trackerID, trackerViewer(a), patch)
+	return err
+}
+
+// Members lists the campaign's people for matching a name, to a Director only:
+// the names are the only thing passed on, never emails, ids' owners or roles.
+func (t aiTrackersAdapter) Members(ctx context.Context, campaignID string, a records.Actor) ([]records.TrackerMember, error) {
+	if !a.CanAuthorDmOnly() || t.members == nil {
+		return nil, nil
+	}
+	list, err := t.members.Members(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	heroes := t.claimedHeroes(ctx, campaignID, a)
+	out := make([]records.TrackerMember, len(list))
+	for i, m := range list {
+		out[i] = records.TrackerMember{UserID: m.UserID, Name: m.Name, Character: m.Character, Heroes: heroes[m.UserID], Director: m.Director}
+	}
+	return out, nil
+}
+
+// claimedHeroes names each member's claimed hero pages, as the players lookup
+// shows them, so a hero's name reaches its player without a People page link.
+// A failed read leaves display names, which still work.
+func (t aiTrackersAdapter) claimedHeroes(ctx context.Context, campaignID string, a records.Actor) map[string][]string {
+	if t.claims == nil {
+		return nil
+	}
+	claimed, err := t.claims.ListClaimed(ctx, campaignID, a.Role, a.UserID)
+	if err != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for _, e := range claimed {
+		if e.OwnerUserID != nil {
+			out[*e.OwnerUserID] = append(out[*e.OwnerUserID], e.Name)
+		}
+	}
+	return out
 }

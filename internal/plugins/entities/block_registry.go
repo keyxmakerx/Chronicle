@@ -55,10 +55,28 @@ type BlockMeta struct {
 	// Group names the palette heading an entry goes under; empty lets the
 	// editor choose from the type.
 	Group string `json:"group,omitempty"`
+	// ShowsSheet marks a block that draws a page's own sheet or its fields
+	// (the attributes, a character sheet, the game system's panels). A
+	// layout without one of them leaves its pages with no sheet.
+	ShowsSheet bool `json:"shows_sheet,omitempty"`
 	// Picture names the small drawing of what the type puts on a page that
 	// the Customizer's widget list shows beside its name: one of
 	// PictureKinds. Empty draws PictureLines, as a package widget does.
 	Picture string `json:"picture,omitempty"`
+	// PageTab, when set, also offers the block as a tab of the panel under a
+	// page a game system draws, where no layout can place it.
+	PageTab *BlockPageTab `json:"-"`
+}
+
+// BlockPageTab describes a block's tab under a system-drawn page. The owning
+// plugin fills it, so the entities plugin never names the block.
+type BlockPageTab struct {
+	// Label is the tab's name; Count selects the rows the tab counts and Act
+	// the piece's own add button, which the panel's action button presses.
+	Label, Count, Act string
+	// State says what the viewer has on this page: how many rows they can
+	// see, and whether they may add one. An error, or neither, means no tab.
+	State func(ctx context.Context, rc BlockRenderContext) (rows int, canAdd bool, err error)
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.
@@ -192,6 +210,18 @@ func (r *BlockRegistry) Register(meta BlockMeta, renderer BlockRenderer) {
 	r.entries[meta.Type] = registeredBlock{meta: meta, renderer: renderer}
 }
 
+// PageTabBlocks returns the metadata of blocks that offer a tab under a
+// system-drawn page, in registration order.
+func (r *BlockRegistry) PageTabBlocks() []BlockMeta {
+	var out []BlockMeta
+	for _, m := range r.Types() {
+		if m.PageTab != nil && m.PageTab.State != nil {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // IsValid returns true if blockType is a registered block type.
 func (r *BlockRegistry) IsValid(blockType string) bool {
 	r.mu.RLock()
@@ -212,6 +242,15 @@ func (r *BlockRegistry) IsSingleton(blockType string) bool {
 		return false
 	}
 	return entry.meta.Singleton
+}
+
+// ShowsSheet reports whether blockType is registered and draws a page's
+// sheet or its fields. Unknown types return false.
+func (r *BlockRegistry) ShowsSheet(blockType string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.entries[blockType]
+	return ok && entry.meta.ShowsSheet
 }
 
 // Types returns all registered block metadata in registration order.

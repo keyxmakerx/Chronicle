@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -43,7 +44,7 @@ func (p *aiPartyAdapter) Party(ctx context.Context, campaignID string, a records
 		return out, err
 	}
 	for _, h := range heroes {
-		hero := records.PartyHero{ID: h.ID, Name: h.Name, Player: h.PlayerName, Subtitle: h.Subtitle, Conditions: h.Conditions}
+		hero := records.PartyHero{ID: h.ID, Name: h.Name, Player: h.PlayerName, Subtitle: h.Subtitle, Level: h.Level, Conditions: h.Conditions}
 		for _, m := range h.Meters {
 			pm := records.PartyMeter{Label: m.Label, Current: m.Current}
 			if m.HasMax {
@@ -139,7 +140,11 @@ func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field s
 	}
 	out := make([]records.SystemEntry, 0, len(l.Choices))
 	for _, c := range l.Choices {
-		out = append(out, records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary, Status: c.Status})
+		e := records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary, Status: c.Status}
+		if look, ok := cardborders.LookFrom(c.Properties); ok {
+			e.Border, e.Colour = look.Border, look.Colour
+		}
+		out = append(out, e)
 	}
 	return l.SystemName, out, nil
 }

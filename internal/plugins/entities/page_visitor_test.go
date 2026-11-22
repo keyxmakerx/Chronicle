@@ -26,7 +26,7 @@ func TestPageControlsForVisitors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: tt.role}
 			hasNotes := false
-			for _, tab := range systemPageTabList(ctx, cc) {
+			for _, tab := range systemPageTabList(ctx, cc, &Entity{ID: "e1"}, nil, "") {
 				if tab.Key == "notes" {
 					hasNotes = true
 				}

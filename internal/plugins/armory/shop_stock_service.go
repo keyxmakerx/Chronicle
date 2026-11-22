@@ -235,6 +235,23 @@ func (s *shopStockService) Sources(ctx context.Context, campaignID, shopEntityID
 	return out, nil
 }
 
+// CheckStockPrice is the Armory's rule for a price on a stock row: not
+// negative or non-numeric, and no larger than a sale can charge. Zero is
+// allowed: it is a good left for the Director to price, and buying already
+// refuses it until one is set. It is exported so a plan can refuse what the
+// shop would, without copying the limits.
+func CheckStockPrice(price float64) error {
+	if math.IsNaN(price) || math.IsInf(price, 0) || price < 0 {
+		return apperror.NewBadRequest("A price can't be negative.")
+	}
+	if price > 0 {
+		if _, err := unitPriceCents(price); err != nil {
+			return apperror.NewBadRequest("A price that large isn't allowed.")
+		}
+	}
+	return nil
+}
+
 // cleanGood validates one drafted good and returns it in stored form.
 func cleanGood(g KeepGood) (KeepGood, error) {
 	g.Name = strings.TrimSpace(g.Name)
@@ -244,15 +261,10 @@ func cleanGood(g KeepGood) (KeepGood, error) {
 	if len(g.Name) > 200 {
 		return g, apperror.NewBadRequest("A good's name can be at most 200 characters.")
 	}
-	if math.IsNaN(g.Price) || math.IsInf(g.Price, 0) || g.Price < 0 {
-		return g, apperror.NewBadRequest("A price can't be negative.")
+	if err := CheckStockPrice(g.Price); err != nil {
+		return g, err
 	}
-	// Zero is allowed: it is a good left for the Director to price, and buying
-	// already refuses it until one is set.
 	if g.Price > 0 {
-		if _, err := unitPriceCents(g.Price); err != nil {
-			return g, apperror.NewBadRequest("A price that large isn't allowed.")
-		}
 		g.Price = math.Round(g.Price*100) / 100
 	}
 	g.Currency = normCurrency(g.Currency)

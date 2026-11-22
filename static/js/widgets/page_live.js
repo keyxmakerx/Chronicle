@@ -41,6 +41,14 @@
 
   function main() { return document.getElementById('main-content'); }
 
+  // A refresh's request carries the page it refreshes, so its events can be
+  // told from those of a link the reader clicked meanwhile.
+  function liveFrom(e) {
+    var c = e.detail && e.detail.requestConfig;
+    return (c && c.headers && c.headers['X-Page-Live']) || '';
+  }
+  function ours(e, m) { return !!liveFrom(e) && e.detail.target === m; }
+
   // Closed dialogs stay in the page marked hidden, so only a shown one counts.
   function openDialog() {
     var all = document.querySelectorAll('dialog[open], [role="dialog"][aria-modal="true"]');
@@ -50,30 +58,54 @@
     return false;
   }
 
-  // Keeps m at least `height` tall and its scroll at `top` while the swapped-in
-  // widgets draw: follow() starts after the swap, end() lets go. The height is
-  // held by an empty block after the new content, which works whatever the
-  // scroller's box sizing and padding.
-  function holdPlace(m, height, top) {
-    var spacer = null, moved = false, done = false, still = 0, landed = false;
+  // Where the content of m ends, measured at `mark`, an empty block after it,
+  // or at a scratch one: scrollHeight can't say, since it never reads less
+  // than the scroller's own height and it counts any hold in place.
+  function contentEnd(m, mark) {
+    var scratch = !mark;
+    if (scratch) {
+      mark = document.createElement('div');
+      mark.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0';
+      m.appendChild(mark);
+    }
+    var y = mark.getBoundingClientRect().top - m.getBoundingClientRect().top - m.clientTop +
+      m.scrollTop + (parseFloat(getComputedStyle(m).paddingBottom) || 0);
+    if (scratch) m.removeChild(mark);
+    return y;
+  }
+
+  // The hold of the refresh in progress, so a refresh that comes while the
+  // last one still holds the page takes it over rather than measuring it.
+  var active = null;
+
+  // Keeps the content of m as tall as it was and its scroll at `top` while
+  // the swapped-in widgets draw: follow() starts after the swap, end() lets
+  // go. The height is held by an empty block after the new content.
+  function holdPlace(m, top) {
+    var prev = active && active.m === m ? active : null;
+    var height = prev ? Math.max(prev.height, contentEnd(m, prev.spacer())) : contentEnd(m, null);
+    // The last hold's block stays until this refresh's markup replaces it;
+    // dropping it now would let the page shrink, and the reader be pulled
+    // up, for as long as the request is on its way.
+    var spacer = active ? active.end(!!prev) : null;
+    var moved = false, done = false, still = 0, landed = false;
     var start = 0;
     // The browser's own scroll anchoring would move the page when a widget
     // grows above the reader; the position is kept here instead.
     var anchor = m.style.overflowAnchor;
     m.style.overflowAnchor = 'none';
-    function held() { return spacer ? spacer.offsetHeight : 0; }
+    // A reader within a screen of the bottom also gets that much room under
+    // the held height, so a widget folding away between two frames cannot
+    // pull them up; the room goes with the hold. A reader at the top cannot
+    // be pulled up, so a page that fits its window never grows a scrollbar.
+    var room = top > 0 ? Math.max(0, top + 2 * m.clientHeight - height) : 0;
+    // Returns what the content still lacks of the old height.
     function size() {
       if (!spacer) return 0;
       if (spacer.parentNode !== m) m.appendChild(spacer);
-      // A second pass when the content was shorter than the scroller itself,
-      // since scrollHeight never reads less than the visible height.
-      var h = 0;
-      for (var i = 0; i < 2; i++) {
-        h = holdFor(height, m.scrollHeight - held());
-        spacer.style.height = h + 'px';
-        if (m.scrollHeight >= height) break;
-      }
-      return h;
+      var natural = contentEnd(m, spacer);
+      spacer.style.height = holdFor(height + room, natural) + 'px';
+      return holdFor(height, natural);
     }
     function touched() { moved = true; }
     var evs = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
@@ -81,36 +113,42 @@
     // In before the new markup is painted, so the reader never sees the page
     // shrink under them.
     function swapped(e) {
-      if (done || !e.detail || e.detail.target !== m) return;
+      if (done || !ours(e, m)) return;
       spacer = document.createElement('div');
       spacer.setAttribute('aria-hidden', 'true');
       spacer.setAttribute('data-page-live-hold', '');
-      // The whole old height until the swap settles: the new markup can still
-      // shrink in that time (htmx puts its settled attributes back), and
-      // a hold sized to it would let the scroll position fall.
-      spacer.style.cssText = 'display:block;height:' + height + 'px;margin:0;padding:0;border:0;pointer-events:none';
+      spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;pointer-events:none';
       m.appendChild(spacer);
+      // Until the swap settles the new markup can still shrink by any amount
+      // (htmx puts its settled attributes back), so a reader who could be
+      // pulled up gets the whole old height then.
+      if (top > 0) spacer.style.height = (height + room) + 'px';
+      else size();
       if (!moved) m.scrollTop = top;
     }
     // htmx scrolls the target to the top when the swap settles; put it back
     // before anything is painted.
     function settled(e) {
-      if (done || !e.detail || e.detail.target !== m) return;
+      if (done || !ours(e, m)) return;
       landed = true;
       size();
       if (!moved) m.scrollTop = top;
     }
     document.addEventListener('htmx:afterSwap', swapped);
     document.addEventListener('htmx:afterSettle', settled);
-    function end() {
-      if (done) return;
+    // Lets go; with `keep` the block stays where it is and is returned.
+    function end(keep) {
+      if (done) return null;
       done = true;
+      if (active === self) active = null;
       document.removeEventListener('htmx:afterSwap', swapped);
       document.removeEventListener('htmx:afterSettle', settled);
       evs.forEach(function (t) { m.removeEventListener(t, touched); });
-      if (spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
+      var kept = keep ? spacer : null;
+      if (!kept && spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
       spacer = null;
       m.style.overflowAnchor = anchor;
+      return kept;
     }
     function frame() {
       if (done) return;
@@ -123,8 +161,50 @@
       if (moved || still >= SETTLED_FRAMES || Date.now() - start > HOLD_MS) { end(); return; }
       requestAnimationFrame(frame);
     }
-    return { follow: function () { start = Date.now(); requestAnimationFrame(frame); }, end: end };
+    var self = {
+      m: m,
+      height: height,
+      spacer: function () { return spacer; },
+      follow: function () { start = Date.now(); requestAnimationFrame(frame); },
+      end: end
+    };
+    active = self;
+    return self;
   }
+
+  // A refresh redraws the page the reader is already on, so it is not an
+  // arrival: from its request to its settle the scroller is marked (input.css
+  // turns the fade-in off under the mark), and the frame that waits unseen
+  // for its widgets is shown as soon as the swap lands. Kept per request,
+  // since htmx can queue one request behind another and resolve its promise
+  // before it has even been sent.
+  var inFlight = [];
+  function track(e, step) {
+    var from = liveFrom(e), m = e.detail.target, xhr = e.detail.xhr;
+    if (!from || !m || !xhr) return;
+    var i = inFlight.indexOf(xhr);
+    if (step === 'send') {
+      if (i < 0) inFlight.push(xhr);
+      m.setAttribute('data-page-live-swap', '');
+    } else if (i < 0) {
+      return;
+    } else if (step === 'swap') {
+      // A refresh that lands after the reader went to another page must not
+      // put the old page back over the new one.
+      if (from !== location.pathname + location.search) e.detail.shouldSwap = false;
+    } else if (step === 'swapped') {
+      xhr._liveSwapped = true;
+      Array.prototype.forEach.call(m.querySelectorAll('[data-whole]'), function (f) { f.setAttribute('data-whole-ready', ''); });
+    } else if (step === 'settled' || !xhr._liveSwapped) {
+      inFlight.splice(i, 1);
+      if (!inFlight.length) m.removeAttribute('data-page-live-swap');
+    }
+  }
+  var STEPS = { 'htmx:beforeSend': 'send', 'htmx:beforeSwap': 'swap', 'htmx:afterSwap': 'swapped', 'htmx:afterRequest': 'ended', 'htmx:afterSettle': 'settled' };
+  Object.keys(STEPS).forEach(function (n) { document.addEventListener(n, function (e) { track(e, STEPS[n]); }); });
+
+  // One refresh at a time across every watcher on the page.
+  var refreshing = false;
 
   function state() {
     var m = main();
@@ -145,7 +225,7 @@
       var entityId = config.entityId || '';
       var url = location.pathname + location.search;
       var ws = null, wsTimer = null, wsDelay = 2000, pending = null;
-      var destroyed = false, busy = false;
+      var destroyed = false;
       if (!campaignId || !entityId || typeof window.WebSocket !== 'function') return;
 
       function schedule(delay) {
@@ -155,24 +235,25 @@
 
       function attempt() {
         pending = null;
-        if (destroyed || busy || location.pathname + location.search !== url) return;
+        if (destroyed || location.pathname + location.search !== url) return;
+        if (refreshing) { schedule(DEBOUNCE); return; }
         if (document.visibilityState === 'hidden' || !isQuiet(state())) { schedule(RETRY); return; }
         var m = main();
         if (!m || !window.htmx || typeof window.htmx.ajax !== 'function') return;
-        busy = true;
+        refreshing = true;
         var top = m.scrollTop;
-        var place = holdPlace(m, m.scrollHeight, top);
+        var place = holdPlace(m, top);
         // The swap replaces this widget, which ends this connection and
         // starts a new one on the fresh markup.
         window.htmx.ajax('GET', url, {
           target: m,
           select: '#main-content > *',
           swap: 'innerHTML',
-          headers: { 'HX-Boosted': 'true' }
+          headers: { 'HX-Boosted': 'true', 'X-Page-Live': url }
         }).then(function () {
           if (main() === m && location.pathname + location.search === url) place.follow();
           else place.end();
-        }, function () { place.end(); }).then(function () { busy = false; });
+        }, function () { place.end(); }).then(function () { refreshing = false; });
       }
 
       function connect() {
@@ -202,14 +283,19 @@
 
       connect();
 
-      return {
-        destroy: function () {
-          destroyed = true;
-          if (pending) clearTimeout(pending);
-          if (wsTimer) clearTimeout(wsTimer);
-          if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } }
-        }
+      // boot.js calls the widget's destroy when a refresh swaps this mount
+      // out; a connection left open would refresh the page once more for
+      // every refresh before it.
+      el._pageLive = function () {
+        destroyed = true;
+        if (pending) clearTimeout(pending);
+        if (wsTimer) clearTimeout(wsTimer);
+        if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } }
       };
+    },
+    destroy: function (el) {
+      if (el._pageLive) el._pageLive();
+      el._pageLive = null;
     }
   });
 })();

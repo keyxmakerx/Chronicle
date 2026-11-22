@@ -2,7 +2,8 @@
  * sidebar_drill.js -- the category drill panel (nav.templ's .nav-drill)
  *
  * Clicking a category row slides a panel over the categories area only
- * (transform on .nav-drill; .nav-top above is never touched). The panel's
+ * (transform on .nav-drill; .nav-top above is never touched). In the phone
+ * drawer it takes the list's place in the sidebar's one scroll. The panel's
  * own content comes from GET /campaigns/:id/sidebar/drill/:slug
  * (SidebarDrillPanel), fetched with htmx.ajax so its hx-get search box and
  * lazy-loaded tree keep working exactly as the fragment declares them.
@@ -51,6 +52,16 @@
     return rw ? rw.querySelector('[data-drill-open]') : null;
   }
 
+  // In the phone drawer the sidebar is the one scroller (phone_shell.css,
+  // whose scroll-padding clears the brand row and foot): an opened panel
+  // starts in view, and so does the row Back returns to.
+  function reveal(el, top) {
+    var sb = document.getElementById('sidebar');
+    if (!el || !sb || getComputedStyle(sb).overflowY === 'visible') return;
+    if (!top) el.scrollIntoView({ block: 'nearest' });
+    else if (el.getBoundingClientRect().top < sb.getBoundingClientRect().top + parseFloat(getComputedStyle(sb).scrollPaddingTop)) el.scrollIntoView();
+  }
+
   function setInert(p, on) {
     if (!p) return;
     if (on) p.setAttribute('inert', ''); else p.removeAttribute('inert');
@@ -64,6 +75,7 @@
     lastOpener = opener || lastOpener;
     setInert(p, false);
     p.classList.add('is-open');
+    reveal(p.parentElement, true);
     if (window.htmx && htmx.ajax) {
       htmx.ajax('GET', url, { target: '#sidebar-cat-content', swap: 'innerHTML' });
     }
@@ -78,7 +90,10 @@
     if (!isOpen(p)) return;
     p.classList.remove('is-open');
     setInert(p, true);
-    if (lastOpener && lastOpener.isConnected) lastOpener.focus({ preventScroll: true });
+    if (lastOpener && lastOpener.isConnected) {
+      lastOpener.focus({ preventScroll: true });
+      reveal(lastOpener);
+    }
     lastOpener = null;
     announce();
   }

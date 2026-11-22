@@ -105,6 +105,9 @@ func TestSystemEntryKind_Plan(t *testing.T) {
 			"purchased_traits": []any{map[string]any{"name": "Stone Skin", "cost": 2, "description": "Tough."}}}, ""), nil, ""},
 		{"update bad trait list refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "purchased_traits": []any{"Stone Skin", map[string]any{"cost": 1}}}, ""), nil, "needs a name"},
 		{"update nested detail refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "x": map[string]any{"a": 1}}, ""), nil, "must be text"},
+		{"update with a border ok", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "card_border": "fire", "card_colour": "#c4243a"}, ""), nil, ""},
+		{"update unknown border refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "card_border": "lava"}, ""), nil, "great-rune"},
+		{"update bad colour refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "card_colour": "red"}, ""), nil, "six hex digits"},
 		{"delete ok", owner, rec("system-entry", "delete", "Stoneborn", map[string]any{"entry": "ancestry"}, ""), nil, ""},
 		{"delete missing", owner, rec("system-entry", "delete", "Nobody", map[string]any{"entry": "ancestry"}, ""), nil, "no ancestry entry"},
 	}
@@ -251,4 +254,17 @@ func TestSystemEntryKind_ForCharacter(t *testing.T) {
 			t.Fatalf("forEntityId = %q", v)
 		}
 	})
+}
+
+// The notes the AI reads name both properties and every border key.
+func TestSystemEntryKind_DocCardBorders(t *testing.T) {
+	doc := SystemEntryKind{}.Doc()
+	for _, want := range []string{"card_border", "card_colour", "carved-stone (Carved stone)", "vine (Vine and wood)", "glass-midnight (Midnight glass)", "kind: system-entry"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("the kind's notes lack %q", want)
+		}
+	}
+	if strings.Index(doc, "card_border") > strings.Index(doc, "kind: system-entry") {
+		t.Error("the example should stay last")
+	}
 }

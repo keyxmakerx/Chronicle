@@ -3,6 +3,7 @@ package calendarai
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -89,7 +90,7 @@ type EventKind struct {
 func (EventKind) Name() string  { return "event" }
 func (EventKind) Label() string { return "Calendar event" }
 func (EventKind) Doc() string {
-	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (a Font Awesome icon name, like `sun` or `fa-sun`), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to; it may be made earlier in the same paste), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none` and `page: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
+	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers, the start time), `end_hour`, `end_minute` (whole numbers, the end time on the end date; with no `end_year`/`end_month`/`end_day` it ends the same day; `end_hour: none` clears it), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (a Font Awesome icon name, like `sun` or `fa-sun`), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to; it may be made earlier in the same paste), `announced` (when players learn of it, for the owner or a co-DM: `ahead` lets them know before it happens, `on_day` shows it to them only on its day; left out, the category's setting applies), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none`, `page: none` and `announced: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
 		"To repeat, add `repeat:` (" + repeatTypes() + "; `none` on update stops it). The date is the first time. `yearly` repeats on the same month and day; `repeat_every` is the step (years for yearly, months for monthly, weeks for custom, where it is required, every Nth matching day for rule; not for weekly or biweekly). Optional end: `repeat_until_year`/`repeat_until_month`/`repeat_until_day` or `repeat_times`. `repeat: rule` takes `repeat_on`, a list of conditions a day must all meet, each one of: `moon` + `phase` (new, first_quarter, full, last_quarter); `weekday`, optionally with `nth` (1 to 5 or last) in its month; `weekdays` (a list); `day` (of the month, or last); `month`; `months` (a list); `season` (any day in it); `season_start` (a season's first day, or any); `event` (an event already on the calendar), optionally with `days` after it (negative for before). `repeat_offset_days` moves every match. Names are the calendar's own; ask `what: calendar` for them. Naming a repeat on update replaces the event's whole repeat. The calendar already shows every moon's phase on every day, so never add an event that only marks a phase (\"Full moon of Selune\"); a moon rule is for something that happens then, such as a festival.\n\n" + rollDoc + "\n\n" +
 		"```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\nrepeat: yearly\n---\nThe lords of the city open their halls.\n```\n\n```\n---\nkind: event\nname: Night of Wolves\nyear: 1492\nmonth: 1\nday: 1\nrepeat: rule\nrepeat_on:\n  - moon: Selune\n    phase: full\n  - season: Winter\n---\n```"
 }
@@ -125,6 +126,12 @@ func (k EventKind) find(ctx context.Context, campaignID string, a Actor, cal *ca
 }
 
 func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
+	p := k.plan(ctx, campaignID, a, r)
+	p.Warnings = append(p.Warnings, unknownKeyWarnings(r, eventKeys, "event")...)
+	return p
+}
+
+func (k EventKind) plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
 	if r.Name == "" {
 		return Plan{Error: "an event needs a name"}
 	}
@@ -147,14 +154,13 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if derr != nil {
 		return Plan{Error: planError(derr)}
 	}
-	if _, _, _, _, err := readDate(cal, r, "end_"); err != nil {
+	ey, em, ed, ended, err := readDate(cal, r, "end_")
+	if err != nil {
 		return Plan{Error: planError(err)}
 	}
-	// A non-numeric hour or minute would otherwise be read as 0 and saved.
-	for _, key := range []string{"hour", "minute"} {
-		if _, _, err := r.Int(key); err != nil {
-			return Plan{Error: planError(err)}
-		}
+	times, err := readEventTimes(cal, r)
+	if err != nil {
+		return Plan{Error: planError(err)}
 	}
 	my, mm, md, moving, merr := readDate(cal, r, "move_to_")
 	if merr != nil {
@@ -162,6 +168,21 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	}
 	if moving && r.Action != ActionUpdate {
 		return Plan{Error: "move_to_year, move_to_month and move_to_day only apply to action: update"}
+	}
+	if r.Action != ActionDelete {
+		day, stored := calDate{y, m, d}, existing
+		switch {
+		case moving:
+			day = calDate{my, mm, md}
+		case r.Action == ActionUpdate && existing != nil:
+			day = calDate{existing.Year, existing.Month, existing.Day}
+		}
+		if r.Action == ActionCreate {
+			stored = nil
+		}
+		if err := times.order(stored, day, ended, calDate{ey, em, ed}); err != nil {
+			return Plan{Error: planError(err)}
+		}
 	}
 	rep, err := k.repeat(ctx, campaignID, a, cal, r)
 	if err != nil {
@@ -178,7 +199,7 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 		return Plan{Error: planError(err)}
 	}
 	if r.Action == ActionDelete && len(x.labels) > 0 {
-		return Plan{Error: "importance, category and page don't go with action: delete"}
+		return Plan{Error: "importance, category, page and announced don't go with action: delete"}
 	}
 	roll, err := readRoll(ctx, campaignID, a, r, k.Tables)
 	if err != nil {
@@ -286,6 +307,16 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 			mi, _, _ := r.Int("minute")
 			in.StartMinute = &mi
 		}
+		if h, ok, _ := r.Int("end_hour"); ok {
+			in.EndHour = &h
+			mi, _, _ := r.Int("end_minute")
+			in.EndMinute = &mi
+			if !ended {
+				// The event form gives a timed end the start day as its end
+				// date, so the event reads as a span, not a start alone.
+				in.EndYear, in.EndMonth, in.EndDay = &y, &m, &d
+			}
+		}
 		if v, ok := r.Bool("all_day"); ok {
 			in.AllDay = v
 		}
@@ -333,6 +364,21 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	}
 	if mi, ok, _ := r.Int("minute"); ok {
 		in.StartMinute = patch.Of(mi)
+	}
+	if strings.EqualFold(r.Str("end_hour"), pageNone) {
+		in.EndHour, in.EndMinute = patch.Null[int](), patch.Null[int]()
+	} else if h, ok, _ := r.Int("end_hour"); ok {
+		in.EndHour = patch.Of(h)
+		mi, _, _ := r.Int("end_minute")
+		in.EndMinute = patch.Of(mi)
+		if !ended && ev.EndYear == nil {
+			// As on create: a timed end needs an end date, the event's own day.
+			day := calendar.DayDate{Year: ev.Year, Month: ev.Month, Day: ev.Day}
+			if my, mm, md, moving, _ := readDate(cal, r, "move_to_"); moving {
+				day = calendar.DayDate{Year: my, Month: mm, Day: md}
+			}
+			in.EndYear, in.EndMonth, in.EndDay = patch.Of(day.Year), patch.Of(day.Month), patch.Of(day.Day)
+		}
 	}
 	if s := r.Visibility(); s != "" {
 		in.Visibility = patch.Of(s)

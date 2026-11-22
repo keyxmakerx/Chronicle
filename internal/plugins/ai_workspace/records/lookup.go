@@ -40,6 +40,11 @@ type PagesAPI interface {
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
 }
 
+// AliasesAPI reads a page's other names (entities.EntityService).
+type AliasesAPI interface {
+	GetAliases(ctx context.Context, entityID string) ([]entities.EntityAlias, error)
+}
+
 // PageLayoutsAPI is a campaign's named page layouts and the layout each page
 // chose (entities.PageLayoutService).
 type PageLayoutsAPI interface {
@@ -50,7 +55,9 @@ type PageLayoutsAPI interface {
 // SystemEntry is one game-system pick-list entry (an ancestry, a kit…).
 // Status is "" for an accepted entry, or "draft"/"sent" for a player's entry
 // no Director has accepted, which only a Director's lookup lists.
-type SystemEntry struct{ Name, Slug, Source, Summary, Status string }
+// Border and Colour are the card border and colour the entry names, empty when
+// it names no border in the library.
+type SystemEntry struct{ Name, Slug, Source, Summary, Status, Border, Colour string }
 
 // SystemEntriesAPI lists the campaign system's entries for one character
 // field, package and campaign-made alike. director includes entries kept
@@ -82,8 +89,10 @@ type Party struct {
 // PartyHero is one claimed character with the meters its system declares.
 type PartyHero struct {
 	ID, Name, Player, Subtitle string
-	Meters                     []PartyMeter
-	Conditions                 []string
+	// Level is "" when the sheet has none.
+	Level      string
+	Meters     []PartyMeter
+	Conditions []string
 }
 
 // PartyMeter is one number on a hero; Max is "" when it has none.
@@ -131,6 +140,9 @@ type Lookups struct {
 	// Folders names the sidebar folders so pages show which one holds them;
 	// nil leaves folders out.
 	Folders aiexport.FolderNamer
+	// Aliases adds a page's other names to the `page` answer; nil leaves
+	// them out.
+	Aliases AliasesAPI
 	// Quests adds a page's quest notice and notice boards to the `page`
 	// answer for a Director; nil leaves them out.
 	Quests QuestsAPI
@@ -166,6 +178,9 @@ type Lookups struct {
 	// enchanted, who made them) to the `inventory` and `players` answers;
 	// nil leaves every count plain.
 	Copies CopiesAPI
+	// Pay says whether the campaign's heroes pay by Wealth, so the `stock`
+	// answer names a price as the Wealth level it is; nil reads coins.
+	Pay ShopPayAPI
 	// Homes answers `what: home`, for the campaign's owner only; nil says it
 	// can't be looked up.
 	Homes *HomeKind
@@ -911,6 +926,7 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	md = strings.Replace(md, "### ", "## Page: ", 1)
 	md = strings.Replace(md, " {#"+anchorOf(md)+"}", "", 1)
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
+	md += pageImageText(e) + run.pageAliasText(e)
 	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
 	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
 	md += run.pageQuestText(e)
@@ -918,6 +934,35 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
+}
+
+// pageImageText says whether the page has a picture and a cover, never where
+// the files are: an AI can't open them, and a path is not its to know.
+func pageImageText(e *entities.Entity) string {
+	yn := func(p *string) string {
+		if p != nil && strings.TrimSpace(*p) != "" {
+			return "yes"
+		}
+		return "no"
+	}
+	return "\n\nPicture: " + yn(e.ImagePath) + "\nCover: " + yn(e.CoverImagePath)
+}
+
+// pageAliasText lists the page's other names. It runs only for a page the
+// Actor can already see, so an alias never outlives the page's own sight rule.
+func (run *lookupRun) pageAliasText(e *entities.Entity) string {
+	if run.l.Aliases == nil {
+		return ""
+	}
+	list, err := run.l.Aliases.GetAliases(run.ctx, e.ID)
+	if err != nil || len(list) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(list))
+	for _, a := range list {
+		names = append(names, oneLine(a.Alias, 80))
+	}
+	return "\nOther names: " + strings.Join(names, ", ")
 }
 
 // pageQuestText is the page's quest notice and the notice boards hanging on
@@ -1011,12 +1056,13 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	} else {
 		shelf = run.shelf(e)
 	}
+	wealth := relType == "sells" && run.l.Pay != nil && run.l.Pay.PaysByWealth(run.ctx, run.campaignID)
 	var lines []string
 	for _, r := range rels {
 		if r.RelationType != relType {
 			continue
 		}
-		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells")+copiesNote(rem, r.TargetEntityID)+shelfNote(shelf, r.ID))
+		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells", wealth)+copiesNote(rem, r.TargetEntityID)+shelfNote(shelf, r.ID))
 	}
 	ans.Chip = fmt.Sprintf("%s · %s · %d", label, e.Name, len(lines))
 	var b strings.Builder
@@ -1027,6 +1073,8 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	}
 	if len(lines) == 0 {
 		b.WriteString("Nothing yet.\n")
+	} else if wealth {
+		b.WriteString("Prices are Wealth levels: a hero can buy a good when their Wealth is at least its price, and nothing is spent.\n\n")
 	}
 	if shelf != nil && len(shelf.Pool) > 0 {
 		b.WriteString(shelfHead(shelf))
@@ -1069,8 +1117,9 @@ func (run *lookupRun) shopLooks(b *strings.Builder, e *entities.Entity) {
 }
 
 // linkMeta renders a stock or inventory link's numbers: ": 1 gp, 5 in
-// stock" or " x2 (notes)".
-func linkMeta(raw []byte, shop bool) string {
+// stock" or " x2 (notes)". wealth names a shop price as the Wealth level it
+// is, leaving out the currency the game does not use.
+func linkMeta(raw []byte, shop, wealth bool) string {
 	m := decodeMeta(raw)
 	num := func(k string) (string, bool) {
 		v, ok := m[k]
@@ -1084,7 +1133,9 @@ func linkMeta(raw []byte, shop bool) string {
 	}
 	if shop {
 		var parts []string
-		if p, ok := num("price"); ok {
+		if p, ok := num("price"); ok && wealth {
+			parts = append(parts, "Wealth "+p)
+		} else if ok {
 			cur := "gp"
 			if c, ok := m["currency"].(string); ok && c != "" {
 				cur = c
@@ -1354,6 +1405,9 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 		case "draft":
 			line += ", a player's draft, not accepted yet"
 		}
+		if e.Border != "" {
+			line += ", card border " + e.Border + " in " + e.Colour
+		}
 		if s := strings.TrimSpace(e.Summary); s != "" {
 			line += ": " + oneLine(s, 140)
 		}
@@ -1438,6 +1492,9 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 			line += " (" + h.Player + ")"
 		}
 		var parts []string
+		if h.Level != "" {
+			parts = append(parts, "Level "+h.Level)
+		}
 		if h.Subtitle != "" {
 			parts = append(parts, h.Subtitle)
 		}
@@ -1498,7 +1555,7 @@ func (run *lookupRun) carried(id string) string {
 		var items []string
 		for _, r := range rels {
 			if r.RelationType == "Has Item" {
-				items = append(items, r.TargetEntityName+linkMeta(r.Metadata, false)+copiesNote(rem, r.TargetEntityID))
+				items = append(items, r.TargetEntityName+linkMeta(r.Metadata, false, false)+copiesNote(rem, r.TargetEntityID))
 			}
 		}
 		if len(items) > 12 {

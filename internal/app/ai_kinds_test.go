@@ -69,12 +69,12 @@ func TestAIKindsPromptOrder(t *testing.T) {
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
 				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home layout category-home saved-layout page-template material recipe drops bench deck card shop-room storefront page-map generator",
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home look layout category-home saved-layout page-template material recipe drops bench deck card shop-room storefront page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
 			deps: aiDeps{Health: degraded},
-			want: "calendar event weather shop-stock carried-item pin map hex-map note house-rule system-entry category-field folder game-night tag menu-order home layout category-home generator",
+			want: "calendar event weather shop-stock carried-item pin map hex-map note house-rule system-entry category-field folder game-night tag menu-order home look layout category-home generator",
 		},
 	}
 	for _, tt := range tests {
@@ -116,4 +116,18 @@ func TestAIKindDocsHoldNoSectionHeadings(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The campaign's look is answered as a lookup and offered as an owner-only
+// tool, beside the block that writes it.
+func TestAIPluggedLookupsIncludeTheLook(t *testing.T) {
+	for _, l := range newAIDeps(aiDeps{}).plugged() {
+		if in := l.LookupInfo(); in.What == "campaign-look" {
+			if in.Tool.Name != "campaign_look" || !in.Tool.Owner {
+				t.Errorf("tool = %+v, want campaign_look, owner only", in.Tool)
+			}
+			return
+		}
+	}
+	t.Error("the campaign's look is not a plugged lookup")
 }

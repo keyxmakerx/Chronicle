@@ -240,3 +240,43 @@ func TestChanges_CarriedParts(t *testing.T) {
 		t.Fatalf("line = %q", line)
 	}
 }
+
+// A card border must be a library key and a card colour six hex digits; the
+// refusal names the valid keys.
+func TestValidateEntryProperties_CardLook(t *testing.T) {
+	tests := []struct {
+		name    string
+		p       map[string]any
+		wantErr string
+	}{
+		{"good pair", map[string]any{"card_border": "fire", "card_colour": "#d9622b"}, ""},
+		{"upper-case colour", map[string]any{"card_border": "ice", "card_colour": "#8FD8FF"}, ""},
+		{"border alone", map[string]any{"card_border": "vine"}, ""},
+		{"unknown border", map[string]any{"card_border": "lava"}, "carved-stone"},
+		{"border of the wrong type", map[string]any{"card_border": 3.0}, "must be one of"},
+		{"empty border", map[string]any{"card_border": ""}, "must be one of"},
+		{"short colour", map[string]any{"card_colour": "#fff"}, "six hex digits"},
+		{"colour without hash", map[string]any{"card_colour": "d9622b"}, "six hex digits"},
+		{"colour of the wrong type", map[string]any{"card_colour": 255.0}, "six hex digits"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEntryProperties(tt.p)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("refused: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
+			}
+			if tt.name == "unknown border" && !strings.Contains(err.Error(), "vine") {
+				t.Errorf("the refusal should list every key: %v", err)
+			}
+		})
+	}
+	if g := CardBorderGuide(); !strings.Contains(g, "thorn-glass (Thorn glass)") || !strings.Contains(g, "card_colour") {
+		t.Errorf("guide lacks a border or the colour property: %s", g)
+	}
+}

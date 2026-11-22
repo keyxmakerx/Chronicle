@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -61,13 +62,38 @@ func (a heroPlannerAdapter) VisitorPlan(ctx context.Context, campaignID string) 
 func heroChoices(in []systems.Choice) []entities.HeroChoice {
 	out := make([]entities.HeroChoice, 0, len(in))
 	for _, c := range in {
+		props, look := heroLook(c.Properties)
 		out = append(out, entities.HeroChoice{
 			Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
-			Description: c.Description, Properties: c.Properties,
+			Description: c.Description, Properties: props, Look: look,
 			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State, Parent: c.Parent,
 		})
 	}
 	return out
+}
+
+// heroLook lifts the card border an entry names out of its properties. The
+// properties it returns never hold the two border keys, so the creator does
+// not list them as facts; they are a copy, because the entry's own map is
+// shared and cached. An entry that names no (valid) border still loses the
+// two keys and gets no look.
+func heroLook(in map[string]any) (map[string]any, *entities.HeroLook) {
+	_, hasBorder := in[cardborders.PropBorder]
+	_, hasColour := in[cardborders.PropColour]
+	if !hasBorder && !hasColour {
+		return in, nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if k != cardborders.PropBorder && k != cardborders.PropColour {
+			out[k] = v
+		}
+	}
+	l, ok := cardborders.LookFrom(in)
+	if !ok {
+		return out, nil
+	}
+	return out, &entities.HeroLook{Border: l.Border, Colour: l.Colour}
 }
 
 func heroCounts(in []systems.CreatorCount) []entities.HeroCount {
@@ -120,4 +146,27 @@ func (a heroTermsAdapter) HeroTerms(ctx context.Context, campaignID string) (*en
 		out.Terms[k] = entities.HeroTerm{Name: v.Name, Category: v.Category, Text: v.Text}
 	}
 	return out, nil
+}
+
+// heroPickChecker gives AI Import's review the hero creator's check of a
+// hero's pick-list values, over the same plan the creator draws, so the
+// review and the creator cannot disagree on what is on a list.
+type heroPickChecker struct {
+	planner entities.HeroPlanner
+}
+
+// HeroPickWarnings is words for each written field that is off the list. A
+// Director is checked against the whole list, the hero-choice rules not
+// applied: the owner is reviewing what the AI proposed, not playing the
+// creator. Anyone else gets the plan their own account would see. A plan
+// that can't be read gives no warning.
+func (c heroPickChecker) HeroPickWarnings(ctx context.Context, campaignID, userID string, director bool, fields map[string]any, written []string) []string {
+	if director {
+		ctx = entities.WithUnlimitedPlan(ctx)
+	}
+	plan, err := c.planner.HeroPlan(ctx, campaignID, userID, director)
+	if err != nil {
+		return nil
+	}
+	return entities.HeroFieldWarnings(plan, fields, written)
 }

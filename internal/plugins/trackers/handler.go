@@ -37,12 +37,18 @@ func viewerFrom(c *echo.Context) (string, Viewer, error) {
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
 	}
-	return cc.Campaign.ID, Viewer{
-		UserID:         auth.GetUserID(c),
+	return cc.Campaign.ID, ViewerFor(cc, auth.GetUserID(c)), nil
+}
+
+// ViewerFor is who is looking, as every tracker route reads them, so a page
+// that asks the service outside a route applies the same rule.
+func ViewerFor(cc *campaigns.CampaignContext, userID string) Viewer {
+	return Viewer{
+		UserID:         userID,
 		MemberRole:     int(cc.MemberRole),
 		VisibilityRole: cc.VisibilityRole(),
 		Director:       cc.CanAuthorDmOnly(),
-	}, nil
+	}
 }
 
 // bind reads a JSON body of at most MaxBodyBytes into dst.
