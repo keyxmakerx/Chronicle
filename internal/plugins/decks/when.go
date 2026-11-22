@@ -305,6 +305,16 @@ func (s *service) BrokenTests(ctx context.Context, campaignID string, d Deck, te
 	return out
 }
 
+// SayWhen is the sentence writer as a service call, so a reader of tests that
+// has no card yet (the AI's review of a card it is about to add) says them in
+// the editor's words instead of keeping a second writer.
+func (s *service) SayWhen(ctx context.Context, campaignID string, d Deck, v Viewer, tests []WhenTest) ([]WhenView, error) {
+	if err := directorOnly(v); err != nil {
+		return nil, err
+	}
+	return s.viewsWith(s.newNamer(ctx, campaignID, d, v), s.newTestChecker(ctx, campaignID, d), tests), nil
+}
+
 // errCannotCheck marks a test that could not be checked for a reason that is
 // not the Director's: the facts are not wired or cannot be read.
 var errCannotCheck = errors.New("the facts cannot be read")

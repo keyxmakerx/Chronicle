@@ -9,6 +9,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
@@ -29,16 +30,20 @@ func TestAIFeatureGate(t *testing.T) {
 		sw   fakeAddonSwitch
 		want map[string]string
 	}{
-		{"all on", fakeAddonSwitch{on: map[string]bool{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true, crafting.AddonSlug: true, armory.AddonSlug: true, transformations.AddonSlug: true}}, map[string]string{}},
+		{"all on", fakeAddonSwitch{on: map[string]bool{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true, crafting.AddonSlug: true, armory.AddonSlug: true, transformations.AddonSlug: true, decks.AddonSlug: true}}, map[string]string{}},
 		{"new campaign", fakeAddonSwitch{on: map[string]bool{}}, map[string]string{
 			records.KindCalendar: "Calendar", "event": "Calendar", "weather": "Calendar", "roll-night": "Calendar", "moon": "Calendar",
 			"game-night": "Game nights", "map": "Maps", "hex-map": "Maps", "pin": "Maps", records.KindPlayerNote: "Player Notes",
 			"recipe": "Crafting", "material": "Crafting", "drops": "Crafting", "bench": "Crafting",
 			"shop-room": "Armory", "storefront": "Armory", "item-look": "Armory", "layer": "Transformations",
+			"deck": "Card decks", "card": "Card decks",
 		}},
-		{"calendar off, game nights on", fakeAddonSwitch{on: map[string]bool{sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true, crafting.AddonSlug: true, armory.AddonSlug: true, transformations.AddonSlug: true}}, map[string]string{
+		{"calendar off, game nights on", fakeAddonSwitch{on: map[string]bool{sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true, crafting.AddonSlug: true, armory.AddonSlug: true, transformations.AddonSlug: true, decks.AddonSlug: true}}, map[string]string{
 			records.KindCalendar: "Calendar", "event": "Calendar", "weather": "Calendar", "roll-night": "Calendar", "moon": "Calendar",
 			"game-night": "Calendar",
+		}},
+		{"card decks off, everything else on", fakeAddonSwitch{on: map[string]bool{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true, crafting.AddonSlug: true, armory.AddonSlug: true, transformations.AddonSlug: true}}, map[string]string{
+			"deck": "Card decks", "card": "Card decks",
 		}},
 		{"lookup fails", fakeAddonSwitch{err: errors.New("db down")}, map[string]string{}},
 	}

@@ -7118,7 +7118,11 @@ func (a *App) RegisterRoutes() {
 			{Name: "deck-hand", Scripts: []string{"js/deck_cards.js", "js/deck_hand.js"}},
 		},
 	})
+	// aiDecks stays nil while the plugin is degraded, so its AI part is left
+	// out then, as the transformations' is.
+	var aiDecks decks.Service
 	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
+		aiDecks = decksSvc
 		decks.RegisterRoutes(e, decks.NewHandler(decksSvc), campaignService, authService, addonService)
 		// Only a healthy plugin is rechecked: without its tables the watcher's
 		// pokes do nothing.
@@ -7300,6 +7304,7 @@ func (a *App) RegisterRoutes() {
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 		Designs:         aiDesigns,
 		Layers:          layersSvc,
+		Decks:           aiDecks,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

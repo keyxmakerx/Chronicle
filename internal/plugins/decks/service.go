@@ -53,6 +53,10 @@ type Service interface {
 	// BrokenTests says which tests of a stored list name something that no
 	// longer exists.
 	BrokenTests(ctx context.Context, campaignID string, d Deck, tests []WhenTest) []bool
+	// SayWhen says each test in words, with whether every name in it still
+	// resolves, using the sentence writer the editor and the notice use.
+	// Directors only: a test may name a tag or layer no player can read.
+	SayWhen(ctx context.Context, campaignID string, d Deck, v Viewer, tests []WhenTest) ([]WhenView, error)
 
 	// Moments lists the campaign's open moments for a Director. It looks again
 	// first when nothing has looked in the last few seconds.
