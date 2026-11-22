@@ -82,29 +82,33 @@ func actionLabel(action string) string {
 	}
 }
 
-// actionAreas names what an action without words of its own changed, by the
-// part of its key before the dot.
+// actionArea is the part of an action key before the dot.
+func actionArea(action string) string {
+	area, _, _ := strings.Cut(action, ".")
+	return area
+}
+
+// actionAreas names what an action without words of its own changed, by its
+// area. Areas with action constants take them from those, so another
+// plugin's name is never written out here.
 var actionAreas = map[string]string{
-	"calendar":    "changed the calendar",
-	"timeline":    "changed timeline",
-	"entity":      "changed",
-	"entity_type": "changed category",
-	"group":       "changed group",
-	"member":      "changed who is in the campaign",
-	"campaign":    "changed the campaign",
-	"trash":       "changed the Trash",
-	"tag":         "changed tags on",
-	"note":        "changed a note",
-	"map":         "changed map",
-	"guest":       "changed guest access",
-	"item":        "changed item",
+	actionArea(ActionCalendarCreated):   "changed the calendar",
+	actionArea(ActionTimelineCreated):   "changed timeline",
+	actionArea(ActionEntityCreated):     "changed",
+	actionArea(ActionEntityTypeCreated): "changed category",
+	actionArea(ActionMemberJoined):      "changed who is in the campaign",
+	actionArea(ActionCampaignUpdated):   "changed the campaign",
+	actionArea(ActionTrashRestored):     "changed the Trash",
+	actionArea(ActionTagCreated):        "changed tags on",
+	actionArea(ActionItemShared):        "changed item",
+	"group":                             "changed group",
+	"guest":                             "changed guest access",
 }
 
 // actionFallback keeps a key the log has no words for out of the page: it
 // says what area changed, or only that something did, never the raw key.
 func actionFallback(action string) string {
-	area, _, _ := strings.Cut(action, ".")
-	if words, ok := actionAreas[area]; ok {
+	if words, ok := actionAreas[actionArea(action)]; ok {
 		return words
 	}
 	return "made a change"
