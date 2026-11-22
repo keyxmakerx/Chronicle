@@ -297,6 +297,11 @@ type CalendarService interface {
 	// its route already requires campaigns.CanAuthorDmOnly, but the check
 	// is repeated here (v.SkipsPerUserRules()) rather than trusted blindly.
 	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
+	// ListPassedEvents lists what the calendar asks about when today moves
+	// from from to to (event_outcome.go), filtered for v like a month read.
+	ListPassedEvents(ctx context.Context, calendarID, campaignID string, from, to DayDate, v permissions.Viewer) (*PassedEvents, error)
+	// SetAskWhenDayPasses turns that question on or off for the calendar.
+	SetAskWhenDayPasses(ctx context.Context, calendarID, campaignID string, ask bool) error
 
 	// Repeat rules and "this one only" (service_recurrence.go). The override
 	// writes are gated like editing the event (Scribe+ at the route, the
@@ -1656,6 +1661,11 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 		Icon:                     ee.Icon,
 		AllDay:                   ee.AllDay,
 		Payload:                  ee.Payload,
+		Status:                   ee.Status,
+		Outcome:                  ee.Outcome,
+	}
+	if ee.MovedFromYear != nil && ee.MovedFromMonth != nil && ee.MovedFromDay != nil {
+		input.MovedFrom = &DayDate{Year: *ee.MovedFromYear, Month: *ee.MovedFromMonth, Day: *ee.MovedFromDay}
 	}
 
 	rules.prepare(&input, ee, ir)
@@ -1914,6 +1924,9 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 		AllDay:                   input.AllDay,
 		Payload:                  input.Payload,
 		CreatedBy:                createdBy,
+	}
+	if err := buildEventStatus(evt, input); err != nil {
+		return nil, err
 	}
 	return evt, nil
 }
@@ -2354,6 +2367,7 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 func (s *calendarService) mergeEventUpdate(ctx context.Context, cal *Calendar, evt *Event, campaignID string, input UpdateEventInput, v permissions.Viewer) error {
 	calendarID := cal.ID
 	var err error
+	was := DayDate{Year: evt.Year, Month: evt.Month, Day: evt.Day}
 
 	name := input.Name.Val(evt.Name)
 	if name == "" {
@@ -2467,6 +2481,9 @@ func (s *calendarService) mergeEventUpdate(ctx context.Context, cal *Calendar, e
 		return err
 	}
 	if err := s.validateEventRule(ctx, calendarID, campaignID, evt.ID, evt, recheckRule, v); err != nil {
+		return err
+	}
+	if err := mergeEventStatus(evt, was, input); err != nil {
 		return err
 	}
 	evt.Visibility = visibility

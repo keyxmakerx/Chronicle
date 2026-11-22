@@ -1,0 +1,49 @@
+// calendar_day_passes.templ renders Calendar settings' "When a day passes"
+// part: the switch for the sheet that asks what became of the events on the
+// days the Director moves today past. A single switch, so it saves the
+// moment it changes and confirms in place, apart from the structure form
+// above it, which saves only after a preview.
+package calendar
+
+import "fmt"
+
+// dayPassesPartID is the part's anchor, so a link can land on it.
+const dayPassesPartID = "day-passes"
+
+templ dayPassesPart(data StructureEditData) {
+	<section id={ dayPassesPartID } class="calv5-panel wide page calv5-daypass" aria-labelledby="calv5-daypass-h">
+		<div class="calv5-body">
+			<h2 class="calv5-wz-h" id="calv5-daypass-h" tabindex="-1">When a day passes</h2>
+			<p class="calv5-wz-lead">When you move today in { data.Calendar.Name } past events, the calendar can ask what became of each one: it happened, it didn’t, or it moved to another day, with a line on what happened if you like.</p>
+			@dayPassesSwitch(data.CampaignID, data.Calendar.ID, data.Calendar.AskWhenDayPasses, false)
+		</div>
+	</section>
+}
+
+// dayPassesSwitch is the switch alone, also the answer to its save, so the
+// part swaps in place with Saved beside it.
+templ dayPassesSwitch(campaignID, calendarID string, ask, saved bool) {
+	<form
+		class="calv5-daypass-form"
+		hx-put={ fmt.Sprintf("/campaigns/%s/calendars/%s/day-passes", campaignID, calendarID) }
+		hx-trigger="change"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<input type="hidden" name="ask_sent" value="1"/>
+		<label class="calv5-toggle-row">
+			<input type="checkbox" role="switch" name="ask" value="on" checked?={ ask } aria-describedby="calv5-daypass-hint"/>
+			<span>Ask what became of events when their day passes</span>
+			if saved {
+				<span class="calv5-saved" role="status"><i class="fa-solid fa-check" aria-hidden="true"></i>Saved</span>
+			}
+		</label>
+		<p id="calv5-daypass-hint" class="calv5-wx-hint">
+			if ask {
+				“Not now” leaves them unanswered, and an unanswered event reads as happened. You can still change any event from its card.
+			} else {
+				Off, nothing asks: events read as happened once their day passes, and you change one from its card.
+			}
+		</p>
+	</form>
+}

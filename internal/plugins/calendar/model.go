@@ -160,6 +160,10 @@ type Calendar struct {
 	// switch — every weekday placement (recurrence display, a future grid
 	// column) goes through it, so the two can never disagree.
 	MonthStartsNewWeek bool `json:"month_starts_new_week"`
+	// AskWhenDayPasses opens the sheet that asks what became of the events
+	// on the days the Director moves today past (event_outcome.go). On by
+	// default; the owner turns it off in Calendar settings.
+	AskWhenDayPasses bool `json:"ask_when_day_passes"`
 	// Per-calendar visibility, mirroring the event model: Visibility is
 	// "everyone" | "dm_only"; VisibilityRules is the optional
 	// {allowed_users,denied_users} JSON allow/deny override. Resolved by
@@ -1273,10 +1277,23 @@ type Event struct {
 	// event — a moon night, a sky event — so a new one doesn't need another
 	// migration. Raw JSON text, parsed on demand via ParsePayload; nil means
 	// no payload. See MoonNightPayload for the one currently-defined shape.
-	Payload   *string   `json:"payload,omitempty"`
-	CreatedBy *string   `json:"created_by,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Payload *string `json:"payload,omitempty"`
+	// Status is what became of the event (EventStatus*): planned until
+	// someone says otherwise, and an unanswered past event reads as
+	// happened. It belongs to a one-off event; a repeating event answers
+	// each date with a skip or move override instead.
+	Status string `json:"status"`
+	// Outcome is the line on what happened, plain text; nil for none. It is
+	// part of the event, so whoever sees the event sees it.
+	Outcome *string `json:"outcome,omitempty"`
+	// MovedFrom* is the day a moved event was planned for, so the calendar
+	// keeps a dashed mark there; nil unless Status is EventStatusMoved.
+	MovedFromYear  *int      `json:"moved_from_year,omitempty"`
+	MovedFromMonth *int      `json:"moved_from_month,omitempty"`
+	MovedFromDay   *int      `json:"moved_from_day,omitempty"`
+	CreatedBy      *string   `json:"created_by,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 
 	// Joined fields for display (populated by some queries).
 	EntityName  string `json:"entity_name,omitempty"`
@@ -1592,6 +1609,11 @@ type CreateEventInput struct {
 	AllDay    bool
 	Payload   *string
 	CreatedBy string
+	// Status, Outcome and MovedFrom restore what became of an event from a
+	// campaign backup; every other caller leaves them zero (planned).
+	Status    string
+	Outcome   *string
+	MovedFrom *DayDate
 	// CanAuthorDmOnly is set by the handler from the request viewer
 	// (v.SkipsPerUserRules(), true for an Owner or a granted co-DM) before
 	// this reaches the service: CreateEvent has no stored row to compare a
@@ -1648,6 +1670,10 @@ type UpdateEventInput struct {
 	Icon    patch.Field[string]
 	AllDay  patch.Field[bool]
 	Payload patch.Field[string]
+	// Status and Outcome say what became of the event; see
+	// mergeEventStatus for how a move keeps the day it was planned for.
+	Status  patch.Field[string]
+	Outcome patch.Field[string]
 }
 
 // MonthInput is the input for creating/updating a month.

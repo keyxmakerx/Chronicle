@@ -227,14 +227,14 @@ its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024) |
+| `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024); `ask_when_day_passes` (migration 031) |
 | `calendar_months`, `calendar_weekdays` | The year's shape | `sort_order`; months carry `is_intercalary`, `leap_year_days`; weekdays `is_rest_day` |
 | `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`, `lore_entity_id` (migration 026), `phase_mode` `cycle`/`manual`, `state_names` JSON; migration 029) and seasons (start/end month and day) | per calendar, FK CASCADE |
 | `calendar_moon_marks` | Days the Director set a manual moon's state; a mark holds until the next | PK `(moon_id, year, month, day)`; `state`; `shown` (players see it); FK→`calendar_moons` CASCADE |
 | `calendar_eras` | Named stretches of years | `start_*`/`end_*`; look: `color`, `color_2`, `style`, `feel`; `lore_entity_id`, `dm_note`, `hidden_until_begins` (migration 024) |
 | `calendar_cycles`, `calendar_cycle_entries`, `calendar_festivals` | Repeating year-cycles and their entries; named festival days | `cycle_length`; festival `month`/`day` or `after_month` |
 | `calendar_event_kinds` | Per-campaign kinds of event (name, icon, colour, default announcement) | `UNIQUE`-slug per `campaign_id` |
-| `calendar_events` | Events | `kind_id`, `announced`, `payload` JSON; `recurrence_rule` JSON, the "repeats by rule" shape (migration 022) |
+| `calendar_events` | Events | `kind_id`, `announced`, `payload` JSON; `recurrence_rule` JSON, the "repeats by rule" shape (migration 022); what became of it: `status` (`planned`/`happened`/`moved`/`called_off`), `outcome` (the line on what happened), `moved_from_year/month/day` (migration 031) |
 | `calendar_event_overrides` | Skip or move one occurrence of a repeating event | PK `(event_id, occurrence_year, occurrence_month, occurrence_day)`; `action` enum(`skip`,`move`) with `new_*` date |
 | `calendar_event_rolls` | An event that rolls when it happens | PK `event_id`; `config` JSON (dice or rolling table, result bands, roll-on-arrival), validated in the service; FK→`calendar_events` CASCADE |
 | `calendar_event_roll_nights` | One stored result per occurrence date | PK `(event_id, year, month, day)`; `total`/`faces` (dice) or `entry` (a table's entry, or a dice result's name the Director picked); `source`; `locked` keeps a re-roll from replacing it; `told` NULL = follow the result's own setting |

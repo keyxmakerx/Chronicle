@@ -740,6 +740,19 @@ func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) er
 			meta = append(meta, "Page: "+e.EntityName)
 		}
 	}
+	// What became of the event belongs to the event, so it is in both
+	// modes; a planned event says nothing, as before.
+	switch e.Status {
+	case calendar.EventStatusHappened:
+		meta = append(meta, "Status: happened")
+	case calendar.EventStatusCalledOff:
+		meta = append(meta, "Status: called off")
+	case calendar.EventStatusMoved:
+		meta = append(meta, "Status: moved")
+	}
+	if e.Outcome != nil && *e.Outcome != "" {
+		meta = append(meta, "What happened: "+*e.Outcome)
+	}
 	if len(meta) > 0 {
 		b.WriteString(strings.Join(meta, " · "))
 		b.WriteString("\n\n")

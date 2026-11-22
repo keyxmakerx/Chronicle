@@ -201,6 +201,13 @@ type ExportEvent struct {
 	// the exporting calendar's moon, season and event ids.
 	Ref            string          `json:"ref,omitempty"`
 	RecurrenceRule json.RawMessage `json:"recurrence_rule,omitempty"`
+	// Status, Outcome and MovedFrom* carry what became of the event; a file
+	// without them reads as planned.
+	Status         string  `json:"status,omitempty"`
+	Outcome        *string `json:"outcome,omitempty"`
+	MovedFromYear  *int    `json:"moved_from_year,omitempty"`
+	MovedFromMonth *int    `json:"moved_from_month,omitempty"`
+	MovedFromDay   *int    `json:"moved_from_day,omitempty"`
 }
 
 // BuildExport creates a ChronicleExport from a fully-loaded Calendar and
@@ -374,6 +381,11 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 				Payload:                  evt.Payload,
 				Ref:                      evt.ID,
 				RecurrenceRule:           rule,
+				Status:                   exportedStatus(evt.Status),
+				Outcome:                  evt.Outcome,
+				MovedFromYear:            evt.MovedFromYear,
+				MovedFromMonth:           evt.MovedFromMonth,
+				MovedFromDay:             evt.MovedFromDay,
 			})
 		}
 	}
@@ -389,4 +401,13 @@ func nonEmptyPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// exportedStatus leaves a planned event's status out of the file, so an
+// export of a calendar nobody has answered reads as it always did.
+func exportedStatus(s string) string {
+	if storedStatus(s) == EventStatusPlanned {
+		return ""
+	}
+	return s
 }

@@ -447,6 +447,8 @@ type updateEventRequest struct {
 	Icon                     patch.Field[string]          `json:"icon"`
 	AllDay                   patch.Field[bool]            `json:"all_day"`
 	Payload                  patch.Field[string]          `json:"payload"`
+	Status                   patch.Field[string]          `json:"status"`
+	Outcome                  patch.Field[string]          `json:"outcome"`
 }
 
 // UpdateEventAPI applies a partial update to an event. Scribe+; the service

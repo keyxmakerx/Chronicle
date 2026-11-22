@@ -9,6 +9,7 @@ package calendar
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -58,7 +59,7 @@ templ PageTimelineBlock(campaignID string, t *PageTimeline, canAuthor bool) {
 						for i, e := range t.Events {
 							<li style={ fmt.Sprintf("left:%.2f%%;--i:%d", t.Percent(e.Abs), i) } data-ptl-at={ fmt.Sprintf("%.3f", t.Percent(e.Abs)) } data-ptl-year={ fmt.Sprintf("%d", e.Year) }>
 								<a
-									class={ "ptl-ev", templ.KV("ptl-ev--dm cb-dm", e.DMOnly), templ.KV("ptl-ev--later", t.Later(e)), templ.KV("ptl-ev--death", e.Death) }
+									class={ "ptl-ev", templ.KV("ptl-ev--dm cb-dm", e.DMOnly), templ.KV("ptl-ev--later", t.Later(e)), templ.KV("ptl-ev--death", e.Death), templ.KV("ptl-ev--off", e.Status == EventStatusCalledOff) }
 									href={ templ.SafeURL(pageTimelineEventURL(campaignID, t.CalendarID, e)) }
 									aria-label={ pageTimelineEventLabel(ctx, e) }
 									data-ptl-name={ e.Name }
@@ -73,6 +74,12 @@ templ PageTimelineBlock(campaignID string, t *PageTimeline, canAuthor bool) {
 									}
 									if e.Repeats {
 										data-ptl-repeats
+									}
+									if w := e.StatusWord(); w != "" {
+										data-ptl-status={ w }
+									}
+									if e.Outcome != "" {
+										data-ptl-outcome={ e.Outcome }
 									}
 								>
 									if e.Labelled {
@@ -113,6 +120,9 @@ func pageTimelineEventLabel(ctx context.Context, e PageTimelineEvent) string {
 		s += " to " + e.EndLabel
 	}
 	s += ": " + e.Name
+	if w := e.StatusWord(); w != "" {
+		s += ", " + strings.ToLower(w)
+	}
 	if e.DMOnly {
 		s += " (" + layouts.GMTerm(ctx) + " only)"
 	}

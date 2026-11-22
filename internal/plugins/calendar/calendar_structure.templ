@@ -99,6 +99,9 @@ templ StructureEditFragment(data StructureEditData) {
 			</div>
 			<div id={ structurePreviewSlot } class="calv5-structure-preview" aria-live="polite"></div>
 			@eraLookPart(data)
+			if !data.RealTime {
+				@dayPassesPart(data)
+			}
 		</div>
 	</div>
 }

@@ -19,6 +19,7 @@ var monthPositionColumns = []struct{ table, column string }{
 	{"calendar_events", "month"},
 	{"calendar_events", "end_month"},
 	{"calendar_events", "recurrence_end_month"},
+	{"calendar_events", "moved_from_month"},
 	{"calendar_eras", "start_month"},
 	{"calendar_eras", "end_month"},
 }

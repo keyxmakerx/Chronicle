@@ -712,6 +712,23 @@
     return e.icon || e.kind_icon || '●';
   }
 
+  // What became of an event (the server's EventStatus*). An event nobody
+  // answered is planned, and reads as happened once its day has passed, so
+  // planned draws nothing new. Every state is a word and a mark, never a
+  // colour alone.
+  var STATUS_WORD = { happened: 'Happened', moved: 'Moved', called_off: 'Called off' };
+  var STATUS_ICON = { happened: 'fa-check', moved: 'fa-arrow-right', called_off: 'fa-xmark' };
+  function evStatus(e) { return (e && e.status) || 'planned'; }
+  function movedFromOf(e) {
+    if (!e || evStatus(e) !== 'moved' || e.moved_from_year == null || e.moved_from_month == null || e.moved_from_day == null) return null;
+    return { y: e.moved_from_year, m: e.moved_from_month, d: e.moved_from_day };
+  }
+  function statusPillHTML(e, tail) {
+    var st = evStatus(e);
+    if (!STATUS_WORD[st]) return '';
+    return '<span class="evst ' + st + '"><i class="fa-solid ' + STATUS_ICON[st] + '" aria-hidden="true"></i>' + esc(STATUS_WORD[st] + (tail || '')) + '</span>';
+  }
+
   // An icon is stored either as a short glyph (an emoji, as the default
   // kinds use) or as a Font Awesome class name, which imports and the AI
   // page write. A class name printed as text shows as "fa-scroll", so it
@@ -1478,6 +1495,7 @@
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
       this.skyRailSrc = config.skyRailSrc; // calendar_sky_rail.js, loaded only for the owner's sky controls
       this.yearTrackSrc = config.yearTrackSrc; // calendar_year_track.js, loaded only when an editor opens Edit
+      this.dayPassesSrc = config.dayPassesSrc; // calendar_day_passes.js, loaded the first time today moves past events
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -1555,6 +1573,7 @@
     },
 
     destroy: function (el) {
+      if (this._passes) this._passes.destroy();
       if (this.eraField) this.eraField.destroy();
       if (this._eraRO) this._eraRO.disconnect();
       // boot.js reuses this one object for every mount, so a remount must
@@ -4806,6 +4825,16 @@
       return this._occurringOn(this.eventsFor(y, m), y, m, d);
     },
 
+    // The events moved away from (y,m,d): the month read brings them in
+    // even when their new day is in another month, so the day they were
+    // planned for keeps its dashed mark.
+    _movedFromOn: function (y, m, d) {
+      return this.eventsFor(y, m).filter(function (e) {
+        var f = movedFromOf(e);
+        return f && f.y === y && f.m === m && f.d === d;
+      });
+    },
+
     // The events of a list that touch (y,m,d). Shared by the saved events
     // and by a draft's marks (evPreview), so both follow one rule.
     _occurringOn: function (list, y, m, d) {
@@ -4955,10 +4984,12 @@
     _saveToday: function (d) {
       var self = this;
       var body = { name: this.cal.name, current_year: d.y, current_month: d.m, current_day: d.d, current_hour: d.h, current_minute: d.mi };
+      var was = { y: this.cal.current_year, m: this.cal.current_month, d: this.cal.current_day };
       return Chronicle.apiFetch(this.apiBase, { method: 'PUT', body: body })
         .then(function (resp) {
           if (!resp.ok) return resp.json().then(function (j) { return (j && j.message) || 'Could not set today.'; }, function () { return 'Could not set today.'; });
           Object.assign(self.cal, body);
+          self._askWhatBecame(was, { y: d.y, m: d.m, d: d.d });
           self._anchor = realAnchor(self.cal);
           self.nightsByMonth = {};
           self.renderToday(true);
@@ -4967,6 +4998,37 @@
           return '';
         })
         .catch(function () { return 'Could not reach Chronicle. Try again.'; });
+    },
+
+    // --------------------------------------------------------------
+    // When today moves forward past events, the calendar asks once what
+    // became of them (calendar_day_passes.js, fetched the first time it is
+    // needed). Only the owner moves today, the calendar's settings can turn
+    // the question off, and a step back in time asks nothing.
+    // --------------------------------------------------------------
+    _askWhatBecame: function (from, to) {
+      var self = this, cal = this.cal;
+      if (cal.ask_when_day_passes === false || this._players || !this._canSetToday()) return;
+      if (CalDate.dayIndex(cal, to.y, to.m, to.d) <= CalDate.dayIndex(cal, from.y, from.m, from.d)) return;
+      var open = function () {
+        if (!Chronicle.calendarDayPasses || !self.el.isConnected) return;
+        if (self._passes) self._passes.destroy();
+        self._passes = Chronicle.calendarDayPasses.open(self, from, to, self._passesKit());
+      };
+      if (Chronicle.calendarDayPasses) { open(); return; }
+      if (!this.dayPassesSrc || this._passesLoading) return;
+      this._passesLoading = true;
+      var s = document.createElement('script');
+      s.src = this.dayPassesSrc;
+      s.onload = function () { self._passesLoading = false; open(); };
+      s.onerror = function () { self._passesLoading = false; };
+      document.head.appendChild(s);
+    },
+
+    // What the sheet borrows from this file: the shared moves and words.
+    _passesKit: function () {
+      return { CalDate: CalDate, esc: esc, reducedMotion: reducedMotion, motionOff: motionOff, byKey: byKey,
+        isPhone: isPhone, openMs: function () { return tokenMs('--dur-standard', 200); }, closeMs: function () { return tokenMs('--dur-everyday-out', 80); } };
     },
 
     renderLegend: function () {
@@ -5159,7 +5221,7 @@
     // noNights leaves game nights out, for the grid's cell, which draws
     // them on their own (_gnDiceHTML).
     _marksHTML: function (y, m, d, noNights) {
-      var evs = this._withPreview(y, m, d, this.eventsOnDay(y, m, d)), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
+      var evs = this._withPreview(y, m, d, this.eventsOnDay(y, m, d)).concat(this._movedFromOn(y, m, d)), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
       if (!evs.length && !nights.length && !polls.length) return '';
       var self = this;
       // Game nights come first, then the dates polls suggest: they are the
@@ -5175,7 +5237,12 @@
         var waits = !dirRing && self.canAuthorDmOnly && CalDate.waitsForItsDay(self.cal, e);
         if (waits) dirRing = ' wait';
         var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
-        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '') + (waits ? ' (players see it on the day)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
+        // A moved event keeps a dashed mark on the day it was planned for;
+        // a called-off one stays on its day, struck through and faded.
+        var from = movedFromOf(e), ghostOf = from && from.y === y && from.m === m && from.d === d;
+        var off = !ghostOf && evStatus(e) === 'called_off';
+        var note = skipped ? ' (skipped)' : ghostOf ? ', moved to ' + self._dateLabel(e.year, e.month, e.day) : off ? ' (called off)' : '';
+        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + (off ? ' off' : '') + (ghostOf ? ' moved' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + note + (waits ? ' (players see it on the day)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
@@ -5832,6 +5899,7 @@
         if (e.target.closest('[data-gn-edit]')) { self._gnOpenEditor(self._findNight(self.evpEl.dataset.ev)); return; }
         if (self._gnExtraClick(e)) return;
         if (self._evPagesClick(e)) return;
+        if (self._evOutcomeClick(e)) return;
         if (self._gnRemindClick(e)) return;
         self._gnHandleClick(e);
       });
@@ -5929,6 +5997,7 @@
       this._escHandler = function (e) {
         if (e.key !== 'Escape') return;
         if (self._hideEraTip) self._hideEraTip(true);
+        if (self._passes && self._passes.isOpen()) { self._passes.notNow(); return; }
         if (self.waitOpen()) { self.closeWaiting({ refocus: true }); return; }
         if (self.gnListOpen()) { self.closeGnList({ refocus: true }); return; }
         if (self.plannerOpen()) { self.closePlanner(); return; }
@@ -6392,17 +6461,28 @@
         return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.describe(mo, abs)) + '</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
       }).join('');
 
-      var evs = this.eventsOnDay(d.y, d.m, d.d);
-      var evHTML = evs.length ? evs.map(function (e) {
+      var evs = this.eventsOnDay(d.y, d.m, d.d), gone = this._movedFromOn(d.y, d.m, d.d);
+      var evHTML = evs.length || gone.length ? evs.map(function (e) {
         var hl = highlightEventId && e.id === highlightEventId ? ' hl' : '';
         var time = e.all_day ? '' : (e.start_hour != null ? pad2(e.start_hour) + ':' + pad2(e.start_minute || 0) : '');
         var occ = CalDate.occurrenceOn(e, d.y, d.m, d.d) || {};
-        var note = occ.skipped ? 'Skipped. Players don’t see it.' : (occ.moved_from ? 'Moved from ' + self._dateLabel(occ.moved_from.year, occ.moved_from.month, occ.moved_from.day) : '');
-        return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '">' +
+        var from = movedFromOf(e), off = evStatus(e) === 'called_off';
+        var note = occ.skipped ? 'Skipped. Players don’t see it.' : (occ.moved_from ? 'Moved from ' + self._dateLabel(occ.moved_from.year, occ.moved_from.month, occ.moved_from.day) :
+          from ? 'planned for ' + self._dateLabel(from.y, from.m, from.d) : '');
+        var pill = occ.skipped ? '' : statusPillHTML(e);
+        return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + (off ? ' off' : '') + '" data-ev="' + esc(e.id) + '">' +
           '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + iconHTML(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
-          (time || note ? '<div class="evm">' + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
+          (time || note || pill ? '<div class="evm">' + pill + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
+          (e.outcome && !occ.skipped ? '<div class="evm evwhy">' + esc(e.outcome) + '</div>' : '') +
           (occ.skipped ? '' : self._rollLineHTML(self.rollOn(e.id, d.y, d.m, d.d))) +
           '</div>';
+      }).join('') + gone.map(function (e) {
+        // The day a moved event was planned for: a dashed row that says
+        // where it went, and opens the event like any other row.
+        var hl = highlightEventId && e.id === highlightEventId ? ' hl' : '';
+        return '<div class="evd go movedfrom' + hl + '" data-ev="' + esc(e.id) + '">' +
+          '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + iconHTML(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
+          '<div class="evm"><span>Moved to ' + esc(self._dateLabel(e.year, e.month, e.day)) + '</span></div></div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
       var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
       var gnHTML = nights.length ? '<div class="sect">' + (nights.length > 1 ? nights.length + ' game nights' : 'Game night') + '</div>' +
@@ -6410,7 +6490,7 @@
       var polls = this.pollsOnDay(d.y, d.m, d.d);
       gnHTML += polls.length ? '<div class="sect">' + (polls.length > 1 ? polls.length + ' date polls' : 'Date poll') + '</div>' +
         '<div class="evlist">' + polls.map(function (x) { return self._pollBoxHTML(x.p, x.o, highlightEventId); }).join('') + '</div>' : '';
-      if ((nights.length || polls.length) && !evs.length) evHTML = '';
+      if ((nights.length || polls.length) && !evs.length && !gone.length) evHTML = '';
 
       // Two leaves: the head (the date and the weather), which stays in
       // view, and the rest, which scrolls on a desktop: the day's events
@@ -6423,7 +6503,7 @@
           (weatherFact ? '<div class="facts">' + weatherFact + '</div>' : '') + '</div>' +
         '</div>' +
         '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML + this._freeWingHTML(d) +
-          (evHTML ? '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
+          (evHTML ? '<div class="sect">' + (evs.length + gone.length > 1 ? (evs.length + gone.length) + ' events' : 'Events') + '</div>' +
           '<div class="evlist">' + evHTML + '</div>' : '') +
           this._gnAddHTML(d) + (this.canEdit ? this._addRowHTML() : '') +
           (moonRows ? '<div class="sect">' + (moonCount > 1 ? 'Moons' : 'Moon') + '</div><div class="moonsec">' + moonRows + '</div>' : '') +
@@ -6464,9 +6544,11 @@
         if (!ev) return;
         var time = ev.all_day ? 'All day' : (ev.start_hour != null ? pad2(ev.start_hour) + ':' + pad2(ev.start_minute || 0) : '');
         var brief = (ev.description && !ev.description_html) ? ev.description : '';
+        var pill = statusPillHTML(ev, evStatus(ev) === 'moved' ? ', ' + this._dateLabel(ev.year, ev.month, ev.day) : '');
         html = '<div class="gh"><b>' + esc(ev.name) + '</b></div>' +
           (time ? '<div class="gw">' + esc(time) + '</div>' : '') +
-          (brief ? '<div class="gb">' + esc(brief) + '</div>' : '');
+          (pill ? '<div class="gw">' + pill + '</div>' : '') +
+          (ev.outcome ? '<div class="gb">' + esc(ev.outcome) + '</div>' : brief ? '<div class="gb">' + esc(brief) + '</div>' : '');
       }
       this.hcEl.innerHTML = html;
       var pr = this.calEl.getBoundingClientRect(), r = mk.getBoundingClientRect();
@@ -6633,10 +6715,129 @@
         '<div class="epb">' +
           '<h3 class="ept">' + esc(ev.name) + (ev.kind_name ? ' <span class="dirnote">' + esc(ev.kind_name) + '</span>' : '') + '</h3>' +
           '<div class="espan">' + esc(label) + (time ? ' · ' + esc(time) : '') + ' ' + visBadge + '</div>' +
+          this._evOutcomeHTML(ev) +
           (body ? '<div class="notes">' + body + '</div>' : '') +
           (day ? this._rollFactsHTML(this.rollOn(ev.id, day.y, day.m, day.d)) : '') +
           recur + entity + this._evPagesBox(ev.id) +
         '<!--EVP_FOOT--></div></div>';
+    },
+
+    // --------------------------------------------------------------
+    // What became of an event, in its card: the status, the day a moved
+    // event was planned for, and the line on what happened, for everyone
+    // who can see the event. Someone who may change events gets a quiet
+    // word that folds open the four states in place; like every other
+    // write in the card it waits for Edit when the deck is on Look. A
+    // repeating event answers each date with "Skip this one" and "Move
+    // this one" instead, so it has none of this.
+    // --------------------------------------------------------------
+    _evOutcomeHTML: function (ev) {
+      var st = evStatus(ev), from = movedFromOf(ev), repeating = !!(ev.is_recurring && ev.recurrence_type);
+      var can = this.canEdit && !this._players && !repeating;
+      var shown = st !== 'planned' || !!ev.outcome;
+      if (!shown && !can) return '';
+      var html = '<div class="evout" data-evout="' + esc(ev.id) + '">';
+      if (shown) {
+        var pill = statusPillHTML(ev, st === 'moved' ? ', ' + this._dateLabel(ev.year, ev.month, ev.day) : '');
+        if (pill || from) html += '<div class="evost">' + pill + (from ? '<span class="evpl">planned for ' + esc(this._dateLabel(from.y, from.m, from.d)) + '</span>' : '') + '</div>';
+        if (ev.outcome) html += '<div class="evwh"><b>What happened</b><p>' + esc(ev.outcome) + '</p></div>';
+      }
+      if (can) {
+        html += '<button type="button" class="qword evochg" data-evout-open aria-expanded="false">' + (shown ? 'Change what became of it' : 'Say what became of it') + '</button>' +
+          '<div class="evoform" data-evout-form hidden></div>';
+      }
+      return html + '</div>';
+    },
+
+    // The four states as one choice, a new day for Moved, and the line.
+    _evOutcomeFormHTML: function (ev) {
+      var st = evStatus(ev), c = this.cal, mc = CalDate.monthCount(c);
+      var words = [['planned', 'Planned'], ['happened', 'Happened'], ['moved', 'Moved'], ['called_off', 'Called off']];
+      var day = st === 'moved' ? { y: ev.year, m: ev.month, d: ev.day } : CalDate.addDays(c, { y: ev.year, m: ev.month, d: ev.day }, 1);
+      var months = (c.months || []).map(function (mo, i) {
+        return '<option value="' + (i + 1) + '"' + (i + 1 === day.m ? ' selected' : '') + '>' + esc(mo.name || 'Month ' + (i + 1)) + '</option>';
+      }).join('') || Array.from({ length: mc }, function (_, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + '</option>'; }).join('');
+      return '<div class="evochips" role="group" aria-label="What became of it">' + words.map(function (w) {
+          return '<button type="button" class="evochip" data-evout-st="' + w[0] + '" aria-pressed="' + (w[0] === st) + '">' + w[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="evomv strow3" data-evout-mv' + (st === 'moved' ? '' : ' hidden') + '>' +
+          '<label class="fld"><span>Moved to</span><select name="month">' + months + '</select></label>' +
+          '<label class="fld"><span>Day</span><input type="number" name="day" inputmode="numeric" min="1" value="' + day.d + '"></label>' +
+          '<label class="fld"><span>Year</span><input type="number" name="year" inputmode="numeric" value="' + day.y + '"></label></div>' +
+        '<label class="fld evoln"><span>What happened, if you like</span><textarea name="outcome" rows="2" maxlength="1000">' + esc(ev.outcome || '') + '</textarea></label>' +
+        '<p class="sterr" role="alert" hidden></p>' +
+        '<div class="sta"><button type="button" class="btn sm primary" data-evout-save>Save</button><button type="button" class="btn sm quiet" data-evout-cancel>Cancel</button></div>';
+    },
+
+    // Clicks inside the card's outcome part; true when one was handled.
+    _evOutcomeClick: function (e) {
+      var box = e.target.closest('[data-evout]');
+      if (!box) return false;
+      var ev = this._findEvent(box.dataset.evout), form = box.querySelector('[data-evout-form]'), open = box.querySelector('[data-evout-open]');
+      if (!ev || !form) return false;
+      if (e.target.closest('[data-evout-open]')) {
+        var opening = form.hidden;
+        if (opening) form.innerHTML = this._evOutcomeFormHTML(ev);
+        form.hidden = !opening;
+        open.setAttribute('aria-expanded', String(opening));
+        if (opening) { var on = form.querySelector('[aria-pressed="true"]'); if (on) on.focus({ preventScroll: true }); }
+        return true;
+      }
+      var chip = e.target.closest('[data-evout-st]');
+      if (chip) {
+        form.querySelectorAll('[data-evout-st]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === chip)); });
+        form.querySelector('[data-evout-mv]').hidden = chip.dataset.evoutSt !== 'moved';
+        return true;
+      }
+      if (e.target.closest('[data-evout-cancel]')) {
+        form.hidden = true; form.innerHTML = '';
+        open.setAttribute('aria-expanded', 'false');
+        open.focus({ preventScroll: true });
+        return true;
+      }
+      if (e.target.closest('[data-evout-save]')) { this._saveOutcome(ev, form, e.target.closest('[data-evout-save]')); return true; }
+      return false;
+    },
+
+    // Sends only what changed, as the event route's partial update reads
+    // it, then redraws the month and the card from the server.
+    _saveOutcome: function (ev, form, btn) {
+      var self = this, err = form.querySelector('.sterr');
+      var picked = form.querySelector('[data-evout-st][aria-pressed="true"]');
+      var st = picked ? picked.dataset.evoutSt : evStatus(ev);
+      var line = form.querySelector('[name="outcome"]').value.trim();
+      var body = {};
+      if (st !== evStatus(ev)) body.status = st;
+      if (line !== (ev.outcome || '')) body.outcome = line || null;
+      if (st === 'moved') {
+        var n = function (k) { var v = form.querySelector('[name="' + k + '"]').value.trim(); return /^-?\d+$/.test(v) ? parseInt(v, 10) : NaN; };
+        var y = n('year'), m = n('month'), d = n('day');
+        if ([y, m, d].some(isNaN)) { err.textContent = 'Fill in the day it moved to.'; err.hidden = false; return; }
+        var len = CalDate.monthDays(this.cal, m - 1, y);
+        if (d < 1 || d > len) { err.textContent = 'That month has ' + len + ' days.'; err.hidden = false; return; }
+        if (y !== ev.year || m !== ev.month || d !== ev.day) {
+          body.year = y; body.month = m; body.day = d; body.status = 'moved';
+          // A span moves whole, as a drag on the year track moves it.
+          if (ev.end_year != null) {
+            var end = CalDate.addDays(this.cal, { y: ev.end_year, m: ev.end_month, d: ev.end_day }, CalDate.dayIndex(this.cal, y, m, d) - CalDate.dayIndex(this.cal, ev.year, ev.month, ev.day));
+            body.end_year = end.y; body.end_month = end.m; body.end_day = end.d;
+          }
+        }
+        else if (evStatus(ev) !== 'moved') { err.textContent = 'Pick the day it moved to.'; err.hidden = false; return; }
+      }
+      if (!Object.keys(body).length) { this.closeEventDetail(); return; }
+      btn.disabled = true;
+      Chronicle.apiFetch(this.apiBase + '/events/' + encodeURIComponent(ev.id), { method: 'PUT', body: body }).then(function (resp) {
+        if (!resp.ok) return resp.json().then(function (j) { return (j && j.message) || 'Not saved. Try again.'; }, function () { return 'Not saved. Try again.'; });
+        self.eventsByMonth = {};
+        self.closeEventDetail();
+        self.renderMonth();
+        self.say(ev.name + ': ' + ({ planned: 'planned', happened: 'happened', moved: 'moved', called_off: 'called off' }[st]) + '.');
+        return '';
+      }, function () { return 'Could not reach Chronicle. Try again.'; }).then(function (msg) {
+        btn.disabled = false;
+        if (msg) { err.textContent = msg; err.hidden = false; }
+      });
     },
 
     // --------------------------------------------------------------

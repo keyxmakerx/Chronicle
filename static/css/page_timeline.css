@@ -89,6 +89,8 @@
 .ptl-ev--later { background: var(--ptl-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptl-acc) 60%, transparent), 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring-soft, 0 0 #0000); }
 .ptl-ev--dm { background: var(--ptl-dm); }
 .ptl-ev--death { background: var(--ptl-bg); box-shadow: inset 0 0 0 1.5px var(--ptl-grey), 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring-soft, 0 0 #0000); }
+/* A called-off event stays on the line, faded: it was planned for that day. */
+.ptl-ev--off { opacity: .45; }
 /* Several events on one bead: a faint second ring. */
 .ptl-ev--multi { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px color-mix(in srgb, var(--ptl-acc) 55%, transparent); }
 .ptl-ev--multi.ptl-ev--dm { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px rgb(var(--color-warn-rgb) / .6); }

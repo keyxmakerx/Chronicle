@@ -111,6 +111,7 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
        e.visibility, e.visibility_rules, e.kind_id, e.announced, e.tier,
        e.color, e.icon, e.all_day, e.payload,
        e.created_by, e.created_at, e.updated_at,
+       e.status, e.outcome, e.moved_from_year, e.moved_from_month, e.moved_from_day,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(et.color, ''),
        COALESCE(k.name, ''), COALESCE(k.slug, ''), COALESCE(k.icon, ''), COALESCE(k.color, '')`
 
@@ -215,7 +216,8 @@ func insertEvent(ctx context.Context, ex dbExecutor, evt *Event) error {
 		        recurrence_end_day, recurrence_max_occurrences, recurrence_day_of_week,
 		        recurrence_rule,
 		        visibility, visibility_rules, kind_id, announced, tier,
-		        color, icon, all_day, payload, created_by)
+		        color, icon, all_day, payload, created_by,
+		        status, outcome, moved_from_year, moved_from_month, moved_from_day)
 		 SELECT ?, c.id, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?,
@@ -223,6 +225,7 @@ func insertEvent(ctx context.Context, ex dbExecutor, evt *Event) error {
 		        ?, ?, ?,
 		        ?, ?, ?,
 		        ?,
+		        ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?
 		 FROM calendars c
@@ -238,6 +241,7 @@ func insertEvent(ctx context.Context, ex dbExecutor, evt *Event) error {
 		ruleValue(evt.RecurrenceRule),
 		evt.Visibility, evt.VisibilityRules, evt.KindID, evt.Announced, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.Payload, evt.CreatedBy,
+		storedStatus(evt.Status), evt.Outcome, evt.MovedFromYear, evt.MovedFromMonth, evt.MovedFromDay,
 		evt.CalendarID,
 		evt.KindID, evt.KindID,
 		evt.EntityID, evt.EntityID,
@@ -271,6 +275,7 @@ func eventDests(evt *Event) []any {
 		&evt.Visibility, &evt.VisibilityRules, &evt.KindID, &evt.Announced, &evt.Tier,
 		&evt.Color, &evt.Icon, &evt.AllDay, &evt.Payload,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
+		&evt.Status, &evt.Outcome, &evt.MovedFromYear, &evt.MovedFromMonth, &evt.MovedFromDay,
 		&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,
 		&evt.KindName, &evt.KindSlug, &evt.KindIcon, &evt.KindColor,
 	}
@@ -376,7 +381,8 @@ func updateEventRow(ctx context.Context, ex dbExecutor, evt *Event) error {
 		     recurrence_end_day = ?, recurrence_max_occurrences = ?, recurrence_day_of_week = ?,
 		     recurrence_rule = ?,
 		     visibility = ?, visibility_rules = ?, kind_id = ?, announced = ?, tier = ?,
-		     color = ?, icon = ?, all_day = ?, payload = ?
+		     color = ?, icon = ?, all_day = ?, payload = ?,
+		     status = ?, outcome = ?, moved_from_year = ?, moved_from_month = ?, moved_from_day = ?
 		 WHERE id = ?`,
 		evt.Name, evt.Description, evt.DescriptionHTML, evt.EntityID,
 		evt.Year, evt.Month, evt.Day,
@@ -387,7 +393,9 @@ func updateEventRow(ctx context.Context, ex dbExecutor, evt *Event) error {
 		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences, evt.RecurrenceDayOfWeek,
 		ruleValue(evt.RecurrenceRule),
 		evt.Visibility, evt.VisibilityRules, evt.KindID, evt.Announced, evt.Tier,
-		evt.Color, evt.Icon, evt.AllDay, evt.Payload, evt.ID,
+		evt.Color, evt.Icon, evt.AllDay, evt.Payload,
+		storedStatus(evt.Status), evt.Outcome, evt.MovedFromYear, evt.MovedFromMonth, evt.MovedFromDay,
+		evt.ID,
 	)
 	return err
 }
@@ -430,11 +438,14 @@ func (r *eventRepo) ListEventsForMonth(ctx context.Context, calendarID string, y
 		    (e.year = ? AND e.month = ?)
 		    OR `+recurringCandidateClause+`
 		    OR `+spanningCandidateClause+`
+		    OR (e.moved_from_year = ? AND e.moved_from_month = ?)
 		  )
 		  %s
 		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
-	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month, year, month, year, month)
+	// The last pair brings in an event moved out of this month, so the day
+	// it was planned for keeps its mark.
+	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month, year, month, year, month, year, month)
 	if err != nil {
 		return nil, err
 	}

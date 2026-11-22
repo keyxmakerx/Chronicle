@@ -43,11 +43,15 @@
     }
     var facts = [[dot.hasAttribute('data-ptl-end') ? 'Dates' : 'Date', fact(dot)]];
     if (dot.hasAttribute('data-ptl-repeats')) facts.push(['Repeats', 'From this date']);
+    // What became of it, and the line on what happened, both as the
+    // server wrote them for this viewer.
+    if (dot.hasAttribute('data-ptl-status')) facts.push(['Status', dot.getAttribute('data-ptl-status')]);
     return {
       kind: dot.getAttribute('data-ptl-kind') || 'Event',
       kindIcon: (dot.getAttribute('data-ptl-icon') || 'fa-calendar-day').replace(/^fa-solid\s+/, ''),
       title: dot.getAttribute('data-ptl-name') || '',
       facts: facts,
+      text: dot.getAttribute('data-ptl-outcome') || '',
       foot: dot.hasAttribute('data-dm-only') ? Chronicle.gmTerm() + ' only' : '',
       link: { href: dot.getAttribute('href') || '', label: 'Open on the calendar' }
     };
