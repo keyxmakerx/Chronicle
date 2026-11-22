@@ -475,12 +475,12 @@ textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
 @container sbpage (max-width: 40rem) {
   .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
   .sb-av { width: 2.75rem; height: 2.75rem; }
-  .sb-chip, .sb-word, .sb-delete, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+  .sb-chip, .sb-word, .sb-delete, .sb-field, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
 }
 @media (pointer: coarse) {
   .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
   .sb-av { width: 2.75rem; height: 2.75rem; }
-  .sb-chip, .sb-word, .sb-delete, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+  .sb-chip, .sb-word, .sb-delete, .sb-field, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
 }
 
 /* Calm keeps the colours and drops the travel; Off keeps neither. */

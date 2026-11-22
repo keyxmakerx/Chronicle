@@ -143,7 +143,7 @@ test('Connections, Data and the old addresses; deleting asks for the name', asyn
   owner.assertClean();
 });
 
-test('on a phone every control is 44 tall; the keys page has the tabs; the log speaks in words', async () => {
+test('on a phone every control and field is 44 tall; the keys pages keep the tabs; the log speaks in words', async () => {
   const owner = await person({ tag: 'board-phone', name: 'Owner Ines' });
   const cid = await newCampaign(owner, 'Narrowmere');
   const page = owner.page;
@@ -154,25 +154,48 @@ test('on a phone every control is 44 tall; the keys page has the tabs; the log s
   assert.equal(await page.locator('.stg-tab[aria-current="page"]').textContent(), 'Connections', 'the full keys page sits under Connections');
 
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const tab of ['dashboard', 'settings', 'connections', 'data']) {
+  for (const tab of ['dashboard', 'settings', 'connections', 'data', 'api-keys']) {
     await owner.go(`/campaigns/${cid}/${tab}`);
-    if (tab === 'connections') await page.locator('#integrations-keys button').first().waitFor();
+    if (tab === 'connections') {
+      // A key, so its Active switch and Revoke button are measured, and the
+      // create form open, so its fields are.
+      await page.locator('#int-key-name').waitFor({ state: 'attached' });
+      await page.getByRole('button', { name: 'Create New Key' }).click();
+      await page.locator('#int-key-name').fill('Phone key');
+      await page.locator('#integrations-keys form[hx-post] button[type="submit"]').click();
+      await page.locator('#integrations-keys').getByText('API Key Created').waitFor();
+      await owner.go(`/campaigns/${cid}/${tab}`);
+      await page.getByRole('button', { name: 'Create New Key' }).click();
+      await page.locator('#int-key-name').waitFor();
+    }
     if (tab === 'data') {
       for (const s of await page.locator('.sb-step > summary, .sb-fold > summary').all()) await s.click();
       await page.locator('#activity-content').scrollIntoViewIfNeeded();
       await page.getByText('invited someone').first().waitFor();
       assert.equal(await page.locator('#activity-content').getByText('member.invited').count(), 0, 'the log never shows a raw key');
     }
+    // Links, buttons, folds and form fields. A check box, and a file picker
+    // drawn as a drop area, are answered through their label, so the label
+    // is what is measured.
     const short = await page.evaluate(() => {
       const out = [];
-      for (const el of document.querySelectorAll('.sb a, .sb button, .sb summary, .stg a, .stg button')) {
-        const r = el.getBoundingClientRect();
-        if (r.width && r.height && r.height < 44) out.push(`${Math.round(r.height)}px "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30)}"`);
+      const sel = ['a', 'button', 'summary', 'select', 'textarea', 'input:not([type="hidden"])']
+        .flatMap((t) => [`.sb ${t}`, `.stg ${t}`, `.keys-touch ${t}`]).join(', ');
+      for (const el of document.querySelectorAll(sel)) {
+        const box = el.matches('input[type="checkbox"], input[type="radio"], input[type="file"]') ? (el.closest('label') || el) : el;
+        const r = box.getBoundingClientRect();
+        if (r.width && r.height && r.height < 44) out.push(`${Math.round(r.height)}px ${el.tagName.toLowerCase()} "${(el.textContent || el.getAttribute('aria-label') || el.name || '').trim().slice(0, 30)}"`);
       }
       return out;
     });
     assert.deepEqual(short, [], `${tab}: controls under 44 tall on a phone`);
   }
+
+  // A key made on the full keys page shows inside the frame, not over it.
+  await page.locator('#name').fill('Second key');
+  await page.getByRole('button', { name: 'Generate Key' }).click();
+  await page.getByText('API Key Created').waitFor();
+  assert.equal(await page.locator('.stg-tab[aria-current="page"]').textContent(), 'Connections', 'the new key keeps the tabs');
   owner.assertClean();
 });
 

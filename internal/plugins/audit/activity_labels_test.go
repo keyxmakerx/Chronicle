@@ -59,3 +59,18 @@ func TestActionLabel_NeverRawKey(t *testing.T) {
 		}
 	}
 }
+
+// The kind beside an entry reads as words, never a stored key.
+func TestEntityTypeWords(t *testing.T) {
+	for in, want := range map[string]string{
+		"page":             "page",
+		"calendar_event":   "calendar event",
+		"timeline.entity":  "timeline entity",
+		"_odd__name-here_": "odd name here",
+		"":                 "",
+	} {
+		if got := entityTypeWords(in); got != want {
+			t.Errorf("entityTypeWords(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

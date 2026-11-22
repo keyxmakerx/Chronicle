@@ -105,6 +105,12 @@ var actionAreas = map[string]string{
 	"guest":                             "changed guest access",
 }
 
+// entityTypeWords shows the kind of thing an entry names as words: a stored
+// kind such as "calendar_event" reads "calendar event", whatever wrote it.
+func entityTypeWords(t string) string {
+	return strings.Join(strings.FieldsFunc(t, func(r rune) bool { return r == '_' || r == '.' || r == '-' }), " ")
+}
+
 // actionFallback keeps a key the log has no words for out of the page: it
 // says what area changed, or only that something did, never the raw key.
 func actionFallback(action string) string {
@@ -335,7 +341,7 @@ templ ActivityContent(cc *campaigns.CampaignContext, stats *CampaignStats, entri
 												<span class="text-sm font-medium text-fg-body">{ entry.EntityName }</span>
 											}
 											if entry.EntityType != "" && entry.Action != ActionMemberJoined && entry.Action != ActionMemberLeft && entry.Action != ActionCampaignUpdated {
-												<span class="text-xs text-fg-muted">({ entry.EntityType })</span>
+												<span class="text-xs text-fg-muted">({ entityTypeWords(entry.EntityType) })</span>
 											}
 										</div>
 										<p class="text-xs text-fg-muted mt-0.5">{ relativeTime(entry.CreatedAt) }</p>
