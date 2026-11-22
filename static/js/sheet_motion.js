@@ -17,6 +17,7 @@
  *   [data-sheet-section="id"]           a part, with .paper-pull; clicking it presses its button
  *   [data-sheet-open="panel-id"]        the button inside a part that opens a panel
  *   <template data-sheet-panel="panel-id" data-title data-kind>  the panel's body
+ *                                       data-size="tall" asks for a reading panel: 390 to 520px wide as the desk allows, always full height
  *   <details data-sheet-fold><summary>..</summary><div class="fold-body"><div class="fold-in" data-move="fold">..
  *   [data-v] / [data-pv]                values snap() and changed() watch
  * Events on the root: sheet:panel-ready (detail.panel, detail.body), sheet:open,
@@ -131,10 +132,29 @@
     return Math.max(Math.round(need), Math.round(rel - partRight - 8));
   }
 
+  // The part of the window the page actually shows: its scroll box (the app's main column) cut to the window. The top
+  // bar and any banner sit above that box, so a paper placed inside the band is never under them.
+  function visibleBand(box, vh) {
+    var top = Math.max(0, box ? box.top : 0), bottom = Math.min(vh, box ? box.bottom : vh);
+    return bottom > top ? { top: top, bottom: bottom } : { top: 0, bottom: vh };
+  }
+
+  // A side paper's tallest: from the sheet's top to 24px above the band's bottom, at least 320px. vh is the band's
+  // height and sheetTop is measured from the band's top. A tall panel may reach nearer the band's top.
+  function sideMaxHeight(vh, sheetTop, tall) {
+    return Math.round(Math.max(320, Math.min(vh - (tall ? 48 : 120), vh - 24 - Math.max(0, sheetTop))));
+  }
+
+  // A tall panel's width: the room beside the sheet once it has shifted as far as it can, kept within 390 to 520px.
+  function sideWidth(room) {
+    return Math.round(Math.max(390, Math.min(520, room)));
+  }
+
   var api = {
     STYLES: STYLES, FONTS: FONTS, BAKED: BAKED, FX_KINDS: FX_KINDS,
     fontHref: fontHref, styleFor: styleFor, modeOf: modeOf, durFor: durFor, msOf: msOf,
-    longestTransition: longestTransition, fxPlan: fxPlan, foldPlan: foldPlan, panelStep: panelStep, sideOver: sideOver
+    longestTransition: longestTransition, fxPlan: fxPlan, foldPlan: foldPlan, panelStep: panelStep, sideOver: sideOver,
+    sideMaxHeight: sideMaxHeight, sideWidth: sideWidth, visibleBand: visibleBand
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
@@ -427,7 +447,7 @@
   // One sheet
   // ---------------------------------------------------------------------
 
-  var WD = 390, PEEK = 50;
+  var W0 = 390, PEEK = 50;
 
   function mount(root) {
     if (root._sheet) return root._sheet;
@@ -435,6 +455,15 @@
     var folio = $('[data-sheet-folio]', root) || root;
     function sheetEl() { return $('.paper-stack > .paper', root) || $('.paper:not(.paper-drawer)', root); }
     function desk() { return root.closest('[data-sheet-desk]') || root.parentElement || root; }
+    // The box the page scrolls in: the nearest ancestor that scrolls, or the window.
+    function scroller() {
+      for (var n = folio.parentElement; n && n !== document.body; n = n.parentElement) {
+        var oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.clientHeight) return n;
+      }
+      return null;
+    }
+    function viewBand() { var sc = scroller(); return visibleBand(sc && sc.getBoundingClientRect(), innerHeight); }
     function narrow() {
       var d = desk(), cs = getComputedStyle(d);
       return d.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) < 820;
@@ -493,6 +522,7 @@
     }
     function slideBack(w, done) {
       clearTimeout(w._t);
+      if (w._ro) { w._ro.disconnect(); w._ro = null; }
       var card = w.firstChild;
       var fin = function () {
         w.classList.remove('is-open');
@@ -580,24 +610,39 @@
     }
 
     // Wide desk: the paper comes out beside the part, from behind the sheet's right edge.
-    function sidePaper(part, id, title, kind, body) {
+    function sidePaper(part, id, title, kind, body, tall) {
       var fr = folio.getBoundingClientRect(), sheet = sheetEl(), sr = sheet.getBoundingClientRect(), pr = part.getBoundingClientRect(), cr = desk().getBoundingClientRect();
       var cur = new DOMMatrixReadOnly(getComputedStyle(folio).transform).m41 || 0;
       // Shift the sheet left as far as the desk allows; a paper that still doesn't fit lies over the sheet, next to the part.
-      var left0 = sr.left - cur, cap = Math.max(0, left0 - (cr.left + 12)), need = left0 + sr.width + WD - (cr.right - 12);
+      var left0 = sr.left - cur, cap = Math.max(0, left0 - (cr.left + 12));
+      var WD = tall ? sideWidth(cr.right - 12 - (left0 - cap + sr.width)) : W0, need = left0 + sr.width + WD - (cr.right - 12);
       var shift = Math.min(cap, Math.max(need, WD / 2)), fit = Math.max(0, need - shift);
       var move = role(root, 'panel');
       var p = drawer(id, title, kind, body, false), w = makeWell(folio, 'right', p, move);
       p.style.width = WD + 'px';
       // A panel is as tall as what it holds, up to the window: past a short sheet it lies over the page below rather than cutting off.
-      p.style.maxHeight = Math.max(320, innerHeight - 120) + 'px';
+      var band = viewBand();
+      p.style.maxHeight = sideMaxHeight(band.bottom - band.top, sr.top - band.top, tall) + 'px';
+      if (tall) p.style.height = p.style.maxHeight;
       var ph = p.offsetHeight, rel = sr.right - fr.left, T = pr.top - fr.top - 18;
       var over = sideOver(fit, rel, pr.right - fr.left);
       // Beside the part that was clicked, lifted only as far as it takes to stay in the window, and never above the sheet.
-      T = Math.min(T, innerHeight - 24 - fr.top - 14 - ph);
-      T = Math.max(T, sr.top - fr.top - 14);
-      w.style.top = T + 'px';
-      w.style.height = (ph + 42) + 'px';
+      function place() {
+        var f = folio.getBoundingClientRect(), s = sheetEl().getBoundingClientRect(), t = part.getBoundingClientRect().top - f.top - 18;
+        t = Math.min(t, viewBand().bottom - 24 - f.top - 14 - ph);
+        T = Math.max(t, s.top - f.top - 14);
+        w.style.top = T + 'px';
+        w.style.height = (ph + 42) + 'px';
+      }
+      place();
+      // The well clips, so it follows the panel as a fold or editor grows it; frozen, it cut the rest off.
+      if (window.ResizeObserver) {
+        w._ro = new ResizeObserver(function () {
+          var h = p.offsetHeight;
+          if (h && h !== ph) { ph = h; place(); }
+        });
+        w._ro.observe(p);
+      }
       // A Grow starts from the part that was clicked: the paper's left edge, at that part's height.
       p.style.setProperty('--ox', '0px');
       p.style.setProperty('--oy', Math.max(0, Math.min(ph, pr.top + pr.height / 2 - (fr.top + T + 14))) + 'px');
@@ -685,7 +730,7 @@
       if (step.effects.indexOf('close') >= 0) closePanel(false, true);
       part = part || trigger;
       var title = src.tpl.getAttribute('data-title') || trigger.textContent.trim(), kind = src.tpl.getAttribute('data-kind') || '';
-      var o = narrow() ? pagePaper(trigger, part, id, title, kind, src.fragment) : sidePaper(part, id, title, kind, src.fragment);
+      var o = narrow() ? pagePaper(trigger, part, id, title, kind, src.fragment) : sidePaper(part, id, title, kind, src.fragment, src.tpl.getAttribute('data-size') === 'tall');
       trigger.setAttribute('aria-expanded', 'true');
       part.classList.add('is-pulled');
       if (part._peek) part._peek.classList.add('is-pulled');

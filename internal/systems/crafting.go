@@ -92,6 +92,32 @@ func (m *SystemManifest) CraftingRules() CraftingRules {
 	return r
 }
 
+// PowerRollRules is a system's power roll as the Table offers it: the
+// project roll's dice, characteristics, edge and bane and tier breaks, read
+// from the crafting block so a system states the roll once.
+type PowerRollRules struct {
+	Dice            string         `json:"dice"`
+	Characteristics []CraftingStat `json:"characteristics"`
+	Edge            int            `json:"edge"`
+	Bane            int            `json:"bane"`
+	Tiers           []int          `json:"tiers"`
+}
+
+// PowerRoll is the system's power roll, and false when it declares none. The
+// Table's power roll line is 2d10 plus one of the system's characteristics, so
+// only a crafting block that names characteristics and rolls 2d10 counts; the
+// defaults every other system gets are not a declaration.
+func (m *SystemManifest) PowerRoll() (PowerRollRules, bool) {
+	if m == nil || m.Crafting == nil || len(m.Crafting.Characteristics) == 0 {
+		return PowerRollRules{}, false
+	}
+	r := m.CraftingRules()
+	if r.Dice != "2d10" || len(r.Tiers) != 2 {
+		return PowerRollRules{}, false
+	}
+	return PowerRollRules{Dice: r.Dice, Characteristics: r.Characteristics, Edge: r.Edge, Bane: r.Bane, Tiers: r.Tiers}, true
+}
+
 // Limits on a crafting block, so its words fit the editor's labels.
 const (
 	maxCraftingStats = 12

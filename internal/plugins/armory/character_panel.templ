@@ -31,7 +31,10 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 			<h3 class="text-sm font-semibold text-fg">
 				<i class="fa-solid fa-sack-dollar text-fg-muted mr-1.5 text-xs"></i>Items and money
 			</h3>
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-3 flex-wrap justify-end">
+				for _, sp := range signposts(v.CampaignID, v.CanCraft) {
+					<a href={ templ.SafeURL(sp.URL) } class="text-xs text-accent hover:underline whitespace-nowrap">{ sp.Label }</a>
+				}
 				if v.CanGive {
 					<button
 						type="button"
