@@ -222,7 +222,6 @@ html[data-motion="off"] .czw-tile:is(:hover, :focus-visible, :active) .czw-pic {
   .czw { padding: 20px 16px 120px; }
   .czw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
   .czw-head .czs-find { margin-top: 0; }
-  /* "All categories" keeps its quiet size; its touch area is 44 tall. */
-  .czw-more { position: relative; }
-  .czw-more::after { content: ""; position: absolute; left: -4px; right: -4px; top: 50%; height: 44px; transform: translateY(-50%); }
+  /* "All categories" keeps its quiet words in a box 44 tall. */
+  .czw-more { display: inline-flex; align-items: center; min-height: 44px; }
 }

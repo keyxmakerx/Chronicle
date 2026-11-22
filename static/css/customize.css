@@ -677,9 +677,8 @@
      the example and the sheet keep clear of the taller dock. */
   .czp .cpe-dock{ flex-wrap:wrap; justify-content:center; overflow:visible; gap:2px; }
   .czp .cpe-dk-sep{ display:none; }
-  /* Whole site keeps its small look; its touch area is 44 tall. */
-  .czp .fz-bar .czb{ position:relative; }
-  .czp .fz-bar .czb::after{ content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
+  /* Whole site is 44 tall on a phone, like every control there. */
+  .czp .fz-bar .czb{ height:44px; }
   .czp .cpe-dk{ min-height:44px; padding:0 9px; }
   .czp .lk-work{ padding-bottom:156px; }
   .czp .lk-ws.panel-open .lk-work{ padding-bottom:calc(var(--lk-hh) * .58 + 12px); }

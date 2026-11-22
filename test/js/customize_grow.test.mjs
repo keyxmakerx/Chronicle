@@ -76,5 +76,5 @@ test('on a phone the bar has two rows and Find is a 44-square search mark', () =
   // The phone's row of tabs scrolls with the edge fade, and the layout picker joins it.
   assert.match(shell, /var CUE_ROWS = '\.czs-tabs-top, \.czs-tabrow,/);
   assert.match(editor, /\(bar\.querySelector\('\.czs-tabrow'\) \|\| bar\)/);
-  assert.match(wallCSS, /\.czw-more::after \{[^}]*height: 44px;/);
+  assert.match(wallCSS, /\.czw-more \{[^}]*min-height: 44px;/);
 });

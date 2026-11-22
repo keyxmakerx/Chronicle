@@ -75,7 +75,18 @@ test('Whole site is out of reach while it is hidden', () => {
 });
 
 test('a pencil mark keeps clear of every word, looking further out when it must', () => {
-  assert.match(src, /var words = fzTextBoxes\(\)\.map\(function\(b\)\{ return \{ x:b\.x \* k - 4, y:b\.y \* k - 3, w:b\.w \* k \+ 8, h:b\.h \* k \+ 6 \}; \}\)/);
+  assert.match(src, /var words = got\.words\.map\(function\(b\)\{ return \{ x:b\.x \* k - 4, y:b\.y \* k - 3, w:b\.w \* k \+ 8, h:b\.h \* k \+ 6 \}; \}\)/);
+  // Sample buttons count as content whole, not only their words.
+  assert.match(src, /querySelectorAll\('\.wic, \.pbtn'\)/);
+});
+
+test('the example is measured in one unzoomed batch, so placing marks costs one layout', () => {
+  assert.match(src, /return \{ words:fzTextBoxes\(\), rects:secs\.map\(fzRects\) \};/);
+  // The zoom is lifted only when there is one.
+  assert.match(src, /function fzBare\(fn\)\{[\s\S]*?if \(!t\) return fn\(\);/);
+  // Nothing measures the example outside fzBare.
+  const tb = src.slice(src.indexOf('function fzTextBoxes(){'), src.indexOf('function markSpot('));
+  assert.doesNotMatch(tb, /style\.transform = /);
   assert.match(src, /for \(var d = 6; \(!small \|\| small\.c\) && d <= 48; d \+= 6\)\{/);
 });
 
@@ -83,7 +94,7 @@ test('on a phone the dock wraps onto centred rows, every tool 44 tall, and Whole
   const phone = css.slice(css.indexOf('/* ---------- Phone: the example fills the width'));
   assert.match(phone, /\.czp \.cpe-dock\{ flex-wrap:wrap; justify-content:center; overflow:visible;/);
   assert.match(phone, /\.czp \.cpe-dk\{ min-height:44px;/);
-  assert.match(phone, /\.czp \.fz-bar \.czb::after\{[^}]*height:44px;/);
+  assert.match(phone, /\.czp \.fz-bar \.czb\{ height:44px; \}/);
 });
 
 test('Hold to see saved paints the saved look without touching the draft, with Space or Enter too', () => {

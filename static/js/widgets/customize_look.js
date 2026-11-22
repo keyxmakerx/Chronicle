@@ -2467,13 +2467,18 @@
       site.style.transform = 'scale(' + k + ') translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + f.toFixed(3) + ')';
     }
     // Rects are measured with no zoom applied, so a redraw never chases its own transform.
-    function fzMeasure(sec){
+    // fzBare runs a batch of measuring with the zoom lifted. It touches the
+    // transform only when there is one, and once per batch, because each lift
+    // and restore costs a layout of the whole page; on a slow machine a layout
+    // per part kept the page too busy to answer clicks.
+    function fzBare(fn){
       var site = fzSite(), t = site.style.transform, tr = site.style.transition;
+      if (!t) return fn();
       site.style.transition = 'none'; site.style.transform = '';
-      var rs = fzRects(sec);
-      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
-      return rs;
+      try { return fn(); }
+      finally { site.style.transform = t; void site.offsetWidth; site.style.transition = tr; }
     }
+    function fzMeasure(sec){ return fzBare(function(){ return fzRects(sec); }); }
     function fzDraw(){
       var svg = $('#fz'), sec = ui.focus;
       if (!svg) return;
@@ -2560,8 +2565,7 @@
     // Every run of words on the example, in the site's own 880 by 520 units,
     // measured unzoomed like fzRects, so a mark can be placed clear of them.
     function fzTextBoxes(){
-      var site = fzSite(), t = site.style.transform, tr = site.style.transition, out = [];
-      site.style.transition = 'none'; site.style.transform = '';
+      var site = fzSite(), out = [];
       var sr = site.getBoundingClientRect(), s = sr.width / 880;
       if (s){
         var walk = document.createTreeWalker(site, NodeFilter.SHOW_TEXT, null), rg = document.createRange(), n;
@@ -2574,12 +2578,12 @@
           });
         }
       }
-      // A button's icon (Icons > Everywhere) is as much content as its word.
-      if (s) Array.prototype.forEach.call(site.querySelectorAll('.wic'), function(el){
+      // A button's icon (Icons > Everywhere) is as much content as its word,
+      // and a sample button is read as a whole, not only its word.
+      if (s) Array.prototype.forEach.call(site.querySelectorAll('.wic, .pbtn'), function(el){
         var r = el.getBoundingClientRect();
         if (r.width && r.height) out.push({ x:(r.left - sr.left) / s, y:(r.top - sr.top) / s, w:r.width / s, h:r.height / s });
       });
-      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
       return out;
     }
     // Where a part's pencil mark sits: outside the part, on the first side
@@ -2639,9 +2643,13 @@
       if (ui.zoom === 'site' && !ui.focus && !(kf && kf.active())){
         // Words keep a little room around them, so a mark never touches a
         // word or a link's underline and reads as part of it.
-        var words = fzTextBoxes().map(function(b){ return { x:b.x * k - 4, y:b.y * k - 3, w:b.w * k + 8, h:b.h * k + 6 }; }), taken = [];
-        (picking ? [sec0] : roomSecs()).forEach(function(sec){
-          var rs = fzMeasure(sec);
+        // Every read first, in one unzoomed batch, then the marks are placed.
+        var secs = picking ? [sec0] : roomSecs(), got = fzBare(function(){
+          return { words:fzTextBoxes(), rects:secs.map(fzRects) };
+        });
+        var words = got.words.map(function(b){ return { x:b.x * k - 4, y:b.y * k - 3, w:b.w * k + 8, h:b.h * k + 6 }; }), taken = [];
+        secs.forEach(function(sec, i){
+          var rs = got.rects[i];
           if (!rs.length) return;
           if (picking){ all = all.concat(rs); ringRects = rs; }
           var open = sectionOpen(sec), at = markSpot(rs[0], k, open ? 44 : 30, 17, words, taken, ww);
