@@ -64,6 +64,7 @@ const (
 	NavAccessAnyone        NavAccess = iota // anyone who can view the campaign
 	NavAccessMemberOrAdmin                  // a member, or a site admin looking in (RequireCampaignAccess)
 	NavAccessMember                         // a member of the campaign (RequireRole(RolePlayer))
+	NavAccessDirector                       // the owner or a co-Director (CanAuthorDmOnly); anyone else is told the page is not there
 )
 
 // NavApp is one app page the sidebar can list, resolved for a campaign.

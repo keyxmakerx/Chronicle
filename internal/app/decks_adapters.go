@@ -66,6 +66,24 @@ func (a *decksHeroAdapter) Viewable(ctx context.Context, campaignID, entityID st
 	return ep.CanView, nil
 }
 
+// Party lists the campaign's claimed pages, the party, as the viewer may see
+// them.
+func (a *decksHeroAdapter) Party(ctx context.Context, campaignID string, v decks.Viewer) ([]decks.Hero, error) {
+	list, err := a.svc.ListClaimed(ctx, campaignID, v.VisibilityRole, v.UserID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]decks.Hero, 0, len(list))
+	for _, e := range list {
+		h := decks.Hero{ID: e.ID, Name: e.Name}
+		if e.OwnerUserID != nil {
+			h.OwnerUserID = *e.OwnerUserID
+		}
+		out = append(out, h)
+	}
+	return out, nil
+}
+
 // decksMemberAdapter implements decks.Members over the campaigns service.
 type decksMemberAdapter struct {
 	svc campaigns.CampaignService
@@ -89,7 +107,7 @@ func (a *decksMemberAdapter) Members(ctx context.Context, campaignID string) ([]
 	}
 	out := make([]decks.Member, 0, len(list))
 	for _, m := range list {
-		out = append(out, decks.Member{UserID: m.UserID, Role: int(m.Role),
+		out = append(out, decks.Member{UserID: m.UserID, Name: m.DisplayName, Role: int(m.Role),
 			Director: m.Role >= campaigns.RoleOwner || grants[m.UserID], JoinedAt: m.JoinedAt})
 	}
 	return out, nil

@@ -776,3 +776,15 @@ type fakePictures struct{}
 func (fakePictures) Usable(_ context.Context, campaignID, id string) (bool, error) {
 	return campaignID == camp && strings.HasPrefix(id, "pic-") && id != "pic-trashed" && id != "pic-page", nil
 }
+
+// Party lists the pages that have an owner, as the claimed party.
+func (f fakeHeroes) Party(_ context.Context, _ string, _ Viewer) ([]Hero, error) {
+	var out []Hero
+	for _, h := range f.pages {
+		if h.OwnerUserID != "" {
+			out = append(out, h)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}

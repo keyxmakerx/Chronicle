@@ -16,6 +16,9 @@ type Heroes interface {
 	// Viewable says whether the viewer may open the page by the page's own
 	// visibility rules, so a hidden hero is never named to a player.
 	Viewable(ctx context.Context, campaignID, entityID string, v Viewer) (bool, error)
+	// Party lists the campaign's hero pages (the claimed pages, the party) as
+	// the viewer may see them, for a Director's hero picker.
+	Party(ctx context.Context, campaignID string, v Viewer) ([]Hero, error)
 }
 
 // Members lists the campaign's members, implemented in internal/app over the
@@ -28,6 +31,8 @@ type Members interface {
 // Member is one person in the campaign.
 type Member struct {
 	UserID string
+	// Name is how the person is shown ("" when they have none).
+	Name string
 	// Role is the membership role (1 player, 2 scribe, 3 owner).
 	Role int
 	// Director is the owner or a co-Director.

@@ -42,6 +42,10 @@ type Service interface {
 	Shuffle(ctx context.Context, campaignID, deckID string, v Viewer) (*ActionResult, error)
 	Gather(ctx context.Context, campaignID, deckID string, v Viewer) (*ActionResult, error)
 
+	// Roster is who a Director can name on a deck: the campaign's hero pages
+	// and its people. Directors only.
+	Roster(ctx context.Context, campaignID string, v Viewer) (Roster, error)
+
 	// Table returns the cards lying in front of the whole table, from every
 	// deck, to any member.
 	Table(ctx context.Context, campaignID string, v Viewer) (*TableView, error)

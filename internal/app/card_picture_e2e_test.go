@@ -50,6 +50,8 @@ func (cardHeroes) Viewable(context.Context, string, string, decks.Viewer) (bool,
 	return true, nil
 }
 
+func (cardHeroes) Party(context.Context, string, decks.Viewer) ([]decks.Hero, error) { return nil, nil }
+
 // cardPageFilter says which pages a viewer can see.
 type cardPageFilter struct{ visible map[string]bool }
 

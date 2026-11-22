@@ -1390,6 +1390,7 @@ var navAppCatalog = []navAppDef{
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone, group: "table", line: "The party and the people they meet"},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone, group: "goods", line: "Every item, and who carries it"},
 	{slug: "crafting", label: "Crafting", icon: "fa-flask", path: "/crafting", addons: []string{crafting.AddonSlug}, needs: []string{"armory"}, access: campaigns.NavAccessMember, group: "goods", line: "Recipes, benches and tools"},
+	{slug: "decks", label: "Card decks", icon: "fa-layer-group", path: "/decks/workshop", addons: []string{decks.AddonSlug}, access: campaigns.NavAccessDirector, group: "table", line: "Hero, party and event decks"},
 	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone, group: "world", line: "What happened, and when"},
 	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin, group: "table", line: "The rulebook and your house rules"},
 }
@@ -7069,6 +7070,7 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(decks.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "deck-cards", Scripts: []string{"js/deck_cards.js"}},
+			{Name: "deck-workshop", Scripts: []string{"js/deck_cards.js", "js/deck_workshop.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
