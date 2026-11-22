@@ -209,3 +209,36 @@ test('a pale moon and a deep red one keep their own colours, in light and dark',
   }
   owner.assertClean();
 });
+
+test('an open day keeps its moon, whether or not its event marks fly into the card', async () => {
+  // Full motion, so a day with events packs its marks into the card.
+  const owner = await person({ tag: 'own', name: 'Mara Vell', context: { reducedMotion: 'no-preference' } });
+  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
+  const { base, cal } = await calendarFor(owner, player, 'Open Day Moon', (cid) => twoMoonsOnSixDays(owner, cid, THERIN));
+  const { page } = owner;
+  await addMarks(owner, base, cal);
+  await owner.go(`${base}/view`);
+  await page.locator('.cal-v5 .day .msil').first().waitFor();
+  const moonOf = (key) => page.evaluate((k) => {
+    const day = document.querySelector(`.cal-v5 .day[data-key="${k}"]`);
+    const m = day && day.querySelector('.msil');
+    if (!m) return null;
+    const cs = getComputedStyle(m);
+    return { packed: day.classList.contains('packed'), opacity: cs.opacity, visibility: cs.visibility };
+  }, key);
+  const y = cal.current_year, mo = cal.current_month;
+  // Day 2 has event marks (they fly into the card); day 10 has none.
+  for (const [d, withEvents] of [[2, true], [10, false]]) {
+    const key = `${y}_${mo}_${d}`;
+    await page.locator(`.cal-v5 .day[data-key="${key}"]`).click();
+    await page.waitForTimeout(900);
+    const m = await moonOf(key);
+    assert.ok(m, `day ${d} drew no moon`);
+    if (withEvents) assert.ok(m.packed, 'a day with events did not pack its marks, so this check proves nothing');
+    assert.equal(m.visibility, 'visible', `day ${d}'s moon is hidden while its card is open`);
+    assert.equal(m.opacity, '1', `day ${d}'s moon faded while its card is open`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+  }
+  owner.assertClean();
+});

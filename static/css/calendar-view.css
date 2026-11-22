@@ -919,8 +919,7 @@
 .cal-v5 .hc .gm + .gm{margin-top:4px}
 .cal-v5 .hc .gmd{width:7px;height:7px;border-radius:50%;background:var(--silL);flex:none}
 .cal-v5 .msil.away{visibility:hidden}
-/* A packed day's moon fades with its other marks (the .25s opacity transition on .day .msil) instead of vanishing on the last frame of the fold. */
-.cal-v5 .day.packed .msil{opacity:0;pointer-events:none}
+/* An open day keeps its moon and weather: the card lists them in words, and only event marks fly into it. */
 /* A silhouette in flight into the day's card turns into the realistic moon it lands as. */
 .cal-v5 .flyer.mflyer{--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
 .cal-v5 .flyer.mflyer.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}
@@ -1272,7 +1271,7 @@
    Edit mode hides it: the cells step back to their dates, and painting draws its own mark (.cwx). */
 .cal-v5 .wxm{position:absolute;right:6px;bottom:5px;z-index:2;font-size:11px;line-height:1;color:var(--mut);pointer-events:none;transition:opacity .25s var(--ease)}
 .cal-v5 .wxm.fut{opacity:.4}
-.cal-v5 .cal.editing .day .wxm, .cal-v5 .day.packed .wxm{opacity:0}
+.cal-v5 .cal.editing .day .wxm{opacity:0}
 .cal-v5 .band .wxm{position:relative;right:auto;bottom:auto;margin-left:6px}
 .cal-v5 .wxf small{display:block;color:var(--mut);font-size:11px}
 .cal-v5 .wxf.fut{opacity:.6;padding:4px 6px;margin:-4px -6px;border:1px dashed var(--edge);border-radius:7px}
