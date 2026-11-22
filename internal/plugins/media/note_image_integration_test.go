@@ -85,7 +85,7 @@ func TestDB_NotePictureAccess(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return h.checkMediaAccess(newADR058TestContext(who), f, false, "")
+		return accessErr(h.checkMediaAccess(newADR058TestContext(who), f, false, ""))
 	}
 	expect := func(label string, allowed map[string]bool) {
 		t.Helper()
@@ -230,7 +230,7 @@ func TestDB_NotePictureAccess(t *testing.T) {
 		expect("deleted", map[string]bool{ana: true, bo: false, gm: false})
 		loose := seedNotePicture(t, db, camp, ana)
 		f, _ := NewMediaRepository(db).FindByID(ctx, loose)
-		mustDeny(t, h.checkMediaAccess(newADR058TestContext(bo), f, false, ""), "membership fallback")
+		mustDeny(t, accessErr(h.checkMediaAccess(newADR058TestContext(bo), f, false, "")), "membership fallback")
 	})
 
 	t.Run("orphan cleanup keeps a picture a saved version still names", func(t *testing.T) {

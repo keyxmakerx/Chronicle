@@ -85,7 +85,7 @@ func TestNoteImageAccess(t *testing.T) {
 			} else {
 				c = newAccessTestContext(nil, &auth.Session{UserID: tc.viewer})
 			}
-			err := h.checkMediaAccess(c, noteImageFile(), false, "")
+			err := accessErr(h.checkMediaAccess(c, noteImageFile(), false, ""))
 			if tc.allowed {
 				mustAllow(t, err, tc.name)
 			} else {
@@ -108,7 +108,7 @@ func TestNoteImageAccess_IgnoresPageRulesAndMembership(t *testing.T) {
 	refs := []MediaRef{{EntityID: "ent-public", RefType: "content"}}
 	h, svc := noteImageHandler(&fakeNoteMedia{}, visible, refs)
 
-	err := h.checkMediaAccess(newADR058TestContext(noteOtherID), noteImageFile(), false, "")
+	err := accessErr(h.checkMediaAccess(newADR058TestContext(noteOtherID), noteImageFile(), false, ""))
 	mustDeny(t, err, "a visible page mentioning a note picture")
 	if svc.findReferencesCalls != 0 || visible.callCount != 0 {
 		t.Errorf("the page rule ran for a note picture (refs=%d, filter=%d)", svc.findReferencesCalls, visible.callCount)
@@ -120,7 +120,7 @@ func TestNoteImageAccess_IgnoresPageRulesAndMembership(t *testing.T) {
 func TestNoteImageAccess_AdminIsNotExempt(t *testing.T) {
 	h, _ := noteImageHandler(&fakeNoteMedia{}, &fakeEntityVisibilityFilter{}, nil)
 	c := newAccessTestContext(nil, &auth.Session{UserID: "user-admin", IsAdmin: true})
-	mustDeny(t, h.checkMediaAccess(c, noteImageFile(), false, ""), "site admin reading a private note picture")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, noteImageFile(), false, "")), "site admin reading a private note picture")
 }
 
 // Existing entity pictures keep the page rule: the note rule is reached only
@@ -129,7 +129,7 @@ func TestNoteImageAccess_OtherFilesKeepThePageRule(t *testing.T) {
 	nm := &fakeNoteMedia{readers: map[string]bool{noteOtherID: true}}
 	h, _ := noteImageHandler(nm, &fakeEntityVisibilityFilter{}, nil)
 	f := adr058File() // an attachment with no page reference: plain membership
-	mustAllow(t, h.checkMediaAccess(newADR058TestContext(noteOtherID), f, false, ""), "member reading an unreferenced attachment")
+	mustAllow(t, accessErr(h.checkMediaAccess(newADR058TestContext(noteOtherID), f, false, "")), "member reading an unreferenced attachment")
 	if nm.calls != 0 {
 		t.Errorf("the notes rule ran for a file that is not a note picture")
 	}
@@ -142,7 +142,7 @@ func TestNoteImageAccess_CoDMReachesTheNotesRuleAsGM(t *testing.T) {
 		members:   map[string]map[string]bool{testCampaignID: {noteReaderID: true, noteAuthorID: true}},
 		dmGranted: map[string]map[string]bool{testCampaignID: {noteReaderID: true}},
 	}
-	mustAllow(t, h.checkMediaAccess(newADR058TestContext(noteReaderID), noteImageFile(), false, ""), "co-DM")
+	mustAllow(t, accessErr(h.checkMediaAccess(newADR058TestContext(noteReaderID), noteImageFile(), false, "")), "co-DM")
 	if nm.role < 3 {
 		t.Errorf("the notes rule saw role %d, want the promoted owner role so GM-shared notes count", nm.role)
 	}
@@ -153,5 +153,5 @@ func TestNoteImage_WithoutACampaignIsGone(t *testing.T) {
 	f := noteImageFile()
 	f.CampaignID = nil
 	f.CampaignIsPublic = nil
-	mustDeny(t, h.checkMediaAccess(newADR058TestContext(noteAuthorID), f, false, ""), "note picture whose campaign was deleted")
+	mustDeny(t, accessErr(h.checkMediaAccess(newADR058TestContext(noteAuthorID), f, false, "")), "note picture whose campaign was deleted")
 }

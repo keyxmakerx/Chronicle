@@ -42,7 +42,7 @@ func TestSignedURL_MintedForA_StillWorksForA(t *testing.T) {
 	expires, sig := signMediaURL(t, h.signer, "file-bind", ViewerSession("user-a"), time.Hour)
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": sig}, &auth.Session{UserID: "user-a"})
 
-	if err := h.checkMediaAccess(c, bindingTestFile(), false, ""); err != nil {
+	if err := accessErr(h.checkMediaAccess(c, bindingTestFile(), false, "")); err != nil {
 		t.Errorf("a link minted for user-a must still work for user-a; got %v", err)
 	}
 }
@@ -58,7 +58,7 @@ func TestSignedURL_MintedForA_DoesNotWorkForB(t *testing.T) {
 	expires, sig := signMediaURL(t, h.signer, "file-bind", ViewerSession("user-a"), time.Hour)
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": sig}, &auth.Session{UserID: "user-b"})
 
-	err := h.checkMediaAccess(c, bindingTestFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, bindingTestFile(), false, ""))
 	if err == nil {
 		t.Error("a link minted for user-a must NOT work for user-b: a copied signed URL must be " +
 			"inert for anyone else (ADR-058 decision 6)")
@@ -78,7 +78,7 @@ func TestSignedURL_MintedForA_DoesNotWorkAnonymously(t *testing.T) {
 	expires, sig := signMediaURL(t, h.signer, "file-bind", ViewerSession("user-a"), time.Hour)
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": sig}, nil)
 
-	err := h.checkMediaAccess(c, bindingTestFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, bindingTestFile(), false, ""))
 	if err == nil {
 		t.Error("a session-bound link must not work for a cookieless (anonymous) presentation")
 	}
@@ -154,7 +154,7 @@ func TestCheckMediaAccess_AnonymousPublicCampaign_DmOnlyPage_Denied(t *testing.T
 	}
 	c := newAccessTestContext(nil, nil) // no signature, no cookie: true anonymous
 
-	err := h.checkMediaAccess(c, publicMediaFileReferenced(), false, "")
+	err := accessErr(h.checkMediaAccess(c, publicMediaFileReferenced(), false, ""))
 	if err == nil {
 		t.Error("an anonymous caller must not read a public campaign's file used only by a " +
 			"dm_only page (ADR-058 decision 7)")
@@ -178,7 +178,7 @@ func TestCheckMediaAccess_AnonymousPublicCampaign_VisiblePage_Allowed(t *testing
 	}
 	c := newAccessTestContext(nil, nil)
 
-	if err := h.checkMediaAccess(c, publicMediaFileReferenced(), false, ""); err != nil {
+	if err := accessErr(h.checkMediaAccess(c, publicMediaFileReferenced(), false, "")); err != nil {
 		t.Errorf("an anonymous caller must be able to read a public campaign's file used by a page "+
 			"anonymous viewers can see; got %v", err)
 	}

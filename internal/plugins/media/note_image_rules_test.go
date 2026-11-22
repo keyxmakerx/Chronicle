@@ -205,7 +205,7 @@ func TestSetSecurityHeaders_NotePictureIsNeverCached(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := newAccessTestContext(nil, nil)
-			(&Handler{}).setSecurityHeaders(c, tc.file)
+			(&Handler{}).setSecurityHeaders(c, tc.file, false)
 			if got := c.Response().Header().Get("Cache-Control"); got != tc.want {
 				t.Errorf("Cache-Control = %q, want %q", got, tc.want)
 			}

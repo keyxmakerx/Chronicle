@@ -66,7 +66,7 @@ func TestCheckMediaAccess_AvatarThumbForAPIKeyCampaign(t *testing.T) {
 			if tc.thumb {
 				size = "300"
 			}
-			err := h.checkMediaAccess(c, tc.file, tc.thumb, size)
+			err := accessErr(h.checkMediaAccess(c, tc.file, tc.thumb, size))
 			if tc.allow {
 				mustAllow(t, err, tc.name)
 			} else {

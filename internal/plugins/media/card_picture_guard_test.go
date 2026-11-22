@@ -143,7 +143,7 @@ func TestCheckCardPictureGuard(t *testing.T) {
 				size = "300"
 			}
 			c := newAccessTestContext(tc.query, sessionOf(tc.user))
-			err := h.checkCardPictureGuard(c, privateMediaFile(), tc.thumb, size)
+			err := accessErr(h.checkCardPictureGuard(c, privateMediaFile(), tc.thumb, size))
 			if tc.allowed {
 				mustAllow(t, err, tc.name)
 			} else {
@@ -165,7 +165,7 @@ func TestCardPictureViewerFromTheMemberChecker(t *testing.T) {
 	g := &fakeCardPictureGuard{isPic: true, seen: map[string]bool{"player": true}}
 	h, _, _ := cardGuardFixture(g)
 	c := newAccessTestContext(nil, sessionOf("player"))
-	mustAllow(t, h.checkCardPictureGuard(c, privateMediaFile(), false, ""), "player")
+	mustAllow(t, accessErr(h.checkCardPictureGuard(c, privateMediaFile(), false, "")), "player")
 	if len(g.viewers) != 1 {
 		t.Fatalf("viewers = %+v", g.viewers)
 	}
@@ -190,27 +190,27 @@ func TestSignedLinksDoNotBypassTheCardPictureGuard(t *testing.T) {
 	// A link minted for the player's own session.
 	exp, sig := signMediaURL(t, signer, "file-1", ViewerSession("player"), time.Minute)
 	c := newAccessTestContext(map[string]string{"expires": exp, "sig": sig}, sessionOf("player"))
-	mustDeny(t, h.checkMediaAccess(c, privateMediaFile(), false, ""), "player's own signed link, card face down")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")), "player's own signed link, card face down")
 
 	// The same link once a copy is face up to them.
 	g.seen["player"] = true
-	mustAllow(t, h.checkMediaAccess(c, privateMediaFile(), false, ""), "player's own signed link, card face up")
+	mustAllow(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")), "player's own signed link, card face up")
 
 	// A link minted for the owner's session, replayed in the player's session.
 	g.seen["player"] = false
 	oExp, oSig := signMediaURL(t, signer, "file-1", ViewerSession("owner"), time.Minute)
 	c = newAccessTestContext(map[string]string{"expires": oExp, "sig": oSig}, sessionOf("player"))
-	mustDeny(t, h.checkMediaAccess(c, privateMediaFile(), false, ""), "a Director's session link used by a player")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")), "a Director's session link used by a player")
 
 	// A thumbnail link for the player, card face down.
 	tExp, tSig := signThumbURL(t, signer, "file-1", "300", ViewerSession("player"), time.Minute)
 	c = newAccessTestContext(map[string]string{"expires": tExp, "sig": tSig}, sessionOf("player"))
-	mustDeny(t, h.checkMediaAccess(c, privateMediaFile(), true, "300"), "player's signed thumbnail link, card face down")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), true, "300")), "player's signed thumbnail link, card face down")
 
 	// Unsigned, as a member loads it by session: the "no page references it"
 	// branch would admit any member without the guard.
 	c = newAccessTestContext(nil, sessionOf("player"))
-	mustDeny(t, h.checkMediaAccess(c, privateMediaFile(), false, ""), "unsigned member request for a face-down card")
+	mustDeny(t, accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")), "unsigned member request for a face-down card")
 }
 
 // The page rule: a card picture that a page the viewer can see also shows is
@@ -242,7 +242,7 @@ func TestCardPictureAlsoOnAPage(t *testing.T) {
 			// page rule in the base check: the guard must apply it itself.
 			exp, sig := signMediaURL(t, signer, "file-1", ViewerSession("player"), time.Minute)
 			c := newAccessTestContext(map[string]string{"expires": exp, "sig": sig}, sessionOf("player"))
-			err := h.checkMediaAccess(c, privateMediaFile(), false, "")
+			err := accessErr(h.checkMediaAccess(c, privateMediaFile(), false, ""))
 			if tc.allowed {
 				mustAllow(t, err, tc.name)
 			} else {
@@ -257,8 +257,8 @@ func TestCardPictureAlsoOnAPage(t *testing.T) {
 		h.service = &fakeAccessMediaService{findReferencesFn: refs}
 		h.entityVisibility = &fakeEntityVisibilityFilter{viewableIDs: map[string]bool{"page-1": true}}
 		c := newAccessTestContext(nil, nil)
-		mustAllow(t, h.checkCardPictureGuard(c, publicMediaFileIn("camp-1"), false, ""), "public campaign")
-		mustDeny(t, h.checkCardPictureGuard(c, privateMediaFile(), false, ""), "private campaign")
+		mustAllow(t, accessErr(h.checkCardPictureGuard(c, publicMediaFileIn("camp-1"), false, "")), "public campaign")
+		mustDeny(t, accessErr(h.checkCardPictureGuard(c, privateMediaFile(), false, "")), "private campaign")
 	})
 }
 
@@ -276,7 +276,7 @@ func TestCardPictureGuardWiredFlagAndUnwired(t *testing.T) {
 	if h.CardPictureGuardWired() {
 		t.Error("CardPictureGuardWired must be false when unset")
 	}
-	mustAllow(t, h.checkCardPictureGuard(newAccessTestContext(nil, sessionOf("player")), privateMediaFile(), false, ""), "unwired guard")
+	mustAllow(t, accessErr(h.checkCardPictureGuard(newAccessTestContext(nil, sessionOf("player")), privateMediaFile(), false, "")), "unwired guard")
 	g := &fakeCardPictureGuard{isPic: true}
 	h.SetCardPictureGuard(g)
 	if !h.CardPictureGuardWired() {
@@ -284,7 +284,7 @@ func TestCardPictureGuardWiredFlagAndUnwired(t *testing.T) {
 	}
 	f := privateMediaFile()
 	f.CampaignID = nil
-	mustAllow(t, h.checkCardPictureGuard(newAccessTestContext(nil, sessionOf("player")), f, false, ""), "a file with no campaign")
+	mustAllow(t, accessErr(h.checkCardPictureGuard(newAccessTestContext(nil, sessionOf("player")), f, false, "")), "a file with no campaign")
 }
 
 // listService records how the picker asked for its page.

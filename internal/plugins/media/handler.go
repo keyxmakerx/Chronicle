@@ -444,12 +444,13 @@ func (h *Handler) serve(c *echo.Context) error {
 	}
 
 	// Enforce access control.
-	if err := h.checkMediaAccess(c, file, false, ""); err != nil {
+	guarded, err := h.checkMediaAccess(c, file, false, "")
+	if err != nil {
 		return err
 	}
 
 	filePath := h.service.FilePath(file)
-	h.setSecurityHeaders(c, file)
+	h.setSecurityHeaders(c, file, guarded)
 	c.Response().Header().Set("Content-Type", file.MimeType)
 
 	return middleware.ServeFile(c, filePath)
@@ -483,12 +484,13 @@ func (h *Handler) serveThumbnail(c *echo.Context) error {
 	}
 
 	// Enforce access control (includes size in signature check).
-	if err := h.checkMediaAccess(c, file, true, size); err != nil {
+	guarded, err := h.checkMediaAccess(c, file, true, size)
+	if err != nil {
 		return err
 	}
 
 	thumbPath := h.service.ThumbnailPath(file, size)
-	h.setSecurityHeaders(c, file)
+	h.setSecurityHeaders(c, file, guarded)
 
 	return middleware.ServeFile(c, thumbPath)
 }
@@ -506,27 +508,38 @@ func currentViewerIdentity(c *echo.Context) string {
 }
 
 // checkMediaAccess enforces signed URL verification and private/public
-// campaign access control, then the shadowed-map-picture rule. Returns nil if
-// access is allowed, or an error to return to the client.
-func (h *Handler) checkMediaAccess(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+// campaign access control, then the shadowed-map-picture and card-picture
+// rules. A nil error means access is allowed; any other is returned to the
+// client.
+//
+// guarded says the file is one a guard decides per viewer (a shadowed map
+// picture, a card's picture). Whoever it was allowed for, such a response must
+// never be kept by a shared cache, which would hand it to a later request
+// without asking the guard; setSecurityHeaders takes it for that reason.
+func (h *Handler) checkMediaAccess(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) (guarded bool, err error) {
 	// Backstop for the serve handlers' own refusal: whatever else is true, a
 	// page file is never decided by the rules below.
 	if file.IsPageFile() {
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
 	// A file whose campaign is in the site Trash, or that is itself in a
 	// clean-up batch, is out of use for everyone. This runs ahead of the
 	// signature check: a link signed before the delete must stop working too.
 	if file.InTrash() {
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
 	if err := h.checkBaseMediaAccess(c, file, isThumb, thumbSize); err != nil {
-		return err
+		return false, err
 	}
-	if err := h.checkMapImageGuard(c, file, isThumb, thumbSize); err != nil {
-		return err
+	shadowed, err := h.checkMapImageGuard(c, file, isThumb, thumbSize)
+	if err != nil {
+		return false, err
 	}
-	return h.checkCardPictureGuard(c, file, isThumb, thumbSize)
+	cardPicture, err := h.checkCardPictureGuard(c, file, isThumb, thumbSize)
+	if err != nil {
+		return false, err
+	}
+	return shadowed || cardPicture, nil
 }
 
 // checkCardPictureGuard (ADR-078) refuses the original (and any thumbnail) of a card's
@@ -541,9 +554,11 @@ func (h *Handler) checkMediaAccess(c *echo.Context, file *MediaFile, isThumb boo
 // already shows it, so this guard replaces only the "no page references it"
 // grant and narrows nothing a page decides. Any error refuses, with the same
 // 404 as every other denial. Nothing here is cached.
-func (h *Handler) checkCardPictureGuard(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+//
+// guarded is true for any file that is a card's picture, whoever asked.
+func (h *Handler) checkCardPictureGuard(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) (guarded bool, err error) {
 	if h.cardPictures == nil || file.CampaignID == nil {
-		return nil
+		return false, nil
 	}
 	ctx := c.Request().Context()
 	// Asked first, and alone, because this runs on every campaign image: a
@@ -552,25 +567,25 @@ func (h *Handler) checkCardPictureGuard(c *echo.Context, file *MediaFile, isThum
 	if err != nil {
 		slog.Error("media: card picture check failed; denying access",
 			slog.String("file_id", file.ID), slog.Any("error", err))
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
 	if !isPicture {
-		return nil
+		return false, nil
 	}
 	// Directors and the owner's API-key links see every card.
 	if h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
-		return nil
+		return true, nil
 	}
 	allowed, err := h.cardPictureShownTo(ctx, file, auth.GetUserID(c))
 	if err != nil {
 		slog.Error("media: card picture check failed; denying access",
 			slog.String("file_id", file.ID), slog.Any("error", err))
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
 	if !allowed {
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
-	return nil
+	return true, nil
 }
 
 // cardPictureAllowed is the card rule for one viewer ("" is anonymous): true
@@ -679,20 +694,22 @@ func (h *Handler) anyRefViewable(ctx context.Context, campaignID, userID string,
 // even for a validly signed URL: a signature proves the link is genuine, not
 // that its holder may see under the shadows. Any error refuses, with the same
 // 404 as every other denial so the response does not reveal the file exists.
-func (h *Handler) checkMapImageGuard(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+//
+// guarded is true for any map picture that has a shadow, whoever asked.
+func (h *Handler) checkMapImageGuard(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) (guarded bool, err error) {
 	if h.mapImages == nil || file.CampaignID == nil {
-		return nil
+		return false, nil
 	}
 	hidden, err := h.mapImages.IsShadowedMapImage(c.Request().Context(), *file.CampaignID, file.ID)
 	if err != nil {
 		slog.Error("media: map picture shadow check failed; denying access",
 			slog.String("file_id", file.ID), slog.Any("error", err))
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
 	if hidden && !h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
-		return apperror.NewNotFound("media file not found")
+		return false, apperror.NewNotFound("media file not found")
 	}
-	return nil
+	return hidden, nil
 }
 
 // viewerSeesUnderShadow is true for a signed-in user whose promoted role is
@@ -1087,7 +1104,8 @@ func (h *Handler) allowUnsignedAccess(c *echo.Context, file *MediaFile) bool {
 }
 
 // setSecurityHeaders applies defense-in-depth headers to media responses.
-func (h *Handler) setSecurityHeaders(c *echo.Context, file *MediaFile) {
+// guarded is checkMediaAccess's answer for this file.
+func (h *Handler) setSecurityHeaders(c *echo.Context, file *MediaFile, guarded bool) {
 	resp := c.Response()
 
 	// Force browser to respect declared Content-Type (prevents MIME sniffing).
@@ -1110,6 +1128,11 @@ func (h *Handler) setSecurityHeaders(c *echo.Context, file *MediaFile) {
 
 	// Cache control based on campaign privacy.
 	switch {
+	case guarded:
+		// Who may open this file is decided on each request, in a public
+		// campaign too. A shared cache that kept one answer would serve it to
+		// the next request without the guard ever running.
+		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
 	case file.IsNotePicture():
 		// Readers change as the note's sharing does, and a public campaign's
 		// notes are no more public than a private one's: never cacheable.

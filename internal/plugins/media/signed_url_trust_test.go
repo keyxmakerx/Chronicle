@@ -166,7 +166,7 @@ func TestCheckMediaAccess_ValidSignedURL_NoCookie_PrivateCampaign(t *testing.T) 
 	expires, sig := signMediaURL(t, h.signer, "file-1", ViewerAPIKey, time.Hour)
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": sig}, nil)
 
-	if err := h.checkMediaAccess(c, privateMediaFile(), false, ""); err != nil {
+	if err := accessErr(h.checkMediaAccess(c, privateMediaFile(), false, "")); err != nil {
 		t.Errorf("valid signed URL should bypass cookie+membership for private campaigns; got %v. C-MEDIA-SIGNED-URL-TRUST regressed.", err)
 	}
 }
@@ -180,7 +180,7 @@ func TestCheckMediaAccess_ExpiredSignature_NoCookie_PrivateCampaign(t *testing.T
 	expires, sig := signMediaURL(t, h.signer, "file-1", ViewerAPIKey, -1*time.Hour)
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": sig}, nil)
 
-	err := h.checkMediaAccess(c, privateMediaFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, privateMediaFile(), false, ""))
 	if err == nil {
 		t.Errorf("expired signature must be rejected; got nil")
 	}
@@ -200,7 +200,7 @@ func TestCheckMediaAccess_TamperedSignature_NoCookie_PrivateCampaign(t *testing.
 	tampered := sig[:len(sig)-1] + repl
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": tampered}, nil)
 
-	err := h.checkMediaAccess(c, privateMediaFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, privateMediaFile(), false, ""))
 	if err == nil {
 		t.Errorf("tampered signature must be rejected; got nil")
 	}
@@ -214,7 +214,7 @@ func TestCheckMediaAccess_NoSignature_NoCookie_PrivateCampaign(t *testing.T) {
 	h := newTestHandler("test-secret", nil)
 	c := newAccessTestContext(nil, nil)
 
-	err := h.checkMediaAccess(c, privateMediaFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, privateMediaFile(), false, ""))
 	if err == nil {
 		t.Errorf("unsigned access to private campaign without cookie must be rejected; got nil")
 	}
@@ -233,7 +233,7 @@ func TestCheckMediaAccess_NoSignature_Cookie_NonMember_PrivateCampaign(t *testin
 	session := &auth.Session{UserID: "user-x"}
 	c := newAccessTestContext(nil, session)
 
-	err := h.checkMediaAccess(c, privateMediaFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, privateMediaFile(), false, ""))
 	if err == nil {
 		t.Errorf("non-member cookie auth on private campaign must be rejected; got nil")
 	}
@@ -253,7 +253,7 @@ func TestCheckMediaAccess_ValidThumbSignedURL_NoCookie_PrivateCampaign(t *testin
 	expires, sig := signThumbURL(t, h.signer, "file-1", "300", ViewerAPIKey, time.Hour)
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": sig}, nil)
 
-	if err := h.checkMediaAccess(c, privateMediaFile(), true, "300"); err != nil {
+	if err := accessErr(h.checkMediaAccess(c, privateMediaFile(), true, "300")); err != nil {
 		t.Errorf("valid thumb signed URL should bypass cookie+membership for private campaigns; got %v", err)
 	}
 }
@@ -271,7 +271,7 @@ func TestCheckMediaAccess_PublicCampaign_NoSignature_NoCookie(t *testing.T) {
 	h := newTestHandler("test-secret", nil)
 	c := newAccessTestContext(nil, nil)
 
-	err := h.checkMediaAccess(c, publicMediaFile(), false, "")
+	err := accessErr(h.checkMediaAccess(c, publicMediaFile(), false, ""))
 	if err == nil {
 		t.Error("ADR-058 decision 7: an anonymous, unsigned request for an unreferenced public-campaign " +
 			"file with no membership must now be denied, not granted unconditionally")
