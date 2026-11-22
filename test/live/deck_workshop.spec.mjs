@@ -121,7 +121,7 @@ test('make a deck from a style by mouse, add a card, change the look and see the
   const pickedValue = await border.getAttribute('data-value');
   await border.click();
   await page.waitForFunction((v) => document.querySelector(`[data-row=border] [data-value="${v}"]`)?.getAttribute('aria-checked') === 'true', pickedValue);
-  assert.notEqual(await page.locator('#dkw-bigcard').innerHTML(), before, 'the big card did not change');
+  await page.waitForFunction((b) => document.querySelector('#dkw-bigcard')?.innerHTML !== b, before, { timeout: 5000 }).catch(() => assert.fail('the big card did not change'));
   const turn = page.locator('[data-row=turn] [role=radio]:not([aria-checked=true]):not([aria-disabled=true])').first();
   const turnValue = await turn.getAttribute('data-value');
   await turn.click();
@@ -324,4 +324,139 @@ test('sheen and foil move only while the pointer rests on the Look tab, and not 
   }
   void owner;
   void api;
+});
+
+const pickBorder = async (page, nth = 0) => {
+  const opt = page.locator('[data-row=border] [role=radio]:not([aria-checked=true]):not([aria-disabled=true]):not([hidden])').nth(nth);
+  const v = await opt.getAttribute('data-value');
+  await opt.click();
+  return v;
+};
+
+test('a save refused as stale is said so, shows the other page, and the next change saves', async () => {
+  const { owner, cid, page } = await director();
+  await makeDeck(page, cid, 'Two pages', 'Plain');
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('[data-row=border]').waitFor();
+  const other = await page.context().newPage();
+  await other.goto(page.url());
+  await other.getByRole('tab', { name: 'Look' }).click();
+  await other.locator('[data-row=border]').waitFor();
+  const fromOther = await pickBorder(other, 0);
+  await other.waitForFunction((v) => document.querySelector(`[data-row=border] [data-value="${v}"]`)?.getAttribute('aria-checked') === 'true', fromOther);
+  await other.locator('[data-dkw-saved].is-on').waitFor();
+
+  // The first page still holds the old version: its change is refused, in words, and it shows the other page's value.
+  const mine = await pickBorder(page, 1);
+  assert.notEqual(mine, fromOther);
+  await page.locator('#dkw-panel [data-dkw-err]:not([hidden])').first().waitFor();
+  assert.match(await page.locator('#dkw-panel [data-dkw-err]:not([hidden])').first().textContent(), /changed somewhere else/i);
+  await page.waitForFunction((v) => document.querySelector(`[data-row=border] [data-value="${v}"]`)?.getAttribute('aria-checked') === 'true', fromOther);
+
+  // The reload gave it the new version, so the next change goes through.
+  const next = page.locator('[data-row=turn] [role=radio]:not([aria-checked=true]):not([aria-disabled=true]):not([hidden])').first();
+  const turn = await next.getAttribute('data-value');
+  await next.click();
+  await page.waitForFunction((v) => document.querySelector(`[data-row=turn] [data-value="${v}"]`)?.getAttribute('aria-checked') === 'true', turn);
+  await page.locator('[data-dkw-saved].is-on').waitFor();
+  await page.reload();
+  await page.locator('[data-row=turn]').waitFor();
+  assert.equal(await page.locator(`[data-row=turn] [data-value="${turn}"]`).getAttribute('aria-checked'), 'true', 'the change after the refusal was not saved');
+  assert.equal(await page.locator(`[data-row=border] [data-value="${fromOther}"]`).getAttribute('aria-checked'), 'true');
+  void owner;
+});
+
+test('kinds are picked with dots and glyph buttons, and a deck with none says so', async () => {
+  const { owner, cid, page, errors } = await director();
+  await makeDeck(page, cid, 'Kinds deck', 'Plain');
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('[data-row=border]').waitFor();
+  assert.match(await page.locator('.dkw-nokinds').textContent(), /No kinds yet/);
+  assert.equal(await page.locator('.dkw-kindbtns').count(), 0);
+  await page.locator('.dkw-nokinds [data-act=toggle-kinds]').click();
+  await page.locator('#dkw-kinds').waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Add a kind' }).click();
+  await page.locator('.dkw-kindrow').waitFor();
+  const row = page.locator('.dkw-kindrow').first();
+  assert.equal(await row.locator('[data-kind-colour] [role=radio]').count(), 10);
+  assert.equal(await row.locator('[data-kind-sign] [role=radio]').count(), 8);
+  assert.equal(await row.locator('select').count(), 0, 'colour and sign are not dropdowns');
+  await row.locator('[data-kind-colour] [aria-label=rose]').click();
+  await page.locator('.dkw-kindrow [data-kind-colour] [aria-label=rose][aria-checked=true]').waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'rose', 'focus left the colour');
+  await row.locator('[data-kind-sign] [aria-label=diamond]').click();
+  await page.locator('.dkw-kindrow [data-kind-sign] [aria-label=diamond][aria-checked=true]').waitFor();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('.dkw-kindbtns').waitFor();
+  assert.equal(await page.locator('.dkw-kindbtns .dkw-chip').count(), 1);
+  assert.deepEqual(errors, []);
+  void owner;
+});
+
+test('a style asks first only when the look has been changed since it, and says what stays', async () => {
+  const { owner, cid, page } = await director();
+  await makeDeck(page, cid, 'Style deck', 'Plain');
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('[data-row=border]').waitFor();
+  // Still a style's own look: a press applies at once.
+  await page.locator('[data-act=apply-style][data-style=iron-omens]').click();
+  await page.waitForFunction(() => document.querySelector('[data-dkw-stylenote]')?.textContent.includes('Iron omens'));
+  assert.equal(await page.locator('[data-dkw-stylenote]').getAttribute('data-changed'), 'false');
+  // After an edit it asks, naming what is replaced and what stays.
+  await pickBorder(page, 0);
+  await page.waitForFunction(() => document.querySelector('[data-dkw-stylenote]')?.getAttribute('data-changed') === 'true');
+  const before = await page.locator('[data-row=border] [aria-checked=true]').getAttribute('data-value');
+  await page.locator('[data-act=apply-style][data-style=tavern-game]').click();
+  const slip = page.getByText(/Your kinds and the words on the back stay/);
+  await slip.waitFor();
+  assert.equal(await page.locator('[data-row=border] [aria-checked=true]').getAttribute('data-value'), before, 'it applied before asking');
+  await page.getByRole('button', { name: 'Replace them' }).click();
+  await page.waitForFunction((b) => document.querySelector('[data-row=border] [aria-checked=true]')?.getAttribute('data-value') !== b, before);
+  void owner;
+});
+
+test('on a phone the table row is compact, the card stays at the top of Look, inputs are 44 tall and Delete is last', async () => {
+  const { owner, cid, page, errors } = await director();
+  await page.setViewportSize({ width: 390, height: 800 });
+  await makeDeck(page, cid, 'Phone deck', 'Plain');
+  for (const n of ['One', 'Two']) await addCard(page, n);
+  await page.getByRole('button', { name: 'Draw', exact: true }).click();
+  await page.locator('.dkw-shownone').first().waitFor();
+  const table = await page.locator('#dkw-table').boundingBox();
+  assert.ok(table.height < 800, `the table row is ${table.height}px tall on a phone, more than a screen`);
+  const hs = await page.locator('.dkw-line:visible, .dkw-title').evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().height));
+  assert.ok(hs.every((h) => h >= 43.5), `an input is shorter than 44: ${hs}`);
+  // Kinds so the buttons show.
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('[data-row=border]').waitFor();
+  await page.locator('[data-act=toggle-kinds]').last().click();
+  await page.getByRole('button', { name: 'Add a kind' }).click();
+  await page.locator('.dkw-kindrow').waitFor();
+  await page.locator('[data-dkw-kindlist] [data-kind-name]').first().blur();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('.dkw-kindbtns').waitFor();
+  assert.ok(await page.locator('.dkw-kindbtns .dkw-chip').first().isVisible(), 'the kind buttons are hidden on a phone');
+  // The stage sticks to the top while the rows scroll, and is under 45% of the screen.
+  const stage = page.locator('.dkw-stagecol');
+  const h = (await stage.boundingBox()).height;
+  assert.ok(h <= 800 * 0.45, `the sticky stage is ${h}px of 800`);
+  await page.evaluate(() => {
+    // Whatever scrolls the page (the window or an app container above the stage).
+    for (let a = document.querySelector('.dkw-stagecol').parentElement; a; a = a.parentElement) {
+      if (a.scrollHeight > a.clientHeight && /auto|scroll/.test(getComputedStyle(a).overflowY)) a.scrollTop = 99999;
+    }
+    window.scrollTo(0, 99999);
+  });
+  await page.waitForTimeout(300);
+  const top = (await stage.boundingBox()).y;
+  assert.ok(top >= -1 && top < 120, `the stage scrolled away (top ${top})`);
+  // Delete this deck is the last thing on the page.
+  const del = page.getByRole('button', { name: 'Delete this deck' });
+  const dy = (await del.boundingBox()).y;
+  const lastRow = await page.locator('[data-row]').last().boundingBox();
+  assert.ok(dy > lastRow.y, 'Delete this deck is not at the end of the page');
+  assert.deepEqual(errors, []);
+  void owner;
 });

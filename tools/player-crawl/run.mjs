@@ -75,6 +75,20 @@ try {
       if (routes.size > 6) console.log(`        ... and ${routes.size - 6} more`);
     }
   }
+  // A card's picture is a file: while its card is face down no one but a
+  // Director may be sent it, at full size or as a thumbnail, whatever the
+  // walk's markers say. The Director's own request proves the file is there.
+  for (const u of s.pictureUrls || []) {
+    const mine = await s.owner.get(u, { follow: false });
+    if (mine.status !== 200) { leaks++; console.log(`  PICTURE NOT REACHABLE by the Director: ${u} -> ${mine.status}`); }
+    // The owner previewing as a guest is left out: /media sits outside the campaign's
+    // routes, which are what the preview cookie lowers, and the owner is a Director.
+    for (const [who, client] of Object.entries(viewers)) {
+      if (who === 'owner previewing as a guest') continue;
+      const got = await client.get(u, { follow: false });
+      if (got.status === 200) { leaks++; console.log(`  LEAK  ${who} was sent a face-down card's picture: ${u}`); }
+    }
+  }
   // The preview must not open anything the stranger cannot: any page that
   // answers 2xx to the previewing owner and not to the stranger is a leak of
   // the owner's real access. The other direction (a page the stranger gets and

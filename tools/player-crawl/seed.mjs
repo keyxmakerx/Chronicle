@@ -353,25 +353,45 @@ export async function seed(base, log = console.log) {
     must(await owner.del(`${C}/entities/${shopA}/relations/${rel.id}`), 'remove open listing');
   });
 
-  // 14c. A Director's card deck: its name, a card's name and words (the face of
-  // a card still in the pile) and a note for Directors. Every deck page, tab and
-  // fragment is a Director page; no one else may be shown any of it.
+  // 14c. A Director's card deck: every string a Director types into it gets a
+  // marker of its own (the deck's name, the back's words, a kind's name, a
+  // card's name, words, corner and note), one card wears a picture, and one
+  // card is drawn into the shown spot where only a Director sees its face.
+  // Every workshop page and fragment is named in the walk, not left to route
+  // expansion, and so are the picture's file and thumbnail.
   const extraUrls = [`${C}/armory?goods=1`, `${C}/armory?goods=1&q=ZQ${RUN}`];
+  const pictureUrls = [];
   await step('a Director deck', async () => {
     const name = m('DECKNAME', 'name of a deck only the Director may open');
     r = must(await postJSON(`${C}/decks`, { name, kind: 'event' }), 'deck');
     const deck = JSON.parse(r.text).id;
     if (!deck) throw new Error('no deck id in the answer');
     ids.deck = deck;
+    // Back words and a kind's name hold 24 characters, a corner value 12; the markers fit.
+    const backWords = m('DECKBACK', 'the words on a deck back');
+    const kindName = m('DECKKIND', 'name of a card kind in a Director deck');
+    must(await owner.put(`${C}/decks/${deck}`, { json: { version: 1, look: { back: { words: backWords }, kinds: [{ key: 'bane', name: kindName, colour: 'rose', sign: 'star' }] } } }), 'look');
     const face = m('DECKFACE', 'name of a card still face down in the pile');
     const words = m('DECKWORDS', 'words on a card still face down in the pile');
     const note = m('DECKNOTE', 'a Director note on a card');
-    r = must(await postJSON(`${C}/decks/${deck}/cards`, { name: face, words, directorNote: note, copies: 1 }), 'card');
+    const corner = m('DC', 'corner value of a card');
+    r = must(await postJSON(`${C}/decks/${deck}/cards`, { name: face, words, directorNote: note, corner, kindKey: 'bane', copies: 1 }), 'card');
     const cards = JSON.parse(r.text).cards || [];
     const card = (cards.find((c) => c.name === face) || {}).id;
-    if (card) extraUrls.push(`${C}/decks/workshop/${deck}/cards?card=${card}`);
-    // One drawn and sitting in the shown spot, where only a Director sees its face.
-    r = must(await postJSON(`${C}/decks/${deck}/draw`, { count: 1 }), 'draw');
+    // A picture, on the card, that no one but a Director may fetch while it is face down.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    r = await owner.upload('/media/upload', { campaign_id: cid, usage_type: 'attachment' }, png);
+    if (r.status >= 400) throw new Error('picture upload -> ' + r.status + ' ' + r.text.slice(0, 120));
+    const pic = JSON.parse(r.text).id;
+    if (!pic) throw new Error('no picture id in the answer');
+    if (card) must(await owner.put(`${C}/decks/${deck}/cards/${card}`, { json: { picture: pic } }), 'card picture');
+    pictureUrls.push(`/media/${pic}`, `/media/${pic}/thumb/300`, `/media/${pic}/thumb/800`);
+    ids.picture = pic;
+    const base = `${C}/decks/workshop`;
+    extraUrls.push(base, `${base}/new`);
+    for (const tail of ['', '/table', '/cards', '/look', '/rules', '/players', '?tab=look', '?tab=rules', '?tab=players']) extraUrls.push(`${base}/${deck}${tail}`);
+    if (card) extraUrls.push(`${base}/${deck}/cards?card=${card}`, `${base}/${deck}?tab=cards&card=${card}`, `${base}/${deck}/look?kind=bane`);
+    must(await postJSON(`${C}/decks/${deck}/draw`, { count: 1 }), 'draw');
   });
 
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.
@@ -397,5 +417,5 @@ export async function seed(base, log = console.log) {
 
   ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ...ids.extra);
 
-  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
+  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, pictureUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
 }

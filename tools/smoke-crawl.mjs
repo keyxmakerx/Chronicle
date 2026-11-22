@@ -122,7 +122,7 @@ async function seedCampaign() {
     await post(`/campaigns/${cid}/decks/${d.id}/draw`, { count: 1 });
     return d.id;
   }, id);
-  if (!deck) console.log('smoke-crawl: no deck was made, the deck pages are not visited');
+  if (!deck) throw new Error('the smoke deck could not be made, so the deck pages would go unchecked');
   return { id, entity, deck };
 }
 
