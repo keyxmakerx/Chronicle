@@ -176,6 +176,9 @@ type Lookups struct {
 	// enchanted, who made them) to the `inventory` and `players` answers;
 	// nil leaves every count plain.
 	Copies CopiesAPI
+	// Pay says whether the campaign's heroes pay by Wealth, so the `stock`
+	// answer names a price as the Wealth level it is; nil reads coins.
+	Pay ShopPayAPI
 	// Homes answers `what: home`, for the campaign's owner only; nil says it
 	// can't be looked up.
 	Homes *HomeKind
@@ -1051,12 +1054,13 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	} else {
 		shelf = run.shelf(e)
 	}
+	wealth := relType == "sells" && run.l.Pay != nil && run.l.Pay.PaysByWealth(run.ctx, run.campaignID)
 	var lines []string
 	for _, r := range rels {
 		if r.RelationType != relType {
 			continue
 		}
-		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells")+copiesNote(rem, r.TargetEntityID)+shelfNote(shelf, r.ID))
+		lines = append(lines, "- "+r.TargetEntityName+linkMeta(r.Metadata, relType == "sells", wealth)+copiesNote(rem, r.TargetEntityID)+shelfNote(shelf, r.ID))
 	}
 	ans.Chip = fmt.Sprintf("%s · %s · %d", label, e.Name, len(lines))
 	var b strings.Builder
@@ -1067,6 +1071,8 @@ func (run *lookupRun) links(owner, relType, label string) (LookupAnswer, error) 
 	}
 	if len(lines) == 0 {
 		b.WriteString("Nothing yet.\n")
+	} else if wealth {
+		b.WriteString("Prices are Wealth levels: a hero can buy a good when their Wealth is at least its price, and nothing is spent.\n\n")
 	}
 	if shelf != nil && len(shelf.Pool) > 0 {
 		b.WriteString(shelfHead(shelf))
@@ -1109,8 +1115,9 @@ func (run *lookupRun) shopLooks(b *strings.Builder, e *entities.Entity) {
 }
 
 // linkMeta renders a stock or inventory link's numbers: ": 1 gp, 5 in
-// stock" or " x2 (notes)".
-func linkMeta(raw []byte, shop bool) string {
+// stock" or " x2 (notes)". wealth names a shop price as the Wealth level it
+// is, leaving out the currency the game does not use.
+func linkMeta(raw []byte, shop, wealth bool) string {
 	m := decodeMeta(raw)
 	num := func(k string) (string, bool) {
 		v, ok := m[k]
@@ -1124,7 +1131,9 @@ func linkMeta(raw []byte, shop bool) string {
 	}
 	if shop {
 		var parts []string
-		if p, ok := num("price"); ok {
+		if p, ok := num("price"); ok && wealth {
+			parts = append(parts, "Wealth "+p)
+		} else if ok {
 			cur := "gp"
 			if c, ok := m["currency"].(string); ok && c != "" {
 				cur = c
@@ -1541,7 +1550,7 @@ func (run *lookupRun) carried(id string) string {
 		var items []string
 		for _, r := range rels {
 			if r.RelationType == "Has Item" {
-				items = append(items, r.TargetEntityName+linkMeta(r.Metadata, false)+copiesNote(rem, r.TargetEntityID))
+				items = append(items, r.TargetEntityName+linkMeta(r.Metadata, false, false)+copiesNote(rem, r.TargetEntityID))
 			}
 		}
 		if len(items) > 12 {

@@ -2,10 +2,14 @@ package records
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
 type fakePay bool
@@ -145,6 +149,36 @@ func TestShopStockPriceBounds(t *testing.T) {
 			}
 			if !tt.wantErr && strings.Contains(p.Error, "price") {
 				t.Fatalf("plan = %+v, want no price problem", p)
+			}
+		})
+	}
+}
+
+// The stock answer names a price as the Wealth level it is in a game that
+// pays by Wealth, and as coins in any other.
+func TestStockLookupNamesWealthPrices(t *testing.T) {
+	pages := []entities.Entity{}
+	for _, e := range shopPages() {
+		pages = append(pages, *e)
+	}
+	rels := &fakeRels{rels: []relations.Relation{
+		{ID: 1, SourceEntityID: "forge", TargetEntityID: "inn", TargetEntityName: "Nails", RelationType: "sells", Metadata: json.RawMessage(`{"price":3,"currency":"gp","quantity":2}`)},
+	}}
+	tests := []struct {
+		name          string
+		pay           ShopPayAPI
+		want, wantNot string
+	}{
+		{"wealth game", fakePay(true), "- Nails: Wealth 3, 2 in stock", "gp"},
+		{"coin game", fakePay(false), "- Nails: 3 gp, 2 in stock", "Wealth"},
+		{"no pay wired", nil, "- Nails: 3 gp, 2 in stock", "Wealth"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l := &Lookups{Pages: &fakePages{all: pages}, Rels: rels, Pay: tc.pay}
+			got := l.Answer(context.Background(), camp, owner, []Record{lookup("stock", map[string]any{"shop": "Ember Forge"})})[0]
+			if got.Error != "" || !strings.Contains(got.Text, tc.want) || strings.Contains(got.Text, tc.wantNot) {
+				t.Fatalf("stock answer:\n%s\n(error %q)", got.Text, got.Error)
 			}
 		})
 	}
