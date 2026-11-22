@@ -227,8 +227,8 @@ func TestTwoWorldsPlayersCannotTellWhichCardWasDealtDown(t *testing.T) {
 			Kinds: []KindDef{{Key: "boon", Name: "Boon", Colour: "teal"}, {Key: "bane", Name: "Bane", Colour: "rose"}}})})
 		fx.must(err)
 		fx.choose(deck, PlayerInput{UserID: "u-tam", DrawsLeft: ptr(3)}, PlayerInput{UserID: "u-scribe"})
-		x := fx.card(deck, CreateCardInput{Name: "Xcard", KindKey: "boon", Words: "XWORDS", DirectorNote: "XNOTE", Fate: FateUsed})
-		y := fx.card(deck, CreateCardInput{Name: "Ycard", KindKey: "bane", Words: "YWORDS", DirectorNote: "YNOTE", Fate: FateBack, AskFirst: true, WhenOpen: true})
+		x := fx.card(deck, CreateCardInput{Name: "Xcard", KindKey: "boon", Words: "XWORDS", DirectorNote: "XNOTE", Fate: FateUsed, Picture: "pic-xx"})
+		y := fx.card(deck, CreateCardInput{Name: "Ycard", KindKey: "bane", Words: "YWORDS", DirectorNote: "YNOTE", Fate: FateBack, AskFirst: true, WhenOpen: true, Picture: "pic-yy"})
 		fx.card(deck, CreateCardInput{Name: "Filler", KindKey: "boon", Copies: ptr(2)})
 		cardID := map[string]string{"X": x, "Y": y}[deal]
 		res, err := fx.svc.DealCard(bg, camp, deck, fx.dir, DealCardInput{CardID: cardID, To: "hand", HeroID: "h-tam"})
@@ -282,7 +282,7 @@ func TestTwoWorldsPlayersCannotTellWhichCardWasDealtDown(t *testing.T) {
 				t.Errorf("worlds returned %d and %d replies", len(a), len(b))
 			}
 			for _, k := range []string{"tam/deck", "ilse/deck", "tam/table"} {
-				for _, bad := range []string{"XWORDS", "YWORDS", "XNOTE", "YNOTE", "Xcard", "Ycard"} {
+				for _, bad := range []string{"XWORDS", "YWORDS", "XNOTE", "YNOTE", "Xcard", "Ycard", "pic-xx", "pic-yy"} {
 					if strings.Contains(a[k], bad) || strings.Contains(b[k], bad) {
 						t.Errorf("%s names %q", k, bad)
 					}

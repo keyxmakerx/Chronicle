@@ -45,6 +45,19 @@ type Service interface {
 	// Table returns the cards lying in front of the whole table, from every
 	// deck, to any member.
 	Table(ctx context.Context, campaignID string, v Viewer) (*TableView, error)
+
+	// IsCardPicture says whether any card of the campaign wears the media file.
+	// It answers true on an error, so a caller that ignores the error refuses.
+	IsCardPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
+	// CardPictureSeenBy says whether a copy of a card wearing the media file is
+	// face up to the viewer right now, by the rules that build what they are
+	// sent. A Director always sees it.
+	CardPictureSeenBy(ctx context.Context, campaignID, mediaID string, v Viewer) (bool, error)
+	// CardPictureIDs lists the media files the campaign's cards wear.
+	CardPictureIDs(ctx context.Context, campaignID string) ([]string, error)
+	// CardPictureUses names the decks and cards that wear the media file, for
+	// Directors only.
+	CardPictureUses(ctx context.Context, campaignID, mediaID string, v Viewer) ([]PictureUse, error)
 }
 
 // Notifier is told after every move, once it is stored, so live messages can
@@ -63,6 +76,11 @@ type Option func(*service)
 // WithNotifier sets who is told after a move.
 func WithNotifier(n Notifier) Option { return func(s *service) { s.notify = n } }
 
+// WithPictures sets who may say a media file is usable as a card's picture.
+// Without it no card can have a picture, so a service built without the media
+// side refuses rather than accepting an id nobody checked.
+func WithPictures(p Pictures) Option { return func(s *service) { s.pictures = p } }
+
 // WithRandom replaces the draw's random pick; tests use it to fix a draw.
 func WithRandom(pick func(n int) int) Option { return func(s *service) { s.pick = pick } }
 
@@ -72,6 +90,8 @@ type service struct {
 	people Members
 	notify Notifier
 	pick   func(n int) int
+	// pictures checks a card's picture on save; nil refuses every picture.
+	pictures Pictures
 }
 
 // NewService builds the service.
@@ -874,10 +894,6 @@ func checkCard(d Deck, c *Card) error {
 	if c.DirectorNote, err = longText("the Director's note", c.DirectorNote, MaxNoteChars); err != nil {
 		return err
 	}
-	// TODO(#2567): a card's picture is accepted once the workshop can upload one.
-	if c.Picture != "" {
-		return errInvalid("a card can't have a picture yet")
-	}
 	if c.Corner, err = plainText("the card's corner", c.Corner, MaxCornerChars); err != nil {
 		return err
 	}
@@ -896,6 +912,33 @@ func checkCard(d Deck, c *Card) error {
 	return nil
 }
 
+// errPicture is the one refusal for every picture that cannot be used: a URL,
+// a made-up id, another campaign's file, a non-image, a page file, a trashed
+// file. The words never vary, so saving a card cannot be used to probe which
+// media ids exist elsewhere.
+func errPicture() error {
+	return errInvalid("that picture can't be used on a card; choose an image from this campaign's media")
+}
+
+// checkPicture accepts "" and otherwise only an id the media side vouches for.
+// A URL or a path fails the token check before anything is looked up.
+func (s *service) checkPicture(ctx context.Context, campaignID, picture string) error {
+	if picture == "" {
+		return nil
+	}
+	if len(picture) > MaxPictureChars || !validToken(picture) || s.pictures == nil {
+		return errPicture()
+	}
+	ok, err := s.pictures.Usable(ctx, campaignID, picture)
+	if err != nil {
+		return apperrorInternal(err)
+	}
+	if !ok {
+		return errPicture()
+	}
+	return nil
+}
+
 func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v Viewer, in CreateCardInput) (DeckView, error) {
 	r := s.newRequest(ctx, campaignID, v)
 	d, err := r.directorDeck(deckID)
@@ -910,6 +953,9 @@ func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v V
 		Words: in.Words, DirectorNote: in.DirectorNote, Picture: in.Picture, Corner: in.Corner, Rare: in.Rare, Copies: copies,
 		Fate: in.Fate, When: in.When, WhenOpen: in.WhenOpen, AskFirst: in.AskFirst}
 	if err := checkCard(d, &c); err != nil {
+		return nil, err
+	}
+	if err := s.checkPicture(ctx, campaignID, c.Picture); err != nil {
 		return nil, err
 	}
 	// The card and copy limits are counted by the repository under the deck
@@ -946,6 +992,7 @@ func (s *service) UpdateCard(ctx context.Context, campaignID, deckID, cardID str
 	if !found {
 		return nil, errNotFound("card")
 	}
+	before := c.Picture
 	c.Name = in.Name.Val(c.Name)
 	c.KindKey = in.KindKey.Val(c.KindKey)
 	c.Words = in.Words.Val(c.Words)
@@ -960,6 +1007,13 @@ func (s *service) UpdateCard(ctx context.Context, campaignID, deckID, cardID str
 	c.AskFirst = in.AskFirst.Val(c.AskFirst)
 	if err := checkCard(d, &c); err != nil {
 		return nil, err
+	}
+	// Only a changed picture is checked: the stored one was checked when it
+	// was set, and a file trashed since must not stop an edit of the words.
+	if c.Picture != before {
+		if err := s.checkPicture(ctx, campaignID, c.Picture); err != nil {
+			return nil, err
+		}
 	}
 	// Only an edit that carries copies reconciles them, and the repository
 	// does that, and counts the deck's limit, under the deck lock.
@@ -1007,4 +1061,128 @@ func (s *service) DeleteCard(ctx context.Context, campaignID, deckID, cardID str
 		return nil, apperrorInternal(err)
 	}
 	return r.view(d)
+}
+
+// ---- card pictures -----------------------------------------------------------
+
+func (s *service) IsCardPicture(ctx context.Context, campaignID, mediaID string) (bool, error) {
+	uses, err := s.repo.CardsWithPicture(ctx, campaignID, mediaID)
+	if err != nil {
+		return true, apperrorInternal(err)
+	}
+	return len(uses) > 0, nil
+}
+
+// CardPictureSeenBy decides by building what the viewer would be sent and
+// looking for a card that wears the picture in it, so the picture is open
+// exactly when its card's face is, and the two cannot drift apart.
+func (s *service) CardPictureSeenBy(ctx context.Context, campaignID, mediaID string, v Viewer) (bool, error) {
+	r := s.newRequest(ctx, campaignID, v)
+	if v.Director {
+		return true, nil
+	}
+	if !r.member() {
+		return false, nil
+	}
+	uses, err := s.repo.CardsWithPicture(ctx, campaignID, mediaID)
+	if err != nil {
+		return false, apperrorInternal(err)
+	}
+	if len(uses) == 0 {
+		return false, nil
+	}
+	want := make(map[string]bool, len(uses))
+	decksWith := map[string]bool{}
+	for _, u := range uses {
+		want[u.CardID] = true
+		decksWith[u.DeckID] = true
+	}
+	// A face-up card lying on the table is read by every member, whatever the
+	// deck's kind.
+	rows, err := s.repo.ListTable(ctx, campaignID)
+	if err != nil {
+		return false, apperrorInternal(err)
+	}
+	for _, row := range rows {
+		if want[row.Face.CardID] {
+			return true, nil
+		}
+	}
+	for id := range decksWith {
+		d, found, err := s.repo.GetDeck(ctx, campaignID, id)
+		if err != nil {
+			return false, apperrorInternal(err)
+		}
+		if !found {
+			continue
+		}
+		listed, err := r.listed(d)
+		if err != nil {
+			return false, err
+		}
+		if !listed {
+			continue
+		}
+		pd, err := r.playerDeck(d)
+		if err != nil {
+			return false, err
+		}
+		if pd.shows(want) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// shows is true when any face this deck sends the viewer is one of the cards.
+func (pd PlayerDeck) shows(want map[string]bool) bool {
+	copies := func(list []PlayerCopy) bool {
+		for _, c := range list {
+			if c.Face != nil && want[c.Face.CardID] {
+				return true
+			}
+		}
+		return false
+	}
+	faces := func(list []Face) bool {
+		for _, f := range list {
+			if want[f.CardID] {
+				return true
+			}
+		}
+		return false
+	}
+	for _, h := range pd.Hands {
+		if copies(h.Hand) || copies(h.Play) {
+			return true
+		}
+	}
+	if copies(pd.PartyHand) || copies(pd.Used) || faces(pd.Cards) {
+		return true
+	}
+	for _, o := range pd.Others {
+		if faces(o.Faces) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *service) CardPictureIDs(ctx context.Context, campaignID string) ([]string, error) {
+	ids, err := s.repo.PictureIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	return ids, nil
+}
+
+func (s *service) CardPictureUses(ctx context.Context, campaignID, mediaID string, v Viewer) ([]PictureUse, error) {
+	if !v.Director {
+		return nil, nil
+	}
+	uses, err := s.repo.CardsWithPicture(ctx, campaignID, mediaID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	return uses, nil
 }

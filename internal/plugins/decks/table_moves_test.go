@@ -214,9 +214,9 @@ func TestTwoWorldsNudgesAndLookedAtCardsAreInvisibleToPlayers(t *testing.T) {
 		fx.must(err)
 		fx.choose(deck, PlayerInput{UserID: "u-tam", DrawsLeft: ptr(3)}, PlayerInput{UserID: "u-scribe"})
 		cards := map[string]string{
-			"X": fx.card(deck, CreateCardInput{Name: "Xcard", KindKey: "boon", Words: "XWORDS", Copies: ptr(2)}),
-			"Y": fx.card(deck, CreateCardInput{Name: "Ycard", KindKey: "bane", Words: "YWORDS", Copies: ptr(2)}),
-			"Z": fx.card(deck, CreateCardInput{Name: "Zcard", KindKey: "boon", Words: "ZWORDS", Copies: ptr(3)}),
+			"X": fx.card(deck, CreateCardInput{Name: "Xcard", KindKey: "boon", Words: "XWORDS", Copies: ptr(2), Picture: "pic-xx"}),
+			"Y": fx.card(deck, CreateCardInput{Name: "Ycard", KindKey: "bane", Words: "YWORDS", Copies: ptr(2), Picture: "pic-yy"}),
+			"Z": fx.card(deck, CreateCardInput{Name: "Zcard", KindKey: "boon", Words: "ZWORDS", Copies: ptr(3), Picture: "pic-zz"}),
 		}
 		_, err = fx.svc.DealCard(bg, camp, deck, fx.dir, DealCardInput{CardID: cards["Z"], To: "hand", HeroID: "h-tam"})
 		fx.must(err)
@@ -280,7 +280,7 @@ func TestTwoWorldsNudgesAndLookedAtCardsAreInvisibleToPlayers(t *testing.T) {
 				if a[k] != b[k] {
 					t.Errorf("%s differs between worlds:\n A: %s\n B: %s", k, a[k], b[k])
 				}
-				for _, bad := range []string{"nextCardId", "lastCardId", "XWORDS", "YWORDS", "ZWORDS"} {
+				for _, bad := range []string{"nextCardId", "lastCardId", "XWORDS", "YWORDS", "ZWORDS", "pic-xx", "pic-yy", "pic-zz"} {
 					if strings.Contains(a[k], bad) || strings.Contains(b[k], bad) {
 						t.Errorf("%s names %q", k, bad)
 					}

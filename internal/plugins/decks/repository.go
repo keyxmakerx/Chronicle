@@ -163,6 +163,12 @@ type Repository interface {
 	// face of their card and their deck's name and look.
 	ListTable(ctx context.Context, campaignID string) ([]TableRow, error)
 
+	// CardsWithPicture lists the cards of the campaign that wear this media
+	// file. A campaign whose decks tables never migrated has none.
+	CardsWithPicture(ctx context.Context, campaignID, mediaID string) ([]PictureUse, error)
+	// PictureIDs lists the distinct media files any card of the campaign wears.
+	PictureIDs(ctx context.Context, campaignID string) ([]string, error)
+
 	// Draw takes p.Count copies (one by default) or none at all.
 	Draw(ctx context.Context, p DrawPlan) ([]Copy, error)
 	Move(ctx context.Context, m Move) error
@@ -187,6 +193,14 @@ type TableRow struct {
 	DeckKind string
 	Look     Look
 	Face     Face
+}
+
+// PictureUse is one card that wears a media file as its picture.
+type PictureUse struct {
+	DeckID   string
+	DeckName string
+	CardID   string
+	CardName string
 }
 
 type sqlRepository struct{ db *sql.DB }
@@ -819,6 +833,63 @@ func (s *sqlRepository) ListTable(ctx context.Context, campaignID string) ([]Tab
 		}
 		r.Look = readLook(look)
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// isNoTable is a query against a table that was never created. The picture
+// questions are asked on every campaign media request, including where the
+// decks migration did not run; with no table there is no card and so no
+// picture, which is different from a failure to ask.
+func isNoTable(err error) bool {
+	var me *mysql.MySQLError
+	return errors.As(err, &me) && me.Number == 1146
+}
+
+func (s *sqlRepository) CardsWithPicture(ctx context.Context, campaignID, mediaID string) ([]PictureUse, error) {
+	if mediaID == "" {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.id, d.name, k.id, k.name
+		 FROM deck_cards k JOIN decks d ON d.id = k.deck_id
+		 WHERE k.campaign_id = ? AND d.campaign_id = ? AND k.picture = ?
+		 ORDER BY d.name, k.name, k.id`, campaignID, campaignID, mediaID)
+	if err != nil {
+		if isNoTable(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("cards with picture: %w", err)
+	}
+	defer rows.Close()
+	var out []PictureUse
+	for rows.Next() {
+		var u PictureUse
+		if err := rows.Scan(&u.DeckID, &u.DeckName, &u.CardID, &u.CardName); err != nil {
+			return nil, fmt.Errorf("scan picture use: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *sqlRepository) PictureIDs(ctx context.Context, campaignID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT picture FROM deck_cards WHERE campaign_id = ? AND picture <> ''`, campaignID)
+	if err != nil {
+		if isNoTable(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("picture ids: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan picture id: %w", err)
+		}
+		out = append(out, id)
 	}
 	return out, rows.Err()
 }

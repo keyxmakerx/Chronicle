@@ -21,6 +21,7 @@ type fixture struct {
 	svc                                     Service
 	cap                                     *capture
 	heroes                                  fakeHeroes
+	pics                                    fakePictures
 	dir, tam, ilse, scribe, former, visitor Viewer
 }
 
@@ -44,7 +45,7 @@ func newFixture(t *testing.T) *fixture {
 		{UserID: "u-ilse", Role: 1, JoinedAt: longAgo},
 		{UserID: "u-scribe", Role: 2, JoinedAt: longAgo},
 	}}
-	fx.svc = NewService(fx.repo, fx.heroes, members, WithNotifier(fx.cap), WithRandom(func(int) int { return 0 }))
+	fx.svc = NewService(fx.repo, fx.heroes, members, WithNotifier(fx.cap), WithPictures(fx.pics), WithRandom(func(int) int { return 0 }))
 	fx.dir = Viewer{UserID: "u-dir", MemberRole: 3, VisibilityRole: 3, Director: true}
 	fx.tam = Viewer{UserID: "u-tam", MemberRole: 1, VisibilityRole: 1}
 	fx.ilse = Viewer{UserID: "u-ilse", MemberRole: 1, VisibilityRole: 1}

@@ -429,7 +429,7 @@ func TestCardRules(t *testing.T) {
 		{name: "note length", in: CreateCardInput{Name: "A", DirectorNote: strings.Repeat("w", 2001)}, wantErr: "too long"},
 		{name: "corner length", in: CreateCardInput{Name: "A", Corner: strings.Repeat("c", 13)}, wantErr: "too long"},
 		{name: "kind must exist in the deck", in: CreateCardInput{Name: "A", KindKey: "boon"}, wantErr: "not one of the deck's kinds"},
-		{name: "picture refused for now", in: CreateCardInput{Name: "A", Picture: "x.png"}, wantErr: "picture yet"},
+		{name: "a picture that is not an id is refused", in: CreateCardInput{Name: "A", Picture: "x.png"}, wantErr: "picture can't be used"},
 		{name: "condition refused for now", in: CreateCardInput{Name: "A", When: `{"x":1}`}, wantErr: "condition yet"},
 		{name: "when_open is stored", in: CreateCardInput{Name: "A", WhenOpen: true}},
 		{name: "bad fate", in: CreateCardInput{Name: "A", Fate: "burn"}, wantErr: "fate must be one of"},

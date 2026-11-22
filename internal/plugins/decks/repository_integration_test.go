@@ -1408,3 +1408,49 @@ func TestIntegration_DrawLargerThanThePileTakesWhatIsThere(t *testing.T) {
 		t.Errorf("zones = %+v", z)
 	}
 }
+
+// The picture questions the media server asks on every campaign file, against
+// real SQL: which cards wear a file, the distinct files, nothing across
+// campaigns, and an empty answer (not an error) where the decks tables do not
+// exist.
+func TestIntegration_CardPictureQueries(t *testing.T) {
+	fx := newDBFixture(t)
+	d1, d2 := fx.deck(t, "One"), fx.deck(t, "Two")
+	mk := func(d Deck, name, pic string) {
+		c := Card{ID: uuid.NewString(), DeckID: d.ID, CampaignID: fx.campaign, Name: name, Copies: 1, Picture: pic}
+		if err := fx.repo.CreateCard(fx.ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk(d1, "A", "pic-a")
+	mk(d1, "B", "")
+	mk(d2, "C", "pic-a")
+	mk(d2, "D", "pic-d")
+
+	uses, err := fx.repo.CardsWithPicture(fx.ctx, fx.campaign, "pic-a")
+	if err != nil || len(uses) != 2 || uses[0].DeckName != "One" || uses[1].CardName != "C" {
+		t.Errorf("uses = %+v, %v", uses, err)
+	}
+	if uses, err := fx.repo.CardsWithPicture(fx.ctx, fx.campaign, ""); err != nil || len(uses) != 0 {
+		t.Errorf("an empty id matched cards: %+v, %v", uses, err)
+	}
+	if uses, err := fx.repo.CardsWithPicture(fx.ctx, "00000000-0000-0000-0000-0000000000ff", "pic-a"); err != nil || len(uses) != 0 {
+		t.Errorf("another campaign matched cards: %+v, %v", uses, err)
+	}
+	ids, err := fx.repo.PictureIDs(fx.ctx, fx.campaign)
+	if err != nil || len(ids) != 2 {
+		t.Errorf("picture ids = %v, %v", ids, err)
+	}
+
+	// No decks tables: no cards, no error.
+	fx.exec(t, `DROP TABLE deck_copies`)
+	fx.exec(t, `DROP TABLE deck_log`)
+	fx.exec(t, `DROP TABLE deck_players`)
+	fx.exec(t, `DROP TABLE deck_cards`)
+	if uses, err := fx.repo.CardsWithPicture(fx.ctx, fx.campaign, "pic-a"); err != nil || len(uses) != 0 {
+		t.Errorf("without the table: %+v, %v", uses, err)
+	}
+	if ids, err := fx.repo.PictureIDs(fx.ctx, fx.campaign); err != nil || len(ids) != 0 {
+		t.Errorf("without the table: %v, %v", ids, err)
+	}
+}

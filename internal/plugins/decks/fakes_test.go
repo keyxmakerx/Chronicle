@@ -3,6 +3,7 @@ package decks
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -338,6 +339,33 @@ func (m *memRepo) ListTable(_ context.Context, _ string) ([]TableRow, error) {
 			out = append(out, TableRow{CopyID: c.ID, DeckID: d.ID, DeckName: d.Name, DeckKind: d.Kind, Look: d.Look, Face: faceOf(card)})
 		}
 	}
+	return out, nil
+}
+
+func (m *memRepo) CardsWithPicture(_ context.Context, campaignID, mediaID string) ([]PictureUse, error) {
+	var out []PictureUse
+	if mediaID == "" {
+		return nil, nil
+	}
+	for _, c := range m.cards {
+		if c.CampaignID == campaignID && c.Picture == mediaID {
+			out = append(out, PictureUse{DeckID: c.DeckID, DeckName: m.decks[c.DeckID].Name, CardID: c.ID, CardName: c.Name})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CardID < out[j].CardID })
+	return out, nil
+}
+
+func (m *memRepo) PictureIDs(_ context.Context, campaignID string) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range m.cards {
+		if c.CampaignID == campaignID && c.Picture != "" && !seen[c.Picture] {
+			seen[c.Picture] = true
+			out = append(out, c.Picture)
+		}
+	}
+	sort.Strings(out)
 	return out, nil
 }
 
@@ -738,4 +766,13 @@ func (m *memRepo) ZoneCountsFor(deckID string) ZoneCounts {
 		}
 	}
 	return z
+}
+
+// fakePictures is the media side of a card's picture: only an id that starts
+// "pic-" in the fixture's campaign is a usable image; "pic-trashed" and
+// "pic-page" model the files the adapter refuses.
+type fakePictures struct{}
+
+func (fakePictures) Usable(_ context.Context, campaignID, id string) (bool, error) {
+	return campaignID == camp && strings.HasPrefix(id, "pic-") && id != "pic-trashed" && id != "pic-page", nil
 }
