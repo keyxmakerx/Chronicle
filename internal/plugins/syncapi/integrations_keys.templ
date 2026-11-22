@@ -154,26 +154,29 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 	</div>
 }
 
-// integrationsKeyCard renders a compact key card for the API keys tab.
+// integrationsKeyCard renders a compact key card for the API keys tab. The
+// card wraps rather than squeezing: when the name and its details need the
+// width, as on a phone where the buttons are 44 tall, Active and Revoke take
+// their own line at the right, and the name wraps instead of being cut.
 templ integrationsKeyCard(campaignID string, k APIKey, csrfToken string) {
-	<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
-		<div class="flex items-center gap-3 flex-1 min-w-0">
+	<div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 rounded-lg bg-surface-alt" data-testid="key-row">
+		<div class="flex items-center gap-3 flex-1 basis-56 min-w-0">
 			<span class={ "w-2.5 h-2.5 rounded-full shrink-0", connectionDotColor(k) }></span>
 			<div class="min-w-0">
-				<div class="flex items-center gap-2">
-					<span class="text-sm font-medium text-fg truncate">{ k.Name }</span>
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<span class="min-w-0 text-sm font-medium text-fg break-words">{ k.Name }</span>
 					if k.VTTTag != nil {
 						<span class="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">{ *k.VTTTag }</span>
 					}
 				</div>
-				<div class="flex items-center gap-2 mt-0.5">
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
 					<span class="text-xs text-fg-muted font-mono">{ k.KeyPrefix }...</span>
 					<span class="text-xs text-fg-muted">{ formatPermissions(k.Permissions) }</span>
 					<span class="text-xs text-fg-muted">{ connectionStatusText(k) }</span>
 				</div>
 			</div>
 		</div>
-		<div class="flex items-center gap-1.5 ml-3 shrink-0">
+		<div class="flex items-center gap-1.5 ml-auto shrink-0">
 			// Toggle active/inactive.
 			<form method="POST"
 				hx-put={ fmt.Sprintf("/campaigns/%s/api-keys/%d/toggle", campaignID, k.ID) }
