@@ -9,11 +9,11 @@
 //
 // RUN: tools/live-checks.sh test/live/calendar_several_moons.spec.mjs
 
-import { test, after } from 'node:test';
+import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { person, newCampaign, addMember, enableAddons, done, picture, repoRoot } from './_live.mjs';
+import { person, newCampaign, addMember, enableAddons, done, picture, repoRoot, once, resetErrors } from './_live.mjs';
 
 after(done);
 
@@ -21,10 +21,20 @@ const PHONE = { width: 390, height: 844 };
 const SMALL = { width: 320, height: 640 };
 const DESKTOP = { width: 1280, height: 800 };
 
-async function calendarFor(owner, player, tag, make) {
-  const cid = await newCampaign(owner, tag);
+// One owner, one player and one campaign serve every walk here; each walk
+// makes its own calendar in it, so the walks never read each other's days.
+const world = once(async () => {
+  const owner = await person({ tag: 'own', name: 'Mara Vell' });
+  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
+  const cid = await newCampaign(owner, 'Several Moons');
   await addMember(owner, cid, player, 'player');
   await enableAddons(owner, cid, '*');
+  return { owner, player, cid };
+});
+
+beforeEach(async () => { const w = await world(); resetErrors(w.owner, w.player); });
+
+async function calendarFor(owner, cid, make) {
   const made = await make(cid);
   assert.equal(made.status, 201, `making the calendar answered ${made.status}`);
   const cal = made.body.calendar;
@@ -90,9 +100,8 @@ async function addMarks(owner, base, cal) {
 }
 
 test('four moons on a ten-day week are one disc with three lit shapes and a +1, for the owner and a player', async () => {
-  const owner = await person({ tag: 'own', name: 'Mara Vell' });
-  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
-  const { base, cal } = await calendarFor(owner, player, 'Several Moons', (cid) => owner.api(`/campaigns/${cid}/calendars/presets/harptos`, { method: 'POST', body: {} }));
+  const { owner, player, cid: campaign } = await world();
+  const { base, cal } = await calendarFor(owner, campaign, (cid) => owner.api(`/campaigns/${cid}/calendars/presets/harptos`, { method: 'POST', body: {} }));
   const { page } = owner;
   await addMarks(owner, base, cal);
   await owner.go(`${base}/view`);
@@ -164,9 +173,8 @@ test('four moons on a ten-day week are one disc with three lit shapes and a +1, 
 });
 
 test('two moons on a six-day week are one disc with two tinted shapes a day, clear of the day number', async () => {
-  const owner = await person({ tag: 'own', name: 'Mara Vell' });
-  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
-  const { base, cal } = await calendarFor(owner, player, 'Two Moons', (cid) => twoMoonsOnSixDays(owner, cid));
+  const { owner, cid: campaign } = await world();
+  const { base, cal } = await calendarFor(owner, campaign, (cid) => twoMoonsOnSixDays(owner, cid));
   const { page } = owner;
   await addMarks(owner, base, cal);
   await owner.go(`${base}/view`);
@@ -188,9 +196,8 @@ test('two moons on a six-day week are one disc with two tinted shapes a day, cle
 });
 
 test('a pale moon and a deep red one keep their own colours, in light and dark', async () => {
-  const owner = await person({ tag: 'own', name: 'Mara Vell' });
-  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
-  const { base } = await calendarFor(owner, player, 'Pale and Red', (cid) => twoMoonsOnSixDays(owner, cid, THERIN));
+  const { owner, cid: campaign } = await world();
+  const { base } = await calendarFor(owner, campaign, (cid) => twoMoonsOnSixDays(owner, cid, THERIN));
   const { page } = owner;
   for (const width of [DESKTOP, PHONE]) {
     await page.setViewportSize(width);
@@ -211,10 +218,11 @@ test('a pale moon and a deep red one keep their own colours, in light and dark',
 });
 
 test('an open day keeps its moon, whether or not its event marks fly into the card', async () => {
+  const { owner, cid: campaign } = await world();
   // Full motion, so a day with events packs its marks into the card.
-  const owner = await person({ tag: 'own', name: 'Mara Vell', context: { reducedMotion: 'no-preference' } });
-  const player = await person({ tag: 'ply', name: 'Tobin Hale' });
-  const { base, cal } = await calendarFor(owner, player, 'Open Day Moon', (cid) => twoMoonsOnSixDays(owner, cid, THERIN));
+  await owner.page.emulateMedia({ reducedMotion: 'no-preference' });
+  await owner.page.setViewportSize(DESKTOP);
+  const { base, cal } = await calendarFor(owner, campaign, (cid) => twoMoonsOnSixDays(owner, cid, THERIN));
   const { page } = owner;
   await addMarks(owner, base, cal);
   await owner.go(`${base}/view`);
@@ -240,5 +248,6 @@ test('an open day keeps its moon, whether or not its event marks fly into the ca
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
   }
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   owner.assertClean();
 });
