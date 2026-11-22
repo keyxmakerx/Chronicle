@@ -13,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
@@ -266,4 +267,41 @@ func registerDecksBlock(blockRegistry *entities.BlockRegistry, svc decks.Service
 		}
 		return part
 	})
+}
+
+// decksTablesAdapter implements decks.Tables over the rolling tables service,
+// so a deck can be made from a table without decks importing that plugin. It
+// is bound only while the rolling tables plugin is healthy.
+type decksTablesAdapter struct {
+	svc rolltables.Service
+}
+
+func (a *decksTablesAdapter) List(ctx context.Context, campaignID string) ([]decks.TableSummary, error) {
+	doc, err := a.svc.Get(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]decks.TableSummary, 0, len(doc.Tables))
+	for _, t := range doc.Tables {
+		out = append(out, decks.TableSummary{ID: t.ID, Name: t.Name, Lines: len(t.Entries)})
+	}
+	return out, nil
+}
+
+func (a *decksTablesAdapter) Lines(ctx context.Context, campaignID, tableID string) ([]decks.TableLine, string, bool, error) {
+	doc, err := a.svc.Get(ctx, campaignID)
+	if err != nil {
+		return nil, "", false, err
+	}
+	for _, t := range doc.Tables {
+		if t.ID != tableID {
+			continue
+		}
+		lines := make([]decks.TableLine, 0, len(t.Entries))
+		for _, e := range t.Entries {
+			lines = append(lines, decks.TableLine{Name: e.Name, Brief: e.Brief, Weight: e.Weight, HasDays: len(e.When) > 0})
+		}
+		return lines, t.Name, true, nil
+	}
+	return nil, "", false, nil
 }

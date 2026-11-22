@@ -29,6 +29,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	cg.GET("/decks", h.List)
 	cg.POST("/decks", h.Create)
+	// A deck made from another deck or a rolling table; Director only, 404
+	// for anyone else. Static, so it is never read as a deck id.
+	cg.POST("/decks/from", h.CreateFrom)
 	// Registered before /decks/:did so "table" is never read as a deck id.
 	cg.GET("/decks/table", h.Table)
 	// The Director's moments and the card editor's options; static paths win

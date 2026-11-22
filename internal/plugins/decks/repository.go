@@ -134,6 +134,11 @@ type Repository interface {
 	GetDeck(ctx context.Context, campaignID, id string) (Deck, bool, error)
 	// CreateDeck returns errDuplicate when the name is taken.
 	CreateDeck(ctx context.Context, d Deck) error
+	// CreateDeckWithCards stores the deck and every card with its pile copies in
+	// one transaction: all of it or nothing. errDuplicate when the deck's name is
+	// taken, errCardDuplicate when two cards share a name, errTargetFull or
+	// errTargetCopies when the card or copy limit would be passed.
+	CreateDeckWithCards(ctx context.Context, d Deck, cards []Card) error
 	// UpdateDeck writes d if its stored version is still expected; ok is
 	// false on a lost race. errDuplicate when the new name is taken. The draw
 	// nudges are written only as picks says.
@@ -376,6 +381,63 @@ func (s *sqlRepository) CreateDeck(ctx context.Context, d Deck) error {
 	}
 	if err != nil {
 		return fmt.Errorf("create deck: %w", err)
+	}
+	return nil
+}
+
+func (s *sqlRepository) CreateDeckWithCards(ctx context.Context, d Deck, cards []Card) error {
+	settings, err := json.Marshal(d.Settings)
+	if err != nil {
+		return fmt.Errorf("encode settings: %w", err)
+	}
+	look, err := json.Marshal(d.Look)
+	if err != nil {
+		return fmt.Errorf("encode look: %w", err)
+	}
+	if len(cards) > MaxCardsPerDeck {
+		return errTargetFull
+	}
+	total := 0
+	for _, c := range cards {
+		total += c.Copies
+	}
+	if total > MaxCopiesPerDeck {
+		return errTargetCopies
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("create deck with cards: %w", err)
+	}
+	defer rollback(tx)
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO decks (id, campaign_id, name, kind, holder_entity_id, settings, look, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.ID, d.CampaignID, d.Name, d.Kind, nullString(d.HolderEntityID), string(settings), string(look), d.SortOrder)
+	if isDuplicate(err) {
+		return errDuplicate
+	}
+	if err != nil {
+		return fmt.Errorf("create deck: %w", err)
+	}
+	for i, c := range cards {
+		c.SortOrder = i
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, has_when, ask_first, sort_order)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			c.ID, c.DeckID, c.CampaignID, c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare,
+			c.Copies, c.Fate, nullString(encodeWhen(c.When)), derivedOpen(c.When), len(c.When) > 0, c.AskFirst, c.SortOrder)
+		if isDuplicate(err) {
+			return errCardDuplicate
+		}
+		if err != nil {
+			return fmt.Errorf("create card: %w", err)
+		}
+		if err := addCopies(ctx, tx, c, c.Copies); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("create deck with cards: %w", err)
 	}
 	return nil
 }

@@ -92,6 +92,38 @@ func (m *memRepo) CreateDeck(_ context.Context, d Deck) error {
 	return nil
 }
 
+// CreateDeckWithCards checks everything before it stores anything, so it is all
+// or nothing as the SQL transaction is (the integration test proves the SQL).
+func (m *memRepo) CreateDeckWithCards(ctx context.Context, d Deck, cards []Card) error {
+	if m.nameTaken(d.Name, "", d.CampaignID) {
+		return errDuplicate
+	}
+	if len(cards) > MaxCardsPerDeck {
+		return errTargetFull
+	}
+	total, seen := 0, map[string]bool{}
+	for _, c := range cards {
+		total += c.Copies
+		k := strings.ToLower(c.Name)
+		if seen[k] {
+			return errCardDuplicate
+		}
+		seen[k] = true
+	}
+	if total > MaxCopiesPerDeck {
+		return errTargetCopies
+	}
+	d.Version = 1
+	d.Players = []Player{}
+	m.decks[d.ID] = d
+	for i, c := range cards {
+		c.SortOrder = i
+		m.cards[c.ID] = c
+		m.addCopies(c, c.Copies)
+	}
+	return nil
+}
+
 func (m *memRepo) UpdateDeck(_ context.Context, d Deck, expected int, picks PickChange) (bool, error) {
 	cur, ok := m.decks[d.ID]
 	if !ok || cur.Version != expected {

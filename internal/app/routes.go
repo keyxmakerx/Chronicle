@@ -4814,13 +4814,20 @@ func (a *App) RegisterRoutes() {
 	// Told after each stored draw, deal and play; the Homebrew service joins it
 	// below, once it exists.
 	decksStory := newDecksStory(decksOn)
-	decksSvc := decks.NewService(decks.NewRepository(a.DB),
-		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService},
+	decksOpts := []decks.Option{
 		decks.WithPictures(&decksPictureAdapter{svc: mediaService}),
 		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
 		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
 		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
-		decks.WithSwitch(decksOn), decks.WithStory(decksStory))
+		decks.WithSwitch(decksOn), decks.WithStory(decksStory),
+	}
+	// "From a rolling table" is offered only while the rolling tables plugin is
+	// healthy; without it the option says so and a create is refused.
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		decksOpts = append(decksOpts, decks.WithTables(&decksTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))}))
+	}
+	decksSvc := decks.NewService(decks.NewRepository(a.DB),
+		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService}, decksOpts...)
 	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.

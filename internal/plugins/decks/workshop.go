@@ -229,6 +229,33 @@ type newPage struct {
 	CampaignID string
 	Styles     []DeckStyle
 	Heroes     []Hero
+	// Decks are the campaign's decks, for "Copy a deck".
+	Decks []DirectorDeck
+	// Tables are the rolling tables, for "From a rolling table".
+	Tables TableChoices
+}
+
+// newStarts are the three ways to start a deck, in the order the tabs show.
+var newStarts = []struct{ Key, Name string }{
+	{"style", "A style"}, {"copy", "Copy a deck"}, {"table", "From a rolling table"},
+}
+
+// newHint is the one line under a start's body, beside the button.
+func newHint(key string) string {
+	switch key {
+	case "copy":
+		return "The copy has the same look, rules and cards, all in the pile. Who may draw, what is in hands or on the table, and what has been used are not copied."
+	case "table":
+		return "Each line becomes a card in the Plain style: its name, its words, and its weight as copies."
+	}
+	return "A style sets the border, shape, back, finish and turn-over at once. Everything can be changed later on the Look tab."
+}
+
+func linesWords(n int) string {
+	if n == 1 {
+		return "1 line"
+	}
+	return strconv.Itoa(n) + " lines"
 }
 
 // WorkshopNew handles GET /campaigns/:id/decks/workshop/new.
@@ -237,11 +264,43 @@ func (h *Handler) WorkshopNew(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	roster, err := h.svc.Roster(c.Request().Context(), cid, v)
+	ctx := c.Request().Context()
+	roster, err := h.svc.Roster(ctx, cid, v)
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, WorkshopNewPage(newPage{CampaignID: cid, Styles: DeckStyles(), Heroes: roster.Heroes}))
+	list, err := h.svc.List(ctx, cid, v)
+	if err != nil {
+		return err
+	}
+	dl, _ := list.(DirectorList)
+	tables, err := h.svc.RollingTables(ctx, cid, v)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, WorkshopNewPage(newPage{CampaignID: cid, Styles: DeckStyles(), Heroes: roster.Heroes, Decks: dl.Decks, Tables: tables}))
+}
+
+// CreateFrom handles POST /campaigns/:id/decks/from: a deck started from
+// another deck or a rolling table. The Director check comes first, so anyone
+// else is told 404 before the body is read or the service is asked.
+func (h *Handler) CreateFrom(c *echo.Context) error {
+	cid, v, err := h.director(c)
+	if err != nil {
+		return err
+	}
+	var in CreateFromInput
+	if err := bind(c, &in, false); err != nil {
+		return err
+	}
+	deck, report, err := h.svc.CreateFrom(c.Request().Context(), cid, v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, struct {
+		Deck   DeckView   `json:"deck"`
+		Report FromReport `json:"report"`
+	}{deck, report})
 }
 
 // WorkshopDeck handles GET /campaigns/:id/decks/workshop/:did.

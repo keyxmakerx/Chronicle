@@ -87,6 +87,14 @@ func (s *spyService) List(context.Context, string, Viewer) (DeckListView, error)
 	s.calls++
 	return DirectorList{Decks: []DirectorDeck{s.deck()}}, nil
 }
+func (s *spyService) CreateFrom(context.Context, string, Viewer, CreateFromInput) (DeckView, FromReport, error) {
+	s.calls++
+	return s.deck(), FromReport{}, nil
+}
+func (s *spyService) RollingTables(context.Context, string, Viewer) (TableChoices, error) {
+	s.calls++
+	return TableChoices{}, nil
+}
 func (s *spyService) Roster(context.Context, string, Viewer) (Roster, error) {
 	s.calls++
 	return Roster{}, nil
@@ -126,6 +134,37 @@ func TestEveryWorkshopHandlerChecksForADirectorBeforeAskingTheService(t *testing
 	}
 }
 
+// The route that starts a deck from another deck or a table asks for a Director
+// before it reads the body or asks the service for anything: a player and a
+// scribe are told 404 and nothing is called.
+func TestStartingADeckFromASourceChecksForADirectorFirst(t *testing.T) {
+	fx := newFixture(t)
+	spy := &spyService{Service: fx.svc}
+	e := echo.New()
+	e.HTTPErrorHandler = newWorkshopRig(t, true).e.HTTPErrorHandler
+	RegisterRoutes(e, NewHandler(spy), guardCampaigns{}, guardAuth{}, guardAddons{on: true})
+	post := func(user, body string) *httptest.ResponseRecorder {
+		rq := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/decks/from", strings.NewReader(body))
+		rq.Header.Set("Content-Type", "application/json")
+		rq.AddCookie(&http.Cookie{Name: sessionCookie, Value: user})
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, rq)
+		return rec
+	}
+	for _, body := range []string{`{"name":"X","kind":"event","deckId":"d-spy"}`, `{"name":"X","kind":"event","tableId":"loot"}`, `not json`, ``} {
+		for _, user := range []string{"u-tam", "u-scribe"} {
+			spy.calls = 0
+			if rec := post(user, body); rec.Code != http.StatusNotFound || spy.calls != 0 {
+				t.Errorf("%s sending %q: %d after %d service calls, want 404 and none", user, body, rec.Code, spy.calls)
+			}
+		}
+	}
+	spy.calls = 0
+	if rec := post("u-dir", `{"name":"X","kind":"event","deckId":"d-spy"}`); rec.Code != http.StatusCreated || spy.calls == 0 || !strings.Contains(rec.Body.String(), `"report"`) {
+		t.Errorf("the control: a Director got %d after %d calls: %.120s", rec.Code, spy.calls, rec.Body.String())
+	}
+}
+
 // A player or scribe sending any of the writes the workshop's widget makes is
 // refused by the plugin, and nothing in the deck changes.
 func TestPlayersAndScribesCannotWriteWhatTheWorkshopWrites(t *testing.T) {
@@ -143,6 +182,8 @@ func TestPlayersAndScribesCannotWriteWhatTheWorkshopWrites(t *testing.T) {
 	type req struct{ method, path, body string }
 	writes := []req{
 		{http.MethodPost, base, `{"name":"Sneaky","kind":"event"}`},
+		{http.MethodPost, base + "/from", `{"name":"Sneaky","kind":"event","deckId":"` + r.deck + `"}`},
+		{http.MethodPost, base + "/from", `{"name":"Sneaky","kind":"event","tableId":"loot"}`},
 		{http.MethodPut, d, `{"version":1,"name":"Sneaky"}`},
 		{http.MethodDelete, d, ``},
 		{http.MethodPut, d + "/players", `{"version":1,"players":[]}`},

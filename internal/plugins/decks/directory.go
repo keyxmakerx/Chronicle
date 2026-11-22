@@ -51,3 +51,31 @@ type Pictures interface {
 	// answer false with no error, so a refusal cannot tell them apart.
 	Usable(ctx context.Context, campaignID, mediaID string) (bool, error)
 }
+
+// Tables reads the campaign's rolling tables so a deck can be made from one.
+// It is owned here and implemented in internal/app over the rolling tables
+// service, and bound only while that plugin is healthy, so decks never imports
+// it. Every method answers as a Director would see it: a Director-only table is
+// listed too, because the workshop is the Director's.
+type Tables interface {
+	// List is the campaign's tables, in their own order.
+	List(ctx context.Context, campaignID string) ([]TableSummary, error)
+	// Lines reads one table's lines; ok is false when there is no such table.
+	Lines(ctx context.Context, campaignID, tableID string) (lines []TableLine, name string, ok bool, err error)
+}
+
+// TableSummary is one rolling table in a list.
+type TableSummary struct {
+	ID    string
+	Name  string
+	Lines int
+}
+
+// TableLine is one line of a rolling table.
+type TableLine struct {
+	Name   string
+	Brief  string
+	Weight float64
+	// HasDays says the line only comes up on certain days.
+	HasDays bool
+}

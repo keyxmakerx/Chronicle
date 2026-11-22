@@ -47,6 +47,12 @@ type Service interface {
 	Say(ctx context.Context, campaignID, deckID, cardID string, v Viewer, said bool) (DeckView, error)
 	// WhenOptions is what the card editor may offer for a test. Directors only.
 	WhenOptions(ctx context.Context, campaignID string, v Viewer) (WhenOptionsView, error)
+
+	// CreateFrom starts a deck from another deck of the campaign or from one of
+	// its rolling tables, with every card, in one transaction. Directors only.
+	CreateFrom(ctx context.Context, campaignID string, v Viewer, in CreateFromInput) (DeckView, FromReport, error)
+	// RollingTables lists the tables a deck could be made from. Directors only.
+	RollingTables(ctx context.Context, campaignID string, v Viewer) (TableChoices, error)
 	// ValidateWhen checks a card's tests against the campaign and returns them
 	// normalized; every writer of a card's tests calls it.
 	ValidateWhen(ctx context.Context, campaignID string, d Deck, tests []WhenTest) ([]WhenTest, error)
@@ -142,6 +148,10 @@ func WithPictures(p Pictures) Option { return func(s *service) { s.pictures = p 
 // Director says so" can be used and no other test can be saved.
 func WithFacts(f Facts) Option { return func(s *service) { s.facts = f } }
 
+// WithTables sets the reader of the campaign's rolling tables. Bound only while
+// that plugin is healthy; without it a deck cannot be made from a table.
+func WithTables(t Tables) Option { return func(s *service) { s.tables = t } }
+
 // WithMoments sets where moments and what is remembered about tests are stored.
 // Without it a deck notices nothing, and conditions still gate draws.
 func WithMoments(m MomentRepository) Option { return func(s *service) { s.moments = m } }
@@ -175,7 +185,10 @@ type service struct {
 	pictures Pictures
 	// facts, moments, momentNote and poke are the parts of card conditions that
 	// live outside this plugin or its main tables; each may be nil.
-	facts      Facts
+	facts Facts
+	// tables reads the campaign's rolling tables; nil while that plugin is not
+	// available, and every way of using it then says so.
+	tables     Tables
 	moments    MomentRepository
 	momentNote MomentNotifier
 	poke       func(campaignID string)
@@ -829,17 +842,8 @@ func (s *service) Create(ctx context.Context, campaignID string, v Viewer, in Cr
 	if err := requireDirector(v); err != nil {
 		return nil, err
 	}
-	name, err := plainText("the deck's name", in.Name, MaxNameChars)
+	name, n, err := s.checkNewDeck(ctx, campaignID, in.Name, in.Kind, in.HolderEntityID)
 	if err != nil {
-		return nil, err
-	}
-	if name == "" {
-		return nil, errInvalid("a deck needs a name")
-	}
-	if err := validKind(in.Kind); err != nil {
-		return nil, err
-	}
-	if err := s.checkHolder(ctx, campaignID, in.Kind, in.HolderEntityID); err != nil {
 		return nil, err
 	}
 	settings, err := applySettings(defaultSettings(in.Kind), in.Settings)
@@ -850,13 +854,6 @@ func (s *service) Create(ctx context.Context, campaignID string, v Viewer, in Cr
 	if err != nil {
 		return nil, err
 	}
-	n, err := s.repo.CountDecks(ctx, campaignID)
-	if err != nil {
-		return nil, apperrorInternal(err)
-	}
-	if n >= MaxDecksPerCampaign {
-		return nil, errInvalid(fmt.Sprintf("a campaign can have at most %d decks", MaxDecksPerCampaign))
-	}
 	d := Deck{ID: uuid.NewString(), CampaignID: campaignID, Name: name, Kind: in.Kind, HolderEntityID: in.HolderEntityID,
 		Settings: settings, Look: look, SortOrder: n}
 	if err := s.repo.CreateDeck(ctx, d); err != nil {
@@ -866,6 +863,33 @@ func (s *service) Create(ctx context.Context, campaignID string, v Viewer, in Cr
 		return nil, apperrorInternal(err)
 	}
 	return s.reread(ctx, campaignID, d.ID, v)
+}
+
+// checkNewDeck is what every way of starting a deck checks first: the name,
+// who it is for, the hero page, and room for one more deck. It returns the
+// cleaned name and how many decks the campaign has now (the new deck's place).
+func (s *service) checkNewDeck(ctx context.Context, campaignID, rawName, kind, holder string) (string, int, error) {
+	name, err := plainText("the deck's name", rawName, MaxNameChars)
+	if err != nil {
+		return "", 0, err
+	}
+	if name == "" {
+		return "", 0, errInvalid("a deck needs a name")
+	}
+	if err := validKind(kind); err != nil {
+		return "", 0, err
+	}
+	if err := s.checkHolder(ctx, campaignID, kind, holder); err != nil {
+		return "", 0, err
+	}
+	n, err := s.repo.CountDecks(ctx, campaignID)
+	if err != nil {
+		return "", 0, apperrorInternal(err)
+	}
+	if n >= MaxDecksPerCampaign {
+		return "", 0, errInvalid(fmt.Sprintf("a campaign can have at most %d decks", MaxDecksPerCampaign))
+	}
+	return name, n, nil
 }
 
 // reread returns the stored deck as the viewer now sees it.

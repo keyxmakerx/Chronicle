@@ -38,6 +38,8 @@ func apperrorInternal(err error) error {
 // Repository-level outcomes the service turns into the errors above.
 var (
 	errDuplicate = errors.New("duplicate name")
+	// errCardDuplicate is two cards of one new deck sharing a name.
+	errCardDuplicate = errors.New("duplicate card name")
 	// errEmptyPile is a draw with no copy to take.
 	errEmptyPile = errors.New("pile is empty")
 	// errNoDraws is a player draw with nothing left to spend.

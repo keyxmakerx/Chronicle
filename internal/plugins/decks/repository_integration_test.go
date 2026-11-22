@@ -9,6 +9,7 @@ package decks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math/rand"
@@ -1503,5 +1504,70 @@ func TestIntegration_CardPictureQueries(t *testing.T) {
 	}
 	if ids, err := fx.repo.PictureIDs(fx.ctx, fx.campaign); err != nil || len(ids) != 0 {
 		t.Errorf("without the table: %v, %v", ids, err)
+	}
+}
+
+// A deck made with its cards is stored whole or not at all: a failure partway
+// leaves no deck, no card and no copy behind.
+func TestIntegration_CreateDeckWithCardsIsAllOrNothing(t *testing.T) {
+	fx := newDBFixture(t)
+	mk := func(name string) Deck {
+		return Deck{ID: uuid.NewString(), CampaignID: fx.campaign, Name: name, Kind: KindEvent, Settings: defaultSettings(KindEvent), Look: defaultLook()}
+	}
+	card := func(d Deck, name string, copies int) Card {
+		return Card{ID: uuid.NewString(), DeckID: d.ID, CampaignID: fx.campaign, Name: name, Copies: copies, When: []WhenTest{{Test: "say"}}}
+	}
+	count := func(q string) int {
+		var n int
+		if err := fx.db.QueryRow(q, fx.campaign).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	good := mk("Whole")
+	if err := fx.repo.CreateDeckWithCards(fx.ctx, good, []Card{card(good, "A", 2), card(good, "B", 3)}); err != nil {
+		t.Fatalf("a good deck: %v", err)
+	}
+	if got := fx.zones(t, good); got.Pile != 5 {
+		t.Errorf("the pile holds %d, want 5", got.Pile)
+	}
+	cards, _ := fx.repo.ListCards(fx.ctx, fx.campaign, good.ID)
+	if len(cards) != 2 || cards[0].Name != "A" || cards[1].SortOrder != 1 || len(cards[0].When) != 1 {
+		t.Errorf("the cards: %+v", cards)
+	}
+
+	before := [3]int{count(`SELECT COUNT(*) FROM decks WHERE campaign_id = ?`), count(`SELECT COUNT(*) FROM deck_cards WHERE campaign_id = ?`), count(`SELECT COUNT(*) FROM deck_copies WHERE campaign_id = ?`)}
+	after := func() [3]int {
+		return [3]int{count(`SELECT COUNT(*) FROM decks WHERE campaign_id = ?`), count(`SELECT COUNT(*) FROM deck_cards WHERE campaign_id = ?`), count(`SELECT COUNT(*) FROM deck_copies WHERE campaign_id = ?`)}
+	}
+	many := func(d Deck, n, copies int) []Card {
+		var out []Card
+		for i := 0; i < n; i++ {
+			out = append(out, card(d, fmt.Sprintf("C%03d", i), copies))
+		}
+		return out
+	}
+	bad := mk("Half")
+	over := mk("Over")
+	cases := []struct {
+		name  string
+		deck  Deck
+		cards []Card
+		want  error
+	}{
+		{"a card name twice, after good cards went in", bad, []Card{card(bad, "X", 2), card(bad, "Y", 1), card(bad, "x", 1)}, errCardDuplicate},
+		{"a deck name taken", mk("Whole"), []Card{card(good, "Q", 1)}, errDuplicate},
+		{"too many cards", over, many(over, MaxCardsPerDeck+1, 1), errTargetFull},
+		{"too many copies", over, many(over, 31, 20), errTargetCopies},
+	}
+	for _, c := range cases {
+		err := fx.repo.CreateDeckWithCards(fx.ctx, c.deck, c.cards)
+		if !errors.Is(err, c.want) {
+			t.Errorf("%s: %v, want %v", c.name, err, c.want)
+		}
+		if got := after(); got != before {
+			t.Errorf("%s left rows behind: %v, was %v", c.name, got, before)
+		}
 	}
 }
