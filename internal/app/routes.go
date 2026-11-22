@@ -6930,7 +6930,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus})
 		rollsHandler := rolls.NewHandler(rollsSvc)
-		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService})
+		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.

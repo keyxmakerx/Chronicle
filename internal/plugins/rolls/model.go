@@ -239,7 +239,9 @@ type PowerStat struct {
 
 // PowerRollSource reads a campaign's power roll and the viewer's own hero.
 // It is implemented in internal/app over the game system and the claimed
-// character, so this plugin reaches neither directly.
+// character, so this plugin reaches neither directly. canSeeGM is whether the
+// viewer sees GM content; without it, a number the GM marked GM-only is left
+// out.
 type PowerRollSource interface {
-	PowerRoll(ctx context.Context, campaignID, userID string) (PowerRollLine, error)
+	PowerRoll(ctx context.Context, campaignID, userID string, canSeeGM bool) (PowerRollLine, error)
 }

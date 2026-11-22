@@ -143,7 +143,7 @@ func (h *Handler) Power(c *echo.Context) error {
 	if h.power == nil {
 		return c.JSON(http.StatusOK, PowerRollLine{})
 	}
-	out, err := h.power.PowerRoll(c.Request().Context(), campaignID, v.UserID)
+	out, err := h.power.PowerRoll(c.Request().Context(), campaignID, v.UserID, v.Director)
 	if err != nil {
 		return err
 	}
