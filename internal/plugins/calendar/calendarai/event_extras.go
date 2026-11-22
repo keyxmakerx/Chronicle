@@ -11,10 +11,14 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// TierLister reads the campaign's event importance levels (its tier
-// vocabulary, or the platform's default trio). The campaigns service is one.
+// TierLister reads and replaces the campaign's event importance levels (its
+// tier vocabulary, or the platform's default trio). The campaigns service is
+// one.
 type TierLister interface {
 	GetEventTierDefinitions(ctx context.Context, campaignID string) ([]campaigns.TierDefinition, error)
+	// SetEventTierDefinitions replaces the levels, as the campaign's own
+	// route does, for the calendar block's `tiers:`.
+	SetEventTierDefinitions(ctx context.Context, campaignID string, defs []campaigns.TierDefinition) error
 }
 
 type calendarByID interface {
@@ -63,6 +67,7 @@ func (k EventKind) eventCalendar(ctx context.Context, campaignID string, a Actor
 // matches nothing is refused with the names that do exist.
 type eventExtras struct {
 	tier, page patch.Field[string]
+	announced  patch.Field[string]
 	kindID     patch.Field[int]
 	icon       string   // a Font Awesome class, "" when the block gave none
 	labels     []string // for the review summary
@@ -177,6 +182,29 @@ func (k EventKind) readEventExtras(ctx context.Context, campaignID string, a Act
 		}
 	}
 
+	if r.Has("announced") {
+		// The event form shows this choice to the Director only.
+		if !a.CanAuthorDmOnly() {
+			return x, badRequestf("only the owner or a co-DM can choose when players learn of an event")
+		}
+		switch w := strings.ToLower(strings.TrimSpace(r.Str("announced"))); w {
+		case calendar.AnnouncedAhead:
+			x.announced = patch.Of(w)
+			x.labels = append(x.labels, "players may know of it ahead of time")
+		case calendar.AnnouncedOnDay, "on-the-day":
+			x.announced = patch.Of(calendar.AnnouncedOnDay)
+			x.labels = append(x.labels, "players learn of it on the day")
+		case pageNone:
+			if r.Action != ActionUpdate {
+				return x, badRequestf("announced: none only applies to action: update; leave announced out instead")
+			}
+			x.announced = patch.Null[string]()
+			x.labels = append(x.labels, "players learn of it as its category says")
+		default:
+			return x, badRequestf("announced must be %s, %s or none (to go back to the category's setting)", calendar.AnnouncedAhead, calendar.AnnouncedOnDay)
+		}
+	}
+
 	if r.Has("page") {
 		ref, err := readPageRef(r, "page")
 		if err != nil {
@@ -213,6 +241,9 @@ func (x eventExtras) summary(s string) string {
 }
 
 func (x eventExtras) toCreate(in *calendar.CreateEventInput) {
+	if v, ok := x.announced.Get(); ok {
+		in.Announced = &v
+	}
 	if v, ok := x.tier.Get(); ok {
 		in.Tier = &v
 	}
@@ -225,5 +256,5 @@ func (x eventExtras) toCreate(in *calendar.CreateEventInput) {
 }
 
 func (x eventExtras) toUpdate(in *calendar.UpdateEventInput) {
-	in.Tier, in.KindID, in.EntityID = x.tier, x.kindID, x.page
+	in.Tier, in.KindID, in.EntityID, in.Announced = x.tier, x.kindID, x.page, x.announced
 }
