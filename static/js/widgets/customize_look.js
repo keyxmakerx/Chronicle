@@ -1861,6 +1861,7 @@
       setLooks(false);
       syncZoomRow();
       openPanel();
+      syncTitle();
       if (focus && $('#tab-' + id).offsetParent) $('#tab-' + id).focus();
       tellShell();
     }
@@ -1940,8 +1941,15 @@
       }
       $('#lk-open').setAttribute('aria-expanded', String(ui.panel && !ui.looks));
       $('#lk-looks-btn').setAttribute('aria-pressed', String(ui.panel && ui.looks));
+      syncTitle();
       measure();
       roomDraw();
+    }
+    // Inside the frame the rooms are the frame's tabs, so the panel names the
+    // open room instead of repeating them.
+    function syncTitle(){
+      var R = ROOMS.filter(function(r){ return r[0] === ui.room; })[0];
+      $('#lk-ptitle').textContent = ui.looks ? 'Looks' : (R ? R[1] : '');
     }
     function openPanel(){ if (ui.panel) return; ui.panel = true; syncPanel(); }
     function closePanel(){
@@ -2714,6 +2722,8 @@
       // until the owner picks Light or Dark for the preview themselves.
       if (window.MutationObserver){ mo = new MutationObserver(themeChanged); mo.observe(root, { attributes:true, attributeFilter:['class'] }); }
       if (SHELL){
+        $('#lk-panel').classList.add('in-shell');
+        syncTitle();
         shellSent = JSON.stringify(shellValue());
         on(document, 'chronicle:customize-draft', fromShell);
         on(window, 'hashchange', sectionFromHash);

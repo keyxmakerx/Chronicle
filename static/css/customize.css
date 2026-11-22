@@ -127,6 +127,11 @@
 .czp .lk-ws.panel-open .lk-work{ padding-right:calc(var(--cpe-panel-w) + 36px); }
 .czp .cz-panels{ min-width:0; }
 
+/* Inside the frame the rooms are its tabs; the panel names the open one. */
+.czp .lk-ptitle{ display:none; }
+.czp .lk-panel.in-shell .lk-rooms{ display:none; }
+.czp .lk-panel.in-shell .lk-ptitle{ display:block; flex:1; min-width:0; margin:0; font-size:14px; font-weight:600; color:var(--text); }
+
 /* The rooms, as quiet words at the panel's top: the open one underlined. */
 .czp .lk-rooms{ flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:0 14px; }
 .czp .tab{
@@ -651,6 +656,7 @@
   .czp .lk-work{ justify-content:flex-start; padding:12px 12px 124px; }
   .czp .lk-ws.panel-open .lk-work{ padding-right:12px; padding-bottom:calc(var(--lk-hh) * .58 + 72px); }
   .czp .lk-panel{ height:58%; width:auto; }
+  .czp .lk-ws.panel-open .pv-cap{ display:none; }
   .czp .lk-x-t{ display:inline; }
   .czp .lk-x .fa-xmark{ display:none; }
   .czp .lk-x{ min-width:44px; height:44px; }
