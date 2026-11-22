@@ -101,6 +101,26 @@ export async function person(opts = {}) {
   return who;
 }
 
+/**
+ * Build something once per check file and give every test the same result: the
+ * accounts and campaign a folded walk shares, so each test pays for its own
+ * steps and not for signing people up again. A failed build is kept, so every
+ * test that needs it fails with the same reason.
+ */
+export function once(build) {
+  let made = null;
+  return () => { made = made || build(); return made; };
+}
+
+/**
+ * Forget the page and server errors people collected so far. Walks that share
+ * accounts call this before each test (a `beforeEach`), so one test's errors
+ * are never charged to the next test's `assertClean()`.
+ */
+export function resetErrors(...people) {
+  for (const p of people) p.errors.length = 0;
+}
+
 /** The shared site admin, made by _setup.mjs. */
 export function siteAdmin(opts = {}) {
   return person({ ...opts, ...ADMIN, tag: 'admin', register: false });
