@@ -169,6 +169,10 @@ type PageSafetyService interface {
 	// RestoreVersion puts a version's title and text back on the page,
 	// saved as a new version so the restore can be undone too.
 	RestoreVersion(ctx context.Context, entityID, versionID string) error
+	// RestoreText puts a title and text kept elsewhere back on the page, as
+	// RestoreVersion does for a saved version: the result is a new "restore"
+	// version, so the undo can be undone too. A nil entry clears the text.
+	RestoreText(ctx context.Context, entityID, name string, entry, entryHTML *string) error
 
 	ListTrash(ctx context.Context, campaignID string) ([]TrashItem, error)
 	// RestoreFromTrash brings a page and its sub-pages back.
@@ -295,6 +299,15 @@ func (p *pageSafetyService) RestoreVersion(ctx context.Context, entityID, versio
 		return err
 	}
 	slog.Info("page version restored", slog.String("entity_id", entityID), slog.String("version_id", versionID), slog.String("name", after.Name))
+	return nil
+}
+
+func (p *pageSafetyService) RestoreText(ctx context.Context, entityID, name string, entry, entryHTML *string) error {
+	after, err := p.svc.restoreVersion(ctx, entityID, &EntityVersion{EntityID: entityID, Kind: VersionRestore, Name: name, Entry: entry, EntryHTML: entryHTML})
+	if err != nil {
+		return err
+	}
+	slog.Info("page text restored", slog.String("entity_id", entityID), slog.String("name", after.Name))
 	return nil
 }
 

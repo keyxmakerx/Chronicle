@@ -41,6 +41,7 @@ func TestAIPageRoutes_HaveOwnerGate(t *testing.T) {
 		{"POST", `"/ai/notes"`},
 		{"GET", `"/ai/requests"`},
 		{"POST", `"/ai/requests/:rid/turn-down"`},
+		{"POST", `"/ai/requests/:rid/undo"`},
 		{"GET", `"/ai/chip"`},
 		{"GET", `"/ai/panel"`},
 		{"GET", `"/ai/bubble"`},

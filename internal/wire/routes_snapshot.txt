@@ -487,6 +487,7 @@ POST	/campaigns/:id/ai/players	session	plugins/ai_workspace.(*Handler).SetPlayer
 POST	/campaigns/:id/ai/players/:kid	session	plugins/ai_workspace.(*Handler).PlayerKeyAction	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/requests	session	plugins/ai_workspace.(*Handler).AIRequests	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).TurnDownRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/requests/:rid/undo	session	plugins/ai_workspace.(*Handler).UndoRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).KeysPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).CreateKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/api-keys/:keyID	session	plugins/syncapi.(*Handler).RevokeKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
