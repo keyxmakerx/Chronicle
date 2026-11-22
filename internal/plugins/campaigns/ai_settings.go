@@ -28,7 +28,7 @@ type aiCampaignReader interface {
 }
 
 // NewAISettings builds the lookup. addons may be nil, which leaves the
-// add-ons out of the answer.
+// add-ons out of the Director's answer (a non-Director never gets them).
 func NewAISettings(camps aiCampaignReader, addons AddonLister) *AISettings {
 	return &AISettings{camps: camps, addons: addons}
 }
@@ -40,18 +40,20 @@ var _ aiplug.Lookup = (*AISettings)(nil)
 func (*AISettings) LookupInfo() aiplug.LookupInfo {
 	return aiplug.LookupInfo{
 		What: "settings", Aliases: []string{"campaign-settings", "features"}, Keys: "none",
-		Brief: "the campaign's name, description, game system and which add-ons are on or off, and for the Director team the names of the event importance levels",
+		Brief: "the campaign's name, description and game system, and for the Director team which add-ons are on or off and the names of the event importance levels",
 		Tool: aiplug.Tool{
 			Name: "campaign_settings", Title: "Campaign settings", Did: "Looked at the campaign's settings",
-			Desc:       "The campaign's name, description and game system, which add-ons (features) are switched on and which are off, and the names of the calendar's event importance levels. Nothing about people, invites, codes or keys.",
-			PlayerDesc: "The campaign's name, description and game system, and which add-ons (features) are switched on.",
+			Desc:       "The campaign's name, description and game system, and for the Director team which add-ons (features) are switched on and which are off and the names of the calendar's event importance levels. Nothing about people, invites, codes or keys.",
+			PlayerDesc: "The campaign's name, description and game system.",
 		},
 	}
 }
 
-// Answer reads as the Actor. The Director team (owner or co-DM) also gets the
-// switched-off add-ons and the importance levels; anyone else, which includes
-// Safe privacy and a player's key, gets what a player sees on screen.
+// Answer reads as the Actor. Everyone gets the name, description and game
+// system. Only the Director team (owner or co-DM) also gets the add-ons on and
+// off and the importance levels: an enabled add-on may have no player screen,
+// so listing them would tell a player's key (or Safe privacy) more than the
+// player can see.
 func (s *AISettings) Answer(ctx context.Context, campaignID string, a aiplug.Actor, _ aiplug.Record) (string, string, error) {
 	chip := "Campaign settings"
 	c, err := s.camps.GetByID(ctx, campaignID)
@@ -85,14 +87,11 @@ func (s *AISettings) Answer(ctx context.Context, campaignID string, a aiplug.Act
 			off = append(off, ad.Name)
 		}
 	}
-	if s.addons != nil {
-		fmt.Fprintf(&b, "\nAdd-ons on: %s\n", listOrNone(on))
-		if director {
+	if director {
+		if s.addons != nil {
+			fmt.Fprintf(&b, "\nAdd-ons on: %s\n", listOrNone(on))
 			fmt.Fprintf(&b, "Add-ons off: %s\n", listOrNone(off))
 		}
-	}
-
-	if director {
 		defs, err := s.camps.GetEventTierDefinitions(ctx, campaignID)
 		if err != nil {
 			return chip, "", err

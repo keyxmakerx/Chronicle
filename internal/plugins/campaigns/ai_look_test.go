@@ -347,3 +347,72 @@ func TestAILookDocListsEveryAllowedValue(t *testing.T) {
 		}
 	}
 }
+
+// fullLook sets every look field to a non-default value under the given header
+// background, so a field the rebuild forgets to carry shows up as a reset.
+func fullLook(top *TopbarStyle) CampaignSettings {
+	return CampaignSettings{
+		BrandName: "Therin", BrandLogo: "brand/logo.png", WelcomeMessage: "Welcome, travellers.",
+		AccentColor: "#7a5cff", AccentSurface1: "#3b82a0", AccentSurface2: "#a05c3b",
+		TopbarStyle:   top,
+		TopbarContent: &TopbarContent{Mode: "links", Quote: "Onward", Widgets: []string{"links", "text"}, Links: []TopbarLink{{Label: "Wiki", URL: "https://example.com/wiki"}}},
+		Appearance: &Appearance{
+			Look: "midnight", NavStyle: "tab", NavStrength: "lively", NavPageName: "hidden", PageTone: "paper", Contrast: "high",
+			BodyFont: "lora", HeadingFont: "cinzel", TypeScale: "roomy", ButtonStyle: "ink", IconAmount: "all", IconColour: "category",
+			Elevation: "dramatic", MotionSpeed: "snappy", ReduceMotion: true,
+			SidebarColour: "own", SidebarOwn: "#1a2a22", SidebarCorner: "subtitle", SidebarSubtitle: "Of Therin",
+			PeekGlow: "own", PeekGlowColour: "#3b9fb5", HeaderHeight: "tall", HoverCard: "night", SheetStyle: "ledger",
+			CraftArt: "lifelike", PageLook: "annals", TimelinePopup: "corner", StyleKit: "ornate", Entrance: "bloom",
+			MomentSheen: true, MomentCascade: true, MomentSpark: true, DmScreenKit: "sharp",
+			EmailLayout: AppearanceEmailLayouts[len(AppearanceEmailLayouts)-1], BuilderLook: "paper",
+			AccessSheet: LookAccessOwner, AccessPage: LookAccessEveryone, AccessHover: LookAccessEveryone, AccessDmScreen: LookAccessOwner,
+		},
+	}
+}
+
+// A block that names one unrelated key must leave every other stored field
+// alone, for each kind of header the Look screen can save. Compared on the
+// whole stored settings, not the screen's reading of them.
+func TestAILookApplyKeepsEveryStoredField(t *testing.T) {
+	ctx := context.Background()
+	headers := map[string]*TopbarStyle{
+		"no header":       nil,
+		"solid":           {Mode: "solid", Color: "#223344"},
+		"gradient":        {Mode: "gradient", GradientFrom: "#0f172a", GradientTo: "#1e2a5a", GradientDir: "to-br"},
+		"moving":          {Mode: "moving", GradientFrom: "#0f172a", GradientTo: "#1e2a5a", GradientDir: "to-r"},
+		"sky":             {Mode: "sky"},
+		"image and shade": {Mode: "image", ImagePath: "headers/dusk.png", Scrim: "strong"},
+	}
+	for name, top := range headers {
+		t.Run(name, func(t *testing.T) {
+			st := lookFixture(t, fullLook(top))
+			backdrop := "backdrops/hall.png"
+			st.c.BackdropPath = &backdrop
+			before := st.c.ParseSettings()
+			if err := NewAILook(st, nil).Apply(ctx, "c1", lookOwner, lookRec("update", "button_style", "press")); err != nil {
+				t.Fatal(err)
+			}
+			if st.saves != 1 {
+				t.Fatalf("saves = %d, want 1", st.saves)
+			}
+			want := before
+			ap := *before.Appearance
+			ap.ButtonStyle = "press"
+			want.Appearance = &ap
+			// JSON so a pointer field prints its contents in the failure.
+			gotJSON, _ := json.Marshal(st.c.ParseSettings())
+			wantJSON, _ := json.Marshal(want)
+			if string(gotJSON) != string(wantJSON) {
+				t.Errorf("stored settings differ beyond button_style:\ngot  %s\nwant %s", gotJSON, wantJSON)
+			}
+			if st.c.BackdropPath == nil || *st.c.BackdropPath != backdrop {
+				t.Errorf("backdrop = %v, want %q", st.c.BackdropPath, backdrop)
+			}
+		})
+	}
+	// A block naming only what is already stored writes nothing.
+	st := lookFixture(t, fullLook(&TopbarStyle{Mode: "sky"}))
+	if err := NewAILook(st, nil).Apply(ctx, "c1", lookOwner, lookRec("update", "button_style", "ink")); err != nil || st.saves != 0 {
+		t.Errorf("same value: err %v, %d saves, want none", err, st.saves)
+	}
+}

@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -10,6 +11,16 @@ import (
 type fakePay bool
 
 func (f fakePay) PaysByWealth(context.Context, string) bool { return bool(f) }
+
+// limitPay adds a price ceiling like the Armory's, to test the plan refuses it.
+type limitPay struct{ fakePay }
+
+func (limitPay) CheckPrice(p float64) error {
+	if p < 0 || p > 10_000_000 {
+		return errors.New("out of range")
+	}
+	return nil
+}
 
 // A Wealth game reads the price as a level and warns on what is ignored or
 // out of reach; a price of 0 is flagged in any game.
@@ -94,11 +105,47 @@ func TestShopRoomPaperWarning(t *testing.T) {
 
 // The Go constant must follow the widget's own switch.
 func TestPaperLookPausedMatchesWidget(t *testing.T) {
-	b, err := os.ReadFile("../../../../static/js/widgets/shop_room_paper.js")
+	const path = "../../../../static/js/widgets/shop_room_paper.js"
+	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Skipf("widget not reachable: %v", err)
+		// A skip here would let the pin pass without ever running.
+		t.Fatalf("widget not readable at %s (relative to this package): %v", path, err)
 	}
 	if got := strings.Contains(string(b), "building: true"); got != paperLookPaused {
 		t.Errorf("paperLookPaused = %v but the widget's building flag says %v", paperLookPaused, got)
+	}
+}
+
+// A price the Armory would refuse is a plan problem, not an apply failure;
+// the edges of the allowed range still plan.
+func TestShopStockPriceBounds(t *testing.T) {
+	pages := shopPages()
+	rope := page("rope", "Rope", "Item", false)
+	pages[rope.Slug] = &rope
+	tests := []struct {
+		name    string
+		price   float64
+		action  string
+		wantErr bool
+	}{
+		{"zero is allowed", 0, ActionCreate, false},
+		{"top of the range", 10_000_000, ActionCreate, false},
+		{"above the range", 10_000_001, ActionCreate, true},
+		{"absurdly large", 1e18, ActionCreate, true},
+		{"negative", -1, ActionCreate, true},
+		{"above the range on update", 1e18, ActionUpdate, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k := ShopStockKind(pages, &writeRels{}, limitPay{})
+			fields := map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "price": tt.price}
+			p := k.Plan(context.Background(), camp, owner, craftRec("shop-stock", tt.action, "", fields))
+			if tt.wantErr && !strings.Contains(p.Error, "price") {
+				t.Fatalf("plan = %+v, want a price problem", p)
+			}
+			if !tt.wantErr && strings.Contains(p.Error, "price") {
+				t.Fatalf("plan = %+v, want no price problem", p)
+			}
+		})
 	}
 }

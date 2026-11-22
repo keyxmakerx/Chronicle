@@ -45,8 +45,8 @@ func TestAISettings_Answer(t *testing.T) {
 			[]string{"Name: Therin", "Description: A broken kingdom.", "Game system: Draw Steel", "Add-ons on: Calendar", "Add-ons off: Maps", "Event importance levels: Major, Detail"},
 			[]string{"JOINSECRET", "GUESTSECRET", "Coming Soon", "Draw Steel, "}},
 		{"player-safe mode and a player's key get what a player sees", aiplug.Actor{UserID: "p", Role: 1},
-			[]string{"Name: Therin", "Game system: Draw Steel", "Add-ons on: Calendar"},
-			[]string{"Add-ons off", "Maps", "importance", "JOINSECRET", "GUESTSECRET"}},
+			[]string{"Name: Therin", "Game system: Draw Steel"},
+			[]string{"Add-ons", "Calendar", "Maps", "importance", "JOINSECRET", "GUESTSECRET"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

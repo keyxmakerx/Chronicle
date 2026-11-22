@@ -11,11 +11,16 @@ import (
 
 type carriedDir struct {
 	armory.StashDirectory
-	ents map[string]*armory.EntityRef
+	ents  map[string]*armory.EntityRef
+	chars []armory.EntityRef
 }
 
 func (d carriedDir) GetEntity(_ context.Context, _, id string) (*armory.EntityRef, error) {
 	return d.ents[id], nil
+}
+
+func (d carriedDir) ListCharacters(context.Context, string, int, string) ([]armory.EntityRef, error) {
+	return d.chars, nil
 }
 
 type carriedAddons bool
@@ -76,6 +81,35 @@ func TestCopiesWords(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := copiesWords(tt.copies); got != tt.want {
 				t.Errorf("copiesWords = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Wealth is claimed only when it is the one kind of money in the campaign.
+func TestAICarriedAdapterPaysByWealth(t *testing.T) {
+	w := armory.EntityRef{MoneyKey: armory.MoneyKeyWealth}
+	gp := armory.EntityRef{MoneyKey: "gp"}
+	none := armory.EntityRef{}
+	tests := []struct {
+		name  string
+		on    bool
+		chars []armory.EntityRef
+		want  bool
+	}{
+		{"all Wealth", true, []armory.EntityRef{w, w}, true},
+		{"Wealth beside a sheet with no money", true, []armory.EntityRef{w, none}, true},
+		{"mixed Wealth and coins", true, []armory.EntityRef{w, gp}, false},
+		{"coins only", true, []armory.EntityRef{gp}, false},
+		{"none with money", true, []armory.EntityRef{none}, false},
+		{"no characters", true, nil, false},
+		{"Armory off", false, []armory.EntityRef{w}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := aiCarriedAdapter{dir: carriedDir{chars: tc.chars}, addons: carriedAddons(tc.on)}
+			if got := c.PaysByWealth(context.Background(), "camp"); got != tc.want {
+				t.Fatalf("PaysByWealth = %v, want %v", got, tc.want)
 			}
 		})
 	}
