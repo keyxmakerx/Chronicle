@@ -48,12 +48,12 @@ func TestHeroChangeDetail(t *testing.T) {
 	}
 }
 
-// fakeHeroCamps is one campaign with an owner, a Co-DM, a Scribe and two
-// players.
+// fakeHeroCamps is one campaign with an owner, a Co-DM (a Scribe with the
+// DM grant), a plain Scribe and two players.
 type fakeHeroCamps struct{ heroChangeCampaigns }
 
 func (fakeHeroCamps) GetByID(_ context.Context, id string) (*campaigns.Campaign, error) {
-	return &campaigns.Campaign{ID: id}, nil
+	return &campaigns.Campaign{ID: id, Settings: `{"dm_grant_ids":["codm"]}`}, nil
 }
 
 func (fakeHeroCamps) ListMembers(context.Context, string) ([]campaigns.CampaignMember, error) {
@@ -61,6 +61,7 @@ func (fakeHeroCamps) ListMembers(context.Context, string) ([]campaigns.CampaignM
 		{UserID: "own", Role: campaigns.RoleOwner, DisplayName: "Dana"},
 		{UserID: "pl", Role: campaigns.RolePlayer, DisplayName: "Ana"},
 		{UserID: "pl2", Role: campaigns.RolePlayer, DisplayName: "Bo"},
+		{UserID: "codm", Role: campaigns.RoleScribe, DisplayName: "Cora"},
 		{UserID: "scr", Role: campaigns.RoleScribe, DisplayName: "Sam"},
 	}, nil
 }
@@ -76,7 +77,8 @@ func (b *fakeBell) NotifyUsersWithDetail(_ context.Context, to []string, _, ntyp
 	return nil
 }
 
-// The level bell goes to the Directors, not the player, and says only who,
+// The level bell goes to the owner and the Co-DM, not the player, another
+// player or a plain Scribe, and says only who,
 // which hero and the new level, whatever else the page holds.
 func TestHeroChangeBell_LevelRaised(t *testing.T) {
 	bell := &fakeBell{}
@@ -86,8 +88,8 @@ func TestHeroChangeBell_LevelRaised(t *testing.T) {
 	if err := b.LevelRaised(context.Background(), e, "pl", 3); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(bell.to, ",") != "own" {
-		t.Errorf("sent to %v, want only the owner", bell.to)
+	if strings.Join(bell.to, ",") != "own,codm" {
+		t.Errorf("sent to %v, want the owner and the Co-DM only", bell.to)
 	}
 	if bell.ntype != notifHeroLevelRaised {
 		t.Errorf("type %q", bell.ntype)

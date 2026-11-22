@@ -219,3 +219,38 @@ func TestUpdateEntityFields_LevelRaisedBell(t *testing.T) {
 		})
 	}
 }
+
+// A level the player may not give their hero is held and reported, and a
+// held level rings nothing even though it is higher.
+func TestUpdateEntityFields_HeldLevelRingsNothing(t *testing.T) {
+	plan := &entities.HeroPlan{Steps: []entities.HeroStep{{
+		FieldKey: "level",
+		Choices:  []entities.HeroChoice{{Name: "1"}, {Name: "2"}},
+		Rules:    &entities.HeroStepRules{Limited: true},
+	}}}
+	roles := map[string]campaigns.Role{"u-1": campaigns.RoleOwner, "pat": campaigns.RolePlayer}
+	ents := &leveledEntitySvc{}
+	bell := &levelBell{}
+	h := NewAPIHandler(&stubSyncSvcForRole{}, ents, actingCampaignSvc{roles: roles}, nil)
+	h.SetHeroPlanner(fixedPlan{plan})
+	h.SetHeroChanges(entities.NewHeroChangeService(nil, nil, bell))
+	c, rec := gateContext(http.MethodPut, `{"actingUserId":"pat","fields_data":{"level":3,"stamina":40}}`)
+	if err := h.UpdateEntityFields(c); err != nil {
+		t.Fatalf("write refused: %v", err)
+	}
+	if len(ents.merges) != 1 || len(ents.merges[0]) != 1 || ents.merges[0]["stamina"] != float64(40) {
+		t.Fatalf("stored %v, want only stamina", ents.merges)
+	}
+	var resp struct {
+		Held []struct{ Key, Reason string }
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Held) != 1 || resp.Held[0].Key != "level" {
+		t.Fatalf("answer %s, want level held", rec.Body.String())
+	}
+	if len(bell.rang) != 0 {
+		t.Fatalf("a held level rang %v", bell.rang)
+	}
+}
