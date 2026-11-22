@@ -280,7 +280,7 @@ func init() {
 			marks = ms
 		}
 		return []records.Kind{
-			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}, Marks: marks},
+			calendarai.CalendarKind{Svc: d.Calendar, Pages: aiCalendarPages{d.Entities}, Marks: marks, Tiers: d.Campaigns},
 			calendarai.EventKind{Svc: d.Calendar, Tiers: d.Campaigns, Pages: aiCalendarPages{d.Entities}, Rolls: d.Rolls, Tables: d.Tables},
 			calendarai.WeatherKind{Svc: d.Calendar},
 		}

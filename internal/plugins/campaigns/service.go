@@ -1721,6 +1721,10 @@ var hexColorRE = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 // dash, underscore). Same shape as Chronicle's general slug pattern.
 var tierSlugRE = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
+// ValidateTierDefinitions is the check SetEventTierDefinitions runs, for a
+// caller that must refuse a bad set before it saves one.
+func ValidateTierDefinitions(defs []TierDefinition) error { return validateTierDefinitions(defs) }
+
 // validateTierDefinitions runs the per-set + per-entry validation rules.
 // Caller passes the proposed full set; returns nil if valid, an
 // apperror.AppError describing the first violation otherwise.
