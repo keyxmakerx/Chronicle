@@ -28,8 +28,8 @@ func aiSettingsFixture() *AISettings {
 	camp := Campaign{Name: "Therin", Description: &d, JoinCode: &code,
 		Settings: `{"system_id":"drawsteel","guest_code":"GUESTSECRET"}`}
 	return NewAISettings(fakeAICampaigns{camp}, fakeAIAddons{
-		{Slug: "calendar", Name: "Calendar", Enabled: true, Installed: true},
-		{Slug: "maps", Name: "Maps", Installed: true},
+		{Slug: "almanac", Name: "Calendar", Enabled: true, Installed: true},
+		{Slug: "atlas", Name: "Maps", Installed: true},
 		{Slug: "soon", Name: "Coming Soon Thing"},
 		{Slug: "drawsteel", Name: "Draw Steel", Category: "system", Enabled: true, Installed: true},
 	})

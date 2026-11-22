@@ -52,11 +52,11 @@ func TestCoverageLookups_Plugged(t *testing.T) {
 }
 
 func TestAddonOffReason(t *testing.T) {
-	d := &aiDeps{Addons: fakeAddons{"timeline": false, "maps": true}}
-	if why := d.addonOffReason("timeline", "Timelines")(context.Background(), "c"); !strings.Contains(why, "Timelines is switched off") {
+	d := &aiDeps{Addons: fakeAddons{"switched-off": false, "switched-on": true}}
+	if why := d.addonOffReason("switched-off", "Timelines")(context.Background(), "c"); !strings.Contains(why, "Timelines is switched off") {
 		t.Errorf("off add-on said %q", why)
 	}
-	if why := d.addonOffReason("maps", "Maps")(context.Background(), "c"); why != "" {
+	if why := d.addonOffReason("switched-on", "Maps")(context.Background(), "c"); why != "" {
 		t.Errorf("on add-on refused: %q", why)
 	}
 }
