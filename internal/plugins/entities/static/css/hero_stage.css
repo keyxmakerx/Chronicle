@@ -122,7 +122,11 @@
 .hc[data-look="stage"] .hc-app[data-view="desk"] .hc-cols { grid-template-columns: clamp(232px, 21vw, 268px) minmax(0, 1fr) clamp(340px, 33vw, 420px); }
 .hc[data-look="stage"] .hc-rail { background: linear-gradient(170deg, var(--hc-stg1), var(--hc-stg2)); border-right: 0; color: var(--hc-stg-ink); overflow-y: auto; }
 .hc[data-look="stage"] .hc-rail .hc-stg { padding: 16px 16px 6px; align-items: center; text-align: center; }
-.hc[data-look="stage"] .hc-rail .hc-stg__id { flex-direction: column; gap: 10px; }
+.hc[data-look="stage"] .hc-rail .hc-stg__id { flex-direction: column; gap: 10px; max-width: 100%; }
+/* The "If you choose" line is one line that ends in an ellipsis. A line that
+   cannot wrap is as wide as its words, so the box around it is held to the
+   rail or it would be centred and cut at both edges. */
+.hc[data-look="stage"] .hc-rail .hc-stg__tx { max-width: 100%; }
 .hc[data-look="stage"] .hc-rail .hc-por { width: 72px; height: 72px; font-size: 28px; }
 .hc[data-look="stage"] .hc-rail .hc-sstw { align-self: stretch; text-align: left; }
 .hc[data-look="stage"] .hc-rail .hc-sst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -155,6 +159,8 @@
 .hc[data-look="stage"] .hc-hero .hc-who { color: var(--hc-stg-ink-2); }
 .hc[data-look="stage"] .hc-hero h2 { color: var(--hc-stg-ink); }
 .hc[data-look="stage"] .hc-hero .hc-line { color: var(--hc-stg-ink-1); }
+/* A name or line with no break in it wraps at the card's edge. */
+.hc[data-look="stage"] .hc-hero :is(h2, .hc-line, .hc-who) { max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
 .hc[data-look="stage"] .hc-hero .hc-stats { align-self: stretch; }
 .hc[data-look="stage"] .hc-hero .hc-stat { background: var(--hc-stg-wash); border: 0; }
 .hc[data-look="stage"] .hc-hero .hc-stat b { color: var(--hc-stg-ink); }

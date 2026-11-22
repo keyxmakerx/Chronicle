@@ -26,6 +26,7 @@ func practiceNewURL(campaignID, query string) string {
 templ PracticeCreatorPage(cc *campaigns.CampaignContext, view PracticeCreatorView) {
 	@layouts.App("Practice hero - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		@heroLookLinks(view.Look)
 		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
 				class="hc"
@@ -41,6 +42,7 @@ templ PracticeCreatorPage(cc *campaigns.CampaignContext, view PracticeCreatorVie
 				data-type-name="practice hero"
 				data-for-self="false"
 				data-skin={ layouts.BuilderSkin(ctx) }
+				{ heroLookAttrs(view.Look)... }
 				if view.TermsURL != "" {
 					data-terms-url={ view.TermsURL }
 				}
