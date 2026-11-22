@@ -369,6 +369,12 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 |---|---|
 | `practice_heroes` | A player's practice heroes (`001_practice_heroes`): `user_id` is the maker (no FK, so removal hooks delete a person's rows without being blocked); `name`, `picks_json` (the creator's `{fieldKey: {name, options}}` map as validated, never derived fields), `level` (carried from a copied hero, else NULL), `copied_from_name`; `ask_status` `''`/`waiting`/`declined` (checked by the service), `ask_note` (a Director's note when declining), `asked_at`; at most 3 per `(campaign_id, user_id)`, enforced by the repository's conditional insert; FK cascade to `campaigns`. Not an `entities` row on purpose |
 
+### hero changes (`internal/plugins/entities/herochangeschema/migrations/`, registry slug `hero_changes`)
+
+| Table | Notes |
+|---|---|
+| `hero_change_state` | What decides when a player may change their hero's picks beyond the campaign's rule (`hero_changes` in the campaign settings JSON, `campaigns.HeroChangeRule`): PK `entity_id`; `level` and `level_at` are the level the hero last reached and when, written by a field observer as the `level` field goes up; `reopened_until` is a Director's exception for this hero, `reopened_by` who gave it (no FK). A hero with no row has no recorded level-up and no exception. FK cascade to `entities` and `campaigns` |
+
 ### page layouts (`internal/plugins/entities/layoutschema/migrations/`, registry slug `page_layouts`)
 
 | Table | Notes |

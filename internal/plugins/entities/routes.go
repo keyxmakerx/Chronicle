@@ -128,6 +128,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/characters/lists", h.UpdateCharacterLists, campaigns.RequireRole(campaigns.RoleOwner))
 	// Staff keep the Players list: who plays which character, and
 	// which characters are on it.
+	// When players may change their hero's picks, and reopening one hero:
+	// the handlers admit the Director team only.
+	cg.POST("/characters/hero-changes", h.SaveHeroChanges, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/characters/hero-changes/:eid/reopen", h.ReopenHeroChanges, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/characters/owner", h.SetCharacterOwner, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/characters/playable", h.SetCharacterPlayable, campaigns.RequireRole(campaigns.RoleScribe))
 	// Which of its category's layouts a page wears; the handler admits the

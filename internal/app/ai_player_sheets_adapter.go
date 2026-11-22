@@ -33,6 +33,9 @@ type aiPlayerSheets struct {
 	planner  entities.HeroPlanner
 	// gmTerm is the campaign's word for its game master; nil says "GM".
 	gmTerm func(ctx context.Context, campaignID string) string
+	// heroChanges locks picks outside the Director's times and rings their
+	// bell for a change; nil never locks.
+	heroChanges *entities.HeroChangeService
 }
 
 var _ ai_workspace.PlayerSheets = aiPlayerSheets{}
@@ -160,7 +163,29 @@ func (a aiPlayerSheets) HeldFields(ctx context.Context, campaignID, userID, enti
 	if err != nil {
 		return nil, err
 	}
-	return entities.ClaimedOwnerPatchHeld(e, userID, campaignID, patch, typeFields, plan)
+	held, err := entities.ClaimedOwnerPatchHeld(e, userID, campaignID, patch, typeFields, plan)
+	if err != nil {
+		return nil, err
+	}
+	locked, _, err := a.heroChanges.HeldPicks(ctx, e, unheld(patch, held), plan)
+	if err != nil {
+		return nil, err
+	}
+	for k, why := range locked {
+		held[k] = why
+	}
+	return held, nil
+}
+
+// unheld is patch without the keys already held.
+func unheld(patch map[string]any, held map[string]string) map[string]any {
+	out := make(map[string]any, len(patch))
+	for k, v := range patch {
+		if _, ok := held[k]; !ok {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // ownCharacter loads a character the player may change through their AI:
@@ -200,12 +225,23 @@ func (a aiPlayerSheets) PatchSheet(ctx context.Context, campaignID, userID, enti
 	if err := entities.CheckClaimedOwnerPatch(e, userID, campaignID, patch, typeFields, plan); err != nil {
 		return err
 	}
+	locked, changes, err := a.heroChanges.HeldPicks(ctx, e, patch, plan)
+	if err != nil {
+		return err
+	}
+	for _, why := range locked {
+		return apperror.NewForbidden(why)
+	}
 	if !apply {
 		return nil
 	}
 	wctx := changesource.With(ctx, changesource.Source{Kind: changesource.KindAI, Label: label, UserID: userID})
 	entities.ClearStaleStepOptions(e, patch)
-	return a.entities.MergeFields(wctx, e.ID, patch)
+	if err := a.entities.MergeFields(wctx, e.ID, patch); err != nil {
+		return err
+	}
+	a.heroChanges.Changed(ctx, e, userID, changes)
+	return nil
 }
 
 func (a aiPlayerSheets) plan(ctx context.Context, campaignID, userID string) (*entities.HeroPlan, error) {

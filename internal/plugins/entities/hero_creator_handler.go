@@ -21,6 +21,10 @@ import (
 // the creator asks only for a name.
 func (h *Handler) SetHeroPlanner(p HeroPlanner) { h.heroPlanner = p }
 
+// SetHeroChanges wires when players may change their hero's picks. Without
+// it every hero is open and no change rings the Directors' bell.
+func (h *Handler) SetHeroChanges(s *HeroChangeService) { h.heroChanges = s }
+
 // heroTarget works out the page type a new hero becomes for this viewer and
 // whether they may make one. A player's hero must be a type they may claim.
 func (h *Handler) heroTarget(c *echo.Context, cc *campaigns.CampaignContext) (*EntityType, heroAccess, error) {

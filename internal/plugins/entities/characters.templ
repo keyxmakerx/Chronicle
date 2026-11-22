@@ -71,6 +71,9 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		if view.PracticeDirector != nil {
 			@practiceDirectorList(view.PracticeDirector)
 		}
+		if view.HeroChanges != nil {
+			@heroChangesSection(view.HeroChanges)
+		}
 		if len(view.Pickable) > 0 {
 			@castPickBox(cc.Campaign.ID, view.CSRFToken, view.Pickable)
 		}

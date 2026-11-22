@@ -207,3 +207,9 @@
 .hb-ownfoot { border-top: 1px solid var(--color-border); background: var(--color-bg-secondary); }
 .hb-ownbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12.5px; color: var(--color-text-secondary); }
 .hb-ph .hb-ph1 .hb-link { padding-left: 0; }
+
+/* When the Director's times let the picks change: a quiet line under the
+   hero's name, never a banner. */
+.hb-lock { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--color-text-secondary); max-width: 70ch; }
+.hb-lock i { margin-right: 4px; font-size: 11px; color: var(--color-text-muted); }
+.hb-locked { margin: 0; }
