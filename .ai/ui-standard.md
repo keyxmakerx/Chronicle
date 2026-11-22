@@ -748,6 +748,11 @@ The same screens, folded to the width; never a second design.
   opens Customize › Look on it. The strip Settles in (Calm fades, Off shows
   it). A page loaded in full during a try-out wears the tried kit from its
   first paint.
+- **The phone menu scrolls as one list.** In the drawer the brand row stays
+  at the top and the foot at the bottom, and everything between, an open
+  category's pages included, moves with one swipe; no part of it scrolls on
+  its own. A docked sidebar keeps its fixed top part, and an open category
+  scrolls as a whole under it.
 - **Side panels become bottom sheets on a phone**: the page peek and the
   Table (under **What is on a page** and **Opening and closing**).
 - **A sheet that scrolls keeps the pull to itself**: a fixed sheet's scroll
