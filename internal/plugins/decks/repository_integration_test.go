@@ -580,11 +580,6 @@ func TestIntegration_ShuffleGatherAndLogTrim(t *testing.T) {
 	if stale != 0 {
 		t.Errorf("gather left the old hand's state on %d copies", stale)
 	}
-	for _, c := range copies {
-		if _, ok, _ := fx.repo.GetCopy(fx.ctx, fx.campaign, d.ID, c.ID); ok && c.ID != copies[3].ID {
-			// copies 0 to 2 came back to the pile; copy 3 was gone and came back too
-		}
-	}
 	after, _ := fx.repo.ListCopies(fx.ctx, fx.campaign, d.ID)
 	old := map[string]bool{}
 	for _, c := range copies {
@@ -1278,7 +1273,9 @@ func TestIntegration_CreateRacingKeepEndsAtTheCardLimit(t *testing.T) {
 		t.Errorf("%d writers got the last slot, want 1", won)
 	}
 	var cards int
-	fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?`, dst.ID).Scan(&cards)
+	if err := fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?`, dst.ID).Scan(&cards); err != nil {
+		t.Fatalf("count cards: %v", err)
+	}
 	if cards != MaxCardsPerDeck {
 		t.Errorf("deck has %d cards, want exactly %d", cards, MaxCardsPerDeck)
 	}
@@ -1320,7 +1317,9 @@ func TestIntegration_SameNameCreateRacingKeep(t *testing.T) {
 			t.Fatalf("round %d: create failed: %v", round, createErr)
 		}
 		var cards int
-		fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?`, dst.ID).Scan(&cards)
+		if err := fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?`, dst.ID).Scan(&cards); err != nil {
+			t.Fatalf("round %d: count cards: %v", round, err)
+		}
 		if col, rows := fx.storedCopies(t, dst, "Ember"); cards != 1 || col != want || rows != want {
 			t.Errorf("round %d: %d cards, column %d, rows %d, want 1 card with %d", round, cards, col, rows, want)
 		}

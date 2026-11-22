@@ -344,9 +344,6 @@ func (p deckPage) table() tableView {
 // left says how many are in the pile, in words.
 func (t tableView) left() string { return strconv.Itoa(t.Pile) + " left" }
 
-// kindOfCard names a card's kind, "" for none.
-func kindOfCard(l Look, c DirectorCard) string { return kindWord(l, dirFace(c)) }
-
 func boolWord(b bool) string {
 	if b {
 		return "true"

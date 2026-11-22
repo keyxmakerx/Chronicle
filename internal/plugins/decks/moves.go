@@ -446,7 +446,7 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if c.Zone != ZoneHand {
 			return nil, wrongZone("in a hand")
 		}
-		if !v.Director && !((own || party) && d.Settings.Discard) {
+		if mayDiscard := v.Director || ((own || party) && d.Settings.Discard); !mayDiscard {
 			return nil, errForbidden("you can't discard from this deck")
 		}
 		if !v.Director && !c.FaceUp {

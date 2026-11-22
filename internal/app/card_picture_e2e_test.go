@@ -421,9 +421,9 @@ func TestCardPictureGuardErrorRefusesAndLogs(t *testing.T) {
 // picture, a Director does, and totals are right for both.
 func TestCardPictureIsLeftOutOfThePicker(t *testing.T) {
 	w := newCardWorld(t)
-	var plain []string
+	plain := map[string]bool{}
 	for i := 0; i < 3; i++ {
-		plain = append(plain, w.file(w.camp, media.UsageAttachment, "image/png"))
+		plain[w.file(w.camp, media.UsageAttachment, "image/png")] = true
 	}
 	pic := w.file(w.camp, media.UsageAttachment, "image/png")
 	w.card(w.deck("Omens", &decks.SettingsInput{}), "Relic", pic)
@@ -466,6 +466,9 @@ func TestCardPictureIsLeftOutOfThePicker(t *testing.T) {
 		t.Errorf("Scribe pages hold %v, want the 3 plain files", got)
 	}
 	for _, id := range got {
+		if !plain[id] {
+			t.Errorf("a Scribe's picker lists %s, which is not one of the plain files", id)
+		}
 		if id == pic {
 			t.Error("a Scribe's picker lists a card's picture")
 		}

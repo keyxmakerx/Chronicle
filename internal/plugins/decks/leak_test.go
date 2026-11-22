@@ -12,7 +12,6 @@ import (
 type leakWorld struct {
 	*fixture
 	secrets, party, vault string
-	partyShownCopy        string
 	partyUsedCopy         string
 	secretCopies          map[string]string // card name -> copy id
 }
