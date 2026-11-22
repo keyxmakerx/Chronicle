@@ -33,11 +33,14 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   assert.equal(await page.locator('.czs-top').count(), 0, 'the wall has a bar of tabs');
   await picture(page, 'customize-frame', { check: '#1366', about: 'Customize wall: a picture of everything that can be changed', mask: ['.sidebar', '[data-sidebar]'] });
   // Pressing a picture opens its workshop; the bar names it and "Everything" comes back.
+  // Focus lands on the workshop's name going in and on the picture coming back.
   await page.locator('.czw-tile', { hasText: 'Colours and type' }).click();
   await page.locator('.czs-top [data-czs-back]').waitFor();
   assert.match(page.url(), /\/customize\/look#style$/);
+  await page.waitForFunction(() => document.activeElement && document.activeElement.matches('.czs-catname'));
   await page.locator('.czs-top [data-czs-back]').click();
   await page.locator('[data-czw]').waitFor();
+  await page.waitForFunction(() => document.activeElement && document.activeElement.matches('.czw-tile[data-czw-key="colours"]'));
 
   // 2. A draft survives a reload: rename a category.
   const href = await categoryHref(page, cid, 'Locations');
@@ -61,8 +64,11 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('aside, nav').getByText('Places of Note').first().waitFor();
 
-  // 4. Discard and Undo on Look.
+  // 4. Discard and Undo on Look. The starting looks are in the panel that the
+  // dock's Looks opens.
   await owner.go(`/campaigns/${cid}/customize/look`);
+  await page.locator('#lk-looks-btn').click();
+  await page.locator('#lk-panel.open #lk-looks:not([hidden])').waitFor();
   const parchment = page.locator('label.lk[data-hc="look:parchment"]');
   const radio = parchment.locator('input');
   await parchment.click();
@@ -115,7 +121,7 @@ test('Customize frame, drafts, save, discard, two tabs, find, old address', asyn
   owner.assertClean();
 });
 
-test('phone width: the rail is a swipeable row and the save bar fits', async () => {
+test('phone width: the tabs are a swipeable row and the save bar fits', async () => {
   const owner = await person({ tag: 'czp', name: 'Mara Vell', context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } });
   const cid = await newCampaign(owner, 'Frame Phone');
   const { page } = owner;
@@ -126,14 +132,25 @@ test('phone width: the rail is a swipeable row and the save bar fits', async () 
 
   const tabs = page.locator('.czs-tab').first();
   await tabs.waitFor();
+  // Two rows: "Everything", the name and Find on the first, the tabs on a
+  // second row that scrolls sideways; every control 44 tall, nothing clipped.
   const rail = await page.evaluate(() => {
     const t = document.querySelector('.czs-tab');
-    const row = t.closest('.czs-tabs-top');
+    const row = t.closest('.czs-tabrow');
     const s = getComputedStyle(row);
-    return { overflowX: s.overflowX, flexDir: s.flexDirection, display: s.display, scrolls: row.scrollWidth >= row.clientWidth };
+    const box = (q) => { const b = document.querySelector(q).getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, h: b.height, w: b.width }; };
+    return {
+      overflowX: s.overflowX, flexDir: s.flexDirection, w: innerWidth,
+      back: box('[data-czs-back]'), name: box('.czs-catname'), find: box('.czs-top .czs-find'), tab: box('.czs-tab'),
+      tabHeights: [...document.querySelectorAll('.czs-tab')].map((x) => x.getBoundingClientRect().height),
+    };
   });
-  assert.notEqual(rail.flexDir, 'column', 'the rail is still a column at phone width');
-  assert.ok(['auto', 'scroll'].includes(rail.overflowX), `the rail row does not scroll sideways (${rail.overflowX})`);
+  assert.notEqual(rail.flexDir, 'column', 'the tabs are still a column at phone width');
+  assert.ok(['auto', 'scroll'].includes(rail.overflowX), `the tabs row does not scroll sideways (${rail.overflowX})`);
+  assert.ok(rail.tab.t >= rail.back.b - 1, 'the tabs share a row with "Everything"');
+  assert.ok(rail.name.r <= rail.find.l + 1 && rail.find.r <= rail.w, 'the name runs under Find or Find is off the screen');
+  assert.ok(rail.find.h >= 44 && rail.find.w >= 44 && rail.back.h >= 44, 'Find or "Everything" is under 44 tall');
+  assert.ok(rail.tabHeights.every((h) => h >= 44), `a tab is under 44 tall (${rail.tabHeights.join(', ')})`);
 
   const fit = await page.evaluate(() => {
     const b = document.querySelector('[data-czs-save]').closest('[data-czs-savebar]').getBoundingClientRect();
