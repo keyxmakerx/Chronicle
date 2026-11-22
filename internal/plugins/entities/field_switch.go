@@ -439,7 +439,11 @@ func (v *FieldSwitchView) AddsLine() string {
 // they leave the visible field. "" when nothing comes off.
 func (v *FieldSwitchView) RemovesLine(categoryFields []FieldDefinition) string {
 	var parts []string
-	if len(v.Removes) > 0 {
+	switch len(v.Removes) {
+	case 0:
+	case 1:
+		parts = append(parts, v.Removes[0]+" comes off the pages")
+	default:
 		parts = append(parts, joinAnd(v.Removes, "and")+" come off the pages")
 	}
 	have := fieldKeySet(categoryFields)
@@ -460,7 +464,11 @@ func (v *FieldSwitchView) RemovesLine(categoryFields []FieldDefinition) string {
 		// Only a reused field's misfits leave: start the sentence with them.
 		parts[0] = "A " + strings.TrimPrefix(parts[0], "so does a ") + " comes off the pages"
 	}
-	return strings.Join(parts, ", and ") + ". What they held is kept in a fold only you see."
+	held := "What they held"
+	if len(parts) == 1 && len(v.Removes) <= 1 {
+		held = "What it held"
+	}
+	return strings.Join(parts, ", and ") + ". " + held + " is kept in a fold only you see."
 }
 
 // BackLine says what switching back does, for the category's Fields tab.

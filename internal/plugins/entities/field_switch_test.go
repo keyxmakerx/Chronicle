@@ -228,7 +228,12 @@ func TestFieldSwitchViewWording(t *testing.T) {
 		{
 			name: "only a Type, nothing to set aside", fields: []FieldDefinition{{Key: "type", Label: "Type"}},
 			wantAdds:    "Adds Type, Kind, Effect and Copied from.",
-			wantRemoves: "A Type that isn’t Consumable, Trinket, Leveled or Artifact comes off the pages. What they held is kept in a fold only you see.",
+			wantRemoves: "A Type that isn’t Consumable, Trinket, Leveled or Artifact comes off the pages. What it held is kept in a fold only you see.",
+		},
+		{
+			name: "one field comes off", fields: []FieldDefinition{{Key: "rarity", Label: "Rarity"}},
+			wantAdds:    "Adds Type, Kind, Effect and Copied from.",
+			wantRemoves: "Rarity comes off the pages. What it held is kept in a fold only you see.",
 		},
 		{
 			name: "nothing comes off", fields: []FieldDefinition{{Key: "weight", Label: "Weight"}},
