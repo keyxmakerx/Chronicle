@@ -5702,12 +5702,11 @@ func (a *App) RegisterRoutes() {
 	}
 	aiWorkspaceHandler.SetPromptBuilder(aiWorkspacePrompt)
 
-	// The entities service implements importer.CampaignLookup and
-	// importer.EntityCreator as-is; no adapter needed. SEC-6-AMENDED
+	// The importer finds pages by name through aiPageNames. SEC-6-AMENDED
 	// ingress sanitization is enforced by the AST pin in
 	// internal/plugins/ai_workspace/importer/committer_sanitize_test.go.
-	aiWorkspaceHandler.SetImportLookup(entityService)
-	aiWorkspaceCommitter := importer.NewCommitter(entityService)
+	aiWorkspaceHandler.SetImportLookup(aiPageNames{entityService})
+	aiWorkspaceCommitter := importer.NewCommitter(aiPageNames{entityService})
 	// Pages by era go through the calendar plugin's version service, never
 	// its repository.
 	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
@@ -7303,7 +7302,7 @@ func (a *App) RegisterRoutes() {
 		Drawings:        drawingService,
 		Hexes:           hexService,
 		Encounters:      encounterAPI.svc,
-		Entities:        entityService,
+		Entities:        aiPageNames{entityService},
 		FieldRules:      fieldRulesSvc,
 		Folders:         folderService,
 		Health:          a.PluginHealth,

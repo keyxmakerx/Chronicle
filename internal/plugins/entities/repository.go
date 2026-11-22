@@ -787,6 +787,11 @@ type EntityRepository interface {
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 
+	// ListSuffixedSlugs returns the live entities whose slug is base followed
+	// by "-" and more, oldest first: the pages that got a uniqueness suffix
+	// because another row already held base.
+	ListSuffixedSlugs(ctx context.Context, campaignID, base string) ([]Entity, error)
+
 	// ListByCampaign returns entities filtered by campaign, optional types, and visibility.
 	// typeIDs is matched via IN clause; nil or empty means no type filter. This supports
 	// the sub-category-as-template model where a parent entity_type's listing aggregates
@@ -1322,6 +1327,42 @@ func (r *entityRepository) Delete(ctx context.Context, id string) error {
 		return apperror.NewNotFound("entity not found")
 	}
 	return nil
+}
+
+// maxSuffixedSlugs bounds ListSuffixedSlugs. Only uniqueness suffixes match,
+// and generateSlug makes about a hundred numbered ones per base before it
+// turns to a hex tail.
+const maxSuffixedSlugs = 120
+
+// ListSuffixedSlugs returns the live entities whose slug is base plus a
+// uniqueness suffix ("-2", "-<8 hex>"), oldest first, so "saltreach-docks"
+// never crowds out "saltreach-2". Slugs hold only [a-z0-9-], so base carries
+// no LIKE or regexp syntax; a base with anything else matches nothing.
+func (r *entityRepository) ListSuffixedSlugs(ctx context.Context, campaignID, base string) ([]Entity, error) {
+	if base == "" || strings.Trim(base, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
+		return nil, nil
+	}
+	query := `SELECT ` + entitySelectColumns + `
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          WHERE e.campaign_id = ? AND e.slug LIKE ? AND e.slug REGEXP ?` + liveOnly + `
+	          ORDER BY e.created_at, e.id
+	          LIMIT ?`
+	rows, err := database.Q(ctx, r.db).QueryContext(ctx, query, campaignID, base+"-%", "^"+base+"-([0-9]+|[0-9a-f]{8})$", maxSuffixedSlugs)
+	if err != nil {
+		return nil, fmt.Errorf("listing suffixed slugs: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *e)
+	}
+	return out, rows.Err()
 }
 
 // SlugExists returns true if an entity with the given slug exists in the campaign.
