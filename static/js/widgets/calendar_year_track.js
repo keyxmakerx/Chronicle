@@ -272,7 +272,7 @@
 
   function blankDraft(kind, seed) {
     return {
-      kind: kind, seed: seed, ev: [], wx: [], remove: [], retire: [], pinned: {}, dropped: {}, note: '',
+      kind: kind, seed: seed, from: null, ev: [], wx: [], remove: [], retire: [], pinned: {}, dropped: {}, note: '',
       on: { events: true, sky: true, weather: true },
       recipe: { events: 'events.frontier', sky: 'sky.classic', history: 'history.kingdom' }, busy: '0.5',
       // When players learn of what a fill keeps: 'later' (a Director reveals each) or 'day' (each shows on its day).
@@ -914,7 +914,22 @@
     var recipe = G.recipes.get(D.recipe[lane]);
     if (lane === 'events') recipe.details = assign({}, recipe.details, { density: +D.busy });
     var res = G.mass.fillRestOfYear({ generator: lane, calendar: cal, seed: D.seed, recipe: recipe, nonce: 'f' + D.n[lane], existing: pins });
-    D.ev = D.ev.filter(function (e) { return e._lane !== lane; }).concat(res.items.map(function (e) { return assign({}, e, { _lane: lane }); }));
+    D.ev = D.ev.filter(function (e) { return e._lane !== lane; }).concat(fromToday(res.items, D.from).map(function (e) { return assign({}, e, { _lane: lane }); }));
+  }
+  // A fill covers today to the year's end, but the engine places a span by its
+  // peak, so one can begin before today. Brings each item inside: an event
+  // already under way starts today (its end stays), one that is over by today
+  // is left out. Without a first day (not a fill) the items are returned as is.
+  function fromToday(items, from) {
+    if (!from) return items;
+    var first = stamp(from.year, from.month, from.day), out = [];
+    items.forEach(function (e) {
+      if (stamp(e.year, e.month, e.day) >= first) { out.push(e); return; }
+      if (e.end_year == null || e.end_month == null || e.end_day == null) return;
+      if (stamp(e.end_year, e.end_month, e.end_day) < first) return;
+      out.push(assign({}, e, { year: from.year, month: from.month, day: from.day }));
+    });
+    return out;
   }
   // The fill's weather: today to the year's end, on days that have none.
   function rollFillWeather(G, cal, D, y, stored, setup) {
@@ -1032,6 +1047,7 @@
     this.prepare([y]).then(function (settings) {
       var G = window.ChronicleGen, cal = self.cal(), D = blankDraft('fill', randomSeed()), setup = self.setup(settings);
       D.setup = setup;
+      D.from = { year: now.year, month: now.month, day: now.day };
       D.remove = fillReplaces(self.savedEvents(y), now);
       D.retire = fillRetires(self.savedEvents(y), now);
       rollFillLane(G, cal, D, 'events'); rollFillLane(G, cal, D, 'sky');
@@ -1453,7 +1469,7 @@
       protectedDay: protectedDay, emptyDays: emptyDays, redrawable: redrawable, asEngineDay: asEngineDay,
       blankDraft: blankDraft, activeEvents: activeEvents, activeWeather: activeWeather, counts: counts, sentence: sentence, keepLabel: keepLabel,
       keptWords: keptWords, notKeptWords: notKeptWords, notUndoneWords: notUndoneWords, keepBatchBody: keepBatchBody, undoBatchBody: undoBatchBody, createBody: createBody, chosenActions: chosenActions, mayGenerate: mayGenerate,
-      weatherSetup: weatherSetup, rollFillLane: rollFillLane, rollFillWeather: rollFillWeather, rollHistory: rollHistory,
+      weatherSetup: weatherSetup, rollFillLane: rollFillLane, fromToday: fromToday, rollFillWeather: rollFillWeather, rollHistory: rollHistory,
       buildCopy: buildCopy, buildEvery: buildEvery, buildReroll: buildReroll, buildWeatherReroll: buildWeatherReroll,
       contiguous: contiguous, rerollNote: rerollNote, BATCH_MAX_EVENTS: BATCH_MAX_EVENTS, BATCH_MAX_DAYS: BATCH_MAX_DAYS, YearTrack: YearTrack
     };

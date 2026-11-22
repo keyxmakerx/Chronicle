@@ -284,6 +284,97 @@ test('a fill draft stays inside today to the end of the year and never hits a pa
   }
 });
 
+// ---- A fill starts today ----
+const span = (name, start, end) => {
+  const e = { name, year: start[0], month: start[1], day: start[2], description: 'Seen.' };
+  if (end) { e.end_year = end[0]; e.end_month = end[1]; e.end_day = end[2]; }
+  return e;
+};
+const at = (e) => [e.year, e.month, e.day];
+const endOf = (e) => [e.end_year, e.end_month, e.end_day];
+
+test('a fill keeps what starts today or later, starts what is under way today, and drops what is over', () => {
+  const from = { year: 1523, month: 1, day: 1 };
+  const cases = [
+    { what: 'starts on the first day', e: span('A', [1523, 1, 1], [1523, 1, 9]), start: [1523, 1, 1], end: [1523, 1, 9] },
+    { what: 'starts later', e: span('B', [1523, 4, 2]), start: [1523, 4, 2], end: [undefined, undefined, undefined] },
+    { what: 'spills in from the year before (the caught comet)', e: span('The Red Star', [1522, 17, 30], [1523, 1, 27]), start: [1523, 1, 1], end: [1523, 1, 27] },
+    { what: 'ends on the first day', e: span('C', [1522, 17, 25], [1523, 1, 1]), start: [1523, 1, 1], end: [1523, 1, 1] },
+    { what: 'ended before the first day', e: span('D', [1522, 16, 2], [1522, 17, 20]), gone: true },
+    { what: 'has no end and began before', e: span('E', [1522, 17, 28]), gone: true },
+  ];
+  for (const c of cases) {
+    const out = YT.fromToday([c.e], from);
+    if (c.gone) { assert.equal(out.length, 0, c.what); continue; }
+    assert.equal(out.length, 1, c.what);
+    assert.deepEqual(at(out[0]), c.start, c.what);
+    assert.deepEqual(endOf(out[0]), c.end, c.what);
+    assert.equal(out[0].name, c.e.name, c.what);
+    assert.equal(out[0].description, c.e.description, c.what);
+  }
+  const same = span('F', [1523, 1, 1]);
+  assert.equal(YT.fromToday([same], from)[0], same, 'an item that already fits is returned as it is');
+});
+
+test('a fill from a day inside the year pulls a span that began days before to that day', () => {
+  const from = { year: 100, month: 2, day: 10 };
+  const [e] = YT.fromToday([span('Comet', [100, 1, 20], [100, 3, 1])], from);
+  assert.deepEqual(at(e), [100, 2, 10]);
+  assert.deepEqual(endOf(e), [100, 3, 1]);
+});
+
+test('a draft that is not a fill has no first day and keeps every item as it is', () => {
+  const items = [span('Old', [99, 6, 1], [99, 6, 3]), span('Gone', [99, 5, 1])];
+  assert.equal(YT.blankDraft('history', 's').from, null);
+  assert.deepEqual(YT.fromToday(items, null), items);
+  assert.deepEqual(YT.fromToday(items, undefined), items);
+});
+
+test('a fill draft holds a span that spilled in from last year, starting on the fill day, and a second fill replaces both', () => {
+  const now = { year: 1523, month: 1, day: 1 };
+  const stand = {
+    recipes: { get: () => ({ details: {} }) },
+    mass: { fillRestOfYear: () => ({ items: [
+      Object.assign(span('The Red Star', [1522, 17, 30], [1523, 1, 27]), { gen: { key: 'k1' } }),
+      Object.assign(span('A falling star', [1523, 2, 3]), { gen: { key: 'k2' } }),
+    ] }) },
+  };
+  const D = YT.blankDraft('fill', 's');
+  D.from = { ...now };
+  YT.rollFillLane(stand, cal, D, 'sky');
+  assert.equal(D.ev.length, 2);
+  assert.deepEqual(Array.from(D.ev, (e) => e.name), ['The Red Star', 'A falling star']);
+  assert.deepEqual(at(D.ev[0]), [1523, 1, 1]);
+  assert.deepEqual(endOf(D.ev[0]), [1523, 1, 27]);
+  // What Keep saves carries the new start, so the marker matches the saved event.
+  const saved = D.ev.map((e, i) => {
+    const b = YT.createBody(e, { lane: 'sky' });
+    return Object.assign({ id: 'k' + i }, b);
+  });
+  assert.equal(YT.fillReplaces(saved, now).length, 2);
+  // A re-roll keeps the first day.
+  YT.rollFillLane(stand, cal, D, 'sky');
+  assert.deepEqual(at(D.ev[0]), [1523, 1, 1]);
+});
+
+test('the real engine places a comet before day 1 of the year, and a fill from day 1 never keeps one', () => {
+  const h = JSON.parse(readFileSync(path.join(here, '..', '..', 'internal', 'plugins', 'calendar', 'presets', 'harptos.json'), 'utf8')).calendar;
+  const first = h.current_year * 10000 + h.current_month * 100 + h.current_day;
+  const startsBefore = (e) => e.year * 10000 + e.month * 100 + e.day < first;
+  let seed = null;
+  for (let i = 0; i < 1500 && seed === null; i++) {
+    const r = G.mass.fillRestOfYear({ generator: 'sky', calendar: h, seed: 'seed' + i, recipe: G.recipes.get('sky.classic'), nonce: 'f1', existing: [] });
+    if (r.items.some(startsBefore)) seed = 'seed' + i;
+  }
+  assert.notEqual(seed, null, 'no seed in 1500 put a sky event before day 1; the engine changed, so find the case another way');
+  const D = YT.blankDraft('fill', seed);
+  D.from = { year: h.current_year, month: h.current_month, day: h.current_day };
+  YT.rollFillLane(G, h, D, 'sky');
+  assert.ok(D.ev.length > 0);
+  assert.equal(D.ev.filter(startsBefore).length, 0, 'the draft holds an event that starts before the fill day');
+  assert.ok(D.ev.every((e) => e.year === h.current_year), 'the draft holds an event of another year');
+});
+
 // ---- Lit window and today line ----
 test('the lit window and today line follow day counts, not equal-width months', () => {
   const g = YT.geometry(DAYS);
