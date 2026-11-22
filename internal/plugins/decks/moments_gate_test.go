@@ -144,7 +144,7 @@ func TestMomentRoutesAreOffWithTheAddonOff(t *testing.T) {
 		for _, hdr := range [][]string{nil, {"Accept", "application/json"}, {"HX-Request", "true"}} {
 			rec := sendRoute(e, r, "u-dir", hdr...)
 			// A page navigation is sent back to the campaign; anything else is a 404.
-			if rec.Code != http.StatusNotFound && !(len(hdr) == 0 && rec.Code == http.StatusSeeOther) {
+			if rec.Code != http.StatusNotFound && (len(hdr) != 0 || rec.Code != http.StatusSeeOther) {
 				t.Errorf("%s %s with the add-on off %v: %d", r.method, r.path, hdr, rec.Code)
 			}
 		}
