@@ -1306,7 +1306,19 @@
     };
   }
 
-  window.ShopRoom = { signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  // A hero who pays with Wealth is not charged coin: a listing's number is the
+  // Wealth the hero needs, so it reads as that rather than as a price in coin.
+  function payingWithWealth(buyer) { return !!buyer && buyer.kind === 'wealth'; }
+  function wealthPrices(its) {
+    return its.map(function (it) {
+      var o = {};
+      Object.keys(it).forEach(function (k) { o[k] = it[k]; });
+      o.price = 'Wealth ' + it.p; o.priceUsual = '';
+      return o;
+    });
+  }
+
+  window.ShopRoom = { wealthPrices: wealthPrices, payingWithWealth: payingWithWealth, signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1631,6 +1643,7 @@
         S.dark = document.documentElement.classList.contains('dark');
         // Arranging shows every good, so a GM can place one that is not out today.
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
+        if (payingWithWealth(buyer())) S.its = wealthPrices(S.its);
         if (S.mode !== 'arr') S.its = haggled(todayShelf(S.its, today), rollsState && rollsState.goods);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
@@ -1798,8 +1811,8 @@
         renderPeek();
         if (!buy || !buy.buyers.length) { bk.innerHTML = ''; return; }
         var who = buyer(), sm = basketSummary(basket, S.its, who), h = '';
-        var coin = localCoin(words, sm.currency);
-        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price"' + (coin.usual ? ' title="' + esc(sm.total + ' ' + coin.usual) + '"' : '') + '>' + esc(sm.total + ' ' + coin.text) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
+        var coin = localCoin(words, sm.currency), wl = sm.kind === 'wealth';
+        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price"' + (!wl && coin.usual ? ' title="' + esc(sm.total + ' ' + coin.usual) + '"' : '') + '>' + esc(wl ? 'needs Wealth ' + sm.need : sm.total + ' ' + coin.text) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
         var money = sm.moneyText === null ? '' : ' · ' + esc(sm.moneyText);
         if (buy.buyers.length > 1) {
           h += '<label>Paying: <select data-payer="1">' + buy.buyers.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === payer ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' + money + '</label>';
@@ -1872,7 +1885,7 @@
         if (sm.count) {
           h = '<b>In your basket</b>' + S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) {
             return '<p><span>' + basket[String(it.id)] + ' × ' + esc(it.n) + '</span></p>';
-          }).join('') + '<p><b>Total</b><b>' + esc(sm.total + ' ' + coin.text) + '</b></p>';
+          }).join('') + (sm.kind === 'wealth' ? '<p><b>Needs</b><b>Wealth ' + esc(sm.need) + '</b></p>' : '<p><b>Total</b><b>' + esc(sm.total + ' ' + coin.text) + '</b></p>');
         } else h = '<b>' + (buy && buy.buyers.length ? 'Your basket is empty.' : S.its.length + (S.its.length === 1 ? ' thing' : ' things') + ' for sale.') + '</b><p>Press to see the wares.</p>';
         peekEl.innerHTML = h;
       }
