@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/labstack/echo/v5"
@@ -99,15 +100,16 @@ func TestServe_ExistenceOracle_ResponseByteIdentical(t *testing.T) {
 	}
 
 	// Same headers. Serve only calls setSecurityHeaders AFTER
-	// checkMediaAccess succeeds, so on a denial (either path) it should
-	// have written no headers of its own at all -- confirmed here rather
-	// than assumed, so a future change that adds a header to one path but
-	// not the other (e.g. logging a Retry-After only for the "found but
-	// denied" case) would be caught.
-	if got := recKnown.Header(); len(got) != 0 {
-		t.Errorf("known-private path wrote headers before the error handler ran: %v", got)
+	// checkMediaAccess succeeds, so on a denial (either path) the only
+	// header of its own is the one every refusal gets, "no-store" --
+	// confirmed here rather than assumed, so a future change that adds a
+	// header to one path but not the other (e.g. logging a Retry-After
+	// only for the "found but denied" case) would be caught.
+	want := http.Header{"Cache-Control": []string{"no-store"}}
+	if got := recKnown.Header(); !reflect.DeepEqual(got, want) {
+		t.Errorf("known-private path's headers before the error handler ran = %v, want %v", got, want)
 	}
-	if got := recUnknown.Header(); len(got) != 0 {
-		t.Errorf("unknown-id path wrote headers before the error handler ran: %v", got)
+	if got := recUnknown.Header(); !reflect.DeepEqual(got, want) {
+		t.Errorf("unknown-id path's headers before the error handler ran = %v, want %v", got, want)
 	}
 }
