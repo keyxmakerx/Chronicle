@@ -2,13 +2,15 @@ package connector
 
 import (
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 )
 
 // Every lookup tool takes `piece`, so a long answer or list can always be read
 // on; the change tools do not, and `search` is on a player's key as well as an
 // owner's.
 func TestTools_PieceAndSearch(t *testing.T) {
-	owner := &Connection{CanAsk: true}
+	owner := &Connection{CanAsk: true, Privacy: aiexport.PrivacyModePermitted}
 	player := &Connection{ForPlayer: true}
 
 	for _, name := range []string{"read_page", "list_pages", "map_pins", "house_rules", "shop_stock", "inventory", "rolling_tables", "search", "block_format"} {
