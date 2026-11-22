@@ -146,6 +146,7 @@ type Handler struct {
 	blockRegistry      *BlockRegistry
 	placeSvc           PlaceService // Optional: extra listings in the page tree; see place_service.go.
 	cache              *redis.Client
+	fieldSwitch        *FieldSwitchService // Optional: a game system's one-time field switch; see field_switch.go.
 }
 
 // NewHandler creates a new entity handler.
@@ -437,6 +438,7 @@ func (h *Handler) Index(c *echo.Context) error {
 
 	// When viewing a specific category (type), render the category dashboard.
 	if activeEntityType != nil {
+		h.addFieldSwitchView(c, cc, activeEntityType)
 		parentIDs := make([]string, len(entities))
 		for i := range entities {
 			parentIDs[i] = entities[i].ID
@@ -2447,6 +2449,13 @@ func (h *Handler) fieldsPayload(c *echo.Context, cc *campaigns.CampaignContext, 
 		response["owner_fields"] = keys
 	}
 	h.addHeroRuleNotes(c.Request().Context(), response, cc.Campaign.ID, entity, canSeeGM || isOwner)
+	// What a field switch took off this page, for the GM's fold only: the
+	// values are kept apart from fields_data, so no other viewer gets them.
+	if canSeeGM && h.fieldSwitch != nil {
+		if kept := h.fieldSwitch.SetAside(c.Request().Context(), et, entity.ID); len(kept) > 0 {
+			response["set_aside"] = kept
+		}
+	}
 	return response, nil
 }
 
@@ -3619,6 +3628,9 @@ func (h *Handler) EntityTypeCustomizeTab(c *echo.Context) error {
 		ctx = withTypeLayouts(ctx, h.pageLayouts.ForType(ctx, et))
 	}
 	c.SetRequest(c.Request().WithContext(ctx))
+	if tab == "fields" {
+		h.addFieldSwitchView(c, cc, et)
+	}
 	return middleware.Render(c, http.StatusOK, EntityTypeCustomizeTabTmpl(cc, et, tab, middleware.GetCSRFToken(c)))
 }
 

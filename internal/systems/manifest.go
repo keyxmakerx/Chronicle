@@ -359,6 +359,14 @@ type FieldDef struct {
 	// it beside the field so an AI writes what the system's widgets read.
 	Format string `json:"format,omitempty"`
 
+	// Options are the values an "enum" field is picked from; the page's
+	// field becomes a pick list of them.
+	Options []string `json:"options,omitempty"`
+
+	// Section groups the field on a page ("Basics", "Making it"). Absent:
+	// the page's single default group.
+	Section string `json:"section,omitempty"`
+
 	// Min and Max bound a number field's value when AI Import writes it.
 	// Absent means no bound; a hand-typed sheet value is not checked.
 	Min *float64 `json:"min,omitempty"`
@@ -559,6 +567,18 @@ type EntityPresetDef struct {
 	// specific features like the Armory (items) or NPC gallery (characters).
 	Category string `json:"category,omitempty"`
 
+	// FoundryItemType is the Foundry Item type an item preset's pages become
+	// when a hero carries them (Draw Steel's "treasure"). Only the Foundry
+	// module reads it.
+	FoundryItemType string `json:"foundry_item_type,omitempty"`
+
+	// Switch, on a preset whose category a campaign already has (the Items
+	// every campaign starts with), says the preset's fields reach that
+	// category only when the owner accepts a one-time switch, never by
+	// themselves on enable or on a package update. Nil: the fields are added
+	// as for any other preset.
+	Switch *PresetSwitchDef `json:"switch,omitempty"`
+
 	// FoundryActorType is the Foundry VTT Actor type string that corresponds
 	// to this preset (e.g., "character", "hero", "npc"). Different game
 	// systems use different actor types — D&D 5e uses "character", Draw Steel
@@ -578,6 +598,27 @@ type EntityPresetDef struct {
 	// in this order; any other step follows in field order. Unknown keys are
 	// ignored, so a system can name a step a campaign has no list for.
 	CreatorOrder []string `json:"creator_order,omitempty"`
+}
+
+// PresetSwitchDef is how a preset takes over a category the campaign already
+// has. Core keeps no game system's field names: the package lists them.
+type PresetSwitchDef struct {
+	// Label names the fields in the owner's offer ("treasure fields").
+	Label string `json:"label"`
+
+	// Summary says in a few words what the switch adds, for the offer's
+	// first line ("Type, Kind, Echelon, ..."). Absent: the field labels.
+	Summary string `json:"summary,omitempty"`
+
+	// SetAside are the category's own field keys the switch takes off every
+	// page. Their values are kept, shown only to the GM, and come back if the
+	// owner switches back.
+	SetAside []string `json:"set_aside,omitempty"`
+
+	// Reuse are keys the category and the preset share whose old values may
+	// not fit the preset's field (a free-text Type becoming a pick list): a
+	// value that isn't one of the preset field's options is set aside too.
+	Reuse []string `json:"reuse,omitempty"`
 }
 
 // RelationPresetDef describes a relation type template that a module provides.
@@ -726,6 +767,7 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 		PresetName:        preset.Name,
 		FoundrySystemID:   m.FoundrySystemID,
 		FoundryActorType:  preset.FoundryActorType,
+		FoundryItemType:   preset.FoundryItemType,
 		FoundryPullFields: preset.FoundryPullFields,
 		Fields:            fields,
 	}
@@ -739,6 +781,9 @@ type CharacterFieldsResponse struct {
 	PresetName       string `json:"preset_name"`
 	FoundrySystemID  string `json:"foundry_system_id,omitempty"`
 	FoundryActorType string `json:"foundry_actor_type,omitempty"`
+	// FoundryItemType is the Foundry Item type an item preset's pages
+	// become; empty for actor presets.
+	FoundryItemType string `json:"foundry_item_type,omitempty"`
 	// FoundryPullFields lists the only keys Foundry may send back; absent
 	// means all mapped fields sync both ways.
 	FoundryPullFields []string               `json:"foundry_pull_fields,omitempty"`

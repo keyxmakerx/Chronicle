@@ -1,0 +1,94 @@
+// field_switch.templ draws a game system's one-time field switch for its
+// owner: the offer on the category's list while it is unanswered, and the
+// switch (or switching back) in the category's Fields tab. See field_switch.go.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// fieldSwitchAction is a switch form's address. The kind is a fixed word.
+func fieldSwitchAction(cc *campaigns.CampaignContext, et *EntityType, kind string) templ.SafeURL {
+	base := fmt.Sprintf("/campaigns/%s/entity-types/%d/field-switch", cc.Campaign.ID, et.ID)
+	if kind != "" {
+		base += "/" + kind
+	}
+	return templ.SafeURL(base)
+}
+
+// fieldSwitchDraftGuard stops a switch from the Customizer's Fields tab while
+// the Customizer's draft holds unsaved field changes for this category: the
+// draft's Save would put the old field list back over the switch.
+var fieldSwitchDraftGuard = inlineHandler("field_switch_guard",
+	`return (function(f){var d=(window.Chronicle&&Chronicle.customizeDraft)?Chronicle.customizeDraft():null;`+
+		`var it=d&&d.categories&&d.categories.items&&d.categories.items[f.getAttribute('data-cat')];`+
+		`if(it&&it.fields){var n=f.querySelector('[data-fs-note]');if(n)n.hidden=false;return false;}`+
+		`var b=f.querySelector('button[type=submit]');if(b){b.disabled=true;b.setAttribute('aria-busy','true');}return true;})(this)`)
+
+// fieldSwitchOffer is the offer on the category's list: drawn for the owner
+// only, and only until they answer it.
+templ fieldSwitchOffer(cc *campaigns.CampaignContext, et *EntityType) {
+	if v := fieldSwitchViewOf(ctx); v != nil && v.State == "" {
+		<section class="fs-offer" aria-labelledby="fs-offer-h" data-field-switch-offer>
+			<h2 id="fs-offer-h" class="fs-offer-h">{ v.Question(et.NamePlural) }</h2>
+			<ul class="fs-offer-list">
+				<li>{ v.AddsLine() }</li>
+				if line := v.RemovesLine(et.Fields); line != "" {
+					<li>{ line }</li>
+				}
+				<li>Nothing is deleted, and you can switch back from { et.NamePlural } › Fields in the Customizer.</li>
+			</ul>
+			<div class="fs-offer-acts">
+				<form method="POST" action={ fieldSwitchAction(cc, et, "") } onsubmit={ fieldSwitchDraftGuard } data-cat={ fmt.Sprint(et.ID) }>
+					<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
+					<button type="submit" class="btn-primary text-sm">Switch to { v.Offer.SystemName } fields</button>
+				</form>
+				<form method="POST" action={ fieldSwitchAction(cc, et, "dismiss") }>
+					<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
+					<button type="submit" class="quiet-word">Not now</button>
+				</form>
+			</div>
+		</section>
+	}
+}
+
+// fieldSwitchSettings is the switch in the category's Fields tab, where it
+// stays after "Not now", and where a switched category goes back.
+templ fieldSwitchSettings(cc *campaigns.CampaignContext, et *EntityType) {
+	if v := fieldSwitchViewOf(ctx); v != nil {
+		<section class="fs-settings" aria-labelledby="fs-settings-h" data-field-switch-settings>
+			<h2 id="fs-settings-h" class="fs-settings-h">{ v.Offer.SystemName } { v.Offer.Label }</h2>
+			if v.State == FieldSwitchSwitched {
+				<p class="fs-settings-p">{ et.NamePlural } use { v.Offer.SystemName }’s { v.Offer.Label }.</p>
+				if v.CanSwitchBack {
+					<p class="fs-settings-p">{ v.BackLine() }</p>
+					<form method="POST" action={ fieldSwitchAction(cc, et, "back") } onsubmit={ fieldSwitchDraftGuard } data-cat={ fmt.Sprint(et.ID) }>
+						<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
+						<input type="hidden" name="return_to" value="fields"/>
+						<p class="fs-settings-note" data-fs-note hidden role="status">Save or discard your field changes first, then switch back.</p>
+						<button type="submit" class="btn-secondary text-sm">Switch back</button>
+					</form>
+				} else {
+					<p class="fs-settings-p">They have had them since { v.Offer.SystemName } was turned on, so there is nothing to switch back to.</p>
+				}
+			} else {
+				<ul class="fs-offer-list">
+					<li>{ v.AddsLine() }</li>
+					if line := v.RemovesLine(et.Fields); line != "" {
+						<li>{ line }</li>
+					}
+					<li>Nothing is deleted, and you can switch back here.</li>
+				</ul>
+				<form method="POST" action={ fieldSwitchAction(cc, et, "") } onsubmit={ fieldSwitchDraftGuard } data-cat={ fmt.Sprint(et.ID) }>
+					<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
+					<input type="hidden" name="return_to" value="fields"/>
+					<p class="fs-settings-note" data-fs-note hidden role="status">Save or discard your field changes first, then switch.</p>
+					<button type="submit" class="btn-primary text-sm">Switch to { v.Offer.SystemName } fields</button>
+				</form>
+			}
+		</section>
+	}
+}

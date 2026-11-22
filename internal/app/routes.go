@@ -3062,6 +3062,11 @@ func (a *App) RegisterRoutes() {
 	entityRepo := entities.NewEntityRepository(a.DB)
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
+	// A game system's one-time field switch (Draw Steel's treasure fields for
+	// Items). The offers come from the enabled system, which is resolved once
+	// the system handler exists further down.
+	fieldSwitchOffers := &fieldSwitchOfferSource{types: entityService}
+	fieldSwitchService := entities.NewFieldSwitchService(entities.NewFieldSwitchRepository(a.DB), entityTypeRepo, fieldSwitchOffers.offer)
 
 	// Pages saved before search_text stopped indexing what not every reader
 	// may see (GM-only text, mention names, restricted field values) still
@@ -3214,6 +3219,7 @@ func (a *App) RegisterRoutes() {
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
+	entityHandler.SetFieldSwitch(fieldSwitchService)
 	// A practice hero's table has its own plugin migration, so it is gated on
 	// that slug alone; when it did not apply the repository is nil and every
 	// hook skips it, and the Standing block is unaffected.
@@ -3566,7 +3572,7 @@ func (a *App) RegisterRoutes() {
 	if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
-	addonService.SetPresetApplier(newPresetApplier(entityService))
+	addonService.SetPresetApplier(newPresetApplier(entityService).withFieldSwitch(fieldSwitchService))
 	// Register per-extension settings/onboarding providers (the SetupProvider
 	// framework). The player-character provider drives the claiming addon's
 	// settings page: detect existing PCs / sub-categories / the duplicate-category
@@ -3683,7 +3689,7 @@ func (a *App) RegisterRoutes() {
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
-		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
+		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService).withFieldSwitch(fieldSwitchService), presetsBefore)
 	})
 	// A removed or archived system package stops being served now, and its
 	// page renderers go with it.
@@ -4779,6 +4785,7 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetHeroChanges(heroChangeSvc)
+	syncAPIHandler.SetItemFieldsGate(switchedCategoryGate(entityService, fieldSwitchService))
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
 	syncAPIHandler.SetFolderLister(folderService)
 	if urlSigner != nil {
@@ -6057,6 +6064,7 @@ func (a *App) RegisterRoutes() {
 	// Custom system manager stores per-campaign uploads under media/systems/.
 	campaignSystemMgr := systems.NewCampaignSystemManager(filepath.Join(a.Config.Upload.MediaPath, "systems"))
 	systemHandler := systems.NewSystemHandler()
+	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
@@ -7365,6 +7373,10 @@ func (a *App) RegisterRoutes() {
 		Decks:           aiDecks,
 		Timelines:       aiTimelines,
 		LookDrafts:      customizeDrafts,
+		FieldSwitch: aiFieldSwitchAdapter{
+			owner:  aiMenuAdapter{campaigns: campaignService, types: entityService},
+			offers: fieldSwitchOffers, svc: fieldSwitchService,
+		},
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

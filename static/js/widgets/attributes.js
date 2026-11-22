@@ -88,6 +88,9 @@ Chronicle.register('attributes', {
       // hero keeps that is no longer offered, and picks waiting for an answer.
       state.choiceBreaks = data.choice_breaks || [];
       state.choiceWaiting = data.choice_waiting || [];
+      // What a game system's field switch took off this page. The server
+      // sends it to the GM side only.
+      state.setAside = data.set_aside || null;
       render();
     }
 
@@ -385,6 +388,7 @@ Chronicle.register('attributes', {
       order.forEach(function (sec) {
         if (groups[sec].childNodes.length) container.appendChild(groups[sec]);
       });
+      renderSetAside(container);
 
       if (!hasValues) {
         var empty = document.createElement('div');
@@ -395,6 +399,40 @@ Chronicle.register('attributes', {
           : 'No attributes set.';
         container.appendChild(empty);
       }
+    }
+
+    // renderSetAside draws the GM's fold of the values a field switch took off
+    // this page, under its facts, closed until asked.
+    function renderSetAside(container) {
+      var list = state.setAside;
+      if (!list || !list.length) return;
+      var fold = document.createElement('details');
+      fold.className = 'fs-aside';
+      fold.setAttribute('data-dm-only', '');
+      var sum = document.createElement('summary');
+      var q = document.createElement('span');
+      q.className = 'fs-aside-q';
+      q.textContent = 'Set aside from the old fields';
+      sum.appendChild(q);
+      var tag = document.createElement('span');
+      tag.className = 'fs-aside-tag';
+      tag.textContent = 'Only you see this';
+      sum.appendChild(tag);
+      fold.appendChild(sum);
+      var dl = document.createElement('dl');
+      dl.className = 'fs-aside-list';
+      list.forEach(function (v) {
+        var row = document.createElement('div');
+        var dt = document.createElement('dt');
+        dt.textContent = v.label || v.key;
+        var dd = document.createElement('dd');
+        dd.textContent = v.value;
+        row.appendChild(dt);
+        row.appendChild(dd);
+        dl.appendChild(row);
+      });
+      fold.appendChild(dl);
+      container.appendChild(fold);
     }
 
     // renderDate shows a calendar date field: its date, how long ago it was,

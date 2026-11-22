@@ -86,6 +86,7 @@ type aiDeps struct {
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
 	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
 	SystemState     systemstate.Service              // nil while the system state plugin is degraded
+	FieldSwitch     records.CategorySwitchAPI        // a game system's one-time field switch; nil without one
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI      // the calendar's roll half; nil without one
