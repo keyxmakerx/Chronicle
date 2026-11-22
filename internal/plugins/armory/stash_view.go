@@ -129,6 +129,22 @@ func panelURL(campaignID, characterID string) string {
 	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/panel"
 }
 
+// signpost is one quiet link in the hero panel's header.
+type signpost struct{ Label, URL string }
+
+// signposts lists the pages the Items tab points to. Every viewer of the panel
+// has at least the Player role, which opens the stashes page and the Armory, so
+// those always show; Crafting shows only when the crafting gate says it is on
+// for this viewer (CanCraft), so a campaign without it never gets a dead link.
+func signposts(campaignID string, canCraft bool) []signpost {
+	base := "/campaigns/" + campaignID
+	out := []signpost{{"Party stashes", base + "/armory/stashes"}, {"Armory", base + "/armory"}}
+	if canCraft {
+		out = append(out, signpost{"Crafting", base + "/crafting"})
+	}
+	return out
+}
+
 // benchPanelURL is the panel route for a page that carries the bench, so the
 // panel's own reloads keep it.
 func benchPanelURL(campaignID, characterID string) string {

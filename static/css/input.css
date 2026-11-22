@@ -7207,25 +7207,41 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 .ph-danger-btn:hover { background: #b91c1c; }
 /* The tabbed panel under a system-rendered page (page_tabs.templ, widgets/page_tabs.js). Each piece keeps its own markup; inside a
    pane its heading and add button give way to the tab and the bar's one action button, which presses that same add button. */
-/* A system's paper sheet caps its folio at --sheet-width and centres it; the panel keeps the same width so the two read as one
-   column instead of the panel running past the sheet's edges on a wide screen. */
+/* A system's paper sheet caps its folio at --sheet-width and centres it, and the sheet's own body has no side padding, so the strip
+   takes the same cap and the same centring: it starts and ends where the sheet's content does. Index tabs per the standard's Tab
+   weight (small capitals, a hairline under the row, the open tab's line up its side and down its pane's side), no box of its own. */
 :root { --sheet-width: 920px; }
-.pt { max-width: var(--sheet-width); margin-inline: auto; margin-top: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 1px 2px rgb(0 0 0 / .06); min-width: 0; }
-.pt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
-.pt-tabs { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; min-width: 0; }
-.pt-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--color-text-body); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
-.pt-tab:hover { background: var(--color-bg-tertiary); }
-.pt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.pt-tab[aria-selected="true"] { background: rgb(var(--color-accent-rgb) / .12); color: var(--color-accent-link, var(--color-accent)); }
+.pt { display: grid; grid-template-columns: minmax(0, 1fr) auto; max-width: var(--sheet-width); margin: 12px auto 0; min-width: 0; transition: transform var(--dur-slide) var(--ease-slide); }
+/* While a paper is out beside the sheet the sheet's folio slides left (sheet_motion.css); the strip follows by the same amount (page_tabs.js). */
+.pt.is-shifted { transform: translateX(calc(var(--shift, 0px) * -1)); }
+html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [data-cz-reduce]) .pt { transition: none; }
+.pt-bar { grid-column: 1; grid-row: 1; min-width: 0; border-bottom: 1px solid var(--color-border); }
+.pt-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; min-width: 0; }
+.pt-tab { margin-bottom: -1px; padding: 4px 12px 5px; border: 0; border-left: 1px solid transparent; border-bottom: 1px solid transparent; background: none; color: var(--color-text-secondary); font: inherit; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; transition: color var(--dur-micro); }
+.pt-tab:hover { color: var(--color-text-primary); }
+.pt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.pt-tab[aria-selected="true"] { color: var(--color-accent-link, var(--color-accent)); border-left-color: var(--color-accent); border-bottom-color: var(--color-accent); }
 .pt-tab.is-empty:not([aria-selected="true"]) { color: var(--color-text-muted); }
 .pt-tab[hidden] { display: none; }
-.pt-n { min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-muted); font-size: 11px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.pt-n { margin-left: 4px; font-weight: 700; letter-spacing: 0; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
 .pt-n:empty { display: none; }
-.pt-tab[aria-selected="true"] .pt-n { background: var(--color-accent); color: #fff; }
-.pt-act { white-space: nowrap; }
+.pt-tab[aria-selected="true"] .pt-n { color: inherit; }
+/* The one action is a quiet word at the end of the line; on a phone it moves under the list. */
+.pt-act { grid-column: 2; grid-row: 1; align-self: end; padding: 4px 2px 5px 14px; border: 0; border-bottom: 1px solid var(--color-border); background: none; color: var(--color-accent-link, var(--color-accent)); font: inherit; font-size: .8rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.pt-act:hover { text-decoration: underline; }
+.pt-act:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .pt-act[hidden] { display: none; }
-.pt-pane { padding: 16px; min-width: 0; }
+.pt-pane { grid-column: 1 / -1; grid-row: 2; min-width: 0; padding: 10px 0 2px 10px; border-left: 1px solid var(--color-accent); }
 .pt-pane[hidden], .pt-empty[hidden], .pt-none[hidden] { display: none; }
+@media (max-width: 640px) {
+  .pt-tab { padding: 4px 8px 5px; letter-spacing: .05em; }
+  .pt-act { grid-column: 1 / -1; grid-row: 3; justify-self: start; padding: 10px 0 2px; border-bottom: 0; }
+}
+@media (pointer: coarse) {
+  .pt-tab, .pt-act { min-height: 44px; }
+  .pt-tab { display: inline-flex; align-items: center; }
+  .pt-act { display: inline-flex; align-items: center; }
+}
 .pt-empty, .pt-none { margin: 0; color: var(--color-text-muted); font-size: 13.5px; }
 .pt-pane [data-widget="entity-notes"] .en-head,
 .pt-pane [data-widget="entity-posts"] > .flex.items-center.justify-between.mb-3,
@@ -7243,8 +7259,12 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 .pt-prompts > details > summary { display: inline-flex; padding: 2px 0; font-size: 12.5px; }
 .pt-prompts > details > summary span { font-weight: 500; color: var(--color-accent-link, var(--color-accent)); }
 .pt-prompts > details > summary:hover { background: none; }
-.pt-links { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.pt-grp { min-width: 0; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; }
+/* Links: short columns with a hairline between them (column-rule only draws between columns, so a wrapped row never gets a stray line). */
+.pt-links { columns: 170px; column-gap: 20px; column-rule: 1px solid var(--color-border); }
+.pt-grp { min-width: 0; padding: 0; margin-bottom: 12px; break-inside: avoid; }
+.pt-grp .card, .pt-grp .rel-card { border: 0; border-radius: 0; background: none; box-shadow: none; }
+.pt-grp .card { padding: 2px 0; }
+.pt-grp .rel-item { padding: 2px 0; }
 .pt-grp-h { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted); }
 .pt-grp .grid { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 640px) { .ph-phone-only { display: none; } }
