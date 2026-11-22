@@ -185,6 +185,15 @@ would do.
   dashboard. A feature switch makes a widget *available*; it never draws
   one. `internal/plugins/entities/page_extras.go` is the pattern for moving
   an auto-drawn panel into a placed block without changing existing pages.
+- **A card is one object.** Every screen draws a Card deck's card with
+  `CardView` (`internal/plugins/decks/card.templ`) and `static/css/decks_card.css`:
+  a tall plate with the words on its leaf, or a compact card, in the deck's
+  border, finish and lettering. The kind is always named in words and drawn
+  as a sign, never by colour alone. Words never shrink: a smaller size shows
+  fewer lines, never smaller type, and at about 92px (the hand) every frame
+  thins and the corner mark goes. A face-down card is drawn from the deck's
+  look alone and carries no card data. A name over a picture sits on a band
+  at least 0.85 opaque.
 - **One copy.** A panel that can be placed is never also drawn automatically,
   so placing it never shows it twice.
 - **A switch is named for what you see**, and turns on one thing. Feature
@@ -528,6 +537,20 @@ place, and Off shows the end state.
   glides to its place over 340 ms. Calm keeps them still.
 - **Durations and easing come from the tokens** in `static/css/input.css`;
   the owner's Motion speed retimes all of them, the paper moves included.
+- **A card turn-over is a big moment, and the only one this long.** It takes
+  up to 900ms (`--ease-out` and `--ease-in-out`, scaled with the owner's
+  Motion speed through `--dur-standard`), is played once per card, and only
+  when someone turns a card over, never on something done many times a
+  session. Cards that arrive, are dealt or are drawn are placed, not turned.
+  "Gone for good" may take up to 1s. "Its moment has come" breathes twice, 1s
+  each, and never loops. Moves that only say where a card went (draw, deal,
+  shuffle, play, used) stay under 500ms. A turn-over started from the
+  keyboard still plays. The deck picks its turn-over from a fixed list; the
+  other moves are the same for every deck. Calm fades the card in 200ms and
+  nothing travels; Off shows the end at once. A weak device, a screen with
+  more than twelve cards and the small shape play burn as sweep and ink as a
+  fade; at most one card turns at a time per viewer and a deal moves at most
+  seven cards, 60ms apart (`internal/plugins/decks/static/js/deck_cards.js`).
 - **Effects have depth and stay light**: no flat pastel fills, no bounces or
   overshoot outside Site admin's entrance, and nothing that loads a weak
   device. Heavy effects check what the device can do first.
@@ -599,6 +622,14 @@ second; the dice settle in under 480ms.
   `text-accent`), never hard-coded colours, and both light and dark. Dark mode
   uses the same rules with lighter surfaces and a lighter accent, not glows
   (Lumen's glow is its kit's character and the one exception).
+- **A card's materials are fixed colours.** Iron, brass, steel, stone and the
+  gold of a rare card, and the ten kind colours a deck paints its kinds and
+  backs from, are defined once in `static/css/decks_card.css` (`MATERIALS`
+  and `PALETTE`) and read the same in light and dark: a material is an
+  object, like the dark metal the owner signed, and does not follow the page.
+  Everything else on a card is a token. A material's ink reaches 4.5:1 on its
+  own field (`test/js/deck_card_contrast.test.mjs`), and no card has a paper
+  or parchment texture.
 - **Colour roles**: page `--color-bg-primary`, panel `--color-bg-secondary`,
   hover and alternate rows `--color-bg-tertiary`, menu `--color-sidebar-bg`,
   headings `--color-text-primary`, labels `--color-text-secondary`, hints and

@@ -7056,7 +7056,13 @@ func (a *App) RegisterRoutes() {
 
 	// Card decks: server-side draws and hands, behind the Card decks add-on.
 	// Server only for now; the notifier is wired when live messages exist.
-	a.registerPlugin(PluginRegistration{Slug: decks.PluginSlug})
+	a.registerPlugin(PluginRegistration{
+		Slug:     decks.PluginSlug,
+		StaticFS: echo.MustSubFS(decks.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "deck-cards", Scripts: []string{"js/deck_cards.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
 		decksSvc := decks.NewService(decks.NewRepository(a.DB),
 			&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService})

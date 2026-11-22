@@ -800,6 +800,7 @@ POST	/campaigns/:id/decks/:did/draw	session	plugins/decks.(*Handler).Draw	plugin
 POST	/campaigns/:id/decks/:did/gather	session	plugins/decks.(*Handler).Gather	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
 PUT	/campaigns/:id/decks/:did/players	session	plugins/decks.(*Handler).SetPlayers	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 POST	/campaigns/:id/decks/:did/shuffle	session	plugins/decks.(*Handler).Shuffle	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
+GET	/campaigns/:id/decks/looks	session	plugins/decks.(*Handler).Looks	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 GET	/campaigns/:id/decks/table	session	plugins/decks.(*Handler).Table	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1446,6 +1447,7 @@ GET	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).RedeemSuggestToken	-
 POST	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).ApplySuggestToken	-
 GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
 GET	/static/plugins/crafting*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
+GET	/static/plugins/decks*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/static/plugins/encounters*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/static/plugins/entities*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-
 GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v5.StaticDirectoryHandler	-

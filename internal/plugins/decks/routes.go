@@ -31,6 +31,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/decks", h.Create)
 	// Registered before /decks/:did so "table" is never read as a deck id.
 	cg.GET("/decks/table", h.Table)
+	cg.GET("/decks/looks", h.Looks)
 	cg.GET("/decks/:did", h.Get)
 	cg.PUT("/decks/:did", h.Update)
 	cg.DELETE("/decks/:did", h.Delete)

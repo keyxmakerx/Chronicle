@@ -1,0 +1,31 @@
+package decks
+
+// CardPlate is the tall card: all picture, with the name on a plate. Its words
+// are on the leaf (CardLeaf). It draws a face only from a face-up state.
+templ CardPlate(l Look, s CardState, size CardSize) {
+	if s.up {
+		{{ k, hasKind := kindOf(l, s.face.KindKey) }}
+		<div
+			class={ "dk-card dk-plate", lookClasses(l), paletteOf(k.Colour), sizeClassOf(size), templ.KV("dk-rare", s.face.Rare) }
+			role="group"
+			aria-label={ accessibleName(l, s.face) }
+		>
+			@cardFittings(l.Border)
+			if hasKind {
+				@cardMarker(l, k)
+			}
+			<span class="dk-fr">
+				if l.Window == "round" {
+					<span class="dk-blur" aria-hidden="true"><span class="dk-ph"></span>@cardPicture(s)</span>
+				}
+				@cardCorner(l, s.face.Corner)
+				@cardArt(s, k, hasKind)
+				<b class="dk-name">{ s.face.Name }</b>
+				if hasKind {
+					@cardKindLine(l, k)
+				}
+			</span>
+			@cardSeal(s.face.Rare)
+		</div>
+	}
+}

@@ -1,0 +1,27 @@
+package decks
+
+// cardArt is a card's picture window. Without a picture it shows the card's
+// material and the kind's sign, so a card with no picture looks deliberate
+// and never shows a broken image. A deferred picture is named in data-src and
+// loaded by the widget after the turn has started.
+templ cardArt(s CardState, k KindDef, hasKind bool) {
+	<span class="dk-art" aria-hidden="true">
+		<span class="dk-ph">
+			if hasKind {
+				@KindSign(k.Sign)
+			}
+		</span>
+		@cardPicture(s)
+	</span>
+}
+
+// cardPicture is the picture itself, drawn only when the card has one.
+templ cardPicture(s CardState) {
+	if s.picture != "" {
+		if s.deferPicture {
+			<img class="dk-pic" alt="" data-src={ s.picture } decoding="async"/>
+		} else {
+			<img class="dk-pic" alt="" src={ s.picture } loading="lazy" decoding="async"/>
+		}
+	}
+}

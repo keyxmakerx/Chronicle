@@ -1,0 +1,414 @@
+/* decks_card.css: the card of the Card decks add-on, drawn by
+   internal/plugins/decks (card*.templ) and moved by
+   internal/plugins/decks/static/js/deck_cards.js. One class prefix, dk-.
+
+   Colours come from Chronicle's tokens. Two blocks are fixed colours on
+   purpose and read the same in light and dark, the way the signed dark metal
+   does: the MATERIALS (iron, brass, steel, stone, gold) and the kind PALETTE
+   (the ten keys a deck's kinds and back are painted from). */
+
+/* ---- MATERIALS: fixed colours, never themed -------------------------------- */
+:root {
+  --dk-iron: linear-gradient(140deg, #0a0c10 0%, #30353d 15%, #14171c 32%, #3b414a 50%, #101216 68%, #2a2e35 85%, #050608 100%);
+  --dk-iron-field: #0d0f13;
+  --dk-iron-ink: #d5dae2;
+  --dk-iron-ink2: #bcc3cd;
+  --dk-brass: radial-gradient(circle at 8% 94%, rgba(78, 150, 122, .6), transparent 20%), radial-gradient(circle at 94% 6%, rgba(78, 150, 122, .45), transparent 15%), radial-gradient(circle at 97% 72%, rgba(25, 16, 6, .55), transparent 13%), linear-gradient(140deg, #2a1d0b 0%, #8c6a2c 14%, #4a3416 30%, #a8843d 48%, #3b2a12 66%, #7a5c26 84%, #1c1307 100%);
+  --dk-brass-field: #140f08;
+  --dk-brass-ink: #efdcae;
+  --dk-brass-ink2: #d9c79e;
+  --dk-steel: repeating-linear-gradient(90deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px), linear-gradient(140deg, #0e131a 0%, #4a5664 16%, #1b222b 33%, #66737f 50%, #151b23 68%, #3d4855 86%, #080b0f 100%);
+  --dk-steel-field: #0a0e14;
+  --dk-steel-ink: #e1e7ef;
+  --dk-steel-ink2: #c4ccd7;
+  --dk-stone: radial-gradient(circle at 30% 40%, rgba(255, 255, 255, .08) .6px, transparent 1.2px) 0 0/3px 7px, radial-gradient(circle at 70% 20%, rgba(0, 0, 0, .14) .7px, transparent 1.3px) 1px 0/5px 4px, radial-gradient(circle, rgba(0, 0, 0, .2) 1px, transparent 1.6px) 0 0/11px 13px, radial-gradient(circle, rgba(255, 255, 255, .09) .9px, transparent 1.4px) 4px 6px/7px 9px, radial-gradient(ellipse 30% 12% at 20% 2%, rgba(255, 255, 255, .08), transparent 70%), radial-gradient(ellipse 12% 30% at 97% 30%, rgba(0, 0, 0, .18), transparent 70%), radial-gradient(ellipse 12% 25% at 3% 80%, rgba(255, 255, 255, .07), transparent 70%), linear-gradient(90deg, transparent 30%, rgba(0, 0, 0, .45) 30% calc(30% + 1px), rgba(255, 255, 255, .14) calc(30% + 1px) calc(30% + 2px), transparent 0) 0 0/100% 14px no-repeat, linear-gradient(90deg, transparent 64%, rgba(0, 0, 0, .45) 64% calc(64% + 1px), rgba(255, 255, 255, .14) calc(64% + 1px) calc(64% + 2px), transparent 0) 0 100%/100% 11px no-repeat, linear-gradient(transparent 46%, rgba(0, 0, 0, .45) 46% calc(46% + 1px), rgba(255, 255, 255, .14) calc(46% + 1px) calc(46% + 2px), transparent 0) 0 0/11px 100% no-repeat, linear-gradient(transparent 58%, rgba(0, 0, 0, .45) 58% calc(58% + 1px), rgba(255, 255, 255, .14) calc(58% + 1px) calc(58% + 2px), transparent 0) 100% 0/11px 100% no-repeat, linear-gradient(160deg, #74787e 0%, #5b5f65 35%, #4a4e54 65%, #3a3d42 100%);
+  --dk-stone-hand: radial-gradient(circle at 30% 40%, rgba(255, 255, 255, .08) .6px, transparent 1.2px) 0 0/3px 7px, radial-gradient(circle, rgba(0, 0, 0, .2) 1px, transparent 1.6px) 0 0/11px 13px, linear-gradient(160deg, #74787e 0%, #5b5f65 35%, #4a4e54 65%, #3a3d42 100%);
+  --dk-stone-field: #17191c;
+  --dk-stone-ink: #ecebe7;
+  --dk-stone-ink2: #cfcdc7;
+  --dk-gold: #d9b45a;
+  --dk-gold-edge: #a8822e;
+  --dk-gold-deep: #7a5a18;
+  --dk-gold-glow: rgba(201, 162, 74, .45);
+  --dk-gold-ink: #8a6414;
+  --dk-gold-ink-night: #e8c66a;
+  --dk-band: rgba(8, 10, 20, .9);
+  --dk-bar: #fff;
+}
+:root.dark { --dk-gold-ink: #e8c66a; }
+
+/* a card with no kind (or a back with no colour) is painted from the page's own tokens */
+:where(.dk-card, .dk-leaf) { --dk-k: var(--color-text-muted); --dk-pd: var(--color-accent-hover); }
+
+/* ---- PALETTE: the ten kind colours; --dk-k is the kind, --dk-pd its deep tone for a back ---- */
+.dk-pal-violet { --dk-pd: #5b21b6; --dk-k: #7c3aed; }
+.dk-pal-indigo { --dk-pd: #3730a3; --dk-k: #4f46e5; }
+.dk-pal-blue { --dk-pd: #1e40af; --dk-k: #2563eb; }
+.dk-pal-cyan { --dk-pd: #155e75; --dk-k: #0891b2; }
+.dk-pal-teal { --dk-pd: #115e59; --dk-k: #0d9488; }
+.dk-pal-moss { --dk-pd: #3f6212; --dk-k: #4d7c0f; }
+.dk-pal-plum { --dk-pd: #86198f; --dk-k: #a21caf; }
+.dk-pal-rose { --dk-pd: #9f1239; --dk-k: #e11d48; }
+.dk-pal-umber { --dk-pd: #78350f; --dk-k: #92400e; }
+.dk-pal-slate { --dk-pd: #334155; --dk-k: #475569; }
+.dark .dk-pal-violet, .dark.dk-pal-violet { --dk-k: #a78bfa; }
+.dark .dk-pal-indigo, .dark.dk-pal-indigo { --dk-k: #818cf8; }
+.dark .dk-pal-blue, .dark.dk-pal-blue { --dk-k: #60a5fa; }
+.dark .dk-pal-cyan, .dark.dk-pal-cyan { --dk-k: #22d3ee; }
+.dark .dk-pal-teal, .dark.dk-pal-teal { --dk-k: #2dd4bf; }
+.dark .dk-pal-moss, .dark.dk-pal-moss { --dk-k: #a3e635; }
+.dark .dk-pal-plum, .dark.dk-pal-plum { --dk-k: #e879f9; }
+.dark .dk-pal-rose, .dark.dk-pal-rose { --dk-k: #fb7185; }
+.dark .dk-pal-umber, .dark.dk-pal-umber { --dk-k: #d6a064; }
+.dark .dk-pal-slate, .dark.dk-pal-slate { --dk-k: #94a3b8; }
+
+/* The faces the lettering list names, from Chronicle's own fonts. */
+@font-face { font-family: 'DK Cinzel'; font-weight: 600; font-display: swap; src: url(/static/fonts/customize/cinzel-latin-600.woff2) format('woff2'); }
+@font-face { font-family: 'DK Marcellus'; font-weight: 400; font-display: swap; src: url(/static/fonts/customize/marcellus-latin-400.woff2) format('woff2'); }
+@font-face { font-family: 'DK Oswald'; font-weight: 500 600; font-display: swap; src: url(/static/fonts/customize/oswald-latin-var.woff2) format('woff2'); }
+@font-face { font-family: 'DK Kalam'; font-weight: 700; font-display: swap; src: url(/static/fonts/customize/kalam-latin-700.woff2) format('woff2'); }
+
+/* ---- the wrapper and the three sizes ---------------------------------------- */
+.dk-wrap, .dk-card, .dk-leaf { --dk-w: 128px; }
+.dk-sz-hand { --dk-w: 92px; }
+.dk-sz-row { --dk-w: 128px; }
+.dk-sz-open { --dk-w: 176px; }
+.dk-wrap { position: relative; display: inline-block; vertical-align: top; width: var(--dk-w); max-width: 100%; perspective: 800px; }
+.dk-wrap.dk-open { display: inline-flex; flex-wrap: wrap; align-items: stretch; width: auto; perspective: none; }
+.dk-turner { position: relative; display: block; transform-style: flat; }
+.dk-turner > .dk-card { position: relative; width: 100%; }
+.dk-faceslot { position: absolute; inset: 0; pointer-events: none; }
+.dk-faceslot > .dk-card { width: 100%; }
+.dk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.dk-turn { position: absolute; inset: 0; z-index: 8; width: 100%; padding: 0; border: 0; border-radius: var(--shape-r-panel, 12px); background: transparent; cursor: pointer; }
+.dk-turn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.dk-turn[aria-disabled="true"] { cursor: default; }
+
+/* ---- the card ---------------------------------------------------------------- */
+.dk-card { position: relative; flex: none; box-sizing: border-box; width: var(--dk-w); aspect-ratio: 7 / 12; border-radius: var(--shape-r-panel, 12px); border: 1px solid var(--color-border); background: var(--color-bg-secondary); box-shadow: var(--elev-resting); overflow: hidden; display: flex; flex-direction: column; color: var(--color-text-body); font-size: 12px; line-height: 1.4; text-align: left; }
+.dk-card *, .dk-leaf * { box-sizing: border-box; }
+.dk-s-standard, .dk-s-small { aspect-ratio: 5 / 7; }
+.dk-sg { width: 1em; height: 1em; flex: none; fill: var(--dk-k); }
+.dk-em { fill: currentColor; }
+
+/* the picture window: the picture, or the material and the kind's sign */
+.dk-art { position: relative; display: block; overflow: hidden; min-height: 0; background: #0d0f13; }
+.dk-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--dk-k) 55%, #101218) 0, #0d0f13 78%); }
+.dk-ph .dk-sg { width: 38%; height: auto; max-height: 38%; fill: color-mix(in srgb, var(--dk-k) 60%, #fff); opacity: .5; }
+.dk-pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dk-pic[data-src] { opacity: 0; }
+
+.dk-kind { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .09em; text-transform: uppercase; color: var(--color-text-secondary); }
+.dk-kind .dk-sg { width: 9px; height: 9px; }
+.dk-name { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; font-weight: 700; line-height: 1.2; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.dk-words { display: block; font-size: 12px; line-height: 1.4; color: var(--color-text-body); overflow-wrap: anywhere; }
+.dk-sz-hand .dk-name { -webkit-line-clamp: 2; }
+.dk-sz-row .dk-name { -webkit-line-clamp: 3; }
+.dk-sz-open .dk-name { -webkit-line-clamp: unset; }
+
+/* the compact card: standard and small */
+.dk-compact { border-top: 4px solid var(--dk-k); }
+.dk-compact .dk-art { flex: 1 1 0; min-height: 38%; }
+.dk-compact .dk-kind { padding: 7px 10px 0; }
+.dk-compact .dk-name { padding: 2px 10px 8px; }
+.dk-compact .dk-words { padding: 0 10px; margin: -4px 0 8px; }
+.dk-sz-hand.dk-compact .dk-words, .dk-s-small:not(.dk-sz-open) .dk-words { display: none; }
+.dk-sz-row .dk-words { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.dk-sz-hand .dk-kind, .dk-s-small.dk-sz-hand .dk-kind { display: none; }
+.dk-s-small .dk-name { padding: 5px 8px 7px; }
+.dk-sz-open.dk-compact { aspect-ratio: auto; min-height: calc(var(--dk-w) * 1.4); }
+.dk-sz-open.dk-compact .dk-art { flex: none; height: calc(var(--dk-w) * .6); }
+.dk-b-line.dk-compact { border-top-width: 2px; }
+.dk-b-none.dk-compact { border-top-width: 0; border-color: transparent; }
+
+/* the plate: all picture, the name on a plate */
+.dk-plate { padding: 6px; }
+.dk-plate .dk-fr { position: relative; flex: 1; display: flex; flex-direction: column; border: 1px solid var(--dk-k); border-radius: 8px; padding: 5px; gap: 5px; min-height: 0; outline: 1px solid var(--color-border); outline-offset: 2px; }
+.dk-plate .dk-art { flex: 1 1 0; border-radius: 999px 999px 5px 5px; }
+.dk-plate .dk-name { text-align: center; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; padding: 1px 2px 2px; }
+.dk-num { position: absolute; top: 3px; left: 5px; z-index: 2; display: flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; line-height: 1; color: var(--color-text-primary); background: var(--color-bg-secondary); border-radius: 4px; padding: 2px 4px; }
+.dk-compact > .dk-num { top: 6px; left: 8px; }
+.dk-num .dk-em { width: 10px; height: 10px; fill: var(--dk-k); }
+.dk-c-suit .dk-num { flex-direction: column; padding: 3px 4px; gap: 1px; }
+.dk-pips { flex-direction: column; gap: 3px; padding: 4px; }
+.dk-pips i { width: 6px; height: 6px; border-radius: 50%; background: var(--dk-k); }
+.dk-c-none .dk-num { display: none; }
+
+/* the name's place and the window */
+.dk-n-above .dk-name { order: -1; }
+.dk-n-above .dk-num { top: auto; bottom: 4px; }
+.dk-n-over .dk-fr, .dk-w-full .dk-fr { overflow: hidden; }
+.dk-n-over .dk-name, .dk-w-full .dk-name { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 8px 6px; color: #fff; background: var(--dk-band); border-radius: 0 0 7px 7px; text-shadow: none; }
+.dk-n-over .dk-name::before, .dk-w-full .dk-name::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 18px; background: linear-gradient(to top, var(--dk-band), transparent); pointer-events: none; }
+.dk-n-over .dk-num, .dk-w-full .dk-num { z-index: 2; }
+.dk-w-square .dk-art { border-radius: 3px; }
+/* A true pointed arch: two arcs of radius equal to the window's width, each
+   centred on the opposite springing point, drawn for a window 7 wide by 10
+   tall and in percentages so it scales with the card. */
+.dk-w-pointed .dk-art { border-radius: 0; clip-path: polygon(0.0% 100.0%, 0.0% 60.6%, 3.1% 43.3%, 6.2% 36.3%, 9.4% 31.0%, 12.5% 26.7%, 15.6% 23.1%, 18.8% 19.8%, 21.9% 16.9%, 25.0% 14.3%, 28.1% 12.0%, 31.2% 9.8%, 34.4% 7.8%, 37.5% 6.0%, 40.6% 4.3%, 43.8% 2.7%, 46.9% 1.3%, 50.0% 0.0%, 53.1% 1.3%, 56.2% 2.7%, 59.4% 4.3%, 62.5% 6.0%, 65.6% 7.8%, 68.8% 9.8%, 71.9% 12.0%, 75.0% 14.3%, 78.1% 16.9%, 81.2% 19.8%, 84.4% 23.1%, 87.5% 26.7%, 90.6% 31.0%, 93.8% 36.3%, 96.9% 43.3%, 100.0% 60.6%, 100.0% 100.0%); }
+.dk-w-round .dk-fr { overflow: hidden; background: #0b0d12; }
+.dk-w-round .dk-blur { position: absolute; inset: 0; filter: blur(3px) brightness(.5) saturate(.8); }
+.dk-w-round .dk-art { position: relative; flex: none; width: 86%; aspect-ratio: 1; margin: auto auto 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--dk-k), 0 0 0 5px rgba(0, 0, 0, .35), 0 0 0 6px rgba(255, 255, 255, .35); }
+.dk-w-round .dk-name { position: relative; margin-top: auto; color: #fff; background: var(--dk-band); text-shadow: none; }
+.dk-w-round .dk-num { z-index: 2; background: var(--dk-band); color: #fff; }
+.dk-w-full .dk-art { position: absolute; inset: 0; border-radius: inherit; }
+.dk-w-full .dk-fr { padding: 0; }
+.dk-compact .dk-art { clip-path: none; border-radius: 0; }
+
+/* lettering */
+.dk-l-carved :is(.dk-name, .dk-dn, .dk-bw) { font-family: 'DK Cinzel', Georgia, serif; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+.dk-l-classic :is(.dk-name, .dk-dn, .dk-bw) { font-family: 'DK Marcellus', Georgia, serif; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; }
+.dk-l-condensed :is(.dk-name, .dk-dn, .dk-bw) { font-family: 'DK Oswald', 'Arial Narrow', sans-serif; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.dk-l-hand :is(.dk-name, .dk-dn, .dk-bw) { font-family: 'DK Kalam', cursive; font-weight: 700; letter-spacing: 0; text-transform: none; line-height: 1.15; }
+.dk-l-hand .dk-name { font-size: 14px; }
+.dk-l-condensed .dk-name { font-size: 13px; }
+
+/* kind markers: the deck picks the style, each kind brings a colour and a sign */
+.dk-mk { position: absolute; z-index: 4; pointer-events: none; }
+.dk-gem { top: 0; left: calc(50% - 8px); width: 16px; height: 16px; }
+.dk-gem .dk-sg { width: 100%; height: 100%; stroke: var(--color-bg-secondary); stroke-width: 2.2; paint-order: stroke; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .45)) drop-shadow(0 0 3px color-mix(in srgb, var(--dk-k) 60%, transparent)); }
+.dk-mat .dk-gem .dk-sg { stroke: #050608; }
+.dk-ban { top: 0; right: 14px; width: 18px; height: 28px; background: var(--dk-k); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%); display: flex; justify-content: center; padding-top: 5px; }
+.dk-ban .dk-sg, .dk-tab .dk-sg { fill: #fff; width: 10px; height: 10px; }
+.dk-tab { top: 0; right: 0; width: 30px; height: 30px; background: var(--dk-k); clip-path: polygon(0 0, 100% 0, 100% 100%); border-top-right-radius: 11px; }
+.dk-tab .dk-sg { position: absolute; top: 4px; right: 4px; }
+.dk-rib { top: 0; right: 0; width: 58px; height: 58px; border-top-right-radius: 11px; overflow: hidden; background: linear-gradient(45deg, transparent 46%, rgba(0, 0, 0, .25) 46% 47%, var(--dk-k) 47% 71%, rgba(0, 0, 0, .25) 71% 72%, transparent 72%); }
+.dk-rib i { position: absolute; left: 19px; top: 14px; width: 44px; transform: rotate(45deg); display: flex; justify-content: center; align-items: center; gap: 2px; font-size: 8px; font-style: normal; font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+.dk-rib .dk-sg { fill: #fff; width: 7px; height: 7px; }
+.dk-kl { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: -3px; font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-secondary); }
+.dk-kl .dk-sg { width: 9px; height: 9px; }
+.dk-compact .dk-kl { justify-content: flex-start; margin: -6px 10px 6px; }
+
+/* the double line, the single line, the corners, none */
+.dk-b-line .dk-fr { outline: 0; }
+.dk-b-kit { padding: 9px; }
+.dk-b-kit .dk-fr { outline: 0; border-radius: 3px; }
+.dk-b-kit .dk-art { border-radius: 2px; }
+.dk-b-none.dk-plate { padding: 0; }
+.dk-b-none .dk-fr { border: 0; outline: 0; border-radius: 0; padding: 0; gap: 0; }
+.dk-b-none .dk-art { border-radius: 0; }
+.dk-b-none .dk-name { padding: 7px 4px 8px; }
+
+/* ---- forged borders: iron, brass, steel, bound iron, stone -------------------- */
+.dk-b-metal { --dk-mat: var(--dk-iron); --dk-field: var(--dk-iron-field); --dk-ink: var(--dk-iron-ink); --dk-ink2: var(--dk-iron-ink2); --dk-lip: rgba(255, 255, 255, .14); }
+.dk-b-brass { --dk-mat: var(--dk-brass); --dk-field: var(--dk-brass-field); --dk-ink: var(--dk-brass-ink); --dk-ink2: var(--dk-brass-ink2); --dk-lip: rgba(240, 205, 130, .3); }
+.dk-b-steel { --dk-mat: var(--dk-steel); --dk-field: var(--dk-steel-field); --dk-ink: var(--dk-steel-ink); --dk-ink2: var(--dk-steel-ink2); --dk-lip: rgba(200, 215, 235, .2); }
+.dk-b-bound { --dk-mat: var(--dk-iron); --dk-field: var(--dk-iron-field); --dk-ink: var(--dk-iron-ink); --dk-ink2: var(--dk-iron-ink2); --dk-lip: rgba(255, 255, 255, .14); }
+.dk-b-stone { --dk-mat: var(--dk-stone); --dk-field: var(--dk-stone-field); --dk-ink: var(--dk-stone-ink); --dk-ink2: var(--dk-stone-ink2); --dk-lip: rgba(255, 255, 255, .2); }
+.dk-mat { --dk-pad: 11px; padding: var(--dk-pad); border-radius: 7px; border-color: #000; background: var(--dk-mat); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), inset 0 -2px 0 rgba(0, 0, 0, .6), 0 2px 3px rgba(0, 0, 0, .35), 0 10px 18px rgba(0, 0, 0, .3); }
+.dk-mat .dk-fr { z-index: 1; border: 1px solid #000; outline: 0; border-radius: 3px; padding: 4px; background: var(--dk-field); box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px rgba(0, 0, 0, .8); }
+.dk-mat .dk-art { border-radius: 2px; filter: saturate(.94) contrast(1.04); }
+.dk-mat .dk-name { color: var(--dk-ink); text-shadow: 0 1px 0 #000; }
+.dk-mat .dk-num { background: var(--dk-field); color: var(--dk-ink); top: 2px; left: 3px; }
+.dk-mat::before { content: ""; position: absolute; inset: 4px; border-radius: 4px; pointer-events: none; display: none; }
+.dk-b-metal.dk-plate { padding: 11px; }
+.dk-rv { position: absolute; z-index: 3; width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #8b929e 0, #3a3f47 40%, #0b0d10 80%); box-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
+.dk-rv-a { top: 3px; left: 3px; } .dk-rv-b { top: 3px; right: 3px; } .dk-rv-c { bottom: 3px; left: 3px; } .dk-rv-d { bottom: 3px; right: 3px; }
+.dk-rv-g { top: 1px; left: calc(50% - 5px); width: 10px; height: 10px; background: radial-gradient(circle at 35% 30%, #fff 0, var(--dk-k) 42%, #050608 115%); box-shadow: 0 0 5px color-mix(in srgb, var(--dk-k) 70%, transparent); }
+.dk-mat .dk-compact-fix, .dk-mat.dk-compact > .dk-art, .dk-mat.dk-compact > .dk-kind, .dk-mat.dk-compact > .dk-name, .dk-mat.dk-compact > .dk-words, .dk-mat.dk-compact > .dk-kl { position: relative; z-index: 1; }
+
+/* a faint sheen crosses metal when the pointer rests on it; borders never move otherwise */
+.dk-b-brass::after, .dk-b-steel::after, .dk-b-bound::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .09) 48%, rgba(255, 255, 255, .13) 50%, transparent 62%); transform: translateX(-110%); }
+.dk-b-brass:hover::after, .dk-b-steel:hover::after, .dk-b-bound:hover::after { transform: translateX(110%); transition: transform 1.1s var(--ease-in-out); }
+html[data-motion] .dk-mat::after, [data-dk-motion] .dk-mat::after { display: none; }
+@media (prefers-reduced-motion: reduce) { .dk-mat::after { display: none; } }
+
+/* tarnished brass */
+.dk-b-brass { padding-top: 14px; }
+.dk-b-brass::before { display: block; border: 1px solid rgba(20, 12, 4, .8); box-shadow: 0 1px 0 rgba(255, 225, 160, .32), inset 0 1px 0 rgba(255, 225, 160, .2); }
+.dk-b-brass .dk-rv-g { top: 1.5px; left: calc(50% - 5.5px); width: 11px; height: 11px; background: radial-gradient(circle at 35% 30%, #fff 0, color-mix(in srgb, var(--dk-k) 75%, #fff) 18%, var(--dk-k) 50%, color-mix(in srgb, var(--dk-k) 55%, #000) 100%); box-shadow: 0 0 0 1.5px #b08a42, 0 0 0 2.5px #2a1c08, 0 0 6px color-mix(in srgb, var(--dk-k) 65%, transparent); }
+/* cold steel, the engraved line filled in the kind's colour */
+.dk-b-steel::before { display: block; inset: 5px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--dk-k) 65%, #fff); box-shadow: 0 0 0 1px rgba(0, 0, 0, .65), inset 0 0 0 1px rgba(0, 0, 0, .5), 0 0 5px color-mix(in srgb, var(--dk-k) 55%, transparent); }
+.dk-b-steel .dk-rv-g { top: 1px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 1px; transform: rotate(45deg); background: linear-gradient(135deg, color-mix(in srgb, var(--dk-k) 55%, #fff), var(--dk-k) 50%, color-mix(in srgb, var(--dk-k) 60%, #000)); box-shadow: 0 0 0 1px #0a0e14, 0 0 0 2px #7c8794, 0 0 5px var(--dk-k); }
+/* bound iron: chains down the sides and a lock whose keyhole glows */
+.dk-b-bound { padding-top: 17px; }
+.dk-ch { position: absolute; top: 22px; bottom: 16px; width: 5px; z-index: 2; background: radial-gradient(ellipse 2.1px 3.4px at 50% 50%, transparent 52%, #9aa1ab 60%, #3a3f47 85%, transparent 96%) 0 0/5px 9px repeat-y, linear-gradient(90deg, transparent 1.9px, #6b727c 1.9px 3.1px, transparent 3.1px) 0 4.5px/5px 9px repeat-y; filter: drop-shadow(0 1px 0 #000); }
+.dk-ch-l { left: 3px; } .dk-ch-r { right: 3px; }
+.dk-lk { position: absolute; top: 1px; left: calc(50% - 9px); width: 18px; height: 15px; z-index: 3; border-radius: 3px 3px 8px 8px; background: radial-gradient(circle at 35% 25%, #5b616b, #22262c 60%, #0b0d10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 1px 2px rgba(0, 0, 0, .7); }
+.dk-lk::before { content: ""; position: absolute; top: 3px; left: calc(50% - 2.5px); width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--dk-k) 55%, #fff); box-shadow: 0 0 4px var(--dk-k), 0 0 8px var(--dk-k); }
+.dk-lk::after { content: ""; position: absolute; top: 6px; left: calc(50% - 2px); width: 4px; height: 6px; background: color-mix(in srgb, var(--dk-k) 55%, #fff); clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); filter: drop-shadow(0 0 3px var(--dk-k)); }
+/* carved stone: granite blocks and a keystone whose rune glows in the kind's colour */
+.dk-b-stone { border-radius: 4px; padding-top: 14px; box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .3), inset -1px -1px 0 rgba(0, 0, 0, .45), 0 2px 3px rgba(0, 0, 0, .3), 0 10px 18px rgba(0, 0, 0, .26); }
+.dk-b-stone .dk-fr { box-shadow: 0 0 0 1px rgba(255, 255, 255, .22), -1px -1px 0 1px rgba(0, 0, 0, .4), inset 0 2px 5px rgba(0, 0, 0, .8); }
+.dk-ks { position: absolute; top: 0; left: calc(50% - 12px); width: 24px; height: 15px; z-index: 3; clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%); background: radial-gradient(circle, rgba(255, 255, 255, .12) .7px, transparent 1.1px) 1px 2px/5px 5px, linear-gradient(180deg, #80848a, #5d6167); }
+.dk-ks::before { content: ""; position: absolute; inset: 0; clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%, 22% 92%, 78% 92%, 96% 4%, 4% 4%, 22% 92%, 20% 100%); background: rgba(0, 0, 0, .45); }
+.dk-ks::after { content: ""; position: absolute; top: 3px; left: calc(50% - 3.5px); width: 7px; height: 7px; transform: rotate(45deg); border: 1.5px solid color-mix(in srgb, var(--dk-k) 50%, #fff); background: radial-gradient(circle, color-mix(in srgb, var(--dk-k) 40%, #fff) 0, var(--dk-k) 70%); box-shadow: 0 0 5px var(--dk-k), 0 0 9px color-mix(in srgb, var(--dk-k) 60%, transparent); }
+
+/* the compact card in a forged frame */
+.dk-mat.dk-compact { border: 1px solid #000; padding: 7px; border-radius: 8px; }
+.dk-b-brass.dk-compact, .dk-b-stone.dk-compact { padding-top: 13px; }
+.dk-mat.dk-compact::before { inset: 3px; border-radius: 5px; }
+.dk-mat.dk-compact > .dk-art { border-radius: 3px 3px 0 0; box-shadow: 0 0 0 1px #000; }
+.dk-mat.dk-compact > .dk-kind, .dk-mat.dk-compact > .dk-name, .dk-mat.dk-compact > .dk-words, .dk-mat.dk-compact > .dk-kl { margin: 0; background: var(--dk-field); box-shadow: -1px 0 0 #000, 1px 0 0 #000; }
+.dk-mat.dk-compact > .dk-kind { color: var(--dk-ink2); padding-top: 6px; }
+.dk-mat.dk-compact > .dk-name { color: var(--dk-ink); }
+.dk-mat.dk-compact > .dk-words { color: var(--dk-ink2); border-bottom: 9px solid var(--dk-field); }
+.dk-mat.dk-compact > .dk-kl { color: var(--dk-ink2); justify-content: flex-start; padding: 0 10px 8px; }
+.dk-mat.dk-compact > :last-child { box-shadow: -1px 0 0 #000, 1px 0 0 #000, 0 1px 0 #000; border-radius: 0 0 3px 3px; }
+.dk-mat.dk-compact > .dk-seal:last-child, .dk-mat.dk-compact > .dk-seal { box-shadow: none; background: none; }
+.dk-s-small.dk-mat.dk-compact { padding: 5px; padding-top: 9px; }
+.dk-s-small.dk-mat.dk-compact::before { inset: 2px; }
+.dk-s-small.dk-mat .dk-rv-g { width: 7px; height: 7px; top: 1px; left: calc(50% - 3.5px); }
+.dk-s-small.dk-mat .dk-ks { width: 16px; height: 9px; left: calc(50% - 8px); }
+.dk-s-small.dk-mat .dk-ks::after { top: 1.5px; width: 5px; height: 5px; left: calc(50% - 2.5px); border-width: 1px; }
+
+/* the hand rule: at about 92px wide the frame thins, the rivets shrink and the corner mark goes */
+.dk-sz-hand.dk-card { --dk-w: 92px; border-radius: 8px; }
+.dk-sz-hand.dk-mat { --dk-pad: 7px; padding: 7px; border-radius: 6px; }
+.dk-sz-hand.dk-b-brass, .dk-sz-hand.dk-b-stone { padding-top: 9px; }
+.dk-sz-hand.dk-b-bound { padding-top: 11px; }
+.dk-sz-hand.dk-b-metal.dk-plate { padding: 7px; }
+.dk-sz-hand .dk-fr { padding: 2px; gap: 3px; }
+.dk-sz-hand.dk-plate .dk-name { padding: 0 1px 2px; letter-spacing: .04em; }
+.dk-sz-hand .dk-num { display: none; }
+.dk-sz-hand.dk-mat::before { inset: 2.5px; border-radius: 3px; }
+.dk-sz-hand.dk-b-steel::before { inset: 3px; }
+.dk-sz-hand .dk-rv { width: 4px; height: 4px; }
+.dk-sz-hand .dk-rv-a { top: 1.5px; left: 1.5px; } .dk-sz-hand .dk-rv-b { top: 1.5px; right: 1.5px; } .dk-sz-hand .dk-rv-c { bottom: 1.5px; left: 1.5px; } .dk-sz-hand .dk-rv-d { bottom: 1.5px; right: 1.5px; }
+.dk-sz-hand .dk-rv-g { width: 7px; height: 7px; top: 1px; left: calc(50% - 3.5px); }
+.dk-sz-hand.dk-b-steel .dk-rv-g { width: 5px; height: 5px; left: calc(50% - 2.5px); top: 1px; }
+.dk-sz-hand .dk-ch { width: 3px; top: 14px; bottom: 10px; background-size: 3px 6px, 3px 6px; background-position: 0 0, 0 3px; }
+.dk-sz-hand .dk-ch-l { left: 2px; } .dk-sz-hand .dk-ch-r { right: 2px; }
+.dk-sz-hand .dk-lk { width: 12px; height: 10px; left: calc(50% - 6px); top: 1px; }
+.dk-sz-hand .dk-lk::before { top: 2px; width: 3px; height: 3px; left: calc(50% - 1.5px); }
+.dk-sz-hand .dk-lk::after { top: 4px; width: 3px; height: 4px; left: calc(50% - 1.5px); }
+.dk-sz-hand .dk-ks { width: 16px; height: 9px; left: calc(50% - 8px); }
+.dk-sz-hand .dk-ks::after { top: 1.5px; width: 5px; height: 5px; left: calc(50% - 2.5px); border-width: 1px; }
+.dk-sz-hand.dk-b-stone { --dk-mat: var(--dk-stone-hand); }
+.dk-sz-hand.dk-compact .dk-gem { transform: scale(.8); transform-origin: 50% 0; }
+.dk-sz-hand .dk-rib { width: 40px; height: 40px; }
+.dk-sz-hand .dk-rib i { left: 10px; top: 9px; width: 34px; font-size: 8px; }
+.dk-sz-hand .dk-ban { right: 8px; width: 14px; height: 22px; padding-top: 4px; }
+.dk-sz-hand .dk-tab { width: 24px; height: 24px; }
+
+/* finishes: matte, a glow in the kind's colour, a slow sheen, foil */
+.dk-f-sheen::before, .dk-f-foil::before, .dk-rare::before, .dk-f-glow .dk-fr::after, .dk-f-sheen::after, .dk-f-foil::after, .dk-rare::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit; }
+.dk-f-sheen::before { background: linear-gradient(118deg, rgba(255, 255, 255, .22), transparent 34%, transparent 66%, rgba(255, 255, 255, .12)); }
+.dk-f-foil::before, .dk-rare::before { background: linear-gradient(120deg, transparent 8%, rgba(255, 110, 190, .22) 26%, rgba(255, 226, 120, .2) 40%, rgba(120, 240, 190, .2) 54%, rgba(110, 170, 255, .24) 70%, transparent 90%); mix-blend-mode: screen; }
+.dk-f-sheen::after, .dk-f-foil::after, .dk-rare::after { background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, .5) 50%, transparent 68%); transform: translateX(-140%); }
+.dk-f-sheen:hover::after, .dk-f-foil:hover::after, .dk-rare:hover::after { animation: dk-sheen 1.3s var(--ease-in-out) 1 both; }
+@keyframes dk-sheen { from { transform: translateX(-140%); } to { transform: translateX(140%); } }
+html[data-motion] :is(.dk-f-sheen, .dk-f-foil, .dk-rare)::after { animation: none !important; }
+html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { transition: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { :is(.dk-f-sheen, .dk-f-foil, .dk-rare)::after { animation: none !important; } :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { transition: none; transform: none; } }
+.dk-f-glow .dk-fr::after { z-index: 3; box-shadow: inset 0 0 16px 2px color-mix(in srgb, var(--dk-k) 75%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--dk-k) 70%, transparent); }
+.dk-f-glow .dk-lfi::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 16px 2px color-mix(in srgb, var(--dk-k) 75%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--dk-k) 70%, transparent); }
+.dk-f-glow.dk-card:not(.dk-mat) { box-shadow: 0 0 0 1px color-mix(in srgb, var(--dk-k) 35%, transparent), 0 0 14px color-mix(in srgb, var(--dk-k) 40%, transparent), var(--elev-resting); }
+.dk-f-glow.dk-mat { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .7), 0 0 12px color-mix(in srgb, var(--dk-k) 30%, transparent), 0 10px 18px rgba(0, 0, 0, .34); }
+.dk-card.dk-rare { border-color: var(--dk-gold-edge); box-shadow: 0 0 0 2px var(--dk-gold), 0 0 0 3px var(--dk-gold-deep), 0 6px 18px var(--dk-gold-glow); }
+.dk-rare .dk-name, .dk-rare .dk-dn { color: var(--dk-gold-ink); }
+.dk-rare.dk-mat .dk-name { color: var(--dk-gold-ink-night); }
+.dk-seal { position: absolute; z-index: 6; bottom: 2px; left: calc(50% - 7px); width: 14px; height: 14px; }
+.dk-seal svg { width: 100%; height: 100%; fill: #e3bd5c; stroke: #6b4d10; stroke-width: 1.2; paint-order: stroke; }
+
+/* ---- the back: one for every card of a deck ------------------------------------ */
+.dk-back { padding: 6px; border-color: rgba(0, 0, 0, .25); background-color: var(--dk-pd); background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .13) 0 2px, transparent 2px 11px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, .13) 0 2px, transparent 2px 11px); }
+.dk-bfr { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 4px; border: 1px solid rgba(255, 255, 255, .6); border-radius: 7px; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .1em; text-transform: uppercase; text-align: center; overflow-wrap: anywhere; }
+.dk-bfr .dk-em { width: 38%; height: auto; aspect-ratio: 1; fill: rgba(255, 255, 255, .92); color: rgba(255, 255, 255, .92); }
+.dk-p-rays { background-image: repeating-conic-gradient(from 0deg at 50% 44%, rgba(255, 255, 255, .16) 0 5deg, transparent 5deg 15deg); }
+.dk-p-rays .dk-bfr { background: radial-gradient(circle at 50% 44%, var(--dk-pd) 0 24%, transparent 25%); }
+.dk-p-waves { background-image: radial-gradient(circle at 50% 100%, transparent 5px, rgba(255, 255, 255, .2) 5.5px 7.5px, transparent 8px); background-size: 16px 9px; }
+.dk-p-stars { background-image: radial-gradient(1.2px 1.2px at 12% 18%, #fff 98%, transparent), radial-gradient(1px 1px at 70% 9%, rgba(255, 255, 255, .8) 98%, transparent), radial-gradient(1.6px 1.6px at 38% 62%, #fff 98%, transparent), radial-gradient(1px 1px at 86% 48%, rgba(255, 255, 255, .7) 98%, transparent), radial-gradient(1px 1px at 22% 88%, rgba(255, 255, 255, .8) 98%, transparent), radial-gradient(1.3px 1.3px at 62% 80%, #fff 98%, transparent), linear-gradient(170deg, rgba(255, 255, 255, .08), transparent 60%); background-size: 46px 52px, 46px 52px, 46px 52px, 46px 52px, 46px 52px, 46px 52px, auto; }
+.dk-p-check { background-image: linear-gradient(45deg, rgba(255, 255, 255, .15) 25%, transparent 25% 75%, rgba(255, 255, 255, .15) 75%), linear-gradient(-45deg, rgba(255, 255, 255, .15) 25%, transparent 25% 75%, rgba(255, 255, 255, .15) 75%); background-size: 12px 12px; }
+.dk-p-check .dk-bfr { outline: 1px solid rgba(255, 255, 255, .45); outline-offset: -5px; }
+.dk-p-plain { background-image: none; }
+.dk-p-plain .dk-bfr { outline: 1px solid rgba(255, 255, 255, .4); outline-offset: -6px; }
+.dk-p-iron { padding: 10px; border-color: #000; background: var(--dk-iron); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .7), 0 2px 3px rgba(0, 0, 0, .4), 0 8px 16px rgba(0, 0, 0, .3); }
+.dk-p-iron .dk-bfr { border: 1px solid #000; border-radius: 3px; color: #aeb5c0; background: var(--dk-iron-field) radial-gradient(circle at 50% 44%, transparent 31%, rgba(255, 255, 255, .09) 32% 33%, transparent 34%); box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), inset 0 2px 5px rgba(0, 0, 0, .8); }
+.dk-p-iron .dk-bfr .dk-em { fill: #6b7280; color: #6b7280; filter: drop-shadow(0 0 5px var(--dk-k)) drop-shadow(0 1px 0 rgba(255, 255, 255, .2)); }
+.dk-sz-hand.dk-p-iron { padding: 7px; }
+.dk-back.dk-l-carved .dk-bw, .dk-back .dk-bw { color: inherit; }
+
+/* a pile of backs with its count, as it sits on a table */
+.dk-pile { position: relative; display: inline-block; width: var(--dk-w, 128px); aspect-ratio: 7 / 12; margin: 4px 10px 6px 4px; }
+.dk-pile > .dk-wrap { position: absolute; inset: 0; width: 100%; }
+.dk-pile > .dk-wrap:nth-child(1) { transform: translate(5px, 6px) rotate(3.5deg); }
+.dk-pile > .dk-wrap:nth-child(2) { transform: translate(-3px, 3px) rotate(-2.5deg); }
+.dk-pile-n { position: absolute; right: -8px; bottom: -8px; z-index: 3; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 11px; font-weight: 700; line-height: 1; box-shadow: var(--elev-resting); }
+
+/* ---- the leaf: beside the plate at the open size, in the deck's border ---------- */
+.dk-leaf { position: relative; width: 170px; align-self: stretch; margin: 12px 0; border: 1px solid var(--color-border); border-left: 0; border-radius: 0 12px 12px 0; background: var(--color-bg-secondary); box-shadow: var(--elev-resting); display: flex; flex-direction: column; color: var(--color-text-body); font-size: 12px; line-height: 1.4; }
+.dk-lfi { position: relative; flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 12px 10px; }
+.dk-dn { font-size: 13px; line-height: 1.2; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.dk-leaf .dk-kl { justify-content: flex-start; margin: 0; }
+.dk-foot { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--color-border); font-size: 11.5px; color: var(--color-text-muted); }
+.dk-leaf.dk-b-double { padding: 6px 6px 6px 0; }
+.dk-leaf.dk-b-double .dk-lfi { border: 1px solid var(--dk-k); border-left: 0; border-radius: 0 8px 8px 0; outline: 1px solid var(--color-border); outline-offset: 2px; clip-path: inset(-4px -4px -4px 0); }
+.dk-leaf.dk-b-line { padding: 6px 6px 6px 0; }
+.dk-leaf.dk-b-line .dk-lfi { border: 1px solid var(--dk-k); border-left: 0; border-radius: 0 8px 8px 0; }
+.dk-leaf.dk-mat { background: var(--dk-mat); border-color: #000; border-left: 0; padding: 9px 9px 9px 0; border-radius: 0 7px 7px 0; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .7), 0 6px 14px rgba(0, 0, 0, .3); }
+.dk-leaf.dk-mat .dk-lfi { background: var(--dk-field); border: 1px solid #000; border-left: 0; border-radius: 0 3px 3px 0; box-shadow: 0 0 0 1px var(--dk-lip), inset 0 2px 5px rgba(0, 0, 0, .8); color: var(--dk-ink2); }
+.dk-leaf.dk-mat .dk-dn { color: var(--dk-ink); }
+.dk-leaf.dk-mat .dk-words { color: var(--dk-ink2); }
+.dk-leaf.dk-mat .dk-kl, .dk-leaf.dk-mat .dk-foot { color: var(--dk-ink2); }
+.dk-leaf.dk-mat .dk-foot { border-top-color: rgba(255, 255, 255, .14); }
+.dk-leaf.dk-mat::after { display: none; }
+.dk-leaf.dk-b-none { box-shadow: var(--elev-resting); }
+.dk-leaf.dk-rare { border-color: var(--dk-gold-edge); box-shadow: 0 0 0 2px var(--dk-gold), 0 6px 18px var(--dk-gold-glow); }
+.dk-leaf.dk-f-glow:not(.dk-mat) { box-shadow: 0 0 14px color-mix(in srgb, var(--dk-k) 40%, transparent), var(--elev-resting); }
+.dk-leaf.dk-f-sheen::before, .dk-leaf.dk-f-foil::before { border-radius: 0 12px 12px 0; }
+.dk-leaf.dk-f-sheen::after, .dk-leaf.dk-f-foil::after { display: none; }
+@media (max-width: 440px) { .dk-wrap.dk-open { max-width: 100%; } .dk-leaf { width: min(170px, 100%); margin-left: 0; border-left: 1px solid var(--color-border); border-radius: 12px; } .dk-leaf.dk-b-double, .dk-leaf.dk-b-line { padding: 6px; } .dk-leaf.dk-mat { padding: 9px; } .dk-leaf.dk-mat .dk-lfi, .dk-leaf.dk-b-double .dk-lfi, .dk-leaf.dk-b-line .dk-lfi { border-left: 1px solid currentColor; border-radius: 6px; } }
+
+/* ---- turning: structure only; deck_cards.js owns every keyframe -------------- */
+/* While a card turns in three dimensions the back and the face are two sides of
+   one slab. At rest neither rule applies and the face is a plain card. */
+.dk-wrap.dk-turning { overflow: visible; }
+.dk-turner.dk-3d { transform-style: preserve-3d; }
+.dk-turner.dk-3d > .dk-card, .dk-turner.dk-3d > .dk-faceslot { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.dk-turner.dk-3d > .dk-faceslot { transform: rotateY(180deg); }
+.dk-turner.dk-flat > .dk-faceslot { z-index: 1; }
+.dk-turner.dk-flat > .dk-back { z-index: 2; }
+.dk-turner.dk-burning > .dk-back { -webkit-mask-image: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 1%), #000 calc(var(--dk-r) + 3%)); mask-image: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 1%), #000 calc(var(--dk-r) + 3%)); }
+/* starts below zero so the mask shows no dot at rest */
+@property --dk-r { syntax: '<percentage>'; inherits: true; initial-value: -4%; }
+
+/* effect layers the script adds for one move and takes away at its end */
+.dk-fx { position: absolute; pointer-events: none; }
+.dk-fx-shadow { left: 8%; right: 8%; bottom: -6px; height: 10px; border-radius: 50%; background: rgba(0, 0, 0, .28); filter: blur(5px); opacity: .5; }
+.dk-fx-bar { left: -4px; right: -4px; top: 0; height: 3px; border-radius: 2px; background: var(--dk-bar); box-shadow: 0 0 6px 2px var(--dk-k, var(--dk-bar)), 0 0 18px 6px color-mix(in srgb, var(--dk-k, #fff) 55%, transparent); opacity: 0; z-index: 4; }
+.dk-fx-ring { inset: -3px; border-radius: 14px; border: 2px solid var(--color-text-primary); opacity: 0; z-index: 4; }
+.dk-fx-ember { inset: 0; z-index: 3; border-radius: inherit; opacity: 0; background: radial-gradient(circle at 50% 46%, transparent calc(var(--dk-r) - 7%), rgba(253, 230, 138, .95) calc(var(--dk-r) - 1%), #f97316 calc(var(--dk-r) + 2%), rgba(124, 45, 18, .75) calc(var(--dk-r) + 6%), transparent calc(var(--dk-r) + 11%)); }
+.dk-fx-door { inset: 0; z-index: 3; opacity: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.dk-fx-door > .dk-card { position: absolute; inset: 0; width: 100%; }
+.dk-fx-door.dk-l { clip-path: inset(0 50% 0 0); transform-origin: 0 50%; }
+.dk-fx-door.dk-r { clip-path: inset(0 0 0 50%); transform-origin: 100% 50%; }
+.dk-fx-wax { z-index: 5; width: 31%; aspect-ratio: 1; left: 34.5%; top: 37%; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .45)); }
+.dk-fx-wax i { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fb7185 0, #be123c 36%, #881337 70%, #4c0519 100%); box-shadow: inset 0 0 0 3px rgba(76, 5, 25, .5), inset 0 0 0 6px rgba(251, 113, 133, .22); }
+.dk-fx-wax i.dk-l { clip-path: polygon(0 0, 56% 0, 46% 28%, 60% 52%, 45% 76%, 53% 100%, 0 100%); }
+.dk-fx-wax i.dk-r { clip-path: polygon(56% 0, 100% 0, 100% 100%, 53% 100%, 45% 76%, 60% 52%, 46% 28%); }
+.dk-fx-bolt { z-index: 5; left: 30%; top: -26%; width: 40%; height: 120%; opacity: 0; overflow: visible; filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 7px #a5b4fc); }
+.dk-fx-bolt path { fill: #fff; }
+.dk-fx-flash { inset: -6px; border-radius: 16px; z-index: 4; opacity: 0; background: radial-gradient(circle at 50% 46%, #fff 0, #eef2ff 55%, rgba(224, 231, 255, 0) 100%); }
+.dk-fx-heat { inset: -5px; border-radius: 15px; z-index: 0; opacity: 0; box-shadow: 0 0 14px 5px rgba(249, 115, 22, .75), 0 0 30px 10px rgba(220, 38, 38, .45); }
+.dk-fx-glow { inset: -5px; border-radius: 16px; opacity: 0; box-shadow: 0 0 0 2px var(--dk-k), 0 0 16px 4px color-mix(in srgb, var(--dk-k) 60%, transparent); }
+.dk-fx-mote { width: 4px; height: 4px; border-radius: 50%; background: var(--color-text-muted); opacity: 0; }
+.dk-gone-mask { -webkit-mask-image: linear-gradient(to bottom, transparent var(--dk-g), #000 calc(var(--dk-g) + 20%)); mask-image: linear-gradient(to bottom, transparent var(--dk-g), #000 calc(var(--dk-g) + 20%)); }
+@property --dk-g { syntax: '<percentage>'; inherits: true; initial-value: -20%; }
+.dk-spent { filter: saturate(.35) brightness(.9); }
+
+/* ---- the proof page (a Director's sheet of every look; goes with the Look tab) ---- */
+.dk-pf { max-width: 1100px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 28px; }
+.dk-pf h2 { margin: 0 0 4px; font-size: 18px; color: var(--color-text-primary); }
+.dk-pf p { margin: 0 0 10px; color: var(--color-text-muted); font-size: 14px; max-width: 70ch; }
+.dk-pf-sec { padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-secondary); min-width: 0; }
+.dk-pf-row { display: flex; flex-wrap: wrap; gap: 18px 22px; align-items: flex-start; }
+.dk-pf-one { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; min-width: 0; }
+.dk-pf-lbl { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--color-text-muted); text-align: center; overflow-wrap: anywhere; }
+.dk-pf-play { min-height: 40px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.dk-pf-play:hover { border-color: var(--color-accent); }
+.dk-pf-play:focus-visible, .dk-turn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dk-pf-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.dk-pf-field { position: relative; width: 210px; height: 170px; border: 1px dashed var(--color-border); border-radius: 12px; }
+.dk-pf-field .dk-wrap { position: absolute; left: 16px; top: 16px; }
+/* a face that has not arrived yet: plain material with the card's shape */
+.dk-plain { position: relative; display: block; width: 100%; aspect-ratio: 7 / 12; border: 1px solid var(--color-border); border-radius: var(--shape-r-panel, 12px); background: var(--color-bg-secondary); }
+.dk-plain.dk-s-small, .dk-plain.dk-s-standard { aspect-ratio: 5 / 7; }
+/* a late picture eases in; Calm and Off set the page flag and the picture just appears */
+html:not([data-motion]) .dk-art > .dk-pic { transition: opacity var(--dur-standard) var(--ease-out); }
+.dk-wrap:focus { outline: none; }
+.dk-wrap:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 12px; }
+.dk-pf-h1 { margin: 0 0 6px; font-size: 22px; font-weight: 700; color: var(--color-text-primary); }
+.dk-pf-field .dk-wrap.dk-sz-hand { left: 58px; }
+.dk-pf-pile .dk-wrap:nth-child(2) { margin: 4px 0 0 5px; }
+.dk-pf-pile .dk-wrap:nth-child(3) { margin: 8px 0 0 10px; }

@@ -15,3 +15,10 @@ const AddonSlug = "decks"
 //
 //go:embed migrations/*.sql
 var MigrationsFS embed.FS
+
+// StaticAssetsFS holds the card motion script, served at
+// /static/plugins/decks/ and loaded on sight the first time a page shows a
+// card.
+//
+//go:embed static
+var StaticAssetsFS embed.FS
