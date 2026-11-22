@@ -347,3 +347,19 @@ svg.tb-ico { inline-size: 18px; block-size: 18px; }
 .pv-back:hover { text-decoration-thickness: 2px; }
 .pv-back:active { opacity: 0.7; }
 .pv-back:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 2px; }
+
+/* The guest preview's strip: what is shown, a switch for which visitor, and
+   the way back, wrapping onto lines of their own on a phone. */
+.gpv-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px; text-align: center; }
+.gpv-seg { display: inline-flex; border: 1px solid currentColor; border-radius: 8px; overflow: hidden; }
+.gpv-opt {
+  position: relative; padding: 2px 10px; background: none; border: 0; color: inherit;
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) ease-out;
+}
+.gpv-opt + .gpv-opt { border-left: 1px solid currentColor; }
+.gpv-opt[aria-pressed="true"] { background: rgb(245 158 11 / 0.35); }
+.gpv-opt:hover { background: rgb(245 158 11 / 0.2); }
+.gpv-opt[aria-pressed="true"]:hover { background: rgb(245 158 11 / 0.35); }
+.gpv-opt:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+.gpv-opt::after { content: ""; position: absolute; inset: -12px 0; }

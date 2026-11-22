@@ -160,6 +160,10 @@ test('a new-hero sentence kept on this device becomes the starting picks, once',
   assert.match(await rail(pg, 'kit').innerText(), /Battlemind/);
   assert.equal(await pg.locator('.hc-app').getAttribute('data-step'), '3', 'it opens on the first step without a pick');
   assert.equal(await pg.evaluate(() => localStorage.getItem('chronicle:hero-builder:c1')), null, 'the sentence is used once');
+  await pg.reload();
+  await pg.waitForSelector('.hc-app');
+  assert.match(await rail(pg, 'class').innerText(), /Fury/, 'a reload before the next pick keeps it');
+  assert.match(await rail(pg, 'kit').innerText(), /Battlemind/);
 });
 
 test('unmounting lets go of the window, the document and the size watcher', { skip }, async (t) => {

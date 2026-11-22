@@ -6381,8 +6381,8 @@ func (a *App) RegisterRoutes() {
 			// below is built from the visitor's values. The preview is noted
 			// only to draw its own chrome, and the site-admin flag, which the
 			// session carries, is blanked so the shell is a visitor's too.
-			if cc.Preview == campaigns.PreviewGuest {
-				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewGuest)
+			if cc.InGuestPreview() {
+				ctx = layouts.SetPreviewAs(ctx, cc.Preview)
 				ctx = layouts.SetIsAdmin(ctx, false)
 			} else if viewingAsPlayer {
 				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewPlayer)
@@ -6390,6 +6390,7 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
+			ctx = layouts.SetCampaignPublic(ctx, cc.Campaign.IsPublic)
 
 			// Entity types, per-type counts and the enabled addons: what the
 			// sidebar is built from. Use the request context (not the

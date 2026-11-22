@@ -273,16 +273,29 @@ type CampaignContext struct {
 	// visibility or pick a role from them; every access decision reads
 	// MemberRole, IsMember and IsDmGranted, which a preview has already
 	// lowered.
-	Preview        string // "", PreviewPlayer or PreviewGuest
+	Preview        string // "", PreviewPlayer, PreviewGuest or PreviewGuestCode
 	PreviewerRole  Role   // The viewer's real role while Preview is set.
 	PreviewerCanDM bool   // Whether the viewer is really on the DM team.
 }
 
-// The two ways the DM team can look at the campaign as someone else.
+// The ways the DM team can look at the campaign as someone else: as a
+// player, as a visitor with no code, and as a visitor who came in on a guest
+// code (a look-around pass).
 const (
-	PreviewPlayer = "player"
-	PreviewGuest  = "guest"
+	PreviewPlayer    = "player"
+	PreviewGuest     = "guest"
+	PreviewGuestCode = "guestcode"
 )
+
+// previewPassDays is how long the pass in a guest-code preview runs. A real
+// pass lasts at most a week, so the preview shows the longest one.
+const previewPassDays = 7
+
+// InGuestPreview reports whether this context is either guest preview.
+// Chrome only (see Preview).
+func (cc *CampaignContext) InGuestPreview() bool {
+	return cc.Preview == PreviewGuest || cc.Preview == PreviewGuestCode
+}
 
 // DMTeamChrome reports whether the viewer is really on the DM team, even
 // while a preview has lowered their role. Chrome only (see Preview).
@@ -325,6 +338,19 @@ func (cc *CampaignContext) GuestPreviewContext() *CampaignContext {
 		PreviewerRole:  cc.MemberRole,
 		PreviewerCanDM: cc.CanAuthorDmOnly(),
 	}
+}
+
+// GuestCodePreviewContext is GuestPreviewContext for a visitor who came in on
+// a guest code: the same visitor, holding a look-around pass that ends a week
+// from now. A pass gives exactly what a public visit gives (RoleNone) and
+// opens a private campaign for reading, so this lowers a DM-team member as
+// far as GuestPreviewContext does; ADR-076.
+func (cc *CampaignContext) GuestCodePreviewContext(now time.Time) *CampaignContext {
+	out := cc.GuestPreviewContext()
+	out.Preview = PreviewGuestCode
+	until := now.Add(previewPassDays * 24 * time.Hour)
+	out.VisitUntil = &until
+	return out
 }
 
 // EffectiveRole returns the permission level to use for route-level authorization.
