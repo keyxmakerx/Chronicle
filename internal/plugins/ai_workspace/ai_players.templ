@@ -33,7 +33,7 @@ templ aiPlayersPanel(p PlayersView) {
 				</form>
 			}
 			<div id="ai-players-what" class="aic-row-drawer aic-what" x-show="what" x-cloak>
-				@playerCanDo(false)
+				@playerCanDo(false, false)
 				<p class="aic-hint">Off stops every player's key from its next call. Their keys are kept for when you turn it back on.</p>
 			</div>
 		</div>
@@ -52,15 +52,21 @@ templ aiPlayersPanel(p PlayersView) {
 // playerCanDo is what a player's AI may do: the same list on the owner's
 // Settings and, said to the player (own), in their side sheet. The last line
 // is a limit, so it says so in words: its icon alone would read as a third
-// ability with icons off or to a screen reader.
-templ playerCanDo(own bool) {
+// ability with icons off or to a screen reader. A co-DM's or Scribe's key is
+// a player's key (aboveP), so their own line says players, not "you", which
+// for them would promise GM-only pages their AI can't read.
+templ playerCanDo(own, aboveP bool) {
 	<ul class="aic-cando">
-		if own {
+		if own && aboveP {
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what players can read in this campaign, and nothing more</span></li>
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change your own character's sheet and hero builder choices</span></li>
+			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span><b>Never:</b> change anything without your yes, or touch anyone else's things</span></li>
+		} else if own {
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what you can read in this campaign, and nothing more</span></li>
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change your own character's sheet and hero builder choices</span></li>
 			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span><b>Never:</b> change anything without your yes, or touch anyone else's things</span></li>
 		} else {
-			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what the player can read in this campaign, and nothing more</span></li>
+			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Read what the player can read in this campaign, and nothing more. A co-DM's or Scribe's AI reads only what players can.</span></li>
 			<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Ask to change their own character's sheet and hero builder choices</span></li>
 			<li data-never><i class="fa-solid fa-xmark" aria-hidden="true"></i><span><b>Never:</b> change anything without the player's yes, or touch anyone else's things</span></li>
 		}

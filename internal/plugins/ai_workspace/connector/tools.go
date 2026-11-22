@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
@@ -43,8 +44,9 @@ type tool struct {
 	Args []arg
 	// Asks marks the tools only an "Ask for changes" connection lists.
 	Asks bool
-	// Owner marks the tools a player's key never lists: the Director's
-	// preparation and queues, which a player's view has no business in.
+	// Owner marks the tools only a key reading as the owner lists: the
+	// Director's preparation and queues, which a player's view has no
+	// business in. A player's key and an owner's Safe key never list them.
 	Owner bool
 	// PlayerDesc replaces Desc for a player's key, where the owner's
 	// wording would be wrong.
@@ -64,7 +66,8 @@ const (
 // lookup, so answers follow the lookup's privacy and size caps exactly.
 var tools = []tool{
 	{Name: "campaign_outline", Title: "Campaign outline", Did: "Read the outline of your world",
-		Desc: "Start here. The campaign's name and every page it can see, grouped by kind (characters, places...). Use read_page for one page's text."},
+		Desc:       "Start here. It opens with what this connection reads as (the owner, GM-only pages and secrets included, or only what the campaign's players see) and whether it may ask for changes. Then the campaign's name and every page it can see, grouped by kind (characters, places...), with pages players never see marked (GM only). Use read_page for one page's text.",
+		PlayerDesc: "Start here. It opens with what this connection reads as (you, as a player: nothing GM-only) and whether it may ask for changes. Then every page you can see, grouped by kind (characters, places...). Use read_page for one page's text."},
 	{Name: "list_pages", Title: "List pages", Did: "Listed pages", What: "pages",
 		Desc: "Page names with their tags, optionally only one kind of page or one tag.",
 		Args: []arg{{Key: "type", Desc: "A kind of page, for example \"Character\""}, {Key: "tag", Desc: "A tag's name"}}},
@@ -153,16 +156,19 @@ var tools = []tool{
 }
 
 // toolsFor is the tools a connection may use, in order: the built-in ones,
-// with the lookups features plug in (l.Plugged) before block_format. A
-// player's key never lists the owner's tools, and one it isn't listed
-// can't be called.
+// with the lookups features plug in (l.Plugged) before block_format. Only a
+// key that reads as the owner lists the owner's tools, and one that isn't
+// listed can't be called. Most of those lookups also refuse a player's view
+// on their own; hiding them as well means a Safe key is never offered GM
+// material, so the guarantee doesn't rest on every lookup's own check.
 func toolsFor(c *Connection, l *records.Lookups) []*tool {
 	out := make([]*tool, 0, len(tools))
+	owner := readsAsOwner(c)
 	add := func(t *tool) {
 		if t.Asks && (c == nil || !c.CanAsk) {
 			return
 		}
-		if t.Owner && (c == nil || c.ForPlayer) {
+		if t.Owner && !owner {
 			return
 		}
 		out = append(out, t)
@@ -333,11 +339,15 @@ func (t *tool) summary(args map[string]string) string {
 	return t.Did + ": " + strings.Join(parts, ", ")
 }
 
-// answer runs the tool as the connection's Actor. It returns the text for
-// the AI, the note for the log, and whether it was answered.
-func (t *tool) answer(ctx context.Context, l *records.Lookups, campaignID, campaignName string, a records.Actor, args map[string]string) (text, note string, ok bool) {
+// answer runs the tool as the session's Actor. It returns the text for the
+// AI, the note for the log, and whether it was answered.
+func (t *tool) answer(ctx context.Context, l *records.Lookups, sess Session, args map[string]string) (text, note string, ok bool) {
+	campaignID, a := "", sess.Actor
+	if sess.Conn != nil {
+		campaignID = sess.Conn.CampaignID
+	}
 	if t.What == "" {
-		return outline(ctx, l, campaignID, campaignName, a)
+		return outline(ctx, l, sess.Conn, campaignID, sess.CampaignName, a)
 	}
 	if l == nil {
 		l = &records.Lookups{}
@@ -361,11 +371,12 @@ func (t *tool) answer(ctx context.Context, l *records.Lookups, campaignID, campa
 	return strings.TrimSpace(ans[0].Text), ans[0].Chip, true
 }
 
-// outline is the campaign's name and its page index, as the copy-and-paste
-// prompt's "What already exists" reads it.
-func outline(ctx context.Context, l *records.Lookups, campaignID, campaignName string, a records.Actor) (string, string, bool) {
+// outline is the campaign's name, what the connection reads as, and its
+// page index, as the copy-and-paste prompt's "What already exists" reads it.
+func outline(ctx context.Context, l *records.Lookups, c *Connection, campaignID, campaignName string, a records.Actor) (string, string, bool) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", oneLine(campaignName, 200))
+	b.WriteString(accessSection(c))
 	index := ""
 	if l != nil {
 		index = l.PageIndex(ctx, campaignID, a)
@@ -382,4 +393,38 @@ func outline(ctx context.Context, l *records.Lookups, campaignID, campaignName s
 			". A `menu-order` change can reorder them.\n")
 	}
 	return b.String(), "categories and names", true
+}
+
+// readsAsOwner reports whether the connection reads as the campaign's owner:
+// an owner's key set to Permitted. It is actorFor's rule, so what a key is
+// told and offered never drifts from what it reads.
+func readsAsOwner(c *Connection) bool {
+	return c != nil && !c.ForPlayer && c.Privacy != aiexport.PrivacyModeSafe
+}
+
+// accessSection is the outline's "This connection": who the key reads as and
+// whether it may ask for changes. It is in a tool answer because many AI apps
+// drop or summarise the initialize instructions, and the AI has to know
+// whether what it reads may be repeated to players.
+func accessSection(c *Connection) string {
+	asks := "Changes: it only reads."
+	if c != nil && c.CanAsk {
+		asks = "Changes: it may ask for changes, which wait for the owner's yes in Chronicle."
+	}
+	var reads, who string
+	switch {
+	case c != nil && c.ForPlayer:
+		reads = "you, as a player in this campaign: what players see, plus the pages you claimed and those shared with you. Nothing GM-only."
+		if c.CanAsk {
+			asks = "Changes: it may ask for changes to your own character's sheet, which wait for your yes under the AI button in Chronicle."
+		}
+		who = "You choose whether it may ask for changes in your AI panel in Chronicle; the campaign's owner decides whether players may use AI at all."
+	case readsAsOwner(c):
+		reads = "the campaign's owner: everything, GM-only pages and secret text included. Pages marked (GM only) and text between {gm{ and }gm} are secrets; never repeat them to players."
+		who = "The owner sets both on the Your AI page in Chronicle."
+	default:
+		reads = "the campaign's players: only what players see. GM-only pages, secret text, notes and the Director's preparation are left out."
+		who = "The owner sets both on the Your AI page in Chronicle."
+	}
+	return "## This connection\n\n- Reads as " + reads + "\n- " + asks + "\n- " + who + "\n\n"
 }

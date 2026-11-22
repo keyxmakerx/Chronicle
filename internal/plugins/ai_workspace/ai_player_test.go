@@ -258,7 +258,7 @@ func TestPlayersPanel_SwitchAndPause(t *testing.T) {
 func TestPlayerCanDoNeverLineSaysSoInText(t *testing.T) {
 	for _, own := range []bool{true, false} {
 		var sb strings.Builder
-		if err := playerCanDo(own).Render(context.Background(), &sb); err != nil {
+		if err := playerCanDo(own, false).Render(context.Background(), &sb); err != nil {
 			t.Fatal(err)
 		}
 		out := sb.String()
@@ -272,6 +272,33 @@ func TestPlayerCanDoNeverLineSaysSoInText(t *testing.T) {
 		if strings.Contains(out[:i], "Never") {
 			t.Errorf("own=%v: a can-do line says never", own)
 		}
+	}
+}
+
+// A co-DM's or Scribe's key reads as a player, so their own panel says
+// players, never "what you can read"; a player's panel keeps "you", and the
+// owner's list says co-DMs and Scribes get the same.
+func TestPlayerCanDoSaysWhatTheKeyReads(t *testing.T) {
+	cases := []struct {
+		name        string
+		own, aboveP bool
+		want, never string
+	}{
+		{"a player", true, false, "Read what you can read", "players can read"},
+		{"a co-DM or Scribe", true, true, "Read what players can read", "what you can read"},
+		{"the owner's list", false, false, "co-DM's or Scribe's AI reads only what players can", "what you can read"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var sb strings.Builder
+			if err := playerCanDo(tc.own, tc.aboveP).Render(context.Background(), &sb); err != nil {
+				t.Fatal(err)
+			}
+			out := sb.String()
+			if !strings.Contains(out, tc.want) || strings.Contains(out, tc.never) {
+				t.Errorf("got %s; want %q and not %q", out, tc.want, tc.never)
+			}
+		})
 	}
 }
 

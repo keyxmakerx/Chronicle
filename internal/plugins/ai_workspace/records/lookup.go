@@ -701,6 +701,8 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 	}
 	groups, order := map[string][]string{}, []string{}
 	parents, folders := run.parentNames(), run.folderNames()
+	director := run.director()
+	kindMark, marked := map[string]string{}, false
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if typeName != "" && !sameName(p.TypeName, typeName) && !sameName(p.TypeNamePlural, typeName) && !sameName(p.TypeSlug, typeName) {
@@ -713,6 +715,14 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 			order = append(order, label)
 		}
 		line := withParent(p, parents, folders)
+		if director {
+			if m := pageSightMark(&p); m != "" {
+				line, marked = line+m, true
+			}
+			if m := kindSightMark(&p); m != "" {
+				kindMark[label], marked = m, true
+			}
+		}
 		if names := pageTagNames(byPage[p.ID]); len(names) > 0 {
 			line += " [" + strings.Join(names, ", ") + "]"
 		}
@@ -742,9 +752,12 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Pages (%d)\n\n", n)
+	if marked {
+		b.WriteString(sightLegend + "\n")
+	}
 	lines := 0
 	for _, label := range order {
-		fmt.Fprintf(&b, "### %s (%d)\n\n", label, len(groups[label]))
+		fmt.Fprintf(&b, "### %s (%d)%s\n\n", label, len(groups[label]), kindMark[label])
 		for _, name := range groups[label] {
 			if lines >= maxAnswerLines {
 				break
@@ -790,12 +803,22 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	worn := run.layoutNames()
 	byLayout, layoutOrder := map[string]map[string][]string{}, map[string][]string{}
 	parents, folders := run.parentNames(), run.folderNames()
+	director := run.director()
+	kindMark, marked := map[string]string{}, false
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
 		name := withParent(p, parents, folders)
+		if director {
+			if m := pageSightMark(&p); m != "" {
+				name, marked = name+m, true
+			}
+			if m := kindSightMark(&p); m != "" {
+				kindMark[label], marked = m, true
+			}
+		}
 		groups[label] = append(groups[label], name)
 		if lay, ok := worn[p.ID]; ok {
 			if byLayout[label] == nil {
@@ -819,10 +842,14 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 		return out
 	}
 	var b strings.Builder
+	if marked {
+		// First, so the cap on a long index never cuts the explanation off.
+		b.WriteString(sightLegend + "\n")
+	}
 	for _, label := range order {
 		names := groups[label]
 		if lays := layoutOrder[label]; len(lays) > 0 && len(byLayout[label]) > 0 {
-			fmt.Fprintf(&b, "- **%s** (%d), by layout:", label, len(names))
+			fmt.Fprintf(&b, "- **%s** (%d)%s, by layout:", label, len(names), kindMark[label])
 			for _, lay := range lays {
 				in := byLayout[label][lay]
 				fmt.Fprintf(&b, " %s layout (%d): %s;", lay, len(in), list(in))
@@ -830,7 +857,7 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 			b.WriteString("\n")
 			continue
 		}
-		fmt.Fprintf(&b, "- **%s** (%d): %s\n", label, len(names), list(names))
+		fmt.Fprintf(&b, "- **%s** (%d)%s: %s\n", label, len(names), kindMark[label], list(names))
 	}
 	return capText(b.String(), 8*1024)
 }
@@ -926,6 +953,14 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	md = strings.Replace(md, "### ", "## Page: ", 1)
 	md = strings.Replace(md, " {#"+anchorOf(md)+"}", "", 1)
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
+	if run.director() {
+		// Read before the extras below, whose blocks may quote text that
+		// looks like a marker; the body's own markers are the only real ones.
+		if note := pageSecretsNote(e, types, md); note != "" {
+			head, rest, _ := strings.Cut(md, "\n\n")
+			md = head + "\n\n" + note + "\n\n" + rest
+		}
+	}
 	md += pageImageText(e) + run.pageAliasText(e)
 	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
 	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
