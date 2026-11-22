@@ -7206,6 +7206,10 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("designs plugin degraded — routes not registered")
 	}
+	var aiTimelines timeline.TimelineService
+	if a.PluginHealth.IsHealthy(timeline.PluginSlug) {
+		aiTimelines = timelineSvc
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -7249,6 +7253,7 @@ func (a *App) RegisterRoutes() {
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 		Designs:         aiDesigns,
 		Layers:          layersSvc,
+		Timelines:       aiTimelines,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

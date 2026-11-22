@@ -40,6 +40,11 @@ type PagesAPI interface {
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
 }
 
+// AliasesAPI reads a page's other names (entities.EntityService).
+type AliasesAPI interface {
+	GetAliases(ctx context.Context, entityID string) ([]entities.EntityAlias, error)
+}
+
 // PageLayoutsAPI is a campaign's named page layouts and the layout each page
 // chose (entities.PageLayoutService).
 type PageLayoutsAPI interface {
@@ -131,6 +136,9 @@ type Lookups struct {
 	// Folders names the sidebar folders so pages show which one holds them;
 	// nil leaves folders out.
 	Folders aiexport.FolderNamer
+	// Aliases adds a page's other names to the `page` answer; nil leaves
+	// them out.
+	Aliases AliasesAPI
 	// Quests adds a page's quest notice and notice boards to the `page`
 	// answer for a Director; nil leaves them out.
 	Quests QuestsAPI
@@ -911,6 +919,7 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	md = strings.Replace(md, "### ", "## Page: ", 1)
 	md = strings.Replace(md, " {#"+anchorOf(md)+"}", "", 1)
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
+	md += pageImageText(e) + run.pageAliasText(e)
 	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
 	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
 	md += run.pageQuestText(e)
@@ -918,6 +927,35 @@ func (run *lookupRun) pageOf(e *entities.Entity) (LookupAnswer, error) {
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
+}
+
+// pageImageText says whether the page has a picture and a cover, never where
+// the files are: an AI can't open them, and a path is not its to know.
+func pageImageText(e *entities.Entity) string {
+	yn := func(p *string) string {
+		if p != nil && strings.TrimSpace(*p) != "" {
+			return "yes"
+		}
+		return "no"
+	}
+	return "\n\nPicture: " + yn(e.ImagePath) + "\nCover: " + yn(e.CoverImagePath)
+}
+
+// pageAliasText lists the page's other names. It runs only for a page the
+// Actor can already see, so an alias never outlives the page's own sight rule.
+func (run *lookupRun) pageAliasText(e *entities.Entity) string {
+	if run.l.Aliases == nil {
+		return ""
+	}
+	list, err := run.l.Aliases.GetAliases(run.ctx, e.ID)
+	if err != nil || len(list) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(list))
+	for _, a := range list {
+		names = append(names, oneLine(a.Alias, 80))
+	}
+	return "\nOther names: " + strings.Join(names, ", ")
 }
 
 // pageQuestText is the page's quest notice and the notice boards hanging on
