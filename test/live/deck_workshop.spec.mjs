@@ -329,6 +329,13 @@ test('sheen and foil move only while the pointer rests on the Look tab, and not 
   void api;
 });
 
+// Pressing a tab that is already drawn loads it again and swaps the panel when
+// it arrives, so anything read before then may be a node about to be replaced.
+const openLookAgain = async (page) => {
+  await page.getByRole('tab', { name: 'Look' }).click();
+  await page.locator('#dkw-panel:not([aria-busy])').waitFor();
+};
+
 const pickBorder = async (page, nth = 0) => {
   const opt = page.locator('[data-row=border] [role=radio]:not([aria-checked=true]):not([aria-disabled=true]):not([hidden])').nth(nth);
   const v = await opt.getAttribute('data-value');
@@ -390,7 +397,7 @@ test('kinds are picked with dots and glyph buttons, and a deck with none says so
   await row.locator('[data-kind-sign] [aria-label=diamond]').click();
   await page.locator('.dkw-kindrow [data-kind-sign] [aria-label=diamond][aria-checked=true]').waitFor();
   await page.reload();
-  await page.getByRole('tab', { name: 'Look' }).click();
+  await openLookAgain(page);
   await page.locator('.dkw-kindbtns').waitFor();
   assert.equal(await page.locator('.dkw-kindbtns .dkw-chip').count(), 1);
   assert.deepEqual(errors, []);
@@ -465,7 +472,7 @@ test('on a phone the table row is compact, the card stays at the top of Look, in
   await page.locator('.dkw-kindrow').waitFor();
   await page.locator('[data-dkw-kindlist] [data-kind-name]').first().blur();
   await page.reload();
-  await page.getByRole('tab', { name: 'Look' }).click();
+  await openLookAgain(page);
   await page.locator('.dkw-kindbtns').waitFor();
   assert.ok(await page.locator('.dkw-kindbtns .dkw-chip').first().isVisible(), 'the kind buttons are hidden on a phone');
   // The stage sticks to the top while the rows scroll, and is under 45% of the screen.
