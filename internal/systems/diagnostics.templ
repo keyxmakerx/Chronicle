@@ -33,10 +33,10 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 				<i class="fa-solid fa-circle-info text-3xl text-fg-muted mb-3 block"></i>
 				<p class="text-fg-secondary text-sm">No game system is enabled for this campaign.</p>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) }
 					class="inline-block mt-3 text-sm text-accent hover:underline"
 				>
-					Enable a system in Campaign Settings
+					Pick a system on Campaign settings › Game
 				</a>
 			</div>
 		} else {

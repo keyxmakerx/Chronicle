@@ -187,7 +187,7 @@ func TestHomeBlocksOnAPageShowEachViewerOnlyTheirOwn(t *testing.T) {
 	)
 	// directorMarkers are what only the Director's side may ever show.
 	directorMarkers := []string{
-		"data-dm-only", "/activity", "dashboard-sync-block", "/settings", "/members", "/entity-types",
+		"data-dm-only", "/activity", "dashboard-sync-block", "/settings", "/dashboard", "/members", "/entity-types",
 		"/customize", "Tell your players", "Pick a category", "Empty text block",
 	}
 	tests := []struct {
@@ -199,7 +199,7 @@ func TestHomeBlocksOnAPageShowEachViewerOnlyTheirOwn(t *testing.T) {
 		// every viewer sees this.
 		allSee string
 	}{
-		{block: "welcome_banner", who: everyone, allSee: "Therin", ownerSees: "/settings"},
+		{block: "welcome_banner", who: everyone, allSee: "Therin", ownerSees: "/dashboard"},
 		{block: "quick_actions", who: everyone, allSee: "All pages", ownerSees: "/entity-types"},
 		{block: "category_grid", who: everyone, allSee: "Characters", ownerSees: "Secret Vaults"},
 		{block: "recent_pages", who: everyone, allSee: "Harbour Gate"},

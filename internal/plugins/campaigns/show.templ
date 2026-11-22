@@ -157,7 +157,7 @@ templ homePreviewChrome(cc *CampaignContext, state string, guestPrivate bool, cs
 				<p>This campaign is private, so only guests with a guest code can open it.</p>
 				<div class="cb-pv-acts">
 					@homeGuestCodeLink(cc, csrfToken)
-					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/dashboard#line-public") } class="text-accent hover:underline">Who can read it</a>
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/settings#line-public") } class="text-accent hover:underline">Who can read it</a>
 					if cc.OwnerChrome() {
 						@homeArrangeLink(cc, PreviewGuest, csrfToken)
 					}

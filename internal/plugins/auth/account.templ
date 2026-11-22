@@ -497,7 +497,7 @@ templ deleteAccountCard(owned []OwnedCampaignRef, needsCode bool) {
 								if o.MemberCount > 1 {
 									<a class="btn-secondary text-sm" href={ templ.SafeURL("/campaigns/" + o.ID + "/transfer") }>Hand over…</a>
 								}
-								<a class="btn-secondary text-sm" href={ templ.SafeURL("/campaigns/" + o.ID + "/settings") }>Delete…</a>
+								<a class="btn-secondary text-sm" href={ templ.SafeURL("/campaigns/" + o.ID + "/data#danger") }>Delete…</a>
 							</li>
 						}
 					</ul>

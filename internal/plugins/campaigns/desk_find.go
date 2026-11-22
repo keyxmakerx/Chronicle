@@ -28,13 +28,13 @@ var deskFindWords = map[string]string{
 	"manage:trash":          "deleted restore bring back recover safety net",
 }
 
-// deskFindGroups is the page's group each tool's row sits in, so a result
-// says where to look on the page.
+// deskFindGroups is the tab each tool sits under, so a result says where to
+// look.
 var deskFindGroups = map[string]string{
 	"manage:members":        "People",
 	"manage:player-changes": "People",
 	"manage:media":          "Data",
-	"manage:customize":      "Customize",
+	"manage:customize":      "Campaign",
 	"manage:extensions":     "Game",
 	"manage:roll-tables":    "Game",
 	"manage:foundry":        "Connections",
@@ -62,55 +62,63 @@ type deskFindInput struct {
 	SettingsTabs []SettingsTab
 }
 
-// deskFindRowTabs are the Details and data tabs the page has a row for, which
-// the index would otherwise offer twice.
-var deskFindRowTabs = map[string]bool{settingsTabAPIKeys: true, settingsTabData: true, settingsTabActivity: true, settingsTabImport: true}
+// deskFindRowTabs are the Data parts the index already lists by name, which
+// it would otherwise offer twice.
+var deskFindRowTabs = map[string]bool{settingsTabImport: true}
 
-// buildDeskFind lists what Find can open: every tool the campaign has, the
-// settings the page itself holds, the Customizer's own settings and each
-// Details and data tab. A tool whose add-on is off is not a tool here, so
+// buildDeskFind lists what Find can open: every tab and tool the campaign
+// has, the settings the tabs hold, the Customizer's own settings and each
+// plugin's part of Data. A tool whose add-on is off is not a tool here, so
 // neither it nor anything inside it is offered.
 func buildDeskFind(in deskFindInput) []customizeFindEntry {
-	page := in.Base + "/dashboard"
-	// This page and Details and data lead the list, and list "settings", so
-	// typing it finds this place before the Customizer's "<Category> settings".
+	camp := in.Base + "/settings"
+	data := in.Base + "/data"
+	// The board and the tabs lead the list, and list "settings", so typing it
+	// finds this place before the Customizer's "<Category> settings".
+	// Connections names Foundry only while Foundry sync is on.
+	connWords := "settings ai keys api integrations"
+	if in.Foundry {
+		connWords = "settings foundry ai keys api integrations"
+	}
 	out := []customizeFindEntry{
-		{Label: "Campaign settings", Path: deskFindRoot, Href: page, Icon: "fa-sliders", Words: "settings rows overview"},
-		{Label: "Details and data", Path: deskFindRoot, Href: in.Base + "/settings", Icon: "fa-gear", Words: "settings details description keys export import activity"},
+		{Label: "Campaign settings", Path: deskFindRoot, Href: in.Base + "/dashboard", Icon: "fa-sliders", Words: "settings overview board tiles"},
+		{Label: "Campaign", Path: deskFindRoot, Href: camp, Icon: "fa-gear", Words: "settings details name description access look"},
+		{Label: "Connections", Path: deskFindRoot, Href: in.Base + "/connections", Icon: "fa-plug", Words: connWords},
+		{Label: "Data", Path: deskFindRoot, Href: data, Icon: "fa-database", Words: "settings details and data export import activity trash storage danger"},
 	}
 	for _, t := range layouts.ManageToolRows(in.Base, in.Media, in.Foundry) {
-		if t.Key == "manage:dashboard" || t.Key == "manage:settings" {
+		switch t.Key {
+		case "manage:dashboard", "manage:settings", "manage:connections", "manage:data":
 			continue
 		}
 		out = append(out, customizeFindEntry{Label: t.Label, Path: deskFindPath(deskFindGroups[t.Key]), Href: t.URL, Icon: t.Icon, Words: deskFindWords[t.Key]})
 	}
-	general := deskFindPath("General")
-	access := deskFindPath("Access")
+	campaign := deskFindPath("Campaign")
 	game := deskFindPath("Game")
 	conns := deskFindPath("Connections")
-	data := deskFindPath("Data")
-	end := deskFindPath("Danger zone")
+	dataPath := deskFindPath("Data")
+	end := deskFindPath("Data › Danger zone")
 	// The old group and row names stay as hidden words, so someone who types
-	// what the page used to say still finds the row.
-	archive := customizeFindEntry{Label: "Archive", Path: end, Href: page + "#line-end", Icon: "fa-box-archive", Words: "archive this campaign finish close read-only end archive or delete"}
+	// what the page used to say still finds the setting.
+	archive := customizeFindEntry{Label: "Archive", Path: end, Href: data + "#danger", Icon: "fa-box-archive", Words: "archive this campaign finish close read-only end archive or delete"}
 	if in.Archived {
 		archive.Label, archive.Words = "Unarchive", "unarchive this campaign bring back reopen restore archived archive or delete"
 	}
 	out = append(out,
-		customizeFindEntry{Label: "Private or public", Path: access, Href: page + "#line-public", Icon: "fa-lock", Words: "campaign public private visibility discover members link who can read it what players and guests see"},
-		customizeFindEntry{Label: "New pages", Path: access, Href: page + "#line-pages", Icon: "fa-eye", Words: "new pages start visibility hidden shown default secret what players and guests see"},
-		customizeFindEntry{Label: "Preview as a player", Path: access, Href: page + "#line-preview", Icon: "fa-user", Words: "player view see as preview home players' dashboard what players and guests see"},
-		customizeFindEntry{Label: "Preview as a guest", Path: access, Href: page + "#line-preview", Icon: "fa-user-secret", Words: "guest visitor public view see as preview home guests' dashboard what players and guests see"},
-		customizeFindEntry{Label: "Name", Path: general, Href: page + "#line-name", Icon: "fa-pen", Words: "rename called title campaign name look and game"},
-		customizeFindEntry{Label: "Description", Path: general, Href: page + "#line-description", Icon: "fa-align-left", Words: "description about summary blurb look and game"},
-		customizeFindEntry{Label: "Game system", Path: game, Href: page + "#line-system", Icon: "fa-dice-d20", Words: "system game rules ruleset pick"},
-		customizeFindEntry{Label: "Keys", Path: conns, Href: in.Base + "/settings?tab=" + settingsTabAPIKeys, Icon: "fa-key", Words: "api tokens other tools"},
-		customizeFindEntry{Label: "Export", Path: data, Href: in.Base + "/settings?tab=" + settingsTabData, Icon: "fa-file-export", Words: "export a copy download backup copy data safety net"},
-		customizeFindEntry{Label: "Import", Path: data, Href: in.Base + "/settings?tab=" + settingsTabImport, Icon: "fa-file-import", Words: "upload restore vault safety net"},
-		customizeFindEntry{Label: "Activity log", Path: data, Href: in.Base + "/settings?tab=" + settingsTabActivity, Icon: "fa-clock-rotate-left", Words: "history audit who did safety net"},
+		customizeFindEntry{Label: "Private or public", Path: campaign, Href: camp + "#line-public", Icon: "fa-lock", Words: "campaign public private visibility discover members link who can read it who can see it what players and guests see access"},
+		customizeFindEntry{Label: "New pages", Path: campaign, Href: camp + "#line-pages", Icon: "fa-eye", Words: "new pages start visibility hidden shown default secret what players and guests see access"},
+		customizeFindEntry{Label: "Preview as a player", Path: campaign, Href: camp + "#line-preview", Icon: "fa-user", Words: "player view see as preview home players' dashboard what players and guests see"},
+		customizeFindEntry{Label: "Preview as a guest", Path: campaign, Href: camp + "#line-preview", Icon: "fa-user-secret", Words: "guest visitor public view see as preview home guests' dashboard what players and guests see"},
+		customizeFindEntry{Label: "Name", Path: campaign, Href: camp + "#line-name", Icon: "fa-pen", Words: "rename called title campaign name general look and game"},
+		customizeFindEntry{Label: "Description", Path: campaign, Href: camp + "#line-description", Icon: "fa-align-left", Words: "description about summary blurb general look and game"},
+		customizeFindEntry{Label: "Game system", Path: game, Href: in.Base + "/extensions", Icon: "fa-dice-d20", Words: "system game rules ruleset pick"},
+		customizeFindEntry{Label: "Keys", Path: conns, Href: in.Base + "/connections#keys", Icon: "fa-key", Words: "api tokens other tools"},
+		customizeFindEntry{Label: "Export", Path: dataPath, Href: data + "#export", Icon: "fa-file-export", Words: "export a copy download backup copy data safety net"},
+		customizeFindEntry{Label: "Import", Path: dataPath, Href: data + "#" + settingsTabImport, Icon: "fa-file-import", Words: "upload restore vault safety net"},
+		customizeFindEntry{Label: "Activity log", Path: dataPath, Href: data + "#activity", Icon: "fa-clock-rotate-left", Words: "history audit who did safety net"},
 		archive,
-		customizeFindEntry{Label: "Transfer ownership", Path: end, Href: page + "#line-end", Icon: "fa-right-left", Words: "hand over give new owner archive or delete"},
-		customizeFindEntry{Label: "Delete", Path: end, Href: page + "#line-end", Icon: "fa-trash", Words: "delete this campaign remove destroy erase archive or delete"},
+		customizeFindEntry{Label: "Transfer ownership", Path: deskFindPath("People"), Href: in.Base + "/members#transfer", Icon: "fa-right-left", Words: "hand over give new owner archive or delete danger zone"},
+		customizeFindEntry{Label: "Delete", Path: end, Href: data + "#danger", Icon: "fa-trash", Words: "delete this campaign remove destroy erase archive or delete"},
 	)
 	for _, e := range in.Customize {
 		// Customize's own front page is the tool already listed above.
@@ -129,7 +137,7 @@ func buildDeskFind(in deskFindInput) []customizeFindEntry {
 			continue
 		}
 		icon := strings.TrimSpace(strings.TrimPrefix(t.Icon, "fa-solid "))
-		out = append(out, customizeFindEntry{Label: t.Label, Path: "Details and data", Href: in.Base + "/settings?tab=" + t.ID, Icon: icon})
+		out = append(out, customizeFindEntry{Label: t.Label, Path: dataPath, Href: data + "#" + t.ID, Icon: icon})
 	}
 	return out
 }
@@ -152,7 +160,7 @@ func (h *Handler) DeskFind(c *echo.Context) error {
 		Foundry:      in.Addons["sync-api"],
 		Archived:     cc.Campaign.IsArchived(),
 		Customize:    h.customizeFindEntries(cc, areas, h.CustomizeCategories(ctx, cc.Campaign.ID)),
-		SettingsTabs: h.visibleSettingsTabs(cc, nil, nil, "", nil, false),
+		SettingsTabs: h.visibleSettingsTabs(cc),
 	})
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, map[string]any{"entries": entries})

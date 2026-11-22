@@ -109,7 +109,7 @@ func historyQuery(f SyncHistoryFilter, extra string) string {
 
 templ SyncHistoryPage(cc *campaigns.CampaignContext, d SyncHistoryPageData) {
 	@layouts.App(cc.Campaign.Name + " - Sync history") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Sync history"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Sync history", Tab: "connections"}) {
 		<div id="sync-history" data-campaign={ d.CampaignID }>
 			<form
 				class="flex flex-wrap items-center gap-2 mb-4"

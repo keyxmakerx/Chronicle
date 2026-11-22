@@ -1,0 +1,75 @@
+// settings_connections.templ draws Campaign settings' Connections tab: a card
+// for each outside thing linked to the campaign, each saying how it is doing,
+// then the campaign's API keys.
+
+package campaigns
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// ConnectionsTabPage is the Connections tab inside the settings frame.
+templ ConnectionsTabPage(cc *CampaignContext, t ConnectionsTab) {
+	@layouts.App(cc.Campaign.Name + " — Connections") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/manage_desk.css") }/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/settings_board.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Connections", Tab: "connections", Landing: true}) {
+			<div class="desk sb" data-desk data-campaign={ cc.Campaign.ID }>
+				<div class="sb-conns">
+					if t.Foundry != nil {
+						@connCard("foundry", *t.Foundry, "Open Foundry")
+					} else {
+						<section class="sb-box" id="line-foundry" aria-labelledby="sb-c-foundry">
+							<h2 class="sb-tl" id="sb-c-foundry">Foundry</h2>
+							<p class="sb-tv">Off</p>
+							<p class="sb-th">Turn on Foundry sync on Game to keep a Foundry world's pages, dates and players in step.</p>
+							<p class="sb-words"><a class="sb-word" href={ templ.SafeURL(t.FoundryOffHref) }>Open Game</a></p>
+						</section>
+					}
+					@connCard("ai", t.AI, "Open Your AI")
+				</div>
+				<h2 class="sb-h" id="keys">
+					Keys
+					if t.Keys != nil {
+						<span class="sb-cnt">{ plural(t.Keys.Count, "key", "keys") } in use</span>
+					}
+				</h2>
+				<p class="sb-dim">A key lets another tool read or write this campaign through the API. Foundry makes its own on the Foundry page.</p>
+				<div
+					id="integrations-keys"
+					hx-get={ "/campaigns/" + cc.Campaign.ID + "/integrations/keys" }
+					hx-trigger="load"
+					hx-swap="innerHTML"
+				>
+					<p class="sb-dim">Loading keys…</p>
+				</div>
+				<div class="sb-box">
+					<h3 class="sb-tl">Other tools</h3>
+					<p class="sb-th">Make a key above, then call the <code>/api/v1/</code> addresses with it. A tool on another web address also needs your site admin to allow that address.</p>
+					if t.BaseURL != "" {
+						<p class="sb-th">Server address: <code>{ t.BaseURL }</code></p>
+					}
+				</div>
+			</div>
+		}
+	}
+}
+
+// connCard is one connection: its name, how it is doing (with the state dot),
+// a line more, and the word that opens its own page.
+templ connCard(id string, t DeskGoTile, open string) {
+	<section class="sb-box sb-conn" id={ "line-" + id } data-line={ id } aria-labelledby={ "sb-c-" + id }>
+		<h2 class="sb-tl" id={ "sb-c-" + id }>{ t.Label }</h2>
+		<p class="sb-tv">
+			if t.Value.State != "" {
+				<i class={ "desk-dot", templ.KV("ok", t.Value.State == "ok"), templ.KV("warn", t.Value.State == "warn") } aria-hidden="true"></i>
+				if t.Value.State == "warn" {
+					<span class="sr-only">Warning: </span>
+				}
+			}
+			<span class="sb-tvt">{ t.Value.Text }</span>
+		</p>
+		if t.Hint != "" {
+			<p class="sb-th">{ t.Hint }</p>
+		}
+		<p class="sb-words"><a class="sb-word" href={ templ.SafeURL(t.Href) }>{ open }</a></p>
+	</section>
+}

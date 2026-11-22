@@ -9,10 +9,10 @@ is the full-size example; its `API-CONTRACT.md` documents the endpoints it uses.
 
 As the campaign owner:
 
-1. Campaign settings > Game & features (`/campaigns/:id/extensions`): make sure the
+1. Campaign settings > Game (`/campaigns/:id/extensions`): make sure the
    **Sync API** feature is on. With it off, every key is refused with
    `sync_api_disabled`.
-2. **Details and data** > **Keys** (`/campaigns/:id/settings?tab=api-keys`) > create a key.
+2. Campaign settings > **Connections** > **Keys** (`/campaigns/:id/connections#keys`) > create a key.
    Pick permissions: **read** (GETs), **write** (create, update, delete),
    **sync** (`/sync` endpoints). Optional: rate limit (default 300 requests a
    minute), expiry date, IP allowlist (IPs or CIDRs).

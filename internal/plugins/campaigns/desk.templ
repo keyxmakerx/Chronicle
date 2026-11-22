@@ -1,70 +1,31 @@
-// desk.templ draws the owner's Campaign settings page (the desk) and the
-// figures a Manage tool page shows beside its title. The page is a sheet: each
-// row is a short name with its value right beside it, and a value is a control
-// that changes where it stands, a figure that opens its page, or a quiet word.
+// desk.templ draws Campaign settings' Overview (the board), the rows the
+// Campaign tab lists, and the figures a Manage tool page shows beside its
+// title. A row is a short name with its value right beside it, and a value is
+// a control that changes where it stands, a figure that opens its page, or a
+// quiet word.
 
 package campaigns
 
-import "fmt"
+
 import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
-// deskPageBody draws the page inside the shared Manage frame: the title with
-// Find on its row, "Needs you" when something waits, then the sheet's two
-// columns of groups. A value that opens a page is a link; one that changes in
-// place carries its own inline handler (deskBlankCall), built Go-side, because
-// the page arrives by a boosted swap where a script tag or a delegated
-// listener may never run. The behaviour itself is static/js/desk_blank.js,
-// which the handler loads on first use so the page stays inside the layout's
-// script budget.
+// deskPageBody draws the Overview inside the shared settings frame (the
+// banner and the tabs are the frame's): the board of tiles. A tile that flips
+// or a chip that switches carries its own inline handler (boardCall), built
+// Go-side, because the page arrives by a boosted swap where a script tag or a
+// delegated listener may never run; the behaviour is
+// static/js/settings_board.js, loaded on first use.
 templ deskPageBody(cc *CampaignContext, d *Desk) {
 	@layouts.App(d.CampaignName + " — Campaign settings") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/manage_desk.css") }/>
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Campaign settings", Home: true, Actions: layouts.ManageFindField()}) {
-			<div class="desk set" data-desk data-campaign={ cc.Campaign.ID }>
-				if len(d.Needs) > 0 {
-					<section class="set-grp set-needs" aria-labelledby="desk-g-needs" data-desk-needs>
-						<h2 class="set-lab" id="desk-g-needs">Needs you</h2>
-						<ul class="set-list">
-							for _, n := range d.Needs {
-								<li class="set-ln">
-									<span class="set-name" aria-hidden="true">{ n.Lead }</span>
-									<span class="set-vals">
-										<a class="set-v" href={ templ.SafeURL(n.URL) } aria-label={ deskValueLabel(n.Lead, DeskValue{Text: n.Rest, State: n.State}) }>
-											@deskValueFace(DeskValue{Text: n.Rest, State: n.State, Href: n.URL})
-										</a>
-									</span>
-								</li>
-							}
-						</ul>
-					</section>
-				}
-				<div class="set-cols">
-					<div class="set-col">
-						for i, g := range d.Left {
-							@deskGroup(g, fmt.Sprintf("desk-g-l%d", i))
-						}
-					</div>
-					<div class="set-col">
-						for i, g := range d.Right {
-							@deskGroup(g, fmt.Sprintf("desk-g-r%d", i))
-						}
-					</div>
-				</div>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/settings_board.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Campaign settings", Home: true}) {
+			<div class="desk sb" data-desk data-settings-board data-campaign={ cc.Campaign.ID }>
+				<p class="sr-only" role="status" data-sb-status></p>
+				@deskBoard(cc, d.Board)
 			</div>
 		}
 	}
-}
-
-// deskGroup is a named run of rows under a caps label and a hairline.
-templ deskGroup(g DeskGroup, id string) {
-	<section class={ "set-grp", templ.KV("set-grp-danger", g.Danger) } aria-labelledby={ id }>
-		<h2 class="set-lab" id={ id }>{ g.Name }</h2>
-		<ul class="set-list">
-			for _, l := range g.Lines {
-				@deskRow(l)
-			}
-		</ul>
-	</section>
 }
 
 // deskRow is one setting. Its id keeps links to "#line-<id>" landing on it.

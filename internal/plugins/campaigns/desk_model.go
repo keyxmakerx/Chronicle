@@ -1,9 +1,9 @@
-// desk_model.go holds the types of the owner's Campaign settings page (the
-// desk): the facts other plugins supply, the provider seam they register
-// through, and the page model the templates draw. The model can only say a
-// row's name and its values, never a phrase. The rows are built in
-// desk_rows.go and assembled in desk_service.go, so every row is
-// table-testable without a database, a socket or an Echo context.
+// desk_model.go holds the types behind Campaign settings (the owner's desk):
+// the facts other plugins supply, the provider seam they register through,
+// and the rows and values the pages draw. A row can only say its name and its
+// values, never a phrase. Rows are built in desk_rows.go, the Overview's tiles
+// in desk_board.go, and both are assembled in desk_service.go, so everything
+// is table-testable without a database, a socket or an Echo context.
 
 package campaigns
 
@@ -120,11 +120,6 @@ type DeskKeysFacts struct {
 	Count int
 }
 
-// DeskSystem is one game system the owner can pick, by registry id.
-type DeskSystem struct {
-	ID, Name string
-}
-
 // DeskInputs is everything campaigns itself knows that the desk draws: the
 // campaign, its members and the game and features read through the existing
 // listers. Gathered by the handler so the service stays free of Echo.
@@ -134,16 +129,16 @@ type DeskInputs struct {
 	// SystemID is the campaign's current game system id; empty when none.
 	SystemID string
 	// SystemName is the chosen game system's name; empty when none is chosen
-	// or the chosen one is not in Systems.
+	// or the system list does not name it.
 	SystemName string
-	// Systems are the systems the owner can pick; empty when the lister is
-	// missing, which turns the System row into a link to the features page.
-	Systems []DeskSystem
 	// FeaturesOn and FeaturesTotal count the installed features; both zero
 	// when the add-on list could not be read.
 	FeaturesOn, FeaturesTotal int
-	// Addons says which add-ons are on for this campaign: rows for Media and
-	// Foundry exist only while theirs is.
+	// Features is the add-on list itself, for the board's chips; nil when it
+	// could not be read.
+	Features []PluginHubAddon
+	// Addons says which add-ons are on for this campaign: the Foundry tile
+	// and the storage figures exist only while theirs is.
 	Addons map[string]bool
 	// Invited is how many invitations still wait for an answer; InvitedRead
 	// says they could be counted, so an unread count is never drawn as zero.
@@ -152,7 +147,8 @@ type DeskInputs struct {
 	// GMTerm is the campaign's own word for its game master, for the words a
 	// service builds (the template reads it from its context instead).
 	GMTerm string
-	// Look is the saved look in words, for the Customize block's Look row.
+	// Look is the saved look in words, for the Look tile and the Campaign
+	// tab's Look row.
 	Look LookSummary
 	// Categories are the campaign's categories; CategoriesRead says they
 	// could be read, so an unread list is never drawn as none.
@@ -172,21 +168,10 @@ type DeskTab struct {
 	Summary   CustomizeSummary
 }
 
-// Desk is the page: named rows in groups, in two columns.
+// Desk is the Overview page: the board of tiles.
 type Desk struct {
 	CampaignName string
-	Needs        []NeedsYouItem
-	// Left and Right are the two columns of groups, in reading order (left
-	// top to bottom, then right). A narrow page stacks them in that order.
-	Left, Right []DeskGroup
-}
-
-// DeskGroup is a named run of rows, drawn under a quiet label.
-type DeskGroup struct {
-	Name string
-	// Danger draws the label in the state red: only the Danger zone.
-	Danger bool
-	Lines  []DeskLine
+	Board        DeskBoard
 }
 
 // DeskLine is one setting: its name, and the values that stand beside it.

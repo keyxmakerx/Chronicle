@@ -25,14 +25,18 @@ type DeskService interface {
 	// Register adds a provider for its slot; a second one for the same slot
 	// replaces the first.
 	Register(p DeskProvider)
-	// Build reads every provider and builds every row. It never fails: a
-	// figure whose numbers are missing is the word "Open".
+	// Build reads every provider and builds the Overview's tiles. It never
+	// fails: a figure whose numbers are missing is the word "Open".
 	Build(ctx context.Context, req DeskRequest, in DeskInputs) *Desk
 	// Figure builds the figures a Manage tool page draws beside its title,
 	// from fresh numbers, so a change made on the page can redraw them
 	// without redrawing the page. False when the page's line does not exist
 	// for this campaign; an empty figure draws nothing.
 	Figure(ctx context.Context, req DeskRequest, in DeskInputs, id string) (DeskFigure, bool)
+	// Facts reads only the named slots' providers, for a tab that draws a
+	// few of the board's figures (Connections, Data). A slot whose provider
+	// fails or is missing stays nil.
+	Facts(ctx context.Context, req DeskRequest, slots ...DeskSlot) DeskFacts
 	// NeedsCount is how many things wait on the owner, for the sidebar's
 	// Manage row. It asks only the providers that feed Needs-you, so a count
 	// on every page does not cost the whole desk.
@@ -144,39 +148,16 @@ func callProvider(ctx context.Context, p DeskProvider, req DeskRequest) (DeskFac
 func (s *deskService) Build(ctx context.Context, req DeskRequest, in DeskInputs) *Desk {
 	c := in.Campaign
 	facts := s.gather(ctx, req)
-
-	data := []DeskLine{copyLine(c), activityLine(c)}
-	if in.Addons["media-gallery"] {
-		data = append(data, mediaLine(c, facts.Media))
-	}
-	data = append(data, trashLine(c, facts.Trash))
-	var conns []DeskLine
-	if in.Addons["sync-api"] {
-		conns = append(conns, foundryLine(c, facts.Foundry, req.Now))
-	}
-	conns = append(conns, aiLine(c, facts.AI), keysLine(c, facts.Keys))
-
+	needs := needsYou(c, withoutDisabled(facts, in.Addons), req.Now)
 	return &Desk{
 		CampaignName: c.Name,
-		Needs:        needsYou(c, withoutDisabled(facts, in.Addons), req.Now),
-		Left: []DeskGroup{
-			{Name: "General", Lines: []DeskLine{nameLine(c), descriptionLine(c)}},
-			{Name: "Access", Lines: []DeskLine{publicLine(c), pagesLine(c), previewLine(c)}},
-			{Name: "People", Lines: []DeskLine{peopleLine(c, in.Members), invitedLine(c, in), changesLine(c, facts.Changes)}},
-			{Name: "Game", Lines: []DeskLine{systemLine(c, in), featuresLine(c, in), tablesLine(c), entriesLine(c, facts.Entries)}},
-		},
-		Right: []DeskGroup{
-			{Name: "Customize", Lines: customizeLines(c, in)},
-			{Name: "Connections", Lines: conns},
-			{Name: "Data", Lines: data},
-			{Name: "Danger zone", Danger: true, Lines: []DeskLine{endLine(c)}},
-		},
+		Board:        boardOf(c, in, facts, needs, in.Features, req.Now),
 	}
 }
 
 // figure builds one tool page's figures by the id of the line that page names.
 // Foundry and Media exist only while their add-on is on, the same rule Build
-// applies. Details and data is a page with a line but no figure.
+// applies. The Campaign tab is a page with a line but no figure.
 func (s *deskService) figure(id string, c *Campaign, in DeskInputs, f DeskFacts, now time.Time) (DeskFigure, bool) {
 	switch id {
 	case "people":
@@ -203,6 +184,13 @@ func (s *deskService) figure(id string, c *Campaign, in DeskInputs, f DeskFacts,
 		return trashFigure(c, f.Trash), true
 	}
 	return DeskFigure{}, false
+}
+
+func (s *deskService) Facts(ctx context.Context, req DeskRequest, slots ...DeskSlot) DeskFacts {
+	if len(slots) == 0 {
+		return DeskFacts{}
+	}
+	return s.gather(ctx, req, slots...)
 }
 
 func (s *deskService) NeedsCount(ctx context.Context, req DeskRequest, in DeskInputs) int {
