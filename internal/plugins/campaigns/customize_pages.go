@@ -338,15 +338,15 @@ func (h *Handler) renderCustomizeIn(c *echo.Context, cc *CampaignContext, area, 
 func (h *Handler) customizePartBar(ctx context.Context, cc *CampaignContext, area string, crumbs []CustomizeCrumb) *customizeBar {
 	base := h.customizeBase(cc)
 	b := &customizeBar{Base: base}
-	switch {
-	case area == "look":
+	switch area {
+	case "look":
 		b.Name, b.Dot = "Look", "look"
 		for _, r := range lookRooms {
 			b.Tabs = append(b.Tabs, customizeBarTab{Label: r.Label, Href: base + "/look#" + r.Key, Key: r.Key})
 		}
-	case area == "categories":
+	case "categories":
 		b.Name, b.Dot = "Categories", "categories"
-	case area == "home":
+	case "home":
 		b.Name = "Home pages"
 		open := ""
 		if len(crumbs) > 1 {
