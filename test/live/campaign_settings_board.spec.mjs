@@ -3,7 +3,8 @@
 // feature chips saving where they stand, the Campaign tab's fields and the
 // card that follows them, Connections and Data, old addresses landing on
 // their new tab, the Danger zone's delete asking for the name, and every
-// control 44 tall on a phone. Players and scribes never get the tabs.
+// control 44 tall on a phone, with key rows that fold rather than cover their
+// words. Players and scribes never get the tabs.
 //
 // Set LIVE_SHOTS to a folder to also save pictures of the four tabs there,
 // light and dark, on a desktop and a phone.
@@ -143,7 +144,7 @@ test('Connections, Data and the old addresses; deleting asks for the name', asyn
   owner.assertClean();
 });
 
-test('on a phone every control is 44 tall; the keys page has the tabs; the log speaks in words', async () => {
+test('on a phone every control and field is 44 tall; the keys pages keep the tabs; the log speaks in words', async () => {
   const owner = await person({ tag: 'board-phone', name: 'Owner Ines' });
   const cid = await newCampaign(owner, 'Narrowmere');
   const page = owner.page;
@@ -154,25 +155,80 @@ test('on a phone every control is 44 tall; the keys page has the tabs; the log s
   assert.equal(await page.locator('.stg-tab[aria-current="page"]').textContent(), 'Connections', 'the full keys page sits under Connections');
 
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const tab of ['dashboard', 'settings', 'connections', 'data']) {
+  for (const tab of ['dashboard', 'settings', 'connections', 'data', 'api-keys']) {
     await owner.go(`/campaigns/${cid}/${tab}`);
-    if (tab === 'connections') await page.locator('#integrations-keys button').first().waitFor();
+    if (tab === 'connections') {
+      // A key, so its Active switch and Revoke button are measured, and the
+      // create form open, so its fields are.
+      await page.locator('#int-key-name').waitFor({ state: 'attached' });
+      // A long name and two permissions, so the key row is as full as a
+      // real one and has to fold.
+      await page.getByRole('button', { name: 'Create New Key' }).click();
+      await page.locator('#int-key-name').fill('OWNERSECRET-KEYNAME Foundry table');
+      await page.locator('#integrations-keys input[name="perm_write"]').check();
+      await page.locator('#integrations-keys form[hx-post] button[type="submit"]').click();
+      await page.locator('#integrations-keys').getByText('API Key Created').waitFor();
+      await owner.go(`/campaigns/${cid}/${tab}`);
+      await page.getByRole('button', { name: 'Create New Key' }).click();
+      await page.locator('#int-key-name').waitFor();
+    }
     if (tab === 'data') {
       for (const s of await page.locator('.sb-step > summary, .sb-fold > summary').all()) await s.click();
       await page.locator('#activity-content').scrollIntoViewIfNeeded();
       await page.getByText('invited someone').first().waitFor();
       assert.equal(await page.locator('#activity-content').getByText('member.invited').count(), 0, 'the log never shows a raw key');
     }
+    // Links, buttons, folds and form fields. A check box, and a file picker
+    // drawn as a drop area, are answered through their label, so the label
+    // is what is measured.
     const short = await page.evaluate(() => {
       const out = [];
-      for (const el of document.querySelectorAll('.sb a, .sb button, .sb summary, .stg a, .stg button')) {
-        const r = el.getBoundingClientRect();
-        if (r.width && r.height && r.height < 44) out.push(`${Math.round(r.height)}px "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30)}"`);
+      const sel = ['a', 'button', 'summary', 'select', 'textarea', 'input:not([type="hidden"])']
+        .flatMap((t) => [`.sb ${t}`, `.stg ${t}`, `.keys-touch ${t}`]).join(', ');
+      for (const el of document.querySelectorAll(sel)) {
+        const box = el.matches('input[type="checkbox"], input[type="radio"], input[type="file"]') ? (el.closest('label') || el) : el;
+        const r = box.getBoundingClientRect();
+        if (r.width && r.height && r.height < 44) out.push(`${Math.round(r.height)}px ${el.tagName.toLowerCase()} "${(el.textContent || el.getAttribute('aria-label') || el.name || '').trim().slice(0, 30)}"`);
       }
       return out;
     });
     assert.deepEqual(short, [], `${tab}: controls under 44 tall on a phone`);
+
+    // A key row folds rather than squeezing: no word in it sits under its
+    // buttons, runs out of the row, or is cut off.
+    if (tab === 'connections' || tab === 'api-keys') {
+      assert.ok(await page.locator('[data-testid="key-row"]').count() > 0, `${tab}: a key row to check`);
+      const squeezed = await page.evaluate(() => {
+        const out = [];
+        const over = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+        for (const row of document.querySelectorAll('[data-testid="key-row"]')) {
+          const edge = row.getBoundingClientRect();
+          const buttons = [...row.querySelectorAll('button')].map((b) => b.getBoundingClientRect());
+          const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+          for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+            const word = n.textContent.trim();
+            if (!word || n.parentElement.closest('button')) continue;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            for (const r of range.getClientRects()) {
+              if (buttons.some((b) => over(r, b))) out.push(`"${word.slice(0, 24)}" under a button`);
+              if (r.left < edge.left - 0.5 || r.right > edge.right + 0.5) out.push(`"${word.slice(0, 24)}" outside its row`);
+            }
+            const el = n.parentElement;
+            if (el.scrollWidth > el.clientWidth + 1) out.push(`"${word.slice(0, 24)}" cut off`);
+          }
+        }
+        return [...new Set(out)];
+      });
+      assert.deepEqual(squeezed, [], `${tab}: key rows squeezed on a phone`);
+    }
   }
+
+  // A key made on the full keys page shows inside the frame, not over it.
+  await page.locator('#name').fill('Second key');
+  await page.getByRole('button', { name: 'Generate Key' }).click();
+  await page.getByText('API Key Created').waitFor();
+  assert.equal(await page.locator('.stg-tab[aria-current="page"]').textContent(), 'Connections', 'the new key keeps the tabs');
   owner.assertClean();
 });
 

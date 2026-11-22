@@ -18,7 +18,8 @@ import (
 templ OwnerKeysPageTempl(campaignID string, keys []APIKey, stats *APIStats, csrfToken string) {
 	@layouts.App("API Keys") {
 		@layouts.ManageFrame(layouts.ManageFrameData{Title: "API keys", Tab: "connections"}) {
-		<div class="max-w-4xl space-y-6">
+		// The created key lands in here, so the settings frame stays around it.
+		<div id="keys-page" class="max-w-4xl space-y-6 keys-touch">
 			<p class="text-sm text-fg-secondary">
 				Manage API keys for external tool integration (Foundry VTT, custom scripts, etc.)
 			</p>
@@ -85,7 +86,7 @@ templ OwnerKeysPageTempl(campaignID string, keys []APIKey, stats *APIStats, csrf
 					method="POST"
 					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) }
 					hx-post={ fmt.Sprintf("/campaigns/%s/api-keys", campaignID) }
-					hx-target="#main-content"
+					hx-target="#keys-page"
 					hx-swap="innerHTML show:window:top"
 					class="space-y-4"
 				>
@@ -185,33 +186,37 @@ templ OwnerKeysPageTempl(campaignID string, keys []APIKey, stats *APIStats, csrf
 	}
 }
 
-// ownerKeyRow renders a single API key row.
+// ownerKeyRow renders a single API key row. On a wide screen it is one line:
+// name, permissions and last use, then the buttons. Below md it folds, so the
+// 44-tall buttons there cover nothing: permissions and last use go under the
+// name, the buttons take their own line at the right, and the name wraps
+// instead of being cut.
 templ ownerKeyRow(campaignID string, k APIKey, csrfToken string) {
-	<div class="flex items-center justify-between p-4 rounded-lg bg-surface-alt">
-		<div class="flex items-center gap-3 flex-1 min-w-0">
+	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 p-4 rounded-lg bg-surface-alt" data-testid="key-row">
+		<div class="flex items-center gap-3 flex-1 basis-56 min-w-0">
 			<span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" class={ keyStatusBg(k) }>
 				<i class={ "fa-solid text-sm " + keyStatusIcon(k) }></i>
 			</span>
 			<div class="min-w-0">
-				<div class="text-sm font-medium text-fg truncate">{ k.Name }</div>
+				<div class="text-sm font-medium text-fg break-words">{ k.Name }</div>
 				<div class="text-xs text-fg-muted font-mono">{ k.KeyPrefix }...</div>
 			</div>
 		</div>
-		<div class="flex items-center gap-2 ml-4">
-			<div class="text-right mr-4 hidden md:block">
-				<div class="text-xs text-fg-muted">
-					{ formatPermissions(k.Permissions) }
-				</div>
-				if k.LastUsedAt != nil {
-					<div class="text-xs text-fg-muted">
-						Last used:
-						{ " " }
-						@components.Date(*k.LastUsedAt, timeutil.DateWithTime)
-					</div>
-				} else {
-					<div class="text-xs text-fg-muted italic">Never used</div>
-				}
+		<div class="basis-full pl-11 md:basis-auto md:pl-0 md:text-right">
+			<div class="text-xs text-fg-muted">
+				{ formatPermissions(k.Permissions) }
 			</div>
+			if k.LastUsedAt != nil {
+				<div class="text-xs text-fg-muted">
+					Last used:
+					{ " " }
+					@components.Date(*k.LastUsedAt, timeutil.DateWithTime)
+				</div>
+			} else {
+				<div class="text-xs text-fg-muted italic">Never used</div>
+			}
+		</div>
+		<div class="flex items-center gap-2 ml-auto">
 			// Toggle active/inactive.
 			<form method="POST" hx-put={ fmt.Sprintf("/campaigns/%s/api-keys/%d/toggle", campaignID, k.ID) } class="inline">
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
@@ -230,7 +235,7 @@ templ ownerKeyRow(campaignID string, k APIKey, csrfToken string) {
 			// Revoke.
 			<form method="POST" hx-delete={ fmt.Sprintf("/campaigns/%s/api-keys/%d", campaignID, k.ID) } hx-confirm="Revoke this API key? This cannot be undone." class="inline">
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-2 py-1" title="Revoke">
+				<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-2 py-1" title="Revoke" aria-label="Revoke">
 					<i class="fa-solid fa-trash"></i>
 				</button>
 			</form>
@@ -238,10 +243,13 @@ templ ownerKeyRow(campaignID string, k APIKey, csrfToken string) {
 	</div>
 }
 
-// KeyCreatedTempl renders the one-time key display after creation (full page).
+// KeyCreatedTempl renders the one-time key display after creation (full
+// page), inside the settings frame's Connections tab like the keys page.
 templ KeyCreatedTempl(campaignID string, result *CreateAPIKeyResult, csrfToken string) {
 	@layouts.App("Key Created") {
-		@keyCreatedContent(campaignID, result)
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "API key created", Tab: "connections"}) {
+			@keyCreatedContent(campaignID, result)
+		}
 	}
 }
 
@@ -253,14 +261,14 @@ templ KeyCreatedFragmentTempl(campaignID string, result *CreateAPIKeyResult) {
 
 // keyCreatedContent is the inner content shared by full-page and fragment variants.
 templ keyCreatedContent(campaignID string, result *CreateAPIKeyResult) {
-	<div class="max-w-2xl mx-auto space-y-6">
+	<div class="max-w-2xl space-y-6 keys-touch">
 		<div class="card p-6">
 			<div class="flex items-center gap-3 mb-4">
 				<span class="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
 					<i class="fa-solid fa-check text-emerald-600 dark:text-emerald-400"></i>
 				</span>
 				<div>
-					<h1 class="text-xl font-bold text-fg">API Key Created</h1>
+					<h2 class="text-xl font-bold text-fg">API Key Created</h2>
 					<p class="text-sm text-fg-secondary">{ result.Key.Name }</p>
 				</div>
 			</div>
