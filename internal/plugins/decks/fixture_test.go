@@ -23,6 +23,7 @@ type fixture struct {
 	heroes                                  fakeHeroes
 	members                                 fakeMembers
 	pics                                    fakePictures
+	screen                                  *memScreen
 	dir, tam, ilse, scribe, former, visitor Viewer
 }
 
@@ -50,7 +51,8 @@ func newFixtureWith(t *testing.T, opts ...Option) *fixture {
 		{UserID: "u-scribe", Role: 2, JoinedAt: longAgo},
 	}}
 	fx.members = members
-	fx.svc = NewService(fx.repo, fx.heroes, members, append([]Option{WithNotifier(fx.cap), WithBell(fx.cap), WithPictures(fx.pics), WithRandom(func(int) int { return 0 })}, opts...)...)
+	fx.screen = newMemScreen(fx.repo)
+	fx.svc = NewService(fx.repo, fx.heroes, members, append([]Option{WithNotifier(fx.cap), WithBell(fx.cap), WithPictures(fx.pics), WithScreen(fx.screen), WithRandom(func(int) int { return 0 })}, opts...)...)
 	fx.dir = Viewer{UserID: "u-dir", MemberRole: 3, VisibilityRole: 3, Director: true}
 	fx.tam = Viewer{UserID: "u-tam", MemberRole: 1, VisibilityRole: 1}
 	fx.ilse = Viewer{UserID: "u-ilse", MemberRole: 1, VisibilityRole: 1}

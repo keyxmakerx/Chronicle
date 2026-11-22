@@ -118,7 +118,8 @@ templ HandBody(p handPage) {
 						if len(d.Heroes) == 0 {
 							<p class="dkh-quiet">You have no hero to draw into yet.</p>
 						}
-						<button type="button" class="btn-primary text-sm dkh-btn" data-dkh-draw data-deck={ d.DeckID } data-hero={ firstHero(d.Heroes) } data-working-label="Drawing…" disabled?={ !d.CanDraw || len(d.Heroes) == 0 }>Draw</button>
+						<button type="button" class="btn-primary text-sm dkh-btn" data-dkd-open data-deck={ d.DeckID } data-hero={ firstHero(d.Heroes) } disabled?={ !d.CanDraw || len(d.Heroes) == 0 }>Draw</button>
+						<button type="button" class="text-sm dkh-btn dkh-btn-quiet" data-dkh-draw data-deck={ d.DeckID } data-hero={ firstHero(d.Heroes) } data-working-label="Drawing…" disabled?={ !d.CanDraw || len(d.Heroes) == 0 }>Quick draw</button>
 					</div>
 				</div>
 			</section>
