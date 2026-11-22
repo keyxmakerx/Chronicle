@@ -7,6 +7,10 @@
 #
 # The checks still take pictures of the screens they visit, but nothing
 # compares them, so a changed screen never fails this job.
+#
+# The smoke crawl (every link and GET route of the server the checks filled)
+# runs on pushes to main, on the nightly schedule and on a manual run. A pull
+# request runs the walks alone, to keep its wait short.
 # ============================================================================
 
 name: Live checks
@@ -16,6 +20,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -95,6 +101,7 @@ jobs:
           DB_HOST: 127.0.0.1:3306
           DB_ROOT_PASSWORD: chronicle
           REDIS_URL: redis://localhost:6379
+          LIVE_SMOKE: ${{ github.event_name == 'pull_request' && '0' || '1' }}
         run: tools/live-checks.sh
 
       - name: Keep the server log
