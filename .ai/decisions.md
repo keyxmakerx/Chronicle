@@ -1275,6 +1275,7 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A copy returning to the pile gets a fresh id, so a remembered id cannot be tracked through the pile.
 - Turning a card over and showing it are separate marks (`face_up`, `is_open`). One mark would make a player's private turn the same event as a show, so every other player would be told that a card was turned, and which hero turned it; with two, a turned card and an unturned one are the same bytes to everyone but the holder and the Directors.
 - A change to the zones or the claim rule changes the move table in `internal/plugins/decks/.ai.md` and its tests first.
+- Who is told of a move, live and on the bell, is a function of the move and the deck's settings alone (`audience.go`), never of which card a copy is, and a live message carries no payload. A player's socket therefore receives the same messages, in the same order, whatever a Director does out of sight; a Director's private acts tell Directors only. A new action or setting changes that function and its table test first.
 
 ## ADR-078: A card's picture is decided by the card's visibility, and the guard overrides a signature but narrows nothing a page shows
 

@@ -138,6 +138,10 @@ async function deckPages(ids) {
     const res = await visit(u);
     if (res && res.status() !== 200) problems.push(`${u.replace(BASE, '')}: answered ${res.status()} for the Director`);
   }
+  // The player's hand: the Hand leaf's fragment and a page's Cards part.
+  const hand = `${BASE}/campaigns/${ids.id}/decks/hand`;
+  frags.push(hand);
+  if (ids.entity) frags.push(`${hand}/hero/${ids.entity}`);
   for (const u of frags) {
     at = u.replace(BASE, '');
     const res = await page.request.get(u, { headers: { 'HX-Request': 'true' }, timeout: 15000 }).catch(() => null);

@@ -894,7 +894,7 @@
       if (sec) {
         var k = this.leaves.indexOf(sec);
         if (k < 0) { k = this.leaves.length - 1; this.leaves[k] = sec; this.saveLeaves(); }
-        if (sec !== 'rolls') this.phoneLeaf = k;
+        if (sec !== 'rolls') this.leafTo(sec);
       }
       this.setHeight(sec && sec !== 'rolls' ? 'full' : this.h === 'full' ? 'full' : 'lift');
       if (!this.loaded) this.load();
@@ -1346,7 +1346,7 @@
       var t = ev.target;
       if (ev.button !== 0 || !t || !t.closest) return;
       if (self.isl && self.isl.expanded && !t.closest('#tt-isl-detail, .tt-island')) self.collapse(self.isl);
-      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail')) self.closeTable(false);
+      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail, [data-dkh-over]')) self.closeTable(false);
     }, true);
 
     // A pick of your own rune dice: the die, its colour, or a crit animation.

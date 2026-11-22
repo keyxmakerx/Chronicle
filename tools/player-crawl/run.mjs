@@ -61,7 +61,8 @@ try {
       if (who === 'player' && s.playerOnly[h.marker]) continue; // the author reading their own note
       // A shop good listed openly shows in its own shop and on its own page;
       // anywhere else (a list, search, Auto-link, the Items gallery) is a leak.
-      if ((s.mayShow[h.marker] || []).some((id) => h.route.includes(id))) continue;
+      // An id starting with $ names a page by the end of its path.
+      if ((s.mayShow[h.marker] || []).some((id) => (id[0] === '$' ? h.route.split('?')[0].endsWith(id.slice(1)) : h.route.includes(id)))) continue;
       const e = byMarker.get(h.marker) || new Set();
       e.add(`${h.variant.padEnd(4)} ${idShape(h.route)}`);
       byMarker.set(h.marker, e);
@@ -88,6 +89,23 @@ try {
       const got = await client.get(u, { follow: false });
       if (got.status === 200) { leaks++; console.log(`  LEAK  ${who} was sent a face-down card's picture: ${u}`); }
     }
+  }
+  // The turn request: sent by people who may not turn that copy, it must be
+  // refused as if nothing were there, carry no marker, and leave the copy face
+  // down (checked from the Director's side afterwards).
+  for (const pr of s.postProbes || []) {
+    for (const who of pr.who) {
+      const client = viewers[who];
+      const res = await client.post(pr.path, { body: { csrf_token: client.csrf() }, headers: { Accept: 'text/html, application/json' }, follow: false });
+      const found = Object.keys({ ...s.markers, ...s.playerOnly }).filter((k) => res.text.includes(k));
+      console.log(`turn request as ${who}: ${res.status}`);
+      if (res.status === 200 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} to a turn request${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
+    }
+  }
+  if ((s.postProbes || []).length) {
+    const d = await s.owner.get(`${s.C}/decks/${s.ids.handDeck}`, { headers: { Accept: 'application/json' } });
+    const copy = (JSON.parse(d.text).copies || []).find((c) => c.id === s.ids.handCopy);
+    if (!copy || copy.faceUp) { leaks++; console.log('  LEAK  the copy was turned over by a request from someone who may not turn it'); }
   }
   // The preview must not open anything the stranger cannot: any page that
   // answers 2xx to the previewing owner and not to the stranger is a leak of

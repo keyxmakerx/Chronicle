@@ -81,9 +81,15 @@ type HandView struct {
 	Draws  []HandDraw
 }
 
-// Empty says the viewer has nothing to show in any part.
+// Empty says the viewer holds nothing, sees nothing on the table or in other
+// hands, and has no deck open to draw from; a party deck with no hand is not a card.
 func (h *HandView) Empty() bool {
-	return len(h.Mine) == 0 && len(h.Party) == 0 && len(h.Table) == 0 && len(h.Others) == 0 && len(h.Draws) == 0
+	for _, p := range h.Party {
+		if len(p.Hand) > 0 || len(p.Used) > 0 {
+			return false
+		}
+	}
+	return len(h.Mine) == 0 && len(h.Table) == 0 && len(h.Others) == 0 && len(h.Draws) == 0
 }
 
 func handCards(d PlayerDeck, list []PlayerCopy) []HandCard {

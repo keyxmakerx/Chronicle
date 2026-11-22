@@ -19,6 +19,12 @@ export async function liveEdits(s, log = console.log) {
   const tryit = async (name, fn) => { try { await fn(); } catch (e) { log('live edit not done', name, '-', e.message); out.__skipped = [...(out.__skipped || []), name]; } };
   const J = (res, w) => { if (res.status >= 400) throw new Error(`${w} -> ${res.status}`); return res; };
   const doc = (x) => JSON.stringify({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: x }] }] });
+  await tryit('hidden hand deck acts', async () => {
+    if (!ids.handDeck || !ids.handCard) throw new Error('no hand deck');
+    const t = mkm('LIVEDECKWORDS', 'live: new words typed on a card of a hero deck');
+    J(await owner.put(`${C}/decks/${ids.handDeck}/cards/${ids.handCard}`, { json: { words: t } }), 'edit card');
+    J(await owner.post(`${C}/decks/${ids.handDeck}/draw`, { json: { count: 1 } }), 'draw');
+  });
   await tryit('public control', async () => {
     const t = mkm('LIVEPUBLIC', 'live control: a visible map marker');
     delete out[t]; out.__control = t;
@@ -394,6 +400,64 @@ export async function seed(base, log = console.log) {
     must(await postJSON(`${C}/decks/${deck}/draw`, { count: 1 }), 'draw');
   });
 
+  // 14d. A hero deck with a hand: two players each claim a hero and are chosen
+  // for the deck, one card (its name, words, kind, corner, note and picture all
+  // marked) is dealt face down into the first player's hand and one is left in
+  // the pile. A player's own hand, another player's, a Scribe's and a stranger's
+  // may not hold any of it before the card is turned; the turn request is sent
+  // only by people who may not turn it. A Director's draw and edits run live.
+  const postProbes = [];
+  await step("a hero deck's hands", async () => {
+    const heroA = await create('Hand hero A ' + RUN, 'Character', false);
+    const heroB = await create('Hand hero B ' + RUN, 'Character', false);
+    for (const h of [heroA, heroB]) must(await owner.post(`${C}/characters/playable`, { body: { entity_id: h, playable: '1', csrf_token: owner.csrf() } }), 'make playable');
+    must(await player.post(`${C}/entities/${heroA}/claim`, { body: { csrf_token: player.csrf() } }), 'claim A');
+    must(await player2.post(`${C}/entities/${heroB}/claim`, { body: { csrf_token: player2.csrf() } }), 'claim B');
+    ids.heroA = heroA;
+    ids.heroB = heroB;
+    r = must(await postJSON(`${C}/decks`, { name: 'Hands deck ' + RUN, kind: 'hero', settings: { knows: 'count', othersSee: 'back', arrives: 'down', draws: 'players' } }), 'hand deck');
+    const deck = JSON.parse(r.text).id;
+    ids.handDeck = deck;
+    const kind = m('HANDKIND', 'name of a card kind in a hero deck');
+    // The deck list shows a deck's look (its kind palette) to the players the
+    // deck is open to, so that one page may name the kind; no other may.
+    mayShow[kind] = ['$/decks'];
+    must(await owner.put(`${C}/decks/${deck}`, { json: { version: 1, look: { kinds: [{ key: 'bane', name: kind, colour: 'rose', sign: 'star' }] } } }), 'hand look');
+    const face = m('HANDFACE', 'name of a card face down in a player hand');
+    const words = m('HANDWORDS', 'words of a card face down in a player hand');
+    const note = m('HANDNOTE', 'a Director note on a card in a hand');
+    const corner = m('HC', 'corner value of a card in a hand');
+    r = must(await postJSON(`${C}/decks/${deck}/cards`, { name: face, words, directorNote: note, corner, kindKey: 'bane', copies: 1 }), 'hand card');
+    const card = (JSON.parse(r.text).cards.find((c) => c.name === face) || {}).id;
+    if (!card) throw new Error('no card id');
+    ids.handCard = card;
+    must(await postJSON(`${C}/decks/${deck}/cards`, { name: 'Plain filler ' + RUN, words: 'filler words', kindKey: 'bane', copies: 3 }), 'filler card');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    r = await owner.upload('/media/upload', { campaign_id: cid, usage_type: 'attachment' }, png);
+    if (r.status >= 400) throw new Error('hand picture upload -> ' + r.status);
+    const pic = JSON.parse(r.text).id;
+    must(await owner.put(`${C}/decks/${deck}/cards/${card}`, { json: { picture: pic } }), 'hand card picture');
+    pictureUrls.push(`/media/${pic}`, `/media/${pic}/thumb/300`, `/media/${pic}/thumb/800`);
+    // The players are chosen by the ids the Players tab names them with.
+    r = must(await owner.get(`${C}/decks/workshop/${deck}/players`), 'players tab');
+    const rows = [...r.text.matchAll(/data-user="([0-9a-f-]{36})"[\s\S]*?<span>([^<]+)<\/span>/g)].map((x) => ({ id: x[1], name: x[2] }));
+    const a = rows.find((x) => x.name === 'Pat Player'), b = rows.find((x) => x.name === 'Quinn Player');
+    if (!a || !b) throw new Error('the players are not on the Players tab');
+    r = must(await owner.get(`${C}/decks/${deck}`, { headers: { Accept: 'application/json' } }), 'deck');
+    must(await owner.put(`${C}/decks/${deck}/players`, { json: { version: JSON.parse(r.text).version, players: [{ userId: a.id, drawsLeft: 2 }, { userId: b.id }] } }), 'choose players');
+    r = must(await postJSON(`${C}/decks/${deck}/deal-card`, { cardId: card, to: 'hand', heroId: heroA }), 'deal');
+    const copy = JSON.parse(r.text).copyId;
+    if (!copy) throw new Error('no copy id');
+    ids.handCopy = copy;
+    const hand = `${C}/decks/hand`;
+    extraUrls.push(hand, `${hand}/hero/${heroA}`, `${hand}/hero/${heroB}`, `${hand}/${deck}/copies/${copy}`, `${C}/entities/${heroA}`, `${C}/entities/${heroB}`);
+    const base = `${C}/decks/workshop`;
+    for (const tail of ['', '/table', '/cards', '/players']) extraUrls.push(`${base}/${deck}${tail}`);
+    extraUrls.push(`${base}/${deck}/cards?card=${card}`, `${base}/${deck}?tab=cards&card=${card}`, `${base}/${deck}/look?kind=bane`);
+    // Only people who may not turn this copy ask: turning it for its holder would show them the card.
+    postProbes.push({ path: `${hand}/${deck}/copies/${copy}/turn`, who: ['other player', 'scribe', 'signedout'] });
+  });
+
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.
   await step('public campaign', async () => {
     must(await owner.put(C, { json: { name: 'Crawl ' + RUN, description: '', is_public: true } }), 'update campaign');
@@ -415,7 +479,7 @@ export async function seed(base, log = console.log) {
     if (r.status >= 400) throw new Error('player page note -> ' + r.status + ' ' + r.text.slice(0, 120));
   });
 
-  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ...ids.extra);
+  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ids.handDeck, ids.heroA, ids.heroB, ids.handCard, ids.handCopy, ...ids.extra);
 
-  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, pictureUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
+  return { owner, player, player2, scribe, guest, playerOnly, ids, postProbes, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, pictureUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
 }

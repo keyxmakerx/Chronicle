@@ -241,7 +241,7 @@
         clearTimeout(timer);
         timer = setTimeout(refresh, REFRESH_WAIT);
       }
-      function onLive() { if (el.isConnected) later(); }
+      function onLive() { if (el.isConnected) later(); else close(false); }
       window.addEventListener(LIVE_EVENT, onLive);
       inst.onLive = onLive;
 
@@ -279,12 +279,19 @@
         if (toOpener !== false && o && o.isConnected && o.focus) o.focus({ preventScroll: true });
       }
 
+      inst.close = close;
+
       function place(html, focusIt) {
         var doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
         var fresh = $('[data-dkh-over]', doc);
         if (!fresh) throw new Error('no card');
         var had = overlay;
-        if (had) had.replaceWith(fresh); else el.appendChild(fresh);
+        // A card read again in place must not slide in a second time.
+        // The sheet lives on the page itself: the Table drawer is a moving
+        // box, and a fixed layer inside it would be clipped to it.
+        fresh.addEventListener('click', inst.onClick);
+        fresh.addEventListener('keydown', inst.onKey);
+        if (had) { fresh.classList.add('dkh-again'); had.replaceWith(fresh); } else document.body.appendChild(fresh);
         overlay = fresh;
         adopt(fresh);
         if (focusIt) {
@@ -406,7 +413,7 @@
       el.addEventListener('click', inst.onClick);
 
       inst.onKey = function (ev) {
-        if (ev.key === 'Escape' && overlay) { ev.stopPropagation(); close(true); }
+        if (ev.key === 'Escape' && overlay) { ev.preventDefault(); ev.stopPropagation(); close(true); }
       };
       el.addEventListener('keydown', inst.onKey);
     },
@@ -415,6 +422,7 @@
       var w = el.__dkhInst;
       if (!w) return;
       el.__dkhInst = null;
+      if (w.close) w.close(false);
       window.removeEventListener(LIVE_EVENT, w.onLive);
       if (w.onCapture) el.removeEventListener('click', w.onCapture, true);
       if (w.onClick) el.removeEventListener('click', w.onClick);
