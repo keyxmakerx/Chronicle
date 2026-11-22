@@ -82,8 +82,10 @@ type Party struct {
 // PartyHero is one claimed character with the meters its system declares.
 type PartyHero struct {
 	ID, Name, Player, Subtitle string
-	Meters                     []PartyMeter
-	Conditions                 []string
+	// Level is "" when the sheet has none.
+	Level      string
+	Meters     []PartyMeter
+	Conditions []string
 }
 
 // PartyMeter is one number on a hero; Max is "" when it has none.
@@ -1438,6 +1440,9 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 			line += " (" + h.Player + ")"
 		}
 		var parts []string
+		if h.Level != "" {
+			parts = append(parts, "Level "+h.Level)
+		}
 		if h.Subtitle != "" {
 			parts = append(parts, h.Subtitle)
 		}

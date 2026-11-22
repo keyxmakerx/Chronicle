@@ -186,7 +186,11 @@ type HeroView struct {
 	PlayerHere   bool   `json:"player_here,omitempty"`
 	// Subtitle and Conditions come from the sheet fields the system's
 	// manifest names; either may be empty.
-	Subtitle   string      `json:"subtitle"`
+	Subtitle string `json:"subtitle"`
+	// Level is the sheet's `level` value when the hero has one, so a reader
+	// that is not the screen (the AI's players lookup) can say it. It is read
+	// from the same narrowed values as the meters.
+	Level      string      `json:"level,omitempty"`
 	Conditions []string    `json:"conditions,omitempty"`
 	Meters     []MeterView `json:"meters,omitempty"`
 }

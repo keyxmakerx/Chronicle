@@ -4061,7 +4061,7 @@ func (a *App) RegisterRoutes() {
 		_, sys := navAddonsFrom(list)
 		return sys.Slug
 	})
-	entities.SetFoundryLinkChecker(func(ctx context.Context, campaignID string) bool {
+	foundryLinked := func(ctx context.Context, campaignID string) bool {
 		keys, err := syncService.ListKeysByCampaign(ctx, campaignID)
 		if err != nil {
 			return false
@@ -4072,7 +4072,8 @@ func (a *App) RegisterRoutes() {
 			}
 		}
 		return false
-	})
+	}
+	entities.SetFoundryLinkChecker(foundryLinked)
 	// The campaign "Sync API" addon toggle is what gates external Bearer
 	// access (REST via syncapi.RequireSyncAPIAddon, WebSocket via
 	// AuthenticateKeyForWS). Both read it through this gate; the WS path
@@ -6081,7 +6082,7 @@ func (a *App) RegisterRoutes() {
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).
-	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService}
+	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService, choices: characterChoiceSvc, linked: foundryLinked}
 	if n, err := addSystemSheetFieldsOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService, characterListService); err != nil {
 		slog.Error("adding system sheet fields failed", slog.String("error", err.Error()))
 	} else if n > 0 {
@@ -6103,6 +6104,8 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	// AI Import's review warns about hero values the creator would refuse.
+	aiWorkspaceHandler.SetHeroPicks(heroPickChecker{planner: heroPlannerAdapter{choices: characterChoiceSvc}})
 	entityHandler.SetVisitorPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroTerms(heroTermsAdapter{choices: characterChoiceSvc})
 	// A player's Foundry edit is judged with the same plan the web door uses.
