@@ -25,6 +25,16 @@ export async function liveEdits(s, log = console.log) {
     J(await owner.put(`${C}/decks/${ids.handDeck}/cards/${ids.handCard}`, { json: { words: t } }), 'edit card');
     J(await owner.post(`${C}/decks/${ids.handDeck}/draw`, { json: { count: 1 } }), 'draw');
   });
+  await tryit('a moment comes', async () => {
+    // A card the Director says so for: a moment opens, and only Directors are told.
+    const name = mkm('LIVEMOMENTCARD', 'live: name of a card whose moment came');
+    let r = J(await owner.post(`${C}/decks`, { json: { name: 'Live moment deck ' + RUN, kind: 'event' } }), 'deck');
+    const deck = JSON.parse(r.text).id;
+    r = J(await owner.post(`${C}/decks/${deck}/cards`, { json: { name, copies: 1, when: [{ test: 'say' }] } }), 'card');
+    const card = JSON.parse(r.text).cards.find((c) => c.name === name).id;
+    J(await owner.post(`${C}/decks/${deck}/cards/${card}/say`, { json: { said: true } }), 'say');
+    J(await owner.get(`${C}/decks/moments`, { headers: { Accept: 'application/json' } }), 'moments');
+  });
   await tryit('public control', async () => {
     const t = mkm('LIVEPUBLIC', 'live control: a visible map marker');
     delete out[t]; out.__control = t;
@@ -455,6 +465,61 @@ export async function seed(base, log = console.log) {
     postProbes.push({ path: `${hand}/${deck}/copies/${copy}/turn`, who: ['other player', 'scribe', 'signedout'] });
   });
 
+  // 14e. A card that waits for its moment. Its tests are the Director's own and
+  // name things no player may read: a Director-only tag on a player's hero, a
+  // layer on a page no player can open, and a tracker kind shown to Directors
+  // only. The facts hold, so a moment is open and its reading, its card and
+  // every name in its sentences are the Director's alone. The Director's
+  // routes for answering are asked as every other viewer and must refuse; the
+  // moment must still be open, and the card unsaid, afterwards.
+  await step('a card that waits for its moment', async () => {
+    if (!ids.heroA || !ids.hidden) throw new Error('no hero or hidden page to name');
+    const tagName = m('WHENTAG', 'name of a Director-only tag a hidden test names');
+    const layerName = m('WHENLAYER', 'name of a layer on a hidden page a hidden test names');
+    const kindName = m('WHENKIND', 'name of a Director-only tracker kind a hidden test names');
+    const cardName = m('WHENCARD', 'name of a card that waits for its moment');
+    r = must(await postJSON(`${C}/tags`, { name: tagName, color: '#aa00aa', dmOnly: true }), 'tag');
+    const tid = JSON.parse(r.text).id;
+    if (!tid) throw new Error('no tag id');
+    must(await putJSON(`${C}/entities/${ids.heroA}/tags`, { tagIds: [tid] }), 'tag the hero');
+    must(await postJSON(`${C}/pages/${ids.hidden}/layers`, { name: layerName, changes: [{ field: 'hp', op: 'add', value: 1 }] }), 'layer');
+    r = must(await postJSON(`${C}/tracker-kinds`, { name: kindName, shape: 'count', visibility: 'directors' }), 'tracker kind');
+    const kid = JSON.parse(r.text).id;
+    if (!kid) throw new Error('no tracker kind id');
+    r = must(await postJSON(`${C}/trackers/page/${ids.heroA}`, { kindId: kid, visibility: 'directors' }), 'place tracker');
+    const trk = JSON.parse(r.text).id;
+    must(await postJSON(`${C}/trackers/page/${ids.heroA}/log`, { trackerId: trk, op: 'add', amount: 3 }), 'log tracker');
+    r = must(await postJSON(`${C}/decks`, { name: 'Moment deck ' + RUN, kind: 'event' }), 'moment deck');
+    const deck = JSON.parse(r.text).id;
+    ids.whenDeck = deck;
+    const tests = [
+      { test: 'tag', who: ids.heroA, tag: tid, has: true },
+      { test: 'layer', who: ids.hidden, name: layerName, on: true },
+      { test: 'tracker', who: ids.heroA, kind: kid, op: 'gte', value: 2 },
+    ];
+    r = must(await postJSON(`${C}/decks/${deck}/cards`, { name: cardName, words: 'when words ' + RUN, copies: 1, when: tests }), 'moment card');
+    const card = (JSON.parse(r.text).cards.find((c) => c.name === cardName) || {}).id;
+    if (!card) throw new Error('no card id');
+    ids.whenCard = card;
+    // The first read looks again by itself; poll until the moment is there.
+    let moment;
+    for (let i = 0; i < 20 && !moment; i++) {
+      r = must(await owner.get(`${C}/decks/moments`, { headers: { Accept: 'application/json' } }), 'moments');
+      moment = (JSON.parse(r.text).moments || []).find((x) => x.deckId === deck);
+      if (!moment) await new Promise((res) => setTimeout(res, 500));
+    }
+    if (!moment) throw new Error('no moment came although every test holds');
+    ids.moment = moment.id;
+    if (!moment.reading || !moment.reading.includes(kindName)) throw new Error('the moment carries no reading of the tracker');
+    const base = `${C}/decks/workshop`;
+    for (const tail of ['', '/cards', '/rules']) extraUrls.push(`${base}/${deck}${tail}`);
+    extraUrls.push(`${base}/${deck}/cards?card=${card}`, `${C}/decks/moments`, `${C}/decks/when-options`);
+    // Answering and saying so: only a Director may; nobody else may even learn the route is there.
+    const who = ['player', 'other player', 'scribe', 'signedout'];
+    for (const tail of ['deal', 'another', 'invite', 'dismiss']) postProbes.push({ path: `${C}/decks/moments/${moment.id}/${tail}`, who });
+    postProbes.push({ path: `${C}/decks/${deck}/cards/${card}/say`, who });
+  });
+
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.
   await step('public campaign', async () => {
     must(await owner.put(C, { json: { name: 'Crawl ' + RUN, description: '', is_public: true } }), 'update campaign');
@@ -476,7 +541,7 @@ export async function seed(base, log = console.log) {
     if (r.status >= 400) throw new Error('player page note -> ' + r.status + ' ' + r.text.slice(0, 120));
   });
 
-  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ids.handDeck, ids.heroA, ids.heroB, ids.handCard, ids.handCopy, ...ids.extra);
+  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ids.handDeck, ids.heroA, ids.heroB, ids.handCard, ids.handCopy, ids.whenDeck, ids.whenCard, ids.moment, ...ids.extra);
 
   return { owner, player, player2, scribe, guest, playerOnly, ids, postProbes, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, pictureUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
 }

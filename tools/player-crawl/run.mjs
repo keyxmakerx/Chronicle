@@ -101,6 +101,16 @@ try {
       if (res.status === 200 || found.length) { leaks++; console.log(`  LEAK  ${who} was answered ${res.status} to a turn request${found.length ? ' with ' + found.map((k) => s.markers[k]).join(', ') : ''}`); }
     }
   }
+  // The moment and the card are as the Director left them: the answers and the
+  // say route, asked by people who may not, changed nothing.
+  if (s.ids.moment) {
+    const mo = await s.owner.get(`${s.C}/decks/moments`, { headers: { Accept: 'application/json' } });
+    const still = (JSON.parse(mo.text).moments || []).find((x) => x.id === s.ids.moment);
+    if (!still || still.state !== 'waiting') { leaks++; console.log('  LEAK  a moment was answered by a request from someone who may not answer it'); }
+    const dk = await s.owner.get(`${s.C}/decks/${s.ids.whenDeck}`, { headers: { Accept: 'application/json' } });
+    const card = (JSON.parse(dk.text).cards || []).find((c) => c.id === s.ids.whenCard);
+    if (!card || card.saidAt) { leaks++; console.log('  LEAK  a card was said so by a request from someone who may not say it'); }
+  }
   if ((s.postProbes || []).length) {
     const d = await s.owner.get(`${s.C}/decks/${s.ids.handDeck}`, { headers: { Accept: 'application/json' } });
     const copy = (JSON.parse(d.text).copies || []).find((c) => c.id === s.ids.handCopy);
@@ -144,6 +154,16 @@ try {
     if (!ownerBlob.includes(k)) console.log(`  not carried live to the owner (nothing to compare): ${what}`);
     for (const who of ['player', 'scribe']) {
       if (socks[who].messages.some((x) => x.includes(k))) { leaks++; console.log(`  LEAK  ${who} socket received: ${what}`); }
+    }
+  }
+  // A moment is told to Directors only: the owner's socket must have heard one
+  // (or the check is blind), and neither the player's nor the scribe's may have.
+  if (!skippedLive.includes('a moment comes')) {
+    const heard = (k) => socks[k].messages.some((x) => x.includes('"decks.moment"'));
+    console.log(`  moment message: owner ${heard('owner') ? 'heard' : 'DID NOT HEAR (live check is blind)'}`);
+    if (!heard('owner')) leaks++;
+    for (const who of ['player', 'scribe']) {
+      if (heard(who)) { leaks++; console.log(`  LEAK  ${who} socket received a moment message`); }
     }
   }
   for (const k of Object.values(socks)) k.close();

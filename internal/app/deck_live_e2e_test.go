@@ -193,3 +193,97 @@ func TestLiveMessagesAreTheSameInTwoWorlds(t *testing.T) {
 		}
 	}
 }
+
+// onlyFacts is the one fact a live moment test needs: whether Tam's page has a
+// tag. Everything else is unavailable.
+type onlyFacts struct {
+	decks.Facts
+	has  *bool
+	hero string
+}
+
+func (f onlyFacts) Tags(_ context.Context, _, page string) ([]decks.TagFact, error) {
+	if page == f.hero && *f.has {
+		return []decks.TagFact{{ID: 7, Name: "Cursed"}}, nil
+	}
+	return nil, nil
+}
+
+func (f onlyFacts) Options(context.Context, string) (decks.WhenOptions, error) {
+	return decks.WhenOptions{Heroes: []decks.OptionHero{{ID: f.hero, Name: "Tam"}}, Tags: []decks.TagOption{{ID: 7, Name: "Cursed"}}}, nil
+}
+
+// A moment is a Directors-only message that carries nothing; an invitation
+// reaches the invited player (and the Directors) with the same payload-free
+// "your decks view changed" every player gets, and no one else.
+func TestMomentMessagesReachOnlyTheDirectorsAndTheInvited(t *testing.T) {
+	w := newCardWorld(t)
+	bus := &socketBus{seen: map[string][]string{}, clients: map[string]*ws.Client{
+		"director": {UserID: w.owner, Role: 3},
+		"tam":      {UserID: w.tam, Role: 1},
+		"ilse":     {UserID: w.ilse, Role: 1},
+		"scribe":   {UserID: w.scribe, Role: 2},
+	}}
+	pub := &decksLivePublisher{bus: bus}
+	campSvc := campaigns.NewCampaignService(campaigns.NewCampaignRepository(w.db), trashUserFinder{}, nil, nil, "http://localhost")
+	has := false
+	w.decks = decks.NewService(decks.NewRepository(w.db),
+		cardHeroes{owner: map[string]string{w.tam: w.heroTam, w.ilse: w.heroIlse}},
+		&decksMemberAdapter{svc: campSvc},
+		decks.WithNotifier(pub), decks.WithMomentNotifier(pub), decks.WithMoments(decks.NewMomentRepository(w.db)),
+		decks.WithFacts(onlyFacts{has: &has, hero: w.heroTam}))
+	ctx := context.Background()
+	deck, err := w.decks.Create(ctx, w.camp, w.dir_, decks.CreateDeckInput{Name: "Tam's omens", Kind: decks.KindHero, HolderEntityID: w.heroTam})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := deck.(decks.DirectorDeck).ID
+	tag, yes := 7, true
+	if _, err := w.decks.CreateCard(ctx, w.camp, id, w.dir_, decks.CreateCardInput{Name: "The Drowned Bell",
+		When: decks.WhenList{{Test: decks.TestTag, Who: w.heroTam, Tag: &tag, Has: &yes}}}); err != nil {
+		t.Fatal(err)
+	}
+	bus.seen = map[string][]string{}
+
+	has = true
+	if err := w.decks.Recheck(ctx, w.camp); err != nil {
+		t.Fatal(err)
+	}
+	if len(bus.seen["director"]) != 1 {
+		t.Fatalf("the Director was sent %v", bus.seen["director"])
+	}
+	for _, who := range []string{"tam", "ilse", "scribe"} {
+		if len(bus.seen[who]) != 0 {
+			t.Errorf("%s was sent %v when a moment came", who, bus.seen[who])
+		}
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(bus.seen["director"][0]), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["type"] != "decks.moment" || m["payload"] != nil || m["resourceId"] != nil || strings.Contains(bus.seen["director"][0], "Drowned") {
+		t.Errorf("the moment message says more than \"look again\": %s", bus.seen["director"][0])
+	}
+
+	moments, err := w.decks.Moments(ctx, w.camp, w.dir_)
+	if err != nil || len(moments) != 1 {
+		t.Fatalf("moments = %v, %v", moments, err)
+	}
+	bus.seen = map[string][]string{}
+	if _, err := w.decks.InviteMoment(ctx, w.camp, moments[0].ID, w.dir_); err != nil {
+		t.Fatal(err)
+	}
+	if len(bus.seen["tam"]) != 1 || len(bus.seen["director"]) < 1 {
+		t.Errorf("after the invitation tam was sent %d, the Director %d", len(bus.seen["tam"]), len(bus.seen["director"]))
+	}
+	for _, who := range []string{"ilse", "scribe"} {
+		if len(bus.seen[who]) != 0 {
+			t.Errorf("%s was sent %v when Tam was invited", who, bus.seen[who])
+		}
+	}
+	for _, raw := range bus.seen["tam"] {
+		if !strings.Contains(raw, `"decks.changed"`) || strings.Contains(raw, "moment") || strings.Contains(raw, "Drowned") {
+			t.Errorf("the invited player was sent more than \"your decks view changed\": %s", raw)
+		}
+	}
+}

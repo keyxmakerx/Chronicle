@@ -221,6 +221,18 @@ func (p *decksLivePublisher) Changed(campaignID string, to decks.Audience) {
 	p.bus.Publish(msg)
 }
 
+// MomentChanged tells the Directors that a moment opened, changed or closed.
+// The message is Directors-only whoever else is connected, and carries nothing:
+// the Table fetches the moments again.
+func (p *decksLivePublisher) MomentChanged(campaignID string) {
+	if p.bus == nil {
+		return
+	}
+	msg := ws.NewMessage(ws.MsgDecksMoment, campaignID, "", nil)
+	msg.RequiresDM = true
+	p.bus.Publish(msg)
+}
+
 // decksBellAdapter writes the decks' bell entries through the notification
 // service, which honours each person's notification choices.
 type decksBellAdapter struct {

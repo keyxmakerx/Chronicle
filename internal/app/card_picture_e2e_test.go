@@ -44,7 +44,13 @@ func (h cardHeroes) Owned(_ context.Context, _, userID string) ([]decks.Hero, er
 	return nil, nil
 }
 func (h cardHeroes) InCampaign(_ context.Context, _, id string) (decks.Hero, bool, error) {
-	return decks.Hero{ID: id, Name: "Hero"}, true, nil
+	hero := decks.Hero{ID: id, Name: "Hero"}
+	for user, page := range h.owner {
+		if page == id {
+			hero.OwnerUserID = user
+		}
+	}
+	return hero, true, nil
 }
 func (cardHeroes) Viewable(context.Context, string, string, decks.Viewer) (bool, error) {
 	return true, nil

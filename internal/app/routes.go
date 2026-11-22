@@ -4802,10 +4802,17 @@ func (a *App) RegisterRoutes() {
 	// asks even where the decks plugin is degraded: a campaign with no decks
 	// tables has no card pictures, and any other failure refuses.
 	decksLive := &decksLivePublisher{}
+	// Cards wait for their moment: the facts a card's tests read are bound to
+	// the trackers and layers services once they exist, and the watcher is told
+	// whenever one of them may have changed.
+	decksWatch := newDecksWatcher()
+	decksFacts := &decksFactsAdapter{entities: entityService, characters: characterListService, tags: tagService}
 	decksSvc := decks.NewService(decks.NewRepository(a.DB),
 		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService},
 		decks.WithPictures(&decksPictureAdapter{svc: mediaService}),
-		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}))
+		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
+		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
+		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke))
 	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
@@ -6022,7 +6029,7 @@ func (a *App) RegisterRoutes() {
 	campaignService.SetMediaCleaner(mediaService)
 	campaignService.SetHookDispatcher(wasmHookDispatcher)
 	entityService.SetHookDispatcher(wasmEntityHooks{d: wasmHookDispatcher})
-	tagService.SetHookDispatcher(wasmTagHooks{d: wasmHookDispatcher})
+	tagService.SetHookDispatcher(decksTagHooks{next: wasmTagHooks{d: wasmHookDispatcher}, poke: decksWatch.Poke})
 
 	// --- Game Systems ---
 	// System reference pages and tooltip API, gated by per-campaign addon checks.
@@ -6735,7 +6742,7 @@ func (a *App) RegisterRoutes() {
 	// The quests due-date events follow a page's visibility, so the entity
 	// events also reach them once the quests service exists (attached below).
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
-	entityService.SetEventPublisher(questEntityEvts)
+	entityService.SetEventPublisher(&decksEntityEvents{next: questEntityEvts, poke: decksWatch.Poke})
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	// Calendar writes reach the Foundry module live; without this it only
 	// sees them on reconnect or a manual Pull. Reached by type assertion like
@@ -6943,6 +6950,13 @@ func (a *App) RegisterRoutes() {
 		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
 		registerTrackersBlock(blockRegistry)
 		registerRecipeBlock(blockRegistry)
+		// Every tracker change, of any kind, may bring a card's moment.
+		decksFacts.trackers = trackersSvc
+		if o, ok := trackersSvc.(interface{ SetChangeObserver(trackers.ChangeObserver) }); ok {
+			o.SetChangeObserver(decksTrackerObserver{poke: decksWatch.Poke})
+		} else {
+			slog.Error("decks: the trackers service cannot be observed, so cards will not hear tracker changes")
+		}
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
@@ -7082,7 +7096,8 @@ func (a *App) RegisterRoutes() {
 	var layersSvc transformations.Service // nil while degraded; the AI part is left out then
 	if a.PluginHealth.IsHealthy(transformations.PluginSlug) {
 		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages},
-			transformations.WithNotifier(&transformationsLayersPublisher{bus: wsEventBus}))
+			transformations.WithNotifier(decksLayersNotifier{next: &transformationsLayersPublisher{bus: wsEventBus}, poke: decksWatch.Poke}))
+		decksFacts.layers = layersSvc
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
 		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
@@ -7101,6 +7116,9 @@ func (a *App) RegisterRoutes() {
 	})
 	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
 		decks.RegisterRoutes(e, decks.NewHandler(decksSvc), campaignService, authService, addonService)
+		// Only a healthy plugin is rechecked: without its tables the watcher's
+		// pokes do nothing.
+		decksWatch.bind(decksSvc)
 		registerDecksBlock(blockRegistry, decksSvc)
 	} else {
 		slog.Warn("decks plugin degraded — card decks are not available")
