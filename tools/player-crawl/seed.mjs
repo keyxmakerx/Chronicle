@@ -353,6 +353,27 @@ export async function seed(base, log = console.log) {
     must(await owner.del(`${C}/entities/${shopA}/relations/${rel.id}`), 'remove open listing');
   });
 
+  // 14c. A Director's card deck: its name, a card's name and words (the face of
+  // a card still in the pile) and a note for Directors. Every deck page, tab and
+  // fragment is a Director page; no one else may be shown any of it.
+  const extraUrls = [`${C}/armory?goods=1`, `${C}/armory?goods=1&q=ZQ${RUN}`];
+  await step('a Director deck', async () => {
+    const name = m('DECKNAME', 'name of a deck only the Director may open');
+    r = must(await postJSON(`${C}/decks`, { name, kind: 'event' }), 'deck');
+    const deck = JSON.parse(r.text).id;
+    if (!deck) throw new Error('no deck id in the answer');
+    ids.deck = deck;
+    const face = m('DECKFACE', 'name of a card still face down in the pile');
+    const words = m('DECKWORDS', 'words on a card still face down in the pile');
+    const note = m('DECKNOTE', 'a Director note on a card');
+    r = must(await postJSON(`${C}/decks/${deck}/cards`, { name: face, words, directorNote: note, copies: 1 }), 'card');
+    const cards = JSON.parse(r.text).cards || [];
+    const card = (cards.find((c) => c.name === face) || {}).id;
+    if (card) extraUrls.push(`${C}/decks/workshop/${deck}/cards?card=${card}`);
+    // One drawn and sitting in the shown spot, where only a Director sees its face.
+    r = must(await postJSON(`${C}/decks/${deck}/draw`, { count: 1 }), 'draw');
+  });
+
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.
   await step('public campaign', async () => {
     must(await owner.put(C, { json: { name: 'Crawl ' + RUN, description: '', is_public: true } }), 'update campaign');
@@ -374,7 +395,7 @@ export async function seed(base, log = console.log) {
     if (r.status >= 400) throw new Error('player page note -> ' + r.status + ' ' + r.text.slice(0, 120));
   });
 
-  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ...ids.extra);
+  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ...ids.extra);
 
-  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls: [`${C}/armory?goods=1`, `${C}/armory?goods=1&q=ZQ${RUN}`], skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
+  return { owner, player, player2, scribe, guest, playerOnly, ids, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
 }

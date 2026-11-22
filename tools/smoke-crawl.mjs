@@ -109,7 +109,41 @@ async function seedCampaign() {
     await submit(n);
     entity = entity || (page.url().match(/\/entities\/([0-9a-f-]{36})/) || [])[1] || '';
   }
-  return { id, entity };
+  // One deck with a card and a drawn card, so the Director's deck pages have
+  // something to draw. Uses the page's own Chronicle.apiFetch for the CSRF token.
+  const deck = await page.evaluate(async (cid) => {
+    const post = async (url, body) => {
+      const r = await Chronicle.apiFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      return r.ok ? r.json() : null;
+    };
+    const d = await post(`/campaigns/${cid}/decks`, { name: 'Smoke deck', kind: 'event' });
+    if (!d) return '';
+    await post(`/campaigns/${cid}/decks/${d.id}/cards`, { name: 'Smoke card', copies: 2 });
+    await post(`/campaigns/${cid}/decks/${d.id}/draw`, { count: 1 });
+    return d.id;
+  }, id);
+  if (!deck) console.log('smoke-crawl: no deck was made, the deck pages are not visited');
+  return { id, entity, deck };
+}
+
+// The Director's deck workshop: every full page, and each tab and the table row
+// as the fragment a tab swap fetches. Tabs are buttons, so the link walk
+// never reaches them.
+async function deckPages(ids) {
+  if (!ids.deck) return 0;
+  const base = `${BASE}/campaigns/${ids.id}/decks/workshop`;
+  const pages = [base, `${base}/new`, `${base}/${ids.deck}`];
+  const frags = ['table', 'cards', 'look', 'rules', 'players'].map((t) => `${base}/${ids.deck}/${t}`);
+  for (const u of pages) {
+    const res = await visit(u);
+    if (res && res.status() !== 200) problems.push(`${u.replace(BASE, '')}: answered ${res.status()} for the Director`);
+  }
+  for (const u of frags) {
+    at = u.replace(BASE, '');
+    const res = await page.request.get(u, { headers: { 'HX-Request': 'true' }, timeout: 15000 }).catch(() => null);
+    if (!res || res.status() !== 200) problems.push(`${at}: fragment answered ${res ? res.status() : 'nothing'} for the Director`);
+  }
+  return pages.length + frags.length;
 }
 
 async function visit(u) {
@@ -197,7 +231,7 @@ try {
   const ids = await seedCampaign();
   // /admin answers only a site admin; on a fresh instance the first account is one.
   const walked = (await walk(`${BASE}/campaigns/${ids.id}`)) + (await walk(BASE + '/admin'));
-  const probed = await probe(ids);
+  const probed = (await probe(ids)) + (await deckPages(ids));
   const unique = [...new Set(problems)];
   console.log(`smoke-crawl: walked ${walked} pages, probed ${probed} routes, ${unique.length} problem(s)`);
   for (const p of unique) console.log('  ' + p);
