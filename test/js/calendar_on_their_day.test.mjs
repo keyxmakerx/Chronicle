@@ -1,7 +1,7 @@
 // calendar_on_their_day.test.mjs — pins the Director's "waiting for its day"
 // rule: it must agree with the server's EffectiveAnnounced and its "strictly
 // after today" cut (calendar/model.go, service.go dropUnannouncedFutureEvents),
-// or the half ring on the month would promise something players never get.
+// or the waiting mark on the month would promise something players never get.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

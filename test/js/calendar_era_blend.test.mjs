@@ -90,6 +90,13 @@ test('daysClip outlines only the real day cells, leading and trailing cells left
   assert.equal(api.daysClip({ ...scene([gas]), rows: [] }), null);
 });
 
+test('daysClip takes in every row, edge to edge, when the weeks show their neighbouring days', () => {
+  const { api } = loadBlend();
+  const pts = (sc) => JSON.parse(JSON.stringify(api.daysClip(sc)));
+  assert.deepEqual(pts({ ...scene([gas]), outside: true }), [[0, 0], [280, 0], [280, 200], [0, 200]]);
+  assert.equal(api.daysClip({ ...scene([gas]), outside: true, rows: [] }), null);
+});
+
 test('normalizeLook fills and clamps what the server or a hand edit sends', () => {
   const { api } = loadBlend();
   assert.deepEqual({ ...api.normalizeLook(null) }, { colors_on: true, feel: 'subtle', intensity: 1, speed: 1 });
