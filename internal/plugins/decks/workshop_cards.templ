@@ -1,0 +1,187 @@
+package decks
+
+import "strconv"
+
+// DeckCardsTab is the Cards tab: the deck's cards at hand size, each with its
+// copies as a small count, and the open card's editor beside them (under them
+// on a phone). A Director view: it draws every card's face and note.
+templ DeckCardsTab(p deckPage) {
+	{{ cur, editing := p.cardByID(p.Card) }}
+	<div class="dkw-cards" data-dkw-cards data-url={ p.frag("cards") } data-newname={ newCardName(p.Deck.Cards) } data-count={ strconv.Itoa(len(p.Deck.Cards)) }>
+		<div class="dkw-grid-wrap">
+			<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+			<div class="dkw-tools">
+				<button type="button" class="dkw-word dkw-add" data-act="add-card" data-working-label="Adding…">+ Card</button>
+				<span class="dkw-quiet">{ cardsWords(len(p.Deck.Cards)) } defined, { strconv.Itoa(p.totalCards()) } in the deck</span>
+			</div>
+			if len(p.Deck.Cards) == 0 {
+				<p class="dkw-empty">This deck has no cards yet. Add the first one and give it a name.</p>
+			}
+			<ul class="dkw-grid" id="dkw-grid">
+				for _, c := range p.Deck.Cards {
+					<li>
+						<a
+							class="dkw-cardlink"
+							href={ templ.SafeURL(p.pageURL("cards") + "&card=" + c.ID) }
+							data-card={ c.ID }
+							aria-current={ currentWord(editing && cur.ID == c.ID) }
+							aria-label={ c.Name + ", " + copiesWords(c.Copies) }
+						>
+							@CardView(p.Deck.Look, upState(c, SizeHand), CardOpts{Size: SizeHand})
+							<span class="dkw-copies" aria-hidden="true">{ strconv.Itoa(c.Copies) }</span>
+						</a>
+					</li>
+				}
+			</ul>
+		</div>
+		if editing {
+			@cardEditor(p, cur)
+		} else if len(p.Deck.Cards) > 0 {
+			<p class="dkw-quiet dkw-pickone">Choose a card to edit it.</p>
+		}
+	</div>
+}
+
+func currentWord(on bool) string {
+	if on {
+		return "true"
+	}
+	return "false"
+}
+
+func copiesWords(n int) string {
+	if n == 1 {
+		return "1 copy"
+	}
+	return strconv.Itoa(n) + " copies"
+}
+
+// newCardName is a name no card of the deck has, for "+ Card".
+func newCardName(cards []DirectorCard) string {
+	taken := map[string]bool{}
+	for _, c := range cards {
+		taken[c.Name] = true
+	}
+	if !taken["New card"] {
+		return "New card"
+	}
+	for i := 2; ; i++ {
+		if n := "New card " + strconv.Itoa(i); !taken[n] {
+			return n
+		}
+	}
+}
+
+// fateWords says where a used card goes, for the deck's own way and a card's.
+func fateWords(f string) string {
+	switch f {
+	case FateBack:
+		return "back into the pile"
+	case FateGone:
+		return "out of the game"
+	case FatePlay:
+		return "into play, in front of the hero"
+	}
+	return "to the used pile"
+}
+
+// cardEditor is one card's editor: every field saves as it is changed, and the
+// card beside it shows the change at once.
+templ cardEditor(p deckPage, c DirectorCard) {
+	<form class="dkw-editor" data-dkw-editor data-card-id={ c.ID } onsubmit="return false">
+		<div class="dkw-ed-top">
+			<h2 class="dkw-lab">One card <span class="dkw-quiet">of { p.Deck.Name }</span></h2>
+			<button type="button" class="dkw-word" data-act="close-card">Done</button>
+		</div>
+		<div class="dkw-ed-body">
+			<div class="dkw-preview" id="dkw-preview" data-dk-stage>
+				@CardView(p.Deck.Look, upState(c, SizeOpen), CardOpts{Size: SizeOpen})
+			</div>
+			<div class="dkw-ed-fields">
+				<div class="dkw-field">
+					<label for="dkw-f-name">Name</label>
+					<input id="dkw-f-name" class="dkw-line" type="text" value={ c.Name } maxlength="120" data-field="name" autocomplete="off"/>
+				</div>
+				<div class="dkw-field">
+					<label for="dkw-f-words">Words players read</label>
+					<textarea id="dkw-f-words" class="dkw-line" rows="3" maxlength="2000" data-field="words">{ c.Words }</textarea>
+				</div>
+				<div class="dkw-field">
+					<span class="dkw-flabel" id="dkw-pic-l">Picture</span>
+					<div class="dkw-pic" role="group" aria-labelledby="dkw-pic-l">
+						if c.Picture != "" {
+							<img class="dkw-pic-img" alt="The card's picture" src={ pictureURL(c.Picture, SizeRow) } width="64" height="64"/>
+						}
+						<button type="button" class="dkw-btn" data-widget="media-picker" data-campaign-id={ p.CampaignID } data-mime-prefix="image/" data-event-target="media-picker:select" data-dkw-pick>
+							if c.Picture != "" {
+								Change picture
+							} else {
+								Choose a picture
+							}
+						</button>
+						if c.Picture != "" {
+							<button type="button" class="dkw-word" data-act="remove-picture">Remove picture</button>
+						}
+					</div>
+				</div>
+				<div class="dkw-row2">
+					<div class="dkw-field">
+						<span class="dkw-flabel" id="dkw-kind-l">Kind</span>
+						<div class="dkw-chips" role="radiogroup" aria-labelledby="dkw-kind-l">
+							<button type="button" class="dkw-chip" role="radio" aria-checked={ boolWord(c.KindKey == "") } data-kind-key="">No kind</button>
+							for _, k := range p.Deck.Look.Kinds {
+								<button type="button" class={ "dkw-chip", paletteOf(k.Colour) } role="radio" aria-checked={ boolWord(c.KindKey == k.Key) } data-kind-key={ k.Key }>
+									@KindSign(k.Sign)
+									{ k.Name }
+								</button>
+							}
+						</div>
+						if len(p.Deck.Look.Kinds) == 0 {
+							<span class="dkw-quiet">This deck has no kinds yet. Add them on the Look tab.</span>
+						}
+					</div>
+					<div class="dkw-field dkw-narrow">
+						<label for="dkw-f-corner">Corner value</label>
+						<input id="dkw-f-corner" class="dkw-line" type="text" value={ c.Corner } maxlength="12" data-field="corner" autocomplete="off"/>
+					</div>
+				</div>
+				<div class="dkw-row2">
+					<label class="dkw-switch">
+						<input type="checkbox" role="switch" data-field="rare" checked?={ c.Rare }/>
+						<span>Rare</span>
+					</label>
+					<div class="dkw-field dkw-narrow">
+						<span class="dkw-flabel" id="dkw-copies-l">Copies</span>
+						<span class="dkw-step" role="group" aria-labelledby="dkw-copies-l">
+							<button type="button" class="dkw-stepbtn" data-act="copies-down" aria-label="One copy fewer" disabled?={ c.Copies <= 1 }>−</button>
+							<output class="dkw-count" data-dkw-copies>{ strconv.Itoa(c.Copies) }</output>
+							<button type="button" class="dkw-stepbtn" data-act="copies-up" aria-label="One copy more" disabled?={ c.Copies >= MaxCopiesPerCard }>+</button>
+						</span>
+					</div>
+				</div>
+				<p class="dkw-sentence">
+					<label for="dkw-f-fate">After it is used it goes</label>
+					<select id="dkw-f-fate" class="dw-blank is-filled" data-field="fate">
+						<option value="" selected?={ c.Fate == "" }>{ "the deck's way: " + fateWords(p.Deck.Settings.Fate) }</option>
+						for _, f := range []string{FateBack, FateUsed, FateGone, FatePlay} {
+							<option value={ f } selected?={ c.Fate == f }>{ fateWords(f) }</option>
+						}
+					</select>.
+				</p>
+				<label class="dkw-switch">
+					<input type="checkbox" role="switch" data-field="askFirst" checked?={ c.AskFirst }/>
+					<span>Ask me before a player plays it</span>
+				</label>
+				<p class="dkw-quiet">Conditions for when this card can come up arrive in a later step.</p>
+				<div class="dkw-note" data-dm-only>
+					<label for="dkw-f-note">Note for the Directors</label>
+					<textarea id="dkw-f-note" class="dkw-line" rows="2" maxlength="2000" data-field="directorNote">{ c.DirectorNote }</textarea>
+				</div>
+				<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+				<div class="dkw-actions">
+					<button type="button" class="dkw-word dkw-danger" data-act="delete-card" data-name={ c.Name }>Delete this card</button>
+				</div>
+			</div>
+		</div>
+	</form>
+}

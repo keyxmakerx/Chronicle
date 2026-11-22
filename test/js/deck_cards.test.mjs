@@ -4,7 +4,7 @@
 // point for no more than 400ms, turn one card at a time, and end every move on
 // the page's own motion level (Calm fades, Off shows the end at once). The
 // pieces are pure or take their hooks, so they run here without a browser; the
-// browser check lives in test/live/deck_card_looks.spec.mjs.
+// browser check lives in test/live/deck_workshop.spec.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,9 +38,9 @@ test('the turn-overs match the list the server accepts', () => {
 });
 
 test('the fixed moves match the server list', () => {
-  const src = readFileSync(join(decks, 'looks_page.go'), 'utf8');
+  const src = readFileSync(join(decks, 'card_look.go'), 'utf8');
   const m = src.match(/func moveNames\(\) \[\]string \{\s*return \[\]string\{([^}]*)\}/);
-  assert.ok(m, 'no moveNames in looks_page.go');
+  assert.ok(m, 'no moveNames in card_look.go');
   assert.deepEqual([...DC.MOVES], [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]));
 });
 

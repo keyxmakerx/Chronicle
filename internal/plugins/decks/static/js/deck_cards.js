@@ -706,45 +706,9 @@
 
   // ---- Mounting ----
 
-  // The Director's proof sheet (looks_page.templ) plays a sample per button:
-  // one delegated handler on the sheet, bound the first time a card mounts.
-  function bindProof(root) {
-    if (!root || root.__dkProof) return;
-    root.__dkProof = true;
-    root.addEventListener('click', function (ev) {
-      var b = ev.target.closest && ev.target.closest('[data-dk-move],[data-dk-reset]');
-      var one = b && b.closest('[data-dk-one]');
-      if (!one || !root.contains(one)) return;
-      if (b.hasAttribute('data-dk-reset')) return resetSample(one);
-      var cards = Array.prototype.slice.call(one.querySelectorAll('[data-dk-card]'));
-      var name = b.getAttribute('data-dk-move');
-      var o = { dx: parseInt(b.getAttribute('data-dx'), 10) || 0, dy: parseInt(b.getAttribute('data-dy'), 10) || 0 };
-      if (name === 'shuffle') return shuffle(cards);
-      if (name === 'deal') return deal(cards, o);
-      move(cards[0], name, o);
-    });
-  }
-
-  function resetSample(one) {
-    var slot = one.querySelector('[data-dk-slot]');
-    var tpl = one.querySelector('template.dk-down-tpl');
-    if (slot && tpl) {
-      slot.innerHTML = tpl.innerHTML; // the server's own markup for the card face down
-      var c = slot.querySelector('[data-dk-card]');
-      if (c) { c.__dkMounted = false; mount(c); }
-      return;
-    }
-    one.querySelectorAll('[data-dk-card]').forEach(function (c) {
-      settle(c);
-      c.hidden = false;
-      c.classList.remove('dk-spent', 'dk-gone-mask');
-    });
-  }
-
   function mount(card) {
     if (card.__dkMounted) return;
     card.__dkMounted = true;
-    bindProof(card.closest('[data-dk-proof]'));
     var btn = card.querySelector('.dk-turn');
     if (btn) {
       card.__dkClick = function () { turnOver(card); };

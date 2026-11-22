@@ -470,20 +470,7 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 @property --dk-g { syntax: '<percentage>'; inherits: true; initial-value: -20%; }
 .dk-spent { filter: saturate(.35) brightness(.9); }
 
-/* ---- the proof page (a Director's sheet of every look; goes with the Look tab) ---- */
-.dk-pf { max-width: 1100px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 28px; }
-.dk-pf h2 { margin: 0 0 4px; font-size: 18px; color: var(--color-text-primary); }
-.dk-pf p { margin: 0 0 10px; color: var(--color-text-muted); font-size: 14px; max-width: 70ch; }
-.dk-pf-sec { padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-secondary); min-width: 0; }
-.dk-pf-row { display: flex; flex-wrap: wrap; gap: 18px 22px; align-items: flex-start; }
-.dk-pf-one { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; min-width: 0; }
-.dk-pf-lbl { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--color-text-muted); text-align: center; overflow-wrap: anywhere; }
-.dk-pf-play { min-height: 40px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-.dk-pf-play:hover { border-color: var(--color-accent); }
-.dk-pf-play:focus-visible, .dk-turn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.dk-pf-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
-.dk-pf-field { position: relative; width: 210px; height: 170px; border: 1px dashed var(--color-border); border-radius: 12px; }
-.dk-pf-field .dk-wrap { position: absolute; left: 16px; top: 16px; }
+.dk-turn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 /* a face that has not arrived yet: plain material with the card's shape */
 .dk-plain { position: relative; display: block; width: 100%; aspect-ratio: 7 / 12; border: 1px solid var(--color-border); border-radius: var(--shape-r-panel, 12px); background: var(--color-bg-secondary); }
 .dk-plain.dk-s-small, .dk-plain.dk-s-standard { aspect-ratio: 5 / 7; }
@@ -491,10 +478,6 @@ html[data-motion] :is(.dk-b-brass, .dk-b-steel, .dk-b-bound):hover::after { tran
 html:not([data-motion]) .dk-art > .dk-pic { transition: opacity var(--dur-standard) var(--ease-out); }
 .dk-wrap:focus { outline: none; }
 .dk-wrap:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 12px; }
-.dk-pf-h1 { margin: 0 0 6px; font-size: 22px; font-weight: 700; color: var(--color-text-primary); }
-.dk-pf-field .dk-wrap.dk-sz-hand { left: 58px; }
-.dk-pf-pile .dk-wrap:nth-child(2) { margin: 4px 0 0 5px; }
-.dk-pf-pile .dk-wrap:nth-child(3) { margin: 8px 0 0 10px; }
 
 /* the deck's turn-over sets how deep the card's perspective is; a flat turn has none */
 .dk-t-slow { perspective: 900px; }

@@ -3,9 +3,6 @@ package decks
 import (
 	"bytes"
 	"context"
-	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"regexp"
@@ -13,10 +10,6 @@ import (
 	"testing"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v5"
-
-	"github.com/keyxmakerx/chronicle/internal/apperror"
-	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 func renderToString(t *testing.T, c templ.Component) string {
@@ -305,72 +298,6 @@ func TestMaterialsAreDefinedOnceAtTheTop(t *testing.T) {
 	for _, name := range []string{"--dk-iron:", "--dk-brass:", "--dk-steel:", "--dk-stone:", "--dk-gold:"} {
 		if c := strings.Count(css, "  "+name); c != 1 || !strings.Contains(css[i:j], name) {
 			t.Errorf("%s must be defined once, in the MATERIALS block (found %d)", name, c)
-		}
-	}
-}
-
-func callLooks(cc *campaigns.CampaignContext) (*httptest.ResponseRecorder, error) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/decks/looks", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}})
-	if cc != nil {
-		c.Set("campaign_context", cc)
-	}
-	return rec, NewHandler(nil).Looks(c)
-}
-
-// The proof page is Director-only: everyone else gets the answer a missing page gets.
-func TestLooksPageGates(t *testing.T) {
-	ctx := func(role campaigns.Role, grant bool) *campaigns.CampaignContext {
-		return &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role, IsMember: true, IsDmGranted: grant}
-	}
-	for name, cc := range map[string]*campaigns.CampaignContext{
-		"player": ctx(campaigns.RolePlayer, false), "scribe": ctx(campaigns.RoleScribe, false),
-	} {
-		_, err := callLooks(cc)
-		var ae *apperror.AppError
-		if !errors.As(err, &ae) || ae.Code != http.StatusNotFound {
-			t.Errorf("%s: got %v, want a 404", name, err)
-		}
-	}
-	if _, err := callLooks(nil); err == nil {
-		t.Error("no campaign context must be refused")
-	}
-	for name, cc := range map[string]*campaigns.CampaignContext{"owner": ctx(campaigns.RoleOwner, false), "granted player": ctx(campaigns.RolePlayer, true)} {
-		rec, err := callLooks(cc)
-		if err != nil || rec.Code != http.StatusOK {
-			t.Errorf("%s: err %v, status %d, want the page", name, err, rec.Code)
-		}
-	}
-}
-
-// The sheet draws every border on every shape and a card per turn-over and move.
-func TestProofSectionsCoverEverything(t *testing.T) {
-	secs := proofSections()
-	by := map[string]proofSection{}
-	for _, s := range secs {
-		by[s.ID] = s
-	}
-	if got, want := len(by["borders"].Cells), len(borderValues)*len(shapeValues); got != want {
-		t.Errorf("borders: %d cells, want %d", got, want)
-	}
-	if got := len(by["turns"].Cells); got != len(turnValues) {
-		t.Errorf("turns: %d cells, want %d", got, len(turnValues))
-	}
-	if got := len(by["moves"].Cells); got != len(moveNames()) {
-		t.Errorf("moves: %d cells, want %d", got, len(moveNames()))
-	}
-	for _, id := range []string{"windows", "names", "lettering", "corners", "markers", "finishes", "backs", "kinds", "leaf", "hand"} {
-		if len(by[id].Cells) == 0 {
-			t.Errorf("section %q is empty", id)
-		}
-	}
-	page := renderToString(t, proofPageBody(secs))
-	for _, p := range Palette {
-		if !strings.Contains(page, "dk-pal-"+p) {
-			t.Errorf("the sheet shows no %s card", p)
 		}
 	}
 }

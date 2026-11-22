@@ -1,0 +1,187 @@
+package decks
+
+import "strconv"
+
+// DeckLookTab is the Look tab: the live card and its back on the left, one row
+// of small real cards for every choice on the right, and the starting styles
+// across the top. Choosing saves on its own through the deck's JSON route; a
+// turn-over plays on the big card, which sits on a stage so a Director sees
+// the deck's real turn-over. A Director view.
+templ DeckLookTab(p deckPage) {
+	{{ l := p.Deck.Look }}
+	{{ sample := sampleCardFor(l, sampleCard(p.Deck, p.Kind)) }}
+	{{ styleName, changed := styleNote(l) }}
+	<div class="dkw-look" data-dkw-look data-url={ p.frag("look") } data-small={ boolWord(l.Shape == "small") }>
+		<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+		<div class="dkw-startrow">
+			<span class="dkw-lab">Start from</span>
+			<div class="dkw-stylestrip" role="group" aria-label="Start from a style">
+				for _, s := range deckStyles {
+					{{ sl := fanLook(s) }}
+					<button type="button" class="dkw-style dkw-style-s" data-act="apply-style" data-style={ s.Key } data-look={ styleJSON(s) } aria-label={ "Start from " + s.Name + ". " + s.Line }>
+						<span class="dkw-fan" aria-hidden="true">
+							<span class="dkw-fan-a">@CardBack(sl, SizeHand)</span>
+							<span class="dkw-fan-b">@CardView(sl, FaceUp(fanFace(), ""), CardOpts{Size: SizeHand})</span>
+						</span>
+						<b>{ s.Name }</b>
+					</button>
+				}
+			</div>
+			<p class="dkw-quiet dkw-stylenote" data-dkw-stylenote>
+				{ styleName }
+				if changed {
+					, changed
+				}
+			</p>
+		</div>
+		<div class="dkw-lookgrid">
+			<div class="dkw-stagecol">
+				<div class="dkw-stage" data-dk-one data-dk-stage>
+					<div class="dkw-pair">
+						<figure class="dkw-fig">
+							<div data-dk-slot id="dkw-bigcard">
+								@CardView(l, upState(sample, SizeOpen), CardOpts{Size: SizeOpen})
+							</div>
+							<figcaption class="dkw-quiet">Face</figcaption>
+						</figure>
+						<figure class="dkw-fig">
+							@CardBack(l, SizeRow)
+							<figcaption class="dkw-quiet">Back</figcaption>
+						</figure>
+					</div>
+					<template class="dk-face-tpl" data-delay="0">
+						@CardFace(l, upState(sample, SizeOpen), CardOpts{Size: SizeOpen})
+					</template>
+					<template class="dk-down-tpl">
+						@CardView(l, FaceDown(), CardOpts{Size: SizeOpen, DeckName: p.Deck.Name})
+					</template>
+					<button type="button" class="btn-primary text-sm" data-act="play-turn" id="dkw-playturn">Play the turn-over</button>
+				</div>
+				if len(l.Kinds) > 0 {
+					<div class="dkw-kindbtns" role="group" aria-label="See each kind of card">
+						for _, k := range l.Kinds {
+							<button
+								type="button"
+								class={ "dkw-chip", paletteOf(k.Colour) }
+								aria-pressed={ boolWord(sample.KindKey == k.Key) }
+								data-act="show-kind"
+								data-kind-key={ k.Key }
+								data-url={ p.frag("look") + "?kind=" + k.Key }
+							>
+								@KindSign(k.Sign)
+								{ k.Name }
+							</button>
+						}
+					</div>
+				}
+				<p>
+					<button type="button" class="dkw-word" data-act="toggle-kinds" aria-expanded="false" aria-controls="dkw-kinds">Words on the back, and the kinds of card</button>
+				</p>
+			</div>
+			<div class="dkw-rows">
+				for _, row := range lookRows {
+					@lookRowView(l, row, sample)
+				}
+			</div>
+		</div>
+		@kindsEditor(l)
+	</div>
+}
+
+// lookRowView is one choice: its heading with the current value, and a row of
+// small real cards or backs, none a dropdown.
+templ lookRowView(l Look, row lookRow, sample DirectorCard) {
+	{{ cur := lookValue(l, row.Key) }}
+	{{ fold := row.folded(l) }}
+	<section class="dkw-lrow" data-row={ row.Key }>
+		<h3 class="dkw-lab" id={ "dkw-r-" + row.Key }>{ row.Title } <span class="dkw-quiet" data-dkw-cur>{ row.word(cur) }</span></h3>
+		if row.TallOnly && l.Shape != "tall" {
+			<p class="dkw-quiet">Only on tall cards.</p>
+		}
+		<div class={ "dkw-opts", templ.KV("dkw-opts-dots", row.Kind == "colour") } role="radiogroup" aria-labelledby={ "dkw-r-" + row.Key }>
+			for i, v := range row.Values {
+				{{ why := row.unavailable(l, v) }}
+				<button
+					type="button"
+					class={ "dkw-opt", templ.KV("dkw-dotopt", row.Kind == "colour") }
+					role="radio"
+					aria-checked={ boolWord(v == cur) }
+					aria-disabled={ boolWord(why != "") }
+					data-path={ row.Key }
+					data-value={ v }
+					data-word={ row.word(v) }
+					hidden?={ fold > 0 && i >= foldAfter }
+					if why != "" {
+						title={ why }
+						aria-describedby={ "dkw-w-" + row.Key + "-" + strconv.Itoa(i) }
+					}
+				>
+					@swatch(l, row, v, sample)
+					<span class="dkw-optname">{ row.word(v) }</span>
+					if why != "" && !(row.TallOnly) {
+						<span class="dkw-reason" id={ "dkw-w-" + row.Key + "-" + strconv.Itoa(i) }>{ why }</span>
+					}
+				</button>
+			}
+		</div>
+		if fold > 0 {
+			<button type="button" class="dkw-word" data-act="show-all" data-count={ strconv.Itoa(len(row.Values)) } aria-expanded="false">Show all { strconv.Itoa(len(row.Values)) }</button>
+		}
+	</section>
+}
+
+// swatch draws one choice as the thing it chooses: a card wearing the value, a
+// back wearing it, a back in the turn-over's pose, or a colour dot.
+templ swatch(l Look, row lookRow, v string, sample DirectorCard) {
+	{{ cl := withChoice(l, row.Key, v) }}
+	switch row.Kind {
+		case "back":
+			<span class="dkw-sw" aria-hidden="true">@CardBack(cl, SizeHand)</span>
+		case "pose":
+			<span class={ "dkw-sw", poseClass(v) } aria-hidden="true">@CardBack(l, SizeHand)</span>
+		case "colour":
+			<span class={ "dkw-dot", paletteOf(v), templ.KV("dkw-dot-campaign", v == "") } aria-hidden="true"></span>
+		default:
+			<span class="dkw-sw" aria-hidden="true">@CardView(cl, upState(sampleCardFor(cl, sample), SizeHand), CardOpts{Size: SizeHand})</span>
+	}
+}
+
+// kindsEditor is the words on the back and the kinds of card: name, colour and
+// sign for up to twelve. A kind a card still wears cannot be removed, and the
+// server says which card.
+templ kindsEditor(l Look) {
+	<section class="dkw-kinds" id="dkw-kinds" data-dkw-kinds hidden>
+		<h3 class="dkw-lab">The back's words, and the kinds of card</h3>
+		<div class="dkw-field">
+			<label for="dkw-backwords">Words on the back</label>
+			<input id="dkw-backwords" class="dkw-line" type="text" value={ l.Back.Words } maxlength="24" data-back-words autocomplete="off"/>
+		</div>
+		<ul class="dkw-kindlist" data-dkw-kindlist>
+			for _, k := range l.Kinds {
+				@kindRow(k)
+			}
+		</ul>
+		<button type="button" class="dkw-word" data-act="add-kind" disabled?={ len(l.Kinds) >= MaxKinds }>Add a kind</button>
+		<span class="dkw-quiet">{ strconv.Itoa(len(l.Kinds)) } of { strconv.Itoa(MaxKinds) }</span>
+		<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+	</section>
+}
+
+// kindRow is one kind: a name, a colour and a sign, each in words.
+templ kindRow(k KindDef) {
+	<li class={ "dkw-kindrow", paletteOf(k.Colour) } data-kind-key={ k.Key }>
+		<span class="dkw-kindsign" aria-hidden="true">@KindSign(k.Sign)</span>
+		<input class="dkw-line" type="text" value={ k.Name } maxlength="24" aria-label="Kind name" data-kind-name autocomplete="off"/>
+		<select class="dkw-select" aria-label={ "Colour of " + k.Name } data-kind-colour>
+			for _, c := range Palette {
+				<option value={ c } selected?={ c == k.Colour }>{ c }</option>
+			}
+		</select>
+		<select class="dkw-select" aria-label={ "Sign of " + k.Name } data-kind-sign>
+			for _, s := range signValues {
+				<option value={ s } selected?={ s == k.Sign }>{ s }</option>
+			}
+		</select>
+		<button type="button" class="dkw-word dkw-danger" data-act="remove-kind">Remove</button>
+	</li>
+}

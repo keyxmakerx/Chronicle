@@ -1,0 +1,71 @@
+package decks
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// WorkshopListPage is the Decks app page: the campaign's decks, each drawn as
+// its back with its name, who it is for and how many cards are where.
+templ WorkshopListPage(campaignID string, ds []DirectorDeck) {
+	@layouts.App("Card decks") {
+		@CardSheet()
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_workshop.css") }/>
+		@layouts.AppFrame() {
+			@layouts.AppOpening(decksOpening(campaignID, len(ds) == 0)) {
+				if len(ds) > 0 {
+					<span>{ deckCountWords(len(ds)) }</span>
+				}
+			}
+			if len(ds) > 0 {
+				<ul class="dkw-decks" data-dkw-list>
+					for _, d := range ds {
+						<li>
+							<a class="dkw-deck" href={ templ.SafeURL("/campaigns/" + campaignID + "/decks/workshop/" + d.ID) }>
+								<span class="dkw-deck-back">
+									@CardBack(d.Look, SizeRow)
+								</span>
+								<span class="dkw-deck-text">
+									<b class="dkw-deck-name">{ d.Name }</b>
+									<span class="dkw-quiet">{ kindWords(d.Kind) }</span>
+									<span class="dkw-quiet">{ strconv.Itoa(d.Counts.Pile) } in the pile, { strconv.Itoa(d.Counts.Used) } used, { strconv.Itoa(d.Counts.Play) } in play</span>
+								</span>
+							</a>
+						</li>
+					}
+				</ul>
+			}
+		}
+	}
+}
+
+// decksOpening is the page's introduction: one line on what a deck is, and
+// the one action, which is the same in the empty and the full page.
+func decksOpening(campaignID string, empty bool) layouts.AppOpeningData {
+	line := "A deck is a pile of cards you draw from at the table, for one hero, for the whole party, or for an event."
+	return layouts.AppOpeningData{
+		Name:   "Card decks",
+		Empty:  empty,
+		Intros: layouts.AppIntros{Player: line, CoDM: line, Owner: line},
+		Action: &layouts.AppAction{Label: "New deck", Icon: "fa-plus", Href: "/campaigns/" + campaignID + "/decks/workshop/new"},
+	}
+}
+
+func deckCountWords(n int) string {
+	if n == 1 {
+		return "1 deck"
+	}
+	return strconv.Itoa(n) + " decks"
+}
+
+// kindWords says who a deck is for.
+func kindWords(kind string) string {
+	switch kind {
+	case KindHero:
+		return "A hero's deck"
+	case KindParty:
+		return "The party's deck"
+	}
+	return "An event deck"
+}

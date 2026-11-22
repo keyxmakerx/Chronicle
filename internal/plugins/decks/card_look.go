@@ -292,3 +292,9 @@ func backLabel(o CardOpts) string {
 // cardStylesheet is the card's stylesheet address, versioned by the asset
 // hash so a change reaches viewers at once.
 func cardStylesheet() string { return layouts.AssetURL("/static/css/decks_card.css") }
+
+// moveNames are the fixed moves, the same for every deck; deck_cards.js plays
+// exactly these and a test pins the two lists together.
+func moveNames() []string {
+	return []string{"draw", "deal", "shuffle", "play", "used", "gone", "ready"}
+}

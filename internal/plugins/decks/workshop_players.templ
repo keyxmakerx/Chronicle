@@ -1,0 +1,34 @@
+package decks
+
+import "strconv"
+
+// DeckPlayersTab is the Players tab: who may draw for themselves, and how many
+// draws each has left. It saves through the chosen-players route with the
+// deck's version. Directors always draw and are not listed.
+templ DeckPlayersTab(p deckPage) {
+	{{ rows := p.playerRows() }}
+	<div class="dkw-players" data-dkw-players>
+		if p.Deck.Settings.Draws != "players" {
+			<p class="dkw-quiet">Players draw only when the deck's rule says so. Right now only the Directors draw. Change it on the Rules tab.</p>
+		}
+		if len(rows) == 0 {
+			<p class="dkw-empty">Nobody has joined this campaign as a player yet.</p>
+		}
+		<ul class="dkw-plist">
+			for _, r := range rows {
+				<li class="dkw-prow" data-user={ r.UserID }>
+					<label class="dkw-switch">
+						<input type="checkbox" role="switch" data-chosen checked?={ r.Chosen }/>
+						<span>{ r.Name }</span>
+					</label>
+					<label class="dkw-pleft">
+						<span class="dkw-quiet">Draws left</span>
+						<input class="dkw-line dkw-num" type="number" min="0" max={ strconv.Itoa(MaxDraws) } inputmode="numeric" placeholder="No limit" value={ r.Left } data-left aria-label={ "Draws left for " + r.Name } disabled?={ !r.Chosen }/>
+					</label>
+				</li>
+			}
+		</ul>
+		<p class="dkw-quiet">A blank means no limit. A player's draw follows the same next and last cards a Director's does.</p>
+		<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+	</div>
+}

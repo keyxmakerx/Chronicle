@@ -31,7 +31,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/decks", h.Create)
 	// Registered before /decks/:did so "table" is never read as a deck id.
 	cg.GET("/decks/table", h.Table)
-	cg.GET("/decks/looks", h.Looks)
+	// The workshop pages sit beside the JSON routes under /workshop, as the
+	// rolling tables page sits beside its JSON; static paths win over :did.
+	cg.GET("/decks/workshop", h.WorkshopList)
+	cg.GET("/decks/workshop/new", h.WorkshopNew)
+	cg.GET("/decks/workshop/:did", h.WorkshopDeck)
+	cg.GET("/decks/workshop/:did/table", h.WorkshopTable)
+	for _, t := range workshopTabs {
+		cg.GET("/decks/workshop/:did/"+t.Key, h.WorkshopTab(t.Key))
+	}
 	cg.GET("/decks/:did", h.Get)
 	cg.PUT("/decks/:did", h.Update)
 	cg.DELETE("/decks/:did", h.Delete)
