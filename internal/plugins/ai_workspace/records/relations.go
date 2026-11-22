@@ -199,7 +199,7 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if pc, ok := k.Pay.(ShopPriceChecker); ok && k.name == "shop-stock" && r.Action != ActionDelete {
 		if f, has, _ := r.Float("price"); has {
 			if err := pc.CheckPrice(f); err != nil {
-				return Plan{Error: "price: " + err.Error()}
+				return Plan{Error: planError(err)}
 			}
 		}
 	}

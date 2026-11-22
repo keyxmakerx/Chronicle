@@ -3,11 +3,11 @@ package records
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
@@ -21,7 +21,7 @@ type limitPay struct{ fakePay }
 
 func (limitPay) CheckPrice(p float64) error {
 	if p < 0 || p > 10_000_000 {
-		return errors.New("out of range")
+		return apperror.NewBadRequest("A price that large isn't allowed.")
 	}
 	return nil
 }
@@ -144,8 +144,8 @@ func TestShopStockPriceBounds(t *testing.T) {
 			k := ShopStockKind(pages, &writeRels{}, limitPay{})
 			fields := map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "price": tt.price}
 			p := k.Plan(context.Background(), camp, owner, craftRec("shop-stock", tt.action, "", fields))
-			if tt.wantErr && !strings.Contains(p.Error, "price") {
-				t.Fatalf("plan = %+v, want a price problem", p)
+			if tt.wantErr && (!strings.Contains(p.Error, "price") || strings.Contains(p.Error, "bad_request")) {
+				t.Fatalf("plan = %+v, want a price problem in plain words", p)
 			}
 			if !tt.wantErr && strings.Contains(p.Error, "price") {
 				t.Fatalf("plan = %+v, want no price problem", p)
