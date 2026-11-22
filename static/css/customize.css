@@ -68,7 +68,6 @@
 .czp .cz-head p{ margin:2px 0 0; font-size:13px; color:var(--muted); max-width:120ch; }
 
 /* ---------- Looks ---------- */
-.czp .looks{ margin-bottom:14px; padding-top:12px; }
 .czp .looks-h{ display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; margin-bottom:8px; }
 .czp .looks-h h2{ margin:0; font-size:14px; font-weight:650; }
 .czp .looks-h p{ margin:0; font-size:12.5px; color:var(--muted); }
@@ -111,29 +110,34 @@
 .czp .lk-custom .lk-scene .i{ width:20px; height:20px; }
 .czp .lk-custom.on .lk-scene{ color:var(--accent-ink); background:var(--accent-wash); }
 
-/* ---------- Main grid ---------- */
-.czp .cz-grid{
-  display:grid; grid-template-columns:minmax(0, 440px) minmax(0, 1fr);
-  grid-template-areas:"tabs tabs" "panels preview"; gap:14px 18px; align-items:start;
+/* ---------- The workshop ----------
+   The example is the work, in the middle, as large as the space allows. The
+   settings of the open part slide out on the right in Page layout's own panel
+   frame (customize_page_editor.css, .cpe-insp), and the tools float at the
+   foot in its dock (.cpe-dock). The workshop is as tall as the window below
+   Customize's bar; the script sets --lk-h and the example's scale --k. */
+.czs .czp .cz.lk-cz{ max-width:none; padding-inline:0; }
+.czs-body:has(.lk-ws){ padding-bottom:0; }
+/* --lk-h is the window below Customize's bar; on a touch screen the Table's line rests on the window's foot, so the workshop stops above it. */
+.czp .lk-ws{ --cpe-panel-w:300px; --lk-hh:calc(var(--lk-h, 640px) - var(--bottom-bar, 0px)); height:var(--lk-hh); min-height:440px; background:var(--wb); }
+.czp .lk-work{
+  position:relative; height:100%; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:20px 24px 124px;
 }
-.czp .cz-tabs{ grid-area:tabs; display:flex; align-items:flex-end; gap:12px; border-bottom:1px solid var(--line); }
-.czp .cz-panels{ grid-area:panels; min-width:0; }
-.czp .cz-preview{ grid-area:preview; position:sticky; top:12px; z-index:3; min-width:0; }
+.czp .lk-ws.panel-open .lk-work{ padding-right:calc(var(--cpe-panel-w) + 36px); }
+.czp .cz-panels{ min-width:0; }
 
-/* Section tabs: one row across the top, the open one underlined. The row
-   scrolls inside itself when it runs out of room. */
-.czp .tl{ display:flex; flex:1; min-width:0; gap:2px; overflow-x:auto; scrollbar-width:none; }
-.czp .tl::-webkit-scrollbar{ display:none; }
+/* The rooms, as quiet words at the panel's top: the open one underlined. */
+.czp .lk-rooms{ flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:0 14px; }
 .czp .tab{
-  position:relative; flex:none; display:flex; align-items:center; gap:7px; padding:9px 11px 10px; margin-bottom:-1px;
-  border-bottom:2px solid transparent; border-radius:8px 8px 0 0;
-  font-size:13.5px; font-weight:550; color:var(--body); white-space:nowrap; transition:transform var(--dur-micro) var(--ease);
+  position:relative; flex:none; display:inline-flex; align-items:center; gap:5px; min-height:32px; padding:4px 0; margin-bottom:-1px;
+  border-bottom:2px solid transparent;
+  font-size:12.5px; font-weight:600; color:var(--muted); white-space:nowrap;
 }
-.czp .tab .i{ color:var(--muted); }
-.czp .tab:hover{ background:var(--surface-2); color:var(--text); }
-.czp .tab:active{ transform:scale(.98); }
-.czp .tab[aria-selected="true"]{ border-bottom-color:var(--accent-strong); color:var(--accent-ink); font-weight:650; }
-.czp .tab[aria-selected="true"] .i{ color:var(--accent-ink); }
+.czp .tab .i{ display:none; }
+.czp .tab:hover{ color:var(--text); }
+.czp .tab[aria-selected="true"]{ border-bottom-color:var(--accent-strong); color:var(--text); }
+.czp .lk-panel[data-mode="looks"] .tab[aria-selected="true"]{ border-bottom-color:transparent; color:var(--muted); }
 .czp .tab .chg{ margin-left:2px; width:7px; height:7px; flex:none; border-radius:50%; background:var(--dirty); opacity:0; transform:scale(.4); transition:opacity var(--dur) ease, transform var(--dur) var(--ease-out); }
 .czp .tab.changed .chg{ opacity:1; transform:none; }
 .czp .tabs-foot{ flex:none; margin:0 0 10px; font-size:11.5px; line-height:1.45; color:var(--muted); }
@@ -199,6 +203,99 @@
 .czp .opt .dotc{ width:9px; height:9px; border-radius:50%; background:var(--c); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .18); }
 .czp .opt .dotc.ink{ background:var(--muted); }
 .czp .opt .soon{ font-size:9.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:1px 6px; border-radius:99px; background:var(--surface-2); color:var(--muted); }
+
+/* Choices with a sample: each option is a small card, the sample over its
+   word. The sample is a few shapes of the part the choice changes; the
+   selected card wears the accent edge. */
+.czp .opt .ot{ font-weight:inherit; }
+.czp .smp-opts{ display:grid; grid-template-columns:repeat(auto-fill, minmax(86px, 1fr)); gap:8px; }
+.czp .smp-opts .opt{ display:flex; }
+.czp .smp-opts .opt > span{ flex:1; min-width:0; flex-direction:column; align-items:stretch; gap:6px; padding:6px 6px 7px; border-radius:10px; text-align:center; }
+.czp .smp-opts .opt > input:checked + span{ background:var(--accent-wash); border-color:var(--accent); color:var(--accent-ink); box-shadow:inset 0 0 0 1px var(--accent); }
+.czp .smp-opts .chip{ width:100%; height:22px; border-radius:5px; position:relative; }
+.czp .smp-opts .chip::after{ content:""; position:absolute; left:4px; right:55%; top:5px; height:2px; border-radius:1px; background:rgb(255 255 255 / .35); box-shadow:0 5px 0 rgb(255 255 255 / .22), 0 10px 0 rgb(255 255 255 / .22); }
+.czp .smp{
+  position:relative; display:block; height:30px; border-radius:6px; overflow:hidden; background:var(--p-bg, var(--surface-2));
+  box-shadow:inset 0 0 0 1px rgb(0 0 0 / .1); font-style:normal; text-align:left; line-height:1;
+}
+.czp .smp b{ display:block; font-weight:inherit; }
+.czp .smp small{ font-size:8px; }
+.czp .smp-l{ height:3px; margin:4px 6px 0; border-radius:2px; background:var(--p-line, #d1d5db); width:70%; }
+.czp .smp-l.s{ width:45%; }
+.czp .smp-h{ height:9px; }
+.czp .smp-h.t{ height:100%; position:relative; }
+.czp .smp-sc{ position:absolute; inset:0; background:#000; }
+.czp .smp-page .smp-l:first-of-type{ margin-top:6px; }
+.czp .smp-sb{ background:#1a1c23; }
+.czp .smp-sb .smp-l{ background:rgb(255 255 255 / .25); }
+.czp .smp-cn{ display:flex; align-items:center; flex-wrap:wrap; gap:3px 4px; padding:5px 6px 4px; border-bottom:1px solid rgb(255 255 255 / .1); }
+.czp .smp-cn.b{ height:18px; align-items:flex-end; background:var(--smp-dusk) center / cover; border-bottom:0; }
+.czp .smp-lg{ width:8px; height:8px; border-radius:2px; background:var(--p-accent, #6366f1); }
+.czp .smp-nm{ height:3px; width:28px; border-radius:2px; background:rgb(255 255 255 / .8); }
+.czp .smp-su{ flex-basis:100%; height:2px; width:20px; border-radius:1px; background:rgb(255 255 255 / .35); margin-left:12px; }
+.czp .smp-glow{ background:#14151b; }
+.czp .smp-gl{ position:absolute; left:0; top:4px; bottom:4px; width:5px; border-radius:0 5px 5px 0; background:linear-gradient(90deg, var(--g), transparent); box-shadow:0 0 12px 3px color-mix(in srgb, var(--g) 55%, transparent); }
+.czp .smp-row{ position:relative; display:flex; align-items:center; gap:4px; height:13px; margin:7px 5px 0; padding:0 4px; border-radius:3px; overflow:hidden; }
+.czp .smp-row.on{ background:rgb(var(--p-accent-rgb, 99 102 241) / .2); }
+.czp .smp-row.calm{ background:rgb(var(--p-accent-rgb, 99 102 241) / .15); }
+.czp .smp-row.lively{ background:rgb(var(--p-accent-rgb, 99 102 241) / .3); }
+.czp .smp-rail{ position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--p-accent, #6366f1); }
+.czp .smp-row.lively .smp-rail{ width:3.5px; }
+.czp .smp-pn{ height:3px; width:14px; margin-left:auto; border-radius:2px; background:rgb(255 255 255 / .5); }
+.czp .smp-aa{ display:grid; place-items:center; align-content:center; gap:3px; background:var(--p-card, #fff); color:var(--ink, var(--p-body)); font:600 17px/1 var(--p-font); }
+.czp .smp-aa small{ font:400 8px/1 var(--p-font); color:var(--ink2, var(--p-muted)); }
+.czp .smp-r{ display:flex; align-items:center; gap:4px; margin:6px 6px 0; height:9px; }
+.czp .smp-r .smp-l{ margin:0; flex:1; }
+.czp .smp-ic{ width:7px; height:7px; border-radius:2px; flex:none; background:var(--p-accent, #6366f1); }
+.czp .smp-btn{ display:flex; align-items:center; justify-content:center; gap:3px; width:30px; height:9px; border-radius:3px; background:var(--p-fill, #6366f1); }
+.czp .smp-btn .smp-ic{ width:4px; height:4px; background:#fff; border-radius:1px; }
+.czp .smp-curvebox{ display:flex; align-items:center; justify-content:space-between; gap:4px; padding:3px 6px; background:var(--surface-2); color:var(--muted); font:600 9px/1 var(--font-ui); }
+.czp .smp-curve{ width:30px; height:24px; flex:none; fill:none; stroke:var(--accent-strong); stroke-width:1.6; stroke-linecap:round; }
+.czp .smp-mat .smp-hd{ height:4px; width:40%; margin:6px 6px 0; border-radius:2px; background:var(--p-text); }
+.czp .smp-mat .smp-rule{ height:1px; margin:3px 6px 1px; background:var(--p-text); opacity:.7; }
+.czp .smp-mat .smp-r{ margin-top:4px; border-bottom:1px solid var(--p-line); height:6px; }
+.czp .smp-std{ display:grid; place-items:center; }
+.czp .smp-card{ width:76%; height:22px; border-radius:4px; border:1px solid var(--p-line2, #d1d5db); background:var(--p-card, #fff); overflow:hidden; }
+.czp .smp-card .smp-hd{ height:4px; width:40%; margin:4px 5px 0; border-radius:2px; background:var(--p-text); }
+.czp .smp-same{ display:grid; place-items:center; background:var(--surface-2); color:var(--muted); font:600 10px/1 var(--font-ui); }
+.czp .smp-kit{ display:grid; place-items:center; background:var(--kp, #f9fafb); }
+.czp .smp-kc{ width:70%; height:22px; padding:3px 5px; background:var(--kq, #fff); border:1px solid #d1d5db; border-radius:4px; }
+.czp .smp-kh{ font:700 9px/1 var(--p-font-h, serif); color:#1f2937; }
+.czp .smp-kc .smp-l{ margin:4px 0 0; width:80%; }
+.czp .smp-kit[data-kit="material"] .smp-kc{ border-color:transparent; box-shadow:0 1px 3px rgb(0 0 0 / .15); }
+.czp .smp-kit[data-kit="sharp"] .smp-kc{ border:0; border-top:2px solid #111; border-radius:0; }
+.czp .smp-kit[data-kit="sharp"] .smp-kh{ font-family:Georgia, serif; letter-spacing:.04em; }
+.czp .smp-kit[data-kit="ornate"] .smp-kc{ border:3px double #8a6a1f; border-radius:2px; }
+.czp .smp-kit[data-kit="ornate"] .smp-kh{ font-family:Georgia, serif; font-style:italic; color:#5b3a12; }
+.czp .smp-kit[data-kit="flowing"] .smp-kc{ border:1px solid #6fb3a6; border-radius:10px 3px 10px 3px; }
+.czp .smp-kit[data-kit="lumen"] .smp-kc{ border:0; border-radius:6px; box-shadow:0 0 0 1px rgb(99 102 241 / .25), 0 3px 10px rgb(99 102 241 / .3); }
+.czp .smp-kit[data-kit="sketchbook"] .smp-kc{ border:1.5px dashed #5b6070; border-radius:3px; transform:rotate(-1.2deg); }
+.czp .smp-kit[data-kit="sketchbook"] .smp-kh{ font-family:"Comic Sans MS", "Segoe Print", cursive; color:#374151; }
+.czp .smp-ent{ display:grid; place-items:center; background:var(--surface-2); }
+.czp .smp-eb{ width:22px; height:16px; border-radius:4px; background:var(--surface); box-shadow:0 0 0 1px var(--line-strong), 0 2px 6px rgb(0 0 0 / .18); }
+.czp .smp-ent-bloom .smp-eb{ filter:blur(1.2px); box-shadow:0 0 0 1px var(--line-strong), 0 0 8px rgb(var(--p-accent-rgb, 99 102 241) / .5); }
+.czp .smp-ent-unfold .smp-eb{ background:linear-gradient(to bottom, var(--surface) 55%, var(--surface-2)); }
+.czp .smp-ent-drop .smp-eb{ box-shadow:0 0 0 1px var(--line-strong), 0 7px 8px -3px rgb(0 0 0 / .35); transform:translateY(-2px); }
+.czp .smp-sheet{ display:block; padding:5px 6px; background:var(--sp); color:var(--si); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .14), inset 0 -2px 0 var(--sa); }
+.czp .smp-sh{ font:700 11px/1 Georgia, serif; }
+.czp .smp-sl{ height:2px; margin-top:4px; width:70%; border-radius:1px; background:var(--si); opacity:.4; }
+.czp .smp-sl.s{ width:45%; }
+.czp .smp-craft{ display:flex; align-items:center; justify-content:center; gap:5px; background:var(--surface-2); }
+.czp .smp-craft b{ width:11px; height:14px; border-radius:3px 3px 5px 5px; }
+.czp .smp-craft-painted b{ background:linear-gradient(160deg, #6b3a2a, #231612); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .4); }
+.czp .smp-craft-lifelike b{ background:linear-gradient(135deg, #e9f3f7 0%, #9bb7c4 45%, #b8893a 100%); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .25); }
+.czp .smp-craft-illustrated b{ background:#f4b860; box-shadow:inset 0 0 0 1.5px #5a3b12; }
+.czp .smp-bld{ display:block; padding:5px 6px; background:#fff; }
+.czp .smp-bt{ height:4px; width:40%; border-radius:2px; background:#374151; }
+.czp .smp-bld .smp-l{ margin:4px 0 0; background:#d1d5db; }
+.czp .smp-bld-paper{ background:#f4eddd; }
+.czp .smp-bld-paper .smp-bt{ background:#43372a; }
+.czp .smp-bld-ornate{ background:#f4eddd; box-shadow:inset 0 0 0 3px #f4eddd, inset 0 0 0 4px #8a6a1f; }
+.czp .smp-bld-ornate .smp-bt{ background:#8a6a1f; }
+.czp .smp-acc{ display:grid; place-items:center; background:var(--surface-2); color:var(--muted); }
+.czp .smp-acc .i{ width:16px; height:16px; }
+.czp .smp-opts .opt > input:checked + span .smp-acc{ color:var(--accent-ink); }
+.czp .opt > input:checked + span .ot{ font-weight:650; }
 
 /* Colour swatches (native radios) */
 .czp .sws{ display:flex; flex-wrap:wrap; align-items:center; gap:7px 6px; }
@@ -401,30 +498,38 @@
 .czp .glow-demo{ display:flex; align-items:center; gap:12px; padding:8px 10px; border-radius:9px; background:var(--surface-2); font-size:11.5px; color:var(--muted); }
 .czp .glow-demo i{ flex:none; width:10px; height:44px; border-radius:0 8px 8px 0; background:linear-gradient(90deg, var(--g, #6366f1), transparent); box-shadow:0 0 18px 4px color-mix(in srgb, var(--g, #6366f1) 55%, transparent); }
 
-/* ---------- Preview column ---------- */
-.czp .pvw{ display:grid; gap:8px; padding:10px; border-radius:12px; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow-1); }
-.czp .pv-bar{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; }
-.czp .pv-title{ display:flex; align-items:center; gap:7px; margin-right:auto; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
-.czp .pv-title .live{ width:7px; height:7px; border-radius:50%; background:#10b981; box-shadow:0 0 0 3px rgb(16 185 129 / .18); }
-.czp .zseg{ display:inline-flex; padding:2px; border-radius:9px; background:var(--surface-2); }
-.czp .zseg label{ position:relative; display:inline-flex; }
+/* ---------- The example ----------
+   880 by 520 site units, scaled by --k to the largest size the space left of
+   the panel allows. The frame is that size; the caption sits under it. */
+.czp .pvw{ display:grid; gap:10px; justify-items:center; min-width:0; }
+.czp .zseg{ display:flex; padding:2px; border-radius:9px; background:var(--surface-2); }
+.czp .zseg label{ position:relative; display:inline-flex; flex:1; }
 .czp .zseg input{ position:absolute; opacity:0; width:1px; height:1px; margin:0; pointer-events:none; }
-.czp .zseg span{ padding:3px 9px; border-radius:7px; font-size:12px; font-weight:600; color:var(--muted); cursor:pointer; white-space:nowrap; transition:transform var(--dur-micro) var(--ease); }
+.czp .zseg span{ flex:1; text-align:center; padding:6px 9px; border-radius:7px; font-size:12px; font-weight:600; color:var(--muted); cursor:pointer; white-space:nowrap; transition:transform var(--dur-micro) var(--ease); }
 .czp .zseg label:hover span{ color:var(--text); }
 .czp .zseg label:active span{ transform:scale(.95); }
 .czp .zseg input:checked + span{ background:var(--surface); color:var(--text); box-shadow:var(--shadow-1); }
 .czp .zseg input:focus-visible + span{ outline:2px solid var(--focus); outline-offset:1px; }
 .czp .zseg input:disabled + span{ opacity:.45; cursor:not-allowed; }
-.czp .pv-hide{ display:none; }
-.czp .pv-frame{ position:relative; display:block; border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px var(--line); background:var(--p-bg); }
+.czp .pv-frame{
+  position:relative; display:block; width:calc(880px * var(--k, .6)); height:calc(520px * var(--k, .6)); max-width:100%;
+  border-radius:10px; overflow:hidden; box-shadow:0 0 0 1px var(--line), var(--shadow-2); background:var(--p-bg);
+}
 .czp .pv-frame.settle{ animation:czk-settle 320ms ease-out both; }
 @keyframes czk-settle{ from{ opacity:.55; } to{ opacity:1; } }
-/* The shown zoom sets the frame's height; the others lie over it, faded out. */
-.czp .zp{ position:relative; min-width:0; opacity:1; transition:opacity 220ms ease; }
-.czp .zp.off{ position:absolute; left:0; top:0; width:100%; opacity:0; pointer-events:none; }
-.czp .pv-cap{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; font-size:11.5px; line-height:1.4; color:var(--muted); }
-.czp .pv-cap .pill{ display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:99px; background:var(--surface-2); color:var(--body); font-weight:600; }
+/* The shown zoom fills the frame; the others lie over it, faded out. */
+.czp .zp{ position:relative; width:100%; height:100%; min-width:0; overflow-x:hidden; overflow-y:auto; opacity:1; transition:opacity 220ms ease; }
+.czp .zp[data-z="site"]{ overflow:hidden; }
+.czp .zp.off{ position:absolute; left:0; top:0; opacity:0; pointer-events:none; }
+.czp .pv-cap{ display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px 10px; max-width:calc(880px * var(--k, .6)); font-size:11.5px; line-height:1.4; color:var(--muted); text-align:center; }
+.czp .pv-cap .pill{ display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:99px; background:var(--surface); color:var(--body); font-weight:600; box-shadow:inset 0 0 0 1px var(--line); }
 .czp .pv-cap .pill .i{ width:12px; height:12px; }
+/* While Hold to see saved is held, a tag says the example shows the saved look. */
+.czp .lk-held-tag{
+  position:absolute; left:50%; top:10px; transform:translateX(-50%); z-index:5; padding:6px 10px; border-radius:7px;
+  font:700 10.5px/1 var(--font-ui); letter-spacing:.09em; text-transform:uppercase; background:var(--color-text-primary); color:var(--color-bg-primary);
+  box-shadow:var(--shadow-2); pointer-events:none;
+}
 
 /* ---------- Save bar ---------- */
 .czp .cz-save{
@@ -480,42 +585,110 @@
 .czp .toast button{ font-weight:650; color:var(--toast-link); padding:3px 6px; border-radius:6px; transition:transform var(--dur-micro) var(--ease); }
 .czp .toast button:active{ transform:scale(.95); }
 
-/* ---------- Mid widths: two even columns ---------- */
-@container cz (max-width: 1099px){
-  .czp .cz-grid{ grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }
-  .czp .tab{ padding:8px 9px 9px; font-size:12.5px; }
-  .czp .tabs-foot{ display:none; }
+/* ---------- The settings panel ----------
+   Page layout's slide-out frame (.cpe-insp), 300px wide, holding the open
+   part's settings in one column. The panel's contents swap with a short
+   fade; the slide itself is the frame's. Calm keeps fades, Off and a device
+   asking for less motion show the end state. */
+.czp .lk-panel{ --cpe-panel-w:300px; width:var(--cpe-panel-w); }
+.czp .lk-ph{ padding-bottom:4px; }
+.czp .lk-x{ width:auto; min-width:36px; padding:0 8px; gap:6px; font:inherit; font-size:12.5px; font-weight:600; }
+.czp .lk-x-t{ display:none; }
+.czp .cpe-handle{ background:var(--color-input-border, var(--color-border)); }
+.czp .lk-pb{ padding:12px 16px 96px; gap:14px; }
+.czp .lk-pb > *{ min-width:0; }
+.czp .lk-zoomw{ display:grid; gap:8px; padding-top:14px; border-top:1px solid var(--line-2); }
+.czp .lk-zoomw .grp-l{ margin:0; }
+.czp .lk-panel[data-mode="looks"] .lk-zoomw{ display:none; }
+.czp .lk-pb .room-h{ font-size:12px; }
+.czp .lk-pb .parts{ gap:2px 14px; }
+.czp .lk-pb .parts-row{ flex-wrap:wrap; overflow:visible; padding:0; margin:0; }
+.czp .lk-pb .part{
+  min-height:32px; padding:4px 0; border:0; border-bottom:2px solid transparent; border-radius:0; background:none;
+  font-size:13px; font-weight:600; color:var(--muted);
 }
-/* ---------- Phone: sticky preview strip, sections as a scroller ---------- */
-@container cz (max-width: 760px){
-  .czp .mk-in{ gap:6px 12px; }
-  .czp .mk-t{ flex-basis:100%; }
-  .czp .cz-head h1{ font-size:20px; }
-  .czp .looks-h p{ flex-basis:100%; }
-  .czp .cz-grid{ grid-template-columns:minmax(0, 1fr); grid-template-areas:"preview" "tabs" "panels"; gap:10px; }
-  .czp .cz-preview{ position:sticky; top:0; z-index:15; margin-inline:-16px; padding:6px 16px 8px; background:var(--bg); border-bottom:1px solid var(--line); }
-  .czp .pvw{ padding:6px 8px 8px; gap:6px; }
-  .czp .pv-title{ display:none; }
-  .czp .pv-hide{ display:inline-flex; margin-left:auto; }
-  .czp .pv-opt{ display:none; }
-  .czp .pv-cap{ display:none; }
-  .czp .pv-frame{ height:188px; }
-  .czp .zp{ overflow-y:auto; overflow-x:hidden; }
-  .czp .cz-tabs{ position:sticky; top:var(--strip-h, 0px); z-index:14; margin-inline:-16px; padding:6px 16px; background:var(--bg); border-bottom:1px solid var(--line); }
-  .czp .fld{ grid-template-columns:minmax(0, 1fr); }
-  .czp .fld > .lab{ padding-top:0; }
-  .czp .sec-h{ flex-wrap:wrap; gap:6px 12px; }
-  .czp .sec-t{ flex:1 1 100%; }
-  .czp .sec-r{ max-width:none; flex-direction:row; flex-wrap:wrap; align-items:baseline; gap:2px 8px; text-align:left; }
-  .czp .reset{ margin-right:0; margin-left:-6px; }
-  .czp .wset{ margin-left:0; }
-  .czp .tiles{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.czp .lk-pb .part:hover{ background:none; color:var(--text); }
+.czp .lk-pb .part:active{ transform:none; }
+.czp .lk-pb .part[aria-pressed="true"]{ background:none; border-color:transparent; border-bottom-color:var(--accent-strong); color:var(--text); }
+.czp .lk-pb .parts:not(.parts-row) .part{ border:1px solid var(--line); border-radius:999px; padding:4px 12px; background:var(--surface); }
+.czp .lk-pb .parts:not(.parts-row) .part[aria-pressed="true"]{ background:var(--accent-wash); border-color:var(--accent); color:var(--accent-ink); }
+.czp .lk-pb .sec{ background:none; border:0; border-radius:0; box-shadow:none; }
+.czp .lk-pb .sec-h{ flex-wrap:wrap; gap:6px 12px; padding:2px 0 12px; border-bottom:1px solid var(--line-2); }
+.czp .lk-pb .sec-t{ flex:1 1 100%; }
+.czp .lk-pb .sec-r{ max-width:none; flex-direction:column; align-items:flex-start; gap:1px; text-align:left; }
+.czp .lk-pb .reset{ margin-right:0; margin-left:-6px; }
+.czp .lk-pb .sec-b{ padding:14px 0 0; }
+.czp .lk-pb .fld{ grid-template-columns:minmax(0, 1fr); }
+.czp .lk-pb .fld > .lab{ padding-top:0; }
+.czp .lk-pb .crow{ grid-template-columns:minmax(0, 1fr); }
+.czp .lk-pb .wset{ margin-left:0; }
+.czp .lk-pb .tiles{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.czp .lk-pb .tiles.rows{ grid-template-columns:minmax(0, 1fr); }
+.czp .lk-pb .tabs-foot{ margin:0; }
+.czp .lk-pb .sec.enter, .czp .lk-pb .room.enter, .czp .lk-pb .lk-looks.enter, .czp .lk-pb .cz-panels.enter{ animation:czk-fade-in 140ms ease-out both; }
+/* The starting looks, in two columns inside the panel. */
+.czp .lk-looks{ display:grid; gap:10px; }
+.czp .lk-looks .looks-h{ display:grid; gap:2px; margin:0; }
+.czp .lk-looks .lk-row{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; overflow:visible; padding:3px; margin:-3px; }
+.czp .lk-looks .lk{ width:auto; }
+.czp .lk-looks .lk-d{ display:none; }
+
+/* ---------- The tools at the foot ----------
+   Page layout's dock (.cpe-dock). The groups of radios are real radios in
+   labels dressed as dock buttons. */
+.czp .lk-dg{ display:contents; }
+.czp .lk-dg > .cpe-dk{ position:relative; cursor:pointer; }
+.czp .lk-dg > .cpe-dk:has(input:checked){ background:color-mix(in srgb, currentColor 20%, transparent); }
+.czp .lk-dg > .cpe-dk:has(input:focus-visible){ outline:2px solid currentColor; outline-offset:-3px; }
+.czp .lk-dg > .cpe-dk:has(input:disabled){ opacity:.4; cursor:default; }
+.czp .cpe-dk{ padding:0 10px; font-size:13.5px; font-weight:500; }
+.czp .cpe-dk-main{ font-weight:700; }
+#lk-hold{ touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+#lk-hold[aria-pressed="true"]{ background:color-mix(in srgb, currentColor 28%, transparent); }
+
+/* ---------- Phone: the example fills the width, the panel is a sheet ---------- */
+@media (max-width: 640px){
+  .czp .lk-work{ justify-content:flex-start; padding:12px 12px 124px; }
+  .czp .lk-ws.panel-open .lk-work{ padding-right:12px; padding-bottom:calc(var(--lk-hh) * .58 + 72px); }
+  .czp .lk-panel{ height:58%; width:auto; }
+  .czp .lk-x-t{ display:inline; }
+  .czp .lk-x .fa-xmark{ display:none; }
+  .czp .lk-x{ min-width:44px; height:44px; }
+  .czp .lk-pb{ padding:12px 16px 96px; }
+  .czp .lk-ph{ touch-action:none; }
+  .czp .lk-rooms .tab{ min-height:44px; }
+  .czp .lk-pb .part{ min-height:44px; }
+  .czp .lk-pb .parts:not(.parts-row) .part{ min-height:44px; }
   .czp .cz-save{ gap:8px; }
   .czp .sv-st span{ display:none; }
-.czp .sv-st b{ overflow:hidden; text-overflow:ellipsis; }
+  .czp .sv-st b{ overflow:hidden; text-overflow:ellipsis; }
   .czp .czb{ padding:0 12px; }
   .czp .toast{ bottom:calc(70px + env(safe-area-inset-bottom, 0px)); }
+  .czp .lk-ws.panel-open .cpe-dock-wrap{ bottom:calc(var(--lk-hh) * .58 + 8px); }
 }
+html[data-motion="off"] .czp .lk-pb .sec.enter, html[data-motion="off"] .czp .lk-pb .room.enter, html[data-motion="off"] .czp .lk-pb .lk-looks.enter, html[data-motion="off"] .czp .lk-pb .cz-panels.enter,
+.czp.rm .lk-pb .sec.enter, .czp.rm .lk-pb .room.enter, .czp.rm .lk-pb .lk-looks.enter, .czp.rm .lk-pb .cz-panels.enter{ animation:none; }
+/* Calm: the panel and the tools only fade; Off, and a device asking for less
+   motion, show the end state. */
+html[data-motion="calm"] .czp .lk-panel,
+html[data-motion="calm"] .czp .lk-panel.open{ transform:none; }
+html[data-motion="calm"] .czp .lk-panel{ transition:opacity var(--dur-standard) var(--ease-in), visibility 0s linear var(--dur-standard); }
+html[data-motion="calm"] .czp .lk-panel.open{ transition:opacity var(--dur-slide) var(--ease-slide), visibility 0s; }
+html[data-motion="calm"] .czp .lk-ws .cpe-dock-wrap, html[data-motion="off"] .czp .lk-ws .cpe-dock-wrap, .czp.rm .lk-ws .cpe-dock-wrap,
+html[data-motion="off"] .czp .lk-panel, html[data-motion="off"] .czp .lk-panel.open, .czp.rm .lk-panel, .czp.rm .lk-panel.open{ transition:none; }
+@media (max-width: 640px){
+  html[data-motion="calm"] .czp .lk-panel, html[data-motion="calm"] .czp .lk-panel.open{ transform:none; }
+}
+/* Touch: every control in the panel and the tools is 44px tall. */
+@media (pointer: coarse){
+  .czp .cpe-dk{ min-height:44px; }
+  .czp .lk-rooms .tab, .czp .lk-pb .part, .czp .lk-pb .parts:not(.parts-row) .part{ min-height:44px; }
+  .czp .lk-x{ min-width:44px; height:44px; }
+  .czp .zseg span{ padding-block:12px; }
+  .czp .opt > span{ min-height:44px; }
+  .czp .smp-opts .opt > span{ min-height:0; }
+}
+
 /* ---------- Preview: Chronicle at a small size, fed by the draft ----------
    Every --p-* value comes from the draft (see derive() in the script). */
 .czp .pv{ font-family:var(--p-font); color:var(--p-body); font-size:var(--p-fs); line-height:1.5; }
@@ -526,7 +699,7 @@
 .czp .p-link{ color:var(--p-link); font-weight:600; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:2px; }
 .czp .muted{ color:var(--p-muted); }
 
-/* Whole site: a fixed 880 x 540 site scaled to the column */
+/* Whole site: a fixed 880 x 520 site scaled to the frame */
 .czp .site-wrap{ position:relative; width:100%; height:calc(520px * var(--k, .6)); overflow:hidden; }
 .czp .site{
   position:absolute; left:0; top:0; width:880px; height:520px; transform:scale(var(--k, .6)); transform-origin:0 0;
@@ -986,6 +1159,9 @@
 .czp .fz rect{ vector-effect:non-scaling-stroke; }
 .czp .fz-ring rect{ fill:none; stroke:rgb(var(--p-accent-l-rgb)); stroke-width:2; opacity:0; transition:opacity 220ms ease; }
 .czp .fz.on .fz-ring rect{ opacity:1; }
+.czp .fz-open rect{ fill:none; stroke:rgb(var(--p-accent-l-rgb)); stroke-width:2.5; opacity:0; transition:opacity 180ms ease; }
+.czp .fz.open .fz-open rect{ opacity:1; }
+.czp.rm .fz-open rect, html[data-motion="off"] .czp .fz-open rect{ transition:none; }
 .czp .fz-hov rect{ fill:rgb(var(--p-accent-rgb) / .10); stroke:rgb(var(--p-accent-rgb)); stroke-width:1.5; stroke-dasharray:5 3; }
 .czp .fz-flash rect{ fill:rgb(var(--p-accent-l-rgb) / .14); stroke:rgb(var(--p-accent-l-rgb)); stroke-width:2; opacity:0; animation:czk-fz-flash 1000ms ease-out both; }
 @keyframes czk-fz-flash{ 0%{ opacity:0; } 18%{ opacity:1; } 100%{ opacity:0; } }
@@ -1052,7 +1228,7 @@
   transform:scale(calc(1 / var(--k, .6))); transform-origin:0 0;
   background:color-mix(in srgb, var(--p-bg) 28%, transparent);
   backdrop-filter:blur(max(1.2px, calc(2px * var(--k, .6)))); -webkit-backdrop-filter:blur(max(1.2px, calc(2px * var(--k, .6))));
-  transition:opacity 220ms ease;
+  transition:opacity 180ms ease;
 }
 .czp .rm-blur.cut{ transition:none; }
 .czp .rm-blur.on{ opacity:1; }

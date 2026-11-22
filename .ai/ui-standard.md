@@ -879,6 +879,19 @@ their tokens.
   (`static/js/widgets/player_view.js`). Calm fades, Off swaps. A secret
   never shows as a gap: a view built for players leaves out the link or row
   that would point at it.
+- **Look is a workshop with the example in the middle.** The example site is
+  the work, as large as the space left of the panel allows. The open part's
+  settings live in a ~300px panel on the right, Page layout's own slide-out
+  frame (a 58% sheet from the foot on a phone, Done and a grab line close it),
+  with the four rooms as quiet words at its top and the room's parts under
+  them. Pressing a part of the example opens it: the part gets a ring and the
+  rest softens; settings that dress the whole site (Colours, Type, a starting
+  look) leave the example sharp. The tools float at the foot in Page layout's
+  dock: Settings, Looks (the eight starting looks in the panel), Light and
+  Dark, the page switch and Hold to see saved (the example shows the saved
+  look while it is held, with Space or Enter too). Every choice that was
+  words carries a sample of what it looks like. The panel's contents swap
+  with a fade of at most 150 ms; Calm fades only, Off shows the end state.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
