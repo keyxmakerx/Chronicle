@@ -342,8 +342,8 @@
       '<span class="dcz-what">Each player can change the die, colours and animations for their own rolls. Everyone else still sees the campaign’s.</span></span></label>' +
       (s.playersPick ? '<div class="dcz-offer"><p class="dcz-lab">Sets on offer to players</p><div class="dcz-chks">' + this.offerList() + '</div></div>' : '') + '</section>' +
 
-      '<section class="dcz-sec" aria-labelledby="dcz-h-look"><h2 id="dcz-h-look" class="dcz-h">The table’s dice</h2>' +
-      '<p class="dcz-hint">What a player who hasn’t picked starts on.</p>' + seg('data-dcz-look', LOOKS, s.look || 'quick', 'The table’s dice') + '</section>';
+      '<section class="dcz-sec" aria-labelledby="dcz-h-look"><h2 id="dcz-h-look" class="dcz-h">Players’ starting dice</h2>' +
+      '<p class="dcz-hint">What a player who hasn’t picked starts on.</p>' + seg('data-dcz-look', LOOKS, s.look || 'quick', 'Players’ starting dice') + '</section>';
 
     this.el.querySelector('[data-dcz-tray-lab]').textContent = set.name + ' · ' + colour.name;
     if (keep) {

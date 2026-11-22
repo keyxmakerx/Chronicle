@@ -60,10 +60,10 @@ templ customizeOverview(areas []CustomizeArea, sums map[string]CustomizeSummary)
 	</div>
 }
 
-// customizeSavesAlone marks a part that still saves with its own button
-// until its rebuild joins it to the one draft.
+// customizeSavesAlone marks a part that saves each change as it is made,
+// outside the one draft and its save bar.
 templ customizeSavesAlone() {
-	<p class="czs-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>This part still saves with its own button. It joins the one save bar in a later update.</span></p>
+	<p class="czs-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>This part saves each change as you make it, not with the Save bar.</span></p>
 }
 
 // customizePluginArea draws a plugin's area.
