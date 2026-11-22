@@ -18,7 +18,11 @@ func init() {
 		if d.Trackers == nil {
 			return nil
 		}
-		return []records.Kind{records.TrackerKind{Svc: aiTrackersAdapter{svc: d.Trackers, ents: d.Entities}, Entities: d.Entities}}
+		var dir trackers.MemberDirectory
+		if d.Campaigns != nil {
+			dir = &trackersMemberAdapter{svc: d.Campaigns}
+		}
+		return []records.Kind{records.TrackerKind{Svc: aiTrackersAdapter{svc: d.Trackers, ents: d.Entities, members: dir}, Entities: d.Entities}}
 	})
 }
 
@@ -28,6 +32,9 @@ func init() {
 type aiTrackersAdapter struct {
 	svc  trackers.Service
 	ents entities.EntityService
+	// members is the same directory the trackers screen chooses players from;
+	// nil while campaigns is unavailable, which leaves nobody to name.
+	members trackers.MemberDirectory
 }
 
 var _ records.TrackersAPI = aiTrackersAdapter{}
@@ -113,6 +120,11 @@ func (t aiTrackersAdapter) Page(ctx context.Context, campaignID, pageID string, 
 	for _, tv := range pv.Trackers {
 		on := records.TrackerOnPage{ID: tv.ID, KindID: tv.KindID, Name: tv.Name, Shape: tv.Shape,
 			Visibility: tv.Visibility, Value: tv.Value, Max: tv.Max, Now: tv.Now}
+		// The service fills Players for a Director's view only; a player's
+		// copy never carries them, so none can reach a lookup from here.
+		for _, p := range tv.Players {
+			on.Players = append(on.Players, records.TrackerPlayer{UserID: p.UserID, Name: p.Name, CanChange: p.CanChange})
+		}
 		for _, s := range tv.Steps {
 			on.Steps = append(on.Steps, records.TrackerStep{Name: s.Name, Text: s.Text})
 		}
@@ -149,4 +161,36 @@ func (t aiTrackersAdapter) Pages(ctx context.Context, campaignID string, a recor
 
 func (t aiTrackersAdapter) HasBlock(ctx context.Context, campaignID, pageID string) (bool, error) {
 	return categoryLayoutHas(ctx, t.ents, campaignID, pageID, trackers.BlockType)
+}
+
+// SetSeen changes who sees one placed tracker. The viewer carries the actor,
+// so the service's Director check is what allows or refuses it.
+func (t aiTrackersAdapter) SetSeen(ctx context.Context, campaignID, trackerID string, a records.Actor, in records.TrackerSeen) error {
+	patch := trackers.TrackerPatch{Visibility: &in.Visibility}
+	if in.Visibility == trackers.SeePlayers {
+		picks := make([]trackers.PlayerPick, len(in.Players))
+		for i, p := range in.Players {
+			picks[i] = trackers.PlayerPick{UserID: p.UserID, CanChange: p.CanChange}
+		}
+		patch.Players = &picks
+	}
+	_, err := t.svc.Patch(ctx, campaignID, trackerID, trackerViewer(a), patch)
+	return err
+}
+
+// Members lists the campaign's people for matching a name, to a Director only:
+// the names are the only thing passed on, never emails, ids' owners or roles.
+func (t aiTrackersAdapter) Members(ctx context.Context, campaignID string, a records.Actor) ([]records.TrackerMember, error) {
+	if !a.CanAuthorDmOnly() || t.members == nil {
+		return nil, nil
+	}
+	list, err := t.members.Members(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]records.TrackerMember, len(list))
+	for i, m := range list {
+		out[i] = records.TrackerMember{UserID: m.UserID, Name: m.Name, Character: m.Character, Director: m.Director}
+	}
+	return out, nil
 }

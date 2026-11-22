@@ -16,6 +16,9 @@ type fakeTrackers struct {
 	logs    []TrackerChange
 	noBlock map[string]bool
 	n       int
+	members []TrackerMember
+	// placedAs is the visibility each placement was first made with.
+	placedAs []string
 }
 
 func newFakeTrackers() *fakeTrackers {
@@ -71,7 +74,25 @@ func (f *fakeTrackers) Page(_ context.Context, _, pageID string, _ Actor) (*Trac
 	}
 	return &TrackerPage{Trackers: out}, nil
 }
+func (f *fakeTrackers) SetSeen(_ context.Context, _, id string, a Actor, in TrackerSeen) error {
+	if !a.CanAuthorDmOnly() {
+		return badRequestf("only a Director can change who sees a tracker")
+	}
+	for pg, ts := range f.placed {
+		for i := range ts {
+			if ts[i].ID == id {
+				f.placed[pg][i].Visibility, f.placed[pg][i].Players = in.Visibility, in.Players
+				return nil
+			}
+		}
+	}
+	return badRequestf("no tracker %s", id)
+}
+func (f *fakeTrackers) Members(context.Context, string, Actor) ([]TrackerMember, error) {
+	return f.members, nil
+}
 func (f *fakeTrackers) Place(_ context.Context, _, pageID string, _ Actor, in TrackerPlace) error {
+	f.placedAs = append(f.placedAs, in.Visibility)
 	f.n++
 	f.placed[pageID] = append(f.placed[pageID], TrackerOnPage{ID: fmt.Sprintf("t%d", f.n), KindID: in.KindID, Visibility: in.Visibility})
 	return nil
@@ -83,7 +104,7 @@ func (f *fakeTrackers) Log(_ context.Context, _, _ string, _ Actor, in TrackerCh
 func (f *fakeTrackers) Pages(context.Context, string, Actor) ([]TrackerPageRef, error) {
 	var out []TrackerPageRef
 	for id := range f.placed {
-		out = append(out, TrackerPageRef{ID: id, Name: map[string]string{"p-orrin": "Orrin", "p-saat": "Saatraaol"}[id]})
+		out = append(out, TrackerPageRef{ID: id, Name: map[string]string{"p-orrin": "Orrin", "p-saat": "Saatraaol", "p-sivin": "Sivin"}[id]})
 	}
 	return out, nil
 }
@@ -93,9 +114,16 @@ func (f *fakeTrackers) HasBlock(_ context.Context, _, pageID string) (bool, erro
 
 func trackerFixture() (TrackerKind, *fakeTrackers) {
 	svc := newFakeTrackers()
+	svc.members = []TrackerMember{
+		{UserID: "u-pat", Name: "Pat", Character: "Sivin"},
+		{UserID: "u-sam", Name: "Sam", Character: "Brannoc"},
+		{UserID: "u-twin1", Name: "Alex"}, {UserID: "u-twin2", Name: "alex"},
+		{UserID: "u-dm", Name: "Dee", Director: true},
+	}
 	pages := fakeEntities{
 		"orrin":     {ID: "p-orrin", CampaignID: camp, Name: "Orrin"},
 		"saatraaol": {ID: "p-saat", CampaignID: camp, Name: "Saatraaol"},
+		"sivin":     {ID: "p-sivin", CampaignID: camp, Name: "Sivin"},
 	}
 	return TrackerKind{Svc: svc, Entities: pages}, svc
 }
@@ -233,7 +261,7 @@ func TestTrackerKind_ExportAndLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(ans.Text, "- Counsel on Orrin: 2; hidden from players") || !strings.Contains(ans.Text, "add 1 on 3 Quickening 100: At the gate") {
+	if !strings.Contains(ans.Text, "- Counsel on Orrin: 2; who sees it: Director only") || !strings.Contains(ans.Text, "add 1 on 3 Quickening 100: At the gate") {
 		t.Fatalf("lookup %q", ans.Text)
 	}
 	run.a = player
