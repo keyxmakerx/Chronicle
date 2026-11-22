@@ -243,6 +243,9 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 	b.WriteString(run.settingsText(cal))
 	b.WriteString(run.importanceText())
 	b.WriteString(run.climateText(cal))
+	if now := run.partyNowText(cal); now != "" {
+		b.WriteString(now + "Ask `what: place-weather` for weather by place.\n")
+	}
 	ans.Text = b.String()
 	return ans, nil
 }

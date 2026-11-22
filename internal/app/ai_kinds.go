@@ -88,7 +88,8 @@ type aiDeps struct {
 	SystemState     systemstate.Service              // nil while the system state plugin is degraded
 
 	// Derived once and shared by several kinds and the lookups.
-	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
+	Rolls      calendarai.EventRollAPI      // the calendar's roll half; nil without one
+	Places     calendar.PlaceWeatherService // the calendar's weather by place; nil without it
 	Tables     records.TableKind
 	HouseRules *records.HouseRuleKind
 	Homebrew   records.HomebrewAPI       // nil while field rules are degraded
@@ -105,6 +106,9 @@ type aiDeps struct {
 func newAIDeps(d aiDeps) *aiDeps {
 	if rs, ok := d.Calendar.(calendar.EventRollService); ok {
 		d.Rolls = rs
+	}
+	if pw, ok := d.Calendar.(calendar.PlaceWeatherService); ok {
+		d.Places = pw
 	}
 	d.Tables = records.TableKind{Svc: aiRollTablesAdapter{d.RollTables}}
 	campaignsSvc := d.Campaigns
@@ -133,7 +137,7 @@ func newAIDeps(d aiDeps) *aiDeps {
 			return err == nil && on
 		})
 	}
-	d.CalLookups = &calendarai.Lookups{Cal: d.Calendar, Weather: d.Calendar, Rolls: d.Rolls, Tiers: d.Campaigns}
+	d.CalLookups = &calendarai.Lookups{Cal: d.Calendar, Weather: d.Calendar, Rolls: d.Rolls, Tiers: d.Campaigns, Places: d.Places}
 	if d.PageBlocks != nil {
 		d.PageMaps = aiPageMapsAdapter{svc: d.PageBlocks}
 	}
@@ -336,6 +340,13 @@ func init() {
 			calendarai.WeatherKind{Svc: d.Calendar},
 		}
 	})
+	// Where the party is: the calendar's weather by place.
+	addAIKinds(15, func(d *aiDeps) []records.Kind {
+		if d.Places == nil {
+			return nil
+		}
+		return []records.Kind{calendarai.PartyPlaceKind{Cal: d.Calendar, Places: d.Places, Pages: aiCalendarPages{d.Entities}}}
+	})
 	addAIKinds(40, func(d *aiDeps) []records.Kind {
 		if d.Rolls == nil {
 			return nil
@@ -416,7 +427,7 @@ func init() {
 		return []records.Kind{records.PageMapKind{Svc: d.PageMaps, Entities: d.Entities}}
 	})
 	addAIKinds(220, func(d *aiDeps) []records.Kind {
-		return []records.Kind{calendarai.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls, Structure: d.Calendar, Eras: d.Calendar}}
+		return []records.Kind{calendarai.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls, Structure: d.Calendar, Eras: d.Calendar, Places: d.Places}}
 	})
 }
 
@@ -438,7 +449,7 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		out := records.OffFeatures{}
 		if off(calendar.PluginSlug) {
-			for _, k := range []string{calendarai.KindCalendar, "event", "weather", "roll-night", "moon", "game-night"} {
+			for _, k := range []string{calendarai.KindCalendar, "event", "weather", calendarai.KindPartyPlace, "roll-night", "moon", "game-night"} {
 				out[k] = "Calendar"
 			}
 		}

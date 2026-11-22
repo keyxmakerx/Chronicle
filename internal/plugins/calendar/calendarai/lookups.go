@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
 // maxCalMonths caps the months one events or weather lookup reads.
@@ -31,6 +32,9 @@ type Lookups struct {
 	Rolls EventRollAPI
 	// Tiers adds the event importance levels to the calendar answer.
 	Tiers TierLister
+	// Places adds where the party is to the calendar answer and answers
+	// `what: place-weather`; nil keeps one weather for the world.
+	Places calendar.PlaceWeatherService
 }
 
 // All is the calendar lookups in the prompt's order. Without a calendar
@@ -64,6 +68,7 @@ func (l *Lookups) All() []aiplug.Lookup {
 			Tool: aiplug.Tool{Name: "weather", Title: "Weather by day", Did: "Looked up the weather",
 				Desc: "Each day's weather in a range of dates: from and to, or a year and a month.", Args: dateArgs},
 		}, "Weather", (*lookupRun).weather},
+		l.placeWeatherLookup(),
 	}
 }
 

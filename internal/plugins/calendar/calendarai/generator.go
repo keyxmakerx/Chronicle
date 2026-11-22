@@ -41,6 +41,9 @@ type GeneratorKind struct {
 	Structure CalendarStructureAPI
 	// Eras writes a history run's eras; without it a history adds only events.
 	Eras EraAPI
+	// Places runs a weather row's `place`: that place's own weather, from its
+	// own climate; without it such a row is refused.
+	Places calendar.PlaceWeatherService
 }
 
 // Weather tuning a row may set, with the generator's own bounds.
@@ -75,7 +78,7 @@ func (GeneratorKind) Name() string  { return "generator" }
 func (GeneratorKind) Label() string { return "Generator" }
 func (GeneratorKind) Doc() string {
 	return "Asks Chronicle's own generators to make something, instead of writing it yourself. Use `action: create`. Keys by `generator`:\n" +
-		"- `weather`: weather for days of the default calendar, from `year`/`month`/`day` to `end_year`/`end_month`/`end_day`. It follows the calendar's own seasons, climate, how long its weather lasts, and the owner's own kinds of weather. Optional, for this run only: `climate` (" + climateIDs() + "), `continuity` (0 changes every day, 1 long spells), `warmer` (-15 to 15 degrees C), `wetter` and `windier` (-1 to 1). Days set by hand or locked are kept.\n" +
+		"- `weather`: weather for days of the default calendar, from `year`/`month`/`day` to `end_year`/`end_month`/`end_day`. It follows the calendar's own seasons, climate, how long its weather lasts, and the owner's own kinds of weather. Optional: `place`, a page with a Climate of its own, makes that place's weather from its climate instead of the world's. Optional, for this run only: `climate` (" + climateIDs() + "; not with `place`), `continuity` (0 changes every day, 1 long spells), `warmer` (-15 to 15 degrees C), `wetter` and `windier` (-1 to 1). Days set by hand or locked are kept.\n" +
 		"- `events`: festivals and other calendar events for one `year`.\n" +
 		"- `sky`: sky events (eclipses, meteor showers, comets) for one `year`.\n" +
 		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n" +
@@ -96,6 +99,16 @@ type genPlan struct {
 	NamesKind string          `json:"namesKind,omitempty"`
 	// Kinds is the owner's own kinds of weather, which the run may make.
 	Kinds []calendar.WeatherKind `json:"kinds,omitempty"`
+	// Zones is set for a place's weather: the place as the generator's one
+	// zone, so its days follow their own chain from its own climate.
+	Zones []genZone `json:"zones,omitempty"`
+}
+
+// genZone is one zone of a weather run, in the generator's shape.
+type genZone struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Climate string `json:"climate"`
 }
 
 type ymd struct{ Year, Month, Day int }
@@ -215,12 +228,28 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		if err != nil {
 			return p, nil, "", err
 		}
+		for_ := ""
+		if name := strings.TrimSpace(r.Str("place")); name != "" {
+			// A place's climate is the one on its page; a row's own climate
+			// would give the place weather that contradicts its page.
+			if r.Str("climate") != "" {
+				return p, nil, "", apperror.NewBadRequest("a place's weather follows the Climate on its page; leave out `climate`, or change the page")
+			}
+			pl, err := k.placeZone(ctx, campaignID, cal, y, name)
+			if err != nil {
+				return p, nil, "", err
+			}
+			details["climate"] = pl.Climate
+			p.Zones = []genZone{{ID: pl.ID, Name: pl.Name, Climate: pl.Climate}}
+			for_ = " for " + pl.Name
+			climate = " in the " + climateLabel(pl.Climate) + " climate (set on its page)"
+		}
 		p.Recipe["details"] = details
 		p.Scope = map[string]any{"range": map[string]any{
 			"from": map[string]int{"year": y, "month": m, "day": d},
 			"to":   map[string]int{"year": ey, "month": em, "day": ed},
 		}}
-		return p, cal, "weather from " + dateLabel(cal, y, m, d) + " to " + dateLabel(cal, ey, em, ed) + climate + ", kept off days set by hand or locked", nil
+		return p, cal, "weather" + for_ + " from " + dateLabel(cal, y, m, d) + " to " + dateLabel(cal, ey, em, ed) + climate + ", kept off days set by hand or locked", nil
 	}
 	y, ok, err := r.Int("year")
 	if err != nil || !ok {
@@ -469,6 +498,9 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 				return apperror.NewBadRequest("the generator returned a day outside the range")
 			}
 			in = append(in, calendar.DayWeatherInput{Year: d.Year, Month: d.Month, Day: d.Day, Source: calendar.WeatherSourceGenerated, WeatherInput: d.WeatherInput})
+		}
+		if len(p.Zones) == 1 {
+			return k.Places.SetPlaceDayWeather(ctx, cal.ID, campaignID, p.Zones[0].ID, in)
 		}
 		return k.Cal.SetDayWeather(ctx, cal.ID, campaignID, in)
 	default:

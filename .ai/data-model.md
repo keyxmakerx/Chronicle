@@ -240,6 +240,8 @@ its two siblings are one-way (`docs/deployment.md` §6). `sessions` and
 | `calendar_event_roll_nights` | One stored result per occurrence date | PK `(event_id, year, month, day)`; `total`/`faces` (dice) or `entry` (a table's entry, or a dice result's name the Director picked); `source`; `locked` keeps a re-roll from replacing it; `told` NULL = follow the result's own setting |
 | `calendar_weather` | The calendar's current-weather snapshot | one row per calendar |
 | `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
+| `calendar_place_weather_days` | Weather for one date at one place with a climate of its own | PK `(calendar_id, place_id, year, month, day)`; same columns, `source` and `locked` as `calendar_weather_days`; FK→`entities` CASCADE (migration 032) |
+| `calendar_party_places` | Where the party is from a day on; each move holds until the next | PK `(calendar_id, year, month, day)`; `place_id` NULL = everywhere else; FK→`entities` SET NULL (migration 032) |
 | `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
 | `entity_era_links`, `entity_event_links` | Pages tied to an era or an event | `participation_role` |
 | `entity_era_versions` | A page's version for one era: only what changes there (migration 027) | PK `(entity_id, era_id)`, both FK CASCADE; `name`, `image_path`, `entry`/`entry_html`/`entry_rev`, `fields_data` (changed values only); NULL means "as the usual page" |

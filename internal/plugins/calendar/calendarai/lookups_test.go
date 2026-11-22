@@ -158,10 +158,10 @@ func TestLookups_Contract(t *testing.T) {
 			t.Errorf("%s: incomplete or owner-only: %+v", in.What, in)
 		}
 	}
-	if got := strings.Join(whats, " "); got != "calendar weather-kinds events weather" {
+	if got := strings.Join(whats, " "); got != "calendar weather-kinds events weather place-weather" {
 		t.Errorf("whats %q", got)
 	}
-	if got := strings.Join(tools, " "); got != "calendar_overview weather_kinds calendar_events weather" {
+	if got := strings.Join(tools, " "); got != "calendar_overview weather_kinds calendar_events weather place_weather" {
 		t.Errorf("tools %q", got)
 	}
 	var dated int
