@@ -29,8 +29,9 @@ test('holdFor is what the content lacks of the old height, never negative', () =
 // The page: a scrolling #main-content as in the app layout, a tall sheet and
 // the page-live mount. The refreshed copy has the sheet empty; it draws itself
 // `late` ms after the swap, as a widget waiting on its data does.
-function pageHtml(fresh, short) {
-  if (short) return '<!doctype html><html><head></head><body style="margin:0">' +
+function pageHtml(fresh, kind) {
+  if (kind === 'whole') return wholeHtml(fresh);
+  if (kind === 'short') return '<!doctype html><html><head></head><body style="margin:0">' +
     '<main id="main-content" style="height:600px;overflow-y:auto;padding:16px"><h1>Lore</h1>' +
     (fresh ? '<div data-late data-to="200px" style="height:0"></div>' : '<div style="height:200px"></div>') +
     '<div style="height:100px">Notes</div><div id="live"></div></main></body></html>';
@@ -43,7 +44,24 @@ function pageHtml(fresh, short) {
     '<main id="main-content" style="height:600px;overflow-y:auto;padding:16px"><h1>Bren</h1>' + sheet + '<div id="notes" style="height:400px">Notes</div><div id="live"></div></main></body></html>';
 }
 
-async function setup(t, late, short) {
+// The app's own rules for a page arriving: the frame that waits unseen for
+// its widgets, and the fade-in of swapped-in markup.
+const CSS = read('static/css/input.css');
+const between = (from, to) => { const i = CSS.indexOf(from); const j = CSS.indexOf(to, i); assert.ok(i >= 0 && j > i, 'input.css: ' + from); return CSS.slice(i, j); };
+const ARRIVAL = ':root{--dur-page:90ms;--ease-out:ease-out}' +
+  between('@layer utilities {\n  .htmx-added {', '/* ====') +
+  between('[data-whole] {', '/* Settle:');
+
+// An entity page sent with first paint: its frame waits unseen for a widget
+// that, here, never draws, as a sheet still fetching its data does.
+function wholeHtml(fresh) {
+  return '<!doctype html><html><head><style>' + ARRIVAL + '</style></head><body style="margin:0">' +
+    '<main id="main-content" style="height:600px;overflow-y:auto;padding:16px"><div data-whole' + (fresh ? '' : ' data-whole-ready') + '>' +
+    '<h1>Bren</h1><div data-first-paint style="height:800px"></div><p>' + (fresh ? 'Saved' : 'Before') + '</p></div>' +
+    '<div id="live"></div></main></body></html>';
+}
+
+async function setup(t, late, kind, slow = 150) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: { width: 800, height: 700 } });
@@ -54,19 +72,24 @@ async function setup(t, late, short) {
   // Refreshes take a moment to arrive, as they do over a real network, so
   // frames are painted while one is on its way.
   await p.route('http://chronicle.test/**', async (r) => {
+    // The Pages list, for a reader who clicks away.
+    if (new URL(r.request().url()).pathname === '/campaigns/c1/entities') {
+      return r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><head><title>Pages</title></head><body><main id="main-content"><h1>Pages</h1><p>List</p></main></body></html>' });
+    }
     const fresh = served++ > 0;
-    if (fresh) await new Promise((ok) => setTimeout(ok, 150));
-    await r.fulfill({ contentType: 'text/html', body: pageHtml(fresh, short) });
+    if (fresh) await new Promise((ok) => setTimeout(ok, slow));
+    await r.fulfill({ contentType: 'text/html', body: pageHtml(fresh, kind) });
   });
   await p.goto('http://chronicle.test/campaigns/c1/entities/e1');
   await p.addScriptTag({ content: HTMX });
   // A stand-in for Chronicle's widget registry and the page's socket.
   await p.evaluate((lateMs) => {
     window.Chronicle = { register: (n, w) => { window._live = w; } };
-    window.WebSocket = function () { window._sock = this; this._on = {}; setTimeout(() => this._fire('open', {}), 0); };
+    window._socks = [];
+    window.WebSocket = function () { window._sock = this; window._socks.push(this); this._on = {}; setTimeout(() => this._fire('open', {}), 0); };
     window.WebSocket.prototype.addEventListener = function (t, f) { this._on[t] = f; };
     window.WebSocket.prototype._fire = function (t, e) { if (this._on[t]) this._on[t](e); };
-    window.WebSocket.prototype.close = function () {};
+    window.WebSocket.prototype.close = function () { this.closed = true; };
     document.addEventListener('htmx:afterSwap', () => {
       setTimeout(() => { const b = document.querySelector('[data-brief]'); if (b) b.style.height = '0'; }, 0);
       setTimeout(() => { const f = document.querySelector('[data-folds]'); if (f) f.style.height = '0'; }, 150);
@@ -75,6 +98,7 @@ async function setup(t, late, short) {
   }, late);
   await p.addScriptTag({ content: LIVE });
   await p.evaluate(() => window._live.init(document.getElementById('live'), { campaignId: 'c1', entityId: 'e1' }));
+  p.served = () => served - 1;
   return p;
 }
 
@@ -122,7 +146,7 @@ test('a reader who scrolls during the refresh is left where they scrolled', { sk
 const changed = () => window._sock._fire('message', { data: JSON.stringify({ type: 'page.changed', campaignId: 'c1', resourceId: 'e1' }) });
 
 test('a page shorter than its window gets no scrollbar and keeps no hold', { skip }, async (t) => {
-  const p = await setup(t, 400, true);
+  const p = await setup(t, 400, 'short');
   await p.evaluate((fire) => {
     const m = document.getElementById('main-content');
     window._rows = [];
@@ -154,4 +178,91 @@ test('a refresh during the last one\'s hold measures the page without that hold'
   assert.equal(r.low, before.top, 'never pulled up');
   assert.equal(r.top, before.top);
   assert.equal(r.held, false);
+});
+
+// How visible the heading is on every frame while `go` runs, through every
+// ancestor's opacity.
+async function headingFrames(p, go, frames) {
+  await p.evaluate(([fire, n]) => {
+    window._seen = [];
+    (function tick() {
+      let o = 1;
+      for (let el = document.querySelector('#main-content h1'); el; el = el.parentElement) o *= parseFloat(getComputedStyle(el).opacity);
+      window._seen.push(o);
+      if (window._seen.length < n) requestAnimationFrame(tick);
+    })();
+    (0, eval)(fire)();
+  }, [go.toString(), frames]);
+  await p.waitForFunction((n) => window._seen.length >= n, frames, { timeout: 15000 });
+  return p.evaluate(() => ({ seen: window._seen, text: document.querySelector('#main-content p').textContent }));
+}
+
+test('a refresh after a save keeps the page on screen; a page that arrives still waits and fades', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  const r = await headingFrames(p, changed, 150);
+  assert.equal(r.text, 'Saved', 'the page was refreshed');
+  assert.equal(Math.min(...r.seen), 1, 'the heading never dimmed: ' + [...new Set(r.seen)].join(','));
+  assert.equal(await p.evaluate(() => document.getElementById('main-content').hasAttribute('data-page-live-swap')), false);
+  // The same markup swapped in as another page is: hidden until its widgets draw.
+  const a = await headingFrames(p, () => window.htmx.ajax('GET', location.pathname, { target: '#main-content', select: '#main-content > *', swap: 'innerHTML' }), 30);
+  assert.ok(Math.min(...a.seen) < 0.5, 'another page still waits unseen: ' + [...new Set(a.seen)].join(','));
+});
+
+const toAll = () => window._socks.forEach((s) => s._fire('message', { data: JSON.stringify({ type: 'page.changed', campaignId: 'c1', resourceId: 'e1' }) }));
+
+test('a page watcher swapped out of the page stops listening', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  const closed = await p.evaluate(() => { const el = document.getElementById('live'); window._live.destroy(el); return window._sock.closed === true; });
+  assert.ok(closed, 'its connection is closed');
+  await p.evaluate(toAll);
+  await p.waitForTimeout(1800);
+  assert.equal(p.served(), 0, 'no refresh after it was swapped out');
+});
+
+test('two refreshes at once keep the page on screen and leave nothing behind', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  // A second watcher on the same page, as a mount left over from an earlier
+  // refresh would be.
+  await p.evaluate(() => { const el = document.createElement('div'); document.body.appendChild(el); window._live.init(el, { campaignId: 'c1', entityId: 'e1' }); });
+  await p.waitForTimeout(50);
+  const r = await headingFrames(p, toAll, 170);
+  assert.ok(p.served() >= 2, 'both refreshed: ' + p.served());
+  assert.equal(r.text, 'Saved', 'the page was refreshed');
+  assert.equal(Math.min(...r.seen), 1, 'the heading never dimmed: ' + [...new Set(r.seen)].join(','));
+  const left = await p.evaluate(() => ({ mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), ready: document.querySelector('[data-whole]').hasAttribute('data-whole-ready') }));
+  assert.deepEqual(left, { mark: false, ready: true });
+});
+
+test('a refresh that arrives after the reader went to another page is dropped', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  await p.evaluate((fire) => {
+    // The reader clicks away while the refresh is on its way.
+    document.addEventListener('htmx:beforeRequest', function once() { document.removeEventListener('htmx:beforeRequest', once); history.pushState({}, '', '/campaigns/c1/entities'); });
+    (0, eval)(fire)();
+  }, changed.toString());
+  await p.waitForTimeout(2200);
+  const r = await p.evaluate(() => ({ text: document.querySelector('#main-content p').textContent, mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), held: !!document.querySelector('[data-page-live-hold]') }));
+  assert.equal(p.served(), 1, 'the refresh was sent');
+  assert.deepEqual(r, { text: 'Before', mark: false, held: false });
+});
+
+test('a link clicked while a slow refresh is on its way wins', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole', 600);
+  await p.evaluate((fire) => {
+    const a = document.createElement('a');
+    a.href = '/campaigns/c1/entities'; a.id = 'to-pages'; a.textContent = 'Pages';
+    a.setAttribute('hx-boost', 'true'); a.setAttribute('hx-target', '#main-content'); a.setAttribute('hx-select', '#main-content > *');
+    document.body.appendChild(a);
+    window.htmx.process(a);
+    document.addEventListener('htmx:beforeRequest', function once(e) {
+      if (!e.detail.requestConfig.headers['X-Page-Live']) return;
+      document.removeEventListener('htmx:beforeRequest', once);
+      setTimeout(() => a.click(), 300);
+    });
+    (0, eval)(fire)();
+  }, changed.toString());
+  await p.waitForTimeout(3000);
+  const r = await p.evaluate(() => ({ path: location.pathname, h1: document.querySelector('#main-content h1').textContent, mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), held: !!document.querySelector('[data-page-live-hold]') }));
+  assert.equal(p.served(), 1, 'the refresh was sent');
+  assert.deepEqual(r, { path: '/campaigns/c1/entities', h1: 'Pages', mark: false, held: false });
 });
