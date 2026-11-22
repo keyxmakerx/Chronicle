@@ -689,6 +689,19 @@ func (s *service) Update(ctx context.Context, campaignID, deckID string, v Viewe
 	if err := validKind(next.Kind); err != nil {
 		return nil, err
 	}
+	if cur.Kind == KindParty && next.Kind != KindParty {
+		// A card in the party's hand has no holder, so in any other kind of
+		// deck nobody could see or play it.
+		copies, err := s.repo.ListCopies(ctx, campaignID, cur.ID)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		for _, c := range copies {
+			if c.Zone == ZoneHand && c.HolderEntityID == "" {
+				return nil, conflict("take the party's cards back before changing who this deck is for")
+			}
+		}
+	}
 	var curHolder *string
 	if cur.HolderEntityID != "" {
 		curHolder = &cur.HolderEntityID

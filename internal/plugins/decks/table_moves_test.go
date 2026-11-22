@@ -615,6 +615,23 @@ func TestHandDealWithNoHeroIsOnlyForAPartyDeck(t *testing.T) {
 	}
 }
 
+func TestPartyDeckKeepsItsKindWhileThePartyHoldsCards(t *testing.T) {
+	fx := newFixture(t)
+	deck := fx.deck("Fortune", KindParty, nil)
+	c := fx.card(deck, CreateCardInput{Name: "A"})
+	res, err := fx.svc.DealCard(bg, camp, deck, fx.dir, DealCardInput{CardID: c, To: "hand"})
+	fx.must(err)
+	if _, err := fx.svc.Update(bg, camp, deck, fx.dir, UpdateDeckInput{Version: patch.Of(1), Kind: patch.Of(KindEvent)}); code(err) != http.StatusConflict {
+		t.Fatalf("changing the kind with a card in the party's hand: code %d, want 409", code(err))
+	}
+	if _, err := fx.svc.Act(bg, camp, deck, res.CopyID, "take-back", fx.dir, ActInput{}); err != nil {
+		t.Fatalf("take back: %v", err)
+	}
+	if _, err := fx.svc.Update(bg, camp, deck, fx.dir, UpdateDeckInput{Version: patch.Of(1), Kind: patch.Of(KindEvent)}); err != nil {
+		t.Errorf("changing the kind once the party's hand is empty: %v", err)
+	}
+}
+
 // ---- keep for good ---------------------------------------------------------
 
 type keepWorld struct {
