@@ -1172,7 +1172,10 @@
     $$('.mk, .more', cell).forEach(function (m) {
       stopAnims(m);
       if (going.indexOf(m) >= 0) { m.classList.add('away'); return; }
-      anim(m, back ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], { duration: 200, delay: back ? 200 : 60, easing: 'ease-out', fill: 'both' });
+      // From and back to the mark's own opacity: a hidden event's is faded.
+      var own = parseFloat(getComputedStyle(m).opacity);
+      if (!(own >= 0)) own = 1;
+      anim(m, back ? [{ opacity: 0 }, { opacity: own }] : [{ opacity: own }, { opacity: 0 }], { duration: 200, delay: back ? 200 : 60, easing: 'ease-out', fill: 'both' });
     });
   }
   function unpackMarks(cell) {
@@ -1186,7 +1189,7 @@
     var cr = calEl.getBoundingClientRect();
     return (P.pairs || []).map(function (p, i) {
       var a = (back ? p.ric : p.mk).getBoundingClientRect(), b = (back ? p.mk : p.ric).getBoundingClientRect(), f = document.createElement('span');
-      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '') + (p.mk.classList.contains('wait') ? ' wait' : '');
+      f.className = 'flyer';
       f.setAttribute('style', (p.mk.getAttribute('style') || '') + ';width:' + a.width.toFixed(1) + 'px;height:' + a.height.toFixed(1) + 'px');
       if (p.mk.classList.contains('gnm')) f.innerHTML = p.mk.innerHTML;
       else f.textContent = p.mk.textContent;
@@ -1194,7 +1197,10 @@
       p.f = f;
       var sx = a.left - cr.left, sy = a.top - cr.top, ex = b.left - cr.left, ey = b.top - cr.top, k = b.width / a.width;
       var lift = Math.min(26, 8 + Math.hypot(ex - sx, ey - sy) * 0.07), t = { duration: o.dur, delay: o.delay + i * o.stagger, fill: 'both' };
-      var trip = anim(f, [{ transform: 'translate(' + sx.toFixed(1) + 'px,' + sy.toFixed(1) + 'px)' }, { transform: 'translate(' + ex.toFixed(1) + 'px,' + ey.toFixed(1) + 'px)' }], Object.assign({ easing: 'cubic-bezier(.45,0,.2,1)' }, t));
+      // A hidden event's mark is faded in the cell and full in the card, so
+      // its flyer brightens on the way in and dims on the way back.
+      var faded = parseFloat(getComputedStyle(p.mk).opacity), fo = p.mk.classList.contains('dir') && faded < 1 ? (back ? [1, faded] : [faded, 1]) : [1, 1];
+      var trip = anim(f, [{ transform: 'translate(' + sx.toFixed(1) + 'px,' + sy.toFixed(1) + 'px)', opacity: fo[0] }, { transform: 'translate(' + ex.toFixed(1) + 'px,' + ey.toFixed(1) + 'px)', opacity: fo[1] }], Object.assign({ easing: 'cubic-bezier(.45,0,.2,1)' }, t));
       [trip,
         anim(f, [{ transform: 'translateY(0px)', easing: 'cubic-bezier(.25,.6,.45,1)' }, { transform: 'translateY(' + (-lift).toFixed(1) + 'px)', offset: 0.42, easing: 'cubic-bezier(.55,0,.75,.4)' }, { transform: 'translateY(0px)' }], Object.assign({ composite: 'add' }, t)),
         anim(f, [{ transform: 'scale(1)' }, { transform: 'scale(' + (Math.max(k, 1) * 1.16).toFixed(3) + ')', offset: 0.45 }, { transform: 'scale(' + k.toFixed(3) + ')' }], Object.assign({ composite: 'add', easing: 'ease-in-out' }, t))
@@ -5028,13 +5034,16 @@
         var firstCol = CalDate.gridLead(cal, y, m);
         this._gridOff = firstCol;
         var cells = [];
-        for (var i = 0; i < firstCol; i++) cells.push(null);
         for (var d = 1; d <= days; d++) cells.push(d);
-        while (cells.length % weekLen !== 0) cells.push(null);
+        // The weeks' other cells show the neighbouring months' dates, faded,
+        // so the grid reads as one run of days and the month's own stand out.
+        var lead = this._outsideDays(y, m, -1, firstCol), trail = this._outsideDays(y, m, 1, (weekLen - (firstCol + days) % weekLen) % weekLen);
+        cells = lead.concat(cells, trail);
         html += '<div class="wk">';
         for (var i2 = 0; i2 < cells.length; i2++) {
           if (i2 > 0 && i2 % weekLen === 0) html += '</div><div class="wk">';
-          html += cells[i2] ? this._dayCellHTML(y, m, cells[i2]) : '<div class="day"></div>';
+          var c = cells[i2];
+          html += typeof c === 'number' ? this._dayCellHTML(y, m, c) : this._outsideCellHTML(c);
         }
         html += '</div>';
       }
@@ -5066,6 +5075,27 @@
       if (ri) this._startRoll(ri);
       // The editor's year track dresses the fresh month (its draft's ink, what was just kept).
       if (this.afterPaint) this.afterPaint();
+    },
+
+    // _outsideDays lists the n dates of the month before (dir -1) or after
+    // (dir 1) that share the shown month's first or last week, nearest last
+    // or first. A festival month next door is not a run of weekdays, so its
+    // cells stay blank ({n: 0}) rather than borrow another month's numbers.
+    _outsideDays: function (y, m, dir, n) {
+      var out = [], cal = this.cal, nb = CalDate.shiftMonth(cal, y, m, dir), mc = CalDate.monthCount(cal);
+      var def = (cal.months || [])[((nb.m - 1) % mc + mc) % mc];
+      var len = def && !def.is_intercalary ? CalDate.monthDays(cal, nb.m - 1, nb.y) : 0;
+      for (var i = 0; i < n; i++) {
+        var d = dir < 0 ? len - n + 1 + i : i + 1;
+        out.push({ n: d >= 1 && d <= len ? d : 0 });
+      }
+      return out;
+    },
+
+    // A cell outside the shown month: only its date, faded. It is not a
+    // button, since that day belongs to the month next door.
+    _outsideCellHTML: function (c) {
+      return '<div class="day out" aria-hidden="true">' + (c.n ? '<div class="dc"><span class="num">' + c.n + '</span></div>' : '') + '</div>';
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {
@@ -5214,7 +5244,8 @@
 
     // --------------------------------------------------------------
     // The era field: calendar_era_blend.js paints the eras' colours behind
-    // the shown month's days. Without that script it stays missing.
+    // the shown month's weeks, the neighbouring months' dates included.
+    // Without that script it stays missing.
     // --------------------------------------------------------------
     _paintEraField: function (o) {
       var blend = Chronicle.calendarEraBlend, month = this.stageEl.querySelector('.month');
@@ -5241,6 +5272,7 @@
         cols: band ? 1 : CalDate.weekLen(cal),
         off: band ? 0 : (this._gridOff || 0),
         days: info.days,
+        outside: !band,
         split: eras.length > 1 ? info.change : null,
         eras: eras.map(function (e) { return { key: e.id, color: e.color, color_2: e.color_2, style: e.style, feel: e.feel }; })
       };
