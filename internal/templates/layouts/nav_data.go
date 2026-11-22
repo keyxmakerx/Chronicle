@@ -154,23 +154,23 @@ var manageToolWords = map[string]string{
 
 // ownerCommands are the owner's own phrases: what people type when they want
 // a campaign setting ("export", "delete", "guest"), each with the words that
-// also find it. base is "/campaigns/<id>". The tab ids and the #danger and
-// #line-preview anchors are the ones the settings and desk pages answer to.
+// also find it. base is "/campaigns/<id>". The anchors (#export, #danger,
+// #line-preview) are the ones Campaign settings' tabs answer to.
 func ownerCommands(base string) []navCommand {
 	return []navCommand{
 		{Label: "Campaign settings", Href: base + "/dashboard", Icon: "fa-sliders", Words: "settings manage owner options"},
-		{Label: "Preview as a player or guest", Href: base + "/dashboard#line-preview", Icon: "fa-eye", Words: "player guest visitor public dashboard home view as see preview"},
-		{Label: "Export a copy", Href: base + "/settings?tab=data", Icon: "fa-file-export", Words: "export backup download copy"},
-		{Label: "Import", Href: base + "/settings?tab=import", Icon: "fa-file-import", Words: "import upload restore"},
-		{Label: "Activity log", Href: base + "/settings?tab=activity", Icon: "fa-clock-rotate-left", Words: "activity log history audit"},
-		{Label: "Keys", Href: base + "/settings?tab=api-keys", Icon: "fa-key", Words: "api keys tokens tools"},
+		{Label: "Preview as a player or guest", Href: base + "/settings#line-preview", Icon: "fa-eye", Words: "player guest visitor public dashboard home view as see preview"},
+		{Label: "Export a copy", Href: base + "/data#export", Icon: "fa-file-export", Words: "export backup download copy"},
+		{Label: "Import", Href: base + "/data#import", Icon: "fa-file-import", Words: "import upload restore"},
+		{Label: "Activity log", Href: base + "/data#activity", Icon: "fa-clock-rotate-left", Words: "activity log history audit"},
+		{Label: "Keys", Href: base + "/connections#keys", Icon: "fa-key", Words: "api keys tokens tools"},
 		{Label: "Invite someone", Href: base + "/members", Icon: "fa-user-plus", Words: "invite add player join"},
 		// The finished page pieces are on Game & features, each under its own anchor.
 		{Label: "Quest board", Href: base + "/extensions#quest-board", Icon: "fa-scroll", Words: "quest board quests cork put on a page"},
 		{Label: "Notice boards", Href: base + "/extensions#notice-boards", Icon: "fa-thumbtack", Words: "notice board boards tavern town put on a page"},
 		{Label: "Trackers", Href: base + "/extensions#trackers", Icon: "fa-gauge", Words: "tracker clock clocks counter steps put on a page"},
 		{Label: "Tests", Href: base + "/extensions#tests", Icon: "fa-flag-checkered", Words: "test montage chase put on a page"},
-		{Label: "Archive or delete this campaign", Href: base + "/settings#danger", Icon: "fa-triangle-exclamation", Words: "delete archive remove end"},
+		{Label: "Archive or delete this campaign", Href: base + "/data#danger", Icon: "fa-triangle-exclamation", Words: "delete archive remove end"},
 	}
 }
 
@@ -235,6 +235,11 @@ func ManageToolRows(base string, media, foundry bool) []NavRowView {
 	return append(rows,
 		NavRowView{Key: "manage:ai", Label: "Your AI", Icon: "fa-wand-magic-sparkles", URL: base + "/ai"},
 		NavRowView{Key: "manage:trash", Label: "Trash", Icon: "fa-trash-can", URL: base + "/trash"},
-		NavRowView{Key: "manage:settings", Label: "Details and data", Icon: "fa-gear", URL: base + "/settings"},
+		// Three of Campaign settings' tabs: the campaign's name, access and
+		// look; its outside links; and copies, the activity log and the
+		// Danger zone.
+		NavRowView{Key: "manage:settings", Label: "Campaign details", Icon: "fa-gear", URL: base + "/settings"},
+		NavRowView{Key: "manage:connections", Label: "Connections", Icon: "fa-plug", URL: base + "/connections"},
+		NavRowView{Key: "manage:data", Label: "Data", Icon: "fa-database", URL: base + "/data"},
 	)
 }

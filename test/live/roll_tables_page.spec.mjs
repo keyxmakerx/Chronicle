@@ -127,7 +127,7 @@ test('build a table from examples, keep when and who sees it, then rename, move 
   owner.assertClean();
 });
 
-test('players and scribes do not get the page, and the desk lists it for the owner', async () => {
+test('players and scribes do not get the page, and Game lists it for the owner', async () => {
   const owner = await person({ tag: 'tables-gate-owner', name: 'Owner Ines' });
   const cid = await newCampaign(owner, 'Rolling tables gate');
   const scribe = await person({ tag: 'tables-scribe', name: 'Sam Scribe' });
@@ -139,7 +139,7 @@ test('players and scribes do not get the page, and the desk lists it for the own
     assert.equal(res.status(), 403, who.name);
     assert.equal(await who.page.getByText('New table').count(), 0, 'no builder for ' + who.name);
   }
-  await owner.go(`/campaigns/${cid}/dashboard`);
+  await owner.go(`/campaigns/${cid}/extensions`);
   const link = owner.page.locator(`a[href="/campaigns/${cid}/roll-tables/manage"]`).first();
   await link.waitFor({ state: 'attached' });
 });

@@ -32,14 +32,15 @@ const maxFormOverhead = 1 << 20
 // body to disk) before the route's own limit could run.
 func RequestLimit(l Limits) int64 { return l.MaxUploadBytes + maxFormOverhead }
 
-// Page sends the old Import page address to Settings > Import, so bookmarks
-// and links written before the move still land on the import.
+// Page sends the old Import page address to the Import part of Campaign
+// settings' Data tab, so bookmarks and links written before the move still
+// land on the import.
 func (h *Handler) Page(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings?tab="+SettingsTabID)
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/data#"+SettingsTabID)
 }
 
 // SettingsTabID is the Import tab's id on the campaign Settings page.

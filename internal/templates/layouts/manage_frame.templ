@@ -1,8 +1,9 @@
 // manage_frame.templ is the one frame every owner Manage page sits in. It
 // lives here, not in the campaigns plugin, because pages owned by other
-// plugins (Media, Trash, Sync history, Your AI) use it too. The sidebar is
-// the only Manage menu, so the frame carries no links of its own beyond the
-// quiet way back to the desk.
+// plugins (Media, Trash, Sync history, Your AI) use it too. For the owner it
+// is Campaign settings' workshop frame: the campaign's banner, then the index
+// tabs (Overview, Campaign, People, Game, Connections, Data), then the page.
+// Anyone else gets the plain title.
 
 package layouts
 
@@ -10,9 +11,15 @@ package layouts
 type ManageFrameData struct {
 	// Title is the page's name, drawn as its one h1.
 	Title string
-	// Home marks the desk itself, which has no "Campaign settings" word above it since
-	// it is the place that word leads to.
+	// Home marks the board itself (Overview): its tab names it and it has no
+	// way back to itself.
 	Home bool
+	// Tab names the tab the page sits under ("connections"); empty takes the
+	// tab of the page's Line.
+	Tab string
+	// Landing marks a tab's own page (People, Game, Connections): the tab
+	// already says where you are, so the title is for the screen reader only.
+	Landing bool
 	// Intro is one plain sentence under the title; empty draws nothing. Pages
 	// that already carry their own introduction inside leave it empty.
 	Intro string
@@ -21,7 +28,7 @@ type ManageFrameData struct {
 	Actions templ.Component
 	// Line names the desk line this page belongs to ("people", "trash"). The
 	// frame draws that line's figures beside the title, built from the same
-	// facts as the desk's row, so going from the desk to the page carries
+	// facts as the board's tile, so going from the board to the page carries
 	// them. Empty draws none: pages with no line of their own, and anyone who
 	// is not the owner.
 	Line string
@@ -32,39 +39,168 @@ type ManageFrameData struct {
 }
 
 // ManageFrame gives every Manage page the same left edge and the same content
-// width, a quiet "Campaign settings" above the title that leads back to the desk, the
-// title with the page's muted figures beside it, a slot for the page's own
-// actions, then the page body. One component, so the edge cannot drift page
-// by page again. The Customizer is a full-screen workshop and never sits in it.
+// width. The owner gets the banner and the tabs above the page's own head (the
+// title with its muted figures, the pin and the page's actions); Find sits in
+// the banner, so "/" has one button to press. One component, so the edge
+// cannot drift page by page again. The Customizer is a full-screen workshop
+// and never sits in it.
 templ ManageFrame(d ManageFrameData) {
 	{{ figure := manageFigureFor(ctx, d.Line) }}
 	if d.NoFigure {
 		{{ figure = nil }}
 	}
-	<div class="manage-frame" data-manage-frame data-workshop>
-		<header class="manage-head">
-			if !d.Home {
-				<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow">Campaign settings</a>
+	{{ mast := manageMastFor(ctx) }}
+	{{ pinKey, pinName := ManageToolOfLine(d.Line) }}
+	if mast != nil {
+		{{ tab := manageTabFor(d) }}
+		{{ landing := manageLanding(d) }}
+		<link rel="stylesheet" href={ AssetURL("/static/css/settings_frame.css") }/>
+		<div class="manage-frame stg" data-manage-frame data-workshop data-settings-tab={ tab }>
+			@manageMasthead(*mast, tab == "overview")
+			if landing {
+				@manageTabBar(tab, pinKey, pinName)
+			} else {
+				@manageTabBar(tab, "", "")
 			}
-			<h1 class="manage-title cb-title">{ d.Title }</h1>
-			{{ pinKey, pinName := ManageToolOfLine(d.Line) }}
-			@ManagePin(pinKey, pinName)
-			if figure != nil {
-				<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
-				@figure
-			}
-			if d.Actions != nil || ManageFindShown(ctx) {
-				<div class="manage-actions">
-					if d.Actions != nil {
+			<header class={ "manage-head", "stg-head", templ.KV("stg-landing", landing) }>
+				// A tab's own page is named by its tab, so its title is for the
+				// screen reader only and wears no page look (a look's title
+				// rule would undo the hiding), and its pin sits in the tab bar.
+				if landing {
+					<h1 class="manage-title sr-only">{ d.Title }</h1>
+				} else {
+					<h1 class="manage-title cb-title">{ d.Title }</h1>
+					@ManagePin(pinKey, pinName)
+				}
+				if figure != nil {
+					<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
+					@figure
+				}
+				if d.Actions != nil {
+					<div class="manage-actions">
 						@d.Actions
+					</div>
+				}
+				if d.Intro != "" {
+					<p class="manage-intro">{ d.Intro }</p>
+				}
+			</header>
+			{ children... }
+		</div>
+	} else {
+		<div class="manage-frame" data-manage-frame data-workshop>
+			<header class="manage-head">
+				if !d.Home {
+					<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") } class="manage-eyebrow">Campaign settings</a>
+				}
+				<h1 class="manage-title cb-title">{ d.Title }</h1>
+				@ManagePin(pinKey, pinName)
+				if figure != nil {
+					<link rel="stylesheet" href={ AssetURL("/static/css/manage_desk.css") }/>
+					@figure
+				}
+				if d.Actions != nil || ManageFindShown(ctx) {
+					<div class="manage-actions">
+						if d.Actions != nil {
+							@d.Actions
+						}
+						@ManageFind()
+					</div>
+				}
+				if d.Intro != "" {
+					<p class="manage-intro">{ d.Intro }</p>
+				}
+			</header>
+			{ children... }
+		</div>
+	}
+}
+
+// manageMasthead is the campaign's banner: its cover (its own backdrop, or one
+// drawn from its colour), its emblem, "Campaign settings" leading back to the
+// board, its name, whether it is private or public, and a few facts. Find sits
+// at its end.
+templ manageMasthead(m ManageMast, home bool) {
+	<div class="stg-mast" data-settings-mast>
+		if m.Cover != "" {
+			<img class="stg-cover stg-cover-pic" src={ MediaURL(ctx, m.Cover) } alt="" loading="eager" decoding="async"/>
+		} else {
+			@ManageDrawnCover("stg-cover")
+		}
+		<div class="stg-mast-in">
+			if m.Emblem != "" {
+				<img class="stg-emblem" src={ MediaURL(ctx, m.Emblem) } alt=""/>
+			} else {
+				<span class="stg-emblem stg-face" aria-hidden="true">{ m.Initial() }</span>
+			}
+			<div class="stg-mast-t">
+				if home {
+					<p class="stg-eyebrow">Campaign settings</p>
+				} else {
+					<a class="stg-eyebrow" href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/dashboard") }>Campaign settings</a>
+				}
+				<p class="stg-name stg-face" data-settings-name>{ m.Name }</p>
+				<p class="stg-facts">
+					<span class="stg-pill" data-settings-access>
+						if m.Public {
+							Public
+						} else {
+							Private
+						}
+					</span>
+					if m.Archived {
+						<span class="stg-pill stg-pill-warn">Archived</span>
 					}
-					@ManageFind()
-				</div>
-			}
-			if d.Intro != "" {
-				<p class="manage-intro">{ d.Intro }</p>
-			}
-		</header>
-		{ children... }
+					for _, f := range m.Facts {
+						<span class="stg-fact">{ f }</span>
+					}
+				</p>
+			</div>
+			<div class="stg-find">
+				@ManageFindField()
+			</div>
+		</div>
 	</div>
+}
+
+// ManageDrawnCover is the cover a campaign without a backdrop wears: hills
+// under a moon, every fill mixed from the campaign's colour so it is that
+// campaign's in light and dark. Decoration only. The Campaign tab's card wears
+// it too.
+templ ManageDrawnCover(class string) {
+	<svg class={ class, "stg-cover-drawn" } viewBox="0 0 800 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+		<rect class="stg-sky" width="800" height="120"></rect>
+		<circle class="stg-moon" cx="640" cy="34" r="15"></circle>
+		<path class="stg-r1" d="M0 86l70-30 46 20 64-44 58 36 72-26 60 32 66-48 70 40 58-22 66 30 70-36v82H0z"></path>
+		<path class="stg-r2" d="M0 100l90-26 60 16 80-30 70 26 90-34 80 30 74-22 86 24 80-30 90 28v38H0z"></path>
+		<path class="stg-r3" d="M0 112l120-16 100 10 110-20 120 16 130-18 110 14 110-12v34H0z"></path>
+	</svg>
+}
+
+// manageTabBar is the row of index tabs under the banner. Each is a link to
+// its page; the lit one says aria-current, so the screen reader hears where
+// you are and every tab is a plain link to open in a new tab. A tab's own
+// page puts its pin at the bar's end, where its title would have been.
+templ manageTabBar(current, pinKey, pinName string) {
+	<nav class="stg-bar" aria-label="Campaign settings">
+		<ul class="stg-tabs">
+			for _, t := range manageTabs {
+				<li>
+					<a
+						class="stg-tab"
+						href={ templ.SafeURL(manageTabHref(ctx, t)) }
+						data-settings-tab-link={ t.Key }
+						if t.Key == current {
+							aria-current="page"
+						}
+					>{ t.Label }</a>
+				</li>
+			}
+		</ul>
+		if pinKey != "" && NavCanOwnPin(ctx) {
+			<span class="stg-bar-end">
+				@ManagePin(pinKey, pinName)
+			</span>
+		}
+	</nav>
 }

@@ -492,13 +492,8 @@ func (h *Handler) Update(c *echo.Context) error {
 
 	input := UpdateCampaignInput(req)
 
-	_, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input)
-	if err != nil {
-		errMsg := apperror.UserMessage(err, "failed to update campaign")
-		csrfToken := middleware.GetCSRFToken(c)
-		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
-		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, false)
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg, "general", tabs))
+	if _, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input); err != nil {
+		return err
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
@@ -515,8 +510,10 @@ func (h *Handler) Delete(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
+	// htmx sends a DELETE's values in the address, so the typed name is read
+	// from the query as well as from a body.
 	var req struct {
-		ConfirmName string `json:"confirm_name" form:"confirm_name"`
+		ConfirmName string `json:"confirm_name" form:"confirm_name" query:"confirm_name"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -743,46 +740,16 @@ func (h *Handler) UpdateHandoverSettingAPI(c *echo.Context) error {
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).
 // Supports ?tab= query param to open a specific tab (general, people, integrations, activity).
 func (h *Handler) Settings(c *echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
+	cc, err := deskOwner(c)
+	if err != nil {
+		return err
 	}
-
-	// Tabs that became pages of their own keep their old links working.
-	if to := settingsTabRedirect(cc.Campaign.ID, c.QueryParam("tab")); to != "" {
+	// The old Details and data tabs keep their links working on the tab
+	// that holds them now.
+	if to := settingsTabRedirect(cc.Campaign.ID, c.QueryParam("tab"), h.extraSettingsTabIDs(cc)); to != "" {
 		return c.Redirect(http.StatusFound, to)
 	}
-
-	ctx := c.Request().Context()
-	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
-	csrfToken := middleware.GetCSRFToken(c)
-
-	// Check SMTP configuration for invite/transfer warnings.
-	smtpConfigured := false
-	if h.smtpChecker != nil {
-		smtpConfigured = h.smtpChecker.IsConfigured(ctx)
-	}
-
-	// Fetch available game systems for the system selector.
-	var systemOptions []SystemOption
-	if h.systemLister != nil {
-		systemOptions = h.systemLister.ListSystems()
-	}
-
-	// Per-campaign feature toggles live on the top-level Extensions hub
-	// at `/campaigns/:id/extensions`, not any built-in Settings tab —
-	// no addons-store load needed here.
-
-	tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, systemOptions, smtpConfigured)
-
-	// Resolve the requested tab against the set actually visible to this
-	// viewer. The raw `?tab=` value is attacker-controllable and flows
-	// into an Alpine `x-data` expression in settings.templ, so it must be
-	// constrained to a known tab ID (reflected-XSS guard); an empty or
-	// unknown value falls back to "general".
-	activeTab := sanitizeSettingsTab(c.QueryParam("tab"), tabs)
-
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", activeTab, tabs))
+	return middleware.Render(c, http.StatusOK, CampaignTabPage(cc, campaignTabOf(cc.Campaign, h.deskInputs(c, cc))))
 }
 
 // PluginHub redirects the legacy plugin hub page (GET /campaigns/:id/plugins)
@@ -1417,17 +1384,15 @@ func (h *Handler) UpdateMemberCharacterAPI(c *echo.Context) error {
 
 // --- Ownership Transfer ---
 
-// TransferForm renders the ownership transfer form (GET /campaigns/:id/transfer).
+// TransferForm sends an old link to the transfer form (GET
+// /campaigns/:id/transfer) to where it lives, on People.
 func (h *Handler) TransferForm(c *echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
-	csrfToken := middleware.GetCSRFToken(c)
-	tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, false)
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", "general", tabs))
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members#transfer")
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
@@ -1443,16 +1408,11 @@ func (h *Handler) Transfer(c *echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	_, err := h.service.InitiateTransfer(c.Request().Context(), cc.Campaign.ID, userID, req.Email)
-	if err != nil {
-		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
-		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := apperror.UserMessage(err, "failed to initiate transfer")
-		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, false)
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg, "general", tabs))
+	if _, err := h.service.InitiateTransfer(c.Request().Context(), cc.Campaign.ID, userID, req.Email); err != nil {
+		return err
 	}
 
-	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/members#transfer")
 }
 
 // AcceptTransfer accepts a pending ownership transfer (GET /campaigns/:id/accept-transfer).
@@ -1482,7 +1442,7 @@ func (h *Handler) CancelTransfer(c *echo.Context) error {
 		return err
 	}
 
-	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/members#transfer")
 }
 
 // --- Campaign Group Management ---
@@ -1745,6 +1705,11 @@ func (h *Handler) ArchiveCampaign(c *echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.archived", nil)
+	// The Danger zone's step posts here; it goes back to Data, which then
+	// shows the campaign as it is now.
+	if middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/data")
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "archived"})
 }
 
@@ -1760,6 +1725,11 @@ func (h *Handler) UnarchiveCampaign(c *echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.unarchived", nil)
+	// The Danger zone's step posts here; it goes back to Data, which then
+	// shows the campaign as it is now.
+	if middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/data")
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "active"})
 }
 

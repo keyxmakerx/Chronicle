@@ -1,5 +1,6 @@
-// settings.templ renders the campaign settings page as a tabbed "Campaign Hub"
-// with four tabs: General, People, Integrations, and Activity.
+// settings.templ holds parts several Campaign settings pages draw: the
+// activity log's lazy fragment (Data), the People page's sections, the
+// feature cards' list and the "If you're away" choice.
 
 package campaigns
 
@@ -11,35 +12,6 @@ import (
 	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
-
-// jsEsc escapes a string for safe embedding inside a single-quoted
-// JavaScript string literal in an Alpine.js attribute expression. It
-// mirrors the entities plugin's helper of the same name and is
-// re-declared locally rather than imported to keep plugins isolated.
-//
-// Escaping the single quote and backslash is what defeats the Settings
-// `?tab=` reflected-XSS vector at the sink: templ HTML-escapes the
-// attribute and the browser HTML-decodes it before Alpine evaluates it
-// as JS, but a backslash is not an HTML metacharacter, so `\'` stays an
-// escaped quote through that round-trip and cannot break the literal.
-func jsEsc(s string) string {
-	result := ""
-	for _, c := range s {
-		switch c {
-		case '\'':
-			result += "\\'"
-		case '\\':
-			result += "\\\\"
-		case '\n':
-			result += "\\n"
-		case '\r':
-			result += "\\r"
-		default:
-			result += string(c)
-		}
-	}
-	return result
-}
 
 // entityTypesJSON serializes entity types to JSON for the entity type config widget.
 func entityTypesJSON(types []SettingsEntityType) string {
@@ -66,219 +38,11 @@ func systemOptionsJSON(opts []SystemOption) string {
 	return string(b)
 }
 
-// settingsTabIDsJSON serializes the visible tab IDs, in order, for the
-// tab bar's arrow-key navigation: moveTab (Alpine, on the page's
-// x-data) needs the ordered ID list to compute "next"/"previous"
-// without re-deriving it from the DOM.
-func settingsTabIDsJSON(tabs []SettingsTab) string {
-	ids := make([]string, len(tabs))
-	for i, t := range tabs {
-		ids[i] = t.ID
-	}
-	b, err := json.Marshal(ids)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
-}
-
-// CampaignSettingsPage renders the tabbed campaign settings hub.
-//
-// Tab list is built by the Handler (see settings_tabs.go) and passed
-// in already role-filtered + sort-ordered. The page iterates the list
-// for the tab bar AND the content blocks — no hardcoded tab refs here,
-// which lets plugins contribute additional tabs via the campaigns
-// handler's RegisterSettingsTab without forking this file. transfer +
-// csrfToken are used by the pre-tab banners; per-tab data is captured
-// inside each tab's own Content closure.
-templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
-	@layouts.App(cc.Campaign.Name + " - Details and data") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Details and data", Line: "settings"}) {
-		<div
-			x-data={ fmt.Sprintf(`{
-				tab: '%s',
-				ids: %s,
-				activate(id) {
-					this.tab = id;
-					history.replaceState(null, '', '?tab=' + id);
-				},
-				moveTab(dir) {
-					var i = this.ids.indexOf(this.tab);
-					var next = this.ids[(i + dir + this.ids.length) %% this.ids.length];
-					this.activate(next);
-					this.$nextTick(function() { document.getElementById(next + '-tab').focus(); });
-				}
-			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
-		>
-			if errMsg != "" {
-				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
-			}
-			if cc.Campaign.IsArchived() {
-				<div class="alert-warning mb-4">
-					<i class="fa-solid fa-box-archive mr-2"></i> This campaign is archived and read-only.
-					<form method="POST" hx-post={ fmt.Sprintf("/campaigns/%s/unarchive", cc.Campaign.ID) } class="inline ml-2">
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="text-sm font-medium underline hover:no-underline">Unarchive</button>
-					</form>
-				</div>
-			}
-			// Tab bar. role="tablist"/"tab" + aria-selected/aria-controls
-			// give a screen reader a real tab group instead of four
-			// unrelated buttons; roving tabindex (bound in
-			// settingsTabButton) makes only the active tab a Tab-key
-			// stop, matching the arrow-key pattern below.
-			// The tabs wrap onto a second row on a narrow screen rather than
-			// scrolling out of sight, so no label is ever cut off.
-			<div class="flex flex-wrap gap-x-1 border-b border-edge mb-6" role="tablist" aria-label="Details and data">
-				for _, t := range tabs {
-					@settingsTabButton(t)
-				}
-			</div>
-			// Tab content.
-			for _, t := range tabs {
-				<div
-					id={ t.ID + "-panel" }
-					role="tabpanel"
-					aria-labelledby={ t.ID + "-tab" }
-					tabindex="0"
-					x-show={ fmt.Sprintf("tab === '%s'", t.ID) }
-					x-cloak
-				>
-					@t.Content
-				</div>
-			}
-		</div>
-		}
-	}
-}
-
-// settingsTabButton renders one tab-bar <button>. Splitting this out
-// keeps the per-tab Alpine/HTMX wiring readable + lets the templ
-// generator inline the same JS for every iteration.
-//
-// Left/Right move focus + selection between tabs (moveTab, defined on
-// the page's x-data); only the active tab carries tabindex="0" so a
-// plain Tab keypress lands on it directly rather than stepping through
-// every tab first — the pattern Chronicle already uses for role=tab
-// elsewhere, extended here with the arrow-key movement it lacked.
-templ settingsTabButton(t SettingsTab) {
-	<button
-		id={ t.ID + "-tab" }
-		role="tab"
-		aria-controls={ t.ID + "-panel" }
-		@click={ fmt.Sprintf("activate('%s')", t.ID) }
-		@keydown.right.prevent="moveTab(1)"
-		@keydown.left.prevent="moveTab(-1)"
-		:aria-selected={ fmt.Sprintf("tab === '%s' ? 'true' : 'false'", t.ID) }
-		:tabindex={ fmt.Sprintf("tab === '%s' ? '0' : '-1'", t.ID) }
-		:class={ fmt.Sprintf("tab === '%s' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'", t.ID) }
-		class="px-3 sm:px-4 py-2.5 text-sm transition-colors whitespace-nowrap"
-	>
-		<i class={ t.Icon, "mr-1.5 text-xs" }></i>
-		{ " " + t.Label }
-	</button>
-}
-
-// settingsActivityTab is the Activity tab's content: a lazy-loaded
-// HTMX fragment that fetches the activity feed on intersect.
+// settingsActivityTab is the activity log on Data: a lazy HTMX fragment that
+// fetches the feed when it scrolls into view.
 templ settingsActivityTab(cc *CampaignContext) {
 	<div id="activity-content" hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment", cc.Campaign.ID) } hx-trigger="intersect once" hx-swap="innerHTML">
 		<div class="text-center py-12 text-fg-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading activity...</div>
-	</div>
-}
-
-// settingsGeneralTab renders the Details tab: the description, then the danger
-// zone. The name, who can read the campaign and where new pages start are on
-// Campaign settings, each in one place only.
-templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
-	<div class="space-y-4">
-		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-3">Description</h2>
-			<form
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-				hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
-				hx-target="#campaign-details-form"
-				hx-swap="outerHTML"
-				id="campaign-details-form"
-				class="space-y-3"
-			>
-				<input type="hidden" name="_method" value="PUT"/>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<div>
-					<label for="description" class="block text-xs font-medium text-fg-body mb-1">What the campaign is about</label>
-					<textarea id="description" name="description" class="input w-full h-20 text-sm" maxlength="5000">
-						if cc.Campaign.Description != nil {
-							{ *cc.Campaign.Description }
-						}
-					</textarea>
-				</div>
-				<div class="flex justify-end">
-					<button type="submit" class="btn-primary text-xs">Save changes</button>
-				</div>
-			</form>
-			<p class="text-xs text-fg-secondary mt-3">
-				The name, who can read the campaign and where new pages start are on
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Campaign settings</a>.
-			</p>
-		</div>
-
-		// Danger Zone.
-		// Campaign settings links here as /settings#danger, so the card opens
-		// itself when that is the address.
-		<div
-			id="danger"
-			class="card border-red-200 dark:border-red-800 scroll-mt-4"
-			x-data="{ open: location.hash === '#danger' }"
-			@hashchange.window="if (location.hash === '#danger') open = true"
-			x-init="if (location.hash === '#danger') $nextTick(() => $el.scrollIntoView())"
-		>
-			<button @click="open = !open" class="w-full p-4 flex items-center justify-between text-left">
-				<h2 class="text-sm font-semibold text-red-600 dark:text-red-400">Danger zone</h2>
-				<i class="fa-solid fa-chevron-down text-red-400 text-xs transition-transform" :class="open && 'rotate-180'"></i>
-			</button>
-			<div x-show="open" x-transition x-cloak class="px-6 pb-6 space-y-6">
-				// Archive campaign.
-				<div>
-					<h3 class="text-sm font-semibold text-fg mb-1">Archive Campaign</h3>
-					<p class="text-sm text-fg-secondary mb-3">Hides from dashboard, makes read-only. Can be unarchived later.</p>
-					if cc.Campaign.IsArchived() {
-						<form method="POST" hx-post={ fmt.Sprintf("/campaigns/%s/unarchive", cc.Campaign.ID) }>
-							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<button type="submit" class="btn-secondary text-sm">Unarchive Campaign</button>
-						</form>
-					} else {
-						<form method="POST" hx-post={ fmt.Sprintf("/campaigns/%s/archive", cc.Campaign.ID) }>
-							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<button type="submit" class="btn-secondary text-sm">Archive Campaign</button>
-						</form>
-					}
-				</div>
-				// Delete campaign (type name to confirm).
-				<div class="pt-4 border-t border-red-200 dark:border-red-800" x-data="{ confirmName: '' }">
-					<h3 class="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">Delete Campaign</h3>
-					<p class="text-sm text-fg-secondary mb-3">The campaign disappears for everyone right away. Your site admin can bring it back for a limited time; after that it is gone for good.</p>
-					<p class="text-sm text-fg-body mb-2">Type <strong class="text-fg">{ cc.Campaign.Name }</strong> to confirm:</p>
-					<input type="text" x-model="confirmName" class="input w-full mb-3" placeholder="Campaign name"/>
-					<form
-						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-						hx-delete={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
-						hx-vals={ fmt.Sprintf(`{"confirm_name": "%s"}`, cc.Campaign.Name) }
-					>
-						<input type="hidden" name="_method" value="DELETE"/>
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button
-							type="submit"
-							class="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-							x-bind:disabled={ fmt.Sprintf("confirmName !== '%s'", cc.Campaign.Name) }
-						>
-							Delete Campaign
-						</button>
-					</form>
-				</div>
-			</div>
-		</div>
 	</div>
 }
 
@@ -340,70 +104,6 @@ templ peopleSections(cc *CampaignContext, v MemberListView, transfer *OwnershipT
 	</div>
 }
 
-// settingsAPIKeysTab is the API keys tab: keys for tools other than Foundry,
-// the custom-tool guide and the CORS note. Foundry's connect line and
-// install link are on the Foundry page.
-templ settingsAPIKeysTab(cc *CampaignContext, baseURL string) {
-	<div class="space-y-6">
-		if cc.MemberRole >= RoleOwner {
-			<div id="integrations-keys"
-				hx-get={ fmt.Sprintf("/campaigns/%s/integrations/keys", cc.Campaign.ID) }
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			>
-				<div class="card p-6 text-center">
-					<i class="fa-solid fa-spinner fa-spin text-fg-muted"></i>
-					<p class="text-sm text-fg-muted mt-2">Loading API keys...</p>
-				</div>
-			</div>
-		}
-		<div class="card p-4 flex flex-wrap items-center gap-3">
-			<p class="text-sm text-fg-secondary flex-1 min-w-0">Foundry's connect line, install link and module version are on the Foundry page.</p>
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/foundry", cc.Campaign.ID)) } class="btn-secondary text-xs">Open Foundry</a>
-		</div>
-		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-2"><i class="fa-solid fa-code mr-2 text-xs text-fg-muted"></i>Other tools</h2>
-			<p class="text-sm text-fg-secondary">Use the REST API to connect Chronicle to any tool. Create an API key above, then use the <code class="text-xs bg-surface-alt px-1 py-0.5 rounded">/api/v1/</code> endpoints.</p>
-			if baseURL != "" {
-				<p class="text-xs text-fg-muted mt-2">Server URL: <code class="bg-surface-alt px-1 py-0.5 rounded">{ baseURL }</code></p>
-			}
-		</div>
-		<div class="card p-4 flex items-start gap-3">
-			<i class="fa-solid fa-circle-info text-blue-500 dark:text-blue-400 mt-0.5 shrink-0"></i>
-			<p class="text-xs text-fg-secondary">
-				If your tool is on a different domain, a site admin needs to whitelist it in the CORS settings.
-			</p>
-		</div>
-	</div>
-}
-
-// SettingsDataSection is the campaign's export: the built-in Data tab.
-// Importing lives on the Import tab.
-templ SettingsDataSection(cc *CampaignContext) {
-	<div class="card p-4">
-		<h2 class="text-sm font-semibold text-fg mb-3">Data Export</h2>
-		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, to move it to another Chronicle or keep a copy of your pages.</p>
-		<div class="flex flex-wrap items-center gap-3">
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-				<i class="fa-solid fa-download text-xs word-ic"></i> Export JSON
-			</a>
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-				<i class="fa-solid fa-file-zipper text-xs word-ic"></i> Export ZIP (+ media archive)
-			</a>
-		</div>
-		<p class="text-[11px] text-fg-muted mt-2">
-			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
-			files. Importing the ZIP (Settings › Import) restores the campaign with its pictures in place.
-			The JSON-only export carries no pictures at all, so a campaign imported from it has none; use
-			the ZIP to keep the pictures. The export holds pages, categories, tags, relations, calendars,
-			timelines, sessions, maps, notes, groups, quest sheets, crafting recipes, rolling tables and
-			add-on choices. Shops, encounters, trackers, quest boards, benches and the Customizer's other
-			settings are not in it; a site admin's Backups page saves everything.
-		</p>
-	</div>
-
-}
-
 // pluginURL returns the main page URL for a given addon slug within a campaign.
 func pluginURL(campaignID, slug string) string {
 	switch slug {
@@ -420,7 +120,7 @@ func pluginURL(campaignID, slug string) string {
 	case "armory":
 		return fmt.Sprintf("/campaigns/%s/armory", campaignID)
 	case "sync-api":
-		return fmt.Sprintf("/campaigns/%s/settings", campaignID) // API keys are in settings.
+		return fmt.Sprintf("/campaigns/%s/connections", campaignID) // Foundry and the API keys are on Connections.
 	default:
 		return fmt.Sprintf("/campaigns/%s", campaignID)
 	}

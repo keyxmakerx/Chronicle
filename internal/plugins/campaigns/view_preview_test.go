@@ -458,7 +458,7 @@ func TestHomeTitle_SettingsLinkAbsentUnderPreviews(t *testing.T) {
 		}
 		for _, tt := range tests {
 			out := renderCardWithCtx(t, tt.ctx, dashWelcomeBanner(tt.cc))
-			if got := strings.Contains(out, "/campaigns/camp-1/settings"); got != tt.want {
+			if got := strings.Contains(out, "/campaigns/camp-1/dashboard"); got != tt.want {
 				t.Errorf("%s (picture=%v): settings link present = %v, want %v", tt.name, withPicture, got, tt.want)
 			}
 		}
@@ -501,7 +501,7 @@ func TestShowPage_DashboardForLine(t *testing.T) {
 	}
 	priv := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}, MemberRole: RoleOwner, IsMember: true}
 	out = render(priv, context.Background(), true)
-	for _, want := range []string{"so only guests with a guest code can open it", "See it as a guest with a code", `value="guestcode"`, "Who can read it", "/campaigns/camp-1/dashboard#line-public", "Arrange this page"} {
+	for _, want := range []string{"so only guests with a guest code can open it", "See it as a guest with a code", `value="guestcode"`, "Who can read it", "/campaigns/camp-1/settings#line-public", "Arrange this page"} {
 		if !strings.Contains(out, want) && !strings.Contains(out, strings.ReplaceAll(want, "&#39;", "'")) {
 			t.Errorf("private guest note missing %q", want)
 		}

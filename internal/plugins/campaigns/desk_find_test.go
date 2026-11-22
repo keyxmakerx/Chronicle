@@ -28,8 +28,8 @@ func TestBuildDeskFind(t *testing.T) {
 		{Label: "Overview", Path: "Customize", Href: "/campaigns/c1/customize", Icon: "fa-compass"},
 	}
 	tabs := []SettingsTab{
-		{ID: "general", Label: "Details", Icon: "fa-solid fa-gear", MinRole: RolePlayer},
-		{ID: "data", Label: "Export", Icon: "fa-solid fa-database", MinRole: RolePlayer},
+		{ID: "vault", Label: "Vault notes", Icon: "fa-solid fa-book", MinRole: RolePlayer},
+		{ID: settingsTabImport, Label: "Import", Icon: "fa-solid fa-file-import", MinRole: RoleOwner},
 		{ID: "secret", Label: "Hidden from the owner's own page", MinRole: RoleOwner + 1},
 		{ID: "blank"},
 	}
@@ -40,7 +40,7 @@ func TestBuildDeskFind(t *testing.T) {
 		wantNot        []string
 	}{
 		{"nothing switched on", false, false,
-			[]string{"People", "Trash", "Customize", "Game & features", "Your AI", "What players changed", "Name", "Description", "Colours", "Details",
+			[]string{"People", "Trash", "Customize", "Game & features", "Your AI", "What players changed", "Name", "Description", "Colours", "Vault notes", "Campaign", "Connections", "Data",
 				"Preview as a player", "Preview as a guest", "New pages", "Private or public", "Game system", "Keys", "Export", "Import", "Activity log",
 				"Archive", "Transfer ownership", "Delete"},
 			[]string{"Media", "Foundry", "Overview", "Hidden from the owner's own page", "Unarchive"}},
@@ -59,6 +59,15 @@ func TestBuildDeskFind(t *testing.T) {
 				if hasLabel(got, l) {
 					t.Errorf("%q must not be offered: %v", l, findLabels(got))
 				}
+			}
+			imports := 0
+			for _, e := range got {
+				if e.Label == "Import" {
+					imports++
+				}
+			}
+			if imports != 1 {
+				t.Errorf("Import is offered %d times, want once: its part and its row are one place", imports)
 			}
 			for _, e := range got {
 				if !strings.HasPrefix(e.Href, "/campaigns/c1/") {
@@ -169,28 +178,31 @@ func TestBuildDeskFind_RowPathsNameTheGroup(t *testing.T) {
 	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Media: true, Foundry: true, Archived: true})
 	type where struct{ path, href string }
 	want := map[string]where{
-		"Name":                 {"Campaign settings › General", "/campaigns/c1/dashboard#line-name"},
-		"Description":          {"Campaign settings › General", "/campaigns/c1/dashboard#line-description"},
-		"Private or public":    {"Campaign settings › Access", "/campaigns/c1/dashboard#line-public"},
-		"New pages":            {"Campaign settings › Access", "/campaigns/c1/dashboard#line-pages"},
-		"Preview as a player":  {"Campaign settings › Access", "/campaigns/c1/dashboard#line-preview"},
-		"Preview as a guest":   {"Campaign settings › Access", "/campaigns/c1/dashboard#line-preview"},
+		"Campaign":             {"Campaign settings", "/campaigns/c1/settings"},
+		"Connections":          {"Campaign settings", "/campaigns/c1/connections"},
+		"Data":                 {"Campaign settings", "/campaigns/c1/data"},
+		"Name":                 {"Campaign settings › Campaign", "/campaigns/c1/settings#line-name"},
+		"Description":          {"Campaign settings › Campaign", "/campaigns/c1/settings#line-description"},
+		"Private or public":    {"Campaign settings › Campaign", "/campaigns/c1/settings#line-public"},
+		"New pages":            {"Campaign settings › Campaign", "/campaigns/c1/settings#line-pages"},
+		"Preview as a player":  {"Campaign settings › Campaign", "/campaigns/c1/settings#line-preview"},
+		"Preview as a guest":   {"Campaign settings › Campaign", "/campaigns/c1/settings#line-preview"},
+		"Customize":            {"Campaign settings › Campaign", "/campaigns/c1/customize"},
 		"People":               {"Campaign settings › People", "/campaigns/c1/members"},
 		"What players changed": {"Campaign settings › People", "/campaigns/c1/players/changes"},
-		"Game system":          {"Campaign settings › Game", "/campaigns/c1/dashboard#line-system"},
+		"Transfer ownership":   {"Campaign settings › People", "/campaigns/c1/members#transfer"},
+		"Game system":          {"Campaign settings › Game", "/campaigns/c1/extensions"},
 		"Game & features":      {"Campaign settings › Game", "/campaigns/c1/extensions"},
-		"Customize":            {"Campaign settings › Customize", "/campaigns/c1/customize"},
-		"Media":                {"Campaign settings › Data", "/campaigns/c1/media"},
 		"Foundry":              {"Campaign settings › Connections", "/campaigns/c1/foundry"},
 		"Your AI":              {"Campaign settings › Connections", "/campaigns/c1/ai"},
-		"Keys":                 {"Campaign settings › Connections", "/campaigns/c1/settings?tab=api-keys"},
-		"Export":               {"Campaign settings › Data", "/campaigns/c1/settings?tab=data"},
-		"Import":               {"Campaign settings › Data", "/campaigns/c1/settings?tab=import"},
-		"Activity log":         {"Campaign settings › Data", "/campaigns/c1/settings?tab=activity"},
+		"Keys":                 {"Campaign settings › Connections", "/campaigns/c1/connections#keys"},
+		"Media":                {"Campaign settings › Data", "/campaigns/c1/media"},
+		"Export":               {"Campaign settings › Data", "/campaigns/c1/data#export"},
+		"Import":               {"Campaign settings › Data", "/campaigns/c1/data#import"},
+		"Activity log":         {"Campaign settings › Data", "/campaigns/c1/data#activity"},
 		"Trash":                {"Campaign settings › Data", "/campaigns/c1/trash"},
-		"Unarchive":            {"Campaign settings › Danger zone", "/campaigns/c1/dashboard#line-end"},
-		"Transfer ownership":   {"Campaign settings › Danger zone", "/campaigns/c1/dashboard#line-end"},
-		"Delete":               {"Campaign settings › Danger zone", "/campaigns/c1/dashboard#line-end"},
+		"Unarchive":            {"Campaign settings › Data › Danger zone", "/campaigns/c1/data#danger"},
+		"Delete":               {"Campaign settings › Data › Danger zone", "/campaigns/c1/data#danger"},
 	}
 	for _, e := range got {
 		if w, ok := want[e.Label]; ok {
@@ -209,21 +221,27 @@ func TestBuildDeskFind_RowPathsNameTheGroup(t *testing.T) {
 }
 
 // Typing "settings" finds this place first, ahead of the Customizer's category
-// entries, which sort after the page's own.
+// entries, which sort after the page's own: the board, then its three tabs of
+// settings, each with the words of what it holds, the old page's among them.
 func TestBuildDeskFind_SettingsLeadsWithThisPlace(t *testing.T) {
 	got := buildDeskFind(deskFindInput{Base: "/campaigns/c1", Customize: []customizeFindEntry{
 		{Label: "Characters settings", Path: "Categories › Characters", Href: "/campaigns/c1/customize/categories/1/settings"},
 	}})
-	if len(got) < 2 || got[0].Label != "Campaign settings" || got[0].Href != "/campaigns/c1/dashboard" || got[1].Label != "Details and data" {
-		t.Fatalf("first entries = %v", findLabels(got))
+	labels := findLabels(got)
+	if len(got) < 4 || strings.Join(labels[:4], ",") != "Campaign settings,Campaign,Connections,Data" || got[0].Href != "/campaigns/c1/dashboard" {
+		t.Fatalf("first entries = %v", labels)
 	}
-	for _, w := range []string{"settings", "details", "description", "keys", "export", "import", "activity"} {
-		if !strings.Contains(" "+got[1].Words+" ", " "+w+" ") {
-			t.Errorf("Details and data lacks the word %q", w)
+	for i, words := range map[int][]string{
+		0: {"settings", "overview"},
+		1: {"settings", "details", "description"},
+		2: {"settings", "keys", "ai"},
+		3: {"settings", "details", "export", "import", "activity", "danger"},
+	} {
+		for _, w := range words {
+			if !strings.Contains(" "+got[i].Words+" ", " "+w+" ") {
+				t.Errorf("%s lacks the word %q", got[i].Label, w)
+			}
 		}
-	}
-	if !strings.Contains(got[0].Words, "settings") {
-		t.Error("Campaign settings must list the word settings")
 	}
 	for _, w := range []string{"description", "about", "summary", "blurb"} {
 		found := false

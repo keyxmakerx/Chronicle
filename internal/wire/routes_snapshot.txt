@@ -706,6 +706,7 @@ GET	/campaigns/:id/choice-rules/count	session	systems.(*ChoiceRuleHandler).Count
 GET	/campaigns/:id/choice-rules/entries	session	systems.(*ChoiceRuleHandler).EntriesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/coming-up	public-capable	app.(*comingUpHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/coming-up/waiting	public-capable	app.(*comingUpHandler).Waiting	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+GET	/campaigns/:id/connections	session	plugins/campaigns.(*Handler).ConnectionsPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/content-templates	session	plugins/entities.(*ContentTemplateHandler).ListAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/content-templates	session	plugins/entities.(*ContentTemplateHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentTemplateHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -789,6 +790,7 @@ GET	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).GetDash
 PUT	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).UpdateDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/find	session	plugins/campaigns.(*Handler).DeskFind	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard/needs	session	plugins/campaigns.(*Handler).DeskNeedsCount	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/data	session	plugins/campaigns.(*Handler).DataPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).UpdateDefaultVisibilityAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/designs	session	plugins/designs.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/designs	session	plugins/designs.(*Handler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
