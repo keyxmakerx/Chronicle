@@ -148,6 +148,14 @@ func (h *Handler) writesOwnEntry(c *echo.Context, cc *campaigns.CampaignContext)
 	return false, nil
 }
 
+// heroLookFrom reads ?look=: only the exact value "stage" picks that look.
+func heroLookFrom(v string) string {
+	if v == HeroLookStage {
+		return HeroLookStage
+	}
+	return ""
+}
+
 // NewHero renders the hero creator (GET /campaigns/:id/characters/new).
 func (h *Handler) NewHero(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -169,6 +177,7 @@ func (h *Handler) NewHero(c *echo.Context) error {
 		ForSelf:   access.ForSelf,
 		CSRFToken: middleware.GetCSRFToken(c),
 		TermsURL:  h.termsURLIf(c.Request().Context(), cc.Campaign.ID, "/campaigns/"+cc.Campaign.ID+"/characters/new/terms"),
+		Look:      heroLookFrom(c.QueryParam("look")),
 	}))
 }
 

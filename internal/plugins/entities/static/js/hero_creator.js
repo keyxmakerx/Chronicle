@@ -56,6 +56,10 @@
  * <campaign> in sessionStorage) is shown above the steps: it is how the
  * Characters page says why it sent a stored try-out here.
  *
+ * Stage look (data-look="stage" on the mount): hero_stage.js, listed ahead of
+ * this file, defines a subclass that draws the hero at the top of the page. The
+ * methods it overrides are the named seams here; this file never reads the look.
+ *
  * Served per-plugin at /static/plugins/entities/js/hero_creator.js from the
  * body-script registry, so it survives boosted navigation. Re-wires after
  * HTMX swaps.
@@ -483,7 +487,8 @@
     // that a later blank start would pick up.
     // A try-out has one place to live, written only when it is kept.
     if (this.preload || this.tryout) return;
-    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name, about: this.about })); } catch (e) { /* ignore */ }
+    // Whether the last write held, for a look that tells the player.
+    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name, about: this.about })); this.kept = true; } catch (e) { this.kept = false; }
   };
   // The try-out kept in this browser, or null when there is none, it is not
   // one of ours, or the browser will not say.
@@ -802,18 +807,15 @@
         ? '<section class="hc-mid hc-mid--wide">' + this.extraHTML() + '</section>'
         : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
     } else {
-      cols = this.sheadHTML() + '<ul class="hc-chips" aria-label="Your picks">' + this.chipsHTML() + '</ul><div class="hc-body" data-body>' + this.bodyInner() + '</div>';
+      cols = this.sheadHTML() + this.chipsBlockHTML() + '<div class="hc-body" data-body>' + this.bodyInner() + '</div>';
     }
-    var back = this.backUrl || ('/campaigns/' + encodeURIComponent(this.campaignId) + '/characters');
     // A redraw keeps the height and shortness the last fit measured, so the
     // cards are laid out once at their real size rather than twice.
     // The live region outlives a redraw, or what a pick just announced (and
     // anything it cleared) would be wiped before a screen reader read it.
     var liveEl = this.root.querySelector('.hc-live');
     this.root.innerHTML = '<div class="hc-app' + (this.short ? ' is-short' : '') + '" data-view="' + this.view + '" data-step="' + this.step + '" data-mo="' + motion() + '"' + (this.fitH ? ' style="--hc-h:' + this.fitH + 'px"' : '') + '>' +
-      '<header class="hc-abar"><a class="hc-ibtn" href="' + esc(back) + '" aria-label="Back to characters">' + I.back + '</a>' +
-      '<div class="hc-abar__t"><h1>' + esc(this.title()) + '</h1><small>' + esc(this.plan.systemName || 'Game system') + '</small></div></header>' +
-      this.bandHTML() + cols + '</div>';
+      this.topHTML(this.backHref()) + this.bandHTML() + cols + '</div>';
     if (liveEl) this.root.appendChild(liveEl);
     this.fit();
     this.after();
@@ -823,6 +825,19 @@
     // Turning the screen between phone and computer keeps what was being written.
     if (keepOwn) this.showOwn(true);
   };
+
+  // Where the back link in the bar goes: the page that sent the player here,
+  // else the Characters page.
+  Creator.prototype.backHref = function () {
+    return this.backUrl || ('/campaigns/' + encodeURIComponent(this.campaignId) + '/characters');
+  };
+  Creator.prototype.barHTML = function (back) {
+    return '<header class="hc-abar"><a class="hc-ibtn" href="' + esc(back) + '" aria-label="Back to characters">' + I.back + '</a>' +
+      '<div class="hc-abar__t"><h1>' + esc(this.title()) + '</h1><small>' + esc(this.plan.systemName || 'Game system') + '</small></div></header>';
+  };
+  // Everything above the practice band: the bar alone here; a look that
+  // seats more in the top of the page (the stage's banner) overrides it.
+  Creator.prototype.topHTML = function (back) { return this.barHTML(back); };
 
   // Practice mode says what it is above the steps, in the page's own words.
   Creator.prototype.bandHTML = function () {
@@ -847,6 +862,9 @@
       '<div class="hc-prog" aria-hidden="true">' + pr + '</div></div>';
   };
 
+  Creator.prototype.chipsBlockHTML = function () {
+    return '<ul class="hc-chips" aria-label="Your picks">' + this.chipsHTML() + '</ul>';
+  };
   // The row of what is picked; tapping one goes back to that step.
   Creator.prototype.chipsHTML = function () {
     var self = this, h = '';
@@ -958,10 +976,13 @@
       (pts ? '<dl class="hc-facts"><div><dt>Points to spend</dt><dd>' + pts + ', set by your ' + gm() + '</dd></div></dl>' : '') + '<span class="hc-more">Start writing ' + I.up + '</span></div>';
   };
 
+  // The "3 / 11" count in a card's top row.
+  Creator.prototype.cardIx = function (i, n) { return '<span class="hc-ix">' + (i + 1) + ' / ' + n + '</span>'; };
+
   Creator.prototype.cardHTML = function (c, i, n, st) {
     var pk = this.isPicked(st, c);
     return '<div class="hc-card' + (pk ? ' is-picked' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules">' +
-      '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your ' + esc(lower(st.label)) : esc(st.label)) + '</span>' + this.marksHTML(st, c, false) + '<span class="hc-ix">' + (i + 1) + ' / ' + n + '</span></span>' +
+      '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your ' + esc(lower(st.label)) : esc(st.label)) + '</span>' + this.marksHTML(st, c, false) + this.cardIx(i, n) + '</span>' +
       '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + this.factsHTML(c, 3) +
       '<span class="hc-more">Read the rules ' + I.up + '</span></div>';
   };
@@ -1084,8 +1105,11 @@
 
   // --- Computer: steps rail, your hero so far, the open entry ---
 
+  // What stands above the step rows in the rail; nothing in this look.
+  Creator.prototype.railHead = function () { return ''; };
+
   Creator.prototype.railHTML = function () {
-    var self = this, h = '<aside class="hc-rail"><nav class="hc-steps" aria-label="Steps">';
+    var self = this, h = '<aside class="hc-rail">' + this.railHead() + '<nav class="hc-steps" aria-label="Steps">';
     this.plan.steps.forEach(function (st, i) {
       var p = self.picked(i), cur = i === self.step, note = self.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '" data-k="' + esc(st.fieldKey) + '"' + (cur ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : cur ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span>' +
@@ -1130,9 +1154,10 @@
   // Every box is optional, and each stays editable on the sheet. The
   // backstory is the one Foundry's Biography carries.
   var ABOUT_HINT = { pronouns: 'she/her, he/him, they/them…', appearance: 'Height, hair, scars, what they wear…', backstory: 'Where they come from, who they left behind…' };
+  Creator.prototype.aboutHeadHTML = function () { return '<h2 class="hc-disp hc-rev__t" tabindex="-1">About your hero</h2>'; };
   Creator.prototype.aboutHTML = function () {
     var self = this, fields = this.aboutFields(), bio = fields.some(function (f) { return f.key === 'backstory'; });
-    var h = '<div class="hc-rev hc-about" data-about-step><h2 class="hc-disp hc-rev__t" tabindex="-1">About your hero</h2>';
+    var h = '<div class="hc-rev hc-about" data-about-step>' + this.aboutHeadHTML();
     fields.forEach(function (f) {
       var id = 'hc-ab-' + esc(f.key), v = self.about[f.key] || '', ph = ABOUT_HINT[f.key] || 'Optional';
       h += '<div class="hc-field"><label for="' + id + '">' + esc(f.label) + '</label>' + (f.long
@@ -1233,15 +1258,21 @@
     return Math.max(0, viewBottom - bar.getBoundingClientRect().top);
   }
 
+  // The room the builder may fill, and the least height it keeps. The floor is
+  // low enough on a phone that a short screen still keeps the foot above The
+  // table bar.
+  Creator.prototype.room = function () {
+    var v = scrollerRect(this.root);
+    return { height: v.height, min: this.desk() ? 560 : 400 };
+  };
+
   // The builder fills what is visible above The table bar, so the step header
   // and the thumb-height Choose always sit on the screen.
   Creator.prototype.fit = function () {
     var app = this.app();
     if (!app) return;
-    var v = scrollerRect(this.root);
-    // The floor is low enough on a phone that a short screen still keeps the
-    // foot above The table bar.
-    this.fitH = Math.max(this.desk() ? 560 : 400, Math.floor(v.height));
+    var v = this.room();
+    this.fitH = Math.max(v.min, Math.floor(v.height));
     app.style.setProperty('--hc-h', this.fitH + 'px');
     // A short phone gives the cards the room the step's intro line would take.
     this.short = !this.desk() && v.height < 580;
@@ -1550,7 +1581,7 @@
   };
 
   Creator.prototype.setInert = function (on) {
-    this.$$('.hc-abar, .hc-band, .hc-shead, .hc-chips, .hc-body').forEach(function (e) { if (on) e.setAttribute('inert', ''); else e.removeAttribute('inert'); });
+    this.$$('.hc-abar, .hc-stgw, .hc-band, .hc-shead, .hc-chips, .hc-body').forEach(function (e) { if (on) e.setAttribute('inert', ''); else e.removeAttribute('inert'); });
   };
 
   Creator.prototype.setY = function (y, animate) {
@@ -1781,15 +1812,13 @@
     this.root.querySelector('.hc-app').setAttribute('data-mo', motion());
     if (this.desk()) return this.chooseDesk(c, st, si, i, nx);
     var src = this.mode === 'cards' ? this.$$('.hc-hand .hc-card[data-i]')[i] : this.$$('.hc-lrow[data-i]')[i];
-    var chip = this.$('.hc-chips .hc-chip[data-k="' + st.fieldKey + '"]'), self = this;
+    var chip = this.flightTarget(st), self = this;
     if (!this.lively() || !src || !chip) {
       this.closeSheet(false, function () { self.goStep(nx, 'fwd', st.fieldKey); });
       return;
     }
     this.busy = true;
-    var chips = this.$('.hc-chips');
-    chips.style.scrollBehavior = 'auto';
-    chips.scrollLeft = Math.max(0, chip.offsetLeft - 16);
+    this.prepFlight(chip);
     var app = this.app(), from = rel(app, src.getBoundingClientRect()), to = rel(app, chip.getBoundingClientRect());
     this.closeSheet(false);
     var g = this.ghost(c, st, from);
@@ -1803,15 +1832,27 @@
     setTimeout(function () { if (self.navSeq === seq) self.goStep(nx, 'fwd', null, true); }, ms(300));
     fl.onfinish = function () {
       g.remove(); self.busy = false;
-      var cs = self.$('.hc-chips');
-      if (cs) {
-        cs.innerHTML = self.chipsHTML();
-        var nc = cs.querySelector('[data-k="' + st.fieldKey + '"]'); if (nc) nc.classList.add('is-glow');
-        var slot = cs.querySelector('.is-slot.is-cur'); if (slot) self.anim(slot, [{ opacity: 0, transform: 'translateX(8px)' }, { opacity: 1, transform: 'none' }], { duration: ms(220), slide: true });
-        self.chipsInto();
-      }
+      self.landed(st);
       var sh = self.$('.hc-shead'); if (sh) sh.outerHTML = self.sheadHTML();
     };
+  };
+
+  // Where a chosen card flies on a phone: its chip. The chip row is brought
+  // to it first, so it is on screen when the card arrives.
+  Creator.prototype.flightTarget = function (st) { return this.$('.hc-chips .hc-chip[data-k="' + st.fieldKey + '"]'); };
+  Creator.prototype.prepFlight = function (chip) {
+    var chips = this.$('.hc-chips');
+    chips.style.scrollBehavior = 'auto';
+    chips.scrollLeft = Math.max(0, chip.offsetLeft - 16);
+  };
+  // The card has landed: the chip row catches up and the chip glows.
+  Creator.prototype.landed = function (st) {
+    var cs = this.$('.hc-chips');
+    if (!cs) return;
+    cs.innerHTML = this.chipsHTML();
+    var nc = cs.querySelector('[data-k="' + st.fieldKey + '"]'); if (nc) nc.classList.add('is-glow');
+    var slot = cs.querySelector('.is-slot.is-cur'); if (slot) this.anim(slot, [{ opacity: 0, transform: 'translateX(8px)' }, { opacity: 1, transform: 'none' }], { duration: ms(220), slide: true });
+    this.chipsInto();
   };
 
   Creator.prototype.chipsInto = function () {
@@ -1911,11 +1952,17 @@
       app.setAttribute('data-step', this.step);
       this.after();
     } else this.render();
-    if (glowKey) { var c = this.$('.hc-chips [data-k="' + glowKey + '"]'); if (c) c.classList.add('is-glow'); }
+    if (glowKey) this.glowPick(glowKey);
     this.deal(dir || (i < prev ? 'back' : 'fwd'));
     this.focusHead();
     var top = this.root.getBoundingClientRect().top;
     if (top < 0) this.root.scrollIntoView({ block: 'start' });
+  };
+
+  // On a phone the pick just made glows where it is shown: its chip.
+  Creator.prototype.glowPick = function (key) {
+    var c = this.$('.hc-chips [data-k="' + key + '"]');
+    if (c) c.classList.add('is-glow');
   };
 
   Creator.prototype.focusHead = function () {
@@ -2450,11 +2497,25 @@
 
   // Loaded on sight (ADR-063): boot.js fetches this script when it meets the
   // page's data-widget mount, then mounts it through register().
+  // The stage look is a subclass in its own file (hero_stage.js, listed ahead
+  // of this one): it is built once, from what it may borrow of the creator.
+  var StageCreator = null;
+  function stage() {
+    if (!StageCreator && typeof window.ChronicleHeroStage === 'function') {
+      StageCreator = window.ChronicleHeroStage(Creator, {
+        esc: esc, lower: lower, cap: cap, an: an, plain: plain, words: words, hasOwn: hasOwn, factsOf: factsOf, buyList: buyList, itemText: itemText,
+        motion: motion, ms: ms, rel: rel, qa: qa, q1: q1, onScreen: onScreen, dockedBar: dockedBar, I: I, num: num, sumOf: sumOf
+      });
+    }
+    return StageCreator;
+  }
+
   function register() {
     Chronicle.register('hero-creator', {
       init: function (el) {
         if (el._heroCreator) return;
-        var p = new Creator(el);
+        var Look = el.getAttribute('data-look') === 'stage' && stage() || Creator;
+        var p = new Look(el);
         el._heroCreator = p;
         p.wire();
         p.load();

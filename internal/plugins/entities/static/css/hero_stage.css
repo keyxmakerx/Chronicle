@@ -1,0 +1,184 @@
+/* hero_stage.css — the hero creator's "stage" look, switched on by
+   data-look="stage" on the mount (hero_stage.js draws it). Every rule is scoped
+   to that mount, so the classic creator is untouched. Colours, radii, edges,
+   durations and easing come from the --hc-* tokens and the site's own; the
+   white-on-gradient inks and washes below are the signed look's fixed values. */
+
+/* ---------- The hero's colours ---------- */
+
+/* The campaign's accent, mixed towards night. The first pair is the look as it
+   was signed; a browser that can reshape a colour also caps its lightness, so a
+   pale or a green accent is held dark enough for white words. The caps sit just
+   under the default accent's own mix, which they leave as it is. */
+.hc[data-look="stage"] {
+  --hc-stg1: color-mix(in srgb, var(--color-accent) 62%, #0e0c2e);
+  --hc-stg2: color-mix(in srgb, var(--color-accent) 34%, #0b0c1a);
+  --hc-stg-ink: #fff;
+  --hc-stg-ink-1: rgb(255 255 255 / 0.94);
+  --hc-stg-ink-2: rgb(255 255 255 / 0.94);
+  --hc-stg-ink-3: rgb(255 255 255 / 0.8);
+  --hc-stg-wash: rgb(255 255 255 / 0.14);
+}
+@supports (color: oklch(from red min(l, 0.44) c h)) {
+  .hc[data-look="stage"] {
+    --hc-stg1: oklch(from color-mix(in srgb, var(--color-accent) 62%, #0e0c2e) min(l, 0.44) c h);
+    --hc-stg2: oklch(from color-mix(in srgb, var(--color-accent) 34%, #0b0c1a) min(l, 0.32) c h);
+  }
+}
+
+/* ---------- The window ---------- */
+
+/* The creator takes the whole window; its height is set by fit() to what the
+   docked Table bar leaves. The mount stops being the size container (a
+   container can hold a fixed child to itself) and the window-wide app takes
+   over, so the hc queries measure what is on screen. */
+.hc[data-look="stage"] { container-type: normal; }
+.hc[data-look="stage"] .hc-app {
+  position: fixed; inset: 0 0 auto 0; z-index: var(--z-popup); container: hc / inline-size;
+  border: 0; border-radius: 0; box-shadow: none;
+}
+.hc[data-look="stage"] :is(.hc-list, .hc-rev, .hc-grid, .hc-rail, .hc-hand) { overscroll-behavior: contain; }
+
+/* A white ring wherever the ground is the gradient. */
+.hc[data-look="stage"] :is(.hc-stgw, .hc-rail, .hc-hero) :focus-visible { outline-color: var(--hc-stg-ink); }
+
+/* ---------- The top bar ---------- */
+
+.hc[data-look="stage"] .hc-lv {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 10px 0 4px; border-radius: var(--hc-radius);
+  color: inherit; text-decoration: none; font: 600 14px/1.2 var(--hc-face-body);
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.hc[data-look="stage"] .hc-lv:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+.hc[data-look="stage"] .hc-sv {
+  margin-left: auto; padding-right: 8px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--hc-muted);
+}
+.hc[data-look="stage"] .hc-sv::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
+/* A write that failed is a ring, so it differs from saved by shape, not colour alone. */
+.hc[data-look="stage"] .hc-sv.is-bad::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+
+/* ---------- The stage on a phone: bar and hero in one banner ---------- */
+
+.hc[data-look="stage"] .hc-stgw {
+  flex: none; position: relative; color: var(--hc-stg-ink);
+  background: radial-gradient(220px 130px at 88% 0, rgb(255 255 255 / 0.2), transparent 70%), linear-gradient(140deg, var(--hc-stg1), var(--hc-stg2));
+}
+.hc[data-look="stage"] .hc-stgw .hc-abar { height: 46px; background: none; border: 0; color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-stgw .hc-sv { color: var(--hc-stg-ink-1); }
+
+.hc[data-look="stage"] .hc-stg { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 2px 16px 14px; color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-stg__id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.hc[data-look="stage"] .hc-stg__tx { min-width: 0; }
+.hc[data-look="stage"] .hc-stg__nm { margin: 0; font-size: 22px; line-height: 1.15; color: var(--hc-stg-ink); overflow-wrap: anywhere; }
+.hc[data-look="stage"] .hc-stg__ln { margin: 1px 0 0; font-size: 14px; line-height: 1.4; color: var(--hc-stg-ink-1); border-radius: 6px; overflow-wrap: anywhere; }
+.hc[data-look="stage"] .hc-stg__pv { margin: 0; height: 18px; font-size: 12.5px; line-height: 18px; color: var(--hc-stg-ink-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  transition: height var(--dur-standard) var(--ease-out), opacity var(--dur-standard) var(--ease-out); }
+
+/* The portrait: the hero's first letter, in a ring. */
+.hc[data-look="stage"] .hc-por {
+  position: relative; box-sizing: border-box; flex: none; width: 56px; height: 56px; padding: 0; display: grid; place-items: center; border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 0.88); background: rgb(255 255 255 / 0.16); color: var(--hc-stg-ink);
+  font: 700 22px/1 var(--hc-face-body); text-transform: uppercase;
+  transition: width var(--dur-standard) var(--ease-out), height var(--dur-standard) var(--ease-out), font-size var(--dur-standard) var(--ease-out);
+}
+/* A tucked portrait is smaller than a finger; its press area is not. */
+.hc[data-look="stage"] button.hc-por { cursor: pointer; }
+.hc[data-look="stage"] button.hc-por::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
+.hc[data-look="stage"] .hc-por--big { width: 96px; height: 96px; margin-bottom: 8px; font-size: 36px; }
+
+/* The four figures: Stamina, Speed, Size, Stability. */
+.hc[data-look="stage"] .hc-sstw { display: grid; grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-standard) var(--ease-out), margin-top var(--dur-standard) var(--ease-out), opacity var(--dur-standard) var(--ease-out); }
+.hc[data-look="stage"] .hc-sst { min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.hc[data-look="stage"] .hc-st { min-width: 0; padding: 5px 8px 6px; border-radius: var(--hc-radius); background: var(--hc-stg-wash); }
+.hc[data-look="stage"] .hc-st span { display: block; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--hc-stg-ink-2); white-space: nowrap; }
+.hc[data-look="stage"] .hc-st b { font-size: 19px; line-height: 1.15; font-weight: 700; color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-pv { font-style: normal; margin-left: 5px; font-size: 12.5px; font-weight: 600; color: var(--hc-stg-ink-1); white-space: nowrap; }
+/* A figure nothing gives yet shows only what this entry would give, dimmed. */
+.hc[data-look="stage"] .hc-st.is-pvonly b { display: none; }
+.hc[data-look="stage"] .hc-st.is-pvonly .hc-pv { margin-left: 0; font-size: 17px; font-weight: 500; color: var(--hc-stg-ink-2); }
+@container hc (max-width: 380px) {
+  .hc[data-look="stage"] .hc-sst { gap: 4px; }
+  .hc[data-look="stage"] .hc-st { padding-inline: 5px; }
+  .hc[data-look="stage"] .hc-st span { letter-spacing: 0.02em; }
+}
+
+/* Scrolled a little, the stage folds to its name and line. */
+.hc[data-look="stage"] .hc-stg.is-tuck .hc-sstw { grid-template-rows: 0fr; margin-top: -10px; opacity: 0; }
+.hc[data-look="stage"] .hc-stg.is-tuck .hc-por { width: 40px; height: 40px; font-size: 16px; }
+.hc[data-look="stage"] .hc-stg.is-tuck .hc-stg__pv { height: 0; opacity: 0; }
+
+/* The line that just changed takes a white wash that fades. */
+.hc[data-look="stage"] .hc-stg__ln.is-lit { animation: hc-lit 1.1s var(--ease-out); }
+@keyframes hc-lit {
+  0% { background: rgb(255 255 255 / 0.4); box-shadow: 0 0 0 6px rgb(255 255 255 / 0.4); }
+  100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
+}
+
+/* ---------- The computer: the hero stands in the rail ---------- */
+
+/* With the whole window to fill, the rail and the open entry take the room
+   the signed look gives them, easing back to the creator's own on a narrow one. */
+.hc[data-look="stage"] .hc-app[data-view="desk"] .hc-cols { grid-template-columns: clamp(232px, 21vw, 268px) minmax(0, 1fr) clamp(340px, 33vw, 420px); }
+.hc[data-look="stage"] .hc-rail { background: linear-gradient(170deg, var(--hc-stg1), var(--hc-stg2)); border-right: 0; color: var(--hc-stg-ink); overflow-y: auto; }
+.hc[data-look="stage"] .hc-rail .hc-stg { padding: 16px 16px 6px; align-items: center; text-align: center; }
+.hc[data-look="stage"] .hc-rail .hc-stg__id { flex-direction: column; gap: 10px; }
+.hc[data-look="stage"] .hc-rail .hc-por { width: 72px; height: 72px; font-size: 28px; }
+.hc[data-look="stage"] .hc-rail .hc-sstw { align-self: stretch; text-align: left; }
+.hc[data-look="stage"] .hc-rail .hc-sst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hc[data-look="stage"] .hc-rail .hc-steps { overflow: visible; padding: 6px 8px 10px; }
+.hc[data-look="stage"] .hc-rail .hc-row { min-height: 44px; padding: 3px 10px; color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-rail .hc-row .hc-lb b { color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-rail .hc-row .hc-lb span { color: var(--hc-stg-ink-3); }
+.hc[data-look="stage"] .hc-rail .hc-row:hover { background: rgb(255 255 255 / 0.1); }
+.hc[data-look="stage"] .hc-rail .hc-row[aria-current="step"] { background: rgb(255 255 255 / 0.18); }
+/* A lit row is a paler ground, so its small words go to full strength. */
+.hc[data-look="stage"] .hc-rail .hc-row:hover .hc-lb span { color: var(--hc-stg-ink-1); }
+.hc[data-look="stage"] .hc-rail .hc-row[aria-current="step"] .hc-lb span { color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-rail .hc-row[aria-current="step"]::before { background: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-rail .hc-num { background: transparent; border-color: rgb(255 255 255 / 0.55); color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-rail .hc-num.is-done { background: var(--hc-stg-ink); border-color: var(--hc-stg-ink); color: var(--hc-stg1); }
+.hc[data-look="stage"] .hc-rail .hc-num.is-now { border: 2px solid var(--hc-stg-ink); color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-rail .hc-row.is-glow { animation: hc-sglow 1.2s var(--ease-out); }
+@keyframes hc-sglow {
+  0% { background: rgb(255 255 255 / 0.5); box-shadow: 0 0 0 3px rgb(255 255 255 / 0.5); }
+  100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ---------- Name and review: the card is the hero ---------- */
+
+.hc[data-look="stage"] .hc-hero {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 24px 16px 18px; text-align: center; border: 0; color: var(--hc-stg-ink);
+  background: linear-gradient(150deg, var(--hc-stg1), var(--hc-stg2));
+}
+.hc[data-look="stage"] .hc-hero::before { display: none; }
+.hc[data-look="stage"] .hc-hero .hc-who { color: var(--hc-stg-ink-2); }
+.hc[data-look="stage"] .hc-hero h2 { color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-hero .hc-line { color: var(--hc-stg-ink-1); }
+.hc[data-look="stage"] .hc-hero .hc-stats { align-self: stretch; }
+.hc[data-look="stage"] .hc-hero .hc-stat { background: var(--hc-stg-wash); border: 0; }
+.hc[data-look="stage"] .hc-hero .hc-stat b { color: var(--hc-stg-ink); }
+.hc[data-look="stage"] .hc-hero .hc-stat span { color: var(--hc-stg-ink-2); }
+
+/* ---------- About your hero: the head ---------- */
+
+.hc[data-look="stage"] .hc-about .hc-rev__t { margin-bottom: 4px; }
+.hc[data-look="stage"] .hc-opt { margin-left: 4px; vertical-align: middle; font: 700 13px/1 var(--hc-face-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--hc-muted); }
+.hc[data-look="stage"] .hc-ahd { margin: 0 0 16px; font-size: 15px; color: var(--hc-muted); }
+
+/* ---------- The cards: a mouse can move the hand ---------- */
+
+.hc[data-look="stage"] .hc-hand.is-dragging { cursor: grabbing; user-select: none; }
+.hc[data-look="stage"] .hc-hand.is-dragging .hc-card { pointer-events: none; }
+
+/* ---------- Motion levels ---------- */
+
+/* Gentle fades; it does not resize. Still changes at once (the base rules
+   already stop transitions of size). */
+.hc[data-look="stage"] .hc-app[data-mo="gentle"] :is(.hc-sstw, .hc-por, .hc-stg__pv) { transition-property: opacity; }
+.hc[data-look="stage"] .hc-app[data-mo="gentle"] .hc-rail .hc-row.is-glow { animation-duration: 0.6s; }
+.hc[data-look="stage"] .hc-app[data-mo="still"] .hc-stg__ln.is-lit,
+.hc[data-look="stage"] .hc-app[data-mo="still"] .hc-rail .hc-row.is-glow { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .hc[data-look="stage"] .hc-stg__ln.is-lit, .hc[data-look="stage"] .hc-rail .hc-row.is-glow { animation: none; }
+}

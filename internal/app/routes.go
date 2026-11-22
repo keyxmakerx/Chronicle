@@ -3241,7 +3241,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_builder.js"}},
-			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_creator.js"}},
+			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_stage.js", "js/hero_creator.js"}},
 			{Name: "hero-tryout", Scripts: []string{"js/hero_tryout.js"}},
 			{Name: "own-entries", Scripts: []string{"js/own_entry_editor.js", "js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
