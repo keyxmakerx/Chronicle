@@ -110,7 +110,35 @@ test('a rail icon dragged toward the page opens its section on a leaf, and the l
   await page.mouse.up();
   await page.waitForTimeout(300);
   assert.deepEqual(await leaves(page), [['adventures', 'reveal'], ['homebrew']]);
-  assert.equal(await page.locator('.dms-leaf [data-dms-sec="adventures"]').evaluate((e) => e.classList.contains('dms-folded')), true, 'the older card on the leaf is not folded');
+  // Both cards on the leaf stay open: the older one is not forced to fold.
+  assert.equal(await page.locator('.dms-leaf [data-dms-sec="adventures"]').evaluate((e) => e.classList.contains('dms-folded')), false, 'the older card on the leaf was folded');
+  assert.equal(await page.locator('.dms-leaf [data-dms-sec="reveal"]').evaluate((e) => e.classList.contains('dms-folded')), false);
+  // A header folds just its own card.
+  await page.locator('.dms-leaf [data-dms-sec="adventures"] [data-dms-fold]').click();
+  assert.equal(await page.locator('.dms-leaf [data-dms-sec="adventures"]').evaluate((e) => e.classList.contains('dms-folded')), true);
+  assert.equal(await page.locator('.dms-leaf [data-dms-sec="reveal"]').evaluate((e) => e.classList.contains('dms-folded')), false);
+  await page.locator('.dms-leaf [data-dms-sec="adventures"] [data-dms-fold]').click();
+
+  // A card dragged by its title lands where it is dropped: reveal goes above
+  // adventures on the same leaf, then across to the column.
+  const dragCard = async (id, to, below) => {
+    const h = await page.locator(`[data-dms-sec="${id}"] .dms-sec-t`).boundingBox();
+    const t = await page.locator(to).boundingBox();
+    const x = h.x + 60, y = h.y + h.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    const tx = t.x + t.width / 2, ty = below ? t.y + t.height - 4 : t.y + 4;
+    for (let i = 1; i <= 10; i++) await page.mouse.move(x + ((tx - x) * i) / 10, y + ((ty - y) * i) / 10);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+  };
+  await dragCard('reveal', '.dms-leaf [data-dms-sec="adventures"]', false);
+  assert.deepEqual(await leaves(page), [['reveal', 'adventures'], ['homebrew']]);
+  await dragCard('reveal', '[data-dms-cards] [data-dms-sec="party"]', true);
+  assert.deepEqual(await leaves(page), [['adventures'], ['homebrew']]);
+  assert.deepEqual(await column(page), ['party', 'reveal', 'world']);
+  await dragCard('reveal', '.dms-leaf [data-dms-sec="adventures"]', true);
+  assert.deepEqual(await leaves(page), [['adventures', 'reveal'], ['homebrew']]);
 
   // A plain click on a rail icon still opens the card in the column.
   await page.locator('.dms-rail [data-dms-open="notes"]').click();
