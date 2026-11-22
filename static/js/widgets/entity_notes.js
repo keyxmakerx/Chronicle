@@ -9,7 +9,9 @@
  * Live: /ws entity_note.* nudges carry ids only and trigger a refetch, with
  * a 30 s poll behind them. Rows are matched by id and changed one at a time,
  * so the composer, a note folded open and the reader's scroll survive any
- * update. Auto-mounted by boot.js on data-widget="entity-notes".
+ * update. A page refresh after someone else's save keeps the mounted widget
+ * (update) and only refetches; one that mounts it afresh carries an unsent
+ * note across. Auto-mounted by boot.js on data-widget="entity-notes".
  */
 (function () {
   'use strict';
@@ -27,6 +29,31 @@
   // Our own writes come back over the socket; inside this window a change
   // to a note we just wrote is ours, so it settles in instead of glowing.
   var OWN_ECHO_MS = 4000;
+  // A page refresh that has to mount the widget afresh destroys it and
+  // mounts the new copy straight after. An unsent note left at unmount is
+  // kept this long, per page and reader, for the new copy to open again.
+  var CARRY_MS = 3000;
+  var carried = {};
+  function takeCarried(key) {
+    var d = carried[key];
+    delete carried[key];
+    return d && Date.now() - d.at < CARRY_MS ? d : null;
+  }
+
+  // The settings boot.js hands init, from the mount's data-* attributes.
+  function settingsOf(node) {
+    var out = {};
+    Array.prototype.forEach.call(node.attributes, function (a) {
+      if (a.name.indexOf('data-') === 0 && a.name !== 'data-widget') out[a.name] = a.value;
+    });
+    return out;
+  }
+  function sameSettings(a, b) {
+    var x = settingsOf(a), y = settingsOf(b), k;
+    for (k in x) if (x[k] !== y[k]) return false;
+    for (k in y) if (!(k in x)) return false;
+    return true;
+  }
 
   var AUDIENCES = {
     'private':   { label: 'Only me',         icon: 'fa-lock',        tone: '' },
@@ -150,6 +177,8 @@
       var ws = null, wsDelay = 2000, wsTimer = null, pollTimer = null, agoTimer = null;
       var toastTimer = null;
       var destroyed = false;
+      var carryKey = endpoint + '|' + me;
+      var carry = takeCarried(carryKey);
 
       // --- Shell ---
 
@@ -206,6 +235,7 @@
             notes = Array.isArray(list) ? list : [];
             loaded = true;
             refresh(true);
+            reopenCarried();
             checkComposerAgainstServer();
           })
           .catch(function (err) {
@@ -214,7 +244,17 @@
               loaded = true;
               listEl.innerHTML = '<div class="en-empty"><b>Notes could not load</b>They will try again shortly.</div>';
             }
+            reopenCarried();
           });
+      }
+
+      // The note the copy this one replaced was writing, opened once the
+      // list is in so an edit finds its note. Something the reader opened
+      // since wins.
+      function reopenCarried() {
+        var d = carry;
+        carry = null;
+        if (d && !comp && !destroyed) openComposer(d.id, d);
       }
 
       // Names for each note's author. Anyone who has left the campaign
@@ -580,7 +620,9 @@
         return title !== (comp.base.title || '') || body !== (comp.base.bodyHtml || '');
       }
 
-      function openComposer(id) {
+      // draft, when given, is an unsent note carried across a remount: the
+      // composer opens holding it, without taking focus.
+      function openComposer(id, draft) {
         if (comp) {
           if (comp.id === id) { focusComposer(); return; }
           if (composerDirty()) {
@@ -591,16 +633,17 @@
           closeComposer(true);
         }
         var n = id ? find(id) : null;
-        if (id && !n) return;
+        if (id && !n && !draft) return;
+        var editing = !!(n || (draft && draft.base));
         comp = {
           id: id,
-          audience: n ? n.audience : 'private',
-          sharedWith: n && Array.isArray(n.sharedWith) ? n.sharedWith.slice() : [],
-          base: n ? { title: n.title || '', bodyHtml: n.bodyHtml || '', audience: n.audience, updatedAt: n.updatedAt } : null,
+          audience: draft ? draft.audience : n ? n.audience : 'private',
+          sharedWith: draft ? draft.sharedWith.slice() : n && Array.isArray(n.sharedWith) ? n.sharedWith.slice() : [],
+          base: draft ? draft.base : n ? { title: n.title || '', bodyHtml: n.bodyHtml || '', audience: n.audience, updatedAt: n.updatedAt } : null,
           editor: null, textarea: null, saving: false, gone: false, form: null
         };
-        var h = '<form class="en-comp en-grow" novalidate aria-label="' + (n ? 'Edit note' : 'New note') + '">';
-        h += '<input type="text" class="input en-field" data-en-f="title" maxlength="200" placeholder="Title (optional)" aria-label="Title" value="' + esc(n ? n.title : '') + '">';
+        var h = '<form class="en-comp' + (draft ? '' : ' en-grow') + '" novalidate aria-label="' + (editing ? 'Edit note' : 'New note') + '">';
+        h += '<input type="text" class="input en-field" data-en-f="title" maxlength="200" placeholder="Title (optional)" aria-label="Title" value="' + esc(draft ? draft.title : n ? n.title : '') + '">';
         h += '<div class="en-editor-wrap">';
         h += '<div class="en-fmt" role="toolbar" aria-label="Formatting" hidden>' +
           fmtBtn('bold', 'fa-bold', 'Bold') + fmtBtn('italic', 'fa-italic', 'Italic') + fmtBtn('bulletList', 'fa-list-ul', 'List') + '</div>';
@@ -617,13 +660,13 @@
         h += '<div class="en-callout" data-en-warn hidden></div>';
         h += '<div class="en-foot"><span class="en-hint" data-en-hint aria-live="polite"></span><span class="en-spacer"></span>';
         h += '<button type="button" class="btn btn-secondary btn-sm" data-en-act="cancel">Cancel</button>';
-        h += '<button type="submit" class="btn btn-primary btn-sm" data-en-act="save">' + (n ? 'Save changes' : 'Save note') + '</button>';
+        h += '<button type="submit" class="btn btn-primary btn-sm" data-en-act="save">' + (editing ? 'Save changes' : 'Save note') + '</button>';
         h += '</div></form>';
         compSlot.innerHTML = h;
         comp.form = compSlot.querySelector('form');
-        mountEditor(n ? (n.bodyHtml || (n.body ? '<p>' + esc(extractText(n.body)) + '</p>' : '')) : '');
+        mountEditor(draft ? draft.html : n ? (n.bodyHtml || (n.body ? '<p>' + esc(extractText(n.body)) + '</p>' : '')) : '');
         setAudience(comp.audience);
-        focusComposer(n ? 'body' : 'title');
+        if (!draft) focusComposer(n ? 'body' : 'title');
       }
 
       function fmtBtn(cmd, icon, label) {
@@ -926,6 +969,13 @@
       // carried out, and timers and the socket stop.
       el.__entityNotesCleanup = function () {
         flushDeletes();
+        // A note being saved is on its way; carrying it too could save it twice.
+        if (comp && !comp.saving && composerDirty()) {
+          carried[carryKey] = {
+            at: Date.now(), id: comp.id, base: comp.base, audience: comp.audience, sharedWith: comp.sharedWith.slice(),
+            title: comp.form.querySelector('[data-en-f="title"]').value, html: bodyHTML()
+          };
+        }
         destroyed = true;
         if (comp && comp.editor) { try { comp.editor.destroy(); } catch (e) {} }
         comp = null;
@@ -937,6 +987,28 @@
         document.removeEventListener('visibilitychange', onVisible);
         window.removeEventListener('pagehide', onPageHide);
       };
+      el.__entityNotesReload = loadNotes;
+    },
+
+    // A page refresh with this mount in it. The same settings keep
+    // everything: the socket, the composer and what is typed in it, notes
+    // folded open, the filter. The notes may still have changed, since they
+    // are fetched, not served, so they are read again. Changed settings (the
+    // reader's role, another page) mount the widget afresh, an unsent note
+    // carried across.
+    update: function (el, fresh) {
+      if (sameSettings(el, fresh) && typeof el.__entityNotesReload === 'function') {
+        el.__entityNotesReload();
+        return;
+      }
+      Chronicle.destroyWidget(el);
+      Array.prototype.slice.call(el.attributes).forEach(function (a) {
+        if (a.name.indexOf('data-') === 0 && a.name !== 'data-widget' && !fresh.hasAttribute(a.name)) el.removeAttribute(a.name);
+      });
+      Array.prototype.forEach.call(fresh.attributes, function (a) {
+        if (a.name.indexOf('data-') === 0) el.setAttribute(a.name, a.value);
+      });
+      Chronicle.mountWidget(el);
     },
 
     destroy: function (el) {
@@ -944,6 +1016,7 @@
         el.__entityNotesCleanup();
         delete el.__entityNotesCleanup;
       }
+      delete el.__entityNotesReload;
       el.innerHTML = '';
     }
   });

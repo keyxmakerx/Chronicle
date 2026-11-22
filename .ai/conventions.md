@@ -112,7 +112,7 @@ Table-driven (`tests := []struct{name string; ...}` with `t.Run`), with interfac
 
 ## Widget Registration (Frontend JS)
 
-A widget mounts to `data-widget="<slug>"`, fetches its own data and renders itself: `Chronicle.register('editor', { init(el, config) {}, destroy(el) {} })`. An optional `update(el, fresh)` lets a page refresh keep the mounted widget when its markup came back the same (`fresh` is the new element); without it the widget is destroyed and mounted again.
+A widget mounts to `data-widget="<slug>"`, fetches its own data and renders itself: `Chronicle.register('editor', { init(el, config) {}, destroy(el) {} })`. An optional `update(el, fresh)` lets a page refresh keep the mounted widget: it is called instead of destroy and init, `fresh` being the new element, whose data-* attributes may differ from `el`'s, so `update` brings the widget fully up to date itself; without it the widget is destroyed and mounted again. `entity_notes.js` is the worked example.
 
 ## File Naming
 
