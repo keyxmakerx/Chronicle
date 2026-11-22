@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS deck_cards (
     PRIMARY KEY (id),
     UNIQUE KEY uq_deck_cards_name (deck_id, name),
     KEY idx_deck_cards_campaign (campaign_id),
+    KEY idx_deck_cards_picture (campaign_id, picture),
     CONSTRAINT fk_deck_cards_deck     FOREIGN KEY (deck_id)     REFERENCES decks(id)     ON DELETE CASCADE,
     CONSTRAINT fk_deck_cards_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
