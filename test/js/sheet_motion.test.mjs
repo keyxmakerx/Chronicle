@@ -244,3 +244,11 @@ test('sideMaxHeight: a tall panel may reach nearer the window top', () => {
   assert.equal(S.sideMaxHeight(900, -400, true), 852);
   assert.equal(S.sideMaxHeight(900, 176, true), 700);
 });
+
+test('visibleBand: a paper is placed inside what the page shows, below the top bar and banners', () => {
+  assert.deepEqual(S.visibleBand({ top: 97, bottom: 900 }, 900), { top: 97, bottom: 900 }, 'the main column under a top bar and banner');
+  assert.deepEqual(S.visibleBand(null, 900), { top: 0, bottom: 900 }, 'a page that scrolls the window');
+  assert.deepEqual(S.visibleBand({ top: -50, bottom: 1400 }, 900), { top: 0, bottom: 900 }, 'cut to the window');
+  // A tall panel in that band is 48px shorter than the band, so it starts 24px under the banner.
+  assert.equal(S.sideMaxHeight(900 - 97, -400, true), 755);
+});

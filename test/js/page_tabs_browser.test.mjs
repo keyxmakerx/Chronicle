@@ -173,3 +173,27 @@ test('the panel slides with the sheet while a paper is out beside it', { skip },
   await p.evaluate(() => document.querySelector('[data-sheet-folio]').classList.remove('is-shifted'));
   await p.waitForFunction(() => !document.querySelector('section.pt').classList.contains('is-shifted'));
 });
+
+test('the panel follows a sheet whose folio is drawn after it mounts, and drawn again', { skip }, async (t) => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  const shiftRule = CSS.match(/^\.pt\.is-shifted \{[^}]*\}/m)[0];
+  // A game system's sheet starts as an empty mount and draws its folio later.
+  await p.setContent(`<!doctype html><html><head><style>body{margin:0}[hidden]{display:none}${PT_RULES}\n${shiftRule}</style></head><body><main id="main-content" style="width:1280px"><div id="mount"></div>${MARKUP}</main></body></html>`);
+  await p.addScriptTag({ content: 'window.Chronicle = { register: function (n, impl) { impl.init(document.querySelector("[data-widget=" + n + "]")); } };' });
+  await p.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets/page_tabs.js'), 'utf8') });
+  const draw = () => p.evaluate(() => {
+    document.getElementById('mount').innerHTML = '<div data-sheet><div data-sheet-folio style="width:920px;margin-inline:auto;height:200px"></div></div>';
+  });
+  const shift = (px) => p.evaluate((px) => { const f = document.querySelector('[data-sheet-folio]'); f.style.setProperty('--shift', px); f.classList.add('is-shifted'); }, px);
+  await draw();
+  await shift('84px');
+  await p.waitForFunction(() => document.querySelector('section.pt').classList.contains('is-shifted'));
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('section.pt')).getPropertyValue('--shift')), '84px');
+  // The sheet redraws: the new folio starts unshifted, and the strip goes back with it, then follows the new one.
+  await draw();
+  await p.waitForFunction(() => !document.querySelector('section.pt').classList.contains('is-shifted'));
+  await shift('60px');
+  await p.waitForFunction(() => getComputedStyle(document.querySelector('section.pt')).getPropertyValue('--shift') === '60px');
+});

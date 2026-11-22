@@ -132,8 +132,15 @@
     return Math.max(Math.round(need), Math.round(rel - partRight - 8));
   }
 
-  // A side paper's tallest: from the sheet's top (on screen) to 24px above the window's bottom, at least 320px.
-  // A tall panel may reach nearer the window's top.
+  // The part of the window the page actually shows: its scroll box (the app's main column) cut to the window. The top
+  // bar and any banner sit above that box, so a paper placed inside the band is never under them.
+  function visibleBand(box, vh) {
+    var top = Math.max(0, box ? box.top : 0), bottom = Math.min(vh, box ? box.bottom : vh);
+    return bottom > top ? { top: top, bottom: bottom } : { top: 0, bottom: vh };
+  }
+
+  // A side paper's tallest: from the sheet's top to 24px above the band's bottom, at least 320px. vh is the band's
+  // height and sheetTop is measured from the band's top. A tall panel may reach nearer the band's top.
   function sideMaxHeight(vh, sheetTop, tall) {
     return Math.round(Math.max(320, Math.min(vh - (tall ? 48 : 120), vh - 24 - Math.max(0, sheetTop))));
   }
@@ -147,7 +154,7 @@
     STYLES: STYLES, FONTS: FONTS, BAKED: BAKED, FX_KINDS: FX_KINDS,
     fontHref: fontHref, styleFor: styleFor, modeOf: modeOf, durFor: durFor, msOf: msOf,
     longestTransition: longestTransition, fxPlan: fxPlan, foldPlan: foldPlan, panelStep: panelStep, sideOver: sideOver,
-    sideMaxHeight: sideMaxHeight, sideWidth: sideWidth
+    sideMaxHeight: sideMaxHeight, sideWidth: sideWidth, visibleBand: visibleBand
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
@@ -448,6 +455,15 @@
     var folio = $('[data-sheet-folio]', root) || root;
     function sheetEl() { return $('.paper-stack > .paper', root) || $('.paper:not(.paper-drawer)', root); }
     function desk() { return root.closest('[data-sheet-desk]') || root.parentElement || root; }
+    // The box the page scrolls in: the nearest ancestor that scrolls, or the window.
+    function scroller() {
+      for (var n = folio.parentElement; n && n !== document.body; n = n.parentElement) {
+        var oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.clientHeight) return n;
+      }
+      return null;
+    }
+    function viewBand() { var sc = scroller(); return visibleBand(sc && sc.getBoundingClientRect(), innerHeight); }
     function narrow() {
       var d = desk(), cs = getComputedStyle(d);
       return d.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) < 820;
@@ -605,14 +621,15 @@
       var p = drawer(id, title, kind, body, false), w = makeWell(folio, 'right', p, move);
       p.style.width = WD + 'px';
       // A panel is as tall as what it holds, up to the window: past a short sheet it lies over the page below rather than cutting off.
-      p.style.maxHeight = sideMaxHeight(innerHeight, sr.top, tall) + 'px';
+      var band = viewBand();
+      p.style.maxHeight = sideMaxHeight(band.bottom - band.top, sr.top - band.top, tall) + 'px';
       if (tall) p.style.height = p.style.maxHeight;
       var ph = p.offsetHeight, rel = sr.right - fr.left, T = pr.top - fr.top - 18;
       var over = sideOver(fit, rel, pr.right - fr.left);
       // Beside the part that was clicked, lifted only as far as it takes to stay in the window, and never above the sheet.
       function place() {
         var f = folio.getBoundingClientRect(), s = sheetEl().getBoundingClientRect(), t = part.getBoundingClientRect().top - f.top - 18;
-        t = Math.min(t, innerHeight - 24 - f.top - 14 - ph);
+        t = Math.min(t, viewBand().bottom - 24 - f.top - 14 - ph);
         T = Math.max(t, s.top - f.top - 14);
         w.style.top = T + 'px';
         w.style.height = (ph + 42) + 'px';

@@ -148,21 +148,32 @@ Chronicle.register('page-tabs', {
 
     // The sheet above slides left while a paper is out beside it; the strip
     // takes the same shift so the two stay one column. The sheet stays the
-    // authority: this only copies what its folio says.
-    var folio = document.querySelector('[data-sheet-folio]');
+    // authority: this only copies what its folio says. A game system's sheet
+    // draws its folio after this widget mounts, and may draw it again, so the
+    // folio is looked for whenever the page's content changes until one is
+    // there and still on the page.
+    var folio = null, fo = null;
     function follow() {
       // A narrow sheet (under 820px wide) does not slide, so neither does the strip.
-      var sheet = folio.closest('[data-sheet]');
-      var on = folio.classList.contains('is-shifted') && !(sheet && sheet.clientWidth < 820);
+      var sheet = folio && folio.closest('[data-sheet]');
+      var on = !!folio && folio.classList.contains('is-shifted') && !(sheet && sheet.clientWidth < 820);
       if (on) el.style.setProperty('--shift', folio.style.getPropertyValue('--shift') || '0px');
       el.classList.toggle('is-shifted', on);
     }
-    var fo = null;
-    if (folio) {
-      fo = new MutationObserver(follow);
-      fo.observe(folio, { attributes: true, attributeFilter: ['class', 'style'] });
+    function findFolio() {
+      if (folio && folio.isConnected) return;
+      if (fo) { fo.disconnect(); fo = null; }
+      folio = document.querySelector('[data-sheet-folio]');
+      if (folio) {
+        fo = new MutationObserver(follow);
+        fo.observe(folio, { attributes: true, attributeFilter: ['class', 'style'] });
+      }
       follow();
     }
+    var page = el.closest('#main-content') || document.body;
+    var finder = new MutationObserver(findFolio);
+    finder.observe(page, { childList: true, subtree: true });
+    findFolio();
 
     el.addEventListener('click', onClick);
     el.addEventListener('keydown', onKey);
@@ -176,6 +187,7 @@ Chronicle.register('page-tabs', {
       clearTimeout(autoTimer);
       mo.disconnect();
       if (fo) fo.disconnect();
+      finder.disconnect();
       el.removeEventListener('click', onClick);
       el.removeEventListener('keydown', onKey);
       el.removeEventListener('htmx:afterRequest', onLoaded);
