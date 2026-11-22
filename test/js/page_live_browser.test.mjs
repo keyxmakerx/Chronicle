@@ -61,7 +61,7 @@ function wholeHtml(fresh) {
     '<div id="live"></div></main></body></html>';
 }
 
-async function setup(t, late, kind) {
+async function setup(t, late, kind, slow = 150) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: { width: 800, height: 700 } });
@@ -72,8 +72,12 @@ async function setup(t, late, kind) {
   // Refreshes take a moment to arrive, as they do over a real network, so
   // frames are painted while one is on its way.
   await p.route('http://chronicle.test/**', async (r) => {
+    // The Pages list, for a reader who clicks away.
+    if (new URL(r.request().url()).pathname === '/campaigns/c1/entities') {
+      return r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><head><title>Pages</title></head><body><main id="main-content"><h1>Pages</h1><p>List</p></main></body></html>' });
+    }
     const fresh = served++ > 0;
-    if (fresh) await new Promise((ok) => setTimeout(ok, 150));
+    if (fresh) await new Promise((ok) => setTimeout(ok, slow));
     await r.fulfill({ contentType: 'text/html', body: pageHtml(fresh, kind) });
   });
   await p.goto('http://chronicle.test/campaigns/c1/entities/e1');
@@ -240,4 +244,25 @@ test('a refresh that arrives after the reader went to another page is dropped', 
   const r = await p.evaluate(() => ({ text: document.querySelector('#main-content p').textContent, mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), held: !!document.querySelector('[data-page-live-hold]') }));
   assert.equal(p.served(), 1, 'the refresh was sent');
   assert.deepEqual(r, { text: 'Before', mark: false, held: false });
+});
+
+test('a link clicked while a slow refresh is on its way wins', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole', 600);
+  await p.evaluate((fire) => {
+    const a = document.createElement('a');
+    a.href = '/campaigns/c1/entities'; a.id = 'to-pages'; a.textContent = 'Pages';
+    a.setAttribute('hx-boost', 'true'); a.setAttribute('hx-target', '#main-content'); a.setAttribute('hx-select', '#main-content > *');
+    document.body.appendChild(a);
+    window.htmx.process(a);
+    document.addEventListener('htmx:beforeRequest', function once(e) {
+      if (!e.detail.requestConfig.headers['X-Page-Live']) return;
+      document.removeEventListener('htmx:beforeRequest', once);
+      setTimeout(() => a.click(), 300);
+    });
+    (0, eval)(fire)();
+  }, changed.toString());
+  await p.waitForTimeout(3000);
+  const r = await p.evaluate(() => ({ path: location.pathname, h1: document.querySelector('#main-content h1').textContent, mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), held: !!document.querySelector('[data-page-live-hold]') }));
+  assert.equal(p.served(), 1, 'the refresh was sent');
+  assert.deepEqual(r, { path: '/campaigns/c1/entities', h1: 'Pages', mark: false, held: false });
 });
