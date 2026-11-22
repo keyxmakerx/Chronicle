@@ -377,19 +377,23 @@
       /** reopen: the open card read again after the hand changed; gone means closed. */
       function reopen() {
         if (!overlay) return Promise.resolve();
+        var mine = overlay;
         var u = urls(base, overlay.getAttribute('data-deck'), overlay.getAttribute('data-copy'));
         var hadFocus = overlay.contains(document.activeElement);
         var act = hadFocus && document.activeElement.getAttribute ? document.activeElement.getAttribute('data-dkh-act') : null;
         return fetch(u.open, { credentials: 'same-origin', headers: HEADERS }).then(function (r) {
           return r.ok ? r.text() : refusal(r);
         }).then(function (html) {
+          // The answer is for the card that was open when it was asked for; a
+          // card closed meanwhile stays closed.
+          if (overlay !== mine) return;
           place(html, false);
           if (hadFocus) {
             var t = (act && $('[data-dkh-act="' + act + '"]', overlay)) || $('[data-dkh-close]', overlay);
             if (t) t.focus({ preventScroll: true });
           }
         }, function (e) {
-          if (e && e.status === 404) close(true);
+          if (e && e.status === 404 && overlay === mine) close(true);
         });
       }
 

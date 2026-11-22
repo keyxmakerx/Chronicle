@@ -140,6 +140,30 @@ test('the opened card has the controls the server drew, and Keep it changes noth
   await page.context().close();
 });
 
+test('a card closed while it was being read again stays closed', { skip }, async () => {
+  const OPEN = `GET ${BASE}/hand/d1/copies/c1`;
+  const page = await open(body(up('c1')), { [OPEN]: html200(opened()), [`GET ${BASE}/hand`]: html200(body(up('c1'))) });
+  await page.click('[data-dkh-open]');
+  await page.waitForSelector('[data-dkh-over]');
+  // The next read of the open card is held until the test lets it go.
+  await page.evaluate((key) => {
+    const real = window.fetch;
+    window.fetch = function (url, opts) {
+      const k = ((opts && opts.method) || 'GET') + ' ' + String(url).replace(/^file:\/\/\/?/, '/');
+      if (k !== key) return real(url, opts);
+      return new Promise((res) => { window.__letGo = () => res(new Response(window.__answers[key].body, { status: 200 })); });
+    };
+  }, OPEN);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:decks-changed')));
+  await page.waitForFunction(() => typeof window.__letGo === 'function');
+  await page.click('.dkh-acts [data-dkh-close]');
+  assert.equal(await page.$('[data-dkh-over]'), null);
+  await page.evaluate(() => window.__letGo());
+  await page.waitForTimeout(150);
+  assert.equal(await page.$('[data-dkh-over]'), null, 'the closed card came back');
+  await page.context().close();
+});
+
 test('asking sends the play verb, then the card says it is waiting and cannot be asked again', { skip }, async () => {
   const page = await open(body(up('c1')), { [`GET ${BASE}/hand/d1/copies/c1`]: html200(opened({ ask: true })) });
   await page.click('[data-dkh-open]');
