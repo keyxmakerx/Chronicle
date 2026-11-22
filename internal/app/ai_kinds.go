@@ -184,7 +184,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Rels:     d.Relations,
 		Notes:    d.Notes,
 		Rules:    d.HouseRules,
-		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
+		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice, rules: d.ChoiceRules},
 		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
 		Plugged:  d.plugged(),
@@ -369,7 +369,11 @@ func init() {
 		if d.PlayerNotes != nil {
 			kinds = append(kinds, records.PlayerNoteKind{Svc: d.PlayerNotes, Entities: d.Entities})
 		}
-		return append(kinds, *d.HouseRules, records.SystemEntryKind{Svc: d.SystemEntries})
+		kinds = append(kinds, *d.HouseRules, records.SystemEntryKind{Svc: d.SystemEntries})
+		if d.ChoiceRules != nil {
+			kinds = append(kinds, records.HeroChoiceRuleKind{Svc: d.ChoiceRules})
+		}
+		return kinds
 	})
 	addAIKinds(140, func(d *aiDeps) []records.Kind {
 		if d.Homebrew == nil {

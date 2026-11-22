@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
@@ -129,12 +130,20 @@ func (p *aiPartyAdapter) nextNight(ctx context.Context, campaignID string) *reco
 // the character pick lists, package and campaign-made entries alike.
 type aiSystemEntriesAdapter struct {
 	choices systems.CharacterChoiceService
+	// rules adds each entry's hero-choice marks to a Director's list; nil
+	// leaves them out.
+	rules systems.ChoiceRuleService
 }
 
 // Entries reads the list as a Director only when the lookup's privacy mode
-// lets the AI see Director-only content, so Safe never lists hidden entries.
+// lets the AI see Director-only content, so Safe never lists hidden entries
+// and never learns which entries a Director took off players' lists.
 func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field string, director bool) (string, []records.SystemEntry, error) {
 	l, err := a.choices.CharacterChoiceList(systems.WithChoiceViewer(ctx, director), campaignID, field)
+	if err != nil {
+		return "", nil, err
+	}
+	marks, err := a.marks(ctx, campaignID, field, director)
 	if err != nil {
 		return "", nil, err
 	}
@@ -144,9 +153,36 @@ func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field s
 		if look, ok := cardborders.LookFrom(c.Properties); ok {
 			e.Border, e.Colour = look.Border, look.Colour
 		}
+		if m, ok := marks[c.Source+"\x00"+c.Key]; ok && c.Key != "" {
+			if m.State != systems.RuleOpen {
+				e.Mark, e.MarkReason, e.MarkFromGroup = m.State, m.Reason, m.Inherited
+			}
+			e.PlayerMarks = len(m.Players)
+		}
 		out = append(out, e)
 	}
 	return l.SystemName, out, nil
+}
+
+// marks is the Directors' view of the field's hero-choice marks, by source
+// and entry key. A list the rules cannot mark (no game system, or a field
+// that is not a pick list) has none, which is not an error for the lookup.
+func (a aiSystemEntriesAdapter) marks(ctx context.Context, campaignID, field string, director bool) (map[string]systems.DirectorEntry, error) {
+	if !director || a.rules == nil {
+		return nil, nil
+	}
+	dl, err := a.rules.DirectorEntries(ctx, campaignID, systems.EntryActor{IsDirector: true}, field, "")
+	if err != nil {
+		if apperror.SafeCode(err) < 500 {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make(map[string]systems.DirectorEntry, len(dl.Entries))
+	for _, e := range dl.Entries {
+		out[e.Source+"\x00"+e.Key] = e
+	}
+	return out, nil
 }
 
 // Fields lists the character fields that have entries, the keys a

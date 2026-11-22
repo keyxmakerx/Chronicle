@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 
@@ -57,7 +58,20 @@ type PageLayoutsAPI interface {
 // no Director has accepted, which only a Director's lookup lists.
 // Border and Colour are the card border and colour the entry names, empty when
 // it names no border in the library.
-type SystemEntry struct{ Name, Slug, Source, Summary, Status, Border, Colour string }
+type SystemEntry struct {
+	Name, Slug, Source, Summary, Status, Border, Colour string
+	// Mark is what the campaign's hero-choice rules make the entry for every
+	// player (systems.RuleNotOffered and the rest, or "left_out" when a short
+	// list leaves it off); "" when it is open. Only a Director's lookup
+	// fills the marks, so an AI that reads what players see never learns
+	// what a Director took off the list.
+	Mark       string
+	MarkReason string
+	// MarkFromGroup says the mark is the one on every entry of its source.
+	MarkFromGroup bool
+	// PlayerMarks counts the marks on the entry for single players.
+	PlayerMarks int
+}
 
 // SystemEntriesAPI lists the campaign system's entries for one character
 // field, package and campaign-made alike. director includes entries kept
@@ -1430,6 +1444,12 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 		head += " (" + system + ")"
 	}
 	fmt.Fprintf(&b, "## %s, %d entries\n\n", head, len(list))
+	for _, e := range list {
+		if e.Mark != "" || e.PlayerMarks > 0 {
+			b.WriteString(entryMarksNote + "\n\n")
+			break
+		}
+	}
 	var lines []string
 	size := 0
 	for _, e := range list {
@@ -1443,6 +1463,7 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 		if e.Border != "" {
 			line += ", card border " + e.Border + " in " + e.Colour
 		}
+		line += entryMarkText(e)
 		if s := strings.TrimSpace(e.Summary); s != "" {
 			line += ": " + oneLine(s, 140)
 		}
@@ -1456,7 +1477,7 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 		b.WriteString("Too many to describe in one answer, so these are names and slugs only. Ask again with `name` (part of an entry's name) for their sources and summaries.\n\n")
 		lines = lines[:0]
 		for _, e := range list {
-			lines = append(lines, "- "+e.Name+" ("+e.Slug+")")
+			lines = append(lines, "- "+e.Name+" ("+e.Slug+")"+entryMarkText(e))
 		}
 		for i, l := range lines {
 			if b.Len()+len(l) > maxAnswerBytes-256 {
@@ -1471,6 +1492,40 @@ func (run *lookupRun) systemEntries(field, name string) (LookupAnswer, error) {
 	writeLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// entryMarksNote explains the marks once, above a list that carries any.
+const entryMarksNote = "Marks are this campaign's hero-choice rules, the same ones a Director sets on the Own entries page. " +
+	"\"Not here\" takes an entry out of players' hero maker, the game system's own entries included; Directors still see it. " +
+	"Change a mark for every player with `kind: hero-choice-rule`."
+
+// entryMarkText is an entry's mark as the lookup words it, "" for an open
+// entry with no marks for single players.
+func entryMarkText(e SystemEntry) string {
+	var s string
+	switch e.Mark {
+	case systems.RuleNotOffered:
+		s = ", marked Not here: players' hero maker leaves it out"
+	case systems.RuleAskFirst:
+		s = ", marked Ask first: players need a Director's yes to pick it"
+	case systems.RuleRequired:
+		s = ", marked Everyone takes it"
+	case "left_out":
+		s = ", left off the short list the marks make"
+	}
+	if s != "" && e.MarkFromGroup {
+		s += " (from the mark on every entry of its source)"
+	}
+	if s != "" && e.MarkReason != "" {
+		s += ", reason " + quote(oneLine(e.MarkReason, 140))
+	}
+	switch {
+	case e.PlayerMarks == 1:
+		s += ", 1 mark for a single player"
+	case e.PlayerMarks > 1:
+		s += fmt.Sprintf(", %d marks for single players", e.PlayerMarks)
+	}
+	return s
 }
 
 // systemEntryFields is `what: system-entries` with no `field`: the keys it
