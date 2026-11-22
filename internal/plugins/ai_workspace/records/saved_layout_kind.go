@@ -81,14 +81,23 @@ type savedLayoutTarget struct {
 	hasRename, hasDesc, hasIc bool
 }
 
-// presetNamed is the saved layout with the name, nil for none.
+// presetNamed is the saved layout with the name, nil for none. The
+// campaign's own wins over a built-in of the same name, so the one the owner
+// can change is the one a record reaches.
 func presetNamed(all []entities.LayoutPreset, name string) *entities.LayoutPreset {
+	var builtin *entities.LayoutPreset
 	for i := range all {
-		if sameName(all[i].Name, name) {
+		if !sameName(all[i].Name, name) {
+			continue
+		}
+		if !all[i].IsBuiltin {
 			return &all[i]
 		}
+		if builtin == nil {
+			builtin = &all[i]
+		}
 	}
-	return nil
+	return builtin
 }
 
 func presetRows(p *entities.LayoutPreset) ([]gridRow, error) {
