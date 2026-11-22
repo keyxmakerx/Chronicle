@@ -250,7 +250,7 @@
 .cal-v5 .settoday .strow2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:66%}
 .cal-v5 .settoday .fld input, .cal-v5 .settoday .fld select{height:32px;font-size:13px}
 .cal-v5 .settoday .stn{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
-.cal-v5 .settoday .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
+.cal-v5 .settoday .sterr, .cal-v5 .pop > .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
 .cal-v5 .settoday .sta{display:flex;gap:8px}
 @keyframes cal5-bump{from{opacity:.2;transform:translateY(5px)}to{opacity:1;transform:none}}
 .cal-v5 .dow{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:8px var(--gx) 0}
@@ -1286,6 +1286,24 @@
 .cal-v5 .wxtag.fctag{margin:0 0 0 8px;vertical-align:middle;color:var(--ink2)}
 .cal-v5 .wxf.fcf b{font-weight:650;color:var(--ink)}
 .cal-v5 .wxf.fcps small{margin-top:0}
+/* Weather by place (the Director's): one quiet line per place, the party's line marked by a left rule, not a colour.
+   Name and reading share a row and wrap under each other on a phone; no motion of its own. */
+.cal-v5 .wxplist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.cal-v5 .wxp{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:7px 10px;border-radius:8px;font:500 12px/1.35 var(--sans);color:var(--ink2);min-width:0}
+.cal-v5 .wxp.here{background:var(--paper2);box-shadow:inset 2px 0 0 var(--ink)}
+.cal-v5 .wxpn{display:flex;flex-direction:column;min-width:0}
+.cal-v5 .wxpn b{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .wxpn small{font-size:11px;color:var(--mut)}
+.cal-v5 .wxph{color:var(--ink2)}
+.cal-v5 .wxpr{display:inline-flex;align-items:center;gap:6px;color:var(--ink2);white-space:nowrap}
+.cal-v5 .wxpr.none{color:var(--mut)}
+.cal-v5 .wxpfoot{margin:6px 10px 0;font:500 11px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .wxmove{display:inline;padding:0;border:0;background:none;font:inherit;font-weight:600;color:var(--ink2);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--edge);cursor:pointer}
+.cal-v5 .wxmove:hover, .cal-v5 .wxmove:focus-visible{color:var(--ink);text-decoration-color:currentColor;outline:none}
+.cal-v5 .wxmove:focus-visible{box-shadow:0 0 0 2px var(--edge);border-radius:3px}
+.cal-v5 .wxf.wxat small{margin-top:0}
+.cal-v5 button.hubi{border:0;background:none;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.cal-v5 .pop > .sterr{padding:0 12px 10px}
 /* Edit mode's lock on a locked day, a small monochrome glyph at the mark's corner. */
 .cal-v5 .cwx .lk{position:absolute;right:-3px;top:-3px;font-size:8px;line-height:1;color:var(--mut)}
 /* A day's weather, shown while editing or generating; painted days carry their weather's tint. */
@@ -1451,6 +1469,10 @@
 /* ── The weather calendar: a compact month that holds only weather. ── */
 .cal-v5 .wxc{gap:12px}
 .cal-v5 .wxc-mon{display:flex;align-items:center;gap:6px}
+/* Which place's weather the panel holds; a place's climate reads, set on its page. */
+.cal-v5 .wxc-for select{font-weight:600}
+.cal-v5 .wxc-roll select:disabled{opacity:.7;cursor:default}
+.cal-v5 .wxc-climn{font:500 11px/1.3 var(--sans);color:var(--mut)}
 .cal-v5 .wxc-mon h3{margin:0;flex:1;min-width:0;font:500 22px/1.1 var(--serif);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .wxc-mon h3 span{color:var(--mut)}
 .cal-v5 .wxc-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);transition:background var(--dur-micro,120ms) var(--ease),color var(--dur-micro,120ms) var(--ease)}

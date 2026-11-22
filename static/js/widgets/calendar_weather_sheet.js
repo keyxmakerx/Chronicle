@@ -14,6 +14,11 @@
  * day's lock. Saving and Undo belong to the editor (opts.save); this file only
  * shapes what would be saved. The weather itself is chronicle_gen.js, loaded
  * by the editor before this opens.
+ *
+ * A place with a climate of its own on its page has its own weather. "Weather
+ * for" switches the panel between everywhere else (the world's climate) and
+ * each such place; a place's rolls use its climate as the generator's zone,
+ * with the same continuity, pins and painted days as the world's.
  */
 (function () {
   'use strict';
@@ -129,8 +134,10 @@
 
   // opts: {year, month: the month to show; chosen: day keys ('y_m_d') to
   // start chosen; settings: the calendar's Weather settings or null;
+  // places: the places with a climate of their own ({id, name, climate,
+  // climate_name}), place: the one to start on ('' for everywhere else);
   // save: function (changes) -> Promise<bool>}. The editor has already
-  // loaded the shown month's weather year and events.
+  // loaded the shown month's weather year, places' weather and events.
   Panel.prototype.open = function (opts) {
     var view = this.view, back = document.activeElement;
     view.closeAllPanels({ instant: true });
@@ -139,8 +146,10 @@
     this.state = {
       y: opts.year, m: opts.month, save: opts.save, back: back,
       draft: {}, pins: {}, sel: sel, added: [], last: null, more: false, query: '',
-      focus: null, busy: false, nag: false, note: ''
+      focus: null, busy: false, nag: false, note: '',
+      places: opts.places || [], place: ''
     };
+    if (opts.place && this._placeById(opts.place)) this.state.place = opts.place;
     this._useSettings(opts.settings);
     this._presets = {};
     var self = this;
@@ -197,8 +206,30 @@
     return out;
   };
 
+  Panel.prototype._placeById = function (id) {
+    var list = (this.state && this.state.places) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  };
+
+  // _byYear is a year's stored readings for the place shown: the world's,
+  // or the place's from the Director's weather by place. Undefined while
+  // that year has not loaded.
+  Panel.prototype._byYear = function (y) {
+    var S = this.state, view = this.view;
+    if (!S.place) return view.weatherByYear[y];
+    var pw = view.placeWxByYear && view.placeWxByYear[y];
+    return pw && pw.byDay ? (pw.byDay[S.place] || {}) : undefined;
+  };
+
+  // _climateNow is the climate a roll uses: the place's own, or the panel's.
+  Panel.prototype._climateNow = function () {
+    var pl = this.state && this.state.place ? this._placeById(this.state.place) : null;
+    return pl ? pl.climate : this._climate;
+  };
+
   Panel.prototype._stored = function (k) {
-    var p = parseKey(k), byDay = this.view.weatherByYear[p.year];
+    var p = parseKey(k), byDay = this._byYear(p.year);
     return (byDay && byDay[p.month + '_' + p.day]) || null;
   };
 
@@ -307,7 +338,7 @@
 
   // ---- rolling ----
   Panel.prototype._recipe = function () {
-    return { generator: 'weather', details: { climate: this._climate, continuity: this._continuity } };
+    return { generator: 'weather', details: { climate: this._climateNow(), continuity: this._continuity } };
   };
 
   // _engineRun runs the generator over targets with the given locks, and the
@@ -315,12 +346,16 @@
   Panel.prototype._engineRun = function (targets, locks, seed) {
     var S = this.state, view = this.view, self = this, inScope = {}, known = {};
     targets.concat(locks.map(function (d) { return dkey(d.year, d.month, d.day); })).forEach(function (k) { inScope[k] = true; });
-    var context = [], byDay = view.weatherByYear[S.y] || {};
+    var context = [], byDay = this._byYear(S.y) || {};
     Object.keys(byDay).forEach(function (md) { var k = S.y + '_' + md; if (!inScope[k] && !S.draft[k]) context.push(asEngineDay(byDay[md])); });
     Object.keys(S.draft).forEach(function (k) { var w = S.draft[k].w; if (w && !inScope[k] && parseKey(k).year === S.y) context.push(asEngineDay(w)); });
     window.ChronicleGen.weather.presets(this._kinds).forEach(function (p) { known[p.id] = true; });
+    // A place is its own zone, so its days follow its own chain of weather
+    // rather than the world's, and come back stamped with the place.
+    var pl = S.place ? this._placeById(S.place) : null;
     return window.ChronicleGen.run('weather', {
       calendar: view.cal, recipe: this._recipe(), seed: seed,
+      zones: pl ? [{ id: pl.id, name: pl.name, climate: pl.climate }] : undefined,
       scope: { days: targets.map(parseKey) },
       locked: locks.filter(function (d) { return !d.preset_id || known[d.preset_id]; }),
       context: { weather: context }, kinds: self._kinds
@@ -407,7 +442,7 @@
       if (pin && w && (written[k] || !(s && s.locked === true))) lock.push(parseKey(k));
       else if (!pin && s && s.locked === true && !written[k] && w) unlock.push(parseKey(k));
     });
-    return { put: put, clear: clear, lock: lock, unlock: unlock };
+    return { put: put, clear: clear, lock: lock, unlock: unlock, place: S.place };
   };
 
   // _preview hands the unsaved readings to the calendar behind as faint
@@ -435,12 +470,16 @@
   // _renderShell draws the parts that stay while the panel is open; the
   // month, the palette and the footer redraw on their own.
   Panel.prototype._renderShell = function () {
-    var climates = window.ChronicleGen.weather.climates(), cur = this._climate;
+    var climates = window.ChronicleGen.weather.climates(), cur = this._climateNow(), S = this.state;
+    var forRow = S.places.length ? '<label class="fld wxc-for">Weather for<select id="cal5-wxfor">' +
+      '<option value=""' + (S.place ? '' : ' selected') + '>Everywhere else</option>' +
+      S.places.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === S.place ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') +
+      '</select></label>' : '';
     var opt = function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + esc(c.name) + '</option>'; };
     this.el.innerHTML = '<div class="grab" aria-hidden="true"></div>' +
       '<div class="crease gcr"><span id="cal5-wxtitle">Weather</span><span class="sub">ONLY WEATHER, DAY BY DAY</span>' +
         '<button type="button" class="x" data-wx-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>' +
-      '<div class="gbody wxc">' +
+      '<div class="gbody wxc">' + forRow +
         '<div class="wxc-mon"><h3 id="cal5-wxmon" aria-live="polite"></h3>' +
           '<button type="button" class="wxc-nav" data-wx-nav="-1" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>' +
           '<button type="button" class="wxc-nav" data-wx-nav="1" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button></div>' +
@@ -453,10 +492,10 @@
         '<div class="wxc-more" id="cal5-wxmore" hidden><input type="search" class="wxq" id="cal5-wxq" placeholder="Search weather" aria-label="Search weather"><div class="wxl" role="list"></div></div>' +
         '<div class="wxc-lab">Roll</div>' +
         '<div class="wxc-roll">' +
-          '<label class="fld">Climate<select id="cal5-wxclim">' +
+          '<label class="fld">Climate<select id="cal5-wxclim"' + (S.place ? ' disabled aria-describedby="cal5-wxclimn"' : '') + '>' +
             '<optgroup label="Natural">' + climates.filter(function (c) { return !c.magic; }).map(opt).join('') + '</optgroup>' +
             '<optgroup label="Magic">' + climates.filter(function (c) { return c.magic; }).map(opt).join('') + '</optgroup>' +
-          '</select></label>' +
+          '</select>' + this._climateNoteHTML() + '</label>' +
           '<label class="fld">How long weather lasts<span class="dv">' +
             '<input type="range" id="cal5-wxcont" min="0" max="1" step="0.05" value="' + this._continuity + '">' +
             '<output id="cal5-wxconto">' + continuityWords(this._continuity) + '</output></span></label>' +
@@ -471,6 +510,38 @@
       '<div class="efoot gfoot"><span class="gfa">' +
         '<button type="button" class="btn quiet" data-wx-cancel>Cancel</button>' +
         '<button type="button" class="btn primary" data-wx-save>Save weather</button></span></div>';
+  };
+
+  // A place's climate is set on its page, so here it only reads.
+  Panel.prototype._climateNoteHTML = function () {
+    var pl = this.state.place ? this._placeById(this.state.place) : null;
+    return pl ? '<span class="wxc-climn" id="cal5-wxclimn">Set on ' + esc(pl.name) + '’s page</span>' : '';
+  };
+
+  // _usePlace switches the panel to another place's weather. A draft holds
+  // one place's days, so it must be saved or discarded first.
+  Panel.prototype._usePlace = function (id, sel) {
+    var S = this.state, view = this.view, self = this;
+    if (id === S.place) return;
+    if (this.dirty()) {
+      sel.value = S.place;
+      this._say('Save or discard this weather before switching places.', true);
+      return;
+    }
+    S.place = id && this._placeById(id) ? id : '';
+    S.sel = {};
+    var clim = $('#cal5-wxclim', this.el), fld = clim && clim.closest('.fld');
+    if (clim) {
+      clim.value = this._climateNow();
+      clim.disabled = !!S.place;
+      if (S.place) clim.setAttribute('aria-describedby', 'cal5-wxclimn'); else clim.removeAttribute('aria-describedby');
+      var old = fld && $('.wxc-climn', fld);
+      if (old) old.remove();
+      if (fld && S.place) fld.insertAdjacentHTML('beforeend', this._climateNoteHTML());
+    }
+    this._renderMonth();
+    var y = S.y, need = S.place ? (view.fetchPlaceWeather ? view.fetchPlaceWeather(y) : Promise.resolve()) : view.fetchWeatherYear(y);
+    Promise.resolve(need).then(function () { if (self.state && self.state.place === S.place) self._renderMonth(); });
   };
 
   // _renderMonth redraws everything that follows the shown month.
@@ -674,7 +745,7 @@
     if (m < 1) { m = mc; y--; } else if (m > mc) { m = 1; y++; }
     S.y = y; S.m = m; S.sel = {}; S.anchor = null; S.focus = null;
     this._renderMonth();
-    Promise.all([view.fetchWeatherYear(y), view.fetchMonth(y, m)]).then(function () {
+    Promise.all([view.fetchWeatherYear(y), view.fetchMonth(y, m), S.place && view.fetchPlaceWeather ? view.fetchPlaceWeather(y) : null]).then(function () {
       if (self.state && self.state.y === y && self.state.m === m) self._renderMonth();
     });
   };
@@ -741,7 +812,8 @@
     el.addEventListener('change', function (e) {
       var t = e.target;
       if (!self.state) return;
-      if (t.id === 'cal5-wxclim') { self._climate = t.value; self._picked = true; }
+      if (t.id === 'cal5-wxfor') self._usePlace(t.value, t);
+      else if (t.id === 'cal5-wxclim') { self._climate = t.value; self._picked = true; }
       else if (t.id === 'cal5-wxsky') self._skyOwn = t.checked;
     });
     el.addEventListener('click', function (e) {
