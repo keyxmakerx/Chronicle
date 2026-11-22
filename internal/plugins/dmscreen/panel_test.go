@@ -96,6 +96,16 @@ func TestPanel(t *testing.T) {
 			want: []string{`data-dms-open="fight"`, `data-dms-sec="fight" aria-labelledby="dms-h-fight" hidden`, `<div data-widget="encounter-run"></div>`},
 		},
 		{
+			name:    "no decks source leaves the Card decks section out",
+			view:    View{CampaignID: "c1"},
+			notWant: []string{`data-dms-open="decks"`, `data-dms-sec="decks"`},
+		},
+		{
+			name: "a decks source adds the layer-group icon and a hidden section around its fragment",
+			view: View{CampaignID: "c1", Decks: templ.Raw(`<div data-dkd-screen></div>`), DecksSummary: "1 deck"},
+			want: []string{`data-dms-open="decks"`, "fa-layer-group", `data-dms-sec="decks" aria-labelledby="dms-h-decks" hidden`, `<div data-dkd-screen></div>`, "Card decks", "1 deck"},
+		},
+		{
 			name: "every section starts hidden; the rail, tuck and close-all are there",
 			view: View{CampaignID: "c1"},
 			want: []string{`data-dms-tuck`, `data-dms-closeall`, `data-dms-sec="world" aria-labelledby="dms-h-world" hidden`,

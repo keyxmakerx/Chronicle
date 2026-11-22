@@ -160,6 +160,13 @@ type FightSource interface {
 	ReadyCount(ctx context.Context, campaignID string, v Viewer) (int, error)
 }
 
+// DecksSource draws the Card decks section: the decks plugin's own fragment
+// and its one-line summary, so the screen holds no deck data. ok is false when
+// the campaign has the add-on off, so the section is left out.
+type DecksSource interface {
+	DecksSection(ctx context.Context, campaignID string, v Viewer) (body templ.Component, summary string, ok bool, err error)
+}
+
 // Sources groups the screen's inputs. Any of them may be nil, which leaves
 // that section out.
 type Sources struct {
@@ -175,6 +182,7 @@ type Sources struct {
 	System   SystemSource
 	Homebrew HomebrewSource
 	Fight    FightSource
+	Decks    DecksSource
 
 	// Board and Adventures together feed the Adventures tab; with either
 	// missing (the table failed to migrate) the tab is left out.

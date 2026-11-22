@@ -41,6 +41,12 @@ func TestView_Sections(t *testing.T) {
 				"adventures": "2 pinned, 1 note"},
 		},
 		{
+			name:     "card decks sit after the party with the decks' own summary",
+			view:     View{CampaignID: "c1", Decks: templ.Raw(""), DecksSummary: "3 decks · 2 drawn"},
+			wantIDs:  "world party decks reveal",
+			wantSums: map[string]string{"decks": "3 decks · 2 drawn"},
+		},
+		{
 			name:     "a fight count that could not be read stays a plain line",
 			view:     View{CampaignID: "c1", Fight: templ.Raw(""), FightCounted: false},
 			wantIDs:  "world fight party reveal",

@@ -4827,6 +4827,7 @@ func (a *App) RegisterRoutes() {
 		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
 		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
 		decks.WithSwitch(decksOn), decks.WithStory(decksStory),
+		decks.WithScreen(decks.NewScreenRepository(a.DB)),
 	}
 	// "From a rolling table" is offered only while the rolling tables plugin is
 	// healthy; without it the option says so and a create is refused.
@@ -6735,6 +6736,10 @@ func (a *App) RegisterRoutes() {
 	dmFight := &dmFightAdapter{}
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
 		dmSources.Fight = dmFight
+	}
+	// The Card decks section reads the decks plugin through its service.
+	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
+		dmSources.Decks = &dmDecksAdapter{svc: decksSvc, addons: addonService}
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)

@@ -60,6 +60,9 @@ func (v *View) Sections() []SectionView {
 		}
 	}
 	out = append(out, party)
+	if v.Decks != nil {
+		out = append(out, SectionView{ID: "decks", Title: "Card decks", Icon: "layer-group", Summary: v.DecksSummary})
+	}
 	if n := len(v.Conditions); n > 0 {
 		out = append(out, SectionView{ID: "rules", Title: "Rules", Icon: "book", Summary: plural(n, "condition", "conditions")})
 	}

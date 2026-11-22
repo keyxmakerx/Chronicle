@@ -460,3 +460,58 @@ func TestBuild_HiddenMore(t *testing.T) {
 		}
 	}
 }
+
+// decksSource is a DecksSource that answers as set and counts its calls.
+type decksSource struct {
+	ok    bool
+	err   error
+	calls int
+}
+
+func (d *decksSource) DecksSection(_ context.Context, _ string, _ Viewer) (templ.Component, string, bool, error) {
+	d.calls++
+	if d.err != nil || !d.ok {
+		return nil, "", false, d.err
+	}
+	return templ.Raw(`<div data-dkd-screen></div>`), "3 decks · 2 drawn", true, nil
+}
+
+func TestBuild_CardDecksSection(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name     string
+		src      *decksSource
+		viewer   Viewer
+		want     bool
+		wantCall bool
+	}{
+		{"the owner gets it with the add-on on", &decksSource{ok: true}, Viewer{UserID: "u", Role: 3}, true, true},
+		{"the add-on off leaves it out", &decksSource{ok: false}, Viewer{UserID: "u", Role: 3}, false, true},
+		{"a failing source leaves it out without failing the screen", &decksSource{err: errors.New("db down")}, Viewer{UserID: "u", Role: 3}, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, err := NewService(Sources{Decks: tt.src}).Build(ctx, "c1", tt.viewer)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if got := v.Decks != nil; got != tt.want {
+				t.Errorf("section present = %v, want %v", got, tt.want)
+			}
+			if tt.want && v.DecksSummary != "3 decks · 2 drawn" {
+				t.Errorf("summary = %q", v.DecksSummary)
+			}
+			if got := tt.src.calls > 0; got != tt.wantCall {
+				t.Errorf("source asked = %v, want %v", got, tt.wantCall)
+			}
+		})
+	}
+	if none, _ := NewService(Sources{}).Build(ctx, "c1", Viewer{UserID: "u", Role: 3}); none.Decks != nil {
+		t.Error("no source should mean no section")
+	}
+	// The screen is not built for a Scribe at all, so the decks are never asked.
+	scribe := &decksSource{ok: true}
+	if _, err := NewService(Sources{Decks: scribe}).Build(ctx, "c1", Viewer{UserID: "u", Role: 2}); err == nil || scribe.calls != 0 {
+		t.Errorf("a Scribe: err %v, source asked %d times", err, scribe.calls)
+	}
+}

@@ -230,6 +230,15 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		view.Homebrew = s.src.Homebrew.DrawerMount(campaignID, v.Layouts)
 	}
 
+	if s.src.Decks != nil && v.IsOwner() {
+		body, summary, ok, err := s.src.Decks.DecksSection(ctx, campaignID, v)
+		if err != nil {
+			warn("decks", err)
+		} else if ok {
+			view.Decks, view.DecksSummary = body, summary
+		}
+	}
+
 	if s.src.Board != nil && s.src.Adventures != nil {
 		adv, err := s.adventures(ctx, campaignID, v)
 		if err != nil {
