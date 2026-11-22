@@ -435,8 +435,11 @@
   // --- Draft kept on this device ---
   Creator.prototype.restore = function () {
     try {
-      var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null') || (!this.practice && this.sentenceDraft());
+      var own = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null'), d = own || (!this.practice && this.sentenceDraft());
       if (d) { this.adopt(d); this.resumed = true; }
+      // A carried-over sentence is removed as it is read, so it is kept as
+      // this creator's own draft at once, or a reload would lose it.
+      if (d && !own) this.save();
     } catch (e) { /* no storage: start fresh */ }
   };
   // The Characters page once offered a new hero as a sentence, kept on this
