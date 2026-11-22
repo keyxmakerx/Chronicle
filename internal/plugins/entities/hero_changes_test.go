@@ -72,7 +72,7 @@ func TestHeroChangeWindow(t *testing.T) {
 	}
 }
 
-func TestHeroPickChanges(t *testing.T) {
+func TestHeroLockedChanges(t *testing.T) {
 	picks := builderPicks{"class": {}, "ancestry": {}}
 	e := &Entity{FieldsData: map[string]any{
 		"class": "Fury", "ancestry": "", "ancestry" + heroOptionsSuffix: "", "class" + heroOptionsSuffix: `["Grit","Brawn"]`, "culture": "Wode",
@@ -91,11 +91,13 @@ func TestHeroPickChanges(t *testing.T) {
 		{"what an entry bought, changed", map[string]any{"class" + heroOptionsSuffix: `["Grit"]`}, []string{"Class choices: Brawn, Grit → Grit"}},
 		{"buying for a blank is not a change", map[string]any{"ancestry" + heroOptionsSuffix: `["Tough"]`}, nil},
 		{"a field that is not a step is ignored", map[string]any{"culture": "Other"}, nil},
+		{"a list is never in the locked set", map[string]any{"skills_json": `["Sneak"]`}, nil},
+		{"a story is never in the locked set", map[string]any{"backstory": "A new tale"}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []string
-			for _, ch := range heroPickChanges(e, tc.patch, picks, labels) {
+			for _, ch := range heroLockedChanges(e, tc.patch, picks, labels) {
 				got = append(got, ch.Label+": "+ch.From+" → "+ch.To)
 			}
 			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
@@ -295,17 +297,17 @@ func TestHeroChangeService_HeldPicks(t *testing.T) {
 	e := &Entity{ID: "e1", CampaignID: "c1", Name: "Tess", CreatedAt: made, FieldsData: map[string]any{"class": "Fury"}}
 
 	s, _, _ := newTestHeroChanges(shut)
-	held, changes, err := s.HeldPicks(context.Background(), e, map[string]any{"class": "Tactician"}, plan)
+	held, changes, err := s.HeldPicks(context.Background(), e, map[string]any{"class": "Tactician"}, plan, nil)
 	if err != nil || len(changes) != 0 || !strings.Contains(held["class"], "locked") {
 		t.Fatalf("a shut hero's change must be held: held=%v changes=%v err=%v", held, changes, err)
 	}
 	open, _, _ := newTestHeroChanges(nil)
-	held, changes, err = open.HeldPicks(context.Background(), e, map[string]any{"class": "Tactician"}, plan)
+	held, changes, err = open.HeldPicks(context.Background(), e, map[string]any{"class": "Tactician"}, plan, nil)
 	if err != nil || len(held) != 0 || len(changes) != 1 {
 		t.Fatalf("an open hero's change passes and is counted: held=%v changes=%v err=%v", held, changes, err)
 	}
 	var none *HeroChangeService
-	if held, _, err := none.HeldPicks(context.Background(), e, map[string]any{"class": "Tactician"}, plan); err != nil || len(held) != 0 {
+	if held, _, err := none.HeldPicks(context.Background(), e, map[string]any{"class": "Tactician"}, plan, nil); err != nil || len(held) != 0 {
 		t.Fatal("an unwired service never holds")
 	}
 }

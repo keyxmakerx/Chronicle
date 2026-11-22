@@ -2189,3 +2189,11 @@ func (m *mockSessionRepo) ListCampaignIDsUsingGameNights(ctx context.Context) ([
 	}
 	return nil, nil
 }
+
+func (m *mockSessionRepo) FindUnreadNotification(context.Context, string, string, string) (*Notification, error) {
+	return nil, nil
+}
+
+func (m *mockSessionRepo) RewriteUnreadNotification(context.Context, string, *string, *string, time.Time) (bool, error) {
+	return false, nil
+}

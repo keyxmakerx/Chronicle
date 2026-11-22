@@ -174,6 +174,12 @@ type SessionRepository interface {
 	// notifications_repository.go.
 	CreateNotification(ctx context.Context, n *Notification) error
 	MergeUnreadNotification(ctx context.Context, n *Notification) error
+	// FindUnreadNotification is the user's newest unread notification of the
+	// type and link; nil when there is none.
+	FindUnreadNotification(ctx context.Context, userID, ntype, link string) (*Notification, error)
+	// RewriteUnreadNotification replaces a row's payload and time while it is
+	// still unread and still holds payload was; false when it no longer does.
+	RewriteUnreadNotification(ctx context.Context, id string, was, payload *string, at time.Time) (bool, error)
 	// LatestCampaignNotificationAt is when the campaign last sent a
 	// notification of ntype to anyone; the zero time when never.
 	LatestCampaignNotificationAt(ctx context.Context, campaignID, ntype string) (time.Time, error)
