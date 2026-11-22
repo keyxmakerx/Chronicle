@@ -2007,8 +2007,11 @@ Chronicle.register('notes', {
         } else {
           el.removeAttribute('data-entity-id');
         }
+        // Only this panel: boot.js sends chronicle:navigated before the
+        // swap, so the page being left is still here, its widgets already
+        // destroyed, and a wider scan would start them again.
         Chronicle.destroyWidget(el);
-        Chronicle.mountWidgets(el.parentElement || document);
+        Chronicle.mountWidget(el);
       }
     }
 

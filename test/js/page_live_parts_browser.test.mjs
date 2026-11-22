@@ -285,3 +285,19 @@ test('the first refresh after a direct load leaves the parts that did not change
   assert.equal(r.panel.tabs, true, 'the tab panel, whose widget drew before the page finished loading, is kept');
   assert.deepEqual(r.lazy, { kept: true, text: 'Loaded' }, 'the block htmx filled on load is kept, filled');
 });
+
+test('a save made while the connection was down is caught up on reconnect', { skip }, async (t) => {
+  const p = await setup(t, [{ entry: 'Before' }, { entry: 'After' }]);
+  // The server drops the socket (as when the reader's access is lowered); a
+  // save lands while it is down, its nudge reaching nobody.
+  await p.evaluate(() => window._socks.filter((s) => !s.closed).forEach((s) => { s.closed = true; s._fire('close', {}); }));
+  await p.waitForFunction(() => window._socks.filter((s) => !s.closed).length === 1, null, { timeout: 5000 });
+  await p.waitForFunction(() => document.querySelector('[data-block="entry"]').textContent === 'After', null, { timeout: 5000 });
+  assert.equal(p.served(), 1, 'one look on reconnect');
+});
+
+test('the first connection does not refresh the page', { skip }, async (t) => {
+  const p = await setup(t, [{ entry: 'Before' }, { entry: 'After' }]);
+  await p.waitForTimeout(2000);
+  assert.equal(p.served(), 0);
+});

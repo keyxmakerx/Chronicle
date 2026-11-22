@@ -402,6 +402,7 @@
 
       again = function () { schedule(RETRY); };
 
+      var dropped = false;
       function connect() {
         if (destroyed) return;
         try {
@@ -409,7 +410,14 @@
           var sock = new WebSocket(proto + '//' + location.host + '/ws?campaign=' + encodeURIComponent(campaignId));
           var opened = false;
           ws = sock;
-          sock.addEventListener('open', function () { opened = true; wsDelay = 2000; });
+          sock.addEventListener('open', function () {
+            opened = true;
+            wsDelay = 2000;
+            // A save while the connection was down sent its nudge to nobody
+            // (the server drops a reader's sockets when their access is lowered),
+            // so a reconnect looks once.
+            if (dropped) { dropped = false; schedule(DEBOUNCE); }
+          });
           sock.addEventListener('message', function (ev) {
             var msg;
             try { msg = JSON.parse(ev.data); } catch (e) { return; }
@@ -421,6 +429,7 @@
             ws = null;
             // Never opened: the reader is not signed in, nothing to follow.
             if (destroyed || !opened) return;
+            dropped = true;
             wsTimer = setTimeout(connect, wsDelay);
             wsDelay = Math.min(wsDelay * 2, 60000);
           });

@@ -962,6 +962,17 @@
       connect();
       pollTimer = setInterval(loadNotes, 30000);
       agoTimer = setInterval(tickAgo, 60000);
+      // A row drawn while the list was hidden (a tab not open) measured
+      // nothing, so whether it needs Show more is asked again once the list
+      // has a size.
+      var sized = null;
+      if (typeof ResizeObserver === 'function') {
+        sized = new ResizeObserver(function () {
+          if (!listEl.clientWidth) return;
+          Array.prototype.forEach.call(listEl.querySelectorAll('.en-note'), markFoldable);
+        });
+        sized.observe(listEl);
+      }
       document.addEventListener('visibilitychange', onVisible);
       window.addEventListener('pagehide', onPageHide);
 
@@ -981,6 +992,7 @@
         comp = null;
         clearInterval(pollTimer);
         clearInterval(agoTimer);
+        if (sized) sized.disconnect();
         clearTimeout(wsTimer);
         clearTimeout(toastTimer);
         if (ws) { try { ws.close(); } catch (e) {} ws = null; }
