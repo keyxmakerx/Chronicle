@@ -179,6 +179,14 @@ const MsgRollMade MessageType = "roll.made"
 // offline reads the night's list through its own route.
 const MsgTableShown MessageType = "table.shown"
 
+// MsgDecksChanged tells a client that its own view of the card decks changed,
+// so it fetches its hand again. It carries no payload and no id of any deck,
+// card or copy, and its audience is decided only from facts the receiver could
+// already read (see the decks plugin's audience rule), so receiving one says
+// nothing about what moved. Not a change-feed type: the fragments are read
+// through their own routes.
+const MsgDecksChanged MessageType = "decks.changed"
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"

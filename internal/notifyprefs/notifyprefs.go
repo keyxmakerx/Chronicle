@@ -30,6 +30,7 @@ const (
 	AvailabilityAsks = "availabilityAsks"
 	GameNightEntries = "gameNightEntries"
 	ItemsGiven       = "itemsGiven"
+	CardDecks        = "cardDecks"
 	ModuleUpdates    = "moduleUpdates"
 )
 
@@ -63,6 +64,9 @@ var Catalog = []Category{
 		Detail:   "For the DM, a check-in when the entries named anyone",
 		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
 	{Key: ItemsGiven, Group: "Items and campaigns", Label: "Someone gives my character an item",
+		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
+	{Key: CardDecks, Group: "Items and campaigns", Label: "A card is dealt to my hero or taken back, or my Director answers a card I asked to play",
+		Detail:   "For a Director, also when a player asks to play a card",
 		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
 	{Key: ModuleUpdates, Group: "Items and campaigns", Label: "A new Foundry module version is out",
 		Detail:   "Campaign owners only",
@@ -99,6 +103,10 @@ var bellTypes = map[string]string{
 	"game_night_checkin":           GameNightEntries,
 	"game_night_share_entry":       GameNightEntries,
 	"item_given":                   ItemsGiven,
+	"deck_card_dealt":              CardDecks,
+	"deck_card_taken_back":         CardDecks,
+	"deck_card_asked":              CardDecks,
+	"deck_ask_answered":            CardDecks,
 }
 
 // CategoryForBellType returns the category of a bell notification type, or

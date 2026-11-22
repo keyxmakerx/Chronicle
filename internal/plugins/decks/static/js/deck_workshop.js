@@ -696,6 +696,8 @@
           case 'put-back': verb(btn, 'put-back', {}, 'draw', MOVE_AT.back, null, '[data-act=draw]'); break;
           case 'another': verb(btn, 'another', {}, 'draw', MOVE_AT.back, null, '[data-act=draw]'); break;
           case 'take-off': verb(btn, 'take-off', {}, 'used', MOVE_AT.used); break;
+          case 'approve': verb(btn, 'approve', {}, 'play', MOVE_AT.deal, null, '[data-act=draw]'); break;
+          case 'turn-down': verb(btn, 'turn-down', {}, 'ready', MOVE_AT.deal, null, '[data-act=draw]'); break;
           case 'shuffle': {
             btn.disabled = true;
             api('POST', deckURL + '/shuffle', {}).then(function () {

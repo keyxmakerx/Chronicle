@@ -297,7 +297,19 @@ type tableView struct {
 	Shown    []shownCard
 	UsedTop  *DirectorCard
 	Play     []playCard
+	Held     []heldCard
 	HasHeros bool
+}
+
+// heldCard is a copy in a hand, with what a Director may know of how its
+// holder has treated it: turned over or not, shown or not, asking to play it.
+type heldCard struct {
+	CopyID string
+	Card   DirectorCard
+	Where  string
+	Turned bool
+	Shown  bool
+	Asked  bool
 }
 
 func (p deckPage) table() tableView {
@@ -320,6 +332,15 @@ func (p deckPage) table() tableView {
 		case ZoneUsed:
 			cc := card
 			t.UsedTop = &cc
+		case ZoneHand:
+			where := "the party's hand"
+			if cp.HolderEntityID != "" {
+				where = p.heroName(cp.HolderEntityID)
+				if where == "" {
+					where = "a hero"
+				}
+			}
+			t.Held = append(t.Held, heldCard{CopyID: cp.ID, Card: card, Where: where, Turned: cp.FaceUp, Shown: cp.Open, Asked: cp.AskedAt != nil})
 		case ZonePlay:
 			where := "the table"
 			if cp.HolderEntityID != "" {

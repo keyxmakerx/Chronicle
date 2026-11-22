@@ -101,6 +101,26 @@ templ DeckTable(p deckPage) {
 				<span class="dkw-quiet">{ strconv.Itoa(t.InHands) } held in hands</span>
 			}
 		</div>
+		if len(t.Held) > 0 {
+			<div class="dkw-col dkw-held" data-dm-only>
+				<h2 class="dkw-lab">In hands <span class="dkw-quiet">only Directors see these</span></h2>
+				<ul class="dkw-playlist" data-dkw-held>
+					for _, h := range t.Held {
+						<li data-copy={ h.CopyID }>
+							@CardView(p.Deck.Look, upState(h.Card, SizeHand), CardOpts{Size: SizeHand})
+							<span class="dkw-quiet">{ h.Where }: { heldWords(h) }</span>
+							if h.Asked {
+								<span class="dkw-ask" data-dkw-ask>{ askWho(h.Where) } asks to play this</span>
+								<span class="dkw-acts">
+									<button type="button" class="dkw-btn" data-act="approve" data-working-label="Letting them…">Let them</button>
+									<button type="button" class="dkw-word" data-act="turn-down" data-working-label="Telling them…">Not now</button>
+								</span>
+							}
+						</li>
+					}
+				</ul>
+			</div>
+		}
 		<p class="dkw-nudges">
 			@nudge(p, "next", "Comes up next", p.Deck.NextCardID)
 			@nudge(p, "last", "Kept for last", p.Deck.LastCardID)
@@ -123,4 +143,23 @@ templ nudge(p deckPage, which, label, current string) {
 		</select>
 		<button type="button" class="dkw-word" data-act="nudge-clear" data-which={ which } disabled?={ current == "" }>Clear</button>
 	</span>
+}
+
+// heldWords says how a hand's holder has treated a copy.
+func heldWords(h heldCard) string {
+	switch {
+	case h.Shown:
+		return "turned over and shown to the table"
+	case h.Turned:
+		return "turned over, not shown"
+	}
+	return "still face down"
+}
+
+// askWho names who asks: the hero, or "A player" when a hand has no hero.
+func askWho(where string) string {
+	if where == "" || where == "a hero" || where == "the party's hand" {
+		return "A player"
+	}
+	return where
 }

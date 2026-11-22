@@ -28,7 +28,7 @@ templ HandOpened(p openedPage) {
 					if c.Copy.Waiting {
 						<button type="button" class="btn-primary dkh-btn" disabled>Waiting for your Director</button>
 					} else if c.CanPlay {
-						<button type="button" class="btn-primary dkh-btn" data-dkh-act="play" data-working-label={ playWorking(c.Copy) }>
+						<button type="button" class="btn-primary dkh-btn" data-dkh-act="play" data-dkh-ask?={ c.Copy.AskFirst } data-working-label={ playWorking(c.Copy) }>
 							if c.Copy.AskFirst {
 								Ask to play
 							} else {

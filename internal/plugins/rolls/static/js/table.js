@@ -28,8 +28,10 @@
 
   // The sections a leaf can show. Rules, Conditions, Party and Notes join
   // this list as they are built (TODO(#1475)).
-  var SECTIONS = [['rolls', 'Rolls'], ['tonight', 'Tonight'], ['dice', 'My dice']];
-  var SECTION_NAME = { rolls: 'Rolls', tonight: 'Tonight', dice: 'My dice' };
+  var BASE_SECTIONS = [['rolls', 'Rolls'], ['tonight', 'Tonight'], ['dice', 'My dice']];
+  // With the Card decks add-on on, the Hand leaf joins, second in the default order.
+  var HAND_SECTIONS = [['rolls', 'Rolls'], ['hand', 'Hand'], ['tonight', 'Tonight'], ['dice', 'My dice']];
+  var SECTION_NAME = { rolls: 'Rolls', hand: 'Hand', tonight: 'Tonight', dice: 'My dice' };
   var LOOKS = [['quick', 'Quick 2D'], ['rune', 'Rune 3D'], ['none', 'Numbers only']];
   var QUICK = [4, 6, 8, 10, 12, 20];
   // A game with a power roll puts its own dice first; the rest wait behind "Other dice".
@@ -90,6 +92,8 @@
     this.userId = host.getAttribute('data-user-id');
     this.director = host.getAttribute('data-director') === 'true';
     this.gm = host.getAttribute('data-gm-term') || 'Director';
+    this.decks = host.getAttribute('data-decks') === 'true';
+    this.sections = this.decks ? HAND_SECTIONS : BASE_SECTIONS;
     this.tab = $('[data-tt-tab]', host);
     this.count = $('[data-tt-count]', host);
     this.header = host.closest('header') || host.parentNode;
@@ -138,14 +142,26 @@
     this.loadPower();
     this.syncSheet();
     if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
+    this.openFromLink();
   }
 
+  // A bell notice opens the Table on a leaf with ?table=<leaf>.
+  Table.prototype.openFromLink = function () {
+    var want = '';
+    try { want = new URLSearchParams(W.location.search).get('table') || ''; } catch (e) { return; }
+    if (this.leaves.indexOf(want) < 0 || want === 'rolls') return;
+    var me = this;
+    setTimeout(function () { if (me.alive) me.openTable(want); }, 0);
+  };
+
   // A remembered layout keeps only sections that exist, each once.
+  // On the phone's sheet every section is a tab, so none is out of reach; on
+  // a desktop the drawer shows at most three side by side.
   Table.prototype.readLeaves = function (raw) {
-    var out = [];
-    (raw || '').split(',').forEach(function (s) { if (SECTION_NAME[s] && out.indexOf(s) < 0) out.push(s); });
-    SECTIONS.forEach(function (s) { if (out.indexOf(s[0]) < 0) out.push(s[0]); });
-    return out.slice(0, Math.min(3, SECTIONS.length));
+    var out = [], all = this.sections.map(function (s) { return s[0]; });
+    (raw || '').split(',').forEach(function (s) { if (all.indexOf(s) >= 0 && out.indexOf(s) < 0) out.push(s); });
+    all.forEach(function (s) { if (out.indexOf(s) < 0) out.push(s); });
+    return out.slice(0, this.sheet ? all.length : Math.min(3, all.length));
   };
 
   Table.prototype.on = function (target, type, fn, opt) {
@@ -282,6 +298,8 @@
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg && msg.type === 'roll.made' && msg.payload) self.receive(msg.payload, true);
       if (msg && msg.type === 'table.shown' && msg.payload) self.receiveShown(msg.payload, true);
+      // Carries nothing: the hand and the hero strips fetch their own view.
+      if (msg && msg.type === 'decks.changed') W.dispatchEvent(new CustomEvent('chronicle:decks-changed'));
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;
@@ -418,6 +436,45 @@
         self.shownBody(it) + '</li>';
     }).join('');
     return '<ul class="tt-log tt-tonight" id="tt-tonight" aria-label="Shown tonight">' + rows + '</ul>';
+  };
+
+  // ---------- Hand: the Card decks leaf ----------
+
+  // The leaf is a place the server's hand fragment is put in; the deck-hand
+  // widget (decks plugin) owns everything inside it.
+  Table.prototype.handHTML = function () {
+    var self = this;
+    Promise.resolve().then(function () { self.fillHand(); });
+    return '<div class="tt-hand" id="tt-hand" data-tt-hand aria-busy="true"><p class="tt-from">Reading your hand…</p></div>';
+  };
+
+  Table.prototype.fillHand = function () {
+    var self = this;
+    $$('[data-tt-hand]').forEach(function (box) {
+      if (box.hasAttribute('data-tt-filling')) return;
+      box.setAttribute('data-tt-filling', '');
+      var url = '/campaigns/' + encodeURIComponent(self.campaignId) + '/decks/hand';
+      C.apiFetch(url, { headers: { 'HX-Request': 'true', 'Accept': 'text/html' } }).then(function (res) {
+        if (!res.ok) throw new Error('status ' + res.status);
+        return res.text();
+      }).then(function (html) {
+        if (!box.isConnected) return;
+        box.innerHTML = html;
+        box.removeAttribute('aria-busy');
+        if (C.mountWidgets) C.mountWidgets(box);
+      }).catch(function () {
+        if (!box.isConnected) return;
+        box.removeAttribute('aria-busy');
+        box.innerHTML = '<p class="tt-from">Your hand could not be read.</p><button type="button" class="tt-quiet" data-tt-handretry>Try again</button>';
+        var b = box.querySelector('[data-tt-handretry]');
+        b.addEventListener('click', function () {
+          box.innerHTML = '<p class="tt-from">Reading your hand…</p>';
+          box.setAttribute('aria-busy', 'true');
+          self.fillHand();
+        });
+        b.focus();
+      }).then(function () { box.removeAttribute('data-tt-filling'); });
+    });
   };
 
   Table.prototype.older = function () {
@@ -640,12 +697,13 @@
   Table.prototype.sectionHTML = function (id) {
     if (id === 'rolls') return this.logHTML() + this.rollerHTML();
     if (id === 'tonight') return this.tonightHTML();
+    if (id === 'hand') return this.handHTML();
     return this.diceHTML();
   };
 
   Table.prototype.leafHTML = function (i) {
     var cur = this.leaves[i], self = this;
-    var menu = SECTIONS.map(function (s) {
+    var menu = this.sections.map(function (s) {
       var j = self.leaves.indexOf(s[0]);
       var note = s[0] === cur ? 'Showing here' : j >= 0 ? 'Swaps with leaf ' + (j + 1) : '';
       return '<button type="button" role="menuitemradio" aria-checked="' + (s[0] === cur) + '" data-tt-leaf="' + i + '" data-tt-sec="' + s[0] + '"><span>' + s[1] + '</span><span class="tt-mnote">' + note + '</span></button>';
@@ -676,6 +734,7 @@
     var on = !!this.mql.matches;
     if (on === this.sheet) return;
     this.sheet = on;
+    this.leaves = this.readLeaves(store('leaves.' + this.key));
     var d = this.drawer(); if (d) d.remove();
     this.open = false;
     this.h = 'rest';

@@ -7,11 +7,14 @@ package app
 import (
 	"context"
 
+	"github.com/a-h/templ"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
 // decksHeroAdapter implements decks.Heroes over the entities service.
@@ -192,4 +195,63 @@ func wireCardPictures(decksService decks.Service, mediaService media.MediaServic
 	mediaHandler.SetCardPictureGuard(g)
 	mediaAPIHandler.SetCardPictureGuard(g)
 	mediaService.SetCardPictureGuard(g)
+}
+
+// decksLivePublisher carries "your decks view changed" over the hub. The
+// message has no payload; who gets it is the audience the service worked out:
+// every member, named players (Directors join them by the hub's rule), or,
+// with neither, Directors alone.
+type decksLivePublisher struct {
+	bus ws.EventBus
+}
+
+func (p *decksLivePublisher) Changed(campaignID string, to decks.Audience) {
+	if p.bus == nil {
+		return
+	}
+	msg := ws.NewMessage(ws.MsgDecksChanged, campaignID, "", nil)
+	switch {
+	case to.Members:
+		msg.Public = true
+	case len(to.Users) > 0:
+		msg.AllowedUsers = to.Users
+	default:
+		msg.RequiresDM = true
+	}
+	p.bus.Publish(msg)
+}
+
+// decksBellAdapter writes the decks' bell entries through the notification
+// service, which honours each person's notification choices.
+type decksBellAdapter struct {
+	notify interface {
+		NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error
+	}
+}
+
+func (a *decksBellAdapter) Ring(ctx context.Context, campaignID string, e decks.BellEntry) error {
+	return a.notify.NotifyUsersWithDetail(ctx, e.Users, campaignID, e.Kind, e.Message, "", e.Link)
+}
+
+// registerDecksBlock registers the Cards part of a hero's page, behind the
+// Card decks add-on. What it draws is decided by the decks service for the
+// viewer; a page they may not read the hand of draws nothing.
+func registerDecksBlock(blockRegistry *entities.BlockRegistry, svc decks.Service) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: decks.BlockType, Label: "Cards", Icon: "fa-layer-group", Picture: entities.PictureGrid,
+		Description: "The cards this hero holds, as the viewer may read them",
+		Addon:       decks.AddonSlug,
+		Contexts:    []string{"template"},
+		TileSizes:   []string{"2x2", "4x2", "1x2"},
+		Singleton:   true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		part, err := decks.HeroBlock(context.Background(), svc, rc.CC, rc.Entity.ID, rc.UserID)
+		if err != nil {
+			return templ.NopComponent
+		}
+		return part
+	})
 }

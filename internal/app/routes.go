@@ -4799,9 +4799,11 @@ func (a *App) RegisterRoutes() {
 	// server must be able to refuse a card's picture from the first request. It
 	// asks even where the decks plugin is degraded: a campaign with no decks
 	// tables has no card pictures, and any other failure refuses.
+	decksLive := &decksLivePublisher{}
 	decksSvc := decks.NewService(decks.NewRepository(a.DB),
 		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService},
-		decks.WithPictures(&decksPictureAdapter{svc: mediaService}))
+		decks.WithPictures(&decksPictureAdapter{svc: mediaService}),
+		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}))
 	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
@@ -7086,17 +7088,18 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Card decks: server-side draws and hands, behind the Card decks add-on.
-	// Server only for now; the notifier is wired when live messages exist.
 	a.registerPlugin(PluginRegistration{
 		Slug:     decks.PluginSlug,
 		StaticFS: echo.MustSubFS(decks.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "deck-cards", Scripts: []string{"js/deck_cards.js"}},
 			{Name: "deck-workshop", Scripts: []string{"js/deck_cards.js", "js/deck_workshop.js"}},
+			{Name: "deck-hand", Scripts: []string{"js/deck_cards.js", "js/deck_hand.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
 		decks.RegisterRoutes(e, decks.NewHandler(decksSvc), campaignService, authService, addonService)
+		registerDecksBlock(blockRegistry, decksSvc)
 	} else {
 		slog.Warn("decks plugin degraded — card decks are not available")
 	}
@@ -7290,6 +7293,7 @@ func (a *App) RegisterRoutes() {
 	// The service was constructed earlier with a holder.Notify reference;
 	// setting holder.bus here makes future mutations broadcast over WS.
 	entityNotesNotifier.bus = wsEventBus
+	decksLive.bus = wsEventBus
 
 	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
 	drawingService.SetEventPublisher(mapEvents)

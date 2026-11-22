@@ -1,0 +1,83 @@
+/* The player's hand: the Hand leaf of the Table and the Cards part of a hero's
+ * page (internal/plugins/decks hand*.templ, driven by deck_hand.js). It sits on
+ * the theme tokens, never paper; the cards come from decks_card.css and nothing
+ * here sets a card colour. Only transform and opacity move. */
+
+.dkh { --dkh-gap: 12px; max-width: 100%; min-width: 0; }
+.dkh :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dkh button, .dkh select { font-family: inherit; }
+.dkh[aria-busy="true"] .dkh-body { opacity: 0.7; transition: opacity var(--dur-everyday, 160ms) var(--ease-standard, ease); }
+
+.dkh-quiet { margin: 0; font-size: 0.8125rem; color: var(--color-text-muted); }
+.dkh-empty { margin: 8px 0; font-size: 0.9375rem; color: var(--color-text-secondary); max-width: 60ch; }
+.dkh-sec { margin: 0 0 16px; min-width: 0; }
+.dkh-lab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0 0 6px; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent-link, var(--color-accent)); }
+.dkh-lab .dkh-quiet { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.dkh-sub { margin: 10px 0 4px; font-size: 0.8125rem; font-weight: 500; color: var(--color-text-secondary); }
+
+/* A hand: cards side by side, overlapping a little so a full hand stays on one
+   line, and a scroll along the row when it cannot. */
+.dkh-row { display: flex; flex-wrap: nowrap; align-items: flex-start; padding: 6px 2px 10px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.dkh-item { flex: 0 0 auto; min-width: 0; margin-right: -14px; }
+.dkh-item:last-child { margin-right: 0; }
+.dkh-item:hover, .dkh-item:focus-within { position: relative; z-index: 1; }
+.dkh-slot { position: relative; display: inline-block; }
+
+/* A face-up card is opened by a button laid over it; 44 tall at least. */
+.dkh-hit { position: absolute; inset: 0; min-height: 44px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.dkh-hit:hover { box-shadow: inset 0 0 0 2px var(--color-accent); }
+.dkh-hit:active { opacity: 0.7; }
+.dkh-hit[data-working] { cursor: progress; box-shadow: inset 0 0 0 2px var(--color-accent); }
+
+/* The marks a card can wear. */
+.dkh-chip { position: absolute; top: -6px; right: -6px; z-index: 2; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); font-size: 0.6875rem; font-weight: 600; line-height: 1.5; pointer-events: none; }
+.dkh-chip-new { border-color: var(--color-accent); color: var(--color-accent-link, var(--color-accent)); }
+.dkh-chip-wait { border-color: var(--color-warn, var(--color-border)); }
+
+/* What a refused move or a stale view says, beside the thing, until dismissed. */
+.dkh-notes { margin: 4px 0 0; }
+.dkh-note { margin: 4px 0 0; font-size: 0.875rem; color: var(--color-text-secondary); }
+.dkh-err { margin: 8px 0 0; padding: 6px 10px; border-left: 2px solid var(--color-danger-strong, var(--color-accent)); font-size: 0.875rem; color: var(--color-text-primary); }
+.dkh-err[hidden] { display: none; }
+.dkh-word { display: inline-flex; align-items: center; min-height: 32px; padding: 0 4px; border: 0; background: none; color: var(--color-accent-link, var(--color-accent)); font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+.dkh-word:hover { text-decoration: underline; }
+
+/* A deck opened to draw from: its pile as a back, what the deck lets them know, and Draw. */
+.dkh-pile { display: flex; align-items: flex-start; gap: 14px; }
+.dkh-stack { flex: 0 0 auto; }
+.dkh-pilebody { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.dkh-pick { min-height: 32px; padding: 4px 8px; border: 1px solid var(--color-input-border); border-radius: 8px; background: var(--color-input-bg); color: var(--color-text-primary); font-size: 0.875rem; max-width: 100%; }
+
+/* Buttons: the standard's weights, 44 tall on a phone. */
+.dkh-btn { min-height: 36px; padding: 0 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+.dkh-btn:disabled { opacity: 0.45; cursor: default; }
+.dkh-btn-quiet { border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); box-shadow: var(--elev-resting); }
+.dkh-btn-quiet:hover:not(:disabled) { border-color: var(--color-accent); }
+.dkh-btn-quiet:active:not(:disabled) { opacity: 0.8; }
+.dkh-btn[data-working] { cursor: progress; }
+
+/* The opened card: a sheet over the hand. */
+.dkh-over { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: color-mix(in srgb, var(--color-text-primary) 45%, transparent); animation: dkh-fade var(--dur-everyday, 160ms) var(--ease-standard, ease) both; }
+.dkh-sheet { position: relative; display: grid; gap: 12px; justify-items: center; width: 100%; max-width: 28rem; max-height: 100%; overflow-y: auto; padding: 20px 16px calc(16px + env(safe-area-inset-bottom, 0px)); border: 1px solid var(--color-border); border-radius: 16px 16px 0 0; background: var(--color-card-bg); color: var(--color-text-primary); box-shadow: var(--elev-dragged); animation: dkh-rise var(--dur-standard, 220ms) var(--ease-out, ease-out) both; }
+.dkh-x { position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 8px; background: none; color: var(--color-text-secondary); cursor: pointer; }
+.dkh-x:hover { color: var(--color-text-primary); }
+.dkh-x svg { width: 20px; height: 20px; }
+.dkh-big .dk-sz-open { --dk-w: min(224px, 62vw); }
+.dkh-state { margin: 0; min-height: 1.25em; font-size: 0.875rem; color: var(--color-text-secondary); text-align: center; }
+.dkh-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
+.dkh-acts .dkh-btn { min-height: 44px; }
+
+@keyframes dkh-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dkh-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+html[data-motion="calm"] .dkh-sheet { animation: dkh-fade var(--dur-everyday, 160ms) both; }
+html[data-motion="off"] .dkh-over, html[data-motion="off"] .dkh-sheet { animation: none; }
+@media (prefers-reduced-motion: reduce) { .dkh-over, .dkh-sheet { animation: none; } }
+
+@media (min-width: 640px) {
+  .dkh-over { align-items: center; }
+  .dkh-sheet { border-radius: 16px; }
+  .dkh-btn { min-height: 36px; }
+}
+
+/* The Cards part of a hero's page sits in the page's own flow. */
+.dkh-strip .dkh-row { padding-top: 2px; }

@@ -76,6 +76,8 @@
 .dkw-stepbtn:hover:not(:disabled) { background: var(--color-border-light); }
 .dkw-count { min-width: 2ch; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 .dkw-shown { padding-left: 12px; box-shadow: inset 3px 0 0 color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, transparent); }
+.dkw-held { grid-column: 1 / -1; padding-left: 12px; box-shadow: inset 3px 0 0 color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, transparent); }
+.dkw-ask { font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
 .dkw-shownlist, .dkw-playlist { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; padding: 0; list-style: none; }
 .dkw-shownone, .dkw-playlist > li { display: grid; gap: 4px; justify-items: start; max-width: 14rem; }
 .dkw-acts { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
