@@ -41,6 +41,9 @@ type Record struct {
 	// Generated is the browser's generator output (JSON), set at commit
 	// for generator rows only. Untrusted: kinds validate it like any input.
 	Generated string
+	// Seen is the Plan.Seen the review page showed for this row, set at
+	// commit. Untrusted: it is only ever compared with a fresh plan's.
+	Seen string
 	// Text renders Body for storage. The engine always sets it on a record
 	// it applies; nil only in a plan or a lookup, which render nothing.
 	Text Text
@@ -108,6 +111,11 @@ type Plan struct {
 	// drawn on the review screen by the hex map preview widget, and parsed
 	// only when the owner asks to see the map. "" for none.
 	HexMap string
+	// Seen is the state the row was planned against, for a kind that must not
+	// act on something that changed after the owner read the row. The review
+	// page carries it back and Apply compares it with a fresh plan. "" for
+	// kinds that do not need it.
+	Seen string
 }
 
 // Kind is one kind of block an AI can ask to write.

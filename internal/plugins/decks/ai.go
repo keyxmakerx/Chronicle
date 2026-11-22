@@ -606,7 +606,11 @@ func (k *deckKind) workDelete(ctx context.Context, campaignID string, a aiplug.A
 	return deckWork{plan: aiplug.Plan{Summary: s, Warnings: []string{
 		"Deleting this deck removes its cards and anything players hold from it.",
 		"This cannot be undone.",
-	}}, id: hit.ID, remove: true}
+	}, Seen: aiplug.Hash(struct {
+		ID      string
+		Version int
+		Counts  ZoneCounts
+	}{hit.ID, hit.Version, hit.Counts})}, id: hit.ID, remove: true}
 }
 
 func (k *deckKind) workCreate(e deckEdit, hit *DirectorDeck, r aiplug.Record) deckWork {
@@ -759,6 +763,12 @@ func (k *deckKind) Apply(ctx context.Context, campaignID string, a aiplug.Actor,
 	}
 	v := directorViewer(a)
 	if w.remove {
+		// The owner said yes to this deck as it was reviewed; one that has since
+		// gained cards or had a card move is a different removal. An empty Seen
+		// fails closed.
+		if r.Seen == "" || r.Seen != w.plan.Seen {
+			return apperror.NewBadRequest("this deck changed since its removal was reviewed; nothing was removed. Ask for the change again to review it as it is now.")
+		}
 		return k.svc.Delete(ctx, campaignID, w.id, v)
 	}
 	if w.create != nil {

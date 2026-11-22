@@ -80,11 +80,71 @@ func TestAIDeckDeletePlan(t *testing.T) {
 	}
 }
 
+// seenBy is the row as the review page hands it back: the plan's Seen
+// carried on the record.
+func (r *aiRig) seenBy(rec aiplug.Record) aiplug.Record {
+	r.t.Helper()
+	p := r.deck.Plan(bg, camp, aiDirector, rec)
+	if p.Error != "" {
+		r.t.Fatalf("plan: %s", p.Error)
+	}
+	rec.Seen = p.Seen
+	return rec
+}
+
+const changedSince = "this deck changed since its removal was reviewed; nothing was removed. Ask for the change again to review it as it is now."
+
+// A removal is held to the deck the owner read: whatever changed it since, or
+// no Seen at all, deletes nothing.
+func TestAIDeckDeleteIsHeldToWhatWasReviewed(t *testing.T) {
+	plan := func(r *aiRig) string {
+		return r.deck.Plan(bg, camp, aiDirector, aiRec("deck", "delete", "Omens", nil)).Seen
+	}
+	t.Run("the same deck plans to the same Seen", func(t *testing.T) {
+		r := newAIRig(t)
+		deckWithCardsHeld(r)
+		if a, b := plan(r), plan(r); a == "" || a != b {
+			t.Errorf("seen = %q then %q", a, b)
+		}
+	})
+	cases := []struct {
+		name   string
+		change func(r *aiRig, id string)
+		seen   func(reviewed string) string
+	}{
+		{name: "a copy moved zones", change: func(r *aiRig, id string) {
+			r.fx.place(r.fx.copiesOf(r.fx.cardID(id, "Hush"))[0], ZoneHand, "h-ilse", true)
+		}},
+		{name: "a card was added", change: func(r *aiRig, id string) { r.fx.card(id, CreateCardInput{Name: "Late"}) }},
+		{name: "no Seen at all", change: func(*aiRig, string) {}, seen: func(string) string { return "" }},
+		{name: "a Seen from somewhere else", change: func(*aiRig, string) {}, seen: func(string) string { return "abc" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newAIRig(t)
+			id := deckWithCardsHeld(r)
+			rec := aiRec("deck", "delete", "Omens", nil)
+			rec.Seen = plan(r)
+			if tc.seen != nil {
+				rec.Seen = tc.seen(rec.Seen)
+			}
+			tc.change(r, id)
+			err := r.deck.Apply(bg, camp, aiDirector, rec)
+			if code(err) != 400 || !strings.Contains(err.Error(), changedSince) {
+				t.Errorf("apply = %v, want the changed-since refusal", err)
+			}
+			if got := r.deckNames(); fmt.Sprint(got) != "[Omens]" {
+				t.Errorf("decks = %v, want Omens kept", got)
+			}
+		})
+	}
+}
+
 func TestAIDeckDeleteApply(t *testing.T) {
 	r := newAIRig(t)
 	deckWithCardsHeld(r)
 	r.fx.deck("Keep", KindParty, nil)
-	rec := aiRec("deck", "delete", "Omens", nil)
+	rec := r.seenBy(aiRec("deck", "delete", "Omens", nil))
 	r.applyDeck(rec)
 	if got := r.deckNames(); fmt.Sprint(got) != "[Keep]" {
 		t.Errorf("decks after the delete = %v, want only Keep", got)
@@ -145,7 +205,7 @@ func TestAIDeckDeleteThenACardOnIt(t *testing.T) {
 	if len(stagedDecks(ctx)) != 0 || len(r.deckNames()) != 1 {
 		t.Fatal("staging a delete staged or removed something")
 	}
-	r.applyDeck(del)
+	r.applyDeck(r.seenBy(del))
 	err := r.card.Apply(ctx, camp, aiDirector, aiRec("card", "create", "Late", map[string]any{"deck": "Omens"}))
 	if code(err) != 400 || !strings.Contains(err.Error(), `no deck called "Omens"`) {
 		t.Errorf("card after a delete = %v, want the no-deck refusal", err)
