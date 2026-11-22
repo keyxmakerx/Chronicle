@@ -6,6 +6,7 @@ package decks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -664,5 +665,137 @@ func TestIntegration_AClaimedMomentClosesWithTheDrawAndALostClaimMovesNothing(t 
 	}
 	if _, err := r.fx.repo.Draw(bg, claim(m.ID)); err != errMomentGone {
 		t.Errorf("a second claim: %v", err)
+	}
+}
+
+// A look that read the cards before another look marked them must not raise a
+// moment of its own: the store, not the stale read, says what really started.
+func TestIntegration_OnlyTheLookThatMarksACardStartsIt(t *testing.T) {
+	r := newMomentRig(t)
+	deck := r.deck("Omens", KindEvent, "", nil)
+	card := r.card(deck, "Doom", 1, r.cursed(true))
+	n, err := r.moms.SetFits(bg, r.fx.campaign, deck, []string{card}, nil)
+	r.must(err)
+	if n != 1 {
+		t.Fatalf("the first look started %d cards", n)
+	}
+	n, err = r.moms.SetFits(bg, r.fx.campaign, deck, []string{card}, nil)
+	r.must(err)
+	if n != 0 {
+		t.Errorf("a second look started %d cards again", n)
+	}
+}
+
+// A look that judged a moment's old card must not write that card's hero and
+// reading onto the moment once it has been picked again.
+func TestIntegration_ARefreshForACardTheMomentLeftChangesNothing(t *testing.T) {
+	r := newMomentRig(t)
+	deck := r.deck("Omens", KindEvent, "", nil)
+	a := r.card(deck, "Doom", 1, r.cursed(true))
+	b := r.card(deck, "Gloom", 1, r.cursed(true))
+	r.setCursed(true)
+	r.recheck()
+	open := r.open()
+	if len(open) != 1 {
+		t.Fatalf("open = %+v", open)
+	}
+	held, other := a, b
+	if open[0].Card.ID == b {
+		held, other = b, a
+	}
+	moved, err := r.moms.Refresh(bg, r.fx.campaign, open[0].ID, other, Moment{FitCount: 9, Reading: Reading{Text: "stale"}})
+	r.must(err)
+	if moved {
+		t.Fatal("a refresh for another card was written")
+	}
+	if now := r.open(); len(now) != 1 || now[0].Card.ID != held || now[0].FitCount == 9 {
+		t.Errorf("the moment changed: %+v", now)
+	}
+	moved, err = r.moms.Refresh(bg, r.fx.campaign, open[0].ID, held, Moment{FitCount: 2, Reading: Reading{Text: strings.Repeat("x", 900)}})
+	r.must(err)
+	if !moved {
+		t.Error("a refresh for the held card was not written")
+	}
+}
+
+// momentWorld plays the same deck over the real store with and without a
+// moment that opens, is told to wait, and lapses, and returns everything a
+// player can read and every message sent to someone who is not a Director.
+func momentWorld(t *testing.T, stirs bool) map[string]string {
+	t.Helper()
+	r := newMomentRig(t)
+	deck := r.deck("Omens", KindEvent, "", &SettingsInput{Knows: ptr("kinds"), Draws: ptr("players")})
+	_, err := r.svc.SetPlayers(bg, r.fx.campaign, deck, r.dir, SetPlayersInput{Version: 1, Players: []PlayerInput{{UserID: r.fx.tam, DrawsLeft: ptr(3)}}})
+	r.must(err)
+	r.card(deck, "Plain", 2, nil)
+	r.card(deck, "Doom", 1, r.cursed(true))
+	r.recheck()
+	if stirs {
+		r.setCursed(true)
+		r.recheck()
+		open := r.open()
+		if len(open) != 1 {
+			t.Fatalf("no moment opened: %+v", open)
+		}
+		_, err := r.svc.AnotherMoment(bg, r.fx.campaign, open[0].ID, r.dir)
+		if err == nil {
+			t.Fatal("drawing another with one card that fits should be refused")
+		}
+		_, err = r.svc.DismissMoment(bg, r.fx.campaign, open[0].ID, r.dir)
+		r.must(err)
+		r.setCursed(false)
+		r.recheck()
+		r.setCursed(true)
+		r.recheck()
+		r.setCursed(false)
+		r.recheck()
+		if len(r.open()) != 0 {
+			t.Fatal("the second moment did not lapse")
+		}
+	}
+	out := map[string]string{}
+	put := func(label string, v any, err error) {
+		if err != nil {
+			out[label] = "error " + err.Error()
+			return
+		}
+		raw, _ := json.Marshal(v)
+		s := string(raw)
+		for id, word := range map[string]string{deck: "DECK", r.fx.campaign: "CAMPAIGN", r.fx.hero: "HERO", r.fx.hero2: "HERO2", r.fx.tam: "TAM", r.fx.owner: "OWNER"} {
+			s = strings.ReplaceAll(s, id, word)
+		}
+		out[label] = stripIDs(s)
+	}
+	l, err := r.svc.List(bg, r.fx.campaign, r.tam)
+	put("list", l, err)
+	d, err := r.svc.Get(bg, r.fx.campaign, deck, r.tam)
+	put("deck", d, err)
+	tb, err := r.svc.Table(bg, r.fx.campaign, r.tam)
+	put("table", tb, err)
+	h, err := r.svc.Hand(bg, r.fx.campaign, r.tam)
+	put("hand", h, err)
+	res, err := r.svc.Draw(bg, r.fx.campaign, deck, r.tam, DrawInput{HeroID: r.fx.hero})
+	if err == nil {
+		res.CopyID, res.CopyIDs = "", nil
+	}
+	put("draw", res, err)
+	r.cap.mu.Lock()
+	defer r.cap.mu.Unlock()
+	put("told", r.cap.told, nil)
+	put("rings", r.cap.rings, nil)
+	return out
+}
+
+// A moment that opens, is refused another card, is told to wait, comes again
+// and lapses changes nothing a player reads and sends them nothing.
+func TestIntegration_TwoWorldsAMomentComingAndGoingIsInvisibleToPlayers(t *testing.T) {
+	with, without := momentWorld(t, true), momentWorld(t, false)
+	if len(with) == 0 || len(with) != len(without) {
+		t.Fatalf("worlds returned %d and %d replies", len(with), len(without))
+	}
+	for k := range with {
+		if with[k] != without[k] {
+			t.Errorf("%s differs:\n with a moment: %s\n without:       %s", k, with[k], without[k])
+		}
 	}
 }

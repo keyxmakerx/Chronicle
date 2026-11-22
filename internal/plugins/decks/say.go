@@ -6,6 +6,9 @@ import "context"
 // it hold while it is set, and it clears itself when a copy of the card leaves
 // the pile.
 func (s *service) Say(ctx context.Context, campaignID, deckID, cardID string, v Viewer, said bool) (DeckView, error) {
+	if err := directorOnly(v); err != nil {
+		return nil, err
+	}
 	r := s.newRequest(ctx, campaignID, v)
 	d, err := r.directorDeck(deckID)
 	if err != nil {

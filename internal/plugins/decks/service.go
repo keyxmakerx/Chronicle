@@ -150,6 +150,13 @@ func WithMomentNotifier(n MomentNotifier) Option { return func(s *service) { s.m
 // can change whether a test holds, and does its work later, off the request.
 func WithPoke(p func(campaignID string)) Option { return func(s *service) { s.poke = p } }
 
+// WithSwitch says whether card decks are switched on for a campaign. With it,
+// a campaign that switched them off raises no moments from the cards it still
+// has.
+func WithSwitch(on func(ctx context.Context, campaignID string) bool) Option {
+	return func(s *service) { s.switchedOn = on }
+}
+
 // WithRandom replaces the draw's random pick; tests use it to fix a draw.
 func WithRandom(pick func(n int) int) Option { return func(s *service) { s.pick = pick } }
 
@@ -168,6 +175,7 @@ type service struct {
 	moments    MomentRepository
 	momentNote MomentNotifier
 	poke       func(campaignID string)
+	switchedOn func(ctx context.Context, campaignID string) bool
 	// looked is when each campaign's moments were last rechecked on a read.
 	looked   map[string]time.Time
 	lookedMu sync.Mutex
@@ -1277,10 +1285,22 @@ func (s *service) DeleteCard(ctx context.Context, campaignID, deckID, cardID str
 	} else if !found {
 		return nil, errNotFound("card")
 	}
+	// An open moment on the card goes with it, and a player invited by that
+	// moment is told their view changed.
+	invited := ""
+	if s.moments != nil {
+		if om, open, err := s.moments.Open(ctx, campaignID, d.ID); err != nil {
+			return nil, apperrorInternal(err)
+		} else if open && om.CardID == cardID && om.State == MomentInvited {
+			invited = om.InvitedUserID
+		}
+	}
 	if err := s.repo.DeleteCard(ctx, campaignID, d.ID, cardID); err != nil {
 		return nil, apperrorInternal(err)
 	}
-	// An open moment on the card goes with it.
+	if invited != "" && s.notify != nil {
+		s.notify.Changed(campaignID, Audience{Users: []string{invited}})
+	}
 	s.momentChanged(campaignID)
 	s.poked(campaignID)
 	return r.view(d)

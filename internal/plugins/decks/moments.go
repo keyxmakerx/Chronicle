@@ -159,6 +159,11 @@ func (s *service) Recheck(ctx context.Context, cid string) error {
 	if err != nil {
 		return apperrorInternal(err)
 	}
+	// Asked second, so a campaign with nothing to watch costs the one question
+	// above and no more.
+	if len(ids) == 0 || (s.switchedOn != nil && !s.switchedOn(ctx, cid)) {
+		return nil
+	}
 	var first error
 	changed := false
 	var told []string
@@ -215,7 +220,6 @@ func (s *service) recheckDeck(ctx context.Context, cid, deckID string) (changed 
 	fit := s.look(ctx, cid, d, cards, piles)
 
 	var start, stop []string
-	started := false
 	for _, c := range cards {
 		if len(c.When) == 0 {
 			continue
@@ -223,19 +227,23 @@ func (s *service) recheckDeck(ctx context.Context, cid, deckID string) (changed 
 		_, ok := fit[c.ID]
 		switch {
 		case ok && c.FitsSince == nil:
-			start, started = append(start, c.ID), true
+			start = append(start, c.ID)
 		case !ok && c.FitsSince != nil:
 			stop = append(stop, c.ID)
 		}
 	}
-	if err := s.moments.SetFits(ctx, cid, d.ID, start, stop); err != nil {
+	// The store says how many cards this look really started. A look that read
+	// the cards before another look marked them starts none, so a moment that
+	// was raised and answered in between is not raised a second time.
+	started, err := s.moments.SetFits(ctx, cid, d.ID, start, stop)
+	if err != nil {
 		return false, "", apperrorInternal(err)
 	}
 
 	if hasOpen {
 		return s.keepOrRepick(ctx, cid, d, cards, piles, fit, om)
 	}
-	if !started {
+	if started == 0 {
 		return false, "", nil
 	}
 	pick, ok := s.weightedPick(cards, fit, piles, "")
@@ -290,10 +298,11 @@ func (s *service) refresh(ctx context.Context, cid string, om Moment, subject st
 	if om.SubjectID == subject && om.FitCount == count && om.Reading.Text == r.Text && om.Reading.Source == r.Source {
 		return false, "", nil
 	}
-	if err := s.moments.Refresh(ctx, cid, om.ID, Moment{SubjectID: subject, FitCount: count, Reading: r}); err != nil {
+	moved, err := s.moments.Refresh(ctx, cid, om.ID, om.CardID, Moment{SubjectID: subject, FitCount: count, Reading: r})
+	if err != nil {
 		return false, "", apperrorInternal(err)
 	}
-	return true, "", nil
+	return moved, "", nil
 }
 
 // lapse closes a moment nothing fits any more.

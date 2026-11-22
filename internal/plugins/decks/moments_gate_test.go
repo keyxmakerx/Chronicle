@@ -165,8 +165,11 @@ func TestTheServiceRefusesMomentCallsFromPlayersToo(t *testing.T) {
 		if _, err := fx.svc.DealMoment(bg, camp, "m", v); code(err) != http.StatusNotFound {
 			t.Errorf("%s DealMoment: %v", name, err)
 		}
-		if _, err := fx.svc.WhenOptions(bg, camp, v); code(err) == 0 {
-			t.Errorf("%s WhenOptions was answered", name)
+		if _, err := fx.svc.WhenOptions(bg, camp, v); code(err) != http.StatusNotFound {
+			t.Errorf("%s WhenOptions: %v", name, err)
+		}
+		if _, err := fx.svc.Say(bg, camp, "d", "c", v, true); code(err) != http.StatusNotFound {
+			t.Errorf("%s Say: %v", name, err)
 		}
 	}
 }

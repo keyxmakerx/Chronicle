@@ -268,7 +268,7 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 			// A player pulls only a card with no test or with printed tests that
 			// all hold; a card with a test the Director kept to themselves is never
 			// in it, whether or not it holds.
-			if allowed := s.eligibleForPlayer(ctx, campaignID, d, cards); allowed != nil {
+			if allowed := s.eligibleForPlayer(ctx, campaignID, d, cards, v); allowed != nil {
 				plan.Restrict, plan.Allowed = true, allowed
 			}
 			plan.SpendUserID = v.UserID
@@ -279,9 +279,10 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 	}
 	got, err := s.repo.Draw(ctx, plan)
 	if err != nil {
-		if !v.Director && errors.Is(err, errNoneFit) {
+		if !v.Director && (errors.Is(err, errNoneFit) || errors.Is(err, errMomentGone)) {
 			// Nothing a player may pull is the same answer as an empty pile that
-			// does not reshuffle, so the reply cannot say a hidden test is why.
+			// does not reshuffle, so the reply cannot say a hidden test is why. An
+			// invitation taken back while the draw was on its way reads the same.
 			return nil, errNothingLeft()
 		}
 		return nil, s.drawError(err, false)

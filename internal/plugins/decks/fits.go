@@ -399,8 +399,10 @@ func (s *service) fittingCards(ctx context.Context, cid string, d Deck, cards []
 // no test, or one whose tests are all printed and all hold. A card with any
 // test the Director kept to themselves is never in it, whether or not that test
 // holds, and its facts are not even read, so what a player is sent cannot
-// depend on a hidden fact.
-func (s *service) eligibleForPlayer(ctx context.Context, cid string, d Deck, cards []Card) map[string]bool {
+// depend on a hidden fact. A printed test about a page this player cannot open
+// keeps the card out the same way: the draw would otherwise say how that page
+// stands.
+func (s *service) eligibleForPlayer(ctx context.Context, cid string, d Deck, cards []Card, v Viewer) map[string]bool {
 	if !cardsWithTests(cards) {
 		return nil
 	}
@@ -410,12 +412,27 @@ func (s *service) eligibleForPlayer(ctx context.Context, cid string, d Deck, car
 		switch {
 		case len(c.When) == 0:
 			out[c.ID] = true
-		case hasHidden(c.When):
+		case hasHidden(c.When) || !s.pagesOpenTo(ctx, cid, c.When, v):
 		case j.fits(c).OK:
 			out[c.ID] = true
 		}
 	}
 	return out
+}
+
+// pagesOpenTo says whether the viewer may open every page the tests name by
+// id. A page that cannot be asked about counts as closed.
+func (s *service) pagesOpenTo(ctx context.Context, cid string, tests []WhenTest, v Viewer) bool {
+	for _, t := range tests {
+		if t.Who == "" || t.Who == WhoHolder || t.Who == WhoAny {
+			continue
+		}
+		ok, err := s.heroes.Viewable(ctx, cid, t.Who, v)
+		if err != nil || !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // fittingWithTests says which cards that have tests fit now, hidden tests

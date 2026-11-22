@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -148,8 +149,9 @@ func storedNumber(v any) (float64, bool) {
 		if s == "" {
 			return 0, false
 		}
+		// ParseFloat reads "inf" and "nan" as numbers; a sheet never means them.
 		f, err := strconv.ParseFloat(s, 64)
-		return f, err == nil
+		return f, err == nil && !math.IsInf(f, 0) && !math.IsNaN(f)
 	}
 	return 0, false
 }

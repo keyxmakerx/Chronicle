@@ -77,8 +77,10 @@ type MomentRepository interface {
 	// PileCounts is how many copies of each card are in the pile.
 	PileCounts(ctx context.Context, campaignID, deckID string) (map[string]int, error)
 	// SetFits starts fits_since on the cards in start (where it is not set) and
-	// clears it on the cards in stop.
-	SetFits(ctx context.Context, campaignID, deckID string, start, stop []string) error
+	// clears it on the cards in stop. started is how many cards it really
+	// started: a look that read the cards before another look marked them
+	// starts none, so it raises no second moment.
+	SetFits(ctx context.Context, campaignID, deckID string, start, stop []string) (started int, err error)
 	// ClearFits clears fits_since on every card of the deck.
 	ClearFits(ctx context.Context, campaignID, deckID string) error
 	// SetSaid sets or clears "the Director says so"; ok is false for a card that
@@ -99,8 +101,9 @@ type MomentRepository interface {
 	// fromCard.
 	Repick(ctx context.Context, campaignID, id, fromCard string, to Moment) (bool, error)
 	// Refresh updates what an open moment says about its card without changing
-	// the card.
-	Refresh(ctx context.Context, campaignID, id string, to Moment) error
+	// the card, only while it still holds forCard: a look that began before the
+	// moment was picked again must not write the old card's hero onto the new one.
+	Refresh(ctx context.Context, campaignID, id, forCard string, to Moment) (bool, error)
 	// Close moves an open moment to a closed state, only from one of from.
 	Close(ctx context.Context, campaignID, id string, from []string, to, by string) (bool, error)
 	// Invite moves a waiting moment to invited.
@@ -160,6 +163,16 @@ func (s *sqlMoments) PileCounts(ctx context.Context, campaignID, deckID string) 
 	return out, rows.Err()
 }
 
+// clipReading keeps a reading inside its column, by characters, so a very long
+// page name cannot fail the write.
+func clipReading(s string) string {
+	const max = 500
+	if r := []rune(s); len(r) > max {
+		return string(r[:max])
+	}
+	return s
+}
+
 func inList(ids []string) (string, []any) {
 	args := make([]any, 0, len(ids))
 	for _, id := range ids {
@@ -168,24 +181,31 @@ func inList(ids []string) (string, []any) {
 	return strings.TrimSuffix(strings.Repeat("?,", len(ids)), ","), args
 }
 
-func (s *sqlMoments) SetFits(ctx context.Context, campaignID, deckID string, start, stop []string) error {
+func (s *sqlMoments) SetFits(ctx context.Context, campaignID, deckID string, start, stop []string) (int, error) {
+	started := 0
 	if len(start) > 0 {
 		marks, args := inList(start)
 		args = append([]any{deckID, campaignID}, args...)
-		if _, err := s.db.ExecContext(ctx,
-			`UPDATE deck_cards SET fits_since = NOW() WHERE deck_id = ? AND campaign_id = ? AND fits_since IS NULL AND id IN (`+marks+`)`, args...); err != nil {
-			return fmt.Errorf("start fits: %w", err)
+		res, err := s.db.ExecContext(ctx,
+			`UPDATE deck_cards SET fits_since = NOW() WHERE deck_id = ? AND campaign_id = ? AND fits_since IS NULL AND id IN (`+marks+`)`, args...)
+		if err != nil {
+			return 0, fmt.Errorf("start fits: %w", err)
 		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("start fits: %w", err)
+		}
+		started = int(n)
 	}
 	if len(stop) > 0 {
 		marks, args := inList(stop)
 		args = append([]any{deckID, campaignID}, args...)
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE deck_cards SET fits_since = NULL WHERE deck_id = ? AND campaign_id = ? AND fits_since IS NOT NULL AND id IN (`+marks+`)`, args...); err != nil {
-			return fmt.Errorf("stop fits: %w", err)
+			return started, fmt.Errorf("stop fits: %w", err)
 		}
 	}
-	return nil
+	return started, nil
 }
 
 func (s *sqlMoments) ClearFits(ctx context.Context, campaignID, deckID string) error {
@@ -287,7 +307,7 @@ func (s *sqlMoments) Create(ctx context.Context, m Moment) (bool, error) {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO deck_moments (id, campaign_id, deck_id, card_id, subject_entity_id, fit_count, reading_text, reading_source, read_at, state, quiet, open_deck_id)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?)`,
-		m.ID, m.CampaignID, m.DeckID, m.CardID, nullString(m.SubjectID), m.FitCount, m.Reading.Text, m.Reading.Source, readAt, m.Quiet, m.DeckID)
+		m.ID, m.CampaignID, m.DeckID, m.CardID, nullString(m.SubjectID), m.FitCount, clipReading(m.Reading.Text), m.Reading.Source, readAt, m.Quiet, m.DeckID)
 	if isDuplicate(err) {
 		return false, nil
 	}
@@ -312,7 +332,7 @@ func (s *sqlMoments) Repick(ctx context.Context, campaignID, id, fromCard string
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE deck_moments SET card_id = ?, subject_entity_id = ?, fit_count = ?, reading_text = ?, reading_source = ?, read_at = ?
 		 WHERE id = ? AND campaign_id = ? AND state = 'waiting' AND card_id = ?`,
-		to.CardID, nullString(to.SubjectID), to.FitCount, to.Reading.Text, to.Reading.Source, readAt, id, campaignID, fromCard)
+		to.CardID, nullString(to.SubjectID), to.FitCount, clipReading(to.Reading.Text), to.Reading.Source, readAt, id, campaignID, fromCard)
 	if err != nil {
 		return false, fmt.Errorf("repick moment: %w", err)
 	}
@@ -323,18 +343,23 @@ func (s *sqlMoments) Repick(ctx context.Context, campaignID, id, fromCard string
 	return n == 1, nil
 }
 
-func (s *sqlMoments) Refresh(ctx context.Context, campaignID, id string, to Moment) error {
+func (s *sqlMoments) Refresh(ctx context.Context, campaignID, id, forCard string, to Moment) (bool, error) {
 	var readAt any
 	if !to.Reading.At.IsZero() {
 		readAt = to.Reading.At.UTC()
 	}
-	if _, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE deck_moments SET subject_entity_id = ?, fit_count = ?, reading_text = ?, reading_source = ?, read_at = ?
-		 WHERE id = ? AND campaign_id = ? AND open_deck_id IS NOT NULL`,
-		nullString(to.SubjectID), to.FitCount, to.Reading.Text, to.Reading.Source, readAt, id, campaignID); err != nil {
-		return fmt.Errorf("refresh moment: %w", err)
+		 WHERE id = ? AND campaign_id = ? AND open_deck_id IS NOT NULL AND card_id = ?`,
+		nullString(to.SubjectID), to.FitCount, clipReading(to.Reading.Text), to.Reading.Source, readAt, id, campaignID, forCard)
+	if err != nil {
+		return false, fmt.Errorf("refresh moment: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("refresh moment: %w", err)
+	}
+	return n == 1, nil
 }
 
 func (s *sqlMoments) Close(ctx context.Context, campaignID, id string, from []string, to, by string) (bool, error) {

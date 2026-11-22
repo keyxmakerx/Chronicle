@@ -4812,7 +4812,11 @@ func (a *App) RegisterRoutes() {
 		decks.WithPictures(&decksPictureAdapter{svc: mediaService}),
 		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
 		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
-		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke))
+		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
+		decks.WithSwitch(func(ctx context.Context, campaignID string) bool {
+			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
+			return err == nil && on
+		}))
 	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.

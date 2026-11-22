@@ -215,25 +215,28 @@ func TestFittingSetsByWhoAsks(t *testing.T) {
 		{ID: "open-holds", When: []WhenTest{holdsOpen}},
 		{ID: "open-fails", When: []WhenTest{failsOpen}},
 		{ID: "mixed", When: []WhenTest{holdsOpen, holds}},
+		// Printed, and it holds, but about a page a player cannot open.
+		{ID: "open-vault", When: []WhenTest{{Test: TestTag, Who: "h-vault", Tag: it(7), Has: bl(false), Open: true}}},
 	}
 	dir := s.fittingCards(bg, camp, Deck{}, cards)
-	for id, want := range map[string]bool{"plain": true, "hidden-holds": true, "hidden-fails": false, "open-holds": true, "open-fails": false, "mixed": true} {
+	for id, want := range map[string]bool{"plain": true, "hidden-holds": true, "hidden-fails": false, "open-holds": true, "open-fails": false, "mixed": true, "open-vault": true} {
 		if dir[id] != want {
 			t.Errorf("Director set: %s = %v, want %v", id, dir[id], want)
 		}
 	}
 	// A player's own draw never reaches a card with a test the Director kept.
-	pl := s.eligibleForPlayer(bg, camp, Deck{}, cards)
-	for id, want := range map[string]bool{"plain": true, "hidden-holds": false, "hidden-fails": false, "open-holds": true, "open-fails": false, "mixed": false} {
+	// Nor one whose printed test is about a page they cannot open.
+	pl := s.eligibleForPlayer(bg, camp, Deck{}, cards, fx.tam)
+	for id, want := range map[string]bool{"plain": true, "hidden-holds": false, "hidden-fails": false, "open-holds": true, "open-fails": false, "mixed": false, "open-vault": false} {
 		if pl[id] != want {
 			t.Errorf("player set: %s = %v, want %v", id, pl[id], want)
 		}
 	}
-	if s.fittingCards(bg, camp, Deck{}, []Card{{ID: "a"}}) != nil || s.eligibleForPlayer(bg, camp, Deck{}, []Card{{ID: "a"}}) != nil {
+	if s.fittingCards(bg, camp, Deck{}, []Card{{ID: "a"}}) != nil || s.eligibleForPlayer(bg, camp, Deck{}, []Card{{ID: "a"}}, fx.tam) != nil {
 		t.Error("a deck with no tests must not be restricted")
 	}
 	withTests := s.fittingWithTests(bg, camp, Deck{}, cards)
-	if _, ok := withTests["plain"]; ok || len(withTests) != 3 {
+	if _, ok := withTests["plain"]; ok || len(withTests) != 4 {
 		t.Errorf("fittingWithTests = %v", withTests)
 	}
 }
@@ -245,7 +248,7 @@ func TestAPlayersEligibilityNeverReadsAHiddenTestsFacts(t *testing.T) {
 	newFactsFixture(t, fx, f)
 	s := fx.svc.(*service)
 	hidden := WhenTest{Test: TestNumber, Who: "h-tam", Field: "hp", Op: "gte", Value: fl(0)}
-	s.eligibleForPlayer(bg, camp, Deck{}, []Card{{ID: "h", When: []WhenTest{hidden}}})
+	s.eligibleForPlayer(bg, camp, Deck{}, []Card{{ID: "h", When: []WhenTest{hidden}}}, fx.tam)
 	if f.reads != 0 {
 		t.Errorf("a hidden test's facts were read %d times for a player", f.reads)
 	}

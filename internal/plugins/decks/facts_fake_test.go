@@ -134,8 +134,10 @@ func (m memMoments) PileCounts(_ context.Context, _, deckID string) (map[string]
 	}
 	return out, nil
 }
-func (m memMoments) SetFits(context.Context, string, string, []string, []string) error { return nil }
-func (m memMoments) ClearFits(context.Context, string, string) error                   { return nil }
+func (m memMoments) SetFits(_ context.Context, _, _ string, start, _ []string) (int, error) {
+	return len(start), nil
+}
+func (m memMoments) ClearFits(context.Context, string, string) error { return nil }
 func (m memMoments) SetSaid(_ context.Context, _, deckID, cardID string, said bool) (bool, error) {
 	c, ok := m.repo.cards[cardID]
 	if !ok || c.DeckID != deckID {
@@ -164,7 +166,9 @@ func (m memMoments) Create(context.Context, Moment) (bool, error) { return false
 func (m memMoments) Repick(context.Context, string, string, string, Moment) (bool, error) {
 	return false, nil
 }
-func (m memMoments) Refresh(context.Context, string, string, Moment) error { return nil }
+func (m memMoments) Refresh(context.Context, string, string, string, Moment) (bool, error) {
+	return true, nil
+}
 func (m memMoments) Close(context.Context, string, string, []string, string, string) (bool, error) {
 	return false, nil
 }
