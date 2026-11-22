@@ -98,5 +98,8 @@ test('the shop room saves and loads the counter look', () => {
   SR.fromLayout(S2, L);
   assert.equal(S2.look, 'counter');
   SR.fromLayout(S2, Object.assign({}, L, { look: 'neon' }));
-  assert.equal(S2.look, 'lit', 'an unknown look reads as lit');
+  assert.equal(S2.look, 'counter', 'an unknown look opens at the counter');
+  SR.fromLayout(S2, Object.assign({}, L, { look: 'lit' }));
+  assert.equal(S2.look, 'counter', 'a room saved as the retired lit room opens at the counter');
+  assert.equal(SR.toLayout(S2).look, 'counter', 'and saves as the counter');
 });

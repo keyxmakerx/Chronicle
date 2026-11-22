@@ -98,7 +98,7 @@ test('picking up one of the room\'s own decorations keeps every decoration and e
   assert.ok(after.filter((q) => q.icon).every((q) => q.mine), 'every decoration is now hand-placed');
 });
 
-test('the look round-trips, and a room saved before paper reads as the lit room', () => {
+test('the look round-trips, and a room saved before there was a choice opens at the counter', () => {
   const S = state({ look: 'paper' });
   SR.createRoom(S).generate();
   const L = SR.toLayout(S);
@@ -108,7 +108,7 @@ test('the look round-trips, and a room saved before paper reads as the lit room'
   assert.equal(S2.look, 'paper');
   delete L.look;
   SR.fromLayout(S2, L);
-  assert.equal(S2.look, 'lit');
+  assert.equal(S2.look, 'counter');
 });
 
 test('a long shop name goes onto two readable lines on both signs', () => {

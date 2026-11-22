@@ -727,5 +727,8 @@
     var st = document.createElement('style'); st.id = 'srp-style'; st.textContent = CSS; document.head.appendChild(st);
   }
 
-  window.ShopRoomPaper = { KIND: KIND, html: html, render: render, fit: fit, floorAt: floorAt, spotAt: spotAt, hit: hit, solve: solve, apply: apply, spotPos: spotPos };
+  // building marks the paper look as under construction: the shop room offers
+  // it to nobody and opens a shop saved as paper at the counter instead.
+  // TODO(#1943): the redesigned paper looks replace this file and drop the mark.
+  window.ShopRoomPaper = { building: true, KIND: KIND, html: html, render: render, fit: fit, floorAt: floorAt, spotAt: spotAt, hit: hit, solve: solve, apply: apply, spotPos: spotPos };
 })();
