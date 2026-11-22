@@ -39,6 +39,7 @@ The hero creator never lists them as facts on the card or in the entry's sheet.
 | `glass-midnight` | Midnight glass | `#a78bfa` |
 | `rune-metal` | Rune metal | `#3fc8d4` |
 | `great-rune` | Great rune | `#b48cf2` |
+| `mechanical` | Boiler works | `#6fa8dc` |
 | `thorn-glass` | Thorn glass | `#c4243a` |
 | `scales` | Scales | `#2fb5a4` |
 | `vine` | Vine and wood | `#6fae4f` |

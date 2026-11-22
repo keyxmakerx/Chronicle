@@ -40,8 +40,8 @@ func TestLookFrom(t *testing.T) {
 }
 
 func TestLibraryShape(t *testing.T) {
-	if n := len(All()); n != 15 {
-		t.Fatalf("library has %d borders, want 15", n)
+	if n := len(All()); n != 16 {
+		t.Fatalf("library has %d borders, want 16", n)
 	}
 	seen := map[string]bool{}
 	for _, b := range All() {
@@ -57,6 +57,12 @@ func TestLibraryShape(t *testing.T) {
 		}
 		if (b.Mask != "" || b.CornerMask != "") && (b.Peak == nil || b.Gain == nil) {
 			t.Errorf("%s has a mask but no peak and gain", b.Key)
+		}
+		if b.Glow != nil && (b.Mask == "" && b.CornerMask == "") {
+			t.Errorf("%s glows but has no mask, so nothing takes the glow", b.Key)
+		}
+		if b.Glow != nil && *b.Glow <= 0 {
+			t.Errorf("%s: glow %v must be positive", b.Key, *b.Glow)
 		}
 	}
 	if !reflect.DeepEqual(Keys()[:3], []string{"carved-stone", "earth", "fire"}) {
@@ -83,10 +89,29 @@ func TestPicturesExist(t *testing.T) {
 	}
 }
 
+// Files is what the page embeds and serves, so a picture it drops is a 404.
+func TestFilesCoversEveryPictureField(t *testing.T) {
+	got := map[string]bool{}
+	for _, f := range Files() {
+		got[f] = true
+	}
+	for _, b := range All() {
+		for field, f := range map[string]string{"Img": b.Img, "Mask": b.Mask, "Over": b.Over, "Corner": b.Corner, "CornerMask": b.CornerMask, "Ground": b.Ground} {
+			if f != "" && !got[f] {
+				t.Errorf("%s.%s names %s, which Files() leaves out", b.Key, field, f)
+			}
+		}
+	}
+	if m, _ := Get("mechanical"); m.Ground == "" || !got[m.Ground] {
+		t.Errorf("mechanical's ground %q must be in Files()", m.Ground)
+	}
+}
+
 func TestLibraryJSON(t *testing.T) {
 	got := LibraryJSON(func(p string) string { return p + "?v=x" })
 	for _, want := range []string{
 		`"great-rune":{"img":"/static/plugins/entities/img/borders/great-rune.webp?v=x","mask":"/static/plugins/entities/img/borders/great-rune-mask.webp?v=x","peak":0,"gain":0.85}`,
+		`"mechanical":{"img":"/static/plugins/entities/img/borders/mechanical.webp?v=x","mask":"/static/plugins/entities/img/borders/mechanical-mask.webp?v=x","corner":"/static/plugins/entities/img/borders/mechanical-corners.webp?v=x","cornerMask":"/static/plugins/entities/img/borders/mechanical-corners-mask.webp?v=x","ground":"/static/plugins/entities/img/borders/mechanical-steam.webp?v=x","peak":0,"gain":1,"glow":1.4}`,
 		`"scales":{"img":"/static/plugins/entities/img/borders/scales.webp?v=x","over":"/static/plugins/entities/img/borders/scales-boss.webp?v=x","dye":true}`,
 		`"carved-stone":{"img":"/static/plugins/entities/img/borders/earth.webp?v=x","corner":`,
 		`"cornerMask":"/static/plugins/entities/img/borders/carved-stone-corner-mask.webp?v=x"`,

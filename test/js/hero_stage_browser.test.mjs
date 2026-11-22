@@ -216,6 +216,22 @@ test('phone: the stage tucks when the list is scrolled and opens again at the to
   assert.equal(await pg.locator('.hc-por').evaluate((e) => e.offsetWidth), 56);
 });
 
+for (const [name, stageLook] of [['stage', true], ['classic', false]]) {
+  test(`${name} look, phone: the step button keeps no hover wash after a tap, so the bars under it stay bars`, { skip }, async (t) => {
+    const bg = (pg) => pg.evaluate(() => getComputedStyle(document.querySelector('.hc-sbtn')).backgroundColor);
+    const touch = await open(t, { width: 360, height: 640, look: stageLook, dark: true });
+    await touch.pg.click('.hc-sbtn');
+    await touch.pg.waitForSelector('[data-drape]');
+    await touch.pg.waitForTimeout(200);
+    assert.equal(await bg(touch.pg), 'rgba(0, 0, 0, 0)', 'a finger leaves no wash');
+    // A mouse over the same button still gets its wash.
+    const mouse = await open(t, { width: 360, height: 640, look: stageLook, dark: true, mouse: true });
+    await mouse.pg.hover('.hc-sbtn');
+    await mouse.pg.waitForTimeout(200);
+    assert.notEqual(await bg(mouse.pg), 'rgba(0, 0, 0, 0)', 'a mouse still gets it');
+  });
+}
+
 test('Save and leave is a link to the Characters page; a try-out and a copy just Leave', { skip }, async (t) => {
   const own = await open(t, { draft: DRAFT_ANCESTRY });
   const lv = own.pg.locator('.hc-lv');

@@ -259,7 +259,7 @@ func TestSystemEntryKind_ForCharacter(t *testing.T) {
 // The notes the AI reads name both properties and every border key.
 func TestSystemEntryKind_DocCardBorders(t *testing.T) {
 	doc := SystemEntryKind{}.Doc()
-	for _, want := range []string{"card_border", "card_colour", "carved-stone (Carved stone)", "vine (Vine and wood)", "glass-midnight (Midnight glass)", "kind: system-entry"} {
+	for _, want := range []string{"card_border", "card_colour", "carved-stone (Carved stone)", "vine (Vine and wood)", "glass-midnight (Midnight glass)", "mechanical (Boiler works)", "kind: system-entry"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the kind's notes lack %q", want)
 		}

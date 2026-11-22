@@ -19,7 +19,9 @@ const (
 
 // Border is one entry of the library. The picture fields are file names under
 // StaticDir; Peak and Gain are the colouring script's numbers and are nil
-// where the border has no part that takes colour.
+// where the border has no part that takes colour. Glow is set where the lit
+// parts were drawn glowing, and is how strongly. Ground is a picture laid on
+// the card's dark field behind the words.
 type Border struct {
 	Key    string
 	Name   string
@@ -30,9 +32,11 @@ type Border struct {
 	Over       string
 	Corner     string
 	CornerMask string
+	Ground     string
 	Dye        bool
 	Peak       *float64
 	Gain       *float64
+	Glow       *float64
 }
 
 // StaticDir is where the pictures are served, under the entities plugin's
@@ -54,6 +58,7 @@ var library = []Border{
 	{Key: "glass-midnight", Name: "Midnight glass", Colour: "#a78bfa", Img: "glass-midnight.webp"},
 	{Key: "rune-metal", Name: "Rune metal", Colour: "#3fc8d4", Img: "rune-metal.webp", Mask: "rune-metal-mask.webp", Peak: num(0.96), Gain: num(1.3)},
 	{Key: "great-rune", Name: "Great rune", Colour: "#b48cf2", Img: "great-rune.webp", Mask: "great-rune-mask.webp", Peak: num(0), Gain: num(0.85)},
+	{Key: "mechanical", Name: "Boiler works", Colour: "#6fa8dc", Img: "mechanical.webp", Mask: "mechanical-mask.webp", Corner: "mechanical-corners.webp", CornerMask: "mechanical-corners-mask.webp", Ground: "mechanical-steam.webp", Peak: num(0), Gain: num(1), Glow: num(1.4)},
 	{Key: "thorn-glass", Name: "Thorn glass", Colour: "#c4243a", Img: "thorn-glass.webp", Mask: "thorn-glass-mask.webp", Peak: num(0.92), Gain: num(1.3)},
 	{Key: "scales", Name: "Scales", Colour: "#2fb5a4", Img: "scales.webp", Over: "scales-boss.webp", Dye: true},
 	{Key: "vine", Name: "Vine and wood", Colour: "#6fae4f", Img: "vine.webp", Mask: "vine-mask.webp", Peak: num(0.74), Gain: num(1.3)},
@@ -87,7 +92,7 @@ func Files() []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, b := range library {
-		for _, f := range []string{b.Img, b.Mask, b.Over, b.Corner, b.CornerMask} {
+		for _, f := range []string{b.Img, b.Mask, b.Over, b.Corner, b.CornerMask, b.Ground} {
 			if f != "" && !seen[f] {
 				seen[f] = true
 				out = append(out, f)
@@ -137,9 +142,11 @@ func LibraryJSON(url func(path string) string) string {
 		Over       string   `json:"over,omitempty"`
 		Corner     string   `json:"corner,omitempty"`
 		CornerMask string   `json:"cornerMask,omitempty"`
+		Ground     string   `json:"ground,omitempty"`
 		Dye        bool     `json:"dye,omitempty"`
 		Peak       *float64 `json:"peak,omitempty"`
 		Gain       *float64 `json:"gain,omitempty"`
+		Glow       *float64 `json:"glow,omitempty"`
 	}
 	at := func(f string) string {
 		if f == "" {
@@ -150,8 +157,8 @@ func LibraryJSON(url func(path string) string) string {
 	out := make(map[string]part, len(library))
 	for _, b := range library {
 		out[b.Key] = part{
-			Img: at(b.Img), Mask: at(b.Mask), Over: at(b.Over), Corner: at(b.Corner), CornerMask: at(b.CornerMask),
-			Dye: b.Dye, Peak: b.Peak, Gain: b.Gain,
+			Img: at(b.Img), Mask: at(b.Mask), Over: at(b.Over), Corner: at(b.Corner), CornerMask: at(b.CornerMask), Ground: at(b.Ground),
+			Dye: b.Dye, Peak: b.Peak, Gain: b.Gain, Glow: b.Glow,
 		}
 	}
 	raw, err := json.Marshal(out)

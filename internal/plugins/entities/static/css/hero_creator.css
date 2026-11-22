@@ -102,7 +102,8 @@ html.dark .hc[data-skin="ornate"] {
 /* step header (phone): the step name wraps to a second line rather than being cut */
 .hc-shead { flex: none; position: relative; z-index: 2; background-color: var(--hc-surface); background-image: var(--hc-texture); border-bottom: var(--hc-edge) solid var(--hc-line); }
 .hc-sbtn { width: 100%; min-height: 50px; display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; padding: 6px 16px 4px; border: 0; background: transparent; cursor: pointer; text-align: left; transition: background-color var(--dur-micro) var(--ease-out); }
-.hc-sbtn:hover { background: var(--hc-surface-2); }
+/* A tap leaves :hover set on a touch screen, and the wash is the colour of the bars under it. */
+@media (hover: hover) { .hc-sbtn:hover { background: var(--hc-surface-2); } }
 .hc-sbtn .hc-of { font-size: 14px; color: var(--hc-muted); white-space: nowrap; flex: none; }
 .hc-sbtn .hc-nm { font-size: 17px; font-weight: 600; line-height: 1.25; min-width: 0; overflow-wrap: break-word; }
 .hc-sbtn .hc-chev { margin-left: auto; color: var(--hc-muted); transition: transform var(--dur-standard) var(--ease-out); }
@@ -188,7 +189,7 @@ html.dark .hc[data-skin="ornate"] {
 .hc-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 12px; color: var(--hc-muted); letter-spacing: 0.05em; text-transform: uppercase; }
 .hc-top .hc-ix { margin-left: auto; letter-spacing: 0; white-space: nowrap; }
 .hc-card h3 { margin: 0; font-size: 30px; line-height: 1.05; }
-.hc-sum { margin: 0; font-size: 16px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.hc-sum { margin: 0; font-size: 16px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; }
 .hc-facts { margin: 0; display: grid; gap: 1px; background: var(--hc-line); border-radius: var(--hc-radius); overflow: hidden; border: var(--hc-edge) solid var(--hc-line); }
 .hc-facts div { display: flex; flex-direction: column; padding: 7px 12px; background: var(--hc-surface-2); min-width: 0; }
 .hc-facts dt { font-size: 12px; color: var(--hc-muted); letter-spacing: 0.03em; }
@@ -398,7 +399,7 @@ html.dark .hc[data-skin="ornate"] {
   transition: transform var(--dur-standard) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out), border-color var(--dur-micro) var(--ease-out); }
 .hc-gcard:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--hc-accent) 45%, var(--hc-line)); }
 .hc-gcard .hc-top { min-height: 24px; }
-.hc-gcard h3 { margin: 0; font-size: 22px; line-height: 1.1; }
+.hc-gcard h3 { margin: 0; font-size: 22px; line-height: 1.1; overflow-wrap: break-word; }
 .hc-gcard .hc-sum { font-size: 15px; -webkit-line-clamp: 3; }
 .hc-ft { margin-top: auto; font-size: 14px; color: var(--hc-muted); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .hc-ft b { color: var(--hc-text); font-weight: 600; }
