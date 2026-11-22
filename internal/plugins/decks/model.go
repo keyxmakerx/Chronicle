@@ -406,8 +406,12 @@ type PlayerCopy struct {
 	// Open is true on a face-up card its holder has shown to the table. It is
 	// never set on a face-down copy, so a face-down entry is always the same
 	// four keys.
-	Open bool  `json:"open,omitempty"`
-	Face *Face `json:"face,omitempty"`
+	Open bool `json:"open,omitempty"`
+	// AskFirst is true on a face-up card whose play waits for a Director's
+	// answer, so the holder's button reads "Ask to play". It is never set on a
+	// face-down copy.
+	AskFirst bool  `json:"askFirst,omitempty"`
+	Face     *Face `json:"face,omitempty"`
 }
 
 // PlayerHand is one of the viewer's own heroes and what they hold of a deck.
@@ -433,12 +437,15 @@ type OtherHolds struct {
 
 // PlayerDeck is a deck as a listed player sees it.
 type PlayerDeck struct {
-	ID        string       `json:"id"`
-	Name      string       `json:"name"`
-	Kind      string       `json:"kind"`
-	Look      Look         `json:"look"`
-	CanDraw   bool         `json:"canDraw"`
-	DrawsLeft *int         `json:"drawsLeft"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Look      Look   `json:"look"`
+	CanDraw   bool   `json:"canDraw"`
+	DrawsLeft *int   `json:"drawsLeft"`
+	// DrawsOpen is true for a player the deck lets draw for themselves, even
+	// with no draws left, so the screen can say so.
+	DrawsOpen bool         `json:"drawsOpen"`
 	Hands     []PlayerHand `json:"hands"`
 	// PartyHand is the party deck's own hand, held by no hero and seen by every
 	// member of the campaign. Face-down copies are face-down entries.

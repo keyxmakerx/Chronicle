@@ -50,6 +50,15 @@ type Service interface {
 	// deck, to any member.
 	Table(ctx context.Context, campaignID string, v Viewer) (*TableView, error)
 
+	// Hand reads what the Hand leaf draws, from the player types only.
+	Hand(ctx context.Context, campaignID string, v Viewer) (*HandView, error)
+	// HeroHand reads the strip on one hero's page.
+	HeroHand(ctx context.Context, campaignID, heroID string, v Viewer) (*HeroHandView, error)
+	// Open reads one face-up card at full size with what its viewer may do.
+	Open(ctx context.Context, campaignID, deckID, copyID string, v Viewer) (*OpenedCard, error)
+	// TurnFace turns one face-down copy over and returns its face.
+	TurnFace(ctx context.Context, campaignID, deckID, copyID string, v Viewer) (*OpenedCard, error)
+
 	// IsCardPicture says whether any card of the campaign wears the media file.
 	// It answers true on an error, so a caller that ignores the error refuses.
 	IsCardPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
@@ -64,21 +73,27 @@ type Service interface {
 	CardPictureUses(ctx context.Context, campaignID, mediaID string, v Viewer) ([]PictureUse, error)
 }
 
-// Notifier is told after every move, once it is stored, so live messages can
-// follow. CopyID is empty for a shuffle or a gather.
-//
-// Anything that names a copy, a card or a holder is for Directors only. A
-// notice sent to a player may name only the deck: a copy id, a card, or which
-// hero holds it would tell a player what a face-down card is or where it went.
+// Notifier carries "your decks view changed" to the people it is for. It is
+// told after every stored move and edit, once, with who to tell and nothing
+// else: no deck, copy, card or holder, so a message cannot say what moved.
 type Notifier interface {
-	Moved(campaignID, deckID, copyID, action, holderEntityID, actorUserID string)
+	Changed(campaignID string, to Audience)
+}
+
+// Bell writes notices for the bell. A notice to a player may name only the
+// deck, and a card only when it was face up to that player.
+type Bell interface {
+	Ring(ctx context.Context, campaignID string, e BellEntry) error
 }
 
 // Option configures the service.
 type Option func(*service)
 
-// WithNotifier sets who is told after a move.
+// WithNotifier sets who carries live messages after a move.
 func WithNotifier(n Notifier) Option { return func(s *service) { s.notify = n } }
+
+// WithBell sets where bell notices are written.
+func WithBell(b Bell) Option { return func(s *service) { s.bell = b } }
 
 // WithPictures sets who may say a media file is usable as a card's picture.
 // Without it no card can have a picture, so a service built without the media
@@ -93,6 +108,7 @@ type service struct {
 	heroes Heroes
 	people Members
 	notify Notifier
+	bell   Bell
 	pick   func(n int) int
 	// pictures checks a card's picture on save; nil refuses every picture.
 	pictures Pictures
@@ -117,12 +133,6 @@ func cryptoPick(n int) int {
 		panic(fmt.Sprintf("decks: crypto/rand: %v", err))
 	}
 	return int(v.Int64())
-}
-
-func (s *service) moved(campaignID string, m Move, action string) {
-	if s.notify != nil {
-		s.notify.Moved(campaignID, m.DeckID, m.CopyID, action, m.Log.HolderEntityID, m.Log.ActorUserID)
-	}
 }
 
 // request carries what one call learns about the viewer, so it asks the
@@ -421,6 +431,7 @@ func playerCopy(c Copy, cards map[string]Card) PlayerCopy {
 		out.Face = &f
 		out.Waiting = c.AskedAt != nil
 		out.Open = c.Open
+		out.AskFirst = card.AskFirst
 	}
 	return out
 }
@@ -459,7 +470,8 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 		return PlayerDeck{}, err
 	} else if ok {
 		out.DrawsLeft = p.DrawsLeft
-		out.CanDraw = d.Settings.Draws == "players" && (p.DrawsLeft == nil || *p.DrawsLeft > 0)
+		out.DrawsOpen = d.Settings.Draws == "players"
+		out.CanDraw = out.DrawsOpen && (p.DrawsLeft == nil || *p.DrawsLeft > 0)
 	}
 
 	owned, err := r.ownedHeroes()
@@ -875,6 +887,12 @@ func (s *service) SetPlayers(ctx context.Context, campaignID, deckID string, v V
 	if !saved {
 		return nil, errStale()
 	}
+	var before []string
+	for _, p := range cur.Players {
+		before = append(before, p.UserID)
+	}
+	cur.Players = players
+	s.announce(ctx, campaignID, moveNote{Deck: cur, Action: actPlayers, Before: before})
 	return s.reread(ctx, campaignID, deckID, v)
 }
 

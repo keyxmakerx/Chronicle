@@ -1,0 +1,59 @@
+package decks
+
+import "strconv"
+
+// handSlot is one card of a hand: the card at hand size and what lets its
+// holder act on it. A face-down card is the deck's back from the look alone;
+// its slot carries the copy's id (the one thing a holder needs to turn it) and
+// the deck's name, never the card's id, name, words, kind or picture. A face-up
+// card is opened by a button laid over it. acts says whether the viewer may
+// turn and open it; without acts a face-up card is shown and nothing more.
+templ handSlot(c HandCard, i, n int, acts bool, base string) {
+	<div class="dkh-slot" data-dkh-slot data-copy={ c.Copy.ID } data-deck={ c.DeckID } data-deck-name={ c.DeckName }>
+		if c.Copy.FaceUp {
+			@CardView(c.Look, FaceUp(faceOrZero(c.Copy), pictureURL(faceOrZero(c.Copy).Picture, SizeHand)), CardOpts{Size: SizeHand})
+			if acts {
+				<button type="button" class="dkh-hit" data-dkh-open aria-label={ openLabel(c) }></button>
+			}
+			if c.Copy.Waiting {
+				<span class="dkh-chip dkh-chip-wait">Waiting</span>
+			} else if c.Copy.Open {
+				<span class="dkh-chip">Shown</span>
+			}
+		} else {
+			@CardView(c.Look, FaceDown(), CardOpts{Size: SizeHand, DeckName: c.DeckName, Position: position(i, n), Turnable: acts})
+			if acts {
+				<span class="dkh-chip dkh-chip-new">New</span>
+			}
+		}
+	</div>
+}
+
+// handRow is a row of hand slots.
+templ handRow(cards []HandCard, acts bool, base string) {
+	<div class="dkh-row" role="list">
+		for i, c := range cards {
+			<div class="dkh-item" role="listitem">
+				@handSlot(c, i, len(cards), acts, base)
+			</div>
+		}
+	</div>
+}
+
+// handBacks is a count of face-down cards the viewer may see but not turn.
+templ handBacks(l Look, deck string, n int) {
+	<div class="dkh-row" role="list">
+		for i := 0; i < n; i++ {
+			<div class="dkh-item" role="listitem">
+				@CardView(l, FaceDown(), CardOpts{Size: SizeHand, DeckName: deck})
+			</div>
+		}
+	</div>
+}
+
+func countWords(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
+}

@@ -1,0 +1,145 @@
+package decks
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// HandPanel is the Hand leaf: the viewer's own hand, the party's, what lies
+// on the table, what other heroes' hands show them, and the decks open to
+// them to draw from. It is drawn from HandView, which is built from the
+// player types only. The widget (deck_hand.js) refetches it when told the
+// viewer's decks changed.
+templ HandPanel(p handPage) {
+	@CardSheet()
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_hand.css") }/>
+	<div class="dkh" data-widget="deck-hand" data-dkh-root data-src={ p.base() + "/hand" } data-base={ p.base() } data-campaign-id={ p.CampaignID }>
+		@HandBody(p)
+	</div>
+}
+
+// HandBody is the part of the panel a refetch replaces.
+templ HandBody(p handPage) {
+	<div class="dkh-body" data-dkh-body>
+		if p.View.Empty() {
+			<p class="dkh-empty">No cards yet. Your Director deals them.</p>
+		}
+		for _, sp := range p.View.Mine {
+			<section class="dkh-sec" aria-label={ "Your hand" + heroSuffix(sp.Name, len(p.View.Mine)) }>
+				<h3 class="dkh-lab">Your hand{ heroSuffix(sp.Name, len(p.View.Mine)) }</h3>
+				if len(sp.Hand) > 0 {
+					@handRow(sp.Hand, sp.Acts, p.base())
+				}
+				if len(sp.Play) > 0 {
+					<h4 class="dkh-sub">In play in front of { sp.Name }</h4>
+					@handRow(sp.Play, sp.Acts, p.base())
+				}
+			</section>
+		}
+		for _, pt := range p.View.Party {
+			<section class="dkh-sec" aria-label={ "The party's " + pt.DeckName }>
+				<h3 class="dkh-lab">{ pt.DeckName } <span class="dkh-quiet">the party's deck</span></h3>
+				if pt.Pile != nil {
+					<p class="dkh-quiet">{ countWords(*pt.Pile, "card left to draw", "cards left to draw") }</p>
+				}
+				if len(pt.Hand) > 0 {
+					<h4 class="dkh-sub">The party's hand</h4>
+					@handRow(pt.Hand, true, p.base())
+				}
+				if len(pt.Used) > 0 {
+					<h4 class="dkh-sub">Used, which everyone can see</h4>
+					@handRow(pt.Used, false, p.base())
+				}
+			</section>
+		}
+		if len(p.View.Table) > 0 {
+			<section class="dkh-sec" aria-label="On the table">
+				<h3 class="dkh-lab">On the table</h3>
+				for _, td := range p.View.Table {
+					<h4 class="dkh-sub">{ td.Name }</h4>
+					<div class="dkh-row" role="list">
+						for _, tc := range td.Cards {
+							<div class="dkh-item" role="listitem">
+								<div class="dkh-slot" data-dkh-slot data-copy={ tc.CopyID } data-deck={ td.DeckID } data-deck-name={ td.Name }>
+									@CardView(td.Look, FaceUp(tc.Face, pictureURL(tc.Face.Picture, SizeHand)), CardOpts{Size: SizeHand})
+									<button type="button" class="dkh-hit" data-dkh-open aria-label={ "Open " + accessibleName(td.Look, tc.Face) + ", " + td.Name }></button>
+								</div>
+							</div>
+						}
+					</div>
+				}
+			</section>
+		}
+		for _, o := range p.View.Others {
+			<section class="dkh-sec" aria-label={ o.HeroName + ", " + o.DeckName }>
+				<h3 class="dkh-lab">{ otherName(o.HeroName) } <span class="dkh-quiet">{ o.DeckName }</span></h3>
+				<div class="dkh-row" role="list">
+					for _, f := range o.Faces {
+						<div class="dkh-item" role="listitem">
+							@CardView(o.Look, FaceUp(f, pictureURL(f.Picture, SizeHand)), CardOpts{Size: SizeHand})
+						</div>
+					}
+				</div>
+				if backs := o.Count - len(o.Faces); backs > 0 {
+					<p class="dkh-quiet">{ countWords(backs, "card face down", "cards face down") }</p>
+					@handBacks(o.Look, o.DeckName, backs)
+				}
+			</section>
+		}
+		for _, d := range p.View.Draws {
+			<section class="dkh-sec dkh-draw" aria-label={ "Draw from " + d.DeckName } data-dkh-draw-sec data-deck={ d.DeckID }>
+				<h3 class="dkh-lab">{ d.DeckName } <span class="dkh-quiet">you can draw from this deck</span></h3>
+				<div class="dkh-pile">
+					<span class="dkh-stack" aria-hidden="true">
+						@CardBack(d.Look, SizeHand)
+					</span>
+					<div class="dkh-pilebody">
+						if d.knownLine() != "" {
+							<p class="dkh-quiet" data-dkh-left>{ d.knownLine() }</p>
+						}
+						if d.kindsLine() != "" {
+							<p class="dkh-quiet">{ d.kindsLine() }</p>
+						}
+						<p class="dkh-quiet" data-dkh-draws>{ d.drawsLine() }</p>
+						if len(d.Heroes) > 1 {
+							<label class="dkh-quiet" for={ "dkh-hero-" + d.DeckID }>Into the hand of</label>
+							<select id={ "dkh-hero-" + d.DeckID } class="dkh-pick" data-dkh-hero>
+								for _, h := range d.Heroes {
+									<option value={ h.ID }>{ h.Name }</option>
+								}
+							</select>
+						}
+						if len(d.Heroes) == 0 {
+							<p class="dkh-quiet">You have no hero to draw into yet.</p>
+						}
+						<button type="button" class="btn-primary text-sm dkh-btn" data-dkh-draw data-deck={ d.DeckID } data-hero={ firstHero(d.Heroes) } data-working-label="Drawing…" disabled?={ !d.CanDraw || len(d.Heroes) == 0 }>Draw</button>
+					</div>
+				</div>
+			</section>
+		}
+	</div>
+	<div class="dkh-notes" data-dkh-notes role="status" aria-live="polite">
+		for _, line := range handNote(p.View.Mine, p.View.Party) {
+			<p class="dkh-note">{ line }</p>
+		}
+	</div>
+	<p class="dkh-err" role="alert" data-dkh-err hidden></p>
+}
+
+func heroSuffix(name string, heroes int) string {
+	if heroes > 1 && name != "" {
+		return ", " + name
+	}
+	return ""
+}
+
+func otherName(name string) string {
+	if name == "" {
+		return "A hero"
+	}
+	return name
+}
+
+func firstHero(h []Hero) string {
+	if len(h) == 0 {
+		return ""
+	}
+	return h[0].ID
+}

@@ -2,6 +2,7 @@ package decks
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -367,6 +368,18 @@ func (m *memRepo) PictureIDs(_ context.Context, campaignID string) ([]string, er
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// cardsOf lists a deck's card ids in a stable order.
+func (m *memRepo) cardsOf(deckID string) []string {
+	var out []string
+	for id, c := range m.cards {
+		if c.DeckID == deckID {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (m *memRepo) index(id string) int {
@@ -750,11 +763,21 @@ type fakeMembers struct{ list []Member }
 
 func (f fakeMembers) Members(context.Context, string) ([]Member, error) { return f.list, nil }
 
-// capture records moves the notifier was told about.
-type capture struct{ got []string }
+// capture records who the notifier was told to reach and what went on the bell.
+type capture struct {
+	got   []string
+	told  []Audience
+	rings []BellEntry
+}
 
-func (c *capture) Moved(_, deckID, copyID, action, holder, actor string) {
-	c.got = append(c.got, deckID+"|"+copyID+"|"+action+"|"+holder+"|"+actor)
+func (c *capture) Changed(_ string, to Audience) {
+	c.told = append(c.told, to)
+	c.got = append(c.got, fmt.Sprintf("members=%v users=%v", to.Members, to.Users))
+}
+
+func (c *capture) Ring(_ context.Context, _ string, e BellEntry) error {
+	c.rings = append(c.rings, e)
+	return nil
 }
 
 // ZoneCountsFor counts one deck's copies by zone.

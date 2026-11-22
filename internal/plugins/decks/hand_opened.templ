@@ -1,0 +1,60 @@
+package decks
+
+// HandOpened is one card opened at full size, with its controls: the card at
+// open size (the plate with its leaf for tall, the compact card for the
+// others) and, under it, Play it or Ask to play, Show the table, Throw it
+// away and Keep it. Which controls are on follows OpenedCard, which follows
+// the rules the move routes apply; the routes still decide every request.
+templ HandOpened(p openedPage) {
+	{{ c := p.Card }}
+	{{ f := faceOrZero(c.Copy) }}
+	<div class="dkh-over" role="dialog" aria-modal="false" aria-label={ accessibleName(c.Look, f) + ", " + c.DeckName } data-dkh-over data-copy={ c.Copy.ID } data-deck={ c.DeckID }>
+		<div class="dkh-sheet">
+			<button type="button" class="dkh-x" data-dkh-close aria-label="Close this card">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+			</button>
+			<div class="dkh-big" data-dkh-big>
+				@CardView(c.Look, FaceUp(f, pictureURL(f.Picture, SizeOpen)), CardOpts{Size: SizeOpen})
+			</div>
+			<p class="dkh-state" role="status" aria-live="polite" data-dkh-state>
+				if c.Copy.Waiting {
+					Waiting for your Director
+				} else if c.Shown {
+					Shown to the table
+				}
+			</p>
+			<div class="dkh-acts">
+				if c.InHand {
+					if c.Copy.Waiting {
+						<button type="button" class="btn-primary dkh-btn" disabled>Waiting for your Director</button>
+					} else if c.CanPlay {
+						<button type="button" class="btn-primary dkh-btn" data-dkh-act="play" data-working-label={ playWorking(c.Copy) }>
+							if c.Copy.AskFirst {
+								Ask to play
+							} else {
+								Play it
+							}
+						</button>
+					}
+					if c.CanShow {
+						<button type="button" class="dkh-btn dkh-btn-quiet" data-dkh-act="show" data-working-label="Showing…">Show the table</button>
+					} else if c.Shown {
+						<button type="button" class="dkh-btn dkh-btn-quiet" disabled>Shown to the table</button>
+					}
+					if c.CanDiscard {
+						<button type="button" class="dkh-btn dkh-btn-quiet" data-dkh-act="discard" data-working-label="Throwing away…">Throw it away</button>
+					}
+				}
+				<button type="button" class="dkh-btn dkh-btn-quiet" data-dkh-close>Keep it</button>
+			</div>
+			<p class="dkh-err" role="alert" data-dkh-err hidden></p>
+		</div>
+	</div>
+}
+
+func playWorking(c PlayerCopy) string {
+	if c.AskFirst {
+		return "Asking…"
+	}
+	return "Playing…"
+}

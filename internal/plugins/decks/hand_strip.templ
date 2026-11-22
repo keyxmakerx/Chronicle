@@ -1,0 +1,56 @@
+package decks
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// HeroStrip is the Cards part of a hero's page: the hero's hand as the
+// viewer may read it, with the same cards and the same widget as the Hand
+// leaf. It acts only for the hero's player and Directors (HeroHandView.Own
+// carries Acts); everyone else reads what the decks let them see.
+templ HeroStrip(p stripPage) {
+	@CardSheet()
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/decks_hand.css") }/>
+	<div class="dkh dkh-strip" data-widget="deck-hand" data-dkh-root data-src={ p.base() + "/hand/hero/" + p.View.HeroID } data-base={ p.base() } data-campaign-id={ p.CampaignID }>
+		@StripBody(p)
+	</div>
+}
+
+// StripBody is the part of the strip a refetch replaces.
+templ StripBody(p stripPage) {
+	<div class="dkh-body" data-dkh-body>
+		if p.View.Empty() {
+			<p class="dkh-empty">No cards to show.</p>
+		}
+		if p.View.Own != nil {
+			if len(p.View.Own.Hand) > 0 {
+				@handRow(p.View.Own.Hand, p.View.Own.Acts, p.base())
+			}
+			if len(p.View.Own.Play) > 0 {
+				<h4 class="dkh-sub">In play</h4>
+				@handRow(p.View.Own.Play, p.View.Own.Acts, p.base())
+			}
+		}
+		for _, o := range p.View.Others {
+			<section class="dkh-sec" aria-label={ o.DeckName }>
+				<h3 class="dkh-lab">{ o.DeckName }</h3>
+				<div class="dkh-row" role="list">
+					for _, f := range o.Faces {
+						<div class="dkh-item" role="listitem">
+							@CardView(o.Look, FaceUp(f, pictureURL(f.Picture, SizeHand)), CardOpts{Size: SizeHand})
+						</div>
+					}
+				</div>
+				if backs := o.Count - len(o.Faces); backs > 0 {
+					@handBacks(o.Look, o.DeckName, backs)
+				}
+			</section>
+		}
+	</div>
+	<div class="dkh-notes" data-dkh-notes role="status" aria-live="polite">
+		if p.View.Own != nil && p.View.Own.Acts {
+			for _, line := range handNote([]HandSpot{*p.View.Own}, nil) {
+				<p class="dkh-note">{ line }</p>
+			}
+		}
+	</div>
+	<p class="dkh-err" role="alert" data-dkh-err hidden></p>
+}

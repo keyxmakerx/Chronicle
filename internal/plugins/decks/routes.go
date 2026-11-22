@@ -40,6 +40,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	for _, t := range workshopTabs {
 		cg.GET("/decks/workshop/:did/"+t.Key, h.WorkshopTab(t.Key))
 	}
+	// The player's fragments: the Hand leaf, a hero's Cards part, an opened card
+	// and the turn-over request that brings a face. Static paths win over :did.
+	cg.GET("/decks/hand", h.HandFragment)
+	cg.GET("/decks/hand/hero/:eid", h.HeroStripFragment)
+	cg.GET("/decks/hand/:did/copies/:copy", h.OpenCardFragment)
 	cg.GET("/decks/:did", h.Get)
 	cg.PUT("/decks/:did", h.Update)
 	cg.DELETE("/decks/:did", h.Delete)
@@ -50,6 +55,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// The moves share one per-user limit, far above honest play, so flipping
 	// or drawing in a loop cannot flood the log or the database.
 	moves := middleware.UserRateLimit(func(c *echo.Context) string { return auth.GetUserID(c) }, moveRateLimit, time.Minute)
+	cg.POST("/decks/hand/:did/copies/:copy/turn", h.TurnFaceFragment, moves)
 	cg.POST("/decks/:did/draw", h.Draw, moves)
 	cg.POST("/decks/:did/copies/:copy/:verb", h.Act, moves)
 	cg.POST("/decks/:did/deal-card", h.DealCard, moves)

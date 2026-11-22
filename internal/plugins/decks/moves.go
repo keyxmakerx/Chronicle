@@ -104,7 +104,7 @@ func (r *request) lookupCopy(d Deck, id string) (Copy, error) {
 func conflict(msg string) error { return errConflictMsg(msg) }
 
 // applyMove stores a move and turns a lost race into a conflict.
-func (s *service) applyMove(ctx context.Context, m Move, action string) error {
+func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, action string) error {
 	m.Log.Action = action
 	if err := s.repo.Move(ctx, m); err != nil {
 		if errors.Is(err, errLostClaim) {
@@ -112,7 +112,7 @@ func (s *service) applyMove(ctx context.Context, m Move, action string) error {
 		}
 		return apperrorInternal(err)
 	}
-	s.moved(m.CampaignID, m, action)
+	s.announce(ctx, m.CampaignID, moveNote{Deck: d, Move: m, Action: action, Card: card})
 	return nil
 }
 
@@ -237,7 +237,8 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 		return nil, s.drawError(err, false)
 	}
 	for _, c := range got {
-		s.moved(campaignID, Move{DeckID: d.ID, CopyID: c.ID, Log: plan.Log}, ActDraw)
+		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
+			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: c.ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
 	}
 	return r.drawResult(d, got)
 }
@@ -266,7 +267,8 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 	if err != nil {
 		return nil, s.drawError(err, true)
 	}
-	s.moved(campaignID, Move{DeckID: d.ID, CopyID: got[0].ID, Log: plan.Log}, ActDeal)
+	s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDeal,
+		Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZoneShown}, To: to, Log: plan.Log}})
 	return r.result(d, got[0].ID)
 }
 
@@ -348,7 +350,8 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if err != nil {
 			return nil, s.drawError(err, false)
 		}
-		s.moved(campaignID, Move{DeckID: d.ID, CopyID: got[0].ID, Log: plan.Log}, ActDraw)
+		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
+			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
 		return r.drawResult(d, got)
 
 	case verbTurn:
@@ -467,7 +470,7 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		m.Log.Seen = c.FaceUp
 	}
 
-	if err := s.applyMove(ctx, m, action); err != nil {
+	if err := s.applyMove(ctx, d, card.Name, m, action); err != nil {
 		return nil, err
 	}
 	// A copy back in the pile has a new id, so the old one names nothing.
@@ -492,6 +495,10 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 		return nil, err
 	}
 	log := LogLine{Action: action, ActorUserID: v.UserID}
+	var before []string
+	if action == ActGather {
+		before = s.holdersOf(ctx, campaignID, d)
+	}
 	if action == ActShuffle {
 		_, err = s.repo.Shuffle(ctx, campaignID, d.ID, log)
 	} else {
@@ -503,7 +510,8 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 		}
 		return nil, apperrorInternal(err)
 	}
-	s.moved(campaignID, Move{DeckID: d.ID, Log: log}, action)
+	s.announce(ctx, campaignID, moveNote{Deck: d, Action: action, Before: before,
+		Move: Move{CampaignID: campaignID, DeckID: d.ID, From: Place{Zone: ZoneUsed}, To: Place{Zone: ZonePile}, Log: log}})
 	return r.result(d, "")
 }
 
@@ -546,6 +554,7 @@ func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*Ac
 		}
 		return nil, apperrorInternal(err)
 	}
-	s.moved(r.cid, Move{DeckID: d.ID, CopyID: c.ID, Log: plan.Log}, ActKeep)
+	s.announce(r.ctx, r.cid, moveNote{Deck: d, Action: ActKeep, Target: &target,
+		Move: Move{CampaignID: r.cid, DeckID: d.ID, CopyID: c.ID, From: here, To: Place{Zone: ZoneGone}, Log: plan.Log}})
 	return r.result(d, c.ID)
 }

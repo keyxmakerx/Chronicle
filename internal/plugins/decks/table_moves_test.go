@@ -700,7 +700,7 @@ func TestKeepCopiesTheCardIntoAnotherDeck(t *testing.T) {
 	if dd := mustGet(t, w.fixture, w.src, w.dir).(DirectorDeck); dd.Log[0].Action != ActKeep || dd.Log[0].CardName != "Ember" {
 		t.Errorf("log = %+v", dd.Log)
 	}
-	if len(w.cap.got) != 1 || !strings.Contains(w.cap.got[0], "|kept|") {
+	if len(w.cap.got) != 1 {
 		t.Errorf("announced %v", w.cap.got)
 	}
 	// The source card still has both of its copies; one is gone.

@@ -53,7 +53,7 @@ func (guardCampaigns) GetByID(_ context.Context, id string) (*campaigns.Campaign
 }
 
 func (guardCampaigns) GetMember(_ context.Context, campaignID, userID string) (*campaigns.CampaignMember, error) {
-	roles := map[string]campaigns.Role{"u-dir": campaigns.RoleOwner, "u-codm": campaigns.RolePlayer, "u-tam": campaigns.RolePlayer, "u-scribe": campaigns.RoleScribe}
+	roles := map[string]campaigns.Role{"u-dir": campaigns.RoleOwner, "u-codm": campaigns.RolePlayer, "u-tam": campaigns.RolePlayer, "u-ilse": campaigns.RolePlayer, "u-scribe": campaigns.RoleScribe}
 	if campaignID == "camp-2" {
 		roles = map[string]campaigns.Role{"u-other": campaigns.RoleOwner}
 	}

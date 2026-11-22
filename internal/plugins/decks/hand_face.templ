@@ -1,0 +1,9 @@
+package decks
+
+// TurnedFace is what the turn request brings back: the card's face at hand
+// size, built for the motion widget's turn-over (the picture loads once the
+// turn is under way). It is sent only in the reply that turned the copy.
+templ TurnedFace(c *OpenedCard) {
+	{{ f := faceOrZero(c.Copy) }}
+	@CardFace(c.Look, FaceUpDeferred(f, pictureURL(f.Picture, SizeHand)), CardOpts{Size: SizeHand})
+}
