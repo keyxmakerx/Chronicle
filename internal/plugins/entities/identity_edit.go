@@ -102,6 +102,9 @@ type builderStep struct {
 	limited bool
 	// required: the list is a short list; the step can't be emptied.
 	required bool
+	// parent is the step this one's entries live inside; a value must then
+	// belong to the parent entry the hero holds (or the patch sets).
+	parent string
 }
 
 // builderPicks is what the hero builder lets a player choose: for each step's
@@ -129,7 +132,7 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 				names[k] = ch
 			}
 		}
-		bs := builderStep{names: names}
+		bs := builderStep{names: names, parent: st.Parent}
 		if st.Rules != nil {
 			bs.limited, bs.required = st.Rules.Limited, st.Rules.Required
 		}
@@ -227,6 +230,8 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 		default:
 			if err := checkOwnerValue(entity, k, v, listed, isStep, refuseAsk); err != nil {
 				held[k] = err
+			} else if err := checkParentFit(entity, patch, k, v, listed); err != nil {
+				held[k] = err
 			}
 		}
 	}
@@ -286,6 +291,38 @@ func checkOwnerValue(entity *Entity, k string, v any, step builderStep, isStep, 
 		}
 	}
 	return nil
+}
+
+// checkParentFit refuses a value on a dependent step (a subclass) that does
+// not belong to the hero's current parent value (a class), which is the
+// patch's own when the same patch sets it. A hero keeps what it already
+// holds while its parent is not being changed. A step with no parent, a
+// value off the list (other checks judge that) and an empty value pass.
+// Offering nothing for a count-0 step is the builder's job, not a refusal here.
+func checkParentFit(entity *Entity, patch map[string]any, k string, v any, step builderStep) error {
+	val, _ := v.(string)
+	val = strings.TrimSpace(val)
+	if step.parent == "" || val == "" {
+		return nil
+	}
+	ch, on := step.names[strings.ToLower(val)]
+	if !on || ch.Parent == "" {
+		return nil
+	}
+	parentVal, parentInPatch := "", false
+	if pv, has := patch[step.parent]; has {
+		parentInPatch = true
+		parentVal, _ = pv.(string)
+	} else if entity != nil {
+		parentVal, _ = entity.FieldsData[step.parent].(string)
+	}
+	if strings.EqualFold(strings.TrimSpace(parentVal), ch.Parent) {
+		return nil
+	}
+	if holdsValue(entity, k, val) && !parentInPatch {
+		return nil
+	}
+	return apperror.NewBadRequest(fmt.Sprintf("%q belongs to %s; choose that %s first", val, ch.Parent, step.parent))
 }
 
 // askYourDirector is the refusal for writing an ask-first entry where the

@@ -39,6 +39,10 @@ type HeroChoice struct {
 	// State is HeroChoiceStateAskFirst on an entry the player may pick only
 	// with a Director's yes; empty for an entry they may simply pick.
 	State string `json:"state,omitempty"`
+	// Parent is the name of the parent-step entry this one belongs to, set
+	// on entries of a step whose list lives inside another step's entries
+	// (a subclass inside its class).
+	Parent string `json:"parent,omitempty"`
 	// Held marks an entry the rules took off the player's list, carried only
 	// so a hero that already holds it stays editable. Never served, and never
 	// a valid new pick.
@@ -58,6 +62,65 @@ type HeroStep struct {
 	// Held is what the rules took off the list, kept server-side so a hero
 	// that holds one stays editable. Never served.
 	Held []HeroChoice `json:"-"`
+	// Needed: the system's rules expect this pick. The step reads as not
+	// optional, but only a Director's rule makes the server refuse a hero
+	// without it.
+	Needed bool `json:"needed,omitempty"`
+	// Parent is the field key of the step this step's entries live inside.
+	Parent string `json:"parent,omitempty"`
+	// CountFrom says how many of this step the chosen parent entries allow.
+	CountFrom []HeroCount `json:"countFrom,omitempty"`
+}
+
+// HeroCount names a step and a number property that sets how many of this
+// step the entry chosen there allows. Note names a text property on the same
+// entry that tells the player why.
+type HeroCount struct {
+	Step     string `json:"step"`
+	Property string `json:"property"`
+	Note     string `json:"note,omitempty"`
+}
+
+// heroStepAllowance is what the chosen parent entries say about a step:
+// how many it takes, and from which entry. Known is false when no chosen
+// entry defines the number, and the step then behaves as it always did.
+type heroStepAllowance struct {
+	Count int
+	Known bool
+	By    string
+	Note  string
+}
+
+// heroAllowance walks the step's CountFrom in order, so a later step whose
+// chosen entry defines the number (a subclass) overrides an earlier one (its
+// class). chosen returns the entry picked at a step, nil when none.
+func heroAllowance(step *HeroStep, chosen func(stepKey string) *HeroChoice) heroStepAllowance {
+	var out heroStepAllowance
+	for _, cf := range step.CountFrom {
+		ch := chosen(cf.Step)
+		if ch == nil {
+			continue
+		}
+		n, ok := ch.Properties[cf.Property].(float64)
+		if !ok || n < 0 {
+			continue
+		}
+		out = heroStepAllowance{Count: int(n), Known: true, By: ch.Name}
+		if cf.Note != "" {
+			out.Note, _ = ch.Properties[cf.Note].(string)
+		}
+	}
+	return out
+}
+
+// heroNotUsed is the refusal for a pick on a step the chosen parent does not
+// use, in the words a player reads.
+func heroNotUsed(parentName, label string) error {
+	article := "A"
+	if r := []rune(strings.ToLower(strings.TrimSpace(parentName))); len(r) > 0 && strings.ContainsRune("aeiou", r[0]) {
+		article = "An"
+	}
+	return apperror.NewBadRequest(fmt.Sprintf("%s %s doesn't use a %s", article, strings.TrimSpace(parentName), strings.ToLower(label)))
 }
 
 // HeroPlan is every step for one campaign, in the order the system declares
@@ -247,7 +310,9 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 			steps[plan.Steps[i].FieldKey] = &plan.Steps[i]
 		}
 	}
-	out := make(map[string]heroPickResult, len(picks))
+	// First every pick is matched to its entry, so a step's parent and count
+	// can be read whatever order the picks arrive in.
+	found := make(map[string]*HeroChoice, len(picks))
 	for key, pick := range picks {
 		step := steps[key]
 		if step == nil {
@@ -269,6 +334,19 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 		}
 		if choice == nil {
 			return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
+		}
+		found[key] = choice
+	}
+	chosen := func(k string) *HeroChoice { return found[k] }
+	out := make(map[string]heroPickResult, len(picks))
+	for key, pick := range picks {
+		choice := found[key]
+		if choice == nil {
+			continue
+		}
+		step := steps[key]
+		if err := checkHeroStepFit(step, steps, choice, chosen); err != nil {
+			return nil, err
 		}
 		res := heroPickResult{choice: choice}
 		if len(pick.Options) > 0 && (checkAsked || choice.State != HeroChoiceStateAskFirst) {
@@ -296,6 +374,45 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 		out[key] = res
 	}
 	return out, nil
+}
+
+// checkHeroStepFit refuses a pick the chosen parent does not allow: an entry
+// of a dependent step must belong to the entry picked at its parent step
+// (and the parent must be picked), and a step the chosen entries allow none
+// of takes no pick.
+func checkHeroStepFit(step *HeroStep, steps map[string]*HeroStep, choice *HeroChoice, chosen func(string) *HeroChoice) error {
+	if step.Parent != "" {
+		parent := chosen(step.Parent)
+		if parent == nil {
+			parentLabel := step.Parent
+			if ps := steps[step.Parent]; ps != nil {
+				parentLabel = ps.Label
+			}
+			return apperror.NewBadRequest(fmt.Sprintf("choose the %s before the %s", strings.ToLower(parentLabel), strings.ToLower(step.Label)))
+		}
+		if !heroParentHasEntries(step, parent.Name) {
+			return heroNotUsed(parent.Name, step.Label)
+		}
+		if !strings.EqualFold(choice.Parent, parent.Name) {
+			return apperror.NewBadRequest(fmt.Sprintf("%q is not a %s of %s", choice.Name, strings.ToLower(step.Label), parent.Name))
+		}
+	}
+	if a := heroAllowance(step, chosen); a.Known && a.Count == 0 {
+		return heroNotUsed(a.By, step.Label)
+	}
+	return nil
+}
+
+// heroParentHasEntries reports whether the dependent step offers anything
+// for this parent entry. A parent with nothing listed (a class with no
+// subclasses) leaves the step unasked rather than unfinished.
+func heroParentHasEntries(step *HeroStep, parentName string) bool {
+	for _, c := range step.Choices {
+		if strings.EqualFold(c.Parent, parentName) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildHeroFields checks every pick against the plan and returns the hero's

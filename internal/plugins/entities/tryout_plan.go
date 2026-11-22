@@ -23,14 +23,14 @@ func tryoutPlan(plan *HeroPlan) *HeroPlan {
 	}
 	out.SystemID, out.SystemName = plan.SystemID, plan.SystemName
 	for _, st := range plan.Steps {
-		step := HeroStep{FieldKey: st.FieldKey, Label: st.Label, Choices: []HeroChoice{}}
+		step := HeroStep{FieldKey: st.FieldKey, Label: st.Label, Choices: []HeroChoice{}, Needed: st.Needed, Parent: st.Parent, CountFrom: st.CountFrom}
 		for _, c := range st.Choices {
 			if c.Mine || c.Status != "" || c.Held || (c.Source != "package" && c.Source != "campaign") {
 				continue
 			}
 			step.Choices = append(step.Choices, HeroChoice{
 				Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
-				Description: c.Description, Properties: c.Properties,
+				Description: c.Description, Properties: c.Properties, Parent: c.Parent,
 			})
 		}
 		if len(step.Choices) > 0 {

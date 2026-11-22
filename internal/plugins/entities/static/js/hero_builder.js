@@ -175,9 +175,98 @@
 
 
   // --- Lookups ---
-  Builder.prototype.stepByKey = function (k) {
+  Builder.prototype.rawStep = function (k) {
     for (var i = 0; i < this.plan.steps.length; i++) if (this.plan.steps[i].fieldKey === k) return this.plan.steps[i];
     return null;
+  };
+  // A step as one hero sees it. h defaults to the hero whose panel is open,
+  // which is who every panel, pick and roll is for.
+  Builder.prototype.stepByKey = function (k, h) {
+    h = h || (this.panel && this.heroById(this.panel.hero));
+    return this.view(h, this.rawStep(k));
+  };
+
+  // --- Steps a system shapes: dependent lists and counts ---
+
+  // A dependent step (a subclass) lists only the entries under the parent
+  // entry the hero holds. The view is kept per hero and parent value so the
+  // same step is the same object from one call to the next.
+  Builder.prototype.view = function (h, st) {
+    if (!st || !st.parent || !h) return st;
+    var pv = lower(h.values[st.parent] || ''), key = h.id + '|' + st.fieldKey + '|' + pv;
+    this.views = this.views || {};
+    var v = this.views[key];
+    if (!v || v.base !== st.choices) {
+      v = Object.assign({}, st, { choices: this.offered(h.values, st), base: st.choices });
+      this.views[key] = v;
+    }
+    return v;
+  };
+  // The entries a step offers for a set of values.
+  Builder.prototype.offered = function (vals, st) {
+    if (!st.parent) return st.choices;
+    var pv = lower(vals[st.parent] || '');
+    return pv ? st.choices.filter(function (c) { return lower(c.parent) === pv; }) : [];
+  };
+  // The entry a values map holds at a step; the one under the held parent
+  // wins when two parents list the same name.
+  Builder.prototype.entryOf = function (vals, key) {
+    var st = this.rawStep(key), name = st && vals[key];
+    if (!name) return null;
+    var pv = st.parent && lower(vals[st.parent] || ''), first = null;
+    for (var i = 0; i < st.choices.length; i++) {
+      var c = st.choices[i];
+      if (lower(c.name) !== lower(name)) continue;
+      if (!pv || lower(c.parent) === pv) return c;
+      first = first || c;
+    }
+    return first;
+  };
+  // How many of this step the held parent entries allow; a later countFrom
+  // whose entry defines the number overrides an earlier one.
+  Builder.prototype.allowanceOf = function (vals, st) {
+    var out = { known: false, count: 0 }, self = this;
+    (st.countFrom || []).forEach(function (cf) {
+      var e = self.entryOf(vals, cf.step), n = e && e.properties && e.properties[cf.property];
+      if (typeof n === 'number' && n >= 0) out = { known: true, count: Math.floor(n) };
+    });
+    return out;
+  };
+  // A step the held entries leave nothing to ask: a count of 0, or a parent
+  // that lists none. It is left out of the sentence.
+  Builder.prototype.unusedWith = function (vals, st) {
+    var a = this.allowanceOf(vals, st);
+    if (a.known && a.count === 0) return true;
+    return !!(st.parent && vals[st.parent] && !this.offered(vals, st).length && !st.canMake);
+  };
+  // What else must be cleared when values change a hero: a pick that no
+  // longer fits its parent, or sits on a step the new entries do not use.
+  // Only steps downstream of a change are looked at, so a value the hero
+  // already holds elsewhere is never touched.
+  Builder.prototype.dependents = function (h, values) {
+    var self = this, vals = {}, out = {}, changed = {}, again = true, guard = 0;
+    Object.keys(h.values).forEach(function (k) { vals[k] = h.values[k]; });
+    Object.keys(values).forEach(function (k) {
+      if (lower(vals[k] || '') !== lower(values[k] == null ? '' : values[k])) changed[k] = true;
+      if (values[k] == null) delete vals[k]; else vals[k] = values[k];
+    });
+    while (again && guard++ < 8) {
+      again = false;
+      this.plan.steps.forEach(function (st) {
+        var k = st.fieldKey;
+        if (!vals[k] || k in values || k in out) return;
+        var deps = [st.parent].concat((st.countFrom || []).map(function (c) { return c.step; }));
+        if (!deps.some(function (d) { return d && changed[d]; })) return;
+        var c = self.entryOf(vals, k);
+        if (c && !self.unusedWith(vals, st) && (!st.parent || lower(c.parent) === lower(vals[st.parent] || ''))) return;
+        out[k] = null; delete vals[k]; changed[k] = true; again = true;
+      });
+    }
+    return out;
+  };
+  Builder.prototype.indexOfKey = function (steps, key) {
+    for (var i = 0; i < steps.length; i++) if (steps[i].fieldKey === key) return i;
+    return -1;
   };
   Builder.prototype.choiceByName = function (st, name) {
     for (var i = 0; i < st.choices.length; i++) if (lower(st.choices[i].name) === lower(name)) return st.choices[i];
@@ -189,7 +278,9 @@
   };
   // The steps a hero shows: GM-only fields stay out of a player's sentence.
   Builder.prototype.stepsFor = function (h) {
-    return this.plan.steps.filter(function (s) { return h.hidden.indexOf(s.fieldKey) < 0; });
+    var self = this;
+    return this.plan.steps.filter(function (s) { return h.hidden.indexOf(s.fieldKey) < 0 && !self.unusedWith(h.values, s); })
+      .map(function (s) { return self.view(h, s); });
   };
   // The pick of this step that waits for a Director: a saved hero's request
   // from the plan, or, on a hero not made yet, an Ask first entry just picked.
@@ -290,9 +381,10 @@
     var h = this.heroById(p.hero), st = this.stepByKey(p.key);
     if (!h || !st) return '';
     if (p.own) return this.ownShell(h, st);
-    var steps = this.stepsFor(h), idx = steps.indexOf(st), list = st.choices, n = list.length, rl = rollable(st), nr = rl.length;
+    var steps = this.stepsFor(h), idx = this.indexOfKey(steps, st.fieldKey), list = st.choices, n = list.length, rl = rollable(st), nr = rl.length;
     var rules = st.rules || {}, waitName = this.waitingName(h, st);
     var cur = h.values[st.fieldKey], fo = (p.focus != null && list[p.focus]) || (cur && this.choiceByName(st, cur)) || list[0];
+    if (!fo && st.parent && !h.values[st.parent]) return this.waitHtml(h, st, idx, steps.length);
     if (!fo) return this.ownOnly(h, st, idx, steps.length);
     var whose = esc(possessive(h.name));
     var html = '<div class="hb-ph"><div class="hb-ph1"><span class="hb-kicker">' + (idx + 1) + ' of ' + steps.length + '</span>' +
@@ -320,6 +412,16 @@
       (prev ? '<button type="button" class="hb-link" data-go="' + esc(prev.fieldKey) + '">Back to ' + esc(lower(prev.label)) + '</button>' : '<span></span>') +
       (next ? '<button type="button" class="hb-link" data-go="' + esc(next.fieldKey) + '">On to ' + esc(lower(next.label)) + '</button>' : '<span></span>') + '</div>';
     return html;
+  };
+
+  // The panel of a dependent step whose parent the hero has not chosen.
+  Builder.prototype.waitHtml = function (h, st, idx, total) {
+    var ps = this.rawStep(st.parent), word = ps ? lower(ps.label) : 'earlier choice';
+    return '<div class="hb-ph"><div class="hb-ph1"><span class="hb-kicker">' + (idx + 1) + ' of ' + total + '</span>' +
+      '<button type="button" class="hb-x" data-act="close" aria-label="Close the choices"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
+      '<h3 class="hb-pt">Choose ' + esc(possessive(h.name)) + ' ' + esc(lower(st.label)) + '</h3>' +
+      '<p class="hb-none">Choose ' + esc(possessive(h.name)) + ' ' + esc(word) + ' first.</p></div>' +
+      '<div class="hb-pf hb-steps"><button type="button" class="hb-link" data-go="' + esc(st.parent) + '">Go to ' + esc(word) + '</button><span></span></div>';
   };
 
   Builder.prototype.chooseText = function (c, chosen, waitName) {
@@ -599,6 +701,10 @@
   // hero (put back if the save fails) or kept in the draft for a new one.
   Builder.prototype.apply = function (h, values) {
     var self = this, before = {};
+    // A changed parent takes its dependent picks with it, in the same save.
+    var extra = this.dependents(h, values);
+    this.cleared = Object.keys(extra).map(function (k) { var st = self.rawStep(k); return st ? lower(st.label) : k; });
+    values = Object.assign({}, values, extra);
     Object.keys(values).forEach(function (k) {
       before[k] = h.values[k] || null;
       // What was bought belongs to the old pick; the server clears it on a
@@ -675,16 +781,13 @@
   Builder.prototype.pick = function (heroId, key, name, note) {
     var h = this.heroById(heroId), self = this, v = {};
     v[key] = name;
-    var pc = this.choiceByName(this.stepByKey(key), name);
-    if (pc && pc.state === 'ask_first' && !note) return this.askPick(h, this.stepByKey(key), pc);
+    var pc = this.choiceByName(this.stepByKey(key, h), name);
+    if (pc && pc.state === 'ask_first' && !note) return this.askPick(h, this.stepByKey(key, h), pc);
     // Choosing moves the panel on to the next blank, so filling in a hero is
     // one choice after another; with nothing left it closes.
-    var rest = this.left(h).filter(function (s) { return s.fieldKey !== key; });
-    var steps = this.stepsFor(h), at = steps.indexOf(this.stepByKey(key));
-    var next = rest.filter(function (s) { return steps.indexOf(s) > at; })[0] || rest[0];
     // A pick with points to spend keeps the panel on it, so its traits are
     // bought now rather than forgotten.
-    var buy = buyListOf(this.choiceByName(this.stepByKey(key), name));
+    var buy = buyListOf(this.choiceByName(this.stepByKey(key, h), name));
     if (buy && !note) {
       this.panel = { hero: h.id, key: key, focus: null };
       var keeping = this.apply(h, v);
@@ -695,12 +798,18 @@
       if (first) first.focus({ preventScroll: false });
       return keeping;
     }
+    var saving = this.apply(h, v), cleared = this.cleared || [];
+    // The next blank is read after the change, which may have cleared or
+    // freed steps further on.
+    var rest = this.left(h).filter(function (s) { return s.fieldKey !== key; });
+    var steps = this.stepsFor(h), at = this.indexOfKey(steps, key);
+    var next = rest.filter(function (s) { return self.indexOfKey(steps, s.fieldKey) > at; })[0] || rest[0];
     this.panel = next ? { hero: h.id, key: next.fieldKey, focus: null } : null;
-    var saving = this.apply(h, v);
     this.redrawHero(h);
     // Saved shows once the server has it; a new hero has nothing to save yet.
     saving.then(function () { self.tick(h, key); }, function () {});
     if (note) this.toast(note);
+    else if (cleared.length) this.toast('Cleared ' + cleared.join(' and ') + ', which no longer fit.');
     else if (!next) this.toast(h.name + ' has every choice made.');
     if (!next) this.focusAfter(h);
     else { var q = this.el.querySelector('[data-hb-q]'); if (q && !this.narrow()) q.focus({ preventScroll: true }); }
