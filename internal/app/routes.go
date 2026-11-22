@@ -7232,6 +7232,8 @@ func (a *App) RegisterRoutes() {
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
+		SavedLayouts:    layoutPresetService,
+		PageTemplates:   contentTemplateService,
 		PageTests:       pageTests,
 		Trackers:        trackersSvc,
 		FoundryMonsters: aiFoundryMonsters,

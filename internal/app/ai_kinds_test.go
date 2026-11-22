@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
@@ -32,6 +33,10 @@ type stubPlayerNotes struct{ entity_notes.Service }
 type stubCrafting struct{ records.CraftingAPI }
 
 type stubShopLooks struct{ records.ShopLooksAPI }
+type stubSavedLayouts struct{ entities.LayoutPresetService }
+type stubPageTemplates struct {
+	entities.ContentTemplateService
+}
 
 func aiKindNames(d aiDeps) string {
 	var names []string
@@ -57,13 +62,13 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		{
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home material recipe drops bench shop-room storefront page-map generator",
+				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}},
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home layout category-home saved-layout page-template material recipe drops bench shop-room storefront page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
 			deps: aiDeps{Health: degraded},
-			want: "calendar event weather shop-stock carried-item pin map hex-map note house-rule system-entry category-field folder game-night tag menu-order home generator",
+			want: "calendar event weather shop-stock carried-item pin map hex-map note house-rule system-entry category-field folder game-night tag menu-order home layout category-home generator",
 		},
 	}
 	for _, tt := range tests {
@@ -81,11 +86,28 @@ func TestAIKindsEachHaveABrief(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
 	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}}))...)
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}}))...)
 	caps := reg.Capabilities()
 	for _, k := range reg.Kinds() {
 		if strings.Contains(caps, "`kind: "+k.Name()+"`: "+k.Label()+"\n") {
 			t.Errorf("kind %s has only its label in the prompt", k.Name())
+		}
+	}
+}
+
+// A kind's format never holds a line opening with "## ": the connector cuts
+// its guide at those headings, so one inside a format would pull every later
+// format out of the blocks index and past the guide's size.
+func TestAIKindDocsHoldNoSectionHeadings(t *testing.T) {
+	healthy := database.NewPluginHealthRegistry()
+	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
+	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}}))...)
+	for _, k := range reg.Kinds() {
+		for _, line := range strings.Split(k.Doc(), "\n") {
+			if strings.HasPrefix(line, "## ") {
+				t.Errorf("kind %s's format has a section heading: %q", k.Name(), line)
+			}
 		}
 	}
 }
