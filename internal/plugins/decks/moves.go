@@ -113,6 +113,7 @@ func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, ac
 		return apperrorInternal(err)
 	}
 	s.announce(ctx, m.CampaignID, moveNote{Deck: d, Move: m, Action: action, Card: card})
+	s.poked(m.CampaignID)
 	return nil
 }
 
@@ -184,6 +185,10 @@ func (s *service) drawError(err error, named bool) error {
 		return errConflictMsg(fmt.Sprintf("At most %d cards can be shown at once; deal some or put them back first.", MaxShown))
 	case errors.Is(err, errLostClaim):
 		return errMoved()
+	case errors.Is(err, errNoneFit):
+		return errConflictMsg("No card in the pile fits right now. You can still deal a card by name.")
+	case errors.Is(err, errMomentGone):
+		return momentGone()
 	}
 	return apperrorInternal(err)
 }
@@ -196,6 +201,12 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 	}
 	plan := DrawPlan{CampaignID: campaignID, DeckID: d.ID, Count: 1, Reshuffle: d.Settings.Empty == "reshuffle",
 		Pick: s.pick, Log: LogLine{Action: ActDraw, ActorUserID: v.UserID}}
+	cards, err := s.repo.ListCards(ctx, campaignID, d.ID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	invited := false
+	var invite Moment
 	if v.Director {
 		if in.HeroID != "" {
 			return nil, errInvalid("a Director's draw goes to the shown spot; deal it from there")
@@ -207,35 +218,78 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 			plan.Count = in.Count
 		}
 		plan.To = Place{Zone: ZoneShown}
+		// A Director's draw is among the cards that fit now.
+		if allowed := s.fittingCards(ctx, campaignID, d, cards); allowed != nil {
+			plan.Restrict, plan.Allowed = true, allowed
+		}
 	} else {
-		p, ok, err := r.chosen(d)
-		if err != nil {
-			return nil, err
-		}
-		if !ok || d.Settings.Draws != "players" {
-			return nil, errForbidden("you can't draw from this deck")
-		}
-		if in.Count > 1 || in.Count < 0 {
-			return nil, errInvalid("you draw one card at a time")
-		}
-		if p.DrawsLeft != nil && *p.DrawsLeft <= 0 {
-			return nil, errForbidden("you have no draws left")
-		}
-		own, err := r.owns(in.HeroID)
-		if err != nil {
-			return nil, err
-		}
-		if !own {
-			return nil, errForbidden("you can only draw into your own hero's hand")
+		invite, invited = s.invitation(ctx, campaignID, d, v, in.HeroID)
+		if invited {
+			if in.Count > 1 || in.Count < 0 {
+				return nil, errInvalid("you draw one card at a time")
+			}
+			own, err := r.owns(in.HeroID)
+			if err != nil {
+				return nil, err
+			}
+			if !own {
+				return nil, errForbidden("you can only draw into your own hero's hand")
+			}
+			// An invited draw needs no grant and spends no draw. It is among the
+			// cards with a test that fit now, hidden tests included.
+			fit := s.fittingWithTests(ctx, campaignID, d, cards)
+			allowed := make(map[string]bool, len(fit))
+			for id := range fit {
+				allowed[id] = true
+			}
+			plan.Restrict, plan.Allowed = true, allowed
+			plan.Moment = &MomentClaim{ID: invite.ID, From: []string{MomentInvited}, To: MomentDrawn, By: v.UserID, InvitedUserID: v.UserID}
+		} else {
+			p, ok, err := r.chosen(d)
+			if err != nil {
+				return nil, err
+			}
+			if !ok || d.Settings.Draws != "players" {
+				return nil, errForbidden("you can't draw from this deck")
+			}
+			if in.Count > 1 || in.Count < 0 {
+				return nil, errInvalid("you draw one card at a time")
+			}
+			if p.DrawsLeft != nil && *p.DrawsLeft <= 0 {
+				return nil, errForbidden("you have no draws left")
+			}
+			own, err := r.owns(in.HeroID)
+			if err != nil {
+				return nil, err
+			}
+			if !own {
+				return nil, errForbidden("you can only draw into your own hero's hand")
+			}
+			// A player pulls only a card with no test or with printed tests that
+			// all hold; a card with a test the Director kept to themselves is never
+			// in it, whether or not it holds.
+			if allowed := s.eligibleForPlayer(ctx, campaignID, d, cards); allowed != nil {
+				plan.Restrict, plan.Allowed = true, allowed
+			}
+			plan.SpendUserID = v.UserID
 		}
 		plan.To = Place{Zone: ZoneHand, HolderEntityID: in.HeroID, FaceUp: d.Settings.Arrives == "up"}
-		plan.DealtBy, plan.SpendUserID = v.UserID, v.UserID
+		plan.DealtBy = v.UserID
 		plan.Log.HolderEntityID = in.HeroID
 	}
 	got, err := s.repo.Draw(ctx, plan)
 	if err != nil {
+		if !v.Director && errors.Is(err, errNoneFit) {
+			// Nothing a player may pull is the same answer as an empty pile that
+			// does not reshuffle, so the reply cannot say a hidden test is why.
+			return nil, errNothingLeft()
+		}
 		return nil, s.drawError(err, false)
 	}
+	if invited {
+		s.afterAnswer(ctx, campaignID, invite)
+	}
+	s.poked(campaignID)
 	for _, c := range got {
 		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
 			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: c.ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
@@ -269,6 +323,7 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 	}
 	s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDeal,
 		Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZoneShown}, To: to, Log: plan.Log}})
+	s.poked(campaignID)
 	return r.result(d, got[0].ID)
 }
 
@@ -346,6 +401,13 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		plan := DrawPlan{CampaignID: campaignID, DeckID: d.ID, Count: 1, To: Place{Zone: ZoneShown}, PutBackCopyID: c.ID,
 			Reshuffle: d.Settings.Empty == "reshuffle", Pick: s.pick,
 			Log: LogLine{Action: ActDraw, ActorUserID: v.UserID}}
+		all, err := s.repo.ListCards(ctx, campaignID, d.ID)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		if allowed := s.fittingCards(ctx, campaignID, d, all); allowed != nil {
+			plan.Restrict, plan.Allowed = true, allowed
+		}
 		got, err := s.repo.Draw(ctx, plan)
 		if err != nil {
 			return nil, s.drawError(err, false)
@@ -512,6 +574,7 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 	}
 	s.announce(ctx, campaignID, moveNote{Deck: d, Action: action, Before: before,
 		Move: Move{CampaignID: campaignID, DeckID: d.ID, From: Place{Zone: ZoneUsed}, To: Place{Zone: ZonePile}, Log: log}})
+	s.poked(campaignID)
 	return r.result(d, "")
 }
 
@@ -556,5 +619,6 @@ func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*Ac
 	}
 	s.announce(r.ctx, r.cid, moveNote{Deck: d, Action: ActKeep, Target: &target,
 		Move: Move{CampaignID: r.cid, DeckID: d.ID, CopyID: c.ID, From: here, To: Place{Zone: ZoneGone}, Log: plan.Log}})
+	s.poked(r.cid)
 	return r.result(d, c.ID)
 }

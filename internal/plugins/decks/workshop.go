@@ -58,7 +58,8 @@ func pictureURL(id string, size CardSize) string {
 
 // dirFace is a card's face as a Director's page draws it.
 func dirFace(c DirectorCard) Face {
-	return Face{CardID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare}
+	return Face{CardID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare,
+		When: printedFrom(c.When)}
 }
 
 // upState is the card face up at a size, picture and all.

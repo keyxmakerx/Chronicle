@@ -470,6 +470,25 @@ func (m *memRepo) Move(_ context.Context, mv Move) error {
 	return nil
 }
 
+// fit narrows a list of pile copies to the cards the plan allows, as the SQL
+// does after it has read the pile.
+func (m *memRepo) fit(p DrawPlan, raw []int, exclude string) []int {
+	var out []int
+	for _, i := range raw {
+		if !p.Restrict || p.Allowed[m.copies[i].CardID] {
+			out = append(out, i)
+		}
+	}
+	if len(out) == 0 && exclude != "" {
+		for i, c := range m.copies {
+			if c.ID == exclude && (!p.Restrict || p.Allowed[c.CardID]) {
+				out = append(out, i)
+			}
+		}
+	}
+	return out
+}
+
 func (m *memRepo) pile(p DrawPlan, exclude string) []int {
 	var out []int
 	for i, c := range m.copies {
@@ -564,8 +583,9 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 			undo()
 			return nil, errShownFull
 		}
-		cands := m.pile(p, exclude)
-		if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && m.copies[cands[0]].ID == exclude)) {
+		raw := m.pile(p, exclude)
+		cands := m.fit(p, raw, exclude)
+		if p.Reshuffle && p.CardID == "" && (len(raw) == 0 || (exclude != "" && len(raw) == 1 && m.copies[raw[0]].ID == exclude)) {
 			moved := false
 			for i, c := range m.copies {
 				if c.DeckID == p.DeckID && c.Zone == ZoneUsed {
@@ -574,7 +594,8 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 				}
 			}
 			if moved {
-				cands = m.pile(p, exclude)
+				raw = m.pile(p, exclude)
+				cands = m.fit(p, raw, exclude)
 			}
 		}
 		if len(cands) == 0 {
@@ -582,6 +603,9 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 				break
 			}
 			undo()
+			if len(raw) > 0 {
+				return nil, errNoneFit
+			}
 			return nil, errEmptyPile
 		}
 		if n > 0 && p.To.Zone == ZoneShown && shown+len(out)+1 > MaxShown {
@@ -624,6 +648,10 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 		c.MovedAt = m.tick()
 		if p.DealtBy != "" {
 			c.DealtBy, c.DealtAt = p.DealtBy, &now
+		}
+		if k := m.cards[c.CardID]; k.SaidAt != nil {
+			k.SaidAt = nil
+			m.cards[c.CardID] = k
 		}
 		line := p.Log
 		line.DeckID, line.CardID, line.CardName, line.CopyID = p.DeckID, c.CardID, m.cards[c.CardID].Name, c.ID

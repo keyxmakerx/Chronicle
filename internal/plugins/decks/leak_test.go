@@ -33,7 +33,7 @@ func newLeakWorld(t *testing.T) *leakWorld {
 		{"GoneCard", "GONEWORDS", "GONENOTE"},
 		{"TableCard", "TABLEWORDS", "TABLENOTE"},
 	} {
-		id := fx.card(w.secrets, CreateCardInput{Name: c.name, Words: c.words, DirectorNote: c.note, WhenOpen: false})
+		id := fx.card(w.secrets, CreateCardInput{Name: c.name, Words: c.words, DirectorNote: c.note})
 		w.secretCopies[c.name] = fx.copiesOf(id)[0]
 	}
 	fx.choose(w.secrets, PlayerInput{UserID: "u-tam", DrawsLeft: ptr(2)})

@@ -155,14 +155,17 @@ func drawPlan(fx *dbFixture, d Deck, to Place) DrawPlan {
 
 func TestIntegration_MigrationIsIdempotentAndReversible(t *testing.T) {
 	fx := newDBFixture(t)
-	up, err := MigrationsFS.ReadFile("migrations/001_decks.up.sql")
-	if err != nil {
-		t.Fatal(err)
+	read := func(name string) string {
+		b, err := MigrationsFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
 	}
-	down, err := MigrationsFS.ReadFile("migrations/001_decks.down.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Later migrations hang off the first one's tables, so up runs in order and
+	// down in reverse.
+	ups := []string{read("001_decks.up.sql"), read("002_deck_moments.up.sql")}
+	downs := []string{read("002_deck_moments.down.sql"), read("001_decks.down.sql")}
 	// The migration runner applies a multi-statement file; do the same twice.
 	db2, err := sql.Open("mysql", mustDSN(t)+"&multiStatements=true")
 	if err != nil {
@@ -177,19 +180,25 @@ func TestIntegration_MigrationIsIdempotentAndReversible(t *testing.T) {
 		t.Skipf("cannot select schema: %v", err)
 	}
 	for i := 0; i < 2; i++ {
-		if _, err := db2.Exec(string(up)); err != nil {
-			t.Fatalf("up, run %d: %v", i+1, err)
+		for j, up := range ups {
+			if _, err := db2.Exec(up); err != nil {
+				t.Fatalf("up %d, run %d: %v", j+1, i+1, err)
+			}
 		}
 	}
-	if _, err := db2.Exec(string(down)); err != nil {
-		t.Fatalf("down: %v", err)
+	for j, down := range downs {
+		if _, err := db2.Exec(down); err != nil {
+			t.Fatalf("down %d: %v", j+1, err)
+		}
 	}
 	var n int
 	if err := fx.db.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name LIKE 'deck%'`, name).Scan(&n); err != nil || n != 0 {
 		t.Errorf("after down %d deck tables remain (%v)", n, err)
 	}
-	if _, err := db2.Exec(string(up)); err != nil {
-		t.Fatalf("up after down: %v", err)
+	for j, up := range ups {
+		if _, err := db2.Exec(up); err != nil {
+			t.Fatalf("up %d after down: %v", j+1, err)
+		}
 	}
 }
 
@@ -985,7 +994,7 @@ func (fx *dbFixture) keepSetup(t *testing.T) (src, dst Deck, card Card, cp Copy)
 	suffix := uuid.NewString()[:8]
 	src, dst = fx.deck(t, "Src "+suffix), fx.deck(t, "Dst "+suffix)
 	card = Card{ID: uuid.NewString(), DeckID: src.ID, CampaignID: fx.campaign, Name: "Ember", KindKey: "boon", Words: "EMBERWORDS",
-		DirectorNote: "EMBERNOTE", Corner: "IV", Rare: true, Fate: FateGone, AskFirst: true, WhenOpen: true, Copies: 2}
+		DirectorNote: "EMBERNOTE", Corner: "IV", Rare: true, Fate: FateGone, AskFirst: true, When: WhenList{{Test: TestSay}}, Copies: 2}
 	if err := fx.repo.CreateCard(fx.ctx, card); err != nil {
 		t.Fatal(err)
 	}
@@ -1017,7 +1026,7 @@ func TestIntegration_KeepCopiesTheCardInOneTransaction(t *testing.T) {
 	}
 	got := cards[0]
 	if got.Name != "Ember" || got.Words != "EMBERWORDS" || got.DirectorNote != "EMBERNOTE" || got.Corner != "IV" || !got.Rare ||
-		got.Fate != FateGone || !got.AskFirst || got.KindKey != "boon" || got.Copies != 1 || got.WhenOpen || got.When != "" {
+		got.Fate != FateGone || !got.AskFirst || got.KindKey != "boon" || got.Copies != 1 || len(got.When) != 0 {
 		t.Errorf("kept card = %+v", got)
 	}
 	if z := fx.zones(t, dst); z.Pile != 1 {
@@ -1484,6 +1493,7 @@ func TestIntegration_CardPictureQueries(t *testing.T) {
 	}
 
 	// No decks tables: no cards, no error.
+	fx.exec(t, `DROP TABLE deck_moments`)
 	fx.exec(t, `DROP TABLE deck_copies`)
 	fx.exec(t, `DROP TABLE deck_log`)
 	fx.exec(t, `DROP TABLE deck_players`)

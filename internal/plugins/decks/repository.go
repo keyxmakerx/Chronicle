@@ -93,6 +93,16 @@ type DrawPlan struct {
 	Reshuffle bool
 	// SpendUserID spends one of that player's draws; "" spends nothing.
 	SpendUserID string
+	// Restrict limits the draw to the copies of the cards in Allowed: the cards
+	// whose tests fit (or, for a player, may be pulled). A pile that holds copies
+	// but none of them allowed is errNoneFit, and nothing is reshuffled: a
+	// reshuffle is only for a pile that is really empty.
+	Restrict bool
+	Allowed  map[string]bool
+	// Moment, when set, is claimed in the same transaction as the draw, so a
+	// deal and the answer that caused it are one step and two Directors cannot
+	// both answer.
+	Moment *MomentClaim
 	// Pick returns a random index below n; the service supplies crypto
 	// randomness and tests supply a fixed one.
 	Pick func(n int) int
@@ -185,7 +195,8 @@ type Repository interface {
 }
 
 // TableRow is a card on the table with what a viewer needs to draw it. It
-// holds no Director's note or condition because the query never reads them.
+// holds no Director's note. Tests are read only so the service can print the
+// ones the Director chose to print; a row is never sent as it is.
 type TableRow struct {
 	CopyID   string
 	DeckID   string
@@ -193,6 +204,7 @@ type TableRow struct {
 	DeckKind string
 	Look     Look
 	Face     Face
+	Tests    []WhenTest
 }
 
 // PictureUse is one card that wears a media file as its picture.
@@ -464,17 +476,19 @@ func (s *sqlRepository) SetPlayers(ctx context.Context, campaignID, deckID strin
 
 // ---- cards ----------------------------------------------------------------
 
-const cardColumns = `id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, ask_first, sort_order, created_at, updated_at`
+const cardColumns = `id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, ask_first, sort_order, said_at, fits_since, created_at, updated_at`
 
 func scanCard(sc scanner) (Card, error) {
 	var c Card
 	var when sql.NullString
+	var said, fits sql.NullTime
 	if err := sc.Scan(&c.ID, &c.DeckID, &c.CampaignID, &c.Name, &c.KindKey, &c.Words, &c.DirectorNote,
 		&c.Picture, &c.Corner, &c.Rare, &c.Copies, &c.Fate, &when, &c.WhenOpen, &c.AskFirst, &c.SortOrder,
-		&c.CreatedAt, &c.UpdatedAt); err != nil {
+		&said, &fits, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return Card{}, err
 	}
-	c.When = fromNull(when)
+	c.When = decodeWhen(fromNull(when))
+	c.SaidAt, c.FitsSince = timePtr(said), timePtr(fits)
 	return c, nil
 }
 
@@ -534,10 +548,10 @@ func (s *sqlRepository) CreateCard(ctx context.Context, c Card) error {
 	}
 	c.SortOrder = cards
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, ask_first, sort_order)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, has_when, ask_first, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.DeckID, c.CampaignID, c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare,
-		c.Copies, c.Fate, nullString(c.When), c.WhenOpen, c.AskFirst, c.SortOrder)
+		c.Copies, c.Fate, nullString(encodeWhen(c.When)), derivedOpen(c.When), len(c.When) > 0, c.AskFirst, c.SortOrder)
 	if isDuplicate(err) {
 		return errDuplicate
 	}
@@ -578,10 +592,14 @@ func (s *sqlRepository) UpdateCard(ctx context.Context, c Card, resize bool) (Re
 	// copies is written, and the copies reconciled, only for an edit that
 	// carries a copies value. Any other edit holds a card read before the lock,
 	// whose copies a keep may have raised since.
+	// fits_since is assigned before when_json because an assignment sees the
+	// columns assigned before it: an edit that changes the tests starts the card
+	// over, so a moment is raised on the next rising edge and not on a stale one.
+	when := nullString(encodeWhen(c.When))
 	sets := `name = ?, kind_key = ?, words = ?, director_note = ?, picture = ?, corner = ?, rare = ?,
-		   fate = ?, when_json = ?, when_open = ?, ask_first = ?`
+		   fate = ?, fits_since = IF(when_json <=> ?, fits_since, NULL), when_json = ?, when_open = ?, has_when = ?, ask_first = ?`
 	args := []any{c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare, c.Fate,
-		nullString(c.When), c.WhenOpen, c.AskFirst}
+		when, when, derivedOpen(c.When), len(c.When) > 0, c.AskFirst}
 	if resize {
 		var others int
 		if err := tx.QueryRowContext(ctx,
@@ -813,7 +831,7 @@ func (z *ZoneCounts) add(zone string, n int) {
 
 func (s *sqlRepository) ListTable(ctx context.Context, campaignID string) ([]TableRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT c.id, d.id, d.name, d.kind, d.look, k.id, k.name, k.kind_key, k.words, k.picture, k.corner, k.rare
+		`SELECT c.id, d.id, d.name, d.kind, d.look, k.id, k.name, k.kind_key, k.words, k.picture, k.corner, k.rare, k.when_json
 		 FROM deck_copies c
 		 JOIN decks d ON d.id = c.deck_id
 		 JOIN deck_cards k ON k.id = c.card_id
@@ -827,11 +845,13 @@ func (s *sqlRepository) ListTable(ctx context.Context, campaignID string) ([]Tab
 	for rows.Next() {
 		var r TableRow
 		var look string
+		var when sql.NullString
 		if err := rows.Scan(&r.CopyID, &r.DeckID, &r.DeckName, &r.DeckKind, &look,
-			&r.Face.CardID, &r.Face.Name, &r.Face.KindKey, &r.Face.Words, &r.Face.Picture, &r.Face.Corner, &r.Face.Rare); err != nil {
+			&r.Face.CardID, &r.Face.Name, &r.Face.KindKey, &r.Face.Words, &r.Face.Picture, &r.Face.Corner, &r.Face.Rare, &when); err != nil {
 			return nil, fmt.Errorf("scan table row: %w", err)
 		}
 		r.Look = readLook(look)
+		r.Tests = decodeWhen(fromNull(when))
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -1090,6 +1110,11 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 	if err := lockDeck(ctx, tx, p.CampaignID, p.DeckID); err != nil {
 		return nil, err
 	}
+	if p.Moment != nil {
+		if err := claimMoment(ctx, tx, p.CampaignID, p.DeckID, *p.Moment); err != nil {
+			return nil, err
+		}
+	}
 
 	if p.SpendUserID != "" {
 		var left sql.NullInt64
@@ -1158,25 +1183,43 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 	}
 	nextUsed, lastUsed := false, false
 
-	candidates := func() ([]pileCopy, error) {
+	// candidates reads the pile once and returns it twice: raw is every copy
+	// that may be drawn at all (the put-back copy left out unless it is all
+	// there is), and fit is the part of it the plan allows. The reshuffle rule
+	// looks at raw only, so a pile that holds copies is never reshuffled just
+	// because none of them fit.
+	allowed := func(c pileCopy) bool { return !p.Restrict || p.Allowed[c.cardID] }
+	candidates := func() (raw, fit []pileCopy, err error) {
 		all, err := pileCopies(ctx, tx, p)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if exclude == "" {
-			return all, nil
-		}
-		var rest []pileCopy
-		for _, c := range all {
-			if c.id != exclude {
-				rest = append(rest, c)
+		raw = all
+		if exclude != "" {
+			var rest []pileCopy
+			for _, c := range all {
+				if c.id != exclude {
+					rest = append(rest, c)
+				}
+			}
+			if len(rest) > 0 {
+				raw = rest
 			}
 		}
-		if len(rest) == 0 {
-			// Nothing else exists, so the same copy is the only honest draw.
-			return all, nil
+		for _, c := range raw {
+			if allowed(c) {
+				fit = append(fit, c)
+			}
 		}
-		return rest, nil
+		if len(fit) == 0 && exclude != "" {
+			// Only the copy that was just put back can still fit.
+			for _, c := range all {
+				if c.id == exclude && allowed(c) {
+					fit = append(fit, c)
+				}
+			}
+		}
+		return raw, fit, nil
 	}
 
 	var out []Copy
@@ -1189,18 +1232,18 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 		if i == 0 && p.To.Zone == ZoneShown && shown+1 > MaxShown {
 			return nil, errShownFull
 		}
-		cands, err := candidates()
+		raw, cands, err := candidates()
 		if err != nil {
 			return nil, err
 		}
-		if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && cands[0].id == exclude)) {
+		if p.Reshuffle && p.CardID == "" && (len(raw) == 0 || (exclude != "" && len(raw) == 1 && raw[0].id == exclude)) {
 			res, err := tx.ExecContext(ctx,
 				`UPDATE deck_copies SET `+resetFields+` WHERE deck_id = ? AND campaign_id = ? AND zone = 'used'`, p.DeckID, p.CampaignID)
 			if err != nil {
 				return nil, fmt.Errorf("reshuffle: %w", err)
 			}
 			if n, _ := res.RowsAffected(); n > 0 {
-				if cands, err = candidates(); err != nil {
+				if raw, cands, err = candidates(); err != nil {
 					return nil, err
 				}
 			}
@@ -1210,6 +1253,9 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 				// A draw of several takes what the pile holds; only a pile with
 				// nothing drawable at all is an empty-pile answer.
 				break
+			}
+			if len(raw) > 0 {
+				return nil, errNoneFit
 			}
 			return nil, errEmptyPile
 		}
@@ -1253,6 +1299,11 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 				return nil, fmt.Errorf("claim copy: %w", err)
 			}
 			return nil, errLostClaim
+		}
+		// "The Director says so" holds until a copy of the card leaves the pile,
+		// then the card waits for the next time it is said.
+		if _, err := tx.ExecContext(ctx, `UPDATE deck_cards SET said_at = NULL WHERE id = ? AND said_at IS NOT NULL`, pick.cardID); err != nil {
+			return nil, fmt.Errorf("clear said: %w", err)
 		}
 		line := p.Log
 		line.DeckID, line.CardID, line.CardName, line.CopyID = p.DeckID, pick.cardID, pick.cardName, pick.id

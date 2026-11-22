@@ -50,6 +50,12 @@ var (
 	errTargetFull   = errors.New("target deck has too many cards")
 	errTargetCopies = errors.New("target deck has too many copies")
 	errCardCopies   = errors.New("target card has too many copies")
+	// errNoneFit is a draw from a pile that holds copies, none of which the
+	// plan allows.
+	errNoneFit = errors.New("no card in the pile fits")
+	// errMomentGone is an answer to a moment that is no longer open, or that
+	// another answer closed first.
+	errMomentGone = errors.New("the moment is no longer open")
 	// errLostClaim is a move whose copy was no longer where it was read.
 	errLostClaim = errors.New("copy moved first")
 )

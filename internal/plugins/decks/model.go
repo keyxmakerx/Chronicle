@@ -141,9 +141,19 @@ type Card struct {
 	Copies int
 	// Fate is "" for the deck's default.
 	Fate string
-	// When holds a condition; it is always empty until conditions exist.
-	When      string
-	WhenOpen  bool
+	// When is the card's list of tests, at most MaxTests, all of which must hold
+	// for the card to come up. WhenOpen is derived from it: true when at least one
+	// test is printed on the card.
+	When     []WhenTest
+	WhenOpen bool
+	// SaidAt is when a Director said so, for the "the Director says so" test.
+	SaidAt *time.Time
+	// FitsSince is when the card's tests last started to hold, kept so a moment
+	// is raised on the rising edge only. Nil while they do not hold.
+	FitsSince *time.Time
+	// Printed is the card's printed line as the reader may see it. It is never
+	// stored; the service fills it where a face is built.
+	Printed   string
 	AskFirst  bool
 	SortOrder int
 	CreatedAt time.Time
@@ -243,9 +253,9 @@ type CreateCardInput struct {
 	Rare         bool   `json:"rare"`
 	Copies       *int   `json:"copies"`
 	Fate         string `json:"fate"`
-	When         string `json:"when"`
-	WhenOpen     bool   `json:"whenOpen"`
-	AskFirst     bool   `json:"askFirst"`
+	// When is the card's tests; "", null and [] mean none.
+	When     WhenList `json:"when"`
+	AskFirst bool     `json:"askFirst"`
 }
 
 // UpdateCardInput is a partial update of a card.
@@ -259,9 +269,9 @@ type UpdateCardInput struct {
 	Rare         patch.Field[bool]   `json:"rare"`
 	Copies       patch.Field[int]    `json:"copies"`
 	Fate         patch.Field[string] `json:"fate"`
-	When         patch.Field[string] `json:"when"`
-	WhenOpen     patch.Field[bool]   `json:"whenOpen"`
-	AskFirst     patch.Field[bool]   `json:"askFirst"`
+	// When replaces the whole list of tests; null or [] clears it.
+	When     patch.Field[WhenList] `json:"when"`
+	AskFirst patch.Field[bool]     `json:"askFirst"`
 }
 
 // DrawInput names the hero a player draws into; a Director's draw goes to the
@@ -327,10 +337,16 @@ type DirectorCard struct {
 	Rare         bool   `json:"rare"`
 	Copies       int    `json:"copies"`
 	Fate         string `json:"fate"`
-	When         string `json:"when"`
-	WhenOpen     bool   `json:"whenOpen"`
-	AskFirst     bool   `json:"askFirst"`
-	SortOrder    int    `json:"sortOrder"`
+	// When is the card's tests, each with its sentence and whether it still
+	// resolves. WhenOpen is true when at least one is printed. FitsNow and WhyNot
+	// are filled for a deck read whole, only for a card that has tests.
+	When      []WhenView `json:"when"`
+	WhenOpen  bool       `json:"whenOpen"`
+	FitsNow   bool       `json:"fitsNow"`
+	WhyNot    string     `json:"whyNot,omitempty"`
+	SaidAt    *time.Time `json:"saidAt,omitempty"`
+	AskFirst  bool       `json:"askFirst"`
+	SortOrder int        `json:"sortOrder"`
 }
 
 // DirectorCopy is one copy wherever it is.
@@ -392,6 +408,9 @@ type Face struct {
 	Picture string `json:"picture"`
 	Corner  string `json:"corner"`
 	Rare    bool   `json:"rare"`
+	// When is the card's printed line ("When ... and ..."), empty when no test is
+	// printed. Only tests the Director chose to print are in it.
+	When string `json:"when,omitempty"`
 }
 
 // PlayerCopy is a copy a player may know about. Face is present only for a
@@ -460,6 +479,9 @@ type PlayerDeck struct {
 	Others []OtherHolds `json:"others,omitempty"`
 	// Used is the used pile of a party deck, visible to every member.
 	Used []PlayerCopy `json:"used,omitempty"`
+	// InvitedHeroID is set only for the player a Director invited to draw, and
+	// names the hero the card will go to. Everyone else's deck omits it.
+	InvitedHeroID string `json:"invitedHeroId,omitempty"`
 }
 
 func (PlayerDeck) deckView() {}

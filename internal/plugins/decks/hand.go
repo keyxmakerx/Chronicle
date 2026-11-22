@@ -294,6 +294,7 @@ func (s *service) holderSpot(ctx context.Context, campaignID string, hero Hero, 
 			if err != nil {
 				return nil, apperrorInternal(err)
 			}
+			s.printLines(ctx, campaignID, d, r.v, list)
 			cards[c.DeckID] = make(map[string]Card, len(list))
 			for _, k := range list {
 				cards[c.DeckID][k.ID] = k
@@ -393,7 +394,9 @@ func (r *request) openOnTable(deckID, copyID string) (*OpenedCard, bool, error) 
 	}
 	look := d.Look
 	look.Kinds = kindsOf(d.Look, map[string]bool{card.KindKey: true})
-	f := faceOf(card)
+	one := []Card{card}
+	r.s.printLines(r.ctx, r.cid, d, r.v, one)
+	f := faceOf(one[0])
 	return &OpenedCard{DeckID: d.ID, DeckName: d.Name, Look: look,
 		Copy: PlayerCopy{ID: c.ID, DeckID: c.DeckID, FaceUp: true, Face: &f}}, true, nil
 }
@@ -406,7 +409,9 @@ func (r *request) opened(d Deck, c Copy) (*OpenedCard, error) {
 	if !found {
 		return nil, errNotFound("card")
 	}
-	pc := playerCopy(c, map[string]Card{card.ID: card})
+	one := []Card{card}
+	r.s.printLines(r.ctx, r.cid, d, r.v, one)
+	pc := playerCopy(c, map[string]Card{card.ID: one[0]})
 	out := &OpenedCard{DeckID: d.ID, DeckName: d.Name, Look: d.Look, Copy: pc, InHand: c.Zone == ZoneHand}
 	own, err := r.owns(c.HolderEntityID)
 	if err != nil {

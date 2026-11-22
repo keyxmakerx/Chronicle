@@ -1300,3 +1300,24 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A new way to read a face (a new zone, a new setting) changes `playerDeck` and so changes the picture rule with it; there is no second copy of the rules to update.
 - A new place that mints cookieless media links for members must ask the card rule first.
 
+
+## ADR-079: A card's tests are the Director's by default, judged on facts read as a Director, and a moment never deals
+
+**Status:** Accepted; the server half of card conditions in decks (#2569).
+
+**Context:** A Director wants a card to come up when its moment comes: a hero's stamina falls, a tag goes on, a layer is applied, a tracker rises, or the Director says so. The facts live in four other plugins. The draw is also the place where a hidden condition is most likely to leak: a player who is refused a draw, or who is told a deck is empty, must not be able to learn which hidden test is why.
+
+**Decision:**
+1. A card has up to four tests that must all hold: `number`, `tracker`, `tag`, `layer` or `say`. Each is printed on the card (a player reads it with the face) or the Director's own (never sent to a player). They are one JSON list in `deck_cards.when_json`; `when_open`, `has_when` and `fits_since` are derived. No formulas, no "any of".
+2. One function checks a list of tests (`ValidateWhen`); one writer says a test in words, for the editor, the notice and the card face. A typo in a request is refused by name at decode, never stored as a test that does nothing.
+3. The facts come through an interface decks declares (`Facts`) and `internal/app` implements over the entities, tags, trackers and transformations services. Every read is as a Director would see it. A fact that cannot be read is a missing fact and a test on it does not hold, so a failing or degraded source can never make a card come up. Numbers are the stored sheet with the page's layers applied (`set` and `add` in order); what only the browser works out is not judged.
+4. A Director's draw and "draw another" pick among cards that fit; nothing fitting is a 409 and reshuffles nothing (a reshuffle is for a truly empty pile). Deal by name ignores conditions. A player's own draw only pulls cards with no test or with printed tests that all hold; a card with a Director-only test is never in the set, whether or not it holds, and its facts are not read. The player's reply when nothing is eligible is the empty-pile reply, byte for byte.
+5. A moment is a waiting notice for one deck, with at most one open per deck (a unique key on `open_deck_id`, NULL once closed). It is raised on the rising edge of "some card fits" (`fits_since`), picked blind and weighted by copies, re-picked while another card fits, and lapses when none does. Chronicle never deals on its own: the Director answers (deal, draw another, let them draw, not now). An answer that deals is claimed inside the draw's transaction, so two Directors cannot both answer. "Let them draw" invites the hero's claimed player; the invited draw picks among cards that fit, spends no draw and closes the moment.
+6. Rechecks are woken, not polled. A watcher coalesces pokes per campaign from the entity events, the tag hooks, the layers notifier, a new always-on trackers observer and decks' own writes; the recheck begins with one indexed question so a campaign that watches nothing costs one lookup after a page save. A Director's read looks again at most every 5 seconds per campaign, which covers a change no hook saw.
+7. That a moment came, which card, whether a hidden test holds and what was read are Directors-only by every channel: the websocket message `decks.moment` is `RequiresDM` with no payload, and the moment routes answer 404 to anyone else. Only the invited player learns of an invitation (a bell entry on the existing card-decks choice and a payload-free `decks.changed`).
+
+**Consequences:**
+- A new kind of test is a new key set in `keysOf`, a branch in `check`, `sentence` and the judge, and a row in the two-worlds leak test.
+- A new source of change for a fact is a new `Poke`; until it exists the Director's own read is the backstop. Known gaps: a tag deleted outright, a page cloned with its tags, a page deleted through a path that publishes no event.
+- The trackers plugin gains an observer interface beside its owned-kind listener; the listener is unchanged.
+- A printed test is the player's to read, but whether it holds is not: what a player is sent about a deck does not depend on it.

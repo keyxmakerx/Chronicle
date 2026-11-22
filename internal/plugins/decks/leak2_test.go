@@ -228,7 +228,7 @@ func TestTwoWorldsPlayersCannotTellWhichCardWasDealtDown(t *testing.T) {
 		fx.must(err)
 		fx.choose(deck, PlayerInput{UserID: "u-tam", DrawsLeft: ptr(3)}, PlayerInput{UserID: "u-scribe"})
 		x := fx.card(deck, CreateCardInput{Name: "Xcard", KindKey: "boon", Words: "XWORDS", DirectorNote: "XNOTE", Fate: FateUsed, Picture: "pic-xx"})
-		y := fx.card(deck, CreateCardInput{Name: "Ycard", KindKey: "bane", Words: "YWORDS", DirectorNote: "YNOTE", Fate: FateBack, AskFirst: true, WhenOpen: true, Picture: "pic-yy"})
+		y := fx.card(deck, CreateCardInput{Name: "Ycard", KindKey: "bane", Words: "YWORDS", DirectorNote: "YNOTE", Fate: FateBack, AskFirst: true, When: WhenList{{Test: TestSay}}, Picture: "pic-yy"})
 		fx.card(deck, CreateCardInput{Name: "Filler", KindKey: "boon", Copies: ptr(2)})
 		cardID := map[string]string{"X": x, "Y": y}[deal]
 		res, err := fx.svc.DealCard(bg, camp, deck, fx.dir, DealCardInput{CardID: cardID, To: "hand", HeroID: "h-tam"})

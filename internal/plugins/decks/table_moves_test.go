@@ -654,7 +654,7 @@ func newKeepWorld(t *testing.T, dstKinds []KindDef) *keepWorld {
 		fx.must(err)
 	}
 	w.ember = fx.card(w.src, CreateCardInput{Name: "Ember", KindKey: "boon", Words: "EMBERWORDS", DirectorNote: "EMBERNOTE",
-		Corner: "IV", Rare: true, Fate: FateGone, AskFirst: true, WhenOpen: true, Copies: ptr(2)})
+		Corner: "IV", Rare: true, Fate: FateGone, AskFirst: true, When: WhenList{{Test: TestSay}}, Copies: ptr(2)})
 	w.copyID = fx.copiesOf(w.ember)[0]
 	fx.place(w.copyID, ZoneHand, "h-tam", true)
 	// Setting the looks up announced them; the tests count what a keep tells.
@@ -689,7 +689,7 @@ func TestKeepCopiesTheCardIntoAnotherDeck(t *testing.T) {
 		t.Errorf("kept card = %+v", got)
 	}
 	// The condition was written against the source deck and is not carried.
-	if got.When != "" || got.WhenOpen {
+	if len(got.When) != 0 {
 		t.Errorf("the condition was carried over: %+v", got)
 	}
 	copies := w.repo.ZoneCountsFor(w.dst)

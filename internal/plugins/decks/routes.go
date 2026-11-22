@@ -31,6 +31,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/decks", h.Create)
 	// Registered before /decks/:did so "table" is never read as a deck id.
 	cg.GET("/decks/table", h.Table)
+	// The Director's moments and the card editor's options; static paths win
+	// over :did, so neither is read as a deck id.
+	cg.GET("/decks/moments", h.Moments)
+	cg.GET("/decks/when-options", h.WhenOptions)
 	// The workshop pages sit beside the JSON routes under /workshop, as the
 	// rolling tables page sits beside its JSON; static paths win over :did.
 	cg.GET("/decks/workshop", h.WorkshopList)
@@ -61,4 +65,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/decks/:did/deal-card", h.DealCard, moves)
 	cg.POST("/decks/:did/shuffle", h.Shuffle, moves)
 	cg.POST("/decks/:did/gather", h.Gather, moves)
+	cg.POST("/decks/moments/:mid/deal", h.MomentDeal, moves)
+	cg.POST("/decks/moments/:mid/another", h.MomentAnother, moves)
+	cg.POST("/decks/moments/:mid/invite", h.MomentInvite, moves)
+	cg.POST("/decks/moments/:mid/dismiss", h.MomentDismiss, moves)
+	cg.POST("/decks/:did/cards/:cid/say", h.Say, moves)
 }

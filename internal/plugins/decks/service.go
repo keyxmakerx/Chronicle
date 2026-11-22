@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +42,32 @@ type Service interface {
 	DealCard(ctx context.Context, campaignID, deckID string, v Viewer, in DealCardInput) (*ActionResult, error)
 	Shuffle(ctx context.Context, campaignID, deckID string, v Viewer) (*ActionResult, error)
 	Gather(ctx context.Context, campaignID, deckID string, v Viewer) (*ActionResult, error)
+
+	// Say sets or clears "the Director says so" on a card. Directors only.
+	Say(ctx context.Context, campaignID, deckID, cardID string, v Viewer, said bool) (DeckView, error)
+	// WhenOptions is what the card editor may offer for a test. Directors only.
+	WhenOptions(ctx context.Context, campaignID string, v Viewer) (WhenOptionsView, error)
+	// ValidateWhen checks a card's tests against the campaign and returns them
+	// normalized; every writer of a card's tests calls it.
+	ValidateWhen(ctx context.Context, campaignID string, d Deck, tests []WhenTest) ([]WhenTest, error)
+	// BrokenTests says which tests of a stored list name something that no
+	// longer exists.
+	BrokenTests(ctx context.Context, campaignID string, d Deck, tests []WhenTest) []bool
+
+	// Moments lists the campaign's open moments for a Director. It looks again
+	// first when nothing has looked in the last few seconds.
+	Moments(ctx context.Context, campaignID string, v Viewer) ([]MomentView, error)
+	// DealMoment deals the moment's card, an ordinary deal.
+	DealMoment(ctx context.Context, campaignID, momentID string, v Viewer) (*ActionResult, error)
+	// AnotherMoment picks again among the other cards that fit.
+	AnotherMoment(ctx context.Context, campaignID, momentID string, v Viewer) (*MomentView, error)
+	// InviteMoment lets the hero's player draw.
+	InviteMoment(ctx context.Context, campaignID, momentID string, v Viewer) (*MomentView, error)
+	// DismissMoment sets the moment aside, or takes an invitation back.
+	DismissMoment(ctx context.Context, campaignID, momentID string, v Viewer) (*MomentView, error)
+	// Recheck looks at every card with tests in the campaign and raises, re-picks
+	// or lapses moments. It never deals.
+	Recheck(ctx context.Context, campaignID string) error
 
 	// Roster is who a Director can name on a deck: the campaign's hero pages
 	// and its people. Directors only.
@@ -80,6 +107,13 @@ type Notifier interface {
 	Changed(campaignID string, to Audience)
 }
 
+// MomentNotifier tells Directors that a moment opened, changed or closed. It
+// carries nothing but the campaign: the message is Directors-only and the
+// client fetches the moments again.
+type MomentNotifier interface {
+	MomentChanged(campaignID string)
+}
+
 // Bell writes notices for the bell. A notice to a player may name only the
 // deck, and a card only when it was face up to that player.
 type Bell interface {
@@ -100,6 +134,22 @@ func WithBell(b Bell) Option { return func(s *service) { s.bell = b } }
 // side refuses rather than accepting an id nobody checked.
 func WithPictures(p Pictures) Option { return func(s *service) { s.pictures = p } }
 
+// WithFacts sets what a card's tests are judged on. Without it only "the
+// Director says so" can be used and no other test can be saved.
+func WithFacts(f Facts) Option { return func(s *service) { s.facts = f } }
+
+// WithMoments sets where moments and what is remembered about tests are stored.
+// Without it a deck notices nothing, and conditions still gate draws.
+func WithMoments(m MomentRepository) Option { return func(s *service) { s.moments = m } }
+
+// WithMomentNotifier sets who carries the Directors-only moment message.
+func WithMomentNotifier(n MomentNotifier) Option { return func(s *service) { s.momentNote = n } }
+
+// WithPoke sets what is told that something a card's tests read may have
+// changed in a campaign. It is called after every write the service makes that
+// can change whether a test holds, and does its work later, off the request.
+func WithPoke(p func(campaignID string)) Option { return func(s *service) { s.poke = p } }
+
 // WithRandom replaces the draw's random pick; tests use it to fix a draw.
 func WithRandom(pick func(n int) int) Option { return func(s *service) { s.pick = pick } }
 
@@ -112,11 +162,20 @@ type service struct {
 	pick   func(n int) int
 	// pictures checks a card's picture on save; nil refuses every picture.
 	pictures Pictures
+	// facts, moments, momentNote and poke are the parts of card conditions that
+	// live outside this plugin or its main tables; each may be nil.
+	facts      Facts
+	moments    MomentRepository
+	momentNote MomentNotifier
+	poke       func(campaignID string)
+	// looked is when each campaign's moments were last rechecked on a read.
+	looked   map[string]time.Time
+	lookedMu sync.Mutex
 }
 
 // NewService builds the service.
 func NewService(repo Repository, heroes Heroes, members Members, opts ...Option) Service {
-	s := &service{repo: repo, heroes: heroes, people: members, pick: cryptoPick}
+	s := &service{repo: repo, heroes: heroes, people: members, pick: cryptoPick, looked: map[string]time.Time{}}
 	for _, o := range opts {
 		o(s)
 	}
@@ -399,10 +458,18 @@ func (r *request) directorFull(d Deck) (DirectorDeck, error) {
 	var counts ZoneCounts
 	out := directorSummary(d, counts)
 	out.Cards = make([]DirectorCard, 0, len(cards))
+	// One namer, checker and judge serve every card, so the facts are read once
+	// however many cards have tests.
+	var j *judge
+	var nm *namer
+	var chk *testChecker
 	for _, c := range cards {
-		out.Cards = append(out.Cards, DirectorCard{ID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words,
-			DirectorNote: c.DirectorNote, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare, Copies: c.Copies, Fate: c.Fate,
-			When: c.When, WhenOpen: c.WhenOpen, AskFirst: c.AskFirst, SortOrder: c.SortOrder})
+		if len(c.When) > 0 && j == nil {
+			j = r.s.judgeFor(r.ctx, r.cid, d)
+			nm = r.s.newNamer(r.ctx, r.cid, d, r.v)
+			chk = r.s.newTestChecker(r.ctx, r.cid, d)
+		}
+		out.Cards = append(out.Cards, r.s.directorCardOf(c, j, nm, chk))
 	}
 	out.Copies = make([]DirectorCopy, 0, len(copies))
 	for _, c := range copies {
@@ -415,8 +482,27 @@ func (r *request) directorFull(d Deck) (DirectorDeck, error) {
 	return out, nil
 }
 
+// directorCardOf is a card with everything a Director wrote and, for a card
+// with tests, each test's sentence, whether the card fits now and why not. The
+// judge, namer and checker are nil for a card with no tests.
+func (s *service) directorCardOf(c Card, j *judge, nm *namer, chk *testChecker) DirectorCard {
+	dc := DirectorCard{ID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words,
+		DirectorNote: c.DirectorNote, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare, Copies: c.Copies, Fate: c.Fate,
+		When: []WhenView{}, WhenOpen: c.WhenOpen, SaidAt: c.SaidAt, AskFirst: c.AskFirst, SortOrder: c.SortOrder}
+	if len(c.When) > 0 {
+		dc.When = s.viewsWith(nm, chk, c.When)
+		f := j.fits(c)
+		dc.FitsNow = f.OK
+		if !f.OK {
+			dc.WhyNot = f.Why
+		}
+	}
+	return dc
+}
+
 func faceOf(c Card) Face {
-	return Face{CardID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare}
+	return Face{CardID: c.ID, Name: c.Name, KindKey: c.KindKey, Words: c.Words, Picture: c.Picture, Corner: c.Corner, Rare: c.Rare,
+		When: c.Printed}
 }
 
 // playerCopy is a copy as a player may know it: the face only when it is
@@ -502,11 +588,13 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 	if err != nil {
 		return PlayerDeck{}, apperrorInternal(err)
 	}
+	r.s.printLines(r.ctx, r.cid, d, r.v, cards)
 	byID := make(map[string]Card, len(cards))
 	for _, c := range cards {
 		byID[c.ID] = c
 	}
 	out := PlayerDeck{ID: d.ID, Name: d.Name, Kind: d.Kind, Look: d.Look, Hands: []PlayerHand{}}
+	out.InvitedHeroID = r.s.invitedHero(r.ctx, r.cid, d, r.v)
 
 	if p, ok, err := r.chosen(d); err != nil {
 		return PlayerDeck{}, err
@@ -656,6 +744,28 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer) (*Tabl
 	}
 	out := &TableView{Decks: []TableDeck{}}
 	index := map[string]int{}
+	// A card on the table prints the tests its Director chose to print, named as
+	// this reader may read them.
+	printed := map[string]*namer{}
+	for i := range rows {
+		if !derivedOpen(rows[i].Tests) {
+			continue
+		}
+		n, ok := printed[rows[i].DeckID]
+		if !ok {
+			d, found, err := s.repo.GetDeck(ctx, campaignID, rows[i].DeckID)
+			if err != nil {
+				return nil, apperrorInternal(err)
+			}
+			if found {
+				n = s.newNamer(ctx, campaignID, d, v)
+			}
+			printed[rows[i].DeckID] = n
+		}
+		if n != nil {
+			rows[i].Face.When = n.printedLine(rows[i].Tests)
+		}
+	}
 	for _, row := range rows {
 		i, ok := index[row.DeckID]
 		if !ok {
@@ -843,6 +953,16 @@ func (s *service) Update(ctx context.Context, campaignID, deckID string, v Viewe
 	if readByPlayers(cur, next) {
 		s.announce(ctx, campaignID, moveNote{Deck: next, Action: actDeck, Before: before})
 	}
+	if cur.Settings.Notice != next.Settings.Notice {
+		// A deck that changes how loudly it speaks starts over: what fits now is
+		// judged again as if it had just started to.
+		if s.moments != nil {
+			if err := s.moments.ClearFits(ctx, campaignID, cur.ID); err != nil {
+				return nil, apperrorInternal(err)
+			}
+		}
+		s.poked(campaignID)
+	}
 	return s.reread(ctx, campaignID, deckID, v)
 }
 
@@ -890,6 +1010,7 @@ func (s *service) Delete(ctx context.Context, campaignID, deckID string, v Viewe
 	if err := s.repo.DeleteDeck(ctx, campaignID, deckID); err != nil {
 		return apperrorInternal(err)
 	}
+	s.momentChanged(campaignID)
 	// The deck's cards leave every hand with it, so whoever saw it is told.
 	cur.Players = nil
 	s.announce(ctx, campaignID, moveNote{Deck: cur, Action: actDeck, Before: before})
@@ -993,10 +1114,7 @@ func checkCard(d Deck, c *Card) error {
 			return err
 		}
 	}
-	// TODO(#2569): a card's condition is accepted once conditions exist.
-	if c.When != "" {
-		return errInvalid("a card can't have a condition yet")
-	}
+	// The tests are checked by ValidateWhen, which needs the campaign's facts.
 	return nil
 }
 
@@ -1039,10 +1157,14 @@ func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v V
 	}
 	c := Card{ID: uuid.NewString(), DeckID: d.ID, CampaignID: campaignID, Name: in.Name, KindKey: in.KindKey,
 		Words: in.Words, DirectorNote: in.DirectorNote, Picture: in.Picture, Corner: in.Corner, Rare: in.Rare, Copies: copies,
-		Fate: in.Fate, When: in.When, WhenOpen: in.WhenOpen, AskFirst: in.AskFirst}
+		Fate: in.Fate, When: in.When, AskFirst: in.AskFirst}
 	if err := checkCard(d, &c); err != nil {
 		return nil, err
 	}
+	if c.When, err = s.ValidateWhen(ctx, campaignID, d, c.When); err != nil {
+		return nil, err
+	}
+	c.WhenOpen = derivedOpen(c.When)
 	if err := s.checkPicture(ctx, campaignID, c.Picture); err != nil {
 		return nil, err
 	}
@@ -1061,6 +1183,7 @@ func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v V
 		}
 		return nil, apperrorInternal(err)
 	}
+	s.poked(campaignID)
 	return r.view(d)
 }
 
@@ -1090,11 +1213,19 @@ func (s *service) UpdateCard(ctx context.Context, campaignID, deckID, cardID str
 	c.Rare = in.Rare.Val(c.Rare)
 	c.Copies = in.Copies.Val(c.Copies)
 	c.Fate = in.Fate.Val(c.Fate)
-	c.When = in.When.Val(c.When)
-	c.WhenOpen = in.WhenOpen.Val(c.WhenOpen)
 	c.AskFirst = in.AskFirst.Val(c.AskFirst)
 	if err := checkCard(d, &c); err != nil {
 		return nil, err
+	}
+	// Only a body that carries the tests checks them: a stored list that names a
+	// tag since deleted must not stop an edit of the words. Absent keeps the
+	// list, null or [] clears it, a list replaces it whole.
+	if in.When.Present() {
+		w, _ := in.When.Get()
+		if c.When, err = s.ValidateWhen(ctx, campaignID, d, w); err != nil {
+			return nil, err
+		}
+		c.WhenOpen = derivedOpen(c.When)
 	}
 	// Only a changed picture is checked: the stored one was checked when it
 	// was set, and a file trashed since must not stop an edit of the words.
@@ -1121,6 +1252,7 @@ func (s *service) UpdateCard(ctx context.Context, campaignID, deckID, cardID str
 		}
 		return nil, apperrorInternal(err)
 	}
+	s.poked(campaignID)
 	return r.view(d)
 }
 
@@ -1148,6 +1280,9 @@ func (s *service) DeleteCard(ctx context.Context, campaignID, deckID, cardID str
 	if err := s.repo.DeleteCard(ctx, campaignID, d.ID, cardID); err != nil {
 		return nil, apperrorInternal(err)
 	}
+	// An open moment on the card goes with it.
+	s.momentChanged(campaignID)
+	s.poked(campaignID)
 	return r.view(d)
 }
 
