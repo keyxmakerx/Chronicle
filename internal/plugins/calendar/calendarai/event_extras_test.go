@@ -17,6 +17,11 @@ func (f fakeTiers) GetEventTierDefinitions(context.Context, string) ([]campaigns
 	return f, nil
 }
 
+// SetEventTierDefinitions is not used by the event tests.
+func (f fakeTiers) SetEventTierDefinitions(context.Context, string, []campaigns.TierDefinition) error {
+	return nil
+}
+
 func defaultTiers() fakeTiers {
 	return fakeTiers{
 		{Slug: "major", Name: "Major"},

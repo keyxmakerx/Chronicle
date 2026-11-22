@@ -111,6 +111,7 @@ func heroViews(def *systems.DMScreenDef, heroes []Hero, presence map[string]bool
 			PlayerUserID: h.PlayerUserID, PlayerHere: h.PlayerUserID != "" && presence[h.PlayerUserID],
 			Meters: buildMeters(meters, fields),
 		}
+		hv.Level, _ = fieldText(fields, "level")
 		if def != nil {
 			hv.Subtitle, _ = fieldText(fields, def.HeroSubtitle)
 			hv.Conditions = heroConditions(fields[def.HeroConditions])

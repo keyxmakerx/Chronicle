@@ -127,17 +127,37 @@ func (a *trackersClockAdapter) Today(ctx context.Context, campaignID string, v t
 
 // registerTrackersBlock adds the Trackers block to page layouts. The widget
 // fetches the page's trackers itself, so the block only emits its mount.
-func registerTrackersBlock(blockRegistry *entities.BlockRegistry) {
+func registerTrackersBlock(blockRegistry *entities.BlockRegistry, svc trackers.Service) {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: trackers.BlockType, Label: "Trackers", Icon: "fa-gauge", Picture: entities.PictureCounter,
 		Description: "Counters, named steps and clocks on this page, each with a dated log",
 		Contexts:    []string{"template"},
 		Singleton:   true,
 		TileSizes:   []string{"1x1", "2x1", "2x2", "4x1"},
+		PageTab:     trackersPageTab(svc),
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
 			return templ.NopComponent
 		}
 		return trackers.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken)
 	})
+}
+
+// trackersPageTab offers the block as a tab under a page a game system draws.
+// What the viewer has comes from the service's own page view, so who sees a
+// tracker and who may add one stays the service's rule.
+func trackersPageTab(svc trackers.Service) *entities.BlockPageTab {
+	return &entities.BlockPageTab{
+		Label: "Trackers", Count: ".tk-row", Act: ".tk-head .tk-q",
+		State: func(ctx context.Context, rc entities.BlockRenderContext) (int, bool, error) {
+			if svc == nil || rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+				return 0, false, nil
+			}
+			pv, err := svc.Page(ctx, rc.CC.Campaign.ID, rc.Entity.ID, trackers.ViewerFor(rc.CC, rc.UserID))
+			if err != nil {
+				return 0, false, err
+			}
+			return len(pv.Trackers), pv.CanEdit, nil
+		},
+	}
 }

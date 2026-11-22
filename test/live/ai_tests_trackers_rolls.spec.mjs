@@ -177,7 +177,7 @@ test('a hidden tracker: owner sees it with its log line, a player sees nothing',
   // The tracker, then its first change: the change names a tracker that exists.
   await askAndApply(owner, cid, ai, 'Counsel tracker', `---\nkind: tracker\nname: Orrin's Counsel\nmin: 0\nmax: 5\npages: [Orrin]\n---\n`);
   await askAndApply(owner, cid, ai, 'Counsel up', `---\nkind: tracker\naction: update\nname: Orrin's Counsel\npage: Orrin\nadd: 1\nnote: Counselled Saatraaol at the gate\n---\n`);
-  assert.match((await ai.call('trackers')).out, /hidden from players/);
+  assert.match((await ai.call('trackers')).out, /who sees it: Director only/);
 
   await owner.go(`/campaigns/${cid}/entities/${orrin}`);
   await owner.page.getByText("Orrin's Counsel").first().waitFor();

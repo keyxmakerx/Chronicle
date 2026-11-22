@@ -3148,7 +3148,8 @@ func (a *App) RegisterRoutes() {
 	// choice to hide the brush.
 	campaignHandler.SetPageCategoryLookup(&pageCategoryAdapter{svc: entityService})
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
-	campaignHandler.SetCustomizeDrafts(campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB)))
+	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
+	campaignHandler.SetCustomizeDrafts(customizeDrafts)
 	// After the look, which NewHandler registers first: a category's menu
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
@@ -4061,7 +4062,7 @@ func (a *App) RegisterRoutes() {
 		_, sys := navAddonsFrom(list)
 		return sys.Slug
 	})
-	entities.SetFoundryLinkChecker(func(ctx context.Context, campaignID string) bool {
+	foundryLinked := func(ctx context.Context, campaignID string) bool {
 		keys, err := syncService.ListKeysByCampaign(ctx, campaignID)
 		if err != nil {
 			return false
@@ -4072,7 +4073,8 @@ func (a *App) RegisterRoutes() {
 			}
 		}
 		return false
-	})
+	}
+	entities.SetFoundryLinkChecker(foundryLinked)
 	// The campaign "Sync API" addon toggle is what gates external Bearer
 	// access (REST via syncapi.RequireSyncAPIAddon, WebSocket via
 	// AuthenticateKeyForWS). Both read it through this gate; the WS path
@@ -6081,7 +6083,7 @@ func (a *App) RegisterRoutes() {
 	// AI Import's brief carries the system's notes on sheet fields, and the
 	// categories the system's sheets live on get its fields once
 	// (system_sheet_fields.go).
-	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService}
+	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService, choices: characterChoiceSvc, linked: foundryLinked}
 	if n, err := addSystemSheetFieldsOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService, characterListService); err != nil {
 		slog.Error("adding system sheet fields failed", slog.String("error", err.Error()))
 	} else if n > 0 {
@@ -6103,6 +6105,8 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
+	// AI Import's review warns about hero values the creator would refuse.
+	aiWorkspaceHandler.SetHeroPicks(heroPickChecker{planner: heroPlannerAdapter{choices: characterChoiceSvc}})
 	entityHandler.SetVisitorPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	entityHandler.SetHeroTerms(heroTermsAdapter{choices: characterChoiceSvc})
 	// A player's Foundry edit is judged with the same plan the web door uses.
@@ -6929,7 +6933,7 @@ func (a *App) RegisterRoutes() {
 		trackersHandler := trackers.NewHandler(trackersSvc)
 		trackersHandler.SetPlacementChecker(blockPlacement)
 		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
-		registerTrackersBlock(blockRegistry)
+		registerTrackersBlock(blockRegistry, trackersSvc)
 		registerRecipeBlock(blockRegistry)
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
@@ -7206,6 +7210,10 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("designs plugin degraded — routes not registered")
 	}
+	var aiTimelines timeline.TimelineService
+	if a.PluginHealth.IsHealthy(timeline.PluginSlug) {
+		aiTimelines = timelineSvc
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -7249,6 +7257,8 @@ func (a *App) RegisterRoutes() {
 		Carried:         aiCarriedAdapter{stash: stashSvc, dir: stashDirectory, addons: addonService},
 		Designs:         aiDesigns,
 		Layers:          layersSvc,
+		Timelines:       aiTimelines,
+		LookDrafts:      customizeDrafts,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

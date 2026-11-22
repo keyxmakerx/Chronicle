@@ -240,6 +240,7 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 		}
 		fmt.Fprintf(&b, "\n### Event categories (the names `category:` takes on events)\n\n%s\n", strings.Join(names, ", "))
 	}
+	b.WriteString(run.settingsText(cal))
 	b.WriteString(run.importanceText())
 	b.WriteString(run.climateText(cal))
 	ans.Text = b.String()
@@ -269,7 +270,20 @@ func (run *lookupRun) importanceText() string {
 		}
 		b.WriteString(line + "\n")
 	}
+	// The same levels in the shape the owner's `kind: calendar` block takes,
+	// so changing one is a copy with an edit and sending it unchanged is no
+	// change.
+	b.WriteString("\nTo change the levels (the owner only), send the whole list as `tiers:` on a `kind: calendar` block with `action: update`:\n\n```\n" + tiersBlock(defs) + "```\n")
 	return b.String()
+}
+
+// settingsText is the calendar's simple settings as the keys that set them,
+// for a Director; "" for anyone else, who has no way to change them.
+func (run *lookupRun) settingsText(cal *calendar.Calendar) string {
+	if !run.director() {
+		return ""
+	}
+	return "\n### Settings (keys of a `kind: calendar` block with `action: update`, owner only)\n\n```\n" + optionLines(cal) + "```\n"
 }
 
 // climateText is the calendar's weather settings, or "" when they can't be

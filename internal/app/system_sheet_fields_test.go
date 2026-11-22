@@ -152,3 +152,62 @@ func TestAIFieldNotes_CreatureFoundryPullAndBounds(t *testing.T) {
 		}
 	}
 }
+
+type fakeCreatorPlan struct{ steps []systems.CreatorStep }
+
+func (f fakeCreatorPlan) CreatorPlan(context.Context, string) (*systems.CreatorPlan, error) {
+	return &systems.CreatorPlan{Steps: f.steps}, nil
+}
+
+// A hero field with a pick list says the value is a name from the campaign's
+// list and where to read it; Foundry's "leave it out" shows only when a
+// Foundry world is linked, and then wins over the pick-list note.
+func TestAIFieldNotes_PickListsAndFoundryLink(t *testing.T) {
+	m := sheetManifest()
+	m.EntityPresets[0].Fields = append(m.EntityPresets[0].Fields,
+		systems.FieldDef{Key: "ancestry", Label: "Ancestry", Type: "string"},
+		systems.FieldDef{Key: "subclass", Label: "Subclass", Type: "string"})
+	hero := entities.EntityType{ID: 1, Slug: "character", Enabled: true}
+	plan := fakeCreatorPlan{steps: []systems.CreatorStep{
+		{FieldKey: "class"}, {FieldKey: "ancestry"}, {FieldKey: "subclass", Parent: "class"},
+	}}
+	yes := func(context.Context, string) bool { return true }
+	no := func(context.Context, string) bool { return false }
+	tests := []struct {
+		name   string
+		linked func(context.Context, string) bool
+		key    string
+		want   []string
+		not    []string
+	}{
+		{"pick list", yes, "ancestry", []string{"A name from the campaign's `ancestry` list", "`system-entries` lookup", "`system_entries`"}, []string{"Foundry keeps"}},
+		{"dependent list", yes, "subclass", []string{"must belong to the chosen `class`"}, nil},
+		{"kept and linked", yes, "class", []string{"Foundry keeps this one: leave it out"}, []string{"system-entries"}},
+		{"kept, not linked", no, "class", []string{"A name from the campaign's `class` list"}, []string{"Foundry keeps"}},
+		{"unwired link reads as linked", nil, "class", []string{"Foundry keeps"}, nil},
+		{"no list, not linked", no, "stamina_max", nil, []string{"Foundry keeps"}},
+		{"no list, linked", yes, "stamina_max", []string{"Foundry keeps"}, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			n := aiFieldNotes{
+				manifest: func(context.Context, string) *systems.SystemManifest { return m },
+				lists:    fakePCLists{"c1": {1}},
+				types:    &fakeSheetTypes{types: map[string][]entities.EntityType{"c1": {hero}}},
+				choices:  plan,
+				linked:   tc.linked,
+			}
+			got := n.FieldNotes(context.Background(), "c1", hero)[tc.key]
+			for _, w := range tc.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("note %q lacks %q", got, w)
+				}
+			}
+			for _, w := range tc.not {
+				if strings.Contains(got, w) {
+					t.Errorf("note %q holds %q", got, w)
+				}
+			}
+		})
+	}
+}

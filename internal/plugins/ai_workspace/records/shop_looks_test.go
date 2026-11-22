@@ -279,7 +279,7 @@ func TestStockLookupShowsTodaysShelf(t *testing.T) {
 // `today` writes the flag the shelf reads, and false takes it away while
 // keeping the rest of the listing.
 func TestShopStockTodayFlag(t *testing.T) {
-	k := ShopStockKind(nil, nil).(*linkKind)
+	k := ShopStockKind(nil, nil, nil).(*linkKind)
 	tests := []struct {
 		name, existing string
 		today          any
