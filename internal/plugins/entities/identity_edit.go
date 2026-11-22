@@ -69,6 +69,14 @@ var ownerListFieldKeys = map[string]bool{
 	"perks_json":     true,
 }
 
+// ownerListLabels are how the bell names each list. They sit beside the keys
+// because the type's own labels read "Skills Data".
+var ownerListLabels = map[string]string{
+	"skills_json":    "Skills",
+	"languages_json": "Languages",
+	"perks_json":     "Perks",
+}
+
 // OwnerIdentityFieldKeys returns the short free-text keys, sorted, for UI and
 // docs.
 func OwnerIdentityFieldKeys() []string {

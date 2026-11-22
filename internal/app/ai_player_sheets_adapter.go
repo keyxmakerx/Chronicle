@@ -167,7 +167,7 @@ func (a aiPlayerSheets) HeldFields(ctx context.Context, campaignID, userID, enti
 	if err != nil {
 		return nil, err
 	}
-	locked, _, err := a.heroChanges.HeldPicks(ctx, e, unheld(patch, held), plan)
+	locked, _, err := a.heroChanges.HeldPicks(ctx, e, unheld(patch, held), plan, typeFields)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (a aiPlayerSheets) PatchSheet(ctx context.Context, campaignID, userID, enti
 	if err := entities.CheckClaimedOwnerPatch(e, userID, campaignID, patch, typeFields, plan); err != nil {
 		return err
 	}
-	locked, changes, err := a.heroChanges.HeldPicks(ctx, e, patch, plan)
+	locked, changes, err := a.heroChanges.HeldPicks(ctx, e, patch, plan, typeFields)
 	if err != nil {
 		return err
 	}

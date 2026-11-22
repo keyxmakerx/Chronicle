@@ -316,7 +316,12 @@ leaving the list for another page.
   never calls `preventDefault` there, so the letter is typed. It works only
   in its own view (the page being edited, the open workshop), never on keys
   pressed anywhere else on the page. Each one also has a button, so the
-  shortcut is never the only way.
+  shortcut is never the only way. A surface that covers the whole window (the
+  hero creator's stage look) sets `data-full-surface` on `<html>` while it is
+  open and removes it when it closes; a page-wide single-key shortcut that opens
+  something (the Table's T and R, the journal's "/") does nothing while it is
+  set, so nothing opens where it cannot be seen. A shortcut's own widget reads
+  the attribute; the surface never reaches into the widget.
 - **Preview who and where.** A workshop that changes what people see offers
   Phone, Tablet and Computer, and "A player", so the owner sees what each
   gets before saving.

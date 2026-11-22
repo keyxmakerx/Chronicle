@@ -194,6 +194,10 @@ Chronicle.register('page-tabs', {
     };
     update();
   },
+  // A page refresh calls this only when the panel's markup came back the
+  // same (page_live.js): the tabs stay as the reader left them, and the
+  // widgets inside are refreshed one by one.
+  update: function () {},
   destroy: function (el) {
     if (el._ptOff) el._ptOff();
   }

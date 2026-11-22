@@ -153,6 +153,8 @@ type PracticeCreatorView struct {
 	// TermsURL is where the builder reads the system's rules words; empty
 	// when the system has no glossary.
 	TermsURL string
+	// Look is "stage" for the hero-on-stage look; see HeroCreatorView.
+	Look string
 }
 
 // PracticePageView is a practice hero's own page.
@@ -182,6 +184,8 @@ type TryoutCreatorView struct {
 	// TermsURL is the try-out's own read-only route to the rules words;
 	// empty when the system has no glossary.
 	TermsURL string
+	// Look is "stage" for the hero-on-stage look; see HeroCreatorView.
+	Look string
 }
 
 // TryoutView is the Characters page's mount for a try-out kept in the

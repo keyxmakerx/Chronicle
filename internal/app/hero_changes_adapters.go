@@ -12,7 +12,8 @@ import (
 
 // hero_changes_adapters.go wires when players may change their hero's picks:
 // the Director's rule lives in the campaign settings, and a change rings the
-// bell of the owner and every Co-DM.
+// bell of the owner and every Co-DM. A Director keeps one unread row per hero
+// (see hero_change_fold.go).
 
 // notifHeroChanged is the bell type of a player's hero change. It has no
 // category on the account page, so it is always delivered.
@@ -22,8 +23,12 @@ const notifHeroChanged = "hero_changed"
 // hero through the sync. Like notifHeroChanged it is always delivered.
 const notifHeroLevelRaised = "hero_level_raised"
 
-// heroChangeShown is how many changed picks the bell names before "and N more".
+// heroChangeShown is how many changed fields the bell names before "and N more".
 const heroChangeShown = 3
+
+// heroChangeNames is how many names of a list the bell gives on each side,
+// added and removed, before "and N more".
+const heroChangeNames = 4
 
 // heroChangeCampaigns is the slice of the campaign service the rule and the
 // bell need.
@@ -54,16 +59,45 @@ func (r heroChangeRules) SaveHeroChangeRule(ctx context.Context, campaignID stri
 	return r.camps.UpdateHeroChanges(ctx, campaignID, rule)
 }
 
+// heroBellStore is the bell store as the hero bells use it: a plain row for a
+// level, and one row per hero for changes.
+type heroBellStore interface {
+	scribeNoteNotifier
+	FoldUnreadNotification(ctx context.Context, userIDs []string, campaignID, ntype, link string, fold func(kept string) (message, detail, state string)) error
+}
+
 // heroChangeBell tells the campaign's Directors what a player changed.
 type heroChangeBell struct {
 	camps heroChangeCampaigns
-	bell  scribeNoteNotifier
+	bell  heroBellStore
 }
 
+// HeroChanged keeps one unread row per hero and Director: a change while the
+// row is unread folds into it, so a burst of saves is one bell.
 func (b heroChangeBell) HeroChanged(ctx context.Context, e *entities.Entity, userID string, changes []entities.HeroPickChange) error {
-	return b.ring(ctx, e, userID, notifHeroChanged, func(player string) (string, string) {
-		return player + " changed " + e.Name, heroChangeDetail(changes)
-	})
+	c, err := b.camps.GetByID(ctx, e.CampaignID)
+	if err != nil || c == nil {
+		return err
+	}
+	members, err := b.camps.ListMembers(ctx, e.CampaignID)
+	if err != nil {
+		return err
+	}
+	directors, player := heroChangeRecipients(c, members, userID)
+	if len(directors) == 0 {
+		return nil
+	}
+	return b.bell.FoldUnreadNotification(ctx, directors, e.CampaignID, notifHeroChanged, heroLink(e),
+		func(kept string) (string, string, string) {
+			fields := foldHeroChanges(kept, changes)
+			return player + " changed " + e.Name, heroFoldDetail(fields), encodeHeroFold(fields)
+		})
+}
+
+// heroLink is the page a hero's bells point at; it is also what keeps one
+// unread row per hero.
+func heroLink(e *entities.Entity) string {
+	return "/campaigns/" + e.CampaignID + "/entities/" + e.ID
 }
 
 // LevelRaised says only who, which hero and the new level: the page itself
@@ -90,7 +124,7 @@ func (b heroChangeBell) ring(ctx context.Context, e *entities.Entity, userID, nt
 		return nil
 	}
 	message, detail := say(player)
-	link := "/campaigns/" + e.CampaignID + "/entities/" + e.ID
+	link := heroLink(e)
 	return b.bell.NotifyUsersWithDetail(ctx, directors, e.CampaignID, ntype, message, detail, link)
 }
 
@@ -110,24 +144,6 @@ func heroChangeRecipients(c *campaigns.Campaign, members []campaigns.CampaignMem
 		}
 	}
 	return directors, player
-}
-
-// heroChangeDetail names each change, "Class: Fury → Tactician", the first
-// few of them and how many more.
-func heroChangeDetail(changes []entities.HeroPickChange) string {
-	parts := make([]string, 0, heroChangeShown+1)
-	for i, ch := range changes {
-		if i == heroChangeShown {
-			parts = append(parts, "and "+pluralMore(len(changes)-heroChangeShown))
-			break
-		}
-		to := ch.To
-		if to == "" {
-			to = "nothing"
-		}
-		parts = append(parts, ch.Label+": "+ch.From+" → "+to)
-	}
-	return strings.Join(parts, "; ")
 }
 
 func pluralMore(n int) string {

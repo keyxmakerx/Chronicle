@@ -16,6 +16,7 @@ import (
 templ TryoutCreatorPage(cc *campaigns.CampaignContext, view TryoutCreatorView) {
 	@layouts.App("Try the hero builder - " + cc.Campaign.Name) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		@heroLookLinks(view.Look)
 		<div class="max-w-7xl mx-auto sm:px-4">
 			<div
 				class="hc"
@@ -29,6 +30,7 @@ templ TryoutCreatorPage(cc *campaigns.CampaignContext, view TryoutCreatorView) {
 				data-type-name="practice hero"
 				data-for-self="false"
 				data-skin={ layouts.BuilderSkin(ctx) }
+				{ heroLookAttrs(view.Look)... }
 				if view.TermsURL != "" {
 					data-terms-url={ view.TermsURL }
 				}

@@ -68,20 +68,63 @@
     // The page behind is covered, never scrolled into place.
     P.alignTop = function () { this.aligned = false; };
 
-    // The site's own bar and sidebar are behind the creator: out of reach of
-    // the keyboard and screen readers while it is open. Only what this took is
-    // given back, so a page that set its own inert is left as it was.
+    // Everything else on the page is behind the creator, so it is out of reach
+    // of the keyboard and screen readers while the look is open: at each level
+    // from the mount up to the body, every sibling goes inert. Left usable:
+    // the docked Table bar (a body child or fixed, with its ancestors), and the
+    // site's toasts, which announce and offer Undo over the creator. Only what
+    // this took is given back, so a page that set its own inert is left as it
+    // was. It runs on every render and again when something joins a level the
+    // walk crossed (a bar HTMX brings in late).
+    var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, LINK: 1, TEMPLATE: 1, NOSCRIPT: 1 };
+
+    P.usable = function () {
+      var out = [], toast = document.getElementById('chronicle-toasts'), bar = document.getElementById('tt-drawer');
+      if (toast) out.push(toast);
+      if (bar && (bar.parentElement === document.body || getComputedStyle(bar).position === 'fixed')) out.push(bar);
+      return out;
+    };
+
     P.lockSite = function (on) {
       var self = this;
-      if (on) {
-        ['sidebar', 'app-topbar'].forEach(function (id) {
-          var el = document.getElementById(id);
-          if (el && !el.hasAttribute('inert') && self.inerted.indexOf(el) < 0) { el.setAttribute('inert', ''); self.inerted.push(el); }
-        });
+      if (!on) {
+        if (this.siteWatch) { this.siteWatch.disconnect(); this.siteWatch = null; }
+        if (this.siteKick) { cancelAnimationFrame(this.siteKick); this.siteKick = 0; }
+        this.inerted.forEach(function (el) { el.removeAttribute('inert'); });
+        this.inerted = [];
+        document.documentElement.removeAttribute('data-full-surface');
         return;
       }
-      this.inerted.forEach(function (el) { el.removeAttribute('inert'); });
-      this.inerted = [];
+      // Page shortcuts stand down while a surface covers the window.
+      document.documentElement.setAttribute('data-full-surface', '');
+      var keep = this.usable(), levels = [], node = this.root;
+      while (node && node !== document.body && node.parentElement) {
+        var par = node.parentElement, mine = node;
+        levels.push(par);
+        Array.prototype.forEach.call(par.children, function (sib) {
+          if (sib === mine || SKIP_TAGS[sib.tagName]) return;
+          var held = keep.some(function (k) { return sib === k || sib.contains(k); }), at = self.inerted.indexOf(sib);
+          if (held) {
+            if (at >= 0) { sib.removeAttribute('inert'); self.inerted.splice(at, 1); }
+          } else if (at < 0 && !sib.hasAttribute('inert')) {
+            sib.setAttribute('inert', '');
+            self.inerted.push(sib);
+          }
+        });
+        node = par;
+      }
+      if (!window.MutationObserver) return;
+      if (!this.siteWatch) {
+        this.siteWatch = new MutationObserver(function () {
+          if (self.siteKick) return;
+          self.siteKick = requestAnimationFrame(function () {
+            self.siteKick = 0;
+            if (self.siteWatch && document.body.contains(self.root)) self.lockSite(true);
+          });
+        });
+      }
+      this.siteWatch.disconnect();
+      levels.forEach(function (el) { self.siteWatch.observe(el, { childList: true }); });
     };
 
     P.render = function () {
@@ -91,8 +134,28 @@
       this.lastStats = this.stats();
     };
 
+    // The Table bar slides to its resting place after its stylesheet arrives,
+    // and a slide moves the bar without resizing it, which the base's
+    // observer cannot see. Fit again when the bar's slide ends at rest.
+    P.watch = function () {
+      var self = this, pend = 0;
+      base.watch.call(this);
+      this.onBarSlide = function (ev) {
+        var bar = document.getElementById('tt-drawer');
+        if (!bar || ev.target !== bar || ev.propertyName !== 'transform') return;
+        // Lifted or full, the phone sheet covers the creator on purpose, and
+        // the creator keeps the height it had under the resting bar.
+        var h = bar.getAttribute('data-h');
+        if (h && h !== 'rest') return;
+        if (pend) return;
+        pend = requestAnimationFrame(function () { pend = 0; if (document.body.contains(self.root)) self.fit(); });
+      };
+      document.addEventListener('transitionend', this.onBarSlide, true);
+    };
+
     P.destroy = function () {
       if (this.borders) { this.borders.destroy(); this.borders = null; }
+      if (this.onBarSlide) { document.removeEventListener('transitionend', this.onBarSlide, true); this.onBarSlide = null; }
       this.lockSite(false);
       base.destroy.call(this);
     };

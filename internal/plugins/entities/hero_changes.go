@@ -12,21 +12,34 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // hero_changes.go decides when a player may change their own hero's builder
-// picks. The Director sets the times in the campaign settings
-// (campaigns.HeroChangeRule): some days after the hero is made, some days
-// after each new level from a level on, or both, or any time when there is
-// no rule. A Director can also reopen one hero for some days. Outside those
-// times the fields door refuses a change to a pick, and every change a
-// player makes rings the Directors' bell.
+// picks, and what rings the Directors' bell. They are two different sets and
+// stay two functions:
+//
+//   - What locks (heroLockedChanges): a builder step or what a step's entry
+//     buys. The Director sets the times in the campaign settings
+//     (campaigns.HeroChangeRule): some days after the hero is made, some days
+//     after each new level from a level on, or both, or any time when there is
+//     no rule. A Director can also reopen one hero for some days. Outside
+//     those times the writers refuse a change to a pick.
+//   - What rings (heroBellChanges): the locked set plus every other key a
+//     claimed owner may write: short identity texts, the story texts and the
+//     lists of names. Those are always stored; they only ring.
 //
 // Only a change counts: filling a blank finishes the hero rather than
-// changing it, so it is always allowed and rings nothing.
+// changing it, so it is always allowed and rings nothing. Only a claimed
+// owner acting as a Player rings; the callers judge that, since a Director's
+// or Scribe's edit never reaches these functions with a change to report.
+//
+// A player's burst of changes stays one unread row per Director (the bell
+// adapter folds it); this file only says what changed.
 
 // HeroLevelKey is the field that holds a hero's level in the game systems
 // that have one. A system without it never opens a level window.
@@ -70,13 +83,38 @@ type HeroChangeNotifier interface {
 	LevelRaised(ctx context.Context, e *Entity, userID string, level int) error
 }
 
-// HeroPickChange is one pick a player changed, as the Directors read it.
+// HeroChangeKind says how a changed field is judged and worded.
+type HeroChangeKind string
+
+// The kinds of change the bell tells of. Only HeroChangePick is ever locked.
+const (
+	// HeroChangePick is a builder step or what a step's entry buys.
+	HeroChangePick HeroChangeKind = "pick"
+	// HeroChangeText is a short identity text such as pronouns.
+	HeroChangeText HeroChangeKind = "text"
+	// HeroChangeList is a list of names (skills, languages, perks).
+	HeroChangeList HeroChangeKind = "list"
+	// HeroChangeStory is the player's long text. Its words never leave the
+	// page: a change carries no From or To.
+	HeroChangeStory HeroChangeKind = "story"
+)
+
+// HeroPickChange is one field a player changed, as the Directors read it.
+// A zero Kind reads like a pick.
 type HeroPickChange struct {
 	FieldKey string
 	Label    string
 	From     string
 	To       string
+	Kind     HeroChangeKind
+	// WasNames and NowNames are, for a list, the names it held before and
+	// holds now, in their own spelling.
+	WasNames []string
+	NowNames []string
 }
+
+// locked reports whether the Director's times apply to this change.
+func (c HeroPickChange) locked() bool { return c.Kind == HeroChangePick }
 
 // HeroLock is whether a hero's picks may change now, as the builder and the
 // Directors' list show it. Until is set when the window closes at a known
@@ -174,12 +212,17 @@ func heroLevel(fields map[string]any) int {
 	return 0
 }
 
-// heroPickChanges lists the picks a patch changes: builder steps and what an
-// entry lets the hero buy, each whose stored value is not blank and differs
-// from what the patch writes. Filling a blank is not a change.
-func heroPickChanges(e *Entity, patch map[string]any, picks builderPicks, labels map[string]string) []HeroPickChange {
+// heroLockedChanges lists the picks a patch changes that the Director's times
+// lock: builder steps and what an entry lets the hero buy, each whose stored
+// value is not blank and differs from what the patch writes. Filling a blank
+// is not a change. A story or list key is never in this set whatever the plan
+// says, so the lock cannot widen to them.
+func heroLockedChanges(e *Entity, patch map[string]any, picks builderPicks, labels map[string]string) []HeroPickChange {
 	var out []HeroPickChange
 	for k, v := range patch {
+		if ownerStoryFieldKeys[k] || ownerListFieldKeys[k] {
+			continue
+		}
 		step, isOptions := strings.CutSuffix(k, heroOptionsSuffix)
 		if !isOptions {
 			step = k
@@ -202,10 +245,182 @@ func heroPickChanges(e *Entity, patch map[string]any, picks builderPicks, labels
 		if isOptions {
 			label += " choices"
 		}
-		out = append(out, HeroPickChange{FieldKey: k, Label: label, From: was, To: now})
+		out = append(out, HeroPickChange{FieldKey: k, Label: label, From: was, To: now, Kind: HeroChangePick})
 	}
 	slices.SortFunc(out, func(a, b HeroPickChange) int { return strings.Compare(a.FieldKey, b.FieldKey) })
 	return out
+}
+
+// heroBellChanges lists every change a claimed owner's patch makes that rings
+// the bell: the locked set, and each identity, story and list key whose stored
+// value is not blank and differs. The bell never names a key the type marks
+// GM-only or lacks, so a write that slipped such a key past a door still
+// leaves it out. typeFields nil means the type is unknown and only the owner
+// keys themselves limit it.
+func heroBellChanges(e *Entity, patch map[string]any, picks builderPicks, stepLabel map[string]string, typeFields []FieldDefinition) []HeroPickChange {
+	out := heroLockedChanges(e, patch, picks, stepLabel)
+	if e == nil {
+		return out
+	}
+	gmOnly, onType := map[string]bool{}, map[string]bool{}
+	fieldLabel := map[string]string{}
+	for i := range typeFields {
+		f := typeFields[i]
+		onType[f.Key] = true
+		fieldLabel[f.Key] = strings.TrimSpace(f.Label)
+		if f.GMOnly {
+			gmOnly[f.Key] = true
+		}
+	}
+	for k, v := range patch {
+		var kind HeroChangeKind
+		switch {
+		case ownerListFieldKeys[k]:
+			kind = HeroChangeList
+		case ownerStoryFieldKeys[k]:
+			kind = HeroChangeStory
+		case ownerIdentityFieldKeys[k]:
+			if _, isStep := picks[k]; isStep {
+				continue // judged above, as a pick
+			}
+			kind = HeroChangeText
+		default:
+			continue
+		}
+		if gmOnly[k] || (typeFields != nil && !onType[k]) {
+			continue
+		}
+		// A story is compared as written, so a change of case rings; every
+		// other kind is also dropped when a client merely resends the stored
+		// value, since Foundry resends the whole mapped set.
+		if kind != HeroChangeStory && sentBackUnchanged(e, k, v) {
+			continue
+		}
+		ch, changed := bellChange(kind, k, e.FieldsData[k], v)
+		if !changed {
+			continue
+		}
+		switch kind {
+		case HeroChangeList:
+			ch.Label = ownerListLabels[k]
+		default:
+			ch.Label = fieldLabel[k]
+			if ch.Label == "" {
+				ch.Label = capitalFirst(k)
+			}
+		}
+		out = append(out, ch)
+	}
+	slices.SortFunc(out, func(a, b HeroPickChange) int { return strings.Compare(a.FieldKey, b.FieldKey) })
+	return out
+}
+
+// bellChange judges one non-pick key. A value it cannot read is no change,
+// since reporting "everything removed" for a malformed write would be wrong.
+func bellChange(kind HeroChangeKind, k string, old, v any) (HeroPickChange, bool) {
+	ch := HeroPickChange{FieldKey: k, Kind: kind}
+	switch kind {
+	case HeroChangeList:
+		was, okWas := listNames(old)
+		now, okNow := listNames(v)
+		if !okWas || !okNow || len(was) == 0 || sameNames(was, now) {
+			return ch, false
+		}
+		ch.WasNames, ch.NowNames = was, now
+	default:
+		if v != nil {
+			if _, isText := v.(string); !isText {
+				return ch, false
+			}
+		}
+		oldText, _ := old.(string)
+		was, now := strings.TrimSpace(oldText), ""
+		if s, ok := v.(string); ok {
+			now = strings.TrimSpace(s)
+		}
+		same := was == now
+		if kind == HeroChangeText {
+			same = strings.EqualFold(was, now)
+		}
+		if was == "" || same {
+			return ch, false
+		}
+		if kind == HeroChangeText {
+			ch.From, ch.To = was, now
+		}
+	}
+	return ch, true
+}
+
+// listNames reads a list as the names it holds, trimmed and distinct, in the
+// order given: a JSON array as text, or a decoded array, whose entries are a
+// name or an object with a name. Blank is no names. ok is false for text that
+// is not a list, which has no names to compare.
+func listNames(v any) (names []string, ok bool) {
+	var raw []any
+	switch t := v.(type) {
+	case nil:
+		return nil, true
+	case string:
+		if strings.TrimSpace(t) == "" {
+			return nil, true
+		}
+		if err := json.Unmarshal([]byte(t), &raw); err != nil {
+			return nil, false
+		}
+	case []any:
+		raw = t
+	case []string:
+		for _, n := range t {
+			raw = append(raw, n)
+		}
+	default:
+		return nil, false
+	}
+	seen := map[string]bool{}
+	for _, it := range raw {
+		var name string
+		switch n := it.(type) {
+		case string:
+			name = n
+		case map[string]any:
+			name, _ = n["name"].(string)
+		}
+		name = strings.TrimSpace(name)
+		key := strings.ToLower(name)
+		if name == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		names = append(names, name)
+	}
+	return names, true
+}
+
+// sameNames reports whether two name lists hold the same names, ignoring
+// order and case.
+func sameNames(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]bool, len(a))
+	for _, n := range a {
+		set[strings.ToLower(n)] = true
+	}
+	for _, n := range b {
+		if !set[strings.ToLower(n)] {
+			return false
+		}
+	}
+	return true
+}
+
+func capitalFirst(k string) string {
+	if k == "" {
+		return k
+	}
+	r, size := utf8.DecodeRuneInString(k)
+	return string(unicode.ToUpper(r)) + k[size:]
 }
 
 // pickText is a pick as compared and shown: trimmed text, or for what an
@@ -306,11 +521,12 @@ func (s *HeroChangeService) Locks(ctx context.Context, campaignID string, heroes
 	return out, nil
 }
 
-// CheckPicks returns the picks a claimed owner's patch changes, refused when
-// the hero's picks are shut now.
-func (s *HeroChangeService) CheckPicks(ctx context.Context, e *Entity, patch map[string]any, picks builderPicks, plan *HeroPlan) ([]HeroPickChange, error) {
-	changes := heroPickChanges(e, patch, picks, stepLabels(plan))
-	if s == nil || len(changes) == 0 {
+// CheckPicks returns the changes a claimed owner's patch makes for the bell,
+// refused when it changes a pick and the hero's picks are shut now. A list,
+// story or identity change is never refused: it is stored and only rings.
+func (s *HeroChangeService) CheckPicks(ctx context.Context, e *Entity, patch map[string]any, picks builderPicks, plan *HeroPlan, typeFields []FieldDefinition) ([]HeroPickChange, error) {
+	changes := heroBellChanges(e, patch, picks, stepLabels(plan), typeFields)
+	if s == nil || !anyLocked(changes) {
 		return changes, nil
 	}
 	lock, err := s.Lock(ctx, e)
@@ -323,14 +539,19 @@ func (s *HeroChangeService) CheckPicks(ctx context.Context, e *Entity, patch map
 	return changes, nil
 }
 
+func anyLocked(changes []HeroPickChange) bool {
+	return slices.ContainsFunc(changes, HeroPickChange.locked)
+}
+
 // HeldPicks is CheckPicks key by key, for writers that keep what passes and
 // report the rest (Foundry, a player's AI): when the hero's picks are shut,
-// each changed pick is held with the reason; otherwise the changes are
-// returned for the bell. The caller passes only the keys it would still
-// store, so a key held for another reason is not counted twice.
-func (s *HeroChangeService) HeldPicks(ctx context.Context, e *Entity, patch map[string]any, plan *HeroPlan) (map[string]string, []HeroPickChange, error) {
-	changes := heroPickChanges(e, patch, builderPicksFrom(plan), stepLabels(plan))
-	if s == nil || len(changes) == 0 {
+// each changed pick is held with the reason; the changes that are not picks
+// are stored, so they are still returned for the bell. The caller passes only
+// the keys it would still store, so a key held for another reason is not
+// counted twice.
+func (s *HeroChangeService) HeldPicks(ctx context.Context, e *Entity, patch map[string]any, plan *HeroPlan, typeFields []FieldDefinition) (map[string]string, []HeroPickChange, error) {
+	changes := heroBellChanges(e, patch, builderPicksFrom(plan), stepLabels(plan), typeFields)
+	if s == nil || !anyLocked(changes) {
 		return nil, changes, nil
 	}
 	lock, err := s.Lock(ctx, e)
@@ -340,11 +561,16 @@ func (s *HeroChangeService) HeldPicks(ctx context.Context, e *Entity, patch map[
 	if lock.Open {
 		return nil, changes, nil
 	}
-	held := make(map[string]string, len(changes))
+	held := map[string]string{}
+	var stored []HeroPickChange
 	for _, ch := range changes {
-		held[ch.FieldKey] = "Your hero's picks are locked right now. " + lock.Next
+		if ch.locked() {
+			held[ch.FieldKey] = "Your hero's picks are locked right now. " + lock.Next
+			continue
+		}
+		stored = append(stored, ch)
 	}
-	return held, nil, nil
+	return held, stored, nil
 }
 
 // Changed rings the Directors' bell for a change a player saved.

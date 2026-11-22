@@ -1685,7 +1685,9 @@
         if (self.open) { self.closeTable(); }
         return;
       }
-      if (typing(ev.target) || ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented) return;
+      // A surface that covers the window stands the page's shortcuts down, so
+      // the drawer never opens where nobody can see it.
+      if (typing(ev.target) || ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented || document.documentElement.hasAttribute('data-full-surface')) return;
       var k = (ev.key || '').toLowerCase();
       if (k === 't') { ev.preventDefault(); if (self.open) self.closeTable(); else self.openTable(); }
       else if (k === 'r') { ev.preventDefault(); self.openTable('rolls'); var fx = document.getElementById('tt-fx'); if (fx) fx.focus(); }
