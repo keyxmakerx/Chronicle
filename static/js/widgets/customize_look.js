@@ -1904,6 +1904,17 @@
       fzSection(id);
       roomDraw();
     }
+    // A pencil mark opens its part as a click on the part does. From the
+    // keyboard, focus stays on the mark when it is still drawn, and otherwise
+    // moves into the part's settings.
+    function openMark(sec, fromKeys){
+      selectSection(sec);
+      if (!fromKeys) return;
+      var m = $('#rm-brush [data-mark="' + sec + '"]');
+      if (m){ m.focus({ preventScroll:true }); return; }
+      var p = $('#panel-' + sec), f = p && $('button, input, select, textarea, [tabindex="0"]', p);
+      if (f) f.focus({ preventScroll:true });
+    }
     function chooseLook(id){
       applyLook(draft, id); settle(); update(); fzFlash('*');
       announce('Previewing the ' + look(id).name + ' look. Save changes to use it.');
@@ -2274,6 +2285,7 @@
       if (!t) return;
       if (t.getAttribute('role') === 'tab'){ setLooks(false); selectRoom(t.id.slice(4)); return; }
       if (t.dataset.sec){ selectSection(t.dataset.sec); return; }
+      if (t.dataset.mark){ openMark(t.dataset.mark, e.detail === 0); return; }
       if (t.dataset.quick){ quickSetup(t.dataset.quick); return; }
       if (t.dataset.viewas){ ui.viewAs = t.dataset.viewas; update(); return; }
       if (t.dataset.open){
@@ -2303,16 +2315,23 @@
         case 'lk-x': closePanel(); break;
       }
     });
+    // Escape anywhere in the workshop closes the topmost thing: a hover card or
+    // a picker first, then a zoom, then the panel. Escape in a text field is
+    // the field's own, and a menu or dialog of the frame's (Find, a drawer)
+    // closes itself first.
+    on(document, 'keydown', function(e){
+      if (e.key !== 'Escape' || e.defaultPrevented || !ROOT.isConnected) return;
+      var t = e.target;
+      if (t && t.closest && !ROOT.contains(t) && t.closest('[role="dialog"], [role="menu"], .czs-drawer')) return;
+      if (document.querySelector('.czs-drawer:not([hidden])')) return;
+      if (hcOn){ hcHide(); e.preventDefault(); return; }
+      var top = layers[layers.length - 1];
+      if (top){ e.preventDefault(); top.close(true); return; }
+      if (t && t.matches && t.matches('textarea, select, [contenteditable="true"], input:not([type="radio"]):not([type="checkbox"]):not([type="range"]):not([type="button"])')) return;
+      if (ui.focus){ e.preventDefault(); fzSet(null); return; }
+      if (ui.panel){ e.preventDefault(); closePanel(); }
+    });
     on(ROOT, 'keydown', function(e){
-      if (e.key === 'Escape'){
-        if (hcOn){ hcHide(); e.preventDefault(); return; }
-        var top = layers[layers.length - 1];
-        if (top){ e.preventDefault(); top.close(true); return; }
-        if (ui.focus){ e.preventDefault(); fzSet(null); return; }
-        // Escape in a field is the field's own; anywhere else it puts the panel away.
-        if (ui.panel && !(e.target.matches && e.target.matches('textarea, input:not([type="radio"]):not([type="checkbox"]):not([type="range"])'))){ e.preventDefault(); closePanel(); }
-        return;
-      }
       if (e.target.id === 'pop-hex' && e.key === 'Enter'){ e.preventDefault(); useHex(); return; }
       if (e.target.getAttribute && e.target.getAttribute('role') === 'tab'){
         var ids = ROOMS.map(function(r){ return r[0]; }), i = ids.indexOf(e.target.id.slice(4)), n = null;
@@ -2458,13 +2477,13 @@
     function fzDraw(){
       var svg = $('#fz'), sec = ui.focus;
       if (!svg) return;
-      if (!sec || ui.zoom !== 'site'){ svg.classList.remove('on'); $('#fz-bar').classList.remove('on'); fzZoom(null); return; }
+      if (!sec || ui.zoom !== 'site'){ svg.classList.remove('on'); $('#fz-bar').classList.remove('on'); $('#fz-bar').inert = true; fzZoom(null); return; }
       var rs = fzMeasure(sec);
       $('.fz-dim', svg).setAttribute('d', fzHoles(rs, 4));
       setHTML($('.fz-ring', svg), fzRectsSVG(rs, 4, 6));
       svg.classList.add('on');
       setText($('#fz-name'), sectionName(sec));
-      $('#fz-bar').classList.add('on');
+      $('#fz-bar').classList.add('on'); $('#fz-bar').inert = false;
       fzZoom(rs);
     }
     function fzQueue(){ cancelAnimationFrame(fzRaf); fzRaf = requestAnimationFrame(function(){ fzDraw(); roomDraw(); if (fzHovSec) fzHover(fzHovSec, true); }); }
@@ -2566,7 +2585,8 @@
     // Where a part's pencil mark sits: outside the part, on the first side
     // where it covers no words and no other mark (right, left, above, below).
     // When every side would cover words it shrinks to a pencil alone at the
-    // part's corner, whichever corner covers least; never over words by choice.
+    // part's corner, or the nearest clear spot further out; never over words
+    // by choice.
     function markSpot(r, k, mw, mh, words, taken, ww){
       var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, B = (r.y + r.h) * k, H = 520 * k;
       function cover(c, w, h){
@@ -2593,6 +2613,14 @@
       // goes along its inside edges, wherever no word is.
       for (var x = R - sm - 2; x >= L + 2; x -= 10){ corners.push([x, T + 2]); corners.push([x, B - sm - 2]); }
       var small = best(corners, sm, sm);
+      // Still on words: look further out, ring by ring, for the nearest clear spot.
+      for (var d = 6; (!small || small.c) && d <= 48; d += 6){
+        var ring = [];
+        for (var rx = L - d - sm; rx <= R + d; rx += 6){ ring.push([rx, T - d - sm]); ring.push([rx, B + d]); }
+        for (var ry = T - d; ry <= B + d - sm; ry += 6){ ring.push([L - d - sm, ry]); ring.push([R + d, ry]); }
+        var far = best(ring, sm, sm);
+        if (far && (!small || far.c < small.c)) small = far;
+      }
       if (small) small.small = true;
       if (small && (!full || small.c <= full.c)) return small;
       return full || { x:clamp(R - sm, 0, ww - sm), y:clamp(T - sm / 2, 0, H - sm), w:sm, h:sm, small:true };
@@ -2606,17 +2634,21 @@
       if (!blur || !brush) return;
       var all = [], marks = '', k = fzK(), ww = $('#site-wrap').clientWidth, sec0 = openSec();
       var picking = !!sec0 && !WHOLE[sec0] && ui.zoom === 'site' && !ui.focus && !(kf && kf.active());
-      var ringRects = [];
-      if (ui.zoom === 'site' && !ui.focus){
-        var words = fzTextBoxes().map(function(b){ return { x:b.x * k, y:b.y * k, w:b.w * k, h:b.h * k }; }), taken = [];
+      var ringRects = [], ae = document.activeElement, keep = ae && ae.getAttribute && ae.getAttribute('data-mark');
+      // A style kit's frame over the example hides the marks, so they go too.
+      if (ui.zoom === 'site' && !ui.focus && !(kf && kf.active())){
+        // Words keep a little room around them, so a mark never touches a
+        // word or a link's underline and reads as part of it.
+        var words = fzTextBoxes().map(function(b){ return { x:b.x * k - 4, y:b.y * k - 3, w:b.w * k + 8, h:b.h * k + 6 }; }), taken = [];
         (picking ? [sec0] : roomSecs()).forEach(function(sec){
           var rs = fzMeasure(sec);
           if (!rs.length) return;
           if (picking){ all = all.concat(rs); ringRects = rs; }
           var open = sectionOpen(sec), at = markSpot(rs[0], k, open ? 44 : 30, 17, words, taken, ww);
           taken.push({ x:at.x, y:at.y, w:at.w, h:at.h });
-          marks += '<span class="rb' + (at.small ? ' sm' : open ? ' open' : '') + '" style="left:' + at.x.toFixed(0) + 'px;top:' + at.y.toFixed(0) + 'px">' +
-            IC('i-pencil') + (open && !at.small ? IC('i-users') : '') + '</span>';
+          var lab = 'Change the ' + sectionName(sec).toLowerCase();
+          marks += '<button type="button" class="rb' + (at.small ? ' sm' : open ? ' open' : '') + '" data-mark="' + sec + '" aria-label="' + esc(lab) + '" title="' + esc(lab) + '" style="left:' + at.x.toFixed(0) + 'px;top:' + at.y.toFixed(0) + 'px">' +
+            IC('i-pencil') + (open && !at.small ? IC('i-users') : '') + '</button>';
         });
       }
       // Leaving for a zoomed part, the layer goes at once: its undoing of the
@@ -2629,6 +2661,8 @@
         ring.parentNode.classList.toggle('open', picking);
       }
       setHTML(brush, marks);
+      // A redraw keeps keyboard focus on the mark it was on.
+      if (keep && !brush.contains(document.activeElement)){ var m = $('[data-mark="' + keep + '"]', brush); if (m) m.focus({ preventScroll:true }); }
     }
     function syncPeople(){
       var rows = $('#pp-rows');
@@ -2660,9 +2694,11 @@
     function fzInit(){
       var site = fzSite(), wrap = $('#site-wrap');
       site.insertAdjacentHTML('beforeend', '<div class="rm-blur" id="rm-blur" aria-hidden="true"></div><svg class="fz" id="fz" viewBox="0 0 880 520" aria-hidden="true"><path class="fz-dim" fill-rule="evenodd" d="M0 0H880V520H0Z"/><g class="fz-ring"></g><g class="fz-open"></g><g class="fz-hov"></g><g class="fz-flash"></g></svg>');
-      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div><div class="rm-brush" id="rm-brush" aria-hidden="true"></div>');
+      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div><div class="rm-brush" id="rm-brush"></div>');
       wrap.classList.add('fz-ok');
       $('[data-z="site"]').insertAdjacentHTML('beforeend', '<div class="fz-bar" id="fz-bar"><span>Showing <b id="fz-name"></b></span><button type="button" class="czb czb-s czb-sm" id="fz-all">Whole site</button></div>');
+      // Hidden until a part is zoomed in on, and out of reach while hidden.
+      $('#fz-bar').inert = true;
       on(wrap, 'pointermove', function(e){
         if (e.pointerType === 'touch' || ui.zoom !== 'site') return;
         var sec = fzSecAt(e.target);

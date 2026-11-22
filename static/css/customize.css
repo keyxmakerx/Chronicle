@@ -671,6 +671,16 @@
   .czp .czb{ padding:0 12px; }
   .czp .toast{ bottom:calc(70px + env(safe-area-inset-bottom, 0px)); }
   .czp .lk-ws.panel-open .cpe-dock-wrap{ bottom:calc(var(--lk-hh) * .58 + 8px); }
+  /* The tools wrap onto centred rows rather than scroll, so every one shows;
+     the example and the sheet keep clear of the taller dock. */
+  .czp .cpe-dock{ flex-wrap:wrap; justify-content:center; overflow:visible; gap:2px; }
+  .czp .cpe-dk-sep{ display:none; }
+  /* Whole site keeps its small look; its touch area is 44 tall. */
+  .czp .fz-bar .czb{ position:relative; }
+  .czp .fz-bar .czb::after{ content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
+  .czp .cpe-dk{ min-height:44px; padding:0 9px; }
+  .czp .lk-work{ padding-bottom:156px; }
+  .czp .lk-ws.panel-open .lk-work{ padding-bottom:calc(var(--lk-hh) * .58 + 120px); }
 }
 html[data-motion="off"] .czp .lk-pb .sec.enter, html[data-motion="off"] .czp .lk-pb .room.enter, html[data-motion="off"] .czp .lk-pb .lk-looks.enter, html[data-motion="off"] .czp .lk-pb .cz-panels.enter,
 .czp.rm .lk-pb .sec.enter, .czp.rm .lk-pb .room.enter, .czp.rm .lk-pb .lk-looks.enter, .czp.rm .lk-pb .cz-panels.enter{ animation:none; }
@@ -1243,10 +1253,15 @@ html[data-motion="off"] .czp .lk-panel, html[data-motion="off"] .czp .lk-panel.o
   .czp .rm-blur{ backdrop-filter:none; -webkit-backdrop-filter:none; background:color-mix(in srgb, var(--p-bg) 60%, transparent); }
 }
 .czp .rm-brush{ position:absolute; inset:0; z-index:35; pointer-events:none; overflow:hidden; }
+/* A part's pencil mark is a button: Tab reaches it, Enter or Space opens the
+   part as a click on the part does. */
 .czp .rb{
-  position:absolute; display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:999px;
-  background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--surface);
+  position:absolute; display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border:0; border-radius:999px;
+  background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--surface); font:inherit; line-height:1;
+  pointer-events:auto; cursor:pointer;
 }
+.czp .rb:focus{ outline:none; }
+.czp .rb:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
 .czp .rb .i{ width:11px; height:11px; }
 .czp .rb.open{ padding-right:7px; }
 .czp .rb.sm{ width:15px; height:15px; padding:0; justify-content:center; }
