@@ -124,7 +124,7 @@
 /* A crit's edge flashes as the die lands: the roll's first crit twice, any others once and fainter. */
 .td-flash .tdr { animation: td-flash 0.7s var(--ease-out, ease-out) 1; }
 .td-flash2 .tdr { animation: td-flash2 0.5s var(--ease-out, ease-out) 1; }
-@keyframes td-flash { 0%, 50% { stroke-opacity: 0; stroke-width: 5; } 25%, 75%, 100% { stroke-opacity: 1; } 100% { stroke-width: 2.5; } }
+@keyframes td-flash { 0%, 50% { stroke-opacity: 0; } 25%, 75%, 100% { stroke-opacity: 1; } }
 @keyframes td-flash2 { 0% { stroke-opacity: 0; } 50% { stroke-opacity: 0.6; } 100% { stroke-opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .td-flash .tdr, .td-flash2 .tdr { animation: none; } }
 .td-die text, .tt-mini text { font: 600 17px Inter, system-ui, sans-serif; fill: var(--td-ink); text-anchor: middle; dominant-baseline: central; font-variant-numeric: tabular-nums; }
