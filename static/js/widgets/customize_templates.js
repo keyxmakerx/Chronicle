@@ -105,8 +105,8 @@
         if (failed) { el.innerHTML = '<p class="text-sm text-fg-secondary">The starting text could not be loaded. Reload the page to try again.</p>'; return; }
         if (open) { drawForm(); return; }
         var list = model();
-        el.innerHTML = '<div class="space-y-4"><div><h2 class="text-base font-semibold text-fg mb-0.5">Starting text</h2>' +
-          '<p class="text-xs text-fg-secondary">Pre-fill the page editor when creating new pages. Templates appear in the create form and the page editor’s “/” menu.</p></div>' +
+        el.innerHTML = '<div class="space-y-4"><div><h1 class="czs-h1">Starting text</h1>' +
+          '<p class="czs-lede">Pre-fill the page editor when creating new pages. Templates appear in the create form and the page editor’s “/” menu.</p></div>' +
           '<div class="space-y-2">' + (list.length ? list.map(row).join('') : '<div class="card p-6 text-center"><p class="text-sm text-fg-secondary">No starting text yet.</p></div>') + '</div>' +
           '<button type="button" class="btn-primary text-sm" data-new><i class="fa-solid fa-plus word-ic" aria-hidden="true"></i> New starting text</button></div>';
       }

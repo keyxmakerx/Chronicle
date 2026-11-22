@@ -163,11 +163,18 @@
 
   // daysClip is the outline of the month's real day cells, in box px: the
   // canvas is drawn coarse and scaled up, so its soft edge is cut here to
-  // the cells' own edges. Null when the scene has no grid to follow.
+  // the cells' own edges. A scene with `outside` set draws its weeks' other
+  // cells too (the calendar shows the neighbouring months' dates there), so
+  // the outline is every row, edge to edge. Null when the scene has no grid
+  // to follow.
   function daysClip(sc) {
     var rows = sc && sc.rows, cols = sc && sc.cols;
     if (!rows || !rows.length || !cols || !sc.days) return null;
     var W = sc.box.width, p = W / cols, first = sc.off || 0, last = first + sc.days - 1;
+    if (sc.outside) {
+      var end = rows[rows.length - 1].top + rows[rows.length - 1].height;
+      return [[0, rows[0].top], [W, rows[0].top], [W, end], [0, end]];
+    }
     var r0 = Math.floor(first / cols), rL = Math.min(rows.length - 1, Math.floor(last / cols));
     if (r0 > rL) return null;
     var c0 = first - r0 * cols, cL = rL === Math.floor(last / cols) ? last % cols : cols - 1;

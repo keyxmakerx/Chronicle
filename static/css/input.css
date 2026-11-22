@@ -5482,6 +5482,14 @@ html[data-motion="calm"] .manage-pin:active, html[data-motion="off"] .manage-pin
 .manage-find kbd { font: inherit; font-size: 0.6875rem; padding: 0 0.3125rem; border: 1px solid var(--color-border); border-radius: var(--shape-r-small); color: var(--color-text-muted); }
 html[data-motion="off"] .manage-find { transition: none; }
 @media (pointer: coarse), (max-width: 767px) { .manage-find { min-height: 2.75rem; padding-inline: 0.75rem; } .manage-find kbd { display: none; } }
+/* The API keys screens are older markup that sizes its own controls; on a
+   phone or a touch screen every field, button and check row in them is 44
+   tall (a check box is answered through its row, so the row takes the size). */
+@media (pointer: coarse), (max-width: 767px) {
+  .keys-touch :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, button, .btn-primary, .btn-secondary) { min-height: 2.75rem; }
+  .keys-touch button { min-width: 2.75rem; }
+  .keys-touch label:has(> input[type="checkbox"]) { min-height: 2.75rem; }
+}
 .manage-intro { flex: 0 0 100%; margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--color-text-secondary); max-width: 65ch; }
 
 /* Shared block parts. Blocks mark their heading (cb-head), count (cb-count),

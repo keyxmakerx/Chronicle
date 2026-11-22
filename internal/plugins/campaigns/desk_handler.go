@@ -86,6 +86,7 @@ func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts d
 			addons = nil
 		}
 	}
+	in.Features = addons
 	for _, a := range addons {
 		in.Addons[a.Slug] = a.Enabled
 	}
@@ -102,7 +103,6 @@ func (h *Handler) deskInputsFor(ctx context.Context, campaign *Campaign, parts d
 		id := currentSystemID(campaign.ParseSettings().SystemID, addons)
 		in.SystemID = id
 		for _, o := range h.systemLister.ListSystems() {
-			in.Systems = append(in.Systems, DeskSystem{ID: o.ID, Name: o.Name})
 			if id != "" && o.ID == id {
 				in.SystemName = o.Name
 			}

@@ -58,17 +58,29 @@ func pagesHandler() *Handler {
 	return h
 }
 
-// The overview draws the frame: its rail, the save bar and the draft's
-// version, so the shell script has what it needs to start.
-func TestCustomizeOverview_RendersFrame(t *testing.T) {
+// The wall draws the frame: Find, the save bar and the draft's version, so the
+// shell script has what it needs to start, and a picture for the shared parts
+// and each category. It has no bar of tabs.
+func TestCustomizeWall_RendersFrame(t *testing.T) {
 	h := pagesHandler()
 	r := getPage(t, h, h.Customize, "/campaigns/camp-1/customize")
 	if r.code != http.StatusOK {
 		t.Fatalf("code = %d", r.code)
 	}
-	for _, want := range []string{`data-widget="customize-shell"`, `data-czs-savebar`, `data-version="0"`, `href="/campaigns/camp-1/customize/look"`, "NPCs"} {
+	for _, want := range []string{
+		`data-widget="customize-shell"`, `data-czs-savebar`, `data-version="0"`, `data-czw`, "Customize Ashfall",
+		`href="/campaigns/camp-1/customize/look#frame"`, `href="/campaigns/camp-1/customize/look#style"`,
+		`href="/campaigns/camp-1/customize/categories/7/layout"`, "NPCs", `data-czs-find`,
+		`href="/campaigns/camp-1/customize/categories"`, "All categories",
+		`data-share="frame"`, `data-czw-shares="colours"`,
+	} {
 		if !strings.Contains(r.body, want) {
-			t.Errorf("overview missing %q", want)
+			t.Errorf("wall missing %q", want)
+		}
+	}
+	for _, not := range []string{"data-czs-top", `data-czs-area="overview"`} {
+		if strings.Contains(r.body, not) {
+			t.Errorf("wall should not contain %q", not)
 		}
 	}
 }
@@ -83,8 +95,8 @@ func TestCustomizePluginArea(t *testing.T) {
 	if r.code != http.StatusOK || !strings.Contains(r.body, "MAPS-BODY") {
 		t.Fatalf("maps area: code %d, body has area: %v", r.code, strings.Contains(r.body, "MAPS-BODY"))
 	}
-	if !strings.Contains(r.body, `href="/campaigns/camp-1/customize/x/maps"`) {
-		t.Error("rail has no link to the plugin's area")
+	if !strings.Contains(r.body, `href="/campaigns/camp-1/customize/"`) && !strings.Contains(r.body, `href="/campaigns/camp-1/customize"`) {
+		t.Error("the part's bar has no way back to the wall")
 	}
 	if r := getPage(t, h, h.CustomizePluginArea, "/campaigns/camp-1/customize/x/nope", "tab", "nope"); r.code != http.StatusNotFound {
 		t.Errorf("unknown area: code %d, want 404", r.code)
@@ -121,10 +133,9 @@ func TestCustomizeCategory_Addresses(t *testing.T) {
 	}
 }
 
-// The index tabs: the open area's tab is current and names the part open
-// now, and each area's parts hang in its drawer — every category with its
-// kinds under it, each home, the Look's rooms. There is no rail and no
-// second row of tabs for the same parts.
+// The bar inside a part names where you are: "Everything" first, the part's
+// name, then its own tabs (a category's five, Look's rooms, the homes). There
+// is no top-level row of areas, no rail and no drawer for Look or the homes.
 func TestCustomizeTopBar(t *testing.T) {
 	h := &Handler{}
 	town := 7
@@ -143,9 +154,8 @@ func TestCustomizeTopBar(t *testing.T) {
 	}{
 		{"a category open", h.CustomizeCategory, "/campaigns/camp-1/customize/categories/8/layout", []string{"key", "8", "tab", "layout"},
 			[]string{
-				// Inside a category its own bar stands in for the area tabs.
 				`data-czs-catbar`,
-				`href="/campaigns/camp-1/customize/categories" data-czs-area="categories" aria-label="All categories"`,
+				`href="/campaigns/camp-1/customize" data-czs-back`, `<span>Everything</span>`,
 				`<span data-czs-catname>Towns</span>`,
 				`href="/campaigns/camp-1/customize/categories/8/layout" data-czs-cattab="layout" aria-current="page"`,
 				`data-czs-cattab="settings"`,
@@ -154,20 +164,24 @@ func TestCustomizeTopBar(t *testing.T) {
 				`href="/campaigns/camp-1/customize/categories/8/layout" class="czs-pt is-kind" aria-current="page"`,
 				`<span class="czs-sw" style="background:#ef4444;"`,
 				`<span class="czs-cnt">34</span>`,
-				`New category`,
-				`id="czs-dr-look"`, `href="/campaigns/camp-1/customize/look#pages"`,
-				`id="czs-dr-home"`,
+				`All categories`, `New category`,
 			},
-			[]string{"czs-rail", "czs-crumbs", "background:red", `data-czs-part`, `data-czs-area="look"`}},
+			[]string{"czs-rail", "czs-crumbs", "background:red", `data-czs-part`, `id="czs-dr-look"`, `id="czs-dr-home"`, `data-czs-area="look"`}},
 		{"a home open", h.CustomizeHome, "/campaigns/camp-1/customize/home/player", []string{"who", "player"},
-			[]string{`<span class="czs-part" data-czs-part>Players</span>`, `<span class="czs-pl">Players</span>`,
-				`href="/campaigns/camp-1/customize/home/player" class="czs-pt" aria-current="page"`,
-				`href="/campaigns/camp-1/customize/home/guest"`},
-			// The Overview tab is retired along with the owner dashboard it arranged.
-			[]string{`aria-label="Which home"`, `customize/home/dm`}},
-		{"the overview", h.Customize, "/campaigns/camp-1/customize", nil,
-			[]string{`data-czs-area="overview" aria-current="page"`},
-			[]string{`data-czs-part`}},
+			[]string{`<span>Everything</span>`, `<span class="czs-catname is-static" tabindex="-1">Home pages</span>`,
+				`href="/campaigns/camp-1/customize/home/player" aria-current="page"`,
+				`href="/campaigns/camp-1/customize/home/guest"`, `href="/campaigns/camp-1/customize/home/default"`},
+			// The retired owner dashboard has no tab.
+			[]string{`aria-label="Which home"`, `customize/home/dm`, `data-czs-part`}},
+		{"Look open", h.CustomizeLook, "/campaigns/camp-1/customize/look", nil,
+			[]string{`<span>Everything</span>`, `<span class="czs-catname is-static" tabindex="-1">Look</span>`,
+				`href="/campaigns/camp-1/customize/look#frame" data-czs-room="frame"`,
+				`href="/campaigns/camp-1/customize/look#style" data-czs-room="style"`,
+				`data-czs-room="pages"`, `data-czs-room="people"`},
+			[]string{`id="czs-dr-look"`}},
+		{"the wall", h.Customize, "/campaigns/camp-1/customize", nil,
+			[]string{`czs-is-wall`, `data-czw`},
+			[]string{`data-czs-part`, `data-czs-top`, `data-czs-back`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

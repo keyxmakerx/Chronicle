@@ -1,12 +1,10 @@
-// desk_rows.go builds every row of the owner's Campaign settings page from
-// live numbers. A row is a short name and the values that stand beside it:
-// a figure, a quiet word or a value changed where it stands, never a phrase.
-// Each builder is a pure function of its inputs so the names, the values for
-// every state, the plural forms and the "figure could not be read" fallback
-// are table-tested together. A figure that cannot be read is the quiet word
-// "Open", never a placeholder number. The figures a Manage tool page draws
-// beside its title are built here too, from the same facts, so a page and
-// its row cannot disagree.
+// desk_rows.go builds the settings Campaign settings changes where they stand
+// (name, description, who can see it, new pages, the preview, the Customize
+// rows), the values the board's tiles show, the figures a Manage tool page
+// draws beside its title, and what needs the owner. Each builder is a pure
+// function of its inputs, so the words for every state, the plural forms and
+// the "figure could not be read" fallback are table-tested together. A figure
+// that cannot be read is the quiet word "Open", never a placeholder number.
 
 package campaigns
 
@@ -58,11 +56,7 @@ func figureValue(text, sub, href string) DeskValue {
 // quiet word "Open" leading to the same page. It never invents a number.
 func openValue(href string) DeskValue { return DeskValue{Text: "Open", Href: href} }
 
-// wordValue is a quiet word that leads somewhere; one ending in an ellipsis
-// leads to a further step.
-func wordValue(text, href string) DeskValue { return DeskValue{Text: text, Href: href, Word: true} }
-
-// ---- General -------------------------------------------------------------
+// ---- Name and description ---------------------------------------------------
 
 // nameLine is the campaign's name, renamed where it stands.
 func nameLine(c *Campaign) DeskLine {
@@ -211,27 +205,6 @@ func headCount(members []CampaignMember) int {
 	return n
 }
 
-// peopleLine is the head count, leading to the People page.
-func peopleLine(c *Campaign, members []CampaignMember) DeskLine {
-	href := deskHref(c.ID, "/members")
-	l := DeskLine{ID: "people", Name: "Members", Values: []DeskValue{openValue(href)}}
-	if n := headCount(members); n > 0 {
-		l.Values = []DeskValue{figureValue(strconv.Itoa(n), "", href)}
-	}
-	return l
-}
-
-// invitedLine is how many invitations wait, leading to the invite box on the
-// People page.
-func invitedLine(c *Campaign, in DeskInputs) DeskLine {
-	href := deskHref(c.ID, "/members#invite-box")
-	l := DeskLine{ID: "invited", Name: "Invited", Values: []DeskValue{openValue(href)}}
-	if in.InvitedRead {
-		l.Values = []DeskValue{figureValue(strconv.Itoa(in.Invited), "", href)}
-	}
-	return l
-}
-
 // peopleFigure is what the People page draws beside its title: "5 members ·
 // 1 invited", with no invited part when nobody waits.
 func peopleFigure(members []CampaignMember, in DeskInputs) DeskFigure {
@@ -246,16 +219,6 @@ func peopleFigure(members []CampaignMember, in DeskInputs) DeskFigure {
 	return f
 }
 
-// changesLine is how much players changed this week.
-func changesLine(c *Campaign, f *DeskChangesFacts) DeskLine {
-	href := deskHref(c.ID, "/players/changes")
-	l := DeskLine{ID: "changes", Name: "Player edits", Values: []DeskValue{openValue(href)}}
-	if f != nil {
-		l.Values = []DeskValue{figureValue(strconv.Itoa(f.Changes), "this week", href)}
-	}
-	return l
-}
-
 func changesFigure(f *DeskChangesFacts) DeskFigure {
 	if f == nil {
 		return DeskFigure{}
@@ -264,76 +227,6 @@ func changesFigure(f *DeskChangesFacts) DeskFigure {
 }
 
 // ---- Game ----------------------------------------------------------------
-
-// systemLine is the campaign's game system, picked where it stands from the
-// systems the site can list. A system the list does not hold (a custom one),
-// or no list at all, is a figure that opens the features page instead.
-func systemLine(c *Campaign, in DeskInputs) DeskLine {
-	href := deskHref(c.ID, "/extensions")
-	l := DeskLine{ID: "system", Name: "System"}
-	known := in.SystemID == ""
-	for _, s := range in.Systems {
-		if s.ID == in.SystemID {
-			known = true
-		}
-	}
-	if len(in.Systems) == 0 || !known {
-		text := in.SystemName
-		switch {
-		case text != "":
-		case in.SystemID == "":
-			text = "None"
-		default:
-			text = "Custom"
-		}
-		l.Values = []DeskValue{figureValue(text, "", href)}
-		return l
-	}
-	b := DeskBlank{
-		Kind: DeskBlankChoice, ID: "system", Label: "System", Value: in.SystemID, Shown: "None",
-		URL: deskHref(c.ID, "/system"), Method: "PUT", Field: "system_id",
-		Options: []DeskOption{{Value: "", Label: "None"}},
-	}
-	for _, s := range in.Systems {
-		b.Options = append(b.Options, DeskOption{Value: s.ID, Label: s.Name})
-		if s.ID == in.SystemID {
-			b.Shown = s.Name
-		}
-	}
-	offWhenArchived(c, &b)
-	l.Values = []DeskValue{{Blank: &b}}
-	return l
-}
-
-// featuresLine is how many of the installed features are on.
-func featuresLine(c *Campaign, in DeskInputs) DeskLine {
-	href := deskHref(c.ID, "/extensions")
-	l := DeskLine{ID: "features", Name: "Features", Values: []DeskValue{openValue(href)}}
-	if in.FeaturesTotal > 0 {
-		l.Values = []DeskValue{figureValue(fmt.Sprintf("%d of %d", in.FeaturesOn, in.FeaturesTotal), "on", href)}
-	}
-	return l
-}
-
-// tablesLine opens the Rolling tables page; the page lists its own counts.
-func tablesLine(c *Campaign) DeskLine {
-	return DeskLine{ID: "tables", Name: "Rolling tables", Values: []DeskValue{openValue(deskHref(c.ID, "/roll-tables/manage"))}}
-}
-
-// entriesLine opens the page of the campaign's own rules entries: how many
-// there are and how many players' drafts wait for a Director.
-func entriesLine(c *Campaign, f *DeskEntriesFacts) DeskLine {
-	href := deskHref(c.ID, "/characters/entries")
-	l := DeskLine{ID: "entries", Name: "Own entries", Values: []DeskValue{openValue(href)}}
-	if f != nil {
-		v := figureValue(strconv.Itoa(f.Entries), "", href)
-		if n := f.Waiting(); n > 0 {
-			v.Sub, v.Joined = fmt.Sprintf("%d waiting", n), true
-		}
-		l.Values = []DeskValue{v}
-	}
-	return l
-}
 
 // gameFigure is what the Game and features page draws beside its title:
 // "Draw Steel · 12 of 15 on". A part it cannot name is left out.
@@ -448,20 +341,6 @@ func customizeLines(c *Campaign, in DeskInputs) []DeskLine {
 	return append(out, brushLine(c.ID, in.BrushHidden))
 }
 
-// mediaLine is what the picture store holds: a file count and its size.
-func mediaLine(c *Campaign, f *DeskMediaFacts) DeskLine {
-	href := deskHref(c.ID, "/media")
-	l := DeskLine{ID: "media", Name: "Media", Values: []DeskValue{openValue(href)}}
-	if f != nil {
-		sub := ""
-		if f.Files > 0 {
-			sub = deskBytes(f.Bytes)
-		}
-		l.Values = []DeskValue{figureValue(plural(f.Files, "file", "files"), sub, href)}
-	}
-	return l
-}
-
 func mediaFigure(f *DeskMediaFacts) DeskFigure {
 	if f == nil {
 		return DeskFigure{}
@@ -504,10 +383,6 @@ func foundryValue(c *Campaign, f *DeskFoundryFacts, now time.Time) DeskValue {
 		}
 	}
 	return v
-}
-
-func foundryLine(c *Campaign, f *DeskFoundryFacts, now time.Time) DeskLine {
-	return DeskLine{ID: "foundry", Name: "Foundry", Values: []DeskValue{foundryValue(c, f, now)}}
 }
 
 // foundryFigure is the Foundry page's figure: the dot, then the same words.
@@ -566,10 +441,6 @@ func aiValue(c *Campaign, f *DeskAIFacts) DeskValue {
 	return v
 }
 
-func aiLine(c *Campaign, f *DeskAIFacts) DeskLine {
-	return DeskLine{ID: "ai", Name: "Your AI", Values: []DeskValue{aiValue(c, f)}}
-}
-
 func aiFigure(c *Campaign, f *DeskAIFacts) DeskFigure {
 	if f == nil {
 		return DeskFigure{}
@@ -577,33 +448,7 @@ func aiFigure(c *Campaign, f *DeskAIFacts) DeskFigure {
 	return figureOf(aiValue(c, f))
 }
 
-// keysLine is how many API keys the campaign has, leading to the keys tab.
-func keysLine(c *Campaign, f *DeskKeysFacts) DeskLine {
-	href := deskHref(c.ID, "/settings?tab="+settingsTabAPIKeys)
-	l := DeskLine{ID: "keys", Name: "Keys", Values: []DeskValue{openValue(href)}}
-	if f != nil {
-		l.Values = []DeskValue{figureValue(strconv.Itoa(f.Count), "", href)}
-	}
-	return l
-}
-
 // ---- Data ----------------------------------------------------------------
-
-// copyLine leads to the tabs of Details and data that export and import a
-// copy of the campaign, so nothing waits behind a page the owner has to guess
-// at.
-func copyLine(c *Campaign) DeskLine {
-	return DeskLine{ID: "copy", Name: "Copy", Values: []DeskValue{
-		wordValue("Export…", deskHref(c.ID, "/settings?tab="+settingsTabData)),
-		wordValue("Import…", deskHref(c.ID, "/settings?tab="+settingsTabImport)),
-	}}
-}
-
-func activityLine(c *Campaign) DeskLine {
-	return DeskLine{ID: "activity", Name: "Activity", Values: []DeskValue{
-		figureValue("Log", "", deskHref(c.ID, "/settings?tab="+settingsTabActivity)),
-	}}
-}
 
 // trashValue is what waits in the campaign Trash and for how long.
 func trashValue(c *Campaign, f *DeskTrashFacts) DeskValue {
@@ -621,10 +466,6 @@ func trashValue(c *Campaign, f *DeskTrashFacts) DeskValue {
 	return figureValue(plural(f.Items, "item", "items"), sub, href)
 }
 
-func trashLine(c *Campaign, f *DeskTrashFacts) DeskLine {
-	return DeskLine{ID: "trash", Name: "Trash", Values: []DeskValue{trashValue(c, f)}}
-}
-
 func trashFigure(c *Campaign, f *DeskTrashFacts) DeskFigure {
 	if f == nil || f.Items == 0 {
 		return DeskFigure{}
@@ -632,26 +473,7 @@ func trashFigure(c *Campaign, f *DeskTrashFacts) DeskFigure {
 	return figureOf(trashValue(c, f))
 }
 
-// ---- Danger zone ---------------------------------------------------------
-
-// endLine is the foot of the page. Archive and Delete lead to the confirming
-// steps in the danger zone of Details and data, and Transfer to where
-// ownership moves on the People page. Nothing here changes the campaign in
-// one press.
-func endLine(c *Campaign) DeskLine {
-	danger := deskHref(c.ID, "/settings#danger")
-	archive := "Archive…"
-	if c.IsArchived() {
-		archive = "Unarchive…"
-	}
-	del := wordValue("Delete…", danger)
-	del.Danger = true
-	return DeskLine{ID: "end", Name: "Campaign", Values: []DeskValue{
-		wordValue(archive, danger),
-		wordValue("Transfer…", deskHref(c.ID, "/members#transfer")),
-		del,
-	}}
-}
+// ---- Needs you -------------------------------------------------------------
 
 // needsYou lists what only the owner can unblock, most urgent first. Only
 // what a provider could actually measure appears: a missing or failed

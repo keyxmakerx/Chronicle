@@ -170,3 +170,47 @@ func jsString(s string) string {
 
 // deskDisabled is the aria-disabled value for a blank.
 func deskDisabled(b *DeskBlank) string { return strconv.FormatBool(b.Off != "") }
+
+// itoa is strconv.Itoa for the templates.
+func itoa(n int) string { return strconv.Itoa(n) }
+
+// boardCall is a board control's click handler: it hands the control and the
+// event to static/js/settings_board.js, loading it on first use, for the same
+// reason the blanks bring their own script.
+func boardCall(name, method string) templ.ComponentScript {
+	return deskScript(name, "settings_board.js", "data-settings-board-js", "settingsBoard", method, "", "b,e", "this,event")
+}
+
+// boardGoLabel is a tile's accessible name: its label, then what it shows, so
+// a screen reader hears "Foundry: warning, No answer, Quiet for 24 days".
+func boardGoLabel(t DeskGoTile) string {
+	s := t.Label + ": "
+	if t.Value.State == "warn" {
+		s += "warning, "
+	}
+	s += t.Value.Text
+	if t.Hint != "" {
+		s += ", " + t.Hint
+	}
+	return s
+}
+
+// boardChipTitle is a feature chip's hover words: what the feature does, or
+// why it cannot be switched now.
+func boardChipTitle(ch DeskChip, off string) string {
+	if off != "" {
+		return off
+	}
+	return ch.Hint
+}
+
+// boardKey is a settings field's key handler: Escape puts the stored words
+// back, Enter (Ctrl or Cmd + Enter in a description) saves.
+func boardKey() templ.ComponentScript {
+	return deskScript("boardKey", "settings_board.js", "data-settings-board-js", "settingsBoard", "keydown", "", "b,e", "this,event")
+}
+
+// cardInitial is the card's emblem letter when the campaign has no logo.
+func cardInitial(name string) string {
+	return layouts.ManageMast{Name: name}.Initial()
+}

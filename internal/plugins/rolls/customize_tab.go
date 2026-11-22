@@ -59,7 +59,7 @@ func diceSummary(s *Settings) campaigns.CustomizeSummary {
 }
 
 // diceFinds names the Dice tab's contents for Find, in the words the tab uses:
-// the die and its colour, each set, the crits, the players switch and the table’s dice (how a
+// the die and its colour, each set, the crits, the players switch and the players’ starting dice (how a
 // roll starts).
 func diceFinds() []campaigns.CustomizeFind {
 	out := []campaigns.CustomizeFind{
@@ -69,7 +69,7 @@ func diceFinds() []campaigns.CustomizeFind {
 		{Label: "Crit success", Words: "crit critical natural twenty 20 animation"},
 		{Label: "Crit fail", Words: "crit critical fumble natural one 1 animation"},
 		{Label: "Players may pick their own dice", Words: "players switch pick own offer sets"},
-		{Label: "The table’s dice", Words: "how a roll starts quick 2d rune 3d numbers only default"},
+		{Label: "Players’ starting dice", Words: "the table’s dice how a roll starts quick 2d rune 3d numbers only default"},
 	}
 	for _, k := range DiceSetKeys {
 		if name := diceSetNames[k]; name != "" {
@@ -92,8 +92,11 @@ func CustomizeTabFactory(dice DiceSettingsReader) func(*campaigns.CampaignContex
 			Label:     "Dice",
 			Icon:      "fa-solid fa-dice-d20",
 			SortOrder: 20,
-			Blurb:     "The dice everyone rolls, colours and crits, and what players may pick.",
-			Finds:     diceFinds(),
+			// The dice pages are /rolls and /rolls/settings; the brush matches by prefix.
+			Paths: []string{"/rolls"},
+			Here:  "The dice everyone rolls",
+			Blurb: "The dice everyone rolls, colours and crits, and what players may pick.",
+			Finds: diceFinds(),
 			// Read at render time: the Director's own word for themselves is a
 			// per-campaign setting.
 			Content: templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {

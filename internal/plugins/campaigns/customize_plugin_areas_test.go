@@ -65,18 +65,21 @@ func TestCustomizeAreas_AddonAndFinds(t *testing.T) {
 	}
 }
 
-// A card with no summary says what its tab holds, not that a feature adds it.
-func TestCustomizeOverview_PluginCardSaysWhatIsInside(t *testing.T) {
-	areas := []CustomizeArea{{ID: "overview", Label: "Overview"}, {ID: "x-dice", Label: "Dice", Href: "/d", Blurb: "The dice everyone rolls."}, {ID: "x-bare", Label: "Bare", Href: "/b"}}
+// A picture with no summary says what its tab holds, not that a feature adds it.
+func TestCustomizeWall_PluginPictureSaysWhatIsInside(t *testing.T) {
+	groups := buildWallGroups(wallInput{Base: "/c", Apps: []wallApp{
+		{ID: "dice", Label: "Dice", Line: "The dice everyone rolls."},
+		{ID: "bare", Label: "Bare"},
+	}})
 	var sb strings.Builder
-	if err := customizeOverview(areas, map[string]CustomizeSummary{}).Render(context.Background(), &sb); err != nil {
+	if err := customizeWall("Ashfall", groups, wallSkin{Campaign: "Ashfall"}).Render(context.Background(), &sb); err != nil {
 		t.Fatal(err)
 	}
 	out := sb.String()
 	if !strings.Contains(out, "The dice everyone rolls.") {
-		t.Errorf("the Dice card does not say what is inside it")
+		t.Errorf("the Dice picture does not say what is inside it")
 	}
 	if strings.Contains(out, "feature adds") {
-		t.Errorf("a card still says a feature adds its settings")
+		t.Errorf("a picture still says a feature adds its settings")
 	}
 }

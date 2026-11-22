@@ -8,6 +8,11 @@
  * section (POST .../customize/publish); each section is applied by the
  * plugin that owns its data, and a section that fails stays in the draft.
  *
+ * The frame also runs the wall's behaviour (Customize's first page): it scales
+ * each picture to its tile, lights the part a shared picture changes in the
+ * others, and, at module level, grows a pressed picture into its workshop
+ * and back (see "The grow" below).
+ *
  * Areas talk to the frame through the page, not through each other:
  *   - An area changes its section with Chronicle.customizeSet(key, value)
  *     (value null removes the section). A value may carry `_changes`, a list
@@ -75,6 +80,287 @@
   // moment after "Saved." appears; the new frame takes over the notes still
   // showing so they stay long enough to read.
   var lastToasts = null;
+
+
+  /* ---------- The grow ----------
+   * Pressing a picture on the wall flies a copy of it (the "fly") from its
+   * tile to where the workshop's stage will be, in the same frame as the
+   * press, while the wall steps back; the request runs meanwhile. The copy is
+   * laid out at its landing size with the miniature scaled to that width and
+   * played from the tile with a transform, so it stays sharp as it grows. It
+   * holds there, over the stage, until the workshop has drawn (every widget
+   * in [data-czs-stage] mounted and no [aria-busy="true"] left in it, or
+   * 1.5 s at most), then
+   * cross-fades into it. "Everything" and browser Back step the workshop back
+   * at once and, when the wall arrives, fly the picture from the stage into
+   * its tile. Calm fades the picture in place instead of flying it; Off and
+   * a device asking for reduced motion swap at once. Focus lands on the
+   * workshop's name going in and on the tile you came from coming back.
+   * html[data-czs-fly] keeps the arriving content hidden until its move
+   * starts (customize_wall.css), so nothing is drawn first and then moves. */
+  var G = document.documentElement;
+  var growFrom = '', fly = null, back = null, lastBar = null;
+  var READY_CAP = 1500;      // ms after the swap the fly waits for the workshop at most
+  var STALE = 10000;         // ms after which a move with no swap is given up
+  function motionLevel() {
+    var m = G.getAttribute('data-motion');
+    if (m === 'off' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return 'off';
+    if (m === 'calm' || G.hasAttribute('data-cz-reduce') || G.getAttribute('data-view-motion') === 'calm') return 'calm';
+    return 'full';
+  }
+  function cssMs(name, dflt) {
+    var v = parseFloat(getComputedStyle(G).getPropertyValue(name));
+    return isFinite(v) && v > 0 ? v : dflt;
+  }
+  function cssEase(name, dflt) { return getComputedStyle(G).getPropertyValue(name).trim() || dflt; }
+  function keyAttr(k) { return String(k || '').replace(/[^a-z0-9-]/gi, ''); }
+  // The wall picture a workshop returns to: the one pressed to get here, or
+  // the one its own address names after a reload.
+  function returnKey(frame) {
+    var own = frame ? frame.getAttribute('data-wall-key') : '';
+    var look = frame && frame.getAttribute('data-area') === 'look';
+    if (look && growFrom && !/^(cat|home|app)-/.test(growFrom)) return growFrom;
+    return own || growFrom || 'frame';
+  }
+  function tileFor(wall, key) {
+    return wall ? wall.querySelector('.czw-tile[data-czw-key="' + keyAttr(key) + '"]') : null;
+  }
+  // Where a workshop's stage sits: below the bar, across the content column,
+  // down to the foot of the window. On the wall there is no bar yet, so its
+  // height is the one last measured, or the frame's own --czs-bar-h.
+  function stageBox() {
+    var main = document.getElementById('main-content'), czs = document.querySelector('.czs');
+    var m = main ? main.getBoundingClientRect() : { top: 0 }, c = czs ? czs.getBoundingClientRect() : { left: 0, width: window.innerWidth };
+    var bar = (lastBar && lastBar.w === window.innerWidth && lastBar.h) || (czs && parseFloat(getComputedStyle(czs).getPropertyValue('--czs-bar-h'))) || 50;
+    var top = Math.max(0, m.top) + bar;
+    return { left: c.left, top: top, width: c.width, height: Math.max(0, window.innerHeight - top) };
+  }
+  // The copy that flies: the tile's miniature in a picture laid out at width w
+  // at (x, y), which scales the miniature to that width itself.
+  function ghostOf(tile, x, y, w) {
+    var mini = tile && tile.querySelector('.czw-mini');
+    if (!mini) return null;
+    var g = document.createElement('div');
+    g.className = 'czw-pic czw-fly';
+    g.setAttribute('aria-hidden', 'true');
+    g.style.left = x + 'px'; g.style.top = y + 'px'; g.style.width = w + 'px';
+    g.appendChild(mini.cloneNode(true));
+    g.firstChild.style.setProperty('--s', (w / 720).toFixed(4));
+    document.body.appendChild(g);
+    return g;
+  }
+  function flipFrom(r, g) {
+    var w = g.offsetWidth || 1, x = parseFloat(g.style.left), y = parseFloat(g.style.top);
+    return 'translate(' + (r.left - x) + 'px,' + (r.top - y) + 'px) scale(' + (r.width / w) + ')';
+  }
+  // Puts everything a move touched back and forgets it; safe to call twice.
+  function flyClear(m) {
+    m = m || fly;
+    if (!m) return;
+    if (m === fly) fly = null;
+    if (m === back) back = null;
+    cancelAnimationFrame(m.raf); clearTimeout(m.cap); clearTimeout(m.stale);
+    m.anims.forEach(function (a) { try { a.cancel(); } catch (e) { /* already gone */ } });
+    m.anims = [];
+    if (m.ghost) m.ghost.remove();
+    if (m.pic) m.pic.style.visibility = '';
+    if (m.wall) { m.wall.style.pointerEvents = ''; m.wall.style.transformOrigin = ''; }
+    if (!fly && !back) G.removeAttribute('data-czs-fly');
+  }
+  function play(m, el, frames, opts) {
+    if (!el || !el.animate) return null;
+    var a = el.animate(frames, opts);
+    m.anims.push(a);
+    return a;
+  }
+  // Moves keyboard focus without scrolling the page, keeping the target in
+  // view of the scrolling column.
+  function focusQuiet(el) {
+    if (!el) return;
+    try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+    var main = document.getElementById('main-content');
+    if (!main || !main.contains(el)) return;
+    var r = el.getBoundingClientRect(), m = main.getBoundingClientRect();
+    if (r.top < m.top + 8) main.scrollTop -= m.top + 8 - r.top;
+    else if (r.bottom > m.bottom - 8) main.scrollTop += Math.min(r.top - m.top - 8, r.bottom - m.bottom + 8);
+  }
+  function focusLost() {
+    var a = document.activeElement;
+    return !a || a === document.body || !a.isConnected;
+  }
+
+  // Opening: a press on a picture starts the fly at once; htmx sends the
+  // request from the same click.
+  function grow(tile) {
+    flyClear(fly); flyClear(back);
+    growFrom = tile.getAttribute('data-czw-key') || '';
+    var lv = motionLevel();
+    if (lv === 'off') return;
+    var wall = tile.closest('[data-czw]'), pic = tile.querySelector('[data-czw-pic]');
+    var to = stageBox(), from = pic && pic.getBoundingClientRect();
+    var g = from && from.width ? ghostOf(tile, to.left, to.top, to.width) : null;
+    if (!g) return;
+    var m = fly = { kind: 'grow', elt: tile, ghost: g, pic: pic, wall: wall, anims: [], raf: 0, cap: 0, stale: 0, landed: false, swapped: false, settled: false };
+    G.setAttribute('data-czs-fly', 'grow');
+    wall.style.pointerEvents = 'none';
+    var ease = cssEase('--ease-out', 'ease-out'), a;
+    if (lv === 'full') {
+      var dur = cssMs('--dur-slide', 360) * 0.92;
+      pic.style.visibility = 'hidden';
+      // The wall steps back about the middle of what shows of it.
+      var wr = wall.getBoundingClientRect();
+      wall.style.transformOrigin = (window.innerWidth / 2 - wr.left) + 'px ' + (window.innerHeight / 2 - wr.top) + 'px';
+      play(m, wall, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: dur, easing: ease, fill: 'forwards' });
+      a = play(m, g, [{ transform: flipFrom(from, g) }, { transform: 'none' }], { duration: dur, easing: ease, fill: 'both' });
+    } else {
+      var calm = cssMs('--dur-standard', 200);
+      play(m, wall, [{ opacity: 1 }, { opacity: 0 }], { duration: calm, easing: ease, fill: 'forwards' });
+      a = play(m, g, [{ opacity: 0 }, { opacity: 1 }], { duration: calm, easing: ease, fill: 'both' });
+    }
+    var landed = function () { m.landed = true; };
+    if (a) { a.onfinish = landed; } else landed();
+    m.stale = setTimeout(function () { flyClear(m); }, STALE);
+  }
+  // The workshop has drawn: the picture fades into it.
+  function reveal(m) {
+    if (m !== fly) return;
+    cancelAnimationFrame(m.raf); clearTimeout(m.cap);
+    var stage = document.querySelector('.czs-is-workshop [data-czs-stage]');
+    var dur = cssMs('--dur-standard', 200), ease = cssEase('--ease-out', 'ease-out');
+    G.removeAttribute('data-czs-fly');
+    if (stage && motionLevel() !== 'off') play(m, stage, [{ opacity: 0 }, { opacity: 1 }], { duration: dur * 0.6, easing: ease });
+    var a = play(m, m.ghost, [{ opacity: 1 }, { opacity: 0 }], { duration: dur, easing: ease, fill: 'forwards' });
+    // The stage keeps animation: none, or its own settle would play again.
+    var done = function () { flyClear(m); };
+    if (a) { a.onfinish = done; a.oncancel = done; } else done();
+  }
+  function waitReady(m) {
+    var t0 = 0;
+    var tick = function () {
+      if (m !== fly) return;
+      var stage = document.querySelector('.czs-is-workshop [data-czs-stage]');
+      if (!stage) { flyClear(m); return; }
+      // A widget whose script is still on the way counts as loading; one
+      // frame after mounting, its own loading mark has had its chance.
+      var waiting = Chronicle.isMounted && Array.prototype.some.call(stage.querySelectorAll('[data-widget]'), function (w) { return !Chronicle.isMounted(w); });
+      if (waiting) t0 = 0;
+      else if (m.landed && t0 && !stage.querySelector('[aria-busy="true"]')) { reveal(m); return; }
+      else t0 = 1;
+      m.raf = requestAnimationFrame(tick);
+    };
+    m.raf = requestAnimationFrame(tick);
+    m.cap = setTimeout(function () { if (m === fly) reveal(m); }, READY_CAP);
+  }
+
+  // Closing: the workshop steps back at once, as feedback while the wall is
+  // fetched; the picture flies home once it arrives.
+  function stepBack(frame) {
+    flyClear(fly); flyClear(back);
+    var stage = frame && frame.querySelector('[data-czs-stage]'), lv = motionLevel();
+    if (!stage) return;
+    var top = frame.querySelector('[data-czs-top]'), r = stage.getBoundingClientRect();
+    var t = Math.max(r.top, top ? top.getBoundingClientRect().bottom : r.top);
+    var m = back = { kind: 'shrink', key: returnKey(frame), rect: { left: r.left, top: t, width: r.width }, lv: lv, anims: [], raf: 0, cap: 0, stale: 0, t: Date.now() };
+    if (lv === 'off') return;
+    G.setAttribute('data-czs-fly', 'shrink');
+    var dur = cssMs('--dur-micro', 120), ease = cssEase('--ease-out', 'ease-out');
+    play(m, stage, lv === 'full' ? [{ opacity: 1, transform: 'none' }, { opacity: 0.6, transform: 'scale(0.985)' }] : [{ opacity: 1 }, { opacity: 0.6 }],
+      { duration: dur, easing: ease, fill: 'forwards' });
+    m.stale = setTimeout(function () { flyClear(m); }, STALE);
+  }
+  // The wall is in: focus the tile you came from and fly its picture home.
+  function homeward(m) {
+    var wall = document.querySelector('.czs-is-wall [data-czw]');
+    flyClear(m);
+    if (!wall) return;
+    var tile = tileFor(wall, m.key) || tileFor(wall, 'frame');
+    if (tile) focusQuiet(tile);
+    if (m.lv === 'off' || !tile) return;
+    var pic = tile.querySelector('[data-czw-pic]'), to = pic && pic.getBoundingClientRect();
+    var g = to && to.width ? ghostOf(tile, m.rect.left, m.rect.top, m.rect.width) : null;
+    var n = back = { kind: 'home', ghost: g, pic: pic, wall: wall, anims: [], raf: 0, cap: 0, stale: 0 };
+    G.setAttribute('data-czs-fly', 'shrink');
+    var a;
+    if (m.lv === 'full' && g) {
+      var dur = cssMs('--dur-large', 280) * 0.9, ease = cssEase('--ease-in-out', 'ease-in-out');
+      pic.style.visibility = 'hidden';
+      var wr = wall.getBoundingClientRect();
+      wall.style.transformOrigin = (window.innerWidth / 2 - wr.left) + 'px ' + (window.innerHeight / 2 - wr.top) + 'px';
+      play(n, wall, [{ opacity: 0, transform: 'scale(0.97)' }, { opacity: 1, transform: 'none' }], { duration: dur, easing: ease });
+      a = play(n, g, [{ transform: 'none' }, { transform: flipFrom(to, g) }], { duration: dur, easing: ease, fill: 'forwards' });
+    } else {
+      var calm = cssMs('--dur-standard', 200), ce = cssEase('--ease-out', 'ease-out');
+      play(n, wall, [{ opacity: 0 }, { opacity: 1 }], { duration: calm, easing: ce });
+      a = play(n, g, [{ opacity: 1 }, { opacity: 0 }], { duration: calm, easing: ce, fill: 'forwards' });
+    }
+    // The wall's own fade now holds it, so the hiding rule can go.
+    G.setAttribute('data-czs-fly', 'home');
+    var done = function () { flyClear(n); };
+    if (a) { a.onfinish = done; a.oncancel = done; } else done();
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !e.target.closest) return;
+    var tile = e.target.closest('.czs-is-wall .czw-tile[href]');
+    if (tile) { grow(tile); return; }
+    var link = e.target.closest('.czs-is-workshop [data-czs-back]');
+    if (link) stepBack(link.closest('.czs'));
+  }, true);
+  // Browser Back from a part: the same step back, then the same way home.
+  window.addEventListener('popstate', function () {
+    if (fly) flyClear(fly);
+    var frame = document.querySelector('.czs-is-workshop');
+    if (frame) stepBack(frame); else flyClear(back);
+  }, true);
+  document.addEventListener('htmx:afterSwap', function (e) {
+    var main = document.getElementById('main-content');
+    if (!e.detail || e.detail.target !== main) return;
+    if (fly && document.querySelector('.czs-is-workshop')) {
+      fly.swapped = true;
+      clearTimeout(fly.stale);
+      // The stage's own settle would replay once the hiding rule lifts.
+      var st = document.querySelector('.czs-is-workshop [data-czs-stage]');
+      if (st) st.style.animation = 'none';
+    } else if (fly) flyClear(fly);
+    if (back && back.kind === 'shrink') {
+      var m = back;
+      // After boot.js puts the column back at its top, before the first paint.
+      if (document.querySelector('.czs-is-wall')) Promise.resolve().then(function () { homeward(m); });
+      else flyClear(m);
+    }
+  });
+  document.addEventListener('htmx:afterSettle', function (e) {
+    var main = document.getElementById('main-content');
+    if (!e.detail || e.detail.target !== main) return;
+    var frame = document.querySelector('.czs-is-workshop');
+    if (!frame) return;
+    // Going in, focus lands on the workshop's name once its widgets have mounted.
+    requestAnimationFrame(function () {
+      if (focusLost()) focusQuiet(frame.querySelector('.czs-catname'));
+    });
+    if (fly && fly.swapped) waitReady(fly);
+  });
+  document.addEventListener('htmx:historyRestore', function () {
+    if (back && back.kind === 'shrink' && document.querySelector('.czs-is-wall')) { homeward(back); return; }
+    flyClear(fly); flyClear(back);
+    var frame = document.querySelector('.czs-is-workshop');
+    if (frame) requestAnimationFrame(function () { if (focusLost()) focusQuiet(frame.querySelector('.czs-catname')); });
+  });
+  ['htmx:responseError', 'htmx:sendError', 'htmx:timeout', 'htmx:swapError'].forEach(function (t) {
+    document.addEventListener(t, function () { flyClear(fly); flyClear(back); });
+  });
+  // Escape mid-move: before the swap it stops the request and the page stays;
+  // after it, the workshop shows at once. Either way no copy is left behind.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || (!fly && !back)) return;
+    if (fly && !fly.swapped && window.htmx) htmx.trigger(fly.elt, 'htmx:abort');
+    if (back && back.kind === 'shrink' && window.htmx) {
+      var l = document.querySelector('.czs-is-workshop [data-czs-back]');
+      if (l) htmx.trigger(l, 'htmx:abort');
+    }
+    flyClear(fly); flyClear(back);
+  }, true);
+  Chronicle._customizeGrow = { clear: function () { flyClear(fly); flyClear(back); }, active: function () { return !!(fly || back); } };
 
   function mount(el) {
     var CID = el.getAttribute('data-campaign-id');
@@ -397,6 +683,38 @@
       });
     }
 
+    /* ---------- The wall ----------
+     * Each miniature is drawn 720 wide and scaled to its tile. Where the
+     * browser can divide lengths the CSS does it from the tile; elsewhere the
+     * width is read here. Hovering or focusing a shared picture lights the part
+     * it changes in every other picture (touch has no hover). */
+    var wall = $('[data-czw]'), picRO = null;
+    if (wall) {
+      var cssFit = window.CSS && CSS.supports && CSS.supports('transform', 'scale(calc(10px / 2px))');
+      if (!cssFit) {
+        var fit = function (pic) {
+          var m = pic.querySelector('.czw-mini');
+          if (m && pic.clientWidth) m.style.setProperty('--s', (pic.clientWidth / 720).toFixed(4));
+        };
+        var pics = Array.prototype.slice.call(wall.querySelectorAll('[data-czw-pic]'));
+        pics.forEach(fit);
+        if (window.ResizeObserver) {
+          picRO = new ResizeObserver(function (es) { es.forEach(function (x) { fit(x.target); }); });
+          pics.forEach(function (p) { picRO.observe(p); });
+        }
+      }
+      var lit = function (e, onTile) {
+        if (e.pointerType === 'touch') return;
+        var t = e.target.closest && e.target.closest('.czw-tile[data-czw-shares]');
+        if (!t) return;
+        if (onTile) wall.setAttribute('data-hl', t.getAttribute('data-czw-shares')); else wall.removeAttribute('data-hl');
+      };
+      on(wall, 'pointerover', function (e) { lit(e, true); });
+      on(wall, 'pointerout', function (e) { lit(e, false); });
+      on(wall, 'focusin', function (e) { lit(e, true); });
+      on(wall, 'focusout', function (e) { lit(e, false); });
+    }
+
     /* ---------- Wiring ---------- */
     on(bar, 'click', function (e) {
       var b = e.target.closest('button');
@@ -409,14 +727,13 @@
     });
     on($('[data-czs-find]'), 'click', openFind);
 
-    /* ---------- Index tabs and their drawers ----------
-     * A tab opens its area; its chevron, or the open area's own tab, drapes
-     * the drawer of the area's parts down from the tab's side line. Escape,
-     * the drawer's Close and a click outside put it away. */
+    /* ---------- The bar and the category drawer ----------
+     * A category's name drapes the drawer of every category down from the
+     * bar. Escape, the drawer's Close and a click outside put it away. */
     var topBar = $('[data-czs-top]'), openDr = null;
     // Content that pins itself under the bar (the Look's example) needs its height.
     var topRO = null;
-    function setTopH() { if (topBar) el.style.setProperty('--czs-top-h', topBar.offsetHeight + 'px'); }
+    function setTopH() { if (topBar && topBar.offsetHeight) { el.style.setProperty('--czs-top-h', topBar.offsetHeight + 'px'); lastBar = { w: window.innerWidth, h: topBar.offsetHeight }; } }
     setTopH();
     if (topBar && window.ResizeObserver) { topRO = new ResizeObserver(setTopH); topRO.observe(topBar); }
     on(window, 'resize', setTopH);
@@ -425,25 +742,32 @@
     // starts at a whole part, so no word is cut at its left edge. The page
     // layout calls it again once its picker has narrowed the row.
     function revealTab() {
-      var strip = topBar && topBar.querySelector('.czs-tabs-top'), cur = strip && strip.querySelector('.czs-tab[aria-current]');
+      // On a phone the tabs have a row of their own, which is what scrolls.
+      var row = topBar && topBar.querySelector('.czs-tabrow');
+      var strip = row && row.clientWidth ? row : topBar && topBar.querySelector('.czs-tabs-top'), cur = strip && strip.querySelector('.czs-tab[aria-current]');
       if (!cur || strip.scrollWidth <= strip.clientWidth) return;
       var w = cur.closest('.czs-tabw') || cur, x0 = strip.offsetLeft;
+      if (strip === row) { strip.scrollLeft = Math.max(0, w.offsetLeft - x0 - 12); return; }
       if (!strip.hasAttribute('data-czs-catbar')) { strip.scrollLeft = Math.max(0, w.offsetLeft - x0 - 12); return; }
       // The row lands with a whole item at its left edge. Near the end the
       // row could not scroll that far, so a tail of room is added after the
       // last item rather than leaving a cut-off word at the left.
       var right = w.offsetLeft - x0 + w.offsetWidth;
-      var parts = Array.prototype.slice.call(strip.children);
-      for (var i = 0; i < parts.length; i++) {
+      var parts = Array.prototype.slice.call(strip.querySelectorAll(':scope > .czs-back-all, :scope > .czs-tabw, :scope > .czs-tabrow > *'));
+      // "Everything" stays pinned at the row's start, so the landing leaves
+      // room for it and the first item is the one after it.
+      var pin = strip.querySelector('.czs-back-all'), pinW = pin ? pin.offsetWidth : 0, first = pin ? 1 : 0;
+      for (var i = first; i < parts.length; i++) {
         var left = Math.max(0, parts[i].offsetLeft - x0);
-        if (right - left <= strip.clientWidth || parts[i] === w) {
+        if (right - left <= strip.clientWidth - pinW || parts[i] === w) {
           // Measured from the items, not scrollWidth, which can still hold
           // the room the last call added.
-          var end = parts[parts.length - 1], tail = Math.max(0, left - (end.offsetLeft - x0 + end.offsetWidth - strip.clientWidth));
+          var end = parts[parts.length - 1], at = Math.max(0, left - pinW);
+          var tail = Math.max(0, at - (end.offsetLeft - x0 + end.offsetWidth - strip.clientWidth));
           strip.style.paddingRight = tail ? tail + 'px' : '';
-          strip.scrollLeft = left;
+          strip.scrollLeft = at;
           // The new room only counts once a frame has been drawn with it.
-          if (tail) requestAnimationFrame(function () { requestAnimationFrame(function () { strip.scrollLeft = left; }); });
+          if (tail) requestAnimationFrame(function () { requestAnimationFrame(function () { strip.scrollLeft = at; }); });
           return;
         }
       }
@@ -452,11 +776,29 @@
     // Widths settle once the web fonts arrive; land on a whole item again.
     // Widths settle as fonts and styles arrive, so the row lands again
     // whenever its items change size, until the person moves it themselves.
+    // A row that scrolls sideways fades on the side that has more beyond it,
+    // so a cut word never reads as the end of the row. Rows are drawn by
+    // several scripts, so this watches the frame rather than each row.
+    var CUE_ROWS = '.czs-tabs-top, .czs-tabrow, .czs-tabs, .czp .parts-row, .czp .lk-row, .cpe-dock';
+    function cueRow(r) {
+      var max = r.scrollWidth - r.clientWidth, x = Math.abs(r.scrollLeft);
+      r.classList.toggle('cue-l', x > 1);
+      r.classList.toggle('cue-r', x < max - 1);
+    }
+    function cueAll() { Array.prototype.forEach.call(el.querySelectorAll(CUE_ROWS), cueRow); }
+    var cueRaf = 0;
+    function cueSoon() { if (!cueRaf) cueRaf = requestAnimationFrame(function () { cueRaf = 0; if (alive) cueAll(); }); }
+    on(el, 'scroll', function (e) { if (e.target.matches && e.target.matches(CUE_ROWS)) cueRow(e.target); }, true);
+    on(window, 'resize', cueSoon);
+    var cueMO = window.MutationObserver ? new MutationObserver(cueSoon) : null;
+    if (cueMO) cueMO.observe(el, { childList: true, subtree: true });
+    cueSoon();
+
     var rowRO = null, rowStrip = topBar && topBar.querySelector('[data-czs-catbar]');
     if (rowStrip && window.ResizeObserver) {
       rowRO = new ResizeObserver(function () { if (alive && rowRO) revealTab(); });
       rowRO.observe(rowStrip);
-      Array.prototype.forEach.call(rowStrip.children, function (k) { rowRO.observe(k); });
+      Array.prototype.forEach.call(rowStrip.querySelectorAll(':scope > *, .czs-tabrow > *'), function (k) { rowRO.observe(k); });
       var settle = function () { if (rowRO) { rowRO.disconnect(); rowRO = null; } };
       ['pointerdown', 'wheel', 'touchstart', 'keydown'].forEach(function (t) { on(rowStrip, t, settle, { passive: true }); });
     }
@@ -491,18 +833,15 @@
       if (first) first.focus();
     }
     if (topBar) {
-      // Capture, so the open area's own tab opens its drawer before htmx
-      // would follow the link.
+      // Capture, so a Look tab changes the address's # before htmx would
+      // follow the link.
       on(topBar, 'click', function (e) {
         var c = e.target.closest('[data-czs-drawer]');
         if (c) { e.preventDefault(); openDrawer(c.getAttribute('data-czs-drawer')); return; }
         if (e.target.closest('[data-czs-drawer-close]')) { e.preventDefault(); closeDrawer(true); return; }
-        var t = e.target.closest('.czs-tab[aria-current="page"]');
-        var id = t && t.getAttribute('data-czs-area');
-        if (id && drawerFor(id)) { e.preventDefault(); e.stopPropagation(); openDrawer(id); return; }
         // A part on this same page (a Look room) changes the address's #
         // only, which the area follows.
-        var a = e.target.closest('.czs-drawer a');
+        var a = e.target.closest('.czs-drawer a, .czs-tab[data-czs-room]');
         if (a && a.hash && a.pathname === location.pathname) {
           e.preventDefault(); e.stopPropagation();
           closeDrawer(false);
@@ -510,29 +849,27 @@
           else location.hash = a.hash;
           return;
         }
-        if (a) closeDrawer(false);
+        if (a && a.closest('.czs-drawer')) closeDrawer(false);
       }, true);
       on(document, 'pointerdown', function (e) {
-        if (openDr && !e.target.closest('.czs-drawer, [data-czs-drawer], .czs-tab[aria-current="page"]')) closeDrawer(false);
+        if (openDr && !e.target.closest('.czs-drawer, [data-czs-drawer]')) closeDrawer(false);
       }, true);
       on(document, 'keydown', function (e) {
         if (e.key === 'Escape' && openDr) { e.preventDefault(); closeDrawer(true); }
       });
       on(window, 'resize', function () { if (openDr) placeDrawer(openDr); });
       // An area that keeps its open part in the page (the Look's rooms)
-      // names it, and which of its parts hold unsaved changes.
+      // names it, and which of its parts hold unsaved changes: its tabs in the
+      // bar carry the open mark and the dots.
       on(document, 'chronicle:customize-part', function (e) {
         var dt = (e && e.detail) || {};
-        var tab = $('.czs-tab[data-czs-area="' + dt.area + '"]'), d = drawerFor(dt.area);
-        var part = tab && tab.querySelector('[data-czs-part]');
-        if (part && typeof dt.label === 'string') part.textContent = dt.label;
-        if (!d) return;
-        Array.prototype.forEach.call(d.querySelectorAll('a[data-czs-room]'), function (a) {
+        Array.prototype.forEach.call(topBar.querySelectorAll('.czs-tab[data-czs-room]'), function (a) {
           var k = a.getAttribute('data-czs-room');
           if (k === dt.key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
           var dot = a.querySelector('.czs-dot');
           if (dot) dot.hidden = !(dt.changed && dt.changed.indexOf(k) >= 0);
         });
+        revealTab();
       });
     }
     on(document, 'keydown', function (e) {
@@ -570,6 +907,8 @@
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
       if (rowRO) { rowRO.disconnect(); rowRO = null; }
       if (topRO) { topRO.disconnect(); topRO = null; }
+      if (cueMO) cueMO.disconnect();
+      if (picRO) picRO.disconnect();
     };
   }
 

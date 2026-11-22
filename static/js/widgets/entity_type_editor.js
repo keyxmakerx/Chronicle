@@ -269,37 +269,42 @@
           });
           row.appendChild(sectionInput);
 
-          // Move up button.
+          // Both arrows stay on every row (off at the ends) so the columns line up.
+          var upBtn = document.createElement('button');
+          upBtn.type = 'button';
+          upBtn.className = 'czf-mv text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs';
+          upBtn.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+          upBtn.title = 'Move up';
+          upBtn.setAttribute('aria-label', 'Move up');
           if (idx > 0) {
-            var upBtn = document.createElement('button');
-            upBtn.type = 'button';
-            upBtn.className = 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs';
-            upBtn.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
-            upBtn.title = 'Move up';
             upBtn.addEventListener('click', function () {
               var temp = fields[idx];
               fields[idx] = fields[idx - 1];
               fields[idx - 1] = temp;
               rerender();
             });
-            acts.appendChild(upBtn);
+          } else {
+            upBtn.disabled = true;
           }
+          acts.appendChild(upBtn);
 
-          // Move down button.
+          var downBtn = document.createElement('button');
+          downBtn.type = 'button';
+          downBtn.className = 'czf-mv text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs';
+          downBtn.innerHTML = '<i class="fa-solid fa-arrow-down"></i>';
+          downBtn.title = 'Move down';
+          downBtn.setAttribute('aria-label', 'Move down');
           if (idx < fields.length - 1) {
-            var downBtn = document.createElement('button');
-            downBtn.type = 'button';
-            downBtn.className = 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs';
-            downBtn.innerHTML = '<i class="fa-solid fa-arrow-down"></i>';
-            downBtn.title = 'Move down';
             downBtn.addEventListener('click', function () {
               var temp = fields[idx];
               fields[idx] = fields[idx + 1];
               fields[idx + 1] = temp;
               rerender();
             });
-            acts.appendChild(downBtn);
+          } else {
+            downBtn.disabled = true;
           }
+          acts.appendChild(downBtn);
 
           // Remove button.
           var removeBtn = document.createElement('button');

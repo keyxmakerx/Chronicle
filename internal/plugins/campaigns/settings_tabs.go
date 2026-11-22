@@ -1,8 +1,6 @@
-// settings_tabs.go — Declarative tab registry for the Campaign Settings
-// page. Built-in tabs are constructed inside Settings handlers with
-// their per-tab dependencies captured in closures; plugins can
-// contribute additional tabs via RegisterSettingsTab without forking
-// settings.templ.
+// settings_tabs.go is the registry other plugins add their parts of
+// Campaign settings' Data tab through (Import), and the map from the old
+// Details and data tabs' addresses to where each lives now.
 
 package campaigns
 
@@ -12,20 +10,16 @@ import (
 	"github.com/a-h/templ"
 )
 
-// SettingsTab is the declarative description of one tab on the Details and
-// data page.
+// SettingsTab is one part another plugin adds to the Data tab.
 //
-//   - ID: stable slug used in the URL (`?tab=<id>`) and the Alpine.js
-//     x-show predicate; must stay URL-safe and stable (operator bookmarks
-//     rely on it).
-//   - Label/Icon: button text / FontAwesome class.
-//   - MinRole gates both the button and the content; a viewer below
-//     MinRole sees neither. Built-ins use RolePlayer; plugins set
-//     whatever discipline they need.
-//   - SortOrder controls render order (built-ins use multiples of 10) so
-//     plugins can insert between them.
-//   - Content is the rendered tab body; the handler captures per-tab
-//     dependencies in this closure at Settings-handler time.
+//   - ID: stable slug, the part's anchor on Data (`/data#<id>`) and the old
+//     `/settings?tab=<id>` address that redirects there; keep it URL-safe
+//     and stable (bookmarks rely on it).
+//   - Label/Icon: the part's heading, and the icon Find shows beside it.
+//   - MinRole gates the part; a viewer below it does not get it.
+//   - SortOrder orders the parts (multiples of 10) so a plugin can place its
+//     part between others.
+//   - Content is the part's body, built per request by the plugin's factory.
 type SettingsTab struct {
 	ID        string
 	Label     string
@@ -35,115 +29,38 @@ type SettingsTab struct {
 	Content   templ.Component
 }
 
-// RegisterSettingsTab appends a tab-factory to the Handler's plugin-
-// contributed registry. Called by other plugins at startup (after the
-// campaigns handler is constructed and after their own services are
-// wired). The factory is invoked per-request inside visibleSettingsTabs
-// with the current CampaignContext so the plugin's tab Content closure
-// can capture per-request state (campaign ID, csrf token via context,
-// member role for finer-grained rendering, etc).
-//
-// The factory shape (rather than a static SettingsTab) lets a plugin's
-// Content closure capture per-request state; built-in tabs don't go
-// through this path, they're constructed inline in the Settings handler.
-//
-// Tabs added here merge with the built-ins at render time; sorting is
-// stable per SortOrder + insertion order so a plugin contributing two
-// tabs with the same SortOrder preserves call order.
+// RegisterSettingsTab adds a part-factory to the Data tab. Called by other
+// plugins at startup; the factory runs per request with the current
+// CampaignContext so the part's Content can capture per-request state.
 func (h *Handler) RegisterSettingsTab(factory func(*CampaignContext) SettingsTab) {
 	h.extraSettingsTabs = append(h.extraSettingsTabs, factory)
 }
 
-// builtInSettingsTabs returns the canonical-order pre-plugin tabs.
-// Constructed per-request because each tab's content closure captures
-// request-scoped state (csrf token, the operator's role, etc).
-//
-// People, Foundry and Your AI are Manage pages of their own, not Settings
-// tabs; old ?tab=people, ?tab=integrations and ?tab=ai-workspace links are
-// redirected by the Settings handler.
-func (h *Handler) builtInSettingsTabs(
-	cc *CampaignContext,
-	transfer *OwnershipTransfer,
-	members []CampaignMember,
-	csrfToken string,
-	systemOptions []SystemOption,
-	smtpConfigured bool,
-) []SettingsTab {
-	return []SettingsTab{
-		{
-			ID:        "general",
-			Label:     "Details",
-			Icon:      "fa-solid fa-gear",
-			MinRole:   RolePlayer,
-			SortOrder: 10,
-			Content:   settingsGeneralTab(cc, csrfToken),
-		},
-		{
-			ID:        settingsTabAPIKeys,
-			Label:     "Keys",
-			Icon:      "fa-solid fa-key",
-			MinRole:   RolePlayer,
-			SortOrder: 40,
-			Content:   settingsAPIKeysTab(cc, h.baseURL),
-		},
-		{
-			ID:        settingsTabData,
-			Label:     "Export",
-			Icon:      "fa-solid fa-database",
-			MinRole:   RolePlayer,
-			SortOrder: 50,
-			Content:   SettingsDataSection(cc),
-		},
-		{
-			ID:        settingsTabActivity,
-			Label:     "Activity log",
-			Icon:      "fa-solid fa-clock-rotate-left",
-			MinRole:   RolePlayer,
-			SortOrder: 60,
-			Content:   settingsActivityTab(cc),
-		},
-	}
-}
-
-// Settings tab IDs that other code points at.
+// Settings tab IDs that other code points at. The old Details and data tabs
+// kept these ids, and their links still arrive (settingsTabRedirect).
 const (
 	settingsTabAPIKeys  = "api-keys"
 	settingsTabData     = "data"
 	settingsTabActivity = "activity"
-	// settingsTabImport is the id the vault_import plugin registers its tab
+	// settingsTabImport is the id the vault_import plugin registers its part
 	// under; campaigns names it only to link there and cannot import the plugin.
 	settingsTabImport = "import"
 )
 
-// visibleSettingsTabs returns the merged + role-filtered + sorted tab
-// list for a viewer with the given role. Built-ins + RegisterSettingsTab
-// additions are sorted together by SortOrder (stable); rows whose
-// MinRole exceeds the viewer's role are dropped.
-//
-// Stable sort preserves insertion order when SortOrders tie — useful
-// for plugins that register multiple tabs at the same priority.
-func (h *Handler) visibleSettingsTabs(
-	cc *CampaignContext,
-	transfer *OwnershipTransfer,
-	members []CampaignMember,
-	csrfToken string,
-	systemOptions []SystemOption,
-	smtpConfigured bool,
-) []SettingsTab {
-	built := h.builtInSettingsTabs(cc, transfer, members, csrfToken, systemOptions, smtpConfigured)
-	all := make([]SettingsTab, 0, len(built)+len(h.extraSettingsTabs))
-	all = append(all, built...)
+// visibleSettingsTabs returns the parts other plugins add to Data that this
+// viewer may see, sorted by SortOrder (stable, so two parts at the same order
+// keep the order they were registered in).
+func (h *Handler) visibleSettingsTabs(cc *CampaignContext) []SettingsTab {
+	all := make([]SettingsTab, 0, len(h.extraSettingsTabs))
 	for _, factory := range h.extraSettingsTabs {
 		all = append(all, factory(cc))
 	}
 	sort.SliceStable(all, func(i, j int) bool {
 		return all[i].SortOrder < all[j].SortOrder
 	})
-
-	role := cc.MemberRole
 	out := all[:0]
 	for _, t := range all {
-		if role < t.MinRole {
+		if t.ID == "" || cc.MemberRole < t.MinRole {
 			continue
 		}
 		out = append(out, t)
@@ -151,42 +68,41 @@ func (h *Handler) visibleSettingsTabs(
 	return out
 }
 
-// sanitizeSettingsTab resolves the `?tab=` query param to a known-safe
-// value: the requested ID only if it matches a tab visible to the current
-// viewer, else falls back to "general".
-//
-// SECURITY: CampaignSettingsPage interpolates this into an Alpine.js
-// x-data expression, and since the browser HTML-decodes the attribute
-// before Alpine evaluates it as JS, an unvalidated value is reflected XSS.
-// Constraining the result to a developer-defined ID from `tabs` closes
-// this at the source (the templ sink also escapes, defense in depth).
-//
-// Matching against the role-filtered `tabs` (not a static allowlist) also
-// stops a viewer selecting a tab their role hides. "general" is always
-// present (RolePlayer-visible, Settings is owner-gated).
-func sanitizeSettingsTab(requested string, tabs []SettingsTab) string {
-	for _, t := range tabs {
-		if t.ID == requested {
-			// Return the registry's constant, never the raw request
-			// string. They are equal on a match, but returning t.ID makes
-			// the trusted provenance explicit at the call site.
-			return t.ID
-		}
-	}
-	return "general"
-}
-
-// settingsTabRedirect is where an old Settings tab now lives, or "" when the
-// tab is still on the Settings page. People, Foundry and the AI tools
-// (once the "Data & AI" tab) became Manage pages.
-func settingsTabRedirect(campaignID, tab string) string {
+// settingsTabRedirect is where an old Details and data tab lives now, or ""
+// when the address is the Campaign tab itself. Keys moved to Connections;
+// the export, the activity log and every plugin's part (Import) to Data,
+// each under its own anchor; People, Foundry and the AI tools became pages of
+// their own earlier.
+func settingsTabRedirect(campaignID, tab string, extra map[string]bool) string {
+	base := "/campaigns/" + campaignID
 	switch tab {
+	case "", "general":
+		return ""
 	case "people":
-		return "/campaigns/" + campaignID + "/members"
+		return base + "/members"
 	case "integrations":
-		return "/campaigns/" + campaignID + "/foundry"
+		return base + "/foundry"
 	case "ai-workspace":
-		return "/campaigns/" + campaignID + "/ai"
+		return base + "/ai"
+	case settingsTabAPIKeys:
+		return base + "/connections#keys"
+	case settingsTabData:
+		return base + "/data#export"
+	case settingsTabActivity:
+		return base + "/data#activity"
+	}
+	if extra[tab] {
+		return base + "/data#" + tab
 	}
 	return ""
+}
+
+// extraSettingsTabIDs are the ids of the parts other plugins add, which Data
+// carries under anchors of the same name.
+func (h *Handler) extraSettingsTabIDs(cc *CampaignContext) map[string]bool {
+	out := map[string]bool{}
+	for _, t := range h.visibleSettingsTabs(cc) {
+		out[t.ID] = true
+	}
+	return out
 }

@@ -1,0 +1,128 @@
+// settings_data.templ draws Campaign settings' Data tab: copies of the whole
+// campaign, the activity log and the Danger zone, beside what the campaign
+// stores and what waits in its Trash.
+
+package campaigns
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// DataTabPage is the Data tab inside the settings frame.
+templ DataTabPage(cc *CampaignContext, t DataTab, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " — Data") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/manage_desk.css") }/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/settings_board.css") }/>
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Data", Tab: "data", Landing: true}) {
+			<div class="desk sb" data-desk data-campaign={ cc.Campaign.ID }>
+				<div class="sb-split">
+					<div class="sb-main">
+						<h2 class="sb-h" id="export">Copies</h2>
+						@dataExport(cc)
+						for _, s := range t.Sections {
+							<h2 class="sb-h" id={ s.ID }>{ s.Label }</h2>
+							<div class="sb-section">
+								@s.Content
+							</div>
+						}
+						<h2 class="sb-h" id="activity">Activity</h2>
+						@settingsActivityTab(cc)
+						@dataDanger(cc, t, csrfToken)
+					</div>
+					<aside class="sb-aside">
+						if t.Storage != nil {
+							@dataFigure("media", *t.Storage, "Open Media")
+						}
+						@dataFigure("trash", t.Trash, "Open the Trash")
+					</aside>
+				</div>
+			</div>
+		}
+	}
+}
+
+// dataFigure is a figure in the side column with the word that opens its page.
+templ dataFigure(id string, t DeskGoTile, open string) {
+	<section class="sb-box" id={ "line-" + id } data-line={ id } aria-labelledby={ "sb-d-" + id }>
+		<h2 class="sb-tl" id={ "sb-d-" + id }>{ t.Label }</h2>
+		<p class="sb-tv"><span class="sb-tvt">{ t.Value.Text }</span></p>
+		if t.Hint != "" {
+			<p class="sb-th">{ t.Hint }</p>
+		}
+		<p class="sb-words"><a class="sb-word" href={ templ.SafeURL(t.Href) }>{ open }</a></p>
+	</section>
+}
+
+// dataExport is the export: the whole campaign as a JSON file, or as a ZIP
+// that adds its pictures, with what each holds.
+templ dataExport(cc *CampaignContext) {
+	<div class="sb-box">
+		<p class="sb-strong">Export a copy</p>
+		<p class="sb-th">Keep a copy of the whole campaign, or move it to another Chronicle. The ZIP adds your pictures; the JSON file has none.</p>
+		<p class="sb-words">
+			<a class="btn-primary text-sm" href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/export?include_media=1") } download>Export ZIP with pictures</a>
+			<a class="sb-word" href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/export") } download>Export JSON only</a>
+		</p>
+		<details class="sb-fold">
+			<summary class="sb-word">What a copy holds</summary>
+			<p class="sb-th">
+				Pages, categories, tags, relations, calendars, timelines, game nights, maps, notes, groups,
+				quest sheets, crafting recipes, rolling tables and add-on choices. Shops, encounters, trackers,
+				quest boards, benches and the Customizer's other settings are not in it; a site admin's Backups
+				page saves everything. Importing the ZIP restores the campaign with its pictures in place.
+			</p>
+		</details>
+	</div>
+}
+
+// dataDanger is the Danger zone. Archiving and deleting each open a step that
+// says what happens first, and deleting asks for the campaign's name, so
+// nothing here changes the campaign in one press. Transfer leads to People,
+// where ownership moves.
+templ dataDanger(cc *CampaignContext, t DataTab, csrfToken string) {
+	<div class="sb-danger" id="danger">
+		<h2 class="sb-h">Danger zone</h2>
+		<div class="sb-list">
+			<details class="sb-row sb-step" id="line-archive">
+				if cc.Campaign.IsArchived() {
+					<summary class="sb-word">Unarchive…</summary>
+					<div class="sb-step-in">
+						<p class="sb-th">The campaign can be changed again, and shows on My campaigns.</p>
+						<form method="POST" action={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/unarchive") } hx-post={ "/campaigns/" + cc.Campaign.ID + "/unarchive" }>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" class="btn-secondary text-sm">Unarchive the campaign</button>
+						</form>
+					</div>
+				} else {
+					<summary class="sb-word">Archive…</summary>
+					<div class="sb-step-in">
+						<p class="sb-th">The campaign becomes read-only and leaves My campaigns. You can unarchive it later.</p>
+						<form method="POST" action={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/archive") } hx-post={ "/campaigns/" + cc.Campaign.ID + "/archive" }>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" class="btn-secondary text-sm">Archive the campaign</button>
+						</form>
+					</div>
+				}
+			</details>
+			<div class="sb-row" id="line-transfer">
+				<a class="sb-word" href={ templ.SafeURL(t.Transfer) }>Transfer ownership…</a>
+				<span class="sb-dim">On People, where you pick the new owner.</span>
+			</div>
+			<details class="sb-row sb-step" id="line-delete">
+				<summary class="sb-word sb-bad">Delete…</summary>
+				// htmx sends a DELETE's values in the address, so the form carries
+				// only the typed name; the CSRF token goes in the header boot.js
+				// adds to every htmx write, never in the address.
+				<form
+					class="sb-step-in"
+					hx-delete={ "/campaigns/" + cc.Campaign.ID }
+					x-data="{ typed: '' }"
+					data-name={ cc.Campaign.Name }
+				>
+					<p class="sb-th">The campaign disappears for everyone right away. Your site admin can bring it back for a while; after that it is gone for good.</p>
+					<label class="sb-th" for="sb-delete-name">Type <b>{ cc.Campaign.Name }</b> to confirm</label>
+					<input id="sb-delete-name" class="sb-field" type="text" name="confirm_name" autocomplete="off" x-model="typed"/>
+					<button type="submit" class="sb-delete text-white" x-bind:disabled="typed !== $root.dataset.name">Delete the campaign</button>
+				</form>
+			</details>
+		</div>
+	</div>
+}

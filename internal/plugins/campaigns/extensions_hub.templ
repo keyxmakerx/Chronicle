@@ -32,11 +32,19 @@ import (
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
 templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component, placeable func(block string) bool) {
 	@layouts.App(cc.Campaign.Name + " - Game & features") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features", Line: "game"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "Game & features", Line: "game", Landing: true}) {
 		<div data-extensions-hub>
 			<div class="manage-split">
 				<div class="mb-6">
 					@gameSystemCard(cc, systemOptionsJSON, currentSystemID(cc.Campaign.ParseSettings().SystemID, addons))
+					// The game's own lists, which the Overview no longer carries a
+					// tile for, are a word away from Game.
+					<p class="mt-3 text-sm text-fg-muted" data-game-more>
+						Also for the game:
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/roll-tables/manage", cc.Campaign.ID)) } class="text-accent hover:underline">Rolling tables</a>
+						<span aria-hidden="true">·</span>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/entries", cc.Campaign.ID)) } class="text-accent hover:underline">Own entries</a>
+					</p>
 				</div>
 				// The feature list is the main column on a big monitor; the game
 				// system, content packs and Foundry row stack beside it.
@@ -133,7 +141,7 @@ templ foundryConnectRow(cc *CampaignContext, foundry FoundryRowData, csrfToken s
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>
 					<button type="submit" class="btn-primary btn-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{ foundry.connectButtonLabel() }</button>
 				</form>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=api-keys", cc.Campaign.ID)) } class="btn-secondary btn-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/connections#keys", cc.Campaign.ID)) } class="btn-secondary btn-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
 			</div>
 		</div>
 		if foundry.NewLine != "" {

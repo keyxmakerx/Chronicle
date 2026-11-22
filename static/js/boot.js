@@ -940,6 +940,9 @@
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.mountWidget = mountElement;
   Chronicle.destroyWidget = destroyElement;
+  // Whether a mount has its widget running yet (its script may still be on
+  // the way), for a script that waits until a swapped-in page has drawn.
+  Chronicle.isMounted = function (el) { return mounted.has(el); };
 
   // --- Unsaved Changes Warning ---
   // Global dirty state tracker. Widgets and forms register themselves as

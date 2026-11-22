@@ -6,6 +6,7 @@ package audit
 import (
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	"fmt"
+	"strings"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -40,9 +41,83 @@ func actionLabel(action string) string {
 		return "deleted tag"
 	case ActionTrashRestored:
 		return "restored from the Trash"
+	case ActionEntityTypeCreated:
+		return "created category"
+	case ActionEntityTypeUpdated:
+		return "changed category"
+	case ActionEntityTypeDeleted:
+		return "deleted category"
+	case "member.invited":
+		return "invited someone"
+	case "member.allowed_back":
+		return "let someone back in"
+	case "campaign.archived":
+		return "archived the campaign"
+	case "campaign.unarchived":
+		return "unarchived the campaign"
+	case "campaign.handed_over":
+		return "handed the campaign over"
+	case "group.created":
+		return "created group"
+	case "group.updated":
+		return "changed group"
+	case "group.deleted":
+		return "deleted group"
+	case "group.member_added":
+		return "added someone to group"
+	case "group.member_removed":
+		return "removed someone from group"
+	case "trash.emptied":
+		return "emptied the Trash"
+	case "trash.campaign_restored":
+		return "brought the campaign back from the Trash"
+	case "trash.files_restored":
+		return "brought files back from the Trash"
+	case "trash.retention_changed", "trash.long_term_changed":
+		return "changed how long the Trash keeps things"
+	case "addon.changed":
+		return "switched a feature"
 	default:
-		return action
+		return actionFallback(action)
 	}
+}
+
+// actionArea is the part of an action key before the dot.
+func actionArea(action string) string {
+	area, _, _ := strings.Cut(action, ".")
+	return area
+}
+
+// actionAreas names what an action without words of its own changed, by its
+// area. Areas with action constants take them from those, so another
+// plugin's name is never written out here.
+var actionAreas = map[string]string{
+	actionArea(ActionCalendarCreated):   "changed the calendar",
+	actionArea(ActionTimelineCreated):   "changed timeline",
+	actionArea(ActionEntityCreated):     "changed",
+	actionArea(ActionEntityTypeCreated): "changed category",
+	actionArea(ActionMemberJoined):      "changed who is in the campaign",
+	actionArea(ActionCampaignUpdated):   "changed the campaign",
+	actionArea(ActionTrashRestored):     "changed the Trash",
+	actionArea(ActionTagCreated):        "changed tags on",
+	actionArea(ActionItemShared):        "changed item",
+	"group":                             "changed group",
+	"guest":                             "changed guest access",
+}
+
+// entityTypeWords shows the kind of thing an entry names as words: a stored
+// kind such as "calendar_event" reads "calendar event", whatever wrote it.
+func entityTypeWords(t string) string {
+	return strings.Join(strings.FieldsFunc(t, func(r rune) bool { return r == '_' || r == '.' || r == '-' }), " ")
+}
+
+// actionFallback keeps a key the log has no words for out of the page: it
+// says what area changed, or only that something did, never the raw key.
+func actionFallback(action string) string {
+	if words, ok := actionAreas[actionArea(action)]; ok {
+		return words
+	}
+	return "made a change"
 }
 
 // actionColor returns Tailwind color classes for an action's timeline dot.
@@ -266,7 +341,7 @@ templ ActivityContent(cc *campaigns.CampaignContext, stats *CampaignStats, entri
 												<span class="text-sm font-medium text-fg-body">{ entry.EntityName }</span>
 											}
 											if entry.EntityType != "" && entry.Action != ActionMemberJoined && entry.Action != ActionMemberLeft && entry.Action != ActionCampaignUpdated {
-												<span class="text-xs text-fg-muted">({ entry.EntityType })</span>
+												<span class="text-xs text-fg-muted">({ entityTypeWords(entry.EntityType) })</span>
 											}
 										</div>
 										<p class="text-xs text-fg-muted mt-0.5">{ relativeTime(entry.CreatedAt) }</p>

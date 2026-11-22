@@ -3175,6 +3175,8 @@ func (a *App) RegisterRoutes() {
 	// Every Manage page shows its own figures beside its title, built by the
 	// same service the desk uses.
 	layouts.SetManageFigure(campaignHandler.ManageFigure)
+	// Every Campaign settings page wears the campaign's banner above its tabs.
+	layouts.SetManageMast(campaignHandler.ManageMast)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
 	// A guest exists only for their campaign, so removing them from it or

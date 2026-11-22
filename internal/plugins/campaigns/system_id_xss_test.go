@@ -41,32 +41,6 @@ func TestGameSystemCard_LegitSystemIDUnchanged(t *testing.T) {
 	}
 }
 
-// TestSettingsGeneralTab_NoLongerHoldsPicker pins that each setting lives in
-// one place: two live controls for one setting would drift. The Details tab
-// keeps the description and the danger zone; the name, public flag and default
-// visibility are on Campaign settings, and the game system on Game & features.
-func TestSettingsGeneralTab_NoLongerHoldsPicker(t *testing.T) {
-	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}}
-	var buf bytes.Buffer
-	if err := settingsGeneralTab(cc, "csrf").Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render failed: %v", err)
-	}
-	html := buf.String()
-	if strings.Contains(html, "data-game-system-card") {
-		t.Error("Details tab still renders the game system picker")
-	}
-	for _, gone := range []string{`name="name"`, `name="is_public"`, "default_vis", "Welcome message", "Game system"} {
-		if strings.Contains(html, gone) {
-			t.Errorf("Details tab still holds %q, which Campaign settings owns", gone)
-		}
-	}
-	for _, want := range []string{`name="description"`, `id="danger"`, "/campaigns/camp-1/dashboard"} {
-		if !strings.Contains(html, want) {
-			t.Errorf("Details tab is missing %q", want)
-		}
-	}
-}
-
 // The save posts to the campaign read in init(). Reading $el.dataset inside
 // the @change handler gets the select's dataset, which has no campaign id,
 // and the save went to /campaigns/undefined/system.

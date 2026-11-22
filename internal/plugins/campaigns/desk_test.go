@@ -1,6 +1,8 @@
-// desk_test.go pins the desk's rows and its provider seam: every row is built
-// without a database or a socket, a failing, panicking or stuck provider only
-// turns its own row's figure into "Open", and a lower role is refused.
+// desk_test.go pins the Overview board and the desk's provider seam: every
+// tile is built without a database or a socket, a failing, panicking or stuck
+// provider only turns its own tile's figure into "Open", and a lower role is
+// refused. The rows that stay (the Campaign tab's fields, Preview and the
+// Customize list) are pinned here too.
 
 package campaigns
 
@@ -44,97 +46,238 @@ func hrefOf(l DeskLine) string {
 	return l.Values[0].Href
 }
 
-// Every row's name, value and destination for each state it can be in,
-// including the plural forms and the "figure could not be read" fallback.
-func TestDeskRows_NameAndValue(t *testing.T) {
+// Every figure tile's label, figure, muted line, destination and state dot
+// for each state it can be in, including the plural forms and the "figure
+// could not be read" fallback, which is the word Open and never a guess.
+func TestBoardTiles_FigureAndDestination(t *testing.T) {
 	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
 	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 	two := now.Add(-2 * time.Hour)
 	old := now.Add(-24 * 24 * time.Hour)
-	team := func(n int) []CampaignMember {
-		out := []CampaignMember{{Role: RoleOwner}}
-		for i := 1; i < n; i++ {
-			out = append(out, CampaignMember{Role: RolePlayer})
-		}
-		return out
-	}
 	tests := []struct {
 		name  string
-		line  DeskLine
-		row   string
+		tile  DeskGoTile
+		label string
 		value string
+		hint  string
 		href  string
 		state string
 	}{
-		{"members unread", peopleLine(c, nil), "Members", "Open|", "/campaigns/c1/members", ""},
-		{"members alone", peopleLine(c, team(1)), "Members", "1|", "/campaigns/c1/members", ""},
-		{"members five", peopleLine(c, team(5)), "Members", "5|", "/campaigns/c1/members", ""},
-		{"invited unread", invitedLine(c, DeskInputs{}), "Invited", "Open|", "/campaigns/c1/members#invite-box", ""},
-		{"invited none", invitedLine(c, DeskInputs{InvitedRead: true}), "Invited", "0|", "/campaigns/c1/members#invite-box", ""},
-		{"invited two", invitedLine(c, DeskInputs{InvitedRead: true, Invited: 2}), "Invited", "2|", "/campaigns/c1/members#invite-box", ""},
-		{"edits no provider", changesLine(c, nil), "Player edits", "Open|", "/campaigns/c1/players/changes", ""},
-		{"edits none", changesLine(c, &DeskChangesFacts{}), "Player edits", "0|this week", "/campaigns/c1/players/changes", ""},
-		{"edits some", changesLine(c, &DeskChangesFacts{Changes: 3, Players: 2}), "Player edits", "3|this week", "/campaigns/c1/players/changes", ""},
-		{"features unread", featuresLine(c, DeskInputs{}), "Features", "Open|", "/campaigns/c1/extensions", ""},
-		{"features", featuresLine(c, DeskInputs{FeaturesOn: 12, FeaturesTotal: 15}), "Features", "12 of 15|on", "/campaigns/c1/extensions", ""},
-		{"tables", tablesLine(c), "Rolling tables", "Open|", "/campaigns/c1/roll-tables/manage", ""},
-		{"entries unread", entriesLine(c, nil), "Own entries", "Open|", "/campaigns/c1/characters/entries", ""},
-		{"entries none", entriesLine(c, &DeskEntriesFacts{}), "Own entries", "0|", "/campaigns/c1/characters/entries", ""},
-		{"entries some", entriesLine(c, &DeskEntriesFacts{Entries: 7}), "Own entries", "7|", "/campaigns/c1/characters/entries", ""},
-		{"entries asks too", entriesLine(c, &DeskEntriesFacts{Entries: 7, Drafts: 1, Asks: 2}), "Own entries", "7|3 waiting", "/campaigns/c1/characters/entries", ""},
-		{"entries waiting", entriesLine(c, &DeskEntriesFacts{Entries: 7, Drafts: 2}), "Own entries", "7|2 waiting", "/campaigns/c1/characters/entries", ""},
-		{"media no provider", mediaLine(c, nil), "Media", "Open|", "/campaigns/c1/media", ""},
-		{"media none", mediaLine(c, &DeskMediaFacts{}), "Media", "0 files|", "/campaigns/c1/media", ""},
-		{"media one", mediaLine(c, &DeskMediaFacts{Files: 1, Bytes: 2048}), "Media", "1 file|2 KB", "/campaigns/c1/media", ""},
-		{"media some", mediaLine(c, &DeskMediaFacts{Files: 212, Bytes: 310 << 20}), "Media", "212 files|310 MB", "/campaigns/c1/media", ""},
-		{"foundry no provider", foundryLine(c, nil, now), "Foundry", "Open|", "/campaigns/c1/foundry", ""},
-		{"foundry never set up", foundryLine(c, &DeskFoundryFacts{}, now), "Foundry", "Not set up|", "/campaigns/c1/foundry", ""},
-		{"foundry key, no answer", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true}}, now), "Foundry", "No answer|yet", "/campaigns/c1/foundry", ""},
-		{"foundry live", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{Connected: true, HasKey: true, HubLastSeen: &now}}, now), "Foundry", "Connected|", "/campaigns/c1/foundry", "ok"},
-		{"foundry seen", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &two}}, now), "Foundry", "Last seen|2 hours ago", "/campaigns/c1/foundry", "ok"},
-		{"foundry silent for weeks", foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &old}}, now), "Foundry", "No answer|24 days", "/campaigns/c1/foundry", "warn"},
-		{"ai no provider", aiLine(c, nil), "Your AI", "Open|", "/campaigns/c1/ai", ""},
-		{"ai none", aiLine(c, &DeskAIFacts{State: DeskAINone}), "Your AI", "Not connected|", "/campaigns/c1/ai", ""},
-		{"ai connected", aiLine(c, &DeskAIFacts{State: DeskAIConnected, Client: "Claude", CanAsk: true}), "Your AI", "Claude|can ask", "/campaigns/c1/ai", "ok"},
-		{"ai look only", aiLine(c, &DeskAIFacts{State: DeskAIConnected}), "Your AI", "Connected|can look", "/campaigns/c1/ai", "ok"},
-		{"ai waiting", aiLine(c, &DeskAIFacts{State: DeskAIConnected, Client: "Claude", CanAsk: true, Waiting: 3}), "Your AI", "Claude|3 waiting", "/campaigns/c1/ai", "ok"},
-		{"ai paused, unnamed", aiLine(c, &DeskAIFacts{State: DeskAIPaused}), "Your AI", "Paused|", "/campaigns/c1/ai", ""},
-		{"ai paused, named", aiLine(c, &DeskAIFacts{State: DeskAIPaused, Client: "Claude"}), "Your AI", "Claude|Paused", "/campaigns/c1/ai", ""},
-		{"ai ended", aiLine(c, &DeskAIFacts{State: DeskAIEnded}), "Your AI", "Ended|", "/campaigns/c1/ai", ""},
-		{"keys unread", keysLine(c, nil), "Keys", "Open|", "/campaigns/c1/settings?tab=api-keys", ""},
-		{"keys none", keysLine(c, &DeskKeysFacts{}), "Keys", "0|", "/campaigns/c1/settings?tab=api-keys", ""},
-		{"keys some", keysLine(c, &DeskKeysFacts{Count: 3}), "Keys", "3|", "/campaigns/c1/settings?tab=api-keys", ""},
-		{"activity", activityLine(c), "Activity", "Log|", "/campaigns/c1/settings?tab=activity", ""},
-		{"trash no provider", trashLine(c, nil), "Trash", "Open|", "/campaigns/c1/trash", ""},
-		{"trash empty", trashLine(c, &DeskTrashFacts{Days: 30}), "Trash", "Empty|", "/campaigns/c1/trash", ""},
-		{"trash one", trashLine(c, &DeskTrashFacts{Items: 1, Days: 30}), "Trash", "1 item|kept 30 days", "/campaigns/c1/trash", ""},
-		{"trash some", trashLine(c, &DeskTrashFacts{Items: 3, Days: 30}), "Trash", "3 items|kept 30 days", "/campaigns/c1/trash", ""},
-		{"trash one day", trashLine(c, &DeskTrashFacts{Items: 2, Days: 1}), "Trash", "2 items|kept 1 day", "/campaigns/c1/trash", ""},
+		{"system none", systemTile(c, DeskInputs{}), "Game system", "None", "Pick one on Game", "/campaigns/c1/extensions", ""},
+		{"system named", systemTile(c, DeskInputs{SystemID: "drawsteel", SystemName: "Draw Steel"}), "Game system", "Draw Steel", "Its rules and tooltips are on", "/campaigns/c1/extensions", ""},
+		{"system of their own", systemTile(c, DeskInputs{SystemID: "custom:https://x"}), "Game system", "Custom", "A system of your own", "/campaigns/c1/extensions", ""},
+		{"edits unread", editsTile(c, nil), "Player edits", "Open", "", "/campaigns/c1/players/changes", ""},
+		{"edits none", editsTile(c, &DeskChangesFacts{}), "Player edits", "0", "None this week", "/campaigns/c1/players/changes", ""},
+		{"edits some", editsTile(c, &DeskChangesFacts{Changes: 3, Players: 2}), "Player edits", "3", "this week · 2 players", "/campaigns/c1/players/changes", ""},
+		{"edits by one player", editsTile(c, &DeskChangesFacts{Changes: 1, Players: 1}), "Player edits", "1", "this week · 1 player", "/campaigns/c1/players/changes", ""},
+		{"storage without media", storageTile(c, false, nil), "Copies", "Export", "A copy of the whole campaign, to keep or move", "/campaigns/c1/data", ""},
+		{"storage unread", storageTile(c, true, nil), "Storage and copies", "Open", "Export or import a copy", "/campaigns/c1/data", ""},
+		{"storage empty", storageTile(c, true, &DeskMediaFacts{}), "Storage and copies", "Empty", "No pictures or files yet · export or import a copy", "/campaigns/c1/data", ""},
+		{"storage some", storageTile(c, true, &DeskMediaFacts{Files: 212, Bytes: 310 << 20}), "Storage and copies", "310 MB", "212 files · export or import a copy", "/campaigns/c1/data", ""},
+		{"trash unread", trashTile(c, nil), "Trash and activity", "Open", "", "/campaigns/c1/data", ""},
+		{"trash empty", trashTile(c, &DeskTrashFacts{Days: 30}), "Trash and activity", "Empty", "Nothing waiting in the Trash", "/campaigns/c1/data", ""},
+		{"trash one", trashTile(c, &DeskTrashFacts{Items: 1, Days: 30}), "Trash and activity", "1 item", "in the Trash · kept 30 days", "/campaigns/c1/data", ""},
+		{"trash some, one day", trashTile(c, &DeskTrashFacts{Items: 2, Days: 1}), "Trash and activity", "2 items", "in the Trash · kept 1 day", "/campaigns/c1/data", ""},
+		{"foundry unread", foundryTile(c, nil, now), "Foundry", "Open", "", "/campaigns/c1/foundry", ""},
+		{"foundry never set up", foundryTile(c, &DeskFoundryFacts{}, now), "Foundry", "Not set up", "", "/campaigns/c1/foundry", ""},
+		{"foundry key, no answer", foundryTile(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true}}, now), "Foundry", "No answer yet", "", "/campaigns/c1/foundry", ""},
+		{"foundry live", foundryTile(c, &DeskFoundryFacts{Connection: FoundryConnection{Connected: true, HasKey: true, HubLastSeen: &now, ModuleVersion: "3.2.0"}}, now), "Foundry", "Connected", "Module 3.2.0", "/campaigns/c1/foundry", "ok"},
+		{"foundry seen", foundryTile(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &two}}, now), "Foundry", "Last seen", "2 hours ago", "/campaigns/c1/foundry", "ok"},
+		{"foundry silent for weeks", foundryTile(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &old}}, now), "Foundry", "No answer", "Quiet for 24 days", "/campaigns/c1/foundry", "warn"},
+		{"ai unread", aiTile(c, nil), "Your AI", "Open", "", "/campaigns/c1/ai", ""},
+		{"ai none", aiTile(c, &DeskAIFacts{State: DeskAINone}), "Your AI", "Not connected", "", "/campaigns/c1/ai", ""},
+		{"ai connected", aiTile(c, &DeskAIFacts{State: DeskAIConnected, Client: "Claude", CanAsk: true}), "Your AI", "Claude", "can ask", "/campaigns/c1/ai", "ok"},
+		{"ai look only", aiTile(c, &DeskAIFacts{State: DeskAIConnected}), "Your AI", "Connected", "can look", "/campaigns/c1/ai", "ok"},
+		{"ai waiting", aiTile(c, &DeskAIFacts{State: DeskAIConnected, Client: "Claude", CanAsk: true, Waiting: 3}), "Your AI", "Claude", "3 waiting", "/campaigns/c1/ai", "ok"},
+		{"ai paused", aiTile(c, &DeskAIFacts{State: DeskAIPaused, Client: "Claude"}), "Your AI", "Claude", "Paused", "/campaigns/c1/ai", ""},
+		{"ai ended", aiTile(c, &DeskAIFacts{State: DeskAIEnded}), "Your AI", "Ended", "", "/campaigns/c1/ai", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := tt.line
-			if l.Name != tt.row || vals(l) != tt.value || hrefOf(l) != tt.href || l.Values[0].State != tt.state {
-				t.Errorf("row = %q / %q / %q / %q, want %q / %q / %q / %q", l.Name, vals(l), hrefOf(l), l.Values[0].State, tt.row, tt.value, tt.href, tt.state)
+			g := tt.tile
+			if g.Label != tt.label || g.Value.Text != tt.value || g.Hint != tt.hint || g.Href != tt.href || g.Value.State != tt.state {
+				t.Errorf("tile = %q / %q / %q / %q / %q, want %q / %q / %q / %q / %q",
+					g.Label, g.Value.Text, g.Hint, g.Href, g.Value.State, tt.label, tt.value, tt.hint, tt.href, tt.state)
 			}
-			if len(l.Values) != 1 || l.Values[0].Word {
-				t.Errorf("a figure is one value that is not a quiet word: %+v", l.Values)
-			}
-			// The model can say only names and values: a row never carries a
-			// phrase, a placeholder number or a dash.
-			for _, v := range l.Values {
-				for _, bad := range []string{"—", "–", "N/A", "GM Only", "dm_only", "The table", "  "} {
-					if strings.Contains(v.Text+v.Sub, bad) {
-						t.Errorf("value says %q", bad)
-					}
+			// A tile says only names and figures: never a placeholder number,
+			// a dash or a code.
+			for _, bad := range []string{"—", "–", "N/A", "GM Only", "dm_only", "The table", "  "} {
+				if strings.Contains(g.Label+g.Value.Text+g.Hint, bad) {
+					t.Errorf("tile says %q", bad)
 				}
+			}
+		})
+	}
+	if got := monoOf("Draw Steel"); got != "DS" {
+		t.Errorf("initials = %q", got)
+	}
+	if got := systemTile(c, DeskInputs{SystemName: "D&D 5e", SystemID: "dnd5e"}).Mono; got != "D5" {
+		t.Errorf("the system's mark is its first two initials, got %q", got)
+	}
+}
+
+// People shows a face for the first few people, owner first, with a count of
+// the rest, the head count as the members page words it, and the way to
+// invite. A face never shows a whole email address.
+func TestBoardTiles_People(t *testing.T) {
+	c := &Campaign{ID: "c1", Settings: "{}"}
+	pic := " /media/a.png "
+	team := []CampaignMember{
+		{UserID: "u0", Role: RoleOwner, DisplayName: "Dana"},
+		{UserID: "u1", Role: RolePlayer, Email: "kit@example.com", AvatarPath: &pic},
+		{UserID: "u2", Role: RoleScribe},
+	}
+	for i := 3; i < 9; i++ {
+		team = append(team, CampaignMember{UserID: "u" + itoa(i), Role: RolePlayer, DisplayName: "P" + itoa(i)})
+	}
+	tests := []struct {
+		name      string
+		in        DeskInputs
+		wantCount string
+		wantFaces int
+		wantMore  int
+	}{
+		{"members unread", DeskInputs{}, "", 0, 0},
+		{"alone", DeskInputs{Members: team[:1]}, "1 member", 1, 0},
+		{"three, one invited", DeskInputs{Members: team[:3], InvitedRead: true, Invited: 1}, "3 members · 1 invited", 3, 0},
+		{"more than fit", DeskInputs{Members: team}, "9 members", deskBoardFaces, 9 - deskBoardFaces},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := peopleTile(c, tt.in)
+			if p.Count != tt.wantCount || len(p.Faces) != tt.wantFaces || p.More != tt.wantMore {
+				t.Errorf("people = %q, %d faces, %d more; want %q, %d, %d", p.Count, len(p.Faces), p.More, tt.wantCount, tt.wantFaces, tt.wantMore)
+			}
+			if p.Href != "/campaigns/c1/members" || p.InviteHref != "/campaigns/c1/members#invite-box" {
+				t.Errorf("links = %q / %q", p.Href, p.InviteHref)
+			}
+		})
+	}
+	p := peopleTile(c, DeskInputs{Members: team[:3]})
+	if (DeskFace{Name: "Owner Ines"}).Short() != "Owner" || (DeskFace{}).Short() != "" {
+		t.Error("a face's short name is the first word of its name")
+	}
+	if f := p.Faces[0]; f.Name != "Dana" || f.Initial() != "D" || f.Role != RoleOwner.DisplayName() {
+		t.Errorf("the owner comes first by name: %+v", f)
+	}
+	if f := p.Faces[1]; f.Name != "kit" || f.Avatar != "/media/a.png" {
+		t.Errorf("a face without a name shows the part before the @ and its picture: %+v", f)
+	}
+	if f := p.Faces[2]; f.Name != "Someone" || f.Initial() != "S" {
+		t.Errorf("a face with neither name nor email is Someone: %+v", f)
+	}
+	// The tint comes from the id alone, so it is one of the five and the
+	// same id always lands on the same one.
+	seen := map[int]bool{}
+	for _, id := range []string{"u1", "u2", "u3", "owner-7", ""} {
+		h := faceHue(id)
+		if h < 0 || h > 4 {
+			t.Errorf("faceHue(%q) = %d, want 0 to 4", id, h)
+		}
+		seen[h] = true
+	}
+	if faceHue("u1") != 0 || len(seen) < 2 {
+		t.Errorf("faceHue(u1) = %d, tints seen %v", faceHue("u1"), seen)
+	}
+}
+
+// Features is a chip for every installed feature, never a game system or one
+// that is not installed, each pressed while it is on; an archived campaign
+// keeps the chips but says why they cannot be pressed.
+func TestBoardTiles_Features(t *testing.T) {
+	addons := []PluginHubAddon{
+		{AddonID: 1, Name: "Maps", Description: "Pin places", Installed: true, Enabled: true},
+		{AddonID: 2, Name: "Calendar", Installed: true},
+		{AddonID: 3, Name: "Coming", Installed: false},
+		{AddonID: 4, Name: "Draw Steel", Category: addonCategorySystem, Installed: true, Enabled: true},
+	}
+	c := &Campaign{ID: "c1", Settings: "{}"}
+	f := featuresTile(c, DeskInputs{FeaturesOn: 1, FeaturesTotal: 2}, addons)
+	var got []string
+	for _, ch := range f.Chips {
+		got = append(got, ch.Name+":"+boolStr(ch.On))
+	}
+	if strings.Join(got, ",") != "Maps:true,Calendar:false" || f.Count != "1 of 2 on" || f.Href != "/campaigns/c1/extensions" || f.Off != "" {
+		t.Errorf("features = %v %q %q %q", got, f.Count, f.Href, f.Off)
+	}
+	if f.Chips[0].AddonID != 1 || boardChipTitle(f.Chips[0], "") != "Pin places" {
+		t.Errorf("a chip carries its add-on and says what it does: %+v", f.Chips[0])
+	}
+	if unread := featuresTile(c, DeskInputs{}, nil); unread.Count != "" || len(unread.Chips) != 0 {
+		t.Errorf("an unread list draws no count and no chips: %+v", unread)
+	}
+	now := time.Now()
+	off := featuresTile(&Campaign{ID: "c1", Settings: "{}", ArchivedAt: &now}, DeskInputs{}, addons)
+	if off.Off != deskArchivedOff || len(off.Chips) != 2 || boardChipTitle(off.Chips[0], off.Off) != deskArchivedOff {
+		t.Errorf("archived chips say why they are off: %+v", off)
+	}
+}
+
+// The two flips wrap the same blanks as the Campaign tab, so they save through
+// the same routes; the first option is the resting state.
+func TestBoardFlips(t *testing.T) {
+	tests := []struct {
+		name     string
+		c        *Campaign
+		wantPub  string
+		wantPage string
+		pubOn    bool
+		pageOn   bool
+	}{
+		{"private, hidden", &Campaign{ID: "c", Settings: `{"default_visibility":"dm_only"}`}, "Private", "Hidden", false, false},
+		{"public, shown", &Campaign{ID: "c", IsPublic: true, Settings: "{}"}, "Public", "Shown", true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := boardOf(tt.c, DeskInputs{Campaign: tt.c, Addons: map[string]bool{}}, DeskFacts{}, nil, nil, time.Now())
+			if b.Access.Now().Label != tt.wantPub || b.Access.On() != tt.pubOn || b.Pages.Now().Label != tt.wantPage || b.Pages.On() != tt.pageOn {
+				t.Errorf("flips = %q %v / %q %v", b.Access.Now().Label, b.Access.On(), b.Pages.Now().Label, b.Pages.On())
+			}
+			if b.Access.Blank.URL != "/campaigns/c/details" || !b.Access.Blank.Bool || b.Pages.Blank.URL != "/campaigns/c/default-visibility" {
+				t.Errorf("flips save through the blanks' routes: %+v / %+v", b.Access.Blank, b.Pages.Blank)
+			}
+		})
+	}
+	if (DeskFlip{}).On() || (DeskFlip{}).Now().Label != "" || (DeskFlip{}).Option(5).Label != "" {
+		t.Error("a flip with no blank is resting and has no words")
+	}
+}
+
+// Which tiles the board holds: Foundry only while Foundry sync is on, and the
+// storage tile names only copies while Media is off. No provider answering
+// leaves every figure as Open.
+func TestDeskService_Build_Board(t *testing.T) {
+	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
+	tests := []struct {
+		name        string
+		addons      map[string]bool
+		wantFoundry bool
+		wantStorage string
+	}{
+		{"add-ons off", map[string]bool{}, false, "Copies"},
+		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true}, true, "Storage and copies"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := NewDeskService().Build(context.Background(), DeskRequest{Now: time.Now()}, DeskInputs{Campaign: c, Addons: tt.addons})
+			b := d.Board
+			if d.CampaignName != "Therin" || (b.Foundry != nil) != tt.wantFoundry || b.Storage.Label != tt.wantStorage {
+				t.Errorf("board: name %q, foundry %v, storage %q", d.CampaignName, b.Foundry != nil, b.Storage.Label)
+			}
+			for _, g := range []DeskGoTile{b.Edits, b.AI, b.Trash} {
+				if g.Value.Text != "Open" {
+					t.Errorf("%s with no provider = %q, want the word Open", g.Label, g.Value.Text)
+				}
+			}
+			if b.Look.Href != "/campaigns/c1/customize" || len(b.Needs) != 0 {
+				t.Errorf("look leads to the Customizer and nothing needs the owner: %+v", b)
 			}
 		})
 	}
 }
 
-// Every figure that opens a page ends in a chevron; a quiet word does not.
-// The missing-figure fallback is "Open" with the chevron.
+// A figure that opens a page ends in a chevron; a quiet word does not. The
+// missing-figure fallback is "Open" with the chevron.
 func TestDeskValues_ChevronOnFiguresOnly(t *testing.T) {
 	c := &Campaign{ID: "c1", Settings: "{}"}
 	render := func(l DeskLine) string {
@@ -144,21 +287,16 @@ func TestDeskValues_ChevronOnFiguresOnly(t *testing.T) {
 		}
 		return sb.String()
 	}
-	if h := render(changesLine(c, nil)); !strings.Contains(h, `>Open<`) || !strings.Contains(h, "set-chev") || !strings.Contains(h, `aria-label="Player edits: Open"`) {
+	if h := render(categoriesLine(c, DeskInputs{})); !strings.Contains(h, `>Open<`) || !strings.Contains(h, "set-chev") || !strings.Contains(h, `aria-label="Categories: Open"`) {
 		t.Errorf("the fallback is Open with a chevron: %s", h)
 	}
-	if h := render(changesLine(c, &DeskChangesFacts{Changes: 3})); !strings.Contains(h, `aria-label="Player edits: 3 this week"`) || !strings.Contains(h, `class="set-sub">this week`) || !strings.Contains(h, "set-chev") {
+	if h := render(lookLine(c, LookSummary{Look: "Parchment", Colour: "Sienna"})); !strings.Contains(h, "set-chev") || !strings.Contains(h, `class="set-sub`) {
 		t.Errorf("a figure draws its muted second part and a chevron: %s", h)
 	}
-	if h := render(copyLine(c)); strings.Contains(h, "set-chev") || strings.Count(h, "set-word") != 2 || !strings.Contains(h, `aria-label="Copy: Export…"`) || !strings.Contains(h, `aria-label="Copy: Import…"`) {
+	if h := render(previewLine(&Campaign{ID: "c1", IsPublic: true, Settings: "{}"})); strings.Contains(h, "set-chev") {
 		t.Errorf("quiet words carry no chevron: %s", h)
 	}
-	if h := render(foundryLine(c, &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: ptrTime(time.Now().Add(-30 * 24 * time.Hour))}}, time.Now())); !strings.Contains(h, "desk-dot warn") || !strings.Contains(h, "warning, No answer") {
-		t.Errorf("a state dot shows state and is said in words: %s", h)
-	}
 }
-
-func ptrTime(t time.Time) *time.Time { return &t }
 
 // The Customize block says what is chosen now in a DM's words: the look by
 // its starter's name, the colour by name with its swatch and never a hex
@@ -212,96 +350,6 @@ func TestDeskRows_Customize(t *testing.T) {
 	}
 	if got := strings.Join(ids, ","); got != "look,categories,homes,x-maps,x-dice,brush" {
 		t.Errorf("Customize block order = %s", got)
-	}
-}
-
-func TestDeskRows_System(t *testing.T) {
-	c := &Campaign{ID: "c1", Settings: "{}"}
-	list := []DeskSystem{{ID: "drawsteel", Name: "Draw Steel"}, {ID: "dnd5e", Name: "D&D 5e"}}
-	now := time.Now()
-	archived := &Campaign{ID: "c1", Settings: "{}", ArchivedAt: &now}
-	tests := []struct {
-		name      string
-		c         *Campaign
-		in        DeskInputs
-		wantBlank string // the blank's shown word, or "" for a figure
-		wantFig   string
-		wantOpts  []string
-		wantOff   bool
-	}{
-		{"none chosen", c, DeskInputs{Systems: list}, "None", "", []string{"None", "Draw Steel", "D&D 5e"}, false},
-		{"one chosen", c, DeskInputs{Systems: list, SystemID: "drawsteel", SystemName: "Draw Steel"}, "Draw Steel", "", []string{"None", "Draw Steel", "D&D 5e"}, false},
-		{"archived is off", archived, DeskInputs{Systems: list, SystemID: "dnd5e", SystemName: "D&D 5e"}, "D&D 5e", "", nil, true},
-		{"custom system is a figure", c, DeskInputs{Systems: list, SystemID: "custom:https://x"}, "", "Custom", nil, false},
-		{"unlisted system with a name", c, DeskInputs{Systems: list, SystemID: "old", SystemName: "Old Game"}, "", "Old Game", nil, false},
-		{"no lister, none chosen", c, DeskInputs{}, "", "None", nil, false},
-		{"no lister, one set", c, DeskInputs{SystemID: "custom:x"}, "", "Custom", nil, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			l := systemLine(tt.c, tt.in)
-			v := l.Values[0]
-			if l.Name != "System" {
-				t.Errorf("name = %q", l.Name)
-			}
-			if tt.wantBlank == "" {
-				if v.Blank != nil || v.Text != tt.wantFig || v.Href != "/campaigns/c1/extensions" {
-					t.Fatalf("want the figure %q opening the features page, got %+v", tt.wantFig, v)
-				}
-				return
-			}
-			b := v.Blank
-			if b == nil || b.Shown != tt.wantBlank || b.URL != "/campaigns/c1/system" || b.Method != "PUT" || b.Field != "system_id" || (b.Off != "") != tt.wantOff {
-				t.Fatalf("blank = %+v", b)
-			}
-			if tt.wantOpts != nil {
-				var got []string
-				for _, o := range b.Options {
-					got = append(got, o.Label)
-				}
-				if strings.Join(got, ",") != strings.Join(tt.wantOpts, ",") || b.Options[0].Value != "" {
-					t.Errorf("options = %v, want %v with None first and empty", got, tt.wantOpts)
-				}
-			}
-		})
-	}
-}
-
-func TestDeskRows_Danger(t *testing.T) {
-	c := &Campaign{ID: "c1", Settings: "{}"}
-	now := time.Now()
-	archived := &Campaign{ID: "c1", Settings: "{}", ArchivedAt: &now}
-	tests := []struct {
-		name string
-		c    *Campaign
-		want []string
-	}{
-		{"active", c, []string{"Archive…", "Transfer…", "Delete…"}},
-		{"archived", archived, []string{"Unarchive…", "Transfer…", "Delete…"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			l := endLine(tt.c)
-			var got []string
-			for _, v := range l.Values {
-				got = append(got, v.Text)
-				if !v.Word || v.Href == "" || v.Blank != nil || v.View != nil {
-					t.Errorf("%q must be a quiet word that only leads on: nothing here acts in one press", v.Text)
-				}
-			}
-			if l.ID != "end" || l.Name != "Campaign" || strings.Join(got, ",") != strings.Join(tt.want, ",") {
-				t.Errorf("row = %q %v, want %v", l.Name, got, tt.want)
-			}
-			hrefs := []string{"/campaigns/c1/settings#danger", "/campaigns/c1/members#transfer", "/campaigns/c1/settings#danger"}
-			for i, v := range l.Values {
-				if v.Href != hrefs[i] {
-					t.Errorf("%q leads to %q, want %q", v.Text, v.Href, hrefs[i])
-				}
-				if v.Danger != (v.Text == "Delete…") {
-					t.Errorf("%q danger = %v: only Delete is in the state red", v.Text, v.Danger)
-				}
-			}
-		})
 	}
 }
 
@@ -460,8 +508,7 @@ func TestDeskRows_Description(t *testing.T) {
 func TestDeskBlanks_OffWhenArchived(t *testing.T) {
 	now := time.Now()
 	c := &Campaign{ID: "c", Settings: "{}", ArchivedAt: &now}
-	in := DeskInputs{Systems: []DeskSystem{{ID: "a", Name: "A"}}}
-	for _, l := range []DeskLine{nameLine(c), descriptionLine(c), pagesLine(c), publicLine(c), systemLine(c, in)} {
+	for _, l := range []DeskLine{nameLine(c), descriptionLine(c), pagesLine(c), publicLine(c)} {
 		b := l.Values[0].Blank
 		if b == nil || b.Off != "Unarchive the campaign to change this." {
 			t.Errorf("row %q must be off on an archived campaign with its reason", l.ID)
@@ -518,19 +565,6 @@ func (s stubProvider) Facts(ctx context.Context, _ DeskRequest) (DeskFacts, erro
 	return s.fn(ctx)
 }
 
-func lineByID(d *Desk, id string) *DeskLine {
-	for _, col := range [][]DeskGroup{d.Left, d.Right} {
-		for gi := range col {
-			for li := range col[gi].Lines {
-				if col[gi].Lines[li].ID == id {
-					return &col[gi].Lines[li]
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func TestDeskService_Providers(t *testing.T) {
 	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
 	in := DeskInputs{Campaign: c, Addons: map[string]bool{"media-gallery": true, "sync-api": true}}
@@ -542,15 +576,15 @@ func TestDeskService_Providers(t *testing.T) {
 		bad       DeskProvider
 		wantMedia string
 	}{
-		{"no provider", nil, "Open|"},
-		{"provider errors", stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) { return DeskFacts{}, errors.New("db down") }}, "Open|"},
-		{"provider panics", stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) { panic("boom") }}, "Open|"},
+		{"no provider", nil, "Open"},
+		{"provider errors", stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) { return DeskFacts{}, errors.New("db down") }}, "Open"},
+		{"provider panics", stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) { panic("boom") }}, "Open"},
 		{"provider fills another slot's pointer", stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) {
 			return DeskFacts{Trash: &DeskTrashFacts{Items: 99}}, nil
-		}}, "Open|"},
+		}}, "Open"},
 		{"provider works", stubProvider{DeskMedia, func(context.Context) (DeskFacts, error) {
 			return DeskFacts{Media: &DeskMediaFacts{Files: 1, Bytes: 10}}, nil
-		}}, "1 file|10 B"},
+		}}, "10 B"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -560,12 +594,12 @@ func TestDeskService_Providers(t *testing.T) {
 			if tt.bad != nil {
 				s.Register(tt.bad)
 			}
-			d := s.Build(context.Background(), DeskRequest{CampaignID: "c1"}, in)
-			if got := vals(*lineByID(d, "media")); got != tt.wantMedia {
-				t.Errorf("media = %q, want %q", got, tt.wantMedia)
+			b := s.Build(context.Background(), DeskRequest{CampaignID: "c1"}, in).Board
+			if got := b.Storage.Value.Text; got != tt.wantMedia {
+				t.Errorf("storage = %q, want %q", got, tt.wantMedia)
 			}
-			if got := vals(*lineByID(d, "trash")); got != "3 items|kept 30 days" {
-				t.Errorf("a failing neighbour changed the trash row: %q", got)
+			if got := b.Trash.Value.Text + "|" + b.Trash.Hint; got != "3 items|in the Trash · kept 30 days" {
+				t.Errorf("a failing neighbour changed the trash tile: %q", got)
 			}
 		})
 	}
@@ -581,22 +615,33 @@ func TestDeskService_SameSlotReplaces(t *testing.T) {
 	s.Register(mk(1))
 	s.Register(mk(2))
 	d := s.Build(context.Background(), DeskRequest{}, DeskInputs{Campaign: &Campaign{ID: "c", Settings: "{}"}})
-	if got := vals(*lineByID(d, "trash")); got != "2 items|kept 30 days" {
+	if got := d.Board.Trash.Value.Text; got != "2 items" {
 		t.Errorf("second provider must replace the first, got %q", got)
 	}
 }
 
-// The Keys count comes from its own provider slot and degrades to Open.
-func TestDeskService_KeysProvider(t *testing.T) {
-	in := DeskInputs{Campaign: &Campaign{ID: "c", Settings: "{}"}}
+// Facts asks only the named slots, so a tab reads only what it draws, and a
+// call naming none asks nobody.
+func TestDeskService_FactsAsksOnlyTheNamedSlots(t *testing.T) {
 	s := NewDeskService()
-	s.Register(stubProvider{DeskKeys, func(context.Context) (DeskFacts, error) { return DeskFacts{Keys: &DeskKeysFacts{Count: 2}}, nil }})
-	if got := vals(*lineByID(s.Build(context.Background(), DeskRequest{}, in), "keys")); got != "2|" {
-		t.Errorf("keys = %q", got)
+	asked := map[DeskSlot]bool{}
+	for _, slot := range []DeskSlot{DeskKeys, DeskTrash} {
+		slot := slot
+		s.Register(stubProvider{slot, func(context.Context) (DeskFacts, error) {
+			asked[slot] = true
+			return DeskFacts{Keys: &DeskKeysFacts{Count: 2}, Trash: &DeskTrashFacts{Items: 1}}, nil
+		}})
+	}
+	f := s.Facts(context.Background(), DeskRequest{}, DeskKeys)
+	if f.Keys == nil || f.Keys.Count != 2 || f.Trash != nil || asked[DeskTrash] {
+		t.Errorf("only the keys slot was asked for: %+v, asked %v", f, asked)
+	}
+	if f := s.Facts(context.Background(), DeskRequest{}); f.Keys != nil || f.Trash != nil {
+		t.Errorf("no slots asks nobody: %+v", f)
 	}
 	s.Register(stubProvider{DeskKeys, func(context.Context) (DeskFacts, error) { return DeskFacts{}, errors.New("db down") }})
-	if got := vals(*lineByID(s.Build(context.Background(), DeskRequest{}, in), "keys")); got != "Open|" {
-		t.Errorf("a failed keys provider must leave Open, got %q", got)
+	if f := s.Facts(context.Background(), DeskRequest{}, DeskKeys); f.Keys != nil {
+		t.Errorf("a failed keys provider leaves the count unread: %+v", f.Keys)
 	}
 }
 
@@ -616,15 +661,15 @@ func TestCallProvider_StuckProviderIsAbandoned(t *testing.T) {
 	}
 }
 
-func TestDeskService_DisabledFoundryDropsLine(t *testing.T) {
+func TestDeskService_DisabledFoundryDropsTile(t *testing.T) {
 	s := NewDeskService()
 	s.Register(stubProvider{DeskFoundry, func(context.Context) (DeskFacts, error) {
 		old := time.Now().Add(-30 * 24 * time.Hour)
 		return DeskFacts{Foundry: &DeskFoundryFacts{Connection: FoundryConnection{HasKey: true, KeyLastUsed: &old}}}, nil
 	}})
 	d := s.Build(context.Background(), DeskRequest{Now: time.Now()}, DeskInputs{Campaign: &Campaign{ID: "c", Settings: "{}"}, Addons: map[string]bool{}})
-	if lineByID(d, "foundry") != nil || len(d.Needs) != 0 {
-		t.Error("with Foundry sync off the desk must neither draw nor flag Foundry")
+	if d.Board.Foundry != nil || len(d.Board.Needs) != 0 {
+		t.Error("with Foundry sync off the board must neither draw nor flag Foundry")
 	}
 }
 
@@ -676,28 +721,21 @@ func TestOwnerDashboard_OnlyTheOwnerOpensTheDesk(t *testing.T) {
 					t.Fatalf("owner: err=%v code=%d", err, rec.Code)
 				}
 				body := rec.Body.String()
-				// "Needs you" is drawn only when something needs the owner.
 				for _, want := range []string{
-					"Campaign settings", "General", "Access", "People", "Game", "Customize", "Connections", "Data", "Danger zone",
-					"7 items", "kept 30 days", `href="/campaigns/camp-1/extensions"`, `id="line-pages"`, `id="line-preview"`, `id="line-end"`,
+					"Campaign settings", "7 items", "in the Trash · kept 30 days", `href="/campaigns/camp-1/extensions"`, `href="/campaigns/camp-1/data"`,
+					`id="line-access"`, `id="line-pages"`, `id="line-people"`, `id="line-features"`, `id="line-look"`, `id="line-trash"`, `data-sb-status`,
 				} {
 					if !strings.Contains(body, want) {
-						t.Errorf("desk is missing %q", want)
+						t.Errorf("board is missing %q", want)
 					}
 				}
-				for _, gone := range []string{"What players and guests see", "Look and game", "Safety net", "Archive or delete", `id="line-settings"`, "manage-pin", "manage-sentence"} {
+				for _, gone := range []string{"Danger zone", `id="line-end"`, "settings?tab=", "manage-pin", "The table"} {
 					if strings.Contains(body, gone) {
-						t.Errorf("the sheet no longer carries %q", gone)
+						t.Errorf("the board no longer carries %q", gone)
 					}
-				}
-				if strings.Contains(body, "The table") {
-					t.Error("no group may be called The table: that is the dice sheet's name")
 				}
 				if n := len(regexp.MustCompile(`\sdata-manage-find[\s>=]`).FindAllString(body, -1)); n > 1 {
 					t.Errorf("the page draws at most one Find, got %d", n)
-				}
-				if strings.Contains(body, "settings?tab=features") {
-					t.Error("desk must not link to the retired Features settings tab")
 				}
 				return
 			}
@@ -873,23 +911,16 @@ func TestUpdateDetailsAPI(t *testing.T) {
 	}
 }
 
-func TestDeskPage_RendersRowsNeedsYouAndBlanks(t *testing.T) {
+// The board page draws every tile in reading order, the flips as buttons that
+// say their state, the chips as pressed or not, and the board itself carries
+// no script tag: the page arrives by a boosted swap, so each control brings
+// its own handler.
+func TestDeskPage_RendersTheBoard(t *testing.T) {
 	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Therin", Settings: "{}"}, MemberRole: RoleOwner}
-	d := &Desk{
-		CampaignName: "Therin",
-		Needs: []NeedsYouItem{
-			{Lead: "Foundry", Rest: "Stopped answering 9 days ago", URL: "/campaigns/camp-1/foundry", State: "warn"},
-		},
-		Left: []DeskGroup{
-			{Name: "General", Lines: []DeskLine{nameLine(cc.Campaign), descriptionLine(cc.Campaign)}},
-			{Name: "People", Lines: []DeskLine{peopleLine(cc.Campaign, nil), changesLine(cc.Campaign, &DeskChangesFacts{Changes: 3})}},
-		},
-		Right: []DeskGroup{
-			{Name: "Data", Lines: []DeskLine{copyLine(cc.Campaign)}},
-			{Name: "Danger zone", Danger: true, Lines: []DeskLine{endLine(cc.Campaign)}},
-		},
-	}
-	// The viewer is the signed-in owner, so Find is drawn on the title's row.
+	in := DeskInputs{Campaign: cc.Campaign, Addons: map[string]bool{"sync-api": true}, FeaturesOn: 1, FeaturesTotal: 2}
+	features := []PluginHubAddon{{AddonID: 5, Name: "Maps", Installed: true, Enabled: true}, {AddonID: 6, Name: "Calendar", Installed: true}}
+	needs := []NeedsYouItem{{Lead: "Foundry", Rest: "Stopped answering 9 days ago", URL: "/campaigns/camp-1/foundry", State: "warn"}}
+	d := &Desk{CampaignName: "Therin", Board: boardOf(cc.Campaign, in, DeskFacts{Changes: &DeskChangesFacts{Changes: 3}}, needs, features, time.Now())}
 	ctx := layouts.SetCampaignRole(layouts.SetCampaignID(layouts.SetIsAuthenticated(context.Background(), true), "camp-1"), 3)
 	var sb strings.Builder
 	if err := DeskPage(cc, d).Render(ctx, &sb); err != nil {
@@ -897,37 +928,25 @@ func TestDeskPage_RendersRowsNeedsYouAndBlanks(t *testing.T) {
 	}
 	html := sb.String()
 	for _, want := range []string{
-		`data-desk-needs`, `Foundry`, `Stopped answering 9 days ago`, `href="/campaigns/camp-1/foundry"`, `desk-dot warn`,
-		// Each row is a name and its value; a figure is a link ending in a chevron.
-		`class="set-name" aria-hidden="true">Members`, `href="/campaigns/camp-1/members"`, `aria-label="Members: Open"`,
-		`aria-label="Player edits: 3 this week"`,
-		// Quiet words, the last of them in the state red.
-		`aria-label="Copy: Export…"`, `class="set-v set-word set-danger"`, `aria-label="Campaign: Delete…"`,
-		// A blank answers both the pointer and the keyboard from its own
-		// attributes, and the Saved tick has its place on the row.
-		`role="button"`, `onclick=`, `onkeydown=`, `aria-expanded="false"`, `class="desk-acts"`,
-		`id="line-name"`, `id="line-description"`, `id="line-end"`, `data-desk-blank="text"`, `data-desk-blank="name"`, `data-maxlen="5000"`,
-		`class="desk-b set-v is-empty set-wide"`, `aria-label="Description: None"`,
-		// Find on the title's row, the one Find on the page.
-		`manage-find-field`, `Find a setting`, `class="set-grp set-grp-danger"`,
+		`data-desk-needs`, `Stopped answering 9 days ago`, `href="/campaigns/camp-1/foundry"`, `desk-dot warn`,
+		`<button type="button" class="sb-t sb-flip sb-flip-access"`, `aria-pressed="false"`, `aria-label="Campaign: Private"`,
+		`data-url="/campaigns/camp-1/details"`, `data-url="/campaigns/camp-1/default-visibility"`,
+		`data-sb-chip="5" aria-pressed="true"`, `data-sb-chip="6" aria-pressed="false"`, `data-sb-count>1 of 2 on`,
+		`aria-label="Player edits: 3, this week"`, `href="/campaigns/camp-1/members#invite-box"`, `aria-label="Invite someone"`,
+		`role="status" data-sb-status`, `onclick=`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("desk is missing %q", want)
+			t.Errorf("board is missing %q", want)
 		}
 	}
-	if n := len(regexp.MustCompile(`\sdata-manage-find[\s>=]`).FindAllString(html, -1)); n != 1 {
-		t.Errorf("the page draws one Find, got %d", n)
+	var board strings.Builder
+	if err := deskBoard(cc, d.Board).Render(ctx, &board); err != nil {
+		t.Fatal(err)
 	}
-	// Find sits inside the title's header, not under it.
-	head := strings.Index(html, `class="manage-head"`)
-	if f, end := strings.Index(html, "manage-find-field"), head+strings.Index(html[head:], "</header>"); head < 0 || f < head || f > end {
-		t.Error("Find belongs on the title's row")
+	if strings.Contains(board.String(), "<script") {
+		t.Error("the board must not carry a script tag")
 	}
-	if regexp.MustCompile(`<button[^>]*desk-b`).MatchString(html) {
-		t.Error("a blank must not be a real button: buttons cannot wrap across lines")
-	}
-	// Left column, then right, in reading order, so Tab follows it.
-	order := []string{`>General<`, `>People<`, `>Data<`, `>Danger zone<`}
+	order := []string{`id="line-access"`, `id="line-pages"`, `id="line-people"`, `id="line-system"`, `id="line-edits"`, `id="line-features"`, `id="line-look"`, `id="line-foundry"`, `id="line-ai"`, `id="line-storage"`, `id="line-trash"`}
 	last := -1
 	for _, w := range order {
 		at := strings.Index(html, w)
@@ -935,11 +954,6 @@ func TestDeskPage_RendersRowsNeedsYouAndBlanks(t *testing.T) {
 			t.Errorf("%s is missing or out of order", w)
 		}
 		last = at
-	}
-	for _, gone := range []string{"desk-chev", "data-fold", "data-carry", "Open People", "manage-pin", `class="desk-s"`} {
-		if strings.Contains(html, gone) {
-			t.Errorf("the rows no longer carry %q", gone)
-		}
 	}
 }
 
@@ -982,67 +996,6 @@ func TestDeskBlank_OptionsCarryHints(t *testing.T) {
 	}
 }
 
-// The group names and their order, and which rows each holds, with the add-on
-// rows present only while their add-on is on. Row ids matter: links point at
-// "#line-<id>".
-func TestDeskService_Build_GroupsAndRows(t *testing.T) {
-	c := &Campaign{ID: "c1", Name: "Therin", Settings: "{}"}
-	shape := func(cols ...[]DeskGroup) string {
-		var parts []string
-		for _, col := range cols {
-			var groups []string
-			for _, g := range col {
-				var ids []string
-				for _, l := range g.Lines {
-					ids = append(ids, l.ID)
-				}
-				groups = append(groups, g.Name+"["+strings.Join(ids, ",")+"]")
-			}
-			parts = append(parts, strings.Join(groups, " "))
-		}
-		return strings.Join(parts, " || ")
-	}
-	tests := []struct {
-		name   string
-		addons map[string]bool
-		want   string
-	}{
-		{"add-ons off", map[string]bool{},
-			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables,entries]" +
-				" || Customize[look,categories,homes,brush] Connections[ai,keys] Data[copy,activity,trash] Danger zone[end]"},
-		{"media and Foundry on", map[string]bool{"media-gallery": true, "sync-api": true},
-			"General[name,description] Access[public,pages,preview] People[people,invited,changes] Game[system,features,tables,entries]" +
-				" || Customize[look,categories,homes,brush] Connections[foundry,ai,keys] Data[copy,activity,media,trash] Danger zone[end]"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// No provider answers: every figure row still draws, as Open.
-			d := NewDeskService().Build(context.Background(), DeskRequest{Now: time.Now()}, DeskInputs{Campaign: c, Addons: tt.addons})
-			if got := shape(d.Left, d.Right); got != tt.want {
-				t.Errorf("sheet =\n%s\nwant\n%s", got, tt.want)
-			}
-			for _, id := range []string{"changes", "keys", "trash"} {
-				if got := vals(*lineByID(d, id)); got != "Open|" {
-					t.Errorf("%s with no provider = %q, want the word Open", id, got)
-				}
-			}
-			if !d.Right[len(d.Right)-1].Danger {
-				t.Error("the Danger zone group is the state red")
-			}
-			for _, col := range [][]DeskGroup{d.Left, d.Right} {
-				for _, g := range col {
-					if g.Name == "The table" {
-						t.Error("a group is called The table, the dice sheet's name")
-					}
-					if g.Danger != (g.Name == "Danger zone") {
-						t.Errorf("group %q danger = %v", g.Name, g.Danger)
-					}
-				}
-			}
-		})
-	}
-}
-
 // updateService records what Update was asked.
 type updateService struct {
 	CampaignService
@@ -1054,9 +1007,9 @@ func (s *updateService) Update(_ context.Context, _ string, in UpdateCampaignInp
 	return &Campaign{ID: "camp-1"}, nil
 }
 
-// The Details tab posts only the description. The handler must hand the service
-// a description and nothing else, so the name and the public flag stay as they
-// are; a body that names them still reaches the service.
+// A form that posts only the description must hand the service a description
+// and nothing else, so the name and the public flag stay as they are; a body
+// that names them still reaches the service.
 func TestUpdate_FormBodyKeepsAbsentKeysAbsent(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1091,8 +1044,8 @@ func TestUpdate_FormBodyKeepsAbsentKeysAbsent(t *testing.T) {
 	}
 }
 
-// A waiting player draft shows on the Own entries row, in Needs you, and in
-// the sidebar's Manage count, all from one provider slot.
+// A waiting player draft shows in Needs you and in the sidebar's Manage count,
+// both from one provider slot.
 func TestDeskService_EntriesWaitingNeedsYou(t *testing.T) {
 	in := DeskInputs{Campaign: &Campaign{ID: "c", Settings: "{}"}}
 	s := NewDeskService()
@@ -1100,11 +1053,8 @@ func TestDeskService_EntriesWaitingNeedsYou(t *testing.T) {
 		return DeskFacts{Entries: &DeskEntriesFacts{Entries: 7, Drafts: 2}}, nil
 	}})
 	d := s.Build(context.Background(), DeskRequest{}, in)
-	if got := vals(*lineByID(d, "entries")); got != "7|2 waiting" {
-		t.Errorf("entries = %q", got)
-	}
-	if len(d.Needs) != 1 || d.Needs[0].Rest != "2 drafts to read" || d.Needs[0].URL != "/campaigns/c/characters/entries" {
-		t.Errorf("needs = %+v", d.Needs)
+	if len(d.Board.Needs) != 1 || d.Board.Needs[0].Rest != "2 drafts to read" || d.Board.Needs[0].URL != "/campaigns/c/characters/entries" {
+		t.Errorf("needs = %+v", d.Board.Needs)
 	}
 	if n := s.NeedsCount(context.Background(), DeskRequest{}, in); n != 1 {
 		t.Errorf("needs count = %d, want 1", n)

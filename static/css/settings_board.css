@@ -1,0 +1,495 @@
+/* Campaign settings' pages under the tabs: the Overview board of tiles, and
+   the Campaign, Connections and Data tabs (a column of settings beside what
+   they change or what is happening). Tool chrome: theme tokens only, light
+   and dark through them, the campaign's colour on what is on or lit. Motion
+   is the press (Settle), the flip's knob and the Glow on a saved tile, all
+   transform, opacity or colour, and Calm and Off drop the travel. */
+
+.sb {
+  --sb-panel: var(--color-bg-secondary);
+  --sb-page: var(--color-bg-primary);
+  --sb-alt: var(--color-bg-tertiary);
+  --sb-line: var(--color-border);
+  --sb-ink: var(--color-text-primary);
+  --sb-mut: var(--color-text-muted);
+  --sb-acc: var(--color-accent);
+  --sb-acc-soft: rgb(var(--color-accent-rgb) / 0.12);
+  --sb-acc-ink: var(--color-accent-link, var(--color-accent));
+  --sb-r: var(--shape-r-panel);
+  margin-top: 1.25rem;
+  color: var(--color-text-body);
+  container: sbpage / inline-size;
+}
+
+/* ---------- The board ---------- */
+.sb-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+  gap: 0.875rem;
+  align-items: stretch;
+}
+.sb-t {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+  min-height: 7rem;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border: var(--shape-edge) solid var(--sb-line);
+  border-radius: 14px;
+  background: var(--sb-panel);
+  box-shadow: var(--elev-resting);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+}
+.sb-w2 { grid-column: span 2; }
+.sb-w4 { grid-column: 1 / -1; }
+.sb-tl {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0.25rem;
+  padding-right: 2rem;
+  font-size: 0.65625rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sb-mut);
+}
+.sb-cnt { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--sb-mut); font-variant-numeric: tabular-nums; }
+.sb-tv {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 1.3125rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--sb-ink);
+}
+.sb-tvt { min-width: 0; overflow-wrap: anywhere; }
+.sb-th { font-size: 0.78125rem; line-height: 1.35; color: var(--sb-mut); }
+.sb-th b { color: var(--sb-ink); font-weight: 600; }
+.sb-grow { flex: 1 1 auto; min-width: 0; }
+
+/* A tile you press: it lifts under the pointer and sinks when pressed. */
+a.sb-t, button.sb-t {
+  cursor: pointer;
+  transition: box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+a.sb-t:hover, button.sb-t:hover { box-shadow: var(--elev-hover); transform: translateY(-1px); }
+a.sb-t:active, button.sb-t:active { transform: translateY(0) scale(0.99); box-shadow: var(--elev-resting); }
+a.sb-t:focus-visible, button.sb-t:focus-visible { outline: 2px solid var(--sb-acc); outline-offset: 2px; }
+.sb-chev { position: absolute; right: 0.75rem; top: 0.875rem; fill: none; stroke: var(--sb-mut); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+a.sb-t:hover .sb-chev { stroke: var(--sb-ink); }
+
+.sb-open {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--shape-r-ctl);
+  color: var(--sb-mut);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.sb-open svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sb-open:hover { background: var(--sb-alt); color: var(--sb-ink); }
+.sb-open:focus-visible { outline: 2px solid var(--sb-acc); outline-offset: 1px; }
+
+/* ---------- A flip ---------- */
+.sb-flip .sb-tl { padding-right: 2.75rem; }
+.sb-g { width: 1.375rem; height: 1.375rem; flex: none; fill: none; stroke: var(--sb-mut); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.sb-flip .sb-g-b, .sb-flip[aria-pressed="true"] .sb-g-a { display: none; }
+.sb-flip[aria-pressed="true"] .sb-g-b { display: block; stroke: var(--sb-acc); }
+.sb-knob {
+  position: absolute;
+  right: 0.75rem;
+  top: 0.75rem;
+  width: 1.875rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: var(--sb-line);
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.sb-knob::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: var(--sb-panel);
+  box-shadow: var(--elev-resting);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+.sb-flip[aria-pressed="true"] { background: color-mix(in srgb, var(--sb-acc) 7%, var(--sb-panel)); border-color: color-mix(in srgb, var(--sb-acc) 45%, var(--sb-line)); }
+.sb-flip[aria-pressed="true"] .sb-knob { background: var(--sb-acc); }
+.sb-flip[aria-pressed="true"] .sb-knob::after { transform: translateX(0.75rem); }
+.sb-flip[aria-disabled="true"], .sb-chip[aria-disabled="true"] { cursor: not-allowed; opacity: 0.6; }
+.sb-flip[aria-disabled="true"]:hover { transform: none; box-shadow: var(--elev-resting); }
+.sb-t[aria-busy="true"], .sb-chip[aria-busy="true"] { cursor: progress; }
+.sb-t[aria-busy="true"] .sb-knob { opacity: 0.6; }
+
+/* ---------- Needs you ---------- */
+.sb-needs { border-color: rgb(var(--color-warn-rgb) / 0.45); }
+.sb-needs-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.sb-needs-list li { display: flex; align-items: center; gap: 0.625rem; padding: 0.375rem 0; border-top: var(--shape-rule) solid var(--sb-line); font-size: 0.8125rem; color: var(--sb-ink); }
+.sb-needs-list li:first-child { border-top: 0; padding-top: 0.125rem; }
+.sb-needs-list b { font-weight: 600; }
+.sb-word {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--sb-acc-ink);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.sb-word:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sb-word:focus-visible { outline: 2px solid var(--sb-acc); outline-offset: 2px; border-radius: var(--shape-r-tag); }
+
+/* ---------- People ---------- */
+.sb-faces { display: flex; flex-wrap: wrap; gap: 0.625rem 0.75rem; margin: 0.25rem 0 0; padding: 0; list-style: none; }
+.sb-face { display: flex; flex-direction: column; align-items: center; gap: 0.1875rem; width: 3.25rem; text-align: center; }
+.sb-face b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78125rem; font-weight: 600; color: var(--sb-ink); }
+.sb-face small { font-size: 0.65625rem; color: var(--sb-mut); white-space: nowrap; }
+.sb-av {
+  --h: var(--sb-acc);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.625rem;
+  height: 2.625rem;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--h) 20%, var(--sb-panel));
+  color: color-mix(in srgb, var(--h) 70%, var(--sb-ink));
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+/* Faces with no picture take a few strengths of the campaign's colour, so a
+   row of letters reads as separate people without adding colours that mean
+   nothing (colour is never decoration). */
+.sb-h1 { --h: color-mix(in srgb, var(--sb-acc) 70%, var(--sb-ink)); }
+.sb-h2 { --h: color-mix(in srgb, var(--sb-acc) 55%, var(--sb-mut)); }
+.sb-h3 { --h: color-mix(in srgb, var(--sb-acc) 45%, var(--sb-ink)); }
+.sb-h4 { --h: var(--sb-mut); }
+.sb-more { background: var(--sb-alt); color: var(--sb-mut); }
+.sb-plus {
+  background: var(--sb-page);
+  border: 1.5px dashed color-mix(in srgb, var(--sb-acc) 50%, var(--sb-line));
+  color: var(--sb-acc-ink);
+  transition: background-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+.sb-plus svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.sb-plus:hover { background: var(--sb-acc-soft); }
+.sb-plus:active { transform: scale(0.94); }
+.sb-plus:focus-visible { outline: 2px solid var(--sb-acc); outline-offset: 2px; }
+.sb-add b { color: var(--sb-acc-ink); }
+
+/* ---------- Game system ---------- */
+.sb-mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9px;
+  background: var(--sb-acc-soft);
+  color: var(--sb-acc-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Features ---------- */
+.sb-chips { display: flex; flex-wrap: wrap; gap: 0.4375rem; }
+.sb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  min-height: 1.875rem;
+  padding: 0 0.75rem 0 0.5625rem;
+  border: var(--shape-edge) solid var(--sb-line);
+  border-radius: 999px;
+  background: var(--sb-page);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+/* The dot says on or off, so the state never rests on colour alone. */
+.sb-chip::before { content: ""; flex: none; width: 0.5rem; height: 0.5rem; border-radius: 50%; border: 1.5px solid var(--sb-mut); }
+.sb-chip:hover { border-color: color-mix(in srgb, var(--sb-acc) 40%, var(--sb-line)); }
+.sb-chip:active { transform: scale(0.96); }
+.sb-chip:focus-visible { outline: 2px solid var(--sb-acc); outline-offset: 2px; }
+.sb-chip[aria-pressed="true"] {
+  background: var(--sb-acc-soft);
+  border-color: color-mix(in srgb, var(--sb-acc) 45%, var(--sb-line));
+  color: var(--sb-acc-ink);
+  font-weight: 600;
+}
+.sb-chip[aria-pressed="true"]::before { background: var(--sb-acc); border-color: var(--sb-acc); }
+
+/* ---------- Look ---------- */
+.sb-lookprev {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 3.125rem;
+  margin: 0.125rem 0 0.25rem;
+  overflow: hidden;
+  border: var(--shape-edge) solid var(--sb-line);
+  border-radius: 9px;
+  background: var(--sb-page);
+  box-shadow: inset 0 3px 0 var(--sb-acc);
+}
+.sb-lookprev b { position: absolute; left: 0.5625rem; top: 0.5625rem; font-size: 1.1875rem; line-height: 1; font-weight: 600; color: var(--sb-ink); text-transform: none; }
+.sb-lookprev span { position: absolute; right: 0.5rem; top: 0.625rem; display: flex; gap: 3px; }
+.sb-lookprev span i { width: 0.5625rem; height: 0.5625rem; border-radius: 50%; background: var(--sb-acc); }
+.sb-lookprev span i:nth-child(2) { background: color-mix(in srgb, var(--sb-acc) 45%, var(--sb-panel)); }
+.sb-lookprev span i:nth-child(3) { background: var(--sb-ink); }
+.sb-lookprev em { position: absolute; left: 0.5625rem; right: 1.375rem; bottom: 1rem; height: 4px; border-radius: 2px; background: var(--sb-line); }
+.sb-lookprev em + em { bottom: 0.5rem; right: 2.25rem; }
+
+/* The Glow: a tile the owner just changed, lit for about a second. */
+.sb-t.is-glow { animation: sb-glow 1.2s var(--ease-out); }
+@keyframes sb-glow {
+  0% { box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.35), var(--elev-resting); }
+  100% { box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0), var(--elev-resting); }
+}
+
+/* ---------- The tabs' pages: settings beside what they change ---------- */
+.sb-split { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: 1.75rem; align-items: start; }
+.sb-aside { display: flex; flex-direction: column; gap: 0.75rem; }
+.sb-h {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 1.625rem 0 0.625rem;
+  font-size: 0.65625rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sb-mut);
+}
+.sb-h::after { content: ""; flex: 1; height: var(--shape-rule); background: var(--sb-line); }
+.sb-main > .sb-h:first-child, .sb-aside > .sb-h:first-child, .sb-box > .sb-h:first-child { margin-top: 0; }
+.sb-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  border: var(--shape-edge) solid var(--sb-line);
+  border-radius: var(--sb-r);
+  background: var(--sb-panel);
+  box-shadow: var(--elev-resting);
+}
+.sb-list {
+  border: var(--shape-edge) solid var(--sb-line);
+  border-radius: var(--sb-r);
+  background: var(--sb-panel);
+  box-shadow: var(--elev-resting);
+}
+.sb-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  min-height: 3.25rem;
+  padding: 0.625rem 1rem;
+  border-top: var(--shape-rule) solid var(--sb-line);
+}
+.sb-row:first-child { border-top: 0; }
+.sb-row-top { align-items: flex-start; }
+.sb-row > label, .sb-row > .sb-rl { flex: 0 0 8rem; font-size: 0.8125rem; font-weight: 600; color: var(--sb-ink); padding-top: 0.125rem; }
+.sb-row > .sb-rv { flex: 1 1 14rem; min-width: 0; }
+.sb-dim { font-size: 0.78125rem; color: var(--sb-mut); }
+.sb-words { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 1.125rem; }
+.sb-fig { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+.sb-fig b { font-size: 1.625rem; font-weight: 600; line-height: 1; color: var(--sb-ink); font-variant-numeric: tabular-nums; }
+.sb-fig span { font-size: 0.78125rem; color: var(--sb-mut); }
+
+/* A field that saves when you leave it. */
+.sb-field {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: var(--shape-edge) solid var(--color-input-border, var(--sb-line));
+  border-radius: var(--shape-r-ctl);
+  background: var(--sb-page);
+  color: var(--sb-ink);
+  font: inherit;
+  font-size: 0.875rem;
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
+.sb-field:hover { border-color: color-mix(in srgb, var(--sb-acc) 35%, var(--sb-line)); }
+.sb-field:focus { outline: none; border-color: var(--sb-acc); box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.18); }
+.sb-field[disabled] { opacity: 0.6; cursor: not-allowed; }
+.sb-field[aria-busy="true"] { cursor: progress; }
+.sb-count-left { display: block; margin-top: 0.25rem; text-align: right; font-size: 0.71875rem; color: var(--sb-mut); font-variant-numeric: tabular-nums; }
+
+/* A two-way choice drawn as two cards, each saying what it means. */
+.sb-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+.sb-choice button {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-height: 4.125rem;
+  padding: 0.8125rem 0.875rem;
+  border: var(--shape-edge) solid var(--sb-line);
+  border-radius: var(--sb-r);
+  background: var(--sb-panel);
+  box-shadow: var(--elev-resting);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+.sb-choice button:hover { border-color: color-mix(in srgb, var(--sb-acc) 40%, var(--sb-line)); }
+.sb-choice button:active { transform: scale(0.99); }
+.sb-choice button:focus-visible { outline: 2px solid var(--sb-acc); outline-offset: 2px; }
+.sb-choice b { display: block; font-weight: 600; color: var(--sb-ink); }
+.sb-choice small { display: block; margin-top: 1px; font-size: 0.78125rem; line-height: 1.35; color: var(--sb-mut); }
+.sb-choice .sb-g { width: 1.375rem; height: 1.375rem; margin-top: 1px; }
+.sb-choice button[aria-pressed="true"] { border-color: var(--sb-acc); background: color-mix(in srgb, var(--sb-acc) 7%, var(--sb-panel)); box-shadow: 0 0 0 1px var(--sb-acc); }
+.sb-choice button[aria-pressed="true"] .sb-g { stroke: var(--sb-acc); }
+.sb-choice button[aria-pressed="true"] b { color: var(--sb-acc-ink); }
+.sb-choice button[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+
+/* The look as a small picture of itself, with the way into the Customizer. */
+.sb-lookrow { display: flex; align-items: center; flex-wrap: wrap; gap: 0.875rem; padding: 0.75rem 1rem; }
+.sb-lookrow .sb-lookprev { width: 5.25rem; height: 3.5rem; margin: 0; flex: none; }
+.sb-strong { font-weight: 600; color: var(--sb-ink); }
+
+/* The campaign's card, as people see it on My campaigns. */
+.sb-pcard { overflow: hidden; border: var(--shape-edge) solid var(--sb-line); border-radius: var(--sb-r); background: var(--sb-panel); box-shadow: var(--elev-hover); }
+.sb-pcard-cover { position: relative; display: block; width: 100%; height: 4rem; object-fit: cover; }
+.sb-pcard-in { position: relative; margin-top: -1.125rem; padding: 0 0.875rem 0.875rem; }
+.sb-pcard .stg-emblem { width: 2.25rem; height: 2.25rem; border-radius: 9px; font-size: 1.0625rem; }
+.sb-pname { margin: 0.5rem 0 0; font-weight: 700; color: var(--sb-ink); overflow-wrap: anywhere; }
+.sb-pdesc { margin: 0.125rem 0 0; font-size: 0.78125rem; color: var(--sb-mut); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sb-pdesc:empty { display: none; }
+.sb-prow { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.625rem; }
+
+/* Connections: each one a card with its own health. */
+.sb-conns { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.875rem; align-items: start; }
+.sb-conn-h { display: flex; align-items: center; gap: 0.75rem; }
+.sb-conn-h .sb-grow > b { display: block; font-weight: 600; color: var(--sb-ink); }
+
+/* The Danger zone: red only in its label and edge. */
+.sb-danger .sb-h { color: rgb(var(--color-bad-rgb)); }
+.sb-danger .sb-h::after { background: rgb(var(--color-bad-rgb) / 0.3); }
+.sb-danger .sb-list { border-color: rgb(var(--color-bad-rgb) / 0.3); }
+
+/* Rows the desk draws (the Customize areas, the preview words), as a list. */
+.sb .set-list.sb-list { margin-top: 0.625rem; }
+.sb .sb-list > .set-ln { padding: 0.375rem 1rem; min-height: 2.75rem; border-top: var(--shape-rule) solid var(--sb-line); }
+.sb .sb-list > .set-ln:first-child { border-top: 0; }
+.sb .sb-preview > .set-ln { grid-template-columns: 4.5rem minmax(0, 1fr); }
+.sb-choicerow { position: relative; }
+.sb-choicerow > .desk-acts, .sb-row > .desk-acts { position: absolute; right: 0.5rem; top: -1.625rem; }
+.sb-row { position: relative; }
+.sb-row > .desk-acts { top: 0.5rem; }
+.sb-row.is-glow, .sb-choicerow.is-glow .sb-choice button[aria-pressed="true"], .sb-chip.is-glow { animation: sb-glow 1.2s var(--ease-out); }
+.sb-avrow { display: flex; }
+.sb-av-sm { width: 1.375rem; height: 1.375rem; margin-right: -0.3125rem; font-size: 0.5625rem; box-shadow: 0 0 0 2px var(--sb-panel); }
+.sb-pcard .stg-cover-drawn { position: static; }
+
+/* A step in the Danger zone: the word opens what happens and the button. */
+.sb-step { display: block; }
+.sb-step > summary { list-style: none; width: max-content; }
+.sb-step > summary::-webkit-details-marker { display: none; }
+.sb-step-in { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; margin-top: 0.5rem; max-width: 34rem; }
+.sb-bad { color: rgb(var(--color-bad-rgb)); }
+.sb-delete {
+  min-height: 2.25rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: var(--shape-r-ctl);
+  background: rgb(var(--color-bad-rgb));
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--dur-standard) var(--ease-out), opacity var(--dur-micro) var(--ease-out);
+}
+/* Deleting presses deeper and lets go slower: the weight matches what's at stake. */
+.sb-delete:active:not(:disabled) { transform: scale(0.96); transition-duration: var(--dur-micro); }
+.sb-delete:focus-visible { outline: 2px solid rgb(var(--color-bad-rgb)); outline-offset: 2px; }
+.sb-delete:disabled { opacity: 0.45; cursor: not-allowed; }
+.sb-fold > summary { list-style: none; width: max-content; }
+.sb-fold > summary::-webkit-details-marker { display: none; }
+.sb-fold[open] > summary { margin-bottom: 0.25rem; }
+.sb-section { min-width: 0; }
+.sb code { font-size: 0.78125rem; padding: 0 0.25rem; border-radius: var(--shape-r-tag); background: var(--sb-alt); }
+
+/* ---------- Narrow pages ---------- */
+@container sbpage (max-width: 52rem) {
+  .sb-split { grid-template-columns: minmax(0, 1fr); }
+}
+@container sbpage (max-width: 40rem) {
+  .sb-board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+  .sb-t { min-height: 6.5rem; }
+  .sb-tv { font-size: 1.1875rem; }
+  .sb-face { width: 2.875rem; }
+  /* The flip's knob moves under the words, so a long label never meets it. */
+  .sb-flip .sb-tl { padding-right: 0; }
+  .sb-flip { padding-bottom: 2.5rem; }
+  .sb-flip .sb-knob { top: auto; bottom: 0.75rem; }
+  .sb-choice { grid-template-columns: minmax(0, 1fr); }
+  .sb-row > label, .sb-row > .sb-rl { flex-basis: 100%; }
+}
+@container sbpage (max-width: 26rem) {
+  .sb-w2 { grid-column: 1 / -1; }
+}
+/* Touch gets 44. A page as narrow as a phone is a touch screen in practice,
+   so there every control is at least 44 tall, as on any touch screen; with a
+   mouse on a wide page they keep their size. */
+@container sbpage (max-width: 40rem) {
+  .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
+  .sb-av { width: 2.75rem; height: 2.75rem; }
+  .sb-chip, .sb-word, .sb-delete, .sb-field, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+}
+@media (pointer: coarse) {
+  .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
+  .sb-av { width: 2.75rem; height: 2.75rem; }
+  .sb-chip, .sb-word, .sb-delete, .sb-field, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+}
+
+/* Calm keeps the colours and drops the travel; Off keeps neither. */
+html[data-motion="calm"] .sb-t, html[data-motion="calm"] .sb-chip,
+html[data-motion="calm"] .sb-choice button, html[data-motion="calm"] .sb-plus { transform: none !important; }
+html[data-motion="calm"] .sb-knob::after, html[data-motion="off"] .sb-knob::after { transition: none; }
+html[data-motion="off"] .sb-t, html[data-motion="off"] .sb-chip, html[data-motion="off"] .sb-choice button,
+html[data-motion="off"] .sb-plus, html[data-motion="off"] .sb-open, html[data-motion="off"] .sb-field, html[data-motion="off"] .sb-knob {
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+}

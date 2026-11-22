@@ -45,7 +45,7 @@ func (h *Handler) SetEntityViewGuard(g EntityViewGuard) {
 	h.entityGuard = g
 }
 
-// Activity redirects to the unified settings page Activity tab.
+// Activity redirects to the activity log on Campaign settings' Data tab.
 // GET /campaigns/:id/activity
 func (h *Handler) Activity(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -53,7 +53,7 @@ func (h *Handler) Activity(c *echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
 	}
 
-	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/settings?tab=activity", cc.Campaign.ID))
+	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/data#activity", cc.Campaign.ID))
 }
 
 // ActivityFragment returns an HTMX fragment with stats and timeline for the

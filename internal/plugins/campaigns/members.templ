@@ -14,7 +14,7 @@ import (
 // manages members, invites and ownership.
 templ CampaignMembersPage(cc *CampaignContext, v MemberListView, transfer *OwnershipTransfer, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
-		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people"}) {
+		@layouts.ManageFrame(layouts.ManageFrameData{Title: "People", Line: "people", Landing: true}) {
 			@peopleSections(cc, v, transfer, smtpConfigured)
 		}
 	}

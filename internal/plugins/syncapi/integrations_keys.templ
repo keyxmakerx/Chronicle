@@ -14,7 +14,7 @@ import (
 // IntegrationsKeysFragmentTempl renders the full keys section: connection status,
 // key cards, and the create form. Loaded via HTMX into the API keys tab.
 templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *APIStats, csrfToken, baseURL string) {
-	<div class="space-y-6">
+	<div class="space-y-6 keys-touch">
 		// Connection Status — per-key health at a glance.
 		if len(keys) > 0 {
 			<div class="card p-4">
@@ -60,7 +60,7 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 		<div class="card p-4">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="text-sm font-semibold text-fg">API Keys</h2>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) } class="text-xs text-fg-muted hover:text-accent">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) } class="inline-flex items-center min-h-11 text-xs text-fg-muted hover:text-accent">
 					View All <i class="fa-solid fa-arrow-right text-[10px] ml-0.5"></i>
 				</a>
 			</div>
@@ -80,7 +80,7 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 
 		// Create Key form.
 		<div class="card p-4" x-data="{ expanded: false }">
-			<button @click="expanded = !expanded" class="flex items-center justify-between w-full text-left">
+			<button @click="expanded = !expanded" class="flex items-center justify-between w-full min-h-11 text-left">
 				<h2 class="text-sm font-semibold text-fg"><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create New Key</h2>
 				<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="expanded && 'rotate-180'"></i>
 			</button>
@@ -154,26 +154,29 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 	</div>
 }
 
-// integrationsKeyCard renders a compact key card for the API keys tab.
+// integrationsKeyCard renders a compact key card for the API keys tab. The
+// card wraps rather than squeezing: when the name and its details need the
+// width, as on a phone where the buttons are 44 tall, Active and Revoke take
+// their own line at the right, and the name wraps instead of being cut.
 templ integrationsKeyCard(campaignID string, k APIKey, csrfToken string) {
-	<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
-		<div class="flex items-center gap-3 flex-1 min-w-0">
+	<div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 rounded-lg bg-surface-alt" data-testid="key-row">
+		<div class="flex items-center gap-3 flex-1 basis-56 min-w-0">
 			<span class={ "w-2.5 h-2.5 rounded-full shrink-0", connectionDotColor(k) }></span>
 			<div class="min-w-0">
-				<div class="flex items-center gap-2">
-					<span class="text-sm font-medium text-fg truncate">{ k.Name }</span>
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<span class="min-w-0 text-sm font-medium text-fg break-words">{ k.Name }</span>
 					if k.VTTTag != nil {
 						<span class="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">{ *k.VTTTag }</span>
 					}
 				</div>
-				<div class="flex items-center gap-2 mt-0.5">
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
 					<span class="text-xs text-fg-muted font-mono">{ k.KeyPrefix }...</span>
 					<span class="text-xs text-fg-muted">{ formatPermissions(k.Permissions) }</span>
 					<span class="text-xs text-fg-muted">{ connectionStatusText(k) }</span>
 				</div>
 			</div>
 		</div>
-		<div class="flex items-center gap-1.5 ml-3 shrink-0">
+		<div class="flex items-center gap-1.5 ml-auto shrink-0">
 			// Toggle active/inactive.
 			<form method="POST"
 				hx-put={ fmt.Sprintf("/campaigns/%s/api-keys/%d/toggle", campaignID, k.ID) }
@@ -201,7 +204,7 @@ templ integrationsKeyCard(campaignID string, k APIKey, csrfToken string) {
 				hx-confirm="Revoke this API key? This cannot be undone."
 				class="inline">
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<button type="submit" class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 px-1.5 py-1" title="Revoke">
+				<button type="submit" class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 px-1.5 py-1" title="Revoke" aria-label="Revoke">
 					<i class="fa-solid fa-trash"></i>
 				</button>
 			</form>

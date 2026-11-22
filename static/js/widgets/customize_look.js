@@ -582,7 +582,9 @@
     var memo = {};          // custom colours picked during this visit, per swatch group
     var undoDraft = null;   // what Discard threw away, for its Undo
     var uploaded = {};      // picture names stored during this visit, not yet known to be in use
-    var ui = { room:'frame', section:'brand', last:{}, viewAs:'owner', zoom:'site', page:'dash', ptheme:null, strip:true, pageAuto:true };
+    // panel: the settings panel is out; looks: it shows the starting looks instead
+    // of a part's settings; held: the example shows what is saved.
+    var ui = { room:'frame', section:'brand', last:{}, viewAs:'owner', zoom:'site', page:'dash', ptheme:null, pageAuto:true, panel:false, looks:false, held:false };
 
     // Colours compare without regard to case, as the server's own check of a
     // saved look does, so a colour stored as #9A4A26 still reads as the look's
@@ -724,12 +726,77 @@
     function crow(id, label, line, body){
       return '<div class="fld crow"><div class="lab" id="' + id + '-l">' + esc(label) + '<small>' + esc(line) + '</small></div><div class="ctl">' + body + '</div></div>';
     }
-    function opts(name, k, labelledby, items){
-      return '<div class="opts" role="radiogroup" aria-labelledby="' + labelledby + '">' + items.map(function(it){
+    // A choice shown as words, each with a small sample of what it looks like
+    // when `kind` names one (SMP below): the options become little cards.
+    function opts(name, k, labelledby, items, kind){
+      var withSmp = !!(kind && SMP[kind]);
+      return '<div class="opts' + (withSmp ? ' smp-opts' : '') + '" role="radiogroup" aria-labelledby="' + labelledby + '">' + items.map(function(it){
         return '<label class="opt"' + (it[4] ? ' data-hc="' + it[4] + '"' : '') + '><input type="radio" name="' + name + '" value="' + it[0] + '" data-k="' + k + '"' + (it[3] ? ' disabled' : '') + '><span>' +
-          (it[2] ? '<i class="chip" style="--c:' + it[2] + '"></i>' : '') + esc(it[1]) + (it[5] ? '<em class="soon">' + esc(it[5]) + '</em>' : '') + '</span></label>';
+          (withSmp ? SMP[kind](it[0], it) : '') + (it[2] ? '<i class="chip" style="--c:' + it[2] + '"></i>' : '') +
+          '<b class="ot">' + esc(it[1]) + '</b>' + (it[5] ? '<em class="soon">' + esc(it[5]) + '</em>' : '') + '</span></label>';
       }).join('') + '</div>';
     }
+    // Samples for the choices that are words. Each is a few shapes: the part
+    // of the site the choice changes, drawn the way that choice draws it. They
+    // wear the draft's own colours and type (class pv) where the choice leaves
+    // those alone, and fixed ones where the choice is the colour.
+    function sm(cls, inner, style){ return '<i class="smp pv ' + cls + '"' + (style ? ' style="' + style + '"' : '') + ' aria-hidden="true">' + (inner || '') + '</i>'; }
+    function easePath(ease){
+      var m = /cubic-bezier\(([^)]+)\)/.exec(ease), v = m ? m[1].split(',').map(parseFloat) : [.2, .8, .2, 1];
+      return '<svg class="smp-curve" viewBox="0 0 32 20" aria-hidden="true"><path d="M2 18 C ' + (2 + v[0] * 28).toFixed(1) + ' ' + (18 - v[1] * 16).toFixed(1) + ', ' + (2 + v[2] * 28).toFixed(1) + ' ' + (18 - v[3] * 16).toFixed(1) + ', 30 2"/></svg>';
+    }
+    // Light-page paper and ink of each sheet style, for its sample card.
+    var SHEET_SMP = {
+      modern:['#ffffff', '#111827', '#6366f1'], parchment:['#f1e4c3', '#4a3520', '#8f2d2d'], ledger:['#f4f1e6', '#1f2d24', '#2f7d4f'], journal:['#ece3cf', '#3b2f1f', '#9a4a26'],
+      vellum:['#f7efdc', '#33281a', '#8a6a1f'], night:['#141830', '#e8e6f5', '#facc15'], deck:['#fdf8ee', '#7f1d1d', '#b45309'], pencil:['#f7f7f4', '#4b5563', '#6b7280'],
+      starship:['#0b1624', '#9ee6ff', '#22d3ee'], neon:['#0a0a12', '#7cff9f', '#ff4fd8'], runes:['#2a2e36', '#d6d3c8', '#94a3b8'], brass:['#2b2118', '#e9c987', '#b7791f']
+    };
+    var SMP = {
+      hbar:function(v){
+        var h = { solid:'#1f2937', gradient:'linear-gradient(90deg, #0f172a, #3b1d5e)', moving:'repeating-linear-gradient(90deg, #0f172a 0 10px, #3b1d5e 10px 20px)', image:'var(--smp-dusk) center / cover', sky:SKY_NIGHT }[v];
+        return sm('smp-page', '<b class="smp-h" style="background:' + h + '"></b><b class="smp-l"></b><b class="smp-l s"></b>');
+      },
+      hdir:function(v){
+        return sm('smp-page', '<b class="smp-h t" style="background:linear-gradient(' + HDR_DIRS[v][0] + ', #0f172a, #3b1d5e)"></b>');
+      },
+      hscrim:function(v){
+        return sm('smp-page', '<b class="smp-h t" style="background:var(--smp-dusk) center / cover"><b class="smp-sc" style="opacity:' + SCRIMS[v][0] + '"></b></b>');
+      },
+      hheight:function(v){ return sm('smp-page', '<b class="smp-h" style="background:#1f2937;height:' + (v === 'tall' ? 15 : 7) + 'px"></b><b class="smp-l"></b>'); },
+      corner:function(v){
+        var bn = v === 'banner';
+        return sm('smp-sb', '<b class="smp-cn' + (bn ? ' b' : '') + '">' + (bn ? '' : '<b class="smp-lg"></b>') + '<b class="smp-nm"></b>' + (v === 'subtitle' ? '<b class="smp-su"></b>' : '') + '</b><b class="smp-l"></b><b class="smp-l"></b>');
+      },
+      glow:function(v){ return sm('smp-sb smp-glow', '<b class="smp-gl" style="--g:' + (v === 'own' ? '#ec4899' : 'var(--p-accent)') + '"></b>'); },
+      strength:function(v){ return sm('smp-sb', '<b class="smp-row ' + v + '"><b class="smp-rail"></b></b><b class="smp-l"></b>'); },
+      pagename:function(v){ return sm('smp-sb', '<b class="smp-row on"><b class="smp-nm"></b>' + (v === 'row' ? '<b class="smp-pn"></b>' : '') + '</b><b class="smp-l"></b>'); },
+      contrast:function(v){ return sm('smp-aa', 'Aa<small>small print</small>', v === 'high' ? '--ink:var(--p-text);--ink2:var(--p-body)' : '--ink:var(--p-body);--ink2:var(--p-muted)'); },
+      scale:function(v){ return sm('smp-aa', 'Aa', 'font-size:' + (SCALES[v][0] * 1.25).toFixed(1) + 'px'); },
+      iconAmount:function(v){
+        var ic = '<b class="smp-ic"></b>';
+        return sm('smp-page', '<b class="smp-r">' + (v === 'few' ? '' : ic) + '<b class="smp-l"></b></b><b class="smp-r"><b class="smp-btn">' + (v === 'all' ? ic : '') + '</b></b>');
+      },
+      speed:function(v){ return sm('smp-curvebox', easePath(SPEEDS[v].ease) + '<small>' + SPEEDS[v].d + ' ms</small>'); },
+      pageLook:function(v){
+        return v === 'annals' ? sm('smp-page smp-mat', '<b class="smp-hd"></b><b class="smp-rule"></b><b class="smp-r"><b class="smp-l"></b></b><b class="smp-r"><b class="smp-l s"></b></b>')
+          : sm('smp-page smp-std', '<b class="smp-card"><b class="smp-hd"></b><b class="smp-l"></b><b class="smp-l s"></b></b>');
+      },
+      kit:function(v){
+        if (v === 'same') return sm('smp-same', 'As pages');
+        var K = KIT_PAGES[v], page = K ? K.page[0] : '#f9fafb', paper = K ? K.paper[0] : '#ffffff';
+        return '<i class="smp pv smp-kit" data-kit="' + v + '" style="--kp:' + page + ';--kq:' + paper + '" aria-hidden="true"><b class="smp-kc"><b class="smp-kh">Aa</b><b class="smp-l"></b></b></i>';
+      },
+      entrance:function(v){ return sm('smp-ent smp-ent-' + v, '<b class="smp-eb"></b>'); },
+      sheet:function(v){
+        var c = SHEET_SMP[v] || SHEET_SMP.modern;
+        return '<i class="smp smp-sheet" style="--sp:' + c[0] + ';--si:' + c[1] + ';--sa:' + c[2] + '" aria-hidden="true"><b class="smp-sh">Aa</b><b class="smp-sl"></b><b class="smp-sl s"></b></i>';
+      },
+      craft:function(v){ return '<i class="smp smp-craft smp-craft-' + v + '" aria-hidden="true"><b></b><b></b><b></b></i>'; },
+      builder:function(v){ return '<i class="smp smp-bld smp-bld-' + v + '" aria-hidden="true"><b class="smp-bt"></b><b class="smp-l"></b><b class="smp-l s"></b></i>'; },
+      tone:function(){ return ''; },
+      menu:function(){ return ''; },
+      access:function(v){ return '<i class="smp smp-acc" aria-hidden="true">' + IC({ owner:'i-lock', codm:'i-mask', everyone:'i-users' }[v]) + '</i>'; }
+    };
     // The two Icons choices. Ids match the server's AppearanceIconAmounts and
     // AppearanceIconColours, in that order.
     var ICON_AMOUNTS = [['few', 'Few'], ['names', 'Beside names'], ['all', 'Everywhere']];
@@ -770,13 +837,13 @@
     function tilesBody(){
       return BODY_FONTS.map(function(f){
         return '<label class="tile ft"><input type="radio" name="t-body" value="' + f[0] + '" data-k="type.body"><span class="tb"><span class="tck">' + IC('i-check') + '</span>' +
-          '<span class="ft-aa" style="font-family:' + esc(f[2]) + '" aria-hidden="true">Aa</span><span class="tn">' + esc(f[1]) + '</span><span class="tk">' + esc(f[3]) + '</span></span></label>';
+          '<span class="ft-aa" style="font-family:' + esc(f[2]) + '" aria-hidden="true">Aa</span><span class="tn" style="font-family:' + esc(f[2]) + '">' + esc(f[1]) + '</span><span class="tk">' + esc(f[3]) + '</span></span></label>';
       }).join('');
     }
     function tilesHead(){
       return HEAD_FONTS.map(function(f){
         return '<label class="tile ft' + (f[0] === 'same' ? ' wide' : '') + '"><input type="radio" name="t-head" value="' + f[0] + '" data-k="type.heading"><span class="tb"><span class="tck">' + IC('i-check') + '</span>' +
-          '<span class="ft-aa"' + (f[2] ? ' style="font-family:' + esc(f[2]) + ';font-weight:' + f[4] + '"' : ' data-samefont') + ' aria-hidden="true">Aa</span><span class="tn">' + esc(f[1]) + '</span><span class="tk">' + esc(f[3]) + '</span></span></label>';
+          '<span class="ft-aa"' + (f[2] ? ' style="font-family:' + esc(f[2]) + ';font-weight:' + f[4] + '"' : ' data-samefont') + ' aria-hidden="true">Aa</span><span class="tn"' + (f[2] ? ' style="font-family:' + esc(f[2]) + ';font-weight:' + f[4] + '"' : ' data-samefont') + '>' + esc(f[1]) + '</span><span class="tk">' + esc(f[3]) + '</span></span></label>';
       }).join('');
     }
     function tilesBtn(){
@@ -870,7 +937,7 @@
     function menuColourOpts(){
       return opts('sb-col', 'colours.sidebar', 'sb-col-l', MENU_COLOURS.map(function(c){
         return [c[0], c[1], c[0] === 'charcoal' ? SIDEBARS.charcoal.bg : c[0] === 'ink' ? SIDEBARS.ink.bg : '#2a2e3a', null, 'menu:' + c[0]];
-      }));
+      }), 'menu');
     }
     function panelBody(id){
       if (id === 'brand') return (
@@ -884,17 +951,17 @@
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
-          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return [m[0], m[1]]; })) +
+          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return [m[0], m[1]]; }), 'hbar') +
           '<div class="ctl" id="h-solid"><span class="hint" id="h-solid-l">Colour</span>' + swatches('hsolid', 'h-solid-l') + '</div>' +
           '<div class="ctl" id="h-grad"><span class="hint" id="h-from-l">From</span>' + swatches('hfrom', 'h-from-l') + '<span class="hint" id="h-to-l">To</span>' + swatches('hto', 'h-to-l') +
-            '<span class="hint" id="h-dir-l">Direction</span>' + opts('h-dir', 'header.dir', 'h-dir-l', Object.keys(HDR_DIRS).map(function(k){ return [k, HDR_DIRS[k][1]]; })) +
+            '<span class="hint" id="h-dir-l">Direction</span>' + opts('h-dir', 'header.dir', 'h-dir-l', Object.keys(HDR_DIRS).map(function(k){ return [k, HDR_DIRS[k][1]]; }), 'hdir') +
             '<p class="hint" id="h-anim-h">The two colours drift slowly from side to side. They slow to a stop when nobody is using the page, and hold still for anyone who asks for less motion.</p></div>' +
           '<div class="ctl" id="h-img">' + imgSlot('header.image', '', 'Replace', 'Still or animated, 1.5 MB at most. The shade keeps the header’s words readable.') +
-            '<span class="hint" id="h-scrim-l">Shade</span>' + opts('h-scrim', 'header.scrim', 'h-scrim-l', Object.keys(SCRIMS).map(function(k){ return [k, SCRIMS[k][1]]; })) + '</div>' +
+            '<span class="hint" id="h-scrim-l">Shade</span>' + opts('h-scrim', 'header.scrim', 'h-scrim-l', Object.keys(SCRIMS).map(function(k){ return [k, SCRIMS[k][1]]; }), 'hscrim') + '</div>' +
           '<div class="ctl" id="h-sky"><p class="hint">The animated sky from your calendar, the same one that sits over the month. It follows the world’s date, time of day and weather by itself, so there is nothing to set. Slow devices get the basic sky.</p>' +
             (SKY.calendarId ? '' : '<p class="note"><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span>Your campaign has no calendar yet, so the header shows a still night sky until it has one.</span></p>') + '</div>' +
           '<p class="hint">Words and buttons switch to white on dark backgrounds and pictures by themselves.</p>') +
-        fld('h-height', 'Height', 'How tall the bar is', opts('h-height', 'header.height', 'h-height-l', HDR_HEIGHTS) +
+        fld('h-height', 'Height', 'How tall the bar is', opts('h-height', 'header.height', 'h-height-l', HDR_HEIGHTS, 'hheight') +
           '<p class="hint">Slim is today’s bar. Tall gives pictures and moving colour more room.</p>') +
         fld('h-w', 'Widgets', 'Up to ' + WIDGET_SLOTS, '<p class="hint" id="w-full" aria-live="polite"></p><div class="wl" id="wl" aria-labelledby="h-w-l"></div>' +
           '<p class="hint">On a phone the bar shows the first widget and a +N button that opens the rest.</p>' +
@@ -903,12 +970,12 @@
         fld('sb-col', 'Colour', 'The menu stays dark', menuColourOpts() +
           '<div class="ctl" id="sb-own"><span class="hint" id="sb-own-l">Your colour</span>' + swatches('sbown', 'sb-own-l') + '<p class="note" id="sb-own-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span></span></p></div>' +
           '<p class="hint">The words in the menu pick their own shade. A whole look from the top of the page sets this too; changing it here makes the look Custom.</p>') +
-        fld('sb-corner', 'Top-left corner', 'Above the menu', opts('sb-corner', 'sidebar.corner', 'sb-corner-l', CORNERS.map(function(c){ return [c[0], c[1]]; })) +
+        fld('sb-corner', 'Top-left corner', 'Above the menu', opts('sb-corner', 'sidebar.corner', 'sb-corner-l', CORNERS.map(function(c){ return [c[0], c[1]]; }), 'corner') +
           '<div class="ctl" id="sb-sub-wrap"><label class="hint" for="sb-sub">Subtitle</label><input class="inp" id="sb-sub" type="text" maxlength="40" data-k="sidebar.subtitle" placeholder="The Drowned Crown, session 23" aria-describedby="sb-sub-c">' +
             '<div class="row-h"><span class="hint">One short line under the name. Up to 40 characters.</span><span class="cnt" id="sb-sub-c"></span></div></div>' +
           '<div class="ctl" id="sb-bnr-wrap">' + imgSlot('sidebar.banner', '', 'Upload', 'A picture behind the name, up to 1.5 MB. A soft shade keeps the name readable.') + '</div>' +
           '<p class="hint">Clicking the corner still goes to the dashboard. When the menu peeks out, only the logo shows.</p>') +
-        fld('sb-glow', 'Peek glow', 'When the menu is hidden', opts('sb-glow', 'sidebar.glow', 'sb-glow-l', GLOWS.map(function(g){ return [g[0], g[1]]; })) +
+        fld('sb-glow', 'Peek glow', 'When the menu is hidden', opts('sb-glow', 'sidebar.glow', 'sb-glow-l', GLOWS.map(function(g){ return [g[0], g[1]]; }), 'glow') +
           '<div class="ctl" id="sb-glow-own"><span class="hint" id="sb-glowc-l">Glow colour</span>' + swatches('glow', 'sb-glowc-l') + '</div>' +
           '<div class="glow-demo" aria-hidden="true"><i id="sb-glow-bar"></i><span>The light that grows when you rest the pointer on the left edge</span></div>' +
           '<p class="hint">Hide the menu with the arrow at its foot, then rest the pointer on the window’s left edge to see it.</p>'));
@@ -917,9 +984,9 @@
           '<div role="radiogroup" aria-labelledby="n-style-l" class="ctl"><p class="grp-l">Moving</p><div class="tiles two">' + tilesNav('moving') + '</div>' +
           '<p class="grp-l">Still</p><div class="tiles two">' + tilesNav('still') + '</div></div>' +
           '<p class="hint">Moving styles play in the preview; the samples here play when you point at them.</p>') +
-        fld('n-str', 'Strength', null, opts('n-str', 'nav.strength', 'n-str-l', [['calm', 'Calm'], ['lively', 'Lively']]) +
+        fld('n-str', 'Strength', null, opts('n-str', 'nav.strength', 'n-str-l', [['calm', 'Calm'], ['lively', 'Lively']], 'strength') +
           '<p class="hint">Calm is slower and softer. Lively is brighter and a little quicker.</p>') +
-        fld('n-pn', 'Page name', null, opts('n-pn', 'nav.pageName', 'n-pn-l', [['hidden', 'Hidden'], ['row', 'In the row']]) +
+        fld('n-pn', 'Page name', null, opts('n-pn', 'nav.pageName', 'n-pn-l', [['hidden', 'Hidden'], ['row', 'In the row']], 'pagename') +
           '<p class="hint">Shows the page you are on beside its menu entry, like Emberfall beside Cities.</p>') +
         fld('n-edit', 'Menu items', null, '<button type="button" class="lnk" id="n-edit">' + IC('i-pencil') + 'Edit the menu’s items</button>' +
           '<p class="hint">Reorder, pin, hide and group them with the pencil beside your campaign’s name at the top of the menu.</p>') +
@@ -930,26 +997,26 @@
         crow('s1', GROUPS.s1.label, 'Page title rules, and calendar events without their own colour', swatches('s1', 's1-l')) +
         crow('s2', GROUPS.s2.label, 'Tags without a colour of their own, timeline marks', swatches('s2', 's2-l')) +
         '</div>' +
-        fld('c-page', 'Page tone', null, opts('c-page', 'colours.page', 'c-page-l', [['cool', 'Cool', '#eef0f4'], ['warm', 'Warm', '#f1ebe3'], ['paper', 'Paper', '#eadfc6']])) +
-        fld('c-con', 'Text contrast', null, opts('c-con', 'colours.contrast', 'c-con-l', [['standard', 'Standard'], ['high', 'High']]) +
+        fld('c-page', 'Page tone', null, opts('c-page', 'colours.page', 'c-page-l', [['cool', 'Cool', '#eef0f4'], ['warm', 'Warm', '#f1ebe3'], ['paper', 'Paper', '#eadfc6']], 'tone')) +
+        fld('c-con', 'Text contrast', null, opts('c-con', 'colours.contrast', 'c-con-l', [['standard', 'Standard'], ['high', 'High']], 'contrast') +
           '<p class="hint">High makes body text and small print darker, and borders firmer.</p>') +
         '<p class="hint">Every colour keeps its words readable: Chronicle deepens or lightens a shade where words sit on it, and says so here. On dark pages and in the menu, links always use a lighter shade.</p>');
       if (id === 'type') return (
         fld('t-body', 'Text', 'For reading', '<div class="tiles two" role="radiogroup" aria-labelledby="t-body-l">' + tilesBody() + '</div>') +
         fld('t-head', 'Headings', 'Titles and names', '<div class="tiles two" role="radiogroup" aria-labelledby="t-head-l">' + tilesHead() + '</div>') +
-        fld('t-scale', 'Size', null, opts('t-scale', 'type.scale', 't-scale-l', Object.keys(SCALES).map(function(k){ return [k, SCALES[k][1]]; })) +
+        fld('t-scale', 'Size', null, opts('t-scale', 'type.scale', 't-scale-l', Object.keys(SCALES).map(function(k){ return [k, SCALES[k][1]]; }), 'scale') +
           '<p class="hint">Compact fits more on a screen. Roomy is easier on tired eyes. Headings grow with the text.</p>'));
       if (id === 'buttons') return (
         fld('b-style', 'Style', 'Shape and motion', '<div class="tiles two" role="radiogroup" aria-labelledby="b-style-l">' + tilesBtn() + '</div>' +
           '<p class="hint">Point at a sample and press it. The buttons in the preview use your choice.</p>'));
       if (id === 'icons') return (
-        fld('i-amount', 'How many icons', null, opts('i-amount', 'icons.amount', 'i-amount-l', ICON_AMOUNTS) +
+        fld('i-amount', 'How many icons', null, opts('i-amount', 'icons.amount', 'i-amount-l', ICON_AMOUNTS, 'iconAmount') +
           '<p class="hint">Few is how Chronicle looks today. Beside names adds each category’s icon in front of a page’s name. Everywhere also keeps the icon on buttons and menu rows that have a word.</p>') +
         fld('i-colour', 'Icon colour', null, iconColourOpts() +
           '<p class="hint">One choice colours every icon that stands for a category.</p>'));
       if (id === 'motion') return (
         fld('m-elev', 'Elevation', 'How far cards lift', '<div class="tiles rows" role="radiogroup" aria-labelledby="m-elev-l">' + tilesElev() + '</div>') +
-        fld('m-speed', 'Motion', 'How quickly things move', opts('m-speed', 'motion.speed', 'm-speed-l', Object.keys(SPEEDS).map(function(k){ return [k, SPEEDS[k].name]; })) +
+        fld('m-speed', 'Motion', 'How quickly things move', opts('m-speed', 'motion.speed', 'm-speed-l', Object.keys(SPEEDS).map(function(k){ return [k, SPEEDS[k].name]; }), 'speed') +
           '<p class="hint">Point at the cards and buttons in the preview to feel it.</p>') +
         fld('m-mom', 'Moments', 'Small flourishes, each off until you turn it on',
           [['sheen', 'Page sheen', 'An accent sweep crosses a page’s header as it opens.'], ['cascade', 'List cascade', 'The cards in a list come in one after another.'], ['spark', 'Save spark', 'A few dots in the accent fly out when something saves.']].map(function(m){
@@ -958,14 +1025,14 @@
         fld('m-red', 'For everyone', null, '<label class="switch"><input type="checkbox" id="m-reduce" data-k="motion.reduceAll"><span class="trk"><span class="knob"></span></span>' +
           '<span class="sw-t"><b>Reduce motion for everyone in this campaign</b>Things fade instead of moving, the header holds still and the menu highlight stays still.</span></label>'));
       if (id === 'page') return (
-        fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS) +
+        fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS, 'pageLook') +
           '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>') +
-        fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS) +
+        fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS, 'kit') +
           '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look. The example shows one of your own pages in the kit you press.' + kfBrushHint() + '</p>') +
-        fld('pg-open', 'How cards open', 'Cards and panels that come out of something you click', '<div id="pg-open-pick">' + opts('pg-open', 'motion.entrance', 'pg-open-l', ENTRANCES) +
+        fld('pg-open', 'How cards open', 'Cards and panels that come out of something you click', '<div id="pg-open-pick">' + opts('pg-open', 'motion.entrance', 'pg-open-l', ENTRANCES, 'entrance') +
           '<p class="hint">Grow is the base. Bloom comes into focus from a soft blur, Unfold is revealed downward from its top edge and Drop is set down with weight. Menus, pickers and dialogs keep their quick moves, and Calm turns each into a short fade.</p></div>' +
           '<p class="hint" id="pg-open-kit" hidden></p>') +
-        fld('pg-dmkit', 'DM Screen look', 'What the DM Screen wears for you and your co-DMs', opts('pg-dmkit', 'page.dmKit', 'pg-dmkit-l', [['same', 'Same as pages']].concat(STYLE_KITS)) +
+        fld('pg-dmkit', 'DM Screen look', 'What the DM Screen wears for you and your co-DMs', opts('pg-dmkit', 'page.dmKit', 'pg-dmkit-l', [['same', 'Same as pages']].concat(STYLE_KITS), 'kit') +
           '<p class="hint">Give the DM Screen its own kit so it stands apart from the pages at the table. Players never see the DM Screen.</p>'));
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
@@ -978,11 +1045,11 @@
         fld('em-test', 'Send me a test', 'A sample game night invite', '<div class="img-row"><button type="button" class="czb czb-s czb-sm" id="em-test-btn">' + IC('i-mail') + 'Send me a test</button></div>' +
           '<p class="hint" id="em-test-h">Sends a sample invite in the layout and colour picked here to your own email address, before you save. Its answer links go nowhere.</p><p class="err" id="em-test-e" role="alert" hidden></p>'));
       if (id === 'sheet') return (
-        fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
+        fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES, 'sheet') +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>') +
-        fld('sh-craft', 'Made items', 'Crafted items on sheets and in the Crafting block', opts('sh-craft', 'sheet.craftArt', 'sh-craft-l', CRAFT_ARTS) +
+        fld('sh-craft', 'Made items', 'Crafted items on sheets and in the Crafting block', opts('sh-craft', 'sheet.craftArt', 'sh-craft-l', CRAFT_ARTS, 'craft') +
           '<p class="hint">Dark painted shows each made item as an oil-painted object in its recipe\'s colours. Lifelike draws it the way the crafting bench draws its glass and brass; Illustrated is the softer drawn set.</p>') +
-        fld('sh-builder', 'Hero builder look', 'The step-by-step builder players make heroes in', opts('sh-builder', 'builder.look', 'sh-builder-l', BUILDER_LOOKS) +
+        fld('sh-builder', 'Hero builder look', 'The step-by-step builder players make heroes in', opts('sh-builder', 'builder.look', 'sh-builder-l', BUILDER_LOOKS, 'builder') +
           '<p class="hint">How the hero builder looks to your players.</p>'));
       return '';
     }
@@ -991,7 +1058,7 @@
     function accessFld(key, sub, label, hint){
       var p = ACCESS_PARTS.filter(function(x){ return x[0] === key; })[0];
       return fld('ac-' + key, label || 'Who else may pick their own?', sub, opts('ac-' + key, 'access.' + key, 'ac-' + key + '-l',
-        ACCESS_LEVELS.filter(function(l){ return p[2].indexOf(l[0]) >= 0; })) +
+        ACCESS_LEVELS.filter(function(l){ return p[2].indexOf(l[0]) >= 0; }), 'access') +
         '<p class="hint">' + (hint || 'Their pick changes only what they see. The campaign’s look above stays the starting point.') + '</p>');
     }
     function withAccess(id, html){
@@ -1390,6 +1457,7 @@
         '<span>Click any part of the example site to change it. Save changes to show your draft to everyone.</span>');
     }
     function update(){
+      if (ui.held){ paintSaved(); return; }
       var theme = previewTheme(), vars = derive(draft, theme);
       fzQueue();
       $$('.pv').forEach(function(el){ setVars(el, vars); });
@@ -1790,6 +1858,10 @@
         if (ui.page !== pg) setPage(pg); else update();
         fzQueue();
       }
+      setLooks(false);
+      syncZoomRow();
+      openPanel();
+      syncTitle();
       if (focus && $('#tab-' + id).offsetParent) $('#tab-' + id).focus();
       tellShell();
     }
@@ -1826,8 +1898,22 @@
         else update();
         fzQueue();
       }
+      setLooks(false);
+      openPanel();
       if (focus) $('#tab-' + room).focus();
       fzSection(id);
+      roomDraw();
+    }
+    // A pencil mark opens its part as a click on the part does. From the
+    // keyboard, focus stays on the mark when it is still drawn, and otherwise
+    // moves into the part's settings.
+    function openMark(sec, fromKeys){
+      selectSection(sec);
+      if (!fromKeys) return;
+      var m = $('#rm-brush [data-mark="' + sec + '"]');
+      if (m){ m.focus({ preventScroll:true }); return; }
+      var p = $('#panel-' + sec), f = p && $('button, input, select, textarea, [tabindex="0"]', p);
+      if (f) f.focus({ preventScroll:true });
     }
     function chooseLook(id){
       applyLook(draft, id); settle(); update(); fzFlash('*');
@@ -1839,6 +1925,128 @@
       update(); settle(); tidyPictures();
       $('#tab-' + ROOM_OF[sec]).focus();
       toast((sec === 'email' ? 'The email layout' : sectionName(sec)) + (sec === 'brand' || sec === 'email' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
+    }
+
+    /* ---------- The settings panel and the tools at the foot ----------
+       The panel is Page layout's slide-out: it comes in from the right edge
+       (a sheet from the foot on a phone) when a part is pressed, a room is
+       chosen, Looks is pressed or Find lands on a setting. Done and Escape
+       put it away. It shows the open part's settings, or the starting looks. */
+    // Settings that dress the whole site: the example is not blurred for them.
+    var WHOLE = { colours:1, type:1 };
+    // The part open on the example: set only while the panel shows a part of a room that has parts.
+    function openSec(){
+      var r = ROOMS.filter(function(x){ return x[0] === ui.room; })[0];
+      return ui.panel && !ui.looks && r && r[3].length ? ui.section : null;
+    }
+    function fade(el){ if (!el) return; el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+    function syncPanel(){
+      var p = $('#lk-panel'), ws = $('#lk-ws');
+      if (p.classList.contains('open') !== ui.panel){ void p.offsetWidth; p.classList.toggle('open', ui.panel); }
+      p.inert = !ui.panel;
+      ws.classList.toggle('panel-open', ui.panel);
+      if (p.dataset.mode !== (ui.looks ? 'looks' : 'part')){
+        p.dataset.mode = ui.looks ? 'looks' : 'part';
+        $('#panels').hidden = ui.looks; $('#lk-looks').hidden = !ui.looks;
+        fade(ui.looks ? $('#lk-looks') : $('#panels'));
+      }
+      $('#lk-open').setAttribute('aria-expanded', String(ui.panel && !ui.looks));
+      $('#lk-looks-btn').setAttribute('aria-pressed', String(ui.panel && ui.looks));
+      syncTitle();
+      measure();
+      roomDraw();
+    }
+    // Inside the frame the rooms are the frame's tabs, so the panel names the
+    // open room instead of repeating them.
+    function syncTitle(){
+      var R = ROOMS.filter(function(r){ return r[0] === ui.room; })[0];
+      $('#lk-ptitle').textContent = ui.looks ? 'Looks' : (R ? R[1] : '');
+    }
+    function openPanel(){ if (ui.panel) return; ui.panel = true; syncPanel(); }
+    function closePanel(){
+      if (!ui.panel) return;
+      var had = $('#lk-panel').contains(document.activeElement);
+      if (pick) closePicker(false);
+      if (openW) closeWset(false);
+      ui.panel = false; syncPanel();
+      if (had) $('#lk-open').focus();
+    }
+    function setLooks(on){ if (ui.looks === on) return; ui.looks = on; syncPanel(); }
+    // Settings in the dock opens (or puts away) the room's settings; Looks shows the starting looks.
+    function toggleSettings(){
+      if (ui.panel && !ui.looks){ closePanel(); return; }
+      setLooks(false); openPanel(); syncPanel();
+      var t = $('#tab-' + ui.room); if (t && t.offsetParent && !phone()) t.focus();
+    }
+    function toggleLooks(){
+      if (ui.panel && ui.looks){ closePanel(); return; }
+      setLooks(true); openPanel(); syncPanel();
+      var c = $('#lk-row input:checked') || $('#lk-row input'); if (c && !phone()) c.focus();
+    }
+    // Pieces and Type only mean something for colours, type and buttons.
+    function syncZoomRow(){ $('#lk-zoom').hidden = ui.room !== 'style'; }
+    // A swipe down on the sheet's grab line puts it away, on a phone.
+    function sheetSwipe(e){
+      var strip = e.target.closest && e.target.closest('.lk-ph');
+      if (!strip || e.pointerType === 'mouse' || !phone()) return;
+      var y0 = e.clientY, moved = false;
+      function end(ev){
+        document.removeEventListener('pointermove', mv);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        if (!moved || ev.clientY - y0 < 40) return;
+        closePanel();
+        // The press that ended the swipe must not also click a tab.
+        var stop = function(c){ c.stopPropagation(); c.preventDefault(); };
+        document.addEventListener('click', stop, true);
+        setTimeout(function(){ document.removeEventListener('click', stop, true); }, 0);
+      }
+      function mv(ev){ if (Math.abs(ev.clientY - y0) > 8) moved = true; }
+      document.addEventListener('pointermove', mv);
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
+    }
+    // Hold to see saved: while the button is held the example shows the saved
+    // look; the draft and its controls are untouched, and release returns.
+    function paintSaved(){
+      var keep = draft, theme = previewTheme();
+      draft = saved;
+      try {
+        var vars = derive(saved, theme);
+        $$('.pv').forEach(function(el){ setVars(el, vars); });
+        renderPreview(theme);
+        runMotion();
+        if (kf) kf.set({ on:kf.active(), kit:saved.page.kit, saved:saved.page.kit, theme:theme, unsaved:false });
+      } finally { draft = keep; }
+    }
+    function holdStart(){
+      if (ui.held) return;
+      ui.held = true;
+      $('#lk-hold').setAttribute('aria-pressed', 'true');
+      $('#lk-held').hidden = false;
+      paintSaved();
+      announce('Showing the look as it is saved. Let go to come back to your draft.');
+    }
+    function holdEnd(){
+      if (!ui.held) return;
+      ui.held = false;
+      $('#lk-hold').setAttribute('aria-pressed', 'false');
+      $('#lk-held').hidden = true;
+      update();
+      announce('Back to your draft.');
+    }
+    function holdWire(){
+      var b = $('#lk-hold');
+      b.addEventListener('pointerdown', function(e){
+        if (e.button) return;
+        try { b.setPointerCapture(e.pointerId); } catch (x) { /* a release outside still ends it below */ }
+        holdStart();
+      });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(n){ b.addEventListener(n, holdEnd); });
+      b.addEventListener('keydown', function(e){ if ((e.key === ' ' || e.key === 'Enter') && !e.repeat){ e.preventDefault(); holdStart(); } });
+      b.addEventListener('keyup', function(e){ if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); holdEnd(); } });
+      b.addEventListener('blur', holdEnd);
+      b.addEventListener('contextmenu', function(e){ e.preventDefault(); });
     }
 
     /* ---------- Inside Customize's frame ---------- */
@@ -2075,8 +2283,9 @@
     on(ROOT, 'click', function(e){
       var t = e.target.closest ? e.target.closest('button') : null;
       if (!t) return;
-      if (t.getAttribute('role') === 'tab'){ selectRoom(t.id.slice(4)); return; }
+      if (t.getAttribute('role') === 'tab'){ setLooks(false); selectRoom(t.id.slice(4)); return; }
       if (t.dataset.sec){ selectSection(t.dataset.sec); return; }
+      if (t.dataset.mark){ openMark(t.dataset.mark, e.detail === 0); return; }
       if (t.dataset.quick){ quickSetup(t.dataset.quick); return; }
       if (t.dataset.viewas){ ui.viewAs = t.dataset.viewas; update(); return; }
       if (t.dataset.open){
@@ -2099,19 +2308,30 @@
         case 'n-edit': showPencil(); break;
         case 'pop-done': closePicker(true); break;
         case 'pop-use': useHex(); break;
-        case 'pv-hide': toggleStrip(); break;
         case 'fz-all': fzSet(null); $('#tab-' + ui.room).focus(); break;
         case 'em-test-btn': sendTestEmail(t); break;
+        case 'lk-open': toggleSettings(); break;
+        case 'lk-looks-btn': toggleLooks(); break;
+        case 'lk-x': closePanel(); break;
       }
     });
+    // Escape anywhere in the workshop closes the topmost thing: a hover card or
+    // a picker first, then a zoom, then the panel. Escape in a text field is
+    // the field's own, and a menu or dialog of the frame's (Find, a drawer)
+    // closes itself first.
+    on(document, 'keydown', function(e){
+      if (e.key !== 'Escape' || e.defaultPrevented || !ROOT.isConnected) return;
+      var t = e.target;
+      if (t && t.closest && !ROOT.contains(t) && t.closest('[role="dialog"], [role="menu"], .czs-drawer')) return;
+      if (document.querySelector('.czs-drawer:not([hidden])')) return;
+      if (hcOn){ hcHide(); e.preventDefault(); return; }
+      var top = layers[layers.length - 1];
+      if (top){ e.preventDefault(); top.close(true); return; }
+      if (t && t.matches && t.matches('textarea, select, [contenteditable="true"], input:not([type="radio"]):not([type="checkbox"]):not([type="range"]):not([type="button"])')) return;
+      if (ui.focus){ e.preventDefault(); fzSet(null); return; }
+      if (ui.panel){ e.preventDefault(); closePanel(); }
+    });
     on(ROOT, 'keydown', function(e){
-      if (e.key === 'Escape'){
-        if (hcOn){ hcHide(); e.preventDefault(); return; }
-        var top = layers[layers.length - 1];
-        if (top){ e.preventDefault(); top.close(true); return; }
-        if (ui.focus){ e.preventDefault(); fzSet(null); }
-        return;
-      }
       if (e.target.id === 'pop-hex' && e.key === 'Enter'){ e.preventDefault(); useHex(); return; }
       if (e.target.getAttribute && e.target.getAttribute('role') === 'tab'){
         var ids = ROOMS.map(function(r){ return r[0]; }), i = ids.indexOf(e.target.id.slice(4)), n = null;
@@ -2130,21 +2350,28 @@
       if (pick && to && !$('#pop').contains(to) && to !== pick.btn) closePicker(false);
     });
 
-    /* ---------- Sizes: the site's scale and the phone strip ---------- */
-    // Narrow is measured on the editor itself: Chronicle's menu takes part of the window.
-    function phone(){ var c = $('#cz'); return !!c && c.clientWidth <= 760; }
-    function toggleStrip(){
-      ui.strip = !ui.strip;
-      $('#preview').hidden = !ui.strip;
-      var b = $('#pv-hide'); b.textContent = ui.strip ? 'Hide' : 'Show preview'; b.setAttribute('aria-expanded', String(ui.strip));
-      measure();
-    }
+    /* ---------- Sizes: the workshop and the example's scale ----------
+       The workshop fills the window below Customize's bar. The example is
+       the largest 880 by 520 site that fits left of the panel (or above the
+       sheet on a phone), with room kept at the foot for the tools and the
+       save bar, so it never jumps when the save bar appears. */
+    var mqPhone = window.matchMedia ? matchMedia('(max-width: 640px)') : null;
+    function phone(){ return mqPhone ? mqPhone.matches : window.innerWidth <= 640; }
     function measure(){
-      var wrap = $('#site-wrap');
-      if (wrap && wrap.clientWidth) wrap.style.setProperty('--k', (wrap.clientWidth / 880).toFixed(4));
+      var ws = $('#lk-ws'), work = $('#pv-col'), wrap = $('#site-wrap');
+      if (!ws || !work || !wrap) return;
+      var top = ws.getBoundingClientRect().top + window.scrollY;
+      var h = Math.max(440, window.innerHeight - top);
+      ws.style.setProperty('--lk-h', h.toFixed(0) + 'px');
+      var cs = getComputedStyle(work), px = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight), py = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      // The caption under the example, and the kit frame's label and links, need a line or two.
+      var aw = work.clientWidth - px, ah = work.clientHeight - py - 44;
+      var k = clamp(Math.min(aw / 880, ah / 520), 0.3, 1.3);
+      if (!isFinite(k)) return;
+      var kv = k.toFixed(4);
+      work.style.setProperty('--k', kv);
+      wrap.style.setProperty('--k', kv);
       fzQueue();
-      if (!phone() && !ui.strip) toggleStrip();
-      ROOT.style.setProperty('--strip-h', phone() ? $('#pv-col').offsetHeight + 'px' : '0px');
     }
 
     /* ---------- Style kits on one of your own pages ----------
@@ -2240,23 +2467,28 @@
       site.style.transform = 'scale(' + k + ') translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + f.toFixed(3) + ')';
     }
     // Rects are measured with no zoom applied, so a redraw never chases its own transform.
-    function fzMeasure(sec){
+    // fzBare runs a batch of measuring with the zoom lifted. It touches the
+    // transform only when there is one, and once per batch, because each lift
+    // and restore costs a layout of the whole page; on a slow machine a layout
+    // per part kept the page too busy to answer clicks.
+    function fzBare(fn){
       var site = fzSite(), t = site.style.transform, tr = site.style.transition;
+      if (!t) return fn();
       site.style.transition = 'none'; site.style.transform = '';
-      var rs = fzRects(sec);
-      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
-      return rs;
+      try { return fn(); }
+      finally { site.style.transform = t; void site.offsetWidth; site.style.transition = tr; }
     }
+    function fzMeasure(sec){ return fzBare(function(){ return fzRects(sec); }); }
     function fzDraw(){
       var svg = $('#fz'), sec = ui.focus;
       if (!svg) return;
-      if (!sec || ui.zoom !== 'site'){ svg.classList.remove('on'); $('#fz-bar').classList.remove('on'); fzZoom(null); return; }
+      if (!sec || ui.zoom !== 'site'){ svg.classList.remove('on'); $('#fz-bar').classList.remove('on'); $('#fz-bar').inert = true; fzZoom(null); return; }
       var rs = fzMeasure(sec);
       $('.fz-dim', svg).setAttribute('d', fzHoles(rs, 4));
       setHTML($('.fz-ring', svg), fzRectsSVG(rs, 4, 6));
       svg.classList.add('on');
       setText($('#fz-name'), sectionName(sec));
-      $('#fz-bar').classList.add('on');
+      $('#fz-bar').classList.add('on'); $('#fz-bar').inert = false;
       fzZoom(rs);
     }
     function fzQueue(){ cancelAnimationFrame(fzRaf); fzRaf = requestAnimationFrame(function(){ fzDraw(); roomDraw(); if (fzHovSec) fzHover(fzHovSec, true); }); }
@@ -2294,7 +2526,7 @@
       var g = $('#fz .fz-hov'), tip = $('#fz-tip');
       if (!g) return;
       fzHovSec = sec;
-      if (!sec || sec === ui.focus){ g.innerHTML = ''; tip.classList.remove('on'); return; }
+      if (!sec || sec === ui.focus || (sec === openSec() && !WHOLE[sec])){ g.innerHTML = ''; tip.classList.remove('on'); return; }
       if (!keep) setHTML(tip, '<b>' + esc(sectionName(sec)) + '</b><span>' + esc(FZ[sec].tip) + ' · click to change</span>');
       g.innerHTML = fzRectsSVG(fzMeasure(sec), 4, 6);
       tip.classList.add('on');
@@ -2333,8 +2565,7 @@
     // Every run of words on the example, in the site's own 880 by 520 units,
     // measured unzoomed like fzRects, so a mark can be placed clear of them.
     function fzTextBoxes(){
-      var site = fzSite(), t = site.style.transform, tr = site.style.transition, out = [];
-      site.style.transition = 'none'; site.style.transform = '';
+      var site = fzSite(), out = [];
       var sr = site.getBoundingClientRect(), s = sr.width / 880;
       if (s){
         var walk = document.createTreeWalker(site, NodeFilter.SHOW_TEXT, null), rg = document.createRange(), n;
@@ -2347,52 +2578,85 @@
           });
         }
       }
-      // A button's icon (Icons > Everywhere) is as much content as its word.
-      if (s) Array.prototype.forEach.call(site.querySelectorAll('.wic'), function(el){
+      // A button's icon (Icons > Everywhere) is as much content as its word,
+      // and a sample button is read as a whole, not only its word.
+      if (s) Array.prototype.forEach.call(site.querySelectorAll('.wic, .pbtn'), function(el){
         var r = el.getBoundingClientRect();
         if (r.width && r.height) out.push({ x:(r.left - sr.left) / s, y:(r.top - sr.top) / s, w:r.width / s, h:r.height / s });
       });
-      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
       return out;
     }
-    // Where a part's pencil mark sits: beside the part, on the first side
-    // where it covers no words and no other mark (right, left, then above its
-    // corner), else where it covers least.
+    // Where a part's pencil mark sits: outside the part, on the first side
+    // where it covers no words and no other mark (right, left, above, below).
+    // When every side would cover words it shrinks to a pencil alone at the
+    // part's corner, or the nearest clear spot further out; never over words
+    // by choice.
     function markSpot(r, k, mw, mh, words, taken, ww){
-      var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, H = 520 * k;
-      var tries = [[R + 3, T + 3], [L - 3 - mw, T + 3], [R - mw, T - mh - 2], [R + 3, T - mh - 2]].filter(function(c){
-        return c[0] >= 0 && c[0] + mw <= ww && c[1] >= 0 && c[1] + mh <= H;
-      });
-      if (!tries.length) tries = [[clamp(R - mw, 0, ww - mw), clamp(T + 3, 0, H - mh)]];
-      function cover(c){
+      var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, B = (r.y + r.h) * k, H = 520 * k;
+      function cover(c, w, h){
         var a = 0;
         words.concat(taken).forEach(function(b){
-          var w = Math.min(c[0] + mw, b.x + b.w) - Math.max(c[0], b.x), h = Math.min(c[1] + mh, b.y + b.h) - Math.max(c[1], b.y);
-          if (w > 0 && h > 0) a += w * h;
+          var cw = Math.min(c[0] + w, b.x + b.w) - Math.max(c[0], b.x), ch = Math.min(c[1] + h, b.y + b.h) - Math.max(c[1], b.y);
+          if (cw > 0 && ch > 0) a += cw * ch;
         });
         return a;
       }
-      var best = tries[0], bc = cover(best);
-      for (var i = 1; i < tries.length && bc > 0; i++){ var c = cover(tries[i]); if (c < bc){ best = tries[i]; bc = c; } }
-      return best;
+      function best(list, w, h){
+        var ok = list.filter(function(c){ return c[0] >= 0 && c[0] + w <= ww && c[1] >= 0 && c[1] + h <= H; }), pick = null, pc = 0;
+        for (var i = 0; i < ok.length; i++){
+          var c = cover(ok[i], w, h);
+          if (!pick || c < pc){ pick = ok[i]; pc = c; }
+          if (!pc) break;
+        }
+        return pick && { x:pick[0], y:pick[1], w:w, h:h, c:pc };
+      }
+      var full = best([[R + 3, T + 3], [L - 3 - mw, T + 3], [R - mw, T - mh - 2], [R + 3, T - mh - 2], [L - 3 - mw, T - mh - 2], [R - mw, B + 2], [L, B + 2]], mw, mh);
+      if (full && !full.c) return full;
+      var sm = 15, corners = [[R - sm / 2, T - sm / 2], [L - sm / 2, T - sm / 2], [R - sm / 2, B - sm / 2], [L - sm / 2, B - sm / 2], [R + 2, T - sm - 1]];
+      // A part that fills the example's edge has no outside; the small mark then
+      // goes along its inside edges, wherever no word is.
+      for (var x = R - sm - 2; x >= L + 2; x -= 10){ corners.push([x, T + 2]); corners.push([x, B - sm - 2]); }
+      var small = best(corners, sm, sm);
+      // Still on words: look further out, ring by ring, for the nearest clear spot.
+      for (var d = 6; (!small || small.c) && d <= 48; d += 6){
+        var ring = [];
+        for (var rx = L - d - sm; rx <= R + d; rx += 6){ ring.push([rx, T - d - sm]); ring.push([rx, B + d]); }
+        for (var ry = T - d; ry <= B + d - sm; ry += 6){ ring.push([L - d - sm, ry]); ring.push([R + d, ry]); }
+        var far = best(ring, sm, sm);
+        if (far && (!small || far.c < small.c)) small = far;
+      }
+      if (small) small.small = true;
+      if (small && (!full || small.c <= full.c)) return small;
+      return full || { x:clamp(R - sm, 0, ww - sm), y:clamp(T - sm / 2, 0, H - sm), w:sm, h:sm, small:true };
     }
+    // The pressed part gets a ring and the rest of the example softens; a
+    // setting that dresses the whole site leaves the example sharp so the
+    // owner sees what they picked. With nothing open the room's parts wear
+    // their pencil marks and nothing is blurred.
     function roomDraw(){
-      var blur = $('#rm-blur'), brush = $('#rm-brush');
+      var blur = $('#rm-blur'), brush = $('#rm-brush'), ring = $('#fz .fz-open');
       if (!blur || !brush) return;
-      var all = [], marks = '', k = fzK(), ww = $('#site-wrap').clientWidth;
-      if (ui.zoom === 'site' && !ui.focus){
-        var words = fzTextBoxes().map(function(b){ return { x:b.x * k, y:b.y * k, w:b.w * k, h:b.h * k }; }), taken = [];
-        roomSecs().forEach(function(sec){
-          var rs = fzMeasure(sec);
+      var all = [], marks = '', k = fzK(), ww = $('#site-wrap').clientWidth, sec0 = openSec();
+      var picking = !!sec0 && !WHOLE[sec0] && ui.zoom === 'site' && !ui.focus && !(kf && kf.active());
+      var ringRects = [], ae = document.activeElement, keep = ae && ae.getAttribute && ae.getAttribute('data-mark');
+      // A style kit's frame over the example hides the marks, so they go too.
+      if (ui.zoom === 'site' && !ui.focus && !(kf && kf.active())){
+        // Words keep a little room around them, so a mark never touches a
+        // word or a link's underline and reads as part of it.
+        // Every read first, in one unzoomed batch, then the marks are placed.
+        var secs = picking ? [sec0] : roomSecs(), got = fzBare(function(){
+          return { words:fzTextBoxes(), rects:secs.map(fzRects) };
+        });
+        var words = got.words.map(function(b){ return { x:b.x * k - 4, y:b.y * k - 3, w:b.w * k + 8, h:b.h * k + 6 }; }), taken = [];
+        secs.forEach(function(sec, i){
+          var rs = got.rects[i];
           if (!rs.length) return;
-          // The category icons are small boxes in the middle of menu rows; left
-          // sharp while their row blurs they read as dark squares, so they blur
-          // with the row until the Icons part is the one open.
-          if (sec !== 'icons' || ui.section === 'icons') all = all.concat(rs);
-          var open = sectionOpen(sec), mw = open ? 44 : 30, mh = 17, at = markSpot(rs[0], k, mw, mh, words, taken, ww);
-          taken.push({ x:at[0], y:at[1], w:mw, h:mh });
-          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + at[0].toFixed(0) + 'px;top:' + at[1].toFixed(0) + 'px">' +
-            IC('i-pencil') + (open ? IC('i-users') : '') + '</span>';
+          if (picking){ all = all.concat(rs); ringRects = rs; }
+          var open = sectionOpen(sec), at = markSpot(rs[0], k, open ? 44 : 30, 17, words, taken, ww);
+          taken.push({ x:at.x, y:at.y, w:at.w, h:at.h });
+          var lab = 'Change the ' + sectionName(sec).toLowerCase();
+          marks += '<button type="button" class="rb' + (at.small ? ' sm' : open ? ' open' : '') + '" data-mark="' + sec + '" aria-label="' + esc(lab) + '" title="' + esc(lab) + '" style="left:' + at.x.toFixed(0) + 'px;top:' + at.y.toFixed(0) + 'px">' +
+            IC('i-pencil') + (open && !at.small ? IC('i-users') : '') + '</button>';
         });
       }
       // Leaving for a zoomed part, the layer goes at once: its undoing of the
@@ -2400,7 +2664,13 @@
       blur.classList.toggle('cut', !!ui.focus || ui.zoom !== 'site');
       if (all.length){ blur.style.clipPath = 'path("' + roomClip(all, k) + '")'; blur.classList.add('on'); }
       else blur.classList.remove('on');
+      if (ring){
+        setHTML(ring, fzRectsSVG(ringRects, 4, 6));
+        ring.parentNode.classList.toggle('open', picking);
+      }
       setHTML(brush, marks);
+      // A redraw keeps keyboard focus on the mark it was on.
+      if (keep && !brush.contains(document.activeElement)){ var m = $('[data-mark="' + keep + '"]', brush); if (m) m.focus({ preventScroll:true }); }
     }
     function syncPeople(){
       var rows = $('#pp-rows');
@@ -2431,10 +2701,12 @@
     }
     function fzInit(){
       var site = fzSite(), wrap = $('#site-wrap');
-      site.insertAdjacentHTML('beforeend', '<div class="rm-blur" id="rm-blur" aria-hidden="true"></div><svg class="fz" id="fz" viewBox="0 0 880 520" aria-hidden="true"><path class="fz-dim" fill-rule="evenodd" d="M0 0H880V520H0Z"/><g class="fz-ring"></g><g class="fz-hov"></g><g class="fz-flash"></g></svg>');
-      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div><div class="rm-brush" id="rm-brush" aria-hidden="true"></div>');
+      site.insertAdjacentHTML('beforeend', '<div class="rm-blur" id="rm-blur" aria-hidden="true"></div><svg class="fz" id="fz" viewBox="0 0 880 520" aria-hidden="true"><path class="fz-dim" fill-rule="evenodd" d="M0 0H880V520H0Z"/><g class="fz-ring"></g><g class="fz-open"></g><g class="fz-hov"></g><g class="fz-flash"></g></svg>');
+      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div><div class="rm-brush" id="rm-brush"></div>');
       wrap.classList.add('fz-ok');
       $('[data-z="site"]').insertAdjacentHTML('beforeend', '<div class="fz-bar" id="fz-bar"><span>Showing <b id="fz-name"></b></span><button type="button" class="czb czb-s czb-sm" id="fz-all">Whole site</button></div>');
+      // Hidden until a part is zoomed in on, and out of reach while hidden.
+      $('#fz-bar').inert = true;
       on(wrap, 'pointermove', function(e){
         if (e.pointerType === 'touch' || ui.zoom !== 'site') return;
         var sec = fzSecAt(e.target);
@@ -2456,6 +2728,7 @@
     /* ---------- Start ---------- */
     function init(){
       IMG.dusk = paintDusk();
+      ROOT.style.setProperty('--smp-dusk', 'url("' + IMG.dusk + '")');
       ROOT.insertAdjacentHTML('afterbegin', SPRITE);
       var live = document.createElement('div'); live.id = 'live'; live.className = 'sr'; live.setAttribute('aria-live', 'polite'); ROOT.appendChild(live);
       buildUI(); buildPreview();
@@ -2482,7 +2755,9 @@
       pv.addEventListener('keyup', function(e){ var b = e.target.closest ? e.target.closest('button.pbtn') : null; if (b) b.classList.remove('prs'); });
       pv.addEventListener('focusout', function(e){ var b = e.target.closest ? e.target.closest('button.pbtn') : null; if (b) b.classList.remove('prs'); });
       applyRM(); syncThemeRadio();
-      fzInit();
+      fzInit(); holdWire();
+      on(ROOT, 'pointerdown', sheetSwipe);
+      syncZoomRow(); syncPanel();
       update(); setZoom('site'); measure();
       if (window.ResizeObserver){ ro = new ResizeObserver(function(){ measure(); runMotion(); }); ro.observe($('#site-wrap')); ro.observe($('#pv-col')); }
       on(window, 'resize', measure);
@@ -2491,6 +2766,8 @@
       // until the owner picks Light or Dark for the preview themselves.
       if (window.MutationObserver){ mo = new MutationObserver(themeChanged); mo.observe(root, { attributes:true, attributeFilter:['class'] }); }
       if (SHELL){
+        $('#lk-panel').classList.add('in-shell');
+        syncTitle();
         shellSent = JSON.stringify(shellValue());
         on(document, 'chronicle:customize-draft', fromShell);
         on(window, 'hashchange', sectionFromHash);
