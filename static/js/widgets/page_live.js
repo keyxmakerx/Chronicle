@@ -41,6 +41,14 @@
 
   function main() { return document.getElementById('main-content'); }
 
+  // A refresh's request carries the page it refreshes, so its events can be
+  // told from those of a link the reader clicked meanwhile.
+  function liveFrom(e) {
+    var c = e.detail && e.detail.requestConfig;
+    return (c && c.headers && c.headers['X-Page-Live']) || '';
+  }
+  function ours(e, m) { return !!liveFrom(e) && e.detail.target === m; }
+
   // Closed dialogs stay in the page marked hidden, so only a shown one counts.
   function openDialog() {
     var all = document.querySelectorAll('dialog[open], [role="dialog"][aria-modal="true"]');
@@ -105,7 +113,7 @@
     // In before the new markup is painted, so the reader never sees the page
     // shrink under them.
     function swapped(e) {
-      if (done || !e.detail || e.detail.target !== m) return;
+      if (done || !ours(e, m)) return;
       spacer = document.createElement('div');
       spacer.setAttribute('aria-hidden', 'true');
       spacer.setAttribute('data-page-live-hold', '');
@@ -121,7 +129,7 @@
     // htmx scrolls the target to the top when the swap settles; put it back
     // before anything is painted.
     function settled(e) {
-      if (done || !e.detail || e.detail.target !== m) return;
+      if (done || !ours(e, m)) return;
       landed = true;
       size();
       if (!moved) m.scrollTop = top;
@@ -164,6 +172,40 @@
     return self;
   }
 
+  // A refresh redraws the page the reader is already on, so it is not an
+  // arrival: from its request to its settle the scroller is marked (input.css
+  // turns the fade-in off under the mark), and the frame that waits unseen
+  // for its widgets is shown as soon as the swap lands. Kept per request,
+  // since htmx can queue one request behind another and resolve its promise
+  // before it has even been sent.
+  var inFlight = [];
+  function track(e, step) {
+    var from = liveFrom(e), m = e.detail.target, xhr = e.detail.xhr;
+    if (!from || !m || !xhr) return;
+    var i = inFlight.indexOf(xhr);
+    if (step === 'send') {
+      if (i < 0) inFlight.push(xhr);
+      m.setAttribute('data-page-live-swap', '');
+    } else if (i < 0) {
+      return;
+    } else if (step === 'swap') {
+      // A refresh that lands after the reader went to another page must not
+      // put the old page back over the new one.
+      if (from !== location.pathname + location.search) e.detail.shouldSwap = false;
+    } else if (step === 'swapped') {
+      xhr._liveSwapped = true;
+      Array.prototype.forEach.call(m.querySelectorAll('[data-whole]'), function (f) { f.setAttribute('data-whole-ready', ''); });
+    } else if (step === 'settled' || !xhr._liveSwapped) {
+      inFlight.splice(i, 1);
+      if (!inFlight.length) m.removeAttribute('data-page-live-swap');
+    }
+  }
+  var STEPS = { 'htmx:beforeSend': 'send', 'htmx:beforeSwap': 'swap', 'htmx:afterSwap': 'swapped', 'htmx:afterRequest': 'ended', 'htmx:afterSettle': 'settled' };
+  Object.keys(STEPS).forEach(function (n) { document.addEventListener(n, function (e) { track(e, STEPS[n]); }); });
+
+  // One refresh at a time across every watcher on the page.
+  var refreshing = false;
+
   function state() {
     var m = main();
     var a = document.activeElement;
@@ -183,7 +225,7 @@
       var entityId = config.entityId || '';
       var url = location.pathname + location.search;
       var ws = null, wsTimer = null, wsDelay = 2000, pending = null;
-      var destroyed = false, busy = false;
+      var destroyed = false;
       if (!campaignId || !entityId || typeof window.WebSocket !== 'function') return;
 
       function schedule(delay) {
@@ -193,11 +235,12 @@
 
       function attempt() {
         pending = null;
-        if (destroyed || busy || location.pathname + location.search !== url) return;
+        if (destroyed || location.pathname + location.search !== url) return;
+        if (refreshing) { schedule(DEBOUNCE); return; }
         if (document.visibilityState === 'hidden' || !isQuiet(state())) { schedule(RETRY); return; }
         var m = main();
         if (!m || !window.htmx || typeof window.htmx.ajax !== 'function') return;
-        busy = true;
+        refreshing = true;
         var top = m.scrollTop;
         var place = holdPlace(m, top);
         // The swap replaces this widget, which ends this connection and
@@ -206,11 +249,11 @@
           target: m,
           select: '#main-content > *',
           swap: 'innerHTML',
-          headers: { 'HX-Boosted': 'true' }
+          headers: { 'HX-Boosted': 'true', 'X-Page-Live': url }
         }).then(function () {
           if (main() === m && location.pathname + location.search === url) place.follow();
           else place.end();
-        }, function () { place.end(); }).then(function () { busy = false; });
+        }, function () { place.end(); }).then(function () { refreshing = false; });
       }
 
       function connect() {
@@ -240,14 +283,19 @@
 
       connect();
 
-      return {
-        destroy: function () {
-          destroyed = true;
-          if (pending) clearTimeout(pending);
-          if (wsTimer) clearTimeout(wsTimer);
-          if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } }
-        }
+      // boot.js calls the widget's destroy when a refresh swaps this mount
+      // out; a connection left open would refresh the page once more for
+      // every refresh before it.
+      el._pageLive = function () {
+        destroyed = true;
+        if (pending) clearTimeout(pending);
+        if (wsTimer) clearTimeout(wsTimer);
+        if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } }
       };
+    },
+    destroy: function (el) {
+      if (el._pageLive) el._pageLive();
+      el._pageLive = null;
     }
   });
 })();

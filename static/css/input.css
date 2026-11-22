@@ -3196,6 +3196,10 @@
 }
 @keyframes whole-release { to { opacity: 1; } }
 html[data-motion="off"] [data-whole] { transition: none; }
+/* A refresh after a save redraws the page the reader is on (page_live.js):
+   nothing arrives, so nothing fades in. */
+[data-page-live-swap] .htmx-added,
+[data-page-live-swap] [data-whole] { transition: none; }
 
 /* Settle: a new step of a form (the sign-in code step, the two-factor
    setup panel) fades in with a 6px rise. Calm keeps the fade only. */
