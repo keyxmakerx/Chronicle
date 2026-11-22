@@ -37,7 +37,12 @@ async function page(t, body, motion) {
   await p.addScriptTag({ content: SLIP_JS });
   return p;
 }
-const settle = (p) => p.waitForTimeout(450);
+// The slip slides for --dur-slide; on a busy CI runner that can outlast a
+// fixed wait, so settle also waits for every running transition to finish.
+const settle = async (p) => {
+  await p.waitForTimeout(450);
+  await p.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, { timeout: 5000 });
+};
 const slip = (p) => p.evaluate(() => {
   const s = document.querySelector('.ask-slip');
   if (!s) return null;
