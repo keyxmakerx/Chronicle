@@ -25,6 +25,12 @@
  * it in, and it is picked for the hero. Their own entries are marked Draft or
  * Waiting for the Director and can be changed from the panel.
  *
+ * A Director may set times when a player can change their picks (after
+ * making the hero, after a new level). Outside them a hero carries a shut
+ * lock: a line says when the picks open again, a step already chosen can be
+ * read but not changed, and blanks can still be filled, since finishing a
+ * hero is not changing it. The fields door enforces the same rule.
+ *
  * Loaded on sight for data-widget="hero-builder" (ADR-063).
  */
 (function () {
@@ -371,7 +377,7 @@
       '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">Your hero</span><h2 class="hb-title">' + esc(h.name) + '</h2></div>' +
       '<div class="hb-tools"><a class="hb-link" href="' + esc(sheet) + '">' + open + '</a>' +
       (left ? '<button type="button" class="hb-btn" data-rollall="' + esc(h.id) + '">Roll everything left</button>' : '') +
-      '</div></header>' + this.sentenceHtml(h, esc(possessive(h.name))) + this.progressHtml(h) + '</article>';
+      '</div></header>' + this.lockHtml(h) + this.sentenceHtml(h, esc(possessive(h.name))) + this.progressHtml(h) + '</article>';
   };
 
   // --- The choose panel: every entry on one list, with its rules ---
@@ -404,9 +410,14 @@
       '<p class="hb-none" data-hb-none hidden>Nothing on this list matches.</p></div>' + this.notHereHtml(rules);
     html += '<div class="hb-detail" data-hb-detail>' + this.detailHtml(st, fo, h) + '</div>';
     var chosen = cur && lower(cur) === lower(fo.name);
-    html += '<div class="hb-pf"><button type="button" class="hb-btn hb-go" data-choose' + (chosen ? ' aria-pressed="true"' : '') + '>' +
-      this.chooseText(fo, chosen, waitName) + '</button>' +
-      (nr ? '<button type="button" class="hb-btn" data-rollone>Roll for me</button>' : '') + '</div>';
+    if (this.locked(h, st)) {
+      html += '<div class="hb-pf"><p class="hb-note hb-locked">' + esc(cur) + ' stays ' + esc(possessive(h.name)) + ' ' + esc(lower(st.label)) +
+        ' for now. Your ' + gm() + ' can open the picks sooner.</p></div>';
+    } else {
+      html += '<div class="hb-pf"><button type="button" class="hb-btn hb-go" data-choose' + (chosen ? ' aria-pressed="true"' : '') + '>' +
+        this.chooseText(fo, chosen, waitName) + '</button>' +
+        (nr ? '<button type="button" class="hb-btn" data-rollone>Roll for me</button>' : '') + '</div>';
+    }
     var prev = steps[idx - 1], next = steps[idx + 1];
     html += '<div class="hb-pf hb-steps">' +
       (prev ? '<button type="button" class="hb-link" data-go="' + esc(prev.fieldKey) + '">Back to ' + esc(lower(prev.label)) + '</button>' : '<span></span>') +
@@ -422,6 +433,27 @@
       '<h3 class="hb-pt">Choose ' + esc(possessive(h.name)) + ' ' + esc(lower(st.label)) + '</h3>' +
       '<p class="hb-none">Choose ' + esc(possessive(h.name)) + ' ' + esc(word) + ' first.</p></div>' +
       '<div class="hb-pf hb-steps"><button type="button" class="hb-link" data-go="' + esc(st.parent) + '">Go to ' + esc(word) + '</button><span></span></div>';
+  };
+
+  // A chosen step the Director's times keep from changing now.
+  Builder.prototype.locked = function (h, st) {
+    return !!(h && h.lock && !h.lock.open && h.values[st.fieldKey]);
+  };
+
+  // The line under a hero's name that says when its picks may change. Only
+  // a campaign with times gives a hero a lock.
+  Builder.prototype.lockHtml = function (h) {
+    var l = h.lock;
+    if (!l || !l.ruled) return '';
+    if (l.open) {
+      if (!l.until) return '';
+      var d = new Date(l.until), when = isNaN(d) ? '' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      return '<p class="hb-lock is-open" data-hb-lock="open">You can change your picks until ' + esc(when) + '.' +
+        (l.reopened ? ' Your ' + gm() + ' opened them.' : '') + '</p>';
+    }
+    return '<p class="hb-lock" data-hb-lock="shut"><i class="fa-solid fa-lock" aria-hidden="true"></i> Your picks are set for now.' +
+      (l.nextLevel ? ' They open again when ' + esc(h.name) + ' reaches level ' + l.nextLevel + '.' : '') +
+      ' Your ' + gm() + ' can open them sooner. Blanks can still be filled.</p>';
   };
 
   Builder.prototype.chooseText = function (c, chosen, waitName) {
@@ -463,13 +495,13 @@
   Builder.prototype.buyHtml = function (st, c, h) {
     var buy = buyListOf(c);
     if (!buy) return '';
-    var have = boughtOf(h, st.fieldKey).map(lower), spent = 0;
+    var have = boughtOf(h, st.fieldKey).map(lower), spent = 0, shut = this.locked(h, st) && have.length > 0;
     buy.items.forEach(function (it) { if (have.indexOf(lower(it.name)) >= 0) spent += it.cost; });
     var left = buy.budget - spent;
     return '<fieldset class="hb-buy" data-hb-buy><legend>Spend ' + esc(possessive(c.name)) + ' ' + buy.budget + ' points</legend>' +
       '<p class="hb-buy-left" aria-live="polite">' + left + ' of ' + buy.budget + ' left</p>' +
       buy.items.map(function (it) {
-        var on = have.indexOf(lower(it.name)) >= 0, off = !on && it.cost > left;
+        var on = have.indexOf(lower(it.name)) >= 0, off = shut || (!on && it.cost > left);
         return '<label class="hb-trait' + (off ? ' is-off' : '') + '"><input type="checkbox" data-buy="' + esc(it.name) + '"' +
           (on ? ' checked' : '') + (off ? ' disabled' : '') + '><span class="hb-trait-n">' + esc(it.name) + '</span>' +
           '<span class="hb-trait-c">' + it.cost + (it.cost === 1 ? ' point' : ' points') + '</span></label>';
@@ -693,7 +725,11 @@
       : fetch(url, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf }, body: JSON.stringify({ fields_patch: patch }) });
     return req.then(function (r) {
       if (r.ok) return null;
-      return r.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.message || b.error || 'That choice could not be saved. Try again.'); });
+      return r.json().catch(function () { return {}; }).then(function (b) {
+        var e = new Error(b.message || b.error || 'That choice could not be saved. Try again.');
+        e.status = r.status;
+        throw e;
+      });
     });
   };
 
@@ -713,6 +749,8 @@
       if (values[k] == null) delete h.values[k]; else h.values[k] = values[k];
     });
     return this.send(h, values).then(function () { return before; }, function (err) {
+      // The Director's times closed since the page was drawn: show the lock.
+      if (err.status === 403 && /locked/i.test(err.message)) h.lock = { ruled: true, open: false };
       // Put back only what a later pick has not already changed again.
       Object.keys(before).forEach(function (k) {
         if ((h.values[k] || null) !== (values[k] == null ? null : values[k])) return;

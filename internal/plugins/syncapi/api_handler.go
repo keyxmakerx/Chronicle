@@ -69,6 +69,7 @@ type APIHandler struct {
 	crafting             *CraftingAPIHandler
 	signer               *media.URLSigner
 	heroPlanner          entities.HeroPlanner
+	heroChanges          *entities.HeroChangeService
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
@@ -780,7 +781,7 @@ func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 	// A player's change comes in under the GM's key, so the key's rights say
 	// nothing about it: judge it as the player, keep the keys that pass and
 	// hold the rest. Held keys are reported, never silently dropped.
-	held, err := h.judgeActingPlayer(ctx, entity, req.ActingUserID, req.FieldsData)
+	held, heroChanges, err := h.judgeActingPlayer(ctx, entity, req.ActingUserID, req.FieldsData)
 	if err != nil {
 		return err
 	}
@@ -806,6 +807,7 @@ func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 		if err := h.entitySvc.MergeFields(ctx, entityID, req.FieldsData); err != nil {
 			return err
 		}
+		h.heroChanges.Changed(ctx, entity, req.ActingUserID, heroChanges)
 	}
 
 	// Capture what was sent (read-only diagnostics ring buffer; no DB) so the

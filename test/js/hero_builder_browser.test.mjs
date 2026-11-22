@@ -300,3 +300,59 @@ test('the Director\'s note asking for another pick is shown, and a request waiti
   const b = await open(t, { plan: held, heroes: [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human', class: 'Censor' }, hidden: [] }] });
   assert.match(await b.p.locator('[data-hero-card="e1"] .hb-sentence').innerText(), /class is Censor asking for Fury, waiting for your Director/);
 });
+
+// The Director's times for changing picks. A shut hero says when the picks
+// open again; a chosen step can be read but not changed, a blank can still be
+// filled; an open window names its last day. A save the server locks shows
+// the lock without a reload.
+test('a shut hero keeps its picks, still fills blanks, and says when they open', { skip }, async (t) => {
+  const heroes = [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human' }, hidden: ['secret'], lock: { ruled: true, open: false, nextLevel: 3 } }];
+  const { p, sent } = await open(t, { heroes });
+  const line = p.locator('[data-hero-card="e1"] [data-hb-lock="shut"]');
+  assert.equal(await line.innerText(), 'Your picks are set for now. They open again when Tess reaches level 3. Your Director can open them sooner. Blanks can still be filled.');
+  await p.click('[data-blank="ancestry"]');
+  const panel = p.locator('.hb-panel');
+  assert.equal(await panel.locator('[data-choose]').count(), 0, 'a chosen step offers no Choose');
+  assert.equal(await panel.locator('[data-rollone]').count(), 0, 'nor a roll');
+  assert.match(await panel.locator('.hb-locked').innerText(), /Human stays Tess’s ancestry for now/);
+  await p.click('[data-blank="class"]');
+  await panel.locator('.hb-opt', { hasText: 'Fury' }).click();
+  await panel.locator('[data-choose]').click();
+  await p.waitForSelector('.hb-tick');
+  assert.deepEqual(sent.map((s) => s.body), [{ fields_patch: { class: 'Fury' } }]);
+});
+
+test('an open window names its last day, and no times means no line', { skip }, async (t) => {
+  const until = new Date(Date.now() + 3 * 864e5).toISOString();
+  const { p } = await open(t, { heroes: [{ id: 'e1', name: 'Tess', values: {}, hidden: [], lock: { ruled: true, open: true, until, reopened: true } }] });
+  assert.match(await p.locator('[data-hb-lock="open"]').innerText(), /^You can change your picks until .+\. Your Director opened them\.$/);
+  const plain = await open(t);
+  assert.equal(await plain.p.locator('[data-hb-lock]').count(), 0);
+});
+
+test('a save the server locks puts the pick back and shows the lock', { skip }, async (t) => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const heroes = [{ id: 'e1', name: 'Tess', values: { ancestry: 'Human', class: 'Fury' }, hidden: ['secret'], lock: { ruled: true, open: true } }];
+  await p.route('**/*', (route) => {
+    const u = new URL(route.request().url());
+    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: page(heroes) });
+    if (u.pathname === '/campaigns/c1/characters/new/plan') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(PLAN) });
+    if (u.pathname.startsWith('/campaigns/c1/')) return route.fulfill({ status: 403, contentType: 'application/json', body: '{"message":"Your hero\'s picks are locked right now. Your picks are set. Your Director can open them again."}' });
+    if (u.pathname.startsWith('/static/')) {
+      const file = staticFile(u.pathname);
+      if (!existsSync(file)) return route.fulfill({ status: 404, body: '' });
+      return route.fulfill({ contentType: u.pathname.endsWith('.css') ? 'text/css' : 'application/javascript', body: readFileSync(file) });
+    }
+    return route.fulfill({ status: 404, body: '' });
+  });
+  await p.goto('http://chronicle.test/');
+  await p.waitForSelector('[data-hb-ready]', { state: 'attached' });
+  await p.click('[data-blank="class"]');
+  await p.locator('.hb-panel .hb-opt', { hasText: 'Tactician' }).click();
+  await p.locator('.hb-panel [data-choose]').click();
+  await p.waitForSelector('[data-hb-lock="shut"]');
+  assert.equal(await p.locator('[data-blank="class"]').innerText(), 'Fury');
+  assert.match(await p.locator('.hb-toast').innerText(), /locked right now/);
+});

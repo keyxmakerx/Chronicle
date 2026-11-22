@@ -1,0 +1,90 @@
+// hero_changes.templ — the Directors' section on the Characters page that
+// sets when players may change their hero's picks, and reopens one hero.
+
+package entities
+
+import "fmt"
+
+func heroChangesCSS() string {
+	return practiceCSS()
+}
+
+func heroChangesURL(campaignID string) string {
+	return "/campaigns/" + campaignID + "/characters/hero-changes"
+}
+
+// heroChangesSection is the section. Each save refreshes the page body
+// (#cast-content) like the page's other controls.
+templ heroChangesSection(v *HeroChangesView) {
+	<link rel="stylesheet" href={ heroChangesCSS() }/>
+	<section class="pr hc mb-8" data-hero-changes="true" aria-labelledby="hc-h">
+		<div class="pr-head">
+			<h2 id="hc-h" class="section-header">Changing heroes</h2>
+		</div>
+		<p class="hc-sum" data-hc-summary="true">{ v.Summary } You get a bell whenever a player changes a pick.</p>
+		<details class="hc-fold" open?={ v.Open }>
+			<summary class="pr-word hc-toggle">Change when</summary>
+			<form
+				class="hc-form"
+				method="post"
+				action={ templ.SafeURL(heroChangesURL(v.CampaignID)) }
+				hx-post={ heroChangesURL(v.CampaignID) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, v.CSRFToken) }
+				hx-target="#cast-content"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+				<fieldset class="hc-set">
+					<legend class="pr-k">Players can change their picks</legend>
+					<label class="hc-opt"><input type="radio" name="when" value="any" checked?={ !v.Ruled }/> Any time</label>
+					<label class="hc-opt"><input type="radio" name="when" value="set" checked?={ v.Ruled }/> Only at these times</label>
+				</fieldset>
+				<fieldset class="hc-set hc-times">
+					<legend class="pr-k">At these times (one or both)</legend>
+					<div class="hc-opt">
+						<input id="hc-making" type="checkbox" name="after_making" value="1" checked?={ v.AfterMaking }/>
+						<label for="hc-making">For the first</label>
+						<input type="number" name="making_days" min="1" max="365" value={ fmt.Sprint(v.MakingDays) } class="input hc-num" aria-label="Days after the hero is made"/>
+						<span>days after the hero is made</span>
+					</div>
+					<div class="hc-opt">
+						<input id="hc-level" type="checkbox" name="after_level" value="1" checked?={ v.AfterLevel }/>
+						<label for="hc-level">For</label>
+						<input type="number" name="level_days" min="1" max="365" value={ fmt.Sprint(v.LevelDays) } class="input hc-num" aria-label="Days after a new level"/>
+						<span>days after each new level, from level</span>
+						<input type="number" name="from_level" min="2" max="100" value={ fmt.Sprint(v.FromLevel) } class="input hc-num" aria-label="First level that opens the picks"/>
+					</div>
+				</fieldset>
+				<div class="pr-acts">
+					<button type="submit" class="btn-primary btn-sm" data-working-label="Saving…">Save</button>
+				</div>
+			</form>
+		</details>
+		if len(v.Rows) > 0 {
+			<ul class="pr-list hc-list">
+				for _, r := range v.Rows {
+					<li class="pr-row" data-hc-row={ r.ID }>
+						<a class="pr-main" href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/entities/" + r.ID) }>
+							<b>{ r.Name }</b>
+							<small>{ "Played by " + r.Player + " · " + r.State }</small>
+						</a>
+						<form
+							class="hc-reopen"
+							method="post"
+							action={ templ.SafeURL(heroChangesURL(v.CampaignID) + "/" + r.ID + "/reopen") }
+							hx-post={ heroChangesURL(v.CampaignID) + "/" + r.ID + "/reopen" }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, v.CSRFToken) }
+							hx-target="#cast-content"
+							hx-swap="outerHTML"
+						>
+							<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+							<input type="number" name="days" min="1" max="365" value="7" class="input hc-num" aria-label={ "Days to open " + r.Name + "'s picks" }/>
+							<span class="pr-k">days</span>
+							<button type="submit" class="pr-word" data-working-label="Opening…">Open picks</button>
+						</form>
+					</li>
+				}
+			</ul>
+		}
+	</section>
+}

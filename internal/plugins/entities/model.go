@@ -869,6 +869,9 @@ type CastView struct {
 	// campaign for the Directors; nil for everyone else, or when none exist.
 	Practice         *PracticeShelfView
 	PracticeDirector *PracticeDirectorView
+	// HeroChanges is the Directors' section that sets when players may
+	// change their hero's picks; nil for everyone else.
+	HeroChanges *HeroChangesView
 	// Tryout is the mount for a try-out kept in the viewer's browser: a
 	// visitor's Practice section or a player's offer to keep it. nil otherwise.
 	Tryout *TryoutView
