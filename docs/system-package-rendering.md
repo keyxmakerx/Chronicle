@@ -349,7 +349,7 @@ What your markup carries:
 | Attribute / class | Meaning |
 |---|---|
 | `data-sheet` | The root. Without one, none of this runs. |
-| `data-sheet-folio` | Optional wrapper around the sheet; it slides left when a panel opens beside it. Size it `width: var(--sheet-width, 920px); max-width: 100%; margin-inline: auto` so it lines up with the tabbed panel (Notes, Items, Files, Posts, Links) Chronicle draws under a page renderer, which is that wide and centred. |
+| `data-sheet-folio` | Optional wrapper around the sheet; it slides left when a panel opens beside it. Size it `width: var(--sheet-width, 920px); max-width: 100%; margin-inline: auto` so it lines up with the tabbed panel (Notes, Items, Files, Posts, Links, and Trackers when the viewer has one there or may add one) Chronicle draws under a page renderer, which is that wide and centred. |
 | `data-sheet-wide` on the root | The sheet can use more room. On a screen at least 1480px wide, `--sheet-width` becomes 1160px for the folio and the tabbed panel together. Size the folio from `var(--sheet-width, 920px)`, never a fixed width, or the two stop lining up. |
 | `data-sheet-names-page` on the root | Set it while the sheet prints the page's name as its own heading; Chronicle's page header then keeps its name for screen readers only, so the name is seen once. Remove it whenever the sheet stops showing the name (a phone layout, say), or the page shows no name at all. |
 | `.paper-stack > .paper` | The sheet itself. |

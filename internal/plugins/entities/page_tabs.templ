@@ -21,6 +21,9 @@ type pageTab struct {
 	// and no add button for this viewer); a tab with no Empty line is hidden
 	// instead, as when the armory has no panel for this page.
 	Empty string
+	// Block is the registered block type a tab draws, when a plugin placed it
+	// through its block's PageTab.
+	Block string
 }
 
 // systemPageTabs gathers everything under a game-system widget into one panel
@@ -30,7 +33,7 @@ type pageTab struct {
 // is unchanged; the panel only places them. Pages built from a layout keep
 // their blocks where the layout puts them.
 templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
-	{{ tabs := systemPageTabList(ctx, cc) }}
+	{{ tabs := systemPageTabList(ctx, cc, entity, entityType, csrfToken) }}
 	<section class="pt" data-widget="page-tabs" aria-label="On this page">
 		<div class="pt-bar">
 			<div class="pt-tabs" role="tablist" aria-label="On this page">
@@ -67,6 +70,10 @@ templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				}
 			>
 				switch t.Key {
+					default:
+						if t.Block != "" {
+							@RenderBlock(ctx, TemplateBlock{ID: "shell-" + t.Block, Type: t.Block}, cc, entity, entityType, csrfToken)
+						}
 					case "notes":
 						@RenderBlock(ctx, TemplateBlock{ID: "shell-notes", Type: "entity_notes"}, cc, entity, entityType, csrfToken)
 						if cc.MemberRole >= campaigns.RoleScribe && entityType != nil {
@@ -115,15 +122,37 @@ templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *
 
 // systemPageTabList is the panel's tabs in order, each only where its piece
 // can draw for this viewer: notes need a member, items the armory
-// panel the show handler set up, files a member.
-func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext) []pageTab {
-	var tabs []pageTab
+// panel the show handler set up, files a member. A block that offers a tab
+// goes first when the viewer can see a row of it, so it is the pane open on
+// load, and after Items when they can only add one.
+func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) []pageTab {
+	var tabs, seen, addable []pageTab
+	if reg := GetGlobalBlockRegistry(); reg != nil {
+		for _, m := range reg.PageTabBlocks() {
+			rows, canAdd, err := m.PageTab.State(ctx, BlockRenderContext{
+				Block: TemplateBlock{ID: "shell-" + m.Type, Type: m.Type},
+				CC: cc, Entity: entity, EntityType: entityType, CSRFToken: csrfToken,
+				UserID: layouts.GetUserID(ctx),
+			})
+			if err != nil {
+				continue
+			}
+			t := pageTab{Key: m.Type, Label: m.PageTab.Label, Count: m.PageTab.Count, Act: m.PageTab.Act, Block: m.Type}
+			if rows > 0 {
+				seen = append(seen, t)
+			} else if canAdd {
+				addable = append(addable, t)
+			}
+		}
+	}
+	tabs = append(tabs, seen...)
 	if layouts.GetUserID(ctx) != "" && cc.MemberRole >= campaigns.RolePlayer {
 		tabs = append(tabs, pageTab{Key: "notes", Label: "Notes", Count: ".en-note[data-en-id]:not(.is-leaving)", Act: `[data-en-act="new"]`})
 	}
 	if autoPagePanel(ctx) && pagePanelURL(ctx) != "" {
 		tabs = append(tabs, pageTab{Key: "items", Label: "Items", Count: "li[data-item-id]", Act: "[data-open-give]"})
 	}
+	tabs = append(tabs, addable...)
 	if cc.MemberRole >= campaigns.RolePlayer {
 		tabs = append(tabs, pageTab{Key: "files", Label: "Files", Count: "[data-pf-row]", Act: "[data-pf-attach]",
 			Empty: "No files yet."})

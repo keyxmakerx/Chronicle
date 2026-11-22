@@ -59,6 +59,20 @@ type BlockMeta struct {
 	// the Customizer's widget list shows beside its name: one of
 	// PictureKinds. Empty draws PictureLines, as a package widget does.
 	Picture string `json:"picture,omitempty"`
+	// PageTab, when set, also offers the block as a tab of the panel under a
+	// page a game system draws, where no layout can place it.
+	PageTab *BlockPageTab `json:"-"`
+}
+
+// BlockPageTab describes a block's tab under a system-drawn page. The owning
+// plugin fills it, so the entities plugin never names the block.
+type BlockPageTab struct {
+	// Label is the tab's name; Count selects the rows the tab counts and Act
+	// the piece's own add button, which the panel's action button presses.
+	Label, Count, Act string
+	// State says what the viewer has on this page: how many rows they can
+	// see, and whether they may add one. An error, or neither, means no tab.
+	State func(ctx context.Context, rc BlockRenderContext) (rows int, canAdd bool, err error)
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.
@@ -190,6 +204,18 @@ func (r *BlockRegistry) Register(meta BlockMeta, renderer BlockRenderer) {
 		r.order = append(r.order, meta.Type)
 	}
 	r.entries[meta.Type] = registeredBlock{meta: meta, renderer: renderer}
+}
+
+// PageTabBlocks returns the metadata of blocks that offer a tab under a
+// system-drawn page, in registration order.
+func (r *BlockRegistry) PageTabBlocks() []BlockMeta {
+	var out []BlockMeta
+	for _, m := range r.Types() {
+		if m.PageTab != nil && m.PageTab.State != nil {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // IsValid returns true if blockType is a registered block type.

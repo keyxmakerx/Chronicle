@@ -6929,7 +6929,7 @@ func (a *App) RegisterRoutes() {
 		trackersHandler := trackers.NewHandler(trackersSvc)
 		trackersHandler.SetPlacementChecker(blockPlacement)
 		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
-		registerTrackersBlock(blockRegistry)
+		registerTrackersBlock(blockRegistry, trackersSvc)
 		registerRecipeBlock(blockRegistry)
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
