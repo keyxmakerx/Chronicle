@@ -30,10 +30,25 @@
   window.ChronicleHeroStage = function (Creator, kit) {
     var esc = kit.esc, lower = kit.lower, I = kit.I, qa = kit.qa, dockedBar = kit.dockedBar, hasOwn = kit.hasOwn;
 
-    function Stage(root) { Creator.call(this, root); this.inerted = []; }
+    function Stage(root) {
+      Creator.call(this, root);
+      this.inerted = [];
+      this.borders = makeBorders(root);
+    }
     Stage.prototype = Object.create(Creator.prototype);
     Stage.prototype.constructor = Stage;
     var base = Creator.prototype, P = Stage.prototype;
+
+    // The borders library the page put on the mount, handed to the colouring
+    // script. A missing or unreadable library, or a page without the script,
+    // leaves every card plain.
+    function makeBorders(root) {
+      try {
+        var lib = JSON.parse(root.getAttribute('data-borders') || 'null');
+        if (lib && typeof lib === 'object' && typeof window.ChronicleHeroBorders === 'function') return window.ChronicleHeroBorders(lib, root);
+      } catch (e) { /* plain cards */ }
+      return null;
+    }
 
     // --- The window ---
 
@@ -77,6 +92,7 @@
     };
 
     P.destroy = function () {
+      if (this.borders) { this.borders.destroy(); this.borders = null; }
       this.lockSite(false);
       base.destroy.call(this);
     };
@@ -121,6 +137,20 @@
     // The banner holds the picks, so there is no chip row.
     P.chipsBlockHTML = function () { return ''; };
     P.cardIx = function () { return ''; };
+
+    // An entry that names a border wears it; the script leaves a wrong name
+    // or colour plain.
+    P.cardAttrs = function (c) { return this.borders ? this.borders.attrs(c.look) : ''; };
+
+    // A framed card is deeper-padded and lets its border overhang, so the
+    // content passing the card's edge is not the only way words reach the
+    // frame: the foot line must also clear the bottom padding.
+    P.overflow = function (card) {
+      var over = base.overflow.call(this, card), more = card.hasAttribute('data-trim') && card.querySelector('.hc-more');
+      if (!more) return over;
+      var pad = parseFloat(getComputedStyle(card).paddingBottom) || 0;
+      return Math.max(over, more.offsetTop + more.offsetHeight - (card.clientHeight - pad));
+    };
 
     // --- The hero ---
 

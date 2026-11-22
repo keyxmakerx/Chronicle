@@ -30,7 +30,7 @@ func tryoutPlan(plan *HeroPlan) *HeroPlan {
 			}
 			step.Choices = append(step.Choices, HeroChoice{
 				Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
-				Description: c.Description, Properties: c.Properties, Parent: c.Parent,
+				Description: c.Description, Properties: c.Properties, Look: c.Look, Parent: c.Parent,
 			})
 		}
 		if len(step.Choices) > 0 {

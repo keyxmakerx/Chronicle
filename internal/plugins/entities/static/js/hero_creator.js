@@ -979,9 +979,17 @@
   // The "3 / 11" count in a card's top row.
   Creator.prototype.cardIx = function (i, n) { return '<span class="hc-ix">' + (i + 1) + ' / ' + n + '</span>'; };
 
+  // Extra attributes for an entry card's opening tag; the stage look puts the
+  // entry's border there. The make-your-own card and list rows never take any.
+  Creator.prototype.cardAttrs = function (c) { return ''; };
+
+  // How far a card's content runs past what it may use. A stage card with a
+  // frame also keeps its foot line out of the frame, so it overrides this.
+  Creator.prototype.overflow = function (card) { return card.scrollHeight - card.clientHeight; };
+
   Creator.prototype.cardHTML = function (c, i, n, st) {
     var pk = this.isPicked(st, c);
-    return '<div class="hc-card' + (pk ? ' is-picked' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules">' +
+    return '<div class="hc-card' + (pk ? ' is-picked' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules"' + this.cardAttrs(c) + '>' +
       '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your ' + esc(lower(st.label)) : esc(st.label)) + '</span>' + this.marksHTML(st, c, false) + this.cardIx(i, n) + '</span>' +
       '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + this.factsHTML(c, 3) +
       '<span class="hc-more">Read the rules ' + I.up + '</span></div>';
@@ -1014,7 +1022,7 @@
     var h = '<div class="hc-grid" data-grid role="listbox" aria-label="' + esc(st.label) + '">';
     l.forEach(function (c, i) {
       var pk = self.isPicked(st, c), ft = factsOf(c).slice(0, 2).map(function (x) { return '<b>' + esc(x[0]) + '</b> ' + esc(x[1]); }).join(' · ');
-      h += '<div class="hc-gcard' + (i === ci ? ' is-focus' : '') + (pk ? ' is-picked' : '') + '" role="option" tabindex="' + (i === ci ? 0 : -1) + '" aria-selected="' + (i === ci) + '" data-i="' + i + '">' +
+      h += '<div class="hc-gcard' + (i === ci ? ' is-focus' : '') + (pk ? ' is-picked' : '') + '" role="option" tabindex="' + (i === ci ? 0 : -1) + '" aria-selected="' + (i === ci) + '" data-i="' + i + '"' + self.cardAttrs(c) + '>' +
         '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your choice' : esc(st.label)) + '</span>' + self.marksHTML(st, c, false) + '</span>' +
         '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + (ft ? '<span class="hc-ft">' + ft + '</span>' : '') + '</div>';
     });
@@ -1368,7 +1376,7 @@
   Creator.prototype.fitCards = function (at) {
     var hand = this.$('[data-hand]');
     if (!hand) return;
-    var all = qa('.hc-card', hand);
+    var self = this, all = qa('.hc-card', hand);
     if (at == null) { var cur = hand.querySelector('.hc-card[data-i="' + this.curIdx() + '"]'); at = Math.max(0, all.indexOf(cur)); }
     // Reads and writes are batched across the cards: reset every card, read
     // them all, shorten each by what its overflow says, then check them all.
@@ -1382,7 +1390,7 @@
       if (dl) { dl.hidden = false; qa('div', dl).forEach(function (d) { d.hidden = false; }); }
     });
     jobs.forEach(function (j) {
-      j.over = j.c.scrollHeight - j.c.clientHeight;
+      j.over = self.overflow(j.c);
       j.lh = parseFloat(getComputedStyle(j.sum).lineHeight) || 24;
       j.lines = Math.round(j.sum.scrollHeight / j.lh);
       j.facts = j.dl ? qa('div', j.dl).map(function (d) { return d.offsetHeight + 1; }) : [];
@@ -1411,7 +1419,7 @@
     });
     // A card the estimate left long is finished one step at a time.
     jobs.forEach(function (j) {
-      while (j.i < j.list.length && j.c.scrollHeight > j.c.clientHeight + 1) j.list[j.i++]().run();
+      while (j.i < j.list.length && self.overflow(j.c) > 1) j.list[j.i++]().run();
       if (j.dl) j.dl.hidden = !qa('div', j.dl).some(function (d) { return !d.hidden; });
       // A one-word name wider than the card cannot wrap, so it is set smaller
       // until it fits across; a smaller name only ever frees height.
