@@ -33,6 +33,8 @@ func TestCoverageLookups_Plugged(t *testing.T) {
 	}{
 		{"timeline degraded", aiDeps{}, "campaign_settings"},
 		{"timeline up", aiDeps{Timelines: struct{ timeline.TimelineService }{}}, "campaign_settings timelines"},
+		{"quests up", aiDeps{Quests: stubQuestSvc{}, Boards: stubBoardSvc{}}, "campaign_settings quests"},
+		{"quests half up", aiDeps{Quests: stubQuestSvc{}}, "campaign_settings"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

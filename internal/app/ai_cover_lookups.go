@@ -6,6 +6,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/aiplug"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 )
 
@@ -19,6 +20,9 @@ func (d *aiDeps) coverageLookups() []aiplug.Lookup {
 	out := []aiplug.Lookup{campaigns.NewAISettings(d.Campaigns, hub)}
 	if d.Timelines != nil {
 		out = append(out, timeline.NewAITimelines(d.Timelines, d.addonOffReason(timeline.PluginSlug, "Timelines")))
+	}
+	if d.Quests != nil && d.Boards != nil {
+		out = append(out, quests.NewAIQuests(d.Quests, d.Boards))
 	}
 	return out
 }
