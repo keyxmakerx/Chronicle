@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -71,6 +73,119 @@ func TestRollsCritAdapterFallsBackToDefault(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if got := a.CritRules(context.Background(), "c1"); !reflect.DeepEqual(got, systems.DefaultCritRules()) {
 				t.Fatalf("got %v, want the default rules", got)
+			}
+		})
+	}
+}
+
+type powerSystems struct{ sys systems.System }
+
+func (p powerSystems) EnabledSystem(context.Context, string) systems.System { return p.sys }
+
+type powerHeroes struct {
+	entities.EntityService
+	mine  []entities.Entity
+	types map[int]*entities.EntityType
+}
+
+func (p powerHeroes) ListByOwner(_ context.Context, _, _ string) ([]entities.Entity, error) {
+	return p.mine, nil
+}
+
+func (p powerHeroes) GetEntityTypeByID(_ context.Context, id int) (*entities.EntityType, error) {
+	if t, ok := p.types[id]; ok {
+		return t, nil
+	}
+	return nil, errors.New("no such type")
+}
+
+// powerCharacters lists the campaign's character types.
+type powerCharacters []int
+
+func (p powerCharacters) CharacterTypeIDs(context.Context, string) ([]int, error) { return p, nil }
+
+// The Table's power roll comes from the game system's declaration and the
+// viewer's own claimed hero; a campaign with none shows no line.
+func TestRollsPowerAdapter(t *testing.T) {
+	ctx := context.Background()
+	decl := fakeSystem{manifest: &systems.SystemManifest{Crafting: &systems.CraftingRules{
+		Dice: "2d10", Edge: 2, Bane: -2, Tiers: []int{11, 16},
+		Characteristics: []systems.CraftingStat{{Key: "might", Label: "Might"}, {Key: "agility", Label: "Agility"}},
+	}}}
+	const heroType, noteType = 7, 9
+	hero := entities.Entity{Name: "Sivin", EntityTypeID: heroType, FieldsData: map[string]any{"might": float64(1), "agility": "+2"}}
+	plain := map[int]*entities.EntityType{heroType: {ID: heroType}}
+	chars := powerCharacters{heroType}
+
+	t.Run("no system", func(t *testing.T) {
+		got, err := (&rollsPowerAdapter{sys: powerSystems{}}).PowerRoll(ctx, "c1", "u1", false)
+		if err != nil || got.Declared {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+	t.Run("a system with no declaration", func(t *testing.T) {
+		got, _ := (&rollsPowerAdapter{sys: powerSystems{sys: fakeSystem{manifest: &systems.SystemManifest{}}}}).PowerRoll(ctx, "c1", "u1", false)
+		if got.Declared {
+			t.Fatalf("declared without a block: %+v", got)
+		}
+	})
+	t.Run("a hero's numbers", func(t *testing.T) {
+		a := &rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{mine: []entities.Entity{hero}, types: plain}, characters: chars}
+		got, err := a.PowerRoll(ctx, "c1", "u1", false)
+		if err != nil || !got.Declared || got.Hero != "Sivin" || len(got.Characteristics) != 2 {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+		if v := got.Characteristics[0].Value; v == nil || *v != 1 {
+			t.Errorf("might = %v", v)
+		}
+		if v := got.Characteristics[1].Value; v == nil || *v != 2 {
+			t.Errorf("agility = %v", v)
+		}
+	})
+	t.Run("no hero keeps the line without numbers", func(t *testing.T) {
+		got, _ := (&rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{}, characters: chars}).PowerRoll(ctx, "c1", "u1", false)
+		if !got.Declared || got.Hero != "" || got.Characteristics[0].Value != nil {
+			t.Fatalf("got %+v", got)
+		}
+	})
+	t.Run("the hero is the first owned page of a character type", func(t *testing.T) {
+		note := entities.Entity{Name: "Shopping list", EntityTypeID: noteType, FieldsData: map[string]any{"might": float64(5)}}
+		a := &rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{mine: []entities.Entity{note, hero}, types: plain}, characters: chars}
+		got, _ := a.PowerRoll(ctx, "c1", "u1", false)
+		if got.Hero != "Sivin" || got.Characteristics[0].Value == nil || *got.Characteristics[0].Value != 1 {
+			t.Fatalf("picked the wrong page: %+v", got)
+		}
+	})
+
+	// A number the GM marked GM-only, on the category or on just this page,
+	// never reaches a player; a Director still sees it.
+	gmOnType := map[int]*entities.EntityType{heroType: {ID: heroType, Fields: []entities.FieldDefinition{{Key: "might", GMOnly: true}}}}
+	onPage := hero
+	onPage.FieldOverrides = &entities.FieldOverrides{Added: []entities.FieldDefinition{{Key: "might", GMOnly: true}}}
+	for _, tt := range []struct {
+		name      string
+		hero      entities.Entity
+		types     map[int]*entities.EntityType
+		canSeeGM  bool
+		wantMight bool
+	}{
+		{"GM-only on the category hides it from a player", hero, gmOnType, false, false},
+		{"GM-only on the page hides it from a player", onPage, plain, false, false},
+		{"a Director sees a GM-only category field", hero, gmOnType, true, true},
+		{"a Director sees a GM-only page field", onPage, plain, true, true},
+		{"an unreadable category hides everything from a player", hero, nil, false, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{mine: []entities.Entity{tt.hero}, types: tt.types}, characters: chars}
+			got, err := a.PowerRoll(ctx, "c1", "u1", tt.canSeeGM)
+			if err != nil || got.Hero != "Sivin" {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+			if has := got.Characteristics[0].Value != nil; has != tt.wantMight {
+				t.Errorf("might shown = %v, want %v", has, tt.wantMight)
+			}
+			if tt.types != nil && got.Characteristics[1].Value == nil {
+				t.Errorf("agility is not GM-only and should show")
 			}
 		})
 	}

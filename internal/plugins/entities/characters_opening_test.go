@@ -10,8 +10,8 @@ import (
 )
 
 // Characters opens on one line inside the frame; "Create hero" is there only
-// for someone who may make one, and keeps the attribute the hero builder's
-// script looks for.
+// for someone who may make one, and is a link to the hero creator (the live
+// check presses it and lands there).
 func TestCharactersOpening(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1", Name: "Ashen"}}
 	render := func(v CastView) string {
@@ -26,8 +26,8 @@ func TestCharactersOpening(t *testing.T) {
 		t.Errorf("a viewer who may not create should see the opening and no Create hero:\n%s", player)
 	}
 	maker := render(CastView{CanCreateHero: true})
-	if !strings.Contains(maker, "Create hero") || !strings.Contains(maker, `data-create-hero="true"`) {
-		t.Errorf("Create hero or its script hook is missing:\n%s", maker)
+	if !strings.Contains(maker, "Create hero") || !strings.Contains(maker, `data-create-hero="true"`) || !strings.Contains(maker, `href="/campaigns/c1/characters/new"`) {
+		t.Errorf("Create hero, its test hook or its link to the creator is missing:\n%s", maker)
 	}
 	if i := strings.Index(maker, `id="cast-content"`); i < 0 || strings.Index(maker, "data-app-frame") < i {
 		t.Errorf("the frame must sit inside #cast-content so its swaps keep it")

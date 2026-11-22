@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -203,6 +204,94 @@ func cookieStates(rec *httptest.ResponseRecorder) (player, guest string) {
 		}
 	}
 	return
+}
+
+// The guest-code preview lowers the DM team's reads to a visitor holding a
+// look-around pass, on a private campaign too (a pass opens one), and has no
+// effect for anyone else or on a write.
+func TestAllowPublicAccess_GuestCodePreview(t *testing.T) {
+	public := &Campaign{ID: "camp-1", IsPublic: true}
+	private := &Campaign{ID: "camp-1", IsPublic: false}
+	code := []*http.Cookie{{Name: viewAsGuestCodeCookie, Value: "camp-1"}}
+	both := append([]*http.Cookie{{Name: viewAsGuestCookie, Value: "camp-1"}}, code...)
+	tests := []struct {
+		name     string
+		campaign *Campaign
+		role     Role
+		method   string
+		cookies  []*http.Cookie
+		want     string
+	}{
+		{"owner, public: pass holder", public, RoleOwner, http.MethodGet, code, PreviewGuestCode},
+		{"owner, private: pass holder", private, RoleOwner, http.MethodGet, code, PreviewGuestCode},
+		{"owner, POST: real", private, RoleOwner, http.MethodPost, code, ""},
+		{"code wins over a stale guest cookie", public, RoleOwner, http.MethodGet, both, PreviewGuestCode},
+		{"another campaign's cookie: real", private, RoleOwner, http.MethodGet, []*http.Cookie{{Name: viewAsGuestCodeCookie, Value: "camp-2"}}, ""},
+		{"plain player with the cookie: no effect", private, RolePlayer, http.MethodGet, code, ""},
+		{"scribe with the cookie: no effect", public, RoleScribe, http.MethodGet, code, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			camp := *tt.campaign
+			svc := &stubPublicSvc{campaign: &camp, member: &CampaignMember{UserID: "u1", Role: tt.role}}
+			cc, _ := previewRequest(t, AllowPublicCampaignAccess, svc, tt.method, tt.cookies, nil)
+			if cc == nil {
+				t.Fatal("no context")
+			}
+			if cc.Preview != tt.want {
+				t.Fatalf("preview = %q, want %q", cc.Preview, tt.want)
+			}
+			if tt.want == "" {
+				if cc.MemberRole != tt.role || !cc.IsMember || cc.VisitUntil != nil {
+					t.Errorf("real context lost: %+v", cc)
+				}
+				return
+			}
+			if cc.MemberRole != RoleNone || cc.IsMember || cc.IsDmGranted || cc.IsSiteAdmin || cc.CanAuthorDmOnly() || cc.VisibilityRole() != int(RoleNone) {
+				t.Errorf("not a visitor: %+v", cc)
+			}
+			if cc.VisitUntil == nil || !cc.VisitUntil.After(time.Now().Add(6*24*time.Hour)) {
+				t.Errorf("the preview's pass should run a week, got %v", cc.VisitUntil)
+			}
+			if !cc.PreviewerCanDM || cc.PreviewerRole != tt.role || cc.HomeAudience() != HomeGuest {
+				t.Errorf("chrome fields wrong: %+v", cc)
+			}
+		})
+	}
+}
+
+func TestViewAs_GuestCode(t *testing.T) {
+	privOwner := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RoleOwner, IsMember: true}
+	player := &CampaignContext{Campaign: &Campaign{ID: "camp-1"}, MemberRole: RolePlayer, IsMember: true}
+	gCookie := &http.Cookie{Name: viewAsGuestCookie, Value: "camp-1"}
+	codeState := func(rec *httptest.ResponseRecorder) string {
+		for _, ck := range rec.Result().Cookies() {
+			if ck.Name == viewAsGuestCodeCookie {
+				if ck.MaxAge < 0 {
+					return "off"
+				}
+				if !ck.HttpOnly || ck.SameSite != http.SameSiteLaxMode {
+					return "loose"
+				}
+				return "on"
+			}
+		}
+		return ""
+	}
+	rec := viewAsCall(t, privOwner, url.Values{"as": {"guestcode"}, "next": {"home"}}, []*http.Cookie{gCookie}, false)
+	if rec.Code != 303 || rec.Header().Get("Location") != "/campaigns/camp-1" || codeState(rec) != "on" {
+		t.Errorf("a private campaign's owner starts it: %d %q %q", rec.Code, rec.Header().Get("Location"), codeState(rec))
+	}
+	if _, g := cookieStates(rec); g != "off" {
+		t.Errorf("starting it clears the guest preview, guest=%q", g)
+	}
+	rec = viewAsCall(t, privOwner, url.Values{"as": {"self"}}, []*http.Cookie{{Name: viewAsGuestCodeCookie, Value: "camp-1"}}, false)
+	if codeState(rec) != "off" {
+		t.Errorf("self ends it, got %q", codeState(rec))
+	}
+	if rec := viewAsCall(t, player, url.Values{"as": {"guestcode"}}, nil, false); rec.Code != 403 {
+		t.Errorf("a player is refused, got %d", rec.Code)
+	}
 }
 
 func TestViewAs(t *testing.T) {
@@ -412,7 +501,7 @@ func TestShowPage_DashboardForLine(t *testing.T) {
 	}
 	priv := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}, MemberRole: RoleOwner, IsMember: true}
 	out = render(priv, context.Background(), true)
-	for _, want := range []string{"so guests can&#39;t open it", "Who can read it", "/campaigns/camp-1/dashboard#line-public", "Arrange this page"} {
+	for _, want := range []string{"so only guests with a guest code can open it", "See it as a guest with a code", `value="guestcode"`, "Who can read it", "/campaigns/camp-1/dashboard#line-public", "Arrange this page"} {
 		if !strings.Contains(out, want) && !strings.Contains(out, strings.ReplaceAll(want, "&#39;", "'")) {
 			t.Errorf("private guest note missing %q", want)
 		}

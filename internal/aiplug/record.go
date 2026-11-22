@@ -9,6 +9,9 @@ package aiplug
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -282,4 +285,36 @@ func PlanError(err error) string {
 		return ae.Message
 	}
 	return "could not be checked; try again in a moment"
+}
+
+// Snapshot is what an undoable kind kept of one thing before a request's
+// change: enough to put it back. Data is the kind's own JSON and is never
+// shown to anyone; Target and Name only say which thing it was.
+type Snapshot struct {
+	Target string
+	Name   string
+	Data   string
+}
+
+// Undoable is a kind whose change the owner can take back from "What it
+// did". Before runs ahead of Apply and returns nil when this change has
+// nothing to put back. Fingerprint is the state of the thing now, taken just
+// after Apply and again at Undo: Undo goes ahead only when the two agree, so
+// work done in between is never overwritten. A kind that does not implement
+// it is not undoable.
+type Undoable interface {
+	Before(ctx context.Context, campaignID string, a Actor, r Record) (*Snapshot, error)
+	Fingerprint(ctx context.Context, campaignID string, a Actor, s Snapshot) (string, error)
+	Restore(ctx context.Context, campaignID string, a Actor, s Snapshot) error
+}
+
+// Hash is the fingerprint of a value as JSON, for an Undoable's Fingerprint.
+// encoding/json writes map keys in order, so equal states hash equal.
+func Hash(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

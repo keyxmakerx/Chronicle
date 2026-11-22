@@ -14,8 +14,13 @@ import (
 // Handler serves the Table tab's rolls as JSON. It binds and calls the
 // service; who may see and do what is the service's.
 type Handler struct {
-	svc Service
+	svc   Service
+	power PowerRollSource
 }
+
+// SetPowerRolls gives the handler the game system's power roll; without it
+// the Table never shows a power roll line.
+func (h *Handler) SetPowerRolls(src PowerRollSource) { h.power = src }
 
 // NewHandler creates the rolls handler.
 func NewHandler(svc Service) *Handler {
@@ -37,6 +42,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/rolls", h.Roll, player)
 	cg.GET("/rolls/settings", h.Settings, player)
 	cg.PUT("/rolls/settings", h.SetSettings, player)
+	cg.GET("/rolls/power", h.Power, player)
 }
 
 // ViewerOf is who is asking, from the campaign context. A member with DM
@@ -121,6 +127,23 @@ func (h *Handler) SetSettings(c *echo.Context) error {
 		return err
 	}
 	out, err := h.svc.SetSettings(c.Request().Context(), campaignID, v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Power returns the campaign's power roll and the viewer's own hero's
+// characteristics: only the caller's claimed character, never anyone else's.
+func (h *Handler) Power(c *echo.Context) error {
+	campaignID, v, err := h.viewer(c)
+	if err != nil {
+		return err
+	}
+	if h.power == nil {
+		return c.JSON(http.StatusOK, PowerRollLine{})
+	}
+	out, err := h.power.PowerRoll(c.Request().Context(), campaignID, v.UserID, v.Director)
 	if err != nil {
 		return err
 	}

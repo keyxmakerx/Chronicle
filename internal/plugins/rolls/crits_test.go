@@ -2,6 +2,7 @@ package rolls
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -141,5 +142,22 @@ func TestServiceJudgesEveryPath(t *testing.T) {
 				t.Fatalf("crits = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// powerRollWire is a Draw Steel crit as the log and the live message carry
+// it. test/js/power_roll.test.mjs reads this same text, so the power roll's
+// "Critical" headline and the server's judgement agree on the wire.
+const powerRollWire = `[{"sides":10,"value":9,"crit":"succ"},{"sides":10,"value":10,"crit":"succ"}]`
+
+func TestPowerRollCritWire(t *testing.T) {
+	dice := d([2]int{10, 9}, [2]int{10, 10})
+	markCrits(drawSteelCrits, dice, [][2]int{{0, 2}})
+	got, err := json.Marshal(dice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != powerRollWire {
+		t.Fatalf("wire = %s, want %s", got, powerRollWire)
 	}
 }

@@ -49,12 +49,12 @@ func TestSittingRows(t *testing.T) {
 	start := time.Date(2026, 10, 1, 20, 0, 0, 0, time.UTC)
 	ask := start.Add(10 * time.Minute)
 	s := connector.Sitting{Start: start, End: start.Add(20 * time.Minute), Calls: []connector.Call{
-		{Tool: "read_page", At: start.Add(20 * time.Minute), Summary: "Read Brimstone Keep", OK: true},
-		{Tool: toolAskName, At: ask, Summary: "Asked: Add the Ash Road", Note: "sent for your review", OK: true},
-		{Tool: toolAskName, At: start.Add(5 * time.Minute), Summary: "Asked: Old one", OK: true},
-		{Tool: "read_note", At: start, Summary: "Read a note", Note: "not available", OK: false},
+		{ID: 1, Tool: "read_page", At: start.Add(20 * time.Minute), Summary: "Read Brimstone Keep", OK: true},
+		{ID: 2, Tool: toolAskName, At: ask, Summary: "Asked: Add the Ash Road", Note: "sent for your review", OK: true},
+		{ID: 3, Tool: toolAskName, At: start.Add(5 * time.Minute), Summary: "Asked: Old one", OK: true},
+		{ID: 4, Tool: "read_note", At: start, Summary: "Read a note", Note: "not available", OK: false},
 	}}
-	v := ConnectView{Requests: []connector.Request{{Summary: "Add the Ash Road", CreatedAt: ask.Add(2 * time.Second)}}}
+	v := ConnectView{Calls: s.Calls, Requests: []connector.Request{{ID: 9, Summary: "Add the Ash Road", CreatedAt: ask.Add(2 * time.Second)}}}
 	rows := sittingRows(v, s)
 	want := []struct {
 		kind    string

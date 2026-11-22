@@ -487,6 +487,7 @@ POST	/campaigns/:id/ai/players	session	plugins/ai_workspace.(*Handler).SetPlayer
 POST	/campaigns/:id/ai/players/:kid	session	plugins/ai_workspace.(*Handler).PlayerKeyAction	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/requests	session	plugins/ai_workspace.(*Handler).AIRequests	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).TurnDownRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/requests/:rid/undo	session	plugins/ai_workspace.(*Handler).UndoRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).KeysPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).CreateKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/api-keys/:keyID	session	plugins/syncapi.(*Handler).RevokeKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1210,6 +1211,7 @@ PUT	/campaigns/:id/roll-tables	session	plugins/rolltables.(*Handler).Put	plugins
 GET	/campaigns/:id/roll-tables/manage	session	plugins/rolltables.(*Handler).Manage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/rolls	session	plugins/rolls.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/rolls	session	plugins/rolls.(*Handler).Roll	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/rolls/power	session	plugins/rolls.(*Handler).Power	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/rolls/settings	session	plugins/rolls.(*Handler).Settings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/rolls/settings	session	plugins/rolls.(*Handler).SetSettings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/run-by	session	plugins/campaigns.(*Handler).RunByBlock	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

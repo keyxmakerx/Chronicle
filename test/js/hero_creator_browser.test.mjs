@@ -4,7 +4,8 @@
 // Chromium against a stubbed plan. It pins what a player making a hero sees:
 // the "n not here" foot folding open names and reasons, a required step with
 // one entry filled in and locked, a short-list note, the Ask first mark with a
-// waiting line, the Director's suggestion, and what reaches the server.
+// waiting line, the Director's suggestion, what reaches the server, and that a
+// new-hero sentence an older Characters page kept on the device seeds a hero.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -148,6 +149,21 @@ test('coming back to a saved draft opens on the first step without a pick', { sk
   assert.match(await rail(pg, 'class').innerText(), /Fury/, 'the pick is kept');
   assert.equal(await reopen({ class: { name: 'Fury', options: [] }, kit: { name: 'Battlemind', options: [] }, culture: { name: 'Academic', options: [] } }), '4',
     'every step chosen opens Name and review');
+});
+
+test('a new-hero sentence kept on this device becomes the starting picks, once', { skip }, async (t) => {
+  const { pg } = await open(t);
+  await pg.evaluate(() => localStorage.setItem('chronicle:hero-builder:c1', JSON.stringify({ name: 'Kept', values: { class: 'Fury', kit: 'Battlemind', kit_choices_json: '["x"]' }, open: true })));
+  await pg.reload();
+  await pg.waitForSelector('.hc-app');
+  assert.match(await rail(pg, 'class').innerText(), /Fury/);
+  assert.match(await rail(pg, 'kit').innerText(), /Battlemind/);
+  assert.equal(await pg.locator('.hc-app').getAttribute('data-step'), '3', 'it opens on the first step without a pick');
+  assert.equal(await pg.evaluate(() => localStorage.getItem('chronicle:hero-builder:c1')), null, 'the sentence is used once');
+  await pg.reload();
+  await pg.waitForSelector('.hc-app');
+  assert.match(await rail(pg, 'class').innerText(), /Fury/, 'a reload before the next pick keeps it');
+  assert.match(await rail(pg, 'kit').innerText(), /Battlemind/);
 });
 
 test('unmounting lets go of the window, the document and the size watcher', { skip }, async (t) => {

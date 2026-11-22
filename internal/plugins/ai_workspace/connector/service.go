@@ -85,6 +85,8 @@ type Service struct {
 	// watchRepo is nil until SetWatch.
 	watchRepo WatchRepository
 	watch     *watcher
+	// undoStore keeps what applied requests changed (undo.go); nil until SetUndo.
+	undoStore UndoStore
 }
 
 // ChangesCheck looks at what the connection's AI asks for against the

@@ -128,8 +128,8 @@ func previewSlotFor(cc *CampaignContext, playerPreview bool, csrfToken string) t
 	}
 	state := ""
 	switch {
-	case cc.Preview == PreviewGuest:
-		state = PreviewGuest
+	case cc.InGuestPreview():
+		state = cc.Preview
 	case playerPreview:
 		state = PreviewPlayer
 	}
@@ -149,27 +149,33 @@ templ homePreviewChrome(cc *CampaignContext, state string, guestPrivate bool, cs
 			<span class="text-xs font-semibold uppercase tracking-wider text-fg-secondary">Dashboard for</span>
 			@homePreviewChoice(cc, "self", "You", state == "", csrfToken)
 			@homePreviewChoice(cc, "player", "Players", state == PreviewPlayer, csrfToken)
-			@homePreviewChoice(cc, "guest", "Guests", state == PreviewGuest, csrfToken)
+			@homePreviewChoice(cc, "guest", "Guests", state == PreviewGuest || state == PreviewGuestCode, csrfToken)
 		</div>
 		if guestPrivate {
 			// A div, not a paragraph: the arrange form inside would end a paragraph.
 			<div class="mt-3 text-sm text-fg-secondary" role="status">
-				This campaign is private, so guests can't open it.
-				<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/dashboard#line-public") } class="text-accent hover:underline">Who can read it</a>
-				if cc.OwnerChrome() {
-					<span aria-hidden="true">·</span>
-					@homeArrangeLink(cc, PreviewGuest, csrfToken)
-				}
+				<p>This campaign is private, so only guests with a guest code can open it.</p>
+				<div class="cb-pv-acts">
+					@homeGuestCodeLink(cc, csrfToken)
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/dashboard#line-public") } class="text-accent hover:underline">Who can read it</a>
+					if cc.OwnerChrome() {
+						@homeArrangeLink(cc, PreviewGuest, csrfToken)
+					}
+				</div>
 			</div>
 		} else if state != "" {
 			<div class="cb-pv-strip mt-3 rounded-lg border-l-[3px] border-amber-500 bg-amber-500/10 px-4 py-2 text-sm text-fg" role="status">
-				if state == PreviewGuest {
+				if state == PreviewGuestCode {
+					You are seeing the guests' dashboard, as a visitor with a guest code sees it.
+				} else if state == PreviewGuest {
 					You are seeing the guests' dashboard, as a visitor sees it.
 				} else {
 					You are seeing the players' dashboard, as a player sees it.
 				}
 				if cc.OwnerChrome() {
-					@homeArrangeLink(cc, state, csrfToken)
+					<div class="cb-pv-acts">
+						@homeArrangeLink(cc, state, csrfToken)
+					</div>
 				}
 			</div>
 		}
@@ -192,6 +198,17 @@ templ homePreviewChoice(cc *CampaignContext, as, label string, selected bool, cs
 				templ.KV("text-fg border-transparent hover:text-accent", !selected),
 			}
 		>{ label }</button>
+	</form>
+}
+
+// homeGuestCodeLink starts the guest-code preview, the one view of a private
+// campaign a guest can have.
+templ homeGuestCodeLink(cc *CampaignContext, csrfToken string) {
+	<form method="POST" action={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/view-as") } hx-post={ "/campaigns/" + cc.Campaign.ID + "/view-as" } hx-headers={ `{"X-CSRF-Token":"` + csrfToken + `"}` } class="inline">
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<input type="hidden" name="as" value={ PreviewGuestCode }/>
+		<input type="hidden" name="next" value="home"/>
+		<button type="submit" class="text-accent hover:underline">See it as a guest with a code</button>
 	</form>
 }
 

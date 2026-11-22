@@ -256,3 +256,28 @@ html[data-motion="off"] .tt-island { transform: none; }
 .tt-note { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--color-text-primary); overflow-wrap: anywhere; white-space: pre-line; }
 .tt-open { align-self: flex-start; display: inline-flex; align-items: center; text-decoration: none; }
 .tt-isl-detail .tt-note { max-width: 36ch; }
+
+/* The power roll line: characteristics as one-press rolls and a five-step edge or bane. */
+.tt-power { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 9px; border: 1px solid var(--color-accent); border-radius: var(--tt-r-ctl); }
+.tt-pstats { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tt-pchip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tt-pchip[aria-pressed="true"] { background: var(--color-accent-fill, var(--color-accent)); border-color: transparent; color: var(--color-accent-on-fill, #fff); }
+.tt-pbonus { display: inline-flex; align-items: center; gap: 6px; }
+.tt-pbonus .tt-field { width: 72px; flex: none; }
+.tt-pedge { align-self: flex-start; }
+.tt-pn { display: none; }
+.tt-other { display: contents; }
+.tt-other[hidden] { display: none; }
+.tt-tot.tt-tier { font-size: 1.05rem; white-space: nowrap; min-width: 0; }
+.tt-island .tt-num, .tt-bignum { white-space: nowrap; }
+.tt-isl-detail .tt-bignum { font-size: 1.5rem; }
+html[data-tt-sheet] .tt-pw { display: none; }
+html[data-tt-sheet] .tt-pn { display: inline; }
+.tt-power { container-type: inline-size; }
+.tt-k .tt-from { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+.tt-pedge { flex-wrap: nowrap; max-width: 100%; }
+.tt-pedge button { white-space: nowrap; padding-inline: 6px; font-size: 12.5px; }
+@container (max-width: 380px) {
+  .tt-pw { display: none; }
+  .tt-pn { display: inline; }
+}

@@ -435,9 +435,29 @@
   // --- Draft kept on this device ---
   Creator.prototype.restore = function () {
     try {
-      var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null');
+      var own = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null'), d = own || (!this.practice && this.sentenceDraft());
       if (d) { this.adopt(d); this.resumed = true; }
+      // A carried-over sentence is removed as it is read, so it is kept as
+      // this creator's own draft at once, or a reload would lose it.
+      if (d && !own) this.save();
     } catch (e) { /* no storage: start fresh */ }
+  };
+  // The Characters page once offered a new hero as a sentence, kept on this
+  // device as { name, values } with bought options in "<key>_choices_json".
+  // A sentence left there carries over here once, as the creator's draft.
+  var SENTENCE = 'chronicle:hero-builder:';
+  Creator.prototype.sentenceDraft = function () {
+    var raw = window.localStorage.getItem(SENTENCE + this.campaignId);
+    if (!raw) return null;
+    window.localStorage.removeItem(SENTENCE + this.campaignId);
+    var s = JSON.parse(raw) || {}, v = s.values || {}, picks = {}, O = '_choices_json';
+    Object.keys(v).forEach(function (k) {
+      if (k.slice(-O.length) === O || typeof v[k] !== 'string') return;
+      var opts = [];
+      try { opts = JSON.parse(v[k + O] || '[]'); } catch (e) { /* none */ }
+      picks[k] = { name: v[k], options: Array.isArray(opts) ? opts.filter(function (o) { return typeof o === 'string'; }) : [] };
+    });
+    return Object.keys(picks).length || (s.name || '').trim() ? { picks: picks, name: typeof s.name === 'string' ? s.name : '' } : null;
   };
   // Takes a draft or a preload ({picks, name}) as the starting point, keeping
   // only what the plan still offers.
@@ -1197,6 +1217,12 @@
     jobs.forEach(function (j) {
       while (j.i < j.list.length && j.c.scrollHeight > j.c.clientHeight + 1) j.list[j.i++]().run();
       if (j.dl) j.dl.hidden = !qa('div', j.dl).some(function (d) { return !d.hidden; });
+      // A one-word name wider than the card cannot wrap, so it is set smaller
+      // until it fits across; a smaller name only ever frees height.
+      if (j.h3 && j.h3.scrollWidth > j.h3.clientWidth + 1) {
+        var px = parseFloat(getComputedStyle(j.h3).fontSize);
+        j.h3.style.fontSize = Math.max(14, Math.floor(px * j.h3.clientWidth / j.h3.scrollWidth)) + 'px';
+      }
       j.c._fitted = j.size;
     });
   };

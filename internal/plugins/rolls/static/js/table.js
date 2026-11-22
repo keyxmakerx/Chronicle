@@ -32,6 +32,8 @@
   var SECTION_NAME = { rolls: 'Rolls', tonight: 'Tonight', dice: 'My dice' };
   var LOOKS = [['quick', 'Quick 2D'], ['rune', 'Rune 3D'], ['none', 'Numbers only']];
   var QUICK = [4, 6, 8, 10, 12, 20];
+  // A game with a power roll puts its own dice first; the rest wait behind "Other dice".
+  var POWER_QUICK = [10, 6, 3];
   // Rune dice come in these sizes; any other die plays as quick 2D.
   var RUNE_SIDES = { 4: 1, 6: 1, 8: 1, 10: 1, 12: 1, 20: 1 };
   // How many rolls the log holds in the page before older ones are fetched.
@@ -104,6 +106,11 @@
     this.camp = null;
     this.personal = readPicks(store('dice.' + key));
     this.cat = null;
+    // The game system's power roll and this person's hero (power_roll.js does the math).
+    this.power = null;
+    this.step = 0;
+    this.otherDice = false;
+    this.lastStat = '';
     this.catAsked = false;
     this.rolls = [];
     this.byId = {};
@@ -128,6 +135,7 @@
     this.wire();
     this.connect();
     this.loadSettings();
+    this.loadPower();
     this.syncSheet();
     if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
   }
@@ -169,6 +177,41 @@
       self.applyDice();
       if (self.open) self.renderSection('dice');
     }).catch(function () { /* the table's choice stays quick 2D */ });
+  };
+
+  // The campaign's power roll, when its game system declares one. Without it the
+  // Table is unchanged.
+  Table.prototype.loadPower = function () {
+    var self = this;
+    C.apiFetch(this.base + '/power').then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
+      if (!p || !p.declared || !C.powerRoll || !(p.characteristics || []).length) return;
+      self.power = { dice: p.dice || '2d10', edge: num(p.edge), bane: num(p.bane), tiers: [num((p.tiers || [])[0]), num((p.tiers || [])[1])], characteristics: p.characteristics, hero: p.hero || '' };
+      if (self.loaded) self.refreshLog(true);
+      var d = self.drawer();
+      if (self.sheet && d) {
+        var keep = self.keepForm();
+        d.innerHTML = self.drawerHTML();
+        self.restoreForm(keep);
+      } else if (self.open) self.renderSection('rolls');
+    }).catch(function () { /* no power roll line */ });
+  };
+
+  // How a roll reads as a power roll: { tier, crit, total } or null.
+  Table.prototype.pread = function (r) {
+    return this.power ? C.powerRoll.read(r, this.power) : null;
+  };
+
+  // The big figure for a roll: the tier first for a power roll, else the total.
+  Table.prototype.figure = function (r) {
+    if (r.hidden) return '?';
+    var p = this.pread(r);
+    return p ? C.powerRoll.headline(p) : String(r.total);
+  };
+
+  // The bonus typed for a hero with no numbers on the sheet, kept in this browser.
+  Table.prototype.myBonus = function () {
+    var n = parseInt(store('pbonus.' + this.key), 10);
+    return isFinite(n) ? Math.max(-9, Math.min(20, n)) : 0;
   };
 
   // The personal picks kept in this browser: only known keys, as strings.
@@ -430,6 +473,8 @@
       if (mod) faces += '<span>' + (mod > 0 ? '+' : '−') + '</span><span>' + Math.abs(mod) + '</span>';
       rows += '<dt>Math</dt><dd class="tt-math">' + (faces || esc(r.formula)) + '<span>=</span><span class="tt-eq">' + esc(r.total) + '</span></dd>';
       if (r.outcome) rows += '<dt>Result</dt><dd>' + esc(r.outcome) + '</dd>';
+      var pr = this.pread(r);
+      if (pr) rows += '<dt>Power roll</dt><dd>' + esc(C.powerRoll.headline(pr)) + '</dd>';
     }
     if (r.why) rows += '<dt>Why</dt><dd>' + esc(r.why) + '</dd>';
     rows += '<dt>From</dt><dd>' + esc(fromWhere(r)) + (r.origin === 'foundry' ? ' <span class="tt-chip">Foundry</span>' : '') + '</dd>';
@@ -449,7 +494,7 @@
       '<button type="button" class="tt-row" data-tt-row="' + esc(r.id) + '" aria-expanded="' + open + '" aria-controls="' + did + '">' +
       '<span class="tt-who" aria-hidden="true">' + esc(initials(r.rollerName)) + '</span>' +
       '<span class="tt-l1"><b>' + esc(this.who(r)) + '</b><span>' + esc(r.label || r.formula) + '</span>' + chips + '</span>' +
-      '<span class="tt-tot' + (r.hidden ? ' tt-hid' : '') + '">' + (r.hidden ? '?' : esc(r.total)) + '</span>' +
+      '<span class="tt-tot' + (r.hidden ? ' tt-hid' : '') + (this.pread(r) ? ' tt-tier' : '') + '">' + esc(this.figure(r)) + '</span>' +
       '<span class="tt-l2">' + esc(r.formula) + ' · ' + esc(timeOf(r.createdAt)) + '</span></button>' +
       '<div class="tt-detail" id="' + did + '"' + (open ? '' : ' hidden') + '>' + this.detailHTML(r) + '</div></li>';
   };
@@ -463,16 +508,67 @@
     return '<ul class="tt-log" id="tt-log" aria-label="Roll log">' + head + this.rolls.map(function (r) { return self.rowHTML(r); }).join('') + '</ul>';
   };
 
+  // The power roll line: the hero's characteristics as one-press rolls, and a
+  // five-step edge or bane set before the press. A person with no hero numbers
+  // types their bonus instead.
+  Table.prototype.powerHTML = function () {
+    var pw = this.power;
+    if (!pw) return '';
+    var self = this;
+    var known = pw.characteristics.some(function (c) { return c.value != null; });
+    var head = '<p class="tt-k">Power roll · ' + esc(pw.dice) + ' + a characteristic' + (pw.hero ? ' <span class="tt-from">' + esc(pw.hero) + '</span>' : '') + '</p>';
+    var row;
+    if (known) {
+      row = '<div class="tt-pstats">' + pw.characteristics.map(function (c) {
+        var v = c.value == null ? 0 : num(c.value);
+        return '<button type="button" class="tt-dbtn tt-pchip" data-tt-pstat="' + esc(c.key) + '" aria-pressed="' + (self.lastStat === c.key) + '">' + esc(c.label) +
+          ' <b>' + (v > 0 ? '+' + v : v) + '</b></button>';
+      }).join('') + '</div>';
+    } else {
+      row = '<div class="tt-pstats"><label class="tt-pbonus"><span class="tt-from">Your bonus</span>' +
+        '<input class="tt-field" id="tt-pbonus" type="number" inputmode="numeric" min="-9" max="20" step="1" value="' + this.myBonus() + '"></label>' +
+        '<button type="button" class="tt-dbtn" data-tt-pplain>Power roll</button></div>';
+    }
+    var steps = [[-2, 'Double bane', '2× bane'], [-1, 'Bane', 'Bane'], [0, 'Plain', 'Plain'], [1, 'Edge', 'Edge'], [2, 'Double edge', '2× edge']];
+    var seg = '<div class="tt-seg tt-pedge" role="group" aria-label="Edge or bane">' + steps.map(function (st) {
+      return '<button type="button" data-tt-pstep="' + st[0] + '" aria-pressed="' + (self.step === st[0]) + '" aria-label="' + st[1] + '"><span class="tt-pw" aria-hidden="true">' + st[1] + '</span><span class="tt-pn" aria-hidden="true">' + st[2] + '</span></button>';
+    }).join('') + '</div>';
+    return '<div class="tt-power" role="group" aria-label="Power roll">' + head + row + seg +
+      '<p class="tt-from">Press a characteristic to roll it. Edge or bane is set first and clears after the roll.</p></div>';
+  };
+
+  // powerRoll asks the server for one power roll; the edge or bane clears after.
+  Table.prototype.powerRoll = function (name, value, key) {
+    var p = C.powerRoll.plan(this.power, name, value, this.step);
+    this.lastStat = key || '';
+    this.setStep(0);
+    this.roll(p.formula, p.label);
+    $$('[data-tt-pstat]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tt-pstat') === key)); });
+  };
+
+  Table.prototype.setStep = function (n) {
+    this.step = n;
+    $$('[data-tt-pstep]').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-tt-pstep') === n)); });
+  };
+
   Table.prototype.rollerHTML = function () {
     var gm = esc(this.gm);
     var modes = this.director ?
       [['public', 'Everyone sees it'], ['gm', gm + 's only'], ['self', 'Just me']] :
       [['public', 'Everyone sees it'], ['gm', 'The ' + gm + ' and me'], ['blind', 'Blind: only the ' + gm], ['self', 'Just me']];
-    var buttons = QUICK.map(function (s) {
+    var die = function (s) {
       return '<button type="button" class="tt-dbtn" data-tt-quick="d' + s + '" aria-label="Roll a d' + s + '"><span class="tt-mini" aria-hidden="true">' + C.tableDice.svg(s) + '</span>d' + s + '</button>';
-    }).join('');
-    return '<form class="tt-roller" data-tt-form novalidate><div class="tt-dice">' + buttons + '</div>' +
-      '<div class="tt-crow"><label class="tt-sr" for="tt-fx">Dice to roll</label><input class="tt-field" id="tt-fx" autocomplete="off" maxlength="120" placeholder="2d10+2, d20, 4d6">' +
+    };
+    var pw = this.power;
+    var buttons = (pw ? POWER_QUICK : QUICK).map(die).join('');
+    var rest = '';
+    if (pw) {
+      rest = '<button type="button" class="tt-quiet" data-tt-other aria-expanded="' + this.otherDice + '" aria-controls="tt-otherdice">Other dice</button>' +
+        '<span class="tt-dice tt-other" id="tt-otherdice"' + (this.otherDice ? '' : ' hidden') + '>' +
+        QUICK.filter(function (s) { return POWER_QUICK.indexOf(s) < 0; }).map(die).join('') + '</span>';
+    }
+    return '<form class="tt-roller" data-tt-form novalidate>' + this.powerHTML() + '<div class="tt-dice">' + buttons + rest + '</div>' +
+      '<div class="tt-crow"><label class="tt-sr" for="tt-fx">Dice to roll</label><input class="tt-field" id="tt-fx" autocomplete="off" maxlength="120" placeholder="' + (pw ? '2d10+2, d6, d3' : '2d10+2, d20, 4d6') + '">' +
       '<label class="tt-sr" for="tt-mode">Who sees it</label><select class="tt-mode" id="tt-mode">' +
       modes.map(function (m) { return '<option value="' + m[0] + '">' + m[1] + '</option>'; }).join('') + '</select>' +
       '<button type="submit" class="tt-go">Roll</button></div><p class="tt-ferr" id="tt-ferr" role="alert" hidden></p></form>';
@@ -971,7 +1067,7 @@
   Table.prototype.notice = function (r) {
     if (r.shown) { this.noticeShown(r); return; }
     var who = r.hidden ? 'You rolled blind' : this.who(r) + (r.origin === 'foundry' ? ' in Foundry' : '');
-    var num = r.hidden ? '?' : String(r.total);
+    var num = this.figure(r);
     var what = (r.label || r.formula) + (!r.hidden && r.outcome ? ' · ' + r.outcome : '');
     this.say(who + ', ' + what + ': ' + (r.hidden ? 'sent to the ' + this.gm : num));
     if (this.isl && this.isl.expanded) { this.queue.push(r); return; }
@@ -1049,7 +1145,7 @@
       me.detail = d;
       return;
     }
-    d.innerHTML = '<div class="tt-dhd"><b>' + esc(r.label || r.formula) + '</b><span class="tt-bignum">' + (r.hidden ? '?' : esc(r.total)) + '</span></div>' + this.detailHTML(r) +
+    d.innerHTML = '<div class="tt-dhd"><b>' + esc(r.label || r.formula) + '</b><span class="tt-bignum">' + esc(this.figure(r)) + '</span></div>' + this.detailHTML(r) +
       '<div class="tt-foot"><button type="button" class="tt-quiet" data-tt-tolog>Open in the roll log</button><button type="button" class="tt-quiet" data-tt-iclose>Done</button></div>';
     document.body.appendChild(d);
     me.detail = d;
@@ -1138,6 +1234,24 @@
         store('crits.' + self.key, self.crits ? 'on' : 'off');
         self.applyDice();
         self.renderSection('dice');
+        return;
+      }
+      if (self.power && d.ttPstat !== undefined) {
+        var st = self.power.characteristics.filter(function (c) { return c.key === d.ttPstat; })[0];
+        if (st) self.powerRoll(st.label, st.value == null ? 0 : num(st.value), st.key);
+        return;
+      }
+      if (self.power && b.hasAttribute('data-tt-pplain')) {
+        var bi = document.getElementById('tt-pbonus'), bv = Math.max(-9, Math.min(20, parseInt(bi && bi.value, 10) || 0));
+        store('pbonus.' + self.key, String(bv));
+        self.powerRoll(C.powerRoll.PLAIN, bv, '');
+        return;
+      }
+      if (d.ttPstep !== undefined) { self.setStep(+d.ttPstep); return; }
+      if (b.hasAttribute('data-tt-other')) {
+        self.otherDice = !self.otherDice;
+        b.setAttribute('aria-expanded', String(self.otherDice));
+        var od = document.getElementById('tt-otherdice'); if (od) od.hidden = !self.otherDice;
         return;
       }
       if (d.ttLook) { self.look = d.ttLook; store('look.' + self.key, self.look); self.renderSection('dice'); return; }

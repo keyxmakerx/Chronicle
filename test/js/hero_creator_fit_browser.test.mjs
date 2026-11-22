@@ -4,8 +4,9 @@
 // layout promises: on a computer the review's stat labels never break inside
 // a word (the tiles wrap to rows instead), and on a 320px phone every card in
 // the hand keeps its content, "Read the rules" included, inside the card, even
-// with long names in a step of 100. On a phone a mark that is a button is a
-// full 44px target.
+// with long names in a step of 100, and a one-word name wider than the card is
+// set smaller rather than cut at the edge. On a phone a mark that is a button
+// is a full 44px target.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -24,7 +25,7 @@ const css = () => readFileSync(join(root, 'internal/plugins/entities/static/css/
 
 const LONG = 'You somehow learned far more than anyone expected, and the knowledge sits heavy: people come to you for answers you would rather not give, and some of them do not take no for an answer.';
 const ch = (key, name, properties = {}, summary = LONG) => ({ key, slug: key, name, summary, source: 'package', properties });
-const NAMES = ['Advanced Studies', 'Infernal Contract... But, Like, Bad', 'Slight Case of Lycanthropy', 'Following in the Footsteps', 'Amnesia'];
+const NAMES = ['Advanced Studies', 'Infernal Contract... But, Like, Bad', 'Slight Case of Lycanthropy', 'Following in the Footsteps', 'Amnesia', 'Misunderstood', 'Shipwrecked'];
 const PLAN = () => ({ systemName: 'Draw Steel', steps: [
   { fieldKey: 'complication', label: 'Complication', choices: Array.from({ length: 100 }, (_, i) => ({ ...ch('c' + i, NAMES[i % NAMES.length] + (i >= NAMES.length ? ' ' + i : '')), ...(i % 3 === 0 ? { state: 'ask_first' } : {}) })) },
   { fieldKey: 'ancestry', label: 'Ancestry', choices: [ch('dwarf', 'Dwarf', { speed: 5, size: '1M', stability: 0 })] },
@@ -93,6 +94,24 @@ test('at 320 wide every card keeps its content, "Read the rules" included', { sk
     if (r.over > 1 || r.moreOut > 0) bad.push(r);
   }
   assert.deepEqual(bad, [], 'no card is taller inside than out');
+});
+
+test('at 320 wide a one-word name is never cut at the card edge', { skip }, async (t) => {
+  const pg = await open(t, 320, 520);
+  await pg.waitForSelector('.hc-hand .hc-card[data-i]');
+  const cut = [];
+  for (const i of [5, 6, 12, 13]) {
+    await pg.evaluate((i) => { const c = document.querySelectorAll('.hc-hand .hc-card[data-i]')[i], h = c.parentNode; h.scrollLeft = c.offsetLeft - (h.clientWidth - c.offsetWidth) / 2; }, i);
+    await pg.waitForTimeout(120);
+    const r = await pg.evaluate((i) => {
+      const h = document.querySelectorAll('.hc-hand .hc-card[data-i]')[i].querySelector('h3'), word = h.textContent.split(' ')[0];
+      const probe = document.createElement('span'); probe.textContent = word; probe.style.whiteSpace = 'nowrap'; h.appendChild(probe);
+      const w = probe.getBoundingClientRect().width; probe.remove();
+      return { name: h.textContent, out: Math.round(w - h.clientWidth) };
+    }, i);
+    if (r.out > 0) cut.push(r);
+  }
+  assert.deepEqual(cut, [], 'every name fits across its card');
 });
 
 test('on a phone a mark that is a button presses 44px tall', { skip }, async (t) => {

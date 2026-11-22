@@ -1,0 +1,44 @@
+package layouts
+
+// GuestPreviewBanner is the strip under the top bar while the DM team looks
+// at the campaign as a visitor. Its switch picks which visitor: one with no
+// code (only on a public campaign, the only kind such a visitor can open) or
+// one who came in on a guest code. Each choice posts to view-as, so it is a
+// button a keyboard reaches; Back to your view ends the preview.
+templ GuestPreviewBanner() {
+	<div class="gpv-bar bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-sm text-amber-800 dark:text-amber-300" role="status" data-guest-preview={ PreviewAs(ctx) }>
+		<span class="min-w-0">
+			<i class="fa-solid fa-eye-slash mr-1" aria-hidden="true"></i>
+			if PreviewAs(ctx) == "guestcode" {
+				Viewing as a visitor with a guest code
+			} else {
+				Viewing as a visitor
+			}
+		</span>
+		if IsCampaignPublic(ctx) {
+			<span class="gpv-seg" role="group" aria-label="Which visitor">
+				@guestPreviewChoice("guest", "No code", PreviewAs(ctx) == "guest")
+				@guestPreviewChoice("guestcode", "Guest code", PreviewAs(ctx) == "guestcode")
+			</span>
+		}
+		<button
+			type="button"
+			class="pv-back"
+			hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/view-as" }
+			hx-vals={ `{"as":"self"}` }
+			hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
+		>Back to your view</button>
+	</div>
+}
+
+// guestPreviewChoice is one side of the banner's switch.
+templ guestPreviewChoice(as, label string, on bool) {
+	<button
+		type="button"
+		class="gpv-opt"
+		aria-pressed={ boolString(on) }
+		hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/view-as" }
+		hx-vals={ `{"as":"` + as + `"}` }
+		hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
+	>{ label }</button>
+}

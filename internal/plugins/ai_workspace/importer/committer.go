@@ -174,6 +174,11 @@ type RowOutcome struct {
 	EntityID string // populated when an entity was created or updated
 	Slug     string // resolved final slug (after rename suffix if applied)
 	Reason   string // human-readable reason for skip/failed; empty otherwise
+	// Before is what Undo needs to take this row back; nil when the row
+	// changed nothing that can be put back.
+	Before *PageBefore
+	// Kept is the same for a record row.
+	Kept *KeptRecord
 }
 
 // RowStatus enumerates the per-row commit outcomes.
@@ -280,7 +285,37 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 	}
 
 	c.relinkPending(ctx, relink, links, &result)
+	c.settleBefores(ctx, campaignID, &result)
 	return result, nil
+}
+
+// settleBefores takes the fingerprint of every page a row kept a before for,
+// after the relink pass, which rewrites a body once more: taken earlier, the
+// fingerprint would never match the page Undo finds. A page written by two
+// rows keeps the earliest before and the final fingerprint. A page whose
+// state cannot be read loses its before, so Undo is never offered on a guess.
+func (c *Committer) settleBefores(ctx context.Context, campaignID string, result *CommitResult) {
+	seen := map[string]bool{}
+	for i := range result.Rows {
+		b := result.Rows[i].Before
+		if b == nil {
+			continue
+		}
+		if seen[b.EntityID] {
+			result.Rows[i].Before = nil
+			continue
+		}
+		seen[b.EntityID] = true
+		if b.Action == ActionDelete {
+			continue
+		}
+		e, _ := c.creator.GetBySlug(ctx, campaignID, result.Rows[i].Slug)
+		if e == nil || e.ID != b.EntityID {
+			result.Rows[i].Before = nil
+			continue
+		}
+		b.AfterHash = PageFingerprint(e)
+	}
 }
 
 // pasteSlugsOf is the set of pages this commit will save, by name slug.
@@ -603,6 +638,7 @@ func (c *Committer) commitRow(
 		out.Reason = reason
 		return out
 	}
+	out.Before = &PageBefore{Action: ActionCreate, EntityID: ent.ID, Name: finalName}
 	if finalName != dec.Name && finalName != page.Name {
 		out.Status = StatusRenamed
 		out.Reason = "Original name conflicted; saved as " + strconv.Quote(finalName)
@@ -630,6 +666,10 @@ func (c *Committer) commitUpdate(
 	links *PageLinks,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
+	// Taken before any write: the page's own history can fold this save into
+	// the owner's last edit, so it cannot be trusted to hold the before.
+	was := PageBefore{Action: ActionUpdate, EntityID: existing.ID, Name: existing.Name,
+		Entry: copyString(existing.Entry), EntryHTML: copyString(existing.EntryHTML)}
 
 	// The AI's copy of a page carries its GM-only passages back only when
 	// its export wrote them, and never its pictures or diagrams, so a
@@ -735,6 +775,12 @@ func (c *Committer) commitUpdate(
 		return out
 	}
 	out.Status = StatusUpdated
+	// Only the title and text are kept (what the page's history holds), so a
+	// block that also changed sheet fields, tags, folder, parent, layout or
+	// visibility offers no Undo rather than a half one.
+	if !keepText && changesOnlyText(page) {
+		out.Before = &was
+	}
 	return out
 }
 
@@ -953,6 +999,7 @@ func (c *Committer) commitDelete(
 		return out
 	}
 	out.Status = StatusDeleted
+	out.Before = &PageBefore{Action: ActionDelete, EntityID: existing.ID, Name: existing.Name}
 	return out
 }
 

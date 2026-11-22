@@ -5665,6 +5665,7 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceRenderer.Folders = aiFolderNames{folders: folderService}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
+	aiWorkspaceHandler.SetPageUndo(aiPageUndo{pages: entityService, safety: pageSafetyService})
 	// Which parts of a split AI answer were applied; left out when its table
 	// did not migrate, so labels are still read but earlier pastes unknown.
 	// So are the owner's switches for which shared notes the AI may change;
@@ -5690,6 +5691,10 @@ func (a *App) RegisterRoutes() {
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
 		campaignHandler.RegisterDeskProvider(ai_workspace.NewDeskProvider(aiConnectorSvc))
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheckDid)
+		// What an applied request changed is kept for 30 days so the owner can
+		// undo it from Your AI; the purge removes it once the time is up.
+		aiConnectorSvc.SetUndo(connector.NewUndoRepository(a.DB))
+		go aiConnectorSvc.StartBeforePurger(a.ShutdownCtx)
 		aiConnectorSvc.SetNotes(aiWorkspaceHandler.ConnectorNotes)
 		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
 			u, err := authService.GetUser(ctx, userID)
@@ -6381,8 +6386,8 @@ func (a *App) RegisterRoutes() {
 			// below is built from the visitor's values. The preview is noted
 			// only to draw its own chrome, and the site-admin flag, which the
 			// session carries, is blanked so the shell is a visitor's too.
-			if cc.Preview == campaigns.PreviewGuest {
-				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewGuest)
+			if cc.InGuestPreview() {
+				ctx = layouts.SetPreviewAs(ctx, cc.Preview)
 				ctx = layouts.SetIsAdmin(ctx, false)
 			} else if viewingAsPlayer {
 				ctx = layouts.SetPreviewAs(ctx, campaigns.PreviewPlayer)
@@ -6390,6 +6395,7 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 			ctx = layouts.SetVisitUntil(ctx, cc.VisitUntil)
+			ctx = layouts.SetCampaignPublic(ctx, cc.Campaign.IsPublic)
 
 			// Entity types, per-type counts and the enabled addons: what the
 			// sidebar is built from. Use the request context (not the
@@ -6920,7 +6926,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -6929,7 +6935,9 @@ func (a *App) RegisterRoutes() {
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler})
-		rolls.RegisterRoutes(e, rolls.NewHandler(rollsSvc), campaignService, authService)
+		rollsHandler := rolls.NewHandler(rollsSvc)
+		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
+		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
 		campaignHandler.RegisterCustomizeTab(rolls.CustomizeTabFactory(rollsSvc))

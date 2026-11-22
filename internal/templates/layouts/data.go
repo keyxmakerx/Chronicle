@@ -25,6 +25,7 @@ const (
 	keyIsAdmin             ctxKey = "layout_is_admin"
 	keyIsGuest             ctxKey = "layout_is_guest"
 	keyVisitUntil          ctxKey = "layout_visit_until"
+	keyCampaignPublic      ctxKey = "layout_campaign_public"
 	keyIsPane              ctxKey = "layout_is_pane"
 	keyCalloutSeed         ctxKey = "layout_callout_seed"
 	keyCampaignID          ctxKey = "layout_campaign_id"
@@ -121,6 +122,18 @@ func SetIsGuest(ctx context.Context, isGuest bool) context.Context {
 // IsGuest reports whether the signed-in person is a guest.
 func IsGuest(ctx context.Context) bool {
 	v, _ := ctx.Value(keyIsGuest).(bool)
+	return v
+}
+
+// SetCampaignPublic records whether anyone may read the campaign without a
+// code. The guest preview offers its no-code visitor only then.
+func SetCampaignPublic(ctx context.Context, public bool) context.Context {
+	return context.WithValue(ctx, keyCampaignPublic, public)
+}
+
+// IsCampaignPublic reports what SetCampaignPublic recorded.
+func IsCampaignPublic(ctx context.Context) bool {
+	v, _ := ctx.Value(keyCampaignPublic).(bool)
 	return v
 }
 
@@ -480,15 +493,23 @@ func SetViewingAsPlayer(ctx context.Context, viewing bool) context.Context {
 	return context.WithValue(ctx, keyViewingAsPlayer, viewing)
 }
 
-// SetPreviewAs records which preview the DM team is in ("player", "guest" or
-// ""), for the preview's own chrome: the eye, the strip and the way back.
+// SetPreviewAs records which preview the DM team is in ("player", "guest",
+// "guestcode" or ""), for the preview's own chrome: the eye, the strip and the
+// way back.
 // The role and owner values in this context are already the viewer's during a
 // preview; this never decides what is shown.
 func SetPreviewAs(ctx context.Context, preview string) context.Context {
 	return context.WithValue(ctx, keyPreviewAs, preview)
 }
 
-// PreviewAs returns "player", "guest" or "" (no preview).
+// InGuestPreview reports whether the DM team is in either guest preview: a
+// visitor with no code, or one on a guest code.
+func InGuestPreview(ctx context.Context) bool {
+	p := PreviewAs(ctx)
+	return p == "guest" || p == "guestcode"
+}
+
+// PreviewAs returns "player", "guest", "guestcode" or "" (no preview).
 func PreviewAs(ctx context.Context) string {
 	p, _ := ctx.Value(keyPreviewAs).(string)
 	return p
@@ -1038,4 +1059,12 @@ func GetAdminNavPins(ctx context.Context) []string {
 func GetDegradedPluginCount(ctx context.Context) int {
 	count, _ := ctx.Value(keyDegradedPluginCount).(int)
 	return count
+}
+
+// boolString is the "true"/"false" an aria attribute needs.
+func boolString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }

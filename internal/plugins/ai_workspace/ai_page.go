@@ -54,6 +54,10 @@ type ConnectView struct {
 	Notes *NotesView
 	// Players is the players panel; nil when the watch isn't wired.
 	Players *PlayersView
+	// Applied are the owner's applied requests and Undo the Undo state of
+	// each that has any, by request id; both stay empty when Undo isn't wired.
+	Applied []connector.Request
+	Undo    map[int64]undoCell
 	// LevelSaved is true on the answer to a change of level, which says
 	// Saved beside it.
 	LevelSaved bool
@@ -119,6 +123,9 @@ func (h *Handler) connectView(c *echo.Context, cc *campaigns.CampaignContext) (C
 	}
 	v.Sittings = connector.Sittings(v.Calls)
 	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID, auth.GetUserID(c)); err != nil {
+		return v, err
+	}
+	if err := h.fillUndo(ctx, cc, auth.GetUserID(c), &v); err != nil {
 		return v, err
 	}
 	if h.connector.Watching() {

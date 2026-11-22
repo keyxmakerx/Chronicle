@@ -6,7 +6,8 @@
  * sentence with every choice on that list, its rules and a roll range, so a
  * player reads before they pick and never leaves the page. A pick on an
  * existing hero saves at once through the fields door, with a green Saved
- * beside it; a new hero keeps its picks on this device until it is made.
+ * beside it. A new hero is made in the hero creator: the page's Create hero
+ * is a plain link to it, and nothing here offers a sentence for one.
  *
  * The steps come from the creator plan (the same lists as the creator
  * page), so a campaign's own entries appear beside the game system's.
@@ -16,8 +17,7 @@
  * A Director's rules shape the lists: entries marked Not here are gone (a
  * quiet foot line names them), Ask first entries carry a mark, are skipped
  * by the dice, and when picked wait for the Director beside the blank while
- * the rest of the hero is filled in; a required step with one entry left is
- * filled in and locked.
+ * the rest of the hero is filled in.
  *
  * A player a Director let write one entry of their own sees "Make your own"
  * at the end of that list, and the panel turns into the shared own-entry
@@ -131,19 +131,10 @@
   function Builder(el) {
     this.el = el;
     this.planUrl = el.getAttribute('data-plan-url');
-    this.createUrl = el.getAttribute('data-create-url');
     this.fieldsBase = el.getAttribute('data-fields-base');
     this.csrf = el.getAttribute('data-csrf');
-    this.canCreate = el.getAttribute('data-can-create') === 'true';
-    this.forSelf = el.getAttribute('data-for-self') === 'true';
-    this.typeName = el.getAttribute('data-type-name') || 'character';
-    this.draftKey = 'chronicle:hero-builder:' + el.getAttribute('data-campaign-id');
     try { this.heroes = JSON.parse(el.getAttribute('data-heroes') || '[]') || []; } catch (e) { this.heroes = []; }
     this.heroes.forEach(function (h) { h.values = h.values || {}; h.hidden = h.hidden || []; });
-    this.fresh = { id: 'new', name: '', values: {}, hidden: [], isNew: true };
-    // The new-hero sentence stays folded until the page's Create hero is
-    // clicked, or a draft left open on this device brings it back.
-    this.freshOpen = false;
     this.panel = null;
     this.busy = false;
   }
@@ -158,8 +149,6 @@
     }).then(function (plan) {
       self.plan = plan || {};
       self.plan.steps = (self.plan.steps || []).filter(function (s) { return (s.choices && s.choices.length) || s.canMake; });
-      self.restore();
-      self.prefill();
       return self.readNotes().then(function () { self.render(); });
     }).catch(function () {
       self.el.innerHTML = '<p class="hb-wait">The hero builder could not open. Reload the page to try again.</p>';
@@ -184,38 +173,6 @@
   Builder.prototype.ownEnabled = function () { return !!(window.ChronicleOwnEntry && window.ChronicleOwnEntry.Editor); };
   Builder.prototype.canOwn = function (st) { return !!(st && st.canMake && this.ownEnabled()); };
 
-  // A required step left with one entry starts filled in on a new hero.
-  Builder.prototype.prefill = function () {
-    var self = this;
-    this.plan.steps.forEach(function (st) {
-      var p = st.rules && st.rules.prefilled, c = p && self.choiceByName(st, p);
-      if (c) self.fresh.values[st.fieldKey] = c.name;
-    });
-  };
-  Builder.prototype.restore = function () {
-    if (!this.canCreate) return;
-    try {
-      var d = JSON.parse(window.localStorage.getItem(this.draftKey) || 'null');
-      if (!d) return;
-      var self = this;
-      this.fresh.name = typeof d.name === 'string' ? d.name : '';
-      Object.keys(d.values || {}).forEach(function (k) {
-        // Keep only picks the lists still offer, in case the system changed.
-        var st = self.stepByKey(k), c = st && self.choiceByName(st, d.values[k]);
-        if (c) self.fresh.values[k] = c.name;
-      });
-      Object.keys(d.values || {}).forEach(function (k) {
-        if (k.slice(-OPTS.length) === OPTS && self.fresh.values[k.slice(0, -OPTS.length)]) self.fresh.values[k] = d.values[k];
-      });
-      this.freshOpen = d.open !== false && !!(this.fresh.name.trim() || Object.keys(this.fresh.values).length);
-    } catch (e) { /* no storage: start fresh */ }
-  };
-  Builder.prototype.saveDraft = function () {
-    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ name: this.fresh.name, values: this.fresh.values, open: this.freshOpen })); } catch (e) { /* ignore */ }
-  };
-  Builder.prototype.clearDraft = function () {
-    try { window.localStorage.removeItem(this.draftKey); } catch (e) { /* ignore */ }
-  };
 
   // --- Lookups ---
   Builder.prototype.stepByKey = function (k) {
@@ -227,7 +184,6 @@
     return null;
   };
   Builder.prototype.heroById = function (id) {
-    if (id === 'new') return this.fresh;
     for (var i = 0; i < this.heroes.length; i++) if (this.heroes[i].id === id) return this.heroes[i];
     return null;
   };
@@ -238,16 +194,8 @@
   // The pick of this step that waits for a Director: a saved hero's request
   // from the plan, or, on a hero not made yet, an Ask first entry just picked.
   Builder.prototype.waitingName = function (h, st) {
-    if (h.isNew) {
-      var c = h.values[st.fieldKey] && this.choiceByName(st, h.values[st.fieldKey]);
-      return c && c.state === 'ask_first' ? c.name : '';
-    }
     var w = st.rules && st.rules.waiting;
     return w && String(w.entityId) === String(h.id) ? w.entryName : '';
-  };
-  // A step the Director's rules leave one entry on: filled in on a new hero.
-  Builder.prototype.lockedFor = function (h, st) {
-    return !!(h.isNew && st.rules && st.rules.prefilled && lower(h.values[st.fieldKey]) === lower(st.rules.prefilled));
   };
   Builder.prototype.left = function (h) {
     var self = this;
@@ -261,14 +209,11 @@
   // --- The sentences ---
   Builder.prototype.render = function () {
     var self = this;
-    var showFresh = this.canCreate && this.freshOpen;
-    // Nothing to fill in yet: the mount stays, empty, so Create hero can open it.
-    this.el.hidden = !this.heroes.length && !showFresh;
+    this.el.hidden = !this.heroes.length;
     this.el.setAttribute('data-hb-ready', '');
-    if (!this.plan.steps.length && !this.canCreate) { this.el.innerHTML = ''; return; }
+    if (!this.plan.steps.length) { this.el.innerHTML = ''; return; }
     var html = '<div class="hb-wrap' + (this.panel ? ' is-open' : '') + '"><div class="hb-main">';
     html += this.heroes.map(function (h) { return self.heroHtml(h); }).join('');
-    if (showFresh) html += this.freshHtml();
     html += '</div><aside class="hb-panel" aria-label="Choices"' + (this.panel ? '' : ' hidden') + '>' + this.panelHtml() + '</aside></div>' +
       '<div class="hb-toast" role="status" aria-live="polite" hidden></div>';
     this.el.innerHTML = html;
@@ -279,13 +224,9 @@
   Builder.prototype.blankHtml = function (h, st) {
     var v = h.values[st.fieldKey], on = this.panel && this.panel.hero === h.id && this.panel.key === st.fieldKey;
     var c = v && this.choiceByName(st, v), wait = this.waitingName(h, st);
-    if (this.lockedFor(h, st)) {
-      return '<span class="hb-blank is-locked" aria-label="' + esc(st.label + ': ' + v + ', ' + window.ChronicleHeroRules.LOCK) + '">' + esc(v) + '</span>' +
-        ' <span class="hb-lock">' + window.ChronicleHeroRules.LOCK + '</span>';
-    }
     // A hero that already holds a pick keeps showing it; the request that
     // would replace it waits beside it.
-    if (wait && v && !h.isNew) {
+    if (wait && v) {
       return '<button type="button" class="hb-blank' + (on ? ' is-cur' : '') + (c && c.source === 'campaign' ? ' is-own' : '') + '" data-blank="' + esc(st.fieldKey) + '" data-hero="' + esc(h.id) + '"' +
         ' aria-label="' + esc(st.label + ': ' + v + '. Asking your ' + gm() + ' for ' + wait + '. Show every choice') + '" aria-expanded="' + !!on + '">' + esc(v) + '</button>' +
         ' <span class="hb-waiting">asking for ' + esc(wait) + ', waiting for your ' + gm() + '</span>';
@@ -325,7 +266,7 @@
     var self = this;
     return this.stepsFor(h).map(function (st) {
       var g = st.rules && st.rules.suggested;
-      if (!g || self.waitingName(h, st) || (h.values[st.fieldKey] && !h.isNew)) return '';
+      if (!g || self.waitingName(h, st) || h.values[st.fieldKey]) return '';
       return '<span class="hb-note hb-suggest">' + window.ChronicleHeroRules.suggestedText(st.label, g) + '</span>';
     }).join('');
   };
@@ -342,24 +283,6 @@
       '</div></header>' + this.sentenceHtml(h, esc(possessive(h.name))) + this.progressHtml(h) + '</article>';
   };
 
-  Builder.prototype.freshHtml = function () {
-    var h = this.fresh, left = this.left(h).length;
-    var field = '<label class="hb-name"><span class="sr-only">Your new hero’s name</span><input type="text" maxlength="200" autocomplete="off" data-hb-name placeholder="Their name" value="' + esc(h.name) + '"></label>';
-    // The visible "’s" belongs to the sentence; with no steps the name stands alone.
-    var who = field + '’s';
-    var whose = this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
-      : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
-    var none = this.plan.steps.length ? '' : '<p class="hb-note">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
-      ' choices for heroes yet, so a new hero only needs a name.</p>';
-    return '<article class="hb-hero hb-fresh" data-hero-card="new">' +
-      '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">' + (this.heroes.length ? 'Another hero' : 'A new hero') + '</span></div>' +
-      '<div class="hb-tools">' + (left ? '<button type="button" class="hb-btn" data-rollall="new">Roll everything left</button>' : '') +
-      '<button type="button" class="hb-link" data-act="fold">Not now</button></div>' +
-      '</header>' + none + (this.plan.steps.length ? this.sentenceHtml(h, who) : '<p class="hb-sentence">' + field + '</p>') +
-      this.progressHtml(h) +
-      '<div class="hb-make"><button type="button" class="hb-btn hb-go" data-make>Make this hero</button><span class="hb-note">' + whose + ' Anything left blank can be chosen later.</span></div>' +
-      '<p class="hb-error" role="alert" data-hb-error hidden></p></article>';
-  };
   // --- The choose panel: every entry on one list, with its rules ---
   Builder.prototype.panelHtml = function () {
     var p = this.panel;
@@ -371,7 +294,7 @@
     var rules = st.rules || {}, waitName = this.waitingName(h, st);
     var cur = h.values[st.fieldKey], fo = (p.focus != null && list[p.focus]) || (cur && this.choiceByName(st, cur)) || list[0];
     if (!fo) return this.ownOnly(h, st, idx, steps.length);
-    var whose = h.isNew ? (h.name.trim() ? esc(possessive(h.name.trim())) : 'the new hero’s') : esc(possessive(h.name));
+    var whose = esc(possessive(h.name));
     var html = '<div class="hb-ph"><div class="hb-ph1"><span class="hb-kicker">' + (idx + 1) + ' of ' + steps.length + '</span>' +
       '<button type="button" class="hb-x" data-act="close" aria-label="Close the choices"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
       '<h3 class="hb-pt">Choose ' + whose + ' ' + esc(lower(st.label)) + '</h3>' +
@@ -455,7 +378,7 @@
     var g = grantsOf(c);
     if (!g.length) return '';
     var what = g.length > 1 ? g.slice(0, -1).join(', ') + ' and ' + g[g.length - 1] : g[0];
-    return '<p class="hb-note">You choose the ' + esc(what) + ' this gives on ' + (h && !h.isNew ? esc(possessive(h.name)) : 'your hero’s') + ' sheet' + (h && h.isNew ? ' once they’re made' : '') + '.</p>';
+    return '<p class="hb-note">You choose the ' + esc(what) + ' this gives on ' + (h ? esc(possessive(h.name)) : 'your hero’s') + ' sheet.</p>';
   };
 
   // Ticks or unticks a bought trait on the current pick and saves the list.
@@ -515,7 +438,7 @@
   };
   // A list with nothing in it yet that a player may still write one for.
   Builder.prototype.ownOnly = function (h, st, idx, total) {
-    var whose = h.isNew ? (h.name.trim() ? esc(possessive(h.name.trim())) : 'the new hero’s') : esc(possessive(h.name));
+    var whose = esc(possessive(h.name));
     return '<div class="hb-ph"><div class="hb-ph1"><span class="hb-kicker">' + (idx + 1) + ' of ' + total + '</span>' +
       '<button type="button" class="hb-x" data-act="close" aria-label="Close the choices"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
       '<h3 class="hb-pt">Choose ' + whose + ' ' + esc(lower(st.label)) + '</h3></div>' +
@@ -535,7 +458,7 @@
     var h = this.heroById(p.hero), st = this.stepByKey(p.key), c = index != null ? st.choices[index] : null;
     if (!h || !st) return;
     var ed = new Own.Editor({
-      campaignId: this.el.getAttribute('data-campaign-id'), csrf: this.csrf, step: st, entry: c, forId: h.isNew ? '' : h.id,
+      campaignId: this.el.getAttribute('data-campaign-id'), csrf: this.csrf, step: st, entry: c, forId: h.id,
       onSaved: function (e, mode, isNew) { self.ownSaved(h, st, e, mode, isNew); }
     });
     this.endOwn();
@@ -572,18 +495,6 @@
       this.drawPanel();
       this.toast(ch.name + (mode === 'send' ? ' handed in. It waits for your ' + gm() + '.' : ' saved as a draft.'));
     }
-  };
-  // The drafts a new hero's player picked are kept to the hero once it exists,
-  // so a Director accepting one can give it to that hero alone.
-  Builder.prototype.keepDraftsTo = function (picks, heroId) {
-    var self = this;
-    if (!heroId || !(window.Chronicle && Chronicle.apiFetch)) return Promise.resolve();
-    var base = '/campaigns/' + encodeURIComponent(this.el.getAttribute('data-campaign-id')) + '/system-entries/';
-    return Promise.all(Object.keys(picks).map(function (k) {
-      var st = self.stepByKey(k), c = st && self.choiceByName(st, picks[k].name);
-      if (!c || !c.mine || !c.status || !c.entryId) return null;
-      return Chronicle.apiFetch(base + encodeURIComponent(c.entryId), { method: 'PUT', body: { forEntityId: heroId }, csrfToken: self.csrf }).catch(function () {});
-    }).filter(Boolean));
   };
 
   Builder.prototype.openPanel = function (heroId, key) {
@@ -667,7 +578,7 @@
   // --- Picking and saving ---
   Builder.prototype.redrawHero = function (h) {
     var card = this.el.querySelector('[data-hero-card="' + h.id + '"]');
-    if (card) card.outerHTML = h.isNew ? this.freshHtml() : this.heroHtml(h);
+    if (card) card.outerHTML = this.heroHtml(h);
     this.drawPanel();
   };
 
@@ -695,7 +606,6 @@
       if (self.stepByKey(k) && lower(h.values[k]) !== lower(values[k])) delete h.values[k + OPTS];
       if (values[k] == null) delete h.values[k]; else h.values[k] = values[k];
     });
-    if (h.isNew) { this.saveDraft(); return Promise.resolve(before); }
     return this.send(h, values).then(function () { return before; }, function (err) {
       // Put back only what a later pick has not already changed again.
       Object.keys(before).forEach(function (k) {
@@ -711,7 +621,7 @@
   // A small green Saved beside the blank that changed, gone after a moment.
   Builder.prototype.tick = function (h, key) {
     var b = this.el.querySelector('[data-blank="' + key + '"][data-hero="' + h.id + '"]');
-    if (!b || h.isNew) return;
+    if (!b) return;
     var t = document.createElement('span');
     t.className = 'hb-tick';
     t.textContent = 'Saved';
@@ -766,7 +676,7 @@
     var h = this.heroById(heroId), self = this, v = {};
     v[key] = name;
     var pc = this.choiceByName(this.stepByKey(key), name);
-    if (pc && pc.state === 'ask_first' && !h.isNew && !note) return this.askPick(h, this.stepByKey(key), pc);
+    if (pc && pc.state === 'ask_first' && !note) return this.askPick(h, this.stepByKey(key), pc);
     // Choosing moves the panel on to the next blank, so filling in a hero is
     // one choice after another; with nothing left it closes.
     var rest = this.left(h).filter(function (s) { return s.fieldKey !== key; });
@@ -791,15 +701,14 @@
     // Saved shows once the server has it; a new hero has nothing to save yet.
     saving.then(function () { self.tick(h, key); }, function () {});
     if (note) this.toast(note);
-    else if (!next) this.toast(h.isNew ? 'Every choice made. Name your hero and make it.' : h.name + ' has every choice made.');
+    else if (!next) this.toast(h.name + ' has every choice made.');
     if (!next) this.focusAfter(h);
     else { var q = this.el.querySelector('[data-hb-q]'); if (q && !this.narrow()) q.focus({ preventScroll: true }); }
     return saving;
   };
 
   Builder.prototype.focusAfter = function (h) {
-    var el = h.isNew ? (this.el.querySelector('[data-hb-name]').value.trim() ? this.el.querySelector('[data-make]') : this.el.querySelector('[data-hb-name]'))
-      : this.el.querySelector('[data-hero-card="' + h.id + '"] .hb-title');
+    var el = this.el.querySelector('[data-hero-card="' + h.id + '"] .hb-title');
     if (el) { if (el.classList.contains('hb-title')) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
   };
 
@@ -838,7 +747,7 @@
       });
       var names = keys.map(function (k) { return v[k]; }).join(', ');
       saving.then(function (before) {
-        self.toast('The dice chose ' + names + (h.isNew ? '.' : '. Saved.'), function () {
+        self.toast('The dice chose ' + names + '. Saved.', function () {
           self.apply(h, before).then(function () { self.redrawHero(h); self.toast('Put back.'); }, function () {});
           self.redrawHero(h);
         });
@@ -846,48 +755,6 @@
     });
   };
 
-  Builder.prototype.make = function () {
-    var self = this, h = this.fresh, err = this.el.querySelector('[data-hb-error]'), btn = this.el.querySelector('[data-make]');
-    var name = h.name.trim();
-    function fail(msg) { err.textContent = msg; err.hidden = false; btn.disabled = false; }
-    if (!name) { fail('Give your hero a name first.'); this.el.querySelector('[data-hb-name]').focus(); return; }
-    if (this.busy) return;
-    this.busy = true;
-    btn.disabled = true;
-    err.hidden = true;
-    var picks = {};
-    Object.keys(h.values).forEach(function (k) {
-      if (k.slice(-OPTS.length) === OPTS) return;
-      picks[k] = { name: h.values[k] };
-      var opts = boughtOf(h, k);
-      if (opts.length) picks[k].options = opts;
-    });
-    var body = { name: name, picks: picks };
-    var send = (window.Chronicle && Chronicle.apiFetch)
-      ? Chronicle.apiFetch(this.createUrl, { method: 'POST', body: body, csrfToken: this.csrf })
-      : fetch(this.createUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf }, body: JSON.stringify(body) });
-    send.then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, body: b }; });
-    }).then(function (res) {
-      self.busy = false;
-      if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
-      self.clearDraft();
-      // A pick that could not be sent to the Director is said plainly, with a
-      // way on, rather than lost behind the page change.
-      var failed = res.body.requestFailed || [];
-      if (failed.length) {
-        var labels = failed.map(function (k) { var st = self.stepByKey(k); return st ? lower(st.label) : k; }).join(', ');
-        err.innerHTML = esc('Your hero is made, but your pick for ' + labels + ' could not be sent to your ' + gm() + '. Open the hero and pick it again.') +
-          ' <a class="hb-link" href="' + esc(res.body.url) + '">Open the hero</a>';
-        err.hidden = false;
-        btn.disabled = true;
-        return;
-      }
-      // The new hero's sheet opens, where the rest of them is filled in.
-      var go = function () { if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.assign(res.body.url); };
-      self.keepDraftsTo(picks, res.body.id).then(go, go);
-    }).catch(function () { self.busy = false; fail('The hero could not be made. Check your connection and try again.'); });
-  };
   // --- Wiring ---
   Builder.prototype.wire = function () {
     var self = this, el = this.el;
@@ -911,8 +778,6 @@
         self.rollAll(t.getAttribute('data-rollall'), t);
       } else if (t.hasAttribute('data-go')) {
         self.openPanel(self.panel.hero, t.getAttribute('data-go'));
-      } else if (t.hasAttribute('data-make')) {
-        self.make();
       } else if (t.hasAttribute('data-undo')) {
         var u = self.undo;
         self.el.querySelector('.hb-toast').hidden = true;
@@ -927,23 +792,15 @@
         }
       } else if (t.getAttribute('data-act') === 'close') {
         self.closePanel();
-      } else if (t.getAttribute('data-act') === 'fold') {
-        self.foldFresh();
       }
     };
     this.onInput = function (e) {
-      if (e.target.hasAttribute('data-hb-name')) {
-        self.fresh.name = e.target.value;
-        self.saveDraft();
-        var err = el.querySelector('[data-hb-error]');
-        if (err) err.hidden = true;
-      } else if (e.target.hasAttribute('data-hb-q')) {
+      if (e.target.hasAttribute('data-hb-q')) {
         self.filter(e.target.value);
       }
     };
     this.onKey = function (e) {
       if (e.key === 'Escape' && self.panel) { e.preventDefault(); self.closePanel(); return; }
-      if (e.key === 'Enter' && e.target.hasAttribute && e.target.hasAttribute('data-hb-name')) { e.preventDefault(); self.make(); return; }
       // Up and down move through the list; the entry read is the one picked.
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.closest && (e.target.closest('.hb-list') || e.target.hasAttribute('data-hb-q'))) {
         var opts = Array.prototype.filter.call(el.querySelectorAll('.hb-opt[data-focus]'), function (o) { return !o.hidden; });
@@ -955,14 +812,6 @@
         to.focus({ preventScroll: false });
       }
     };
-    // The page's Create hero button leads to the sentence for a new hero
-    // instead of the separate creator page.
-    this.onCreate = function (e) {
-      var a = e.target.closest && e.target.closest('[data-create-hero]');
-      if (!a || !self.canCreate || !self.plan || !document.body.contains(el)) return;
-      e.preventDefault();
-      self.openFresh();
-    };
     this.onResize = function () { self.placePanel(); };
     el.addEventListener('click', this.onClick);
     el.addEventListener('input', this.onInput);
@@ -971,33 +820,9 @@
     };
     el.addEventListener('change', this.onChange);
     el.addEventListener('keydown', this.onKey);
-    document.addEventListener('click', this.onCreate, true);
     window.addEventListener('resize', this.onResize);
   };
 
-  // Create hero unfolds the sentence for a new hero; Not now folds it away
-  // again, keeping the draft on this device for the next time.
-  Builder.prototype.openFresh = function () {
-    var grow = !this.freshOpen;
-    if (grow) {
-      this.freshOpen = true;
-      this.saveDraft();
-      this.render();
-    }
-    var card = this.el.querySelector('[data-hero-card="new"]'), name = this.el.querySelector('[data-hb-name]');
-    if (!card) return;
-    if (grow) card.classList.add('is-growing');
-    card.scrollIntoView({ block: 'nearest' });
-    if (name) name.focus({ preventScroll: true });
-  };
-  Builder.prototype.foldFresh = function () {
-    this.freshOpen = false;
-    this.saveDraft();
-    if (this.panel && this.panel.hero === 'new') this.panel = null;
-    this.render();
-    var go = document.querySelector('[data-create-hero]');
-    if (go) go.focus({ preventScroll: true });
-  };
 
   Builder.prototype.unwire = function () {
     this.endOwn();
@@ -1005,7 +830,6 @@
     this.el.removeEventListener('input', this.onInput);
     this.el.removeEventListener('change', this.onChange);
     this.el.removeEventListener('keydown', this.onKey);
-    document.removeEventListener('click', this.onCreate, true);
     window.removeEventListener('resize', this.onResize);
     clearTimeout(this.toastTimer);
   };

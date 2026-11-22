@@ -226,3 +226,29 @@ test('a paper that cannot fit beside the sheet lies next to the part that was cl
   // A right-column part: never less overlap than the desk forces.
   assert.equal(S.sideOver(51, 920, 900), 51);
 });
+
+test('sideMaxHeight: a side paper fits between the sheet top and the window bottom', () => {
+  assert.equal(S.sideMaxHeight(900, -400), 780, 'sheet scrolled above: window minus 120');
+  assert.equal(S.sideMaxHeight(900, 176), 700, 'sheet low in the window: stops 24px above the bottom');
+  assert.equal(S.sideMaxHeight(500, 300), 320, 'never shorter than 320');
+});
+
+
+test('sideWidth: a tall panel takes the room, within 390 to 520', () => {
+  assert.equal(S.sideWidth(200), 390);
+  assert.equal(S.sideWidth(450), 450);
+  assert.equal(S.sideWidth(900), 520);
+});
+
+test('sideMaxHeight: a tall panel may reach nearer the window top', () => {
+  assert.equal(S.sideMaxHeight(900, -400, true), 852);
+  assert.equal(S.sideMaxHeight(900, 176, true), 700);
+});
+
+test('visibleBand: a paper is placed inside what the page shows, below the top bar and banners', () => {
+  assert.deepEqual(S.visibleBand({ top: 97, bottom: 900 }, 900), { top: 97, bottom: 900 }, 'the main column under a top bar and banner');
+  assert.deepEqual(S.visibleBand(null, 900), { top: 0, bottom: 900 }, 'a page that scrolls the window');
+  assert.deepEqual(S.visibleBand({ top: -50, bottom: 1400 }, 900), { top: 0, bottom: 900 }, 'cut to the window');
+  // A tall panel in that band is 48px shorter than the band, so it starts 24px under the banner.
+  assert.equal(S.sideMaxHeight(900 - 97, -400, true), 755);
+});

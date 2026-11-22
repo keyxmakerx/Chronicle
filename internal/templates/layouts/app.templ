@@ -109,12 +109,8 @@ templ fullApp(title string) {
 				@Topbar()
 
 				<!-- "View as player" banner -->
-				if PreviewAs(ctx) == "guest" {
-					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-800 dark:text-amber-300" role="status">
-						<i class="fa-solid fa-eye-slash mr-1"></i>
-						Viewing as a guest
-						<span class="text-amber-700 dark:text-amber-400/70 ml-1">— you see what a visitor sees</span>
-					</div>
+				if InGuestPreview(ctx) {
+					@GuestPreviewBanner()
 				} else if IsViewingAsPlayer(ctx) {
 					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-sm text-amber-800 dark:text-amber-300" data-pv-banner>
 						<span class="min-w-0">
@@ -997,18 +993,18 @@ templ Topbar() {
 				<button
 					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
 					data-tb-tool="pv"
-					if PreviewAs(ctx) != "guest" {
+					if !InGuestPreview(ctx) {
 						data-pv-toggle
 						data-widget="player-view"
 					}
 					hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
 					class={
 						"btn-ghost btn-icon",
-						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest"),
+						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx) || InGuestPreview(ctx)),
 					}
-					title={ func() string { if PreviewAs(ctx) == "guest" { return "Viewing as a guest — click to go back to your own view" }; if IsViewingAsPlayer(ctx) { return "Viewing as player — click to go back to your own view" }; return "View as player" }() }
+					title={ func() string { if InGuestPreview(ctx) { return "Viewing as a guest — click to go back to your own view" }; if IsViewingAsPlayer(ctx) { return "Viewing as player — click to go back to your own view" }; return "View as player" }() }
 				>
-					<i class={ "fa-solid text-xs", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx) || PreviewAs(ctx) == "guest"), templ.KV("fa-eye", !IsViewingAsPlayer(ctx) && PreviewAs(ctx) != "guest") }></i>
+					<i class={ "fa-solid text-xs", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx) || InGuestPreview(ctx)), templ.KV("fa-eye", !IsViewingAsPlayer(ctx) && !InGuestPreview(ctx)) }></i>
 				</button>
 			}
 
