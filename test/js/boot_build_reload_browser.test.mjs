@@ -139,3 +139,57 @@ test('Back that lands on a new build reloads the page in full', { skip }, async 
   assert.equal(r.kept, false, 'the page was reloaded, so its scripts are the new build’s');
   assert.equal(r.fullLoads, 2);
 });
+
+// On a real page the live refresh usually updates in place: page_live.js
+// compares the parts on beforeOnLoad and stops htmx before any swap. With the
+// arrangement unchanged and only a part's words different, that is the path
+// taken, so the build check has to come first.
+const livePage = (build, words) => `<!doctype html><html><head><meta charset="utf-8"><meta name="chronicle-build" content="${build}"></head><body>
+<main id="main-content"><div hidden data-widget="page-live" data-entity-id="e1" data-campaign-id="c1"></div>
+<div data-page-frame><h1 id="name">Bren</h1><div data-page-row><div data-page-col><section data-block="entry"><p id="words">${words}</p></section></div></div></div></main>
+<script src="/static/vendor/htmx.min.js" defer></script><script src="/static/js/boot.js" defer></script><script src="/static/js/widgets/page_live.js" defer></script></body></html>`;
+
+async function inPlace(t, nextBuild) {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  t.after(() => assert.deepEqual(errors, []));
+  let served = 0, fullLoads = 0;
+  await p.route('**/*', (route) => {
+    const req = route.request(), u = new URL(req.url());
+    if (u.pathname.startsWith('/static/')) {
+      return route.fulfill({ contentType: 'application/javascript', body: readFileSync(join(root, u.pathname)) });
+    }
+    const refresh = !!req.headers()['x-page-live'];
+    if (!refresh && served++) fullLoads++;
+    const build = served > 1 || refresh ? nextBuild : 'b1';
+    return route.fulfill({ contentType: 'text/html', headers: { 'X-Chronicle-Build': build }, body: livePage(build, refresh ? 'Fresh' : 'Start') });
+  });
+  await p.addInitScript(() => {
+    window.WebSocket = function () { this._on = {}; };
+    window.WebSocket.prototype.addEventListener = function (t, f) { this._on[t] = f; };
+    window.WebSocket.prototype.close = function () {};
+  });
+  await p.goto('http://chronicle.test/campaigns/c1/entities/e1');
+  await p.waitForFunction(() => window.Chronicle && Chronicle.served);
+  await p.evaluate(() => { window.marker = true; document.getElementById('name')._kept = true; });
+  await p.evaluate(() => window.htmx.ajax('GET', '/campaigns/c1/entities/e1', { target: document.getElementById('main-content'), select: '#main-content > *', swap: 'innerHTML', headers: { 'HX-Boosted': 'true', 'X-Page-Live': '/campaigns/c1/entities/e1' } }).catch(() => {}));
+  await p.waitForFunction(() => window.marker !== true || document.getElementById('words').textContent === 'Fresh');
+  await p.waitForLoadState('load');
+  return p.evaluate((fullLoads) => ({ kept: window.marker === true, inPlace: !!document.getElementById('name')._kept, fullLoads }), fullLoads);
+}
+
+test('a live refresh from the same build updates the page in place', { skip }, async (t) => {
+  const r = await inPlace(t, 'b1');
+  assert.equal(r.kept, true);
+  assert.equal(r.inPlace, true, 'the unchanged heading was kept, so the in-place path ran');
+  assert.equal(r.fullLoads, 0);
+});
+
+test('a live refresh that would update in place from a new build loads the page in full', { skip }, async (t) => {
+  const r = await inPlace(t, 'b2');
+  assert.equal(r.kept, false, 'the page was reloaded, so its scripts are the new build’s');
+  assert.equal(r.fullLoads, 1);
+});

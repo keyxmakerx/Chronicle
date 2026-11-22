@@ -643,23 +643,25 @@
   // while a boosted link swaps in the new build's markup and CSS, and so does
   // a live refresh of the page (it targets #main-content, and the restart
   // drops its socket, whose reconnect fetches the page). New markup run by
-  // old scripts leaves widgets on their loading state. When such a swap
+  // old scripts leaves widgets on their loading state. When such a response
   // comes from a different build than this page's meta names, load it in
-  // full instead, so its scripts match. Registered before the widget
-  // teardown below, which then leaves the page alone.
+  // full instead, so its scripts match. It is checked on beforeOnLoad, ahead
+  // of the live refresh's update in place (which stops the swap there), and
+  // stopped before any later listener sees it.
   var pageBuild = (document.querySelector('meta[name="chronicle-build"]') || {}).content || '';
   function otherBuild(xhr) {
     var build = pageBuild && xhr && xhr.getResponseHeader('X-Chronicle-Build');
     return !!build && build !== pageBuild && xhr.status < 400;
   }
-  document.addEventListener('htmx:beforeSwap', function (event) {
+  document.addEventListener('htmx:beforeOnLoad', function (event) {
     var d = event.detail || {}, xhr = d.xhr, cfg = d.requestConfig || {};
     var main = document.getElementById('main-content');
     var whole = d.boosted || cfg.boosted || (main && d.target === main);
     if (!whole || (cfg.verb && cfg.verb !== 'get') || !otherBuild(xhr)) return;
     var url = (d.pathInfo && (d.pathInfo.responsePath || d.pathInfo.finalRequestPath || d.pathInfo.requestPath)) || xhr.responseURL;
     if (!url) return;
-    d.shouldSwap = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
     window.location.assign(url);
   });
 
