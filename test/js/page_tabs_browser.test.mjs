@@ -142,6 +142,48 @@ test('the Notes tab selectors match what entity_notes.js draws', () => {
   assert.equal(NOTES_ACT, '[data-en-act="new"]');
 });
 
+// A block that offers its own tab: its selectors and stylesheet are read from
+// the plugin that owns it, so the test fails if they drift from its widget.
+const BLOCK_TAB = readFileSync(join(root, 'internal/app/trackers_adapters.go'), 'utf8').match(/Label: "([^"]+)", Count: "([^"]+)", Act: "([^"]+)"/);
+const BLOCK_DIR = join(root, 'internal/plugins/trackers/static');
+
+test('a block\'s own tab hides the block\'s heading and wears its add button', { skip }, async (t) => {
+  const [, label, count, act] = BLOCK_TAB;
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage();
+  const css = readFileSync(join(BLOCK_DIR, 'css/trackers.css'), 'utf8');
+  const markup = `<section class="pt" data-widget="page-tabs"><div class="pt-bar"><div class="pt-tabs" role="tablist">
+<button type="button" class="pt-tab" role="tab" aria-selected="true" data-pt-tab="blk" data-pt-count='${count}' data-pt-act='${act}'>${label} <span class="pt-n" data-pt-n></span></button>
+</div></div><div class="pt-pane" data-pt-pane="blk"><div class="tk" data-widget="blk"></div></div>
+<button type="button" class="pt-act" data-pt-press hidden><span data-pt-press-label></span></button></section>`;
+  await p.setContent(`<!doctype html><html><head><style>[hidden]{display:none}${css}</style></head><body>${markup}</body></html>`);
+  await p.addScriptTag({ content: 'window.Chronicle = { register: function (n, impl) { impl.init(document.querySelector("[data-widget=" + n + "]")); } };' });
+  await p.addScriptTag({ content: readFileSync(join(root, 'static/js/widgets/page_tabs.js'), 'utf8') });
+  // What the widget draws for a Director with one tracker on the page.
+  await p.evaluate(() => {
+    document.querySelector('.tk').innerHTML = '<div class="tk-head"><h3 class="tk-title">Trackers</h3><span class="tk-count">1</span><span class="tk-sp"></span>'
+      + '<button type="button" class="tk-q" onclick="this.dataset.pressed = 1">Add a tracker</button></div><div class="tk-list"><section class="tk-row">Hunger</section></div>';
+  });
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  assert.equal(await p.isVisible('.tk-head'), false);
+  assert.equal(await p.isVisible('.tk-row'), true);
+  assert.equal(await p.textContent('[data-pt-n]'), '1');
+  assert.equal(await p.textContent('[data-pt-press-label]'), 'Add a tracker');
+  await p.click('[data-pt-press]');
+  assert.equal(await p.getAttribute('.tk-q', 'data-pressed'), '1');
+});
+
+test('the block tab\'s selectors match what its widget draws', () => {
+  const [, , count, act] = BLOCK_TAB;
+  const js = readFileSync(join(BLOCK_DIR, 'js/trackers.js'), 'utf8');
+  assert.match(js, /h\('div', 'tk-head'\)/);
+  assert.match(js, /h\('button', 'tk-q', label/);
+  assert.match(js, /h\('section', 'tk-row'/);
+  assert.equal(count, '.tk-row');
+  assert.equal(act, '.tk-head .tk-q');
+});
+
 // The panel's own width rules, read from input.css so the test follows them.
 const CSS = readFileSync(join(root, 'static/css/input.css'), 'utf8');
 const PT_RULES = [CSS.match(/^:root \{ --sheet-width:[^}]*\}/m)[0], CSS.match(/^\.pt \{[^}]*\}/m)[0]].join('\n');

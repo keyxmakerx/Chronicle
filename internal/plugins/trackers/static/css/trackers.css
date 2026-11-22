@@ -17,6 +17,8 @@
 .tk-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--tk-ink); }
 .tk-count { font-size: 12px; color: var(--tk-muted); }
 .tk-sp { flex: 1; }
+/* As a tab under a system-drawn page, the tab carries the name and count and the bar the add button. */
+.pt-pane .tk-head { display: none; }
 .tk-empty, .tk-more, .tk-none { margin: 0; color: var(--tk-muted); font-size: 13px; }
 .tk-status { margin: 0; min-height: 1em; font-size: 12px; color: var(--tk-muted); }
 .tk-status.err { color: rgb(var(--color-danger-rgb, 220 38 38)); }
