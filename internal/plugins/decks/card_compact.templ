@@ -16,7 +16,7 @@ templ CardCompact(l Look, s CardState, size CardSize) {
 				@cardMarker(l, k)
 			}
 			@cardCorner(l, s.face.Corner)
-			@cardArt(s, k, hasKind)
+			@cardArt(l, s, k, hasKind)
 			if hasKind && l.Marker != "line" {
 				<span class="dk-kind">
 					@KindSign(k.Sign)

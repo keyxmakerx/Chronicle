@@ -26,13 +26,14 @@ templ WorkshopDeckPage(p deckPage) {
 				<header class="dkw-head">
 					<p class="dkw-crumb"><a href={ templ.SafeURL(p.base() + "/workshop") }>Card decks</a></p>
 					<div class="dkw-headrow">
-						<input class="dkw-title" type="text" value={ p.Deck.Name } maxlength="120" aria-label="The deck's name" data-dkw-name autocomplete="off"/>
+						<h1 class="cb-title text-2xl font-bold text-fg dkw-h1">
+							<input class="dkw-title" type="text" value={ p.Deck.Name } maxlength="120" aria-label="The deck's name" data-dkw-name autocomplete="off"/>
+						</h1>
+						<p class="dkw-quiet dkw-sub">
+							<span data-dkw-forwhom>{ p.forWhom() }</span> <span aria-hidden="true">·</span> <span data-dkw-total>{ cardsWords(p.totalCards()) }</span>
+						</p>
 						<span class="dkw-saved" role="status" aria-live="polite" data-dkw-saved></span>
 					</div>
-					<p class="dkw-quiet dkw-sub">
-						<span data-dkw-forwhom>{ p.forWhom() }</span> <span aria-hidden="true">·</span> <span data-dkw-total>{ cardsWords(p.totalCards()) }</span>
-						<button type="button" class="dkw-word dkw-danger" data-act="delete-deck" data-copies={ strconv.Itoa(p.totalCards()) }>Delete this deck</button>
-					</p>
 					<p class="dkw-err" role="alert" data-dkw-err hidden></p>
 				</header>
 				@DeckTable(p)
@@ -54,6 +55,11 @@ templ WorkshopDeckPage(p deckPage) {
 				<div id="dkw-panel" class="dkw-panel" role="tabpanel" aria-labelledby={ "dkw-tab-" + p.Tab }>
 					@deckTabPanel(p)
 				</div>
+				<footer class="dkw-foot">
+					<p class="dkw-quiet">Deleting this deck removes its cards and anything players hold from it.</p>
+					<button type="button" class="dkw-btn dkw-btn-danger" data-act="delete-deck" data-copies={ strconv.Itoa(p.totalCards()) }>Delete this deck</button>
+					<p class="dkw-err" role="alert" data-dkw-err hidden></p>
+				</footer>
 			</div>
 		}
 	}
@@ -75,6 +81,7 @@ func cardsWords(n int) string {
 
 // deckTabPanel is the open tab's content.
 templ deckTabPanel(p deckPage) {
+	@versionMark(p.Deck.Version)
 	switch p.Tab {
 		case "look":
 			@DeckLookTab(p)
@@ -85,4 +92,11 @@ templ deckTabPanel(p deckPage) {
 		default:
 			@DeckCardsTab(p)
 	}
+}
+
+// versionMark carries the deck's current version in every fragment, so a page
+// whose save was refused as stale takes the new version from the reload and
+// its next change saves. The widget reads it from the fragment text.
+templ versionMark(v int) {
+	<span hidden data-dkw-version={ strconv.Itoa(v) }></span>
 }

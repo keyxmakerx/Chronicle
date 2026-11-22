@@ -27,7 +27,7 @@ templ DeckLookTab(p deckPage) {
 					</button>
 				}
 			</div>
-			<p class="dkw-quiet dkw-stylenote" data-dkw-stylenote>
+			<p class="dkw-quiet dkw-stylenote" data-dkw-stylenote data-changed={ boolWord(changed) }>
 				{ styleName }
 				if changed {
 					, changed
@@ -74,6 +74,9 @@ templ DeckLookTab(p deckPage) {
 						}
 					</div>
 				}
+				if len(l.Kinds) == 0 {
+					<p class="dkw-quiet dkw-nokinds">No kinds yet. <button type="button" class="dkw-word" data-act="toggle-kinds" aria-expanded="false" aria-controls="dkw-kinds">Add some</button></p>
+				}
 				<p>
 					<button type="button" class="dkw-word" data-act="toggle-kinds" aria-expanded="false" aria-controls="dkw-kinds">Words on the back, and the kinds of card</button>
 				</p>
@@ -82,6 +85,9 @@ templ DeckLookTab(p deckPage) {
 				for _, row := range lookRows {
 					@lookRowView(l, row, sample)
 				}
+				<p class="dkw-morekinds">
+					<button type="button" class="dkw-word" data-act="toggle-kinds" aria-expanded="false" aria-controls="dkw-kinds">Words on the back, and the kinds of card</button>
+				</p>
 			</div>
 		</div>
 		@kindsEditor(l)
@@ -130,19 +136,22 @@ templ lookRowView(l Look, row lookRow, sample DirectorCard) {
 	</section>
 }
 
-// swatch draws one choice as the thing it chooses: a card wearing the value, a
-// back wearing it, a back in the turn-over's pose, or a colour dot.
+// swatch draws one choice as the thing it chooses: the real card at row size
+// wearing the value, scaled down in a fixed box (so a choice that only shows
+// at a bigger size still shows), a back wearing it, a back in the turn-over's
+// pose, or a colour dot. It is a picture of the option; the button's text names it.
 templ swatch(l Look, row lookRow, v string, sample DirectorCard) {
 	{{ cl := withChoice(l, row.Key, v) }}
 	switch row.Kind {
 		case "back":
-			<span class="dkw-sw" aria-hidden="true">@CardBack(cl, SizeHand)</span>
+			<span class="dkw-sw" aria-hidden="true"><span class="dkw-sc">@CardBack(cl, SizeRow)</span></span>
 		case "pose":
-			<span class={ "dkw-sw", poseClass(v) } aria-hidden="true">@CardBack(l, SizeHand)</span>
+			<span class={ "dkw-sw", poseClass(v) } aria-hidden="true"><span class="dkw-sc">@CardBack(l, SizeRow)</span></span>
 		case "colour":
 			<span class={ "dkw-dot", paletteOf(v), templ.KV("dkw-dot-campaign", v == "") } aria-hidden="true"></span>
 		default:
-			<span class="dkw-sw" aria-hidden="true">@CardView(cl, upState(sampleCardFor(cl, sample), SizeHand), CardOpts{Size: SizeHand})</span>
+			{{ sl, sc := swatchSample(cl, sample) }}
+			<span class={ "dkw-sw", templ.KV("dkw-sw-flat", cl.Shape != "tall") } aria-hidden="true"><span class="dkw-sc">@CardView(sl, upState(sc, SizeRow), CardOpts{Size: SizeRow})</span></span>
 	}
 }
 
@@ -172,16 +181,20 @@ templ kindRow(k KindDef) {
 	<li class={ "dkw-kindrow", paletteOf(k.Colour) } data-kind-key={ k.Key }>
 		<span class="dkw-kindsign" aria-hidden="true">@KindSign(k.Sign)</span>
 		<input class="dkw-line" type="text" value={ k.Name } maxlength="24" aria-label="Kind name" data-kind-name autocomplete="off"/>
-		<select class="dkw-select" aria-label={ "Colour of " + k.Name } data-kind-colour>
+		<div class="dkw-kindopts dkw-kindcolours" role="radiogroup" aria-label={ "Colour of " + k.Name } data-kind-colour>
 			for _, c := range Palette {
-				<option value={ c } selected?={ c == k.Colour }>{ c }</option>
+				<button type="button" class={ "dkw-kopt dkw-dotopt", paletteOf(c) } role="radio" aria-checked={ boolWord(c == k.Colour) } aria-label={ c } title={ c } data-value={ c }>
+					<span class="dkw-dot" aria-hidden="true"></span>
+				</button>
 			}
-		</select>
-		<select class="dkw-select" aria-label={ "Sign of " + k.Name } data-kind-sign>
+		</div>
+		<div class="dkw-kindopts dkw-kindsigns" role="radiogroup" aria-label={ "Sign of " + k.Name } data-kind-sign>
 			for _, s := range signValues {
-				<option value={ s } selected?={ s == k.Sign }>{ s }</option>
+				<button type="button" class="dkw-kopt" role="radio" aria-checked={ boolWord(s == k.Sign) } aria-label={ s } title={ s } data-value={ s }>
+					@KindSign(s)
+				</button>
 			}
-		</select>
+		</div>
 		<button type="button" class="dkw-word dkw-danger" data-act="remove-kind">Remove</button>
 	</li>
 }

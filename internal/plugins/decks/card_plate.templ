@@ -19,7 +19,7 @@ templ CardPlate(l Look, s CardState, size CardSize) {
 					<span class="dk-blur" aria-hidden="true"><span class="dk-ph"></span>@cardPicture(s)</span>
 				}
 				@cardCorner(l, s.face.Corner)
-				@cardArt(s, k, hasKind)
+				@cardArt(l, s, k, hasKind)
 				<b class="dk-name">{ s.face.Name }</b>
 				if hasKind {
 					@cardKindLine(l, k)

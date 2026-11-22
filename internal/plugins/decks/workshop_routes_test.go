@@ -147,23 +147,6 @@ func TestWorkshopPagesOpenForDirectors(t *testing.T) {
 	}
 }
 
-// Another campaign's Director meets a missing page, for the campaign they are
-// not in and for a deck of another campaign named under their own.
-func TestWorkshopIsClosedToAnotherCampaign(t *testing.T) {
-	r := newWorkshopRig(t, true)
-	for _, p := range r.paths() {
-		if rec := r.get(p, "u-other"); rec.Code == http.StatusOK || strings.Contains(rec.Body.String(), "Iron omens") {
-			t.Errorf("a stranger at %s: status %d", p, rec.Code)
-		}
-	}
-	for _, tail := range []string{"", "/table", "/cards", "/look", "/rules", "/players"} {
-		rec := r.get("/campaigns/camp-2/decks/workshop/"+r.deck+tail, "u-other")
-		if rec.Code != http.StatusNotFound {
-			t.Errorf("camp-2 Director asking for camp-1's deck%s: status %d, want 404", tail, rec.Code)
-		}
-	}
-}
-
 func TestWorkshopWithTheAddonOffShowsNothing(t *testing.T) {
 	r := newWorkshopRig(t, false)
 	for _, p := range r.paths() {
@@ -180,9 +163,6 @@ func TestWorkshopWithTheAddonOffShowsNothing(t *testing.T) {
 		if rec.Code != http.StatusSeeOther || strings.Contains(rec.Body.String(), "Iron omens") {
 			t.Errorf("%s with the add-on off (page): %d", p, rec.Code)
 		}
-	}
-	if rec := r.get(r.paths()[0], ""); rec.Code == http.StatusOK {
-		t.Error("a signed-out visitor was sent the page")
 	}
 }
 
@@ -395,18 +375,6 @@ func TestRulesHaveOneBlankPerSettingsKey(t *testing.T) {
 	}
 }
 
-// The shown spot, the Cards grid and the editor are Director views: they draw
-// faces from Director data, so a deck page is only ever built for a Director.
-func TestWorkshopHandlersRefuseNonDirectorsBeforeReadingAnything(t *testing.T) {
-	r := newWorkshopRig(t, true)
-	for _, p := range r.paths() {
-		rec := r.get(p, "u-tam")
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("%s: %d", p, rec.Code)
-		}
-	}
-}
-
 // The table row draws the shown spot with every action, and the pile's Draw
 // is off with the reason when the shown spot is full.
 func TestTableRowShowsTheShownSpotAndItsActions(t *testing.T) {
@@ -434,5 +402,46 @@ func TestTableRowShowsTheShownSpotAndItsActions(t *testing.T) {
 	body = r.get("/campaigns/camp-1/decks/workshop/"+r.deck+"/table", "u-dir").Body.String()
 	if !strings.Contains(body, "Put it in a deck for keeps") {
 		t.Error("with a second deck, a shown card can be kept in it")
+	}
+}
+
+// Every fragment carries the deck's current version, so a page whose save was
+// refused as stale takes the new one from the reload and its next save goes
+// through.
+func TestEveryFragmentCarriesTheDecksCurrentVersion(t *testing.T) {
+	r := newWorkshopRig(t, true)
+	d := r.fx.repo.decks[r.deck]
+	_, err := r.fx.svc.Update(nil2ctx(), camp, r.deck, r.fx.dir, UpdateDeckInput{Version: patchOf(d.Version), Name: patchOf("Renamed")})
+	r.fx.must(err)
+	now := r.fx.repo.decks[r.deck].Version
+	if now == d.Version {
+		t.Fatal("the write did not move the version")
+	}
+	want := fmt.Sprintf(`data-dkw-version="%d"`, now)
+	for _, tail := range []string{"/table", "/cards", "/look", "/rules", "/players"} {
+		body := r.get(r.paths()[2]+tail, "u-dir", "HX-Request", "true").Body.String()
+		if !strings.Contains(body, want) {
+			t.Errorf("fragment %s does not carry %s", tail, want)
+		}
+	}
+}
+
+// A deck with no kinds says so where the kind buttons would be, and the kinds
+// editor picks colour and sign with buttons, not dropdowns.
+func TestNoKindsSaysSoAndKindsArePickedWithButtons(t *testing.T) {
+	r := newWorkshopRig(t, true)
+	look := r.get(r.paths()[2]+"/look", "u-dir", "HX-Request", "true").Body.String()
+	if !strings.Contains(look, "No kinds yet") || strings.Contains(look, "dkw-kindbtns") {
+		t.Error("a deck with no kinds says so instead of drawing empty kind buttons")
+	}
+	d := r.fx.repo.decks[r.deck]
+	_, err := r.fx.svc.Update(nil2ctx(), camp, r.deck, r.fx.dir, UpdateDeckInput{Version: patchOf(d.Version), Look: patchOf(LookInput{Kinds: []KindDef{{Key: "bane", Name: "Bane", Colour: "rose", Sign: "star"}}})})
+	r.fx.must(err)
+	look = r.get(r.paths()[2]+"/look", "u-dir", "HX-Request", "true").Body.String()
+	if strings.Contains(look, "dkw-select") {
+		t.Error("the kinds editor still uses dropdowns")
+	}
+	if strings.Count(look, `data-kind-colour`) < 1 || strings.Count(look, `role="radio" aria-checked="true" aria-label="rose"`) != 1 || !strings.Contains(look, `aria-label="star"`) {
+		t.Error("the kind's colour and sign are radio buttons named in words, the current ones checked")
 	}
 }

@@ -106,11 +106,24 @@
     return /[.!?]$/.test(m) ? m : m + '.';
   }
 
+  // The widget's way to take the deck's version from a fragment (set while it is mounted).
+  var versionSink = null;
+
+  /** parseVersion: the deck version a server fragment carries, or 0. */
+  function parseVersion(html) {
+    var m = /data-dkw-version="(\d+)"/.exec(String(html || ''));
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
   /** fragment: GET a server fragment as text (the same markup a swap would use). */
   function fragment(url) {
     return fetch(url, { credentials: 'same-origin', headers: { 'HX-Request': 'true', 'Accept': 'text/html' } }).then(function (r) {
       if (!r.ok) throw new Error(r.status === 404 ? 'That page is not there any more.' : 'That did not load. Try again.');
-      return r.text();
+      return r.text().then(function (text) {
+        var v = parseVersion(text);
+        if (v && versionSink) versionSink(v);
+        return text;
+      });
     });
   }
 
@@ -166,6 +179,12 @@
         all[j].focus();
       });
     });
+  }
+
+  /** pickedValue: the value of the checked choice in a radio group. */
+  function pickedValue(group) {
+    var on = group && $('[role=radio][aria-checked=true]', group);
+    return on ? on.getAttribute('data-value') : '';
   }
 
   function check(group, chosen) {
@@ -259,8 +278,15 @@
       this.el = el;
 
       function version() { return parseInt(el.getAttribute('data-version'), 10) || 0; }
+      versionSink = function (v) { if (v > version()) el.setAttribute('data-version', String(v)); };
       function setVersion(deck) {
         if (deck && typeof deck.version === 'number') el.setAttribute('data-version', String(deck.version));
+        var n = deck && deck.counts;
+        var total = $('[data-dkw-total]', el);
+        if (n && total) {
+          var sum = (n.pile || 0) + (n.shown || 0) + (n.hand || 0) + (n.play || 0) + (n.used || 0) + (n.gone || 0);
+          total.textContent = sum === 1 ? '1 card' : sum + ' cards';
+        }
       }
       function mark(msg) {
         var s = $('[data-dkw-saved]', el);
@@ -536,12 +562,26 @@
       function applyStyle(btn) {
         var look;
         try { look = JSON.parse(btn.getAttribute('data-look')); } catch (e) { return; }
-        var id = btn.id || '';
-        return put({ look: look }).then(function () {
-          clearErr();
-          saved();
-          return reloadLook('[data-act=apply-style][data-style="' + btn.getAttribute('data-style') + '"]');
-        }, function (e) { failed(e, lookRoot(), null); btn.focus(); });
+        var focusSel = '[data-act=apply-style][data-style="' + btn.getAttribute('data-style') + '"]';
+        function apply() {
+          return put({ look: look }).then(function () {
+            clearErr();
+            saved();
+            return reloadLook(focusSel);
+          }, function (e) { failed(e, lookRoot(), focusSel); });
+        }
+        var note = $('[data-dkw-stylenote]', panel);
+        if (note && note.getAttribute('data-changed') === 'true') {
+          var nm = btn.querySelector('b') ? btn.querySelector('b').textContent : 'this style';
+          askDelete($('.dkw-startrow', panel), {
+            ask: 'Start from ' + nm + '?',
+            detail: 'This replaces the shape, border, turning over, picture window, lettering, corner mark, kind marker, finish and the back\u2019s pattern, colour and sign with the style\u2019s. Your kinds and the words on the back stay as they are.',
+            discard: 'Replace them',
+            onDiscard: apply
+          });
+          return Promise.resolve();
+        }
+        return apply();
       }
 
       function kindsFromDom() {
@@ -549,8 +589,8 @@
           return {
             key: r.getAttribute('data-kind-key'),
             name: $('[data-kind-name]', r).value.trim(),
-            colour: $('[data-kind-colour]', r).value,
-            sign: $('[data-kind-sign]', r).value
+            colour: pickedValue($('[data-kind-colour]', r)),
+            sign: pickedValue($('[data-kind-sign]', r))
           };
         });
       }
@@ -598,6 +638,8 @@
       }
 
       // ---- events ----
+      // Enter in a field saves nothing by itself (each field saves as it changes), and never sends the form.
+      el.addEventListener('submit', function (ev) { ev.preventDefault(); });
       el.addEventListener('click', function (ev) {
         var tab = ev.target.closest('.dkw-tab');
         if (tab) { showTab(tab.getAttribute('data-tab')); return; }
@@ -610,6 +652,26 @@
         }
         var opt = ev.target.closest('.dkw-opt');
         if (opt) { choose(opt); return; }
+        var ko = ev.target.closest('.dkw-kopt');
+        if (ko) {
+          var kg = ko.closest('[role=radiogroup]'), kr = ko.closest('.dkw-kindrow');
+          var was = $('[role=radio][aria-checked=true]', kg);
+          if (was === ko) return;
+          check(kg, ko);
+          var which = kg.hasAttribute('data-kind-colour') ? 'data-kind-colour' : 'data-kind-sign';
+          saveKinds(kindsFromDom(), '[data-kind-key="' + kr.getAttribute('data-kind-key') + '"] [' + which + '] [aria-checked=true]');
+          return;
+        }
+        var tg = ev.target.closest('button.toggle[data-field]');
+        if (tg && editor()) {
+          var was = tg.getAttribute('aria-checked') === 'true';
+          var flip = function (on) { tg.setAttribute('aria-checked', on ? 'true' : 'false'); };
+          var body = {};
+          body[tg.getAttribute('data-field')] = !was;
+          flip(!was);
+          saveCard(body, null, function () { flip(was); }).then(function () { tg.focus({ preventScroll: true }); });
+          return;
+        }
         var r = ev.target.closest('[role=radio][data-kind-key]');
         if (r && editor()) {
           var grp = r.closest('[role=radiogroup]');
@@ -681,14 +743,14 @@
           }
           case 'delete-deck': {
             var n = btn.getAttribute('data-copies');
-            askDelete($('.dkw-head', el), {
+            askDelete($('.dkw-foot', el), {
               ask: 'Delete this deck?',
               detail: 'Its cards (' + n + ' in all) go, and so does anything players are holding from it. This cannot be undone.',
               discard: 'Delete the deck',
               onDiscard: function () {
                 api('DELETE', deckURL).then(function () {
                   location.assign(base + 'workshop');
-                }, function (e) { failed(e, $('.dkw-head', el), null); });
+                }, function (e) { failed(e, $('.dkw-foot', el), '[data-act=delete-deck]'); });
               }
             });
             break;
@@ -774,12 +836,13 @@
     },
 
     destroy: function () {
+      versionSink = null;
       if (this._onPick) document.removeEventListener('media-picker:select', this._onPick);
     }
   });
 
   window.DeckWorkshop = {
     LISTS: LISTS, PALETTE: PALETTE, DRAW_MIN: DRAW_MIN, DRAW_MAX: DRAW_MAX, COPIES_MAX: COPIES_MAX, MAX_KINDS: MAX_KINDS,
-    clampCount: clampCount, stepCount: stepCount, lookPatch: lookPatch, kindKey: kindKey, nextKindName: nextKindName, isStale: isStale, words: words
+    clampCount: clampCount, stepCount: stepCount, lookPatch: lookPatch, kindKey: kindKey, nextKindName: nextKindName, isStale: isStale, words: words, parseVersion: parseVersion
   };
 })();

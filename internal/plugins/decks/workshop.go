@@ -91,6 +91,22 @@ func sampleCardFor(l Look, c DirectorCard) DirectorCard {
 	return c
 }
 
+// swatchSample is the look and card a choice's picture draws. A deck with no
+// kinds still shows a kind marker and a corner value on its swatches, or the
+// rows for those choices would show five identical cards.
+func swatchSample(l Look, c DirectorCard) (Look, DirectorCard) {
+	if len(l.Kinds) == 0 {
+		l.Kinds = []KindDef{{Key: "sample", Name: "Boon", Colour: "indigo", Sign: "round"}}
+		c.KindKey = "sample"
+	} else if _, ok := kindOf(l, c.KindKey); !ok {
+		c.KindKey = l.Kinds[0].Key
+	}
+	if c.Corner == "" {
+		c.Corner = "7"
+	}
+	return l, c
+}
+
 // A page's deck as Directors see it, with the rest of the workshop's reads.
 type deckPage struct {
 	CampaignID string

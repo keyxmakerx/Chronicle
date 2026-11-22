@@ -9,6 +9,7 @@ import "strconv"
 templ DeckTable(p deckPage) {
 	{{ t := p.table() }}
 	<div id="dkw-table">
+	@versionMark(p.Deck.Version)
 	<section class="dkw-table" data-dkw-table aria-label="The table" data-pile={ strconv.Itoa(t.Pile) } data-maxdraw={ strconv.Itoa(t.MaxDraw) }>
 		<div class="dkw-col dkw-pile">
 			<h2 class="dkw-lab">The pile</h2>

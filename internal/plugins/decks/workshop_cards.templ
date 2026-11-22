@@ -88,7 +88,7 @@ func fateWords(f string) string {
 // cardEditor is one card's editor: every field saves as it is changed, and the
 // card beside it shows the change at once.
 templ cardEditor(p deckPage, c DirectorCard) {
-	<form class="dkw-editor" data-dkw-editor data-card-id={ c.ID } onsubmit="return false">
+	<form class="dkw-editor" data-dkw-editor data-card-id={ c.ID }>
 		<div class="dkw-ed-top">
 			<h2 class="dkw-lab">One card <span class="dkw-quiet">of { p.Deck.Name }</span></h2>
 			<button type="button" class="dkw-word" data-act="close-card">Done</button>
@@ -128,7 +128,9 @@ templ cardEditor(p deckPage, c DirectorCard) {
 					<div class="dkw-field">
 						<span class="dkw-flabel" id="dkw-kind-l">Kind</span>
 						<div class="dkw-chips" role="radiogroup" aria-labelledby="dkw-kind-l">
-							<button type="button" class="dkw-chip" role="radio" aria-checked={ boolWord(c.KindKey == "") } data-kind-key="">No kind</button>
+							if len(p.Deck.Look.Kinds) > 0 {
+								<button type="button" class="dkw-chip" role="radio" aria-checked={ boolWord(c.KindKey == "") } data-kind-key="">No kind</button>
+							}
 							for _, k := range p.Deck.Look.Kinds {
 								<button type="button" class={ "dkw-chip", paletteOf(k.Colour) } role="radio" aria-checked={ boolWord(c.KindKey == k.Key) } data-kind-key={ k.Key }>
 									@KindSign(k.Sign)
@@ -137,7 +139,7 @@ templ cardEditor(p deckPage, c DirectorCard) {
 							}
 						</div>
 						if len(p.Deck.Look.Kinds) == 0 {
-							<span class="dkw-quiet">This deck has no kinds yet. Add them on the Look tab.</span>
+							<span class="dkw-quiet">No kinds yet. <a class="dkw-word" href={ templ.SafeURL(p.pageURL("look")) }>Add some on the Look tab</a></span>
 						}
 					</div>
 					<div class="dkw-field dkw-narrow">
@@ -146,10 +148,10 @@ templ cardEditor(p deckPage, c DirectorCard) {
 					</div>
 				</div>
 				<div class="dkw-row2">
-					<label class="dkw-switch">
-						<input type="checkbox" role="switch" data-field="rare" checked?={ c.Rare }/>
-						<span>Rare</span>
-					</label>
+					<div class="dkw-switch">
+						<button type="button" class="toggle shrink-0" role="switch" aria-checked={ boolWord(c.Rare) } aria-labelledby="dkw-l-rare" data-field="rare"><span class="toggle-knob"></span></button>
+						<span id="dkw-l-rare">Rare</span>
+					</div>
 					<div class="dkw-field dkw-narrow">
 						<span class="dkw-flabel" id="dkw-copies-l">Copies</span>
 						<span class="dkw-step" role="group" aria-labelledby="dkw-copies-l">
@@ -166,12 +168,12 @@ templ cardEditor(p deckPage, c DirectorCard) {
 						for _, f := range []string{FateBack, FateUsed, FateGone, FatePlay} {
 							<option value={ f } selected?={ c.Fate == f }>{ fateWords(f) }</option>
 						}
-					</select>.
+					</select>
 				</p>
-				<label class="dkw-switch">
-					<input type="checkbox" role="switch" data-field="askFirst" checked?={ c.AskFirst }/>
-					<span>Ask me before a player plays it</span>
-				</label>
+				<div class="dkw-switch">
+					<button type="button" class="toggle shrink-0" role="switch" aria-checked={ boolWord(c.AskFirst) } aria-labelledby="dkw-l-ask" data-field="askFirst"><span class="toggle-knob"></span></button>
+					<span id="dkw-l-ask">Ask me before a player plays it</span>
+				</div>
 				<p class="dkw-quiet">Conditions for when this card can come up arrive in a later step.</p>
 				<div class="dkw-note" data-dm-only>
 					<label for="dkw-f-note">Note for the Directors</label>

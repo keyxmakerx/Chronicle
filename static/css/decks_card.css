@@ -119,7 +119,7 @@
 :root.dark { --dk-gold-ink: #e8c66a; }
 
 /* a card with no kind (or a back with no colour) is painted from the page's own tokens */
-:where(.dk-card, .dk-leaf) { --dk-k: var(--color-text-muted); --dk-pd: var(--color-accent-hover); }
+:where(.dk-card, .dk-leaf) { --dk-k: var(--color-accent); --dk-pd: var(--color-accent-hover); }
 
 /* ---- PALETTE: the ten kind colours; --dk-k is the kind, --dk-pd its deep tone for a back ---- */
 .dk-pal-violet { --dk-pd: #5b21b6; --dk-k: #7c3aed; }
@@ -178,6 +178,8 @@
 .dk-art { position: relative; display: block; overflow: hidden; min-height: 0; background: var(--dk-c-0d0f13); }
 .dk-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--dk-k) 55%, var(--dk-c-101218)) 0, var(--dk-c-0d0f13) 78%); }
 .dk-ph .dk-sg { width: 38%; height: auto; max-height: 38%; fill: color-mix(in srgb, var(--dk-k) 60%, var(--dk-white)); opacity: .5; }
+.dk-ph-deck { display: flex; width: 44%; }
+.dk-ph-deck .dk-em { width: 100%; height: auto; aspect-ratio: 1; fill: var(--dk-white); color: var(--dk-white); opacity: .16; }
 .dk-pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .dk-pic[data-src] { opacity: 0; }
 
