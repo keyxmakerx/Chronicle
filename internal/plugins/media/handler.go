@@ -78,6 +78,41 @@ type MapImageGuard interface {
 	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
 }
 
+// CardPictureViewer is who is asking about a card's picture: the same three
+// facts the decks plugin reads off a request (membership role, the role the
+// promoted visibility rule gives, and whether they are a Director), taken
+// here from the one promotion formula the rest of the media server uses.
+type CardPictureViewer struct {
+	UserID         string
+	MemberRole     int
+	VisibilityRole int
+	Director       bool
+}
+
+// CardPictureUse names one card that wears a media file, for the "where is
+// this used" list a Director reads.
+type CardPictureUse struct {
+	DeckName string
+	CardName string
+}
+
+// CardPictureGuard says whether a media file is the picture of a card in a
+// deck, and whether a given viewer may see it right now. Implemented over the
+// decks plugin (media never reads deck tables), because a card's face is
+// secret until it is face up to someone, and its picture is the face. The
+// answer is never cached here or on the decks side.
+type CardPictureGuard interface {
+	// IsCardPicture is true on error, so a caller that ignores the error refuses.
+	IsCardPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
+	// CardPictureSeenBy is true while a copy of a card wearing the file is
+	// face up to the viewer by the decks plugin's own rules.
+	CardPictureSeenBy(ctx context.Context, campaignID, mediaID string, v CardPictureViewer) (bool, error)
+	// CardPictureIDs lists every media file a card of the campaign wears.
+	CardPictureIDs(ctx context.Context, campaignID string) ([]string, error)
+	// CardPictureUses names the cards wearing the file; empty for a non-Director.
+	CardPictureUses(ctx context.Context, campaignID, mediaID string, v CardPictureViewer) ([]CardPictureUse, error)
+}
+
 // OwnPageChecker answers the one question that lets a player upload into a
 // campaign: is this the page they claimed there? A claiming player may
 // change their own hero's picture (entities' authorizeOwnPageWrite), and the
@@ -103,6 +138,9 @@ type Handler struct {
 	// mapImages is consulted after every other access check. Nil means no maps
 	// plugin is wired (tests); production wiring is pinned by a test in app.
 	mapImages MapImageGuard
+	// cardPictures is consulted after the map guard. Nil means no decks are
+	// wired (tests); production wiring is pinned by a test in app.
+	cardPictures CardPictureGuard
 	// noteMedia decides note pictures; see NoteMediaAccess.
 	noteMedia NoteMediaAccess
 	// ownPages lets a claiming player upload their hero's picture.
@@ -176,6 +214,18 @@ func (h *Handler) SetEntityVisibilityFilter(f EntityVisibilityFilter) {
 // app/routes.go.
 func (h *Handler) SetMapImageGuard(g MapImageGuard) {
 	h.mapImages = g
+}
+
+// SetCardPictureGuard wires the card-picture check. Called during wiring in
+// app/routes.go.
+func (h *Handler) SetCardPictureGuard(g CardPictureGuard) {
+	h.cardPictures = g
+}
+
+// CardPictureGuardWired reports whether the guard is set, so the app's wiring
+// test can prove production never serves media without it.
+func (h *Handler) CardPictureGuardWired() bool {
+	return h.cardPictures != nil
 }
 
 // SetOwnPageChecker wires the claimed-page rule for hero pictures.
@@ -473,7 +523,138 @@ func (h *Handler) checkMediaAccess(c *echo.Context, file *MediaFile, isThumb boo
 	if err := h.checkBaseMediaAccess(c, file, isThumb, thumbSize); err != nil {
 		return err
 	}
-	return h.checkMapImageGuard(c, file, isThumb, thumbSize)
+	if err := h.checkMapImageGuard(c, file, isThumb, thumbSize); err != nil {
+		return err
+	}
+	return h.checkCardPictureGuard(c, file, isThumb, thumbSize)
+}
+
+// checkCardPictureGuard (ADR-077) refuses the original (and any thumbnail) of a card's
+// picture unless the viewer is a Director or a copy of a card wearing it is
+// face up to them right now. A card is referenced by a deck, not a page, so
+// without this the file would reach the "no page references it" branch of
+// checkEntityScopedAccess and go to any campaign member holding its id. Like
+// the map guard it runs even for a validly signed URL: a signature proves the
+// link is genuine, not that its holder may see a face-down card.
+//
+// A file that a page the viewer can see also shows stays visible: the page
+// already shows it, so this guard replaces only the "no page references it"
+// grant and narrows nothing a page decides. Any error refuses, with the same
+// 404 as every other denial. Nothing here is cached.
+func (h *Handler) checkCardPictureGuard(c *echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+	if h.cardPictures == nil || file.CampaignID == nil {
+		return nil
+	}
+	// Directors and the owner's API-key links see every card, so they skip the
+	// lookup (a Director asking costs nothing extra on every image).
+	if h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
+		return nil
+	}
+	allowed, err := h.cardPictureAllowed(c.Request().Context(), file, auth.GetUserID(c))
+	if err != nil {
+		slog.Error("media: card picture check failed; denying access",
+			slog.String("file_id", file.ID), slog.Any("error", err))
+		return apperror.NewNotFound("media file not found")
+	}
+	if !allowed {
+		return apperror.NewNotFound("media file not found")
+	}
+	return nil
+}
+
+// cardPictureAllowed is the card rule for one viewer ("" is anonymous): true
+// for a file that is no card's picture, for a Director, while a copy of a card
+// wearing it is face up to them, or while a page they can see also shows it.
+// An error means "could not tell"; callers refuse.
+func (h *Handler) cardPictureAllowed(ctx context.Context, file *MediaFile, userID string) (bool, error) {
+	campaignID := *file.CampaignID
+	isPicture, err := h.cardPictures.IsCardPicture(ctx, campaignID, file.ID)
+	if err != nil {
+		return false, err
+	}
+	if !isPicture {
+		return true, nil
+	}
+	if userID != "" {
+		if v, ok := h.cardPictureViewer(campaignID, userID); ok {
+			if v.Director {
+				return true, nil
+			}
+			seen, err := h.cardPictures.CardPictureSeenBy(ctx, campaignID, file.ID, v)
+			if err != nil {
+				return false, err
+			}
+			if seen {
+				return true, nil
+			}
+		}
+	}
+	return h.pageShowsFile(ctx, file, userID)
+}
+
+// cardPictureViewer describes a signed-in user to the decks side from the same
+// promotion formula ADR-058 uses. ok is false for a non-member, who is shown no
+// card.
+func (h *Handler) cardPictureViewer(campaignID, userID string) (CardPictureViewer, bool) {
+	if h.memberChecker == nil || !h.memberChecker.IsCampaignMember(campaignID, userID) {
+		return CardPictureViewer{}, false
+	}
+	vis := promotedVisibilityRole(h.memberChecker, campaignID, userID)
+	return CardPictureViewer{
+		UserID:         userID,
+		MemberRole:     h.memberChecker.MemberRole(campaignID, userID),
+		VisibilityRole: vis,
+		Director:       vis >= int(campaigns.RoleOwner),
+	}, true
+}
+
+// pageShowsFile is true when a page that references the file is visible to the
+// viewer, by the same reference lookup and visibility filter ADR-058 decision 1
+// uses, but computed fresh and never from the cache. A signed-in viewer must be
+// a current member; an anonymous one counts only in a public campaign.
+func (h *Handler) pageShowsFile(ctx context.Context, file *MediaFile, userID string) (bool, error) {
+	campaignID := *file.CampaignID
+	if userID != "" {
+		if h.memberChecker == nil || !h.memberChecker.IsCampaignMember(campaignID, userID) {
+			return false, nil
+		}
+	} else if file.CampaignIsPublic == nil || !*file.CampaignIsPublic {
+		return false, nil
+	}
+	refs, err := h.service.FindReferences(ctx, campaignID, file.ID)
+	if err != nil {
+		return false, fmt.Errorf("finding media references: %w", err)
+	}
+	return h.anyRefViewable(ctx, campaignID, userID, refs)
+}
+
+// anyRefViewable reports whether at least one referencing page is visible to
+// the viewer. An unwired filter is an error, so the caller refuses.
+func (h *Handler) anyRefViewable(ctx context.Context, campaignID, userID string, refs []MediaRef) (bool, error) {
+	if len(refs) == 0 {
+		return false, nil
+	}
+	if h.entityVisibility == nil {
+		return false, fmt.Errorf("media: entity visibility filter not configured")
+	}
+	ids := make([]string, 0, len(refs))
+	seen := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		if !seen[ref.EntityID] {
+			seen[ref.EntityID] = true
+			ids = append(ids, ref.EntityID)
+		}
+	}
+	viewable, err := h.entityVisibility.FilterViewableEntityIDs(ctx, campaignID, ids, h.viewerVisibilityRole(campaignID, userID), userID)
+	if err != nil {
+		return false, fmt.Errorf("filtering viewable entities: %w", err)
+	}
+	for _, ok := range viewable {
+		if ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // checkMapImageGuard refuses the original (and any thumbnail) of a map picture
@@ -1063,7 +1244,18 @@ func (h *Handler) CampaignMediaList(c *echo.Context) error {
 		perPage = 24
 	}
 
-	files, total, err := h.service.ListCampaignMedia(ctx, cc.Campaign.ID, page, perPage)
+	hidden, err := h.hiddenCardPictures(ctx, cc, auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	// With nothing to leave out this is the plain list, exactly as before.
+	var files []MediaFile
+	var total int
+	if len(hidden) == 0 {
+		files, total, err = h.service.ListCampaignMedia(ctx, cc.Campaign.ID, page, perPage)
+	} else {
+		files, total, err = h.service.ListCampaignMediaExcluding(ctx, cc.Campaign.ID, hidden, page, perPage)
+	}
 	if err != nil {
 		return err
 	}
@@ -1118,6 +1310,38 @@ func (h *Handler) CampaignMediaList(c *echo.Context) error {
 		"page":     page,
 		"per_page": perPage,
 	})
+}
+
+// hiddenCardPictures lists the files a picker must leave out for this viewer:
+// every card's picture, except for a Director and except for a file that is
+// also on a page the viewer can see (the page already shows it). The files are
+// handed to the repository as one NOT IN, so page counts stay right. An error
+// refuses the whole list rather than risk naming a face-down card's art. Not
+// cached.
+func (h *Handler) hiddenCardPictures(ctx context.Context, cc *campaigns.CampaignContext, userID string) ([]string, error) {
+	if h.cardPictures == nil || cc.CanAuthorDmOnly() {
+		return nil, nil
+	}
+	ids, err := h.cardPictures.CardPictureIDs(ctx, cc.Campaign.ID)
+	if err != nil {
+		slog.Error("media: card picture list failed; refusing the media list",
+			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return nil, apperror.NewInternal(fmt.Errorf("listing media"))
+	}
+	hidden := make([]string, 0, len(ids))
+	for _, id := range ids {
+		file := &MediaFile{ID: id, CampaignID: &cc.Campaign.ID}
+		onPage, err := h.pageShowsFile(ctx, file, userID)
+		if err != nil {
+			slog.Error("media: page check for a card picture failed; refusing the media list",
+				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+			return nil, apperror.NewInternal(fmt.Errorf("listing media"))
+		}
+		if !onPage {
+			hidden = append(hidden, id)
+		}
+	}
+	return hidden, nil
 }
 
 // pickThumbnail picks the smallest available thumbnail size key for a
@@ -1238,7 +1462,20 @@ func (h *Handler) CampaignMediaRefs(c *echo.Context) error {
 
 	refs = h.filterViewableRefs(ctx, cc, auth.GetUserID(c), refs)
 
-	return middleware.Render(c, http.StatusOK, MediaRefsFragment(cc, mediaID, refs))
+	// Cards are named to Directors only: a player or Scribe learning which
+	// card wears a picture would learn what a face-down card is.
+	var cards []CardPictureUse
+	if h.cardPictures != nil && cc.CanAuthorDmOnly() {
+		v := CardPictureViewer{UserID: auth.GetUserID(c), MemberRole: int(cc.MemberRole), VisibilityRole: cc.VisibilityRole(), Director: true}
+		cards, err = h.cardPictures.CardPictureUses(ctx, cc.Campaign.ID, mediaID, v)
+		if err != nil {
+			slog.Error("media: card picture uses failed; naming none",
+				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+			cards = nil
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, MediaRefsFragment(cc, mediaID, refs, cards))
 }
 
 // filterViewableRefs narrows refs to the entities userID may see, using cc's

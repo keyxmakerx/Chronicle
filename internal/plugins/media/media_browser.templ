@@ -274,8 +274,11 @@ templ mediaCard(cc *campaigns.CampaignContext, f MediaFile, csrfToken string) {
 // caller (Handler.CampaignMediaRefs, ADR-058 decision 4) — this component
 // just renders whatever list it's handed and has no visibility logic of its
 // own.
-templ MediaRefsFragment(cc *campaigns.CampaignContext, mediaID string, refs []MediaRef) {
-	if len(refs) == 0 {
+//
+// cards names the decks' cards that wear the file. The caller passes them for a
+// Director only; the component never decides who may see them.
+templ MediaRefsFragment(cc *campaigns.CampaignContext, mediaID string, refs []MediaRef, cards []CardPictureUse) {
+	if len(refs) == 0 && len(cards) == 0 {
 		<span class="text-fg-muted">Not referenced by any pages.</span>
 	} else {
 		<div class="space-y-0.5">
@@ -292,6 +295,12 @@ templ MediaRefsFragment(cc *campaigns.CampaignContext, mediaID string, refs []Me
 						<span class="text-fg-muted">(in content)</span>
 					}
 				</a>
+			}
+			for _, card := range cards {
+				<span class="block text-fg-secondary truncate">
+					{ card.CardName }
+					<span class="text-fg-muted">(card picture, { card.DeckName })</span>
+				</span>
 			}
 		</div>
 	}

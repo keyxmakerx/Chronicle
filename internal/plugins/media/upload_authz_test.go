@@ -53,6 +53,9 @@ func (f *fakeUploadService) SetEntityVisibilityFilter(v EntityVisibilityFilter) 
 func (f *fakeUploadService) ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeUploadService) ListCampaignMediaExcluding(ctx context.Context, campaignID string, _ []string, page, perPage int) ([]MediaFile, int, error) {
+	return nil, 0, nil
+}
 func (f *fakeUploadService) GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error) {
 	return nil, nil
 }

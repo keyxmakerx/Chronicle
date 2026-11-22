@@ -61,6 +61,10 @@ type MediaService interface {
 	// ListCampaignMedia returns paginated media files for a campaign.
 	ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error)
 
+	// ListCampaignMediaExcluding is ListCampaignMedia without the named files,
+	// in the same query, so the page counts stay right.
+	ListCampaignMediaExcluding(ctx context.Context, campaignID string, excludeIDs []string, page, perPage int) ([]MediaFile, int, error)
+
 	// GetCampaignStats returns aggregate storage stats for a campaign.
 	GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error)
 
@@ -815,6 +819,16 @@ func (s *mediaService) ListCampaignMedia(ctx context.Context, campaignID string,
 	}
 	offset := (page - 1) * perPage
 	return s.repo.ListByCampaign(ctx, campaignID, perPage, offset)
+}
+
+// ListCampaignMediaExcluding returns paginated media files for a campaign
+// without the named files.
+func (s *mediaService) ListCampaignMediaExcluding(ctx context.Context, campaignID string, excludeIDs []string, page, perPage int) ([]MediaFile, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+	return s.repo.ListByCampaignExcluding(ctx, campaignID, excludeIDs, perPage, offset)
 }
 
 // GetCampaignStats returns aggregate storage stats for a campaign.

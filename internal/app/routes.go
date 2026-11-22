@@ -4780,6 +4780,14 @@ func (a *App) RegisterRoutes() {
 	// Needed to resolve the caller's role for ListMedia's Scribe+ gate.
 	mediaAPIHandler.SetCampaignService(campaignService)
 	mediaAPIHandler.SetMapImageGuard(mapsService)
+	// The decks service is built here, ahead of its routes, because the media
+	// server must be able to refuse a card's picture from the first request. It
+	// asks even where the decks plugin is degraded: a campaign with no decks
+	// tables has no card pictures, and any other failure refuses.
+	decksSvc := decks.NewService(decks.NewRepository(a.DB),
+		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService},
+		decks.WithPictures(&decksPictureAdapter{svc: mediaService}))
+	wireCardPictures(decksSvc, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
 	// Reuses the sync mapping service created earlier for the owner dashboard.
@@ -7064,8 +7072,6 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	if a.PluginHealth.IsHealthy(decks.PluginSlug) {
-		decksSvc := decks.NewService(decks.NewRepository(a.DB),
-			&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService})
 		decks.RegisterRoutes(e, decks.NewHandler(decksSvc), campaignService, authService, addonService)
 	} else {
 		slog.Warn("decks plugin degraded — card decks are not available")

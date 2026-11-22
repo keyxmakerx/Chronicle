@@ -83,6 +83,10 @@ func (m *mockMediaRepo) ListByCampaign(ctx context.Context, campaignID string, l
 	return nil, 0, nil
 }
 
+func (m *mockMediaRepo) ListByCampaignExcluding(ctx context.Context, campaignID string, _ []string, limit, offset int) ([]MediaFile, int, error) {
+	return m.ListByCampaign(ctx, campaignID, limit, offset)
+}
+
 func (m *mockMediaRepo) GetStorageStats(ctx context.Context) (*StorageStats, error) {
 	if m.getStorageStatsFn != nil {
 		return m.getStorageStatsFn(ctx)

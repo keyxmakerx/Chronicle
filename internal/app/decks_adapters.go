@@ -10,6 +10,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 )
 
 // decksHeroAdapter implements decks.Heroes over the entities service.
@@ -91,4 +93,83 @@ func (a *decksMemberAdapter) Members(ctx context.Context, campaignID string) ([]
 			Director: m.Role >= campaigns.RoleOwner || grants[m.UserID], JoinedAt: m.JoinedAt})
 	}
 	return out, nil
+}
+
+// decksPictureAdapter implements decks.Pictures over the media service.
+type decksPictureAdapter struct {
+	svc media.MediaService
+}
+
+// Usable is true only for an image of this campaign that is not a note picture
+// or page file and is not in the campaign Trash. Every other case, including a
+// file that does not exist, is a plain false so the caller cannot tell them
+// apart.
+func (a *decksPictureAdapter) Usable(ctx context.Context, campaignID, mediaID string) (bool, error) {
+	f, err := a.svc.GetByID(ctx, mediaID)
+	if err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if f == nil || f.IsBound() || f.InTrash() || !f.IsImage() || f.CampaignID == nil || *f.CampaignID != campaignID {
+		return false, nil
+	}
+	// A picture in the campaign Trash is still served until it is purged, so
+	// the trash list is the only place its state shows.
+	trashed, err := a.svc.ListTrashedPictures(ctx, campaignID)
+	if err != nil {
+		return false, err
+	}
+	for _, t := range trashed {
+		if t.ID == mediaID {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// decksCardPictureAdapter implements media.CardPictureGuard over the decks
+// service, so the media server decides a card's picture by the card's own
+// visibility and neither plugin imports the other.
+type decksCardPictureAdapter struct {
+	svc decks.Service
+}
+
+func (a *decksCardPictureAdapter) IsCardPicture(ctx context.Context, campaignID, mediaID string) (bool, error) {
+	return a.svc.IsCardPicture(ctx, campaignID, mediaID)
+}
+
+func decksViewerOf(v media.CardPictureViewer) decks.Viewer {
+	return decks.Viewer{UserID: v.UserID, MemberRole: v.MemberRole, VisibilityRole: v.VisibilityRole, Director: v.Director}
+}
+
+func (a *decksCardPictureAdapter) CardPictureSeenBy(ctx context.Context, campaignID, mediaID string, v media.CardPictureViewer) (bool, error) {
+	return a.svc.CardPictureSeenBy(ctx, campaignID, mediaID, decksViewerOf(v))
+}
+
+func (a *decksCardPictureAdapter) CardPictureIDs(ctx context.Context, campaignID string) ([]string, error) {
+	return a.svc.CardPictureIDs(ctx, campaignID)
+}
+
+func (a *decksCardPictureAdapter) CardPictureUses(ctx context.Context, campaignID, mediaID string, v media.CardPictureViewer) ([]media.CardPictureUse, error) {
+	uses, err := a.svc.CardPictureUses(ctx, campaignID, mediaID, decksViewerOf(v))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]media.CardPictureUse, 0, len(uses))
+	for _, u := range uses {
+		out = append(out, media.CardPictureUse{DeckName: u.DeckName, CardName: u.CardName})
+	}
+	return out, nil
+}
+
+// wireCardPictures gives both media entry points (the media server and the
+// sync media API) the guard that keeps a face-down card's picture from anyone
+// it is not face up to. A named helper so a test can prove the production
+// wiring sets both; without it a card's picture is one id away from any member.
+func wireCardPictures(decksService decks.Service, mediaHandler *media.Handler, mediaAPIHandler *syncapi.MediaAPIHandler) {
+	g := &decksCardPictureAdapter{svc: decksService}
+	mediaHandler.SetCardPictureGuard(g)
+	mediaAPIHandler.SetCardPictureGuard(g)
 }

@@ -1259,3 +1259,24 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A copy returning to the pile gets a fresh id, so a remembered id cannot be tracked through the pile.
 - Turning a card over and showing it are separate marks (`face_up`, `is_open`). One mark would make a player's private turn the same event as a show, so every other player would be told that a card was turned, and which hero turned it; with two, a turned card and an unturned one are the same bytes to everyone but the holder and the Directors.
 - A change to the zones or the claim rule changes the move table in `internal/plugins/decks/.ai.md` and its tests first.
+
+## ADR-077: A card's picture is decided by the card's visibility, and the guard overrides a signature but narrows nothing a page shows
+
+**Status:** Accepted; the card picture step of decks (#2567).
+
+**Context:** A face-down card's face is never sent to a player until they turn it over, and its picture is part of the face. The picture is a campaign media file, and the media server has its own rules: ADR-058 decision 3 serves a file that no page references to any campaign member who has its id, and `/media/list` lists the campaign's pictures to Scribes. A card is referenced by a deck, not a page, so without a rule of its own a Scribe could browse the art of a hidden deck, and a member who once saw a card face up could fetch its picture again while it lies face down.
+
+**Decision:**
+1. A card's picture is a campaign media file id, never a URL or path. The decks plugin checks it on save through an interface it declares (`Pictures`), implemented in `internal/app` over the media service: an image of this campaign, not a note picture or page file, not in the campaign Trash. Every refusal reads the same.
+2. The media plugin declares `CardPictureGuard`, set and wired like `MapImageGuard` on the media server and the sync media API. The media server refuses the original and every thumbnail of a card's picture, with the usual 404, to anyone below Director unless a copy of a card wearing it is face up to them now. The decks plugin answers by building what the viewer would be sent and looking for the card in it, so the picture is open exactly when the face is.
+3. The guard runs even for a validly signed link, like the map guard: a signature proves the link is genuine, not that its holder may see a face-down card. The cookieless links the media server and the notes app mint for the owner's tools stay Director-equivalent, so no path that signs one may sign a card's picture for a member the card rule refuses; `SignedLinksForMember` applies the rule.
+4. The guard only replaces the "no page references it, so any member may fetch it" grant. A file that is also on a page the viewer can see stays visible through the page rule; the guard narrows nothing a page already shows.
+5. Listings below Director leave card pictures out in the query (`NOT IN`), so totals stay right; the picker keeps a card picture that a page the viewer can see also shows. The sync media API has no page filter and leaves card pictures out for every caller below owner. "Where is this used" names a card to Directors only.
+6. Any error in a card-picture check refuses and logs. Nothing about a card-picture decision is cached.
+
+**Consequences:**
+- Every campaign file request from a non-Director costs one extra indexed lookup of `deck_cards` by campaign (none for a Director). A campaign without decks tables answers "no card pictures" rather than failing.
+- A trashed picture opens until its purge, as it does for a page, so a card keeps showing it until then; after a purge the card keeps a dangling id and renders without a picture.
+- A new way to read a face (a new zone, a new setting) changes `playerDeck` and so changes the picture rule with it; there is no second copy of the rules to update.
+- A new place that mints cookieless media links for members must ask the card rule first.
+
