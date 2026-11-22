@@ -12,7 +12,13 @@
  * It opens on the first tab with something in it. Pieces arrive one by one,
  * so the choice is remade as they load, but only until the viewer picks a tab
  * or the first few seconds pass: the panel never changes tab under someone.
+ * A page refresh that replaces the panel mounts a new copy straight after
+ * destroying this one; the tab the viewer was on is kept for it.
  */
+(function () {
+var CARRY_MS = 3000;
+var carried = null;
+
 Chronicle.register('page-tabs', {
   init: function (el) {
     var AUTO_MS = 4000;
@@ -184,6 +190,8 @@ Chronicle.register('page-tabs', {
     mo.observe(el, { childList: true, subtree: true, characterData: true });
 
     el._ptOff = function () {
+      var cur = current();
+      carried = !auto && cur ? { path: location.pathname, tab: cur.getAttribute('data-pt-tab'), at: Date.now() } : null;
       clearTimeout(autoTimer);
       mo.disconnect();
       if (fo) fo.disconnect();
@@ -193,6 +201,12 @@ Chronicle.register('page-tabs', {
       el.removeEventListener('htmx:afterRequest', onLoaded);
     };
     update();
+    var c = carried;
+    carried = null;
+    if (c && c.path === location.pathname && Date.now() - c.at < CARRY_MS) {
+      var keep = el.querySelector('[data-pt-tab="' + c.tab + '"]');
+      if (keep && !keep.hidden) { stopAuto(); select(keep, false); }
+    }
   },
   // A page refresh calls this only when the panel's markup came back the
   // same (page_live.js): the tabs stay as the reader left them, and the
@@ -202,3 +216,4 @@ Chronicle.register('page-tabs', {
     if (el._ptOff) el._ptOff();
   }
 });
+})();

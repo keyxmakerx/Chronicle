@@ -10,12 +10,27 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+// The note rows' own fold rules, so a long note is clamped as in the app.
+const CSS = readFileSync(join(root, 'static/css/input.css'), 'utf8');
+// p { margin: 0 } stands in for the app's base reset.
+const STYLE = 'p { margin: 0 }\n' + CSS.split('\n').filter((l) => /^\.en-(body|prose|note-title)[ .+]/.test(l)).join('\n');
+assert.ok(STYLE.includes('is-clamped'), 'input.css: the clamp rule');
+
+// The real tabbed panel under a system sheet: Links first, then Notes.
+function tabsPanel(notes, other) {
+  const tab = (k, on) => '<button type="button" role="tab" id="pt-tab-' + k + '" data-pt-tab="' + k + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') + '>' + k + ' <span data-pt-n></span></button>';
+  return '<section data-widget="page-tabs"><div class="pt-tabs" role="tablist">' + tab('links', true) + tab('notes', false) + '</div>' +
+    '<div data-pt-pane="links"><p id="other">' + other + '</p></div>' +
+    '<div data-pt-pane="notes" hidden>' + notes + '</div>' +
+    '<button type="button" data-pt-press hidden><span data-pt-press-label></span></button></section>';
+}
 
 // A hero page: a heading block, and a panel holding the notes mount and a
 // second piece, as the tabs under a system sheet do. `v` says what the
@@ -26,11 +41,11 @@ function page(v) {
   const notes = '<div data-widget="entity-notes" data-entity-id="e1" data-campaign-id="c1"' +
     ' data-endpoint="/campaigns/c1/entities/e1/notes" data-current-user-id="u1"' + (v.dm ? ' data-sees-dm-notes="true"' : '') + '></div>';
   const entry = '<section data-block="entry"><p>' + (v.entry || 'Bren') + '</p></section>';
-  const panel = v.alone ? notes : '<section data-widget="page-tabs"><div>' + notes + '</div><p id="other">' + (v.other || 'Links') + '</p></section>';
+  const panel = v.tabs ? tabsPanel(notes, v.other || 'Links') : v.alone ? notes : '<section data-widget="page-tabs"><div>' + notes + '</div><p id="other">' + (v.other || 'Links') + '</p></section>';
   const cols = v.swapped
     ? '<div data-page-col>' + panel + '</div><div data-page-col>' + entry + '</div>'
     : '<div data-page-col>' + entry + '</div><div data-page-col>' + panel + '</div>';
-  return '<!doctype html><html><head><title>Bren</title></head><body>' +
+  return '<!doctype html><html><head><title>Bren</title><style>' + STYLE + '</style></head><body>' +
     '<main id="main-content" style="height:600px;overflow-y:auto">' +
     '<div hidden data-widget="page-live" data-entity-id="e1" data-campaign-id="c1"></div>' +
     '<div data-page-frame data-whole><h1>Bren</h1><div data-page-row>' + cols + '</div></div></main>' +
@@ -39,7 +54,10 @@ function page(v) {
     '<script src="/static/js/widgets/entity_notes.js" defer></script><script src="/static/js/widgets/page_live.js" defer></script></body></html>';
 }
 
-const NOTES = [{ id: 'n1', authorUserId: 'u1', audience: 'private', title: 'Mine', bodyHtml: '<p>First words</p>', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }];
+const NOTES = [
+  { id: 'n1', authorUserId: 'u1', audience: 'private', title: 'Mine', bodyHtml: '<p>First words</p>', createdAt: '2026-01-02T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' },
+  { id: 'n2', authorUserId: 'u2', audience: 'everyone', title: 'Long', bodyHtml: '<p>' + 'A long account of the road. '.repeat(40) + '</p>', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+];
 
 async function setup(t, versions) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
@@ -69,7 +87,7 @@ async function setup(t, versions) {
     window.WebSocket.prototype.close = function () { this.closed = true; };
   });
   await p.goto('http://chronicle.test/campaigns/c1/entities/e1');
-  await p.waitForSelector('.en-note[data-en-id="n1"]');
+  await p.waitForSelector('.en-note[data-en-id="n1"]', { state: 'attached' });
   return p;
 }
 
@@ -175,4 +193,25 @@ test('a carried note is dropped once it is older than the carry window', { skip 
     return !!w.querySelector('form.en-comp');
   });
   assert.equal(opened, false);
+});
+
+test('a replaced tabs panel keeps the reader on the Notes tab, the unsent note showing', { skip }, async (t) => {
+  const p = await setup(t, [{ tabs: true }, { tabs: true, other: 'Links changed' }]);
+  await p.click('#pt-tab-notes');
+  await p.waitForSelector('[data-en-act="new"]');
+  await writeDraft(p);
+  const r = await refresh(p);
+  assert.equal(r.other, 'Links changed');
+  assert.equal(r.widgetKept, false, 'the panel was replaced');
+  assert.equal(await p.getAttribute('#pt-tab-notes', 'aria-selected'), 'true', 'still on Notes');
+  assert.ok(await p.isVisible('form.en-comp'), 'the carried note is in view, not in a hidden tab');
+  assert.equal(r.body, 'Half a thought');
+});
+
+test('a long note drawn while the Notes tab is hidden offers Show more once the tab opens', { skip }, async (t) => {
+  const p = await setup(t, [{ tabs: true }]);
+  await p.waitForSelector('.en-note[data-en-id="n2"]', { state: 'attached' });
+  await p.click('#pt-tab-notes');
+  await p.waitForFunction(() => !document.querySelector('.en-note[data-en-id="n2"] .en-more').hidden, null, { timeout: 3000 });
+  assert.equal(await p.isVisible('.en-note[data-en-id="n1"] .en-more'), false, 'a short note still has none');
 });
