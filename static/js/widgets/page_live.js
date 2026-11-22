@@ -164,6 +164,32 @@
     return self;
   }
 
+  // A refresh redraws the page the reader is already on, so it is not an
+  // arrival: the frame that waits unseen for its widgets is shown at once and
+  // the fade-in is off for this swap (input.css keys on the attribute).
+  // Widgets that draw late fill in under the held height. The request can
+  // finish before the swap settles, so once swapped it is let go at the settle.
+  function keepShown(m) {
+    var done = false, swapped = false;
+    m.setAttribute('data-page-live-swap', '');
+    function show(e) {
+      if (done || !e.detail || e.detail.target !== m) return;
+      swapped = true;
+      Array.prototype.forEach.call(m.querySelectorAll('[data-whole]'), function (f) { f.setAttribute('data-whole-ready', ''); });
+      if (e.type === 'htmx:afterSettle') release(true);
+    }
+    function release(settled) {
+      if (done || (swapped && !settled)) return;
+      done = true;
+      document.removeEventListener('htmx:afterSwap', show);
+      document.removeEventListener('htmx:afterSettle', show);
+      m.removeAttribute('data-page-live-swap');
+    }
+    document.addEventListener('htmx:afterSwap', show);
+    document.addEventListener('htmx:afterSettle', show);
+    return release;
+  }
+
   function state() {
     var m = main();
     var a = document.activeElement;
@@ -200,6 +226,7 @@
         busy = true;
         var top = m.scrollTop;
         var place = holdPlace(m, top);
+        var shown = keepShown(m);
         // The swap replaces this widget, which ends this connection and
         // starts a new one on the fresh markup.
         window.htmx.ajax('GET', url, {
@@ -210,7 +237,7 @@
         }).then(function () {
           if (main() === m && location.pathname + location.search === url) place.follow();
           else place.end();
-        }, function () { place.end(); }).then(function () { busy = false; });
+        }, function () { place.end(); }).then(function () { shown(); busy = false; });
       }
 
       function connect() {
