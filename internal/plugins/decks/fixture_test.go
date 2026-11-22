@@ -28,7 +28,10 @@ type fixture struct {
 
 var longAgo = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T) *fixture { return newFixtureWith(t) }
+
+// newFixtureWith is newFixture with more service options, such as a story.
+func newFixtureWith(t *testing.T, opts ...Option) *fixture {
 	t.Helper()
 	fx := &fixture{t: t, repo: newMemRepo(), cap: &capture{}}
 	fx.heroes = fakeHeroes{
@@ -47,7 +50,7 @@ func newFixture(t *testing.T) *fixture {
 		{UserID: "u-scribe", Role: 2, JoinedAt: longAgo},
 	}}
 	fx.members = members
-	fx.svc = NewService(fx.repo, fx.heroes, members, WithNotifier(fx.cap), WithBell(fx.cap), WithPictures(fx.pics), WithRandom(func(int) int { return 0 }))
+	fx.svc = NewService(fx.repo, fx.heroes, members, append([]Option{WithNotifier(fx.cap), WithBell(fx.cap), WithPictures(fx.pics), WithRandom(func(int) int { return 0 })}, opts...)...)
 	fx.dir = Viewer{UserID: "u-dir", MemberRole: 3, VisibilityRole: 3, Director: true}
 	fx.tam = Viewer{UserID: "u-tam", MemberRole: 1, VisibilityRole: 1}
 	fx.ilse = Viewer{UserID: "u-ilse", MemberRole: 1, VisibilityRole: 1}

@@ -532,6 +532,11 @@ func (s *service) DealMoment(ctx context.Context, cid, id string, v Viewer) (*Ac
 		Move: Move{CampaignID: cid, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZoneShown}, To: place, Log: plan.Log}})
 	s.afterAnswer(ctx, cid, m)
 	s.poked(cid)
+	if s.story != nil {
+		if card, found, err := s.repo.GetCard(ctx, cid, d.ID, m.CardID); err == nil && found {
+			s.tell(ctx, cid, false, d, card, place.HolderEntityID, v)
+		}
+	}
 	return r.result(d, got[0].ID)
 }
 

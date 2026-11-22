@@ -33,6 +33,9 @@ type workshopDeps struct {
 	// Crafting holds the Crafting recipes part's recipes; nil while
 	// crafting is degraded.
 	Crafting crafting.Service
+	// Decks fires the card events and runs the deck actions; nil while the
+	// card decks plugin is degraded.
+	Decks *decksStory
 }
 
 // respiteListener is told of a respite the Director pressed.

@@ -237,14 +237,25 @@ func (s *service) recipesFor(ctx context.Context, campaignID, recipeID string) (
 }
 
 // holds says whether a rule waits for the Director: it is timed for later,
-// carries a test only a person can judge, or does something the server
-// can't.
+// carries a test only a person can judge, does something the server can't, or
+// uses an action that is the Director's call even though the server can run it.
 func (s *service) holds(rule Rule) bool {
 	if rule.Timing != TimingNow || rule.When.Test != "" {
 		return true
 	}
 	for _, d := range rule.Then {
-		if a, ok := s.reg.action(d.Action); !ok || a.ClientRun || a.Run == nil {
+		if a, ok := s.reg.action(d.Action); !ok || a.ClientRun || a.Run == nil || a.Waits {
+			return true
+		}
+	}
+	return false
+}
+
+// waitsOnPurpose says whether a rule has an action that is the Director's
+// call, so the drawer can say that is why it waits.
+func (s *service) waitsOnPurpose(rule Rule) bool {
+	for _, d := range rule.Then {
+		if a, ok := s.reg.action(d.Action); ok && a.Waits {
 			return true
 		}
 	}
@@ -355,6 +366,8 @@ func (s *service) view(r Run) RunView {
 		out.Waits = "Set to wait for the end of the encounter."
 	case r.Rule.Timing == TimingHeld:
 		out.Waits = "Set to wait for you."
+	case s.waitsOnPurpose(r.Rule):
+		out.Waits = "Part of it is your call, so it waits for you."
 	default:
 		out.Waits = "Part of it is yours to run."
 	}

@@ -63,6 +63,7 @@ type runRig struct {
 	runs   *fakeRuns
 	values map[string]int
 	acts   []Act
+	big    int // how many times the Waits action ran
 }
 
 func newRunRig(t *testing.T) *runRig {
@@ -108,6 +109,12 @@ func newRunRig(t *testing.T) *runRig {
 		}}))
 	must(reg.RegisterAction(ActionDef{Name: "secret-boom", Label: "Secret boom", Check: okCheck,
 		Run: func(context.Context, string, Act) (string, error) { return "", errDB }}))
+	must(reg.RegisterAction(ActionDef{Name: "big", Label: "Do the big thing", Check: okCheck, Waits: true,
+		Run: func(_ context.Context, _ string, a Act) (string, error) {
+			rg.acts = append(rg.acts, a)
+			rg.big++
+			return "The big thing is done.", nil
+		}}))
 	must(reg.RegisterAction(ActionDef{Name: "hand", Label: "Do it by hand", Check: okCheck}))
 	must(reg.RegisterAction(ActionDef{Name: "browser", Label: "Run in the browser", ClientRun: true, Check: okCheck}))
 	rg.svc = NewService(newFakeRepo(), reg, nil, rg.runs).(*service)
@@ -116,7 +123,9 @@ func newRunRig(t *testing.T) *runRig {
 	return rg
 }
 
-func counter(key string) Part { return Part{Key: key, Kind: "counter", Label: "C " + key, See: SeeParty} }
+func counter(key string) Part {
+	return Part{Key: key, Kind: "counter", Label: "C " + key, See: SeeParty}
+}
 
 func (rg *runRig) save(t *testing.T, name string, parts []Part, rules ...Rule) *Recipe {
 	t.Helper()
@@ -433,4 +442,83 @@ func TestPressTellsTheOwnerFirst(t *testing.T) {
 			t.Fatalf("a rule ran: %d runs", len(runs.runs))
 		}
 	})
+}
+
+// A Waits action has a server Run and is still the Director's call: a rule
+// timed now is held, nothing runs at firing, and Run does it as the Director
+// who pressed it.
+func TestWaitsActionIsHeldThenRun(t *testing.T) {
+	ctx := context.Background()
+	rg := newRunRig(t)
+	rg.save(t, "Big", []Part{counter("a")},
+		Rule{When: When{Event: "rest"}, Timing: TimingNow, Then: []Do{{Action: "add", Part: "a"}, {Action: "big"}}},
+		Rule{When: When{Event: "rest"}, Timing: TimingNow, Then: []Do{{Action: "add", Part: "a"}}})
+	if err := rg.svc.Fire(ctx, camp, dm, Fired{Event: "rest", Scope: "page-1"}); err != nil {
+		t.Fatal(err)
+	}
+	// The plain number rule ran at once; the rule that ends in a Waits action
+	// ran nothing, not even its number step.
+	if got := strings.Join(rg.statuses(), ","); got != "held,done" || rg.values["a"] != 1 || rg.big != 0 {
+		t.Fatalf("runs = %s, values = %v, big = %d", got, rg.values, rg.big)
+	}
+	d, err := rg.svc.Drawer(ctx, camp, dm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Waiting) != 1 || d.Waiting[0].Waits != "Part of it is your call, so it waits for you." {
+		t.Fatalf("waiting = %+v", d.Waiting)
+	}
+	steps := d.Waiting[0].Steps
+	if len(steps) != 2 || steps[1].Browser || steps[1].ByHand {
+		t.Errorf("a Waits step is neither a browser step nor by hand: %+v", steps)
+	}
+	other := Viewer{UserID: "dm-two", Director: true}
+	v, err := rg.svc.RunHeld(ctx, camp, d.Waiting[0].ID, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Status != RunDone || strings.Join(v.Lines, "|") != "C a is now 2.|The big thing is done." || rg.big != 1 {
+		t.Fatalf("ran %+v, big = %d", v, rg.big)
+	}
+	last := rg.acts[len(rg.acts)-1]
+	if last.By.UserID != "dm-two" || last.Scope != "page-1" || last.Note != "Rule from Big" {
+		t.Errorf("act = %+v", last)
+	}
+	if _, err := rg.svc.RunHeld(ctx, camp, d.Waiting[0].ID, dm); codeOf(err) != 409 || rg.big != 1 {
+		t.Errorf("a second Run must not repeat it: %v, big = %d", err, rg.big)
+	}
+}
+
+// Waits is not a way to give a browser action a server run, and a held
+// Waits action fails its run with the owner's plain sentence.
+func TestWaitsRegistration(t *testing.T) {
+	run := func(context.Context, string, Act) (string, error) { return "", nil }
+	if err := NewRegistry().RegisterAction(ActionDef{Name: "both", ClientRun: true, Waits: true, Check: okCheck}); err == nil {
+		t.Error("Waits together with ClientRun was accepted")
+	}
+	if err := NewRegistry().RegisterAction(ActionDef{Name: "ok", Waits: true, Run: run, Check: okCheck}); err != nil {
+		t.Errorf("Waits with a server Run: %v", err)
+	}
+	// With no server Run it is simply held, as any by-hand action is.
+	if err := NewRegistry().RegisterAction(ActionDef{Name: "hand", Waits: true, Check: okCheck}); err != nil {
+		t.Errorf("Waits with no Run: %v", err)
+	}
+}
+
+func TestWaitsRunFailureIsPlain(t *testing.T) {
+	ctx := context.Background()
+	rg := newRunRig(t)
+	rg.svc.reg.actions["big"] = ActionDef{Name: "big", Label: "Do the big thing", Check: okCheck, Waits: true,
+		Run: func(context.Context, string, Act) (string, error) {
+			return "", apperror.NewValidation("There is no deck called Omens.")
+		}}
+	rg.save(t, "Big", nil, Rule{When: When{Event: "rest"}, Timing: TimingNow, Then: []Do{{Action: "big"}}})
+	if err := rg.svc.Fire(ctx, camp, dm, Fired{Event: "rest"}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := rg.svc.Drawer(ctx, camp, dm)
+	v, err := rg.svc.RunHeld(ctx, camp, d.Waiting[0].ID, dm)
+	if err != nil || v.Status != RunFailed || strings.Join(v.Lines, "|") != "Do the big thing did not run: There is no deck called Omens." {
+		t.Fatalf("ran %+v, %v", v, err)
+	}
 }

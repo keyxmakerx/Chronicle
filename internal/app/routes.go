@@ -4807,16 +4807,20 @@ func (a *App) RegisterRoutes() {
 	// whenever one of them may have changed.
 	decksWatch := newDecksWatcher()
 	decksFacts := &decksFactsAdapter{entities: entityService, characters: characterListService, tags: tagService}
+	decksOn := func(ctx context.Context, campaignID string) bool {
+		on, err := addonService.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
+		return err == nil && on
+	}
+	// Told after each stored draw, deal and play; the Homebrew service joins it
+	// below, once it exists.
+	decksStory := newDecksStory(decksOn)
 	decksSvc := decks.NewService(decks.NewRepository(a.DB),
 		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService},
 		decks.WithPictures(&decksPictureAdapter{svc: mediaService}),
 		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
 		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
 		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
-		decks.WithSwitch(func(ctx context.Context, campaignID string) bool {
-			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
-			return err == nil && on
-		}))
+		decks.WithSwitch(decksOn), decks.WithStory(decksStory))
 	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
@@ -7127,6 +7131,7 @@ func (a *App) RegisterRoutes() {
 		// Only a healthy plugin is rechecked: without its tables the watcher's
 		// pokes do nothing.
 		decksWatch.bind(decksSvc)
+		decksStory.bindDecks(decksSvc)
 		registerDecksBlock(blockRegistry, decksSvc)
 	} else {
 		slog.Warn("decks plugin degraded — card decks are not available")
@@ -7148,6 +7153,7 @@ func (a *App) RegisterRoutes() {
 		Trackers:       trackersSvc,
 		Respites:       craftingListener,
 		Crafting:       craftingWorkshop,
+		Decks:          decksStory,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -7162,6 +7168,7 @@ func (a *App) RegisterRoutes() {
 			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		craftingRespites.homebrew = homebrewSvc
+		decksStory.bindHomebrew(homebrewSvc)
 		// A saved recipe is placed with the Customizer only while the
 		// block that shows it exists.
 		if trackersSvc != nil {

@@ -179,6 +179,8 @@ type service struct {
 	moments    MomentRepository
 	momentNote MomentNotifier
 	poke       func(campaignID string)
+	// story hears stored draws, deals and plays; nil tells no one.
+	story      Story
 	switchedOn func(ctx context.Context, campaignID string) bool
 	// looked is when each campaign's moments were last rechecked on a read.
 	looked   map[string]time.Time

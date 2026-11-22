@@ -295,6 +295,7 @@ func (s *service) Draw(ctx context.Context, campaignID, deckID string, v Viewer,
 		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
 			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: c.ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
 	}
+	s.toldDrawn(ctx, campaignID, d, cards, got, plan.To.HolderEntityID, v)
 	return r.drawResult(d, got)
 }
 
@@ -307,9 +308,11 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 	if !validToken(in.CardID) {
 		return nil, errNotFound("card")
 	}
-	if _, found, err := s.repo.GetCard(ctx, campaignID, d.ID, in.CardID); err != nil {
+	named, found, err := s.repo.GetCard(ctx, campaignID, d.ID, in.CardID)
+	if err != nil {
 		return nil, apperrorInternal(err)
-	} else if !found {
+	}
+	if !found {
 		return nil, errNotFound("card")
 	}
 	to, err := s.target(ctx, campaignID, d, in.To, in.HeroID)
@@ -325,6 +328,7 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 	s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDeal,
 		Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZoneShown}, To: to, Log: plan.Log}})
 	s.poked(campaignID)
+	s.tell(ctx, campaignID, false, d, named, to.HolderEntityID, v)
 	return r.result(d, got[0].ID)
 }
 
@@ -415,6 +419,7 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		}
 		s.announce(ctx, campaignID, moveNote{Deck: d, Action: ActDraw,
 			Move: Move{CampaignID: campaignID, DeckID: d.ID, CopyID: got[0].ID, From: Place{Zone: ZonePile}, To: plan.To, Log: plan.Log}})
+		s.toldDrawn(ctx, campaignID, d, all, got, "", v)
 		return r.drawResult(d, got)
 
 	case verbTurn:
@@ -536,6 +541,14 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 	if err := s.applyMove(ctx, d, card.Name, m, action); err != nil {
 		return nil, err
 	}
+	// Only a stored deal or a play that really happened is told; an ask, a
+	// turn-down and every other verb are not.
+	switch action {
+	case ActDeal:
+		s.tell(ctx, campaignID, false, d, card, m.To.HolderEntityID, v)
+	case ActPlay, ActApprove:
+		s.tell(ctx, campaignID, true, d, card, c.HolderEntityID, v)
+	}
 	// A copy back in the pile has a new id, so the old one names nothing.
 	if m.To.Zone == ZonePile {
 		return r.result(d, "")
@@ -622,4 +635,21 @@ func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*Ac
 		Move: Move{CampaignID: r.cid, DeckID: d.ID, CopyID: c.ID, From: here, To: Place{Zone: ZoneGone}, Log: plan.Log}})
 	s.poked(r.cid)
 	return r.result(d, c.ID)
+}
+
+// toldDrawn tells the story of each card a draw took, once per card, naming it
+// from the deck's card list already read for the draw.
+func (s *service) toldDrawn(ctx context.Context, campaignID string, d Deck, cards []Card, got []Copy, heroID string, by Viewer) {
+	if s.story == nil {
+		return
+	}
+	byID := make(map[string]Card, len(cards))
+	for _, c := range cards {
+		byID[c.ID] = c
+	}
+	for _, c := range got {
+		if card, ok := byID[c.CardID]; ok {
+			s.tell(ctx, campaignID, false, d, card, heroID, by)
+		}
+	}
 }

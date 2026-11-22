@@ -107,6 +107,11 @@ type ActionDef struct {
 	// changed. Without it, and always for a ClientRun action, a rule that
 	// uses the action waits in the Homebrew drawer for the Director.
 	Run func(ctx context.Context, campaignID string, a Act) (string, error)
+	// Waits marks an action that is the Director's call even though the
+	// server can run it: a rule that uses it is held in the drawer however
+	// it is timed, and Run does it when the Director presses Run. It is for
+	// anything bigger than a number moving, which runs at once.
+	Waits bool
 }
 
 // Act is one action a rule is carrying out.
@@ -278,6 +283,9 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 	}
 	if a.ClientRun && a.Preview != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't preview", a.Name)
+	}
+	if a.ClientRun && a.Waits {
+		return fmt.Errorf("homebrew: action %q runs in the browser, which already waits for the Director, so it can't also be marked Waits", a.Name)
 	}
 	if a.ClientRun && a.Run != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't run on the server", a.Name)
