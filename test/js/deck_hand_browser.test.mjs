@@ -113,7 +113,7 @@ test('a refused turn leaves the card face down, says why and puts focus back', {
     focused: document.activeElement === document.querySelector('.dk-turn'),
   }));
   assert.equal(r.state, 'down');
-  assert.match(r.err, /already face up/);
+  assert.match(r.err, /^That card is already face up\./);
   assert.ok(r.enabled && r.focused, JSON.stringify(r));
   await page.context().close();
 });

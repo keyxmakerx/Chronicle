@@ -105,6 +105,8 @@
   function words(err) {
     var m = err && err.message ? String(err.message) : '';
     if (!m || /^request failed|Failed to fetch|NetworkError|Load failed/i.test(m)) return 'That did not go through. Check your connection and try again.';
+    // The server's refusals start in lower case; on the page each is a sentence.
+    m = m.charAt(0).toUpperCase() + m.slice(1);
     return /[.!?]$/.test(m) ? m : m + '.';
   }
 

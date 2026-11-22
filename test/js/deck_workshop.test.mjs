@@ -106,6 +106,7 @@ test('a failed request is said in plain words', () => {
   assert.match(DW.words(new Error('Failed to fetch')), /did not go through/);
   assert.equal(DW.words(new Error('That card is gone')), 'That card is gone.');
   assert.equal(DW.words(new Error('Already ends.')), 'Already ends.');
+  assert.equal(DW.words(new Error('that hero page is not in this campaign')), 'That hero page is not in this campaign.');
 });
 
 test('a fragment carries the deck version the widget reads, under the name the server writes', () => {
