@@ -5997,8 +5997,8 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-empty { padding: 16px 12px; font-size: .85rem; color: var(--dms-ink-muted); }
   .dms-cards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; scrollbar-width: thin; }
 
-  /* A section card: the newest is whole, the older ones fold to one line
-     carrying their summary. */
+  /* A section card: whole or folded to one line carrying its summary, each
+     on its own. */
   .dms-sec {
     flex: none; background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); border-radius: var(--dms-r);
     box-shadow: var(--dms-shadow);
@@ -6018,6 +6018,16 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   .dms-folded .dms-sec-t > i { color: var(--dms-ink-muted); }
   .dms-sec-x { width: 28px; height: 28px; }
+  /* The grip is the card's drag handle. It never scrolls (touch-action), so a
+     finger can pull it; a mouse can also pull the title. Phone lines don't move. */
+  .dms-sec-grip {
+    flex: none; width: 20px; align-self: stretch; display: flex; align-items: center; justify-content: center;
+    font-size: .65rem; color: var(--dms-ink-muted); opacity: .55; cursor: grab; touch-action: none; user-select: none;
+  }
+  .dms-sec-grip:hover { opacity: 1; }
+  .dms-sec.dms-lifting { opacity: .45; }
+  .dms-sec.dms-drop-before { box-shadow: 0 -3px 0 0 var(--dms-acc); }
+  .dms-sec.dms-drop-after { box-shadow: 0 3px 0 0 var(--dms-acc); }
   .dms-sec-b { display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; padding: 4px 12px 12px; }
 
   /* Leaves: a section dragged out of the rail opens on a leaf hinged off the
@@ -6096,6 +6106,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     }
     .dms-phonehead-t { font-size: .95rem; font-weight: 700; color: var(--dms-ink); }
     .dms-phonehead-x { width: 44px; height: 44px; font-size: 1.6rem; line-height: 1; }
+    .dms-sec-grip { display: none; }
     .dms-sec-t { min-height: 44px; padding: 6px 8px; }
     .dms-sec-t > span:not(.dms-sec-sum):not(.dms-sec-badge) { font-size: .78rem; }
     .dms-sec-badge {

@@ -82,11 +82,15 @@ templ Panel(v *View, csrf string) {
 	</div>
 }
 
-// section is one card in the column. Its header folds it to the one-line
-// summary or brings it to the front; the cross closes it.
+// section is one card in the column or on a leaf. Its header folds it to the
+// one-line summary or opens it whole, independently of the others; the grip
+// (or, with a mouse, the title) drags it; the cross closes it.
 templ section(sec SectionView) {
 	<section class="dms-sec" data-dms-sec={ sec.ID } aria-labelledby={ "dms-h-" + sec.ID } hidden>
 		<header class="dms-sec-h">
+			<span class="dms-sec-grip" data-dms-grip title="Drag to move this card" aria-hidden="true">
+				<i class="fa-solid fa-grip-vertical"></i>
+			</span>
 			<button type="button" class="dms-sec-t" data-dms-fold aria-expanded="true">
 				<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
 				<span id={ "dms-h-" + sec.ID }>{ sec.Title }</span>
