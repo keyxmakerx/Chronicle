@@ -896,17 +896,6 @@ func checkCard(d Deck, c *Card) error {
 	return nil
 }
 
-// otherCopies sums the copies of every card but one.
-func otherCopies(cards []Card, except string) int {
-	n := 0
-	for _, c := range cards {
-		if c.ID != except {
-			n += c.Copies
-		}
-	}
-	return n
-}
-
 func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v Viewer, in CreateCardInput) (DeckView, error) {
 	r := s.newRequest(ctx, campaignID, v)
 	d, err := r.directorDeck(deckID)
@@ -923,20 +912,18 @@ func (s *service) CreateCard(ctx context.Context, campaignID, deckID string, v V
 	if err := checkCard(d, &c); err != nil {
 		return nil, err
 	}
-	cards, err := s.repo.ListCards(ctx, campaignID, d.ID)
-	if err != nil {
-		return nil, apperrorInternal(err)
-	}
-	if len(cards) >= MaxCardsPerDeck {
-		return nil, errInvalid(fmt.Sprintf("a deck can have at most %d cards", MaxCardsPerDeck))
-	}
-	if otherCopies(cards, "")+c.Copies > MaxCopiesPerDeck {
-		return nil, errInvalid(fmt.Sprintf("a deck can have at most %d copies in all", MaxCopiesPerDeck))
-	}
-	c.SortOrder = len(cards)
+	// The card and copy limits are counted by the repository under the deck
+	// lock, so a concurrent create or keep cannot slip past them.
 	if err := s.repo.CreateCard(ctx, c); err != nil {
-		if errors.Is(err, errDuplicate) {
+		switch {
+		case errors.Is(err, errDuplicate):
 			return nil, errTaken("card")
+		case errors.Is(err, errTargetFull):
+			return nil, errInvalid(fmt.Sprintf("a deck can have at most %d cards", MaxCardsPerDeck))
+		case errors.Is(err, errTargetCopies):
+			return nil, errInvalid(fmt.Sprintf("a deck can have at most %d copies in all", MaxCopiesPerDeck))
+		case errors.Is(err, errLostClaim):
+			return nil, errNotFound("deck")
 		}
 		return nil, apperrorInternal(err)
 	}
@@ -974,16 +961,14 @@ func (s *service) UpdateCard(ctx context.Context, campaignID, deckID, cardID str
 	if err := checkCard(d, &c); err != nil {
 		return nil, err
 	}
-	cards, err := s.repo.ListCards(ctx, campaignID, d.ID)
-	if err != nil {
-		return nil, apperrorInternal(err)
-	}
-	if otherCopies(cards, c.ID)+c.Copies > MaxCopiesPerDeck {
-		return nil, errInvalid(fmt.Sprintf("a deck can have at most %d copies in all", MaxCopiesPerDeck))
-	}
-	if _, err := s.repo.UpdateCard(ctx, c); err != nil {
+	// Only an edit that carries copies reconciles them, and the repository
+	// does that, and counts the deck's limit, under the deck lock.
+	_, resize := in.Copies.Get()
+	if _, err := s.repo.UpdateCard(ctx, c, resize); err != nil {
 		var held *heldError
 		switch {
+		case errors.Is(err, errTargetCopies):
+			return nil, errInvalid(fmt.Sprintf("a deck can have at most %d copies in all", MaxCopiesPerDeck))
 		case errors.As(err, &held):
 			return nil, errInvalid(fmt.Sprintf("%d %s of this card %s held in hands or in play; take them back before lowering the copies",
 				held.N, plural(held.N, "copy", "copies"), plural(held.N, "is", "are")))

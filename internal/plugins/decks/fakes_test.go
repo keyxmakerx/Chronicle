@@ -103,13 +103,22 @@ func (m *memRepo) UpdateDeck(_ context.Context, d Deck, expected int, picks Pick
 	// Like the SQL, the draw nudges change only when the update names them.
 	d.NextCardID, d.LastCardID = cur.NextCardID, cur.LastCardID
 	if picks.SetNext {
-		d.NextCardID = picks.Next
+		d.NextCardID = m.pickIfCard(d.ID, picks.Next)
 	}
 	if picks.SetLast {
-		d.LastCardID = picks.Last
+		d.LastCardID = m.pickIfCard(d.ID, picks.Last)
 	}
 	m.decks[d.ID] = d
 	return true, nil
+}
+
+// pickIfCard mirrors the SQL subselect: the id stands only while the card is
+// still a card of the deck.
+func (m *memRepo) pickIfCard(deckID, id string) string {
+	if c, ok := m.cards[id]; ok && c.DeckID == deckID {
+		return id
+	}
+	return ""
 }
 
 func (m *memRepo) DeleteDeck(_ context.Context, _, id string) error {
@@ -178,14 +187,42 @@ func (m *memRepo) CreateCard(_ context.Context, c Card) error {
 	if m.cardNameTaken(c.DeckID, c.Name, "") {
 		return errDuplicate
 	}
+	cards, copies := 0, 0
+	for _, o := range m.cards {
+		if o.DeckID == c.DeckID {
+			cards++
+			copies += o.Copies
+		}
+	}
+	if cards >= MaxCardsPerDeck {
+		return errTargetFull
+	}
+	if copies+c.Copies > MaxCopiesPerDeck {
+		return errTargetCopies
+	}
+	c.SortOrder = cards
 	m.cards[c.ID] = c
 	m.addCopies(c, c.Copies)
 	return nil
 }
 
-func (m *memRepo) UpdateCard(_ context.Context, c Card) (ResizeResult, error) {
+func (m *memRepo) UpdateCard(_ context.Context, c Card, resize bool) (ResizeResult, error) {
 	if m.cardNameTaken(c.DeckID, c.Name, c.ID) {
 		return ResizeResult{}, errDuplicate
+	}
+	if !resize {
+		c.Copies = m.cards[c.ID].Copies
+		m.cards[c.ID] = c
+		return ResizeResult{}, nil
+	}
+	others := 0
+	for _, o := range m.cards {
+		if o.DeckID == c.DeckID && o.ID != c.ID {
+			others += o.Copies
+		}
+	}
+	if others+c.Copies > MaxCopiesPerDeck {
+		return ResizeResult{}, errTargetCopies
 	}
 	var mine []int
 	for i, cp := range m.copies {
@@ -464,16 +501,12 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 		m.writeLog(LogLine{DeckID: p.DeckID, CardID: old.CardID, CardName: m.cards[old.CardID].Name, CopyID: old.ID,
 			Action: ActPutBack, ActorUserID: p.Log.ActorUserID})
 	}
+	shown := 0
 	if p.To.Zone == ZoneShown {
-		shown := 0
 		for _, c := range m.copies {
 			if c.DeckID == p.DeckID && c.Zone == ZoneShown {
 				shown++
 			}
-		}
-		if shown+count > MaxShown {
-			undo()
-			return nil, errShownFull
 		}
 	}
 	deck := m.decks[p.DeckID]
@@ -484,6 +517,10 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 	nextUsed, lastUsed := false, false
 	var out []Copy
 	for n := 0; n < count; n++ {
+		if n == 0 && p.To.Zone == ZoneShown && shown+1 > MaxShown {
+			undo()
+			return nil, errShownFull
+		}
 		cands := m.pile(p, exclude)
 		if p.Reshuffle && p.CardID == "" && (len(cands) == 0 || (exclude != "" && len(cands) == 1 && m.copies[cands[0]].ID == exclude)) {
 			moved := false
@@ -498,8 +535,15 @@ func (m *memRepo) Draw(_ context.Context, p DrawPlan) ([]Copy, error) {
 			}
 		}
 		if len(cands) == 0 {
+			if n > 0 {
+				break
+			}
 			undo()
 			return nil, errEmptyPile
+		}
+		if n > 0 && p.To.Zone == ZoneShown && shown+len(out)+1 > MaxShown {
+			undo()
+			return nil, errShownFull
 		}
 		pool, tookNext := cands, false
 		if n == 0 && next != "" {

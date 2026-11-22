@@ -541,6 +541,8 @@ func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*Ac
 			return nil, errInvalid(fmt.Sprintf("that deck already has %d copies in all", MaxCopiesPerDeck))
 		case errors.Is(err, errCardCopies):
 			return nil, errInvalid(fmt.Sprintf("that deck already has %d copies of this card", MaxCopiesPerCard))
+		case errors.Is(err, errDuplicate):
+			return nil, conflict("that deck changed while the card was being kept; look again and try once more")
 		}
 		return nil, apperrorInternal(err)
 	}

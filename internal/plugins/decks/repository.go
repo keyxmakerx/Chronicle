@@ -75,7 +75,8 @@ type PickChange struct {
 type DrawPlan struct {
 	CampaignID string
 	DeckID     string
-	// Count is how many copies to take; 0 is one.
+	// Count is how many copies to take; 0 is one. A pile that holds fewer
+	// gives what it has, and only a pile with none is errEmptyPile.
 	Count int
 	// To is where each drawn copy lands.
 	To Place
@@ -134,14 +135,20 @@ type Repository interface {
 
 	ListCards(ctx context.Context, campaignID, deckID string) ([]Card, error)
 	GetCard(ctx context.Context, campaignID, deckID, id string) (Card, bool, error)
-	// CreateCard stores the card and its copies, all in the pile.
-	// errDuplicate when the name is taken.
+	// CreateCard stores the card and its copies, all in the pile, under the
+	// deck's lock, and sets c.SortOrder. errDuplicate when the name is taken;
+	// errTargetFull or errTargetCopies, changing nothing, when the deck's
+	// card or copy limit would be passed.
 	CreateCard(ctx context.Context, c Card) error
-	// UpdateCard writes the card and brings its copies to c.Copies: it adds
-	// pile copies, or removes them from the pile, then used, then gone. It
-	// returns a *heldError, changing nothing, when more would have to come
-	// out of a hand or out of play.
-	UpdateCard(ctx context.Context, c Card) (ResizeResult, error)
+	// UpdateCard writes the card. Only when resize is true (the edit carried
+	// a copies value) does it write copies and bring the copies to c.Copies:
+	// it adds pile copies, or removes them from the pile, then used, then
+	// gone, and returns a *heldError, changing nothing, when more would have
+	// to come out of a hand or out of play, or errTargetCopies when the
+	// deck's copy limit would be passed. Without resize the stored copies are
+	// left alone, because a keep may have raised them since the caller read
+	// the card.
+	UpdateCard(ctx context.Context, c Card, resize bool) (ResizeResult, error)
 	// DeleteCard removes the card and its copies, and clears the deck's next
 	// or last card when it was this one.
 	DeleteCard(ctx context.Context, campaignID, deckID, id string) error
@@ -159,9 +166,10 @@ type Repository interface {
 	// Draw takes p.Count copies (one by default) or none at all.
 	Draw(ctx context.Context, p DrawPlan) ([]Copy, error)
 	Move(ctx context.Context, m Move) error
-	// Keep returns errLostClaim when the copy moved first, and errTargetFull,
+	// Keep returns errLostClaim when the copy moved first, errTargetFull,
 	// errTargetCopies or errCardCopies, changing nothing, when the target
-	// deck's limits would be passed.
+	// deck's limits would be passed, and errDuplicate when a card of that name
+	// appeared in the target through a writer that did not hold the deck lock.
 	Keep(ctx context.Context, k KeepPlan) error
 	// Shuffle moves the used pile back to the pile and returns how many.
 	Shuffle(ctx context.Context, campaignID, deckID string, log LogLine) (int, error)
@@ -357,16 +365,31 @@ func (s *sqlRepository) UpdateDeck(ctx context.Context, d Deck, expected int, pi
 	}
 	sets := `name = ?, kind = ?, holder_entity_id = ?, settings = ?, look = ?, version = version + 1`
 	args := []any{d.Name, d.Kind, nullString(d.HolderEntityID), string(settings), string(look)}
+	// The deck's next and last card carry no foreign key, so each pick is
+	// written through a subselect that yields the id only while the card still
+	// belongs to the deck. The deck lock is taken first so the subselect runs
+	// after any card delete that holds it has committed.
 	if picks.SetNext {
-		sets += `, next_card_id = ?`
-		args = append(args, nullString(picks.Next))
+		sets += `, next_card_id = (SELECT id FROM deck_cards WHERE id = ? AND deck_id = ?)`
+		args = append(args, nullString(picks.Next), d.ID)
 	}
 	if picks.SetLast {
-		sets += `, last_card_id = ?`
-		args = append(args, nullString(picks.Last))
+		sets += `, last_card_id = (SELECT id FROM deck_cards WHERE id = ? AND deck_id = ?)`
+		args = append(args, nullString(picks.Last), d.ID)
 	}
 	args = append(args, d.ID, d.CampaignID, expected)
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("update deck: %w", err)
+	}
+	defer rollback(tx)
+	if err := lockDeck(ctx, tx, d.CampaignID, d.ID); err != nil {
+		if errors.Is(err, errLostClaim) {
+			return false, nil
+		}
+		return false, err
+	}
+	res, err := tx.ExecContext(ctx,
 		`UPDATE decks SET `+sets+` WHERE id = ? AND campaign_id = ? AND version = ?`, args...)
 	if isDuplicate(err) {
 		return false, errDuplicate
@@ -376,6 +399,9 @@ func (s *sqlRepository) UpdateDeck(ctx context.Context, d Deck, expected int, pi
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
+		return false, fmt.Errorf("update deck: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("update deck: %w", err)
 	}
 	return n == 1, nil
@@ -475,6 +501,24 @@ func (s *sqlRepository) CreateCard(ctx context.Context, c Card) error {
 		return fmt.Errorf("create card: %w", err)
 	}
 	defer rollback(tx)
+	// Under the deck lock, like a keep into this deck, so the limits below
+	// are counted against what a concurrent keep or create has committed.
+	if err := lockDeck(ctx, tx, c.CampaignID, c.DeckID); err != nil {
+		return err
+	}
+	var cards, copies int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(copies), 0) FROM deck_cards WHERE deck_id = ? AND campaign_id = ?`,
+		c.DeckID, c.CampaignID).Scan(&cards, &copies); err != nil {
+		return fmt.Errorf("count cards: %w", err)
+	}
+	if cards >= MaxCardsPerDeck {
+		return errTargetFull
+	}
+	if copies+c.Copies > MaxCopiesPerDeck {
+		return errTargetCopies
+	}
+	c.SortOrder = cards
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO deck_cards (id, deck_id, campaign_id, name, kind_key, words, director_note, picture, corner, rare, copies, fate, when_json, when_open, ask_first, sort_order)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -506,7 +550,7 @@ func addCopies(ctx context.Context, tx *sql.Tx, c Card, n int) error {
 	return nil
 }
 
-func (s *sqlRepository) UpdateCard(ctx context.Context, c Card) (ResizeResult, error) {
+func (s *sqlRepository) UpdateCard(ctx context.Context, c Card, resize bool) (ResizeResult, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ResizeResult{}, fmt.Errorf("update card: %w", err)
@@ -517,17 +561,40 @@ func (s *sqlRepository) UpdateCard(ctx context.Context, c Card) (ResizeResult, e
 	if err := lockDeck(ctx, tx, c.CampaignID, c.DeckID); err != nil {
 		return ResizeResult{}, err
 	}
+	// copies is written, and the copies reconciled, only for an edit that
+	// carries a copies value. Any other edit holds a card read before the lock,
+	// whose copies a keep may have raised since.
+	sets := `name = ?, kind_key = ?, words = ?, director_note = ?, picture = ?, corner = ?, rare = ?,
+		   fate = ?, when_json = ?, when_open = ?, ask_first = ?`
+	args := []any{c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare, c.Fate,
+		nullString(c.When), c.WhenOpen, c.AskFirst}
+	if resize {
+		var others int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(SUM(copies), 0) FROM deck_cards WHERE deck_id = ? AND campaign_id = ? AND id <> ?`,
+			c.DeckID, c.CampaignID, c.ID).Scan(&others); err != nil {
+			return ResizeResult{}, fmt.Errorf("count copies: %w", err)
+		}
+		if others+c.Copies > MaxCopiesPerDeck {
+			return ResizeResult{}, errTargetCopies
+		}
+		sets += `, copies = ?`
+		args = append(args, c.Copies)
+	}
+	args = append(args, c.ID, c.DeckID, c.CampaignID)
 	_, err = tx.ExecContext(ctx,
-		`UPDATE deck_cards SET name = ?, kind_key = ?, words = ?, director_note = ?, picture = ?, corner = ?, rare = ?,
-		   copies = ?, fate = ?, when_json = ?, when_open = ?, ask_first = ?
-		 WHERE id = ? AND deck_id = ? AND campaign_id = ?`,
-		c.Name, c.KindKey, c.Words, c.DirectorNote, c.Picture, c.Corner, c.Rare, c.Copies, c.Fate,
-		nullString(c.When), c.WhenOpen, c.AskFirst, c.ID, c.DeckID, c.CampaignID)
+		`UPDATE deck_cards SET `+sets+` WHERE id = ? AND deck_id = ? AND campaign_id = ?`, args...)
 	if isDuplicate(err) {
 		return ResizeResult{}, errDuplicate
 	}
 	if err != nil {
 		return ResizeResult{}, fmt.Errorf("update card: %w", err)
+	}
+	if !resize {
+		if err := tx.Commit(); err != nil {
+			return ResizeResult{}, fmt.Errorf("update card: %w", err)
+		}
+		return ResizeResult{}, nil
 	}
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id, zone FROM deck_copies WHERE card_id = ? AND deck_id = ? ORDER BY id FOR UPDATE`, c.ID, c.DeckID)
@@ -996,14 +1063,11 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 			return nil, err
 		}
 	}
+	shown := 0
 	if p.To.Zone == ZoneShown {
-		var n int
 		if err := tx.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM deck_copies WHERE deck_id = ? AND campaign_id = ? AND zone = 'shown'`, p.DeckID, p.CampaignID).Scan(&n); err != nil {
+			`SELECT COUNT(*) FROM deck_copies WHERE deck_id = ? AND campaign_id = ? AND zone = 'shown'`, p.DeckID, p.CampaignID).Scan(&shown); err != nil {
 			return nil, fmt.Errorf("read shown: %w", err)
-		}
-		if n+count > MaxShown {
-			return nil, errShownFull
 		}
 	}
 
@@ -1040,6 +1104,14 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 
 	var out []Copy
 	for i := 0; i < count; i++ {
+		// Checked per copy, not against the asked count, so a draw larger than
+		// the pile is judged by the copies it actually takes; passing five
+		// still refuses the whole draw. The first copy is checked before the
+		// pile is read, so a full shown spot is that answer even on an empty
+		// pile; later copies only after the pile is known to hold one.
+		if i == 0 && p.To.Zone == ZoneShown && shown+1 > MaxShown {
+			return nil, errShownFull
+		}
 		cands, err := candidates()
 		if err != nil {
 			return nil, err
@@ -1057,7 +1129,15 @@ func (s *sqlRepository) Draw(ctx context.Context, p DrawPlan) ([]Copy, error) {
 			}
 		}
 		if len(cands) == 0 {
+			if i > 0 {
+				// A draw of several takes what the pile holds; only a pile with
+				// nothing drawable at all is an empty-pile answer.
+				break
+			}
 			return nil, errEmptyPile
+		}
+		if i > 0 && p.To.Zone == ZoneShown && shown+len(out)+1 > MaxShown {
+			return nil, errShownFull
 		}
 		// The next card is the first card of a draw, and only if a copy of it is
 		// in the pile; the last card is left out while anything else is.
@@ -1206,6 +1286,11 @@ func (s *sqlRepository) Keep(ctx context.Context, k KeepPlan) error {
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
 			targetID, k.TargetDeckID, k.CampaignID, src.Name, kind, src.Words, src.DirectorNote, src.Picture, src.Corner,
 			src.Rare, src.Fate, src.AskFirst, cards); err != nil {
+			if isDuplicate(err) {
+				// Every writer of a deck's cards holds its lock, so this means
+				// one that did not; the whole keep rolls back and can be retried.
+				return errDuplicate
+			}
 			return fmt.Errorf("add kept card: %w", err)
 		}
 	default:

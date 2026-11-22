@@ -903,3 +903,98 @@ func TestRarePartialUpdate(t *testing.T) {
 		t.Errorf("after clearing rare: %+v", got)
 	}
 }
+
+// A Director's draw larger than the pile takes what is there instead of
+// rolling back as if the pile were empty.
+func TestDirectorDrawLargerThanThePileTakesWhatIsThere(t *testing.T) {
+	setup := func() (*fixture, string, string, string) {
+		fx := newFixture(t)
+		deck := fx.deck("D", KindEvent, nil)
+		a := fx.card(deck, CreateCardInput{Name: "A", Copies: ptr(2)})
+		b := fx.card(deck, CreateCardInput{Name: "B"})
+		return fx, deck, a, b
+	}
+	absent := patch.Absent[string]()
+	tests := []struct {
+		name  string
+		setup func(fx *fixture, deck, a, b string)
+		want  string
+		// nudge is the card the field is expected to hold afterwards, by name.
+		nextAfter, lastAfter string
+	}{
+		{name: "nothing set", want: "A,A,B"},
+		{name: "next set", setup: func(fx *fixture, deck, a, b string) { fx.must(fx.nudge(deck, patchOf(b), absent)) },
+			want: "B,A,A"},
+		{name: "last set with other cards present", setup: func(fx *fixture, deck, a, b string) {
+			fx.must(fx.nudge(deck, absent, patchOf(a)))
+		}, want: "B,A,A"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fx, deck, a, b := setup()
+			if tt.setup != nil {
+				tt.setup(fx, deck, a, b)
+			}
+			res, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 5})
+			fx.must(err)
+			if got := strings.Join(names(fx, res.CopyIDs), ","); got != tt.want {
+				t.Errorf("drew %s, want %s", got, tt.want)
+			}
+			if len(res.CopyIDs) != 3 {
+				t.Errorf("the reply lists %d copies, want the 3 the pile held", len(res.CopyIDs))
+			}
+			d := fx.repo.decks[deck]
+			if d.NextCardID != "" || d.LastCardID != "" {
+				t.Errorf("a drawn pick stayed set: next %q last %q", d.NextCardID, d.LastCardID)
+			}
+		})
+	}
+
+	t.Run("an empty pile is still the empty answer", func(t *testing.T) {
+		fx, deck, _, _ := setup()
+		_, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 3})
+		fx.must(err)
+		_, err = fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 2})
+		if code(err) != http.StatusConflict || !strings.Contains(err.Error(), "Nothing left") {
+			t.Errorf("err = %v", err)
+		}
+	})
+	t.Run("never more than five shown", func(t *testing.T) {
+		shownIn := func(fx *fixture, deck string) int {
+			n := 0
+			for _, c := range fx.repo.copies {
+				if c.DeckID == deck && c.Zone == ZoneShown {
+					n++
+				}
+			}
+			return n
+		}
+		// Three shown and a pile of three: the third copy would make six, so
+		// the whole draw is refused.
+		fx, deck, _, _ := setup()
+		held := fx.card(deck, CreateCardInput{Name: "C", Copies: ptr(3)})
+		for _, id := range fx.copiesOf(held) {
+			fx.place(id, ZoneShown, "", false)
+		}
+		_, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 5})
+		if code(err) != http.StatusConflict || !strings.Contains(err.Error(), "At most 5") {
+			t.Fatalf("err = %v", err)
+		}
+		if n := shownIn(fx, deck); n != 3 {
+			t.Errorf("%d shown after a refused draw, want 3", n)
+		}
+		// Four shown and a pile of one: the draw takes one and reaches five.
+		fx = newFixture(t)
+		deck = fx.deck("D", KindEvent, nil)
+		fx.card(deck, CreateCardInput{Name: "B"})
+		held = fx.card(deck, CreateCardInput{Name: "C", Copies: ptr(4)})
+		for _, id := range fx.copiesOf(held) {
+			fx.place(id, ZoneShown, "", false)
+		}
+		res, err := fx.svc.Draw(bg, camp, deck, fx.dir, DrawInput{Count: 5})
+		fx.must(err)
+		if len(res.CopyIDs) != 1 || shownIn(fx, deck) != 5 {
+			t.Errorf("drew %d, %d shown; want 1 drawn and 5 shown", len(res.CopyIDs), shownIn(fx, deck))
+		}
+	})
+}

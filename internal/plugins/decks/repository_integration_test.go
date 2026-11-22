@@ -228,7 +228,7 @@ func TestIntegration_DecksCardsAndCopies(t *testing.T) {
 
 	// Resize: up adds to the pile; down removes pile first, then used, then gone.
 	a.Copies = 5
-	if res, err := fx.repo.UpdateCard(fx.ctx, a); err != nil || res.Added != 2 {
+	if res, err := fx.repo.UpdateCard(fx.ctx, a, true); err != nil || res.Added != 2 {
 		t.Fatalf("raise = %+v %v", res, err)
 	}
 	copies, _ := fx.repo.ListCopies(fx.ctx, fx.campaign, d.ID)
@@ -236,14 +236,14 @@ func TestIntegration_DecksCardsAndCopies(t *testing.T) {
 	fx.exec(t, `UPDATE deck_copies SET zone='hand', holder_entity_id = ? WHERE id = ?`, fx.hero, copies[1].ID)
 	fx.exec(t, `UPDATE deck_copies SET zone='play', holder_entity_id = ? WHERE id = ?`, fx.hero, copies[2].ID)
 	a.Copies = 3 // pile 2, used 1, held 2: removes 2 from the pile
-	if _, err := fx.repo.UpdateCard(fx.ctx, a); err != nil {
+	if _, err := fx.repo.UpdateCard(fx.ctx, a, true); err != nil {
 		t.Fatal(err)
 	}
 	if z := fx.zones(t, d); z.Pile != 0 || z.Used != 1 || z.Hand != 1 || z.Play != 1 {
 		t.Errorf("zones = %+v", z)
 	}
 	a.Copies = 1 // would take a held copy out
-	if _, err := fx.repo.UpdateCard(fx.ctx, a); err == nil {
+	if _, err := fx.repo.UpdateCard(fx.ctx, a, true); err == nil {
 		t.Error("lowering below the held copies should be refused")
 	} else if h, ok := err.(*heldError); !ok || h.N != 2 {
 		t.Errorf("err = %v, want 2 held", err)
@@ -308,7 +308,7 @@ func TestIntegration_DeckVersionPlayersAndCascade(t *testing.T) {
 	}
 	// A copies change adds the missing copy back to the pile.
 	c.Copies = 2
-	if res, err := fx.repo.UpdateCard(fx.ctx, c); err != nil || res.Added != 1 {
+	if res, err := fx.repo.UpdateCard(fx.ctx, c, true); err != nil || res.Added != 1 {
 		t.Errorf("repair = %+v %v", res, err)
 	}
 	// Deleting the deck removes everything under it.
@@ -771,7 +771,7 @@ func TestIntegration_NewColumnsRoundTrip(t *testing.T) {
 		t.Error("rare did not round trip through create")
 	}
 	c.Rare = false
-	if _, err := fx.repo.UpdateCard(fx.ctx, c); err != nil {
+	if _, err := fx.repo.UpdateCard(fx.ctx, c, true); err != nil {
 		t.Fatal(err)
 	}
 	if got, _, _ := fx.repo.GetCard(fx.ctx, fx.campaign, d.ID, c.ID); got.Rare {
@@ -1115,5 +1115,296 @@ func TestIntegration_KeepRaceForOneCopy(t *testing.T) {
 	}
 	if lines, _ := fx.repo.ListLog(fx.ctx, fx.campaign, src.ID, 10); len(lines) != 1 {
 		t.Errorf("%d log lines for one keep", len(lines))
+	}
+}
+
+// ---- races between card writers and keep ----------------------------------
+
+// handCopies puts every copy of a card in a hero's hand, face up and open, so
+// each can be kept.
+func (fx *dbFixture) handCopies(t *testing.T, c Card) []Copy {
+	t.Helper()
+	fx.exec(t, `UPDATE deck_copies SET zone = 'hand', holder_entity_id = ?, face_up = 1, is_open = 1 WHERE card_id = ?`, fx.hero, c.ID)
+	all, err := fx.repo.ListCopies(fx.ctx, fx.campaign, c.DeckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []Copy
+	for _, cp := range all {
+		if cp.CardID == c.ID {
+			out = append(out, cp)
+		}
+	}
+	return out
+}
+
+// storedCopies is the card's copies column beside its copy rows; the two must
+// always agree.
+func (fx *dbFixture) storedCopies(t *testing.T, d Deck, name string) (column, rows int) {
+	t.Helper()
+	if err := fx.db.QueryRow(
+		`SELECT k.copies, (SELECT COUNT(*) FROM deck_copies c WHERE c.card_id = k.id) FROM deck_cards k WHERE k.deck_id = ? AND k.name = ?`,
+		d.ID, name).Scan(&column, &rows); err != nil {
+		t.Fatalf("read %q: %v", name, err)
+	}
+	return column, rows
+}
+
+func TestIntegration_EditNotCarryingCopiesKeepsAKeptCopy(t *testing.T) {
+	fx := newDBFixture(t)
+	src, dst := fx.deck(t, "Src"), fx.deck(t, "Dst")
+	fx.card(t, dst, "Ember", 3)
+	kept := fx.handCopies(t, fx.card(t, src, "Ember", 4))
+
+	// The edit read the card at three copies; a keep then made it four.
+	stale, _, _ := fx.repo.GetCard(fx.ctx, fx.campaign, dst.ID, mustCardID(t, fx, dst, "Ember"))
+	if err := fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, kept[0])); err != nil {
+		t.Fatal(err)
+	}
+	stale.Words = "edited"
+	if _, err := fx.repo.UpdateCard(fx.ctx, stale, false); err != nil {
+		t.Fatal(err)
+	}
+	if col, rows := fx.storedCopies(t, dst, "Ember"); col != 4 || rows != 4 {
+		t.Errorf("after an edit without copies: column %d, rows %d, want 4 and 4", col, rows)
+	}
+	if got, _, _ := fx.repo.GetCard(fx.ctx, fx.campaign, dst.ID, stale.ID); got.Words != "edited" {
+		t.Errorf("the edit was not stored: %q", got.Words)
+	}
+
+	// An edit that carries copies sets them from what is stored now: asked for
+	// two, the card ends at two whatever the stale read said.
+	stale, _, _ = fx.repo.GetCard(fx.ctx, fx.campaign, dst.ID, stale.ID)
+	if err := fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, kept[1])); err != nil {
+		t.Fatal(err)
+	}
+	stale.Copies = 2
+	res, err := fx.repo.UpdateCard(fx.ctx, stale, true)
+	if err != nil || res.Removed != 3 {
+		t.Fatalf("resize = %+v, %v; want 3 removed of the 5 held", res, err)
+	}
+	if col, rows := fx.storedCopies(t, dst, "Ember"); col != 2 || rows != 2 {
+		t.Errorf("after an edit with copies: column %d, rows %d, want 2 and 2", col, rows)
+	}
+}
+
+func mustCardID(t *testing.T, fx *dbFixture, d Deck, name string) string {
+	t.Helper()
+	var id string
+	if err := fx.db.QueryRow(`SELECT id FROM deck_cards WHERE deck_id = ? AND name = ?`, d.ID, name).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// Keeps and edits that do not carry copies, run together, lose no kept copy:
+// the column and the rows end equal, at the start plus the keeps.
+func TestIntegration_KeepsAndPlainEditsRunTogether(t *testing.T) {
+	fx := newDBFixture(t)
+	src, dst := fx.deck(t, "Src"), fx.deck(t, "Dst")
+	target := fx.card(t, dst, "Ember", 3)
+	kept := fx.handCopies(t, fx.card(t, src, "Ember", 8))
+	var wg sync.WaitGroup
+	errs := make(chan error, 32)
+	for i, cp := range kept {
+		wg.Add(2)
+		go func(cp Copy) {
+			defer wg.Done()
+			errs <- fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, cp))
+		}(cp)
+		go func(i int) {
+			defer wg.Done()
+			stale := target // read before any of the keeps
+			stale.Words = fmt.Sprintf("edit %d", i)
+			_, err := fx.repo.UpdateCard(fx.ctx, stale, false)
+			errs <- err
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if col, rows := fx.storedCopies(t, dst, "Ember"); col != 11 || rows != 11 {
+		t.Errorf("column %d, rows %d, want 11 and 11", col, rows)
+	}
+}
+
+func TestIntegration_CreateRacingKeepEndsAtTheCardLimit(t *testing.T) {
+	fx := newDBFixture(t)
+	src, dst := fx.deck(t, "Src"), fx.deck(t, "Dst")
+	for i := 0; i < MaxCardsPerDeck-1; i++ {
+		fx.card(t, dst, fmt.Sprintf("Filler %03d", i), 1)
+	}
+	const racers = 4
+	var plans []KeepPlan
+	for i := 0; i < racers; i++ {
+		cp := fx.handCopies(t, fx.card(t, src, fmt.Sprintf("Kept %d", i), 1))[0]
+		plans = append(plans, fx.keepPlan(src, dst, cp))
+	}
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	results := make(chan error, 2*racers)
+	for i := 0; i < racers; i++ {
+		wg.Add(2)
+		go func(k KeepPlan) {
+			defer wg.Done()
+			<-start
+			results <- fx.repo.Keep(fx.ctx, k)
+		}(plans[i])
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			results <- fx.repo.CreateCard(fx.ctx, Card{ID: uuid.NewString(), DeckID: dst.ID, CampaignID: fx.campaign,
+				Name: fmt.Sprintf("Made %d", i), Copies: 1})
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	won := 0
+	for err := range results {
+		switch err {
+		case nil:
+			won++
+		case errTargetFull:
+		default:
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if won != 1 {
+		t.Errorf("%d writers got the last slot, want 1", won)
+	}
+	var cards int
+	fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?`, dst.ID).Scan(&cards)
+	if cards != MaxCardsPerDeck {
+		t.Errorf("deck has %d cards, want exactly %d", cards, MaxCardsPerDeck)
+	}
+}
+
+// A create of the name a keep is adding never makes the keep fail: whichever
+// goes first, the deck ends with one card whose copies match its rows.
+func TestIntegration_SameNameCreateRacingKeep(t *testing.T) {
+	fx := newDBFixture(t)
+	src := fx.deck(t, "Src")
+	kept := fx.handCopies(t, fx.card(t, src, "Ember", 6))
+	for round, cp := range kept {
+		dst := fx.deck(t, fmt.Sprintf("Dst %d", round))
+		var keepErr, createErr error
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			keepErr = fx.repo.Keep(fx.ctx, fx.keepPlan(src, dst, cp))
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			createErr = fx.repo.CreateCard(fx.ctx, Card{ID: uuid.NewString(), DeckID: dst.ID, CampaignID: fx.campaign, Name: "Ember", Copies: 2})
+		}()
+		close(start)
+		wg.Wait()
+		if keepErr != nil {
+			t.Fatalf("round %d: keep failed: %v", round, keepErr)
+		}
+		want := 1
+		switch createErr {
+		case nil:
+			want = 3
+		case errDuplicate:
+		default:
+			t.Fatalf("round %d: create failed: %v", round, createErr)
+		}
+		var cards int
+		fx.db.QueryRow(`SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?`, dst.ID).Scan(&cards)
+		if col, rows := fx.storedCopies(t, dst, "Ember"); cards != 1 || col != want || rows != want {
+			t.Errorf("round %d: %d cards, column %d, rows %d, want 1 card with %d", round, cards, col, rows, want)
+		}
+	}
+}
+
+// ---- picks and deleted cards ----------------------------------------------
+
+func TestIntegration_PickNamingADeletedCardStoresNull(t *testing.T) {
+	fx := newDBFixture(t)
+	d := fx.deck(t, "Omens")
+	keep := fx.card(t, d, "Keep", 1)
+	gone := fx.card(t, d, "Gone", 1)
+	if err := fx.repo.DeleteCard(fx.ctx, fx.campaign, d.ID, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The service checked the card before the delete; the write still lands
+	// without it.
+	d.Version = fx.currentVersion(t, d)
+	if ok, err := fx.repo.UpdateDeck(fx.ctx, d, d.Version, PickChange{SetNext: true, SetLast: true, Next: gone.ID, Last: keep.ID}); err != nil || !ok {
+		t.Fatalf("update: %v %v", ok, err)
+	}
+	got, _, _ := fx.repo.GetDeck(fx.ctx, fx.campaign, d.ID)
+	if got.NextCardID != "" || got.LastCardID != keep.ID {
+		t.Errorf("next %q last %q, want NULL and the kept card", got.NextCardID, got.LastCardID)
+	}
+	if got.Version != d.Version+1 {
+		t.Errorf("version %d, want %d", got.Version, d.Version+1)
+	}
+
+	// A card from another deck is not this deck's either.
+	other := fx.card(t, fx.deck(t, "Elsewhere"), "Far", 1)
+	d.Version = got.Version
+	if ok, err := fx.repo.UpdateDeck(fx.ctx, d, d.Version, PickChange{SetNext: true, Next: other.ID}); err != nil || !ok {
+		t.Fatalf("update: %v %v", ok, err)
+	}
+	if got, _, _ := fx.repo.GetDeck(fx.ctx, fx.campaign, d.ID); got.NextCardID != "" {
+		t.Errorf("a card of another deck was stored: %q", got.NextCardID)
+	}
+}
+
+// An update racing the delete of the card it names never leaves the id behind.
+func TestIntegration_PickRacingItsCardsDelete(t *testing.T) {
+	fx := newDBFixture(t)
+	d := fx.deck(t, "Omens")
+	for round := 0; round < 10; round++ {
+		c := fx.card(t, d, fmt.Sprintf("Card %d", round), 1)
+		d.Version = fx.currentVersion(t, d)
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = fx.repo.UpdateDeck(fx.ctx, d, d.Version, PickChange{SetNext: true, Next: c.ID})
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			_ = fx.repo.DeleteCard(fx.ctx, fx.campaign, d.ID, c.ID)
+		}()
+		close(start)
+		wg.Wait()
+		if got, _, _ := fx.repo.GetDeck(fx.ctx, fx.campaign, d.ID); got.NextCardID != "" {
+			t.Fatalf("round %d: next stayed %q after its card was deleted", round, got.NextCardID)
+		}
+	}
+}
+
+func TestIntegration_DrawLargerThanThePileTakesWhatIsThere(t *testing.T) {
+	fx := newDBFixture(t)
+	d := fx.deck(t, "Omens")
+	fx.card(t, d, "A", 2)
+	fx.card(t, d, "B", 1)
+	plan := drawPlan(fx, d, Place{Zone: ZoneShown})
+	plan.Count = 5
+	got, err := fx.repo.Draw(fx.ctx, plan)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("draw of five from three = %d copies, %v", len(got), err)
+	}
+	if _, err := fx.repo.Draw(fx.ctx, plan); err != errEmptyPile {
+		t.Errorf("draw from an empty pile: %v, want errEmptyPile", err)
+	}
+	if z := fx.zones(t, d); z.Shown != 3 || z.Pile != 0 {
+		t.Errorf("zones = %+v", z)
 	}
 }

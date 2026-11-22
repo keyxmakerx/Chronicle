@@ -475,8 +475,9 @@ func fillSigns(kinds []KindDef) {
 
 // readLook decodes a stored look. It never fails a read: each field is
 // checked on its own and falls back to that field's default, and the kinds
-// are repaired one at a time. A key a later version retired (the old face, a
-// pattern that left the list) simply does not survive the read.
+// are repaired one at a time. Only the keys of Look are decoded, so a stored
+// key the look no longer has (such as the old face) is dropped, and a value
+// outside its list reads as that field's default.
 func readLook(raw string) Look {
 	def := defaultLook()
 	var got Look
