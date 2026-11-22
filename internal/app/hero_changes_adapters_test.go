@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -28,7 +29,9 @@ func TestHeroChangeRecipients(t *testing.T) {
 }
 
 func TestHeroChangeDetail(t *testing.T) {
-	ch := func(l, f, to string) entities.HeroPickChange { return entities.HeroPickChange{Label: l, From: f, To: to} }
+	ch := func(l, f, to string) entities.HeroPickChange {
+		return entities.HeroPickChange{Label: l, From: f, To: to}
+	}
 	cases := []struct {
 		in   []entities.HeroPickChange
 		want string
@@ -42,5 +45,57 @@ func TestHeroChangeDetail(t *testing.T) {
 		if got := heroChangeDetail(tc.in); got != tc.want {
 			t.Errorf("got %q, want %q", got, tc.want)
 		}
+	}
+}
+
+// fakeHeroCamps is one campaign with an owner, a Co-DM, a Scribe and two
+// players.
+type fakeHeroCamps struct{ heroChangeCampaigns }
+
+func (fakeHeroCamps) GetByID(_ context.Context, id string) (*campaigns.Campaign, error) {
+	return &campaigns.Campaign{ID: id}, nil
+}
+
+func (fakeHeroCamps) ListMembers(context.Context, string) ([]campaigns.CampaignMember, error) {
+	return []campaigns.CampaignMember{
+		{UserID: "own", Role: campaigns.RoleOwner, DisplayName: "Dana"},
+		{UserID: "pl", Role: campaigns.RolePlayer, DisplayName: "Ana"},
+		{UserID: "pl2", Role: campaigns.RolePlayer, DisplayName: "Bo"},
+		{UserID: "scr", Role: campaigns.RoleScribe, DisplayName: "Sam"},
+	}, nil
+}
+
+// fakeBell keeps the one bell it was asked to send.
+type fakeBell struct {
+	to                           []string
+	ntype, message, detail, link string
+}
+
+func (b *fakeBell) NotifyUsersWithDetail(_ context.Context, to []string, _, ntype, message, detail, link string) error {
+	b.to, b.ntype, b.message, b.detail, b.link = to, ntype, message, detail, link
+	return nil
+}
+
+// The level bell goes to the Directors, not the player, and says only who,
+// which hero and the new level, whatever else the page holds.
+func TestHeroChangeBell_LevelRaised(t *testing.T) {
+	bell := &fakeBell{}
+	b := heroChangeBell{camps: fakeHeroCamps{}, bell: bell}
+	e := &entities.Entity{ID: "e1", CampaignID: "c1", Name: "Tess",
+		FieldsData: map[string]any{"level": float64(3), "gm_notes": "secret villain"}}
+	if err := b.LevelRaised(context.Background(), e, "pl", 3); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(bell.to, ",") != "own" {
+		t.Errorf("sent to %v, want only the owner", bell.to)
+	}
+	if bell.ntype != notifHeroLevelRaised {
+		t.Errorf("type %q", bell.ntype)
+	}
+	if bell.message != "Ana raised Tess to level 3" || bell.detail != "" {
+		t.Errorf("message %q, detail %q", bell.message, bell.detail)
+	}
+	if bell.link != "/campaigns/c1/entities/e1" {
+		t.Errorf("link %q", bell.link)
 	}
 }

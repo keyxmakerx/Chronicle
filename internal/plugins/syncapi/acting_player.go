@@ -55,56 +55,75 @@ func heldKeysList(held map[string]string) []heldKey {
 // refused outright, since the GM's key must not be a way to write a page the
 // player could not.
 //
-// changes are the picks the write changes while the hero's picks are open,
-// for the Directors' bell once the write is stored.
-func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Entity, actingUserID string, patch map[string]any) (held map[string]string, changes []entities.HeroPickChange, err error) {
+// The verdict's changes are the picks the write changes while the hero's
+// picks are open, and raised the level the player gives their own hero, both
+// for the Directors' bell once the write is stored. Staff and the plain sync
+// get neither, so their writes ring nothing.
+func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Entity, actingUserID string, patch map[string]any) (actingVerdict, error) {
+	var v actingVerdict
 	if actingUserID == "" {
-		return nil, nil, nil
+		return v, nil
 	}
 	member, err := h.campaignSvc.GetMember(ctx, entity.CampaignID, actingUserID)
 	if err != nil {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
-			return nil, nil, apperror.NewForbidden("that player isn't a member of this campaign")
+			return v, apperror.NewForbidden("that player isn't a member of this campaign")
 		}
-		return nil, nil, err
+		return v, err
 	}
 	if member == nil {
-		return nil, nil, apperror.NewForbidden("that player isn't a member of this campaign")
+		return v, apperror.NewForbidden("that player isn't a member of this campaign")
 	}
 	if h.pageGate().visibilityRole(ctx, entity.CampaignID, actingUserID, int(member.Role)) >= int(campaigns.RoleScribe) {
-		return nil, nil, nil
+		return v, nil
 	}
 	if !entities.IsClaimedOwnerPlayer(member.Role, entity, actingUserID) {
-		return nil, nil, apperror.NewForbidden("you can only change a character you own")
+		return v, apperror.NewForbidden("you can only change a character you own")
 	}
 	access, err := h.entitySvc.CheckEntityAccess(ctx, entity.ID, int(campaigns.RolePlayer), actingUserID)
 	if err != nil || access == nil || !access.CanView {
-		return nil, nil, apperror.NewNotFound("entity not found")
+		return v, apperror.NewNotFound("entity not found")
 	}
 	if entities.PatchChangesNothing(entity, patch) {
-		return nil, nil, nil
+		return v, nil
 	}
 	var plan *entities.HeroPlan
 	if h.heroPlanner != nil {
 		// A plan that can't be read must not turn into "no limits".
 		if plan, err = h.heroPlanner.HeroPlan(ctx, entity.CampaignID, actingUserID, false); err != nil {
-			return nil, nil, err
+			return v, err
 		}
 	}
-	held = entities.PlayerPicksHeld(entity, patch, plan)
+	held := entities.PlayerPicksHeld(entity, patch, plan)
+	if held == nil {
+		held = map[string]string{}
+	}
 	rest := make(map[string]any, len(patch))
-	for k, v := range patch {
+	for k, val := range patch {
 		if _, refused := held[k]; !refused {
-			rest[k] = v
+			rest[k] = val
 		}
 	}
 	locked, changes, err := h.heroChanges.HeldPicks(ctx, entity, rest, plan)
 	if err != nil {
-		return nil, nil, err
+		return v, err
 	}
 	for k, why := range locked {
 		held[k] = why
 	}
-	return held, changes, nil
+	v.held, v.changes = held, changes
+	if _, refused := held[entities.HeroLevelKey]; !refused {
+		v.raised = entities.HeroLevelRaised(entity, patch)
+	}
+	return v, nil
+}
+
+// actingVerdict is how a player's write through the sync was judged: the
+// keys held back with why, and what the Directors' bell says once the rest
+// is stored.
+type actingVerdict struct {
+	held    map[string]string
+	changes []entities.HeroPickChange
+	raised  int
 }

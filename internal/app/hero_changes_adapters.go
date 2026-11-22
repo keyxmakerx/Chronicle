@@ -18,6 +18,10 @@ import (
 // category on the account page, so it is always delivered.
 const notifHeroChanged = "hero_changed"
 
+// notifHeroLevelRaised is the bell type of a level a player gave their own
+// hero through the sync. Like notifHeroChanged it is always delivered.
+const notifHeroLevelRaised = "hero_level_raised"
+
 // heroChangeShown is how many changed picks the bell names before "and N more".
 const heroChangeShown = 3
 
@@ -57,6 +61,22 @@ type heroChangeBell struct {
 }
 
 func (b heroChangeBell) HeroChanged(ctx context.Context, e *entities.Entity, userID string, changes []entities.HeroPickChange) error {
+	return b.ring(ctx, e, userID, notifHeroChanged, func(player string) (string, string) {
+		return player + " changed " + e.Name, heroChangeDetail(changes)
+	})
+}
+
+// LevelRaised says only who, which hero and the new level: the page itself
+// may hold GM-only text, and none of it goes in the bell.
+func (b heroChangeBell) LevelRaised(ctx context.Context, e *entities.Entity, userID string, level int) error {
+	return b.ring(ctx, e, userID, notifHeroLevelRaised, func(player string) (string, string) {
+		return player + " raised " + e.Name + " to level " + strconv.Itoa(level), ""
+	})
+}
+
+// ring sends one bell to the campaign's Directors, leaving out the player
+// who made the change.
+func (b heroChangeBell) ring(ctx context.Context, e *entities.Entity, userID, ntype string, say func(player string) (message, detail string)) error {
 	c, err := b.camps.GetByID(ctx, e.CampaignID)
 	if err != nil || c == nil {
 		return err
@@ -69,9 +89,9 @@ func (b heroChangeBell) HeroChanged(ctx context.Context, e *entities.Entity, use
 	if len(directors) == 0 {
 		return nil
 	}
-	message := player + " changed " + e.Name
+	message, detail := say(player)
 	link := "/campaigns/" + e.CampaignID + "/entities/" + e.ID
-	return b.bell.NotifyUsersWithDetail(ctx, directors, e.CampaignID, notifHeroChanged, message, heroChangeDetail(changes), link)
+	return b.bell.NotifyUsersWithDetail(ctx, directors, e.CampaignID, ntype, message, detail, link)
 }
 
 // heroChangeRecipients is the owner and every Co-DM except the player
