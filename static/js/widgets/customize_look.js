@@ -2355,26 +2355,39 @@
       site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
       return out;
     }
-    // Where a part's pencil mark sits: beside the part, on the first side
-    // where it covers no words and no other mark (right, left, then above its
-    // corner), else where it covers least.
+    // Where a part's pencil mark sits: outside the part, on the first side
+    // where it covers no words and no other mark (right, left, above, below).
+    // When every side would cover words it shrinks to a pencil alone at the
+    // part's corner, whichever corner covers least; never over words by choice.
     function markSpot(r, k, mw, mh, words, taken, ww){
-      var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, H = 520 * k;
-      var tries = [[R + 3, T + 3], [L - 3 - mw, T + 3], [R - mw, T - mh - 2], [R + 3, T - mh - 2]].filter(function(c){
-        return c[0] >= 0 && c[0] + mw <= ww && c[1] >= 0 && c[1] + mh <= H;
-      });
-      if (!tries.length) tries = [[clamp(R - mw, 0, ww - mw), clamp(T + 3, 0, H - mh)]];
-      function cover(c){
+      var L = r.x * k, R = (r.x + r.w) * k, T = r.y * k, B = (r.y + r.h) * k, H = 520 * k;
+      function cover(c, w, h){
         var a = 0;
         words.concat(taken).forEach(function(b){
-          var w = Math.min(c[0] + mw, b.x + b.w) - Math.max(c[0], b.x), h = Math.min(c[1] + mh, b.y + b.h) - Math.max(c[1], b.y);
-          if (w > 0 && h > 0) a += w * h;
+          var cw = Math.min(c[0] + w, b.x + b.w) - Math.max(c[0], b.x), ch = Math.min(c[1] + h, b.y + b.h) - Math.max(c[1], b.y);
+          if (cw > 0 && ch > 0) a += cw * ch;
         });
         return a;
       }
-      var best = tries[0], bc = cover(best);
-      for (var i = 1; i < tries.length && bc > 0; i++){ var c = cover(tries[i]); if (c < bc){ best = tries[i]; bc = c; } }
-      return best;
+      function best(list, w, h){
+        var ok = list.filter(function(c){ return c[0] >= 0 && c[0] + w <= ww && c[1] >= 0 && c[1] + h <= H; }), pick = null, pc = 0;
+        for (var i = 0; i < ok.length; i++){
+          var c = cover(ok[i], w, h);
+          if (!pick || c < pc){ pick = ok[i]; pc = c; }
+          if (!pc) break;
+        }
+        return pick && { x:pick[0], y:pick[1], w:w, h:h, c:pc };
+      }
+      var full = best([[R + 3, T + 3], [L - 3 - mw, T + 3], [R - mw, T - mh - 2], [R + 3, T - mh - 2], [L - 3 - mw, T - mh - 2], [R - mw, B + 2], [L, B + 2]], mw, mh);
+      if (full && !full.c) return full;
+      var sm = 15, corners = [[R - sm / 2, T - sm / 2], [L - sm / 2, T - sm / 2], [R - sm / 2, B - sm / 2], [L - sm / 2, B - sm / 2], [R + 2, T - sm - 1]];
+      // A part that fills the example's edge has no outside; the small mark then
+      // goes along its inside edges, wherever no word is.
+      for (var x = R - sm - 2; x >= L + 2; x -= 10){ corners.push([x, T + 2]); corners.push([x, B - sm - 2]); }
+      var small = best(corners, sm, sm);
+      if (small) small.small = true;
+      if (small && (!full || small.c <= full.c)) return small;
+      return full || { x:clamp(R - sm, 0, ww - sm), y:clamp(T - sm / 2, 0, H - sm), w:sm, h:sm, small:true };
     }
     function roomDraw(){
       var blur = $('#rm-blur'), brush = $('#rm-brush');
@@ -2389,10 +2402,10 @@
           // sharp while their row blurs they read as dark squares, so they blur
           // with the row until the Icons part is the one open.
           if (sec !== 'icons' || ui.section === 'icons') all = all.concat(rs);
-          var open = sectionOpen(sec), mw = open ? 44 : 30, mh = 17, at = markSpot(rs[0], k, mw, mh, words, taken, ww);
-          taken.push({ x:at[0], y:at[1], w:mw, h:mh });
-          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + at[0].toFixed(0) + 'px;top:' + at[1].toFixed(0) + 'px">' +
-            IC('i-pencil') + (open ? IC('i-users') : '') + '</span>';
+          var open = sectionOpen(sec), at = markSpot(rs[0], k, open ? 44 : 30, 17, words, taken, ww);
+          taken.push({ x:at.x, y:at.y, w:at.w, h:at.h });
+          marks += '<span class="rb' + (at.small ? ' sm' : open ? ' open' : '') + '" style="left:' + at.x.toFixed(0) + 'px;top:' + at.y.toFixed(0) + 'px">' +
+            IC('i-pencil') + (open && !at.small ? IC('i-users') : '') + '</span>';
         });
       }
       // Leaving for a zoomed part, the layer goes at once: its undoing of the

@@ -231,12 +231,14 @@
 @container cz (max-width: 760px){
   .czp .sws{ gap:0; }
   .czp .sw{ min-width:44px; min-height:44px; place-items:center; }
-  .czp .sw-add{ margin:10px; }
+  .czp .sw-add{ margin:10px; position:relative; }
+  .czp .sw-add::after{ content:""; position:absolute; inset:-11.5px; }
 }
 @media (pointer:coarse){
   .czp .sws{ gap:0; }
   .czp .sw{ min-width:44px; min-height:44px; place-items:center; }
-  .czp .sw-add{ margin:10px; }
+  .czp .sw-add{ margin:10px; position:relative; }
+  .czp .sw-add::after{ content:""; position:absolute; inset:-11.5px; }
 }
 
 /* Option tiles (fonts, highlight styles, buttons, depth) */
@@ -1065,6 +1067,8 @@
 }
 .czp .rb .i{ width:11px; height:11px; }
 .czp .rb.open{ padding-right:7px; }
+.czp .rb.sm{ width:15px; height:15px; padding:0; justify-content:center; }
+.czp .rb.sm .i{ width:9px; height:9px; }
 
 /* A hover card held open on the city page. */
 .czp .e-hc{ position:absolute; right:16px; bottom:14px; width:236px; z-index:3; pointer-events:none; }
