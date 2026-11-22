@@ -4787,7 +4787,7 @@ func (a *App) RegisterRoutes() {
 	decksSvc := decks.NewService(decks.NewRepository(a.DB),
 		&decksHeroAdapter{svc: entityService}, &decksMemberAdapter{svc: campaignService},
 		decks.WithPictures(&decksPictureAdapter{svc: mediaService}))
-	wireCardPictures(decksSvc, mediaHandler, mediaAPIHandler)
+	wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
 	// Reuses the sync mapping service created earlier for the owner dashboard.

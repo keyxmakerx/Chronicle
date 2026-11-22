@@ -131,7 +131,7 @@ func newCardWorld(t *testing.T) *cardWorld {
 		cardHeroes{owner: map[string]string{w.tam: w.heroTam, w.ilse: w.heroIlse}},
 		&decksMemberAdapter{svc: campSvc},
 		decks.WithPictures(&decksPictureAdapter{svc: w.mediaSvc}))
-	wireCardPictures(w.decks, w.handler, syncapi.NewMediaAPIHandler(nil, w.mediaSvc))
+	wireCardPictures(w.decks, w.mediaSvc, w.handler, syncapi.NewMediaAPIHandler(nil, w.mediaSvc))
 
 	w.dir_ = decks.Viewer{UserID: w.owner, MemberRole: 3, VisibilityRole: 3, Director: true}
 	w.tamV = decks.Viewer{UserID: w.tam, MemberRole: 1, VisibilityRole: 1}
@@ -484,11 +484,12 @@ func TestCardPictureIsLeftOutOfThePicker(t *testing.T) {
 		t.Errorf("the Director's picker holds %v, want 4 files including the card picture", all)
 	}
 
-	// Once a page the Scribe can see also shows it, the picker lists it again.
+	// A page the Scribe can see also showing it does not bring it back into the
+	// picker (the fetch keeps that exception; a listing does not).
 	page := w.page("Shrine", `<img src="/media/`+pic+`">`)
 	w.filter.visible[page] = true
-	if _, total := list(scribeCC, w.scribe, "50", "1"); total != 4 {
-		t.Errorf("Scribe total with the picture on a visible page = %d, want 4", total)
+	if _, total := list(scribeCC, w.scribe, "50", "1"); total != 3 {
+		t.Errorf("Scribe total with the picture on a visible page = %d, want 3", total)
 	}
 }
 

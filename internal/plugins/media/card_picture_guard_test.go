@@ -316,41 +316,35 @@ func pickerContext(cc *campaigns.CampaignContext, user string) (*echo.Context, *
 	return c, rec
 }
 
-// The picker leaves a card's picture out for a Scribe, keeps it for a Director
-// and for a picture that is also on a page the Scribe can see, and refuses the
-// whole list when it cannot tell.
+// The picker leaves every card picture out for a Scribe, even one a visible
+// page also shows (a listing is not how a page shows a picture, and the
+// exception would cost a reference scan per picture); a Director keeps them all,
+// and a failure refuses the whole list.
 func TestPickerLeavesOutCardPictures(t *testing.T) {
 	scribe := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleScribe, IsMember: true}
 	director := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner, IsMember: true}
 	coDM := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleScribe, IsMember: true, IsDmGranted: true}
 
-	build := func(g *fakeCardPictureGuard, onPage map[string]bool, visible map[string]bool) (*Handler, *listService) {
+	build := func(g *fakeCardPictureGuard) (*Handler, *listService) {
 		g.ids = []string{"pic-a", "pic-b", "pic-c"}
 		svc := &listService{}
-		svc.findReferencesFn = func(_ context.Context, _, id string) ([]MediaRef, error) {
-			if onPage[id] {
-				return []MediaRef{{EntityID: "page-" + id}}, nil
-			}
-			return nil, nil
-		}
-		vis := map[string]bool{}
-		for id := range visible {
-			vis["page-"+id] = true
-		}
 		h, _, _ := cardGuardFixture(g)
 		h.service = svc
-		h.entityVisibility = &fakeEntityVisibilityFilter{viewableIDs: vis}
 		return h, svc
 	}
 
-	t.Run("a Scribe loses every card picture except one a visible page also shows", func(t *testing.T) {
-		h, svc := build(&fakeCardPictureGuard{}, map[string]bool{"pic-b": true, "pic-c": true}, map[string]bool{"pic-b": true})
+	t.Run("a Scribe loses every card picture and no page is scanned", func(t *testing.T) {
+		h, svc := build(&fakeCardPictureGuard{})
+		svc.findReferencesFn = func(context.Context, string, string) ([]MediaRef, error) {
+			t.Error("the picker scanned page references")
+			return nil, nil
+		}
 		c, rec := pickerContext(scribe, "scribe")
 		if err := h.CampaignMediaList(c); err != nil {
 			t.Fatal(err)
 		}
-		if svc.excluding != 1 || strings.Join(svc.excluded, ",") != "pic-a,pic-c" {
-			t.Errorf("excluded %v (excluding calls %d), want pic-a and pic-c: pic-b is on a page the Scribe sees", svc.excluded, svc.excluding)
+		if svc.excluding != 1 || strings.Join(svc.excluded, ",") != "pic-a,pic-b,pic-c" {
+			t.Errorf("excluded %v (excluding calls %d), want all three", svc.excluded, svc.excluding)
 		}
 		if rec.Code != http.StatusOK {
 			t.Errorf("status %d", rec.Code)
@@ -358,7 +352,7 @@ func TestPickerLeavesOutCardPictures(t *testing.T) {
 	})
 	t.Run("a Director and a co-Director lose nothing and ask nothing", func(t *testing.T) {
 		for _, cc := range []*campaigns.CampaignContext{director, coDM} {
-			h, svc := build(&fakeCardPictureGuard{idsErr: errors.New("must not be asked")}, nil, nil)
+			h, svc := build(&fakeCardPictureGuard{idsErr: errors.New("must not be asked")})
 			c, _ := pickerContext(cc, "owner")
 			if err := h.CampaignMediaList(c); err != nil {
 				t.Fatalf("Director list: %v", err)
@@ -370,7 +364,7 @@ func TestPickerLeavesOutCardPictures(t *testing.T) {
 	})
 	t.Run("with no card pictures it is the plain list", func(t *testing.T) {
 		g := &fakeCardPictureGuard{}
-		h, svc := build(g, nil, nil)
+		h, svc := build(g)
 		g.ids = nil
 		c, _ := pickerContext(scribe, "scribe")
 		if err := h.CampaignMediaList(c); err != nil {
@@ -381,29 +375,17 @@ func TestPickerLeavesOutCardPictures(t *testing.T) {
 		}
 	})
 	t.Run("a failure refuses the whole list", func(t *testing.T) {
-		for name, mk := range map[string]func() (*Handler, *listService){
-			"ids": func() (*Handler, *listService) {
-				return build(&fakeCardPictureGuard{idsErr: errors.New("db")}, nil, nil)
-			},
-			"page lookup": func() (*Handler, *listService) {
-				h, svc := build(&fakeCardPictureGuard{}, nil, nil)
-				svc.findReferencesFn = func(context.Context, string, string) ([]MediaRef, error) { return nil, errors.New("db") }
-				return h, svc
-			},
-		} {
-			h, svc := mk()
-			logs := capturedLog(t)
-			c, _ := pickerContext(scribe, "scribe")
-			err := h.CampaignMediaList(c)
-			if err == nil {
-				t.Errorf("%s: the list was served despite the failure", name)
-			}
-			if svc.plain+svc.excluding != 0 {
-				t.Errorf("%s: media was listed despite the failure", name)
-			}
-			if !strings.Contains(logs.String(), "refusing the media list") {
-				t.Errorf("%s: failure not logged: %q", name, logs.String())
-			}
+		h, svc := build(&fakeCardPictureGuard{idsErr: errors.New("db")})
+		logs := capturedLog(t)
+		c, _ := pickerContext(scribe, "scribe")
+		if err := h.CampaignMediaList(c); err == nil {
+			t.Error("the list was served despite the failure")
+		}
+		if svc.plain+svc.excluding != 0 {
+			t.Error("media was listed despite the failure")
+		}
+		if !strings.Contains(logs.String(), "refusing the media list") {
+			t.Errorf("failure not logged: %q", logs.String())
 		}
 	})
 }

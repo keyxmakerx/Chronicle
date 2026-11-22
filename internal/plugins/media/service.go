@@ -27,6 +27,7 @@ import (
 	"golang.org/x/image/draw"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // StorageLimiter resolves effective storage limits for quota enforcement at
@@ -57,6 +58,12 @@ type MediaService interface {
 	// fails the merge closed rather than defaulting to "merge".
 	SetMemberChecker(checker MemberChecker)
 	SetEntityVisibilityFilter(f EntityVisibilityFilter)
+	// SetCardPictureGuard wires the card-picture rule onto the merge decision, so
+	// an upload of the bytes of a card's picture is never merged into it for
+	// someone below Director (ADR-077). CardPictureGuardWired lets the app's
+	// wiring test prove production sets it.
+	SetCardPictureGuard(g CardPictureGuard)
+	CardPictureGuardWired() bool
 
 	// ListCampaignMedia returns paginated media files for a campaign.
 	ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error)
@@ -163,6 +170,9 @@ type mediaService struct {
 	// canMergeWithExisting fail closed rather than assume "merge".
 	memberChecker    MemberChecker
 	entityVisibility EntityVisibilityFilter
+	// cardPictures keeps an upload from merging into a card's picture for
+	// anyone below Director. Nil leaves merging as ADR-058 decision 5 has it.
+	cardPictures CardPictureGuard
 }
 
 // NewMediaService creates a new media service.
@@ -190,6 +200,16 @@ func (s *mediaService) SetMemberChecker(checker MemberChecker) {
 
 func (s *mediaService) SetEntityVisibilityFilter(f EntityVisibilityFilter) {
 	s.entityVisibility = f
+}
+
+// SetCardPictureGuard wires the card-picture rule onto the merge decision.
+func (s *mediaService) SetCardPictureGuard(g CardPictureGuard) {
+	s.cardPictures = g
+}
+
+// CardPictureGuardWired reports whether the guard is set.
+func (s *mediaService) CardPictureGuardWired() bool {
+	return s.cardPictures != nil
 }
 
 // ValidateMediaPath ensures the media storage directory exists and is writable.
@@ -471,6 +491,45 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 // Fails closed: any error from FindReferences or the visibility filter is
 // reported back as an error, refusing the merge exactly as on a genuine "no".
 func (s *mediaService) canMergeWithExisting(ctx context.Context, campaignID, existingFileID, uploaderID string) (bool, []MediaRef, error) {
+	ok, refs, err := s.canMergeOnPages(ctx, campaignID, existingFileID, uploaderID)
+	if err != nil || !ok || len(refs) > 0 || s.cardPictures == nil {
+		return ok, refs, err
+	}
+	// No page references the file, so decision 3 would merge it. A card's
+	// picture is referenced by a deck, not a page: merging would tell a player
+	// who uploads the same bytes that the image is in a deck they cannot see
+	// (ADR-077). A Director merges. A file a page references is left to the
+	// page rule above, which already proved the uploader can see every page.
+	refused, err := s.cardRefusesMerge(ctx, campaignID, existingFileID, uploaderID)
+	if err != nil {
+		return false, nil, fmt.Errorf("card picture check for merge: %w", err)
+	}
+	if refused {
+		return false, nil, nil
+	}
+	return true, refs, nil
+}
+
+// cardRefusesMerge is true when the file is a card's picture and the uploader
+// is below Director. It makes the same lookups, in the same order, as
+// mergeCheckForNoMatch, so a refusal takes no longer than an upload that
+// matched nothing. An error means "could not tell"; the caller refuses.
+func (s *mediaService) cardRefusesMerge(ctx context.Context, campaignID, fileID, uploaderID string) (bool, error) {
+	if promotedVisibilityRole(s.memberChecker, campaignID, uploaderID) >= int(campaigns.RoleOwner) {
+		return false, nil
+	}
+	if s.entityVisibility != nil {
+		_, _ = s.entityVisibility.FilterViewableEntityIDs(ctx, campaignID, []string{noMatchProbeID}, int(campaigns.RoleNone), uploaderID)
+	}
+	isPicture, err := s.cardPictures.IsCardPicture(ctx, campaignID, fileID)
+	if err != nil {
+		return false, err
+	}
+	return isPicture, nil
+}
+
+// canMergeOnPages is ADR-058 decision 5's page rule, unchanged.
+func (s *mediaService) canMergeOnPages(ctx context.Context, campaignID, existingFileID, uploaderID string) (bool, []MediaRef, error) {
 	refs, err := s.repo.FindReferences(ctx, campaignID, existingFileID)
 	if err != nil {
 		return false, nil, fmt.Errorf("finding references for merge check: %w", err)
@@ -531,6 +590,9 @@ func (s *mediaService) mergeCheckForNoMatch(ctx context.Context, campaignID, upl
 	}
 	role := promotedVisibilityRole(s.memberChecker, campaignID, uploaderID)
 	_, _ = s.entityVisibility.FilterViewableEntityIDs(ctx, campaignID, []string{noMatchProbeID}, role, uploaderID)
+	if s.cardPictures != nil {
+		_, _ = s.cardPictures.IsCardPicture(ctx, campaignID, noMatchProbeID)
+	}
 }
 
 // defaultCampaignlessStorageBytes caps a user's total campaign-less uploads

@@ -1244,7 +1244,7 @@ func (h *Handler) CampaignMediaList(c *echo.Context) error {
 		perPage = 24
 	}
 
-	hidden, err := h.hiddenCardPictures(ctx, cc, auth.GetUserID(c))
+	hidden, err := h.hiddenCardPictures(ctx, cc)
 	if err != nil {
 		return err
 	}
@@ -1313,12 +1313,13 @@ func (h *Handler) CampaignMediaList(c *echo.Context) error {
 }
 
 // hiddenCardPictures lists the files a picker must leave out for this viewer:
-// every card's picture, except for a Director and except for a file that is
-// also on a page the viewer can see (the page already shows it). The files are
-// handed to the repository as one NOT IN, so page counts stay right. An error
-// refuses the whole list rather than risk naming a face-down card's art. Not
-// cached.
-func (h *Handler) hiddenCardPictures(ctx context.Context, cc *campaigns.CampaignContext, userID string) ([]string, error) {
+// every card's picture, for anyone below Director. Unlike the fetch rule it
+// makes no exception for a picture a visible page also shows: that exception
+// costs a full reference scan per picture, and a listing is not how a page
+// shows a picture. The files go to the repository as one NOT IN, so page
+// counts stay right. An error refuses the whole list rather than risk naming a
+// face-down card's art. Not cached.
+func (h *Handler) hiddenCardPictures(ctx context.Context, cc *campaigns.CampaignContext) ([]string, error) {
 	if h.cardPictures == nil || cc.CanAuthorDmOnly() {
 		return nil, nil
 	}
@@ -1328,20 +1329,7 @@ func (h *Handler) hiddenCardPictures(ctx context.Context, cc *campaigns.Campaign
 			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		return nil, apperror.NewInternal(fmt.Errorf("listing media"))
 	}
-	hidden := make([]string, 0, len(ids))
-	for _, id := range ids {
-		file := &MediaFile{ID: id, CampaignID: &cc.Campaign.ID}
-		onPage, err := h.pageShowsFile(ctx, file, userID)
-		if err != nil {
-			slog.Error("media: page check for a card picture failed; refusing the media list",
-				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
-			return nil, apperror.NewInternal(fmt.Errorf("listing media"))
-		}
-		if !onPage {
-			hidden = append(hidden, id)
-		}
-	}
-	return hidden, nil
+	return ids, nil
 }
 
 // pickThumbnail picks the smallest available thumbnail size key for a

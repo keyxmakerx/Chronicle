@@ -164,12 +164,14 @@ func (a *decksCardPictureAdapter) CardPictureUses(ctx context.Context, campaignI
 	return out, nil
 }
 
-// wireCardPictures gives both media entry points (the media server and the
-// sync media API) the guard that keeps a face-down card's picture from anyone
+// wireCardPictures gives the media server, the sync media API and the media
+// service's upload merge (so a player uploading a card picture's bytes is not
+// told it exists) the guard that keeps a face-down card's picture from anyone
 // it is not face up to. A named helper so a test can prove the production
 // wiring sets both; without it a card's picture is one id away from any member.
-func wireCardPictures(decksService decks.Service, mediaHandler *media.Handler, mediaAPIHandler *syncapi.MediaAPIHandler) {
+func wireCardPictures(decksService decks.Service, mediaService media.MediaService, mediaHandler *media.Handler, mediaAPIHandler *syncapi.MediaAPIHandler) {
 	g := &decksCardPictureAdapter{svc: decksService}
 	mediaHandler.SetCardPictureGuard(g)
 	mediaAPIHandler.SetCardPictureGuard(g)
+	mediaService.SetCardPictureGuard(g)
 }

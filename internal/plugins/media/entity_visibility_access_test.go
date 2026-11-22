@@ -62,6 +62,8 @@ func (f *fakeAccessMediaService) SetEntityVisibilityFilter(v EntityVisibilityFil
 func (f *fakeAccessMediaService) ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeAccessMediaService) SetCardPictureGuard(CardPictureGuard) {}
+func (f *fakeAccessMediaService) CardPictureGuardWired() bool { return false }
 func (f *fakeAccessMediaService) ListCampaignMediaExcluding(ctx context.Context, campaignID string, _ []string, page, perPage int) ([]MediaFile, int, error) {
 	return nil, 0, nil
 }

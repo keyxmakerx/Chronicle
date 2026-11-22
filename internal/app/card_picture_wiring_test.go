@@ -17,17 +17,21 @@ func TestWireCardPictures(t *testing.T) {
 	svc := decks.NewService(nil, nil, nil)
 	mediaHandler := media.NewHandler(nil)
 	apiHandler := syncapi.NewMediaAPIHandler(nil, nil)
-	if mediaHandler.CardPictureGuardWired() || apiHandler.CardPictureGuardWired() {
+	mediaSvc := media.NewMediaService(nil, "", 0)
+	if mediaHandler.CardPictureGuardWired() || apiHandler.CardPictureGuardWired() || mediaSvc.CardPictureGuardWired() {
 		t.Fatal("a fresh handler already has the guard; the test would prove nothing")
 	}
 
-	wireCardPictures(svc, mediaHandler, apiHandler)
+	wireCardPictures(svc, mediaSvc, mediaHandler, apiHandler)
 
 	if !mediaHandler.CardPictureGuardWired() {
 		t.Error("the media server has no card picture guard; a card's picture would be served to any member")
 	}
 	if !apiHandler.CardPictureGuardWired() {
 		t.Error("the sync media API has no card picture guard; it would list and link a card's picture")
+	}
+	if !mediaSvc.CardPictureGuardWired() {
+		t.Error("the media service has no card picture guard; an upload of a card picture's bytes would be merged into it")
 	}
 }
 
@@ -38,7 +42,7 @@ func TestRegisterRoutesWiresCardPictures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(src), "wireCardPictures(decksSvc, mediaHandler, mediaAPIHandler)") {
+	if !strings.Contains(string(src), "wireCardPictures(decksSvc, mediaService, mediaHandler, mediaAPIHandler)") {
 		t.Error("RegisterRoutes no longer wires the card picture guard onto the media handlers")
 	}
 }
