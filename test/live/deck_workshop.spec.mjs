@@ -222,7 +222,10 @@ test('small cards say why a choice is unavailable, and Show all opens the folded
   await page.locator('[data-row=shape]').waitFor();
   const small = page.locator('[data-row=shape] [data-value=small]');
   await small.click();
-  await page.waitForFunction(() => document.querySelector('[data-row=shape] [data-value=small]')?.getAttribute('aria-checked') === 'true');
+  // The press checks the choice at once; which choices the small shape rules
+  // out arrive with the saved tab, so wait for that and not for the check.
+  await page.waitForFunction(() => document.querySelector('[data-row=shape] [data-value=small]')?.getAttribute('aria-checked') === 'true'
+    && document.querySelector('[data-row] [data-value=burn]')?.getAttribute('aria-disabled') === 'true');
   const burn = page.locator('[data-row] [data-value=burn]').first();
   assert.equal(await burn.getAttribute('aria-disabled'), 'true');
   assert.ok((await burn.getAttribute('title')).length > 3, 'no reason is given');
