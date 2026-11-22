@@ -129,7 +129,7 @@ function page(o) {
   const stub = o.shell ? '' : `Chronicle.customizeSet = function (k, v, opts) { window.sets.push({ k: k, v: v == null ? v : JSON.parse(JSON.stringify(v)), opts: opts }); };
 Chronicle.customizeDraft = function () { return window.DRAFT; };`;
   const shell = o.shell ? '<script src="/static/js/widgets/customize_shell.js"></script>' : '';
-  const html = SHELL.replace('@@SECTION@@', SECTION).replace('data-czs-savebar hidden', 'data-czs-savebar hidden');
+  const html = SHELL.replace('@@SECTION@@', SECTION);
   const wrap = o.shell ? html.replace('<div class="czs czs-is-workshop">', `<div class="czs czs-is-workshop" data-widget="customize-shell" data-campaign-id="c1" data-csrf="t" data-area="x-hero-creator" data-version="0" data-draft='${JSON.stringify(o.draft || {})}' data-find="[]" data-areas='[{"id":"x-hero-creator","label":"Hero creator","href":"${TAB}","section":"herolooks"}]'>`).replace('<div class="czs-top" data-czs-top style="height:48px"></div>', '<div class="czs-top" data-czs-top style="height:48px"><button type="button" data-czs-find>Find</button></div>') : html;
   return `<!doctype html><html data-gm-term="Director"${o.dark ? ' class="dark"' : ''}${o.motion ? ` data-motion="${o.motion}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${TOKENS}*,::before,::after{box-sizing:border-box}html,body{margin:0}body{font-family:Inter,sans-serif;background:var(--color-bg-primary);color:var(--color-text-body)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}
