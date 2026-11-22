@@ -221,6 +221,11 @@ func gridShape(rows []gridRow) string {
 // gridDropped lists what the old arrangement held more of than the new: block
 // types, and tile sections that were not kept.
 func gridDropped(was, next []gridRow) []string {
+	return gridDroppedAs(was, next, func(t string) string { return t })
+}
+
+// gridDroppedAs is gridDropped with each block type written by name.
+func gridDroppedAs(was, next []gridRow, name func(string) string) []string {
 	count := func(rows []gridRow) (map[string]int, int) {
 		m, tiles := map[string]int{}, 0
 		for _, row := range rows {
@@ -242,7 +247,7 @@ func gridDropped(was, next []gridRow) []string {
 		for _, c := range row.Columns {
 			for _, b := range c.Blocks {
 				if w[b.Type] > n[b.Type] {
-					out = append(out, b.Type)
+					out = append(out, name(b.Type))
 					w[b.Type] = n[b.Type]
 				}
 			}
@@ -256,7 +261,11 @@ func gridDropped(was, next []gridRow) []string {
 		}
 		seen++
 		if seen > nt {
-			out = append(out, "a tile section ("+strings.Join(tileTypes(row), ", ")+")")
+			var tiles []string
+			for _, t := range tileTypes(row) {
+				tiles = append(tiles, name(t))
+			}
+			out = append(out, "a tile section ("+strings.Join(tiles, ", ")+")")
 		}
 	}
 	return out
@@ -346,4 +355,37 @@ func gridWordsSummary(words []homeWordsChange) string {
 		}
 	}
 	return s
+}
+
+// gridTypeOrder is each block type the rows place, in a column or a tile
+// section, once, in the order first met.
+func gridTypeOrder(rows []gridRow) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(t string) {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	for _, row := range rows {
+		for _, c := range row.Columns {
+			for _, b := range c.Blocks {
+				add(b.Type)
+			}
+		}
+		for _, t := range row.Tiles {
+			add(t.Type)
+		}
+	}
+	return out
+}
+
+// gridTypes is the set of block types the rows place.
+func gridTypes(rows []gridRow) map[string]bool {
+	m := map[string]bool{}
+	for _, t := range gridTypeOrder(rows) {
+		m[t] = true
+	}
+	return m
 }
