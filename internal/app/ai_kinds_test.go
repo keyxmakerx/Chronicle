@@ -94,3 +94,20 @@ func TestAIKindsEachHaveABrief(t *testing.T) {
 		}
 	}
 }
+
+// A kind's format never holds a line opening with "## ": the connector cuts
+// its guide at those headings, so one inside a format would pull every later
+// format out of the blocks index and past the guide's size.
+func TestAIKindDocsHoldNoSectionHeadings(t *testing.T) {
+	healthy := database.NewPluginHealthRegistry()
+	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
+	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}}))...)
+	for _, k := range reg.Kinds() {
+		for _, line := range strings.Split(k.Doc(), "\n") {
+			if strings.HasPrefix(line, "## ") {
+				t.Errorf("kind %s's format has a section heading: %q", k.Name(), line)
+			}
+		}
+	}
+}
