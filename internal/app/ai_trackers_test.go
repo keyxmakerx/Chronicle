@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
 
@@ -126,5 +127,51 @@ func TestAITrackersAdapter_MembersCarryClaimedHeroes(t *testing.T) {
 	// A reader who is no Director is told nobody's name, heroes included.
 	if ms, err := ad.Members(context.Background(), "camp-1", records.Actor{UserID: "player-1", Role: 1}); err != nil || ms != nil {
 		t.Fatalf("a player's members %+v err %v", ms, err)
+	}
+}
+
+// sheetEnts is the two reads HasBlock makes: a page and its category.
+type sheetEnts struct {
+	entities.EntityService
+	page *entities.Entity
+	et   *entities.EntityType
+}
+
+func (s sheetEnts) GetByID(context.Context, string) (*entities.Entity, error) { return s.page, nil }
+func (s sheetEnts) GetEntityTypeByID(context.Context, int) (*entities.EntityType, error) {
+	return s.et, nil
+}
+
+// A hero's sheet page shows its trackers under the sheet, so the review must
+// not warn that its layout has no Trackers block; any other page still goes
+// by its layout.
+func TestAITrackersAdapter_HasBlock(t *testing.T) {
+	reg := entities.NewEntityShowRendererRegistry()
+	reg.RegisterByPresetCategory("character", entities.MakeWidgetMountRenderer("sheet"))
+	entities.SetGlobalEntityShowRendererRegistry(reg)
+	defer entities.SetGlobalEntityShowRendererRegistry(nil)
+
+	hero, plain := "character", "location"
+	owner := "u1"
+	tests := []struct {
+		name   string
+		page   entities.Entity
+		preset *string
+		want   bool
+	}{
+		{"a claimed hero the system draws", entities.Entity{ID: "p", CampaignID: "c", OwnerUserID: &owner}, &hero, true},
+		{"a playable hero nobody claimed", entities.Entity{ID: "p", CampaignID: "c", Playable: true}, &hero, true},
+		{"an NPC of the same category goes by its layout", entities.Entity{ID: "p", CampaignID: "c"}, &hero, false},
+		{"a claimed page no system draws", entities.Entity{ID: "p", CampaignID: "c", OwnerUserID: &owner}, &plain, false},
+		{"another campaign's page", entities.Entity{ID: "p", CampaignID: "other", OwnerUserID: &owner}, &hero, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			page := tt.page
+			ad := aiTrackersAdapter{ents: sheetEnts{page: &page, et: &entities.EntityType{ID: 1, PresetCategory: tt.preset}}}
+			if got := ad.sheetDrawn(context.Background(), "c", "p"); got != tt.want {
+				t.Fatalf("sheetDrawn = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

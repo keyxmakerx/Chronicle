@@ -170,8 +170,26 @@ func (t aiTrackersAdapter) Pages(ctx context.Context, campaignID string, a recor
 	return out, nil
 }
 
+// HasBlock says whether the page shows its trackers: its category's layout
+// places the block, or the page is a player's character a game system draws,
+// which shows them in a tab under the sheet whatever the layout holds.
 func (t aiTrackersAdapter) HasBlock(ctx context.Context, campaignID, pageID string) (bool, error) {
+	if t.sheetDrawn(ctx, campaignID, pageID) {
+		return true, nil
+	}
 	return categoryLayoutHas(ctx, t.ents, campaignID, pageID, trackers.BlockType)
+}
+
+func (t aiTrackersAdapter) sheetDrawn(ctx context.Context, campaignID, pageID string) bool {
+	if t.ents == nil {
+		return false
+	}
+	e, err := t.ents.GetByID(ctx, pageID)
+	if err != nil || e == nil || e.CampaignID != campaignID || (e.OwnerUserID == nil && !e.Playable) {
+		return false
+	}
+	et, err := t.ents.GetEntityTypeByID(ctx, e.EntityTypeID)
+	return err == nil && et != nil && entities.SystemDrawsHeroes(ctx, et)
 }
 
 // SetSeen changes who sees one placed tracker. The viewer carries the actor,
