@@ -18,7 +18,7 @@ const root = join(here, '..', '..');
 const decks = join(root, 'internal', 'plugins', 'decks');
 
 function load(env = {}) {
-  const sandbox = { setTimeout, clearTimeout, Promise, console, ...env };
+  const sandbox = { setTimeout, clearTimeout, Promise, console, URLSearchParams, ...env };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(readFileSync(join(decks, 'static', 'js', 'deck_cards.js'), 'utf8'), sandbox);
@@ -270,4 +270,48 @@ test('a stored shape or turn outside the lists reads as the default, as on the s
   assert.equal(DC.turnOf('spin'), 'flip');
   assert.equal(DC.turnOf('forge'), 'forge');
   assert.equal(DC.turnOf(null), 'flip');
+});
+
+const UUID = '0b6f2c1e-5a43-4d0e-9a57-3f1c2b7d8e90';
+
+test('a deferred picture loads only from a same-origin media path', () => {
+  for (const ok of [`/media/${UUID}`, `/media/${UUID}/thumb/300`, `/media/${UUID}?expires=1700000000&sig=ab12-_%3D`, `/media/${UUID}/thumb/300?expires=1&sig=x`]) {
+    assert.equal(DC.pictureSrcOk(ok), true, ok);
+  }
+  for (const bad of ['javascript:alert(1)', 'data:image/png;base64,AAAA', 'https://evil.example/media/' + UUID, '//evil.example/x',
+    '/static/img/a.png', `/media/${UUID}/../x`, `/media/${UUID}/thumb/abc`, '/media/not-a-uuid', `/media/${UUID}#x`, '', null, undefined]) {
+    assert.equal(DC.pictureSrcOk(bad), false, String(bad));
+  }
+});
+
+test('pictureReady requests only an allowed picture and drops the rest with no request', async () => {
+  const mk = (src) => {
+    const attrs = { 'data-src': src };
+    const img = { setAttr: 0, set src(v) { this.requested = v; setTimeout(() => this.onload && this.onload(), 0); },
+      getAttribute: (k) => attrs[k], removeAttribute: (k) => { delete attrs[k]; }, attrs };
+    return img;
+  };
+  const good = mk(`/media/${UUID}/thumb/300`);
+  const bads = ['javascript:alert(1)', 'data:text/html,x', 'https://other.example/a.png', '//other.example/a.png', '/api/secret'].map(mk);
+  const root = { querySelectorAll: () => [good, ...bads] };
+  await DC.pictureReady(root);
+  assert.equal(good.requested, `/media/${UUID}/thumb/300`);
+  for (const b of bads) {
+    assert.equal(b.requested, undefined, 'no request for a dropped picture');
+    assert.equal('data-src' in b.attrs, false, 'the attribute is removed');
+  }
+});
+
+test('a face is fetched only from a path on this site', () => {
+  assert.equal(DC.faceSrcOk('/campaigns/c/decks/d/copies/x/face'), true);
+  for (const bad of ['//evil.example/x', '/\\evil.example', 'https://evil.example/x', 'javascript:1', 'campaigns/x', '', null, '/a b']) {
+    assert.equal(DC.faceSrcOk(bad), false, String(bad));
+  }
+});
+
+test('the requested picture address is rebuilt from the validated parts', () => {
+  assert.equal(DC.pictureSrcOf(`/media/${UUID}/thumb/300?expires=17&sig=a%3Db`), `/media/${UUID}/thumb/300?expires=17&sig=a%3Db`);
+  assert.equal(DC.pictureSrcOf(`/media/${UUID}`), `/media/${UUID}`);
+  assert.equal(DC.pictureSrcOf('//evil.example/x'), '');
+  assert.equal(DC.pictureSrcOf('javascript:1'), '');
 });

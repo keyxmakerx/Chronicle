@@ -223,13 +223,45 @@
     return n ? n.textContent.trim() : '';
   }
 
+  /**
+   * pictureSrcOk: a deferred picture is only ever a same-origin media path,
+   * /media/<uuid>, optionally /thumb/<digits>, optionally a query (signed
+   * links carry expires and sig). Anything else is never requested.
+   */
+  var PICTURE_RE = /^\/media\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\/thumb\/[0-9]+)?(\?[A-Za-z0-9=&%_.~+-]*)?$/;
+  function pictureSrcOk(src) { return typeof src === 'string' && PICTURE_RE.test(src); }
+
+  /**
+   * pictureSrcOf: the address to request, rebuilt from the validated parts
+   * (the id, the thumb size and a re-encoded query), never the raw attribute.
+   * '' when the attribute is not an allowed media path.
+   */
+  function pictureSrcOf(src) {
+    if (!pictureSrcOk(src)) return '';
+    var m = /^\/media\/([0-9a-fA-F-]{36})(?:\/thumb\/([0-9]+))?(?:\?(.*))?$/.exec(src);
+    var out = '/media/' + encodeURIComponent(m[1]);
+    if (m[2]) out += '/thumb/' + encodeURIComponent(m[2]);
+    if (m[3]) {
+      var q = new URLSearchParams(m[3]).toString();
+      if (q) out += '?' + q;
+    }
+    return out;
+  }
+
+  /** faceSrcOk: a face is fetched only from a path on this site: one leading slash, not //host or /\host. */
+  function faceSrcOk(src) {
+    return typeof src === 'string' && src.charAt(0) === '/' && src.charAt(1) !== '/' && src.charAt(1) !== '\\' && !/[\s\u0000-\u001f]/.test(src);
+  }
+
   function pictureReady(root) {
     var imgs = Array.prototype.slice.call(root.querySelectorAll('img[data-src]'));
     if (!imgs.length) return Promise.resolve();
     return Promise.all(imgs.map(function (img) {
+      var src = pictureSrcOf(img.getAttribute('data-src'));
+      if (!src) { img.removeAttribute('data-src'); return Promise.resolve(); } // plain field, no request
       return new Promise(function (res) {
         img.onload = img.onerror = function () { img.removeAttribute('data-src'); res(); };
-        img.src = img.getAttribute('data-src');
+        img.src = src;
       });
     }));
   }
@@ -238,7 +270,7 @@
   function loaderFor(card) {
     var btn = card.querySelector('.dk-turn');
     var src = btn && btn.getAttribute('data-face-src');
-    if (src) {
+    if (src && faceSrcOk(src)) {
       return function () {
         return fetch(src, { credentials: 'same-origin' }).then(function (r) {
           if (!r.ok) throw new Error('face ' + r.status);
@@ -731,7 +763,7 @@
     TURNS: TURNS, MOVES: MOVES, PH: PH, MOVE_PHASES: MOVE_PHASES, HALFWAY_WAIT: HALFWAY_WAIT, CROWD: CROWD, DEAL_MAX: DEAL_MAX, DEAL_GAP: DEAL_GAP,
     levelOf: levelOf, deviceIsLimited: deviceIsLimited, planTurn: planTurn, finishFor: finishFor,
     dealPlan: dealPlan, crowdedFor: crowdedFor, shapeOf: shapeOf, turnOf: turnOf, SHAPES: SHAPES, createQueue: createQueue, sequence: sequence,
-    turnOver: turnOver, move: move, deal: deal, shuffle: shuffle
+    pictureSrcOk: pictureSrcOk, pictureSrcOf: pictureSrcOf, faceSrcOk: faceSrcOk, pictureReady: pictureReady, turnOver: turnOver, move: move, deal: deal, shuffle: shuffle
   };
 
   if (C.register) {
