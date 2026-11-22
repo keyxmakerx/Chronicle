@@ -187,6 +187,12 @@ const MsgTableShown MessageType = "table.shown"
 // through their own routes.
 const MsgDecksChanged MessageType = "decks.changed"
 
+// MsgDecksMoment tells the Directors that a card's moment opened, changed or
+// closed, so their Table fetches the moments again. It carries no payload and
+// no id: it is always published RequiresDM, because that a moment came, and for
+// which card, is the Director's alone. Not a change-feed type.
+const MsgDecksMoment MessageType = "decks.moment"
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"

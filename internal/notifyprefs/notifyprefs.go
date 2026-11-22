@@ -107,6 +107,7 @@ var bellTypes = map[string]string{
 	"deck_card_taken_back":         CardDecks,
 	"deck_card_asked":              CardDecks,
 	"deck_ask_answered":            CardDecks,
+	"deck_draw_invited":            CardDecks,
 }
 
 // CategoryForBellType returns the category of a bell notification type, or

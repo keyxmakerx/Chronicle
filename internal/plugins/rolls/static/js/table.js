@@ -300,6 +300,8 @@
       if (msg && msg.type === 'table.shown' && msg.payload) self.receiveShown(msg.payload, true);
       // Carries nothing: the hand and the hero strips fetch their own view.
       if (msg && msg.type === 'decks.changed') W.dispatchEvent(new CustomEvent('chronicle:decks-changed'));
+      // Directors only; carries nothing, the moments panel fetches its own list.
+      if (msg && msg.type === 'decks.moment') W.dispatchEvent(new CustomEvent('chronicle:decks-moment'));
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;
