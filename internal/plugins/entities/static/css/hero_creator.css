@@ -133,7 +133,7 @@ html.dark .hc[data-skin="ornate"] {
 }
 
 /* step list drape and the scrim behind sheets */
-.hc-drape { position: absolute; left: 0; right: 0; z-index: 6; background-color: var(--hc-surface); background-image: var(--hc-texture); border-bottom: var(--hc-edge) solid var(--hc-line); box-shadow: var(--hc-lift); padding: 4px 0 8px; }
+.hc-drape { position: absolute; left: 0; right: 0; z-index: 6; background-color: var(--hc-surface); background-image: var(--hc-texture); border-bottom: var(--hc-edge) solid var(--hc-line); box-shadow: var(--hc-lift); padding: 4px 0 8px; overflow-y: auto; overscroll-behavior: contain; }
 .hc-drape .hc-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 16px; border: 0; background: transparent; cursor: pointer; text-align: left; transition: background-color var(--dur-micro) var(--ease-out); }
 .hc-drape .hc-row:hover { background: var(--hc-surface-2); }
 .hc-drape .hc-row[aria-current="step"] { background: var(--hc-accent-soft); }

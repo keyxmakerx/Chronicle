@@ -33,6 +33,7 @@
     function Stage(root) {
       Creator.call(this, root);
       this.inerted = [];
+      this.low = false;
       this.borders = makeBorders(root);
     }
     Stage.prototype = Object.create(Creator.prototype);
@@ -274,7 +275,9 @@
       return '<div class="hc-stg__id">' + this.portrait(false) + '<div class="hc-stg__tx"><p class="hc-stg__nm hc-disp">' + esc(this.heroName()) +
         '</p><p class="hc-stg__ln">' + esc(this.heroLine(false)) + '</p><p class="hc-stg__pv"></p></div></div>' + this.figuresHTML();
     };
-    P.stageHTML = function () { return '<div class="hc-stg" data-stage>' + this.stageInner() + '</div>'; };
+    // A banner drawn while the page is giving way for the cards stands tucked,
+    // so a redraw never flashes it open.
+    P.stageHTML = function () { return '<div class="hc-stg' + (this.low ? ' is-tuck' : '') + '" data-stage>' + this.stageInner() + '</div>'; };
 
     P.railHead = function () { return this.stageHTML(); };
     // The hero stands at the head of the rail, so the old foot block is gone.
@@ -352,10 +355,23 @@
     // Wherever the entry in front changes, the preview follows.
     P.after = function () {
       base.after.call(this);
+      this.afterRoom();
       this.tuckFor(this.scroller());
       this.previewStage();
     };
-    P.refreshList = function () { base.refreshList.call(this); this.tuckFor(this.scroller()); };
+    P.refreshList = function () { base.refreshList.call(this); this.afterRoom(); this.tuckFor(this.scroller()); };
+    P.fit = function () {
+      base.fit.call(this);
+      // What the room alone asks of the intro line, before the cards ask more.
+      this.roomShort = this.short;
+      this.afterRoom();
+    };
+
+    // When making room changed the hand's height, the cards are fitted to it.
+    P.afterRoom = function () {
+      if (!this.makeRoom() || !this.$('[data-hand]')) return;
+      this.fitCards(); this.scrollHandTo(this.curIdx(), false); this.tilt();
+    };
     P.refreshUnder = function () { base.refreshUnder.call(this); this.previewStage(); };
     P.refreshRight = function () { base.refreshRight.call(this); this.previewStage(); };
     P.openSheet = function (i, own) { base.openSheet.call(this, i, own); this.previewStage(); };
@@ -388,6 +404,65 @@
       if (p && p.name) this.wash();
     };
 
+    // --- Room for the cards ---
+
+    // The name's line at the fit's floor: a name is never set below 20px, so
+    // its line is that many px at the heading's own line height.
+    var NAME_FLOOR = 20, NAME_LINE = 1.05;
+
+    // The least height the hand needs for every card to read whole: a card's
+    // padding and frame, its label, one line of name and the foot line, with
+    // the gaps between them, plus the hand's own padding. Cards of one border
+    // are alike, so one of each kind is read, not every card of a long step.
+    P.handNeed = function (hand) {
+      var seen = {}, need = 0, px = function (v) { return parseFloat(v) || 0; };
+      qa('.hc-card', hand).forEach(function (c) {
+        var more = c.querySelector('.hc-more'), kind = c.getAttribute('data-trim') || '';
+        if (!more || seen[kind]) return;
+        seen[kind] = true;
+        var cs = getComputedStyle(c), top = c.querySelector('.hc-top'), h3 = c.querySelector('h3'), ratio = NAME_LINE;
+        if (h3) { var hs = getComputedStyle(h3), r = px(hs.lineHeight) / px(hs.fontSize); if (r > 0) ratio = r; }
+        need = Math.max(need, px(cs.paddingTop) + px(cs.paddingBottom) + px(cs.borderTopWidth) + px(cs.borderBottomWidth) +
+          (top ? top.offsetHeight : 0) + more.offsetHeight + NAME_FLOOR * ratio + 2 * px(cs.rowGap));
+      });
+      if (!need) return 0;
+      var hs2 = getComputedStyle(hand);
+      return Math.ceil(need + px(hs2.paddingTop) + px(hs2.paddingBottom));
+    };
+
+    // A card must read whole, so as the room shrinks the page gives way in a
+    // fixed order: the step's intro line, then the hero's figures, and only
+    // then does the hand keep the height its cards need and the body scroll.
+    // Each step is tried by measuring, never by fixed room sizes. Only on a
+    // phone showing cards; anywhere else nothing is forced. Returns whether
+    // anything changed.
+    P.makeRoom = function () {
+      var app = this.app();
+      if (!app) return false;
+      var hand = this.$('[data-hand]'), box = this.$('[data-stage]');
+      var key = function (s) { return [s.short, s.low, hand ? hand.style.minHeight : '', app.classList.contains('is-scroll'), !!box && box.classList.contains('is-tuck')].join(); };
+      var was = key(this);
+      // Measuring needs the tuck to apply at once, not over its transition.
+      app.classList.add('is-fitting');
+      if (this.roomShort != null) this.short = this.roomShort;
+      this.low = false;
+      app.classList.remove('is-scroll');
+      if (hand) hand.style.minHeight = '';
+      if (hand && !this.desk()) {
+        var need = this.handNeed(hand);
+        app.classList.toggle('is-short', this.short);
+        if (box) box.classList.remove('is-tuck');
+        if (need && hand.clientHeight < need) { this.short = true; app.classList.add('is-short'); }
+        if (need && hand.clientHeight < need) { this.low = true; if (box) box.classList.add('is-tuck'); }
+        if (need && hand.clientHeight < need) { hand.style.minHeight = need + 'px'; app.classList.add('is-scroll'); }
+      } else {
+        app.classList.toggle('is-short', this.short);
+        this.tuckFor(this.scroller());
+      }
+      app.classList.remove('is-fitting');
+      return key(this) !== was;
+    };
+
     // --- The tuck ---
 
     // What scrolls on the phone's body: the list view and About your hero (and
@@ -401,6 +476,8 @@
       var box = this.$('[data-stage]');
       if (!box || this.desk()) return;
       var tucked = box.classList.contains('is-tuck');
+      // While the cards need the room the stage stays folded.
+      if (this.low) { box.classList.add('is-tuck'); return; }
       // Nothing scrolls (the cards): the stage stands open.
       if (!sc) { if (tucked) box.classList.remove('is-tuck'); return; }
       if (!tucked && sc.scrollTop > 48 && sc.scrollHeight - sc.clientHeight > 48 + box.offsetHeight * 0.6) box.classList.add('is-tuck');

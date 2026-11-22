@@ -1433,6 +1433,15 @@
 
   Creator.prototype.setupHand = function (hand) {
     var self = this, raf = 0;
+    // The strip snaps to a card, which pulls back the browser's own small
+    // scroll to a focused neighbour; the keyboard's card is brought to the
+    // middle. A pointer's focus is left alone so a drag or tap is not fought.
+    hand.addEventListener('focusin', function (ev) {
+      var t = ev.target, c = t && t.closest ? t.closest('.hc-card') : null, keyboard = false;
+      if (!c) return;
+      try { keyboard = t.matches(':focus-visible'); } catch (e) { /* older engines */ }
+      if (keyboard) self.scrollHandTo(qa('.hc-card', hand).indexOf(c), true);
+    });
     hand.addEventListener('scroll', function () {
       if (raf) return;
       raf = requestAnimationFrame(function () {
@@ -1780,6 +1789,8 @@
     var head = rel(app, q1('.hc-shead', app).getBoundingClientRect()), y = head.top + head.height;
     var scrim = document.createElement('div'); scrim.className = 'hc-scrim'; scrim.setAttribute('data-dscrim', ''); scrim.setAttribute('data-act', 'drape'); scrim.style.top = y + 'px';
     d = document.createElement('div'); d.className = 'hc-drape'; d.setAttribute('data-drape', ''); d.setAttribute('role', 'group'); d.setAttribute('aria-label', 'All steps'); d.style.top = y + 'px';
+    // With many steps the list stops at the app's foot and scrolls inside itself.
+    d.style.maxHeight = 'calc(100% - ' + y + 'px)';
     var h = '';
     for (var i = 0; i <= this.last(); i++) {
       var st = this.plan.steps[i], ab = !st && i < this.last(), p = ab ? this.aboutLine() : this.picked(i), note = st && this.pickNote(st);
@@ -1792,7 +1803,11 @@
     requestAnimationFrame(function () { scrim.classList.add('is-on'); });
     this.anim(d, [{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0 0)' }], { duration: ms(200) });
     var cur = d.querySelector('[aria-current]');
-    if (cur) cur.focus({ preventScroll: true });
+    if (cur) {
+      cur.focus({ preventScroll: true });
+      // The drape's own scroll, so no other scroller moves with it.
+      d.scrollTop = Math.max(0, cur.offsetTop - (d.clientHeight - cur.offsetHeight) / 2);
+    }
   };
 
   // --- Choosing ---

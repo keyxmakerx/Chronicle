@@ -657,3 +657,89 @@ test('the creator follows the Table bar when its height or place changes after i
   // Leaving stops the watching.
   await pg.evaluate(() => window.hcImpl.destroy(document.querySelector('.hc')));
 });
+
+// --- The "All steps" list and the keyboard, in both looks ---
+
+// Nine list steps, with About your hero and Name and review: eleven rows, more
+// than a 360x640 phone holds under the header.
+const LONG = () => ({
+  systemName: 'Draw Steel',
+  about: [{ key: 'pronouns', label: 'Pronouns', long: false }],
+  steps: ['Ancestry', 'Culture', 'Career', 'Class', 'Subclass', 'Kit', 'Complication', 'Boon', 'Bane'].map((l) => ({ fieldKey: l.toLowerCase(), label: l, choices: [ch(l + ' one'), ch(l + ' two')] })),
+});
+const looks = [['stage', true], ['classic', false]];
+
+for (const [name, look] of looks) {
+  for (const [w, h] of [[360, 640], [360, 500]]) {
+    test(`${name} look, ${w}x${h}: the All steps list stops at the app's foot and scrolls inside itself`, { skip }, async (t) => {
+      const { pg } = await open(t, { width: w, height: h, plan: LONG, look });
+      await pg.waitForSelector('.hc-sbtn');
+      await pg.waitForTimeout(300);
+      const rows = async () => pg.evaluate(() => {
+        const d = document.querySelector('[data-drape]'), app = document.querySelector('.hc-app').getBoundingClientRect(), dr = d.getBoundingClientRect();
+        const all = [...d.querySelectorAll('.hc-row')], cur = d.querySelector('[aria-current]').getBoundingClientRect();
+        return { n: all.length, drapeBottom: dr.bottom, appBottom: app.bottom, win: window.innerHeight, scrolls: d.scrollHeight > d.clientHeight + 1,
+          curIn: cur.top >= dr.top - 1 && cur.bottom <= dr.bottom + 1, oy: getComputedStyle(d).overflowY };
+      });
+      await pg.click('.hc-sbtn');
+      await pg.waitForSelector('[data-drape]');
+      let r = await rows();
+      assert.equal(r.n, 11);
+      assert.ok(r.drapeBottom <= r.appBottom + 1, `the list ends at the app's foot: ${r.drapeBottom} vs ${r.appBottom}`);
+      assert.ok(r.drapeBottom <= r.win + 1);
+      assert.equal(r.oy, 'auto');
+      assert.equal(r.scrolls, true, 'eleven rows are more than this height holds');
+      // The last row is reached by scrolling the list itself.
+      const last = await pg.evaluate(() => {
+        const d = document.querySelector('[data-drape]'), rows = d.querySelectorAll('.hc-row'), before = window.scrollY;
+        d.scrollTop = d.scrollHeight;
+        const a = rows[rows.length - 1].getBoundingClientRect(), b = d.getBoundingClientRect();
+        return { inDrape: a.top >= b.top - 1 && a.bottom <= b.bottom + 1, inWindow: a.bottom <= window.innerHeight + 1, pageMoved: window.scrollY !== before };
+      });
+      assert.deepEqual(last, { inDrape: true, inWindow: true, pageMoved: false });
+      // On the last step, the list opens with its row in view.
+      await pg.click('.hc-drape .hc-row[data-go="10"]');
+      await pg.waitForTimeout(400);
+      await pg.click('.hc-sbtn');
+      await pg.waitForSelector('[data-drape]');
+      r = await rows();
+      assert.equal(r.curIn, true, 'the current row is in view as the list opens');
+      // Closing still removes it.
+      await pg.click('.hc-sbtn');
+      await pg.waitForFunction(() => !document.querySelector('[data-drape]'), null, { timeout: 2000 });
+    });
+  }
+
+  test(`${name} look, 390x844: a short list does not scroll and no row is clipped`, { skip }, async (t) => {
+    const { pg } = await open(t, { width: 390, height: 844, look });
+    await pg.waitForSelector('.hc-sbtn');
+    await pg.waitForTimeout(300);
+    await pg.click('.hc-sbtn');
+    await pg.waitForSelector('[data-drape]');
+    const r = await pg.evaluate(() => {
+      const d = document.querySelector('[data-drape]'), rows = [...d.querySelectorAll('.hc-row')], dr = d.getBoundingClientRect(), last = rows[rows.length - 1].getBoundingClientRect();
+      return { scrolls: d.scrollHeight > d.clientHeight + 1, top: d.scrollTop, lastIn: last.bottom <= dr.bottom + 1, clipped: parseFloat(getComputedStyle(d).maxHeight) < d.scrollHeight };
+    });
+    assert.deepEqual(r, { scrolls: false, top: 0, lastIn: true, clipped: false });
+  });
+
+  test(`${name} look, 390x844 with a mouse and no touch: Tab and Shift+Tab keep the focused card in the strip`, { skip }, async (t) => {
+    const many = () => ({ systemName: 'Draw Steel', steps: [{ fieldKey: 'class', label: 'Class', choices: Array.from({ length: 12 }, (_, i) => ch('Entry ' + i)) }] });
+    const { pg, ctx } = await open(t, { width: 390, height: 844, plan: many, look, mouse: true });
+    await pg.waitForSelector('.hc-card[data-i="0"]');
+    await pg.waitForTimeout(500);
+    await pg.focus('.hc-hand .hc-card[data-i="0"]');
+    const where = () => pg.evaluate(() => {
+      const a = document.activeElement, hand = document.querySelector('[data-hand]');
+      if (!a || !hand.contains(a)) return { out: true };
+      const r = a.getBoundingClientRect(), hr = hand.getBoundingClientRect();
+      return { i: a.getAttribute('data-i'), inside: r.left >= hr.left - 1 && r.right <= hr.right + 1 };
+    });
+    const seen = [];
+    for (let k = 0; k < 8; k++) { await pg.keyboard.press('Tab'); await pg.waitForTimeout(250); seen.push(await where()); }
+    for (let k = 0; k < 2; k++) { await pg.keyboard.press('Shift+Tab'); await pg.waitForTimeout(250); seen.push(await where()); }
+    assert.deepEqual(seen.map((s) => s.inside), seen.map(() => true), JSON.stringify(seen));
+    assert.deepEqual(seen.map((s) => s.i), ['1', '2', '3', '4', '5', '6', '7', '8', '7', '6']);
+    void ctx;
+  });
+}
