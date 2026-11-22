@@ -67,3 +67,29 @@ test('on a public campaign the strip switches between the two visitors, on a pho
   await picture(page, 'guest-code-switch-phone');
   owner.assertClean();
 });
+
+test('on a phone the private note\'s actions are each tapped, never the one beside them', async () => {
+  for (const width of [390, 320]) {
+    const owner = await person({ tag: 'gv-phone-' + width, context: { viewport: { width, height: 800 }, hasTouch: true, isMobile: true } });
+    const { page } = owner;
+    const cid = await newCampaign(owner, 'Pocket table');
+    await owner.go(`/campaigns/${cid}?dashboard=guests`);
+    await page.getByRole('button', { name: 'See it as a guest with a code' }).waitFor();
+    // Every action answers at its own middle and ends.
+    const hits = await page.evaluate(() => {
+      const names = ['See it as a guest with a code', 'Who can read it', 'Arrange this page'];
+      const els = [...document.querySelectorAll('.cb-home-preview button, .cb-home-preview a')].filter((el) => names.includes(el.textContent.trim()));
+      return els.map((el) => {
+        const r = el.getBoundingClientRect(), y = r.top + r.height / 2;
+        return [r.left + 2, r.left + r.width / 2, r.right - 2].map((x) => { const at = document.elementFromPoint(x, y); return at === el || el.contains(at); });
+      });
+    });
+    assert.ok(hits.length >= 3, 'the note has its three actions');
+    assert.ok(hits.every((h) => h.every(Boolean)), width + ': no action covers another ' + JSON.stringify(hits));
+    await picture(page, 'guest-code-note-phone-' + width);
+    await Promise.all([page.waitForURL(new RegExp(`/campaigns/${cid}$`)), page.getByRole('button', { name: 'See it as a guest with a code' }).tap()]);
+    await page.waitForSelector('[data-guest-preview="guestcode"]');
+    owner.assertClean();
+    await owner.ctx.close();
+  }
+});

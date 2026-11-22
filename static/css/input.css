@@ -3782,6 +3782,10 @@ dialog.cb-bro[open] { display: flex; flex-direction: column; }
   .cb-home-preview button { position: relative; }
   .cb-home-preview button::before { content: ""; position: absolute; inset: -7px -6px; }
   @media (pointer: coarse) { .cb-home-preview button::before { inset: -13px -6px; } }
+  /* The note's actions sit on a row of their own, and when they wrap the
+     rows stay far enough apart that those 44-pixel touch areas never cover
+     the action above or below. */
+  .cb-pv-acts { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 20px; row-gap: 28px; margin-top: 8px; }
   /* A row with a caption keeps its whole label and lets the caption truncate. */
   .nav-lb-keep { flex: 1 0 auto; max-width: 100%; }
   .nav-lb-keep ~ .nav-tr { flex: 0 1 auto; min-width: 0; max-width: none; }
