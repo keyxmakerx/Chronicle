@@ -78,3 +78,10 @@ system's own entry included, in the Customizer. Their choice wins over the
 package's `card_border` and `card_colour` for everyone who sees the card, and
 choosing the package's own look again, or resetting, hands the card back to the
 package.
+
+The owner does this on the Customizer's Hero creator page: the real creator
+stands in a frame with the campaign's cards, and pressing a card opens a panel
+with the samples and colours. "The game system's" sample is the look the package
+gives that card; "None" shows the card with no border even when the package gives
+one. The change waits in the Customizer's save bar like any other. A campaign's
+own entry keeps its border in the entry itself, not in this list.

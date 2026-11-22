@@ -16,15 +16,22 @@ templ customizeSavesAlone() {
 	<p class="czs-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>This part saves each change as you make it, not with the Save bar.</span></p>
 }
 
-// customizePluginArea draws a plugin's area.
+// customizePluginArea draws a plugin's area. A tab that keeps its changes in
+// the draft (it names a Section) is a workshop: its body fills the page and
+// the save bar says what is waiting, so there is no heading and no note that
+// it saves by itself.
 templ customizePluginArea(t CustomizeTab) {
-	<div class="czs-pad">
-		<h1 class="czs-h1">{ t.Label }</h1>
-		<div class="mt-6">
-			@customizeSavesAlone()
-			@t.Content
+	if t.Section != "" {
+		@t.Content
+	} else {
+		<div class="czs-pad">
+			<h1 class="czs-h1">{ t.Label }</h1>
+			<div class="mt-6">
+				@customizeSavesAlone()
+				@t.Content
+			</div>
 		</div>
-	</div>
+	}
 }
 
 // customizeCategoriesArea is the grid of categories; customize_categories.js

@@ -3227,6 +3227,10 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
+	// The creator's card borders are a "Hero creator" tab on the Customize page;
+	// the campaigns plugin only hosts it, the section it saves into is
+	// herolooks (customize_herolooks.go).
+	campaignHandler.RegisterCustomizeTab(entities.CustomizeTabFactory())
 
 	// Expose the entities plugin's embedded static assets at
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
@@ -3245,6 +3249,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "hero-builder", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_builder.js"}},
 			{Name: "hero-creator", Scripts: []string{"js/hero_rules_lines.js", "js/own_entry_editor.js", "js/hero_borders.js", "js/hero_stage.js", "js/hero_creator.js"}},
 			{Name: "hero-tryout", Scripts: []string{"js/hero_tryout.js"}},
+			{Name: "hero-looks", Scripts: []string{"js/hero_borders.js", "js/hero_border_picker.js", "js/hero_workshop.js", "js/hero_looks.js"}},
 			{Name: "own-entries", Scripts: []string{"js/own_entry_editor.js", "js/own_entries.js"}},
 			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 			{Name: "search-page", Scripts: []string{"js/search_page.js"}},

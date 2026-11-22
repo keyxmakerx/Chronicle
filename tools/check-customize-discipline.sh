@@ -27,12 +27,15 @@ TEMPL_FILES=(
   "internal/plugins/campaigns/customize_look.templ"
   "internal/plugins/campaigns/customize_shell.templ"
   "internal/plugins/campaigns/customize_wall.templ"
+  "internal/plugins/entities/hero_looks_section.templ"
 )
 JS_FILES=(
   "static/js/widgets/customize_look.js"
   "static/js/widgets/customize_shell.js"
   "static/js/widgets/customize_categories.js"
   "static/js/widgets/customize_page_editor.js"
+  "internal/plugins/entities/static/js/hero_looks.js"
+  "internal/plugins/entities/static/js/hero_workshop.js"
 )
 
 # require_file_exists <file>

@@ -209,7 +209,7 @@ func (h *Handler) customizeAreas(ctx context.Context, cc *CampaignContext) []Cus
 	for _, t := range h.shownCustomizeTabs(ctx, cc) {
 		// A tab's icon may carry its own style class; the rail adds fa-solid.
 		icon := strings.TrimSpace(strings.TrimPrefix(t.Icon, "fa-solid "))
-		areas = append(areas, CustomizeArea{ID: "x-" + t.ID, Label: t.Label, Icon: icon, Href: base + "/x/" + t.ID, Blurb: t.Blurb, Finds: t.Finds})
+		areas = append(areas, CustomizeArea{ID: "x-" + t.ID, Label: t.Label, Icon: icon, Href: base + "/x/" + t.ID, Section: t.Section, Blurb: t.Blurb, Finds: t.Finds})
 	}
 	return areas
 }

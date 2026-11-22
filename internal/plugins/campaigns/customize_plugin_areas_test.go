@@ -83,3 +83,40 @@ func TestCustomizeWall_PluginPictureSaysWhatIsInside(t *testing.T) {
 		t.Errorf("a picture still says a feature adds its settings")
 	}
 }
+
+// A tab's Section reaches its area (that is what gives the area its dot and
+// its label in the save bar), and a tab with a Section is drawn as a workshop,
+// without the "saves by itself" note a self-saving tab carries.
+func TestCustomizeAreas_TabSectionReachesArea(t *testing.T) {
+	h := &Handler{}
+	h.RegisterCustomizeTab(func(*CampaignContext) CustomizeTab {
+		return CustomizeTab{ID: "heroes", Label: "Hero creator", Content: tabBody("workshop"), Section: "herolooks"}
+	})
+	h.RegisterCustomizeTab(func(*CampaignContext) CustomizeTab {
+		return CustomizeTab{ID: "dice", Label: "Dice", Content: tabBody("dice"), SortOrder: 20}
+	})
+	sections := map[string]string{}
+	for _, a := range h.customizeAreas(context.Background(), ctxWithRole(RoleOwner)) {
+		sections[a.ID] = a.Section
+	}
+	if sections["x-heroes"] != "herolooks" {
+		t.Errorf("the tab's section did not reach its area: %q", sections["x-heroes"])
+	}
+	if sections["x-dice"] != "" {
+		t.Errorf("a tab with no section got one: %q", sections["x-dice"])
+	}
+	for id, wantNote := range map[string]bool{"heroes": false, "dice": true} {
+		var sb strings.Builder
+		for _, tab := range h.customizeTabs(ctxWithRole(RoleOwner)) {
+			if tab.ID != id {
+				continue
+			}
+			if err := customizePluginArea(tab).Render(context.Background(), &sb); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := strings.Contains(sb.String(), "saves each change"); got != wantNote {
+			t.Errorf("%s: self-saving note shown = %v, want %v", id, got, wantNote)
+		}
+	}
+}

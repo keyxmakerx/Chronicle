@@ -2535,22 +2535,34 @@
   // page's data-widget mount, then mounts it through register().
   // The stage look is a subclass in its own file (hero_stage.js, listed ahead
   // of this one): it is built once, from what it may borrow of the creator.
-  var StageCreator = null;
+  var StageCreator = null, WorkshopCreator = null;
+  function kitOf() {
+    return {
+      esc: esc, lower: lower, cap: cap, an: an, plain: plain, words: words, hasOwn: hasOwn, factsOf: factsOf, buyList: buyList, itemText: itemText,
+      motion: motion, ms: ms, rel: rel, qa: qa, q1: q1, onScreen: onScreen, dockedBar: dockedBar, I: I, num: num, sumOf: sumOf
+    };
+  }
   function stage() {
-    if (!StageCreator && typeof window.ChronicleHeroStage === 'function') {
-      StageCreator = window.ChronicleHeroStage(Creator, {
-        esc: esc, lower: lower, cap: cap, an: an, plain: plain, words: words, hasOwn: hasOwn, factsOf: factsOf, buyList: buyList, itemText: itemText,
-        motion: motion, ms: ms, rel: rel, qa: qa, q1: q1, onScreen: onScreen, dockedBar: dockedBar, I: I, num: num, sumOf: sumOf
-      });
-    }
+    if (!StageCreator && typeof window.ChronicleHeroStage === 'function') StageCreator = window.ChronicleHeroStage(Creator, kitOf());
     return StageCreator;
+  }
+  // The Customizer's workshop look (hero_workshop.js) stands on the stage look.
+  function workshop() {
+    var S = stage();
+    if (!WorkshopCreator && S && typeof window.ChronicleHeroWorkshop === 'function') WorkshopCreator = window.ChronicleHeroWorkshop(S, kitOf());
+    return WorkshopCreator;
   }
 
   function register() {
     Chronicle.register('hero-creator', {
       init: function (el) {
         if (el._heroCreator) return;
-        var Look = el.getAttribute('data-look') === 'stage' && stage() || Creator;
+        var Look;
+        if (el.hasAttribute('data-workshop')) {
+          // Never the stage look instead: it would take over the whole window.
+          Look = el.getAttribute('data-look') === 'stage' && workshop();
+          if (!Look) return;
+        } else Look = el.getAttribute('data-look') === 'stage' && stage() || Creator;
         var p = new Look(el);
         el._heroCreator = p;
         p.wire();
