@@ -229,3 +229,5 @@
 .shop-good-note
 .armory-views
 [data-whole]:not([data-whole-ready])
+body:has([data-sheet][data-sheet-wide])
+body:has([data-sheet][data-sheet-names-page]) [data-page-h1]
