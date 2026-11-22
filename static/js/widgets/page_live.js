@@ -50,29 +50,51 @@
     return false;
   }
 
-  // Keeps m at least `height` tall and its scroll at `top` while the swapped-in
-  // widgets draw: follow() starts after the swap, end() lets go. The height is
-  // held by an empty block after the new content, which works whatever the
-  // scroller's box sizing and padding.
-  function holdPlace(m, height, top) {
+  // Where the content of m ends, measured at `mark`, an empty block after it,
+  // or at a scratch one: scrollHeight can't say, since it never reads less
+  // than the scroller's own height and it counts any hold in place.
+  function contentEnd(m, mark) {
+    var scratch = !mark;
+    if (scratch) {
+      mark = document.createElement('div');
+      mark.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0';
+      m.appendChild(mark);
+    }
+    var y = mark.getBoundingClientRect().top - m.getBoundingClientRect().top - m.clientTop +
+      m.scrollTop + (parseFloat(getComputedStyle(m).paddingBottom) || 0);
+    if (scratch) m.removeChild(mark);
+    return y;
+  }
+
+  // The hold of the refresh in progress, so a refresh that comes while the
+  // last one still holds the page takes it over rather than measuring it.
+  var active = null;
+
+  // Keeps the content of m as tall as it was and its scroll at `top` while
+  // the swapped-in widgets draw: follow() starts after the swap, end() lets
+  // go. The height is held by an empty block after the new content.
+  function holdPlace(m, top) {
+    var prev = active && active.m === m ? active : null;
+    var height = prev ? Math.max(prev.height, contentEnd(m, prev.spacer())) : contentEnd(m, null);
+    if (active) active.end();
     var spacer = null, moved = false, done = false, still = 0, landed = false;
     var start = 0;
     // The browser's own scroll anchoring would move the page when a widget
     // grows above the reader; the position is kept here instead.
     var anchor = m.style.overflowAnchor;
     m.style.overflowAnchor = 'none';
-    function held() { return spacer ? spacer.offsetHeight : 0; }
-    // Returns what the content still lacks of the old height. The block also
-    // keeps a screen's worth of room under that, so a widget that folds away
-    // between two frames cannot pull a reader at the bottom up; the room goes
-    // when the hold ends. It also keeps scrollHeight from reading the
-    // scroller's own height when the content is shorter than that.
+    // A reader within a screen of the bottom also gets that much room under
+    // the held height, so a widget folding away between two frames cannot
+    // pull them up; the room goes with the hold. A reader at the top cannot
+    // be pulled up, so a page that fits its window never grows a scrollbar.
+    var room = top > 0 ? Math.max(0, top + 2 * m.clientHeight - height) : 0;
+    // Returns what the content still lacks of the old height.
     function size() {
       if (!spacer) return 0;
       if (spacer.parentNode !== m) m.appendChild(spacer);
-      var h = holdFor(height, m.scrollHeight - held());
-      spacer.style.height = (h + m.clientHeight) + 'px';
-      return h;
+      var natural = contentEnd(m, spacer);
+      spacer.style.height = holdFor(height + room, natural) + 'px';
+      return holdFor(height, natural);
     }
     function touched() { moved = true; }
     var evs = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
@@ -84,11 +106,13 @@
       spacer = document.createElement('div');
       spacer.setAttribute('aria-hidden', 'true');
       spacer.setAttribute('data-page-live-hold', '');
-      // The whole old height until the swap settles: the new markup can still
-      // shrink in that time (htmx puts its settled attributes back), and
-      // a hold sized to it would let the scroll position fall.
-      spacer.style.cssText = 'display:block;height:' + height + 'px;margin:0;padding:0;border:0;pointer-events:none';
+      spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;pointer-events:none';
       m.appendChild(spacer);
+      // Until the swap settles the new markup can still shrink by any amount
+      // (htmx puts its settled attributes back), so a reader who could be
+      // pulled up gets the whole old height then.
+      if (top > 0) spacer.style.height = (height + room) + 'px';
+      else size();
       if (!moved) m.scrollTop = top;
     }
     // htmx scrolls the target to the top when the swap settles; put it back
@@ -104,6 +128,7 @@
     function end() {
       if (done) return;
       done = true;
+      if (active === self) active = null;
       document.removeEventListener('htmx:afterSwap', swapped);
       document.removeEventListener('htmx:afterSettle', settled);
       evs.forEach(function (t) { m.removeEventListener(t, touched); });
@@ -122,7 +147,15 @@
       if (moved || still >= SETTLED_FRAMES || Date.now() - start > HOLD_MS) { end(); return; }
       requestAnimationFrame(frame);
     }
-    return { follow: function () { start = Date.now(); requestAnimationFrame(frame); }, end: end };
+    var self = {
+      m: m,
+      height: height,
+      spacer: function () { return spacer; },
+      follow: function () { start = Date.now(); requestAnimationFrame(frame); },
+      end: end
+    };
+    active = self;
+    return self;
   }
 
   function state() {
@@ -160,7 +193,7 @@
         if (!m || !window.htmx || typeof window.htmx.ajax !== 'function') return;
         busy = true;
         var top = m.scrollTop;
-        var place = holdPlace(m, m.scrollHeight, top);
+        var place = holdPlace(m, top);
         // The swap replaces this widget, which ends this connection and
         // starts a new one on the fresh markup.
         window.htmx.ajax('GET', url, {
