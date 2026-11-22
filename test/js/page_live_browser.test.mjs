@@ -81,10 +81,11 @@ async function setup(t, late, kind) {
   // A stand-in for Chronicle's widget registry and the page's socket.
   await p.evaluate((lateMs) => {
     window.Chronicle = { register: (n, w) => { window._live = w; } };
-    window.WebSocket = function () { window._sock = this; this._on = {}; setTimeout(() => this._fire('open', {}), 0); };
+    window._socks = [];
+    window.WebSocket = function () { window._sock = this; window._socks.push(this); this._on = {}; setTimeout(() => this._fire('open', {}), 0); };
     window.WebSocket.prototype.addEventListener = function (t, f) { this._on[t] = f; };
     window.WebSocket.prototype._fire = function (t, e) { if (this._on[t]) this._on[t](e); };
-    window.WebSocket.prototype.close = function () {};
+    window.WebSocket.prototype.close = function () { this.closed = true; };
     document.addEventListener('htmx:afterSwap', () => {
       setTimeout(() => { const b = document.querySelector('[data-brief]'); if (b) b.style.height = '0'; }, 0);
       setTimeout(() => { const f = document.querySelector('[data-folds]'); if (f) f.style.height = '0'; }, 150);
@@ -93,6 +94,7 @@ async function setup(t, late, kind) {
   }, late);
   await p.addScriptTag({ content: LIVE });
   await p.evaluate(() => window._live.init(document.getElementById('live'), { campaignId: 'c1', entityId: 'e1' }));
+  p.served = () => served - 1;
   return p;
 }
 
@@ -200,4 +202,42 @@ test('a refresh after a save keeps the page on screen; a page that arrives still
   // The same markup swapped in as another page is: hidden until its widgets draw.
   const a = await headingFrames(p, () => window.htmx.ajax('GET', location.pathname, { target: '#main-content', select: '#main-content > *', swap: 'innerHTML' }), 30);
   assert.ok(Math.min(...a.seen) < 0.5, 'another page still waits unseen: ' + [...new Set(a.seen)].join(','));
+});
+
+const toAll = () => window._socks.forEach((s) => s._fire('message', { data: JSON.stringify({ type: 'page.changed', campaignId: 'c1', resourceId: 'e1' }) }));
+
+test('a page watcher swapped out of the page stops listening', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  const closed = await p.evaluate(() => { const el = document.getElementById('live'); window._live.destroy(el); return window._sock.closed === true; });
+  assert.ok(closed, 'its connection is closed');
+  await p.evaluate(toAll);
+  await p.waitForTimeout(1800);
+  assert.equal(p.served(), 0, 'no refresh after it was swapped out');
+});
+
+test('two refreshes at once keep the page on screen and leave nothing behind', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  // A second watcher on the same page, as a mount left over from an earlier
+  // refresh would be.
+  await p.evaluate(() => { const el = document.createElement('div'); document.body.appendChild(el); window._live.init(el, { campaignId: 'c1', entityId: 'e1' }); });
+  await p.waitForTimeout(50);
+  const r = await headingFrames(p, toAll, 170);
+  assert.ok(p.served() >= 2, 'both refreshed: ' + p.served());
+  assert.equal(r.text, 'Saved', 'the page was refreshed');
+  assert.equal(Math.min(...r.seen), 1, 'the heading never dimmed: ' + [...new Set(r.seen)].join(','));
+  const left = await p.evaluate(() => ({ mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), ready: document.querySelector('[data-whole]').hasAttribute('data-whole-ready') }));
+  assert.deepEqual(left, { mark: false, ready: true });
+});
+
+test('a refresh that arrives after the reader went to another page is dropped', { skip }, async (t) => {
+  const p = await setup(t, 400, 'whole');
+  await p.evaluate((fire) => {
+    // The reader clicks away while the refresh is on its way.
+    document.addEventListener('htmx:beforeRequest', function once() { document.removeEventListener('htmx:beforeRequest', once); history.pushState({}, '', '/campaigns/c1/entities'); });
+    (0, eval)(fire)();
+  }, changed.toString());
+  await p.waitForTimeout(2200);
+  const r = await p.evaluate(() => ({ text: document.querySelector('#main-content p').textContent, mark: document.getElementById('main-content').hasAttribute('data-page-live-swap'), held: !!document.querySelector('[data-page-live-hold]') }));
+  assert.equal(p.served(), 1, 'the refresh was sent');
+  assert.deepEqual(r, { text: 'Before', mark: false, held: false });
 });
