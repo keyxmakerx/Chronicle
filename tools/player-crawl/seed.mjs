@@ -419,9 +419,6 @@ export async function seed(base, log = console.log) {
     const deck = JSON.parse(r.text).id;
     ids.handDeck = deck;
     const kind = m('HANDKIND', 'name of a card kind in a hero deck');
-    // The deck list shows a deck's look (its kind palette) to the players the
-    // deck is open to, so that one page may name the kind; no other may.
-    mayShow[kind] = ['$/decks'];
     must(await owner.put(`${C}/decks/${deck}`, { json: { version: 1, look: { kinds: [{ key: 'bane', name: kind, colour: 'rose', sign: 'star' }] } } }), 'hand look');
     const face = m('HANDFACE', 'name of a card face down in a player hand');
     const words = m('HANDWORDS', 'words of a card face down in a player hand');

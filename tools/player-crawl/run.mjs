@@ -61,8 +61,7 @@ try {
       if (who === 'player' && s.playerOnly[h.marker]) continue; // the author reading their own note
       // A shop good listed openly shows in its own shop and on its own page;
       // anywhere else (a list, search, Auto-link, the Items gallery) is a leak.
-      // An id starting with $ names a page by the end of its path.
-      if ((s.mayShow[h.marker] || []).some((id) => (id[0] === '$' ? h.route.split('?')[0].endsWith(id.slice(1)) : h.route.includes(id)))) continue;
+      if ((s.mayShow[h.marker] || []).some((id) => h.route.includes(id))) continue;
       const e = byMarker.get(h.marker) || new Set();
       e.add(`${h.variant.padEnd(4)} ${idShape(h.route)}`);
       byMarker.set(h.marker, e);

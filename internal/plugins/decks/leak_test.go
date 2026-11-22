@@ -273,8 +273,10 @@ func TestLeak_KnowsAndOthersSee(t *testing.T) {
 			if (pd.Pile != nil) != tt.wantPile || (pd.Kinds != nil) != tt.wantKinds || (pd.Cards != nil) != tt.wantCards {
 				t.Errorf("pile=%v kinds=%v cards=%v", pd.Pile != nil, pd.Kinds != nil, pd.Cards != nil)
 			}
-			if tt.wantPile && *pd.Pile != 1 {
-				t.Errorf("pile count = %d, want 1", *pd.Pile)
+			// One copy lies in the pile and one in the shown spot; a player
+			// counts both, so a Director looking at a card changes no count.
+			if tt.wantPile && *pd.Pile != 2 {
+				t.Errorf("pile count = %d, want 2", *pd.Pile)
 			}
 			raw, _ := json.Marshal(pd)
 			s := string(raw)

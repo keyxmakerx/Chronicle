@@ -657,6 +657,8 @@ func newKeepWorld(t *testing.T, dstKinds []KindDef) *keepWorld {
 		Corner: "IV", Rare: true, Fate: FateGone, AskFirst: true, WhenOpen: true, Copies: ptr(2)})
 	w.copyID = fx.copiesOf(w.ember)[0]
 	fx.place(w.copyID, ZoneHand, "h-tam", true)
+	// Setting the looks up announced them; the tests count what a keep tells.
+	w.cap.got = nil
 	return w
 }
 

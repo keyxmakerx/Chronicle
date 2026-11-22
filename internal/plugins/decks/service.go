@@ -451,6 +451,48 @@ func othersSeeFace(d Deck, c Copy) bool {
 	return c.FaceUp
 }
 
+// kindsKnown is the part of a deck's kinds a player's copy of its look
+// carries. A deck that lets players know its kinds sends them all. Any other
+// deck sends only the kinds of the faces this same reply carries, which a card
+// needs to draw itself: the names of the kinds a Director built a deck from say
+// what is in it, so they are no more a player's to read than the pile is.
+func kindsKnown(d Deck, pd PlayerDeck) []KindDef {
+	if d.Settings.Knows == "kinds" || d.Settings.Knows == "faces" {
+		return append([]KindDef{}, d.Look.Kinds...)
+	}
+	sent := map[string]bool{}
+	copies := func(list []PlayerCopy) {
+		for _, c := range list {
+			if c.Face != nil {
+				sent[c.Face.KindKey] = true
+			}
+		}
+	}
+	for _, h := range pd.Hands {
+		copies(h.Hand)
+		copies(h.Play)
+	}
+	copies(pd.PartyHand)
+	copies(pd.Used)
+	for _, o := range pd.Others {
+		for _, f := range o.Faces {
+			sent[f.KindKey] = true
+		}
+	}
+	return kindsOf(d.Look, sent)
+}
+
+// kindsOf keeps the kinds whose key is in keep, in the deck's own order.
+func kindsOf(l Look, keep map[string]bool) []KindDef {
+	out := []KindDef{}
+	for _, k := range l.Kinds {
+		if keep[k.Key] {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 	cards, err := r.s.repo.ListCards(r.ctx, r.cid, d.ID)
 	if err != nil {
@@ -522,7 +564,9 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 		// shows a card to someone else changes a count.
 		seen := false
 		switch c.Zone {
-		case ZonePile:
+		case ZonePile, ZoneShown:
+			// A card a Director has drawn to look at is still in the pile as
+			// far as a player can tell, so looking changes no count.
 			pile++
 		case ZoneHand, ZonePlay:
 			switch {
@@ -597,6 +641,7 @@ func (r *request) playerDeck(d Deck) (PlayerDeck, error) {
 			out.Others = append(out.Others, oh)
 		}
 	}
+	out.Look.Kinds = kindsKnown(d, out)
 	return out, nil
 }
 
@@ -620,6 +665,15 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer) (*Tabl
 				Look: row.Look, Cards: []TableCard{}})
 		}
 		out.Decks[i].Cards = append(out.Decks[i].Cards, TableCard{CopyID: row.CopyID, Face: row.Face})
+	}
+	// Any member reads the table, whatever decks they may list, so a deck's
+	// look here names only the kinds of its cards that lie on it.
+	for i := range out.Decks {
+		onTable := map[string]bool{}
+		for _, c := range out.Decks[i].Cards {
+			onTable[c.Face.KindKey] = true
+		}
+		out.Decks[i].Look.Kinds = kindsOf(out.Decks[i].Look, onTable)
 	}
 	return out, nil
 }
@@ -772,6 +826,10 @@ func (s *service) Update(ctx context.Context, campaignID, deckID string, v Viewe
 	if err != nil {
 		return nil, err
 	}
+	var before []string
+	if readByPlayers(cur, next) {
+		before = s.seersNow(ctx, campaignID, cur)
+	}
 	okSaved, err := s.repo.UpdateDeck(ctx, next, ver, picks)
 	if errors.Is(err, errDuplicate) {
 		return nil, errTaken("deck")
@@ -781,6 +839,9 @@ func (s *service) Update(ctx context.Context, campaignID, deckID string, v Viewe
 	}
 	if !okSaved {
 		return nil, errStale()
+	}
+	if readByPlayers(cur, next) {
+		s.announce(ctx, campaignID, moveNote{Deck: next, Action: actDeck, Before: before})
 	}
 	return s.reread(ctx, campaignID, deckID, v)
 }
@@ -821,12 +882,17 @@ func (s *service) checkPicks(ctx context.Context, campaignID string, cur Deck, i
 
 func (s *service) Delete(ctx context.Context, campaignID, deckID string, v Viewer) error {
 	r := s.newRequest(ctx, campaignID, v)
-	if _, err := r.directorDeck(deckID); err != nil {
+	cur, err := r.directorDeck(deckID)
+	if err != nil {
 		return err
 	}
+	before := s.seersNow(ctx, campaignID, cur)
 	if err := s.repo.DeleteDeck(ctx, campaignID, deckID); err != nil {
 		return apperrorInternal(err)
 	}
+	// The deck's cards leave every hand with it, so whoever saw it is told.
+	cur.Players = nil
+	s.announce(ctx, campaignID, moveNote{Deck: cur, Action: actDeck, Before: before})
 	return nil
 }
 
@@ -892,7 +958,7 @@ func (s *service) SetPlayers(ctx context.Context, campaignID, deckID string, v V
 		before = append(before, p.UserID)
 	}
 	cur.Players = players
-	s.announce(ctx, campaignID, moveNote{Deck: cur, Action: actPlayers, Before: before})
+	s.announce(ctx, campaignID, moveNote{Deck: cur, Action: actDeck, Before: before})
 	return s.reread(ctx, campaignID, deckID, v)
 }
 

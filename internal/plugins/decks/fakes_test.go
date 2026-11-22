@@ -443,7 +443,9 @@ func (m *memRepo) Move(_ context.Context, mv Move) error {
 	oldID := c.ID
 	c.Zone, c.HolderEntityID, c.FaceUp = mv.To.Zone, mv.To.HolderEntityID, mv.To.FaceUp
 	c.Open = mv.To.Open && mv.To.FaceUp && mv.To.Zone == ZoneHand
-	c.MovedAt = m.tick()
+	if mv.From.Zone != mv.To.Zone || mv.From.HolderEntityID != mv.To.HolderEntityID {
+		c.MovedAt = m.tick()
+	}
 	if mv.To.Zone == ZonePile {
 		c.ID = m.id("cp")
 	}

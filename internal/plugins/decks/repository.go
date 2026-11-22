@@ -953,8 +953,14 @@ func (s *sqlRepository) Move(ctx context.Context, m Move) error {
 	// An open mark only makes sense on a face-up card still in a hand, so a
 	// move that leaves either clears it.
 	open := m.To.Open && m.To.FaceUp && m.To.Zone == ZoneHand
-	sets := []string{"zone = ?", "holder_entity_id = ?", "face_up = ?", "is_open = ?", "moved_at = NOW()"}
+	sets := []string{"zone = ?", "holder_entity_id = ?", "face_up = ?", "is_open = ?"}
 	args := []any{m.To.Zone, nullString(m.To.HolderEntityID), m.To.FaceUp, open}
+	// Copies are listed by when they arrived where they are. A move that
+	// leaves a copy in place (a turn, a show, an ask and its answer) keeps its
+	// time, so nothing done to a card in a hand reorders what anyone is sent.
+	if m.From.Zone != m.To.Zone || m.From.HolderEntityID != m.To.HolderEntityID {
+		sets = append(sets, "moved_at = NOW()")
+	}
 	switch m.Asked {
 	case AskedMark:
 		sets = append(sets, "asked_at = NOW()")

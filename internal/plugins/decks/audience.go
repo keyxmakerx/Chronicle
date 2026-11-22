@@ -20,12 +20,11 @@ type Audience struct {
 	Users []string
 }
 
-// actEdit and actPlayers are changes that are not a move of a copy and are
-// not logged: a card or deck edit, and a change to who a deck is chosen for.
-const (
-	actEdit    = "edited"
-	actPlayers = "players"
-)
+// actDeck is a change to a deck that is not a move of a copy and is not
+// logged, and that its players read: its name, who it is for, what it lets
+// them know, its look, who is chosen for it, or that it is gone. A card edit
+// and a Director's next and last card are announced to nobody.
+const actDeck = "deck"
 
 // moveFacts is everything audience needs. It holds nothing about which card a
 // copy is, so no card can change who is told.
@@ -101,9 +100,9 @@ func othersChange(f moveFacts) bool {
 func audience(f moveFacts) Audience {
 	var s audienceSet
 	switch f.Action {
-	case actEdit, ActPutBack:
+	case ActPutBack:
 		return Audience{}
-	case actPlayers:
+	case actDeck:
 		s.add(f.Seers...)
 		return s.build()
 	case ActKeep:
@@ -127,7 +126,11 @@ func audience(f moveFacts) Audience {
 		}
 		return s.build()
 	}
-	shownSide := f.From.Zone == ZoneShown || f.To.Zone == ZoneShown
+	// The shown spot is part of the pile to every player: a draw to it, a put
+	// back and a second look move nothing they can count, and a deal out of it
+	// is a deal out of the pile.
+	inPile := func(z string) bool { return z == ZonePile || z == ZoneShown }
+	pileChanged := inPile(f.From.Zone) != inPile(f.To.Zone)
 	sides := []struct {
 		p       Place
 		owner   string
@@ -147,7 +150,7 @@ func audience(f moveFacts) Audience {
 			}
 		case p.Zone == ZoneUsed && f.DeckKind == KindParty:
 			s.members = true
-		case p.Zone == ZonePile && !shownSide && f.Knows != "nothing":
+		case inPile(p.Zone) && pileChanged && f.Knows != "nothing":
 			s.add(f.Seers...)
 		}
 	}

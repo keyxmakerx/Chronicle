@@ -3,6 +3,7 @@ package decks
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"sort"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -159,8 +160,8 @@ func (s *service) announce(ctx context.Context, cid string, n moveNote) {
 func (s *service) audienceFor(ctx context.Context, cid string, n moveNote) (Audience, []BellEntry, error) {
 	d, m := n.Deck, n.Move
 	f := moveFacts{Action: n.Action, DeckKind: d.Kind, Knows: d.Settings.Knows, OthersSee: d.Settings.OthersSee, From: m.From, To: m.To}
-	// Edits and Director-only moves need nothing read.
-	if n.Action == actEdit || n.Action == ActPutBack {
+	// A Director-only move needs nothing read.
+	if n.Action == ActPutBack {
 		return audience(f), nil, nil
 	}
 	r, err := s.members(ctx, cid)
@@ -170,7 +171,7 @@ func (s *service) audienceFor(ctx context.Context, cid string, n moveNote) (Audi
 	if f.Seers, err = s.seersOf(ctx, cid, d, r); err != nil {
 		return Audience{}, nil, err
 	}
-	if n.Action == actPlayers {
+	if n.Action == actDeck {
 		set := map[string]bool{}
 		for _, id := range f.Seers {
 			set[id] = true
@@ -221,6 +222,35 @@ func (s *service) audienceFor(ctx context.Context, cid string, n moveNote) (Audi
 		bf.HeroName = "The party"
 	}
 	return aud, bellFor(bf), nil
+}
+
+// seersNow are the players who may see a deck right now, read before a change
+// that may take it from them. A failure reads as nobody: the change then tells
+// only those who see the deck afterwards.
+func (s *service) seersNow(ctx context.Context, cid string, d Deck) []string {
+	if s.notify == nil {
+		return nil
+	}
+	r, err := s.members(ctx, cid)
+	if err != nil {
+		return nil
+	}
+	seers, err := s.seersOf(ctx, cid, d, r)
+	if err != nil {
+		return nil
+	}
+	return seers
+}
+
+// readByPlayers says whether two versions of a deck differ in anything a
+// player's view is built from. A change to how cards arrive, where a played
+// card goes, an empty pile's rule or a Director's next and last card is not
+// one, so saving those tells no player anything.
+func readByPlayers(a, b Deck) bool {
+	return a.Name != b.Name || a.Kind != b.Kind || a.HolderEntityID != b.HolderEntityID ||
+		a.Settings.Draws != b.Settings.Draws || a.Settings.Knows != b.Settings.Knows ||
+		a.Settings.OthersSee != b.Settings.OthersSee || a.Settings.Discard != b.Settings.Discard ||
+		!reflect.DeepEqual(a.Look, b.Look)
 }
 
 // holdersOf are the players who hold cards of the deck right now, read before

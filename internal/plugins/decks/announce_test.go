@@ -187,3 +187,38 @@ func TestAsksAndTakeBacksReachTheBell(t *testing.T) {
 		t.Errorf("an unseen card taken back rang %q", last.Message)
 	}
 }
+
+// A change to a deck is announced only when it changes something a player's
+// view is built from, and then to the players who see the deck. A Director's
+// next card, where a played card goes and a card's own edit tell nobody.
+func TestADeckChangeTellsItsPlayersOnlyWhenTheyReadIt(t *testing.T) {
+	fx := newFixture(t)
+	deck := fx.deck("Boons", KindHero, &SettingsInput{Knows: ptr("nothing"), OthersSee: ptr("back")})
+	fx.choose(deck, PlayerInput{UserID: "u-tam"})
+	card := fx.card(deck, CreateCardInput{Name: "Ember", Copies: ptr(2)})
+	version := func() int { return mustGet(t, fx, deck, fx.dir).(DirectorDeck).Version }
+
+	fx.cap.told = nil
+	_, err := fx.svc.Update(bg, camp, deck, fx.dir, UpdateDeckInput{Version: patchOf(version()), NextCardID: patchOf(card)})
+	fx.must(err)
+	_, err = fx.svc.Update(bg, camp, deck, fx.dir, UpdateDeckInput{Version: patchOf(version()), Settings: patchOf(SettingsInput{Fate: ptr(FateGone), Arrives: ptr("up")})})
+	fx.must(err)
+	_, err = fx.svc.UpdateCard(bg, camp, deck, card, fx.dir, UpdateCardInput{Words: patchOf("new words")})
+	fx.must(err)
+	if len(fx.cap.told) != 0 {
+		t.Fatalf("a change no player reads was announced: %+v", fx.cap.told)
+	}
+
+	_, err = fx.svc.Update(bg, camp, deck, fx.dir, UpdateDeckInput{Version: patchOf(version()), Settings: patchOf(SettingsInput{Knows: ptr("count")})})
+	fx.must(err)
+	if len(fx.cap.told) != 1 || !reflect.DeepEqual(fx.cap.told[0], Audience{Users: []string{"u-tam"}}) {
+		t.Fatalf("a change to what players know told %+v", fx.cap.told)
+	}
+
+	// Deleting the deck tells the players who saw it.
+	fx.cap.told = nil
+	fx.must(fx.svc.Delete(bg, camp, deck, fx.dir))
+	if len(fx.cap.told) != 1 || !reflect.DeepEqual(fx.cap.told[0], Audience{Users: []string{"u-tam"}}) {
+		t.Fatalf("deleting the deck told %+v", fx.cap.told)
+	}
+}

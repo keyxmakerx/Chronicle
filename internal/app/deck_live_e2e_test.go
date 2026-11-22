@@ -59,21 +59,59 @@ func liveRun(t *testing.T, hidden bool) map[string][]string {
 		decks.WithNotifier(&decksLivePublisher{bus: bus}))
 	ctx := context.Background()
 
-	down := "down"
-	omens := w.deck("Omens", &decks.SettingsInput{Arrives: &down})
-	w.choose(omens, w.tam)
+	// Omens is a deck Tam and Ilse both see and count, so anything a Director
+	// does to its pile out of their sight would show up here as a message.
+	down, count := "down", "count"
+	omens := w.deck("Omens", &decks.SettingsInput{Arrives: &down, Knows: &count})
+	w.choose(omens, w.tam, w.ilse)
 	seen := w.card(omens, "The Drowned Bell", "")
+	var fillers []string
+	for _, n := range []string{"One", "Two", "Three", "Four", "Five"} {
+		fillers = append(fillers, w.card(omens, "Filler "+n, ""))
+	}
 	bus.all = 0
 	bus.seen = map[string][]string{}
 
+	// On the deck the players see: look at five and put them all back, look at
+	// one, swap it for another and put that back, name a next and a last card,
+	// and edit a card nobody holds.
+	hiddenOnSeenDeck := func() {
+		res, err := w.decks.Draw(ctx, w.camp, omens, w.dir_, decks.DrawInput{Count: 5})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range res.CopyIDs {
+			w.act(omens, id, "put-back", w.dir_)
+		}
+		res, err = w.decks.Draw(ctx, w.camp, omens, w.dir_, decks.DrawInput{Count: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		again, err := w.decks.Act(ctx, w.camp, omens, res.CopyIDs[0], "another", w.dir_, decks.ActInput{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.act(omens, again.CopyID, "put-back", w.dir_)
+		d, err := w.decks.Get(ctx, w.camp, omens, w.dir_)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.decks.Update(ctx, w.camp, omens, w.dir_, decks.UpdateDeckInput{
+			Version: patch.Of(d.(decks.DirectorDeck).Version), NextCardID: patch.Of(fillers[0]), LastCardID: patch.Of(fillers[1])}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.decks.UpdateCard(ctx, w.camp, omens, fillers[2], w.dir_, decks.UpdateCardInput{Words: patch.Of("edited words")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	hiddenActs := func() {
+		hiddenOnSeenDeck()
 		vault := w.deck("Vault", nil)
 		var ids []string
 		for _, n := range []string{"A", "B", "C", "D", "E", "F"} {
 			ids = append(ids, w.card(vault, "Secret "+n, ""))
 		}
-		bus.all = 0
-		bus.seen = map[string][]string{}
 		res, err := w.decks.Draw(ctx, w.camp, vault, w.dir_, decks.DrawInput{Count: 5})
 		if err != nil {
 			t.Fatal(err)
@@ -135,11 +173,13 @@ func TestLiveMessagesAreTheSameInTwoWorlds(t *testing.T) {
 	if len(busy["director"]) <= len(plain["director"]) {
 		t.Errorf("the Director was not told of the hidden acts: plain %d, busy %d", len(plain["director"]), len(busy["director"]))
 	}
-	if len(plain["tam"]) == 0 || len(plain["director"]) == 0 {
-		t.Fatalf("the holder and the Director were not told of the deal: %v", plain)
+	// The deal is one message: to its holder, to the other player who counts
+	// the pile, and to the Director. A Scribe the deck is not for hears nothing.
+	if len(plain["tam"]) != 1 || len(plain["ilse"]) != 1 || len(plain["director"]) != 1 {
+		t.Fatalf("the deal told tam %d, ilse %d, the Director %d times, want once each", len(plain["tam"]), len(plain["ilse"]), len(plain["director"]))
 	}
-	if len(plain["ilse"]) != 0 || len(plain["scribe"]) != 0 {
-		t.Errorf("a player who may not see the deck was told: %v", plain)
+	if len(plain["scribe"]) != 0 {
+		t.Errorf("someone who may not see the deck was told: %v", plain["scribe"])
 	}
 	for who, msgs := range plain {
 		for _, raw := range msgs {

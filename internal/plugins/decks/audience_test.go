@@ -38,9 +38,15 @@ func TestAudienceForEveryAction(t *testing.T) {
 		{"player draw, count and backs", ActDraw, KindHero, "count", "back", pile, hand(false, false), users("a", "b", "c"), nil, nil},
 		{"player draw, no count, backs", ActDraw, KindHero, "nothing", "back", pile, hand(false, false), users("a", "b"), nil, nil},
 		{"player draw, nothing known or seen", ActDraw, KindHero, "nothing", "nothing", pile, hand(false, false), users("a"), nil, nil},
-		// A deal.
-		{"deal to a hand, backs seen", ActDeal, KindHero, "count", "back", shown, hand(false, false), users("a", "b"), nil, nil},
-		{"deal to a hand, others see nothing", ActDeal, KindHero, "count", "nothing", shown, hand(false, false), users("a"), nil, nil},
+		// A deal. The shown spot is part of the pile to a player, so a deal out
+		// of it tells whoever reads the pile's count, exactly as a deal straight
+		// from the pile does.
+		{"deal to a hand, backs seen", ActDeal, KindHero, "count", "back", shown, hand(false, false), users("a", "b", "c"), nil, nil},
+		{"deal to a hand, others see nothing", ActDeal, KindHero, "count", "nothing", shown, hand(false, false), users("a", "b", "c"), nil, nil},
+		{"deal to a hand, no count, backs seen", ActDeal, KindHero, "nothing", "back", shown, hand(false, false), users("a", "b"), nil, nil},
+		{"deal to a hand, nothing known or seen", ActDeal, KindHero, "nothing", "nothing", shown, hand(false, false), users("a"), nil, nil},
+		{"deal straight from the pile", ActDeal, KindHero, "count", "nothing", pile, hand(false, false), users("a", "b", "c"), nil, nil},
+		{"deal to the table, count known", ActDeal, KindEvent, "count", "nothing", shown, onTable, everyone, nil, nil},
 		{"deal to a hand, face up", ActDeal, KindEvent, "nothing", "face", shown, hand(true, false), users("a", "b"), nil, nil},
 		{"deal to the table", ActDeal, KindEvent, "nothing", "nothing", shown, onTable, everyone, nil, nil},
 		{"deal to the party's hand", ActDeal, KindParty, "nothing", "nothing", shown, partyHand, everyone, nil, nil},
@@ -85,10 +91,8 @@ func TestAudienceForEveryAction(t *testing.T) {
 		{"gather", ActGather, KindHero, "count", "back", used, pile, users("a", "b", "c"), nil, []string{"a"}},
 		{"gather, no count", ActGather, KindHero, "nothing", "back", used, pile, users("a"), nil, []string{"a"}},
 		{"gather, party deck", ActGather, KindParty, "nothing", "back", used, pile, everyone, nil, nil},
-		// Edits are Directors only; a change of players tells the players it touched.
-		{"edit a card", actEdit, KindHero, "faces", "face", Place{}, Place{}, none, nil, nil},
-		{"edit a deck nobody sees", actEdit, KindEvent, "nothing", "nothing", Place{}, Place{}, none, nil, nil},
-		{"players changed", actPlayers, KindHero, "count", "back", Place{}, Place{}, users("a", "b", "c"), nil, nil},
+		// A change to the deck itself that players read tells whoever sees it.
+		{"deck changed", actDeck, KindHero, "count", "back", Place{}, Place{}, users("a", "b", "c"), nil, nil},
 	}
 	covered := map[string]bool{}
 	for _, row := range rows {
@@ -109,17 +113,18 @@ func TestAudienceForEveryAction(t *testing.T) {
 		})
 	}
 	for _, a := range []string{ActDraw, ActDeal, ActTurn, ActShow, ActPlay, ActAsk, ActApprove, ActTurnDown, ActTakeOff, ActDiscard,
-		ActTakeBack, ActPutBack, ActKeep, ActShuffle, ActGather, actEdit, actPlayers} {
+		ActTakeBack, ActPutBack, ActKeep, ActShuffle, ActGather, actDeck} {
 		if !covered[a] {
 			t.Errorf("no row for the action %q", a)
 		}
 	}
 }
 
-// A player the move does not touch is never told: c sees the deck but not
-// ha's page, so a deal to ha reaches a and b only, and nobody else.
+// A player the move does not touch is never told: on a deck that tells no one
+// its count, c and d see the deck but not ha's page, so a deal to ha reaches a
+// and b only.
 func TestAudienceNeverNamesWhoseCardOrWhichCard(t *testing.T) {
-	f := moveFacts{Action: ActDeal, DeckKind: KindHero, Knows: "faces", OthersSee: "face", Seers: []string{"a", "b", "c", "d"},
+	f := moveFacts{Action: ActDeal, DeckKind: KindHero, Knows: "nothing", OthersSee: "face", Seers: []string{"a", "b", "c", "d"},
 		From: Place{Zone: ZoneShown}, To: Place{Zone: ZoneHand, HolderEntityID: "ha"}, ToOwner: "a", ToViewers: []string{"a", "b"}}
 	got := audience(f)
 	if !reflect.DeepEqual(got, Audience{Users: []string{"a", "b"}}) {

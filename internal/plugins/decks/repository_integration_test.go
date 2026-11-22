@@ -557,6 +557,48 @@ func TestIntegration_MoveClaimsTheCopy(t *testing.T) {
 	}
 }
 
+// A move that leaves a copy where it is keeps its place in line; one that
+// takes it somewhere else moves it to the end.
+func TestIntegration_MoveInPlaceKeepsMovedAt(t *testing.T) {
+	fx := newDBFixture(t)
+	d := fx.deck(t, "Order")
+	c := fx.card(t, d, "Ember", 1)
+	copies, err := fx.repo.ListCopies(fx.ctx, fx.campaign, d.ID)
+	if err != nil || len(copies) != 1 {
+		t.Fatalf("copies = %v, %v", copies, err)
+	}
+	id := copies[0].ID
+	fx.exec(t, `UPDATE deck_copies SET zone='hand', holder_entity_id = ?, face_up = 0, moved_at = '2001-02-03 04:05:06' WHERE id = ?`, fx.hero, id)
+	movedAt := func() string {
+		t.Helper()
+		var at string
+		if err := fx.db.QueryRow(`SELECT DATE_FORMAT(moved_at, '%Y-%m-%d %H:%i:%s') FROM deck_copies WHERE card_id = ?`, c.ID).Scan(&at); err != nil {
+			t.Fatal(err)
+		}
+		return at
+	}
+	hand := Place{Zone: ZoneHand, HolderEntityID: fx.hero}
+	up := Place{Zone: ZoneHand, HolderEntityID: fx.hero, FaceUp: true}
+	if err := fx.repo.Move(fx.ctx, Move{CampaignID: fx.campaign, DeckID: d.ID, CopyID: id, From: hand, To: up, Turned: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := movedAt(); got != "2001-02-03 04:05:06" {
+		t.Errorf("a turn restamped the copy: %s", got)
+	}
+	if err := fx.repo.Move(fx.ctx, Move{CampaignID: fx.campaign, DeckID: d.ID, CopyID: id, From: up, To: up, Asked: AskedMark}); err != nil {
+		t.Fatal(err)
+	}
+	if got := movedAt(); got != "2001-02-03 04:05:06" {
+		t.Errorf("an ask restamped the copy: %s", got)
+	}
+	if err := fx.repo.Move(fx.ctx, Move{CampaignID: fx.campaign, DeckID: d.ID, CopyID: id, From: up, To: Place{Zone: ZoneUsed, FaceUp: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := movedAt(); got == "2001-02-03 04:05:06" {
+		t.Error("a move to the used pile kept the old time")
+	}
+}
+
 func TestIntegration_ShuffleGatherAndLogTrim(t *testing.T) {
 	fx := newDBFixture(t)
 	d := fx.deck(t, "Omens")
