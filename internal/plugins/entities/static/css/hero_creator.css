@@ -325,6 +325,13 @@ html.dark .hc[data-skin="ornate"] {
 .hc-field input { width: 100%; height: 48px; border-radius: var(--hc-radius); border: var(--hc-edge) solid var(--hc-line); background: var(--hc-surface); color: var(--hc-text); font-size: 17px; padding: 0 14px;
   transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out); }
 .hc-field input:focus { border-color: var(--hc-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hc-accent) 22%, transparent); }
+/* About your hero: the long boxes grow with what is written, never wider than the column. */
+.hc-field textarea { width: 100%; min-height: 96px; resize: vertical; border-radius: var(--hc-radius); border: var(--hc-edge) solid var(--hc-line); background: var(--hc-surface); color: var(--hc-text);
+  font: inherit; font-size: 17px; line-height: 1.45; padding: 10px 14px; transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out); }
+.hc-field textarea:focus { outline: none; border-color: var(--hc-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hc-accent) 22%, transparent); }
+.hc-field textarea::placeholder { color: var(--hc-muted); opacity: 1; }
+.hc-about .hc-field { max-width: 640px; }
+.hc-under--about { justify-content: space-between; gap: 12px; padding: 8px 0 0; flex-wrap: wrap; }
 .hc-hero { padding: 22px 16px 18px; border-radius: var(--hc-radius-lg); border: var(--hc-edge) solid var(--hc-line); background-color: var(--hc-surface); background-image: var(--hc-texture); box-shadow: var(--hc-shadow); overflow: hidden; }
 .hc-hero::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--hc-accent); }
 .hc-who { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--hc-muted); }

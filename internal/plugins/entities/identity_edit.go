@@ -49,12 +49,15 @@ var ownerIdentityFieldKeys = map[string]bool{
 	"species":    true,
 	"heritage":   true,
 	"background": true,
+	"pronouns":   true,
+	"gender":     true,
 }
 
 // ownerStoryFieldKeys are the long texts that are the player's own words
 // about their hero.
 var ownerStoryFieldKeys = map[string]bool{
-	"backstory": true,
+	"backstory":  true,
+	"appearance": true,
 }
 
 // ownerListFieldKeys are the lists of names the player chooses for their

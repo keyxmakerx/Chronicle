@@ -339,6 +339,7 @@
     this.at = {};
     this.nh = {};
     this.name = '';
+    this.about = {};
     this.terms = null;
     this.busy = false;
     this.sheet = null;
@@ -472,13 +473,16 @@
       self.picks[k] = { name: c.name, options: kept };
     });
     this.name = typeof d.name === 'string' ? d.name : '';
+    var ab = d.about && typeof d.about === 'object' ? d.about : {};
+    this.about = {};
+    this.aboutFields().forEach(function (f) { if (typeof ab[f.key] === 'string') self.about[f.key] = ab[f.key]; });
   };
   Creator.prototype.save = function () {
     // A copy or a change starts from the server's hero, so it keeps no draft
     // that a later blank start would pick up.
     // A try-out has one place to live, written only when it is kept.
     if (this.preload || this.tryout) return;
-    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name })); } catch (e) { /* ignore */ }
+    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name, about: this.about })); } catch (e) { /* ignore */ }
   };
   // The try-out kept in this browser, or null when there is none, it is not
   // one of ours, or the browser will not say.
@@ -503,10 +507,33 @@
 
   // --- Lookups ---
   Creator.prototype.steps = function () { return this.plan.steps; };
-  Creator.prototype.stepCount = function () { return this.plan.steps.length + 1; };
-  // The last step, name and review, sits one past the plan's steps.
-  Creator.prototype.last = function () { return this.plan.steps.length; };
-  Creator.prototype.isDetails = function () { return this.step >= this.plan.steps.length; };
+  Creator.prototype.stepCount = function () { return this.last() + 1; };
+  // The boxes of "About your hero": who the hero is in the player's words,
+  // all optional. A practice hero or a try-out never joins the party, so it
+  // isn't asked.
+  Creator.prototype.aboutFields = function () {
+    var a = this.plan && this.plan.about;
+    return !this.practice && Array.isArray(a) ? a.filter(function (f) { return f && typeof f.key === 'string'; }) : [];
+  };
+  Creator.prototype.hasAbout = function () { return this.aboutFields().length > 0; };
+  // After the plan's steps come About your hero, when the hero's page has
+  // those fields, and last Name and review.
+  Creator.prototype.last = function () { return this.plan.steps.length + (this.hasAbout() ? 1 : 0); };
+  Creator.prototype.isDetails = function () { return this.step >= this.last(); };
+  Creator.prototype.isAbout = function () { return this.hasAbout() && this.step === this.plan.steps.length; };
+  // Past the steps that pick from a list.
+  Creator.prototype.isExtra = function () { return this.step >= this.plan.steps.length; };
+  // What the About boxes hold, in a line: the short ones, then a count.
+  Creator.prototype.aboutLine = function () {
+    var self = this, short = [], long = 0;
+    this.aboutFields().forEach(function (f) {
+      var v = String(self.about[f.key] || '').trim();
+      if (!v) return;
+      if (f.long) long++; else short.push(v);
+    });
+    if (long) short.push(long === 1 ? (short.length ? 'and more' : 'Written') : long + ' written');
+    return short.join(' · ');
+  };
   Creator.prototype.cur = function () { return this.plan.steps[this.step]; };
   Creator.prototype.stepByKey = function (k) {
     for (var i = 0; i < this.plan.steps.length; i++) if (this.plan.steps[i].fieldKey === k) return this.plan.steps[i];
@@ -562,7 +589,7 @@
     for (i = 0; i < n; i++) if (!this.settled(i) && i !== from) return i;
     return n;
   };
-  Creator.prototype.stepWord = function (i) { return i >= this.plan.steps.length ? 'Name and review' : this.plan.steps[i].label; };
+  Creator.prototype.stepWord = function (i) { return i >= this.last() ? 'Name and review' : i >= this.plan.steps.length ? 'About your hero' : this.plan.steps[i].label; };
   // A step the rules require can't be left empty; practice forces nothing.
   Creator.prototype.optional = function (st) { return this.practice || !(st.rules && st.rules.required); };
   Creator.prototype.missing = function () {
@@ -679,8 +706,8 @@
     this.closeTip(true);
     var desk = this.view === 'desk', cols;
     if (desk) {
-      cols = '<div class="hc-cols">' + this.railHTML() + (this.isDetails()
-        ? '<section class="hc-mid hc-mid--wide">' + this.reviewHTML() + '</section>'
+      cols = '<div class="hc-cols">' + this.railHTML() + (this.isExtra()
+        ? '<section class="hc-mid hc-mid--wide">' + this.extraHTML() + '</section>'
         : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
     } else {
       cols = this.sheadHTML() + '<ul class="hc-chips" aria-label="Your picks">' + this.chipsHTML() + '</ul><div class="hc-body" data-body>' + this.bodyInner() + '</div>';
@@ -717,7 +744,8 @@
     var self = this, n = this.stepCount();
     var pr = this.plan.steps.map(function (s, i) {
       return '<i class="' + (self.picked(i) ? 'is-ok' : '') + (i === self.step ? ' is-cur' : '') + '"></i>';
-    }).join('') + '<i class="' + (this.isDetails() ? 'is-cur' : '') + '"></i>';
+    }).join('') + (this.hasAbout() ? '<i class="' + (this.aboutLine() ? 'is-ok' : '') + (this.isAbout() ? ' is-cur' : '') + '"></i>' : '') +
+      '<i class="' + (this.isDetails() ? 'is-cur' : '') + '"></i>';
     return '<div class="hc-shead"><button class="hc-sbtn" type="button" aria-expanded="false" aria-label="All steps" data-act="steps">' +
       '<span class="hc-of">Step ' + (this.step + 1) + ' of ' + n + ' ·</span><span class="hc-nm">' + esc(this.stepWord(this.step)) + '</span>' + I.chev + '</button>' +
       '<div class="hc-prog" aria-hidden="true">' + pr + '</div></div>';
@@ -728,7 +756,7 @@
     var self = this, h = '';
     this.plan.steps.forEach(function (st, i) {
       var p = self.picked(i), cur = i === self.step, e = self.pickedEntry(i);
-      if (!p && !cur && !self.isDetails() && !self.skipped[st.fieldKey]) return;
+      if (!p && !cur && !self.isExtra() && !self.skipped[st.fieldKey]) return;
       var ask = e && (e.state === 'ask_first' ? !self.practice : e.state === 'not_offered');
       var on = (cur ? ' is-cur' : '') + (ask ? ' is-ask' : '');
       if (p) h += '<li><button type="button" class="hc-chip' + on + '" data-k="' + esc(st.fieldKey) + '" data-go="' + i + '"><small>' + esc(st.label) + '</small><b>' + esc(p) + '</b></button></li>';
@@ -883,7 +911,7 @@
   };
 
   Creator.prototype.bodyInner = function () {
-    if (this.isDetails()) return this.reviewHTML();
+    if (this.isExtra()) return this.extraHTML();
     return this.introHTML() + this.toolsHTML() + (this.mode === 'cards' ? this.handHTML() : this.listHTML()) + this.underHTML();
   };
   Creator.prototype.midInner = function () {
@@ -957,6 +985,11 @@
       h += '<button type="button" class="hc-row" data-go="' + i + '" data-k="' + esc(st.fieldKey) + '"' + (cur ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : cur ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span>' +
         '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.skipped[st.fieldKey] ? 'None' : self.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
     });
+    if (this.hasAbout()) {
+      var a = this.plan.steps.length, al = this.aboutLine();
+      h += '<button type="button" class="hc-row" data-go="' + a + '"' + (this.isAbout() ? ' aria-current="step"' : '') + '><span class="hc-num' + (al ? ' is-done' : this.isAbout() ? ' is-now' : '') + '">' + (al ? '✓' : a + 1) + '</span>' +
+        '<span class="hc-lb"><b>About your hero</b><span data-about-line>' + (al ? esc(al) : 'Optional') + '</span></span></button>';
+    }
     var n = this.last();
     h += '<button type="button" class="hc-row" data-go="' + n + '"' + (this.isDetails() ? ' aria-current="step"' : '') + '><span class="hc-num' + (this.isDetails() ? ' is-now' : '') + '">' + (n + 1) + '</span>' +
       '<span class="hc-lb"><b>Name and review</b><span>' + (this.name.trim() ? esc(this.name.trim()) : 'Last') + '</span></span></button></nav>';
@@ -985,6 +1018,27 @@
       this.chooseLabel(c, st) + '</button><span class="hc-hint">or press Enter on a card</span></div>';
   };
 
+  // --- About your hero ---
+
+  Creator.prototype.extraHTML = function () { return this.isAbout() ? this.aboutHTML() : this.reviewHTML(); };
+  // Every box is optional, and each stays editable on the sheet. The
+  // backstory is the one Foundry's Biography carries.
+  var ABOUT_HINT = { pronouns: 'she/her, he/him, they/them…', appearance: 'Height, hair, scars, what they wear…', backstory: 'Where they come from, who they left behind…' };
+  Creator.prototype.aboutHTML = function () {
+    var self = this, fields = this.aboutFields(), bio = fields.some(function (f) { return f.key === 'backstory'; });
+    var h = '<div class="hc-rev hc-about" data-about-step><h2 class="hc-disp hc-rev__t" tabindex="-1">About your hero</h2>';
+    fields.forEach(function (f) {
+      var id = 'hc-ab-' + esc(f.key), v = self.about[f.key] || '', ph = ABOUT_HINT[f.key] || 'Optional';
+      h += '<div class="hc-field"><label for="' + id + '">' + esc(f.label) + '</label>' + (f.long
+        ? '<textarea id="' + id + '" rows="' + (f.key === 'backstory' ? 6 : 3) + '" maxlength="' + (f.key === 'backstory' ? 20000 : 2000) + '" placeholder="' + esc(ph) + '" data-about="' + esc(f.key) + '">' + esc(v) + '</textarea>'
+        : '<input id="' + id + '" type="text" maxlength="60" autocomplete="off" placeholder="' + esc(ph) + '" data-about="' + esc(f.key) + '" value="' + esc(v) + '">') + '</div>';
+    });
+    h += '<p class="hc-note hc-plain">All optional, and you can change any of it on the sheet later.' + (bio ? ' The backstory goes to Foundry’s Biography.' : '') + '</p>';
+    var back = this.plan.steps.length ? this.stepWord(this.step - 1) : '';
+    return h + '<div class="hc-under hc-under--about">' + (back ? '<button type="button" class="hc-qw" data-act="back">' + I.back + esc(back) + '</button>' : '<span class="hc-qw-sp"></span>') +
+      '<button type="button" class="hc-btn" data-act="next">Next: Name and review</button></div></div>';
+  };
+
   // --- Name and review ---
 
   Creator.prototype.heroCard = function () {
@@ -996,7 +1050,7 @@
     var whose = this.tryout ? 'This stays in this browser: only you can see it, and nothing is sent to the campaign.' : this.practice ? 'This stays a practice hero: only you and the Directors see it, and it never joins the party.' : this.forSelf ? 'The hero will be yours, on a new ' + esc(this.typeName) + ' page.'
       : 'The hero goes on a new ' + esc(this.typeName) + ' page, not yet claimed by a player.';
     var none = this.plan.steps.length ? '' : '<p class="hc-empty">' + (this.plan.systemName ? esc(this.plan.systemName) + ' doesn’t list' : 'This campaign’s game system doesn’t list') +
-      ' choices for heroes yet, so the creator only asks for a name. ' + gm() + 's can add their own entries.</p>';
+      ' choices for heroes yet, so the creator only asks for a name' + (this.hasAbout() ? ' and a little about them' : '') + '. ' + gm() + 's can add their own entries.</p>';
     var h = '<div class="hc-rev" data-rev><h2 class="hc-disp hc-rev__t" tabindex="-1">Name your ' + (this.practice ? 'practice ' : '') + 'hero</h2>' + none + (desk ? '<div class="hc-revgrid"><div>' : '');
     h += '<div class="hc-field"><label for="hc-nm">Your hero’s name</label><input id="hc-nm" type="text" maxlength="200" autocomplete="off" placeholder="Type a name" data-name value="' + esc(this.name) + '" required></div>';
     h += this.heroCard();
@@ -1014,6 +1068,11 @@
         (extra.length ? '<em>' + esc(extra.join(' · ')) + '</em>' : '') + '</span>' +
         (self.locked(st) ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
     });
+    if (this.hasAbout()) {
+      var al = this.aboutLine();
+      h += '<li><span class="hc-lb"><small>About your hero</small><b>' + (al ? esc(al) : 'None') + '</b></span>' +
+        '<button type="button" class="hc-qw" data-go="' + this.plan.steps.length + '">' + (al ? 'Change' : 'Add') + '</button></li>';
+    }
     h += '</ul><div class="hc-fin">';
     var mi = this.missing();
     if (mi.length) h += '<p class="hc-hint hc-hint--l">Still to choose: ' + esc(mi.map(function (i) { return lower(self.plan.steps[i].label); }).join(', ')) + '.</p>';
@@ -1578,9 +1637,9 @@
     d = document.createElement('div'); d.className = 'hc-drape'; d.setAttribute('data-drape', ''); d.setAttribute('role', 'group'); d.setAttribute('aria-label', 'All steps'); d.style.top = y + 'px';
     var h = '';
     for (var i = 0; i <= this.last(); i++) {
-      var p = this.picked(i), st = this.plan.steps[i], note = st && this.pickNote(st);
+      var st = this.plan.steps[i], ab = !st && i < this.last(), p = ab ? this.aboutLine() : this.picked(i), note = st && this.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '"' + (i === this.step ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : i === this.step ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span><span class="hc-lb"><b>' + esc(this.stepWord(i)) + '</b><span>' +
-        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.skipped[st.fieldKey] ? 'None' : this.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
+        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : ab ? (p ? esc(p) : 'Optional') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.skipped[st.fieldKey] ? 'None' : this.optional(st) ? 'Optional' : 'Not chosen yet') + '</span></span></button>';
     }
     d.innerHTML = h;
     app.appendChild(scrim); app.appendChild(d);
@@ -1602,7 +1661,7 @@
   };
 
   Creator.prototype.choose = function (i) {
-    if (this.busy || this.isDetails()) return;
+    if (this.busy || this.isExtra()) return;
     var l = this.entries(this.step), st = this.cur(), si = this.step;
     if (i == null) i = this.curIdx();
     var c = l[i];
@@ -1724,7 +1783,7 @@
       if (!keepChips) this.render();
       else {
         var cols = this.$('.hc-cols'), tmp = document.createElement('div');
-        tmp.innerHTML = '<div class="hc-cols">' + this.railHTML() + (this.isDetails() ? '<section class="hc-mid hc-mid--wide">' + this.reviewHTML() + '</section>'
+        tmp.innerHTML = '<div class="hc-cols">' + this.railHTML() + (this.isExtra() ? '<section class="hc-mid hc-mid--wide">' + this.extraHTML() + '</section>'
           : '<section class="hc-mid" data-mid>' + this.midInner() + '</section><aside class="hc-right" data-right aria-label="The entry">' + this.rightInner() + '</aside>') + '</div>';
         cols.parentNode.replaceChild(tmp.firstElementChild, cols);
         app.setAttribute('data-step', this.step);
@@ -2048,7 +2107,9 @@
   // change to the practice hero being edited. The one place a hero is kept.
   Creator.prototype.persist = function (name, picks) {
     var edit = this.practice && this.updateUrl, url = edit ? this.updateUrl : this.createUrl, method = edit ? 'PUT' : 'POST';
-    var body = { name: name, picks: picks };
+    var body = { name: name, picks: picks }, self = this, about = {};
+    this.aboutFields().forEach(function (f) { var v = String(self.about[f.key] || '').trim(); if (v) about[f.key] = v; });
+    if (Object.keys(about).length) body.about = about;
     // A copy of the player's own hero: the server reads that hero again.
     if (this.practice && !edit && this.preload && this.preload.copy) body.copy = true;
     return window.Chronicle && Chronicle.apiFetch
@@ -2179,6 +2240,12 @@
         self.refreshList();
         return;
       }
+      if (t.hasAttribute && t.hasAttribute('data-about')) {
+        self.about[t.getAttribute('data-about')] = t.value;
+        var line = self.$('[data-about-line]'); if (line) line.textContent = self.aboutLine() || 'Optional';
+        self.save();
+        return;
+      }
       if (t.hasAttribute && t.hasAttribute('data-name')) {
         self.name = t.value;
         var nm = self.name.trim(), h = self.$('[data-hname]');
@@ -2208,7 +2275,7 @@
         }
         return;
       }
-      if (inField || !self.plan || self.isDetails()) return;
+      if (inField || !self.plan || self.isExtra()) return;
       var card = t.closest && t.closest('.hc-hand .hc-card[data-i]');
       if (card && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); self.openSheet(+card.getAttribute('data-i')); return; }
       if (card && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) {
