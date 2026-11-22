@@ -1,0 +1,88 @@
+/* hero_border_picker.css — the samples and the colours an owner picks a card's
+   border with (hero_border_picker.js). It needs hero_creator.css and
+   hero_borders.css on the page: a sample is a small .hc-gcard[data-trim], and
+   the root carries .hc so the creator's own variables apply.
+
+   data-lay="wall" is the Customizer's panel; data-lay="field" is the entry
+   form, with larger targets. split gives the panel its scrolling wall and a
+   fixed colour part; top puts the colours before the samples. */
+
+.hcw-pk.hc { display: flex; flex-direction: column; gap: 16px; container-type: normal; min-width: 0; }
+/* In the panel the picker is a column: the samples scroll, the colours stay put. */
+.hcw-pk--split { min-height: 0; gap: 0; }
+.hcw-pk--split .hcw-wall { overflow-y: auto; overscroll-behavior: contain; min-height: 0; padding: 14px 16px 18px; }
+.hcw-wall { display: flex; flex-direction: column; gap: 12px; }
+.hcw-g h4 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); margin: 0 0 6px; font-weight: 600; }
+.hcw-ts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hcw-t {
+  min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 5px 5px 6px; border: var(--shape-edge, 1px) solid var(--color-border); border-radius: var(--shape-r-ctl, 8px);
+  background: var(--color-bg-primary); color: var(--color-text-secondary); font: inherit; font-size: 12.5px; line-height: 1.25; text-align: center; cursor: pointer;
+  transition: border-color var(--dur-micro, 120ms), background-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms);
+}
+.hcw-t:hover { border-color: var(--cpe-accent, var(--color-accent)); color: var(--color-text-primary); }
+.hcw-t:active { background: var(--color-bg-tertiary); }
+.hcw-t[aria-pressed="true"] { border-color: var(--cpe-accent, var(--color-accent)); box-shadow: 0 0 0 1px var(--cpe-accent, var(--color-accent)); background: rgb(var(--color-accent-rgb, 99 102 241) / 0.12); color: var(--color-text-primary); font-weight: 600; }
+.hcw-t:focus-visible { outline: 2px solid var(--cpe-accent, var(--color-accent)); outline-offset: 2px; }
+.hcw-tn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The sample is the card's corner, cropped: the card is drawn at a fixed size and only its top left shows. */
+.hcw-sm { position: relative; display: block; height: 60px; overflow: hidden; border-radius: 5px; background: var(--hc-bg); }
+.hcw-sm > .hc-gcard {
+  position: absolute; left: 13px; top: 13px; width: 320px; height: 240px; min-height: 0; padding: 0; pointer-events: none; transition: none; transform: none; cursor: inherit;
+}
+.hcw-sm > .hc-gcard[data-trim] { --fw: 15px; --trim-over: 26px; --bleed: 44px; padding: 0; }
+.hcw-sm > .hc-gcard:not([data-trim]) { left: 10px; top: 10px; }
+
+.hcw-cg { display: flex; flex-direction: column; gap: 8px; }
+.hcw-cgh { display: flex; align-items: baseline; gap: 8px; }
+.hcw-lab { font-size: 12.5px; font-weight: 600; color: var(--color-text-secondary); }
+.hcw-cgh small { margin-left: auto; font-size: 12px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.hcw-cs { display: flex; flex-wrap: wrap; gap: 7px; }
+.hcw-c {
+  position: relative; flex: none; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: var(--c); cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22); transition: box-shadow var(--dur-micro, 120ms), transform var(--dur-micro, 120ms);
+}
+html.dark .hcw-c { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28); }
+.hcw-c:hover { transform: scale(1.08); }
+.hcw-c[aria-pressed="true"], html.dark .hcw-c[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--color-bg-secondary, var(--color-bg-primary)), 0 0 0 4px var(--cpe-accent, var(--color-accent)); }
+.hcw-c:focus-visible, .hcw-c:focus-within { outline: 2px solid var(--cpe-accent, var(--color-accent)); outline-offset: 3px; }
+/* The border's own colour carries a notch, so it differs from a picked colour by shape. */
+.hcw-c--own::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; border: 2px solid rgb(255 255 255 / 0.92); box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35); }
+.hcw-c--any { background: conic-gradient(#e5484d, #f5a524, #f2d94e, #46a758, #3e9bdc, #6e56cf, #d6409f, #e5484d); overflow: hidden; }
+.hcw-c--any[data-set] { background: var(--c); box-shadow: 0 0 0 2px var(--color-bg-secondary, var(--color-bg-primary)), 0 0 0 4px var(--cpe-accent, var(--color-accent)); }
+.hcw-c--any::after { content: "+"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font: 700 17px/1 Inter, system-ui, sans-serif; text-shadow: 0 0 3px rgb(0 0 0 / 0.7); pointer-events: none; }
+.hcw-c--any input { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); opacity: 0; cursor: pointer; }
+.hcw-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--color-text-secondary); }
+
+/* Panel: the colours below the samples keep their own band. */
+.hcw-foot { padding: 12px 16px 14px; border-top: var(--shape-rule, 1px) solid var(--color-border); }
+
+/* The entry form: larger targets, a form's type sizes. */
+.hcw-pk[data-lay="field"] .hcw-ts { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+.hcw-pk[data-lay="field"] .hcw-t { font-size: 14px; min-height: 44px; }
+.hcw-pk[data-lay="field"] .hcw-tn { white-space: normal; overflow-wrap: anywhere; }
+.hcw-pk[data-lay="field"] .hcw-c { width: 44px; height: 44px; }
+.hcw-pk[data-lay="field"] .hcw-c--own::after { inset: 14px; }
+.hcw-pk[data-lay="field"] .hcw-g h4 { font-size: 13px; letter-spacing: 0.02em; }
+.hcw-pk[data-lay="field"] .hcw-note, .hcw-pk[data-lay="field"] .hcw-cgh small, .hcw-pk[data-lay="field"] .hcw-lab { font-size: 14px; }
+
+/* Narrow screens: the panel is a sheet. The colours sit in one row that scrolls sideways,
+   and the targets are those of a finger. */
+@media (max-width: 640px) {
+  .hcw-pk--split .hcw-wall { padding: 10px 12px 14px; }
+  .hcw-top { padding: 6px 12px 8px; gap: 4px; border-bottom: var(--shape-rule, 1px) solid var(--color-border); }
+  .hcw-top .hcw-cgh { display: none; }
+  .hcw-top .hcw-note { padding: 4px 0 2px; }
+  .hcw-top .hcw-cs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 5px 5px; margin: 0 -5px; overscroll-behavior-x: contain; }
+  .hcw-top .hcw-cs::-webkit-scrollbar { display: none; }
+  .hcw-g h4 { font-size: 13px; letter-spacing: 0.02em; }
+  .hcw-t { font-size: 14px; }
+  .hcw-c { width: 44px; height: 44px; }
+  .hcw-c--own::after { inset: 14px; }
+  .hcw-note, .hcw-cgh small { font-size: 14px; }
+}
+
+/* Calm keeps fades; Off, and a device that asks for less motion, show the end state. */
+html[data-motion] .hcw-c, html[data-motion] .hcw-t { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hcw-c, .hcw-t { transition: none; }
+}
