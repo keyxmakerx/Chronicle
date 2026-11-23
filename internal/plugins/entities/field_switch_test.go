@@ -183,6 +183,42 @@ func TestValueMoveKeepsWhatWasTypedAfterTheSwitch(t *testing.T) {
 	}
 }
 
+func TestValueMoveNeverLosesAKeptValue(t *testing.T) {
+	offer := treasureOffer()
+	old := itemFields()
+	page := map[string]any{"rarity": "Rare"}
+
+	d, kept, _ := acceptMove(old, offer).apply(page, nil)
+	// While switched, the Director adds a Rarity field of their own and fills it.
+	d["rarity"] = "Epic"
+	// Switching back: the page's own value wins, "Rare" stays kept.
+	d, kept, _ = backMove(old, offer).apply(d, kept)
+	if d["rarity"] != "Epic" || kept["rarity"] != "Rare" {
+		t.Fatalf("back: page %v kept %v", d, kept)
+	}
+	// Switching again sets "Epic" aside too; "Rare" must not be overwritten.
+	d, kept, _ = acceptMove(old, offer).apply(d, kept)
+	if _, ok := d["rarity"]; ok {
+		t.Errorf("accept again left rarity on the page: %v", d)
+	}
+	want := map[string]any{"rarity": "Epic", "rarity@1": "Rare"}
+	if !reflect.DeepEqual(kept, want) {
+		t.Errorf("accept again kept %v, want %v", kept, want)
+	}
+	vals := setAsideValues(kept, old, offer.Fields)
+	if len(vals) != 2 || vals[0].Label != "Rarity" || vals[1].Label != "Rarity (kept earlier)" || vals[1].Value != "Rare" {
+		t.Errorf("the fold shows %+v", vals)
+	}
+
+	// The same value, or a blank, adds no twin.
+	kp := map[string]any{"rarity": "Rare"}
+	keepValue(kp, "rarity", "Rare")
+	keepValue(kp, "rarity", "")
+	if !reflect.DeepEqual(kp, map[string]any{"rarity": "Rare"}) {
+		t.Errorf("a repeat or a blank changed what was kept: %v", kp)
+	}
+}
+
 func TestSetAsideValues(t *testing.T) {
 	kept := map[string]any{"attunement": true, "rarity": "Rare", "zzz": "x", "type": ""}
 	got := setAsideValues(kept, itemFields(), treasureOffer().Fields)

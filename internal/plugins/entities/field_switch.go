@@ -278,7 +278,7 @@ func (m valueMove) apply(data, kept map[string]any) (map[string]any, map[string]
 	changed := false
 	for k := range m.leaving {
 		if v, ok := d[k]; ok {
-			kp[k] = v
+			keepValue(kp, k, v)
 			delete(d, k)
 			changed = true
 		}
@@ -317,6 +317,34 @@ func (m valueMove) apply(data, kept map[string]any) (map[string]any, map[string]
 	return d, kp, changed
 }
 
+// keepValue sets a value aside under key k without losing one already kept
+// there (accept, switch back, a new field under the same key, accept again).
+// A different earlier value moves to an "@n" twin of k; the newest stays
+// under k, so a later switch back restores it. A blank never replaces a value.
+func keepValue(kp map[string]any, k string, v any) {
+	old, has := kp[k]
+	if !has || isBlankValue(old) {
+		kp[k] = v
+		return
+	}
+	if isBlankValue(v) || fmt.Sprint(old) == fmt.Sprint(v) {
+		return
+	}
+	for n := 1; ; n++ {
+		twin := fmt.Sprintf("%s%s%d", k, earlierKeySep, n)
+		if _, used := kp[twin]; !used {
+			kp[twin] = old
+			break
+		}
+	}
+	kp[k] = v
+}
+
+// earlierKeySep joins a field key to the number of an earlier kept value of
+// that field. Keys made from a field's name are letters, digits and
+// underscores, so a twin never looks like a field of its own.
+const earlierKeySep = "@"
+
 // setAsideValues lists a page's kept values for the GM's fold, labelled from
 // the field lists that knew them (the old list first), in that order, then
 // any other key by name.
@@ -346,6 +374,14 @@ func setAsideValues(kept map[string]any, labelled ...[]FieldDefinition) []SetAsi
 		label := k
 		if ok && info.label != "" {
 			label = info.label
+		}
+		if base, _, twin := strings.Cut(k, earlierKeySep); twin && !ok {
+			if bi, bok := byKey[base]; bok {
+				info, label = bi, bi.label+" (kept earlier)"
+				if bi.label == "" {
+					label = base + " (kept earlier)"
+				}
+			}
 		}
 		out = append(out, SetAsideValue{Key: k, Label: label, Value: setAsideText(v, info.kind)})
 	}
