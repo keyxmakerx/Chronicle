@@ -864,6 +864,21 @@ test('a dealt card pops up once: face down, centred, nothing of it shown, Turn i
   await page.close2();
 });
 
+test('several cards dealt at once pop up once, as the newest, and the rest are marked seen', { skip }, async () => {
+  const page = await open({ viewer: 'player', start: false });
+  await page.evaluate((f) => { window.__srv.fresh = [f, Object.assign({}, f, { copyId: 'o2' }), Object.assign({}, f, { copyId: 'o3' })]; }, FRESH);
+  await page.evaluate(() => window.__start());
+  await page.waitForSelector('[data-dkd-ov][data-arrive] [data-dko-cardturn]');
+  await page.waitForFunction(() => window.__srv.calls.filter((c) => /seen$/.test(c)).length === 3);
+  await page.click('[data-dko-later]');
+  await page.waitForSelector('[data-dkd-ov]', { state: 'detached' });
+  await page.waitForTimeout(400);
+  assert.equal(await page.$('[data-dkd-ov]'), null, 'a second card popped up after the first');
+  const seen = (await calls(page)).filter((c) => /seen$/.test(c)).sort();
+  assert.deepEqual(seen, ['o1', 'o2', 'o3'].map((id) => 'POST /campaigns/c1/decks/hand/fresh/' + id + '/seen'));
+  await page.close2();
+});
+
 test('pressing the dealt card turns it through the hand\'s turn; Escape closes it', { skip }, async () => {
   const page = await open({ viewer: 'player', start: false });
   await page.evaluate((f) => { window.__FRESH = f; }, FRESH);

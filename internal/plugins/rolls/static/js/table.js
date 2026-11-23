@@ -1821,13 +1821,21 @@
     if (!this.alive || this.freshShowing) return;
     var base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/decks';
     C.apiFetch(base + '/hand/fresh').then(function (res) { return res.ok ? res.json() : null; }).then(function (data) {
-      var card = ((data && data.cards) || []).filter(function (c) { return !self.freshSeen[c.copyId]; })[0];
+      var cards = ((data && data.cards) || []).filter(function (c) { return !self.freshSeen[c.copyId]; });
+      var card = cards[0];
       if (!card || !self.alive || self.freshShowing) return;
       self.freshShowing = true;
       return C.loadDeckDraw().then(function (d) {
         return d.arrive({ campaignId: self.campaignId, card: card, onClose: function () { self.freshShowing = false; self.askFresh(); } });
       }).then(function (shown) {
-        if (shown) self.freshSeen[card.copyId] = true; else self.freshShowing = false;
+        if (!shown) { self.freshShowing = false; return; }
+        self.freshSeen[card.copyId] = true;
+        // Several dealt at once pop up once, as the newest; the rest wait in
+        // the Hand, marked new there, rather than popping one after another.
+        cards.slice(1).forEach(function (c) {
+          self.freshSeen[c.copyId] = true;
+          C.apiFetch(base + '/hand/fresh/' + encodeURIComponent(c.copyId) + '/seen', { method: 'POST' }).catch(function () { /* told again next time */ });
+        });
       });
     }).catch(function () { self.freshShowing = false; });
   };
