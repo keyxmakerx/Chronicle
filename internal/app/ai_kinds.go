@@ -13,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar/calendarai"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/cutscenes"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
@@ -83,6 +84,7 @@ type aiDeps struct {
 	Layers          transformations.Service          // nil while the transformations plugin is degraded
 	Designs         records.DesignsAPI               // nil while the designs plugin is degraded
 	Decks           decks.Service                    // nil while the decks plugin is degraded
+	Cutscenes       cutscenes.Service                // nil while the cutscenes plugin is degraded
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
 	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
 	SystemState     systemstate.Service              // nil while the system state plugin is degraded
@@ -97,6 +99,7 @@ type aiDeps struct {
 	Nights     *sessions.AIGameNights    // the game nights' own AI part
 	LayersAI   *transformations.AILayers // the transformations' own AI part; nil without the plugin
 	DecksAI    *decks.AI                 // the card decks' own AI part; nil without the plugin
+	CutsAI     *cutscenes.AI             // the cut scenes' own AI part; nil without the plugin
 	CalLookups *calendarai.Lookups       // the calendar's own lookups
 	PageMaps   records.PageMapsAPI       // nil while page blocks are degraded
 	Tests      records.TestsAPI          // nil without the Tests block
@@ -135,6 +138,13 @@ func newAIDeps(d aiDeps) *aiDeps {
 		addons := d.Addons
 		d.DecksAI = decks.NewAI(d.Decks, aiLayerPages{pages: d.Entities}, func(ctx context.Context, campaignID string) bool {
 			on, err := addons.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
+			return err == nil && on
+		})
+	}
+	if d.Cutscenes != nil {
+		addons := d.Addons
+		d.CutsAI = cutscenes.NewAI(d.Cutscenes, func(ctx context.Context, campaignID string) bool {
+			on, err := addons.IsEnabledForCampaign(ctx, campaignID, cutscenes.AddonSlug)
 			return err == nil && on
 		})
 	}
@@ -266,6 +276,9 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if d.DecksAI != nil {
 		out = append(out, d.DecksAI.Lookup())
 	}
+	if d.CutsAI != nil {
+		out = append(out, d.CutsAI.Lookup())
+	}
 	if d.SystemState != nil {
 		out = append(out, systemstate.NewAIPageState(d.SystemState, aiEnabledSystem{systems: d.Systems}))
 	}
@@ -304,6 +317,16 @@ func init() {
 			return nil
 		}
 		return d.DecksAI.Kinds()
+	})
+}
+
+// Cut scenes follow card decks.
+func init() {
+	addAIKinds(196, func(d *aiDeps) []records.Kind {
+		if d.CutsAI == nil {
+			return nil
+		}
+		return d.CutsAI.Kinds()
 	})
 }
 
@@ -440,7 +463,7 @@ type aiAddonChecker interface {
 // aiFeatureGate names, by kind, the features a campaign has switched off,
 // using the same add-ons their pages are gated on: the calendar and what is
 // written onto it, game nights (which need the calendar too), maps, Player
-// Notes, Crafting and card decks. A failed check counts the feature as on, so a lookup
+// Notes, Crafting, card decks and cut scenes. A failed check counts the feature as on, so a lookup
 // error never blocks an import; the feature's own routes still gate it.
 func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID string) records.OffFeatures {
 	return func(ctx context.Context, campaignID string) records.OffFeatures {
@@ -462,6 +485,9 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		if off(decks.AddonSlug) {
 			out["deck"], out["card"] = "Card decks", "Card decks"
+		}
+		if off(cutscenes.AddonSlug) {
+			out[cutscenes.KindName] = "Cut scenes"
 		}
 		if off("maps") {
 			out["map"], out["hex-map"], out["pin"] = "Maps", "Maps", "Maps"

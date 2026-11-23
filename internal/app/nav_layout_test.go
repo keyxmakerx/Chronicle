@@ -649,7 +649,7 @@ func TestBuildNavDrawer_ListsWhatTheViewerMayOpen(t *testing.T) {
 	for _, o := range owner.Off {
 		off = append(off, o.Key)
 	}
-	if !reflect.DeepEqual(off, []string{"app:armory", "app:crafting", "app:decks", "app:timeline"}) {
+	if !reflect.DeepEqual(off, []string{"app:armory", "app:crafting", "app:decks", "app:cutscenes", "app:timeline"}) {
 		t.Errorf("the owner's turned-off apps = %v", off)
 	}
 	for _, o := range owner.Off {

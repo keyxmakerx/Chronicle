@@ -75,6 +75,13 @@
     if (isNaN(d.getTime())) return '';
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
+  // How long a cut scene can be watched again: a time today, else the day too.
+  function untilText(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { weekday: 'short' }) + ' ' + t;
+  }
   // A single-key shortcut never fires while typing.
   function typing(t) {
     return !!(t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))));
@@ -122,6 +129,12 @@
     this.shown = [];
     this.shownById = {};
     this.shownLoaded = false;
+    // The Cut scenes shown to this person that can still be watched again.
+    this.cuts = host.getAttribute('data-cutscenes') === 'true';
+    this.cutRows = [];
+    this.cutErr = {};
+    this.cutTimer = 0;
+    this.cutAsked = false;
     this.more = false;
     this.loaded = false;
     this.open = false;
@@ -158,6 +171,7 @@
     if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
     this.openFromLink();
     this.watchDraw();
+    if (this.cuts) this.wireCuts();
   }
 
   // A bell notice opens the Table on a leaf with ?table=<leaf>.
@@ -197,6 +211,7 @@
     var det = $('#tt-isl-detail'); if (det) det.remove();
     var mo = $('#tt-moment'); if (mo) mo.remove();
     clearTimeout(this.momTimer);
+    clearTimeout(this.cutTimer);
     if (this.drawWatch) this.drawWatch.disconnect();
   };
 
@@ -377,7 +392,7 @@
   };
 
   Table.prototype.reload = function () {
-    if (this.open || this.sheet) { this.load(); this.loadShown(); } else { this.loaded = false; this.shownLoaded = false; }
+    if (this.open || this.sheet) { this.load(); this.loadShown(); this.loadCuts(); } else { this.loaded = false; this.shownLoaded = false; this.cutAsked = false; }
   };
 
   // ---------- Tonight: what the director shows ----------
@@ -390,7 +405,7 @@
     this.shownById[it.id] = it;
     this.shown.push(it);
     if (!live) return;
-    if (this.open) this.renderSection('tonight');
+    if (this.open || this.sheet) this.renderSection('tonight');
     if (this.leafShowing('tonight')) {
       var li = $('#tt-tonight li[data-id="' + (W.CSS && CSS.escape ? CSS.escape(it.id) : it.id) + '"]');
       if (li) li.classList.add('tt-fresh');
@@ -413,10 +428,87 @@
       Object.keys(known).forEach(function (id) { if (!self.shownById[id]) self.receiveShown(known[id], false); });
       self.shown.sort(function (a, b) { return a.shownAt < b.shownAt ? -1 : a.shownAt > b.shownAt ? 1 : 0; });
       self.shownError = '';
-      if (self.open) self.renderSection('tonight');
+      if (self.open || self.sheet) self.renderSection('tonight');
     }).catch(function () {
       self.shownError = 'What was shown tonight could not be read. Close the Table and open it again to retry.';
-      if (self.open) self.renderSection('tonight');
+      if (self.open || self.sheet) self.renderSection('tonight');
+    });
+  };
+
+  // ---------- Tonight: cut scenes to watch again ----------
+
+  // The stage widget plays scenes and tells the page what changed; the list
+  // follows it rather than opening another socket.
+  Table.prototype.wireCuts = function () {
+    var self = this;
+    this.on(W, 'chronicle:cutscene-shown', function () { self.cutAsked = false; if (self.open || self.sheet) self.loadCuts(); });
+    this.on(W, 'chronicle:cutscene-list', function (ev) { if (ev.detail && Array.isArray(ev.detail.rows)) self.takeCuts(ev.detail.rows); });
+    this.on(W, 'chronicle:cutscene-watched', function (ev) {
+      var id = ev.detail && ev.detail.showingId;
+      self.cutRows.forEach(function (r) { if (String(r.showingId) === String(id)) r.watched = true; });
+      self.renderCuts();
+    });
+  };
+
+  Table.prototype.loadCuts = function () {
+    var self = this;
+    if (!this.cuts || this.cutAsked) return;
+    this.cutAsked = true;
+    C.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/cutscenes/mine').then(function (res) {
+      if (!res.ok) throw new Error('status ' + res.status);
+      return res.json();
+    }).then(function (body) {
+      self.takeCuts(Array.isArray(body) ? body : (body && body.data) || []);
+    }).catch(function () { self.cutAsked = false; });
+  };
+
+  Table.prototype.takeCuts = function (rows) {
+    this.cutRows = rows.filter(function (r) { return r && r.showingId; });
+    this.renderCuts();
+  };
+
+  // renderCuts redraws Tonight and wakes again when the next row's time to
+  // watch again runs out, so a row is gone once it can no longer be played.
+  Table.prototype.renderCuts = function () {
+    var self = this, now = Date.now(), next = Infinity;
+    clearTimeout(this.cutTimer);
+    this.cutRows.forEach(function (r) {
+      var until = Date.parse(r.rewatchUntil);
+      if (until > now) next = Math.min(next, until);
+    });
+    if (next !== Infinity) this.cutTimer = setTimeout(function () { self.renderCuts(); }, Math.min(next - now + 500, 2147483000));
+    if (this.open || this.sheet) this.renderSection('tonight');
+  };
+
+  Table.prototype.liveCuts = function () {
+    var now = Date.now();
+    return this.cutRows.filter(function (r) { return Date.parse(r.rewatchUntil) > now; });
+  };
+
+  Table.prototype.cutHTML = function (r) {
+    var id = String(r.showingId), err = this.cutErr[id];
+    return '<li class="tt-shown tt-cut" data-cut="' + esc(id) + '"><div class="tt-shead"><b>' + esc(r.name || 'A cut scene') + '</b>' +
+      (r.watched ? '' : '<span class="tt-chip">Missed it</span>') +
+      '<span class="tt-time">until ' + esc(untilText(r.rewatchUntil)) + '</span></div>' +
+      '<button type="button" class="tt-quiet tt-open" data-tt-cut="' + esc(id) + '">' + (r.watched ? 'Watch again' : 'Watch') + '</button>' +
+      (err ? '<p class="tt-note" role="alert">' + esc(err) + '</p>' : '') + '</li>';
+  };
+
+  Table.prototype.watchCut = function (id, btn) {
+    var self = this;
+    delete this.cutErr[id];
+    if (!C.cutscenes || typeof C.cutscenes.watch !== 'function') {
+      this.cutErr[id] = 'Cut scenes are still loading on this page. Try again in a moment.';
+      this.renderSection('tonight');
+      return;
+    }
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    C.cutscenes.watch(id).then(function () {
+      if (btn.isConnected) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    }, function (e) {
+      self.cutErr[id] = e && e.plain ? e.message : 'The scene could not be played. Try again in a moment.';
+      self.renderSection('tonight');
     });
   };
 
@@ -448,11 +540,17 @@
   };
 
   Table.prototype.tonightHTML = function () {
-    var self = this, rows;
-    if (this.shownError) rows = '<li class="tt-empty">' + esc(this.shownError) + '</li>';
-    else if (!this.shownLoaded) rows = '<li class="tt-empty">Reading…</li>';
-    else if (!this.shown.length) rows = '<li class="tt-empty">Nothing shown yet. When the ' + esc(this.gm) + ' shows you a page or a note, it lands here.</li>';
-    else rows = this.shown.map(function (it) {
+    var self = this, rows, cuts = this.liveCuts();
+    // Pages, notes and cut scenes in the order they were shown.
+    var all = this.shown.map(function (it) { return { at: it.shownAt, it: it }; })
+      .concat(cuts.map(function (r) { return { at: r.shownAt, cut: r }; }))
+      .sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; });
+    if (this.shownError && !cuts.length) rows = '<li class="tt-empty">' + esc(this.shownError) + '</li>';
+    else if (!this.shownLoaded && !cuts.length) rows = '<li class="tt-empty">Reading…</li>';
+    else if (!all.length) rows = '<li class="tt-empty">Nothing shown yet. When the ' + esc(this.gm) + ' shows you a page, a note or a cut scene, it lands here.</li>';
+    else rows = all.map(function (x) {
+      if (x.cut) return self.cutHTML(x.cut);
+      var it = x.it;
       return '<li class="tt-shown" data-id="' + esc(it.id) + '"><div class="tt-shead"><b>' + esc(self.shownWhat(it)) + '</b>' +
         (it.to ? '<span class="tt-chip">Only you</span>' : '') + '<span class="tt-time">' + esc(timeOf(it.shownAt)) + '</span></div>' +
         self.shownBody(it) + '</li>';
@@ -765,6 +863,8 @@
       document.documentElement.setAttribute('data-tt-sheet', '');
       this.ensureSheet();
       if (!this.loaded) this.load();
+      // The sheet holds Tonight from the start, so its list is read now too.
+      if (!this.shownLoaded) this.loadShown();
     } else {
       document.documentElement.removeAttribute('data-tt-sheet');
     }
@@ -921,6 +1021,8 @@
       }
       this.setHeight(sec && sec !== 'rolls' ? 'full' : this.h === 'full' ? 'full' : 'lift');
       if (!this.loaded) this.load();
+      if (!this.shownLoaded) this.loadShown();
+      this.loadCuts();
       return;
     }
     if (sec) {
@@ -950,6 +1052,7 @@
     }
     if (!this.loaded) this.load();
     if (!this.shownLoaded) this.loadShown();
+    this.loadCuts();
     this.scrollLog();
     this.seen();
   };
@@ -1550,6 +1653,7 @@
       if (!b || !(b.closest('#tt-drawer') || b.closest('#tt-isl-detail'))) return;
       var d = b.dataset;
       if (b.hasAttribute('data-tt-close')) { self.closeTable(); return; }
+      if (d.ttCut) { self.watchCut(d.ttCut, b); return; }
       // A press on the line is handled by its pointer events; a click with no
       // pointer behind it is the keyboard.
       if (b.hasAttribute('data-tt-grab')) { if (!ev.detail) self.stepSheet(); return; }

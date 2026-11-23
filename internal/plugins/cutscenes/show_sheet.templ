@@ -1,0 +1,113 @@
+package cutscenes
+
+import "time"
+
+// ShowSheet is the "Show to…" sheet: everyone in the campaign with where they
+// are now, a box each, "Everyone here", how long they can watch it again, and
+// Show. It drapes below the button that opened it, over the page, and closes
+// with its close mark or Escape.
+templ ShowSheet(s showSheet) {
+	<section
+		class="csw-sheet"
+		role="dialog"
+		aria-labelledby={ "csw-sheet-h-" + s.Scene.ID }
+		data-csw-sheet
+		onkeydown={ sheetKeyDown(s.Scene.ID) }
+	>
+		<header class="csw-sheet-head">
+			<h2 class="csw-sheet-title" id={ "csw-sheet-h-" + s.Scene.ID }>Show “{ s.Scene.Name }” to…</h2>
+			<button type="button" class="csw-icon" aria-label="Close" title="Close" onclick={ closeSheetOnClick(s.Scene.ID) }>
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</header>
+		<form
+			hx-post={ sceneURL(s.CampaignID, s.Scene.ID) + "/show" }
+			hx-target={ "#" + liveID(s.Scene.ID) }
+			hx-swap="afterbegin"
+		>
+			if len(s.Rows) == 0 {
+				<p class="csw-quiet">Nobody else is in this campaign yet.</p>
+			} else {
+				if s.anyHere() {
+					<p class="csw-sheet-tools">
+						<button type="button" class="quiet-word" onclick={ everyoneHereOnClick() }>Everyone here</button>
+					</p>
+				}
+				<ul class="csw-people">
+					for _, r := range s.Rows {
+						<li>
+							<label class="csw-person">
+								<input
+									type="checkbox"
+									name="to"
+									value={ r.UserID }
+									data-here={ hereFlag(r.Place) }
+									checked?={ s.Picked[r.UserID] }
+								/>
+								<span class="csw-person-name">
+									{ r.Name }
+									if r.You {
+										<span class="csw-quiet">(you)</span>
+									}
+								</span>
+								<span class={ "csw-place", templ.KV("is-away", !r.Place.Here()) }>{ r.Place.Words() }</span>
+							</label>
+						</li>
+					}
+				</ul>
+				<p class="csw-hint">Someone away gets it in their Watch again list instead of on screen.</p>
+			}
+			<fieldset class="csw-rewatch">
+				<legend class="csw-flabel">They can watch it again for</legend>
+				<div class="csw-choices">
+					for _, c := range RewatchChoices {
+						<label class="csw-choice">
+							<input type="radio" name="rewatch" value={ c.Key } checked?={ s.rewatch() == c.Key }/>
+							<span>{ c.Name }</span>
+						</label>
+					}
+				</div>
+			</fieldset>
+			<p class="csw-err" role="alert" hidden?={ s.Error == "" }>{ s.Error }</p>
+			<div class="csw-sheet-foot">
+				<button type="submit" class="btn-primary" disabled?={ len(s.Rows) == 0 }>Show</button>
+			</div>
+		</form>
+	</section>
+}
+
+func hereFlag(p Place) string {
+	if p.Here() {
+		return "y"
+	}
+	return "n"
+}
+
+// ShownRow is a live showing: who it is on and Stop. After Show it also
+// clears the sheet (closeSheet), out of band.
+templ ShownRow(campaignID string, s Showing, closeSheet bool) {
+	<li class="csw-live-row" id={ showingRowID(s.ID) }>
+		<span>Showing to { viewersOf(s) }</span>
+		<span class="csw-quiet" aria-hidden="true">·</span>
+		<button
+			type="button"
+			class="quiet-word"
+			hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + s.ID + "/stop" }
+			hx-target={ "#" + showingRowID(s.ID) }
+			hx-swap="outerHTML"
+		>Stop</button>
+	</li>
+	if closeSheet {
+		<div id={ sheetID(s.SceneID) } class="csw-sheet-host" hx-swap-oob="true"></div>
+	}
+}
+
+// StoppedRow replaces a live row once the Director stops it.
+templ StoppedRow(s Showing, now time.Time) {
+	<li class="csw-live-row is-stopped" id={ showingRowID(s.ID) }>
+		<span>Stopped.</span>
+		if w := Until(s.RewatchUntil, now); w != "" {
+			<span class="csw-quiet">{ viewersOf(s) } can watch it again for { w }.</span>
+		}
+	</li>
+}

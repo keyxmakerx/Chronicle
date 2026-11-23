@@ -748,24 +748,34 @@ func (a *dmPresenceAdapter) clock() time.Time {
 	return time.Now()
 }
 
-// hereUsers merges the two signals. A Foundry row counts only when the GM's
-// client is connected now, the row is linked to a member, it says online, and
-// the report is recent enough to trust.
+// hereUsers merges the two signals: a member is here when either says so.
 func hereUsers(browser []string, reports []syncapi.FoundryPlayer, foundryUp bool, now time.Time) map[string]bool {
-	here := map[string]bool{}
+	inChronicle, inFoundry := presenceSignals(browser, reports, foundryUp, now)
+	for id := range inFoundry {
+		inChronicle[id] = true
+	}
+	return inChronicle
+}
+
+// presenceSignals keeps the two signals apart, for screens that say which one
+// a member is in (the Cut scenes Show sheet). A Foundry row counts only when
+// the GM's client is connected now, the row is linked to a member, it says
+// online, and the report is recent enough to trust.
+func presenceSignals(browser []string, reports []syncapi.FoundryPlayer, foundryUp bool, now time.Time) (inChronicle, inFoundry map[string]bool) {
+	inChronicle, inFoundry = map[string]bool{}, map[string]bool{}
 	for _, id := range browser {
-		here[id] = true
+		inChronicle[id] = true
 	}
 	if !foundryUp {
-		return here
+		return inChronicle, inFoundry
 	}
 	for _, p := range reports {
 		if p.MemberUserID == "" || !p.Online || now.Sub(p.ReportedAt) > foundryReportMaxAge {
 			continue
 		}
-		here[p.MemberUserID] = true
+		inFoundry[p.MemberUserID] = true
 	}
-	return here
+	return inChronicle, inFoundry
 }
 
 // dmScreenSyncAPIAdapter hands the DM Screen to the sync API for the Foundry

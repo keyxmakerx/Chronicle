@@ -67,6 +67,7 @@ type APIHandler struct {
 	quests               *QuestAPIHandler
 	encounters           *EncounterAPIHandler
 	crafting             *CraftingAPIHandler
+	cutscenes            *CutsceneAPIHandler
 	signer               *media.URLSigner
 	heroPlanner          entities.HeroPlanner
 	heroChanges          *entities.HeroChangeService

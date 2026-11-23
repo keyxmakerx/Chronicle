@@ -202,6 +202,17 @@ templ fullApp(title string) {
 		if notesWidgetVisible(ctx) {
 			@NotesWidget()
 		}
+		<!-- Cut scenes: plays a scene the Director shows to this player.
+		     Outside #main-content so a boosted navigation never cuts one off. -->
+		if cutsceneStageVisible(ctx) {
+			<div
+				hidden
+				data-widget="cutscene-stage"
+				data-campaign-id={ GetCampaignID(ctx) }
+				data-user-id={ GetUserID(ctx) }
+				data-engine-src={ AssetURL("/static/js/cutscene_engine.js") }
+			></div>
+		}
 	}
 }
 
@@ -1021,6 +1032,7 @@ templ Topbar() {
 					data-director={ fmt.Sprint(GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) }
 					data-gm-term={ GMTerm(ctx) }
 					data-decks={ fmt.Sprint(IsAddonEnabled(ctx, "decks")) }
+					data-cutscenes={ fmt.Sprint(IsAddonEnabled(ctx, "cutscenes")) }
 					if IsAddonEnabled(ctx, "decks") {
 						data-dkd-src={ AssetURL("/static/plugins/decks/js/deck_draw.js") }
 						data-dkd-cards-src={ AssetURL("/static/plugins/decks/js/deck_cards.js") }
@@ -1217,6 +1229,12 @@ func isPathPrefix(ctx context.Context, prefix string) bool {
 // note.
 func notesWidgetVisible(ctx context.Context) bool {
 	return InCampaign(ctx) && IsAuthenticated(ctx) && IsCampaignMember(ctx) && IsAddonEnabled(ctx, "jot-notes")
+}
+
+// cutsceneStageVisible reports whether this page listens for Cut scenes: a
+// signed-in member of a campaign with the "cutscenes" add-on on.
+func cutsceneStageVisible(ctx context.Context) bool {
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsCampaignMember(ctx) && IsAddonEnabled(ctx, "cutscenes")
 }
 
 // isExternalURL returns true if the URL starts with http:// or https://,
