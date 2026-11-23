@@ -148,12 +148,13 @@ func (h *Handler) writesOwnEntry(c *echo.Context, cc *campaigns.CampaignContext)
 	return false, nil
 }
 
-// heroLookFrom reads ?look=: only the exact value "stage" picks that look.
+// heroLookFrom reads ?look=: the stage look is the default, and only the exact
+// value "classic" picks the other.
 func heroLookFrom(v string) string {
-	if v == HeroLookStage {
-		return HeroLookStage
+	if v == HeroLookClassic {
+		return HeroLookClassic
 	}
-	return ""
+	return HeroLookStage
 }
 
 // NewHero renders the hero creator (GET /campaigns/:id/characters/new).

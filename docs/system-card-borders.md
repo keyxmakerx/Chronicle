@@ -63,8 +63,8 @@ valid keys.
 
 ## Where borders show
 
-Only the hero creator's stage look draws borders (the creator opened with
-`?look=stage` on its address). The classic creator never draws them, and neither
+Only the hero creator's stage look draws borders. It is the default look; the
+creator opened with `?look=classic` on its address is the classic one, which never draws them, and neither
 creator lists the two details as facts.
 The stage look draws the border on the entry's card on a phone and on a computer;
 the parts of a border made to take colour (carved lines, runes, glowing cracks, a
