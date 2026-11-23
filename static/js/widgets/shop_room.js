@@ -2573,18 +2573,26 @@
           root.classList.remove('inside'); root.classList.add('closed');
           front.classList.remove('opening'); front.setAttribute('aria-expanded', 'false');
         };
-        try {
-          greet = false; farewell();
-          clearTimeout(walkT); settle(); alive(false); tilt(0, 0); setOpen(false); peek(false);
-          if (still()) { shut(); return; }
+        // Each step runs on its own, so a throw in one never skips the rest:
+        // stopping the loops matters even when the farewell fails.
+        var failed = false;
+        var step = function (f) {
+          try { f(); } catch (err) { failed = true; if (window.console) console.error('[shop_room] leaving', err); }
+        };
+        clearTimeout(walkT);
+        step(function () { greet = false; farewell(); });
+        step(settle);
+        step(function () { alive(false); });
+        step(function () { tilt(0, 0); });
+        step(function () { setOpen(false); peek(false); });
+        if (failed || still()) { shut(); return; }
+        step(function () {
           var r = front.querySelector('.shr-dr').getBoundingClientRect();
           dlg.style.transformOrigin = (r.left + r.width / 2) + 'px ' + (r.top + r.height * .6) + 'px';
           dlg.classList.add('leaving');
           walkT = setTimeout(shut, 420);
-        } catch (err) {
-          clearTimeout(walkT); shut();
-          if (window.console) console.error('[shop_room] leaving', err);
-        }
+        });
+        if (failed) shut();
       }
       // Escape in the room closes what is open in it first; with nothing open it
       // presses Leave, so leaving still goes through the one Leave control.
