@@ -581,6 +581,33 @@ func TestFreshRules(t *testing.T) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	})
+	t.Run("seeing the newest of a deal marks the older ones, not a later one", func(t *testing.T) {
+		w := newScreenWorld(t, true)
+		var ids []string
+		for i := 0; i < 3; i++ {
+			id := deal(w, "h-tam")
+			age(w, id, time.Duration(3-i)*time.Minute) // later deals are newer
+			ids = append(ids, id)
+		}
+		// The pop-up showed ids[1]; ids[2] was dealt after it.
+		if rec := w.post(decksBase+"/hand/fresh/"+ids[1]+"/seen", "u-tam"); rec.Code != 204 {
+			t.Fatalf("seen: %d", rec.Code)
+		}
+		if got := fresh(w, "u-tam"); len(got) != 1 || got[0] != ids[2] {
+			t.Errorf("after seeing the second: %v, want only [%s]", got, ids[2])
+		}
+		// Ilse's card is not swept by Tam's mark.
+		theirs := deal(w, "h-ilse")
+		if rec := w.post(decksBase+"/hand/fresh/"+ids[2]+"/seen", "u-tam"); rec.Code != 204 {
+			t.Fatalf("seen: %d", rec.Code)
+		}
+		if got := fresh(w, "u-tam"); len(got) != 0 {
+			t.Errorf("Tam: %v", got)
+		}
+		if got := fresh(w, "u-ilse"); len(got) != 1 || got[0] != theirs {
+			t.Errorf("Ilse: %v", got)
+		}
+	})
 	t.Run("seen once, idempotent, and only my own", func(t *testing.T) {
 		w := newScreenWorld(t, true)
 		mine, theirs := deal(w, "h-tam"), deal(w, "h-ilse")

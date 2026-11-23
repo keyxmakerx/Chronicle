@@ -1842,14 +1842,10 @@
       return C.loadDeckDraw().then(function (d) {
         return d.arrive({ campaignId: self.campaignId, card: card, onClose: function () { self.freshShowing = false; self.askFresh(); } });
       }).then(function (shown) {
+        // Several dealt at once pop up once, as the newest: the server marks
+        // the older ones seen with it, and they wait in the Hand.
         if (!shown) { self.freshShowing = false; return; }
-        self.freshSeen[card.copyId] = true;
-        // Several dealt at once pop up once, as the newest; the rest wait in
-        // the Hand, marked new there, rather than popping one after another.
-        cards.slice(1).forEach(function (c) {
-          self.freshSeen[c.copyId] = true;
-          C.apiFetch(base + '/hand/fresh/' + encodeURIComponent(c.copyId) + '/seen', { method: 'POST' }).catch(function () { /* told again next time */ });
-        });
+        cards.forEach(function (c) { self.freshSeen[c.copyId] = true; });
       });
     }).catch(function () { self.freshShowing = false; });
   };

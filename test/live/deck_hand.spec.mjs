@@ -22,6 +22,15 @@ import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { person, siteAdmin, newCampaign, addMember, enableAddons, done, once, resetErrors, ADMIN } from './_live.mjs';
 
+// A card dealt to a hero pops up on its player's open page; Later sets it
+// aside into the Hand, where the walk goes on.
+async function setAside(who) {
+  const pop = who.page.locator('[data-dkd-ov][data-arrive]');
+  await pop.waitFor();
+  await who.page.click('[data-dko-later]');
+  await who.page.locator('[data-dkd-ov]').waitFor({ state: 'detached' });
+}
+
 after(done);
 
 const SHOTS = process.env.LIVE_SHOTS || '';
@@ -175,6 +184,7 @@ async function walk(tag, view, { keyboard = false } = {}) {
   // A Director deals one face down to Tam's hero, from a second browser.
   const dealt = await j(owner, `${A}/${w.omens}/deal-card`, 'POST', { cardId: w.moon, to: 'hand', heroId: w.heroTam });
   assert.ok(dealt.ok, 'the deal failed: ' + JSON.stringify(dealt.body));
+  await setAside(tam);
   const slot = hand(tam).locator('[data-dkh-slot]');
   await slot.first().waitFor();
   assert.equal(await slot.count(), 1);
@@ -309,6 +319,7 @@ test('on a phone, a hand of twelve scrolls inside its row, says its count, and a
     assert.ok(dealt.ok, 'a deal failed: ' + JSON.stringify(dealt.body));
   }
   await openHand(tam, cid);
+  await setAside(tam);
   await tam.page.waitForFunction(() => document.querySelectorAll('#tt-drawer [data-dkh-slot]').length === 12);
   const row = tam.page.locator('#tt-drawer [data-dkh-held]').first();
   const read = () => row.evaluate((r) => ({ sw: r.scrollWidth, cw: r.clientWidth, more: r.getAttribute('data-dkh-more'), label: r.parentNode.querySelector('.dkh-lab').textContent.replace(/\s+/g, ' ').trim() }));
@@ -475,6 +486,7 @@ test('the Cards part is a tab under a hero page a game system draws', async (t) 
 
   // The hero's player: the tab, open on load, counting one, the back of the card.
   await openDsHero(tam, cid, hero);
+  await setAside(tam);
   await dsTab(tam).waitFor();
   assert.match(await dsTab(tam).innerText(), /^Cards\s*1$/i);
   await tam.page.waitForFunction(() => document.querySelector('[data-pt-tab="hero_cards"]')?.getAttribute('aria-selected') === 'true');
@@ -512,6 +524,7 @@ test('the Cards part is a tab under a hero page a game system draws', async (t) 
   assert.ok(await dsPane(tam).isHidden(), 'the Cards pane is still showing');
   const second = await j(owner, `${A}/${omens}/deal-card`, 'POST', { cardId: card, to: 'hand', heroId: hero });
   assert.ok(second.ok, 'the second deal failed: ' + JSON.stringify(second.body));
+  await setAside(tam);
   await tam.page.waitForFunction(() => document.querySelector('[data-pt-tab="hero_cards"] [data-pt-n]')?.textContent === '2');
   await dsTab(tam).click();
   assert.equal(await dsPane(tam).locator('.dkh-item').count(), 2);

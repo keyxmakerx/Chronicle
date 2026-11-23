@@ -26,6 +26,8 @@ const (
 	freshWindow = 10 * time.Minute
 	// freshMax is how many dealt cards one check brings.
 	freshMax = 3
+	// freshSweep is how many older dealt cards one pop-up marks seen with it.
+	freshSweep = 100
 	// fanMax is how many backs the draw overlay's fan shows.
 	fanMax = 7
 )
@@ -460,17 +462,9 @@ func (s *service) FreshCards(ctx context.Context, campaignID string, v Viewer) (
 	if v.Director || s.screen == nil {
 		return out, nil
 	}
-	owned, err := r.ownedHeroes()
+	rows, err := s.freshRows(r, freshMax)
 	if err != nil {
 		return nil, err
-	}
-	ids := make([]string, 0, len(owned))
-	for _, h := range owned {
-		ids = append(ids, h.ID)
-	}
-	rows, err := s.screen.Fresh(ctx, campaignID, v.UserID, ids, freshWindow, freshMax)
-	if err != nil {
-		return nil, apperrorInternal(err)
 	}
 	for _, row := range rows {
 		d, err := r.deck(row.DeckID)
@@ -497,13 +491,54 @@ func (s *service) MarkFreshSeen(ctx context.Context, campaignID, copyID string, 
 	if err != nil {
 		return err
 	}
+	found := false
 	for _, c := range held {
 		if c.ID == copyID {
-			if err := s.screen.MarkSeen(ctx, campaignID, v.UserID, copyID); err != nil {
-				return apperrorInternal(err)
-			}
-			return nil
+			found = true
+			break
 		}
 	}
-	return errNotFound("hand")
+	if !found {
+		return errNotFound("hand")
+	}
+	// The pop-up stands for every card dealt up to the one it showed, so a
+	// deal of several pops up once: the older ones are marked seen with it and
+	// wait in the Hand. A card dealt after it still pops up on its own.
+	rows, err := s.freshRows(r, freshSweep)
+	if err != nil {
+		return err
+	}
+	mark := []string{copyID}
+	for i, row := range rows {
+		if row.CopyID == copyID {
+			for _, older := range rows[i+1:] {
+				mark = append(mark, older.CopyID)
+			}
+			break
+		}
+	}
+	for _, id := range mark {
+		if err := s.screen.MarkSeen(ctx, campaignID, v.UserID, id); err != nil {
+			return apperrorInternal(err)
+		}
+	}
+	return nil
+}
+
+// freshRows lists, newest first, the unseen face-down cards dealt to a hero
+// the viewer plays.
+func (s *service) freshRows(r *request, limit int) ([]FreshRow, error) {
+	owned, err := r.ownedHeroes()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(owned))
+	for _, h := range owned {
+		ids = append(ids, h.ID)
+	}
+	rows, err := s.screen.Fresh(r.ctx, r.cid, r.v.UserID, ids, freshWindow, limit)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	return rows, nil
 }

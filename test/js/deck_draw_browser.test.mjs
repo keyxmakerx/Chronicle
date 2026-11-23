@@ -94,7 +94,13 @@ const SERVER = `(function () {
     if (method === 'PUT' && u === '/campaigns/c1/decks/screen/picks') { if (srv.picksRefuse) return bad(srv.picksRefuse, 400); srv.picks = JSON.parse(body).deckIds; return { status: 204, body: '' }; }
     if (method === 'GET' && u === '/campaigns/c1/decks/hand') return { status: 200, body: handHtml() };
     if (method === 'GET' && u === '/campaigns/c1/decks/hand/fresh') return J({ cards: dir() ? [] : srv.fresh.filter(function (c) { return !srv.seen[c.copyId]; }) });
-    if (method === 'POST' && (m = u.match(/\\/decks\\/hand\\/fresh\\/([^/]+)\\/seen$/))) { srv.seen[m[1]] = true; return { status: 204, body: '' }; }
+    if (method === 'POST' && (m = u.match(/\\/decks\\/hand\\/fresh\\/([^/]+)\\/seen$/))) {
+      // As the server does: the shown card and every older one are seen.
+      var at = srv.fresh.map(function (c) { return c.copyId; }).indexOf(m[1]);
+      srv.seen[m[1]] = true;
+      if (at >= 0) srv.fresh.slice(at + 1).forEach(function (c) { srv.seen[c.copyId] = true; });
+      return { status: 204, body: '' };
+    }
     if (method === 'GET' && (m = u.match(/\\/decks\\/(d\\d)\\/draw-view$/))) { return srv.decks[m[1]] ? J(view(m[1])) : bad('not found', 404); }
     if (method === 'GET' && (m = u.match(/\\/decks\\/(d\\d)\\/copies\\/([^/]+)\\/face$/))) return { status: 200, body: face(m[2]) };
     if (method === 'POST' && (m = u.match(/\\/decks\\/hand\\/(d\\d)\\/copies\\/([^/]+)\\/turn\\?size=open$/))) return { status: 200, body: face(m[2]) };
@@ -864,18 +870,17 @@ test('a dealt card pops up once: face down, centred, nothing of it shown, Turn i
   await page.close2();
 });
 
-test('several cards dealt at once pop up once, as the newest, and the rest are marked seen', { skip }, async () => {
+test('several cards dealt at once pop up once, as the newest', { skip }, async () => {
   const page = await open({ viewer: 'player', start: false });
   await page.evaluate((f) => { window.__srv.fresh = [f, Object.assign({}, f, { copyId: 'o2' }), Object.assign({}, f, { copyId: 'o3' })]; }, FRESH);
   await page.evaluate(() => window.__start());
   await page.waitForSelector('[data-dkd-ov][data-arrive] [data-dko-cardturn]');
-  await page.waitForFunction(() => window.__srv.calls.filter((c) => /seen$/.test(c)).length === 3);
   await page.click('[data-dko-later]');
   await page.waitForSelector('[data-dkd-ov]', { state: 'detached' });
-  await page.waitForTimeout(400);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:decks-changed')));
+  await page.waitForTimeout(500);
   assert.equal(await page.$('[data-dkd-ov]'), null, 'a second card popped up after the first');
-  const seen = (await calls(page)).filter((c) => /seen$/.test(c)).sort();
-  assert.deepEqual(seen, ['o1', 'o2', 'o3'].map((id) => 'POST /campaigns/c1/decks/hand/fresh/' + id + '/seen'));
+  assert.deepEqual((await calls(page)).filter((c) => /seen$/.test(c)), ['POST /campaigns/c1/decks/hand/fresh/o1/seen'], 'only the newest is marked; the server marks the rest');
   await page.close2();
 });
 
