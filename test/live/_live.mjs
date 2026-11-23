@@ -97,7 +97,9 @@ export async function person(opts = {}) {
     api: (url, o) => api(page, url, o),
     go: (path) => go(page, path),
   };
-  if (opts.signIn !== false) await signIn(who, { register: opts.register !== false });
+  // A made-up address is always a new account, so it signs up straight away
+  // instead of first waiting out a sign-in that cannot succeed.
+  if (opts.signIn !== false) await signIn(who, { register: opts.register !== false, fresh: !opts.email });
   return who;
 }
 
@@ -127,18 +129,23 @@ export function siteAdmin(opts = {}) {
 }
 
 
-/** Sign in, registering the account first when `register` is set and it is new. */
-export async function signIn(who, { register = true } = {}) {
+/**
+ * Sign in, registering the account first when `register` is set and it is new.
+ * `fresh` says the account cannot exist yet, so it goes straight to sign-up.
+ */
+export async function signIn(who, { register = true, fresh = false } = {}) {
   const { page } = who;
-  await page.goto(BASE + '/login');
-  await page.fill('#email', who.email);
-  await page.fill('#password', who.password);
-  await Promise.all([
-    page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 5000 }).catch(() => {}),
-    page.locator('#password').press('Enter'),
-  ]);
-  if (!page.url().includes('/login')) return;
-  if (!register) throw new Error('could not sign in as ' + who.email);
+  if (!(fresh && register)) {
+    await page.goto(BASE + '/login');
+    await page.fill('#email', who.email);
+    await page.fill('#password', who.password);
+    await Promise.all([
+      page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 5000 }).catch(() => {}),
+      page.locator('#password').press('Enter'),
+    ]);
+    if (!page.url().includes('/login')) return;
+    if (!register) throw new Error('could not sign in as ' + who.email);
+  }
   await page.goto(BASE + '/register');
   await page.fill('#email', who.email);
   await page.fill('#display_name', who.name);
