@@ -11,7 +11,11 @@ import (
 
 func init() {
 	addAIKinds(185, func(d *aiDeps) []records.Kind {
-		return []records.Kind{records.MenuOrderKind{Svc: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}}}
+		menu := aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}
+		return []records.Kind{
+			records.MenuOrderKind{Svc: menu},
+			records.CategoryKind{Svc: aiCategoryAdapter{owners: menu, types: d.Entities}},
+		}
 	})
 }
 

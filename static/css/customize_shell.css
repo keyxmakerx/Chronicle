@@ -240,8 +240,22 @@
   position: relative;
   transition: transform var(--dur-standard) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out), border-color var(--dur-micro);
 }
-.czs-cat-card:hover { transform: translateY(-2px); box-shadow: var(--elev-hover); border-color: rgb(var(--color-accent-rgb) / 0.45); }
+/* The cell holds the card's link and its ⋯ beside it, so they lift together. */
+.czs-cat-cell { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.czs-cat-cell > .czs-cat-card { flex: 1; padding-right: 48px; }
+.czs-cat-cell:hover > .czs-cat-card { transform: translateY(-2px); box-shadow: var(--elev-hover); border-color: rgb(var(--color-accent-rgb) / 0.45); }
 .czs-cat-card.is-gone { opacity: 0.55; }
+.czs-cat-more { position: absolute; top: 8px; right: 8px; transition: transform var(--dur-standard) var(--ease-out), background var(--dur-micro), color var(--dur-micro); }
+.czs-cat-cell:hover > .czs-cat-more { transform: translateY(-2px); }
+.czs-cat-more[aria-expanded="true"] { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+@media (pointer: coarse) { .czs-cat-more { width: 44px; height: 44px; top: 4px; right: 4px; } }
+/* A card's ⋯ menu: words, the destructive one in the bad colour. */
+.czs-menu { padding: 6px; min-width: 180px; display: flex; flex-direction: column; animation-duration: var(--dur-everyday); }
+.czs-menu > [role="menuitem"] { display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; border-radius: 8px; background: none; color: var(--color-text-body); font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
+.czs-menu > [role="menuitem"]:hover, .czs-menu > [role="menuitem"]:focus-visible { background: var(--color-bg-tertiary); color: var(--color-text-primary); outline: none; }
+.czs-menu > .is-bad { color: rgb(var(--color-bad-rgb)); }
+.czs-menu > .is-bad:hover, .czs-menu > .is-bad:focus-visible { color: rgb(var(--color-bad-rgb)); background: rgb(var(--color-bad-rgb) / 0.1); }
+@media (pointer: coarse) { .czs-menu > [role="menuitem"] { min-height: 44px; } }
 .czs-cat-card .czs-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .czs-cat-card .czs-nm { font-weight: 600; color: var(--color-text-primary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .czs-cat-card .czs-sub { font-size: 12.5px; color: var(--color-text-secondary); }

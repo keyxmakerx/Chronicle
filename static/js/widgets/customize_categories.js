@@ -9,12 +9,13 @@
  * owner presses Save. Section shape, applied by the entities plugin:
  *
  *   { items: { "<id>" | "new-<slug>": { new, name, name_plural, icon, color,
- *       claimable, parent, clear_parent, copy_from, menu, delete, layout,
- *       home, description, fields } },
+ *       claimable, parent, clear_parent, copy_from, menu, delete, move_to,
+ *       layout, home, description, fields } },
  *     _changes: [{ label, href }] }
  *
  * An existing category's item holds only what differs from what is saved,
- * so a change put back by hand leaves the draft. The Customizer's page layout
+ * so a change put back by hand leaves the draft. A category deleted with
+ * pages carries move_to, the saved category its pages move into on Save. The Customizer's page layout
  * (customize_page_editor.js) owns `layout`, `home` and `description` and
  * writes them through Chronicle.customizeCategoryWrite, so the save bar's
  * lines stay this widget's to make.
@@ -113,7 +114,7 @@
           claimable: it.claimable !== undefined ? !!it.claimable : c.claimable,
           menu: it.menu !== undefined ? !!it.menu : inMenu[c.id] !== false,
           parent: parent, pages: c.pages, trashed: c.trashed, dmOnly: c.dmOnly,
-          deleted: !!it.delete, changed: settingsKeys(it).length > 0, layoutChanged: !!it.layout, fieldsChanged: !!it.fields
+          deleted: !!it.delete, moveTo: it.move_to || '', changed: settingsKeys(it).length > 0, layoutChanged: !!it.layout, fieldsChanged: !!it.fields
         };
       });
       Object.keys(its).forEach(function (k) {
@@ -167,7 +168,10 @@
       Object.keys(its).forEach(function (k) {
         var it = its[k], s = savedById(k), nm = it.name_plural || (s && s.plural) || 'Category';
         if (it.new) out.push({ label: 'New category ' + nm, href: BASE + '/categories/' + k + '/settings' });
-        else if (it.delete) out.push({ label: 'Delete ' + (s ? s.plural : nm), href: BASE + '/categories' });
+        else if (it.delete) {
+          var to = it.move_to ? byKey[String(it.move_to)] : null;
+          out.push({ label: 'Delete ' + (s ? s.plural : nm) + (to ? ', its pages move to ' + (to.plural || to.name) : ''), href: BASE + '/categories' });
+        }
         else {
           if (it.layout || it.page_layouts) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
           if (it.home || it.description !== undefined) out.push({ label: nm + ' home', href: BASE + '/categories/' + k + '/home' });
@@ -197,16 +201,24 @@
       var kids = kidsOf(c.key), href = BASE + '/categories/' + c.key + '/' + (c.isNew ? 'settings' : 'layout');
       var pills = [];
       if (c.isNew) pills.push('<span class="czs-pill is-new">New</span>');
-      if (c.deleted) pills.push('<span class="czs-pill is-warn">Deleted when you save</span>');
+      if (c.deleted) {
+        var to = c.moveTo ? find(c.moveTo) : null;
+        pills.push('<span class="czs-pill is-warn">Deleted when you save</span>');
+        if (to) pills.push('<span class="czs-pill">Pages move to ' + esc(to.plural || to.name) + '</span>');
+      }
       else if (c.changed && !c.isNew) pills.push('<span class="czs-pill is-new">Changed</span>');
       if (c.dmOnly) pills.push('<span class="czs-pill is-dm"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the ' + gmTerm() + ' team sees it</span>');
       else pills.push('<span class="czs-pill">' + (c.menu ? 'In the menu' : 'Hidden from players’ menu') + '</span>');
       if (claiming && c.claimable && !c.dmOnly) pills.push('<span class="czs-pill">Players can claim</span>');
-      return '<a class="czs-cat-card' + (c.deleted ? ' is-gone' : '') + '" href="' + esc(href) + '">' +
+      // The ⋯ sits beside the link, not in it: a button inside a link is
+      // not valid, and a long press on the card stays the browser's own.
+      return '<div class="czs-cat-cell"><a class="czs-cat-card' + (c.deleted ? ' is-gone' : '') + '" href="' + esc(href) + '">' +
         '<span class="czs-meta">' + chip(c) + '<span style="min-width:0"><span class="czs-nm">' + esc(c.plural || c.name) + '</span>' +
         '<span class="czs-sub">' + (c.isNew ? 'Made in your draft' : pagesText(c.pages)) + '</span></span></span>' +
         (kids.length ? '<span class="czs-kids">Kinds: ' + esc(kids.map(function (k) { return k.plural || k.name; }).join(', ')) + '</span>' : '') +
-        '<span class="czs-foot">' + pills.join('') + '</span></a>';
+        '<span class="czs-foot">' + pills.join('') + '</span></a>' +
+        '<button type="button" class="czs-icon-btn czs-cat-more" data-more="' + esc(c.key) + '" aria-haspopup="menu" aria-expanded="false" aria-label="More for ' + esc(c.plural || c.name) + '">' +
+        '<i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button></div>';
     }
 
     /* ---------- A category's workspace ----------
@@ -240,9 +252,8 @@
     function drawSettings(c, body) {
       var focusId = document.activeElement && body.contains(document.activeElement) ? document.activeElement.id : '';
       var kids = kidsOf(c.key), parent = c.parent ? find(c.parent) : null;
-      var blocked = c.isNew ? '' : (c.pages > 0 ? 'Move or delete its ' + pagesText(c.pages) + ' first.' :
-        c.trashed > 0 ? pagesText(c.trashed) + ' of it ' + (c.trashed === 1 ? 'is' : 'are') + ' in the Trash. Restore or empty ' + (c.trashed === 1 ? 'it' : 'them') + ' first.' :
-        kids.length ? 'Delete its kinds first.' : '');
+      var blocked = c.isNew ? '' : (kids.length ? 'Delete its kinds first.' : '');
+      var pagesNote = (c.pages + c.trashed) > 0 ? 'Its ' + pagesText(c.pages + c.trashed) + ((c.pages + c.trashed) === 1 ? ' moves' : ' move') + ' to a category you choose, so no page is deleted.' : 'It has no pages, so nothing else is lost.';
       body.innerHTML = '<h1 class="czs-h1">Settings</h1><p class="czs-lede">The name, icon and colour of ' + esc(c.plural || 'this category') + ', and who sees it in the menu.</p><div class="czs-form mt-6">' +
         '<div class="czs-split"><div class="czs-field"><label for="czc-plural">Name</label><input class="input" id="czc-plural" maxlength="100" value="' + esc(c.plural) + '"><p class="czs-err" id="czc-plural-e" hidden>A category needs a name.</p></div>' +
         '<div class="czs-field"><label for="czc-one">One of them is called</label><input class="input" id="czc-one" maxlength="100" value="' + esc(c.name) + '"><p class="czs-hint">Used in “New ' + esc((c.name || 'page').toLowerCase()) + '”.</p><p class="czs-err" id="czc-one-e" hidden>Give one of them a name too.</p></div></div>' +
@@ -262,11 +273,11 @@
             return '<div class="czs-kind">' + chip(k, 'sm') + '<span class="czs-nm">' + esc(k.plural || k.name) + (k.isNew ? ' <span class="czs-pill is-new">New</span>' : '') + '</span>' +
               '<a class="btn-ghost btn-sm" href="' + esc(BASE + '/categories/' + k.key + '/' + (k.isNew ? 'settings' : 'layout')) + '">Open</a>' +
               '<button type="button" class="czs-icon-btn" data-rm-kind="' + esc(k.key) + '" aria-label="Remove ' + esc(k.plural || k.name) + '"' +
-              (!k.isNew && (k.pages > 0 || k.trashed > 0 || kidsOf(k.key).length) ? ' disabled title="It has pages; move or delete them first"' : ' title="Remove"') + '><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>';
+              ' title="Remove"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>';
           }).join('') : '<p class="czs-hint">No kinds yet.</p>') + '</div>' +
           '<div class="czs-act-row"><input class="input" id="czc-kind" maxlength="100" placeholder="Add a kind, like “Dungeons”" style="flex:1;min-width:0;width:auto"><button type="button" class="btn-secondary" id="czc-kind-add"><i class="fa-solid fa-plus" aria-hidden="true"></i>Add</button></div></div>') +
         (c.deleted ? '<div class="czs-danger"><div><span class="czs-lab">Deleted when you save</span><p class="czs-hint">Nothing is gone yet.</p></div><button type="button" class="btn-secondary" id="czc-keep">Keep it</button></div>' :
-          '<div class="czs-danger"><div><span class="czs-lab">Delete ' + esc(c.plural || 'this category') + '</span><p class="czs-hint">' + (c.isNew ? 'It is only in your draft, so nothing else changes.' : (blocked || 'It has no pages, so nothing else is lost.')) + '</p></div>' +
+          '<div class="czs-danger"><div><span class="czs-lab">Delete ' + esc(c.plural || 'this category') + '</span><p class="czs-hint">' + (c.isNew ? 'It is only in your draft, so nothing else changes.' : (blocked || pagesNote)) + '</p></div>' +
           '<button type="button" class="btn-danger" id="czc-delete"' + (blocked ? ' disabled' : '') + '><i class="fa-solid fa-trash-can word-ic" aria-hidden="true"></i>Delete category</button></div>') +
         '</div>';
       bindSettings(c, body);
@@ -322,7 +333,7 @@
       var del = $('#czc-delete', body);
       if (del) del.addEventListener('click', function () { removeCategory(c, true); });
       var keep = $('#czc-keep', body);
-      if (keep) keep.addEventListener('click', function () { write(c.key, { delete: undefined }); drawWorkspace(); });
+      if (keep) keep.addEventListener('click', function () { write(c.key, { delete: undefined, move_to: undefined }); drawWorkspace(); });
     }
     function drawWorkspaceHead() {
       // Redraw the header and tabs only, so a field being typed in keeps its caret.
@@ -338,39 +349,130 @@
     }
     // removeCategory takes a category out: one made in the draft simply
     // leaves it; a saved one is marked to be deleted on Save, after a confirm
-    // when it is the category itself rather than one of its kinds.
+    // that also asks where its pages go when it has any.
     function removeCategory(c, leave) {
       if (!c) return;
       if (c.isNew) {
         var its = items();
         Object.keys(its).forEach(function (k) { if (k === c.key || its[k].parent === c.key) delete its[k]; });
         commit(its);
-        if (leave) shellFlush().then(function () { if (alive) location.href = BASE + '/categories'; });
-        else drawWorkspace();
+        after(leave);
         return;
       }
-      confirmDelete(c, function () {
-        write(c.key, { delete: true });
-        if (leave) shellFlush().then(function () { if (alive) location.href = BASE + '/categories'; });
-        else drawWorkspace();
+      deleteDialog(c, function (moveTo) {
+        write(c.key, { delete: true, move_to: moveTo || undefined });
+        after(leave);
       });
     }
-    function confirmDelete(c, ok) {
+    function after(leave) {
+      if (leave) shellFlush().then(function () { if (alive) location.href = BASE + '/categories'; });
+      else draw();
+    }
+    // keepCategory takes a category back out of the deletions.
+    function keepCategory(c) { write(c.key, { delete: undefined, move_to: undefined }); draw(); }
+
+    // moveTargets is where a category's pages can go: a saved category that
+    // stays, and, for pages only the GM team sees, another category only
+    // they see, since the category is what hides those pages.
+    function moveTargets(c) {
+      return model().filter(function (t) {
+        return !t.isNew && !t.deleted && t.key !== c.key && t.parent !== c.key && (!c.dmOnly || t.dmOnly);
+      });
+    }
+    // targetLabel names a place the pages can go so two of the same name
+    // can still be told apart: who sees it, then how many pages it has.
+    function targetLabel(t, all) {
+      var p = t.parent ? find(t.parent) : null;
+      var base = (p ? (p.plural || p.name) + ' › ' : '') + (t.plural || t.name);
+      var twin = all.filter(function (o) { return o !== t && (o.plural || o.name) === (t.plural || t.name); });
+      if (t.dmOnly) base += ' (only the ' + gmTerm() + ' team sees it)';
+      if (twin.length && twin.every(function (o) { return o.dmOnly === t.dmOnly; })) base += ' (' + pagesText(t.pages) + ')';
+      return base;
+    }
+
+    // deleteDialog confirms a deletion. A category with pages names where
+    // they go first; one with kinds, or whose pages have nowhere they can
+    // go, says why and offers no delete.
+    function deleteDialog(c, ok) {
+      var nm = esc(c.plural || c.name), n = c.pages + c.trashed;
+      var kids = kidsOf(c.key), targets = n ? moveTargets(c) : [];
+      // Another category deleted in this draft may be sending its pages here.
+      var inbound = model().filter(function (o) { return o.deleted && o.moveTo === c.key; })[0];
+      var why = kids.length ? 'Delete its kinds first: ' + esc(kids.map(function (k) { return k.plural || k.name; }).join(', ')) + '.' :
+        inbound ? 'The pages of ' + esc(inbound.plural || inbound.name) + ' are set to move here. Choose somewhere else for them first.' :
+        n && !targets.length ? 'Its pages are for the ' + esc(gmTerm()) + ' team only, and no other category is. Move them one by one first, or make another category only the ' + esc(gmTerm()) + ' team sees.' : '';
+      var trash = c.trashed ? ' (' + c.trashed + ' of them in the Trash)' : '';
+      var body = why ? '<p id="czc-dd">' + why + '</p>' :
+        n ? '<p id="czc-dd">Its ' + pagesText(n) + trash + (n === 1 ? ' moves' : ' move') + ' to another category first, so no page is deleted.</p>' +
+          '<div class="czs-field"><label for="czc-moveto">Move its pages to</label><select class="input" id="czc-moveto">' +
+          targets.map(function (t) { return '<option value="' + esc(t.key) + '">' + esc(targetLabel(t, targets)) + '</option>'; }).join('') + '</select>' +
+          '<p class="czs-hint">They keep their words, tags and links. Its own page layout, home and fields are deleted with it; a value in a field the other category doesn’t have stays saved on the page but isn’t shown.</p></div>' +
+          '<p class="czs-hint">Nothing happens until you save, and until then Discard or Undo brings it back.</p>' :
+          '<p id="czc-dd">It has no pages, so nothing else is lost. It is deleted when you save, and until then Discard or Undo brings it back.</p>';
       var sc = document.createElement('div');
       sc.className = 'czs-scrim'; sc._czsCat = true;
-      var nm = esc(c.plural || c.name);
       sc.innerHTML = '<div class="czs-dlg" role="alertdialog" aria-modal="true" aria-labelledby="czc-dt" aria-describedby="czc-dd" style="width:min(460px,100%)">' +
-        '<h2 id="czc-dt">Delete ' + nm + '?</h2><p id="czc-dd">It has no pages, so nothing else is lost. It is deleted when you save, and until then Discard or Undo brings it back.</p>' +
-        '<div class="czs-acts"><button type="button" class="btn-secondary" data-x>Keep it</button><button type="button" class="btn-danger" data-ok>Delete category</button></div></div>';
+        '<h2 id="czc-dt">' + (why ? nm + ' can’t be deleted yet' : 'Delete ' + nm + '?') + '</h2>' + body +
+        '<div class="czs-acts">' + (why ? '<button type="button" class="btn-secondary" data-x>Close</button>' :
+          '<button type="button" class="btn-secondary" data-x>Keep it</button><button type="button" class="btn-danger" data-ok>' + (n ? 'Move pages and delete' : 'Delete category') + '</button>') + '</div></div>';
       document.body.appendChild(sc);
       var opener = document.activeElement;
       if (window.Chronicle && Chronicle.modal) Chronicle.modal(sc, { opener: null, escape: false, focus: false, aria: false });
       function close() { sc.remove(); if (opener && opener.focus && document.body.contains(opener)) opener.focus(); }
       $('[data-x]', sc).addEventListener('click', close);
-      $('[data-ok]', sc).addEventListener('click', function () { sc.remove(); ok(); });
+      var okBtn = $('[data-ok]', sc);
+      if (okBtn) okBtn.addEventListener('click', function () {
+        var sel = $('#czc-moveto', sc);
+        var v = sel ? sel.value : '';
+        sc.remove();
+        ok(v);
+      });
       sc.addEventListener('pointerdown', function (e) { if (e.target === sc) close(); });
       sc.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
-      $('[data-x]', sc).focus();
+      ($('#czc-moveto', sc) || $('[data-x]', sc)).focus();
+    }
+
+    /* ---------- A card's ⋯ menu ---------- */
+    function moreMenu(btn, c) {
+      var p = document.createElement('div');
+      p.className = 'czs-pop czs-menu'; p._czsCat = true;
+      p.setAttribute('role', 'menu'); p.setAttribute('aria-label', btn.getAttribute('aria-label'));
+      var href = BASE + '/categories/' + c.key + '/settings';
+      p.innerHTML = '<a role="menuitem" href="' + esc(href) + '">Settings</a>' +
+        (c.deleted ? '<button type="button" role="menuitem" data-act="keep">Keep it</button>' :
+          '<button type="button" role="menuitem" class="is-bad" data-act="delete">' + (c.isNew ? 'Remove from draft' : 'Delete…') + '</button>');
+      document.body.appendChild(p);
+      var r = btn.getBoundingClientRect();
+      p.style.left = Math.max(12, Math.min(r.right - p.offsetWidth, innerWidth - p.offsetWidth - 12)) + 'px';
+      var below = r.bottom + 4 + p.offsetHeight <= innerHeight;
+      p.style.top = (below ? r.bottom + 4 : Math.max(12, r.top - p.offsetHeight - 4)) + 'px';
+      p.style.transformOrigin = (below ? 'top' : 'bottom') + ' right';
+      btn.setAttribute('aria-expanded', 'true');
+      var rows = $$('[role="menuitem"]', p);
+      function close(back) {
+        p.remove(); btn.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('pointerdown', off, true);
+        if (back && document.body.contains(btn)) btn.focus();
+      }
+      function off(e) { if (!p.contains(e.target) && !btn.contains(e.target)) close(false); }
+      setTimeout(function () { document.addEventListener('pointerdown', off, true); }, 0);
+      p.addEventListener('keydown', function (e) {
+        var i = rows.indexOf(document.activeElement);
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); rows[(i + 1) % rows.length].focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); rows[(i - 1 + rows.length) % rows.length].focus(); }
+        else if (e.key === 'Tab') close(false);
+      });
+      p.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-act]');
+        if (!b) { if (e.target.closest('a')) close(false); return; }
+        close(true);
+        if (b.getAttribute('data-act') === 'keep') keepCategory(c);
+        else removeCategory(c);
+      });
+      rows[0].focus();
+      p._close = close;
+      return p;
     }
 
     /* ---------- The one icon picker ---------- */
@@ -461,7 +563,17 @@
     }
     on(el, 'click', function (e) {
       var b = e.target.closest('[data-new]');
-      if (b) { e.preventDefault(); newCategoryDialog(); }
+      if (b) { e.preventDefault(); newCategoryDialog(); return; }
+      var m = e.target.closest('[data-more]');
+      if (m) {
+        e.preventDefault();
+        var open = document.querySelector('.czs-menu');
+        var wasOpen = m.getAttribute('aria-expanded') === 'true';
+        if (open && open._close) open._close(false);
+        if (wasOpen) return;
+        var c = find(m.getAttribute('data-more'));
+        if (c) moreMenu(m, c);
+      }
     });
     if (!KEY && location.hash === '#new') setTimeout(newCategoryDialog, 0);
 
