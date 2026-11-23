@@ -157,6 +157,7 @@
     this.syncSheet();
     if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
     this.openFromLink();
+    this.watchDraw();
   }
 
   // A bell notice opens the Table on a leaf with ?table=<leaf>.
@@ -196,6 +197,7 @@
     var det = $('#tt-isl-detail'); if (det) det.remove();
     var mo = $('#tt-moment'); if (mo) mo.remove();
     clearTimeout(this.momTimer);
+    if (this.drawWatch) this.drawWatch.disconnect();
   };
 
   // The dice this person sees: their own pick, else the table's.
@@ -1509,7 +1511,7 @@
     this.on(document, 'pointerdown', function (ev) {
       var t = ev.target;
       if (!self.momOpen || self.sheet || ev.button !== 0 || !t || !t.closest) return;
-      if (!t.closest('#tt-moment, [data-tt-tab], .tt-island, [data-dkh-over]')) self.closeMoment(false);
+      if (!t.closest('#tt-moment, [data-tt-tab], .tt-island, [data-dkh-over], [data-dkd-ov]')) self.closeMoment(false);
     }, true);
     this.on(W, 'resize', function () { var box = document.getElementById('tt-moment'); if (box) self.placeMoment(box); });
   };
@@ -1639,7 +1641,7 @@
       var t = ev.target;
       if (ev.button !== 0 || !t || !t.closest) return;
       if (self.isl && self.isl.expanded && !t.closest('#tt-isl-detail, .tt-island')) self.collapse(self.isl);
-      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail, [data-dkh-over]')) self.closeTable(false);
+      if (self.open && !t.closest('#tt-drawer, [data-tt-tab], .tt-island, #tt-isl-detail, [data-dkh-over], [data-dkd-ov]')) self.closeTable(false);
     }, true);
 
     // A pick of your own rune dice: the die, its colour, or a crit animation.
@@ -1736,6 +1738,116 @@
       self.renderSection('dice');
       if (C.notify) C.notify('The table’s dice weren’t saved. Try again.', 'error');
     });
+  };
+
+  // ---------- The draw overlay (Card decks) ----------
+
+  // deck_draw.js, its stylesheet and the card motion script load on the first
+  // use: a press on a Draw button, the DM Screen's Card decks section, or a
+  // card dealt to this player. A page that never needs them never loads them.
+  var drawLoad = null;
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('script')); };
+      document.head.appendChild(s);
+    });
+  }
+  // Only the version token is read from the page; each path is fixed here, so
+  // a changed attribute can never point the loader at another script.
+  var DRAW_ASSETS = {
+    'data-dkd-src': '/static/plugins/decks/js/deck_draw.js',
+    'data-dkd-cards-src': '/static/plugins/decks/js/deck_cards.js',
+    'data-dkd-css': '/static/css/decks_draw.css',
+    'data-dkd-card-css': '/static/css/decks_card.css'
+  };
+  C.drawAsset = function (holder, attr) {
+    var v = holder && holder.getAttribute(attr);
+    if (!v) return '';
+    var m = /\?v=([A-Za-z0-9._-]{1,80})$/.exec(v);
+    return DRAW_ASSETS[attr] + (m ? '?v=' + encodeURIComponent(m[1]) : '');
+  };
+  C.loadDeckDraw = function () {
+    if (W.DeckDraw) return Promise.resolve(W.DeckDraw);
+    if (drawLoad) return drawLoad;
+    var holder = document.querySelector('[data-dkd-src]');
+    var src = C.drawAsset(holder, 'data-dkd-src');
+    if (!src) return Promise.reject(new Error('no source'));
+    // The overlay's own sheet, and the card sheet a page without cards lacks.
+    ['data-dkd-css', 'data-dkd-card-css'].forEach(function (attr) {
+      var href = C.drawAsset(holder, attr);
+      if (!href || document.querySelector('link[' + attr + '], link[href^="' + DRAW_ASSETS[attr] + '"]')) return;
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.setAttribute(attr, '');
+      document.head.appendChild(link);
+    });
+    var cards = W.DeckCards ? Promise.resolve() : loadScript(C.drawAsset(holder, 'data-dkd-cards-src') || DRAW_ASSETS['data-dkd-cards-src']);
+    drawLoad = cards.then(function () { return loadScript(src); }).then(function () { return W.DeckDraw; }, function (e) {
+      drawLoad = null;
+      throw e;
+    });
+    return drawLoad;
+  };
+
+  // The DM Screen's Card decks section mounts itself once the script is there;
+  // the script is fetched when the section first appears on the page.
+  Table.prototype.watchDraw = function () {
+    var self = this;
+    if (!this.decks) return;
+    if (this.director && W.MutationObserver) {
+      var done = false, queued = false, mo;
+      var look = function () {
+        queued = false;
+        if (done || !self.alive || !document.querySelector('[data-dkd-screen]')) return;
+        done = true;
+        if (mo) mo.disconnect();
+        C.loadDeckDraw().then(function (d) { d.scan(); }, function () { /* the section stays as the server drew it */ });
+      };
+      mo = new W.MutationObserver(function () { if (!queued) { queued = true; (W.requestAnimationFrame || W.setTimeout)(look); } });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+      this.drawWatch = mo;
+      look();
+    }
+    if (!this.director) {
+      this.freshShowing = false;
+      this.freshSeen = {};
+      // Any deck move in the campaign says the decks changed, so a burst of
+      // moves asks once.
+      var freshTimer = 0;
+      this.on(W, 'chronicle:decks-changed', function () {
+        clearTimeout(freshTimer);
+        freshTimer = setTimeout(function () { self.askFresh(); }, 250);
+      });
+      // A card that waited behind another overlay comes once that one closes.
+      this.on(W, 'chronicle:deck-draw-closed', function () { self.askFresh(); });
+      this.askFresh();
+    }
+  };
+
+  // A card a Director dealt to one of this player's heroes pops up once. The
+  // server says which are new; the script is loaded only when there is one.
+  Table.prototype.askFresh = function () {
+    var self = this;
+    if (!this.alive || this.freshShowing) return;
+    var base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/decks';
+    C.apiFetch(base + '/hand/fresh').then(function (res) { return res.ok ? res.json() : null; }).then(function (data) {
+      var cards = ((data && data.cards) || []).filter(function (c) { return !self.freshSeen[c.copyId]; });
+      var card = cards[0];
+      if (!card || !self.alive || self.freshShowing) return;
+      self.freshShowing = true;
+      return C.loadDeckDraw().then(function (d) {
+        return d.arrive({ campaignId: self.campaignId, card: card, onClose: function () { self.freshShowing = false; self.askFresh(); } });
+      }).then(function (shown) {
+        // Several dealt at once pop up once, as the newest: the server marks
+        // the older ones seen with it, and they wait in the Hand.
+        if (!shown) { self.freshShowing = false; return; }
+        cards.forEach(function (c) { self.freshSeen[c.copyId] = true; });
+      });
+    }).catch(function () { self.freshShowing = false; });
   };
 
   C.register('table', {

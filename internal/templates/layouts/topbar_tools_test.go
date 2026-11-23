@@ -135,3 +135,27 @@ func TestViewingBanner_BackToYourView(t *testing.T) {
 		}
 	}
 }
+
+// The draw overlay's script is named on the Table's host and on the DM Screen's
+// host, and only while the Card decks add-on is on, so a page that never uses
+// the overlay never loads it.
+func TestTopbar_DrawOverlayScriptIsNamedOnlyWithTheAddOn(t *testing.T) {
+	srcOn := regexp.MustCompile(`data-dkd-src="/static/plugins/decks/js/deck_draw\.js[^"]*"`)
+	for _, tt := range []struct {
+		name  string
+		addon bool
+		hosts int
+	}{{"add-on on", true, 2}, {"add-on off", false, 0}} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := viewer(3, true, false, false, false)
+			ctx = SetEnabledAddons(ctx, map[string]bool{"decks": tt.addon})
+			html := renderBar(t, ctx)
+			if n := len(srcOn.FindAllString(html, -1)); n != tt.hosts {
+				t.Errorf("%d hosts name the overlay script, want %d", n, tt.hosts)
+			}
+			if !strings.Contains(html, `data-tb-tool="table"`) || !strings.Contains(html, `data-tb-tool="dms"`) {
+				t.Error("the owner's bar lacks the Table or the DM Screen")
+			}
+		})
+	}
+}

@@ -27,7 +27,11 @@ func errMoved() error {
 	return apperror.NewConflict("that card just moved; look again and try once more")
 }
 
-func errNothingLeft() error { return apperror.NewConflict("Nothing left in this deck.") }
+// nothingLeftWords is what a draw from an empty pile says, and what the draw
+// view says before one is tried.
+const nothingLeftWords = "Nothing left in this deck."
+
+func errNothingLeft() error { return apperror.NewConflict(nothingLeftWords) }
 
 // apperrorInternal wraps a repository or adapter failure so no raw database
 // error reaches a response.

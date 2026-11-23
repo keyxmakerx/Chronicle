@@ -96,6 +96,20 @@ type Service interface {
 	// TurnFace turns one face-down copy over and returns its face.
 	TurnFace(ctx context.Context, campaignID, deckID, copyID string, v Viewer) (*OpenedCard, error)
 
+	// Screen reads the DM Screen's Card decks section. Directors only.
+	Screen(ctx context.Context, campaignID string, v Viewer) (*ScreenView, error)
+	// SetScreenPicks stores the decks a Director chose for that section.
+	SetScreenPicks(ctx context.Context, campaignID string, v Viewer, deckIDs []string) error
+	// DrawView reads a deck for the draw overlay: any deck for a Director, a
+	// deck open to them to draw from for a player, from the player types only.
+	DrawView(ctx context.Context, campaignID, deckID string, v Viewer) (*DrawView, error)
+	// ShownFace reads a shown copy's face for a Director.
+	ShownFace(ctx context.Context, campaignID, deckID, copyID string, v Viewer) (*OpenedCard, error)
+	// FreshCards lists dealt face-down cards a player has not been shown yet.
+	FreshCards(ctx context.Context, campaignID string, v Viewer) ([]FreshCard, error)
+	// MarkFreshSeen records that a player was shown a dealt card.
+	MarkFreshSeen(ctx context.Context, campaignID, copyID string, v Viewer) error
+
 	// IsCardPicture says whether any card of the campaign wears the media file.
 	// It answers true on an error, so a caller that ignores the error refuses.
 	IsCardPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
@@ -171,6 +185,10 @@ func WithSwitch(on func(ctx context.Context, campaignID string) bool) Option {
 	return func(s *service) { s.switchedOn = on }
 }
 
+// WithScreen sets where the Card decks section's picks and the shown dealt
+// cards are kept. Without it the section and the pop-up check say nothing.
+func WithScreen(r ScreenRepository) Option { return func(s *service) { s.screen = r } }
+
 // WithRandom replaces the draw's random pick; tests use it to fix a draw.
 func WithRandom(pick func(n int) int) Option { return func(s *service) { s.pick = pick } }
 
@@ -190,6 +208,7 @@ type service struct {
 	// available, and every way of using it then says so.
 	tables     Tables
 	moments    MomentRepository
+	screen     ScreenRepository
 	momentNote MomentNotifier
 	poke       func(campaignID string)
 	// story hears stored draws, deals and plays; nil tells no one.

@@ -85,6 +85,12 @@ type View struct {
 	// wire, for the same reason as Adventures.
 	Fight templ.Component `json:"-"`
 
+	// Decks fills the Card decks section; nil leaves it out. Only the owner and
+	// co-DMs get it, and only with the Card decks add-on on. DecksSummary is its
+	// one line on the rail. Neither is on the wire.
+	Decks        templ.Component `json:"-"`
+	DecksSummary string          `json:"-"`
+
 	// FightReady is how many fights are marked Ready; FightCounted is false
 	// when that could not be read, so the summary stays a plain line rather
 	// than a made-up count. Neither is on the wire.

@@ -1,0 +1,85 @@
+package decks
+
+import "fmt"
+
+// ScreenBody is the Card decks section: a row per chosen deck that unfolds to
+// Draw and Quick draw, the cards a Director has drawn and not dealt, the rest
+// of the decks behind "All decks", the picker, and the heroes a card may be
+// dealt to. It is drawn from ScreenView, a Director's read. The browser side
+// (deck_draw.js) wires it by the data-dkd-* attributes.
+templ ScreenBody(v *ScreenView) {
+	@CardSheet()
+	<div class="dkd" data-dkd-screen data-campaign={ v.CampaignID }>
+		if v.Total == 0 {
+			<p class="dkd-quiet">No card decks yet.</p>
+			<a class="dkd-link" href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/decks/workshop/new") }>Make a deck</a>
+		}
+		for _, d := range v.Shown {
+			@screenDeck(d)
+		}
+		if len(v.Rest) > 0 {
+			<button type="button" class="dkd-more" data-dkd-more aria-expanded="false" aria-controls="dkd-rest">{ fmt.Sprintf("All decks · %d", v.Total) }</button>
+			<div class="dkd-rest" id="dkd-rest" data-dkd-rest hidden>
+				for _, d := range v.Rest {
+					@screenDeck(d)
+				}
+			</div>
+		}
+		if v.Total > 0 {
+			<button type="button" class="dkd-choose" data-dkd-choose aria-expanded="false" aria-controls="dkd-picker">Choose decks</button>
+			<div class="dkd-picker" id="dkd-picker" data-dkd-picker hidden>
+				for _, c := range v.Choices {
+					<label class="dkd-pick"><input type="checkbox" value={ c.ID } checked?={ c.Checked }/> { c.Name }</label>
+				}
+				<button type="button" class="dkd-save" data-dkd-picks-save>Save</button>
+			</div>
+		}
+		<template data-dkd-heroes>
+			for _, h := range v.Heroes {
+				<button type="button" class="dkd-hero" data-hero={ h.ID }>{ h.Name }</button>
+			}
+		</template>
+	</div>
+}
+
+// screenDeck is one deck row. The thumbnail is the deck's own back at the
+// smallest size, so it names no card.
+templ screenDeck(d ScreenDeck) {
+	<div class="dkd-deck" data-dkd-deck={ d.ID } data-name={ d.Name }>
+		<button type="button" class="dkd-row" data-dkd-row aria-expanded="false" aria-controls={ "dkd-acts-" + d.ID }>
+			<span class="dkd-back" aria-hidden="true">
+				@CardBack(d.Look, SizeRow)
+			</span>
+			<span class="dkd-txt">
+				<span class="dkd-name">{ d.Name }</span>
+				<span class="dkd-sub" data-dkd-sub>{ d.Sub() }</span>
+			</span>
+			<svg class="dkd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+		</button>
+		<div class="dkd-acts" id={ "dkd-acts-" + d.ID } data-dkd-acts hidden>
+			<button type="button" class="btn-primary dkd-btn" data-dkd-draw>Draw</button>
+			<button type="button" class="dkd-btn dkd-btn-quiet" data-dkd-quick>Quick draw</button>
+		</div>
+		<div class="dkd-shown" data-dkd-shown>
+			for _, c := range d.Drawn {
+				<button type="button" class="dkd-copy" data-dkd-copy={ c.CopyID } aria-label={ accessibleName(d.Look, c.Face) + ", drawn" }>
+					@CardView(d.Look, FaceUp(c.Face, pictureURL(c.Face.Picture, SizeRow)), CardOpts{Size: SizeRow})
+				</button>
+			}
+		</div>
+		<p class="dkd-err" data-dkd-err role="alert" hidden></p>
+	</div>
+}
+
+// ShownFace is a shown copy's face at open size, with its leaf for a tall
+// card, in the form a turn-over brings in.
+templ ShownFace(c *OpenedCard) {
+	{{ f := faceOrZero(c.Copy) }}
+	@CardFace(c.Look, FaceUpDeferred(f, pictureURL(f.Picture, SizeOpen)), CardOpts{Size: SizeOpen})
+}
+
+// drawnCard is a shown card face up at open size as a whole card, for the
+// overlay's stage.
+templ drawnCard(l Look, f Face) {
+	@CardView(l, FaceUp(f, pictureURL(f.Picture, SizeOpen)), CardOpts{Size: SizeOpen})
+}

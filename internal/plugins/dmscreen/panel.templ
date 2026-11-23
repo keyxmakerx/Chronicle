@@ -203,6 +203,8 @@ templ sectionBody(v *View, id string, csrf string) {
 			}
 		case "fight":
 			@v.Fight
+		case "decks":
+			@v.Decks
 		case "party":
 			if len(v.Party) == 0 {
 				<p class="dms-small">No player characters yet.</p>

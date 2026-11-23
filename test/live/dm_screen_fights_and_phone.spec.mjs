@@ -4,7 +4,7 @@
 // The owner makes two Adventures pages, one with a Ready fight and one with a
 // fight still being planned. The Fight card shows the Ready one first with
 // Start and the other under "Still being planned"; "Plan a fight" asks which
-// adventure; on a phone the seven sections are one named line each and a tap
+// adventure; on a phone the eight sections are one named line each and a tap
 // unfolds one in place.
 //
 // RUN: tools/live-checks.sh test/live/dm_screen_fights_and_phone.spec.mjs
@@ -17,7 +17,7 @@ after(done);
 
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
 const DESK = { viewport: { width: 1280, height: 800 } };
-const LINES = ['The world', 'Fight', 'The party', 'Reveal', 'Notes', 'Adventures', 'Homebrew'];
+const LINES = ['The world', 'Fight', 'The party', 'Card decks', 'Reveal', 'Notes', 'Adventures', 'Homebrew'];
 
 async function theme(page, dark) {
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
@@ -98,7 +98,7 @@ test('the Fight card lists every fight, Ready first with Start, and Plan a fight
   owner.assertClean();
 });
 
-test('on a phone the DM Screen is seven named lines and a tap unfolds one in place', async () => {
+test('on a phone the DM Screen is eight named lines and a tap unfolds one in place', async () => {
   const owner = await person({ tag: 'dmp', name: 'Mara Vell', context: PHONE });
   const { cid } = await setup(owner, 'Saltreach phone');
   const { page } = owner;

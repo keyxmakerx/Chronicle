@@ -165,8 +165,8 @@ func TestIntegration_MigrationIsIdempotentAndReversible(t *testing.T) {
 	}
 	// Later migrations hang off the first one's tables, so up runs in order and
 	// down in reverse.
-	ups := []string{read("001_decks.up.sql"), read("002_deck_moments.up.sql")}
-	downs := []string{read("002_deck_moments.down.sql"), read("001_decks.down.sql")}
+	ups := []string{read("001_decks.up.sql"), read("002_deck_moments.up.sql"), read("003_deck_screen.up.sql")}
+	downs := []string{read("003_deck_screen.down.sql"), read("002_deck_moments.down.sql"), read("001_decks.down.sql")}
 	// The migration runner applies a multi-statement file; do the same twice.
 	db2, err := sql.Open("mysql", mustDSN(t)+"&multiStatements=true")
 	if err != nil {

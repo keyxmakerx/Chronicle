@@ -51,6 +51,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// The player's fragments: the Hand leaf, a hero's Cards part, an opened card
 	// and the turn-over request that brings a face. Static paths win over :did.
 	cg.GET("/decks/hand", h.HandFragment)
+	// The Card decks section and the draw overlay's reads. Static paths win
+	// over :did, so neither "screen" nor "fresh" is read as an id.
+	cg.GET("/decks/screen", h.ScreenFragment)
+	cg.GET("/decks/hand/fresh", h.FreshCards)
+	cg.GET("/decks/:did/draw-view", h.DrawView)
+	cg.GET("/decks/:did/copies/:copy/face", h.ShownFaceFragment)
 	cg.GET("/decks/hand/hero/:eid", h.HeroStripFragment)
 	cg.GET("/decks/hand/:did/copies/:copy", h.OpenCardFragment)
 	cg.GET("/decks/:did", h.Get)
@@ -64,6 +70,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// or drawing in a loop cannot flood the log or the database.
 	moves := middleware.UserRateLimit(func(c *echo.Context) string { return auth.GetUserID(c) }, moveRateLimit, time.Minute)
 	cg.POST("/decks/hand/:did/copies/:copy/turn", h.TurnFaceFragment, moves)
+	cg.PUT("/decks/screen/picks", h.SetScreenPicks, moves)
+	cg.POST("/decks/hand/fresh/:copy/seen", h.FreshSeen, moves)
 	cg.POST("/decks/:did/draw", h.Draw, moves)
 	cg.POST("/decks/:did/copies/:copy/:verb", h.Act, moves)
 	cg.POST("/decks/:did/deal-card", h.DealCard, moves)

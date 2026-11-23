@@ -17,6 +17,15 @@ import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { person, newCampaign, addMember, enableAddons, done, once, resetErrors } from './_live.mjs';
 
+// A card dealt to a hero pops up on its player's open page; Later sets it
+// aside into the Hand, where the walk goes on.
+async function setAside(who) {
+  const pop = who.page.locator('[data-dkd-ov][data-arrive]');
+  await pop.waitFor();
+  await who.page.click('[data-dko-later]');
+  await who.page.locator('[data-dkd-ov]').waitFor({ state: 'detached' });
+}
+
 after(done);
 
 const SHOTS = process.env.LIVE_SHOTS || '';
@@ -286,6 +295,7 @@ async function walk(tag, view, { keyboard = false } = {}) {
   const deal = owner.page.waitForResponse((r) => /\/deal$/.test(r.url()));
   await notice(owner).locator('[data-dkm-act="deal"]').click();
   assert.ok((await deal).ok(), 'Deal was refused');
+  await setAside(tam);
   const slot = tam.page.locator('#tt-drawer [data-dkh-slot]');
   await slot.first().waitFor();
   assert.equal(await slot.locator('.dk-turn').count(), 1, 'the dealt card did not arrive face down');
