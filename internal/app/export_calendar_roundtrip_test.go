@@ -780,15 +780,19 @@ func TestCalendarExportImport_EventOutcomeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var env struct {
-		Calendar struct {
-			Events []map[string]any `json:"events"`
-		} `json:"calendar"`
+	// The calendar section is read as raw maps to see which keys are written;
+	// it marshals the same alone as inside the backup envelope.
+	rawCal, err := json.Marshal(calData)
+	if err != nil {
+		t.Fatalf("marshal calendar: %v", err)
 	}
-	if err := json.Unmarshal(raw, &env); err != nil {
+	var section struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.Unmarshal(rawCal, &section); err != nil {
 		t.Fatalf("unmarshal raw: %v", err)
 	}
-	for _, e := range env.Calendar.Events {
+	for _, e := range section.Events {
 		if e["name"] == "Market" {
 			if _, ok := e["status"]; ok {
 				t.Errorf("a planned event must be written without a status: %v", e)
