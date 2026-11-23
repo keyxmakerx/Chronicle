@@ -16,9 +16,13 @@ package syncapi
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -71,7 +75,38 @@ func NewFoundryPlayerRepository(db *sql.DB) FoundryPlayerRepository {
 	return &foundryPlayerRepo{db: db}
 }
 
+// mysqlDeadlock is the server's error number for a transaction it chose to
+// roll back to break a lock cycle; the whole transaction is safe to run again.
+const mysqlDeadlock = 1213
+
+// foundryPlayersAttempts bounds the retries of a deadlocked Replace.
+const foundryPlayersAttempts = 3
+
+// Replace deletes then inserts a campaign's rows. Two campaigns doing that at
+// once take gap locks on the same index range and the server rolls one back,
+// so the whole transaction is retried a few times before giving up.
 func (r *foundryPlayerRepo) Replace(ctx context.Context, campaignID string, players []FoundryPlayer) error {
+	var err error
+	for attempt := 0; attempt < foundryPlayersAttempts; attempt++ {
+		if err = r.replaceOnce(ctx, campaignID, players); err == nil {
+			return nil
+		}
+		var me *mysql.MySQLError
+		if !errors.As(err, &me) || me.Number != mysqlDeadlock || ctx.Err() != nil {
+			return err
+		}
+		// Retrying at once would replay the same collision; a random pause
+		// staggers the campaigns that were rolled back together.
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(time.Duration(5+rand.IntN(30)) * time.Millisecond):
+		}
+	}
+	return err
+}
+
+func (r *foundryPlayerRepo) replaceOnce(ctx context.Context, campaignID string, players []FoundryPlayer) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("begin foundry players: %w", err))

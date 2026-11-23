@@ -9,6 +9,9 @@ package syncapi
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -49,5 +52,59 @@ func TestFoundryPlayersIntegration_ReplaceKeepsEarlierActivity(t *testing.T) {
 	if p.LastChangeAt == nil || !p.LastChangeAt.Equal(synced) || p.LastFailedAt == nil || !p.LastFailedAt.Equal(failed) ||
 		p.LastFailure != "HTTP 403 Forbidden" || p.FailedCount != 2 || !p.Online || !p.ReportedAt.Equal(now) {
 		t.Fatalf("earlier activity not kept: %+v", p)
+	}
+}
+
+// Several campaigns replacing their lists at once deadlock on shared index
+// gaps; Replace retries, so every report lands and none errors.
+func TestFoundryPlayersIntegration_ConcurrentCampaignsDoNotDeadlock(t *testing.T) {
+	db := newSyncStatsScratchDB(t)
+	ctx := context.Background()
+	const campaigns, rounds, perList = 8, 6, 4
+	uid := "u-fp-0000000000000000000000000000002"
+	if _, err := db.Exec(`INSERT INTO users (id, email, display_name, password_hash) VALUES (?,?,?,?)`, uid, "fp2@example.test", "Ren", "x"); err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, campaigns)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("c-fp-%030d", i+10)
+		if _, err := db.Exec(`INSERT INTO campaigns (id, name, slug, created_by) VALUES (?,?,?,?)`, ids[i], "Busy", fmt.Sprintf("busy-%d", i), uid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := NewFoundryPlayerRepository(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	for round := 0; round < rounds; round++ {
+		var wg sync.WaitGroup
+		errs := make(chan error, campaigns)
+		for _, cid := range ids {
+			wg.Add(1)
+			go func(cid string) {
+				defer wg.Done()
+				list := make([]FoundryPlayer, perList)
+				for j := range list {
+					list[j] = FoundryPlayer{FoundryUserID: fmt.Sprintf("f%d", j), Name: fmt.Sprintf("P%d-%d", round, j), ReportedAt: now}
+				}
+				errs <- repo.Replace(ctx, cid, list)
+			}(cid)
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: %v", round, err)
+			}
+		}
+	}
+	for _, cid := range ids {
+		got, err := repo.List(ctx, cid)
+		if err != nil || len(got) != perList {
+			t.Fatalf("campaign %s: %d rows, %v", cid, len(got), err)
+		}
+		for _, p := range got {
+			if !strings.HasPrefix(p.Name, fmt.Sprintf("P%d-", rounds-1)) {
+				t.Fatalf("campaign %s kept an old row: %+v", cid, p)
+			}
+		}
 	}
 }
