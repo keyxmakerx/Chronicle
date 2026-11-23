@@ -221,9 +221,15 @@ type ExportCalendarData struct {
 	Weather   *ExportCalendarWeather   `json:"weather,omitempty"`
 	// WeatherDays are the day-by-day readings, painted or generated, with
 	// their locks. Additive.
-	WeatherDays     []ExportCalendarWeatherDay `json:"weather_days,omitempty"`
-	EventCategories []ExportEventCategory      `json:"event_categories,omitempty"`
-	Events          []ExportCalendarEvent      `json:"events,omitempty"`
+	WeatherDays []ExportCalendarWeatherDay `json:"weather_days,omitempty"`
+	// PlaceWeather is the weather of each place with a climate of its own,
+	// and PartyMoves the days the party arrived somewhere. Places are named
+	// by page slug, since page ids are new in the restored campaign.
+	// Additive: absent in older backups, which restore no place weather.
+	PlaceWeather    []ExportCalendarPlaceWeather `json:"place_weather,omitempty"`
+	PartyMoves      []ExportCalendarPartyMove    `json:"party_moves,omitempty"`
+	EventCategories []ExportEventCategory        `json:"event_categories,omitempty"`
+	Events          []ExportCalendarEvent        `json:"events,omitempty"`
 	// AdditionalCalendars are the campaign's non-default calendars. They live
 	// under the primary rather than as a second envelope key so a file
 	// written by this version still reads in an importer that only knows the
@@ -429,6 +435,21 @@ type ExportCalendarWeatherDay struct {
 	Source string `json:"source"`
 	Locked bool   `json:"locked,omitempty"`
 	ExportCalendarWeather
+}
+
+// ExportCalendarPlaceWeather is one place's day readings.
+type ExportCalendarPlaceWeather struct {
+	PlaceSlug string                     `json:"place_slug"`
+	Days      []ExportCalendarWeatherDay `json:"days"`
+}
+
+// ExportCalendarPartyMove says the party is at PlaceSlug from this day until
+// the next move; no slug means nowhere with a climate of its own.
+type ExportCalendarPartyMove struct {
+	Year      int    `json:"year"`
+	Month     int    `json:"month"`
+	Day       int    `json:"day"`
+	PlaceSlug string `json:"place_slug,omitempty"`
 }
 
 // ExportEventCategory is an event category definition for export.

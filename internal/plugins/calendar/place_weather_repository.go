@@ -25,6 +25,9 @@ type PlaceWeatherRepository interface {
 	// ListPlaceDays returns the readings of the given places for a year, or
 	// one month of it when month > 0, keyed by place.
 	ListPlaceDays(ctx context.Context, calendarID string, placeIDs []string, year, month int) (map[string][]DayWeather, error)
+	// ListAllPlaceDays returns every stored place reading of the calendar,
+	// keyed by place, each place's in date order.
+	ListAllPlaceDays(ctx context.Context, calendarID string) (map[string][]DayWeather, error)
 	// SetPlaceDays upserts one place's readings in one transaction, with the
 	// same manual and lock rules as WeatherRepository.SetDays.
 	SetPlaceDays(ctx context.Context, calendarID, placeID string, days []DayWeatherInput) error
@@ -67,7 +70,17 @@ func (r *placeWeatherRepo) ListPlaceDays(ctx context.Context, calendarID string,
 		q += ` AND month = ?`
 		args = append(args, month)
 	}
-	rows, err := r.db.QueryContext(ctx, q+` ORDER BY place_id, year, month, day`, args...)
+	return r.queryPlaceDays(ctx, q+` ORDER BY place_id, year, month, day`, args...)
+}
+
+func (r *placeWeatherRepo) ListAllPlaceDays(ctx context.Context, calendarID string) (map[string][]DayWeather, error) {
+	return r.queryPlaceDays(ctx, `SELECT place_id, `+weatherDayCols+` FROM calendar_place_weather_days
+	      WHERE calendar_id = ? ORDER BY place_id, year, month, day`, calendarID)
+}
+
+func (r *placeWeatherRepo) queryPlaceDays(ctx context.Context, q string, args ...any) (map[string][]DayWeather, error) {
+	out := map[string][]DayWeather{}
+	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -18,6 +18,12 @@ type fakePlaceRepo struct {
 	marks []PartyMark
 	set   map[string][]DayWeatherInput
 	asked [][]string // place ids each ListPlaceDays was asked for
+	// locked is each place's days LockPlaceDays was asked to lock.
+	locked map[string][]DayDate
+}
+
+func (f *fakePlaceRepo) ListAllPlaceDays(context.Context, string) (map[string][]DayWeather, error) {
+	return f.days, nil
 }
 
 func (f *fakePlaceRepo) ListPlaceDays(_ context.Context, _ string, ids []string, year, month int) (map[string][]DayWeather, error) {
@@ -40,8 +46,14 @@ func (f *fakePlaceRepo) SetPlaceDays(_ context.Context, _, placeID string, days 
 	return nil
 }
 func (f *fakePlaceRepo) ClearPlaceDays(context.Context, string, string, []DayDate) error { return nil }
-func (f *fakePlaceRepo) LockPlaceDays(context.Context, string, string, []DayDate, bool) (int, error) {
-	return 0, nil
+func (f *fakePlaceRepo) LockPlaceDays(_ context.Context, _, placeID string, dates []DayDate, locked bool) (int, error) {
+	if locked {
+		if f.locked == nil {
+			f.locked = map[string][]DayDate{}
+		}
+		f.locked[placeID] = append(f.locked[placeID], dates...)
+	}
+	return len(dates), nil
 }
 func (f *fakePlaceRepo) ListPartyMarks(context.Context, string) ([]PartyMark, error) {
 	return f.marks, nil

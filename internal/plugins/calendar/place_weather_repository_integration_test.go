@@ -67,6 +67,10 @@ func TestPlaceWeatherRepository_Integration(t *testing.T) {
 	if got, _ = repo.ListPlaceDays(ctx, cal.ID, []string{salt}, 5, 1); len(got[salt]) != 2 {
 		t.Fatalf("after clear = %+v", got[salt])
 	}
+	all, err := repo.ListAllPlaceDays(ctx, cal.ID)
+	if err != nil || len(all) != 2 || len(all[salt]) != 2 || all[salt][0].Day != 1 || len(all[hollow]) != 1 {
+		t.Fatalf("ListAllPlaceDays = %+v, %v; want both places, each in date order", all, err)
+	}
 
 	for _, m := range []PartyMark{{Year: 5, Month: 1, Day: 4, PlaceID: salt}, {Year: 5, Month: 1, Day: 2, PlaceID: hollow}, {Year: 5, Month: 1, Day: 4}} {
 		if err := repo.SetPartyMark(ctx, cal.ID, m); err != nil {

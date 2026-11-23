@@ -560,15 +560,15 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			return nil, fmt.Errorf("export day weather: %w", err)
 		}
 		for _, d := range days {
-			data.WeatherDays = append(data.WeatherDays, campaigns.ExportCalendarWeatherDay{
-				Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source,
-				Locked: d.Locked != nil && *d.Locked,
-				ExportCalendarWeather: exportWeatherReading(d.PresetID, d.PresetLabel, d.Icon, d.Color,
-					d.TemperatureCelsius, d.Wind, d.Precipitation, d.ZoneID, d.ZoneName, d.Description),
-			})
+			data.WeatherDays = append(data.WeatherDays, exportWeatherDay(d))
 		}
 		if rolls, err = backup.EventRollsForBackup(ctx, cal.ID, campaignID, systemViewer); err != nil {
 			return nil, fmt.Errorf("export event rolls: %w", err)
+		}
+	}
+	if pb, ok := a.svc.(calendar.PlaceBackupService); ok {
+		if err := exportPlaceWeather(ctx, pb, cal.ID, campaignID, systemViewer, entitySlugLookup, data); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1905,6 +1905,9 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	if backup != nil && len(data.WeatherDays) > 0 {
 		a.importWeatherDays(ctx, backup, cal.ID, campaignID, data, systemViewer, report)
 	}
+	if pb, ok := a.svc.(calendar.PlaceBackupService); ok && (len(data.PlaceWeather) > 0 || len(data.PartyMoves) > 0) {
+		a.importPlaceWeather(ctx, pb, cal.ID, campaignID, data, idMap, systemViewer, report)
+	}
 	if backup != nil && calendarDataHasHandSetMoons(data) {
 		a.importMoonHands(ctx, backup, cal.ID, campaignID, data, systemViewer, report)
 	}
@@ -2053,22 +2056,129 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	return kindIDBySlug, nil
 }
 
+// exportWeatherDay is one stored reading as a backup carries it.
+func exportWeatherDay(d calendar.DayWeather) campaigns.ExportCalendarWeatherDay {
+	return campaigns.ExportCalendarWeatherDay{
+		Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source,
+		Locked: d.Locked != nil && *d.Locked,
+		ExportCalendarWeather: exportWeatherReading(d.PresetID, d.PresetLabel, d.Icon, d.Color,
+			d.TemperatureCelsius, d.Wind, d.Precipitation, d.ZoneID, d.ZoneName, d.Description),
+	}
+}
+
+// exportPlaceWeather adds each place's readings and the party's moves,
+// naming places by page slug. A place with no slug (not a page this backup
+// carries) is left out, as is a move there: restored, it could only point
+// somewhere else.
+func exportPlaceWeather(ctx context.Context, pb calendar.PlaceBackupService, calendarID, campaignID string, v permissions.Viewer, entitySlugLookup func(string) string, data *campaigns.ExportCalendarData) error {
+	backup, err := pb.PlaceWeatherForBackup(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return fmt.Errorf("export place weather: %w", err)
+	}
+	if backup == nil {
+		return nil
+	}
+	for placeID, days := range backup.Days {
+		slug := entitySlugLookup(placeID)
+		if slug == "" || len(days) == 0 {
+			continue
+		}
+		place := campaigns.ExportCalendarPlaceWeather{PlaceSlug: slug}
+		for _, d := range days {
+			place.Days = append(place.Days, exportWeatherDay(d))
+		}
+		data.PlaceWeather = append(data.PlaceWeather, place)
+	}
+	// Map order is random; a stable order keeps two backups of the same
+	// campaign comparable.
+	sort.Slice(data.PlaceWeather, func(i, j int) bool { return data.PlaceWeather[i].PlaceSlug < data.PlaceWeather[j].PlaceSlug })
+	for _, m := range backup.Marks {
+		move := campaigns.ExportCalendarPartyMove{Year: m.Year, Month: m.Month, Day: m.Day}
+		if m.PlaceID != "" {
+			if move.PlaceSlug = entitySlugLookup(m.PlaceID); move.PlaceSlug == "" {
+				continue
+			}
+		}
+		data.PartyMoves = append(data.PartyMoves, move)
+	}
+	return nil
+}
+
+// importPlaceWeather restores each place's readings and the party's moves,
+// finding each place by its page slug among the pages this import created.
+func (a *calendarImportAdapter) importPlaceWeather(ctx context.Context, pb calendar.PlaceBackupService, calendarID, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, v permissions.Viewer, report *campaigns.ImportReport) {
+	for _, p := range data.PlaceWeather {
+		placeID, ok := idMap.EntitySlugToID[p.PlaceSlug]
+		if !ok {
+			report.Fail(campaigns.SectionCalendar, "place weather", p.PlaceSlug, "the place's page was not restored, so its weather was not either")
+			continue
+		}
+		days := make([]calendar.DayWeather, len(p.Days))
+		for i, d := range p.Days {
+			days[i] = importWeatherDay(d)
+		}
+		skipped, err := pb.RestorePlaceWeather(ctx, calendarID, campaignID, placeID, days, v)
+		if err != nil {
+			slog.Warn("import: place weather failed", slog.String("place", p.PlaceSlug), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "place weather", p.PlaceSlug, apperror.SafeMessage(err))
+			continue
+		}
+		if skipped > 0 {
+			report.FailN(campaigns.SectionCalendar, "place weather", p.PlaceSlug, "a reading's day is not on this calendar, or the reading is not valid", skipped)
+		}
+	}
+	if len(data.PartyMoves) == 0 {
+		return
+	}
+	marks := make([]calendar.PartyMark, 0, len(data.PartyMoves))
+	missing := 0
+	for _, m := range data.PartyMoves {
+		mark := calendar.PartyMark{Year: m.Year, Month: m.Month, Day: m.Day}
+		if m.PlaceSlug != "" {
+			id, ok := idMap.EntitySlugToID[m.PlaceSlug]
+			if !ok {
+				missing++
+				continue
+			}
+			mark.PlaceID = id
+		}
+		marks = append(marks, mark)
+	}
+	if missing > 0 {
+		report.FailN(campaigns.SectionCalendar, "party move", data.Name, "the place's page was not restored", missing)
+	}
+	skipped, err := pb.RestorePartyMoves(ctx, calendarID, campaignID, marks, v)
+	if err != nil {
+		slog.Warn("import: party moves failed", slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "party moves", data.Name, apperror.SafeMessage(err))
+		return
+	}
+	if skipped > 0 {
+		report.FailN(campaigns.SectionCalendar, "party move", data.Name, "a move's day is not on this calendar, or its place is not a page here", skipped)
+	}
+}
+
+// importWeatherDay is one backed-up reading as the calendar stores it.
+func importWeatherDay(d campaigns.ExportCalendarWeatherDay) calendar.DayWeather {
+	locked := d.Locked
+	w := d.ExportCalendarWeather
+	return calendar.DayWeather{
+		Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source, Locked: &locked,
+		PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
+		TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
+		Description: w.Description,
+		Wind: &calendar.Wind{SpeedKPH: w.WindSpeedKPH, SpeedTier: w.WindSpeedTier,
+			Direction: w.WindDirection, DirectionDegrees: w.WindDirectionDegrees},
+		Precipitation: &calendar.Precipitation{Type: w.PrecipitationType, Intensity: w.PrecipitationIntensity},
+	}
+}
+
 // importWeatherDays restores the day-by-day readings with their sources and
 // locks. A reading the calendar no longer has room for is reported.
 func (a *calendarImportAdapter) importWeatherDays(ctx context.Context, backup calendar.BackupService, calendarID, campaignID string, data *campaigns.ExportCalendarData, v permissions.Viewer, report *campaigns.ImportReport) {
 	days := make([]calendar.DayWeather, len(data.WeatherDays))
 	for i, d := range data.WeatherDays {
-		locked := d.Locked
-		w := d.ExportCalendarWeather
-		days[i] = calendar.DayWeather{
-			Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source, Locked: &locked,
-			PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
-			TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
-			Description: w.Description,
-			Wind: &calendar.Wind{SpeedKPH: w.WindSpeedKPH, SpeedTier: w.WindSpeedTier,
-				Direction: w.WindDirection, DirectionDegrees: w.WindDirectionDegrees},
-			Precipitation: &calendar.Precipitation{Type: w.PrecipitationType, Intensity: w.PrecipitationIntensity},
-		}
+		days[i] = importWeatherDay(d)
 	}
 	skipped, err := backup.RestoreDayWeather(ctx, calendarID, campaignID, days, v)
 	if err != nil {
