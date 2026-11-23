@@ -208,7 +208,7 @@ export async function enableAddons(owner, campaignId, slugs) {
   for (const a of list) {
     if (a.enabled || !want(a)) continue;
     const res = await api(owner.page, `/campaigns/${campaignId}/addons/${a.addon_id}/toggle`, { method: 'PUT', form: { action: 'enable' } });
-    assert.ok(res.ok, `turning on ${a.addon_slug || a.addon_id} answered ${res.status}`);
+    assert.ok(res.ok, `turning on ${a.addon_slug || a.addon_id} answered ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`);
   }
 }
 
