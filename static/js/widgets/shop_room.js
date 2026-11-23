@@ -2224,7 +2224,10 @@
         say.classList.remove('on');
         if (S.mode === 'arr') { tryLeave(); return; }
         if (open) { setOpen(false); cartBtn.focus({ preventScroll: true }); return; }
-        if (counterOn() && window.ShopRoomCounter.escape(cel)) return;
+        // A counter that fails to answer must not swallow the way out.
+        var held = false;
+        try { held = counterOn() && window.ShopRoomCounter.escape(cel); } catch (err) { if (window.console) console.error('[shop_room] escape', err); }
+        if (held) return;
         root.querySelector('.shr-out').click();
       }
       function onScroll() { tip.classList.remove('on'); say.classList.remove('on'); }
@@ -2559,21 +2562,29 @@
         clearTimeout(byeT); hint.classList.add('bye'); hint.textContent = '“' + text + '”';
         byeT = setTimeout(function () { hint.classList.remove('bye'); hint.textContent = hint.dataset.usual; }, 4500);
       }
-      // Leaving shrinks the room back into the doorway it came out of, and the door swings shut.
+      // Leaving shrinks the room back into the doorway it came out of, and the
+      // door swings shut. The farewell, the tidying and the shrink are extras:
+      // if one throws, the room closes at once, since a modal dialog that
+      // won't close leaves the visitor no way back to the page.
       function leave() {
-        greet = false; farewell();
-        clearTimeout(walkT); settle(); alive(false); tilt(0, 0); setOpen(false); peek(false);
         var shut = function () {
           if (dlg.open) dlg.close();
           dlg.classList.remove('leaving'); dlg.style.transformOrigin = '';
           root.classList.remove('inside'); root.classList.add('closed');
           front.classList.remove('opening'); front.setAttribute('aria-expanded', 'false');
         };
-        if (still()) { shut(); return; }
-        var r = front.querySelector('.shr-dr').getBoundingClientRect();
-        dlg.style.transformOrigin = (r.left + r.width / 2) + 'px ' + (r.top + r.height * .6) + 'px';
-        dlg.classList.add('leaving');
-        walkT = setTimeout(shut, 420);
+        try {
+          greet = false; farewell();
+          clearTimeout(walkT); settle(); alive(false); tilt(0, 0); setOpen(false); peek(false);
+          if (still()) { shut(); return; }
+          var r = front.querySelector('.shr-dr').getBoundingClientRect();
+          dlg.style.transformOrigin = (r.left + r.width / 2) + 'px ' + (r.top + r.height * .6) + 'px';
+          dlg.classList.add('leaving');
+          walkT = setTimeout(shut, 420);
+        } catch (err) {
+          clearTimeout(walkT); shut();
+          if (window.console) console.error('[shop_room] leaving', err);
+        }
       }
       // Escape in the room closes what is open in it first; with nothing open it
       // presses Leave, so leaving still goes through the one Leave control.
