@@ -117,9 +117,9 @@ test('the lookup lists what waits, what was answered, and cannot approve anythin
   assert.ok(approve.isError, 'the AI could approve something');
 
   // The queue is the owner's business: a key that only sees what players see
-  // is told it is left out.
+  // is not offered the tool at all.
   const safe = await makeKey(owner, await newCampaign(owner, 'Waiting Safe'), LEVEL.players);
   const refused = await safe.call('waiting_for_review');
-  assert.match(refused.out, /left out in Safe privacy/, 'a players-level key was answered: ' + refused.out);
+  assert.match(refused.out, /there is no tool called waiting_for_review/, 'a players-level key was answered: ' + refused.out);
   owner.assertClean();
 });

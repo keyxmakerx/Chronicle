@@ -25,10 +25,22 @@ type MapsAPI interface {
 // MapRef is a map's identity.
 type MapRef struct{ ID, CampaignID, Name string }
 
-// PinRef is a pin as listed.
+// PinRef is a pin as listed. The reading side fills every field from what the
+// viewer may see: PageName is empty when the linked page is hidden from them,
+// and OnlyFor and HiddenFrom count the players a Director's rules name (the
+// rules hold user ids, which are never shown).
 type PinRef struct {
 	ID, Name string
 	X, Y     float64
+	Category string
+	// Description is the pin's note, as written.
+	Description string
+	PageName    string
+	// DMOnly is the pin's "hidden from players" setting.
+	DMOnly bool
+	// OnlyFor is how many players an allow-list limits the pin to;
+	// HiddenFrom how many a deny-list hides it from. Both 0 for no rules.
+	OnlyFor, HiddenFrom int
 }
 
 // PinInput is a pin's fields; on update an unset field is left as it is

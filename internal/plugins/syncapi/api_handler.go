@@ -272,6 +272,13 @@ func (h *APIHandler) ListMembers(c *echo.Context) error {
 		slog.Error("api: list members failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list members"))
 	}
+	// A session caller may be a player; stored keys resolve to Owner.
+	if key := GetAPIKey(c); key != nil {
+		role := h.resolveRole(c)
+		campaigns.RedactMemberCharacters(members, h.visibilityRoleFor(c.Request().Context(), campaignID, key.UserID, role), key.UserID)
+	} else {
+		campaigns.RedactMemberCharacters(members, 0, "")
+	}
 	out := make([]apiMemberResponse, 0, len(members))
 	for i := range members {
 		out = append(out, h.toAPIMember(campaignID, &members[i]))

@@ -362,7 +362,7 @@ func (run *lookupRun) tagsLookup() (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("None yet.\n")
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }

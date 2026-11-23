@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // MaxHalfBytes caps each JSON half. The state is a small tracker document, not
@@ -57,6 +58,9 @@ type Service interface {
 	// by entity name, at most MaxListItems; truncated reports that more exist.
 	// Both halves are returned unfiltered; the caller decides the audience.
 	ListByKey(ctx context.Context, campaignID, systemID, key string) (items []ListItem, truncated bool, err error)
+	// ListByKeyForPage is ListByKey for the pages called name only, read
+	// directly rather than picked from the capped listing.
+	ListByKeyForPage(ctx context.Context, campaignID, systemID, key, name string) (items []ListItem, truncated bool, err error)
 	// GetCampaign returns the campaign-wide document for the key; a key with
 	// no row reads as two empty objects. The caller decides the audience.
 	GetCampaign(ctx context.Context, campaignID, systemID, key string) (State, error)
@@ -135,10 +139,30 @@ func (s *service) Put(ctx context.Context, campaignID, entityID, systemID, key s
 }
 
 func (s *service) ListByKey(ctx context.Context, campaignID, systemID, key string) ([]ListItem, bool, error) {
+	return s.listByKey(ctx, campaignID, systemID, key, "")
+}
+
+func (s *service) ListByKeyForPage(ctx context.Context, campaignID, systemID, key, name string) ([]ListItem, bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, false, errInvalid("a page name is required")
+	}
+	return s.listByKey(ctx, campaignID, systemID, key, name)
+}
+
+// listByKey asks for one row past the cap so "exactly the cap" and "more
+// exist" read apart.
+func (s *service) listByKey(ctx context.Context, campaignID, systemID, key, name string) ([]ListItem, bool, error) {
 	if err := validateIDs(systemID, key); err != nil {
 		return nil, false, err
 	}
-	rows, err := s.repo.ListByKey(ctx, campaignID, systemID, key, MaxListItems+1)
+	var rows []ListItem
+	var err error
+	if name == "" {
+		rows, err = s.repo.ListByKey(ctx, campaignID, systemID, key, MaxListItems+1)
+	} else {
+		rows, err = s.repo.ListByKeyForPage(ctx, campaignID, systemID, key, name, MaxListItems+1)
+	}
 	if err != nil {
 		return nil, false, apperrorInternal(err)
 	}

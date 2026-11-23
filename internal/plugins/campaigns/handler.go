@@ -1115,6 +1115,7 @@ func (h *Handler) Members(c *echo.Context) error {
 			members[i].AvatarPath = resolveAvatarPath(mediaCtx, members[i].AvatarPath)
 		}
 		redactMemberEmails(members, cc.MemberRole, auth.GetUserID(c))
+		RedactMemberCharacters(members, cc.VisibilityRole(), auth.GetUserID(c))
 		return c.JSON(http.StatusOK, members)
 	}
 

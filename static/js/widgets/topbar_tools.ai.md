@@ -28,4 +28,4 @@ transform and opacity only; Calm fades, Off just shows.
 
 Tests: `test/js/topbar_tools.test.mjs` (the pure rules),
 `internal/templates/layouts/topbar_tools_test.go` (who sees which entry),
-`test/live/topbar_tools_shelf.spec.mjs` (a phone, a player, a computer).
+`test/live/shell_phone.spec.mjs` (a phone, a player, a computer).

@@ -150,6 +150,7 @@ var briefs = map[string]string{
 	"table":          "rolling tables and their entries",
 	"shop-stock":     "what a shop sells, its price and how many",
 	"carried-item":   "items a character carries",
+	"relation":       "links between pages, such as \"ally of\" or \"remnant of\", as the Relations box on a page shows them",
 	"pin":            "pins on the campaign's maps",
 	"map":            "new maps drawn from a sketch on a grid of squares: rooms, areas, water, danger zones, walls, roads, paths, labels and pins",
 	"hex-map":        "hex maps: land painted hex by hex, with roads, rivers and trails on top and named places",

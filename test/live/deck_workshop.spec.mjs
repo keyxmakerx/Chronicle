@@ -10,9 +10,9 @@
 //
 // RUN: tools/live-checks.sh test/live/deck_workshop.spec.mjs
 
-import { test, after } from 'node:test';
+import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, newCampaign, addMember, enableAddons, newPage, api, done } from './_live.mjs';
+import { person, newCampaign, addMember, enableAddons, newPage, api, done, once, resetErrors } from './_live.mjs';
 
 after(done);
 
@@ -20,10 +20,13 @@ const SHOTS = process.env.LIVE_SHOTS || '';
 const TURNS = ['flip', 'slow', 'toss', 'slam', 'sweep', 'burn', 'ink', 'seal', 'bolt', 'forge'];
 const LEVELS = ['full', 'calm', 'off'];
 
-async function director(tag = 'dkw-dir') {
-  const owner = await person({ tag, name: 'Director Dara', context: { reducedMotion: 'no-preference' } });
-  const cid = await newCampaign(owner, 'Deck workshop check');
-  await enableAddons(owner, cid, ['decks']);
+// One Director and one campaign serve every walk, so each walk pays for its own
+// steps and not for a sign-up and a campaign. The New deck tabs walk is the
+// exception: it needs a campaign with no decks and no rolling tables, so it
+// gets a second one. Each walk takes the same page back at its start.
+const consoleErrors = { list: [] };
+const directorOwner = once(async () => {
+  const owner = await person({ tag: 'dkw-dir', name: 'Director Dara', context: { reducedMotion: 'no-preference' } });
   await owner.page.addInitScript(() => {
     Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
     window.__anims = [];
@@ -37,12 +40,39 @@ async function director(tag = 'dkw-dir') {
       return animate.call(this, frames, opts);
     };
   });
-  const errors = [];
   owner.page.on('console', (m) => {
-    if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text());
+    if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) consoleErrors.list.push(m.text());
   });
-  owner.page.on('pageerror', (e) => errors.push(String(e)));
-  return { owner, cid, page: owner.page, errors };
+  owner.page.on('pageerror', (e) => consoleErrors.list.push(String(e)));
+  return owner;
+});
+const decksCampaign = (name) => once(async () => {
+  const owner = await directorOwner();
+  const cid = await newCampaign(owner, name);
+  await enableAddons(owner, cid, ['decks']);
+  return cid;
+});
+const mainCampaign = decksCampaign('Deck workshop check');
+const emptyCampaign = decksCampaign('Deck workshop empty check');
+// The phone table row is measured with no other deck to keep a card in, which
+// adds a control to the row.
+const soloCampaign = decksCampaign('Deck workshop solo check');
+
+beforeEach(async () => { resetErrors(await directorOwner()); });
+
+async function director(tag, { own = 'main' } = {}) {
+  const owner = await directorOwner();
+  const cid = await ({ main: mainCampaign, empty: emptyCampaign, solo: soloCampaign }[own])();
+  const page = owner.page;
+  // The page as a Director arrives: no leftover route, size, scheme or tab.
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  for (const other of page.context().pages()) if (other !== page) await other.close();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  const errors = [];
+  consoleErrors.list = errors;
+  void tag;
+  return { owner, cid, page, errors };
 }
 
 // makeDeck walks the making page with the mouse and lands on the new deck.
@@ -454,7 +484,7 @@ test('on a desktop the Look stage sticks, fits the screen, and its leaf spans it
 });
 
 test('on a phone the table row is compact, the card stays at the top of Look, inputs are 44 tall and Delete is last', async () => {
-  const { owner, cid, page, errors } = await director();
+  const { owner, cid, page, errors } = await director('dkw-phone', { own: 'solo' });
   await page.setViewportSize({ width: 390, height: 800 });
   await makeDeck(page, cid, 'Phone deck', 'Plain');
   for (const n of ['One', 'Two']) await addCard(page, n);
@@ -611,7 +641,7 @@ test('make a deck from a rolling table by keyboard alone, and read what the card
 });
 
 test('the New deck tabs draw in light, dark and at 390 wide, empty and full, with no sideways scroll or error', async () => {
-  const { owner, cid, page, errors } = await director('dkw-newtabs');
+  const { owner, cid, page, errors } = await director('dkw-newtabs', { own: 'empty' });
   const modes = [['light', 'light', 1280], ['dark', 'dark', 1280], ['phone', 'light', 390]];
   const tabs = [['style', 'A style'], ['copy', 'Copy a deck'], ['table', 'From a rolling table']];
   const walk = async (label) => {

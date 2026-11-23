@@ -5415,16 +5415,17 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
 html[data-view-text="larger"] { font-size: 115%; }
 html[data-view-text="largest"] { font-size: 130%; }
 
-/* High contrast: darker secondary text and stronger borders, derived from the
-   page's own text and background tokens so a warm or paper campaign keeps its
-   hue. More specific than the campaign's :root / :root.dark token blocks, so
-   it layers on top of any look. */
+/* High contrast: stronger text and borders, derived from the page's own text
+   and background tokens so a warm or paper campaign keeps its hue. Body,
+   labels and hints each stay a step under the heading ink, so headings still
+   stand out. More specific than the campaign's :root / :root.dark token
+   blocks, so it layers on top of any look. */
 html[data-view-contrast="high"],
 html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :root.dark block */
-  --color-text-body: var(--color-text-primary);
-  --color-text-secondary: color-mix(in srgb, var(--color-text-primary) 84%, var(--color-bg-primary));
-  --color-text-muted: color-mix(in srgb, var(--color-text-primary) 72%, var(--color-bg-primary));
-  --color-text-faint: color-mix(in srgb, var(--color-text-primary) 58%, var(--color-bg-primary));
+  --color-text-body: color-mix(in srgb, var(--color-text-primary) 93%, var(--color-bg-primary));
+  --color-text-secondary: color-mix(in srgb, var(--color-text-primary) 86%, var(--color-bg-primary));
+  --color-text-muted: color-mix(in srgb, var(--color-text-primary) 76%, var(--color-bg-primary));
+  --color-text-faint: color-mix(in srgb, var(--color-text-primary) 60%, var(--color-bg-primary));
   --color-border: color-mix(in srgb, var(--color-text-primary) 45%, var(--color-bg-primary));
   --color-border-light: color-mix(in srgb, var(--color-text-primary) 30%, var(--color-bg-primary));
   --color-input-border: color-mix(in srgb, var(--color-text-primary) 55%, var(--color-bg-primary));

@@ -314,7 +314,7 @@ func (*AIGameNights) LookupInfo() aiplug.LookupInfo {
 
 // Answer lists the game nights. They are Director content, as the block
 // is, so a player's view gets a refusal.
-func (k *AIGameNights) Answer(ctx context.Context, campaignID string, a aiplug.Actor, _ aiplug.Record) (string, string, error) {
+func (k *AIGameNights) Answer(ctx context.Context, campaignID string, a aiplug.Actor, r aiplug.Record) (string, string, error) {
 	chip := "Game nights"
 	if !a.CanAuthorDmOnly() {
 		return chip, "", aiplug.BadRequestf("game nights are left out in Safe privacy; choose Permitted to include them")
@@ -346,9 +346,12 @@ func (k *AIGameNights) Answer(ctx context.Context, campaignID string, a aiplug.A
 	if len(lines) == 0 {
 		b.WriteString("None yet.\n")
 	}
-	aiplug.WriteLines(&b, lines)
+	aiplug.WriteLinesPiece(&b, lines, aiplug.PieceOf(r))
 	return fmt.Sprintf("Game nights · %d", len(list)), b.String(), nil
 }
+
+// Pieced says Answer cuts its own list by `piece`, so the engine does not.
+func (k *AIGameNights) Pieced() {}
 
 // serviceNights is aiNightStore over the sessions service.
 type serviceNights struct {

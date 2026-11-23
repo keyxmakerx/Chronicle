@@ -66,8 +66,15 @@ func TestHandle_ToolsListForAskingConnection(t *testing.T) {
 	if err := json.Unmarshal(decode(t, out).Result, &res); err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != len(tools) {
-		t.Fatalf("got %d tools, want %d", len(res.Tools), len(tools))
+	// The rig's key is Safe, so the owner's preparation tools stay out.
+	want := 0
+	for _, tl := range tools {
+		if !tl.Owner {
+			want++
+		}
+	}
+	if len(res.Tools) != want {
+		t.Fatalf("got %d tools, want %d", len(res.Tools), want)
 	}
 	for _, tl := range res.Tools {
 		wantRead := tl.Name != toolAsk

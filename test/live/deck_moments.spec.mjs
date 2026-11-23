@@ -13,9 +13,9 @@
 //
 // RUN: tools/live-checks.sh test/live/deck_moments.spec.mjs
 
-import { test, after } from 'node:test';
+import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, newCampaign, addMember, enableAddons, done } from './_live.mjs';
+import { person, newCampaign, addMember, enableAddons, done, once, resetErrors } from './_live.mjs';
 
 after(done);
 
@@ -77,27 +77,46 @@ const setHP = async (owner, cid, hero, hp) => {
   assert.ok(r.ok, 'the number was not set: ' + JSON.stringify(r.body));
 };
 
-// A Director, a player with a claimed hero, and a hero deck held by that hero
-// with two cards that come up when the hero is hurt: each prints "at or below 5"
-// and keeps "at or above 0.41729" to the Director.
-async function table(tag, { width, height, scheme }) {
-  const ctx = { viewport: { width, height }, colorScheme: scheme, reducedMotion: 'no-preference' };
-  const owner = await person({ tag: tag + '-d', name: 'Director Dara', context: ctx });
-  const tam = await person({ tag: tag + '-t', name: 'Tam Player', context: ctx });
-  const cid = await newCampaign(owner, 'Moments ' + tag);
+// One Director, one player with a claimed hero and one campaign serve every
+// walk in the file; each walk makes its own deck, so the people and the hero are
+// signed up and made once. The hero page's fields are the same for all of them.
+const world = once(async () => {
+  const ctx = { reducedMotion: 'no-preference' };
+  const owner = await person({ tag: 'dm-d', name: 'Director Dara', context: ctx });
+  const tam = await person({ tag: 'dm-t', name: 'Tam Player', context: ctx });
+  const cid = await newCampaign(owner, 'Moments');
   await enableAddons(owner, cid, '*');
   await addMember(owner, cid, tam, 'player');
   const hero = await newHero(owner, cid, 'Orrin');
-  await giveFields(owner, cid, hero.etid, [field('hp', 'Hit points'), field('stamina', 'Stamina')]);
   await tam.go(`/campaigns/${cid}`);
   const claim = await tam.api(`/campaigns/${cid}/entities/${hero.id}/claim`, { method: 'POST' });
   assert.ok(claim.ok, 'could not claim a hero: ' + JSON.stringify(claim.body));
-  await setHP(owner, cid, hero.id, 20);
+  return { owner, tam, cid, hero, decks: [] };
+});
 
+beforeEach(async () => { const w = await world(); resetErrors(w.owner, w.tam); });
+
+// A hero deck held by the hero with two cards that come up when the hero is
+// hurt: each prints "at or below 5" and keeps "at or above 0.41729" to the
+// Director. The people are shown at `view`'s size and in its colour scheme.
+async function table(tag, { width, height, scheme }) {
+  const base = await world();
+  const { owner, tam, cid } = base;
+  void tag;
+  for (const who of [owner, tam]) {
+    await who.page.setViewportSize({ width, height });
+    await who.page.emulateMedia({ colorScheme: scheme });
+  }
   const A = `/campaigns/${cid}/decks`;
+  // An earlier walk's deck would add its own waiting moments to this one's count.
+  for (const old of base.decks.splice(0)) await owner.api(`${A}/${old}`, { method: 'DELETE' });
+  await giveFields(owner, cid, base.hero.etid, [field('hp', 'Hit points'), field('stamina', 'Stamina')]);
+  await setHP(owner, cid, base.hero.id, 20);
+
   const deck = (await j(owner, A, 'POST', { name: 'Omens', kind: 'hero', settings: { knows: 'kinds', othersSee: 'face', arrives: 'down', draws: 'players', notice: 'slide' } })).body.id;
+  base.decks.push(deck);
   const v = (await owner.api(`${A}/${deck}`)).body.version;
-  const held = await j(owner, `${A}/${deck}`, 'PUT', { version: v, holderEntityId: hero.id });
+  const held = await j(owner, `${A}/${deck}`, 'PUT', { version: v, holderEntityId: base.hero.id });
   assert.ok(held.ok, 'the deck was not given to the hero: ' + JSON.stringify(held.body));
   const printed = { test: 'number', open: true, who: 'holder', field: 'hp', op: 'lte', value: 5 };
   const own = { test: 'number', open: false, who: 'holder', field: 'hp', op: 'gte', value: 0.41729 };
@@ -112,7 +131,7 @@ async function table(tag, { width, height, scheme }) {
   const v2 = (await owner.api(`${A}/${deck}`)).body.version;
   const chose = await j(owner, `${A}/${deck}/players`, 'PUT', { version: v2, players: [{ userId: uid, drawsLeft: 3 }] });
   assert.ok(chose.ok, 'could not choose the player: ' + JSON.stringify(chose.body));
-  return { owner, tam, cid, A, deck, storm, hero: hero.id, etid: hero.etid, scheme, width };
+  return { owner, tam, cid, A, deck, storm, hero: base.hero.id, etid: base.hero.etid, scheme, width };
 }
 
 const noSideways = (page, what) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
@@ -344,12 +363,8 @@ test('by keyboard, in light: the notice closes with Escape', async () => {
 });
 
 test('a player and a stranger are told no notice is there', async () => {
-  const owner = await person({ tag: 'dms-d', name: 'Director Dara' });
-  const tam = await person({ tag: 'dms-t', name: 'Tam Player' });
+  const { owner, tam, cid } = await world();
   const stranger = await person({ tag: 'dms-s', name: 'Stranger Sol' });
-  const cid = await newCampaign(owner, 'Moments closed');
-  await enableAddons(owner, cid, '*');
-  await addMember(owner, cid, tam, 'player');
   const url = `/campaigns/${cid}/decks/moments/panel`;
   assert.equal((await owner.api(url)).status, 200, 'the Director was refused');
   assert.equal((await tam.api(url)).status, 404, 'a player read the notice');

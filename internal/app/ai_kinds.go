@@ -25,6 +25,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
@@ -84,6 +85,7 @@ type aiDeps struct {
 	Decks           decks.Service                    // nil while the decks plugin is degraded
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
 	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
+	SystemState     systemstate.Service              // nil while the system state plugin is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      calendarai.EventRollAPI // the calendar's roll half; nil without one
@@ -182,7 +184,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Rels:     d.Relations,
 		Notes:    d.Notes,
 		Rules:    d.HouseRules,
-		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice},
+		Entries:  aiSystemEntriesAdapter{choices: d.CharacterChoice, rules: d.ChoiceRules},
 		Party:    &aiPartyAdapter{screen: d.DMScreen, types: d.Entities, nights: d.Sessions, members: d.Campaigns},
 		Tags:     d.Tags,
 		Plugged:  d.plugged(),
@@ -259,7 +261,25 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if d.DecksAI != nil {
 		out = append(out, d.DecksAI.Lookup())
 	}
+	if d.SystemState != nil {
+		out = append(out, systemstate.NewAIPageState(d.SystemState, aiEnabledSystem{systems: d.Systems}))
+	}
 	return out
+}
+
+// aiEnabledSystem names the campaign's game system for the page-state
+// lookup; "" when none is on or the systems handler is absent.
+type aiEnabledSystem struct{ systems *systems.SystemHandler }
+
+func (a aiEnabledSystem) EnabledSystemID(ctx context.Context, campaignID string) string {
+	if a.systems == nil {
+		return ""
+	}
+	sys := a.systems.EnabledSystem(ctx, campaignID)
+	if sys == nil {
+		return ""
+	}
+	return sys.Info().ID
 }
 
 // Transformations follow the game nights and tags.
@@ -341,6 +361,7 @@ func init() {
 		kinds := []records.Kind{
 			records.ShopStockKind(d.Entities, d.Relations, pay),
 			records.CarriedItemKind(d.Entities, d.Relations, d.Carried),
+			records.PageLinkKind{Entities: d.Entities, Rels: d.Relations, Views: d.Entities},
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
 			records.HexMapKind{Svc: aiHexMapAdapter{maps: d.Maps, hexes: d.Hexes}, Maps: aiMapsAdapter{d.Maps}},
@@ -349,7 +370,11 @@ func init() {
 		if d.PlayerNotes != nil {
 			kinds = append(kinds, records.PlayerNoteKind{Svc: d.PlayerNotes, Entities: d.Entities})
 		}
-		return append(kinds, *d.HouseRules, records.SystemEntryKind{Svc: d.SystemEntries})
+		kinds = append(kinds, *d.HouseRules, records.SystemEntryKind{Svc: d.SystemEntries})
+		if d.ChoiceRules != nil {
+			kinds = append(kinds, records.HeroChoiceRuleKind{Svc: d.ChoiceRules})
+		}
+		return kinds
 	})
 	addAIKinds(140, func(d *aiDeps) []records.Kind {
 		if d.Homebrew == nil {

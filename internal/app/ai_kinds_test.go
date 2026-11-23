@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 )
 
@@ -52,6 +53,9 @@ func aiKindNames(d aiDeps) string {
 	return strings.Join(names, " ")
 }
 
+// stubChoiceRules wires the hero-choice rules, so their kind is registered.
+type stubChoiceRules struct{ systems.ChoiceRuleService }
+
 // TestAIKindsPromptOrder pins the prompt order of AI Import's kinds and that
 // a degraded plugin's kinds are left out.
 func TestAIKindsPromptOrder(t *testing.T) {
@@ -68,13 +72,13 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		{
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map hex-map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home look layout category-home saved-layout page-template material recipe drops bench deck card shop-room storefront page-map generator",
+				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}, ChoiceRules: stubChoiceRules{}},
+			want: "calendar event weather roll_night moon table shop-stock carried-item relation pin map hex-map note player-note house-rule system-entry hero-choice-rule quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order home look layout category-home saved-layout page-template material recipe drops bench deck card shop-room storefront page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
 			deps: aiDeps{Health: degraded},
-			want: "calendar event weather shop-stock carried-item pin map hex-map note house-rule system-entry category-field folder game-night tag menu-order home look layout category-home generator",
+			want: "calendar event weather shop-stock carried-item relation pin map hex-map note house-rule system-entry category-field folder game-night tag menu-order home look layout category-home generator",
 		},
 	}
 	for _, tt := range tests {
@@ -92,7 +96,7 @@ func TestAIKindsEachHaveABrief(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
 	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}}))...)
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}, ChoiceRules: stubChoiceRules{}}))...)
 	caps := reg.Capabilities()
 	for _, k := range reg.Kinds() {
 		if strings.Contains(caps, "`kind: "+k.Name()+"`: "+k.Label()+"\n") {
@@ -108,7 +112,7 @@ func TestAIKindDocsHoldNoSectionHeadings(t *testing.T) {
 	healthy := database.NewPluginHealthRegistry()
 	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
 	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}}))...)
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, Crafting: stubCrafting{}, ShopLooks: stubShopLooks{}, SavedLayouts: stubSavedLayouts{}, PageTemplates: stubPageTemplates{}, Decks: stubDecks{}, ChoiceRules: stubChoiceRules{}}))...)
 	for _, k := range reg.Kinds() {
 		for _, line := range strings.Split(k.Doc(), "\n") {
 			if strings.HasPrefix(line, "## ") {

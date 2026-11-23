@@ -170,7 +170,7 @@ func (run *lookupRun) notes() (LookupAnswer, error) {
 			b.WriteString("None.\n\n")
 			return
 		}
-		writeLines(&b, lines)
+		run.writeLines(&b, lines)
 		b.WriteString("\n")
 	}
 	section("My Journal", own)

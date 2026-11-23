@@ -612,7 +612,8 @@
     function previewTheme(){ return ui.ptheme || pageTheme(); }
     function tones(d, theme){
       var T = clone(TONES[d.colours.page][theme]);
-      if (d.colours.contrast === 'high'){ T.muted = T.body; T.body = T.text; T.line = T.line2; T.line2 = mix(T.line2, T.text, 0.3); }
+      // Same steps as the server's tones(): nearer the heading ink, still apart.
+      if (d.colours.contrast === 'high'){ T.muted = mix(T.muted, T.body, 0.5); T.body = mix(T.body, T.text, 0.45); T.line = T.line2; T.line2 = mix(T.line2, T.text, 0.3); }
       return T;
     }
     // The menu: Charcoal, Ink, a dark shade of the accent, or the owner's own
