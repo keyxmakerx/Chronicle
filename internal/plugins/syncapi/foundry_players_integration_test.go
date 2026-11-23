@@ -55,8 +55,8 @@ func TestFoundryPlayersIntegration_ReplaceKeepsEarlierActivity(t *testing.T) {
 	}
 }
 
-// Several campaigns replacing their lists at once deadlock on shared index
-// gaps; Replace retries, so every report lands and none errors.
+// Several campaigns replacing their lists at once used to deadlock on shared
+// index gaps; every report must land and none may error.
 func TestFoundryPlayersIntegration_ConcurrentCampaignsDoNotDeadlock(t *testing.T) {
 	db := newSyncStatsScratchDB(t)
 	ctx := context.Background()

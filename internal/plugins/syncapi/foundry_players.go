@@ -82,9 +82,11 @@ const mysqlDeadlock = 1213
 // foundryPlayersAttempts bounds the retries of a deadlocked Replace.
 const foundryPlayersAttempts = 3
 
-// Replace deletes then inserts a campaign's rows. Two campaigns doing that at
-// once take gap locks on the same index range and the server rolls one back,
-// so the whole transaction is retried a few times before giving up.
+// Replace deletes then inserts a campaign's rows. Under the default
+// repeatable read the delete also locks the gap up to the next campaign's
+// first row, so campaigns reporting at once deadlock; the transaction runs at
+// read committed, which locks only the campaign's own rows. A deadlock that
+// still happens is retried a few times before giving up.
 func (r *foundryPlayerRepo) Replace(ctx context.Context, campaignID string, players []FoundryPlayer) error {
 	var err error
 	for attempt := 0; attempt < foundryPlayersAttempts; attempt++ {
@@ -107,7 +109,7 @@ func (r *foundryPlayerRepo) Replace(ctx context.Context, campaignID string, play
 }
 
 func (r *foundryPlayerRepo) replaceOnce(ctx context.Context, campaignID string, players []FoundryPlayer) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("begin foundry players: %w", err))
 	}
