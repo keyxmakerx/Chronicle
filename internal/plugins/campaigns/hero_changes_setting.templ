@@ -1,0 +1,78 @@
+// hero_changes_setting.templ draws the People page's "Changing heroes"
+// section: when players may change their own hero's picks.
+
+package campaigns
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+func heroChangesSettingURL(campaignID string) string {
+	return "/campaigns/" + campaignID + "/members/hero-changes"
+}
+
+// heroChangesSection is the section, a list of setting rows on the Campaign
+// settings tokens. A save redraws it in place and its summary row glows.
+templ heroChangesSection(v *HeroChangesSetting) {
+	<section class="sb sb-hc" id="hero-changes" aria-labelledby="hero-changes-h" data-hero-changes-setting>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/settings_board.css") }/>
+		<h2 class="sb-h" id="hero-changes-h">Changing heroes</h2>
+		<form
+			class="sb-list"
+			method="post"
+			action={ templ.SafeURL(heroChangesSettingURL(v.CampaignID)) }
+			hx-post={ heroChangesSettingURL(v.CampaignID) }
+			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, v.CSRFToken) }
+			hx-target="#hero-changes"
+			hx-swap="outerHTML"
+		>
+			<div class={ "sb-row", templ.KV("is-glow", v.Notice != "") } data-hc-summary>
+				<span class="sb-rv">
+					<span class="sb-strong sb-hc-sum">{ v.Summary }</span>
+					<span class="sb-dim">Their hero's name and story are always theirs to change. You get a bell whenever a player changes a pick.</span>
+				</span>
+			</div>
+			<fieldset class="sb-row sb-hc-set">
+				<legend class="sb-rl">When</legend>
+				<span class="sb-rv sb-hc-opts">
+					<label class="sb-hc-opt"><input type="radio" name="when" value="any" checked?={ !v.Form.Ruled }/> Any time</label>
+					<label class="sb-hc-opt"><input type="radio" name="when" value="set" checked?={ v.Form.Ruled }/> Only at these times</label>
+				</span>
+			</fieldset>
+			<fieldset class="sb-row sb-row-top sb-hc-set sb-hc-times">
+				<legend class="sb-rl">Times</legend>
+				<span class="sb-rv sb-hc-lines">
+					<span class="sb-hc-opt">
+						<label class="sb-hc-check"><input id="sb-hc-making" type="checkbox" name="after_making" value="1" checked?={ v.Form.AfterMaking }/> For the first</label>
+						<input type="number" name="making_days" min="1" max="365" value={ fmt.Sprint(v.Form.MakingDays) } class="input sb-hc-num" aria-label="Days after the hero is made"/>
+						<span>days after the hero is made</span>
+					</span>
+					<span class="sb-hc-opt">
+						<label class="sb-hc-check"><input id="sb-hc-level" type="checkbox" name="after_level" value="1" checked?={ v.Form.AfterLevel }/> For</label>
+						<input type="number" name="level_days" min="1" max="365" value={ fmt.Sprint(v.Form.LevelDays) } class="input sb-hc-num" aria-label="Days after a new level"/>
+						<span>days after each new level, from level</span>
+						<input type="number" name="from_level" min="2" max="100" value={ fmt.Sprint(v.Form.FromLevel) } class="input sb-hc-num" aria-label="First level that opens the picks"/>
+					</span>
+					<span class="sb-dim">Tick one or both.</span>
+				</span>
+			</fieldset>
+			<div class="sb-row sb-hc-acts">
+				<button type="submit" class="btn-primary btn-sm" data-working-label="Saving…">Save</button>
+				if v.Err != "" {
+					<span class="sb-hc-msg sb-bad" role="alert">{ v.Err }</span>
+				} else if v.Notice != "" {
+					<span class="sb-hc-msg sb-dim" role="status">{ v.Notice }</span>
+				}
+				if v.Ruled {
+					<span class="sb-dim sb-hc-more">
+						To open one hero's picks for a few days,
+						<a class="sb-word" href={ templ.SafeURL("/campaigns/" + v.CampaignID + "/characters#hero-changes") }>go to the Characters page</a>
+					</span>
+				}
+			</div>
+			<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+		</form>
+	</section>
+}

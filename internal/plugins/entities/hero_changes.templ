@@ -17,7 +17,7 @@ func heroChangesURL(campaignID string) string {
 // (#cast-content) like the page's other controls.
 templ heroChangesSection(v *HeroChangesView) {
 	<link rel="stylesheet" href={ heroChangesCSS() }/>
-	<section class="pr hc mb-8" data-hero-changes="true" aria-labelledby="hc-h">
+	<section class="pr hc mb-8" id="hero-changes" data-hero-changes="true" aria-labelledby="hc-h">
 		<div class="pr-head">
 			<h2 id="hc-h" class="section-header">Changing heroes</h2>
 		</div>

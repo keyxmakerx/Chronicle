@@ -1161,6 +1161,7 @@ POST	/campaigns/:id/members	session	plugins/campaigns.(*Handler).AddMember	plugi
 DELETE	/campaigns/:id/members/:uid	session	plugins/campaigns.(*Handler).RemoveMember	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/members/:uid/character	session	plugins/campaigns.(*Handler).UpdateMemberCharacterAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/members/:uid/role	session	plugins/campaigns.(*Handler).UpdateRole	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/members/hero-changes	session	plugins/campaigns.(*Handler).SaveHeroChangesSetting	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/members/removed/:uid/allow	session	plugins/campaigns.(*Handler).AllowMemberBack	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/my-look	session	plugins/campaigns.(*Handler).YourLook	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/my-look/:part	session	plugins/campaigns.(*Handler).PutLookPick	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
