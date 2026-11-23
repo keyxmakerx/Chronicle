@@ -3067,6 +3067,9 @@ func (a *App) RegisterRoutes() {
 	// the system handler exists further down.
 	fieldSwitchOffers := &fieldSwitchOfferSource{types: entityService}
 	fieldSwitchService := entities.NewFieldSwitchService(entities.NewFieldSwitchRepository(a.DB), entityTypeRepo, fieldSwitchOffers.offer)
+	fieldSwitchService.SetSearchReindex(func(ctx context.Context, typeID int) (int, error) {
+		return entities.ReindexSearchText(ctx, entityRepo, entityTypeRepo, typeID)
+	})
 
 	// Pages saved before search_text stopped indexing what not every reader
 	// may see (GM-only text, mention names, restricted field values) still

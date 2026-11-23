@@ -26,10 +26,32 @@ type fieldSwitchTypes interface {
 // category: the offer, accepting it, "Not now", switching back, and the
 // values it kept aside. Every write is the owner's (the routes require it).
 type FieldSwitchService struct {
-	repo   FieldSwitchRepository
-	types  fieldSwitchTypes
-	offers FieldSwitchOffers
-	draft  FieldSwitchDraft
+	repo    FieldSwitchRepository
+	types   fieldSwitchTypes
+	offers  FieldSwitchOffers
+	draft   FieldSwitchDraft
+	reindex FieldSwitchReindex
+}
+
+// FieldSwitchReindex recomputes search_text for one category's pages. A
+// switch moves values in and out of fields_data, and search_text is built
+// from it, so a value set aside must stop being found.
+type FieldSwitchReindex func(ctx context.Context, typeID int) (int, error)
+
+// SetSearchReindex wires the search refresh run after every switch.
+func (s *FieldSwitchService) SetSearchReindex(r FieldSwitchReindex) { s.reindex = r }
+
+// switched refreshes the category's search text once a switch has committed.
+// A failed refresh is logged; the boot reindex finishes the job.
+func (s *FieldSwitchService) switched(ctx context.Context, typeID, moved int, err error) (int, error) {
+	if err != nil || s.reindex == nil {
+		return moved, err
+	}
+	if n, rerr := s.reindex(ctx, typeID); rerr != nil {
+		slog.Warn("entities: search text refresh after a field switch failed",
+			slog.Int("entity_type_id", typeID), slog.Int("rewritten", n), slog.Any("error", rerr))
+	}
+	return moved, nil
 }
 
 // NewFieldSwitchService wires the switch to its store, the category store and
@@ -150,7 +172,8 @@ func (s *FieldSwitchService) AcceptOffer(ctx context.Context, et *EntityType, of
 		UpdatedBy:         userID,
 	}
 	category := offer.Category
-	return s.repo.Switch(ctx, next, baseOf(sw, et), switchedFieldList(et.Fields, offer), &category, acceptMove(et.Fields, offer))
+	moved, err := s.repo.Switch(ctx, next, baseOf(sw, et), switchedFieldList(et.Fields, offer), &category, acceptMove(et.Fields, offer))
+	return s.switched(ctx, et.ID, moved, err)
 }
 
 // RecordSwitched notes that a category made from the system's preset already
@@ -190,7 +213,8 @@ func (s *FieldSwitchService) Back(ctx context.Context, campaignID string, typeID
 	next := *sw
 	next.State = FieldSwitchBack
 	next.UpdatedBy = userID
-	return s.repo.Switch(ctx, &next, baseOf(sw, et), switchedBackFieldList(et.Fields, sw.OldFields, *offer), sw.OldPresetCategory, backMove(sw.OldFields, *offer))
+	moved, err := s.repo.Switch(ctx, &next, baseOf(sw, et), switchedBackFieldList(et.Fields, sw.OldFields, *offer), sw.OldPresetCategory, backMove(sw.OldFields, *offer))
+	return s.switched(ctx, et.ID, moved, err)
 }
 
 // baseOf is what a switch is worked out from: the answer read and the

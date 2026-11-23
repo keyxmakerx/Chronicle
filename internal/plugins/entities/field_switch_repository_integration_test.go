@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // The switch is worked out before the repository takes its lock, so the
@@ -119,4 +122,77 @@ func TestFieldSwitchRepository_MovedBase_Integration(t *testing.T) {
 			}
 		}
 	})
+}
+
+// A value the switch sets aside leaves the page's fields, so search must stop
+// finding it (and quoting it) for a player as soon as the switch is made, and
+// find it again once switching back puts it back.
+func TestFieldSwitch_SearchFollowsTheSwitch_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openTestDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	owner, campaignID := testUUID(t), testUUID(t)
+	mustExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		owner, "switch-search-"+owner+"@example.test", "Switch Search Test", "x")
+	mustExec(t, db, `INSERT INTO campaigns (id, name, slug, created_by) VALUES (?, ?, ?, ?)`,
+		campaignID, "Switch Search Test", "switch-search-"+campaignID[:8], owner)
+	defer func() {
+		mustExec(t, db, `DELETE FROM campaigns WHERE id = ?`, campaignID)
+		mustExec(t, db, `DELETE FROM users WHERE id = ?`, owner)
+	}()
+
+	types := NewEntityTypeRepository(db)
+	pages := NewEntityRepository(db)
+	offers := func(context.Context, string, *EntityType) *FieldSwitchOffer {
+		o := treasureOffer()
+		return &o
+	}
+	svc := NewFieldSwitchService(NewFieldSwitchRepository(db), types, offers)
+	svc.SetSearchReindex(func(ctx context.Context, typeID int) (int, error) {
+		return ReindexSearchText(ctx, pages, types, typeID)
+	})
+
+	et := &EntityType{
+		CampaignID: campaignID, Slug: "switch-search-items", Name: "Item", NamePlural: "Items",
+		Icon: "fa-box", Color: "#111111", Fields: itemFields(), Layout: DefaultLayout(), Enabled: true,
+	}
+	mustCreate(t, types, ctx, et)
+	now := time.Now().UTC()
+	page := &Entity{
+		ID: testUUID(t), CampaignID: campaignID, EntityTypeID: et.ID, Name: "Lantern", Slug: "lantern-" + testUUID(t)[:6],
+		FieldsData: map[string]any{"rarity": "Duskglass", "weight": "1 lb"}, CreatedBy: owner, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := pages.Create(ctx, page); err != nil {
+		t.Fatalf("create page: %v", err)
+	}
+	if _, err := ReindexSearchText(ctx, pages, types, et.ID); err != nil {
+		t.Fatalf("index: %v", err)
+	}
+	playerFinds := func(t *testing.T) bool {
+		t.Helper()
+		got, _, err := pages.Search(ctx, campaignID, "Duskglass", nil, permissions.RolePlayer, testUUID(t), DefaultListOptions())
+		if err != nil {
+			t.Fatalf("search: %v", err)
+		}
+		return len(got) > 0
+	}
+	if !playerFinds(t) {
+		t.Fatal("before the switch a player should find the page by its Rarity")
+	}
+	if _, err := svc.Accept(ctx, campaignID, et.ID, owner); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if playerFinds(t) {
+		t.Error("after the switch a player still finds the page by a value set aside")
+	}
+	if _, err := svc.Back(ctx, campaignID, et.ID, owner); err != nil {
+		t.Fatalf("Back: %v", err)
+	}
+	if !playerFinds(t) {
+		t.Error("after switching back the Rarity is on the page again and should be found")
+	}
 }
