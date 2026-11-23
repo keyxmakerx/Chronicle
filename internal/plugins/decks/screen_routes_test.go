@@ -29,11 +29,10 @@ func (r *workshopRig) put(path, user, body string) *httptest.ResponseRecorder {
 }
 
 // screenWorld is the workshop rig plus an event deck Tam may draw from, with a
-// secret card (name, words, picture) and a shown copy a Director has drawn.
+// secret card (name, words, picture).
 type screenWorld struct {
 	*workshopRig
 	omens, secretCard string
-	shownCopy         string
 }
 
 var screenSecrets = []string{"Drowned Bell", "DROWNED-WORDS", "pic-bell"}

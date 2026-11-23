@@ -42,7 +42,7 @@
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function el(html) { var t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
   function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function esc(s) { return window.Chronicle.escapeHtml(s); }
   function enc(s) { return encodeURIComponent(s); }
 
   /** cap: a server refusal as a sentence (it starts in lower case on the wire). */
@@ -1309,11 +1309,21 @@
         return undefined;
       });
     }
-    window.addEventListener(LIVE_EVENT, function () {
-      if (!root.isConnected) return;
+    // The DM Screen redraws its sections, so a section that has left the page
+    // lets go of its page-wide listeners the next time one fires.
+    function gone() {
+      if (root.isConnected) return false;
+      window.removeEventListener(LIVE_EVENT, onLive);
+      document.removeEventListener('click', onDocClick, true);
+      clearTimeout(timer);
+      return true;
+    }
+    function onLive() {
+      if (gone()) return;
       clearTimeout(timer);
       timer = setTimeout(function () { if (!menu) resync(); }, 300);
-    });
+    }
+    window.addEventListener(LIVE_EVENT, onLive);
 
     // ---- Quick draw ----
     function quick(node, b) {
@@ -1472,9 +1482,11 @@
       }
       if ((b = t.closest('[data-dkd-picks-save]'))) { savePicks(b); return; }
     });
-    document.addEventListener('click', function (e) {
+    function onDocClick(e) {
+      if (gone()) return;
       if (menu && !menu.node.contains(e.target) && !e.target.closest('[data-dkd-copy]')) closeMenu();
-    }, true);
+    }
+    document.addEventListener('click', onDocClick, true);
     root.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && menu) { var b = menu.btn; closeMenu(); b.focus(); }
     });

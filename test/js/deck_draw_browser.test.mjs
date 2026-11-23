@@ -24,6 +24,7 @@ const FILES = {
   '/js/deck_cards.js': read('internal/plugins/decks/static/js/deck_cards.js'),
   '/js/deck_hand.js': read('internal/plugins/decks/static/js/deck_hand.js'),
   '/js/table.js': read('internal/plugins/rolls/static/js/table.js'),
+  '/js/dm_screen.js': read('static/js/widgets/dm_screen.js'),
   '/css/decks_card.css': read('static/css/decks_card.css'),
   '/css/decks_hand.css': read('static/css/decks_hand.css'),
   '/css/decks_draw.css': read('static/css/decks_draw.css'),
@@ -89,6 +90,7 @@ const SERVER = `(function () {
     if (srv.fail && srv.fail(method, u)) return srv.failAnswer || bad('that did not work');
     if (/\\/decks\\/moments\\/panel/.test(u)) return { status: 200, body: '<div class="dkm" data-dkm data-at=""><ul data-dkm-index hidden></ul></div>' };
     if (method === 'GET' && u === '/campaigns/c1/decks/screen') return { status: 200, body: screen() };
+    if (method === 'GET' && u === '/campaigns/c1/dm-screen') return { status: 200, body: '<div data-dms-root><section data-dms-section="decks">' + screen() + '</section></div>' };
     if (method === 'PUT' && u === '/campaigns/c1/decks/screen/picks') { if (srv.picksRefuse) return bad(srv.picksRefuse, 400); srv.picks = JSON.parse(body).deckIds; return { status: 204, body: '' }; }
     if (method === 'GET' && u === '/campaigns/c1/decks/hand') return { status: 200, body: handHtml() };
     if (method === 'GET' && u === '/campaigns/c1/decks/hand/fresh') return J({ cards: dir() ? [] : srv.fresh.filter(function (c) { return !srv.seen[c.copyId]; }) });
@@ -917,4 +919,51 @@ test('a press inside the overlay does not close the Table drawer behind it', { s
   await page.locator('.dkd-panel .dkd-head').click();
   assert.equal(await page.evaluate(() => document.querySelector('.tt-host')._table.open), true);
   await page.close2();
+});
+
+// ------------------------------------------------- the DM Screen on its own
+
+// Where the Table is not on the page (Site admin), the DM Screen fetches the
+// overlay itself, from the addresses on its own button.
+test('the DM Screen loads the overlay itself where the Table is not on the page', { skip }, async () => {
+  browser = browser || await pw.chromium.launch({ executablePath: chromePath });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(8000);
+  const errors = [];
+  const loaded = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  const body = `<!doctype html><html><head><meta charset="utf-8"><style>${TOKENS}</style></head><body>
+<header id="app-topbar"><div data-widget="dm-screen" data-url="/campaigns/c1/dm-screen" data-dkd-src="/js/deck_draw.js" data-dkd-css="/css/decks_draw.css" data-dkd-card-css="/css/decks_card.css">
+<button type="button" data-dms-toggle aria-expanded="false">Screen</button></div></header><main id="main-content"></main>
+<script>${SERVER}
+window.__srv.viewer = 'director';
+var widgets = {};
+window.Chronicle = {
+  register: function (n, d) { widgets[n] = d; },
+  mountWidgets: function () {}, destroyWidget: function () {},
+  apiFetch: function (u, o) { o = o || {}; return fetch(u, { method: o.method, headers: o.headers, body: o.body && typeof o.body === 'object' ? JSON.stringify(o.body) : o.body }); },
+  working: function () {}, escapeHtml: function (s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return { '&': '&#38;', '<': '&#60;', '>': '&#62;' }[c]; }); }, notify: function () {}, motionMs: function (n) { return n; }, reducedMotion: function () { return true; }, gmTerm: function () { return 'Director'; }
+};
+</script><script src="/js/dm_screen.js"></script>
+<script>widgets['dm-screen'].init(document.querySelector('[data-widget="dm-screen"]'));</script></body></html>`;
+  await page.route('http://chronicle.test/**', (r) => {
+    const path = new URL(r.request().url()).pathname;
+    loaded.push(path);
+    if (path === '/') return r.fulfill({ contentType: 'text/html', body });
+    if (FILES[path]) return r.fulfill({ contentType: path.endsWith('.css') ? 'text/css' : 'text/javascript', body: FILES[path] });
+    return r.fulfill({ status: 404, body: '' });
+  });
+  await page.goto('http://chronicle.test/');
+  await page.click('[data-dms-toggle]');
+  await page.waitForSelector('[data-dms-stage] [data-dkd-screen] [data-dkd-row]');
+  await page.waitForFunction(() => window.DeckDraw && document.querySelector('[data-dkd-screen]').__dkd);
+  for (const f of ['/js/deck_cards.js', '/js/deck_draw.js', '/css/decks_draw.css', '/css/decks_card.css']) {
+    assert.equal(loaded.filter((p) => p === f).length, 1, f + ' loaded once');
+  }
+  await page.click('[data-dkd-deck="d1"] [data-dkd-row]');
+  await page.click('[data-dkd-deck="d1"] [data-dkd-draw]');
+  await page.waitForSelector('[data-dkd-ov] [data-dko-back]');
+  await ctx.close();
+  assert.deepEqual(errors, [], 'the page threw');
 });

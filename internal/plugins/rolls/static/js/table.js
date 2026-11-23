@@ -1801,7 +1801,13 @@
     if (!this.director) {
       this.freshShowing = false;
       this.freshSeen = {};
-      this.on(W, 'chronicle:decks-changed', function () { self.askFresh(); });
+      // Any deck move in the campaign says the decks changed, so a burst of
+      // moves asks once.
+      var freshTimer = 0;
+      this.on(W, 'chronicle:decks-changed', function () {
+        clearTimeout(freshTimer);
+        freshTimer = setTimeout(function () { self.askFresh(); }, 250);
+      });
       // A card that waited behind another overlay comes once that one closes.
       this.on(W, 'chronicle:deck-draw-closed', function () { self.askFresh(); });
       this.askFresh();

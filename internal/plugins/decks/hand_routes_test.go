@@ -145,6 +145,32 @@ func TestTurningAtOpenSizeForTheOverlay(t *testing.T) {
 	}
 }
 
+// A deck whose cards arrive face up gives a player a card that is already
+// turned; the overlay's open-size turn reads it without flipping it, while the
+// Hand's own turn still answers 409. A card not theirs stays hidden.
+func TestOpenSizeTurnReadsACardThatArrivedFaceUp(t *testing.T) {
+	up := "up"
+	w := newHandWorld(t, true, &SettingsInput{Arrives: &up})
+	if !w.fx.copy(w.tamCopy).FaceUp {
+		t.Fatal("the dealt copy did not arrive face up")
+	}
+	hdr := []string{"Accept", "text/html, application/json"}
+	lines := len(w.fx.repo.logs)
+	rec := w.post(w.turnPath(w.tamCopy)+"?size=open", "u-tam", hdr...)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Moonwell") || !strings.Contains(rec.Body.String(), "dk-sz-open") {
+		t.Fatalf("open-size turn of a face-up card: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if len(w.fx.repo.logs) != lines || !w.fx.copy(w.tamCopy).FaceUp {
+		t.Error("reading the face moved the card or wrote a line")
+	}
+	if plain := w.post(w.turnPath(w.tamCopy), "u-tam", hdr...); plain.Code != http.StatusConflict {
+		t.Errorf("the Hand's turn of a face-up card: %d", plain.Code)
+	}
+	if other := w.post(w.turnPath(w.tamCopy)+"?size=open", "u-ilse", hdr...); other.Code != http.StatusNotFound || strings.Contains(other.Body.String(), "Moonwell") {
+		t.Errorf("another player read the card: %d %.200s", other.Code, other.Body.String())
+	}
+}
+
 // A copy that is not theirs, one that does not exist, a bad id and another
 // deck's id answer the same 404, for the turn request and the open request.
 func TestHandRoutesHideWhatIsNotTheirs(t *testing.T) {

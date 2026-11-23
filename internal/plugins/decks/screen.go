@@ -344,7 +344,7 @@ func (r *request) directorDrawView(d Deck) (*DrawView, error) {
 	out := &DrawView{DeckID: d.ID, Name: d.Name, Sub: deckSub(d.Kind, &pile), Shape: d.Look.Shape, Turn: d.Look.Turn,
 		Look: d.Look, Pile: &pile, Fan: fanOf(&pile), Shown: []DrawShown{}}
 	// A draw from an empty pile that reshuffles brings the used cards back.
-	empty := pile == 0 && !(d.Settings.Empty == "reshuffle" && counts.Used > 0)
+	empty := pile == 0 && (d.Settings.Empty != "reshuffle" || counts.Used == 0)
 	switch {
 	case counts.Shown >= MaxShown:
 		out.Refusal = shownFullWords()
@@ -358,7 +358,7 @@ func (r *request) directorDrawView(d Deck) (*DrawView, error) {
 			return nil, err
 		}
 		for _, sh := range drawn {
-			out.Shown = append(out.Shown, DrawShown{CopyID: sh.CopyID, Face: sh.Face})
+			out.Shown = append(out.Shown, DrawShown(sh))
 		}
 	}
 	return out, nil

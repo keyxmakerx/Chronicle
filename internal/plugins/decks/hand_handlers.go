@@ -61,13 +61,23 @@ func (h *Handler) TurnFaceFragment(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	card, err := h.svc.TurnFace(c.Request().Context(), cid, c.Param("did"), c.Param("copy"), v)
+	ctx, did, copyID := c.Request().Context(), c.Param("did"), c.Param("copy")
+	card, err := h.svc.TurnFace(ctx, cid, did, copyID, v)
+	// The draw overlay reads the card at open size, with its leaf. A card
+	// drawn from a deck whose cards arrive face up is already turned, so the
+	// overlay's turn reads it through the ordinary open route instead.
+	if c.QueryParam("size") == "open" {
+		if err != nil {
+			opened, oerr := h.svc.Open(ctx, cid, did, copyID, v)
+			if oerr != nil {
+				return err
+			}
+			card = opened
+		}
+		return middleware.Render(c, http.StatusOK, ShownFace(card))
+	}
 	if err != nil {
 		return err
-	}
-	// The draw overlay reads the card at open size, with its leaf.
-	if c.QueryParam("size") == "open" {
-		return middleware.Render(c, http.StatusOK, ShownFace(card))
 	}
 	return middleware.Render(c, http.StatusOK, TurnedFace(card))
 }

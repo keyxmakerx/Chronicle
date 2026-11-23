@@ -1076,6 +1076,48 @@
         if (window.htmx) window.htmx.process(stage);
         st.loaded = true;
         afterMount();
+        loadDraw(stage);
+      }
+
+      // The Card decks section needs the draw overlay's script. Where the
+      // Table is on the page it fetches the script once the section appears;
+      // where it is not (Site admin), the Screen fetches it from the addresses
+      // on its own button, so only one of the two ever loads it. Once loaded,
+      // the script mounts every section on the page by itself.
+      function loadDraw(stage) {
+        if (window.DeckDraw || !stage.querySelector('[data-dkd-screen]')) return;
+        if (document.querySelector('[data-widget="table"]')) return;
+        loadDrawHere().then(function (d) { if (d && d.scan) d.scan(); }, function () { /* the section stays as the server drew it */ });
+      }
+
+      function loadDrawHere() {
+        if (st.drawLoad) return st.drawLoad;
+        var src = el.getAttribute('data-dkd-src');
+        if (!src) return Promise.reject(new Error('no source'));
+        [['data-dkd-css', 'decks_draw.css'], ['data-dkd-card-css', 'decks_card.css']].forEach(function (pair) {
+          var href = el.getAttribute(pair[0]);
+          if (!href || document.querySelector('link[' + pair[0] + '], link[href*="' + pair[1] + '"]')) return;
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = href;
+          link.setAttribute(pair[0], '');
+          document.head.appendChild(link);
+        });
+        function script(u) {
+          return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = u;
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error('script')); };
+            document.head.appendChild(s);
+          });
+        }
+        var cards = window.DeckCards ? Promise.resolve() : script(src.replace('deck_draw.js', 'deck_cards.js'));
+        st.drawLoad = cards.then(function () { return script(src); }).then(function () { return window.DeckDraw; }, function (e) {
+          st.drawLoad = null;
+          throw e;
+        });
+        return st.drawLoad;
       }
 
       function afterMount() {
