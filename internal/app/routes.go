@@ -3157,6 +3157,9 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
 	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
 	campaignHandler.SetCustomizeDrafts(customizeDrafts)
+	// Publishing a draft's field list would undo a field switch, so the
+	// switch waits until that draft is published or discarded.
+	fieldSwitchService.SetDraft(draftReplacesFields(customizeDrafts))
 	// After the look, which NewHandler registers first: a category's menu
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))

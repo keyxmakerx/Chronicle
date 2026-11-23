@@ -642,3 +642,57 @@ func TestFieldSwitchServiceRestore(t *testing.T) {
 		t.Errorf("another campaign's category: RestoreSetAside = %v, want not found", err)
 	}
 }
+
+// A stored Customizer draft that rewrites the category's fields would put the
+// old list back over the switch when published, so both directions wait for
+// it; a draft for another category, or none, does not stop them.
+func TestFieldSwitchServiceRefusesWhileADraftHoldsFields(t *testing.T) {
+	ctx := context.Background()
+	accept := func(s *FieldSwitchService) error { _, err := s.Accept(ctx, "c1", 4, "owner"); return err }
+	back := func(s *FieldSwitchService) error { _, err := s.Back(ctx, "c1", 4, "owner"); return err }
+	tests := []struct {
+		name     string
+		switched bool // accept before the draft is checked
+		draft    FieldSwitchDraft
+		call     func(*FieldSwitchService) error
+		wantCode int
+	}{
+		{"accept with this category's fields in the draft", false, draftFor(4), accept, 409},
+		{"back with this category's fields in the draft", true, draftFor(4), back, 409},
+		{"accept with another category in the draft", false, draftFor(7), accept, 0},
+		{"back with no draft", true, nil, back, 0},
+		{"accept when the draft cannot be read", false, func(context.Context, string, string, int) (bool, error) {
+			return false, apperror.NewInternal(errors.New("db down"))
+		}, accept, 500},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo := newSwitchService(true)
+			if tc.switched {
+				if err := accept(svc); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before := keysOf(repo.types[4].Fields)
+			svc.SetDraft(tc.draft)
+			err := tc.call(svc)
+			if switchErrCode(err) != tc.wantCode || (tc.wantCode == 0 && err != nil) {
+				t.Fatalf("err = %v, want code %d", err, tc.wantCode)
+			}
+			if tc.wantCode == 409 && !strings.Contains(err.Error(), "Customizer changes to Items") {
+				t.Errorf("message = %q, want it to name the Customizer and the category", err.Error())
+			}
+			if tc.wantCode != 0 && !reflect.DeepEqual(keysOf(repo.types[4].Fields), before) {
+				t.Errorf("a refused switch changed the fields to %v", keysOf(repo.types[4].Fields))
+			}
+		})
+	}
+}
+
+// draftFor is a draft check that finds field changes for one category, asked
+// for the acting owner.
+func draftFor(typeID int) FieldSwitchDraft {
+	return func(_ context.Context, campaignID, userID string, id int) (bool, error) {
+		return campaignID == "c1" && userID == "owner" && id == typeID, nil
+	}
+}

@@ -21,7 +21,9 @@ func fieldSwitchAction(cc *campaigns.CampaignContext, et *EntityType, kind strin
 
 // fieldSwitchDraftGuard stops a switch from the Customizer's Fields tab while
 // the Customizer's draft holds unsaved field changes for this category: the
-// draft's Save would put the old field list back over the switch.
+// draft's Save would put the old field list back over the switch. The service
+// refuses the same case from the stored draft; this catches edits the page
+// has not stored yet and answers without a round trip.
 var fieldSwitchDraftGuard = inlineHandler("field_switch_guard",
 	`return (function(f){var d=(window.Chronicle&&Chronicle.customizeDraft)?Chronicle.customizeDraft():null;`+
 		`var it=d&&d.categories&&d.categories.items&&d.categories.items[f.getAttribute('data-cat')];`+

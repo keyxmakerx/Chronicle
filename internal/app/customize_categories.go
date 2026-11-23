@@ -102,6 +102,35 @@ type categoriesSectionValue struct {
 	Changes json.RawMessage                           `json:"_changes,omitempty"`
 }
 
+// draftReplacesFields answers the field switch's draft check: true when the
+// owner's stored Customizer draft carries a field list for the category,
+// which its publish would write over the whole list. A draft whose section
+// cannot be read is not counted, since publishing refuses it too.
+func draftReplacesFields(drafts interface {
+	Get(ctx context.Context, campaignID, userID string) (*campaigns.CustomizeDraft, error)
+}) entities.FieldSwitchDraft {
+	return func(ctx context.Context, campaignID, userID string, typeID int) (bool, error) {
+		d, err := drafts.Get(ctx, campaignID, userID)
+		if err != nil || d == nil {
+			return false, err
+		}
+		var sections map[string]json.RawMessage
+		if err := json.Unmarshal(d.Draft, &sections); err != nil {
+			return false, nil
+		}
+		raw, ok := sections[customizeSectionCategories]
+		if !ok {
+			return false, nil
+		}
+		var sec categoriesSectionValue
+		if err := json.Unmarshal(raw, &sec); err != nil {
+			return false, nil
+		}
+		it, ok := sec.Items[strconv.Itoa(typeID)]
+		return ok && it.Fields != nil, nil
+	}
+}
+
 // newCategoriesSection builds the "categories" Customize section. The entity
 // service owns the categories and the campaign service owns the sidebar menu;
 // this is the one place that joins the two for a Save.

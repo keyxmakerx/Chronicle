@@ -12,6 +12,11 @@ import (
 // manifest.
 type FieldSwitchOffers func(ctx context.Context, campaignID string, et *EntityType) *FieldSwitchOffer
 
+// FieldSwitchDraft reports whether the owner's unsaved Customizer draft
+// replaces a category's field list. The campaigns plugin keeps the draft; the
+// app layer answers this from it.
+type FieldSwitchDraft func(ctx context.Context, campaignID, userID string, typeID int) (bool, error)
+
 // fieldSwitchTypes is the slice of the entity type store the switch reads.
 type fieldSwitchTypes interface {
 	FindByID(ctx context.Context, id int) (*EntityType, error)
@@ -24,12 +29,37 @@ type FieldSwitchService struct {
 	repo   FieldSwitchRepository
 	types  fieldSwitchTypes
 	offers FieldSwitchOffers
+	draft  FieldSwitchDraft
 }
 
 // NewFieldSwitchService wires the switch to its store, the category store and
 // the offer source. A nil offers source offers nothing.
 func NewFieldSwitchService(repo FieldSwitchRepository, types fieldSwitchTypes, offers FieldSwitchOffers) *FieldSwitchService {
 	return &FieldSwitchService{repo: repo, types: types, offers: offers}
+}
+
+// SetDraft wires the Customizer draft check. Unwired, no draft is checked.
+func (s *FieldSwitchService) SetDraft(d FieldSwitchDraft) {
+	s.draft = d
+}
+
+// refuseDraft refuses a switch while the owner's Customizer draft holds a
+// field list for the category: publishing it replaces the whole list, so it
+// would put the fields from before the switch back over it. The draft lives
+// on the server, so the page's own guard cannot see it from outside the
+// Customizer, and the AI's request never passes that guard at all.
+func (s *FieldSwitchService) refuseDraft(ctx context.Context, et *EntityType, userID string) error {
+	if s.draft == nil {
+		return nil
+	}
+	held, err := s.draft(ctx, et.CampaignID, userID, et.ID)
+	if err != nil {
+		return err
+	}
+	if held {
+		return apperror.NewConflict("Publish or discard your Customizer changes to " + et.NamePlural + " first: publishing them would put the old fields back over the switch")
+	}
+	return nil
 }
 
 // offerFor is the category's offer, or nil.
@@ -82,6 +112,9 @@ func (s *FieldSwitchService) Accept(ctx context.Context, campaignID string, type
 	offer := s.offerFor(ctx, campaignID, et)
 	if offer == nil {
 		return 0, apperror.NewBadRequest("this category has no game system fields to switch to")
+	}
+	if err := s.refuseDraft(ctx, et, userID); err != nil {
+		return 0, err
 	}
 	return s.AcceptOffer(ctx, et, *offer, userID)
 }
@@ -150,6 +183,9 @@ func (s *FieldSwitchService) Back(ctx context.Context, campaignID string, typeID
 		// Only the system's own list tells its fields from ones the owner
 		// added since; without it every later field would go too.
 		return 0, apperror.NewConflict("turn the game system back on to switch " + et.NamePlural + " back: Chronicle needs its field list to tell its fields from the ones you added")
+	}
+	if err := s.refuseDraft(ctx, et, userID); err != nil {
+		return 0, err
 	}
 	next := *sw
 	next.State = FieldSwitchBack
