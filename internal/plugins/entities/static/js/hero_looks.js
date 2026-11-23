@@ -228,6 +228,7 @@
       if (!alive) return;
       var n = V.sel ? cardEl(V.sel.i) : null, x = 0, cv = canvas.getBoundingClientRect();
       fitEl.style.transform = 'none';
+      fitSheet();
       if (small()) {
         var sb = savebar(), cover = V.sel ? insp.offsetHeight : (dock.parentNode.hidden ? 0 : 64) + (sb && !sb.hidden ? 76 : 0);
         canvas.style.setProperty('--hcw-cover', (cover + 16) + 'px');
@@ -247,6 +248,29 @@
         if (V.view === 'phone' && fr.right > edge) x = Math.max(x, (fr.right - edge + fr.left - cv.left - 16) / 2);
       }
       fitEl.style.transform = x ? 'translate(' + (-Math.round(x)) + 'px, 0)' : '';
+    }
+
+    // A phone's sheet is never taller than its stylesheet's share of the
+    // workshop. Where that share would leave less than CLEAR px of the pressed
+    // card above it (a bar over the page takes the room), it is shortened, but
+    // never below its head, the colours and one full row of samples.
+    var CLEAR = 280;
+    function fitSheet() {
+      insp.style.removeProperty('height');
+      if (!V.sel || !small()) return;
+      var full = insp.offsetHeight, ir = insp.getBoundingClientRect();
+      // shift() brings the card's top to 18px under the canvas's top.
+      var room = editor.clientHeight - (canvas.getBoundingClientRect().top - editor.getBoundingClientRect().top) - 18 - CLEAR;
+      if (full <= room) return;
+      // The wall may be scrolled, so its first row is measured from the wall's top.
+      var wall = $('[data-wall]', insp), t = wall && $('.hcw-t', wall), note = $('.hcw-pending', insp), floor = full;
+      if (t) {
+        var ws = getComputedStyle(wall);
+        floor = wall.getBoundingClientRect().top - ir.top + (parseFloat(ws.paddingTop) || 0) + t.offsetHeight + (parseFloat(ws.paddingBottom) || 0);
+      } else if (note && note.firstElementChild) {
+        floor = note.firstElementChild.getBoundingClientRect().bottom - ir.top + (parseFloat(getComputedStyle(note).paddingBottom) || 0);
+      }
+      insp.style.height = Math.round(Math.min(full, Math.max(room, floor))) + 'px';
     }
 
     // ---------- the tools at the foot, and the line above the frame ----------

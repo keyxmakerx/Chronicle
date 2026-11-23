@@ -589,14 +589,21 @@
         var area = areas.filter(function (x) { return x.id === d.getAttribute('data-czs-area-dot'); })[0];
         d.hidden = !(area && area.section && secs.indexOf(area.section) >= 0);
       });
-      var show = secs.length > 0 || publishing || problem === 'conflict';
+      // The bar stays while there is something to redo: Redo has no other
+      // button on a phone. Save and Discard empty the redo history, so it
+      // still goes away after either.
+      var show = secs.length > 0 || publishing || problem === 'conflict' || future.length > 0;
       bar.hidden = !show;
       if (!show) return;
       var ls = labels(), n = ls.length;
       var what = $('[data-czs-what]'), sdot = bar.querySelector('.czs-sdot');
       sdot.classList.toggle('is-bad', !!problem || failed.length > 0);
+      sdot.hidden = !secs.length && !problem && !publishing && !failed.length;
+      // With nothing waiting the words open no list, so they are not a control then.
+      what.disabled = !secs.length && !publishing && problem !== 'conflict';
       if (problem === 'conflict') what.innerHTML = '<b>Draft changed elsewhere.</b> Reload to see it.';
       else if (publishing) what.innerHTML = '<span class="czs-spin" aria-hidden="true"></span> <b>Saving…</b>';
+      else if (!secs.length) what.innerHTML = '<b>No changes</b> waiting' + (problem === 'offline' ? ', not yet kept' : '');
       else {
         what.innerHTML = '<b>' + n + (n === 1 ? ' change' : ' changes') + '</b> waiting' +
           (problem === 'offline' ? ', not yet kept' : '') + ': ' + esc(ls.map(function (l) { return l.label; }).join(', '));
@@ -648,6 +655,8 @@
     function openChanges(anchor) {
       if (pop) { closePop(); return; }
       var ls = labels();
+      // With only a redo waiting there is no list to show.
+      if (!ls.length) return;
       pop = document.createElement('div');
       pop.className = 'czs-pop';
       pop.setAttribute('role', 'dialog');
