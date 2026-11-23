@@ -143,6 +143,9 @@ type EntryCatalog interface {
 	// Catalog returns a category as the reader has it. A Directors-only
 	// category is empty for anyone else.
 	Catalog(ctx context.Context, campaignID, category string, reader EntryActor) (*CatalogList, error)
+	// FieldCatalog is Catalog for the category a character field's pick list
+	// draws from; nil when the campaign has no game system with that field.
+	FieldCatalog(ctx context.Context, campaignID, fieldKey string, reader EntryActor) (*CatalogList, error)
 	// ResolveAddress resolves a slug under a category. printed asks for the
 	// printed original, which only a Director gets for a rewritten entry;
 	// for anyone else it answers as if not asked.
@@ -322,6 +325,14 @@ func (st *readingState) campEntry(j int) CatalogEntry {
 		}
 	}
 	return e
+}
+
+func (s *systemEntryService) FieldCatalog(ctx context.Context, campaignID, fieldKey string, reader EntryActor) (*CatalogList, error) {
+	m := s.manifestOrNil(ctx, campaignID)
+	if m == nil || !ValidChoiceFieldKey(fieldKey) || !isCharacterStringField(m, fieldKey) {
+		return nil, nil
+	}
+	return s.Catalog(ctx, campaignID, kindCategory(m, fieldKey), reader)
 }
 
 func (s *systemEntryService) Catalog(ctx context.Context, campaignID, category string, reader EntryActor) (*CatalogList, error) {
