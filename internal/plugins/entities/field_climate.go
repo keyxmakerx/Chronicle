@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -213,7 +214,9 @@ var climateFieldDef = FieldDefinition{Key: "climate", Label: "Climate", Type: Fi
 // has none, so a place's climate has a line on its page. Additive and
 // idempotent: a category that already has a climate field, or any field
 // keyed "climate", is left alone, and the empty field shows nothing until a
-// climate is chosen. Best-effort per category; returns how many changed.
+// climate is chosen. It carries on past a category that fails and returns
+// how many changed, with an error naming the ones that failed, so the
+// once-per-site caller records the sweep only when every category got it.
 // It cannot tell a category that never had the field from one whose owner
 // deleted it, so startup runs it once per site, not on every boot.
 func (s *entityService) EnsureClimateFields(ctx context.Context) (int, error) {
@@ -222,6 +225,7 @@ func (s *entityService) EnsureClimateFields(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("listing categories: %w", err)
 	}
 	changed := 0
+	var failed []error
 	for _, t := range all {
 		if t.Slug != "location" || climateKey(t.Fields) != "" {
 			continue
@@ -242,9 +246,13 @@ func (s *entityService) EnsureClimateFields(ctx context.Context) (int, error) {
 		n, err := s.ReconcileEntityTypeFields(ctx, t.ID, []FieldDefinition{def})
 		if err != nil {
 			slog.Warn("entities: climate field not added", slog.Int("entity_type_id", t.ID), slog.Any("error", err))
+			failed = append(failed, fmt.Errorf("category %d: %w", t.ID, err))
 			continue
 		}
 		changed += n
+	}
+	if len(failed) > 0 {
+		return changed, fmt.Errorf("climate field not added to %d %s: %w", len(failed), plural(len(failed), "category", "categories"), errors.Join(failed...))
 	}
 	return changed, nil
 }

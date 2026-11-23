@@ -22,9 +22,9 @@ type climateFieldEnsurer interface {
 }
 
 // addClimateFieldsOnce runs EnsureClimateFields unless it already ran on
-// this site. The setting is written only after the sweep returns, so a crash
-// part-way repeats it, which is harmless: a category that has the field is
-// left alone.
+// this site. The setting is written only when the sweep reached every
+// category, so a crash part-way or a category that failed repeats it on the
+// next start, which is harmless: a category that has the field is left alone.
 func addClimateFieldsOnce(ctx context.Context, st pageExtrasSettings, ents climateFieldEnsurer) (int, error) {
 	if v, err := st.Get(ctx, climateFieldsKey); err == nil && v == "1" {
 		return 0, nil

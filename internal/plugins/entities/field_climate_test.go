@@ -225,6 +225,38 @@ func TestEnsureClimateFields(t *testing.T) {
 	}
 }
 
+// A category that fails does not stop the others, and the sweep reports it,
+// so the once-per-site marker is not written and the next start tries again.
+func TestEnsureClimateFieldsReportsAFailedCategory(t *testing.T) {
+	stored := map[int]*EntityType{
+		1: {ID: 1, CampaignID: "a", Slug: "location", Name: "Location", NamePlural: "Locations", Icon: "fa-map", Color: "#5b8def"},
+		2: {ID: 2, CampaignID: "b", Slug: "location", Name: "Location", NamePlural: "Locations", Icon: "fa-map", Color: "#5b8def"},
+	}
+	updated := map[int]bool{}
+	types := &mockEntityTypeRepo{
+		listAllFn: func(context.Context) ([]EntityType, error) { return []EntityType{*stored[1], *stored[2]}, nil },
+		findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+			cp := *stored[id]
+			return &cp, nil
+		},
+		updateFn: func(_ context.Context, et *EntityType) error {
+			if et.ID == 1 {
+				return errors.New("db down")
+			}
+			updated[et.ID] = true
+			return nil
+		},
+	}
+	svc := newTestService(&mockEntityRepo{}, types)
+	n, err := svc.(*entityService).EnsureClimateFields(context.Background())
+	if err == nil {
+		t.Fatal("a failed category must be reported")
+	}
+	if n != 1 || !updated[2] {
+		t.Fatalf("changed %d, updated %v; the other Location should still get the field", n, updated)
+	}
+}
+
 // climateSvc answers the reads the climate line makes: the region, whether
 // the viewer may open it, and whether the page has pages under it.
 type climateSvc struct {
