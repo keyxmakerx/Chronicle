@@ -150,7 +150,12 @@ var manageToolWords = map[string]string{
 	"manage:trash":          "delete deleted restore undo bin",
 	"manage:player-changes": "history changes undo revert",
 	"manage:roll-tables":    "rumours omens random generator roll table builder lines",
+	"manage:own-entries":    OwnEntriesWords,
 }
+
+// OwnEntriesWords are what an owner types looking for Own entries: hiding or
+// limiting the game system's picks, or adding their own.
+const OwnEntriesWords = "homebrew hide class ancestry race species culture career kit subclass complication not here ask first hero rules limit picks replace override rewrite own entries"
 
 // ownerCommands are the owner's own phrases: what people type when they want
 // a campaign setting ("export", "delete", "guest"), each with the words that
@@ -224,6 +229,9 @@ func ManageToolRows(base string, media, foundry bool) []NavRowView {
 		NavRowView{Key: "manage:extensions", Label: "Game & features", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
 		// Every rolling table, with a way to start a new one.
 		NavRowView{Key: "manage:roll-tables", Label: "Rolling tables", Icon: "fa-table-list", URL: base + "/roll-tables/manage"},
+		// The campaign's own pick-list entries and the marks on the game
+		// system's (which ancestries, classes and kits players may pick).
+		NavRowView{Key: "manage:own-entries", Label: "Own entries", Icon: "fa-user-pen", URL: base + "/characters/entries"},
 	)
 	// The Foundry page (connection, players, module version, install link,
 	// and from there the sync history) only means something once the

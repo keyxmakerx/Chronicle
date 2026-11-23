@@ -111,7 +111,7 @@ func TestResolveNavState_CurrentRow(t *testing.T) {
 		{"the old My Characters page has no row", navStateCase{role: 1, path: "/campaigns/c1/me"}, "", ""},
 		{"the owner's Manage pages", navStateCase{role: 3, path: "/campaigns/c1/settings/general"}, "manage:settings", ""},
 		{"a player has none of the owner's Manage rows", navStateCase{role: 1, path: "/campaigns/c1/settings"}, "", ""},
-		{"the owner's Own entries page lights Campaign settings", navStateCase{role: 3, path: "/campaigns/c1/characters/entries"}, "manage:dashboard", ""},
+		{"the owner's Own entries page is its tool, not Characters", navStateCase{role: 3, path: "/campaigns/c1/characters/entries"}, "manage:own-entries", ""},
 		{"a player's Own entries page keeps its place", navStateCase{role: 1, path: "/campaigns/c1/characters/entries"}, "", ""},
 		{"the owner's People page", navStateCase{role: 3, path: "/campaigns/c1/members"}, "manage:members", ""},
 	}

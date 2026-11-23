@@ -408,6 +408,8 @@
     if (ent.reason && ent.state !== 'open') parts.push('Why: ' + ent.reason);
     if (ent.e && ent.e.inherited && ent.state !== 'open') parts.push('Same as the rest of ' + (ent.source === 'campaign' ? 'this campaign’s own' : self.system + '’s own'));
     if (ent.state === 'left_out') parts.push('Not on the short list');
+    var own = ent.source === 'campaign' && ent.e && ent.e.entryId ? this.entries.filter(function (x) { return String(x.id) === String(ent.e.entryId); })[0] : null;
+    if (own && own.standsFor) parts.push('In place of ' + self.system + '’s ' + (own.standsForName || own.name));
     return parts;
   };
 
@@ -447,6 +449,7 @@
       items.push({ act: 'restmark', state: 'ask_first', label: 'Ask first' });
       return items;
     }
+    if (m.step === 'replace') return [{ act: 'back', label: 'Back' }, { sep: true }].concat(this.replaceItems(ent));
     if (m.step === 'players') {
       items.push({ act: 'back', label: 'Back' }, { sep: true });
       (data.members || []).forEach(function (p) {
@@ -465,6 +468,7 @@
     if (target && mk) items.push({ act: 'mark', state: 'clear', target: target, label: 'Same as everyone' });
     var extra = [];
     if (!target && (data.members || []).length) extra.push({ act: 'players', label: 'For one player…' });
+    if (!target && this.replaceable(ent)) extra.push({ act: 'replace', label: 'Replace with your own…' });
     if (mk && mk.state !== 'open') extra.push({ act: 'reason', state: mk.state, target: target, label: mk.reason ? 'Change the reason…' : 'Add a reason…' });
     if (extra.length) items.push({ sep: true });
     return items.concat(extra);
@@ -478,7 +482,7 @@
       var radio = it.act === 'mark' && it.state !== 'clear';
       return '<button type="button" class="oe-menu__item" role="' + (radio ? 'menuitemradio' : 'menuitem') + '"' + (radio ? ' aria-checked="' + !!it.checked + '"' : '') +
         ' data-mact="' + it.act + '"' + (it.state ? ' data-state="' + it.state + '"' : '') + (it.target != null ? ' data-target="' + esc(it.target) + '"' : '') +
-        (it.player ? ' data-player="' + esc(it.player) + '"' : '') + '><span>' + esc(it.label) + '</span>' +
+        (it.player ? ' data-player="' + esc(it.player) + '"' : '') + (it.entry ? ' data-entry="' + esc(it.entry) + '"' : '') + '><span>' + esc(it.label) + '</span>' +
         (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</button>';
     }).join('') + '</div>';
   };
@@ -567,6 +571,53 @@
     var who = target ? this.memberLabel(data, target) : '';
     if (state === 'clear') return ent.name + ' is the same as everyone again for ' + who;
     return ent.name + (state === 'required' && who ? ': ' : ' is ') + markIn(state, who);
+  };
+
+  // "Replace with your own…": a game system's entry gives its place to one of
+  // the campaign's, the way the Rules page's "Rewrite" does. Players then get
+  // the campaign's in its place, never both.
+  Entries.prototype.replaceable = function (ent) {
+    return this.director && !this.as && !ent.group && ent.source !== 'campaign' && !!(ent.e && ent.e.slug);
+  };
+  // The campaign's accepted entries on this list that stand for nothing yet.
+  Entries.prototype.freeOwn = function () {
+    var f = this.cur();
+    return f ? this.accepted(f.key).filter(function (e) { return !e.standsFor; }) : [];
+  };
+  // The replace step: the campaign's entry of the same name if it has one,
+  // else a copy of the printed one to change; then any other of its own.
+  Entries.prototype.replaceItems = function (ent) {
+    var own = this.freeOwn(), same = own.filter(function (e) { return lower(e.name).trim() === lower(ent.name).trim(); })[0];
+    var items = [{ head: 'Players get yours in place of ' + this.system + '’s ' + ent.name }];
+    if (same) items.push({ act: 'tie', entry: same.id, label: 'Use the ' + same.name + ' you wrote' });
+    else items.push({ act: 'rewrite', label: 'Start from a copy of ' + ent.name });
+    own.filter(function (e) { return e !== same; }).slice(0, 12).forEach(function (e) {
+      items.push({ act: 'tie', entry: e.id, label: 'Use ' + e.name });
+    });
+    return items;
+  };
+  // Makes the copy or ties the chosen entry, then opens it in the editor. A
+  // new copy is for the campaign's Directors until they choose Everyone, and
+  // the editor says so.
+  Entries.prototype.replaceWith = function (ref, act, id, btn) {
+    var self = this, f = this.cur(), data = f && this.rules[this.ck(f.key)], ent = data && this.entOf(data, ref);
+    if (!ent || !ent.e || this.ui.working) return;
+    var slug = ent.e.slug;
+    var call = act === 'rewrite'
+      ? api(this.entriesUrl + '/rewrite', { method: 'POST', body: { fieldKey: f.key, slug: slug }, csrfToken: this.csrf })
+      : api(this.entriesUrl + '/' + encodeURIComponent(id) + '/tie', { method: 'POST', body: { slug: slug }, csrfToken: this.csrf });
+    this.ui.working = ref;
+    if (btn) btn.setAttribute('aria-busy', 'true');
+    call.then(json).then(function (res) {
+      var made = act === 'rewrite' && res.ok && res.body && res.body.entry;
+      if (!res.ok || (act === 'rewrite' && !made)) throw new Error((res.body && (res.body.message || res.body.error)) || '');
+      var at = made ? res.body.entry.id : id;
+      window.location.assign(window.location.pathname + '?field=' + encodeURIComponent(f.key) + '&entry=' + encodeURIComponent(at) + (made ? '&made=1' : ''));
+    }).catch(function (err) {
+      self.ui.working = null;
+      if (btn) btn.removeAttribute('aria-busy');
+      notify((err && err.message) || 'That did not work. Check your connection and try again.', 'error');
+    });
   };
 
   Entries.prototype.chooseMark = function (ref, target, state, reasonOnly) {
@@ -1410,7 +1461,9 @@
     if (act === 'mark') { this.chooseMark(m.ref, t.getAttribute('data-target') || '', t.getAttribute('data-state')); return; }
     if (act === 'reason') { this.chooseMark(m.ref, t.getAttribute('data-target') || '', t.getAttribute('data-state'), true); return; }
     if (act === 'restmark') { this.markRest(t.getAttribute('data-state')); return; }
+    if (act === 'rewrite' || act === 'tie') { this.replaceWith(m.ref, act, t.getAttribute('data-entry'), t); return; }
     if (act === 'players') m.step = 'players';
+    else if (act === 'replace') m.step = 'replace';
     else if (act === 'player') { m.step = 'player'; m.player = t.getAttribute('data-player'); }
     else if (act === 'back') m.step = m.step === 'player' ? 'players' : 'marks';
     this.redrawRows();

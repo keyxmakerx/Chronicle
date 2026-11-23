@@ -77,7 +77,7 @@ templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
 				data-widget="hero-creator"
 				data-hero-creator="true"
 				data-campaign-id={ cc.Campaign.ID }
-				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }
+				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan?preview=player", cc.Campaign.ID) }
 				data-create-url={ fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID) }
 				data-csrf={ view.CSRFToken }
 				data-type-name={ view.TypeName }

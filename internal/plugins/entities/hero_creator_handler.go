@@ -209,8 +209,16 @@ func (h *Handler) HeroPlanAPI(c *echo.Context) error {
 	if err := h.requireHeroPlanAccess(c, cc); err != nil {
 		return err
 	}
-	// ?as= is a Director's preview as one player.
-	if as := c.QueryParam("as"); as != "" && cc.CanAuthorDmOnly() && len(as) <= 36 {
+	// ?as= is a Director's preview as one player. The player's own pages (the
+	// hero builder and creator) also ask with ?preview=player, so a Director
+	// with "view as player" on gets the lists a player gets there, rules
+	// applied; the Directors' tools that read the plan never ask, and keep
+	// the whole list.
+	as := c.QueryParam("as")
+	if as == "" && c.QueryParam("preview") == "player" && campaigns.ViewingAsPlayer(c, cc) {
+		as = auth.GetUserID(c)
+	}
+	if as != "" && cc.CanAuthorDmOnly() && len(as) <= 36 {
 		plan, err := h.previewPlan(c, cc, as)
 		if err != nil {
 			return err

@@ -11,10 +11,16 @@ import (
 
 // fakeEntrySvc records what the kind asks of the systems service.
 type fakeEntrySvc struct {
-	// The reading and catalog halves are not used by AI records; calling
-	// one panics, which would show a record reaching beyond its job.
+	// Of the reading and catalog halves AI records use only Tie, Untie and
+	// FieldCatalog (for `in_place_of`); calling any other panics, which would
+	// show a record reaching beyond its job.
 	systems.EntryReading
 	systems.EntryCatalog
+	// catalogs are the lists FieldCatalog answers, found by their field.
+	catalogs  map[string]*systems.CatalogList
+	tied      map[int64]string
+	untied    []int64
+	tieErr    error
 	rows      []systems.SystemEntry
 	created   []systems.CreateSystemEntryInput
 	updated   map[int64]systems.UpdateSystemEntryInput
@@ -35,6 +41,7 @@ func (f *fakeEntrySvc) FindByName(_ context.Context, _, field, name string, _ sy
 	}
 	return nil, nil
 }
+
 // SetCardLook is the owner's Customizer path, never an AI record's.
 func (f *fakeEntrySvc) SetCardLook(context.Context, string, systems.EntryActor, int64, string, string) (*systems.SystemEntry, error) {
 	panic("an AI record must not set a card look")
@@ -57,7 +64,29 @@ func (f *fakeEntrySvc) CheckCreate(_ context.Context, _ string, _ systems.EntryA
 func (f *fakeEntrySvc) Create(_ context.Context, _ string, a systems.EntryActor, in systems.CreateSystemEntryInput) (*systems.SystemEntry, error) {
 	f.lastActor = a
 	f.created = append(f.created, in)
-	return &systems.SystemEntry{}, nil
+	return &systems.SystemEntry{ID: 100 + int64(len(f.created))}, nil
+}
+func (f *fakeEntrySvc) FieldCatalog(_ context.Context, _, field string, _ systems.EntryActor) (*systems.CatalogList, error) {
+	for _, l := range f.catalogs {
+		if l.FieldKey == field {
+			return l, nil
+		}
+	}
+	return nil, nil
+}
+func (f *fakeEntrySvc) Tie(_ context.Context, _ string, _ systems.EntryActor, id int64, slug string) (*systems.SystemEntry, error) {
+	if f.tieErr != nil {
+		return nil, f.tieErr
+	}
+	if f.tied == nil {
+		f.tied = map[int64]string{}
+	}
+	f.tied[id] = slug
+	return &systems.SystemEntry{ID: id, StandsFor: slug}, nil
+}
+func (f *fakeEntrySvc) Untie(_ context.Context, _ string, _ systems.EntryActor, id int64) (*systems.SystemEntry, error) {
+	f.untied = append(f.untied, id)
+	return &systems.SystemEntry{ID: id}, nil
 }
 func (f *fakeEntrySvc) UpdateTelling(ctx context.Context, campaignID string, a systems.EntryActor, _ int, id int64, in systems.UpdateSystemEntryInput) (*systems.SystemEntry, *systems.TellQuestion, error) {
 	e, err := f.Update(ctx, campaignID, a, id, in)
@@ -270,5 +299,165 @@ func TestSystemEntryKind_DocCardBorders(t *testing.T) {
 	}
 	if strings.Index(doc, "card_border") > strings.Index(doc, "kind: system-entry") {
 		t.Error("the example should stay last")
+	}
+}
+
+// ancestries is a Director's reading of the ancestry field: two printed
+// entries offered, one already replaced by Rootkin, one left out.
+func ancestries() map[string]*systems.CatalogList {
+	return map[string]*systems.CatalogList{"ancestries": {
+		Category: "ancestries", FieldKey: "ancestry", SystemName: "Draw Steel",
+		Entries: []systems.CatalogEntry{
+			{Slug: "high-elf", Name: "High Elf", Origin: systems.OriginStandard},
+			{Slug: "dwarf", Name: "Dwarf", Origin: systems.OriginStandard},
+			{Slug: "rootkin", Name: "Rootkin", Origin: systems.OriginRewritten, StandsFor: "wode-elf", StandsForName: "Wode Elf", EntryID: 8},
+			// A campaign entry sharing a printed name is never the target.
+			{Slug: "orc", Name: "Orc", Origin: systems.OriginCampaign, EntryID: 11},
+		},
+		LeftOut: []systems.CatalogEntry{{Slug: "revenant", Name: "Revenant", Origin: systems.OriginStandard, LeftOut: true}},
+	}}
+}
+
+func TestSystemEntryKind_InPlaceOfPlan(t *testing.T) {
+	rows := []systems.SystemEntry{
+		{ID: 7, FieldKey: "ancestry", Name: "Stoneborn", Status: systems.EntryStatusAccepted},
+		{ID: 8, FieldKey: "ancestry", Name: "Rootkin", StandsFor: "wode-elf", StandsForSeen: `{"name":"Wode Elf"}`},
+		{ID: 9, FieldKey: "ancestry", Name: "Pip's Folk", Status: systems.EntryStatusSent},
+	}
+	f := func(extra map[string]any) map[string]any {
+		out := map[string]any{"entry": "ancestry"}
+		for k, v := range extra {
+			out[k] = v
+		}
+		return out
+	}
+	tests := []struct {
+		name     string
+		actor    Actor
+		rec      Record
+		wantErr  string // substring, "" = ok
+		wantSum  string
+		wantWarn bool
+	}{
+		{"create in place", owner, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "high elf"}), ""), "", "new ancestry entry, in place of Draw Steel's High Elf", true},
+		{"create in place as a draft", owner, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "High Elf", "director": true}), ""), "", "in place of Draw Steel's High Elf", false},
+		{"unknown printed name", owner, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "Moon Elf"}), ""), `Draw Steel has no ancestry entry called "Moon Elf"`, "", false},
+		{"campaign entry is not printed", owner, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "Orc"}), ""), "no ancestry entry called", "", false},
+		{"left out refused", owner, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "Revenant"}), ""), "left out", "", false},
+		{"already replaced refused", owner, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "Wode Elf"}), ""), "Rootkin already takes Wode Elf's place", "", false},
+		{"field without a catalog", owner, rec("system-entry", "create", "Star", map[string]any{"entry": "career", "in_place_of": "Sailor"}, ""), "the game system has no career entry", "", false},
+		{"player refused", player, rec("system-entry", "create", "Sylvan Elf", f(map[string]any{"in_place_of": "High Elf"}), ""), "Directors", "", false},
+		{"update ties", owner, rec("system-entry", "update", "Stoneborn", f(map[string]any{"in_place_of": "Dwarf"}), ""), "", "changes the entry; takes the place of Dwarf", false},
+		{"update already in place", owner, rec("system-entry", "update", "Rootkin", f(map[string]any{"in_place_of": "wode elf"}), ""), "", "already takes the place of Wode Elf", false},
+		{"update tied elsewhere refused", owner, rec("system-entry", "update", "Rootkin", f(map[string]any{"in_place_of": "Dwarf"}), ""), "in_place_of: none", "", false},
+		{"update unaccepted refused", owner, rec("system-entry", "update", "Pip's Folk", f(map[string]any{"in_place_of": "Dwarf"}), ""), "accept Pip's Folk", "", false},
+		{"update unties", owner, rec("system-entry", "update", "Rootkin", f(map[string]any{"in_place_of": "none"}), ""), "", "no longer takes the place of Wode Elf", false},
+		{"untie of an untied entry is no change", owner, rec("system-entry", "update", "Stoneborn", f(map[string]any{"in_place_of": "None"}), ""), "", "changes the entry", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &fakeEntrySvc{rows: rows, catalogs: ancestries()}
+			p := SystemEntryKind{Svc: svc}.Plan(context.Background(), camp, tt.actor, tt.rec)
+			if tt.wantErr != "" {
+				if !strings.Contains(p.Error, tt.wantErr) {
+					t.Fatalf("error = %q, want it to contain %q", p.Error, tt.wantErr)
+				}
+				return
+			}
+			if p.Error != "" || !strings.Contains(p.Summary, tt.wantSum) {
+				t.Fatalf("plan = %+v, want summary with %q", p, tt.wantSum)
+			}
+			if tt.name == "untie of an untied entry is no change" && p.Summary != "changes the entry" {
+				t.Fatalf("summary = %q", p.Summary)
+			}
+			if got := len(p.Warnings) > 0; got != tt.wantWarn {
+				t.Fatalf("warnings = %v, want some: %v", p.Warnings, tt.wantWarn)
+			}
+		})
+	}
+}
+
+func TestSystemEntryKind_InPlaceOfApply(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name       string
+		rows       []systems.SystemEntry
+		rec        Record
+		tieErr     error
+		wantErr    string
+		wantTied   map[int64]string
+		wantUntied int
+		wantUpdate bool
+		wantCreate bool
+	}{
+		{name: "create then tie the new entry",
+			rec:      rec("system-entry", "create", "Sylvan Elf", map[string]any{"entry": "ancestry", "in_place_of": "High Elf"}, ""),
+			wantTied: map[int64]string{101: "high-elf"}, wantCreate: true},
+		{name: "a tie refused after the create says the entry was added",
+			rec:    rec("system-entry", "create", "Sylvan Elf", map[string]any{"entry": "ancestry", "in_place_of": "High Elf"}, ""),
+			tieErr: apperror.NewConflict("Moonkin already takes this entry's place. Untie it first."), wantErr: "Sylvan Elf was added, but it could not take High Elf's place", wantCreate: true},
+		{name: "update with only in_place_of ties without a save",
+			rows:     []systems.SystemEntry{{ID: 7, FieldKey: "ancestry", Name: "Stoneborn"}},
+			rec:      rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "in_place_of": "Dwarf"}, ""),
+			wantTied: map[int64]string{7: "dwarf"}},
+		{name: "update with a change saves, then ties",
+			rows:     []systems.SystemEntry{{ID: 7, FieldKey: "ancestry", Name: "Stoneborn"}},
+			rec:      rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "in_place_of": "Dwarf", "summary": "Deep folk."}, ""),
+			wantTied: map[int64]string{7: "dwarf"}, wantUpdate: true},
+		{name: "none unties",
+			rows: []systems.SystemEntry{{ID: 8, FieldKey: "ancestry", Name: "Rootkin", StandsFor: "wode-elf"}},
+			rec:  rec("system-entry", "update", "Rootkin", map[string]any{"entry": "ancestry", "in_place_of": "none"}, ""), wantUntied: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &fakeEntrySvc{rows: tt.rows, catalogs: ancestries(), tieErr: tt.tieErr}
+			err := (SystemEntryKind{Svc: svc}).Apply(ctx, camp, owner, tt.rec)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(apperror.SafeMessage(err), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(svc.created) == 1; got != tt.wantCreate {
+				t.Fatalf("created = %+v", svc.created)
+			}
+			if len(svc.created) == 1 {
+				if _, stored := svc.created[0].Properties["in_place_of"]; stored {
+					t.Fatal("`in_place_of` stored as a detail")
+				}
+			}
+			if got := len(svc.updated) > 0; got != tt.wantUpdate {
+				t.Fatalf("updated = %+v, want an update: %v", svc.updated, tt.wantUpdate)
+			}
+			if len(svc.tied) != len(tt.wantTied) {
+				t.Fatalf("tied = %v, want %v", svc.tied, tt.wantTied)
+			}
+			for id, slug := range tt.wantTied {
+				if svc.tied[id] != slug {
+					t.Fatalf("tied = %v, want %v", svc.tied, tt.wantTied)
+				}
+			}
+			if len(svc.untied) != tt.wantUntied {
+				t.Fatalf("untied = %v", svc.untied)
+			}
+		})
+	}
+	t.Run("player cannot tie", func(t *testing.T) {
+		svc := &fakeEntrySvc{rows: []systems.SystemEntry{{ID: 7, FieldKey: "ancestry", Name: "Stoneborn"}}, catalogs: ancestries()}
+		r := rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "in_place_of": "Dwarf"}, "")
+		if err := (SystemEntryKind{Svc: svc}).Apply(ctx, camp, player, r); err == nil || len(svc.tied) != 0 {
+			t.Fatalf("player apply: err %v tied %v", err, svc.tied)
+		}
+	})
+}
+
+// The notes tell the AI how to name the printed entry and how to undo it.
+func TestSystemEntryKind_DocInPlaceOf(t *testing.T) {
+	doc := SystemEntryKind{}.Doc()
+	for _, want := range []string{"in_place_of:", "in_place_of: none", "unless `director: true`"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("the kind's notes lack %q", want)
+		}
 	}
 }

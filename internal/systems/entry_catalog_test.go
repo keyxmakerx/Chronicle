@@ -573,3 +573,19 @@ func TestPlanReading(t *testing.T) {
 		t.Fatal("a tie to a slug the package no longer has replaces nothing")
 	}
 }
+
+// TestFieldCatalog pins that a field's catalog is the category its pick list
+// draws from, and that a key that is no pick list of the system has none.
+func TestFieldCatalog(t *testing.T) {
+	svc, _, _ := newReadingSvc(t)
+	ctx := context.Background()
+	got, err := svc.FieldCatalog(ctx, "c1", "ancestry", dirActor)
+	if err != nil || got == nil || got.FieldKey != "ancestry" || got.Category != "ancestries" {
+		t.Fatalf("ancestry: %+v, %v", got, err)
+	}
+	for _, key := range []string{"nope", "../ancestry", ""} {
+		if got, err := svc.FieldCatalog(ctx, "c1", key, dirActor); err != nil || got != nil {
+			t.Errorf("%q: %+v, %v", key, got, err)
+		}
+	}
+}
