@@ -90,6 +90,13 @@ func (s *FieldSwitchService) Accept(ctx context.Context, campaignID string, type
 // a category that has no pages when the system is turned on, so a new
 // campaign starts with the system's fields and is never asked.
 func (s *FieldSwitchService) AcceptOffer(ctx context.Context, et *EntityType, offer FieldSwitchOffer, userID string) (int, error) {
+	// The caller's copy may predate its own earlier writes (the preset
+	// applier lists categories once per run); the switch is worked out from
+	// the stored list, which the repository checks again under its lock.
+	et, err := s.types.FindByID(ctx, et.ID)
+	if err != nil {
+		return 0, err
+	}
 	sw, err := s.repo.Get(ctx, et.ID)
 	if err != nil {
 		return 0, err
@@ -110,7 +117,7 @@ func (s *FieldSwitchService) AcceptOffer(ctx context.Context, et *EntityType, of
 		UpdatedBy:         userID,
 	}
 	category := offer.Category
-	return s.repo.Switch(ctx, next, switchedFieldList(et.Fields, offer), &category, acceptMove(et.Fields, offer))
+	return s.repo.Switch(ctx, next, baseOf(sw, et), switchedFieldList(et.Fields, offer), &category, acceptMove(et.Fields, offer))
 }
 
 // RecordSwitched notes that a category made from the system's preset already
@@ -140,26 +147,24 @@ func (s *FieldSwitchService) Back(ctx context.Context, campaignID string, typeID
 	}
 	offer := s.offerFor(ctx, campaignID, et)
 	if offer == nil {
-		// The system is off or no longer offers the switch: go back by the
-		// fields the category has that the old list lacks.
-		offer = &FieldSwitchOffer{SystemID: sw.SystemID, PresetSlug: sw.PresetSlug, Fields: fieldsNotIn(et.Fields, sw.OldFields)}
+		// Only the system's own list tells its fields from ones the owner
+		// added since; without it every later field would go too.
+		return 0, apperror.NewConflict("turn the game system back on to switch " + et.NamePlural + " back: Chronicle needs its field list to tell its fields from the ones you added")
 	}
 	next := *sw
 	next.State = FieldSwitchBack
 	next.UpdatedBy = userID
-	return s.repo.Switch(ctx, &next, switchedBackFieldList(et.Fields, sw.OldFields, *offer), sw.OldPresetCategory, backMove(sw.OldFields, *offer))
+	return s.repo.Switch(ctx, &next, baseOf(sw, et), switchedBackFieldList(et.Fields, sw.OldFields, *offer), sw.OldPresetCategory, backMove(sw.OldFields, *offer))
 }
 
-// fieldsNotIn is the fields of a whose keys b lacks.
-func fieldsNotIn(a, b []FieldDefinition) []FieldDefinition {
-	had := fieldKeySet(b)
-	var out []FieldDefinition
-	for _, f := range a {
-		if !had[f.Key] {
-			out = append(out, f)
-		}
+// baseOf is what a switch is worked out from: the answer read and the
+// category's field list.
+func baseOf(sw *FieldSwitch, et *EntityType) switchBase {
+	b := switchBase{Fields: et.Fields}
+	if sw != nil {
+		b.State = sw.State
 	}
-	return out
+	return b
 }
 
 // Dismiss records "Not now": the list stops offering; Fields settings still do.

@@ -1,11 +1,14 @@
 package entities
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // FieldSwitchRepository stores the owner's answer to a system's switch offer
@@ -18,8 +21,9 @@ type FieldSwitchRepository interface {
 	SaveState(ctx context.Context, sw *FieldSwitch) error
 	// Switch rewrites the category's fields, moves every page's values with
 	// move and records sw, all in one transaction, so a failure leaves the
-	// category and its pages as they were.
-	Switch(ctx context.Context, sw *FieldSwitch, fields []FieldDefinition, presetCategory *string, move valueMove) (int, error)
+	// category and its pages as they were. It refuses with a Conflict when
+	// the category's answer or field list is no longer base.
+	Switch(ctx context.Context, sw *FieldSwitch, base switchBase, fields []FieldDefinition, presetCategory *string, move valueMove) (int, error)
 	// SetAside returns the values a switch took off one page.
 	SetAside(ctx context.Context, entityID string) (map[string]any, error)
 
@@ -34,6 +38,18 @@ type FieldSwitchRepository interface {
 	// RestoreSetAside writes one page's kept values as a backup carried them.
 	RestoreSetAside(ctx context.Context, entityID string, typeID int, values map[string]any) error
 }
+
+// switchBase is what a switch was worked out from: the category's answer
+// ("" when it had none) and its field list. The new field list and the value
+// moves are only right for that base.
+type switchBase struct {
+	State  string
+	Fields []FieldDefinition
+}
+
+// errSwitchMoved refuses a switch whose base changed under it, such as a
+// second "Switch back" pressed while the first was running.
+var errSwitchMoved = apperror.NewConflict("this category's fields changed while switching; reload the page and try again")
 
 type fieldSwitchRepository struct {
 	db *sql.DB
@@ -174,7 +190,7 @@ func (r *fieldSwitchRepository) SaveState(ctx context.Context, sw *FieldSwitch) 
 	return upsertState(ctx, r.db, sw)
 }
 
-func (r *fieldSwitchRepository) Switch(ctx context.Context, sw *FieldSwitch, fields []FieldDefinition, presetCategory *string, move valueMove) (int, error) {
+func (r *fieldSwitchRepository) Switch(ctx context.Context, sw *FieldSwitch, base switchBase, fields []FieldDefinition, presetCategory *string, move valueMove) (int, error) {
 	fieldsJSON, err := json.Marshal(fields)
 	if err != nil {
 		return 0, fmt.Errorf("encoding fields: %w", err)
@@ -185,11 +201,28 @@ func (r *fieldSwitchRepository) Switch(ctx context.Context, sw *FieldSwitch, fie
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Lock the category first, so two owners pressing at once run one after
-	// the other and the second sees the first one's fields.
-	var lockedID int
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM entity_types WHERE id = ? FOR UPDATE`, sw.EntityTypeID).Scan(&lockedID); err != nil {
+	// Lock the category first, so two presses at once run one after the
+	// other. The new list and the moves were worked out before the lock, so
+	// the second press is refused when the first changed what it read;
+	// running it would move values a second time.
+	var lockedFields []byte
+	if err := tx.QueryRowContext(ctx, `SELECT fields FROM entity_types WHERE id = ? FOR UPDATE`, sw.EntityTypeID).Scan(&lockedFields); err != nil {
 		return 0, fmt.Errorf("locking category: %w", err)
+	}
+	var lockedState string
+	switch err := tx.QueryRowContext(ctx,
+		`SELECT state FROM entity_type_field_switches WHERE entity_type_id = ? FOR UPDATE`, sw.EntityTypeID,
+	).Scan(&lockedState); {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return 0, fmt.Errorf("reading field switch: %w", err)
+	}
+	same, err := sameFieldList(lockedFields, base.Fields)
+	if err != nil {
+		return 0, err
+	}
+	if lockedState != base.State || !same {
+		return 0, errSwitchMoved
 	}
 
 	rows, err := tx.QueryContext(ctx,
@@ -272,6 +305,30 @@ func (r *fieldSwitchRepository) Switch(ctx context.Context, sw *FieldSwitch, fie
 		return 0, fmt.Errorf("committing field switch: %w", err)
 	}
 	return len(moves), nil
+}
+
+// sameFieldList reports whether a stored field list is want. Both sides go
+// through the same encoding, so spacing and key order in the stored JSON
+// make no difference.
+func sameFieldList(stored []byte, want []FieldDefinition) (bool, error) {
+	var got []FieldDefinition
+	if len(stored) > 0 {
+		if err := json.Unmarshal(stored, &got); err != nil {
+			return false, fmt.Errorf("reading category fields: %w", err)
+		}
+	}
+	if len(got) == 0 || len(want) == 0 {
+		return len(got) == len(want), nil
+	}
+	a, err := json.Marshal(got)
+	if err != nil {
+		return false, fmt.Errorf("encoding category fields: %w", err)
+	}
+	b, err := json.Marshal(want)
+	if err != nil {
+		return false, fmt.Errorf("encoding category fields: %w", err)
+	}
+	return bytes.Equal(a, b), nil
 }
 
 func (r *fieldSwitchRepository) SetAside(ctx context.Context, entityID string) (map[string]any, error) {

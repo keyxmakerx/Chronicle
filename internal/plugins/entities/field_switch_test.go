@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -296,6 +297,10 @@ type fakeSwitchRepo struct {
 	pages  map[string]map[string]any
 	kept   map[string]map[string]any
 	getErr error
+	// beforeSwitch runs once at the start of the next Switch, standing in
+	// for another request that commits between the service's reads and the
+	// repository's lock.
+	beforeSwitch func()
 }
 
 func newFakeSwitchRepo(et *EntityType, pages map[string]map[string]any) *fakeSwitchRepo {
@@ -319,7 +324,19 @@ func (f *fakeSwitchRepo) SaveState(_ context.Context, sw *FieldSwitch) error {
 	return nil
 }
 
-func (f *fakeSwitchRepo) Switch(_ context.Context, sw *FieldSwitch, fields []FieldDefinition, cat *string, move valueMove) (int, error) {
+func (f *fakeSwitchRepo) Switch(_ context.Context, sw *FieldSwitch, base switchBase, fields []FieldDefinition, cat *string, move valueMove) (int, error) {
+	if hook := f.beforeSwitch; hook != nil {
+		f.beforeSwitch = nil
+		hook()
+	}
+	state := ""
+	if r, ok := f.rows[sw.EntityTypeID]; ok {
+		state = r.State
+	}
+	stored, _ := json.Marshal(f.types[sw.EntityTypeID].Fields)
+	if same, err := sameFieldList(stored, base.Fields); err != nil || !same || state != base.State {
+		return 0, errSwitchMoved
+	}
 	n := 0
 	for id, page := range f.pages {
 		d, kept, changed := move.apply(page, f.kept[id])
@@ -502,22 +519,70 @@ func TestFieldSwitchServiceDismissAndView(t *testing.T) {
 	}
 }
 
+// With the system off there is no list to tell its fields from ones the
+// owner added since the switch, so switching back waits for it; nothing
+// changes in the meantime.
 func TestFieldSwitchServiceBackWithoutTheSystem(t *testing.T) {
 	ctx := context.Background()
 	on, repo := newSwitchService(true)
 	if _, err := on.Accept(ctx, "c1", 4, "owner"); err != nil {
 		t.Fatal(err)
 	}
-	// The system is turned off: the category can still go back.
+	repo.types[4].Fields = append(repo.types[4].Fields, FieldDefinition{Key: "owner_note", Label: "Owner note", Type: "text"})
+	before := keysOf(repo.types[4].Fields)
 	off := NewFieldSwitchService(repo, fakeSwitchTypes{repo}, nil)
-	if _, err := off.Back(ctx, "c1", 4, "owner"); err != nil {
-		t.Fatalf("Back without the system: %v", err)
+	if _, err := off.Back(ctx, "c1", 4, "owner"); switchErrCode(err) != 409 {
+		t.Fatalf("Back without the system = %v, want a conflict", err)
 	}
-	if got := keysOf(repo.types[4].Fields); !reflect.DeepEqual(got, keysOf(itemFields())) {
+	if got := keysOf(repo.types[4].Fields); !reflect.DeepEqual(got, before) || repo.rows[4].State != FieldSwitchSwitched {
+		t.Errorf("a refused switch back changed the category: fields %v, state %s", got, repo.rows[4].State)
+	}
+	// Turned back on, the owner's own field stays.
+	if _, err := on.Back(ctx, "c1", 4, "owner"); err != nil {
+		t.Fatalf("Back with the system on: %v", err)
+	}
+	if got := keysOf(repo.types[4].Fields); !reflect.DeepEqual(got, append(keysOf(itemFields()), "owner_note")) {
 		t.Errorf("fields after back = %v", got)
 	}
-	if _, has := repo.kept["p1"]["type"]; has {
-		t.Errorf("the old Type came back to p1, kept %v", repo.kept["p1"])
+}
+
+// Two presses at once: the second worked out its list and moves from what the
+// first has since changed, so it is refused and every page moves once.
+func TestFieldSwitchServiceRefusesAMovedBase(t *testing.T) {
+	ctx := context.Background()
+	original := map[string]any{"type": "Wondrous item", "rarity": "Rare", "weight": "1 lb"}
+	tests := []struct {
+		name      string
+		switched  bool // accept before the race
+		call      func(*FieldSwitchService) error
+		wantState string
+	}{
+		{"two switch backs", true, func(s *FieldSwitchService) error { _, err := s.Back(ctx, "c1", 4, "owner"); return err }, FieldSwitchBack},
+		{"two accepts", false, func(s *FieldSwitchService) error { _, err := s.Accept(ctx, "c1", 4, "owner"); return err }, FieldSwitchSwitched},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo := newSwitchService(true)
+			if tc.switched {
+				if _, err := svc.Accept(ctx, "c1", 4, "owner"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var first error
+			repo.beforeSwitch = func() { first = tc.call(svc) }
+			if err := tc.call(svc); switchErrCode(err) != 409 {
+				t.Fatalf("the second press = %v, want a conflict", err)
+			}
+			if first != nil {
+				t.Fatalf("the first press failed: %v", first)
+			}
+			if repo.rows[4].State != tc.wantState {
+				t.Errorf("state = %s, want %s", repo.rows[4].State, tc.wantState)
+			}
+			if tc.switched && !reflect.DeepEqual(repo.pages["p1"], original) {
+				t.Errorf("p1 after the race = %v, want %v", repo.pages["p1"], original)
+			}
+		})
 	}
 }
 
