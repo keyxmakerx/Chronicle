@@ -49,4 +49,4 @@ var eventKeys = keySet("year", "month", "day", "end_year", "end_month", "end_day
 	"end_hour", "end_minute", "all_day", "visibility", "color", "icon", "rename_to", "importance", "category",
 	"page", "calendar", "announced", "move_to_year", "move_to_month", "move_to_day",
 	"repeat", "repeat_every", "repeat_times", "repeat_on", "repeat_offset_days",
-	"repeat_until_year", "repeat_until_month", "repeat_until_day", "roll")
+	"repeat_until_year", "repeat_until_month", "repeat_until_day", "roll", "status", "what_happened")

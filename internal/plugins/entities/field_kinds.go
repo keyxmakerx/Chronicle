@@ -56,6 +56,8 @@ type FieldShown struct {
 	RuleGives string `json:"ruleGives,omitempty"`
 	// Date is a calendar date field's "how long ago" and countdowns.
 	Date *DateShown `json:"date,omitempty"`
+	// Climate is a climate field's source and today's weather there.
+	Climate *ClimateShown `json:"climate,omitempty"`
 }
 
 // linkedPage is a link field's target as the viewer may see it.
@@ -106,8 +108,8 @@ func shapeFields(defs []FieldDefinition, data map[string]any, links map[string]l
 				continue
 			}
 			out[d.Key] = local(sh)
-		case "number", "checkbox", "url", "textarea", FieldTypeCalendarDate:
-			// Numbers, ticks, links, prose and dates are never renamed.
+		case "number", "checkbox", "url", "textarea", FieldTypeCalendarDate, FieldTypeClimate:
+			// Numbers, ticks, links, prose, dates and climates are never renamed.
 		default:
 			if text == "" {
 				continue
@@ -181,7 +183,7 @@ func (h *Handler) shownFields(ctx context.Context, campaignID string, entity *En
 			}
 		case FieldTypeRule:
 			ruleIDs = append(ruleIDs, d.RuleID)
-		case "number", "checkbox", "url", "textarea", FieldTypeCalendarDate:
+		case "number", "checkbox", "url", "textarea", FieldTypeCalendarDate, FieldTypeClimate:
 		default:
 			hasText = true
 		}
@@ -210,6 +212,12 @@ func (h *Handler) shownFields(ctx context.Context, campaignID string, entity *En
 		}
 		if sh, ok := shapeDate(d, data[d.Key], book, director); ok {
 			out[d.Key] = sh
+		}
+	}
+	// A climate field reads its page's climate, or the nearest parent's.
+	if key := climateKey(defs); key != "" {
+		if sh, ok := h.climateShown(ctx, campaignID, entity, role, userID); ok {
+			out[key] = sh
 		}
 	}
 	return out
@@ -282,6 +290,9 @@ func (s *entityService) checkFieldKinds(ctx context.Context, campaignID string, 
 			if err := CheckDateSettings(f); err != nil {
 				return err
 			}
+		case FieldTypeClimate:
+			// The climates are the calendar's; a list of its own would drift.
+			f.LinkTo, f.RuleID, f.DateAgo, f.Countdowns, f.Options = 0, 0, false, nil, nil
 		default:
 			f.LinkTo, f.RuleID, f.DateAgo, f.Countdowns = 0, 0, false, nil
 		}
@@ -308,6 +319,15 @@ func (s *entityService) checkLinkValues(ctx context.Context, e *Entity, oldData,
 	var book FieldDateBook
 	bookRead := false
 	for _, d := range defs {
+		if d.Type == FieldTypeClimate {
+			if fieldText(newData[d.Key]) == fieldText(oldData[d.Key]) || s.fieldClimate == nil {
+				continue
+			}
+			if err := checkClimateValue(d, newData[d.Key], s.fieldClimate.Climates()); err != nil {
+				return err
+			}
+			continue
+		}
 		if d.Type == FieldTypeCalendarDate {
 			if fieldText(newData[d.Key]) == fieldText(oldData[d.Key]) {
 				continue

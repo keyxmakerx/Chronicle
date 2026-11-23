@@ -235,12 +235,14 @@ var dayWeatherDataCols = []string{"preset_id", "preset_label", "icon", "color",
 // assigned last because MariaDB applies ON DUPLICATE KEY assignments left to
 // right, so the earlier IF()s must still see the stored source. locked is
 // never assigned by a generated write, so it stays as stored.
-var upsertManualDaySQL, upsertGeneratedDaySQL = buildDayUpserts()
+var upsertManualDaySQL, upsertGeneratedDaySQL = buildDayUpserts("calendar_weather_days", "calendar_id", "year", "month", "day")
 
-func buildDayUpserts() (manual, generated string) {
-	cols := append([]string{"calendar_id", "year", "month", "day"}, dayWeatherDataCols...)
+// buildDayUpserts writes the two upserts for a day-reading table keyed by
+// keyCols; a place's weather (place_weather_repository.go) shares the rules.
+func buildDayUpserts(table string, keyCols ...string) (manual, generated string) {
+	cols := append(append([]string{}, keyCols...), dayWeatherDataCols...)
 	cols = append(cols, "source")
-	insert := `INSERT INTO calendar_weather_days (` + strings.Join(cols, ", ") +
+	insert := `INSERT INTO ` + table + ` (` + strings.Join(cols, ", ") +
 		`) VALUES (` + strings.TrimSuffix(strings.Repeat("?, ", len(cols)), ", ") + `) ON DUPLICATE KEY UPDATE `
 	var m, g []string
 	for _, c := range append(append([]string{}, dayWeatherDataCols...), "source") {

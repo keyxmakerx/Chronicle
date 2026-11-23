@@ -81,7 +81,7 @@ func buildTopbarLive(ctx context.Context, cal headerCalendarService, nights head
 				live.Era = headerEraName(c)
 			}
 			if want["weather"] {
-				days, err := cal.ListDayWeather(ctx, c.ID, req.CampaignID, c.CurrentYear, c.CurrentMonth, req.Viewer)
+				days, err := calendar.PartyDays(ctx, cal, c.ID, req.CampaignID, c.CurrentYear, c.CurrentMonth, req.Viewer)
 				if err != nil {
 					logHeaderErr("weather", req.CampaignID, err)
 				} else {

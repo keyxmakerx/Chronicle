@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -21,11 +22,28 @@ import (
 // and creating entity types from their preset definitions.
 type presetApplier struct {
 	entityService entities.EntityService
+	// switcher runs presets that carry a switch block; without it those
+	// presets are skipped, never applied as ordinary presets.
+	switcher presetFieldSwitcher
+}
+
+// presetFieldSwitcher is the slice of the field switch service the applier
+// uses for presets that reach a campaign only on the owner's yes.
+type presetFieldSwitcher interface {
+	State(ctx context.Context, typeID int) (*entities.FieldSwitch, error)
+	AcceptOffer(ctx context.Context, et *entities.EntityType, offer entities.FieldSwitchOffer, userID string) (int, error)
+	RecordSwitched(ctx context.Context, et *entities.EntityType, offer entities.FieldSwitchOffer) error
 }
 
 // newPresetApplier creates a PresetApplier that bridges systems and entities.
 func newPresetApplier(entityService entities.EntityService) *presetApplier {
 	return &presetApplier{entityService: entityService}
+}
+
+// withFieldSwitch lets the applier run switch presets.
+func (p *presetApplier) withFieldSwitch(s presetFieldSwitcher) *presetApplier {
+	p.switcher = s
+	return p
 }
 
 // ApplySystemPresets looks up the system manifest by slug and creates entity
@@ -134,6 +152,16 @@ func (p *presetApplier) applyManifestPresets(ctx context.Context, campaignID, sy
 			declared = kept
 		}
 
+		// A preset with a switch block changes a category the campaign
+		// already has only on the owner's yes, so it never takes the
+		// ordinary paths below.
+		if isSwitchPreset(preset) {
+			added, made := p.applySwitchPreset(ctx, campaignID, systemSlug, manifest, preset, declared, existingTypes, existingByName, create)
+			fieldsAdded += added
+			created += made
+			continue
+		}
+
 		// Does a type for this preset already exist? Prefer a preset-category
 		// match (stable across renames); fall back to a name match.
 		var match *entities.EntityType
@@ -231,45 +259,123 @@ func (p *presetApplier) applyManifestPresets(ctx context.Context, campaignID, sy
 		}
 
 		// Create path: no matching type yet — make a new one with its fields.
-		// A bad manifest icon falls back to the default rather than dropping
-		// the preset.
-		icon, replaced := sanitize.IconOrDefault(preset.Icon, "")
-		if replaced {
-			slog.Warn("system preset has an invalid icon; using the default",
-				slog.String("preset", preset.Slug), slog.String("icon", preset.Icon))
+		if p.createPresetType(ctx, campaignID, systemSlug, preset, declared) != nil {
+			created++
 		}
-		input := entities.CreateEntityTypeInput{
-			Name:           preset.Name,
-			NamePlural:     preset.NamePlural,
-			Icon:           icon,
-			Color:          preset.Color,
-			PresetCategory: preset.Category,
-			Fields:         declared,
-		}
-
-		et, err := p.entityService.CreateEntityType(ctx, campaignID, input)
-		if err != nil {
-			slog.Warn("failed to create entity type from preset",
-				slog.String("campaign_id", campaignID),
-				slog.String("preset", preset.Slug),
-				slog.Any("error", err),
-			)
-			continue // Graceful degradation — skip this preset but try others.
-		}
-
-		slog.Info("entity type created from system preset",
-			slog.String("campaign_id", campaignID),
-			slog.Int("entity_type_id", et.ID),
-			slog.String("preset", preset.Slug),
-			slog.String("system", systemSlug),
-		)
-		created++
 	}
 
 	if !create {
 		return fieldsAdded, nil
 	}
 	return created, nil
+}
+
+// createPresetType makes a new type from a preset, or logs and returns nil.
+// A bad manifest icon falls back to the default rather than dropping the
+// preset.
+func (p *presetApplier) createPresetType(ctx context.Context, campaignID, systemSlug string, preset systems.EntityPresetDef, declared []entities.FieldDefinition) *entities.EntityType {
+	icon, replaced := sanitize.IconOrDefault(preset.Icon, "")
+	if replaced {
+		slog.Warn("system preset has an invalid icon; using the default",
+			slog.String("preset", preset.Slug), slog.String("icon", preset.Icon))
+	}
+	et, err := p.entityService.CreateEntityType(ctx, campaignID, entities.CreateEntityTypeInput{
+		Name:           preset.Name,
+		NamePlural:     preset.NamePlural,
+		Icon:           icon,
+		Color:          preset.Color,
+		PresetCategory: preset.Category,
+		Fields:         declared,
+	})
+	if err != nil {
+		slog.Warn("failed to create entity type from preset",
+			slog.String("campaign_id", campaignID),
+			slog.String("preset", preset.Slug),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+	slog.Info("entity type created from system preset",
+		slog.String("campaign_id", campaignID),
+		slog.Int("entity_type_id", et.ID),
+		slog.String("preset", preset.Slug),
+		slog.String("system", systemSlug),
+	)
+	return et
+}
+
+// applySwitchPreset applies a preset that carries a switch block. Its fields
+// reach the campaign's category only when:
+//   - the owner has accepted the switch (then later package versions add
+//     their new fields, as for any preset);
+//   - the system is being turned on and the category has no pages yet, so
+//     there is nothing to ask about and a new campaign starts with them;
+//   - the campaign has no such category, so one is made with them.
+//
+// Otherwise nothing changes and the owner sees the offer. Returns fields
+// added and types created.
+func (p *presetApplier) applySwitchPreset(ctx context.Context, campaignID, systemSlug string, manifest *systems.SystemManifest,
+	preset systems.EntityPresetDef, declared []entities.FieldDefinition, existingTypes []entities.EntityType,
+	existingByName map[string]*entities.EntityType, create bool) (int, int) {
+	if p.switcher == nil {
+		return 0, 0
+	}
+	log := func(msg string, err error) {
+		slog.Warn(msg, slog.String("campaign_id", campaignID), slog.String("preset", preset.Slug), slog.Any("error", err))
+	}
+	offer := switchOfferFrom(manifest, preset)
+	target := entities.SwitchTarget(existingTypes, preset.Category)
+	if target == nil {
+		// A type with the preset's name that is not the switch's category
+		// (a sub-category, or one bound to another preset) is the GM's own.
+		if !create || existingByName[strings.ToLower(preset.Name)] != nil {
+			return 0, 0
+		}
+		et := p.createPresetType(ctx, campaignID, systemSlug, preset, declared)
+		if et == nil {
+			return 0, 0
+		}
+		if err := p.switcher.RecordSwitched(ctx, et, offer); err != nil {
+			log("field switch: recording a new category's answer failed", err)
+		}
+		return 0, 1
+	}
+	sw, err := p.switcher.State(ctx, target.ID)
+	if err != nil {
+		log("field switch: reading the answer failed", err)
+		return 0, 0
+	}
+	if sw != nil && sw.State == entities.FieldSwitchSwitched {
+		added, err := p.entityService.ReconcileEntityTypeFields(ctx, target.ID, declared)
+		if err != nil {
+			log("field switch: adding a switched category's new fields failed", err)
+			return 0, 0
+		}
+		return added, 0
+	}
+	if !create || sw != nil {
+		return 0, 0
+	}
+	// The owner sees every page, so this count is all of them.
+	counts, err := p.entityService.CountByType(ctx, campaignID, int(campaigns.RoleOwner), "")
+	if err != nil {
+		log("field switch: counting the category's pages failed", err)
+		return 0, 0
+	}
+	if counts[target.ID] > 0 {
+		return 0, 0
+	}
+	if _, err := p.switcher.AcceptOffer(ctx, target, offer, ""); err != nil {
+		log("field switch: switching an empty category failed", err)
+		return 0, 0
+	}
+	slog.Info("empty category switched to the system's fields",
+		slog.String("campaign_id", campaignID),
+		slog.Int("entity_type_id", target.ID),
+		slog.String("preset", preset.Slug),
+		slog.String("system", systemSlug),
+	)
+	return 0, 0
 }
 
 // ApplyAddonEnableEffects runs entity-type side effects for non-system addons on
@@ -296,9 +402,13 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 	out := make([]entities.FieldDefinition, 0, len(fields))
 	for _, f := range fields {
 		out = append(out, entities.FieldDefinition{
-			Key:   f.Key,
-			Label: f.Label,
-			Type:  mapPresetFieldType(f.Type),
+			Key:     f.Key,
+			Label:   f.Label,
+			Type:    mapPresetFieldType(f.Type),
+			Section: f.Section,
+			// A pick list's values; copied so the stored field never
+			// aliases the registry's manifest.
+			Options: append([]string(nil), f.Options...),
 			// Carried onto the stored field def so the egress filter can
 			// strip GM secrets from non-GM callers.
 			GMOnly: f.GMOnly,

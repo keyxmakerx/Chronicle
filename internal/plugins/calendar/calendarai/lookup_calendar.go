@@ -204,7 +204,7 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 			if t := timeText(e.EndHour, e.EndMinute); t != "" {
 				when += " until " + t
 			}
-			line := fmt.Sprintf("- %s: %s, %s", e.Name, when, who)
+			line := fmt.Sprintf("- %s: %s, %s", e.Name, when, who) + outcomeText(cal, e)
 			// What an event block can send back; a player's view (Safe)
 			// carries none of it, as in the export.
 			if run.a.CanAuthorDmOnly() {

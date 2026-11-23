@@ -71,6 +71,24 @@ type PageTimelineEvent struct {
 	// Labelled says whether the dot carries its year under it; see
 	// labelYears.
 	Labelled bool
+	// Status is what became of the event (EventStatus*), and Outcome the
+	// line on what happened; both follow the event, already filtered.
+	Status  string
+	Outcome string
+}
+
+// StatusWord is how the hover card names what became of the event; empty
+// for a planned one, which shows as it always has.
+func (e PageTimelineEvent) StatusWord() string {
+	switch e.Status {
+	case EventStatusHappened:
+		return "Happened"
+	case EventStatusMoved:
+		return "Moved"
+	case EventStatusCalledOff:
+		return "Called off"
+	}
+	return ""
 }
 
 // Truncated reports whether the cap left events off the line.
@@ -151,6 +169,10 @@ func newPageTimeline(cal *Calendar, events []Event) *PageTimeline {
 			DMOnly:    e.Visibility == "dm_only",
 			Repeats:   e.IsRecurring,
 			Death:     isDeathKind(e),
+			Status:    storedStatus(e.Status),
+		}
+		if e.Outcome != nil {
+			pe.Outcome = *e.Outcome
 		}
 		if e.EndYear != nil && e.EndMonth != nil && e.EndDay != nil {
 			pe.EndLabel = fmt.Sprintf("%s %d, %d", cal.MonthName(*e.EndMonth), *e.EndDay, *e.EndYear)

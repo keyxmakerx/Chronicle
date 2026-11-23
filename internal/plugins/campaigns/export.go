@@ -91,6 +91,24 @@ type ExportEntityType struct {
 	Claimable      *bool   `json:"claimable,omitempty"`
 	// PageLayouts is the category's named layouts besides Layout (additive).
 	PageLayouts json.RawMessage `json:"page_layouts,omitempty"`
+	// FieldSwitch is the owner's answer to a game system's offer of its own
+	// fields for this category (additive). Absent means never answered, so
+	// a restore shows the offer again.
+	FieldSwitch *ExportFieldSwitch `json:"field_switch,omitempty"`
+}
+
+// ExportFieldSwitch is a category's answer to a game system's field switch.
+type ExportFieldSwitch struct {
+	// State is "switched", "dismissed" ("Not now") or "back" (switched,
+	// then switched back).
+	State      string `json:"state"`
+	SystemID   string `json:"system_id"`
+	PresetSlug string `json:"preset_slug"`
+	// OldFields is the field list from before the switch, which switching
+	// back restores; absent when the category began with the system's
+	// fields and has nothing to go back to.
+	OldFields         json.RawMessage `json:"old_fields,omitempty"`
+	OldPresetCategory *string         `json:"old_preset_category,omitempty"`
 }
 
 // --- Entities ---
@@ -122,6 +140,9 @@ type ExportEntity struct {
 	// Layout is the key of the category layout the page chose (additive);
 	// empty means it follows its category.
 	Layout string `json:"layout,omitempty"`
+	// SetAside is the values a game system field switch took off this page,
+	// shown only to the GM and put back on switching back (additive).
+	SetAside json.RawMessage `json:"set_aside,omitempty"`
 }
 
 // --- Tags ---
@@ -221,9 +242,15 @@ type ExportCalendarData struct {
 	Weather   *ExportCalendarWeather   `json:"weather,omitempty"`
 	// WeatherDays are the day-by-day readings, painted or generated, with
 	// their locks. Additive.
-	WeatherDays     []ExportCalendarWeatherDay `json:"weather_days,omitempty"`
-	EventCategories []ExportEventCategory      `json:"event_categories,omitempty"`
-	Events          []ExportCalendarEvent      `json:"events,omitempty"`
+	WeatherDays []ExportCalendarWeatherDay `json:"weather_days,omitempty"`
+	// PlaceWeather is the weather of each place with a climate of its own,
+	// and PartyMoves the days the party arrived somewhere. Places are named
+	// by page slug, since page ids are new in the restored campaign.
+	// Additive: absent in older backups, which restore no place weather.
+	PlaceWeather    []ExportCalendarPlaceWeather `json:"place_weather,omitempty"`
+	PartyMoves      []ExportCalendarPartyMove    `json:"party_moves,omitempty"`
+	EventCategories []ExportEventCategory        `json:"event_categories,omitempty"`
+	Events          []ExportCalendarEvent        `json:"events,omitempty"`
 	// AdditionalCalendars are the campaign's non-default calendars. They live
 	// under the primary rather than as a second envelope key so a file
 	// written by this version still reads in an importer that only knows the
@@ -431,6 +458,21 @@ type ExportCalendarWeatherDay struct {
 	ExportCalendarWeather
 }
 
+// ExportCalendarPlaceWeather is one place's day readings.
+type ExportCalendarPlaceWeather struct {
+	PlaceSlug string                     `json:"place_slug"`
+	Days      []ExportCalendarWeatherDay `json:"days"`
+}
+
+// ExportCalendarPartyMove says the party is at PlaceSlug from this day until
+// the next move; no slug means nowhere with a climate of its own.
+type ExportCalendarPartyMove struct {
+	Year      int    `json:"year"`
+	Month     int    `json:"month"`
+	Day       int    `json:"day"`
+	PlaceSlug string `json:"place_slug,omitempty"`
+}
+
 // ExportEventCategory is an event category definition for export.
 //
 // DefaultAnnounced carries a category whose events are meant to be knowable
@@ -505,6 +547,16 @@ type ExportCalendarEvent struct {
 	// Roll is the event's dice or table roll and its stored nights.
 	// Additive.
 	Roll *ExportCalendarEventRoll `json:"roll,omitempty"`
+	// Status is what became of the event: happened, moved or called_off.
+	// Planned is left out, so a file from before it existed, or an event
+	// nobody answered, reads as planned. Outcome is the line on what
+	// happened; MovedFrom* is the day a moved event was planned for. All
+	// additive.
+	Status         string  `json:"status,omitempty"`
+	Outcome        *string `json:"outcome,omitempty"`
+	MovedFromYear  *int    `json:"moved_from_year,omitempty"`
+	MovedFromMonth *int    `json:"moved_from_month,omitempty"`
+	MovedFromDay   *int    `json:"moved_from_day,omitempty"`
 }
 
 // ExportCalendarEventRoll is an event's roll. Config is the calendar

@@ -47,6 +47,18 @@ type entityExportAdapter struct {
 	// layouts carries each category's named layouts and the one each page
 	// chose; nil leaves them out.
 	layouts entities.PageLayoutService
+	// fieldSwitch carries each category's answer to a game system's field
+	// switch and the values it kept aside; nil leaves them out.
+	fieldSwitch fieldSwitchBackup
+}
+
+// fieldSwitchBackup reads and restores the game system field switch for the
+// campaign backup (entities' FieldSwitchService).
+type fieldSwitchBackup interface {
+	ForCampaign(ctx context.Context, campaignID string) (map[int]*entities.FieldSwitch, error)
+	SetAsideForCampaign(ctx context.Context, campaignID string) (map[string]map[string]any, error)
+	Restore(ctx context.Context, campaignID string, typeID int, sw *entities.FieldSwitch, userID string) error
+	RestoreSetAside(ctx context.Context, campaignID string, typeID int, entityID string, values map[string]any) error
 }
 
 // categoryLayoutSaver checks and stores a category's named layouts
@@ -74,6 +86,19 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	if a.layouts != nil {
 		typeLayouts = a.layouts.ForCampaign(ctx, campaignID)
 		pageKeys = a.layouts.PageKeys(ctx, campaignID)
+	}
+	// A backup that dropped these would lose the GM's kept-aside values and
+	// bring back an offer the owner already answered, so a failed read fails
+	// the export.
+	var switches map[int]*entities.FieldSwitch
+	var keptAside map[string]map[string]any
+	if a.fieldSwitch != nil {
+		if switches, err = a.fieldSwitch.ForCampaign(ctx, campaignID); err != nil {
+			return nil, err
+		}
+		if keptAside, err = a.fieldSwitch.SetAsideForCampaign(ctx, campaignID); err != nil {
+			return nil, err
+		}
 	}
 	for _, et := range etypes {
 		var parentSlug *string
@@ -111,6 +136,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			ParentTypeSlug:  parentSlug,
 			Claimable:       et.Claimable,
 			PageLayouts:     pageLayoutsJSON(typeLayouts[et.ID]),
+			FieldSwitch:     exportFieldSwitch(switches[et.ID]),
 		})
 	}
 
@@ -171,6 +197,9 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				FieldOverrides: fieldOverrides,
 				PopupConfig:    popupConfig,
 				Layout:         pageKeys[e.ID],
+			}
+			if kept := keptAside[e.ID]; len(kept) > 0 {
+				exportEntity.SetAside, _ = json.Marshal(kept)
 			}
 
 			// Export per-entity permissions when visibility is custom.
@@ -560,15 +589,15 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			return nil, fmt.Errorf("export day weather: %w", err)
 		}
 		for _, d := range days {
-			data.WeatherDays = append(data.WeatherDays, campaigns.ExportCalendarWeatherDay{
-				Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source,
-				Locked: d.Locked != nil && *d.Locked,
-				ExportCalendarWeather: exportWeatherReading(d.PresetID, d.PresetLabel, d.Icon, d.Color,
-					d.TemperatureCelsius, d.Wind, d.Precipitation, d.ZoneID, d.ZoneName, d.Description),
-			})
+			data.WeatherDays = append(data.WeatherDays, exportWeatherDay(d))
 		}
 		if rolls, err = backup.EventRollsForBackup(ctx, cal.ID, campaignID, systemViewer); err != nil {
 			return nil, fmt.Errorf("export event rolls: %w", err)
+		}
+	}
+	if pb, ok := a.svc.(calendar.PlaceBackupService); ok {
+		if err := exportPlaceWeather(ctx, pb, cal.ID, campaignID, systemViewer, entitySlugLookup, data); err != nil {
+			return nil, err
 		}
 	}
 
@@ -619,6 +648,8 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			Announced: evt.Announced, Tier: evt.Tier, Color: evt.Color, Icon: evt.Icon,
 			AllDay: evt.AllDay, Payload: evt.Payload,
 			Ref: evt.ID, RecurrenceRule: rule, Overrides: eventOverrides,
+			Status: backupStatus(evt.Status), Outcome: evt.Outcome,
+			MovedFromYear: evt.MovedFromYear, MovedFromMonth: evt.MovedFromMonth, MovedFromDay: evt.MovedFromDay,
 		})
 		if r, ok := rolls[evt.ID]; ok {
 			roll, err := exportEventRoll(r)
@@ -1226,6 +1257,9 @@ type entityImportAdapter struct {
 	// layouts restores each category's named layouts and the one each page
 	// chose; nil reports them as left out.
 	layouts entities.PageLayoutService
+	// fieldSwitch restores each category's field switch answer and the
+	// values it kept aside; nil skips them.
+	fieldSwitch fieldSwitchBackup
 }
 
 // ImportEntities creates entity types, entities, tags, and relations from
@@ -1326,6 +1360,9 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			}
 		}
 		a.restoreCategoryLayouts(ctx, campaignID, newType.ID, et, report)
+		if fieldsOK {
+			a.restoreFieldSwitch(ctx, campaignID, userID, newType.ID, et, report)
+		}
 	}
 
 	// 2. Create entities (first pass: without parent references).
@@ -1371,6 +1408,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.ImagePath, idMap, a.entitySvc.UpdateImage, report)
 		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.CoverImagePath, idMap, a.entitySvc.UpdateCoverImage, report)
 		a.restorePageLayout(ctx, newEntity, e.Layout, e.Name, report)
+		a.restoreSetAside(ctx, campaignID, typeID, newEntity.ID, e, report)
 
 		// Apply field overrides.
 		if len(e.FieldOverrides) > 0 {
@@ -1903,6 +1941,9 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	if backup != nil && len(data.WeatherDays) > 0 {
 		a.importWeatherDays(ctx, backup, cal.ID, campaignID, data, systemViewer, report)
 	}
+	if pb, ok := a.svc.(calendar.PlaceBackupService); ok && (len(data.PlaceWeather) > 0 || len(data.PartyMoves) > 0) {
+		a.importPlaceWeather(ctx, pb, cal.ID, campaignID, data, idMap, systemViewer, report)
+	}
 	if backup != nil && calendarDataHasHandSetMoons(data) {
 		a.importMoonHands(ctx, backup, cal.ID, campaignID, data, systemViewer, report)
 	}
@@ -2051,22 +2092,129 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	return kindIDBySlug, nil
 }
 
+// exportWeatherDay is one stored reading as a backup carries it.
+func exportWeatherDay(d calendar.DayWeather) campaigns.ExportCalendarWeatherDay {
+	return campaigns.ExportCalendarWeatherDay{
+		Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source,
+		Locked: d.Locked != nil && *d.Locked,
+		ExportCalendarWeather: exportWeatherReading(d.PresetID, d.PresetLabel, d.Icon, d.Color,
+			d.TemperatureCelsius, d.Wind, d.Precipitation, d.ZoneID, d.ZoneName, d.Description),
+	}
+}
+
+// exportPlaceWeather adds each place's readings and the party's moves,
+// naming places by page slug. A place with no slug (not a page this backup
+// carries) is left out, as is a move there: restored, it could only point
+// somewhere else.
+func exportPlaceWeather(ctx context.Context, pb calendar.PlaceBackupService, calendarID, campaignID string, v permissions.Viewer, entitySlugLookup func(string) string, data *campaigns.ExportCalendarData) error {
+	backup, err := pb.PlaceWeatherForBackup(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return fmt.Errorf("export place weather: %w", err)
+	}
+	if backup == nil {
+		return nil
+	}
+	for placeID, days := range backup.Days {
+		slug := entitySlugLookup(placeID)
+		if slug == "" || len(days) == 0 {
+			continue
+		}
+		place := campaigns.ExportCalendarPlaceWeather{PlaceSlug: slug}
+		for _, d := range days {
+			place.Days = append(place.Days, exportWeatherDay(d))
+		}
+		data.PlaceWeather = append(data.PlaceWeather, place)
+	}
+	// Map order is random; a stable order keeps two backups of the same
+	// campaign comparable.
+	sort.Slice(data.PlaceWeather, func(i, j int) bool { return data.PlaceWeather[i].PlaceSlug < data.PlaceWeather[j].PlaceSlug })
+	for _, m := range backup.Marks {
+		move := campaigns.ExportCalendarPartyMove{Year: m.Year, Month: m.Month, Day: m.Day}
+		if m.PlaceID != "" {
+			if move.PlaceSlug = entitySlugLookup(m.PlaceID); move.PlaceSlug == "" {
+				continue
+			}
+		}
+		data.PartyMoves = append(data.PartyMoves, move)
+	}
+	return nil
+}
+
+// importPlaceWeather restores each place's readings and the party's moves,
+// finding each place by its page slug among the pages this import created.
+func (a *calendarImportAdapter) importPlaceWeather(ctx context.Context, pb calendar.PlaceBackupService, calendarID, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, v permissions.Viewer, report *campaigns.ImportReport) {
+	for _, p := range data.PlaceWeather {
+		placeID, ok := idMap.EntitySlugToID[p.PlaceSlug]
+		if !ok {
+			report.Fail(campaigns.SectionCalendar, "place weather", p.PlaceSlug, "the place's page was not restored, so its weather was not either")
+			continue
+		}
+		days := make([]calendar.DayWeather, len(p.Days))
+		for i, d := range p.Days {
+			days[i] = importWeatherDay(d)
+		}
+		skipped, err := pb.RestorePlaceWeather(ctx, calendarID, campaignID, placeID, days, v)
+		if err != nil {
+			slog.Warn("import: place weather failed", slog.String("place", p.PlaceSlug), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "place weather", p.PlaceSlug, apperror.SafeMessage(err))
+			continue
+		}
+		if skipped > 0 {
+			report.FailN(campaigns.SectionCalendar, "place weather", p.PlaceSlug, "a reading's day is not on this calendar, or the reading is not valid", skipped)
+		}
+	}
+	if len(data.PartyMoves) == 0 {
+		return
+	}
+	marks := make([]calendar.PartyMark, 0, len(data.PartyMoves))
+	missing := 0
+	for _, m := range data.PartyMoves {
+		mark := calendar.PartyMark{Year: m.Year, Month: m.Month, Day: m.Day}
+		if m.PlaceSlug != "" {
+			id, ok := idMap.EntitySlugToID[m.PlaceSlug]
+			if !ok {
+				missing++
+				continue
+			}
+			mark.PlaceID = id
+		}
+		marks = append(marks, mark)
+	}
+	if missing > 0 {
+		report.FailN(campaigns.SectionCalendar, "party move", data.Name, "the place's page was not restored", missing)
+	}
+	skipped, err := pb.RestorePartyMoves(ctx, calendarID, campaignID, marks, v)
+	if err != nil {
+		slog.Warn("import: party moves failed", slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "party moves", data.Name, apperror.SafeMessage(err))
+		return
+	}
+	if skipped > 0 {
+		report.FailN(campaigns.SectionCalendar, "party move", data.Name, "a move's day is not on this calendar, or its place is not a page here", skipped)
+	}
+}
+
+// importWeatherDay is one backed-up reading as the calendar stores it.
+func importWeatherDay(d campaigns.ExportCalendarWeatherDay) calendar.DayWeather {
+	locked := d.Locked
+	w := d.ExportCalendarWeather
+	return calendar.DayWeather{
+		Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source, Locked: &locked,
+		PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
+		TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
+		Description: w.Description,
+		Wind: &calendar.Wind{SpeedKPH: w.WindSpeedKPH, SpeedTier: w.WindSpeedTier,
+			Direction: w.WindDirection, DirectionDegrees: w.WindDirectionDegrees},
+		Precipitation: &calendar.Precipitation{Type: w.PrecipitationType, Intensity: w.PrecipitationIntensity},
+	}
+}
+
 // importWeatherDays restores the day-by-day readings with their sources and
 // locks. A reading the calendar no longer has room for is reported.
 func (a *calendarImportAdapter) importWeatherDays(ctx context.Context, backup calendar.BackupService, calendarID, campaignID string, data *campaigns.ExportCalendarData, v permissions.Viewer, report *campaigns.ImportReport) {
 	days := make([]calendar.DayWeather, len(data.WeatherDays))
 	for i, d := range data.WeatherDays {
-		locked := d.Locked
-		w := d.ExportCalendarWeather
-		days[i] = calendar.DayWeather{
-			Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source, Locked: &locked,
-			PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
-			TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
-			Description: w.Description,
-			Wind: &calendar.Wind{SpeedKPH: w.WindSpeedKPH, SpeedTier: w.WindSpeedTier,
-				Direction: w.WindDirection, DirectionDegrees: w.WindDirectionDegrees},
-			Precipitation: &calendar.Precipitation{Type: w.PrecipitationType, Intensity: w.PrecipitationIntensity},
-		}
+		days[i] = importWeatherDay(d)
 	}
 	skipped, err := backup.RestoreDayWeather(ctx, calendarID, campaignID, days, v)
 	if err != nil {
@@ -2373,6 +2521,9 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 		Icon:                     evt.Icon,
 		AllDay:                   evt.AllDay,
 		Payload:                  evt.Payload,
+		Status:                   evt.Status,
+		Outcome:                  evt.Outcome,
+		MovedFrom:                backupMovedFrom(evt),
 		CanAuthorDmOnly:          true,
 		Author:                   permissions.SystemViewer(3),
 	})
@@ -2382,6 +2533,24 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 		return ""
 	}
 	return created.ID
+}
+
+// backupStatus is the status a backup writes: planned (and an older row's
+// empty status) is left out, so the file reads as before.
+func backupStatus(s string) string {
+	if s == calendar.EventStatusPlanned {
+		return ""
+	}
+	return s
+}
+
+// backupMovedFrom is the day a backed-up moved event was planned for, or
+// nil. The calendar keeps it only on a moved event and checks it there.
+func backupMovedFrom(evt campaigns.ExportCalendarEvent) *calendar.DayDate {
+	if evt.MovedFromYear == nil || evt.MovedFromMonth == nil || evt.MovedFromDay == nil {
+		return nil
+	}
+	return &calendar.DayDate{Year: *evt.MovedFromYear, Month: *evt.MovedFromMonth, Day: *evt.MovedFromDay}
 }
 
 // eraStartMonthDay resolves an imported era's start month/day: a modern

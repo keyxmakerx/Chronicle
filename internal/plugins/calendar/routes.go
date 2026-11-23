@@ -81,6 +81,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendars/:calid/structure", h.StructureEditPage, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/:calid/structure/preview", h.StructureEditPreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/:calid/structure", h.StructureEditApply, campaigns.RequireRole(campaigns.RoleOwner))
+	// Calendar settings' "When a day passes" switch, saved as it changes.
+	cg.PUT("/calendars/:calid/day-passes", h.SetAskWhenDayPassesAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Calendar reads (Player) — re-registered under the public-capable group
 	// below, whose registration wins for the same path (see maps/routes.go's
@@ -153,6 +155,9 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 	// Events: view Player, create/edit Scribe, delete + visibility Owner.
 	g.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.GET("/calendars/:calid/events/index", h.ListEventIndexAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// What the calendar asks about after today moves past events: Owner,
+	// like setting today.
+	g.GET("/calendars/:calid/events/passed", h.ListPassedEventsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	g.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
@@ -258,6 +263,19 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 	// The forecast is the one future weather a player may read, blurred by
 	// the service; it has the same gate as the day readings it is built from.
 	g.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Each place's weather and the party's marks: the Director's alone. A
+	// player reads the party's weather through weather/days above.
+	dmPlaces := func(what string) echo.MiddlewareFunc {
+		return campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may "+what)
+	}
+	g.GET("/calendars/:calid/weather/places", h.PlaceWeatherYearAPI, dmPlaces("read each place's weather"))
+	g.PUT("/calendars/:calid/weather/places/:pid/days", h.SetPlaceDayWeatherAPI, dmPlaces("set a place's weather"))
+	g.POST("/calendars/:calid/weather/places/:pid/days/clear", h.ClearPlaceDayWeatherAPI, dmPlaces("clear a place's weather"))
+	g.POST("/calendars/:calid/weather/places/:pid/days/lock", h.LockPlaceDayWeatherAPI, dmPlaces("lock a place's weather"))
+	g.POST("/calendars/:calid/weather/party", h.SetPartyPlaceAPI, dmPlaces("say where the party is"))
+	g.POST("/calendars/:calid/weather/party/clear", h.ClearPartyPlaceAPI, dmPlaces("say where the party is"))
 
 	// Event rolls: read Player (the service gives a player only the player
 	// text of a told night that has arrived); every write is gated

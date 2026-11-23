@@ -70,6 +70,31 @@ type APIHandler struct {
 	signer               *media.URLSigner
 	heroPlanner          entities.HeroPlanner
 	heroChanges          *entities.HeroChangeService
+	itemFieldsGate       ItemFieldsGate
+}
+
+// ItemFieldsGate reports whether a campaign's items use a system's item
+// preset. A preset with a switch block reaches a campaign's items only once
+// the owner accepts the switch, so until then item sync carries on as if the
+// system had no item preset.
+type ItemFieldsGate func(ctx context.Context, campaignID string, preset *systems.EntityPresetDef) bool
+
+// SetItemFieldsGate wires the switch check. Unwired, a switch preset is never
+// served.
+func (h *APIHandler) SetItemFieldsGate(g ItemFieldsGate) {
+	h.itemFieldsGate = g
+}
+
+// itemPresetFor is the item preset the campaign's items use under m, or nil.
+func (h *APIHandler) itemPresetFor(ctx context.Context, campaignID string, m *systems.SystemManifest) *systems.EntityPresetDef {
+	p := m.ItemPreset()
+	if p == nil || p.Switch == nil {
+		return p
+	}
+	if h.itemFieldsGate == nil || !h.itemFieldsGate(ctx, campaignID, p) {
+		return nil
+	}
+	return p
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
@@ -1460,7 +1485,7 @@ func (h *APIHandler) ListSystems(c *echo.Context) error {
 			Name:               manifest.Name,
 			Status:             string(manifest.Status),
 			HasCharacterFields: manifest.CharacterPreset() != nil,
-			HasItemFields:      manifest.ItemPreset() != nil,
+			HasItemFields:      h.itemPresetFor(ctx, campaignID, manifest) != nil,
 			FoundrySystemID:    manifest.FoundrySystemID,
 			Enabled:            enabled,
 		})
@@ -1581,11 +1606,14 @@ func (h *APIHandler) GetItemFields(c *echo.Context) error {
 		return apperror.NewNotFound("system not found: " + systemID)
 	}
 
-	resp := manifest.ItemFieldsForAPI()
+	var resp *systems.CharacterFieldsResponse
+	if h.itemPresetFor(c.Request().Context(), campaignID, manifest) != nil {
+		resp = manifest.ItemFieldsForAPI()
+	}
 	if resp == nil {
-		// System has no item preset — return empty fields instead of 404.
-		// This is expected for systems like Draw Steel that have character
-		// and creature presets but no formal item preset.
+		// No item preset, or one the campaign has not switched its items
+		// to: empty fields instead of 404, so item sync keeps its plain
+		// items.
 		return c.JSON(http.StatusOK, map[string]any{
 			"system_id": systemID,
 			"fields":    []any{},

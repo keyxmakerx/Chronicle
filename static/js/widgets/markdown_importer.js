@@ -182,6 +182,8 @@
     if (plan.calendar) opts.calendar = plan.calendar;
     if (plan.scope) opts.scope = plan.scope;
     if (Array.isArray(plan.locked)) opts.locked = plan.locked;
+    // A place's weather runs as that place's one zone, from its own climate.
+    if (Array.isArray(plan.zones) && plan.zones.length) opts.zones = plan.zones;
     // The owner's own kinds of weather; one the engine can't read is left
     // out, as the calendar's weather sheet does, rather than failing the run.
     if (Array.isArray(plan.kinds)) {

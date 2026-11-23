@@ -132,7 +132,7 @@ func buildToday(ctx context.Context, src todaySource, campaignID string, v permi
 	}
 	out.Moons = todayMoons(cal)
 
-	days, err := src.ListDayWeather(ctx, cal.ID, campaignID, cal.CurrentYear, cal.CurrentMonth, v)
+	days, err := PartyDays(ctx, src, cal.ID, campaignID, cal.CurrentYear, cal.CurrentMonth, v)
 	if err != nil {
 		slog.Warn("today in the world: weather unavailable",
 			slog.String("campaign_id", campaignID), slog.Any("error", err))

@@ -177,3 +177,49 @@ func jsonEqual(t *testing.T, got json.RawMessage, want string) bool {
 	}
 	return reflect.DeepEqual(a, b)
 }
+
+type fakeDraftStore struct {
+	draft *campaigns.CustomizeDraft
+	err   error
+	asked string
+}
+
+func (f *fakeDraftStore) Get(_ context.Context, campaignID, userID string) (*campaigns.CustomizeDraft, error) {
+	f.asked = campaignID + "/" + userID
+	return f.draft, f.err
+}
+
+// The field switch waits only for a stored draft that carries a field list
+// for the category; a rename, another category's fields or no draft at all
+// leave it free.
+func TestDraftReplacesFields(t *testing.T) {
+	draft := func(s string) *campaigns.CustomizeDraft {
+		return &campaigns.CustomizeDraft{Version: 1, Draft: json.RawMessage(s)}
+	}
+	tests := []struct {
+		name    string
+		store   *fakeDraftStore
+		want    bool
+		wantErr bool
+	}{
+		{"no draft", &fakeDraftStore{}, false, false},
+		{"fields for the category", &fakeDraftStore{draft: draft(`{"categories":{"items":{"4":{"fields":[{"key":"rarity","label":"Rarity","type":"text"}]}}}}`)}, true, false},
+		{"an emptied field list still replaces it", &fakeDraftStore{draft: draft(`{"categories":{"items":{"4":{"fields":[]}}}}`)}, true, false},
+		{"only a rename", &fakeDraftStore{draft: draft(`{"categories":{"items":{"4":{"name":"Loot"}}}}`)}, false, false},
+		{"another category's fields", &fakeDraftStore{draft: draft(`{"categories":{"items":{"7":{"fields":[]}}}}`)}, false, false},
+		{"only the look", &fakeDraftStore{draft: draft(`{"look":{"accent":"#ff0000"}}`)}, false, false},
+		{"an unreadable section", &fakeDraftStore{draft: draft(`{"categories":"nope"}`)}, false, false},
+		{"the store fails", &fakeDraftStore{err: errors.New("db down")}, false, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := draftReplacesFields(tc.store)(context.Background(), "c1", "owner", 4)
+			if got != tc.want || (err != nil) != tc.wantErr {
+				t.Fatalf("got %v, %v; want %v, error %v", got, err, tc.want, tc.wantErr)
+			}
+			if tc.store.asked != "c1/owner" {
+				t.Errorf("read the draft of %q, want the acting owner's", tc.store.asked)
+			}
+		})
+	}
+}

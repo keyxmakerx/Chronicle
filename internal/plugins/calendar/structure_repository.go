@@ -19,6 +19,7 @@ var monthPositionColumns = []struct{ table, column string }{
 	{"calendar_events", "month"},
 	{"calendar_events", "end_month"},
 	{"calendar_events", "recurrence_end_month"},
+	{"calendar_events", "moved_from_month"},
 	{"calendar_eras", "start_month"},
 	{"calendar_eras", "end_month"},
 }
@@ -328,6 +329,23 @@ func remapMonthPositions(ctx context.Context, ex dbExecutor, calendarID string, 
 // except where a moved reading now claims its day; there the moved reading
 // wins and the left-behind one is deleted, as the preview says.
 func remapWeatherDays(ctx context.Context, ex dbExecutor, calendarID string, remap map[int]int) error {
+	// A place's readings and the party's marks are keyed by day the same way,
+	// so they move with their month by the same rule.
+	for _, t := range []struct{ table, alsoKey string }{
+		{"calendar_weather_days", ""},
+		{"calendar_place_weather_days", "place_id"},
+		{"calendar_party_places", ""},
+	} {
+		if err := remapDayTable(ctx, ex, t.table, t.alsoKey, calendarID, remap); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// remapDayTable is remapWeatherDays for one table keyed by calendar, year,
+// month and day (plus alsoKey when set).
+func remapDayTable(ctx context.Context, ex dbExecutor, table, alsoKey, calendarID string, remap map[int]int) error {
 	if len(remap) == 0 {
 		return nil
 	}
@@ -347,20 +365,24 @@ func remapWeatherDays(ctx context.Context, ex dbExecutor, calendarID string, rem
 		args = append(args, o)
 	}
 	in := strings.TrimSuffix(strings.Repeat("?,", len(olds)), ",")
+	join := ""
+	if alsoKey != "" {
+		join = " AND n." + alsoKey + " = w." + alsoKey
+	}
 	if _, err := ex.ExecContext(ctx,
-		`UPDATE calendar_weather_days SET month = CASE month`+cases.String()+` END
+		`UPDATE `+table+` SET month = CASE month`+cases.String()+` END
 		 WHERE calendar_id = ? AND month IN (`+in+`)`, args...); err != nil {
 		return fmt.Errorf("park moved readings: %w", err)
 	}
 	if _, err := ex.ExecContext(ctx,
-		`DELETE w FROM calendar_weather_days w
-		 JOIN calendar_weather_days n
-		   ON n.calendar_id = w.calendar_id AND n.year = w.year AND n.day = w.day AND n.month = -w.month
+		`DELETE w FROM `+table+` w
+		 JOIN `+table+` n
+		   ON n.calendar_id = w.calendar_id AND n.year = w.year AND n.day = w.day AND n.month = -w.month`+join+`
 		 WHERE w.calendar_id = ? AND w.month > 0`, calendarID); err != nil {
 		return fmt.Errorf("drop displaced readings: %w", err)
 	}
 	if _, err := ex.ExecContext(ctx,
-		`UPDATE calendar_weather_days SET month = -month WHERE calendar_id = ? AND month < 0`, calendarID); err != nil {
+		`UPDATE `+table+` SET month = -month WHERE calendar_id = ? AND month < 0`, calendarID); err != nil {
 		return fmt.Errorf("place moved readings: %w", err)
 	}
 	return nil

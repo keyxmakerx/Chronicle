@@ -90,7 +90,7 @@ type EventKind struct {
 func (EventKind) Name() string  { return "event" }
 func (EventKind) Label() string { return "Calendar event" }
 func (EventKind) Doc() string {
-	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers, the start time), `end_hour`, `end_minute` (whole numbers, the end time on the end date; with no `end_year`/`end_month`/`end_day` it ends the same day; `end_hour: none` clears it), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (a Font Awesome icon name, like `sun` or `fa-sun`), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to; it may be made earlier in the same paste), `announced` (when players learn of it, for the owner or a co-DM: `ahead` lets them know before it happens, `on_day` shows it to them only on its day; left out, the category's setting applies), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none`, `page: none` and `announced: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
+	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers, the start time), `end_hour`, `end_minute` (whole numbers, the end time on the end date; with no `end_year`/`end_month`/`end_day` it ends the same day; `end_hour: none` clears it), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (a Font Awesome icon name, like `sun` or `fa-sun`), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to; it may be made earlier in the same paste), `announced` (when players learn of it, for the owner or a co-DM: `ahead` lets them know before it happens, `on_day` shows it to them only on its day; left out, the category's setting applies), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none`, `page: none` and `announced: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" + outcomeDoc + "\n\n" +
 		"To repeat, add `repeat:` (" + repeatTypes() + "; `none` on update stops it). The date is the first time. `yearly` repeats on the same month and day; `repeat_every` is the step (years for yearly, months for monthly, weeks for custom, where it is required, every Nth matching day for rule; not for weekly or biweekly). Optional end: `repeat_until_year`/`repeat_until_month`/`repeat_until_day` or `repeat_times`. `repeat: rule` takes `repeat_on`, a list of conditions a day must all meet, each one of: `moon` + `phase` (new, first_quarter, full, last_quarter); `weekday`, optionally with `nth` (1 to 5 or last) in its month; `weekdays` (a list); `day` (of the month, or last); `month`; `months` (a list); `season` (any day in it); `season_start` (a season's first day, or any); `event` (an event already on the calendar), optionally with `days` after it (negative for before). `repeat_offset_days` moves every match. Names are the calendar's own; ask `what: calendar` for them. Naming a repeat on update replaces the event's whole repeat. The calendar already shows every moon's phase on every day, so never add an event that only marks a phase (\"Full moon of Selune\"); a moon rule is for something that happens then, such as a festival.\n\n" + rollDoc + "\n\n" +
 		"```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\nrepeat: yearly\n---\nThe lords of the city open their halls.\n```\n\n```\n---\nkind: event\nname: Night of Wolves\nyear: 1492\nmonth: 1\nday: 1\nrepeat: rule\nrepeat_on:\n  - moon: Selune\n    phase: full\n  - season: Winter\n---\n```"
 }
@@ -214,12 +214,23 @@ func (k EventKind) plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if roll.set && k.Rolls == nil {
 		return Plan{Error: "event rolls aren't available on this server"}
 	}
+	out, err := readOutcome(r)
+	if err != nil {
+		return Plan{Error: planError(err)}
+	}
+	repeating := rep.set && rep.typ != ""
+	if !rep.set && r.Action == ActionUpdate && existing != nil {
+		repeating = existing.IsRecurring && existing.RecurrenceType != nil && *existing.RecurrenceType != ""
+	}
+	if err := out.check(r, repeating, moving); err != nil {
+		return Plan{Error: planError(err)}
+	}
 	switch r.Action {
 	case ActionCreate:
 		if !dated {
 			return Plan{Error: "a new event needs year, month and day"}
 		}
-		p := Plan{Summary: withRoll(x.summary(withRepeat(dateLabel(cal, y, m, d)+" on "+cal.Name, rep)), roll)}
+		p := Plan{Summary: withOutcome(withRoll(x.summary(withRepeat(dateLabel(cal, y, m, d)+" on "+cal.Name, rep)), roll), out)}
 		if existing != nil {
 			p.Warnings = append(p.Warnings, "An event with this name already exists; this adds another")
 		}
@@ -229,9 +240,9 @@ func (k EventKind) plan(ctx context.Context, campaignID string, a Actor, r Recor
 			return Plan{Error: "no event called " + quote(r.Name) + " to change"}
 		}
 		if moving {
-			return Plan{Summary: withRoll(x.summary(withRepeat("moves the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day)+" to "+dateLabel(cal, my, mm, md), rep)), roll)}
+			return Plan{Summary: withOutcome(withRoll(x.summary(withRepeat("moves the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day)+" to "+dateLabel(cal, my, mm, md), rep)), roll), out)}
 		}
-		return Plan{Summary: withRoll(x.summary(withRepeat("changes the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day), rep)), roll)}
+		return Plan{Summary: withOutcome(withRoll(x.summary(withRepeat("changes the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day), rep)), roll), out)}
 	default:
 		if existing == nil {
 			return Plan{Error: "no event called " + quote(r.Name) + " to remove"}
@@ -293,6 +304,10 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if err != nil {
 		return err
 	}
+	out, err := readOutcome(r)
+	if err != nil {
+		return err
+	}
 	if r.Action == ActionCreate {
 		in := calendar.CreateEventInput{
 			Name: r.Name, Year: y, Month: m, Day: d,
@@ -328,6 +343,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 		}
 		rep.toCreate(&in)
 		x.toCreate(&in)
+		out.toCreate(&in)
 		ev, err := k.Svc.CreateEvent(ctx, cal.ID, campaignID, in)
 		if err != nil {
 			return err
@@ -394,6 +410,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	}
 	rep.toUpdate(&in)
 	x.toUpdate(&in)
+	out.toUpdate(&in)
 	if err := k.Svc.UpdateEvent(ctx, ev.ID, cal.ID, campaignID, in, a.Viewer()); err != nil {
 		return err
 	}

@@ -754,3 +754,100 @@ func intPtr(i int) *int { return &i }
 func boolPtr(b bool) *bool { return &b }
 
 func float64Ptr(f float64) *float64 { return &f }
+
+// TestCalendarExportImport_EventOutcomeRoundTrip pins what became of each
+// event through a whole-campaign backup: the status, the line on what
+// happened and a moved event's planned day come back, a planned event is
+// written without a status so the file reads as before, and a file from
+// before the fields existed restores its events as planned.
+func TestCalendarExportImport_EventOutcomeRoundTrip(t *testing.T) {
+	line := "Foiled by the party"
+	y, m, d := 100, 1, 11
+	src := &fakeCalendarService{
+		cal: &calendar.Calendar{ID: "cal-1", CampaignID: "c1", Mode: calendar.ModeFantasy, Name: "Therin",
+			Visibility: "everyone", HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60},
+		events: []calendar.Event{
+			{ID: "e1", Name: "Ambush", Year: 100, Month: 1, Day: 10, Visibility: "dm_only", Status: calendar.EventStatusCalledOff, Outcome: &line},
+			{ID: "e2", Name: "Arrival", Year: 100, Month: 1, Day: 12, Visibility: "everyone", Status: calendar.EventStatusMoved, MovedFromYear: &y, MovedFromMonth: &m, MovedFromDay: &d},
+			{ID: "e3", Name: "Market", Year: 100, Month: 1, Day: 20, Visibility: "everyone", Status: calendar.EventStatusPlanned},
+		},
+	}
+	calData, err := (&calendarExportAdapter{svc: src}).ExportCalendar(context.Background(), "c1", func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	raw, err := json.Marshal(&campaigns.CampaignExport{Format: campaigns.ExportFormat, Version: campaigns.ExportVersion, Calendar: calData})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	// The calendar section is read as raw maps to see which keys are written;
+	// it marshals the same alone as inside the backup envelope.
+	rawCal, err := json.Marshal(calData)
+	if err != nil {
+		t.Fatalf("marshal calendar: %v", err)
+	}
+	var section struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.Unmarshal(rawCal, &section); err != nil {
+		t.Fatalf("unmarshal raw: %v", err)
+	}
+	for _, e := range section.Events {
+		if e["name"] == "Market" {
+			if _, ok := e["status"]; ok {
+				t.Errorf("a planned event must be written without a status: %v", e)
+			}
+		}
+	}
+
+	var reloaded campaigns.CampaignExport
+	if err := json.Unmarshal(raw, &reloaded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	dst := &fakeCalendarService{}
+	report := campaigns.NewImportReport()
+	if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "c2", reloaded.Calendar, campaigns.NewIDMap("c2"), report); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if report.HasFailures() {
+		t.Fatalf("import reported failures: %s", report.Summary())
+	}
+	got := map[string]calendar.CreateEventInput{}
+	for _, in := range dst.createdEvents {
+		got[in.Name] = in
+	}
+	tests := []struct {
+		name, status, outcome string
+		movedFrom             *calendar.DayDate
+	}{
+		{"Ambush", calendar.EventStatusCalledOff, line, nil},
+		{"Arrival", calendar.EventStatusMoved, "", &calendar.DayDate{Year: 100, Month: 1, Day: 11}},
+		{"Market", "", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in, ok := got[tt.name]
+			if !ok {
+				t.Fatalf("%s was not recreated", tt.name)
+			}
+			if in.Status != tt.status {
+				t.Errorf("status = %q, want %q", in.Status, tt.status)
+			}
+			if (in.Outcome == nil) != (tt.outcome == "") || (in.Outcome != nil && *in.Outcome != tt.outcome) {
+				t.Errorf("outcome = %v, want %q", in.Outcome, tt.outcome)
+			}
+			if (in.MovedFrom == nil) != (tt.movedFrom == nil) || (in.MovedFrom != nil && *in.MovedFrom != *tt.movedFrom) {
+				t.Errorf("moved from = %v, want %v", in.MovedFrom, tt.movedFrom)
+			}
+		})
+	}
+
+	// A backup from before these fields existed: its events come back planned.
+	var old campaigns.ExportCalendarEvent
+	if err := json.Unmarshal([]byte(`{"name":"Feast","year":100,"month":1,"day":5,"visibility":"everyone"}`), &old); err != nil {
+		t.Fatalf("unmarshal old event: %v", err)
+	}
+	if old.Status != "" || old.Outcome != nil || backupMovedFrom(old) != nil {
+		t.Errorf("an older event read as %+v, want no status, line or planned day", old)
+	}
+}

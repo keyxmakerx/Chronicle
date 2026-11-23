@@ -103,10 +103,25 @@ func (s *calendarService) RestoreDayWeather(ctx context.Context, calendarID, cam
 	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 		return 0, err
 	}
-	skipped := 0
+	inputs, locked, skipped := restorableDays(cal, days)
+	for start := 0; start < len(inputs); start += maxDayWeatherBatch {
+		if err := s.weatherRepo.SetDays(ctx, calendarID, inputs[start:min(start+maxDayWeatherBatch, len(inputs))]); err != nil {
+			return 0, fmt.Errorf("restore day weather: %w", err)
+		}
+	}
+	for start := 0; start < len(locked); start += maxDayWeatherBatch {
+		if _, err := s.weatherRepo.LockDays(ctx, calendarID, locked[start:min(start+maxDayWeatherBatch, len(locked))], true); err != nil {
+			return 0, fmt.Errorf("lock day weather: %w", err)
+		}
+	}
+	return skipped, s.publishAfter(nil, PubWeatherChanged, campaignID, calendarID)
+}
+
+// restorableDays sorts backed-up readings into the writes to make and the
+// days to lock after, skipping (and counting) a repeated day, a day the
+// calendar does not have, an invalid reading or an unknown source.
+func restorableDays(cal *Calendar, days []DayWeather) (inputs []DayWeatherInput, locked []DayDate, skipped int) {
 	seen := make(map[DayDate]bool, len(days))
-	var inputs []DayWeatherInput
-	var locked []DayDate
 	for _, d := range days {
 		key := DayDate{Year: d.Year, Month: d.Month, Day: d.Day}
 		in := DayWeatherInput{Year: d.Year, Month: d.Month, Day: d.Day, Source: d.Source, WeatherInput: d.input()}
@@ -121,17 +136,7 @@ func (s *calendarService) RestoreDayWeather(ctx context.Context, calendarID, cam
 			locked = append(locked, key)
 		}
 	}
-	for start := 0; start < len(inputs); start += maxDayWeatherBatch {
-		if err := s.weatherRepo.SetDays(ctx, calendarID, inputs[start:min(start+maxDayWeatherBatch, len(inputs))]); err != nil {
-			return 0, fmt.Errorf("restore day weather: %w", err)
-		}
-	}
-	for start := 0; start < len(locked); start += maxDayWeatherBatch {
-		if _, err := s.weatherRepo.LockDays(ctx, calendarID, locked[start:min(start+maxDayWeatherBatch, len(locked))], true); err != nil {
-			return 0, fmt.Errorf("lock day weather: %w", err)
-		}
-	}
-	return skipped, s.publishAfter(nil, PubWeatherChanged, campaignID, calendarID)
+	return inputs, locked, skipped
 }
 
 // input is the reading as the flat fields a write takes.

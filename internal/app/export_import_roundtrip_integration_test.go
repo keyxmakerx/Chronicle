@@ -47,6 +47,7 @@ type roundTripHarness struct {
 	media     media.MediaService
 	maps      maps.MapService
 	drawings  maps.DrawingService
+	switches  *entities.FieldSwitchService
 	handler   *campaigns.ExportHandler
 }
 
@@ -71,7 +72,8 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	if err := addonSvc.SeedInstalledAddons(context.Background()); err != nil {
 		t.Fatalf("seed addons: %v", err)
 	}
-	addonSvc.SetPresetApplier(newPresetApplier(entitySvc))
+	switchSvc := entities.NewFieldSwitchService(entities.NewFieldSwitchRepository(db), entities.NewEntityTypeRepository(db), nil)
+	addonSvc.SetPresetApplier(newPresetApplier(entitySvc).withFieldSwitch(switchSvc))
 	entitySvc.SetAddonChecker(addonSvc)
 	entitySvc.SetMediaVerifier(&entityMediaVerifierAdapter{svc: mediaSvc})
 	blocks := entities.NewBlockRegistry()
@@ -96,19 +98,19 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	exportSvc := campaigns.NewExportImportService(campaignSvc)
 	tagSvc := tags.NewTagService(tags.NewTagRepository(db))
 	relSvc := relations.NewRelationService(relations.NewRelationRepository(db))
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc, fieldSwitch: switchSvc})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc})
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonSvc})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaSvc})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaSvc})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc, fieldSwitch: switchSvc})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc, users: auth.NewAuthService(auth.NewUserRepository(db), nil, time.Hour)})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonSvc})
 	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaSvc})
 
 	return &roundTripHarness{
 		t: t, db: db, campaigns: campaignSvc, entities: entitySvc, places: placeSvc, addons: addonSvc,
-		media: mediaSvc, maps: mapSvc, drawings: drawingSvc,
+		media: mediaSvc, maps: mapSvc, drawings: drawingSvc, switches: switchSvc,
 		handler: campaigns.NewExportHandler(exportSvc),
 	}
 }

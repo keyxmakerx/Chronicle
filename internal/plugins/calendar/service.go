@@ -297,6 +297,11 @@ type CalendarService interface {
 	// its route already requires campaigns.CanAuthorDmOnly, but the check
 	// is repeated here (v.SkipsPerUserRules()) rather than trusted blindly.
 	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
+	// ListPassedEvents lists what the calendar asks about when today moves
+	// from from to to (event_outcome.go), filtered for v like a month read.
+	ListPassedEvents(ctx context.Context, calendarID, campaignID string, from, to DayDate, v permissions.Viewer) (*PassedEvents, error)
+	// SetAskWhenDayPasses turns that question on or off for the calendar.
+	SetAskWhenDayPasses(ctx context.Context, calendarID, campaignID string, ask bool) error
 
 	// Repeat rules and "this one only" (service_recurrence.go). The override
 	// writes are gated like editing the event (Scribe+ at the route, the
@@ -472,6 +477,10 @@ type calendarService struct {
 	batchRepo   EventBatchRepository
 	markRepo    MoonMarkRepository
 	rollTables  RollTableSource
+	// placeRepo and places give each place with a climate its own weather
+	// (place_weather.go); both nil leaves the calendar one weather.
+	placeRepo PlaceWeatherRepository
+	places    PlaceDirectory
 	// forecastKey keys the players' weather forecast blur; see
 	// weather_forecast.go.
 	forecastKey []byte
@@ -847,6 +856,7 @@ func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Cale
 		cal.EventKinds = nil
 		cal.Moons = filterMoonsForViewer(cal.Moons, v)
 		cal.Eras = erasForPlayer(cal)
+		s.partyCurrentWeather(ctx, cal)
 	}
 	if err := s.redactEraLore(ctx, cal.CampaignID, cal.Eras, v); err != nil {
 		return nil, err
@@ -1656,6 +1666,11 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 		Icon:                     ee.Icon,
 		AllDay:                   ee.AllDay,
 		Payload:                  ee.Payload,
+		Status:                   ee.Status,
+		Outcome:                  ee.Outcome,
+	}
+	if ee.MovedFromYear != nil && ee.MovedFromMonth != nil && ee.MovedFromDay != nil {
+		input.MovedFrom = &DayDate{Year: *ee.MovedFromYear, Month: *ee.MovedFromMonth, Day: *ee.MovedFromDay}
 	}
 
 	rules.prepare(&input, ee, ir)
@@ -1914,6 +1929,9 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 		AllDay:                   input.AllDay,
 		Payload:                  input.Payload,
 		CreatedBy:                createdBy,
+	}
+	if err := buildEventStatus(evt, input); err != nil {
+		return nil, err
 	}
 	return evt, nil
 }
@@ -2354,6 +2372,7 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 func (s *calendarService) mergeEventUpdate(ctx context.Context, cal *Calendar, evt *Event, campaignID string, input UpdateEventInput, v permissions.Viewer) error {
 	calendarID := cal.ID
 	var err error
+	was := DayDate{Year: evt.Year, Month: evt.Month, Day: evt.Day}
 
 	name := input.Name.Val(evt.Name)
 	if name == "" {
@@ -2467,6 +2486,9 @@ func (s *calendarService) mergeEventUpdate(ctx context.Context, cal *Calendar, e
 		return err
 	}
 	if err := s.validateEventRule(ctx, calendarID, campaignID, evt.ID, evt, recheckRule, v); err != nil {
+		return err
+	}
+	if err := mergeEventStatus(evt, was, input); err != nil {
 		return err
 	}
 	evt.Visibility = visibility
@@ -3299,17 +3321,29 @@ func dayOnOrBefore(y, m, d, cy, cm, cd int) bool {
 // ListDayWeather returns a year's (or one month's) day readings for v. A
 // viewer who cannot see dm_only content gets only days up to today, and no
 // lock state: future days reach players only as a blurred forecast
-// (ListWeatherForecast), never as the stored reading.
+// (ListWeatherForecast), never as the stored reading. They also get the
+// party's weather (place_weather.go): on a day the party was somewhere with
+// a climate of its own, that place's reading stands in for the world's. The
+// Director gets the stored world readings, which the weather calendar edits.
 func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
 		return nil, err
 	}
+	out, err := s.listWorldDays(ctx, cal, year, month, v)
+	if err != nil || v.SkipsPerUserRules() {
+		return out, err
+	}
+	return s.overlayParty(ctx, cal, out, year, month, v)
+}
+
+// listWorldDays is the calendar's own readings cut to what v may see.
+func (s *calendarService) listWorldDays(ctx context.Context, cal *Calendar, year, month int, v permissions.Viewer) ([]DayWeather, error) {
 	director := v.SkipsPerUserRules()
 	if !director && year > cal.CurrentYear {
 		return []DayWeather{}, nil
 	}
-	days, err := s.weatherRepo.ListDays(ctx, calendarID, year, month)
+	days, err := s.weatherRepo.ListDays(ctx, cal.ID, year, month)
 	if err != nil {
 		return nil, fmt.Errorf("list day weather: %w", err)
 	}
@@ -3447,6 +3481,12 @@ func (s *calendarService) ListWeatherForecast(ctx context.Context, calendarID, c
 		horizon = settings.ForecastDays
 	}
 
+	// The forecast follows the party: every day ahead is read from the
+	// region the party is in today, never from a mark still to come.
+	region, err := s.forecastRegion(ctx, cal, today)
+	if err != nil {
+		return nil, err
+	}
 	// A month's readings are fetched once however many forecast days land in it.
 	type monthKey struct{ year, month int }
 	byMonth := map[monthKey]map[int]DayWeather{}
@@ -3458,9 +3498,9 @@ func (s *calendarService) ListWeatherForecast(ctx context.Context, calendarID, c
 		key := monthKey{date.Year, date.Month}
 		days, seen := byMonth[key]
 		if !seen {
-			rows, err := s.weatherRepo.ListDays(ctx, calendarID, date.Year, date.Month)
+			rows, err := s.forecastRows(ctx, cal, region, date.Year, date.Month)
 			if err != nil {
-				return nil, fmt.Errorf("list day weather: %w", err)
+				return nil, err
 			}
 			days = make(map[int]DayWeather, len(rows))
 			for _, r := range rows {

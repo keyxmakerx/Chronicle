@@ -35,6 +35,7 @@ templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, en
 templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, layout *campaigns.DashboardLayout, entities []Entity, total int) {
 	<div id="entity-list">
 		@layouts.AppFrame() {
+		@fieldSwitchOffer(cc, et)
 		for _, row := range layout.Rows {
 			if row.Kind == "tiles" {
 				@categoryTileSection(row, cc, et, entities, total)
@@ -66,6 +67,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 		@layouts.AppOpening(categoryOpening(ctx, cc, et, total, opts)) {
 			<span>{ categoryCount(total) }</span>
 		}
+		@fieldSwitchOffer(cc, et)
 		<!-- Category description (editable rich text) -->
 		if et.Description != nil && *et.Description != "" {
 			<div class="text-sm text-fg-body -mt-3 mb-5 max-w-3xl">

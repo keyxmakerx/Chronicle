@@ -252,7 +252,7 @@
 .cal-v5 .settoday .strow2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:66%}
 .cal-v5 .settoday .fld input, .cal-v5 .settoday .fld select{height:32px;font-size:13px}
 .cal-v5 .settoday .stn{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
-.cal-v5 .settoday .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
+.cal-v5 .settoday .sterr, .cal-v5 .pop > .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
 .cal-v5 .settoday .sta{display:flex;gap:8px}
 @keyframes cal5-bump{from{opacity:.2;transform:translateY(5px)}to{opacity:1;transform:none}}
 .cal-v5 .dow{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:8px var(--gx) 0}
@@ -1290,6 +1290,24 @@
 .cal-v5 .wxtag.fctag{margin:0 0 0 8px;vertical-align:middle;color:var(--ink2)}
 .cal-v5 .wxf.fcf b{font-weight:650;color:var(--ink)}
 .cal-v5 .wxf.fcps small{margin-top:0}
+/* Weather by place (the Director's): one quiet line per place, the party's line marked by a left rule, not a colour.
+   Name and reading share a row and wrap under each other on a phone; no motion of its own. */
+.cal-v5 .wxplist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.cal-v5 .wxp{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:7px 10px;border-radius:8px;font:500 12px/1.35 var(--sans);color:var(--ink2);min-width:0}
+.cal-v5 .wxp.party{background:var(--paper2);box-shadow:inset 2px 0 0 var(--ink)}
+.cal-v5 .wxpn{display:flex;flex-direction:column;min-width:0}
+.cal-v5 .wxpn b{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .wxpn small{font-size:11px;color:var(--mut)}
+.cal-v5 .wxph{color:var(--ink2)}
+.cal-v5 .wxpr{display:inline-flex;align-items:center;gap:6px;color:var(--ink2);white-space:nowrap}
+.cal-v5 .wxpr.none{color:var(--mut)}
+.cal-v5 .wxpfoot{margin:6px 10px 0;font:500 11px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .wxmove{display:inline;padding:0;border:0;background:none;font:inherit;font-weight:600;color:var(--ink2);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--edge);cursor:pointer}
+.cal-v5 .wxmove:hover, .cal-v5 .wxmove:focus-visible{color:var(--ink);text-decoration-color:currentColor;outline:none}
+.cal-v5 .wxmove:focus-visible{box-shadow:0 0 0 2px var(--edge);border-radius:3px}
+.cal-v5 .wxf.wxat small{margin-top:0}
+.cal-v5 button.hubi{border:0;background:none;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.cal-v5 .pop > .sterr{padding:0 12px 10px}
 /* Edit mode's lock on a locked day, a small monochrome glyph at the mark's corner. */
 .cal-v5 .cwx .lk{position:absolute;right:-3px;top:-3px;font-size:8px;line-height:1;color:var(--mut)}
 /* A day's weather, shown while editing or generating; painted days carry their weather's tint. */
@@ -1455,6 +1473,10 @@
 /* ── The weather calendar: a compact month that holds only weather. ── */
 .cal-v5 .wxc{gap:12px}
 .cal-v5 .wxc-mon{display:flex;align-items:center;gap:6px}
+/* Which place's weather the panel holds; a place's climate reads, set on its page. */
+.cal-v5 .wxc-for select{font-weight:600}
+.cal-v5 .wxc-roll select:disabled{opacity:.7;cursor:default}
+.cal-v5 .wxc-climn{font:500 11px/1.3 var(--sans);color:var(--mut)}
 .cal-v5 .wxc-mon h3{margin:0;flex:1;min-width:0;font:500 22px/1.1 var(--serif);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .wxc-mon h3 span{color:var(--mut)}
 .cal-v5 .wxc-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);transition:background var(--dur-micro,120ms) var(--ease),color var(--dur-micro,120ms) var(--ease)}
@@ -2602,3 +2624,85 @@ html[data-motion="off"] .cal-v5 .yt-tk.kept::before, html[data-motion="off"] .ca
 }
 /* Keep and the tools that load the generator hold still while they work. */
 .cal-v5 .yt-word[aria-busy="true"], .cal-v5 .yt-working .btn:disabled{opacity:.55}
+/* What became of an event. Happened and called off borrow the calendar's
+   own green and red; a moved event's marks are dashed, like a draft, since
+   the event is no longer there. A called-off event stays on its day, struck
+   through and faded, so the day still shows what was meant to happen. */
+.cal-v5 .evst{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:var(--shape-r-tag,99px);font:600 11px/1 var(--sans);white-space:nowrap;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .evst i{font-size:9.5px}
+.cal-v5 .evst.happened{color:var(--free);box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--free) 45%,transparent);background:color-mix(in oklch,var(--free) 9%,transparent)}
+.cal-v5 .evst.called_off{color:var(--off);box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--off) 45%,transparent);background:color-mix(in oklch,var(--off) 8%,transparent)}
+.cal-v5 .evst.moved{box-shadow:none;border:1px dashed var(--mut)}
+.cal-v5 .mk.off{opacity:.45;background:linear-gradient(to top right,transparent calc(50% - 1px),currentColor calc(50% - 1px),currentColor calc(50% + 1px),transparent calc(50% + 1px))}
+.cal-v5 .mk.moved{opacity:.6;outline:1.5px dashed currentColor;outline-offset:-2px}
+.cal-v5 .evd.off .qt0{text-decoration:line-through;color:var(--mut)}
+.cal-v5 .evd.off>*:not(.acts){opacity:.62}
+.cal-v5 .evd.movedfrom{box-shadow:none;border:1px dashed var(--edge);opacity:.75}
+.cal-v5 .evd.movedfrom .qt0{color:var(--ink2);font-weight:550}
+.cal-v5 .evm.evwhy{color:var(--ink2);font-style:italic}
+/* The event's card: its state, the line, and the quiet word that opens the change. */
+.cal-v5 .evout{margin-top:14px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.cal-v5 .evost{display:flex;flex-wrap:wrap;align-items:center;gap:6px 9px}
+.cal-v5 .evpl{font:500 11.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .evwh b{display:block;margin-bottom:3px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .evwh p{margin:0;font:450 13px/1.5 var(--sans);color:var(--ink);overflow-wrap:anywhere;white-space:pre-line}
+.cal-v5 .qword{font:600 12px/1.3 var(--sans);color:var(--color-accent-surface-1-ink,var(--ink2));padding:2px 0;border-radius:4px}
+.cal-v5 .qword:hover{text-decoration:underline;text-underline-offset:3px}
+.cal-v5 .qword:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .evoform{align-self:stretch;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:var(--shape-r-ctl,10px);background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .evochips, .cal-v5 .dpch{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .evochip, .cal-v5 .dpchip{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:var(--shape-r-ctl,9px);border:1px solid var(--edge);background:var(--paper);box-shadow:0 1px 1px oklch(0 0 0 / .05);font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap}
+.cal-v5 .evochip:hover, .cal-v5 .dpchip:hover{background:var(--paper2);color:var(--ink)}
+.cal-v5 .evochip[aria-pressed="true"], .cal-v5 .dpchip[aria-pressed="true"]{color:var(--ink);font-weight:650;border-color:transparent;box-shadow:inset 0 0 0 1.5px var(--ink);background:var(--paper)}
+.cal-v5 .evochip:focus-visible, .cal-v5 .dpchip:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .evomv{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1fr);gap:8px}
+.cal-v5 .evoform .sterr, .cal-v5 .dperr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
+.cal-v5 .evoform .sta{display:flex;gap:8px}
+/* Look mode reads; changing what became of an event is Edit's. */
+.cal-v5 .cal.decked:not(.editing) .evochg, .cal-v5 .cal.decked:not(.editing) .evoform{display:none}
+
+/* The sheet that asks once today moves past events. On a computer it hangs
+   under the today pill, inside the calendar, and grows out of it; on a
+   phone it is a drawer at the bottom edge. The scrim only dims: answering
+   is optional, so Not now, Escape or the close mark put it away, and a
+   stray press on the month does not throw the answers away. */
+.cal-v5 .dpscrim{position:absolute;inset:0;z-index:var(--z-popup,50);border-radius:inherit;background:var(--scrim);opacity:0}
+.cal-v5 .dpscrim.on{opacity:.6}
+.cal-v5 .dpsheet{position:absolute;z-index:var(--z-sheet,60);display:flex;flex-direction:column;background:var(--paper);color:var(--ink);border:1px solid var(--edge);border-radius:var(--shape-r-panel,14px);box-shadow:var(--shadow-l);overflow:hidden}
+.cal-v5 .dpsheet:focus{outline:none}
+.cal-v5 .dpgrip{display:none}
+.cal-v5 .dphead{display:flex;align-items:flex-start;gap:10px;padding:16px 16px 10px;border-bottom:1px solid var(--hair)}
+.cal-v5 .dphead>div{flex:1;min-width:0}
+.cal-v5 .dphead h2{margin:0;font:500 19px/1.2 var(--serif);color:var(--ink)}
+.cal-v5 .dphead h2:focus{outline:none}
+.cal-v5 .dphead p{margin:4px 0 0;font:500 12.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .dprows{list-style:none;margin:0;padding:4px 16px;overflow:auto;flex:1 1 auto;min-height:0;overscroll-behavior:contain}
+.cal-v5 .dprow{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:12px 0 13px}
+.cal-v5 .dprow+.dprow{border-top:1px solid var(--hair)}
+/* A Director-only event carries the calendar's amber "only you" mark and a leading edge. */
+.cal-v5 .dprow.dm::before{content:"";position:absolute;left:-16px;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--gold)}
+.cal-v5 .dphd{display:flex;align-items:baseline;gap:8px;width:100%;min-width:0}
+.cal-v5 .dphd b{flex:1;min-width:0;font:600 13.5px/1.3 var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .dponly{display:inline-flex;align-items:center;gap:4px;flex:none;padding:3px 6px;border-radius:var(--shape-r-tag,5px);background:var(--goldBg);color:var(--gold);font:650 9.5px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase}
+.cal-v5 .dponly i{font-size:9px}
+.cal-v5 .dpwhen{margin:-4px 0 0;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .dpmv{display:flex;flex-direction:column;gap:8px;width:100%}
+.cal-v5 .dpother{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1fr);gap:8px}
+.cal-v5 .dpln{width:100%}
+.cal-v5 .dpmore{margin:0;padding:8px 16px 0;font:500 12px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .dperr{padding:8px 16px 0}
+.cal-v5 .dpacts{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px 14px;border-top:1px solid var(--hair);background:var(--paper)}
+@media (max-width:600px){
+  .cal-v5 .dpscrim{position:fixed;border-radius:0}
+  .cal-v5 .dpsheet.phone{position:fixed;left:0;right:0;bottom:var(--bottom-bar,0px);max-height:calc(88vh - var(--bottom-bar,0px));max-height:calc(88dvh - var(--bottom-bar,0px));border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0}
+  .cal-v5 .dpsheet.phone .dpgrip{display:block;width:36px;height:4px;margin:8px auto 0;border-radius:2px;background:var(--edge)}
+  .cal-v5 .dpsheet.phone .dphead{padding-top:10px}
+  .cal-v5 .dpacts{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+  .cal-v5 .dpacts .btn{flex:1}
+}
+@media (pointer:coarse){
+  .cal-v5 .evochip, .cal-v5 .dpchip, .cal-v5 .dpacts .btn{min-height:44px}
+  .cal-v5 .dpch{gap:8px}
+  .cal-v5 .dpchip{flex:1;justify-content:center}
+  .cal-v5 .qword{min-height:44px;display:inline-flex;align-items:center}
+}

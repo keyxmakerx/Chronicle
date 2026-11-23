@@ -712,6 +712,23 @@
     return e.icon || e.kind_icon || '●';
   }
 
+  // What became of an event (the server's EventStatus*). An event nobody
+  // answered is planned, and reads as happened once its day has passed, so
+  // planned draws nothing new. Every state is a word and a mark, never a
+  // colour alone.
+  var STATUS_WORD = { happened: 'Happened', moved: 'Moved', called_off: 'Called off' };
+  var STATUS_ICON = { happened: 'fa-check', moved: 'fa-arrow-right', called_off: 'fa-xmark' };
+  function evStatus(e) { return (e && e.status) || 'planned'; }
+  function movedFromOf(e) {
+    if (!e || evStatus(e) !== 'moved' || e.moved_from_year == null || e.moved_from_month == null || e.moved_from_day == null) return null;
+    return { y: e.moved_from_year, m: e.moved_from_month, d: e.moved_from_day };
+  }
+  function statusPillHTML(e, tail) {
+    var st = evStatus(e);
+    if (!STATUS_WORD[st]) return '';
+    return '<span class="evst ' + st + '"><i class="fa-solid ' + STATUS_ICON[st] + '" aria-hidden="true"></i>' + esc(STATUS_WORD[st] + (tail || '')) + '</span>';
+  }
+
   // An icon is stored either as a short glyph (an emoji, as the default
   // kinds use) or as a Font Awesome class name, which imports and the AI
   // page write. A class name printed as text shows as "fa-scroll", so it
@@ -834,6 +851,61 @@
       (sub ? '<small>' + esc(sub) + '</small>' : '') +
       (future ? '<span class="wxtag">Players see this on the day</span>' : '') +
       '</span></div>';
+  }
+
+  // Weather by place. A place with a climate of its own on its page keeps
+  // its own weather; the party's marks say whose weather they have each day.
+  // The Director reads every place's line; a player's day weather already
+  // arrives as the party's, so these helpers are the Director's.
+
+  // markOnOrBefore says a party mark applies on day (y, m, d).
+  function markOnOrBefore(mk, y, m, d) {
+    return mk.year < y || (mk.year === y && (mk.month < m || (mk.month === m && mk.day <= d)));
+  }
+
+  // partyMarkAt is the mark in force on a day (the latest on or before it),
+  // or null before the first. Marks arrive in date order.
+  function partyMarkAt(marks, y, m, d) {
+    var at = null;
+    (marks || []).forEach(function (mk) { if (markOnOrBefore(mk, y, m, d)) at = mk; });
+    return at;
+  }
+
+  // placeRowsFor is the day's "Weather by place": each place with a climate
+  // of its own, then everywhere else with the world's reading. Empty when
+  // no place has one, so a campaign that never sets a climate sees no change.
+  function placeRowsFor(pw, worldReading, y, m, d) {
+    if (!pw || !pw.places || !pw.places.length) return [];
+    var at = partyMarkAt(pw.party, y, m, d), region = (at && at.region_id) || '', key = m + '_' + d;
+    var rows = pw.places.map(function (p) {
+      return { id: p.id, name: p.name, climate: p.climate_name || p.climate, here: region === p.id, reading: ((pw.byDay || {})[p.id] || {})[key] || null };
+    });
+    rows.push({ id: '', name: 'Everywhere else', climate: (pw.world && pw.world.name) || '', here: region === '', reading: worldReading || null });
+    return rows;
+  }
+
+  // The party's reading among the rows: what players see that day.
+  function partyRowReading(rows) {
+    for (var i = 0; i < rows.length; i++) if (rows[i].here) return rows[i].reading;
+    return null;
+  }
+
+  function placeRowHTML(r) {
+    var w = r.reading;
+    var reading = w ? '<span class="wxpr"><i class="fa-solid ' + weatherIcon(w) + '"' + weatherStyle(w) + ' aria-hidden="true"></i>' +
+      esc(weatherLabel(w)) + (w.temperature_celsius != null ? ' · ' + esc(String(w.temperature_celsius)) + '°' : '') + '</span>'
+      : '<span class="wxpr none">No weather yet</span>';
+    return '<li class="wxp' + (r.here ? ' party' : '') + '"><span class="wxpn"><b>' + esc(r.name) + '</b><small>' + esc(r.climate) +
+      (r.here ? ' · <span class="wxph">the party is here</span>' : '') + '</small></span>' + reading + '</li>';
+  }
+
+  // The Director's list on the day card, with the one control that moves
+  // the party, kept quiet: it changes what players see, so it is a word,
+  // not a button that competes with the day's own actions.
+  function placeListHTML(rows) {
+    if (!rows.length) return '';
+    return '<div class="sect">Weather by place</div><ul class="wxplist">' + rows.map(placeRowHTML).join('') + '</ul>' +
+      '<p class="wxpfoot">Players see only the party’s line. <button type="button" class="wxmove" data-party-move>Move the party</button></p>';
   }
 
   // Event category color: an event's own color falls back to its kind's.
@@ -1478,6 +1550,7 @@
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
       this.skyRailSrc = config.skyRailSrc; // calendar_sky_rail.js, loaded only for the owner's sky controls
       this.yearTrackSrc = config.yearTrackSrc; // calendar_year_track.js, loaded only when an editor opens Edit
+      this.outcomeSrc = config.outcomeSrc; // calendar_outcome.js: the day-passes sheet and the card's change form, loaded when first wanted
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -1495,6 +1568,7 @@
       this._audGen = 0; // bumped when it flips, so a read begun before is not cached
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
+      this.placeWxByYear = {}; // year -> places, party marks and each place's readings (the Director's)
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       this.rollsByMonth = {}; // 'y_m' -> {events, byEvent}, filled by fetchRolls
       this._gnPages = {}; // session id + "|" + date -> its recap, linked pages and entries
@@ -1555,6 +1629,7 @@
     },
 
     destroy: function (el) {
+      if (this._passes) this._passes.destroy();
       if (this.eraField) this.eraField.destroy();
       if (this._eraRO) this._eraRO.disconnect();
       // boot.js reuses this one object for every mount, so a remount must
@@ -2152,6 +2227,45 @@
           return byDay;
         })
         .catch(function () { return {}; });
+    },
+
+    // fetchPlaceWeather loads (and caches) the Director's weather by place
+    // for a year: the places with a climate of their own, the party's marks
+    // and each place's readings. Players never ask: their day weather is
+    // already the party's. Returns a Promise.
+    fetchPlaceWeather: function (y) {
+      var self = this;
+      if (!this.canAuthorDmOnly || !this.apiBase) return Promise.resolve(null);
+      if (this.placeWxByYear[y]) return Promise.resolve(this.placeWxByYear[y]);
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this.apiBase + '/weather/places?year=' + y)
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (pw) {
+          if (!pw) return null;
+          pw.byDay = {};
+          Object.keys(pw.days || {}).forEach(function (id) {
+            var by = pw.byDay[id] = {};
+            (pw.days[id] || []).forEach(function (w) { by[w.month + '_' + w.day] = w; });
+          });
+          if (gen === self._audGen) self.placeWxByYear[y] = pw;
+          return pw;
+        })
+        .catch(function () { return null; });
+    },
+
+    // refreshPlaceWeather drops every cached year (a party mark reaches
+    // forward across years) and reloads the one on screen.
+    refreshPlaceWeather: function () {
+      this.placeWxByYear = {};
+      var self = this;
+      return this.fetchPlaceWeather(this.view.y).then(function () { self.refreshWing(); });
+    },
+
+    // The rows of the day's "Weather by place", empty when no place has a
+    // climate of its own or this viewer is not the Director.
+    placeRowsOn: function (y, m, d) {
+      if (!this.canAuthorDmOnly) return [];
+      return placeRowsFor(this.placeWxByYear[y], this.weatherOnDay(y, m, d), y, m, d);
     },
 
     // The day's weather reading, or null. Today falls back to the calendar's
@@ -4806,6 +4920,16 @@
       return this._occurringOn(this.eventsFor(y, m), y, m, d);
     },
 
+    // The events moved away from (y,m,d): the month read brings them in
+    // even when their new day is in another month, so the day they were
+    // planned for keeps its dashed mark.
+    _movedFromOn: function (y, m, d) {
+      return this.eventsFor(y, m).filter(function (e) {
+        var f = movedFromOf(e);
+        return f && f.y === y && f.m === m && f.d === d;
+      });
+    },
+
     // The events of a list that touch (y,m,d). Shared by the saved events
     // and by a draft's marks (evPreview), so both follow one rule.
     _occurringOn: function (list, y, m, d) {
@@ -4955,10 +5079,12 @@
     _saveToday: function (d) {
       var self = this;
       var body = { name: this.cal.name, current_year: d.y, current_month: d.m, current_day: d.d, current_hour: d.h, current_minute: d.mi };
+      var was = { y: this.cal.current_year, m: this.cal.current_month, d: this.cal.current_day };
       return Chronicle.apiFetch(this.apiBase, { method: 'PUT', body: body })
         .then(function (resp) {
           if (!resp.ok) return resp.json().then(function (j) { return (j && j.message) || 'Could not set today.'; }, function () { return 'Could not set today.'; });
           Object.assign(self.cal, body);
+          self._askWhatBecame(was, { y: d.y, m: d.m, d: d.d });
           self._anchor = realAnchor(self.cal);
           self.nightsByMonth = {};
           self.renderToday(true);
@@ -4967,6 +5093,46 @@
           return '';
         })
         .catch(function () { return 'Could not reach Chronicle. Try again.'; });
+    },
+
+    // --------------------------------------------------------------
+    // When today moves forward past events, the calendar asks once what
+    // became of them (calendar_outcome.js, fetched the first time it is
+    // needed). Only the owner moves today, the calendar's settings can turn
+    // the question off, and a step back in time asks nothing.
+    // --------------------------------------------------------------
+    _askWhatBecame: function (from, to) {
+      var self = this, cal = this.cal;
+      if (cal.ask_when_day_passes === false || this._players || !this._canSetToday()) return;
+      if (CalDate.dayIndex(cal, to.y, to.m, to.d) <= CalDate.dayIndex(cal, from.y, from.m, from.d)) return;
+      this._withOutcome(function (O) {
+        if (self._passes) self._passes.destroy();
+        self._passes = O.open(self, from, to, self._passesKit());
+      });
+    },
+
+    // Runs fn with calendar_outcome.js once it has loaded; nothing without it.
+    _withOutcome: function (fn) {
+      var self = this;
+      if (Chronicle.calendarOutcome) { fn(Chronicle.calendarOutcome); return; }
+      if (!this.outcomeSrc) return;
+      (this._outcomeWait = this._outcomeWait || []).push(fn);
+      if (this._outcomeWait.length > 1) return;
+      var s = document.createElement('script');
+      s.src = this.outcomeSrc;
+      s.onload = function () {
+        var q = self._outcomeWait || [];
+        self._outcomeWait = null;
+        if (Chronicle.calendarOutcome && self.el.isConnected) q.forEach(function (f) { f(Chronicle.calendarOutcome); });
+      };
+      s.onerror = function () { self._outcomeWait = null; };
+      document.head.appendChild(s);
+    },
+
+    // What the sheet borrows from this file: the shared moves and words.
+    _passesKit: function () {
+      return { CalDate: CalDate, esc: esc, reducedMotion: reducedMotion, motionOff: motionOff, byKey: byKey,
+        isPhone: isPhone, openMs: function () { return tokenMs('--dur-standard', 200); }, closeMs: function () { return tokenMs('--dur-everyday-out', 80); } };
     },
 
     renderLegend: function () {
@@ -4984,7 +5150,7 @@
       if (this._strip && !this._rollIn && (this._strip.view.y !== this.view.y || this._strip.view.m !== this.view.m)) this._endRoll();
       this.renderHeader();
       var vy = this.view.y, vm = this.view.m;
-      Promise.all([this.fetchMonth(vy, vm).then(function () { return self.fetchRolls(vy, vm); }), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
+      Promise.all([this.fetchMonth(vy, vm).then(function () { return self.fetchRolls(vy, vm); }), this.fetchWeatherYear(this.view.y), this.fetchPlaceWeather(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
         this._pollsLoaded(), this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
         self._paintMonth();
         self.refreshFreeView();
@@ -5159,7 +5325,7 @@
     // noNights leaves game nights out, for the grid's cell, which draws
     // them on their own (_gnDiceHTML).
     _marksHTML: function (y, m, d, noNights) {
-      var evs = this._withPreview(y, m, d, this.eventsOnDay(y, m, d)), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
+      var evs = this._withPreview(y, m, d, this.eventsOnDay(y, m, d)).concat(this._movedFromOn(y, m, d)), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
       if (!evs.length && !nights.length && !polls.length) return '';
       var self = this;
       // Game nights come first, then the dates polls suggest: they are the
@@ -5175,7 +5341,12 @@
         var waits = !dirRing && self.canAuthorDmOnly && CalDate.waitsForItsDay(self.cal, e);
         if (waits) dirRing = ' wait';
         var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
-        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '') + (waits ? ' (players see it on the day)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
+        // A moved event keeps a dashed mark on the day it was planned for;
+        // a called-off one stays on its day, struck through and faded.
+        var from = movedFromOf(e), ghostOf = from && from.y === y && from.m === m && from.d === d;
+        var off = !ghostOf && evStatus(e) === 'called_off';
+        var note = skipped ? ' (skipped)' : ghostOf ? ', moved to ' + self._dateLabel(e.year, e.month, e.day) : off ? ' (called off)' : '';
+        return '<span class="mk' + (e._draft ? ' ghost' + (e._pin ? ' yt-pin' : '') : '') + dirRing + (skipped ? ' skip' : '') + (off ? ' off' : '') + (ghostOf ? ' moved' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + note + (waits ? ' (players see it on the day)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
@@ -5799,6 +5970,8 @@
         if (more) { self._planMore(more.closest('[data-plan-form]')); return; }
         if (self._gnHandleClick(e)) return;
         if (e.target.closest('[data-sky-day]')) { var sd = parseDayKey(self.wingFor); self.previewSky(sd.y, sd.m, sd.d); return; }
+        var mv = e.target.closest('[data-party-move]');
+        if (mv) { self.showPartyMove(mv); return; }
         var mr = e.target.closest('.mrow');
         if (mr) { self.mvMoonId = mr.dataset.moon; self.mvDay = self.wingFor; self.openMoonView(); return; }
         var evd = e.target.closest('.evd');
@@ -5832,6 +6005,7 @@
         if (e.target.closest('[data-gn-edit]')) { self._gnOpenEditor(self._findNight(self.evpEl.dataset.ev)); return; }
         if (self._gnExtraClick(e)) return;
         if (self._evPagesClick(e)) return;
+        if (self._evOutcomeClick(e)) return;
         if (self._gnRemindClick(e)) return;
         self._gnHandleClick(e);
       });
@@ -5859,7 +6033,10 @@
         if (rm) self._removePhaseEvent(rm.dataset.mvRemove, rm);
       });
       this.popEl.addEventListener('click', function (e) {
-        if (e.target.closest('[data-close]')) self.closePop();
+        if (e.target.closest('[data-close]')) { self.closePop(); return; }
+        var to = e.target.closest('[data-party-to]');
+        if (to) { self._moveParty(to.dataset.partyTo, false); return; }
+        if (e.target.closest('[data-party-clear]')) self._moveParty('', true);
       });
       this.popEl.addEventListener('submit', function (e) {
         var form = e.target.closest('[data-today-form]');
@@ -5929,6 +6106,7 @@
       this._escHandler = function (e) {
         if (e.key !== 'Escape') return;
         if (self._hideEraTip) self._hideEraTip(true);
+        if (self._passes && self._passes.isOpen()) { self._passes.notNow(); return; }
         if (self.waitOpen()) { self.closeWaiting({ refocus: true }); return; }
         if (self.gnListOpen()) { self.closeGnList({ refocus: true }); return; }
         if (self.plannerOpen()) { self.closePlanner(); return; }
@@ -6263,6 +6441,7 @@
           self.eventsByMonth = {};
           self.rollsByMonth = {};
           self.weatherByYear = {};
+          self.placeWxByYear = {};
           self.forecastByDay = {};
           self._forecastP = null;
           self._eventIndex = null;
@@ -6383,7 +6562,14 @@
       var isFuture = CalDate.dayIndex(cal, d.y, d.m, d.d) > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
       var reading = this.weatherOnDay(d.y, d.m, d.d), fc = this.forecastOn(d.y, d.m, d.d);
       var isForecast = !this.canAuthorDmOnly && isFuture && !reading && !!fc;
+      // With places, the head shows the party's line (what players see) and
+      // the scrolling leaf lists every place's.
+      var placeRows = this.placeRowsOn(d.y, d.m, d.d);
+      if (placeRows.length) reading = partyRowReading(placeRows);
       var weatherFact = isForecast ? forecastFactHTML(fc) : weatherFactHTML(reading, isFuture) + (this.canAuthorDmOnly && fc ? playersSeeHTML(fc) : '');
+      if (!this.canAuthorDmOnly && reading && reading.place && !isForecast) {
+        weatherFact += '<div class="row wxf wxat"><span class="tt"><small>' + esc('The party is in ' + reading.place) + '</small></span></div>';
+      }
       var dmMoons = this.canAuthorDmOnly;
       var moonRows = (cal.moons || []).map(function (mo) {
         var abs = CalDate.dayIndex(cal, d.y, d.m, d.d);
@@ -6392,17 +6578,28 @@
         return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.describe(mo, abs)) + '</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
       }).join('');
 
-      var evs = this.eventsOnDay(d.y, d.m, d.d);
-      var evHTML = evs.length ? evs.map(function (e) {
+      var evs = this.eventsOnDay(d.y, d.m, d.d), gone = this._movedFromOn(d.y, d.m, d.d);
+      var evHTML = evs.length || gone.length ? evs.map(function (e) {
         var hl = highlightEventId && e.id === highlightEventId ? ' hl' : '';
         var time = e.all_day ? '' : (e.start_hour != null ? pad2(e.start_hour) + ':' + pad2(e.start_minute || 0) : '');
         var occ = CalDate.occurrenceOn(e, d.y, d.m, d.d) || {};
-        var note = occ.skipped ? 'Skipped. Players don’t see it.' : (occ.moved_from ? 'Moved from ' + self._dateLabel(occ.moved_from.year, occ.moved_from.month, occ.moved_from.day) : '');
-        return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '">' +
+        var from = movedFromOf(e), off = evStatus(e) === 'called_off';
+        var note = occ.skipped ? 'Skipped. Players don’t see it.' : (occ.moved_from ? 'Moved from ' + self._dateLabel(occ.moved_from.year, occ.moved_from.month, occ.moved_from.day) :
+          from ? 'planned for ' + self._dateLabel(from.y, from.m, from.d) : '');
+        var pill = occ.skipped ? '' : statusPillHTML(e);
+        return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + (off ? ' off' : '') + '" data-ev="' + esc(e.id) + '">' +
           '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + iconHTML(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
-          (time || note ? '<div class="evm">' + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
+          (time || note || pill ? '<div class="evm">' + pill + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
+          (e.outcome && !occ.skipped ? '<div class="evm evwhy">' + esc(e.outcome) + '</div>' : '') +
           (occ.skipped ? '' : self._rollLineHTML(self.rollOn(e.id, d.y, d.m, d.d))) +
           '</div>';
+      }).join('') + gone.map(function (e) {
+        // The day a moved event was planned for: a dashed row that says
+        // where it went, and opens the event like any other row.
+        var hl = highlightEventId && e.id === highlightEventId ? ' hl' : '';
+        return '<div class="evd go movedfrom' + hl + '" data-ev="' + esc(e.id) + '">' +
+          '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + iconHTML(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
+          '<div class="evm"><span>Moved to ' + esc(self._dateLabel(e.year, e.month, e.day)) + '</span></div></div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
       var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
       var gnHTML = nights.length ? '<div class="sect">' + (nights.length > 1 ? nights.length + ' game nights' : 'Game night') + '</div>' +
@@ -6410,7 +6607,7 @@
       var polls = this.pollsOnDay(d.y, d.m, d.d);
       gnHTML += polls.length ? '<div class="sect">' + (polls.length > 1 ? polls.length + ' date polls' : 'Date poll') + '</div>' +
         '<div class="evlist">' + polls.map(function (x) { return self._pollBoxHTML(x.p, x.o, highlightEventId); }).join('') + '</div>' : '';
-      if ((nights.length || polls.length) && !evs.length) evHTML = '';
+      if ((nights.length || polls.length) && !evs.length && !gone.length) evHTML = '';
 
       // Two leaves: the head (the date and the weather), which stays in
       // view, and the rest, which scrolls on a desktop: the day's events
@@ -6422,8 +6619,8 @@
           (this.canAuthorDmOnly && this.skyDock ? '<button type="button" class="skyday" data-sky-day><i class="fa-solid fa-cloud-sun"></i>See this day’s sky</button>' : '') +
           (weatherFact ? '<div class="facts">' + weatherFact + '</div>' : '') + '</div>' +
         '</div>' +
-        '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML + this._freeWingHTML(d) +
-          (evHTML ? '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
+        '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + placeListHTML(placeRows) + gnHTML + this._freeWingHTML(d) +
+          (evHTML ? '<div class="sect">' + (evs.length + gone.length > 1 ? (evs.length + gone.length) + ' events' : 'Events') + '</div>' +
           '<div class="evlist">' + evHTML + '</div>' : '') +
           this._gnAddHTML(d) + (this.canEdit ? this._addRowHTML() : '') +
           (moonRows ? '<div class="sect">' + (moonCount > 1 ? 'Moons' : 'Moon') + '</div><div class="moonsec">' + moonRows + '</div>' : '') +
@@ -6464,9 +6661,11 @@
         if (!ev) return;
         var time = ev.all_day ? 'All day' : (ev.start_hour != null ? pad2(ev.start_hour) + ':' + pad2(ev.start_minute || 0) : '');
         var brief = (ev.description && !ev.description_html) ? ev.description : '';
+        var pill = statusPillHTML(ev, evStatus(ev) === 'moved' ? ', ' + this._dateLabel(ev.year, ev.month, ev.day) : '');
         html = '<div class="gh"><b>' + esc(ev.name) + '</b></div>' +
           (time ? '<div class="gw">' + esc(time) + '</div>' : '') +
-          (brief ? '<div class="gb">' + esc(brief) + '</div>' : '');
+          (pill ? '<div class="gw">' + pill + '</div>' : '') +
+          (ev.outcome ? '<div class="gb">' + esc(ev.outcome) + '</div>' : brief ? '<div class="gb">' + esc(brief) + '</div>' : '');
       }
       this.hcEl.innerHTML = html;
       var pr = this.calEl.getBoundingClientRect(), r = mk.getBoundingClientRect();
@@ -6633,10 +6832,47 @@
         '<div class="epb">' +
           '<h3 class="ept">' + esc(ev.name) + (ev.kind_name ? ' <span class="dirnote">' + esc(ev.kind_name) + '</span>' : '') + '</h3>' +
           '<div class="espan">' + esc(label) + (time ? ' · ' + esc(time) : '') + ' ' + visBadge + '</div>' +
+          this._evOutcomeHTML(ev) +
           (body ? '<div class="notes">' + body + '</div>' : '') +
           (day ? this._rollFactsHTML(this.rollOn(ev.id, day.y, day.m, day.d)) : '') +
           recur + entity + this._evPagesBox(ev.id) +
         '<!--EVP_FOOT--></div></div>';
+    },
+
+    // --------------------------------------------------------------
+    // What became of an event, in its card: the status, the day a moved
+    // event was planned for, and the line on what happened, for everyone
+    // who can see the event. Someone who may change events gets a quiet
+    // word that folds open the four states in place; like every other
+    // write in the card it waits for Edit when the deck is on Look. A
+    // repeating event answers each date with "Skip this one" and "Move
+    // this one" instead, so it has none of this.
+    // --------------------------------------------------------------
+    _evOutcomeHTML: function (ev) {
+      var st = evStatus(ev), from = movedFromOf(ev), repeating = !!(ev.is_recurring && ev.recurrence_type);
+      var can = this.canEdit && !this._players && !repeating;
+      var shown = st !== 'planned' || !!ev.outcome;
+      if (!shown && !can) return '';
+      var html = '<div class="evout" data-evout="' + esc(ev.id) + '">';
+      if (shown) {
+        var pill = statusPillHTML(ev, st === 'moved' ? ', ' + this._dateLabel(ev.year, ev.month, ev.day) : '');
+        if (pill || from) html += '<div class="evost">' + pill + (from ? '<span class="evpl">planned for ' + esc(this._dateLabel(from.y, from.m, from.d)) + '</span>' : '') + '</div>';
+        if (ev.outcome) html += '<div class="evwh"><b>What happened</b><p>' + esc(ev.outcome) + '</p></div>';
+      }
+      if (can) {
+        html += '<button type="button" class="qword evochg" data-evout-open aria-expanded="false">' + (shown ? 'Change what became of it' : 'Say what became of it') + '</button>' +
+          '<div class="evoform" data-evout-form hidden></div>';
+      }
+      return html + '</div>';
+    },
+
+    // Clicks inside the card's outcome part: the change form lives in
+    // calendar_outcome.js, fetched the first time it is wanted.
+    _evOutcomeClick: function (e) {
+      var self = this, box = e.target.closest('[data-evout]'), t = e.target;
+      if (!box || !t.closest('button')) return !!box;
+      this._withOutcome(function (O) { if (box.isConnected) O.cardClick(self, box, t, self._passesKit()); });
+      return true;
     },
 
     // --------------------------------------------------------------
@@ -6888,6 +7124,48 @@
     },
 
     // --------------------------------------------------------------
+    // Move the party: the Director says where the party is from the open
+    // day on. Their weather, and what players see, follows from that day
+    // until the next mark. The list holds the places with a climate of their
+    // own; a town inside one shares its weather, so naming the region says
+    // the same thing.
+    // --------------------------------------------------------------
+    showPartyMove: function (btn) {
+      var d = parseDayKey(this.wingFor), pw = this.placeWxByYear[d.y];
+      if (!d || !pw) return;
+      this._popBtn = btn;
+      this._partyDay = d;
+      var at = partyMarkAt(pw.party, d.y, d.m, d.d), region = (at && at.region_id) || '';
+      var onDay = at && at.year === d.y && at.month === d.m && at.day === d.d;
+      var item = function (id, name, sub) {
+        return '<button type="button" class="hubi" data-party-to="' + esc(id) + '"' + (region === id ? ' aria-current="true"' : '') + '>' +
+          '<span class="hn">' + esc(name) + '</span><span class="hs">' + esc(sub) + '</span></button>';
+      };
+      this.popEl.innerHTML = '<div class="crease"><span>Where the party is from ' + esc(this._dateLabel(d.y, d.m, d.d)) + '</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
+        '<div class="list">' + pw.places.map(function (p) { return item(p.id, p.name, p.climate_name || p.climate); }).join('') +
+        item('', 'Everywhere else', 'The world’s climate' + (pw.world && pw.world.name ? ' · ' + pw.world.name : '')) +
+        (onDay ? '<button type="button" class="hubi" data-party-clear><span class="hn">Take back this day’s move</span><span class="hs">Where they were before applies again</span></button>' : '') +
+        '</div><p class="sterr" role="alert" hidden></p>';
+      growOpen(this.popEl, btn, this.calEl);
+      this._updateScrim();
+    },
+
+    // _moveParty stores the move (or takes it back) and redraws the card.
+    _moveParty: function (placeID, clear) {
+      var self = this, d = this._partyDay;
+      if (!d) return;
+      var body = { year: d.y, month: d.m, day: d.d };
+      if (!clear) body.place_id = placeID;
+      Chronicle.apiFetch(this.apiBase + '/weather/party' + (clear ? '/clear' : ''), { method: 'POST', body: body })
+        .then(function (resp) {
+          if (resp.ok) { self.closePop(); return self.refreshPlaceWeather(); }
+          var err = self.popEl.querySelector('.sterr');
+          if (err) { err.textContent = 'Could not move the party. Try again.'; err.hidden = false; }
+        })
+        .catch(function () { self.say('Could not move the party. Try again.'); });
+    },
+
+    // --------------------------------------------------------------
     // Calendar switcher (hub popover)
     // --------------------------------------------------------------
     toggleHub: function () {
@@ -6956,6 +7234,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon, awayStretches: awayStretches, gnFeedURL: gnFeedURL };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon, partyMarkAt: partyMarkAt, placeRowsFor: placeRowsFor, partyRowReading: partyRowReading, placeListHTML: placeListHTML, awayStretches: awayStretches, gnFeedURL: gnFeedURL };
   }
 })();

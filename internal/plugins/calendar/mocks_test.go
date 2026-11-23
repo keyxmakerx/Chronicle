@@ -20,6 +20,7 @@ type fakeCalendarRepo struct {
 	getDefaultFn       func(ctx context.Context, campaignID string) (*Calendar, error)
 	listByCampaignFn   func(ctx context.Context, campaignID string) ([]Calendar, error)
 	setDefaultFn       func(ctx context.Context, campaignID, calendarID string) error
+	setAskFn           func(ctx context.Context, calendarID string, ask bool) error
 	updateFn           func(ctx context.Context, cal *Calendar) error
 	deleteFn           func(ctx context.Context, id string) error
 	updateVisibilityFn func(ctx context.Context, calendarID, visibility string, visRules *string) error
@@ -79,6 +80,12 @@ func (m *fakeCalendarRepo) ListByCampaignID(ctx context.Context, campaignID stri
 func (m *fakeCalendarRepo) SetDefault(ctx context.Context, campaignID, calendarID string) error {
 	if m.setDefaultFn != nil {
 		return m.setDefaultFn(ctx, campaignID, calendarID)
+	}
+	return nil
+}
+func (m *fakeCalendarRepo) SetAskWhenDayPasses(ctx context.Context, calendarID string, ask bool) error {
+	if m.setAskFn != nil {
+		return m.setAskFn(ctx, calendarID, ask)
 	}
 	return nil
 }

@@ -3062,6 +3062,14 @@ func (a *App) RegisterRoutes() {
 	entityRepo := entities.NewEntityRepository(a.DB)
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
+	// A game system's one-time field switch (Draw Steel's treasure fields for
+	// Items). The offers come from the enabled system, which is resolved once
+	// the system handler exists further down.
+	fieldSwitchOffers := &fieldSwitchOfferSource{types: entityService}
+	fieldSwitchService := entities.NewFieldSwitchService(entities.NewFieldSwitchRepository(a.DB), entityTypeRepo, fieldSwitchOffers.offer)
+	fieldSwitchService.SetSearchReindex(func(ctx context.Context, typeID int) (int, error) {
+		return entities.ReindexSearchText(ctx, entityRepo, entityTypeRepo, typeID)
+	})
 
 	// Pages saved before search_text stopped indexing what not every reader
 	// may see (GM-only text, mention names, restricted field values) still
@@ -3152,6 +3160,9 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
 	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
 	campaignHandler.SetCustomizeDrafts(customizeDrafts)
+	// Publishing a draft's field list would undo a field switch, so the
+	// switch waits until that draft is published or discarded.
+	fieldSwitchService.SetDraft(draftReplacesFields(customizeDrafts))
 	// After the look, which NewHandler registers first: a category's menu
 	// setting is applied on top of the saved sidebar.
 	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
@@ -3214,6 +3225,7 @@ func (a *App) RegisterRoutes() {
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
+	entityHandler.SetFieldSwitch(fieldSwitchService)
 	// A practice hero's table has its own plugin migration, so it is gated on
 	// that slug alone; when it did not apply the repository is nil and every
 	// hook skips it, and the Standing block is unaffected.
@@ -3566,7 +3578,7 @@ func (a *App) RegisterRoutes() {
 	if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
-	addonService.SetPresetApplier(newPresetApplier(entityService))
+	addonService.SetPresetApplier(newPresetApplier(entityService).withFieldSwitch(fieldSwitchService))
 	// Register per-extension settings/onboarding providers (the SetupProvider
 	// framework). The player-character provider drives the claiming addon's
 	// settings page: detect existing PCs / sub-categories / the duplicate-category
@@ -3683,7 +3695,7 @@ func (a *App) RegisterRoutes() {
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
-		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
+		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService).withFieldSwitch(fieldSwitchService), presetsBefore)
 	})
 	// A removed or archived system package stops being served now, and its
 	// page renderers go with it.
@@ -4783,6 +4795,7 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetHeroChanges(heroChangeSvc)
+	syncAPIHandler.SetItemFieldsGate(switchedCategoryGate(entityService, fieldSwitchService))
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
 	syncAPIHandler.SetFolderLister(folderService)
 	if urlSigner != nil {
@@ -5830,7 +5843,7 @@ func (a *App) RegisterRoutes() {
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService, layouts: pageLayoutService})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService, layouts: pageLayoutService, fieldSwitch: fieldSwitchService})
 	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
@@ -5839,7 +5852,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService, layouts: pageLayoutService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService, layouts: pageLayoutService, fieldSwitch: fieldSwitchService})
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
@@ -6062,6 +6075,7 @@ func (a *App) RegisterRoutes() {
 	// Custom system manager stores per-campaign uploads under media/systems/.
 	campaignSystemMgr := systems.NewCampaignSystemManager(filepath.Join(a.Config.Upload.MediaPath, "systems"))
 	systemHandler := systems.NewSystemHandler()
+	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
@@ -6843,6 +6857,28 @@ func (a *App) RegisterRoutes() {
 		fc.SetFieldCalendar(fieldDates)
 	}
 
+	// A place's climate is a field on its page; the calendar keeps weather
+	// for each place that has one, reaching pages only through the entities
+	// service. Once per site, every Location category gets the Climate field
+	// (climate_fields.go). Best-effort, never blocks startup.
+	if pw, ok := calendarService.(interface {
+		SetPlaceWeather(calendar.PlaceWeatherRepository, calendar.PlaceDirectory)
+	}); ok {
+		pw.SetPlaceWeather(calendar.NewPlaceWeatherRepository(a.DB), placeDirectoryAdapter{pages: entityService})
+	}
+	fieldClimates := fieldClimateAdapter{svc: calendarService, addons: addonService}
+	entityHandler.SetFieldClimate(fieldClimates)
+	if fc, ok := entityService.(interface{ SetFieldClimate(entities.FieldClimate) }); ok {
+		fc.SetFieldClimate(fieldClimates)
+	}
+	if ec, ok := entityService.(climateFieldEnsurer); ok {
+		if n, err := addClimateFieldsOnce(context.Background(), settingsRepo, ec); err != nil {
+			slog.Error("entities: climate field reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("entities: climate field reconcile added fields", slog.Int("categories", n))
+		}
+	}
+
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
 	// so it loads first in each list (ADR-063).
@@ -7350,6 +7386,10 @@ func (a *App) RegisterRoutes() {
 		Decks:           aiDecks,
 		Timelines:       aiTimelines,
 		LookDrafts:      customizeDrafts,
+		FieldSwitch: aiFieldSwitchAdapter{
+			owner:  aiMenuAdapter{campaigns: campaignService, types: entityService},
+			offers: fieldSwitchOffers, svc: fieldSwitchService,
+		},
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

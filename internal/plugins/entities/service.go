@@ -71,6 +71,12 @@ type EntityService interface {
 
 	// Hierarchy
 	GetChildren(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+
+	// Climates (field_climate.go). ClimateRegion is the page whose climate
+	// covers a page and that climate; ClimatePlaces is every page holding a
+	// climate of its own. Both read unfiltered, for the calendar's weather.
+	ClimateRegion(ctx context.Context, e *Entity) (*Entity, string, error)
+	ClimatePlaces(ctx context.Context, campaignID string) ([]PlaceClimate, error)
 	GetAncestors(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, parentNodeID *string, sortOrder int) error
 	// ReorderEntityType densely re-sequences a sub-category type's position
@@ -448,6 +454,7 @@ type entityService struct {
 	fieldObserver FieldChangeObserver
 	fieldWords    FieldWords           // nil: rule fields are not checked against rules
 	fieldCalendar FieldCalendar        // nil: date fields are checked for form only
+	fieldClimate  FieldClimate         // nil: climate fields are not checked against the calendar's list
 	pageLayouts   PageLayoutService    // nil: each category has only its main layout
 	hooks         EntityHookDispatcher // nil: extension plugins are not told
 }

@@ -352,6 +352,7 @@ templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken str
 			}
 		</div>
 
+		@fieldSwitchSettings(cc, et)
 		<!-- Mount the entity-type-editor widget for field management -->
 		<div
 			data-widget="entity-type-editor"

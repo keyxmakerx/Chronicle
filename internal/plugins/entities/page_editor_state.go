@@ -86,6 +86,8 @@ func exampleFieldValue(f FieldDefinition) string {
 		return "Worked out"
 	case "calendar_date":
 		return "14 Frost, 1492"
+	case FieldTypeClimate:
+		return "Cold coast"
 	}
 	return "Example"
 }

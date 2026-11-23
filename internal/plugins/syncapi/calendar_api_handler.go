@@ -237,11 +237,12 @@ func (h *CalendarAPIHandler) GetCurrentDate(c *echo.Context) error {
 }
 
 // todayWeather is today's reading as the calendar page and DM screen show
-// it: the day's own reading, else the calendar's single stored reading. The
+// it: the party's reading for the day (calendar.PartyDays), else the
+// calendar's single stored reading. The
 // day reading is shaped like Weather so the module reads one form either way.
 // A failed day read falls back rather than failing the date read.
 func (h *CalendarAPIHandler) todayWeather(c *echo.Context, cal *calendar.Calendar, v permissions.Viewer) any {
-	days, err := h.calendarSvc.ListDayWeather(c.Request().Context(), cal.ID, cal.CampaignID, cal.CurrentYear, cal.CurrentMonth, v)
+	days, err := calendar.PartyDays(c.Request().Context(), h.calendarSvc, cal.ID, cal.CampaignID, cal.CurrentYear, cal.CurrentMonth, v)
 	if err == nil {
 		for _, d := range days {
 			if d.Day == cal.CurrentDay {

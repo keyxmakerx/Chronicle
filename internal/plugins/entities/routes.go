@@ -201,6 +201,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entity-types/:etid/attributes-fragment", h.EntityTypeAttributesFragment, campaigns.RequireRole(campaigns.RoleOwner))
 	// Customize's category workspace: the tabs that still use today's editors.
 	cg.GET("/entity-types/:etid/customize-tab/:tab", h.EntityTypeCustomizeTab, campaigns.RequireRole(campaigns.RoleOwner))
+	// A game system's one-time field switch for a category (field_switch.go).
+	cg.POST("/entity-types/:etid/field-switch", h.AcceptFieldSwitch, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/entity-types/:etid/field-switch/back", h.SwitchFieldsBack, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/entity-types/:etid/field-switch/dismiss", h.DismissFieldSwitch, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Block types API — returns available block types filtered by campaign addons.
 	cg.GET("/entity-types/block-types", h.BlockTypesAPI, campaigns.RequireRole(campaigns.RoleOwner))

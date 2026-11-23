@@ -189,6 +189,14 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 			}
 		}
 		return nil, fmt.Sprintf("%q is not one of: %s.", s, strings.Join(def.Options, ", "))
+	case entities.FieldTypeClimate:
+		// Climate ids are lower-case words joined by hyphens; the page save
+		// refuses one the calendar doesn't list, naming the ones it does.
+		s, ok := scalarText(v)
+		if !ok {
+			return nil, "needs a climate id, such as desert or cold-coast."
+		}
+		return strings.Join(strings.Fields(strings.ToLower(s)), "-"), ""
 	case "url":
 		s, ok := scalarText(v)
 		if !ok {

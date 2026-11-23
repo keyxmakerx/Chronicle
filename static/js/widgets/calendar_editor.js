@@ -880,23 +880,45 @@
     return Object.keys(seen).map(Number);
   }
 
-  CalendarEditor.prototype._snapshot = function (dates) {
+  // daysPath is where a place's day weather lives: the world's, or the
+  // place's own when place is set (a place with a climate on its page).
+  function daysPath(place) {
+    return place ? '/weather/places/' + encodeURIComponent(place) + '/days' : '/weather/days';
+  }
+
+  // storedYear is a year's readings for place ('' for the world's), or
+  // undefined while it has not loaded.
+  function storedYear(view, place, y) {
+    if (!place) return view.weatherByYear[y];
+    var pw = view.placeWxByYear && view.placeWxByYear[y];
+    return pw && pw.byDay ? (pw.byDay[place] || {}) : undefined;
+  }
+
+  CalendarEditor.prototype._snapshot = function (dates, place) {
     var view = this.view, years = yearsOf(dates);
-    return Promise.all(years.map(function (y) { return view.fetchWeatherYear(y); })).then(function () {
-      years.forEach(function (y) { if (!view.weatherByYear[y]) throw new Error('weather not loaded'); });
-      return dates.map(function (d) {
-        var w = (view.weatherByYear[d.year] || {})[d.month + '_' + d.day];
+    return Promise.all(years.map(function (y) { return place ? view.fetchPlaceWeather(y) : view.fetchWeatherYear(y); })).then(function () {
+      years.forEach(function (y) { if (!storedYear(view, place, y)) throw new Error('weather not loaded'); });
+      var snap = dates.map(function (d) {
+        var w = (storedYear(view, place, d.year) || {})[d.month + '_' + d.day];
         return { date: d, prev: w ? dayInput(w) : null, locked: !!(w && w.locked) };
       });
+      snap.place = place || '';
+      return snap;
     });
   };
 
   // _refreshWeather reloads the touched years and then redraws, so the grid
   // shows what the server actually holds without flashing empty meanwhile.
-  CalendarEditor.prototype._refreshWeather = function (dates) {
+  CalendarEditor.prototype._refreshWeather = function (dates, place) {
     var view = this.view, self = this;
     // The Director's "Players see" line follows the saved weather.
     if (view.canAuthorDmOnly && view.fetchForecast) view.fetchForecast(true);
+    if (place) {
+      return view.refreshPlaceWeather().then(function () {
+        view.renderMonth();
+        self._renderBar();
+      });
+    }
     return Promise.all(yearsOf(dates).map(function (y) {
       var old = view.weatherByYear[y];
       delete view.weatherByYear[y];
@@ -975,17 +997,17 @@
     var self = this, view = this.view, snap = this._paintUndo;
     if (!snap || this._paintBusy) return;
     this._paintBusy = true;
-    var dates = snap.map(function (s) { return s.date; });
+    var dates = snap.map(function (s) { return s.date; }), path = daysPath(snap.place);
     var restore = snap.filter(function (s) { return s.prev; }).map(function (s) { return s.prev; });
     var call = function (path, method, list, extra) {
       return weatherBatches(function (u, o) { return Chronicle.apiFetch(u, o); }, view.apiBase, path, method, list, extra);
     };
-    call('/weather/days/clear', 'POST', dates).then(function () {
-      return call('/weather/days', 'PUT', restore);
+    call(path + '/clear', 'POST', dates).then(function () {
+      return call(path, 'PUT', restore);
     }).then(function () {
       // Painting over a locked day clears its lock; Undo puts that back too.
       var relock = snap.filter(function (s) { return s.prev && s.locked; }).map(function (s) { return s.date; });
-      return call('/weather/days/lock', 'POST', relock, { locked: true });
+      return call(path + '/lock', 'POST', relock, { locked: true });
     }).then(function () {
       self._paintUndo = null;
       view.say('Undone.');
@@ -993,7 +1015,7 @@
       view.say("Couldn't undo. The calendar shows what is saved now.");
     }).then(function () {
       self._paintBusy = false;
-      self._refreshWeather(dates);
+      self._refreshWeather(dates, snap.place);
     });
   };
 
@@ -1012,10 +1034,12 @@
     this._closeShiftTray();
     var fail = function () { view.say('The weather generator could not load. Check your connection and try again.'); };
     loadEngine(view.engineSrc, function () {
-      Promise.all([view.fetchWeatherYear(y), view.fetchMonth(y, m), Chronicle.calendarWeatherSettings(view)]).then(function (got) {
+      Promise.all([view.fetchWeatherYear(y), view.fetchMonth(y, m), Chronicle.calendarWeatherSettings(view), view.fetchPlaceWeather ? view.fetchPlaceWeather(y) : null]).then(function (got) {
         if (!view.weatherByYear[y]) { view.say("Couldn't load the weather already on those days. Try again."); return; }
+        // Places with a climate of their own each have weather to paint.
+        var pw = got[3];
         Chronicle.calendarWeatherSheet.open(view, {
-          year: y, month: m, chosen: chosen, settings: got[2],
+          year: y, month: m, chosen: chosen, settings: got[2], places: (pw && pw.places) || [],
           save: function (changes) { return self._saveWeather(changes); }
         });
       });
@@ -1037,24 +1061,25 @@
     var call = function (path, method, list, extra) {
       return weatherBatches(function (u, o) { return Chronicle.apiFetch(u, o); }, view.apiBase, path, method, list, extra);
     };
+    var place = ch.place || '', path = daysPath(place);
     this._paintBusy = true;
     var snap = null;
-    return this._snapshot(dates).then(function (s) {
+    return this._snapshot(dates, place).then(function (s) {
       snap = s;
-      return call('/weather/days/clear', 'POST', ch.clear);
+      return call(path + '/clear', 'POST', ch.clear);
     }).then(function () {
-      return call('/weather/days', 'PUT', ch.put);
+      return call(path, 'PUT', ch.put);
     }).then(function () {
-      return call('/weather/days/lock', 'POST', ch.lock, { locked: true });
+      return call(path + '/lock', 'POST', ch.lock, { locked: true });
     }).then(function () {
-      return call('/weather/days/lock', 'POST', ch.unlock, { locked: false });
+      return call(path + '/lock', 'POST', ch.unlock, { locked: false });
     }).then(function () {
       self._paintUndo = snap;
-      self._refreshWeather(dates);
+      self._refreshWeather(dates, place);
       view.say('Saved the weather on ' + (dates.length === 1 ? '1 day' : dates.length + ' days') + '.', { label: 'Undo', run: function () { self._undoPaint(); } });
       return true;
     }).catch(function () {
-      if (snap) self._refreshWeather(dates);
+      if (snap) self._refreshWeather(dates, place);
       view.say(snap ? "Some of the weather couldn't be saved. The calendar shows what is saved now." : "Couldn't save the weather. Nothing changed.");
       return false;
     }).then(function (ok) {

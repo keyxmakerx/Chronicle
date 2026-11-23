@@ -104,6 +104,12 @@ type fakeCalendarSvc struct {
 	lockedTo   *bool
 	// noDefault makes GetDefaultCalendarForViewer report no calendar.
 	noDefault bool
+	// passedFrom/passedTo record the last ListPassedEvents; askSet the last
+	// SetAskWhenDayPasses.
+	passedFrom, passedTo DayDate
+	askSet               *bool
+	// lastUpdate is the last UpdateEvent's input, as the handler bound it.
+	lastUpdate UpdateEventInput
 }
 
 const secretCalendarID = "cal-secret"
@@ -143,6 +149,14 @@ func (f *fakeCalendarSvc) UpdateCalendar(context.Context, string, string, Update
 }
 func (f *fakeCalendarSvc) DeleteCalendar(context.Context, string, string) error     { return nil }
 func (f *fakeCalendarSvc) SetDefaultCalendar(context.Context, string, string) error { return nil }
+func (f *fakeCalendarSvc) ListPassedEvents(_ context.Context, _, _ string, from, to DayDate, v permissions.Viewer) (*PassedEvents, error) {
+	f.lastViewer, f.passedFrom, f.passedTo = v, from, to
+	return &PassedEvents{Events: []PassedEvent{{ID: "e1", Name: "Arrival", Year: from.Year, Month: from.Month, Day: from.Day}}}, nil
+}
+func (f *fakeCalendarSvc) SetAskWhenDayPasses(_ context.Context, _, _ string, ask bool) error {
+	f.askSet = &ask
+	return nil
+}
 
 func (f *fakeCalendarSvc) CreateEvent(_ context.Context, calendarID, campaignID string, input CreateEventInput) (*Event, error) {
 	return &Event{ID: "evt-new", CalendarID: calendarID, Name: input.Name}, nil
@@ -172,8 +186,8 @@ func (f *fakeCalendarSvc) ListUpcomingEvents(_ context.Context, calendarID, _ st
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
 }
-func (f *fakeCalendarSvc) UpdateEvent(_ context.Context, _, _, _ string, _ UpdateEventInput, v permissions.Viewer) error {
-	f.lastViewer = v
+func (f *fakeCalendarSvc) UpdateEvent(_ context.Context, _, _, _ string, in UpdateEventInput, v permissions.Viewer) error {
+	f.lastViewer, f.lastUpdate = v, in
 	return nil
 }
 func (f *fakeCalendarSvc) DeleteEvent(_ context.Context, _, _, _ string, v permissions.Viewer) error {

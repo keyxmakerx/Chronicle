@@ -74,6 +74,9 @@ type CalendarRepository interface {
 	SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error
 	// SaveSunLook writes the calendar's sun.
 	SaveSunLook(ctx context.Context, calendarID string, look SunLook) error
+	// SetAskWhenDayPasses writes the calendar's switch for the sheet that
+	// asks what became of passed events.
+	SetAskWhenDayPasses(ctx context.Context, calendarID string, ask bool) error
 
 	// Cycles (with their entries).
 	SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error
@@ -135,7 +138,7 @@ const calendarCols = `id, campaign_id, mode, name, description, epoch_name, curr
         tracks_real_time, real_time_zone,
         anchor_year, anchor_month, anchor_day, anchor_real_date,
         era_colors_on, era_feel, era_intensity, era_speed,
-        sun_kind, sun_color`
+        sun_kind, sun_color, ask_when_day_passes`
 
 // scanCalendar reads a row into a Calendar struct. Returns (nil, nil) when
 // the row doesn't exist, so callers that treat "no default calendar yet" as
@@ -157,7 +160,7 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.TracksRealTime, &cal.RealTimeZone,
 		&cal.AnchorYear, &cal.AnchorMonth, &cal.AnchorDay, &cal.AnchorRealDate,
 		&cal.EraLook.ColorsOn, &cal.EraLook.Feel, &cal.EraLook.Intensity, &cal.EraLook.Speed,
-		&cal.Sun.Kind, &cal.Sun.Color)
+		&cal.Sun.Kind, &cal.Sun.Color, &cal.AskWhenDayPasses)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1116,6 +1119,12 @@ func (r *calendarRepo) GetEras(ctx context.Context, calendarID string) ([]Era, e
 func (r *calendarRepo) SaveSunLook(ctx context.Context, calendarID string, look SunLook) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE calendars SET sun_kind = ?, sun_color = ? WHERE id = ?`,
 		look.Kind, look.Color, calendarID)
+	return err
+}
+
+// SetAskWhenDayPasses writes the calendar's ask-when-a-day-passes switch.
+func (r *calendarRepo) SetAskWhenDayPasses(ctx context.Context, calendarID string, ask bool) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE calendars SET ask_when_day_passes = ? WHERE id = ?`, ask, calendarID)
 	return err
 }
 
