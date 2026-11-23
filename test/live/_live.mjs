@@ -97,8 +97,30 @@ export async function person(opts = {}) {
     api: (url, o) => api(page, url, o),
     go: (path) => go(page, path),
   };
-  if (opts.signIn !== false) await signIn(who, { register: opts.register !== false });
+  // A made-up address is always a new account, so it signs up straight away
+  // instead of first waiting out a sign-in that cannot succeed.
+  if (opts.signIn !== false) await signIn(who, { register: opts.register !== false, fresh: !opts.email });
   return who;
+}
+
+/**
+ * Build something once per check file and give every test the same result: the
+ * accounts and campaign a folded walk shares, so each test pays for its own
+ * steps and not for signing people up again. A failed build is kept, so every
+ * test that needs it fails with the same reason.
+ */
+export function once(build) {
+  let made = null;
+  return () => { made = made || build(); return made; };
+}
+
+/**
+ * Forget the page and server errors people collected so far. Walks that share
+ * accounts call this before each test (a `beforeEach`), so one test's errors
+ * are never charged to the next test's `assertClean()`.
+ */
+export function resetErrors(...people) {
+  for (const p of people) p.errors.length = 0;
 }
 
 /** The shared site admin, made by _setup.mjs. */
@@ -107,18 +129,23 @@ export function siteAdmin(opts = {}) {
 }
 
 
-/** Sign in, registering the account first when `register` is set and it is new. */
-export async function signIn(who, { register = true } = {}) {
+/**
+ * Sign in, registering the account first when `register` is set and it is new.
+ * `fresh` says the account cannot exist yet, so it goes straight to sign-up.
+ */
+export async function signIn(who, { register = true, fresh = false } = {}) {
   const { page } = who;
-  await page.goto(BASE + '/login');
-  await page.fill('#email', who.email);
-  await page.fill('#password', who.password);
-  await Promise.all([
-    page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 5000 }).catch(() => {}),
-    page.locator('#password').press('Enter'),
-  ]);
-  if (!page.url().includes('/login')) return;
-  if (!register) throw new Error('could not sign in as ' + who.email);
+  if (!(fresh && register)) {
+    await page.goto(BASE + '/login');
+    await page.fill('#email', who.email);
+    await page.fill('#password', who.password);
+    await Promise.all([
+      page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 5000 }).catch(() => {}),
+      page.locator('#password').press('Enter'),
+    ]);
+    if (!page.url().includes('/login')) return;
+    if (!register) throw new Error('could not sign in as ' + who.email);
+  }
   await page.goto(BASE + '/register');
   await page.fill('#email', who.email);
   await page.fill('#display_name', who.name);
@@ -208,7 +235,7 @@ export async function enableAddons(owner, campaignId, slugs) {
   for (const a of list) {
     if (a.enabled || !want(a)) continue;
     const res = await api(owner.page, `/campaigns/${campaignId}/addons/${a.addon_id}/toggle`, { method: 'PUT', form: { action: 'enable' } });
-    assert.ok(res.ok, `turning on ${a.addon_slug || a.addon_id} answered ${res.status}`);
+    assert.ok(res.ok, `turning on ${a.addon_slug || a.addon_id} answered ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`);
   }
 }
 

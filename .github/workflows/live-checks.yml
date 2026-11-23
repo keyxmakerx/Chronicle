@@ -7,23 +7,30 @@
 #
 # The checks still take pictures of the screens they visit, but nothing
 # compares them, so a changed screen never fails this job.
+#
+# It runs only by hand (Actions > Live checks > Run workflow), before a large
+# update, not on every pull request or push: the walks take 15 minutes or more
+# and the fast checks in ci.yml guard each change. It is not required for
+# merging. The smoke crawl (every link and GET route of the server the checks
+# filled) runs too unless the run's "crawl" box is cleared.
 # ============================================================================
 
 name: Live checks
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      crawl:
+        description: 'Also run the smoke crawl (about 3 minutes)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: live-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: live-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   live:
@@ -95,6 +102,7 @@ jobs:
           DB_HOST: 127.0.0.1:3306
           DB_ROOT_PASSWORD: chronicle
           REDIS_URL: redis://localhost:6379
+          LIVE_SMOKE: ${{ inputs.crawl && '1' || '0' }}
         run: tools/live-checks.sh
 
       - name: Keep the server log

@@ -1,4 +1,8 @@
-// ai_your_ai_page.spec.mjs — the Your AI page: pause and resume, changing how
+// ai_your_ai_page.spec.mjs — the Your AI page and asking for changes, walked
+// with one owner for the whole file (ai_asking_for_changes is its last walk;
+// it stands in for the operator check in #1766):
+//
+// The Your AI page: pause and resume, changing how
 // far the AI may go, "What it did", the copy-and-paste address, a request
 // reviewed in place, reduced motion and tables reaching the AI. Stands in for
 // the operator check in #1776.
@@ -18,9 +22,9 @@
 //
 // RUN: tools/live-checks.sh test/live/ai_your_ai_page.spec.mjs
 
-import { test, after } from 'node:test';
+import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { person as signedIn, newCampaign, newPage, done, picture, saved, BASE } from './_live.mjs';
+import { person as signedIn, newCampaign, newPage, done, picture, saved, once, resetErrors, BASE } from './_live.mjs';
 
 after(done);
 
@@ -30,6 +34,11 @@ async function person(opts) {
     try { return await signedIn(opts); } catch (e) { if (i >= 2 || !/could not (register|sign in)/.test(e.message)) throw e; }
   }
 }
+
+// One owner for every walk in the file; each walk makes its own campaign, so
+// keys, requests and pages never carry over between them.
+const accounts = once(async () => ({ owner: await person({ tag: 'aipage', name: 'Your AI Owner' }) }));
+beforeEach(async () => { resetErrors((await accounts()).owner); });
 
 const LEVEL = { ask: /Look and ask for changes/, everything: /Look at everything/, players: /Look at what players see/ };
 
@@ -82,7 +91,7 @@ const table = (name, n = 6) => `---\nkind: table\nname: ${name}\n---\n` + Array.
 
 /** A campaign with a key at `level` (and an AI that has said hello). */
 async function setup(tag, level, name) {
-  const owner = await person({ tag, name });
+  const { owner } = await accounts();
   const cid = await newCampaign(owner, name + "'s campaign");
   const ai = await makeKey(owner, cid, level);
   return { owner, cid, ai, page: owner.page };
@@ -148,24 +157,6 @@ test('widening what the AI sees asks first; narrowing does not', async () => {
   owner.assertClean();
 });
 
-test('What it did: one sitting for a burst of calls, in the person\'s own time zone', async () => {
-  const { owner, cid, ai, page } = await setup('aipage4', LEVEL.everything, 'History Owner');
-  const zone = 'Pacific/Auckland';
-  const set = await owner.api('/account/timezone', { method: 'PUT', body: JSON.stringify({ timezone: zone }), headers: { 'Content-Type': 'application/json' } });
-  assert.ok(set.ok, 'could not set the time zone');
-  for (const t of ['campaign_outline', 'list_pages', 'list_tags', 'players', 'house_rules']) await ai.call(t);
-  await owner.go(`/campaigns/${cid}/ai`);
-  assert.equal(await page.locator('.aic-sit').count(), 1, 'a burst of calls is not one sitting');
-  await page.locator('.aic-sit summary').click();
-  const rows = page.locator('.aic-sit [data-call]');
-  assert.ok(await rows.count() >= 5, 'not every call is listed under the sitting');
-  const t = rows.first().locator('time');
-  const utc = new Date(await t.getAttribute('datetime'));
-  const want = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: zone }).format(utc);
-  assert.equal((await t.innerText()).replace(/\s/g, ' ').toLowerCase(), want.replace(/\s/g, ' ').toLowerCase().replace(/^0/, ''), 'the time is not shown in the person\'s zone');
-  owner.assertClean();
-});
-
 test('the #copy-and-paste address opens the tool over the page', async () => {
   const { owner, cid, page } = await setup('aipage5', LEVEL.ask, 'Paste Owner');
   await owner.go(`/campaigns/${cid}/ai`);
@@ -226,17 +217,19 @@ test('a review opens in the card and applies without leaving the page; reduced m
 const rowDuration = (card) => card.locator('.aic-req-review .air-row').first().evaluate((f) => parseFloat(getComputedStyle(f).animationDuration));
 
 test('the review keeps its unfold when the person allows motion', async () => {
-  const owner = await person({ tag: 'aipage7', name: 'Motion Owner', context: { reducedMotion: 'no-preference' } });
+  const { owner } = await accounts();
   const cid = await newCampaign(owner, "Motion Owner's campaign");
   const ai = await makeKey(owner, cid, LEVEL.ask);
   assert.ok(!(await ai.call('ask_for_changes', { summary: 'One table', changes: table('Motion names', 2) })).isError);
   const { page } = owner;
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await owner.go(`/campaigns/${cid}/ai`);
   await page.locator('[data-ai-open]').first().click();
   const card = page.locator('#ai-panel section.aic-request');
   await card.getByRole('button', { name: 'Review' }).click();
   await card.getByText('Motion names').first().waitFor();
   assert.ok(await rowDuration(card) >= 0.2, 'the review rows do not animate even though motion is allowed');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
 });
 
 test('a table reaches the AI with a header row and one row per line', async () => {
@@ -257,5 +250,148 @@ test('a table reaches the AI with a header row and one row per line', async () =
   assert.ok(lines.some((l) => /^\|\s*Door\s*\|\s*Guard\s*\|$/.test(l)), 'the header row is not on its own line:\n' + read.out);
   assert.ok(lines.some((l) => /^\|\s*:?-{2,}:?\s*\|\s*:?-{2,}:?\s*\|$/.test(l)), 'there is no header separator line:\n' + read.out);
   assert.ok(lines.some((l) => /^\|\s*North\s*\|\s*Mara\s*\|$/.test(l)), 'a body row runs together:\n' + read.out);
+  owner.assertClean();
+});
+
+const campaignTables = async (ai) => (await ai.call('rolling_tables')).out;
+
+test('asking for changes: key, request, review, apply, turn down, removals, only look, disconnect', async () => {
+  const { owner } = await accounts();
+  const cid = await newCampaign(owner, 'Ask For Changes');
+  const { page } = owner;
+
+  // 1. The connect form offers a level that asks, and says what ChatGPT can't do.
+  await owner.go(`/campaigns/${cid}/ai`);
+  await page.getByRole('radio', { name: LEVEL.ask }).waitFor();
+  // The picker now starts on the safest level, not on asking; asking is one pick away.
+  assert.equal(await page.getByRole('radio', { name: LEVEL.players }).getAttribute('aria-checked'), 'true');
+  assert.ok(await page.getByText(/ChatGPT Plus and Pro only let connectors read/).first().isVisible(), 'the ChatGPT note is missing');
+  const ai = await makeKey(owner, cid, LEVEL.ask);
+  await owner.go(`/campaigns/${cid}/ai`);
+  await page.getByText('Claude Code is connected').waitFor();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  assert.match(await page.locator('.aic-row-k .aic-hint').first().innerText(), /asks for changes/, 'the status line does not say "asks for changes"');
+
+  // 2. The AI asks; nothing changes yet; the card, and What it did, say so.
+  const tools = (await ai.rpc('tools/list', {})).json.result.tools.map((t) => t.name);
+  assert.ok(tools.includes('ask_for_changes'), 'ask_for_changes is not offered');
+  const sent = await ai.call('ask_for_changes', { summary: 'Six tavern names', changes: table('Tavern names') });
+  assert.ok(!sent.isError, sent.out);
+  assert.match(sent.out, /Nothing has changed yet/);
+  assert.match(await campaignTables(ai), /no rolling tables|None|0/i, 'the table exists before the owner said yes');
+  assert.doesNotMatch(await campaignTables(ai), /Tavern names/, 'the table exists before the owner said yes');
+  await owner.go(`/campaigns/${cid}/ai`);
+  let panel = await openPanel(page);
+  await panel.getByRole('heading', { name: 'Claude Code asks for 1 change' }).waitFor();
+  const card = panel.locator('section.aic-request');
+  assert.match(await card.innerText(), /“Six tavern names”.*1 to add/s);
+  await picture(page, 'ai-asking-waiting-card', { check: '#1766', about: 'The Waiting for you card in the AI panel', mask: ['.aic-request .aic-hint'], hide: ['#ai-panel + *'] });
+  await page.keyboard.press('Escape');
+  await page.getByRole('tab', { name: 'What it did' }).click();
+  await page.getByText(/asked for changes once/).first().waitFor();
+
+  // 3. Review, read what a page writes, say Yes to some and No to others.
+  const two = await ai.call('ask_for_changes', { summary: 'A page and a table', changes: table('Bar names', 4) + `\n---\nname: Mara Vell\ntype: Character\n---\nShe waits at the bar.\n` });
+  assert.ok(!two.isError, two.out);
+  await owner.go(`/campaigns/${cid}/ai`);
+  panel = await openPanel(page);
+  const cardTwo = panel.locator('section.aic-request', { hasText: 'A page and a table' });
+  await cardTwo.getByRole('button', { name: 'Review' }).click();
+  await cardTwo.getByText('Add the page Mara Vell').waitFor();
+  await cardTwo.getByText('Read what it writes').click();
+  await cardTwo.getByText('She waits at the bar.').first().waitFor();
+  await cardTwo.getByRole('radiogroup', { name: /Bar names/ }).locator('label.air-n').click();
+  await cardTwo.getByRole('button', { name: 'Apply' }).click();
+  await panel.locator('.aic-done').waitFor();
+  await panel.getByText('See what changed').waitFor();
+  assert.equal(await cardTwo.count(), 0, 'the card stays after Apply');
+  await owner.go(`/campaigns/${cid}/entities`);
+  assert.ok(await page.getByText('Mara Vell').first().isVisible(), 'the Yes page was not made');
+  const after3 = await campaignTables(ai);
+  assert.doesNotMatch(after3, /Bar names/, 'a No row was applied');
+
+  // 4. Not now keeps it waiting; Turn down removes it and changes nothing.
+  await owner.go(`/campaigns/${cid}/ai`);
+  panel = await openPanel(page);
+  const first = panel.locator('section.aic-request', { hasText: 'Six tavern names' });
+  await first.getByRole('button', { name: 'Review' }).click();
+  await first.getByRole('button', { name: /Close the review/ }).click();
+  await first.getByRole('button', { name: 'Review' }).waitFor();
+  assert.ok(await first.isVisible(), 'Not now removed the card');
+  await first.getByRole('button', { name: 'Turn down' }).first().click();
+  await first.getByRole('button', { name: 'Turn down' }).last().click();
+  await first.waitFor({ state: 'detached' });
+  assert.doesNotMatch(await campaignTables(ai), /Tavern names/, 'turning down still made the table');
+
+  // 5. A removal starts on No and needs its own tick.
+  const doomed = await newPage(owner, cid, 'Character', 'Doomed Dan');
+  assert.ok(doomed);
+  const rm = await ai.call('ask_for_changes', { summary: 'Remove Dan', changes: `---\naction: delete\nname: Doomed Dan\ntype: Character\nreason: not needed\n---\n` });
+  assert.ok(!rm.isError, rm.out);
+  await owner.go(`/campaigns/${cid}/ai`);
+  panel = await openPanel(page);
+  const rmCard = panel.locator('section.aic-request', { hasText: 'Remove Dan' });
+  await rmCard.getByRole('button', { name: 'Review' }).click();
+  const row = rmCard.getByRole('radiogroup', { name: /Doomed Dan/ });
+  await row.waitFor();
+  assert.equal(await row.locator('label.air-n input').isChecked(), true, 'the removal row does not start on No');
+  await row.locator('label.air-y').click();
+  await rmCard.locator('[data-air-confirm]').waitFor();
+  assert.equal(await rmCard.locator('[data-air-confirm]').isChecked(), false, 'the removal tick starts ticked');
+  assert.equal(await rmCard.locator('[data-air-confirm]').evaluate((e) => e.required), true, 'the removal tick is not required');
+  await rmCard.getByRole('button', { name: /Close the review/ }).click();
+  await rmCard.getByRole('button', { name: 'Turn down' }).first().click();
+  await rmCard.getByRole('button', { name: 'Turn down' }).last().click();
+  await rmCard.waitFor({ state: 'detached' });
+
+  // 7 (before 6, so the key still works): Disconnect keeps what is waiting.
+  const keep = await ai.call('ask_for_changes', { summary: 'Left for later', changes: table('Left tables', 2) });
+  assert.ok(!keep.isError, keep.out);
+  await owner.go(`/campaigns/${cid}/ai`);
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).first().click();
+  await page.getByText('What it already asked for stays in the AI panel for you to answer.').waitFor();
+  await page.locator('.aic-ask').getByRole('button', { name: 'Disconnect' }).click();
+  await page.getByText('No AI connected yet').waitFor();
+  panel = await openPanel(page);
+  const kept = panel.locator('section.aic-request', { hasText: 'Left for later' });
+  await kept.waitFor(); // fails with a timeout if the card vanished with the key
+  await kept.getByRole('button', { name: 'Review' }).click();
+  await kept.getByRole('button', { name: /Close the review/ }).waitFor();
+  await kept.getByRole('button', { name: /Close the review/ }).click();
+  await kept.getByRole('button', { name: 'Turn down' }).first().click();
+  await kept.getByRole('button', { name: 'Turn down' }).last().click();
+  await kept.waitFor({ state: 'detached' });
+  assert.equal((await ai.call('campaign_outline')).status, 401, 'a disconnected key still works');
+
+  // 6. An Only look key can look and cannot ask.
+  const look = await makeKey(owner, cid, LEVEL.everything);
+  const lookTools = (await look.rpc('tools/list', {})).json.result.tools.map((t) => t.name);
+  assert.ok(!lookTools.includes('ask_for_changes'), 'an Only look key is offered ask_for_changes');
+  const refused = await look.call('ask_for_changes', { summary: 'Nope', changes: table('Never', 2) });
+  assert.ok(refused.isError || refused.status >= 400, 'an Only look key was allowed to ask');
+  await owner.go(`/campaigns/${cid}/ai`);
+  await page.locator('[data-ai-open]').first().click();
+  await page.locator('#ai-panel.is-open').waitFor();
+  assert.equal(await page.locator('#ai-panel section.aic-request').count(), 0, 'a request is waiting from an Only look key');
+  owner.assertClean();
+});
+
+// Last: it sets the account's time zone, which every later walk would inherit.
+test('What it did: one sitting for a burst of calls, in the person\'s own time zone', async () => {
+  const { owner, cid, ai, page } = await setup('aipage4', LEVEL.everything, 'History Owner');
+  const zone = 'Pacific/Auckland';
+  const set = await owner.api('/account/timezone', { method: 'PUT', body: JSON.stringify({ timezone: zone }), headers: { 'Content-Type': 'application/json' } });
+  assert.ok(set.ok, 'could not set the time zone');
+  for (const t of ['campaign_outline', 'list_pages', 'list_tags', 'players', 'house_rules']) await ai.call(t);
+  await owner.go(`/campaigns/${cid}/ai`);
+  assert.equal(await page.locator('.aic-sit').count(), 1, 'a burst of calls is not one sitting');
+  await page.locator('.aic-sit summary').click();
+  const rows = page.locator('.aic-sit [data-call]');
+  assert.ok(await rows.count() >= 5, 'not every call is listed under the sitting');
+  const t = rows.first().locator('time');
+  const utc = new Date(await t.getAttribute('datetime'));
+  const want = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: zone }).format(utc);
+  assert.equal((await t.innerText()).replace(/\s/g, ' ').toLowerCase(), want.replace(/\s/g, ' ').toLowerCase().replace(/^0/, ''), 'the time is not shown in the person\'s zone');
   owner.assertClean();
 });
