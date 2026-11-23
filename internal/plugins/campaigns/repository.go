@@ -687,7 +687,9 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 // answer; of several, a playable one wins, then the most recently edited.
 // The older per-member link is only a fallback for a member who owns none,
 // and only while it points at a live page nobody else owns. Templates and
-// adventures are never a character.
+// adventures are never a character. Ordering by edit time means a member
+// with two playable heroes can show the other after editing it.
+// TODO(#2757): pick by a stable key.
 const memberCharacterID = `COALESCE(
 	(SELECT oe.id FROM entities oe
 	  INNER JOIN entity_types oet ON oet.id = oe.entity_type_id
