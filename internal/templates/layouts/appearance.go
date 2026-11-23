@@ -276,7 +276,10 @@ var czTones = map[string][2]czTone{
 }
 
 // tones returns the page tone for theme (0 light, 1 dark) with high
-// contrast applied, the same rule the Customize preview uses.
+// contrast applied, the same rule the Customize preview uses. High contrast
+// moves every text step toward the heading ink but keeps the steps apart
+// (headings, then body, labels, hints, each at 7:1 or more), so headings
+// still stand out from what is under them.
 func (a *AppearanceData) tones(theme int) czTone {
 	name := a.PageTone
 	if name == "" {
@@ -284,7 +287,7 @@ func (a *AppearanceData) tones(theme int) czTone {
 	}
 	t := czTones[name][theme]
 	if a.Contrast == "high" {
-		t.muted, t.body = t.body, t.text
+		t.body, t.muted = colour.Mix(t.body, t.text, 0.45), colour.Mix(t.muted, t.body, 0.5)
 		t.line, t.line2 = t.line2, colour.Mix(t.line2, t.text, 0.3)
 	}
 	return t
@@ -297,14 +300,23 @@ const hintContrast = 4.5
 // toneVars writes one theme's tokens. Hints are the tone's grey nudged until
 // they read at 4.5:1 on every fill; labels sit a step stronger, so the two
 // stay apart without either going faint. Faint is for disabled controls only.
-func toneVars(t czTone, dark bool) string {
+// Under high contrast hints reach 7:1, and a label nearer the heading ink
+// would pass body text, so it sits between the hint and the body instead.
+func toneVars(t czTone, dark, high bool) string {
 	input := t.card
 	borderLight := t.alt
 	if dark {
 		input, borderLight = t.bg, t.line2
 	}
-	hint := colour.Readable(t.muted, []string{t.bg, t.card, t.alt}, hintContrast, !dark).Hex
+	target := hintContrast
+	if high {
+		target = 7
+	}
+	hint := colour.Readable(t.muted, []string{t.bg, t.card, t.alt}, target, !dark).Hex
 	label := colour.Mix(hint, t.text, 0.45)
+	if high {
+		label = colour.Mix(hint, t.body, 0.55)
+	}
 	return fmt.Sprintf("--color-bg-primary:%s;--color-bg-secondary:%s;--color-card-bg:%s;--color-bg-tertiary:%s;"+
 		"--color-border:%s;--color-border-light:%s;--color-input-border:%s;--color-input-bg:%s;"+
 		"--color-text-primary:%s;--color-text-body:%s;--color-text-secondary:%s;--color-text-muted:%s;--color-text-faint:%s;",
@@ -478,8 +490,9 @@ func AppearanceCSS(ctx context.Context) string {
 	var root, dark, extra strings.Builder
 
 	if a.PageTone != "" && a.PageTone != "cool" || a.Contrast == "high" {
-		root.WriteString(toneVars(a.tones(0), false))
-		dark.WriteString(toneVars(a.tones(1), true))
+		high := a.Contrast == "high"
+		root.WriteString(toneVars(a.tones(0), false, high))
+		dark.WriteString(toneVars(a.tones(1), true, high))
 	}
 
 	// Readable accent: buttons get a fill their words can sit on, and links

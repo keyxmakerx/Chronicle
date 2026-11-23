@@ -72,11 +72,12 @@
 }
 @keyframes annals-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-/* Block headings read as section labels with a hairline under them. */
+/* Block headings read as section labels with a hairline under them, a step
+   larger than the reading text so they stand out by size as well as ink. */
 [data-cz-page="annals"] .cb-head {
   display: flex; align-items: baseline; gap: 8px;
   flex: 1 1 auto;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: var(--color-text-primary) !important;
   padding-bottom: 6px;
   border-bottom: var(--shape-rule, 1px) solid var(--annals-line);
