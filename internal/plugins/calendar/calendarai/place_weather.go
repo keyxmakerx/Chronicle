@@ -37,7 +37,7 @@ var _ aiplug.Briefed = PartyPlaceKind{}
 func (PartyPlaceKind) Name() string  { return KindPartyPlace }
 func (PartyPlaceKind) Label() string { return "Where the party is" }
 func (PartyPlaceKind) Brief() string {
-	return "where the party is from a day on, so their weather (all players see of it) is that place's"
+	return "where the party is from a day on, which sets the weather players see"
 }
 func (PartyPlaceKind) Doc() string {
 	return "Where the party is from a day on, on the default calendar. Their weather, and all players see of the weather, is that place's until the next move: the weather of the nearest page at or above it with a Climate set, or the world's. Keys: `place` (a page name, or `everywhere else` for the world's weather); optional `year`, `month`, `day` (default today). `action: delete` takes back the move on that day. A place's climate itself is the page's Climate field: change it as you change any page.\n\n```\n---\nkind: party-place\nplace: Saltreach\nyear: 1492\nmonth: Hammer\nday: 8\n---\n```"
@@ -138,8 +138,8 @@ func (PartyPlaceKind) Export(context.Context, string, Actor) (string, error) { r
 func (l *Lookups) placeWeatherLookup() aiplug.Lookup {
 	return calLookup{l, aiplug.LookupInfo{
 		What: whatPlaceWeather, Aliases: []string{"weather-by-place", "party-place"},
-		Keys:  "`from` and `to`, or `year` and `month` (the Director's per-place days)",
-		Brief: "where the party is and its climate; for the Director also every place with a climate of its own, the party's moves and each place's weather by day",
+		Keys:  "`from` and `to`, or `year` and `month`",
+		Brief: "where the party is; for the Director, each place's climate and weather by day",
 		Tool: aiplug.Tool{Name: "place_weather", Title: "Weather by place", Did: "Looked up the weather by place",
 			Desc: "Where the party is and its climate; for the Director, every place's climate, the party's moves and each place's weather in a range of dates.", Args: dateArgs},
 	}, "Weather by place", (*lookupRun).placeWeather}

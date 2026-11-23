@@ -51,7 +51,7 @@ type CategorySwitchKind struct {
 func (CategorySwitchKind) Name() string  { return "category-switch" }
 func (CategorySwitchKind) Label() string { return "Game system fields" }
 func (CategorySwitchKind) Brief() string {
-	return "switch a category to its game system's fields (Draw Steel's treasure fields for Items), or back"
+	return "switch a category to its game system's fields, or back"
 }
 func (CategorySwitchKind) Doc() string {
 	return "A game system can offer a category its own fields once, such as Draw Steel's treasure fields for Items. " +
