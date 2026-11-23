@@ -963,7 +963,7 @@ func TestToneVarsHintsReadable(t *testing.T) {
 	re := regexp.MustCompile(`--color-text-secondary:(#[0-9a-f]{6});--color-text-muted:(#[0-9a-f]{6});`)
 	for name, themes := range czTones {
 		for i, tone := range themes {
-			m := re.FindStringSubmatch(toneVars(tone, i == 1))
+			m := re.FindStringSubmatch(toneVars(tone, i == 1, false))
 			if m == nil {
 				t.Fatalf("%s/%d: no secondary and muted tokens", name, i)
 			}
@@ -973,6 +973,38 @@ func TestToneVarsHintsReadable(t *testing.T) {
 				}
 				if colour.Contrast(m[1], bg) < colour.Contrast(m[2], bg) {
 					t.Errorf("%s/%d: label %s is weaker than hint %s on %s", name, i, m[1], m[2], bg)
+				}
+			}
+		}
+	}
+}
+
+// TestHighContrastKeepsTextSteps pins that High contrast keeps headings,
+// body, labels and hints apart in every page tone and theme, each step weaker
+// than the one above it and every one at 7:1 or more, so headings never blend
+// into the words under them.
+func TestHighContrastKeepsTextSteps(t *testing.T) {
+	re := regexp.MustCompile(`--color-text-primary:(#[0-9a-f]{6});--color-text-body:(#[0-9a-f]{6});--color-text-secondary:(#[0-9a-f]{6});--color-text-muted:(#[0-9a-f]{6});`)
+	names := []string{"heading", "body", "label", "hint"}
+	for name := range czTones {
+		a := &AppearanceData{PageTone: name, Contrast: "high"}
+		for theme := 0; theme < 2; theme++ {
+			tone := a.tones(theme)
+			m := re.FindStringSubmatch(toneVars(tone, theme == 1, true))
+			if m == nil {
+				t.Fatalf("%s/%d: no text tokens", name, theme)
+			}
+			for _, bg := range []string{tone.bg, tone.card, tone.alt} {
+				prev := 99.0
+				for i, ink := range m[1:] {
+					c := colour.Contrast(ink, bg)
+					if c < 7 {
+						t.Errorf("%s/%d: %s %s on %s is %.2f:1, want 7", name, theme, names[i], ink, bg, c)
+					}
+					if i > 0 && c > prev-0.8 {
+						t.Errorf("%s/%d: %s %s (%.2f:1) is not clearly weaker than the %s above it (%.2f:1) on %s", name, theme, names[i], ink, c, names[i-1], prev, bg)
+					}
+					prev = c
 				}
 			}
 		}

@@ -657,7 +657,10 @@ second; the dice settle in under 480ms.
   headings `--color-text-primary`, labels `--color-text-secondary`, hints and
   dates `--color-text-muted`. Both text greys reach 4.5:1 on the page, panel
   and alternate-row fills in light and dark (a custom page tone is nudged to
-  match), so nothing a reader needs is faint. `--color-text-faint` is for
+  match), so nothing a reader needs is faint. High contrast, the campaign's
+  or a viewer's own, moves every step toward the heading ink but keeps the
+  steps apart (headings, body, labels, hints, each at 7:1 or more), so
+  headings still stand out from the words under them. `--color-text-faint` is for
   disabled controls and decoration only. A card says when it was last changed
   as "Edited 2 days ago" in the label grey, with the exact time in the
   element's `title` and `datetime`, and never fills a missing description
