@@ -32,6 +32,8 @@
   --mut:oklch(.52 .012 265);
   --hair:oklch(.24 .02 265 / .09);
   --hair2:oklch(.24 .02 265 / .05);
+  /* The diagonal lines over a day that belongs to the month next door. */
+  --hatch:oklch(.24 .02 265 / .085);
   --paper:oklch(.993 .003 90);
   --paper2:oklch(.978 .005 85);
   --edge:oklch(.24 .02 265 / .13);
@@ -55,7 +57,7 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
     --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
-    --hair:oklch(.94 .01 265 / .085); --hair2:oklch(.94 .01 265 / .05);
+    --hair:oklch(.94 .01 265 / .085); --hair2:oklch(.94 .01 265 / .05); --hatch:oklch(.94 .01 265 / .075);
     --paper:oklch(.27 .01 265); --paper2:oklch(.235 .01 265); --edge:oklch(.94 .01 265 / .12);
     --lift:oklch(1 0 0 / .035); --crease:oklch(0 0 0 / .32); --scrim:oklch(0 0 0 / .45);
     --shadow-s:0 1px 2px oklch(0 0 0 / .4),0 10px 26px -10px oklch(0 0 0 / .6);
@@ -74,7 +76,7 @@
 }
 :root[data-theme="dark"]{color-scheme:dark;
   --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
-  --hair:oklch(.94 .01 265 / .085); --hair2:oklch(.94 .01 265 / .05);
+  --hair:oklch(.94 .01 265 / .085); --hair2:oklch(.94 .01 265 / .05); --hatch:oklch(.94 .01 265 / .075);
   --paper:oklch(.27 .01 265); --paper2:oklch(.235 .01 265); --edge:oklch(.94 .01 265 / .12);
   --lift:oklch(1 0 0 / .035); --crease:oklch(0 0 0 / .32); --scrim:oklch(0 0 0 / .45);
   --shadow-s:0 1px 2px oklch(0 0 0 / .4),0 10px 26px -10px oklch(0 0 0 / .6);
@@ -266,8 +268,10 @@
 .cal-v5 .wk{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));border-top:1px solid var(--hair)}
 .cal-v5 .day{position:relative;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;min-height:var(--cellH);padding:8px 9px 0 10px;color:var(--ink2);border-left:1px solid var(--hair2);transition:opacity .3s}
 .cal-v5 .wk>.day:first-child{border-left-color:transparent}
-/* A day of the month next door: its date only, faded, over the same era colour. */
+/* A day of the month next door: its date only, faded, over the same era colour,
+   with fine diagonal lines on its surface so it reads as outside the month at a glance. */
 .cal-v5 .day.out .num{color:var(--mut);font-weight:450;opacity:.55}
+.cal-v5 .day.out::before{opacity:1;background:repeating-linear-gradient(-45deg,transparent 0 6px,var(--hatch) 6px 8px)}
 .cal-v5 .cal.editing .day.out, .cal-v5 .cal.editing.painting .day.out, .cal-v5 .cal.picking .day.out{cursor:default}
 /* The day's surface is its own layer, so hover, selection and the press change only its opacity and scale. */
 .cal-v5 .day::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--lift);opacity:0;transition:opacity .2s;pointer-events:none}
