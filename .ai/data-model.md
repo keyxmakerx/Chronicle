@@ -25,8 +25,11 @@ Export and import carry it. The Director's "Make it a full page" clears it.
 `entities.owner_user_id` is different: it is the nullable, player-claimable
 "this is my character" pointer (`ON DELETE SET NULL`). `campaign_members.role`
 (`owner`/`scribe`/`player`) is the campaign-wide authority tier;
-`campaign_members.character_entity_id` links a member to the entity they've
-claimed.
+`campaign_members.character_entity_id` is an older per-member link to a
+character. The member list (`ListMembers`) names the character a member owns
+through `owner_user_id` and uses this link only for a member who owns none;
+other players see a member's character there only when its page is visible to
+every player (`RedactMemberCharacters`).
 
 **Visibility model.** Two independent layers:
 1. **Coarse:** `is_private` (legacy DM-only flag on `entities`) and `dm_only`

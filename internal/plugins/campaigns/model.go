@@ -218,9 +218,12 @@ type MemberLister interface {
 
 // CampaignMember represents a user's membership in a campaign.
 type CampaignMember struct {
-	CampaignID        string    `json:"campaign_id"`
-	UserID            string    `json:"user_id"`
-	Role              Role      `json:"role"`
+	CampaignID string `json:"campaign_id"`
+	UserID     string `json:"user_id"`
+	Role       Role   `json:"role"`
+	// CharacterEntityID is, from ListMembers, the character the member plays
+	// (the page they own, else the older per-member link); single-member
+	// reads return the stored link only.
 	CharacterEntityID *string   `json:"character_entity_id,omitempty"`
 	JoinedAt          time.Time `json:"joined_at"`
 
@@ -231,8 +234,29 @@ type CampaignMember struct {
 	// IsGuest marks someone who joined with a guest code and has no email
 	// yet; Email is then empty.
 	IsGuest bool `json:"is_guest,omitempty"`
-	// Joined from entities table for character display.
+	// CharacterName is that character's name, from ListMembers only.
 	CharacterName *string `json:"character_name,omitempty"`
+	// CharacterShared says every player may see that character's page, so
+	// its name and id may go to members other than its player.
+	CharacterShared bool `json:"-"`
+}
+
+// RedactMemberCharacters clears, for a viewer below Owner visibility, the
+// character of every other member whose page players can't all see: a
+// hidden hero's name must not reach the rest of the table through the
+// member list. Custom-shared pages are cleared too; the list cannot tell
+// which viewers a custom grant covers.
+func RedactMemberCharacters(members []CampaignMember, visibilityRole int, viewerID string) {
+	if visibilityRole >= int(RoleOwner) {
+		return
+	}
+	for i := range members {
+		m := &members[i]
+		if m.CharacterShared || (viewerID != "" && m.UserID == viewerID) {
+			continue
+		}
+		m.CharacterEntityID, m.CharacterName = nil, nil
+	}
 }
 
 // CampaignContext holds the resolved campaign and the requesting user's

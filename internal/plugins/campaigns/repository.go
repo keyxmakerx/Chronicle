@@ -681,15 +681,39 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 	return m, nil
 }
 
-// ListMembers returns all members of a campaign with their display info.
+// memberCharacterID picks the character a member plays, for the member list.
+// Heroes are given to players by setting the page's owner (claiming, and the
+// Characters page's "Who plays whom"), so the page a member owns is the
+// answer; of several, a playable one wins, then the most recently edited.
+// The older per-member link is only a fallback for a member who owns none,
+// and only while it points at a live page nobody else owns. Templates and
+// adventures are never a character.
+const memberCharacterID = `COALESCE(
+	(SELECT oe.id FROM entities oe
+	  INNER JOIN entity_types oet ON oet.id = oe.entity_type_id
+	  WHERE oe.campaign_id = cm.campaign_id AND oe.owner_user_id = cm.user_id
+	    AND oe.deleted_at IS NULL AND oe.is_template = 0
+	    AND (oet.preset_category IS NULL OR oet.preset_category <> 'adventures')
+	  ORDER BY oe.playable DESC, oe.updated_at DESC, oe.id
+	  LIMIT 1),
+	(SELECT le.id FROM entities le
+	  INNER JOIN entity_types lt ON lt.id = le.entity_type_id
+	  WHERE le.id = cm.character_entity_id AND le.campaign_id = cm.campaign_id
+	    AND le.deleted_at IS NULL AND le.is_template = 0
+	    AND (lt.preset_category IS NULL OR lt.preset_category <> 'adventures')
+	    AND (le.owner_user_id IS NULL OR le.owner_user_id = cm.user_id)))`
+
+// ListMembers returns all members of a campaign with their display info and
+// the character each one plays (see memberCharacterID). The character is the
+// owner's view; RedactMemberCharacters trims it for anyone else.
 func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error) {
-	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
+	query := `SELECT cm.campaign_id, cm.user_id, cm.role, e.id, cm.joined_at,
 	                 u.display_name, u.email, u.avatar_path, u.guest_campaign_id IS NOT NULL,
-	                 e.name
+	                 e.name, COALESCE(e.visibility = 'default' AND e.is_private = 0, 0)
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
 	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
-	          LEFT JOIN entities e ON e.id = cm.character_entity_id AND e.campaign_id = cm.campaign_id AND e.deleted_at IS NULL
+	          LEFT JOIN entities e ON e.id = ` + memberCharacterID + `
 	          WHERE cm.campaign_id = ?
 	          ORDER BY FIELD(cm.role, 'owner', 'scribe', 'player'), u.display_name`
 
@@ -706,7 +730,7 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 		if err := rows.Scan(
 			&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
 			&m.DisplayName, &m.Email, &m.AvatarPath, &m.IsGuest,
-			&m.CharacterName,
+			&m.CharacterName, &m.CharacterShared,
 		); err != nil {
 			return nil, fmt.Errorf("scanning member row: %w", err)
 		}
