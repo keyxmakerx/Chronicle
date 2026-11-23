@@ -74,6 +74,18 @@ html.dark .hcw-c { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28); }
   .hcw-top .hcw-note { padding: 4px 0 2px; }
   .hcw-top .hcw-cs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 5px 5px; margin: 0 -5px; overscroll-behavior-x: contain; }
   .hcw-top .hcw-cs::-webkit-scrollbar { display: none; }
+  /* The free colour stays at the row's right end, so it is never off screen.
+     It sits on a band of the sheet's own surface, a wide ring the row clips,
+     which cuts the colours passing beneath cleanly. The band's left part is
+     the row's own sticky ::after, drawn just before it: it is the room that
+     lets the last colour show whole beside it at the row's end, and it takes
+     a tap on the band, so a colour hidden beneath is never picked (a press on
+     the row itself picks nothing). Order moves it, not the markup. */
+  .hcw-top .hcw-cs { --hcw-pin: 20px; }
+  .hcw-top .hcw-cs::after { content: ""; order: 1; flex: none; align-self: stretch; width: var(--hcw-pin); margin-right: -7px; position: sticky; right: 44px; z-index: 1; background: var(--color-bg-secondary); }
+  .hcw-top .hcw-cs .hcw-c--any { order: 2; position: sticky; right: 0; z-index: 1; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22), 0 0 0 var(--hcw-pin) var(--color-bg-secondary); }
+  html.dark .hcw-top .hcw-cs .hcw-c--any { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28), 0 0 0 var(--hcw-pin) var(--color-bg-secondary); }
+  .hcw-top .hcw-cs .hcw-c--any[data-set], html.dark .hcw-top .hcw-cs .hcw-c--any[data-set] { box-shadow: 0 0 0 2px var(--color-bg-secondary), 0 0 0 4px var(--cpe-accent, var(--color-accent)), 0 0 0 var(--hcw-pin) var(--color-bg-secondary); }
   .hcw-g h4 { font-size: 13px; letter-spacing: 0.02em; }
   .hcw-t { font-size: 14px; }
   .hcw-c { width: 44px; height: 44px; }

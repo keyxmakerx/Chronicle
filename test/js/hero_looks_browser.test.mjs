@@ -106,6 +106,10 @@ function block(src, from) {
   return src.slice(from, i + 1);
 }
 const TOKENS = block(input, input.indexOf(':root {\n  --z-raised')) + '\n' + block(input, input.indexOf('  :root {\n    --color-bg-primary')) + '\n' + block(input, input.indexOf('  .dark {'));
+// The notes tab and its rules as the site has them, in their layer; and the
+// Table's resting line, which lifts what reaches the bottom edge on a phone.
+const JOT_CSS = '@layer components {' + input.slice(input.indexOf('  /* --- Jot notes (the floating panel) --- */'), input.indexOf('  /* Panel: rises from the tab')) + '}';
+const TABLE_CSS = readFileSync(join(root, 'internal/plugins/rolls/static/css/table.css'), 'utf8').split('\n').filter((l) => l.startsWith('html[data-tt-sheet] {') || l.startsWith('html[data-tt-sheet] #main-content') || l.startsWith('html[data-tt-sheet] .jot-tab')).join('\n');
 
 const SHELL = `<div class="czs czs-is-workshop"><div class="czs-stage"><div class="czs-top" data-czs-top style="height:48px"></div><div class="czs-body" data-czs-stage>
 @@SECTION@@</div>
@@ -123,6 +127,10 @@ const SHEETS = ['static:css/customize_shell.css', 'static:css/customize_page_edi
 const SCRIPTS = ['js/hero_rules_lines.js', 'js/hero_borders.js', 'js/hero_border_picker.js', 'js/hero_stage.js', 'js/hero_workshop.js', 'js/hero_creator.js'];
 
 // o.draft is what Chronicle.customizeDraft() answers; o.shell mounts the real shell.
+// o.app gives a phone the real app's height above the workshop (the site's 48px
+// top bar and the Customizer's two-row bar); o.bar adds a 40px line above the
+// Customizer, as the real app's time-zone line does; o.jot adds the notes tab;
+// o.table the Table's resting line on a phone.
 function page(o) {
   const links = SHEETS.map((s) => `<link rel="stylesheet" href="/${s.replace(':', '/')}">`).join('');
   const scripts = SCRIPTS.map((s) => `<script src="/${s}"></script>`).join('');
@@ -131,10 +139,10 @@ Chronicle.customizeDraft = function () { return window.DRAFT; };`;
   const shell = o.shell ? '<script src="/static/js/widgets/customize_shell.js"></script>' : '';
   const html = SHELL.replace('@@SECTION@@', SECTION);
   const wrap = o.shell ? html.replace('<div class="czs czs-is-workshop">', `<div class="czs czs-is-workshop" data-widget="customize-shell" data-campaign-id="c1" data-csrf="t" data-area="x-hero-creator" data-version="0" data-draft='${JSON.stringify(o.draft || {})}' data-find="[]" data-areas='[{"id":"x-hero-creator","label":"Hero creator","href":"${TAB}","section":"herolooks"}]'>`).replace('<div class="czs-top" data-czs-top style="height:48px"></div>', '<div class="czs-top" data-czs-top style="height:48px"><button type="button" data-czs-find>Find</button></div>') : html;
-  return `<!doctype html><html data-gm-term="Director"${o.dark ? ' class="dark"' : ''}${o.motion ? ` data-motion="${o.motion}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html data-gm-term="Director"${o.dark ? ' class="dark"' : ''}${o.motion ? ` data-motion="${o.motion}"` : ''}${o.table ? ' data-tt-sheet' : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${TOKENS}*,::before,::after{box-sizing:border-box}html,body{margin:0}body{font-family:Inter,sans-serif;background:var(--color-bg-primary);color:var(--color-text-body)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}
-#main-content{height:100vh;overflow:auto}.btn-primary{background:var(--color-accent);color:#fff;border:0;border-radius:8px;padding:6px 12px}.btn-sm{font-size:13px}</style>${links}</head>
-<body><button id="before" type="button">before</button><main id="main-content">${wrap}</main><button id="after" type="button">after</button>
+#main-content{height:100vh;overflow:auto}.btn-primary{background:var(--color-accent);color:#fff;border:0;border-radius:8px;padding:6px 12px}.btn-sm{font-size:13px}</style>${o.jot ? `<style>${JOT_CSS}#before,#after{position:fixed;top:0;left:0}</style>` : ''}${o.table ? `<style>${TABLE_CSS}</style>` : ''}${links}</head>
+<body><button id="before" type="button">before</button><main id="main-content">${o.app ? '<div data-app-top style="height:48px"></div>' : ''}${o.bar ? '<div data-zone-bar style="height:40px">Times aren’t in your zone yet</div>' : ''}${o.app ? wrap.replace('data-czs-top style="height:48px"', 'data-czs-top style="height:89px"') : wrap}</main><button id="after" type="button">after</button>${o.jot ? '<button type="button" class="jot-tab" data-jot><i class="fa-solid fa-note-sticky" aria-hidden="true" style="display:inline-block;width:1em;height:1em;font-size:16px"></i><span class="jot-tab-label">Jot notes</span></button>' : ''}
 <script>
 window.sets = []; window.DRAFT = ${JSON.stringify(o.draft || {})}; window.widgets = {}; window.mounted = new WeakSet(); window.hits = [];
 window.Chronicle = { register: function (n, d) { widgets[n] = d; }, escapeHtml: function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
@@ -153,7 +161,7 @@ async function open(t, o = {}) {
   const { width = 1280, height = 800, plan = PLAN, reduced = 'no-preference' } = o;
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
-  const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: reduced, hasTouch: width < 700 });
+  const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: reduced, hasTouch: width < 700, deviceScaleFactor: SHOTS ? 2 : 1 });
   const pg = await ctx.newPage();
   const seen = { api: [], nav: [] };
   const errors = [];
@@ -187,7 +195,7 @@ async function press(pg, name) { await cardOf(pg, name).click(); await pg.waitFo
 const tile = (pg, key) => pg.locator('.hcw-insp .hcw-t[data-b="' + key + '"]');
 const trimOf = (pg, name) => cardOf(pg, name).evaluate((n) => ({ trim: n.getAttribute('data-trim'), k: n.style.getPropertyValue('--k').trim() }));
 const frameInfo = (pg) => pg.evaluate(() => ({ view: document.querySelector('.hcw-frame .hc-app').getAttribute('data-view'), fw: document.querySelector('.hcw-frame').offsetWidth }));
-const shot = async (pg, name) => { if (SHOTS) await pg.screenshot({ path: join(SHOTS, name) }); };
+const shot = async (pg, name, clip) => { if (SHOTS) await pg.screenshot({ path: join(SHOTS, name), clip }); };
 
 // --- The frame ---
 
@@ -464,6 +472,50 @@ test('hostile values in the draft change nothing and reach no markup', { skip },
   assert.equal(await pg.evaluate(() => document.querySelectorAll('[onerror], [style*="url(x)"]').length), 0);
 });
 
+// The save bar with only a redo waiting: it says so, its dot is not waiting, and only Redo answers.
+const REDO_ONLY = { hidden: false, what: 'No changes waiting', dot: false, undo: true, redo: false, discard: true, save: true, whatOff: true, whatCursor: 'default', discardDim: true, discardCursor: 'default' };
+const redoBar = (pg) => pg.evaluate(() => {
+  const b = document.querySelector('[data-czs-savebar]'), d = (s) => b.querySelector(s).disabled;
+  return { hidden: b.hidden, what: b.querySelector('[data-czs-what]').textContent, dot: getComputedStyle(b.querySelector('.czs-sdot')).display !== 'none', undo: d('[data-czs-undo]'), redo: d('[data-czs-redo]'), discard: d('[data-czs-discard]'), save: d('[data-czs-save]'),
+    whatOff: d('[data-czs-what]'), whatCursor: getComputedStyle(b.querySelector('[data-czs-what]')).cursor,
+    discardDim: Number(getComputedStyle(b.querySelector('[data-czs-discard]')).opacity) <= 0.5, discardCursor: getComputedStyle(b.querySelector('[data-czs-discard]')).cursor };
+});
+// The words' ink and opacity, which stay as readable when they are not a control.
+const whatInk = (pg) => pg.evaluate(() => { const w = document.querySelector('[data-czs-what]'), b = w.querySelector('b'), cs = getComputedStyle(w); return { ink: cs.color, bold: getComputedStyle(b).color, op: cs.opacity }; });
+const barClip = (pg) => pg.evaluate(() => { const r = document.querySelector('[data-czs-savebar]').getBoundingClientRect(); const x = Math.max(0, r.left - 16), y = Math.max(0, r.top - 16); return { x, y, width: Math.min(innerWidth, r.right + 16) - x, height: Math.min(innerHeight, r.bottom + 16) - y }; });
+
+test('at 390 wide, undone back to no changes, the save bar stays with Redo, and the page still keeps clear of it', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, height: 844, shell: true, jot: true });
+  await press(pg, 'Dwarf');
+  await tile(pg, 'fire').click();
+  await settle(pg, 120);
+  await pg.locator('[data-czs-undo]').click();
+  await settle(pg, 300);
+  assert.equal((await trimOf(pg, 'Dwarf')).trim, 'rune-metal');
+  assert.deepEqual(await redoBar(pg), REDO_ONLY);
+  const quiet = await whatInk(pg);
+  // Hovered, the words gain no underline, and a press opens no list.
+  await pg.locator('[data-czs-what]').hover({ force: true });
+  assert.equal(await pg.evaluate(() => getComputedStyle(document.querySelector('[data-czs-what]')).textDecorationLine), 'none');
+  await pg.locator('[data-czs-what]').click({ force: true });
+  assert.equal(await pg.locator('.czs-pop').count(), 0);
+  await shot(pg, 'redo-390.png');
+  const f = await footInfo(pg);
+  assert.ok(f.jot.bottom + 5 <= f.bar.top, 'the notes tab stays clear of the bar');
+  // The page reads the bar: closed, the workshop's foot is padded past it.
+  await pg.locator('.hcw-done').click();
+  await settle(pg, 300);
+  assert.equal(await pg.evaluate(() => document.querySelector('[data-hl-canvas]').style.getPropertyValue('--hcw-cover')), (76 + 16) + 'px');
+  await pg.locator('[data-czs-redo]').click();
+  await settle(pg, 120);
+  assert.equal((await trimOf(pg, 'Dwarf')).trim, 'fire');
+  assert.equal(await pg.evaluate(() => document.querySelector('.czs-sdot').hidden), false, 'with a change waiting the dot shows again');
+  const live = await redoBar(pg);
+  assert.equal(live.whatOff, false, 'with a change waiting the words open the list again');
+  assert.equal(live.discardDim, false);
+  assert.deepEqual(await whatInk(pg), quiet, 'the words are as readable with nothing waiting as with a change');
+});
+
 test('undo through the real Customize shell puts a card back, and a save reads the plan again and closes the panel', { skip }, async (t) => {
   let served = 0;
   const { pg, seen } = await open(t, { shell: true, plan: () => { served++; const p = PLAN(); if (served > 1) p.steps[0].choices[1] = pkg('Human', { look: { border: 'fire', colour: '#d9622b' }, lookChanged: true, systemLook: null }); return p; } });
@@ -477,13 +529,17 @@ test('undo through the real Customize shell puts a card back, and a save reads t
   await settle(pg, 80);
   assert.equal((await trimOf(pg, 'Human')).trim, null, 'undo puts the card back');
   assert.equal(await tile(pg, 'ice').getAttribute('aria-pressed'), 'false');
-  // Undoing back to clean hides the bar, so redo is reached the way its shortcut does.
-  await pg.evaluate(() => Chronicle.customizeRedo());
+  // Undone back to clean, the bar stays for Redo.
+  assert.deepEqual(await redoBar(pg), REDO_ONLY);
+  await shot(pg, 'redo-desk.png', await barClip(pg));
+  await pg.locator('[data-czs-redo]').click();
   await settle(pg, 80);
   assert.equal((await trimOf(pg, 'Human')).trim, 'ice');
+  assert.match(await pg.locator('[data-czs-what]').innerText(), /1 change.*waiting/);
   await pg.locator('[data-czs-discard]').click();
   await settle(pg, 300);
   assert.equal((await trimOf(pg, 'Human')).trim, null, 'discard too');
+  assert.equal(await pg.evaluate(() => document.querySelector('[data-czs-savebar]').hidden), true, 'after Discard the bar goes away: nothing is left to redo');
   // A Save that applied herolooks: the plan is read again and the panel is closed.
   await tile(pg, 'ice').click();
   await settle(pg, 80);
@@ -494,6 +550,7 @@ test('undo through the real Customize shell puts a card back, and a save reads t
   assert.equal(await pg.locator('.hcw-insp.open').count(), 0);
   assert.deepEqual(await trimOf(pg, 'Human'), { trim: 'fire', k: '#d9622b' }, 'the server’s look is what shows');
   assert.equal(await pg.evaluate(() => document.querySelector('.hcw-frame .hc-app').getAttribute('data-step')), '0', 'the step stays');
+  assert.equal(await pg.evaluate(() => document.querySelector('[data-czs-savebar]').hidden), true, 'after Save the bar goes away');
   // base is the server's now: going back to None is a change again.
   await press(pg, 'Human');
   await tile(pg, '').click();
@@ -552,6 +609,165 @@ for (const width of [390, 360]) {
     assert.equal(await pg.evaluate(() => document.activeElement.textContent.includes('Dwarf') || !!document.activeElement.closest('.hc-card')), true, 'Done gives the keyboard back to the card');
   });
 }
+
+// The sheet's place on a phone: the card above it, its height, and what shows inside.
+const sheetInfo = (pg) => pg.evaluate(() => {
+  const c = document.querySelector('.hcw-on').getBoundingClientRect(), i = document.querySelector('.hcw-insp'), s = i.getBoundingClientRect();
+  const t = i.querySelector('.hcw-t').getBoundingClientRect(), wall = i.querySelector('[data-wall]');
+  return { clear: s.top - c.top, h: s.height, ed: document.querySelector('.hcw-editor').clientHeight, firstRowBottom: t.bottom + wall.scrollTop, sheetBottom: s.bottom, inline: i.style.height };
+});
+
+for (const [width, height] of [[390, 844], [360, 800]]) {
+  test(`at ${width}x${height} with a bar above the page the sheet shortens to keep the pressed card clear, never below one row of samples`, { skip }, async (t) => {
+    const plain = await open(t, { width, height });
+    await press(plain.pg, 'Dwarf');
+    await settle(plain.pg, 500);
+    const a = await sheetInfo(plain.pg);
+    const { pg } = await open(t, { width, height, app: true, bar: true });
+    await press(pg, 'Dwarf');
+    await settle(pg, 500);
+    const b = await sheetInfo(pg);
+    assert.ok(b.clear >= 280, `with the bar too little of the card shows above the sheet: ${b.clear}`);
+    assert.ok(b.h <= b.ed * 0.58 + 1, `the sheet is never taller than its share: ${b.h} of ${b.ed}`);
+    assert.ok(b.firstRowBottom <= b.sheetBottom, 'the head, the colours and one full row of samples still show');
+    assert.ok(a.clear >= 280);
+    assert.equal(a.inline, '', 'where the card already clears, the sheet keeps its share');
+    assert.ok(Math.abs(a.h - a.ed * 0.58) <= 1, `${a.h} of ${a.ed}`);
+    await shot(pg, `sheet-${width}-bar.png`);
+  });
+}
+
+// Colours as computed: rgb(), rgba() and color(srgb …) with alpha, laid over a ground.
+function colourOf(s) {
+  const m = /color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)/.exec(s);
+  if (m) return { c: [m[1], m[2], m[3]].map((v) => Number(v) * 255), a: m[4] == null ? 1 : Number(m[4]) };
+  const n = s.match(/[\d.]+/g).map(Number);
+  return { c: n.slice(0, 3), a: n.length > 3 ? n[3] : 1 };
+}
+const over = (top, ground) => top.c.map((v, i) => v * top.a + ground[i] * (1 - top.a));
+function lum(c) { const [r, g, b] = c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 1);
+
+test('on a computer the Computer and Phone switch is a dark surface like the panel in dark, readable, with the pressed segment clear, and the inverse pill in light', { skip }, async (t) => {
+  for (const dark of [true, false]) {
+    const { pg } = await open(t, { dark });
+    await press(pg, 'Dwarf');
+    await settle(pg, 400);
+    const r = await pg.evaluate(() => {
+      const cs = (s) => getComputedStyle(document.querySelector(s));
+      const probe = document.createElement('span'); probe.style.color = 'var(--color-text-primary)'; document.body.appendChild(probe);
+      return { dock: cs('.hcw .cpe-dock').backgroundColor, ink: cs('.hcw .cpe-dock').color, on: cs('.hcw [data-hl="view-desk"]').backgroundColor, off: cs('.hcw [data-hl="view-phone"]').backgroundColor, panel: cs('.hcw-insp').backgroundColor, primary: getComputedStyle(probe).color };
+    });
+    const dock = colourOf(r.dock).c, ink = colourOf(r.ink).c, on = over(colourOf(r.on), dock);
+    if (dark) {
+      assert.ok(near(dock, colourOf(r.panel).c), `the dock (${r.dock}) is the panel’s surface (${r.panel})`);
+      assert.ok(ratio(ink, dock) >= 7, 'its words read on it');
+      assert.ok(ratio(ink, on) >= 4.5, 'and on the pressed segment');
+      assert.ok(ratio(on, dock) >= 1.4, `the pressed segment (${r.on}) stands out from the dock`);
+      assert.equal(colourOf(r.off).a, 0, 'the other segment has no fill');
+    } else {
+      assert.ok(near(dock, colourOf(r.primary).c), `in light the dock stays on the inverse surface (${r.dock})`);
+    }
+    const clip = await pg.evaluate(() => { const a = document.querySelector('.hcw-dockw .cpe-dock').getBoundingClientRect(), b = document.querySelector('.hcw-insp').getBoundingClientRect(); const x = Math.max(0, a.left - 24), y = Math.max(0, b.top - 8); return { x, y, width: Math.min(innerWidth, b.right + 8) - x, height: Math.min(innerHeight, Math.max(a.bottom, b.bottom) + 8) - y }; });
+    await shot(pg, dark ? 'dock-dark.png' : 'dock-light.png', clip);
+  }
+});
+
+// The free colour on a phone: inside the row's box wherever the row is scrolled.
+const rowInfo = (pg, to) => pg.evaluate((to) => {
+  const row = document.querySelector('.hcw-insp .hcw-top .hcw-cs');
+  row.scrollLeft = to === 'end' ? row.scrollWidth : to === 'mid' ? (row.scrollWidth - row.clientWidth) / 2 : 0;
+  const box = row.getBoundingClientRect(), anyEl = row.querySelector('.hcw-c--any'), a = anyEl.getBoundingClientRect();
+  const sw = Array.from(row.querySelectorAll('button.hcw-c')), iron = sw[sw.length - 1].getBoundingClientRect();
+  const hit = document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2);
+  const beneath = sw.some((b) => { const r = b.getBoundingClientRect(); return r.right > a.left && r.left < a.right; });
+  const shadow = getComputedStyle(anyEl).boxShadow;
+  // What a tap lands on across the band left of the free colour, at its middle and near its top and bottom.
+  const cy = a.top + a.height / 2, band = [];
+  for (let x = Math.ceil(a.left - 19); x < a.left; x += 2) for (const y of [cy - 14, cy, cy + 14]) { const h = document.elementFromPoint(x, y); band.push(h === row || !!(h && h.closest('.hcw-c--any')) ? 'ok' : (h && h.closest('.hcw-c') ? 'swatch' : 'other')); }
+  return { box: { l: box.left, r: box.right, t: box.top, b: box.bottom }, any: { l: a.left, r: a.right, t: a.top, b: a.bottom }, iron: { l: iron.left, r: iron.right }, hit: !!(hit && hit.closest('.hcw-c--any')), band: band.filter((b) => b !== 'ok'), bandAt: { x: a.left - 10, y: cy }, beneath, shadow, overflow: row.scrollWidth > row.clientWidth, pos: getComputedStyle(anyEl).position };
+}, to);
+
+for (const [width, height] of [[390, 844], [360, 800]]) {
+  test(`at ${width}x${height} the free colour stays whole at the colour row’s right end, wherever the row is scrolled`, { skip }, async (t) => {
+    const { pg } = await open(t, { width, height });
+    await press(pg, 'Dwarf');
+    await settle(pg, 400);
+    const ring = 20;
+    for (const to of ['start', 'mid', 'end']) {
+      const r = await rowInfo(pg, to);
+      assert.ok(r.overflow, 'the row scrolls sideways');
+      assert.equal(r.pos, 'sticky');
+      // The focus ring reaches 5px past the swatch; it stays inside the row too.
+      assert.ok(r.any.l >= r.box.l && r.any.r + 5 <= r.box.r && r.any.t - 5 >= r.box.t && r.any.b + 5 <= r.box.b, `${to}: the free colour ${JSON.stringify(r.any)} is cut by the row ${JSON.stringify(r.box)}`);
+      assert.ok(r.hit, `${to}: a tap on the free colour reaches it, not a colour beneath`);
+      assert.match(r.shadow, new RegExp('0px 0px 0px ' + ring + 'px'), 'a band of the sheet’s surface backs it');
+      assert.deepEqual(r.band, [], `${to}: a tap on the band beside it reaches no colour`);
+      if (to !== 'end') {
+        // A real tap on the band changes nothing.
+        const n0 = (await sets(pg)).length, k0 = (await trimOf(pg, 'Dwarf')).k;
+        await pg.mouse.click(r.bandAt.x, r.bandAt.y);
+        await settle(pg, 120);
+        assert.equal((await sets(pg)).length, n0, `${to}: a tap on the band writes nothing`);
+        assert.equal((await trimOf(pg, 'Dwarf')).k, k0);
+        await rowInfo(pg, to);
+      }
+      if (to === 'mid') assert.ok(r.beneath, 'a colour passes beneath it here');
+      if (to === 'end') assert.ok(r.iron.l >= r.box.l && r.iron.r + ring <= r.any.l, `at the row’s end the last colour ${JSON.stringify(r.iron)} shows whole beside it ${JSON.stringify(r.any)}`);
+      if (width === 390 && to !== 'mid') await shot(pg, `sheet-390-${to}.png`);
+    }
+    // Picked, its ring shows inside the row.
+    await pg.evaluate(() => { const i = document.querySelector('.hcw-insp [data-any]'); i.value = '#123456'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+    await settle(pg, 120);
+    const p = await rowInfo(pg, 'start');
+    assert.match(p.shadow, /0px 0px 0px 4px/);
+    assert.ok(p.any.r + 4 <= p.box.r);
+  });
+}
+
+// The notes tab and the save bar share the foot of a phone.
+const footInfo = (pg) => pg.evaluate(() => {
+  const r = (s) => { const n = document.querySelector(s), b = n.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, shown: !n.hidden && b.height > 0 }; };
+  return { jot: r('.jot-tab'), bar: r('[data-czs-savebar]'), save: r('[data-czs-save]'), vh: innerHeight };
+});
+
+for (const [width, table] of [[390, false], [360, false], [390, true]]) {
+  test(`at ${width} wide${table ? ' over the Table’s line' : ''} the notes tab sits clear above the save bar, and back down without it`, { skip }, async (t) => {
+    const { pg } = await open(t, { width, height: 844, shell: true, jot: true, table });
+    const before = await footInfo(pg);
+    assert.equal(before.bar.shown, false);
+    await press(pg, 'Dwarf');
+    await tile(pg, 'fire').click();
+    await settle(pg, 400);
+    const f = await footInfo(pg);
+    assert.equal(f.bar.shown, true);
+    // The tab's press area reaches 5px past it.
+    assert.ok(f.jot.bottom + 5 <= f.bar.top, `the notes tab (${f.jot.top}–${f.jot.bottom}) lies on the save bar (${f.bar.top}–${f.bar.bottom})`);
+    assert.ok(f.jot.top >= 0);
+    assert.ok(f.save.right <= f.vh && f.save.right > f.save.left);
+    await pg.locator('[data-czs-discard]').click();
+    await settle(pg, 400);
+    const after = await footInfo(pg);
+    assert.equal(after.bar.shown, false);
+    assert.equal(after.jot.bottom, before.jot.bottom, 'without the bar the tab is back in its place');
+  });
+}
+
+test('at 390x844 with the save bar up the last row of samples scrolls fully clear of it', { skip }, async (t) => {
+  const { pg } = await open(t, { width: 390, height: 844, shell: true, jot: true });
+  await press(pg, 'Dwarf');
+  await tile(pg, 'fire').click();
+  await settle(pg, 400);
+  const r = await pg.evaluate(() => {
+    const wall = document.querySelector('.hcw-insp [data-wall]');
+    wall.scrollTop = wall.scrollHeight;
+    const ts = wall.querySelectorAll('.hcw-t'), last = ts[ts.length - 1].getBoundingClientRect();
+    return { last: last.bottom, bar: document.querySelector('[data-czs-savebar]').getBoundingClientRect().top, shown: !document.querySelector('[data-czs-savebar]').hidden };
+  });
+  assert.equal(r.shown, true);
+  assert.ok(r.last <= r.bar, `the last row ends at ${r.last}, under the bar at ${r.bar}`);
+});
 
 // --- Nothing leaves the frame ---
 
@@ -706,6 +922,13 @@ for (const [name, o, stepLook] of [
     void stepLook;
   });
 }
+
+test('review picture sheet-390-dark.png', { skip: skip || !SHOTS }, async (t) => {
+  const { pg } = await open(t, { width: 390, height: 844, dark: true });
+  await press(pg, 'Dwarf');
+  await settle(pg, 600);
+  await shot(pg, 'sheet-390-dark.png');
+});
 
 for (const width of [390, 360]) {
   test(`the save bar at ${width} wide with two cards changed`, { skip: skip || !SHOTS }, async (t) => {

@@ -22,6 +22,12 @@
 .hcw[data-view="phone"] .hcw-frame { border-radius: 26px; box-shadow: 0 0 0 9px var(--color-bg-secondary), 0 0 0 10px var(--color-border), var(--elev-dragged); }
 .hcw-dockw { z-index: calc(var(--z-raised) + 1); }
 .hcw-dockw[hidden] { display: none; }
+/* The page editor's dock is drawn on the inverse surface, which in dark is a
+   white pill; beside this page's panel it is a surface like the panel's. The
+   pressed segment keeps its tint of the ink, now light on dark. */
+.dark .hcw .cpe-dock { background: var(--color-bg-secondary); color: var(--color-text-primary); box-shadow: 0 0 0 var(--shape-edge, 1px) var(--color-border), var(--elev-dragged); }
+.dark .hcw .cpe-dock.cue-l::before { background: linear-gradient(to left, transparent, var(--color-bg-secondary)); }
+.dark .hcw .cpe-dock.cue-r::after { background: linear-gradient(to right, transparent, var(--color-bg-secondary)); }
 
 /* The creator in the frame measures the frame, not the window. */
 .hcw-frame .hc[data-look="stage"] .hc-app[data-view="desk"] .hc-cols { grid-template-columns: 232px minmax(0, 1fr) 340px; }
