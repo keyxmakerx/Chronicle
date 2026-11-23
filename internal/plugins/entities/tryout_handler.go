@@ -67,10 +67,11 @@ func (h *Handler) TryoutNew(c *echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	if cc.IsMember && cc.MemberRole == campaigns.RolePlayer {
-		// The look asked for goes with the member to the creator they have.
+		// A request for the classic look goes with the member to the creator
+		// they have; the stage look is the default and needs no carrying.
 		query := ""
-		if heroLookFrom(c.QueryParam("look")) == HeroLookStage {
-			query = "?look=" + HeroLookStage
+		if heroLookFrom(c.QueryParam("look")) == HeroLookClassic {
+			query = "?look=" + HeroLookClassic
 		}
 		return c.Redirect(http.StatusFound, practiceNewURL(cc.Campaign.ID, query))
 	}

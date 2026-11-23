@@ -61,11 +61,18 @@ const DRAFT_FULL = {
 const LIGHT = ':root{--color-bg-primary:#f9fafb;--color-card-bg:#fff;--color-bg-tertiary:#f3f4f6;--color-border:#e5e7eb;--color-text-primary:#111827;--color-text-secondary:#4b5563;--dur-micro:120ms;--dur-standard:200ms;--dur-large:280ms;--ease-out:cubic-bezier(.16,1,.3,1);--z-popup:50;--z-sheet:60}';
 const DARK = 'html.dark{--color-bg-primary:#111827;--color-card-bg:#1f2937;--color-bg-tertiary:#374151;--color-border:#374151;--color-text-primary:#f9fafb;--color-text-secondary:#c4c9d2}';
 
-function page({ accent = '#6366f1', attrs = '', look = true, chrome = false, drawer = false, dark = false, extras = false }) {
+// The two amber strips a Director sees under the 48px top bar.
+const STRIP_CSS = 'padding:6px 16px;font-size:14px;line-height:20px;text-align:center;background:#fef3c7';
+const STRIPS = {
+  guest: `<div class="gpv-bar" role="status" data-guest-preview="guestcode" style="${STRIP_CSS}"><span>Viewing as a visitor with a guest code</span> <button type="button" class="pv-back" onclick="window.backHit=(window.backHit||0)+1">Back to your view</button></div>`,
+  player: `<div data-pv-banner style="${STRIP_CSS}"><span>Viewing as player — Director-only content is hidden</span> <button type="button" class="pv-back" data-pv-toggle onclick="window.backHit=(window.backHit||0)+1">Back to your view</button></div>`,
+};
+
+function page({ accent = '#6366f1', attrs = '', look = true, chrome = false, drawer = false, dark = false, extras = false, strip = '' }) {
   return `<!doctype html><html data-gm-term="Director"${dark ? ' class="dark"' : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${LIGHT}${DARK}:root{--color-accent:${accent}}*,::before,::after{box-sizing:border-box}body{margin:0;font-family:sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}${drawer ? '#tt-drawer{position:fixed;left:0;right:0;bottom:0;height:48px;background:#222;z-index:60}' : ''}</style>
 <link rel="stylesheet" href="/hero_creator.css">${look ? '<link rel="stylesheet" href="/hero_stage.css">' : ''}</head><body>
-${chrome ? '<nav id="sidebar"' + (chrome === 'inert' ? ' inert' : '') + '>side</nav><header id="app-topbar">top</header>' : ''}${drawer ? '<div id="tt-drawer"><button type="button" id="tt-grab">The table</button></div>' : ''}${extras ? '<a id="skip" href="#main-content">Skip to content</a><div id="notice" role="region"><button type="button">Set zone</button><button type="button">Later</button><button type="button">Never</button></div><div id="pre" inert><button type="button">Held by the page</button></div>' : ''}
+${chrome ? '<nav id="sidebar"' + (chrome === 'inert' ? ' inert' : '') + '>side</nav><header id="app-topbar">top</header>' : ''}${strip ? '<header id="app-topbar" style="height:48px">top</header>' + STRIPS[strip] : ''}${drawer ? '<div id="tt-drawer"><button type="button" id="tt-grab">The table</button></div>' : ''}${extras ? '<a id="skip" href="#main-content">Skip to content</a><div id="notice" role="region"><button type="button">Set zone</button><button type="button">Later</button><button type="button">Never</button></div><div id="pre" inert><button type="button">Held by the page</button></div>' : ''}
 ${extras ? '<div id="shell"><main id="main-content" tabindex="-1">' : ''}<div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true"${look ? ' data-look="stage"' : ''} ${attrs}><p class="hc-loading__text">Opening</p></div>
 ${extras ? '</main><footer id="foot"><a href="/elsewhere">Footer link</a></footer></div><div id="chronicle-toasts" aria-live="polite"><button type="button">Undo</button></div>' : ''}
@@ -672,6 +679,66 @@ test('the creator follows the Table bar when its height or place changes after i
   assert.equal(await bottom(), 844 - 48);
   // Leaving stops the watching.
   await pg.evaluate(() => window.hcImpl.destroy(document.querySelector('.hc')));
+});
+
+// --- The visitor and player strips ---
+
+const SIZES = [[1280, 800], [390, 844], [360, 800]];
+const frames3 = (pg) => pg.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
+const edges = (pg) => pg.evaluate(() => {
+  const a = document.querySelector('.hc-app').getBoundingClientRect(), s = document.querySelector('[data-guest-preview], [data-pv-banner]');
+  return { top: a.top, bottom: a.bottom, strip: s ? s.getBoundingClientRect().bottom : 0 };
+});
+async function pinStrip(pg, h, drawer) {
+  const e = await edges(pg), near = (a, b, m) => assert.ok(Math.abs(a - b) < 0.6, m + ': ' + a + ' vs ' + b);
+  near(e.top, e.strip, 'the creator starts at the strip\'s bottom edge');
+  near(e.bottom, h - (drawer ? 48 : 0), 'the creator ends at the window\'s bottom');
+}
+
+for (const kind of ['guest', 'player']) {
+  for (const [w, h] of SIZES) {
+    test(`${kind} strip at ${w}x${h}: Back to your view stays reachable and the creator sits under it`, { skip }, async (t) => {
+      const { pg } = await open(t, { width: w, height: h, strip: kind, drawer: true });
+      await pinStrip(pg, h, true);
+      const hit = await pg.evaluate(() => {
+        const b = document.querySelector('.pv-back').getBoundingClientRect(), el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return el === document.querySelector('.pv-back');
+      });
+      assert.equal(hit, true, 'the button is what is at its own centre');
+      await pg.click('.pv-back', { timeout: 2000 });
+      assert.equal(await pg.evaluate(() => window.backHit), 1, 'a real click lands on it');
+    });
+  }
+
+  test(`${kind} strip: the creator follows the strip when it grows to two lines and when it folds away`, { skip }, async (t) => {
+    const { pg } = await open(t, { width: 1280, height: 800, strip: kind });
+    await pinStrip(pg, 800, false);
+    const before = (await edges(pg)).strip;
+    await pg.evaluate(() => {
+      const s = document.querySelector('[data-guest-preview], [data-pv-banner]');
+      s.firstElementChild.textContent = 'Viewing as someone else, with a long line that has to wrap. '.repeat(14);
+    });
+    await frames3(pg);
+    assert.ok((await edges(pg)).strip > before + 15, 'the strip is taller now');
+    await pinStrip(pg, 800, false);
+    await pg.evaluate(() => { document.querySelector('[data-guest-preview], [data-pv-banner]').style.display = 'none'; });
+    await frames3(pg);
+    assert.equal((await edges(pg)).top, 0, 'a folded strip leaves the whole window');
+    await pg.evaluate(() => { document.querySelector('[data-guest-preview], [data-pv-banner]').style.display = ''; });
+    await frames3(pg);
+    await pinStrip(pg, 800, false);
+    await pg.evaluate(() => window.hcImpl.destroy(document.querySelector('.hc')));
+  });
+}
+
+test('no strip: the creator still takes the whole window from the top', { skip }, async (t) => {
+  for (const [w, h] of SIZES) {
+    const { pg, ctx } = await open(t, { width: w, height: h, strip: '', chrome: true });
+    const e = await edges(pg);
+    assert.equal(e.top, 0);
+    assert.equal(e.bottom, h);
+    await ctx.close();
+  }
 });
 
 // --- The "All steps" list and the keyboard, in both looks ---

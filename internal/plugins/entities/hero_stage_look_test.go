@@ -14,9 +14,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 )
 
-// The creator's stage look is asked for with ?look=stage and nothing else:
-// that value puts data-look on the mount and links the stage stylesheet; no
-// parameter, or any other value, leaves the page as it was.
+// The stage look is the default: no parameter, ?look=stage or any value other
+// than the exact "classic" puts data-look on the mount and links the stage
+// stylesheet; only ?look=classic leaves the page without them.
 func TestNewHero_StageLook(t *testing.T) {
 	player := tryoutViewer{user: "u1", member: true, role: campaigns.RolePlayer}
 	page := func(query string) string {
@@ -38,10 +38,11 @@ func TestNewHero_StageLook(t *testing.T) {
 		want  bool
 	}{
 		{"stage", "?look=stage", true},
-		{"no parameter", "", false},
-		{"another value", "?look=neon", false},
-		{"not the exact value", "?look=Stage", false},
-		{"empty", "?look=", false},
+		{"no parameter", "", true},
+		{"classic", "?look=classic", false},
+		{"another value", "?look=neon", true},
+		{"not the exact classic value", "?look=Classic", true},
+		{"empty", "?look=", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -63,7 +64,7 @@ func TestNewHero_StageLook(t *testing.T) {
 }
 
 // The stage look carries the border library on the mount and links the
-// borders stylesheet; the classic page carries neither.
+// borders stylesheet; the classic page (?look=classic) carries neither.
 func TestNewHero_StageBorders(t *testing.T) {
 	player := tryoutViewer{user: "u1", member: true, role: campaigns.RolePlayer}
 	page := func(query string) string {
@@ -79,7 +80,7 @@ func TestNewHero_StageBorders(t *testing.T) {
 		}
 		return rec.Body.String()
 	}
-	stage, classic := page("?look=stage"), page("")
+	stage, classic := page(""), page("?look=classic")
 	if !strings.Contains(stage, "/static/plugins/entities/css/hero_borders.css") || !strings.Contains(stage, "data-borders=") {
 		t.Error("the stage look must link hero_borders.css and carry data-borders")
 	}
@@ -113,8 +114,8 @@ func TestCardBorderPicturesEmbedded(t *testing.T) {
 }
 
 // The practice and try-out pages take the look the way the new-hero page does:
-// only the exact value "stage" counts, and then the stage and borders
-// stylesheets, data-look and the border library all come with it.
+// only the exact value "classic" opts out of the stage look, which brings the
+// stage and borders stylesheets, data-look and the border library with it.
 func TestPracticeAndTryout_StageLook(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	pages := []struct {
@@ -145,10 +146,11 @@ func TestPracticeAndTryout_StageLook(t *testing.T) {
 		want  bool
 	}{
 		{"stage", "?look=stage", true},
-		{"no parameter", "", false},
-		{"another value", "?look=neon", false},
-		{"not the exact value", "?look=Stage", false},
-		{"empty", "?look=", false},
+		{"no parameter", "", true},
+		{"classic", "?look=classic", false},
+		{"another value", "?look=neon", true},
+		{"not the exact classic value", "?look=Classic", true},
+		{"empty", "?look=", true},
 	}
 	for _, pg := range pages {
 		for _, tt := range tests {
@@ -186,11 +188,13 @@ func TestPracticeAndTryout_StageLook(t *testing.T) {
 	}
 }
 
-// A player sent from the try-out to the creator they have keeps the look.
-func TestTryout_PlayerRedirectKeepsTheLook(t *testing.T) {
+// A player sent from the try-out to the creator they have keeps a request for
+// the classic look; the stage look, the default, carries nothing.
+func TestTryout_PlayerRedirectKeepsClassicLook(t *testing.T) {
 	player := tryoutViewer{user: "u1", member: true, role: campaigns.RolePlayer}
 	tests := []struct{ query, want string }{
-		{"?look=stage", "/campaigns/camp-1/characters/practice/new?look=stage"},
+		{"?look=classic", "/campaigns/camp-1/characters/practice/new?look=classic"},
+		{"?look=stage", "/campaigns/camp-1/characters/practice/new"},
 		{"", "/campaigns/camp-1/characters/practice/new"},
 		{"?look=neon", "/campaigns/camp-1/characters/practice/new"},
 	}

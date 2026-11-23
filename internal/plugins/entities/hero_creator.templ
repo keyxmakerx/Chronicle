@@ -23,14 +23,19 @@ type HeroCreatorView struct {
 	// TermsURL is where the builder reads the system's rules words; empty
 	// when the system has no glossary, which leaves the attribute off.
 	TermsURL string
-	// Look is "stage" when the page asks for the hero-on-stage look; any other
-	// value is the classic look and leaves the attribute and stylesheet off.
+	// Look is "stage" for the hero-on-stage look, which every page gets unless
+	// it asks for the classic look; any other value leaves the attribute and
+	// stylesheet off.
 	Look string
 }
 
-// HeroLookStage is the one value of ?look= that switches the hero creator to
-// the hero-on-stage look.
+// HeroLookStage is the hero-on-stage look, the creator's default; ?look=stage
+// asks for it by name.
 const HeroLookStage = "stage"
+
+// HeroLookClassic is the one value of ?look= that switches the hero creator
+// back to the classic look.
+const HeroLookClassic = "classic"
 
 // heroLookAttrs is what the mount carries for a look. Both looks carry the
 // card-border library and the picker's lists, which the "Card border" row of
