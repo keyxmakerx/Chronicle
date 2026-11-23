@@ -83,14 +83,20 @@ type categoryTarget struct {
 	all  []CategoryInfo
 }
 
+// categoryWord is how the row names the category to delete: `category:`,
+// else the block's name.
+func categoryWord(r Record) string {
+	if name := strings.TrimSpace(r.Str("category")); name != "" {
+		return name
+	}
+	return strings.TrimSpace(r.Name)
+}
+
 // resolve finds the record's category and, when written, the one taking its
 // pages.
 func (k CategoryKind) resolve(ctx context.Context, campaignID string, r Record) (categoryTarget, error) {
 	var t categoryTarget
-	name := strings.TrimSpace(r.Str("category"))
-	if name == "" {
-		name = strings.TrimSpace(r.Name)
-	}
+	name := categoryWord(r)
 	if name == "" {
 		return t, badRequestf("name the category to delete in `category:`")
 	}
@@ -230,7 +236,7 @@ func (k CategoryKind) Plan(ctx context.Context, campaignID string, a Actor, r Re
 		if t.to != nil {
 			p.Summary = self + " is deleted. It has no pages, so nothing moves into " + nameIn(*t.to, t.all) + "."
 		}
-		return p
+		return withSlugNotes(p, t, r)
 	}
 	if t.to == nil {
 		return Plan{Error: fmt.Sprintf("%s still has %s; name the category that takes them in `move_pages_to`", self, movingPages(from))}
@@ -245,6 +251,26 @@ func (k CategoryKind) Plan(ctx context.Context, campaignID string, a Actor, r Re
 	if to.DMOnly && !from.DMOnly {
 		p.Warnings = append(p.Warnings, "players stop seeing these pages: "+toName+" is for the Director team only")
 	}
+	return withSlugNotes(p, t, r)
+}
+
+// withSlugNotes warns when a word the row used is the slug of the category
+// it picked but the name of another one, so a renamed category is never
+// deleted or filled under a name that now belongs to something else.
+func withSlugNotes(p Plan, t categoryTarget, r Record) Plan {
+	note := func(word string, picked *CategoryInfo) {
+		if picked == nil || word == "" {
+			return
+		}
+		for _, c := range t.all {
+			if c.ID != picked.ID && (sameName(c.Name, word) || sameName(c.Plural, word)) {
+				p.Warnings = append(p.Warnings, quote(word)+" is the slug of "+picked.menuLabel()+"; the category called "+c.menuLabel()+" is "+quote(c.Slug))
+				return
+			}
+		}
+	}
+	note(categoryWord(r), &t.from)
+	note(strings.TrimSpace(r.Str("move_pages_to")), t.to)
 	return p
 }
 

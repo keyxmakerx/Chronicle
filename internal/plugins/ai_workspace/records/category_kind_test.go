@@ -69,6 +69,8 @@ func TestCategoryKind_Plan(t *testing.T) {
 			"move into Secrets", "", "players stop seeing these pages: Secrets is for the Director team only"},
 		{"merge names a shared name by its slug", owner, ActionDelete, map[string]any{"category": "Secrets", "move_pages_to": "adventures"},
 			"its 2 pages and its folders move into Adventures (adventures).", "", ""},
+		{"a slug that is another category's name is pointed out", owner, ActionDelete, map[string]any{"category": "Secrets", "move_pages_to": "adventures"},
+			"move into Adventures (adventures).", "", "\"adventures\" is the slug of Adventures; the category called Adventures is \"adventures-2\""},
 		{"ambiguous name refused listing slugs", owner, ActionDelete, map[string]any{"category": "Adventure"},
 			"", "two categories are called Adventure: adventures (11 pages, only the Director team sees it) and adventures-2 (no pages); name one by its slug", ""},
 		{"ambiguous target refused", owner, ActionDelete, map[string]any{"category": "Secrets", "move_pages_to": "Adventures"},

@@ -5,8 +5,10 @@ package entities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -69,6 +71,8 @@ func (s *entityService) MergeEntityType(ctx context.Context, campaignID string, 
 	// standing is reported rather than counted as merged.
 	if _, err := s.types.FindByID(ctx, fromID); err == nil {
 		return int(moved), apperror.NewConflict("a page was added to it while its pages were moving; try again")
+	} else if ae := (*apperror.AppError)(nil); !errors.As(err, &ae) || ae.Code != http.StatusNotFound {
+		return int(moved), apperror.NewInternal(fmt.Errorf("checking entity type %d is gone: %w", fromID, err))
 	}
 
 	slog.Info("entity type merged",

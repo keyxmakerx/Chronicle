@@ -28,9 +28,9 @@ type EntityTypeRepository interface {
 	Delete(ctx context.Context, id int) error
 	// MoveEntitiesAndDeleteType reassigns every entity of fromTypeID to toTypeID
 	// within one campaign, with the type's sidebar folders and saved filters,
-	// then deletes the now-empty fromType — in a single transaction. The DELETE is guarded by NOT EXISTS over entities so a
-	// non-empty source is never dropped (defense in depth; the UPDATE just
-	// emptied it). Returns the number of entities moved. The service picks the
+	// then deletes the now-empty fromType — in a single transaction. The
+	// DELETE is guarded by NOT EXISTS over entities so a non-empty source is
+	// never dropped (defense in depth; the UPDATE just emptied it). Returns the number of entities moved. The service picks the
 	// exact (from, to) pair, so this carries no preset-string matching.
 	MoveEntitiesAndDeleteType(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
@@ -555,8 +555,9 @@ func (r *entityTypeRepository) MoveEntitiesAndDeleteType(ctx context.Context, ca
 	if err != nil {
 		return 0, fmt.Errorf("checking rows affected: %w", err)
 	}
-	// Folders and saved filters follow the pages; left behind, the type's
-	// delete would cascade them away and drop the pages out of their folders.
+	// Folders and saved filters follow the pages: left behind, the delete
+	// would cascade the folders away, dropping the pages out of them, and
+	// leave the filters pointing at a category that no longer exists.
 	for _, table := range []string{"sidebar_nodes", "saved_filters"} {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE `+table+` SET entity_type_id = ? WHERE entity_type_id = ? AND campaign_id = ?`,

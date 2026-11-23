@@ -400,7 +400,8 @@
       var inbound = model().filter(function (o) { return o.deleted && o.moveTo === c.key; })[0];
       var why = kids.length ? 'Delete its kinds first: ' + esc(kids.map(function (k) { return k.plural || k.name; }).join(', ')) + '.' :
         inbound ? 'The pages of ' + esc(inbound.plural || inbound.name) + ' are set to move here. Choose somewhere else for them first.' :
-        n && !targets.length ? 'Its pages are for the ' + esc(gmTerm()) + ' team only, and no other category is. Move them one by one first, or make another category only the ' + esc(gmTerm()) + ' team sees.' : '';
+        n && !targets.length ? (c.dmOnly ? 'Its pages are for the ' + esc(gmTerm()) + ' team only, and no other category is. Move them one by one first, or make another category only the ' + esc(gmTerm()) + ' team sees.' :
+          'There is no other saved category for its pages to move into. Save a new category first, or keep one you are deleting.') : '';
       var trash = c.trashed ? ' (' + c.trashed + ' of them in the Trash)' : '';
       var body = why ? '<p id="czc-dd">' + why + '</p>' :
         n ? '<p id="czc-dd">Its ' + pagesText(n) + trash + (n === 1 ? ' moves' : ' move') + ' to another category first, so no page is deleted.</p>' +
