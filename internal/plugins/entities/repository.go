@@ -27,10 +27,10 @@ type EntityTypeRepository interface {
 	Update(ctx context.Context, et *EntityType) error
 	Delete(ctx context.Context, id int) error
 	// MoveEntitiesAndDeleteType reassigns every entity of fromTypeID to toTypeID
-	// within one campaign, then deletes the now-empty fromType — in a single
-	// transaction. The DELETE is guarded by NOT EXISTS over entities so a
-	// non-empty source is never dropped (defense in depth; the UPDATE just
-	// emptied it). Returns the number of entities moved. The service picks the
+	// within one campaign, with the type's sidebar folders and saved filters,
+	// then deletes the now-empty fromType — in a single transaction. The
+	// DELETE is guarded by NOT EXISTS over entities so a non-empty source is
+	// never dropped (defense in depth; the UPDATE just emptied it). Returns the number of entities moved. The service picks the
 	// exact (from, to) pair, so this carries no preset-string matching.
 	MoveEntitiesAndDeleteType(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
@@ -544,8 +544,9 @@ func (r *entityTypeRepository) MoveEntitiesAndDeleteType(ctx context.Context, ca
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// updated_at moves so sync's change feed carries the pages' new category.
 	res, err := tx.ExecContext(ctx,
-		`UPDATE entities SET entity_type_id = ? WHERE entity_type_id = ? AND campaign_id = ?`,
+		`UPDATE entities SET entity_type_id = ?, updated_at = NOW() WHERE entity_type_id = ? AND campaign_id = ?`,
 		toTypeID, fromTypeID, campaignID)
 	if err != nil {
 		return 0, fmt.Errorf("reassigning entities: %w", err)
@@ -553,6 +554,16 @@ func (r *entityTypeRepository) MoveEntitiesAndDeleteType(ctx context.Context, ca
 	moved, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("checking rows affected: %w", err)
+	}
+	// Folders and saved filters follow the pages: left behind, the delete
+	// would cascade the folders away, dropping the pages out of them, and
+	// leave the filters pointing at a category that no longer exists.
+	for _, table := range []string{"sidebar_nodes", "saved_filters"} {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE `+table+` SET entity_type_id = ? WHERE entity_type_id = ? AND campaign_id = ?`,
+			toTypeID, fromTypeID, campaignID); err != nil {
+			return 0, fmt.Errorf("moving %s from entity type %d: %w", table, fromTypeID, err)
+		}
 	}
 
 	// Delete the now-empty source type. NOT EXISTS is belt-and-suspenders: the

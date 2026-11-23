@@ -170,6 +170,10 @@ type EntityService interface {
 	// Characters the system's sheet and disables the emptied type. Owner-run.
 	MoveCharacterPresetHome(ctx context.Context, campaignID string) (CharacterHomeMove, error)
 	DeleteEntityType(ctx context.Context, id int) error
+	// MergeEntityType moves every page of fromID (Trash included), its
+	// sidebar folders and saved filters into toID, then deletes fromID. See
+	// category_merge.go for the rules it keeps.
+	MergeEntityType(ctx context.Context, campaignID string, fromID, toID int) (int, error)
 	// ApplyCustomizeCategories applies the Customize page's category changes
 	// (create, edit, delete) through the methods above, stopping at the first
 	// failure and reporting what was done. See customize_categories.go.

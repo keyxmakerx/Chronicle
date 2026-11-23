@@ -2,9 +2,10 @@
 // section: creating, changing and deleting entity types in one Save.
 //
 // It is orchestration only. Every write goes through CreateEntityType,
-// UpdateEntityType, UpdateEntityTypeLayout and DeleteEntityType, so each
-// existing rule (names, colours, one level of nesting, a type with pages
-// cannot be deleted) applies here unchanged.
+// UpdateEntityType, UpdateEntityTypeLayout, DeleteEntityType and
+// MergeEntityType, so each existing rule (names, colours, one level of
+// nesting, a type with pages is deleted only by moving them) applies here
+// unchanged.
 
 package entities
 
@@ -69,6 +70,10 @@ type CustomizeCategoryItem struct {
 	PageLayouts *PageLayouts `json:"page_layouts,omitempty"`
 	// Delete removes an existing category.
 	Delete bool `json:"delete,omitempty"`
+	// MoveTo, with Delete, is the existing category (its id) that takes the
+	// deleted one's pages first, so a category with pages can go without
+	// losing any. See category_merge.go.
+	MoveTo string `json:"move_to,omitempty"`
 }
 
 // maxCategoryDescription is the longest description a category takes.
@@ -326,7 +331,12 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 
 	for _, key := range plan.deletes {
 		id, _ := strconv.Atoi(key)
-		if err := s.DeleteEntityType(ctx, id); err != nil {
+		if to := in.Items[key].MoveTo; to != "" {
+			toID, _ := strconv.Atoi(to)
+			if _, err := s.MergeEntityType(ctx, campaignID, id, toID); err != nil {
+				return res, err
+			}
+		} else if err := s.DeleteEntityType(ctx, id); err != nil {
 			return res, err
 		}
 		res.Applied = append(res.Applied, key)
@@ -373,7 +383,7 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if !it.New {
 				return plan, apperror.NewBadRequest("a new category must be marked new")
 			}
-			if it.Delete {
+			if it.Delete || it.MoveTo != "" {
 				return plan, apperror.NewBadRequest("a category made in the draft cannot be deleted")
 			}
 			if it.Name == "" || it.NamePlural == "" {
@@ -410,6 +420,9 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			}
 			if it.Delete && (it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil || it.Fields != nil) {
 				return plan, apperror.NewBadRequest("a category being deleted cannot get a new page layout or home")
+			}
+			if it.MoveTo != "" && !it.Delete {
+				return plan, apperror.NewBadRequest("only a category being deleted moves its pages")
 			}
 			if it.Delete {
 				deleting[k] = true
@@ -454,6 +467,31 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 				return plan, apperror.NewBadRequest("categories cannot be their own ancestors")
 			}
 			cur = parentOf[cur]
+		}
+	}
+
+	// A category whose pages move needs somewhere to keep them: another
+	// existing category that stays, and one players cannot see when the
+	// pages were hidden from them.
+	for k := range deleting {
+		to := items[k].MoveTo
+		if to == "" {
+			continue
+		}
+		if !customizeIDKeyPattern.MatchString(to) {
+			return plan, apperror.NewBadRequest("move its pages into a category that is already saved")
+		}
+		toID, _ := strconv.Atoi(to)
+		target, ok := byID[toID]
+		if !ok {
+			return plan, apperror.NewNotFound("the category to move its pages into was not found")
+		}
+		if deleting[to] {
+			return plan, apperror.NewBadRequest("its pages cannot move into a category that is being deleted too")
+		}
+		id, _ := strconv.Atoi(k)
+		if err := checkMerge(byID[id], target, false); err != nil {
+			return plan, err
 		}
 	}
 

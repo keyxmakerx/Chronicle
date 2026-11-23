@@ -90,6 +90,23 @@ func newCategoryWorld(types ...EntityType) (*categoryWorld, EntityService) {
 			w.log = append(w.log, "delete:"+strconv.Itoa(id))
 			return nil
 		},
+		listChildTypesFn: func(_ context.Context, parentID int) ([]EntityType, error) {
+			var out []EntityType
+			for _, t := range w.types {
+				if t.ParentTypeID != nil && *t.ParentTypeID == parentID {
+					out = append(out, *t)
+				}
+			}
+			return out, nil
+		},
+		moveEntitiesAndDeleteTypeFn: func(_ context.Context, _ string, from, to int) (int64, error) {
+			moved := w.pages[from]
+			w.pages[to] += moved
+			delete(w.pages, from)
+			delete(w.types, from)
+			w.log = append(w.log, "merge:"+strconv.Itoa(from)+">"+strconv.Itoa(to))
+			return int64(moved), nil
+		},
 		slugExistsFn: func(_ context.Context, campaignID, slug string) (bool, error) {
 			for _, t := range w.types {
 				if t.CampaignID == campaignID && t.Slug == slug {
