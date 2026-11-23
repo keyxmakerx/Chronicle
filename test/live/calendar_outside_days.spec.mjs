@@ -79,6 +79,7 @@ test('the weeks show the neighbouring dates, faded, over the era colour; a hidde
         const month = document.querySelector('.cal-v5 .stage > .month');
         return {
           outOpacity: out ? Number(getComputedStyle(out).opacity) : null,
+          hatch: (() => { const o = document.querySelector('.cal-v5 .day.out'); return o ? getComputedStyle(o, '::before').backgroundImage : null; })(),
           outButton: !!document.querySelector('.cal-v5 button.day.out'),
           clip: field ? field.style.clipPath : null, monthH: month.offsetHeight, monthW: month.offsetWidth,
           hidden: (() => { const h = document.querySelector('.cal-v5 .mk.dir'); return h ? { op: Number(getComputedStyle(h).opacity), ring: getComputedStyle(h, '::after').content } : null; })()
@@ -86,11 +87,12 @@ test('the weeks show the neighbouring dates, faded, over the era colour; a hidde
       });
       if (look.outOpacity !== null) assert.ok(look.outOpacity < 0.8, 'the neighbouring dates are not faded');
       assert.equal(look.outButton, false, 'an outside cell is a button');
+      if (look.hatch !== null) assert.match(look.hatch, /repeating-linear-gradient/, `an outside cell is not hatched: ${look.hatch}`);
       assert.ok(look.clip, 'the era colour is not drawn');
       assert.match(look.clip, new RegExp(`^polygon\\(0px 0px, ${look.monthW}px 0px, ${look.monthW}px ${look.monthH}px, 0px ${look.monthH}px\\)$`), `the era colour does not cover every cell: ${look.clip}`);
       assert.ok(look.hidden && look.hidden.op < 0.6, 'the hidden event is not drawn faded');
       assert.equal(look.hidden.ring, 'none', 'the hidden event still has a ring');
-      await picture(page, 'calendar-outside-days', { check: 'calendar-look', about: 'Owner month: neighbouring dates faded over the era colour, a faded hidden event', locator: page.locator('#cal5-cal') });
+      await picture(page, 'calendar-outside-days', { check: 'calendar-look', about: 'Owner month: neighbouring dates faded and hatched over the era colour, a faded hidden event', locator: page.locator('#cal5-cal') });
     }
     await page.locator('#cal5-next').click();
     await page.waitForTimeout(700);
