@@ -432,9 +432,11 @@ html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [d
 [data-sheet][data-sheet-style="brass"] .pg-card .paper-dbody{padding-inline:22px}
 [data-sheet][data-sheet-style="brass"] .pg-head{padding-left:14px}
 /* --- Modern: how the rest of Chronicle looks. Theme tokens, light or dark with the site, cards with soft depth. Default. --- */
+/* The accent is the campaign's colour in the shade that reads as text on this page tone (--color-accent-link), so what can be
+   acted on stands apart from labels even when high contrast makes every text grey nearly the ink. */
 [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])){
   --s-paper:var(--color-card-bg); --s-cut:var(--color-card-bg); --s-slip:var(--color-card-bg); --s-under:var(--color-bg-tertiary); --s-edge:var(--color-border);
-  --s-ink:var(--color-text-primary); --s-soft:var(--color-text-body); --s-mute:var(--color-text-secondary); --s-accent:var(--sh-accent-text); --s-on:var(--sh-on-accent); --s-pole:var(--sh-pole);
+  --s-ink:var(--color-text-primary); --s-soft:var(--color-text-body); --s-mute:var(--color-text-secondary); --s-accent:var(--color-accent-link, var(--sh-accent-text)); --s-on:var(--sh-on-accent); --s-pole:var(--sh-pole);
   --s-neg:var(--sh-neg); --s-bar:var(--sh-bar); --s-temp:var(--sh-temp); --s-warn:var(--sh-warn);
   --s-burn:107 114 128; --s-hl:128 128 128; --s-hlk:.3; --s-rim:transparent; --s-sh:17 24 39; --s-shk:.6;
   --s-tack:var(--color-accent); --s-pinhi:var(--color-card-bg); --s-radius:14px; --s-vig:0; --s-glow:0;
