@@ -499,6 +499,11 @@ test('at 390 wide, undone back to no changes, the save bar stays with Redo, and 
   assert.equal(await pg.evaluate(() => getComputedStyle(document.querySelector('[data-czs-what]')).textDecorationLine), 'none');
   await pg.locator('[data-czs-what]').click({ force: true });
   assert.equal(await pg.locator('.czs-pop').count(), 0);
+  // A disabled Undo does not light under the pointer.
+  await pg.locator('[data-czs-undo]').hover({ force: true });
+  await settle(pg, 200);
+  assert.equal(await pg.evaluate(() => getComputedStyle(document.querySelector('[data-czs-undo]')).backgroundColor), 'rgba(0, 0, 0, 0)');
+  await pg.mouse.move(2, 2);
   await shot(pg, 'redo-390.png');
   const f = await footInfo(pg);
   assert.ok(f.jot.bottom + 5 <= f.bar.top, 'the notes tab stays clear of the bar');

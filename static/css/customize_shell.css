@@ -385,7 +385,7 @@
 .czs-savebar .czs-sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--czs-warn); flex: none; }
 .czs-savebar .czs-sdot.is-bad { background: rgb(248 113 113); }
 .czs-savebar .czs-icon-btn { color: #c3c7d2; }
-.czs-savebar .czs-icon-btn:hover { background: #2c303c; color: #fff; }
+.czs-savebar .czs-icon-btn:not(:disabled):hover { background: #2c303c; color: #fff; }
 .czs-savebar .czs-ghost { background: none; border: 0; color: #e5e7eb; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
 .czs-savebar .czs-ghost:hover { background: #2c303c; }
 /* Disabled as the icon buttons are: dimmed, with no hover. */
