@@ -974,7 +974,7 @@ html[data-motion="off"] .czp .lk-panel, html[data-motion="off"] .czp .lk-panel.o
    light or dark rather than the page's. */
 .czp .pv-sheet{
   flex:1; min-height:0; padding:2px 10px 6px 2px;
-  --color-card-bg:var(--p-card); --color-bg-tertiary:var(--p-alt); --color-border:var(--p-line); --color-accent:var(--p-accent);
+  --color-card-bg:var(--p-card); --color-bg-tertiary:var(--p-alt); --color-border:var(--p-line); --color-accent:var(--p-accent); --color-accent-link:var(--p-link);
   --color-text-primary:var(--p-text); --color-text-body:var(--p-body); --color-text-secondary:var(--p-muted); --sh-ui:var(--p-font);
 }
 .czp .pv[data-theme="light"] .pv-sheet{ --sh-accent-text:#4338ca; --sh-on-accent:#ffffff; --sh-neg:#b42318; --sh-temp:#1d4ed8; --sh-bar:#15803d; --sh-pole:#000000; --sh-warn:#92400e; --shk-theme:1; }
