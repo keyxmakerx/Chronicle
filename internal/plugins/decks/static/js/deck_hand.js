@@ -194,6 +194,7 @@
         var slot = slotOf(a);
         if (slot) return { copy: slot.getAttribute('data-copy'), kind: a.hasAttribute('data-dkh-open') ? '[data-dkh-open]' : '.dk-turn' };
         if (a.hasAttribute('data-dkh-draw')) return { draw: a.getAttribute('data-deck') };
+        if (a.hasAttribute('data-dkd-open')) return { open: a.getAttribute('data-deck') };
         return null;
       }
       function restoreFocus(k) {
@@ -204,6 +205,8 @@
           t = slot && (slot.querySelector(k.kind) || slot.querySelector('[data-dkh-open]') || slot.querySelector('.dk-turn'));
         } else if (k.draw) {
           t = $$('[data-dkh-draw]', el).filter(function (b) { return b.getAttribute('data-deck') === k.draw; })[0];
+        } else if (k.open) {
+          t = $$('[data-dkd-open]', el).filter(function (b) { return b.getAttribute('data-deck') === k.open; })[0];
         }
         if (t && t.focus) t.focus({ preventScroll: true });
       }
@@ -445,6 +448,30 @@
         });
       }
 
+      // ---- The draw overlay ----
+
+      /**
+       * openDraw: the Draw button opens the overlay (its script loads on this
+       * first press); Quick draw above stays the one-press draw. The hand is
+       * read again when the overlay closes, so what was pulled shows at once.
+       */
+      function openDraw(btn) {
+        var sec = btn.closest('[data-dkh-draw-sec]');
+        var sel = sec && $('[data-dkh-hero]', sec);
+        var hero = (sel && sel.value) || btn.getAttribute('data-hero');
+        var load = window.DeckDraw ? Promise.resolve(window.DeckDraw) : (C.loadDeckDraw ? C.loadDeckDraw() : Promise.reject(new Error('')));
+        clearErr();
+        working(btn, true);
+        load.then(function (d) {
+          working(btn, false);
+          return d.open({ campaignId: cid, deckId: btn.getAttribute('data-deck'), from: btn, viewer: 'player', heroId: hero, onClose: function () { refresh(); } });
+        }).catch(function (e) {
+          working(btn, false);
+          say(errBox(btn), (e && e.words) || words(e));
+          btn.focus({ preventScroll: true });
+        });
+      }
+
       // ---- A row wider than its box ----
 
       /**
@@ -514,6 +541,7 @@
         if ((b = t.closest('[data-dkh-open]')) && el.contains(b)) return openCard(b);
         if ((b = t.closest('[data-dkh-act]')) && overlay && overlay.contains(b)) return act(b);
         if ((b = t.closest('[data-dkh-close]')) && overlay && overlay.contains(b)) return close(true);
+        if ((b = t.closest('[data-dkd-open]')) && el.contains(b)) return openDraw(b);
         if ((b = t.closest('[data-dkh-draw]')) && el.contains(b)) return draw(b);
         if (overlay && t === overlay) return close(true);
       };

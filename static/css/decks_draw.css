@@ -1,0 +1,217 @@
+/* Card draw overlay (internal/plugins/decks/static/js/deck_draw.js), the DM
+   Screen's Card decks section and the Hand's Draw buttons. Tokens only; only
+   transform, opacity and a measured height move. Calm and Off are read from
+   html[data-motion]; a device that asks for less motion is Off in the script. */
+
+/* ---- small parts shared by the section, the Hand and the overlay ---- */
+.dkd-word { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--shape-r-ctl, 8px); background: none; color: var(--color-accent-link, var(--color-accent)); font: inherit; font-size: .875rem; font-weight: 500; cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), opacity var(--dur-micro) var(--ease-out); }
+.dkd-word:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); text-decoration: underline; text-underline-offset: 3px; }
+.dkd-word:active:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 18%, transparent); opacity: .85; }
+.dkd-word:disabled { opacity: .45; cursor: default; }
+.dkd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 16px; border-radius: var(--shape-r-ctl, 8px); font-size: .875rem; font-weight: 500; cursor: pointer; }
+.dkd-btn:disabled { opacity: .45; cursor: default; }
+.dkd-btn[data-working], .dkd-word[data-working] { cursor: progress; }
+.dkd-btn-quiet { border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); box-shadow: var(--elev-resting); transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out); }
+.dkd-btn-quiet:hover:not(:disabled) { border-color: var(--color-accent); box-shadow: var(--elev-hover); }
+.dkd-btn-quiet:active:not(:disabled) { opacity: .85; box-shadow: var(--elev-static, none); }
+.dkd-ov :focus-visible, .dkd-screen :focus-visible, .dkd-pacts :focus-visible, .dkd-menu :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dkd-line { margin: 0; min-height: 1.25rem; font-size: .8125rem; line-height: 1.4; color: var(--color-text-secondary); }
+.dkd-line[data-tone="refuse"], [data-dkd-err] { color: var(--color-text-primary); }
+.dkd-line:empty { min-height: 0; }
+
+/* ---- the DM Screen section: Card decks ---- */
+[data-dkd-screen] { display: grid; gap: 0; }
+.dkd-deck + .dkd-deck, [data-dkd-rest] > .dkd-deck:first-child { border-top: var(--shape-rule, 1px) solid var(--surface-border); }
+[data-dkd-row] { display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 6px 8px; border: 0; border-radius: var(--shape-r-ctl, 8px); background: none; color: var(--surface-text); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out); }
+[data-dkd-row]:hover { background: var(--surface-raised); }
+[data-dkd-row]:active { background: color-mix(in srgb, var(--surface-text) 8%, var(--surface-raised)); }
+[data-dkd-row]:focus-visible { outline-offset: -2px; }
+.dkd-back { position: relative; display: block; width: 28px; height: 41px; overflow: hidden; border-radius: 4px; }
+.dkd-back > .dk-wrap, .dkd-back > .dk-card { position: absolute; left: 2px; top: 0; transform: scale(.1875); transform-origin: 0 0; }
+.dkd-name { display: block; font-size: .9rem; font-weight: 600; line-height: 1.25; color: var(--surface-text); overflow-wrap: anywhere; }
+[data-dkd-sub] { display: block; font-size: .78rem; line-height: 1.3; color: var(--surface-text-muted); }
+[data-dkd-row] .dkd-chev { width: 16px; height: 16px; color: var(--surface-text-muted); transition: transform var(--dur-standard) var(--ease-out); }
+[data-dkd-row][aria-expanded="true"] .dkd-chev { transform: rotate(180deg); }
+.dkd-deck > [data-dkd-acts], .dkd-deck > [data-dkd-shown], .dkd-deck > [data-dkd-err] { margin-left: 8px; margin-right: 8px; }
+[data-dkd-acts] { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 2px 0 8px; }
+[data-dkd-acts][hidden], [data-dkd-shown][hidden], [data-dkd-rest][hidden], [data-dkd-picker][hidden], [data-dkd-err][hidden] { display: none; }
+[data-dkd-acts] .dkd-btn { min-width: 84px; }
+[data-dkd-shown] { display: flex; flex-wrap: nowrap; gap: 10px; align-items: flex-start; padding: 6px 6px 12px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+[data-dkd-shown]:empty { display: none; }
+[data-dkd-copy] { position: relative; flex: none; display: block; padding: 0; border: 0; border-radius: 8px; background: none; cursor: pointer; }
+[data-dkd-copy] .dk-wrap { pointer-events: none; }
+[data-dkd-copy]:hover, [data-dkd-copy][aria-expanded="true"] { box-shadow: 0 0 0 2px var(--color-accent); }
+[data-dkd-copy]:active { opacity: .8; }
+[data-dkd-err] { margin: 0 8px 8px; font-size: .8125rem; line-height: 1.4; }
+.dkd-deck { position: relative; }
+[data-dkd-more], [data-dkd-choose] { justify-self: start; min-height: 36px; margin: 2px 4px; padding: 0 8px; border: 0; border-radius: var(--shape-r-ctl, 8px); background: none; color: var(--surface-text-muted); font: inherit; font-size: .8125rem; cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
+[data-dkd-more]:hover, [data-dkd-choose]:hover { background: var(--surface-raised); color: var(--surface-text); text-decoration: underline; text-underline-offset: 3px; }
+[data-dkd-picker] { display: grid; gap: 2px; padding: 6px 8px 10px; }
+[data-dkd-picker] label { display: flex; align-items: center; gap: 10px; min-height: 36px; font-size: .875rem; color: var(--surface-text); cursor: pointer; overflow-wrap: anywhere; }
+[data-dkd-picker] input[type="checkbox"] { flex: none; width: 18px; height: 18px; accent-color: var(--color-accent); }
+[data-dkd-picks-save] { justify-self: start; margin-top: 4px; }
+
+/* A drawn card's menu: a small picker that grows out of the card. */
+.dkd-menu { position: absolute; z-index: 5; min-width: 11.5rem; max-width: calc(100% - 8px); padding: 4px; border: 1px solid var(--color-border); border-radius: var(--shape-r-ctl, 8px); background: var(--color-card-bg); box-shadow: var(--elev-hover); transform-origin: 0 0; }
+.dkd-menu-t { margin: 0; padding: 6px 10px 4px; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.dkd-mi { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--shape-r-small, 6px); background: none; color: var(--color-text-primary); font: inherit; font-size: .875rem; text-align: left; cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out); }
+.dkd-mi:hover { background: var(--color-bg-tertiary); }
+.dkd-mi:active { background: color-mix(in srgb, var(--color-text-primary) 12%, var(--color-bg-tertiary)); }
+.dkd-mi:focus-visible { outline-offset: -2px; }
+.dkd-mi:disabled { opacity: .45; cursor: default; }
+.dkd-mi-quiet { color: var(--color-text-muted); }
+
+/* ---- the Hand: Draw and Quick draw ---- */
+.dkd-pacts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+
+/* ---- the overlay shell ---- */
+html.dkd-locked, html.dkd-locked body { overflow: hidden !important; }
+.dkd-ov { position: fixed; inset: 0; z-index: var(--z-menu-lift); }
+.dkd-scrim { position: absolute; inset: 0; background: var(--surface-overlay); }
+.dkd-panel { position: absolute; left: 50%; top: 50%; display: flex; flex-direction: column; width: min(1120px, calc(100% - 64px)); height: min(760px, calc(100% - 64px)); margin: 0; translate: -50% -50%; overflow: hidden; border: var(--shape-edge, 1px) solid var(--color-border); border-radius: var(--shape-r-panel, 12px); background: var(--color-card-bg); color: var(--color-text-primary); box-shadow: var(--elev-dragged); transform-origin: 0 0; outline: 0; }
+.dkd-head { position: relative; flex: none; display: grid; gap: 2px; padding: 16px 72px 14px 24px; border-bottom: var(--shape-rule, 1px) solid var(--color-border); }
+.dkd-title { margin: 0; font-size: 1.25rem; font-weight: 700; line-height: 1.25; color: var(--color-text-primary); overflow-wrap: anywhere; font-family: var(--font-heading, inherit); }
+.dkd-title:focus { outline: 0; }
+.dkd-subhead { margin: 0; font-size: .875rem; color: var(--color-text-muted); }
+.dkd-x { position: absolute; top: 8px; right: 12px; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: var(--shape-r-ctl, 8px); background: none; color: var(--color-text-secondary); cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
+.dkd-x:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+.dkd-x:active { background: color-mix(in srgb, var(--color-text-primary) 14%, var(--color-bg-tertiary)); }
+.dkd-x svg { width: 20px; height: 20px; }
+.dkd-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dkd-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.dkd-ov[data-phone] .dkd-panel { left: 0; right: 0; top: var(--dkd-top, 56px); bottom: 0; width: auto; height: auto; translate: none; border-radius: var(--shape-r-panel, 12px) var(--shape-r-panel, 12px) 0 0; border-bottom: 0; }
+.dkd-ov[data-phone] .dkd-head { padding: 12px 64px 10px 16px; }
+.dkd-ov[data-phone] .dkd-x { top: 6px; right: 8px; }
+
+/* ---- what the overlay holds: the stage, the fan and the drawn row ---- */
+.dko { --dko-w: 176px; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 14px 24px 12px; }
+.dko[data-noleaf]:not([data-phone]) { --dko-w: 200px; }
+.dko .dk-sz-open { --dk-w: var(--dko-w); }
+
+.dko-main { flex: 1; min-height: 0; display: grid; place-items: center; }
+.dko-group { display: grid; place-items: center; }
+.dko-centre { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; }
+.dko-slot { position: relative; display: grid; place-items: center; width: var(--dko-w); aspect-ratio: 7 / 12; }
+.dko[data-noleaf] .dko-slot { aspect-ratio: 5 / 7; }
+.dko-stagefan { display: none; width: 100%; }
+.dko[data-stage] .dko-stagefan { display: block; }
+.dko[data-stage] .dko-group { display: none; }
+.dko-stagefan .dko-fanpane { width: 100%; }
+.dko-stagefan .dko-fan { height: calc(var(--dko-fullh) * var(--dko-S, 1.35)); }
+.dko-stagefan .dko-fanbox { inset: auto; left: 0; top: 0; width: 100%; height: var(--dko-fullh); transform: scale(var(--dko-S, 1.35)); transform-origin: 50% 0; }
+.dko-stagefan .dko-hint { margin-top: 14px; font-size: .9375rem; }
+.dko-ground { position: absolute; left: 6%; right: 6%; bottom: -10px; height: 18px; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--color-text-primary) 38%, transparent), transparent); filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity var(--dur-standard) var(--ease-out); }
+.dko-slot[data-has] .dko-ground { opacity: 1; }
+.dko-card { position: relative; }
+.dko-card .dk-wrap { vertical-align: top; }
+.dko-leafcol { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); width: 270px; display: grid; min-width: 0; }
+.dko[data-noleaf] .dko-leafcol { display: none; }
+.dko .dk-leaf { width: auto; max-width: 100%; margin: 0; align-self: auto; border-left: 0; border-radius: 0 var(--shape-r-panel, 12px) var(--shape-r-panel, 12px) 0; }
+.dko .dk-leaf .dk-dn { font-size: 1.0625rem; }
+.dko .dk-leaf .dk-words { font-size: .9375rem; line-height: 1.5; }
+.dko .dk-leaf .dk-lfi { padding: 18px 16px 16px 14px; gap: 8px; }
+
+.dko-foot { display: grid; justify-items: center; gap: 10px; min-height: 0; padding: 8px 0; text-align: center; }
+.dko-line { margin: 0; min-height: 1.35rem; font-size: .9375rem; color: var(--color-text-secondary); }
+.dko-line[data-tone="refuse"] { color: var(--color-text-primary); }
+.dko-acts { position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; min-height: 40px; }
+.dko-acts .dkd-btn { min-width: 112px; }
+.dko .dkd-menu { z-index: 6; }
+
+.dko-band { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0fr); align-items: start; padding-top: 8px; border-top: var(--shape-rule, 1px) solid var(--color-border); }
+.dko-band[data-tray] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.dko-band[data-nofan] { grid-template-columns: minmax(0, 0fr) minmax(0, 1fr); }
+.dko-band[data-nofan]:not([data-tray]) { display: none; }
+.dko-bandfan { min-width: 0; overflow: hidden; }
+.dko-fanpane { display: grid; justify-items: center; min-width: 0; }
+.dko-fan { position: relative; width: 100%; height: var(--dko-fanh); transition: opacity var(--dur-standard) var(--ease-out); }
+.dko-fanbox { position: absolute; inset: 0; transition: transform var(--dur-standard) var(--ease-out); }
+.dko-fan[data-dim] { opacity: .72; }
+.dko-fan[data-dim] .dko-fanbox { transform: translateY(8px); }
+.dko-fan[data-off] { opacity: .5; }
+.dko-hint { margin: 2px 0 0; font-size: .8125rem; line-height: 1.4; color: var(--color-text-secondary); text-align: center; min-height: 1.15rem; }
+.dko-hint[data-tone="refuse"] { color: var(--color-text-primary); }
+
+/* A back is a real control: it rests overlapped, lifts a few pixels on hover, shows a clear ring on focus. */
+.dko-back { position: absolute; top: 14px; left: calc(50% - var(--dko-bw) / 2); width: var(--dko-bw); height: var(--dko-bh); padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; transform-origin: 50% var(--dko-R); transform: rotate(var(--a, 0deg)); transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out); }
+.dko-back .dk-wrap, .dko-back .dk-card { pointer-events: none; display: block; }
+.dko-back:hover:not(:disabled) { transform: rotate(var(--a, 0deg)) translateY(-8px); }
+.dko-back:active:not(:disabled) { transform: rotate(var(--a, 0deg)) translateY(-3px); }
+.dko-back:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; z-index: 8 !important; transform: rotate(var(--a, 0deg)) translateY(-8px); }
+.dko-back[data-working] { transition: transform var(--dur-instant) var(--ease-out), box-shadow var(--dur-instant) var(--ease-out); transform: rotate(var(--a, 0deg)) translateY(-16px); box-shadow: 0 0 0 2px var(--color-accent); cursor: default; }
+.dko-back:disabled { cursor: default; }
+
+/* The drawn row: one quiet line until a card is set aside, then real compact cards. */
+.dko-tray { display: grid; align-content: center; min-width: 0; min-height: 100%; overflow: hidden; opacity: 0; }
+.dko-band[data-tray] .dko-tray { opacity: 1; padding-left: 24px; margin-left: 24px; border-left: var(--shape-rule, 1px) solid var(--color-border); }
+.dko-band[data-nofan] .dko-tray { padding-left: 0; margin-left: 0; border-left: 0; }
+.dko:not([data-phone]) .dko-tray-none { display: none; }
+.dko-tray:has(.dko-tray-body:not([hidden])) { align-content: start; }
+.dko-tray-none { margin: 0; font-size: .875rem; color: var(--color-text-muted); }
+.dko-tray-none[hidden], .dko-tray-body[hidden] { display: none; }
+.dko-tray-body { display: grid; gap: 4px; }
+.dko-tray-lab { margin: 0; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.dko-tray-lab span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.dko-tray-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 10px; padding: 2px 4px 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.dko-tcard { position: relative; flex: none; display: block; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: none; cursor: pointer; text-align: left; }
+.dko-tcard .dk-wrap { pointer-events: none; }
+.dko-tcard:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--color-accent); }
+.dko-tcard:active:not(:disabled) { opacity: .8; }
+.dko-tcard:disabled { opacity: .5; cursor: default; }
+.dko-tcap { display: block; width: 92px; margin-top: 6px; font-size: .75rem; line-height: 1.25; color: var(--color-text-secondary); text-align: center; overflow-wrap: anywhere; }
+
+/* The phone: one scroll region (card, leaf, drawn row); the fan, then the line and actions, pinned below. */
+.dko[data-phone] { padding: 0; gap: 0; --dko-S: 1; }
+.dko-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px 16px; display: grid; grid-auto-rows: max-content; gap: 14px; align-content: start; justify-items: center; }
+.dko-scroll[data-more] { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); }
+.dko-scroll > * { min-height: auto; }
+.dko-scroll .dko-centre { width: 100%; }
+.dko-scroll .dko-leafcol { position: static; transform: none; width: 100%; }
+.dko[data-phone] .dk-leaf { border-left: 1px solid var(--color-border); border-radius: var(--shape-r-panel, 12px); }
+.dko-scroll .dko-tray { width: 100%; padding-left: 0; border-left: 0; min-height: 0; }
+.dko-scroll .dko-tray-none { text-align: center; }
+.dko-scroll .dko-tray-row { padding: 2px 2px 6px; gap: 8px; }
+.dko-bottom { flex: none; display: grid; gap: 4px; padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: var(--shape-rule, 1px) solid var(--color-border); background: var(--color-card-bg); }
+.dko-bottom .dko-fan { overflow: hidden; }
+.dko-bottom .dko-hint { text-align: left; }
+.dko-bottom .dko-foot { padding: 0; gap: 6px; justify-items: stretch; text-align: left; }
+.dko-bottom .dko-acts { justify-content: flex-start; gap: 8px; }
+.dko-bottom .dko-acts .dkd-btn, .dko-bottom .dko-acts .dkd-word { min-height: 44px; }
+.dko-bottom .dko-acts .dkd-btn { flex: 1 1 140px; }
+.dko-bottom .dko-line { font-size: .875rem; }
+.dko[data-phone][data-stage] .dko-bottom, .dko[data-phone][data-stage] .dko-centre, .dko[data-phone][data-stage] .dko-leafcol, .dko[data-phone][data-stage] .dko-tray-none { display: none; }
+.dko[data-phone][data-stage]:not([data-hastray]) .dko-scroll { align-content: center; }
+.dko[data-phone][data-stage] .dko-tray { opacity: 1; }
+
+/* Touch: every control 44 tall. */
+@media (max-width: 700px), (hover: none) and (pointer: coarse) {
+  [data-dkd-row] { min-height: 56px; }
+  .dkd-word, .dkd-btn, .dkd-mi, [data-dkd-more], [data-dkd-choose], [data-dkd-picker] label, [data-dkd-open] { min-height: 44px; }
+  [data-dkd-acts] { gap: 4px 12px; }
+}
+
+/* Motion. Full: the lift is a few pixels over --dur-micro. Calm: nothing travels, so a back shows a ring instead. Off: no transitions. */
+html[data-motion="calm"] .dko-back, html[data-motion="calm"] .dko-fanbox, html[data-motion="calm"] [data-dkd-row] .dkd-chev { transition: box-shadow var(--dur-micro) var(--ease-out); }
+html[data-motion="calm"] .dko-back:hover:not(:disabled), html[data-motion="calm"] .dko-back:active:not(:disabled), html[data-motion="calm"] .dko-back:focus-visible, html[data-motion="calm"] .dko-back[data-working] { transition: box-shadow var(--dur-instant) var(--ease-out); transform: rotate(var(--a, 0deg)); }
+html[data-motion="calm"] .dko-back[data-working], html[data-motion="calm"] .dko-back:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--color-accent); }
+html[data-motion="calm"] .dko-fan[data-dim] .dko-fanbox { transform: none; }
+html[data-motion="off"] .dko-back, html[data-motion="off"] .dko-fanbox, html[data-motion="off"] .dko-fan, html[data-motion="off"] .dko-ground, html[data-motion="off"] [data-dkd-row] .dkd-chev { transition: none; }
+html[data-motion="off"] .dko-back[data-working], html[data-motion="off"] .dko-back:hover:not(:disabled) { transform: rotate(var(--a, 0deg)); box-shadow: 0 0 0 2px var(--color-accent); }
+html[data-motion="off"] .dko-fan[data-dim] .dko-fanbox { transform: none; }
+html[data-motion="off"] .dkd-word, html[data-motion="off"] .dkd-btn-quiet, html[data-motion="off"] .dkd-x, html[data-motion="off"] .dkd-mi, html[data-motion="off"] [data-dkd-row], html[data-motion="off"] [data-dkd-more], html[data-motion="off"] [data-dkd-choose] { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .dkd-word, .dkd-btn-quiet, .dkd-x, .dkd-mi, [data-dkd-row], [data-dkd-more], [data-dkd-choose] { transition: none; }
+  .dko-back, .dko-fanbox, .dko-fan, .dko-ground, [data-dkd-row] .dkd-chev { transition: none; }
+  .dko-back[data-working], .dko-back:hover:not(:disabled) { transform: rotate(var(--a, 0deg)); box-shadow: 0 0 0 2px var(--color-accent); }
+  .dko-fan[data-dim] .dko-fanbox { transform: none; }
+}
+
+/* ---- the dealt-card pop-up: one face-down card, centred ---- */
+.dko-arrive { align-items: center; gap: 16px; padding: 24px; text-align: center; }
+.dko-arrive .dko-slot { aspect-ratio: auto; width: auto; }
+.dko-arrive .dko-leafcol { position: static; transform: none; width: min(270px, 100%); }
+.dko-arrive .dk-leaf { border-left: 1px solid var(--color-border); border-radius: var(--shape-r-panel, 12px); }
+.dko-arrive .dko-acts { min-height: 44px; }
+.dko-arrive .dkd-btn, .dko-arrive .dkd-word { min-height: 44px; }
+.dkd-ov[data-arrive] .dkd-panel { width: min(420px, calc(100% - 32px)); height: auto; max-height: calc(100% - 32px); }
+.dkd-ov[data-arrive][data-phone] .dkd-panel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: calc(100% - var(--dkd-top, 56px)); }
