@@ -146,7 +146,10 @@ test('a second press mid-flight replaces the first copy', async () => {
   await p.evaluate(() => document.querySelector('.czw-tile[data-czw-key="frame"]').click());
   assert.equal((await state(p)).ghosts, 1);
   await p.evaluate((h) => window.__swap(h), WORKSHOP('frame', false));
-  await p.waitForTimeout(900);
+  // The copy goes once the fly lands and fades, about 0.6 s of animation that
+  // a busy runner stretches; wait for it to go, but under the 1.5 s cap so the
+  // fallback cannot be what removes it.
+  await p.waitForFunction(() => !document.querySelector('.czw-fly'), null, { timeout: 1300 }).catch(() => {});
   assert.equal((await state(p)).ghosts, 0);
   await close();
 });
