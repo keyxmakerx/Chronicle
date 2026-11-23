@@ -134,7 +134,7 @@ templ heroBuilder(b *HeroBuilderView) {
 		class="hb mb-8"
 		aria-label="Hero builder"
 		data-widget="hero-builder"
-		data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", b.CampaignID) }
+		data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan?preview=player", b.CampaignID) }
 		data-fields-base={ fmt.Sprintf("/campaigns/%s/entities/", b.CampaignID) }
 		data-campaign-id={ b.CampaignID }
 		data-csrf={ b.CSRFToken }

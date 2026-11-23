@@ -51,7 +51,13 @@ func (h *CharacterChoiceHandler) ChoicesAPI(c *echo.Context) error {
 func choiceContext(c *echo.Context, cc *campaigns.CampaignContext) context.Context {
 	ctx := c.Request().Context()
 	director := cc.CanAuthorDmOnly()
-	if as := c.QueryParam("as"); director && as != "" && len(as) <= 36 {
+	as := c.QueryParam("as")
+	// A Director with "view as player" on reads the list as a player, rules
+	// applied: the sheet's picker is a player's surface.
+	if as == "" && campaigns.ViewingAsPlayer(c, cc) {
+		as = auth.GetUserID(c)
+	}
+	if director && as != "" && len(as) <= 36 {
 		return WithChoiceFor(WithChoiceViewerUser(WithChoiceViewer(ctx, false), as), as)
 	}
 	user := auth.GetUserID(c)
