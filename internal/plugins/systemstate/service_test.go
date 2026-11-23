@@ -81,6 +81,25 @@ func (f *fakeRepo) ListByKey(_ context.Context, campaignID, systemID, key string
 	return out, nil
 }
 
+// ListByKeyForPage mimics the SQL's name filter, which compares without case
+// under the column's collation.
+func (f *fakeRepo) ListByKeyForPage(ctx context.Context, campaignID, systemID, key, name string, limit int) ([]ListItem, error) {
+	all, err := f.ListByKey(ctx, campaignID, systemID, key, len(f.rows)+1)
+	if err != nil {
+		return nil, err
+	}
+	var out []ListItem
+	for _, it := range all {
+		if strings.EqualFold(it.EntityName, name) {
+			out = append(out, it)
+		}
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 // The campaign-wide document shares the row map under an empty entity id,
 // which no page id can be.
 func (f *fakeRepo) GetCampaign(ctx context.Context, campaignID, systemID, key string) (*State, error) {
@@ -302,6 +321,47 @@ func TestService_ListByKeyOrdersByName(t *testing.T) {
 	}
 	if len(items) != 2 || items[0].EntityName != "Alma" || items[1].EntityName != "Zed" {
 		t.Errorf("order = %+v", items)
+	}
+}
+
+// A page sorted past the listing's cap is still read by name.
+func TestService_ListByKeyForPage(t *testing.T) {
+	svc, repo, _ := newTestService()
+	now := time.Now()
+	repo.names = map[string]string{}
+	for i := 0; i <= MaxListItems; i++ {
+		id := fmt.Sprintf("e%03d", i)
+		repo.names[id] = fmt.Sprintf("Page %03d", i)
+		repo.rows[rowKey("camp-1", id, "drawsteel", "negotiation")] = &State{GM: json.RawMessage(`{}`), Public: json.RawMessage(`{}`), UpdatedAt: &now}
+	}
+	last := fmt.Sprintf("Page %03d", MaxListItems)
+	tests := []struct {
+		name     string
+		page     string
+		wantLen  int
+		wantCode int
+	}{
+		{"past the listing's cap", last, 1, 0},
+		{"any case, outer spaces", "  " + strings.ToLower(last) + " ", 1, 0},
+		{"a page without it", "Nobody", 0, 0},
+		{"no name", "  ", 0, http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			items, truncated, err := svc.ListByKeyForPage(context.Background(), "camp-1", "drawsteel", "negotiation", tt.page)
+			if tt.wantCode != 0 {
+				if errCode(err) != tt.wantCode {
+					t.Fatalf("code = %d (err %v), want %d", errCode(err), err, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != tt.wantLen || truncated {
+				t.Errorf("len=%d truncated=%v, want %d/false", len(items), truncated, tt.wantLen)
+			}
+		})
 	}
 }
 

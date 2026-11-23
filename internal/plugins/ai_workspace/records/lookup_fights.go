@@ -37,8 +37,12 @@ func (run *lookupRun) encountersLookup(page string) (LookupAnswer, error) {
 		ans.Chip = "Encounters · " + page
 	}
 	report, haveReport := run.foundryReport()
+	ev := run.encounterEV()
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Encounters (%d)\n\n", len(list))
+	if ev != nil && len(list) > 0 {
+		b.WriteString(evNote)
+	}
 	if len(list) == 0 {
 		if page != "" {
 			b.WriteString("None on " + quote(page) + ".\n")
@@ -55,6 +59,12 @@ func (run *lookupRun) encountersLookup(page string) (LookupAnswer, error) {
 			b.WriteString("Plays now: the base creatures, until " + strings.Join(e.Open, ", ") + " has a result.\n")
 		case len(e.Versions) > 0:
 			b.WriteString("Plays now: the base creatures; the DM can pick a version in Foundry.\n")
+		}
+		if ev != nil {
+			b.WriteString(ev.line("", e.Creatures))
+			for _, v := range e.Versions {
+				b.WriteString(ev.line(v.Name, v.Creatures))
+			}
 		}
 		if haveReport {
 			missing, unchecked := cannotPlace(e, report)
@@ -138,7 +148,7 @@ func (run *lookupRun) testsLookup(page string) (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("None yet.\n")
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -210,7 +220,7 @@ func (run *lookupRun) foundryMonsters(r Record) (LookupAnswer, error) {
 	if len(lines) == 0 {
 		b.WriteString("None match.\n")
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	var matches []string
 	for _, c := range rep.Matches {
 		if shown[strings.ToLower(c.MonsterName)+"\x00"+c.MonsterPack] {
@@ -219,7 +229,7 @@ func (run *lookupRun) foundryMonsters(r Record) (LookupAnswer, error) {
 	}
 	if len(matches) > 0 {
 		fmt.Fprintf(&b, "\n## Creature pages matched to these (%d)\n\nA page matched to Foundry's monster is that monster: never write it a second stat block. The DM chooses on the page whose numbers play.\n\n", len(matches))
-		writeLines(&b, matches)
+		run.writeLines(&b, matches)
 	}
 	ans.Text = b.String()
 	return ans, nil

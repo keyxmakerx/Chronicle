@@ -23,7 +23,7 @@ func (w windowWaiting) Waiting(_ context.Context, _ string, _ records.Actor, old
 // both with their argument and a tool never takes one it didn't declare.
 func TestTools_WaitingOlderAndHomeAudience(t *testing.T) {
 	for _, tc := range []struct{ tool, arg string }{{"waiting_for_review", "older"}, {"home", "audience"}} {
-		tl := findTool(&Connection{}, nil, tc.tool)
+		tl := findTool(&Connection{Privacy: aiexport.PrivacyModePermitted}, nil, tc.tool)
 		if tl == nil || !tl.takes(tc.arg) {
 			t.Errorf("%s does not take %s", tc.tool, tc.arg)
 		}

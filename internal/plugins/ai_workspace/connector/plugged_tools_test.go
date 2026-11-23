@@ -53,7 +53,7 @@ func TestToolsFor_PluggedLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, note, ok := tl.answer(context.Background(), l, "c", "Camp", aiplug.Actor{UserID: "u", Role: 3}, args)
+	text, note, ok := tl.answer(context.Background(), l, Session{Conn: &Connection{CampaignID: "c"}, CampaignName: "Camp", Actor: aiplug.Actor{UserID: "u", Role: 3}}, args)
 	if !ok || text != "## Widgets\n\n- Cog" || note != "Widgets" || p.got.Name != "Co" {
 		t.Errorf("answer = %q, %q, %v; record name %q", text, note, ok, p.got.Name)
 	}

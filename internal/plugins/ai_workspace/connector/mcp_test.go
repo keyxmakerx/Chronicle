@@ -118,7 +118,8 @@ func TestTools_EachIsALookup(t *testing.T) {
 	}
 }
 
-// A Safe connection reads as a player: rolling tables stay out, while one
+// A Safe connection reads as a player: rolling tables are not even a tool
+// for it, and the lookup refuses a player's view on its own too, while one
 // that sees what the owner sees gets them. Neither writes anything.
 func TestHandle_ToolsCallFollowsPrivacy(t *testing.T) {
 	m := lootTables()
@@ -138,11 +139,15 @@ func TestHandle_ToolsCallFollowsPrivacy(t *testing.T) {
 	}
 
 	safe := s.Handle(context.Background(), session(aiexport.PrivacyModeSafe), body)
-	if r := read(safe); !r.IsError || strings.Contains(r.Content[0].Text, "Gem") {
-		t.Errorf("Safe read a rolling table: %+v", r)
+	if r := decode(t, safe); r.Error == nil || strings.Contains(string(safe.Body), "Gem") {
+		t.Errorf("Safe could call rolling_tables: %s", safe.Body)
 	}
-	if safe.Called == nil || safe.Called.OK || safe.Called.Tool != "rolling_tables" {
-		t.Errorf("Safe log line = %+v", safe.Called)
+	if safe.Called != nil {
+		t.Errorf("Safe log line = %+v, want none for a tool it doesn't have", safe.Called)
+	}
+	lookup := (&tool{Name: "rolling_tables", What: "table"}).answer
+	if text, _, ok := lookup(context.Background(), s.Lookups, session(aiexport.PrivacyModeSafe), map[string]string{"name": "Loot"}); ok || strings.Contains(text, "Gem") {
+		t.Errorf("the lookup itself answered a player's view: %q", text)
 	}
 
 	permitted := s.Handle(context.Background(), session(aiexport.PrivacyModePermitted), body)

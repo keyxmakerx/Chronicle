@@ -107,7 +107,7 @@ func (run *lookupRun) scenes(match string) (LookupAnswer, error) {
 			b.WriteString("The Foundry world has no scenes.\n")
 		}
 	}
-	writeLines(&b, lines)
+	run.writeLines(&b, lines)
 	if rep.Truncated {
 		b.WriteString("(The world has more scenes than Foundry sends at once; some are missing here.)\n")
 	}

@@ -42,7 +42,7 @@ templ playerPanelBody(v PlayerAIView) {
 			</div>
 			<section class="aic-what" aria-labelledby="ai-cando-heading">
 				<h3 id="ai-cando-heading" class="aic-label aic-label-muted">What your AI can do</h3>
-				@playerCanDo(true)
+				@playerCanDo(true, v.AboveP)
 			</section>
 			if v.Done != "" {
 				<p class="aic-done aic-done-line" role="status">

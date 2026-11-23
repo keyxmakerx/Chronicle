@@ -45,6 +45,9 @@ type PlayerAIView struct {
 	// Done is the line after Apply saying what changed.
 	Done string
 	Now  time.Time
+	// AboveP marks a co-DM or Scribe: their key still reads as a player, so
+	// the panel must not say it reads what they can.
+	AboveP bool
 }
 
 // PlayerReview is what a player's request or paste would change.
@@ -101,7 +104,7 @@ func (h *Handler) playersWhy(ctx context.Context, campaignID string) string {
 // playerView reads a player's panel.
 func (h *Handler) playerView(c *echo.Context, cc *campaigns.CampaignContext) (PlayerAIView, error) {
 	ctx := c.Request().Context()
-	v := PlayerAIView{CampaignID: cc.Campaign.ID, Now: time.Now()}
+	v := PlayerAIView{CampaignID: cc.Campaign.ID, Now: time.Now(), AboveP: cc.MemberRole > campaigns.RolePlayer}
 	if v.Why = h.playersWhy(ctx, cc.Campaign.ID); v.Why != "" {
 		return v, nil
 	}

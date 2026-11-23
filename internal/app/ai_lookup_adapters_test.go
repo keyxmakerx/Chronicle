@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
@@ -52,6 +54,81 @@ func TestAISystemEntriesAdapter_Privacy(t *testing.T) {
 			}
 			if e := list[0]; e.Name != "Dwarf" || e.Slug != "dwarf" || e.Source != "Heroes" || e.Summary != "Stone-born." {
 				t.Errorf("entry %+v", e)
+			}
+		})
+	}
+}
+
+// fakeMarkRules is the hero-choice rules' Directors' list: Memonek is Not
+// here for everyone and Dwarf has one mark for a single player. err, when
+// set, is what it answers instead.
+type fakeMarkRules struct {
+	systems.ChoiceRuleService
+	asked int
+	err   error
+}
+
+func (f *fakeMarkRules) DirectorEntries(_ context.Context, _ string, a systems.EntryActor, field, as string) (*systems.DirectorEntryList, error) {
+	f.asked++
+	if !a.IsDirector || as != "" {
+		return nil, apperror.NewForbidden("directors only")
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &systems.DirectorEntryList{FieldKey: field, Entries: []systems.DirectorEntry{
+		{Key: "dwarf", Source: "package", Name: "Dwarf", State: systems.RuleOpen, Players: []systems.PlayerMark{{UserID: "pat"}}},
+		{Key: "memonek", Source: "package", Name: "Memonek", State: systems.RuleNotOffered, Reason: "Not on Therin."},
+	}}, nil
+}
+
+type keyedChoices struct{ systems.CharacterChoiceService }
+
+func (keyedChoices) CharacterChoiceList(_ context.Context, _, field string) (*systems.ChoiceList, error) {
+	return &systems.ChoiceList{FieldKey: field, SystemName: "Draw Steel", Choices: []systems.Choice{
+		{Slug: "dwarf", Key: "dwarf", Name: "Dwarf", Source: "package"},
+		{Slug: "memonek", Key: "memonek", Name: "Memonek", Source: "package"},
+	}}, nil
+}
+
+// Marks reach the AI only on a Director's lookup, so a connection that reads
+// what players see never learns what a Director took off the list; a field
+// the rules cannot mark still lists, and a server fault is not hidden.
+func TestAISystemEntriesAdapter_Marks(t *testing.T) {
+	tests := []struct {
+		name      string
+		director  bool
+		err       error
+		wantAsked int
+		wantMark  string
+		wantErr   bool
+	}{
+		{name: "director sees marks", director: true, wantAsked: 1, wantMark: systems.RuleNotOffered},
+		{name: "safe never asks", director: false},
+		{name: "unmarkable field lists without marks", director: true, err: apperror.NewValidation("not a pick list"), wantAsked: 1},
+		{name: "server fault fails the lookup", director: true, err: errors.New("db down"), wantAsked: 1, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rules := &fakeMarkRules{err: tt.err}
+			_, list, err := aiSystemEntriesAdapter{choices: keyedChoices{}, rules: rules}.Entries(context.Background(), "camp", "ancestry", tt.director)
+			if rules.asked != tt.wantAsked {
+				t.Errorf("asked the rules %d times, want %d", rules.asked, tt.wantAsked)
+			}
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("want an error")
+				}
+				return
+			}
+			if err != nil || len(list) != 2 {
+				t.Fatalf("err %v, %d entries", err, len(list))
+			}
+			if list[1].Mark != tt.wantMark {
+				t.Errorf("Memonek mark %q, want %q", list[1].Mark, tt.wantMark)
+			}
+			if tt.wantMark != "" && (list[1].MarkReason != "Not on Therin." || list[0].Mark != "" || list[0].PlayerMarks != 1) {
+				t.Errorf("entries %+v", list)
 			}
 		})
 	}

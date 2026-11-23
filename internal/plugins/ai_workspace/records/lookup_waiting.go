@@ -136,7 +136,7 @@ func (run *lookupRun) waiting(r Record) (LookupAnswer, error) {
 	}
 	b.WriteString(decidedCount(len(w.Decided), older))
 	if len(lines) > 0 {
-		writeLines(&b, lines)
+		run.writeLines(&b, lines)
 	}
 
 	fmt.Fprintf(&b, "\n### Entries players wrote (%d handed in, %d still being written)\n\n", handedIn, len(w.Entries)-handedIn)

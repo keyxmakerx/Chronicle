@@ -7295,6 +7295,7 @@ func (a *App) RegisterRoutes() {
 		aiTimelines = timelineSvc
 	}
 	aiWiring := newAIDeps(aiDeps{
+		SystemState:     systemStateSvc,
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
 		CharacterChoice: characterChoiceSvc,
@@ -7953,7 +7954,16 @@ func (m aiMapsAdapter) ListPins(ctx context.Context, campaignID, mapID string, r
 	ps, err := m.svc.ListMarkers(ctx, campaignID, mapID, role, userID)
 	out := make([]records.PinRef, len(ps))
 	for i, x := range ps {
-		out[i] = records.PinRef{ID: x.ID, Name: x.Name, X: x.X, Y: x.Y}
+		out[i] = records.PinRef{ID: x.ID, Name: x.Name, X: x.X, Y: x.Y, DMOnly: x.IsDMOnly(), PageName: x.EntityName}
+		if x.PinCategory != nil {
+			out[i].Category = *x.PinCategory
+		}
+		if x.Description != nil {
+			out[i].Description = *x.Description
+		}
+		if rules := maps.ParseVisibilityRules(x.VisibilityRules); rules != nil {
+			out[i].OnlyFor, out[i].HiddenFrom = len(rules.AllowedUsers), len(rules.DeniedUsers)
+		}
 	}
 	return out, err
 }
