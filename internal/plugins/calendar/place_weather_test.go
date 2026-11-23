@@ -499,3 +499,58 @@ func TestRouteGates_PlaceWeatherIsTheDirectors(t *testing.T) {
 		}
 	}
 }
+
+// A player's single "current weather" is the party's: while the party is
+// somewhere with a climate of its own, the world's reading gives way to that
+// place's reading for today, or to nothing before one is rolled. The
+// Director keeps the world's reading, which is what their editor changes.
+func TestCurrentWeatherFollowsTheParty(t *testing.T) {
+	zone := "z-coast"
+	sleetToday := wx(5, 2, 10, "Sleet")
+	sleetToday.ZoneID = &zone
+	tests := []struct {
+		name  string
+		marks []PartyMark
+		place map[string][]DayWeather
+		v     permissions.Viewer
+		want  string // the current reading's label; "" for none
+	}{
+		{"no moves: the world's", nil, nil, pwPlayer, "World sun"},
+		{"in a place with its own climate: its reading",
+			[]PartyMark{{Year: 5, Month: 2, Day: 1, PlaceID: "gull"}},
+			map[string][]DayWeather{"salt": {sleetToday}}, pwPlayer, "Sleet"},
+		{"in such a place before a reading is rolled: none",
+			[]PartyMark{{Year: 5, Month: 2, Day: 1, PlaceID: "salt"}},
+			map[string][]DayWeather{"salt": {wx(5, 2, 9, "Yesterday")}}, pwPlayer, ""},
+		{"somewhere with no climate of its own: the world's",
+			[]PartyMark{{Year: 5, Month: 2, Day: 1, PlaceID: "plain"}}, nil, pwPlayer, "World sun"},
+		{"a move after today does not count yet",
+			[]PartyMark{{Year: 5, Month: 2, Day: 11, PlaceID: "salt"}},
+			map[string][]DayWeather{"salt": {sleetToday}}, pwPlayer, "World sun"},
+		{"the Director keeps the world's",
+			[]PartyMark{{Year: 5, Month: 2, Day: 1, PlaceID: "salt"}},
+			map[string][]DayWeather{"salt": {sleetToday}}, pwDirector, "World sun"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := placeFixture(nil, &fakePlaceRepo{marks: tt.marks, days: tt.place})
+			svc.(*calendarService).weatherRepo.(*fakeWeatherRepo).getFn = func(context.Context, string) (*Weather, error) {
+				return &Weather{PresetLabel: label("World sun")}, nil
+			}
+			cal, err := svc.GetCalendarForViewer(context.Background(), "cal", "camp", tt.v)
+			if err != nil {
+				t.Fatalf("get calendar: %v", err)
+			}
+			got := ""
+			if cal.Weather != nil {
+				got = *cal.Weather.PresetLabel
+				if cal.Weather.ZoneID != nil && !tt.v.SkipsPerUserRules() {
+					t.Errorf("a player was told the zone %q", *cal.Weather.ZoneID)
+				}
+			}
+			if got != tt.want {
+				t.Fatalf("current weather = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

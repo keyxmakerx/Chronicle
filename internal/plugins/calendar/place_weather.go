@@ -18,6 +18,7 @@ package calendar
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -212,6 +213,65 @@ func regionAt(marks []regionMark, y, m, d int) string {
 		region = mk.region
 	}
 	return region
+}
+
+// partyToday is the region the party is in on cal's today and that
+// region's reading for the day. region is "" when the party is nowhere with
+// a climate of its own, or place weather is off: the world's weather stands.
+// Only marks up to today decide it, so it is the same for every viewer.
+func (s *calendarService) partyToday(ctx context.Context, cal *Calendar) (string, *DayWeather, error) {
+	if !s.placesOn() {
+		return "", nil, nil
+	}
+	today := DayDate{cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay}
+	marks, _, err := s.partyRegions(ctx, cal, &today)
+	if err != nil {
+		return "", nil, err
+	}
+	region := regionAt(marks, today.Year, today.Month, today.Day)
+	if region == "" {
+		return "", nil, nil
+	}
+	days, err := s.placeRepo.ListPlaceDays(ctx, cal.ID, []string{region}, today.Year, today.Month)
+	if err != nil {
+		return "", nil, fmt.Errorf("list place weather: %w", err)
+	}
+	for _, d := range days[region] {
+		if d.Day == today.Day {
+			return region, &d, nil
+		}
+	}
+	return region, nil, nil
+}
+
+// partyCurrentWeather makes a player's single "current weather" the
+// party's: while the party is somewhere with a climate of its own, the
+// world's reading would tell players weather they are not in, so it becomes
+// that place's reading for today, or nothing until one is rolled. It fails
+// closed: if the party's place can't be read, no reading is shown.
+func (s *calendarService) partyCurrentWeather(ctx context.Context, cal *Calendar) {
+	if cal.Weather == nil {
+		return
+	}
+	region, w, err := s.partyToday(ctx, cal)
+	if err != nil {
+		slog.Warn("calendar: party weather unavailable", slog.String("calendar_id", cal.ID), slog.Any("error", err))
+		cal.Weather = nil
+		return
+	}
+	if region == "" {
+		return
+	}
+	if w == nil {
+		cal.Weather = nil
+		return
+	}
+	// The zone is the Director's working detail, as in overlayParty.
+	cal.Weather = &Weather{
+		CalendarID: cal.ID, PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon,
+		Color: w.Color, TemperatureCelsius: w.TemperatureCelsius, Wind: w.Wind,
+		Precipitation: w.Precipitation, Description: w.Description, UpdatedAt: w.UpdatedAt,
+	}
 }
 
 // partyWeather merges the world's readings with the regions' by where the

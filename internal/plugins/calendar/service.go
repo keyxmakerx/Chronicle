@@ -856,6 +856,7 @@ func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Cale
 		cal.EventKinds = nil
 		cal.Moons = filterMoonsForViewer(cal.Moons, v)
 		cal.Eras = erasForPlayer(cal)
+		s.partyCurrentWeather(ctx, cal)
 	}
 	if err := s.redactEraLore(ctx, cal.CampaignID, cal.Eras, v); err != nil {
 		return nil, err
