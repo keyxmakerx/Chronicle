@@ -65,5 +65,9 @@ func (h *Handler) TurnFaceFragment(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The draw overlay reads the card at open size, with its leaf.
+	if c.QueryParam("size") == "open" {
+		return middleware.Render(c, http.StatusOK, ShownFace(card))
+	}
 	return middleware.Render(c, http.StatusOK, TurnedFace(card))
 }

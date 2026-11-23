@@ -1761,14 +1761,16 @@
     var holder = document.querySelector('[data-dkd-src]');
     var src = holder && holder.getAttribute('data-dkd-src');
     if (!src) return Promise.reject(new Error('no source'));
-    var css = holder.getAttribute('data-dkd-css');
-    if (css && !document.querySelector('link[data-dkd-css]')) {
+    // The overlay's own sheet, and the card sheet a page without cards lacks.
+    [['data-dkd-css', 'decks_draw.css'], ['data-dkd-card-css', 'decks_card.css']].forEach(function (pair) {
+      var href = holder.getAttribute(pair[0]);
+      if (!href || document.querySelector('link[' + pair[0] + '], link[href*="' + pair[1] + '"]')) return;
       var link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = css;
-      link.setAttribute('data-dkd-css', '');
+      link.href = href;
+      link.setAttribute(pair[0], '');
       document.head.appendChild(link);
-    }
+    });
     var cards = W.DeckCards ? Promise.resolve() : loadScript(src.replace('deck_draw.js', 'deck_cards.js'));
     drawLoad = cards.then(function () { return loadScript(src); }).then(function () { return W.DeckDraw; }, function (e) {
       drawLoad = null;

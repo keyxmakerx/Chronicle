@@ -95,7 +95,7 @@ const SERVER = `(function () {
     if (method === 'POST' && (m = u.match(/\\/decks\\/hand\\/fresh\\/([^/]+)\\/seen$/))) { srv.seen[m[1]] = true; return { status: 204, body: '' }; }
     if (method === 'GET' && (m = u.match(/\\/decks\\/(d\\d)\\/draw-view$/))) { return srv.decks[m[1]] ? J(view(m[1])) : bad('not found', 404); }
     if (method === 'GET' && (m = u.match(/\\/decks\\/(d\\d)\\/copies\\/([^/]+)\\/face$/))) return { status: 200, body: face(m[2]) };
-    if (method === 'POST' && (m = u.match(/\\/decks\\/hand\\/(d\\d)\\/copies\\/([^/]+)\\/turn$/))) return { status: 200, body: face(m[2]) };
+    if (method === 'POST' && (m = u.match(/\\/decks\\/hand\\/(d\\d)\\/copies\\/([^/]+)\\/turn\\?size=open$/))) return { status: 200, body: face(m[2]) };
     if (method === 'POST' && (m = u.match(/\\/decks\\/(d\\d)\\/draw$/))) {
       var d = srv.decks[m[1]], v = view(m[1]);
       if (srv.refuse) return bad(srv.refuse);
@@ -740,7 +740,7 @@ test('a player\'s Draw opens the overlay, pulls with the hero, turns through the
   assert.doesNotMatch(html, /Tide|Lantern|Bell|Gulls|Salt|Sails|Smuggler|Stranger|Fog|sea pulls/);
   await page.click('[data-dko-cardturn]');
   await turned(page);
-  assert.ok((await calls(page)).includes('POST /campaigns/c1/decks/hand/d1/copies/o1/turn'));
+  assert.ok((await calls(page)).includes('POST /campaigns/c1/decks/hand/d1/copies/o1/turn?size=open'));
   assert.deepEqual(await page.$$eval('[data-dko-acts] button', (b) => b.map((x) => x.textContent.trim())), ['Play it', 'Show the table', 'Keep it', 'Draw another · 2 left']);
   assert.equal(await text(page, '[data-dko-line]'), 'In your hand.');
   await page.close2();
@@ -869,10 +869,10 @@ test('pressing the dealt card turns it through the hand\'s turn; Escape closes i
   await page.evaluate(() => window.__start());
   await page.waitForSelector('[data-dko-cardturn]');
   await page.waitForFunction(() => document.activeElement.hasAttribute('data-dko-cardturn'));
-  assert.deepEqual((await calls(page)).filter((c) => /turn$/.test(c)), []);
+  assert.deepEqual((await calls(page)).filter((c) => /\/turn(\?|$)/.test(c)), []);
   await page.click('[data-dko-cardturn]');
   await page.waitForFunction(() => document.querySelector('[data-dko-arrive] [data-state="up"]') && document.querySelector('[data-dko-leaf] .dk-dn'));
-  assert.ok((await calls(page)).includes('POST /campaigns/c1/decks/hand/d1/copies/o1/turn'));
+  assert.ok((await calls(page)).includes('POST /campaigns/c1/decks/hand/d1/copies/o1/turn?size=open'));
   assert.equal(await text(page, '[data-dko-line]'), 'In your hand.');
   await page.keyboard.press('Escape');
   await page.waitForSelector('[data-dkd-ov]', { state: 'detached' });

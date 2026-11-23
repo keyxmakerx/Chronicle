@@ -1023,6 +1023,8 @@ templ Topbar() {
 					data-decks={ fmt.Sprint(IsAddonEnabled(ctx, "decks")) }
 					if IsAddonEnabled(ctx, "decks") {
 						data-dkd-src={ AssetURL("/static/plugins/decks/js/deck_draw.js") }
+						data-dkd-css={ AssetURL("/static/css/decks_draw.css") }
+						data-dkd-card-css={ AssetURL("/static/css/decks_card.css") }
 					}
 					data-css={ AssetURL("/static/plugins/rolls/css/table.css") }
 				>
@@ -1078,6 +1080,8 @@ templ Topbar() {
 				<div data-tb-tool="dms" data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }
 					if IsAddonEnabled(ctx, "decks") {
 						data-dkd-src={ AssetURL("/static/plugins/decks/js/deck_draw.js") }
+						data-dkd-css={ AssetURL("/static/css/decks_draw.css") }
+						data-dkd-card-css={ AssetURL("/static/css/decks_card.css") }
 					}
 				>
 					<button type="button" class="btn-ghost btn-icon" data-dms-toggle title={ GMTerm(ctx) + " Screen" } aria-label={ "Show or tuck the " + GMTerm(ctx) + " Screen" } aria-expanded="false">

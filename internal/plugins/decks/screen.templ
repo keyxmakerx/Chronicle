@@ -47,11 +47,14 @@ templ ScreenBody(v *ScreenView) {
 templ screenDeck(d ScreenDeck) {
 	<div class="dkd-deck" data-dkd-deck={ d.ID } data-name={ d.Name }>
 		<button type="button" class="dkd-row" data-dkd-row aria-expanded="false" aria-controls={ "dkd-acts-" + d.ID }>
-			<span class="dkd-thumb" aria-hidden="true">
+			<span class="dkd-back" aria-hidden="true">
 				@CardBack(d.Look, SizeRow)
 			</span>
-			<span class="dkd-name">{ d.Name }</span>
-			<span class="dkd-sub" data-dkd-sub>{ d.Sub() }</span>
+			<span class="dkd-txt">
+				<span class="dkd-name">{ d.Name }</span>
+				<span class="dkd-sub" data-dkd-sub>{ d.Sub() }</span>
+			</span>
+			<svg class="dkd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
 		</button>
 		<div class="dkd-acts" id={ "dkd-acts-" + d.ID } data-dkd-acts hidden>
 			<button type="button" class="btn-primary dkd-btn" data-dkd-draw>Draw</button>

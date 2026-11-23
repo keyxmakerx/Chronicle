@@ -34,7 +34,6 @@
   var DRAW_FAILED = 'The draw failed. Pull again to try again.';
   var GONE = 'That card is not here any more.';
   var CLOSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>';
-  var CHEV = '<svg class="dkd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
   var HEADERS = { 'Accept': 'application/json, text/html' };
 
   // ---- Small helpers ----
@@ -383,7 +382,7 @@
       },
       face: function (id) {
         if (isDir) return send('GET', base + '/' + enc(did) + '/copies/' + enc(id) + '/face').then(textOf);
-        return send('POST', base + '/hand/' + enc(did) + '/copies/' + enc(id) + '/turn').then(textOf);
+        return send('POST', base + '/hand/' + enc(did) + '/copies/' + enc(id) + '/turn?size=open').then(textOf);
       },
       verb: function (id, verb, body) { return send('POST', base + '/' + enc(did) + '/copies/' + enc(id) + '/' + verb, body || {}).then(jsonOf); }
     };
@@ -1139,7 +1138,7 @@
           var failed = null;
           var go = $('[data-dko-turn]', acts); if (go) go.disabled = true;
           function loadFace() {
-            return send('POST', base + '/hand/' + enc(card.deckId) + '/copies/' + enc(card.copyId) + '/turn').then(textOf).then(function (html) {
+            return send('POST', base + '/hand/' + enc(card.deckId) + '/copies/' + enc(card.copyId) + '/turn?size=open').then(textOf).then(function (html) {
               var t = document.createElement('template');
               t.innerHTML = html;
               var wrap = $('.dk-wrap', t.content), src = wrap || t.content;

@@ -123,6 +123,28 @@ func TestTurningBringsTheFaceOnceAndFlipsTheCopyOnce(t *testing.T) {
 	}
 }
 
+// The draw overlay asks for the turned face at open size, with the card's
+// words on it; the Hand's own strip keeps the small face.
+func TestTurningAtOpenSizeForTheOverlay(t *testing.T) {
+	for _, tc := range []struct {
+		query, size string
+	}{
+		{"", "dk-sz-hand"},
+		{"?size=open", "dk-sz-open"},
+	} {
+		t.Run("query "+tc.query, func(t *testing.T) {
+			w := newHandWorld(t, true, nil)
+			rec := w.post(w.turnPath(w.tamCopy)+tc.query, "u-tam", "Accept", "text/html, application/json")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("turn: %d %.200s", rec.Code, rec.Body.String())
+			}
+			if body := rec.Body.String(); !strings.Contains(body, tc.size) || !strings.Contains(body, "Moonwell") {
+				t.Errorf("the face is not %s: %.300s", tc.size, body)
+			}
+		})
+	}
+}
+
 // A copy that is not theirs, one that does not exist, a bad id and another
 // deck's id answer the same 404, for the turn request and the open request.
 func TestHandRoutesHideWhatIsNotTheirs(t *testing.T) {
