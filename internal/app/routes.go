@@ -6844,8 +6844,8 @@ func (a *App) RegisterRoutes() {
 
 	// A place's climate is a field on its page; the calendar keeps weather
 	// for each place that has one, reaching pages only through the entities
-	// service. One-time, idempotent: every Location category gets the Climate
-	// field. Best-effort, never blocks startup.
+	// service. Once per site, every Location category gets the Climate field
+	// (climate_fields.go). Best-effort, never blocks startup.
 	if pw, ok := calendarService.(interface {
 		SetPlaceWeather(calendar.PlaceWeatherRepository, calendar.PlaceDirectory)
 	}); ok {
@@ -6856,10 +6856,8 @@ func (a *App) RegisterRoutes() {
 	if fc, ok := entityService.(interface{ SetFieldClimate(entities.FieldClimate) }); ok {
 		fc.SetFieldClimate(fieldClimates)
 	}
-	if ec, ok := entityService.(interface {
-		EnsureClimateFields(context.Context) (int, error)
-	}); ok {
-		if n, err := ec.EnsureClimateFields(context.Background()); err != nil {
+	if ec, ok := entityService.(climateFieldEnsurer); ok {
+		if n, err := addClimateFieldsOnce(context.Background(), settingsRepo, ec); err != nil {
 			slog.Error("entities: climate field reconcile failed", slog.Any("error", err))
 		} else if n > 0 {
 			slog.Info("entities: climate field reconcile added fields", slog.Int("categories", n))

@@ -214,6 +214,8 @@ var climateFieldDef = FieldDefinition{Key: "climate", Label: "Climate", Type: Fi
 // idempotent: a category that already has a climate field, or any field
 // keyed "climate", is left alone, and the empty field shows nothing until a
 // climate is chosen. Best-effort per category; returns how many changed.
+// It cannot tell a category that never had the field from one whose owner
+// deleted it, so startup runs it once per site, not on every boot.
 func (s *entityService) EnsureClimateFields(ctx context.Context) (int, error) {
 	all, err := s.types.ListAll(ctx)
 	if err != nil {
