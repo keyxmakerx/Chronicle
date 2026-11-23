@@ -210,3 +210,69 @@ func (s *FieldSwitchService) SetAside(ctx context.Context, et *EntityType, entit
 	}
 	return setAsideValues(kept, sw.OldFields, et.Fields, theirs)
 }
+
+// ForCampaign is every answered category in a campaign, by category id, for
+// the campaign backup.
+func (s *FieldSwitchService) ForCampaign(ctx context.Context, campaignID string) (map[int]*FieldSwitch, error) {
+	return s.repo.ForCampaign(ctx, campaignID)
+}
+
+// SetAsideForCampaign is every page's kept values in a campaign, by page id,
+// for the campaign backup.
+func (s *FieldSwitchService) SetAsideForCampaign(ctx context.Context, campaignID string) (map[string]map[string]any, error) {
+	return s.repo.SetAsideForCampaign(ctx, campaignID)
+}
+
+// Column widths of entity_type_field_switches, checked before a restore so a
+// hand-edited backup is refused with a reason rather than a database error.
+const (
+	switchIDMaxLen       = 100
+	switchCategoryMaxLen = 50
+)
+
+// Restore makes a restored category's answer the one its backup carried: sw,
+// or no answer when sw is nil, so the offer shows again. It writes no page
+// and no field list; the import has already restored both.
+func (s *FieldSwitchService) Restore(ctx context.Context, campaignID string, typeID int, sw *FieldSwitch, userID string) error {
+	if _, err := s.category(ctx, campaignID, typeID); err != nil {
+		return err
+	}
+	if sw == nil {
+		return s.repo.Clear(ctx, typeID)
+	}
+	switch sw.State {
+	case FieldSwitchSwitched, FieldSwitchDismissed, FieldSwitchBack:
+	default:
+		return apperror.NewBadRequest("the game system field answer is not one Chronicle knows")
+	}
+	if sw.SystemID == "" || sw.PresetSlug == "" || len(sw.SystemID) > switchIDMaxLen || len(sw.PresetSlug) > switchIDMaxLen {
+		return apperror.NewBadRequest("the game system field answer does not name its game system")
+	}
+	if sw.OldPresetCategory != nil && len(*sw.OldPresetCategory) > switchCategoryMaxLen {
+		return apperror.NewBadRequest("the game system field answer's old category is too long")
+	}
+	// A nil list stays nil: it means there is nothing to switch back to.
+	var old []FieldDefinition
+	if sw.OldFields != nil {
+		old = cloneFieldDefs(sw.OldFields)
+	}
+	return s.repo.SaveState(ctx, &FieldSwitch{
+		EntityTypeID: typeID, CampaignID: campaignID,
+		SystemID: sw.SystemID, PresetSlug: sw.PresetSlug, State: sw.State,
+		OldFields: old, OldPresetCategory: sw.OldPresetCategory,
+		UpdatedBy: userID,
+	})
+}
+
+// RestoreSetAside writes back the values a backup says a switch kept aside
+// from one restored page. The import passes only pages it has just made in
+// the campaign, so entityID is not checked again here.
+func (s *FieldSwitchService) RestoreSetAside(ctx context.Context, campaignID string, typeID int, entityID string, values map[string]any) error {
+	if len(values) == 0 {
+		return nil
+	}
+	if _, err := s.category(ctx, campaignID, typeID); err != nil {
+		return err
+	}
+	return s.repo.RestoreSetAside(ctx, entityID, typeID, values)
+}

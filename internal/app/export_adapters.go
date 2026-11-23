@@ -47,6 +47,18 @@ type entityExportAdapter struct {
 	// layouts carries each category's named layouts and the one each page
 	// chose; nil leaves them out.
 	layouts entities.PageLayoutService
+	// fieldSwitch carries each category's answer to a game system's field
+	// switch and the values it kept aside; nil leaves them out.
+	fieldSwitch fieldSwitchBackup
+}
+
+// fieldSwitchBackup reads and restores the game system field switch for the
+// campaign backup (entities' FieldSwitchService).
+type fieldSwitchBackup interface {
+	ForCampaign(ctx context.Context, campaignID string) (map[int]*entities.FieldSwitch, error)
+	SetAsideForCampaign(ctx context.Context, campaignID string) (map[string]map[string]any, error)
+	Restore(ctx context.Context, campaignID string, typeID int, sw *entities.FieldSwitch, userID string) error
+	RestoreSetAside(ctx context.Context, campaignID string, typeID int, entityID string, values map[string]any) error
 }
 
 // categoryLayoutSaver checks and stores a category's named layouts
@@ -74,6 +86,19 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	if a.layouts != nil {
 		typeLayouts = a.layouts.ForCampaign(ctx, campaignID)
 		pageKeys = a.layouts.PageKeys(ctx, campaignID)
+	}
+	// A backup that dropped these would lose the GM's kept-aside values and
+	// bring back an offer the owner already answered, so a failed read fails
+	// the export.
+	var switches map[int]*entities.FieldSwitch
+	var keptAside map[string]map[string]any
+	if a.fieldSwitch != nil {
+		if switches, err = a.fieldSwitch.ForCampaign(ctx, campaignID); err != nil {
+			return nil, err
+		}
+		if keptAside, err = a.fieldSwitch.SetAsideForCampaign(ctx, campaignID); err != nil {
+			return nil, err
+		}
 	}
 	for _, et := range etypes {
 		var parentSlug *string
@@ -111,6 +136,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			ParentTypeSlug:  parentSlug,
 			Claimable:       et.Claimable,
 			PageLayouts:     pageLayoutsJSON(typeLayouts[et.ID]),
+			FieldSwitch:     exportFieldSwitch(switches[et.ID]),
 		})
 	}
 
@@ -171,6 +197,9 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				FieldOverrides: fieldOverrides,
 				PopupConfig:    popupConfig,
 				Layout:         pageKeys[e.ID],
+			}
+			if kept := keptAside[e.ID]; len(kept) > 0 {
+				exportEntity.SetAside, _ = json.Marshal(kept)
 			}
 
 			// Export per-entity permissions when visibility is custom.
@@ -1228,6 +1257,9 @@ type entityImportAdapter struct {
 	// layouts restores each category's named layouts and the one each page
 	// chose; nil reports them as left out.
 	layouts entities.PageLayoutService
+	// fieldSwitch restores each category's field switch answer and the
+	// values it kept aside; nil skips them.
+	fieldSwitch fieldSwitchBackup
 }
 
 // ImportEntities creates entity types, entities, tags, and relations from
@@ -1328,6 +1360,9 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			}
 		}
 		a.restoreCategoryLayouts(ctx, campaignID, newType.ID, et, report)
+		if fieldsOK {
+			a.restoreFieldSwitch(ctx, campaignID, userID, newType.ID, et, report)
+		}
 	}
 
 	// 2. Create entities (first pass: without parent references).
@@ -1373,6 +1408,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.ImagePath, idMap, a.entitySvc.UpdateImage, report)
 		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.CoverImagePath, idMap, a.entitySvc.UpdateCoverImage, report)
 		a.restorePageLayout(ctx, newEntity, e.Layout, e.Name, report)
+		a.restoreSetAside(ctx, campaignID, typeID, newEntity.ID, e, report)
 
 		// Apply field overrides.
 		if len(e.FieldOverrides) > 0 {

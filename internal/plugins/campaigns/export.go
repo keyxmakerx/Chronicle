@@ -91,6 +91,24 @@ type ExportEntityType struct {
 	Claimable      *bool   `json:"claimable,omitempty"`
 	// PageLayouts is the category's named layouts besides Layout (additive).
 	PageLayouts json.RawMessage `json:"page_layouts,omitempty"`
+	// FieldSwitch is the owner's answer to a game system's offer of its own
+	// fields for this category (additive). Absent means never answered, so
+	// a restore shows the offer again.
+	FieldSwitch *ExportFieldSwitch `json:"field_switch,omitempty"`
+}
+
+// ExportFieldSwitch is a category's answer to a game system's field switch.
+type ExportFieldSwitch struct {
+	// State is "switched", "dismissed" ("Not now") or "back" (switched,
+	// then switched back).
+	State      string `json:"state"`
+	SystemID   string `json:"system_id"`
+	PresetSlug string `json:"preset_slug"`
+	// OldFields is the field list from before the switch, which switching
+	// back restores; absent when the category began with the system's
+	// fields and has nothing to go back to.
+	OldFields         json.RawMessage `json:"old_fields,omitempty"`
+	OldPresetCategory *string         `json:"old_preset_category,omitempty"`
 }
 
 // --- Entities ---
@@ -122,6 +140,9 @@ type ExportEntity struct {
 	// Layout is the key of the category layout the page chose (additive);
 	// empty means it follows its category.
 	Layout string `json:"layout,omitempty"`
+	// SetAside is the values a game system field switch took off this page,
+	// shown only to the GM and put back on switching back (additive).
+	SetAside json.RawMessage `json:"set_aside,omitempty"`
 }
 
 // --- Tags ---

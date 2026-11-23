@@ -22,6 +22,17 @@ type FieldSwitchRepository interface {
 	Switch(ctx context.Context, sw *FieldSwitch, fields []FieldDefinition, presetCategory *string, move valueMove) (int, error)
 	// SetAside returns the values a switch took off one page.
 	SetAside(ctx context.Context, entityID string) (map[string]any, error)
+
+	// ForCampaign returns every answered category in a campaign, by category
+	// id, for the campaign backup.
+	ForCampaign(ctx context.Context, campaignID string) (map[int]*FieldSwitch, error)
+	// SetAsideForCampaign returns every page's kept values in a campaign, by
+	// page id, for the campaign backup.
+	SetAsideForCampaign(ctx context.Context, campaignID string) (map[string]map[string]any, error)
+	// Clear removes a category's answer, so the offer shows again.
+	Clear(ctx context.Context, typeID int) error
+	// RestoreSetAside writes one page's kept values as a backup carried them.
+	RestoreSetAside(ctx context.Context, entityID string, typeID int, values map[string]any) error
 }
 
 type fieldSwitchRepository struct {
@@ -52,6 +63,85 @@ func (r *fieldSwitchRepository) Get(ctx context.Context, typeID int) (*FieldSwit
 		}
 	}
 	return sw, nil
+}
+
+func (r *fieldSwitchRepository) ForCampaign(ctx context.Context, campaignID string) (map[int]*FieldSwitch, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT entity_type_id, campaign_id, system_id, preset_slug, state, old_fields, old_preset_category, updated_by, updated_at
+		 FROM entity_type_field_switches WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing field switches: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[int]*FieldSwitch)
+	for rows.Next() {
+		sw := &FieldSwitch{}
+		var oldRaw []byte
+		if err := rows.Scan(&sw.EntityTypeID, &sw.CampaignID, &sw.SystemID, &sw.PresetSlug, &sw.State, &oldRaw, &sw.OldPresetCategory, &sw.UpdatedBy, &sw.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("reading field switch: %w", err)
+		}
+		if len(oldRaw) > 0 && string(oldRaw) != "null" {
+			if err := json.Unmarshal(oldRaw, &sw.OldFields); err != nil {
+				return nil, fmt.Errorf("reading field switch old fields: %w", err)
+			}
+		}
+		out[sw.EntityTypeID] = sw
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listing field switches: %w", err)
+	}
+	return out, nil
+}
+
+func (r *fieldSwitchRepository) SetAsideForCampaign(ctx context.Context, campaignID string) (map[string]map[string]any, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT s.entity_id, s.field_values
+		 FROM entity_set_aside_values s JOIN entities e ON e.id = s.entity_id
+		 WHERE e.campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing kept values: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]map[string]any)
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, fmt.Errorf("reading kept values: %w", err)
+		}
+		vals := map[string]any{}
+		if err := json.Unmarshal(raw, &vals); err != nil {
+			return nil, fmt.Errorf("reading page %s kept values: %w", id, err)
+		}
+		if len(vals) > 0 {
+			out[id] = vals
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listing kept values: %w", err)
+	}
+	return out, nil
+}
+
+func (r *fieldSwitchRepository) Clear(ctx context.Context, typeID int) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM entity_type_field_switches WHERE entity_type_id = ?`, typeID); err != nil {
+		return fmt.Errorf("clearing field switch: %w", err)
+	}
+	return nil
+}
+
+func (r *fieldSwitchRepository) RestoreSetAside(ctx context.Context, entityID string, typeID int, values map[string]any) error {
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("encoding kept values: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO entity_set_aside_values (entity_id, entity_type_id, field_values) VALUES (?, ?, ?)
+		 ON DUPLICATE KEY UPDATE entity_type_id = VALUES(entity_type_id), field_values = VALUES(field_values)`,
+		entityID, typeID, raw); err != nil {
+		return fmt.Errorf("restoring kept values: %w", err)
+	}
+	return nil
 }
 
 // upsertState is the shared write of a switch row, on the db or a transaction.

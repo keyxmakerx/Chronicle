@@ -341,6 +341,37 @@ func (f *fakeSwitchRepo) SetAside(_ context.Context, id string) (map[string]any,
 	return f.kept[id], nil
 }
 
+func (f *fakeSwitchRepo) ForCampaign(_ context.Context, campaignID string) (map[int]*FieldSwitch, error) {
+	out := map[int]*FieldSwitch{}
+	for id, r := range f.rows {
+		if r.CampaignID == campaignID {
+			c := *r
+			out[id] = &c
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeSwitchRepo) SetAsideForCampaign(context.Context, string) (map[string]map[string]any, error) {
+	out := map[string]map[string]any{}
+	for id, k := range f.kept {
+		if len(k) > 0 {
+			out[id] = k
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeSwitchRepo) Clear(_ context.Context, id int) error {
+	delete(f.rows, id)
+	return nil
+}
+
+func (f *fakeSwitchRepo) RestoreSetAside(_ context.Context, id string, _ int, v map[string]any) error {
+	f.kept[id] = v
+	return nil
+}
+
 type fakeSwitchTypes struct{ repo *fakeSwitchRepo }
 
 func (t fakeSwitchTypes) FindByID(_ context.Context, id int) (*EntityType, error) {
@@ -487,5 +518,62 @@ func TestFieldSwitchServiceBackWithoutTheSystem(t *testing.T) {
 	}
 	if _, has := repo.kept["p1"]["type"]; has {
 		t.Errorf("the old Type came back to p1, kept %v", repo.kept["p1"])
+	}
+}
+
+// A backup's answer replaces whatever the category has, a missing answer
+// clears it, and a hand-edited answer Chronicle cannot read is refused.
+func TestFieldSwitchServiceRestore(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newSwitchService(true)
+	if _, err := svc.Accept(ctx, "c1", 4, "owner"); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	if err := svc.Restore(ctx, "c1", 4, nil, "importer"); err != nil {
+		t.Fatalf("Restore(nil): %v", err)
+	}
+	if _, ok := repo.rows[4]; ok {
+		t.Errorf("restoring no answer left %+v, want the offer back", repo.rows[4])
+	}
+
+	old := itemFields()
+	if err := svc.Restore(ctx, "c1", 4, &FieldSwitch{State: FieldSwitchBack, SystemID: "drawsteel", PresetSlug: "drawsteel-item", OldFields: old}, "importer"); err != nil {
+		t.Fatalf("Restore(back): %v", err)
+	}
+	got := repo.rows[4]
+	if got == nil || got.State != FieldSwitchBack || got.CampaignID != "c1" || got.UpdatedBy != "importer" || !reflect.DeepEqual(got.OldFields, old) {
+		t.Errorf("restored row = %+v", got)
+	}
+	if err := svc.Restore(ctx, "c1", 4, &FieldSwitch{State: FieldSwitchSwitched, SystemID: "drawsteel", PresetSlug: "drawsteel-item"}, "importer"); err != nil {
+		t.Fatalf("Restore(switched, nothing to go back to): %v", err)
+	}
+	if repo.rows[4].OldFields != nil {
+		t.Errorf("an answer with nothing to go back to came back with %+v", repo.rows[4].OldFields)
+	}
+
+	long := strings.Repeat("x", 101)
+	for name, sw := range map[string]*FieldSwitch{
+		"unknown state":     {State: "maybe", SystemID: "drawsteel", PresetSlug: "drawsteel-item"},
+		"no system":         {State: FieldSwitchDismissed, PresetSlug: "drawsteel-item"},
+		"system too long":   {State: FieldSwitchDismissed, SystemID: long, PresetSlug: "drawsteel-item"},
+		"old category long": {State: FieldSwitchDismissed, SystemID: "drawsteel", PresetSlug: "drawsteel-item", OldPresetCategory: &long},
+	} {
+		if err := svc.Restore(ctx, "c1", 4, sw, "importer"); switchErrCode(err) != 400 {
+			t.Errorf("%s: Restore = %v, want a bad request", name, err)
+		}
+	}
+	if err := svc.Restore(ctx, "other", 4, nil, "importer"); switchErrCode(err) != 404 {
+		t.Errorf("another campaign's category: Restore = %v, want not found", err)
+	}
+
+	if err := svc.RestoreSetAside(ctx, "c1", 4, "p2", map[string]any{"rarity": "Common"}); err != nil {
+		t.Fatalf("RestoreSetAside: %v", err)
+	}
+	if !reflect.DeepEqual(repo.kept["p2"], map[string]any{"rarity": "Common"}) {
+		t.Errorf("p2's kept values = %v", repo.kept["p2"])
+	}
+	if err := svc.RestoreSetAside(ctx, "other", 4, "p2", map[string]any{"rarity": "Common"}); switchErrCode(err) != 404 {
+		t.Errorf("another campaign's category: RestoreSetAside = %v, want not found", err)
 	}
 }
