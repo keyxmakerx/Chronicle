@@ -45,6 +45,10 @@ type EntityService interface {
 	ReconcileShopGoodVisibility(ctx context.Context, campaignID, entityID string, publicListings int) error
 	GetByID(ctx context.Context, id string) (*Entity, error)
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
+	// GetByNameSlug is the live page a name refers to, given Slugify(name):
+	// the page holding that slug, else a page of that name whose slug took a
+	// uniqueness suffix. Name lookups use it; URLs keep GetBySlug.
+	GetByNameSlug(ctx context.Context, campaignID, nameSlug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
 	// SaveEntry is the editor's save: with baseRev set it refuses to replace
@@ -746,6 +750,29 @@ func (s *entityService) GetByID(ctx context.Context, id string) (*Entity, error)
 // GetBySlug retrieves an entity by campaign ID and slug.
 func (s *entityService) GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error) {
 	return s.entities.FindBySlug(ctx, campaignID, slug)
+}
+
+// GetByNameSlug finds a page by its name's slug. A page's slug is its name's
+// slug unless another row held that slug when the page was made or renamed,
+// most often a page in the trash: then it got "-2" or a hex tail, and an
+// exact slug lookup misses it. The oldest such page whose own name gives
+// nameSlug wins, so "Rope 2" (slug rope-2) never answers for "Rope".
+func (s *entityService) GetByNameSlug(ctx context.Context, campaignID, nameSlug string) (*Entity, error) {
+	e, err := s.entities.FindBySlug(ctx, campaignID, nameSlug)
+	if err == nil || apperror.SafeCode(err) != http.StatusNotFound {
+		return e, err
+	}
+	candidates, lerr := s.entities.ListSuffixedSlugs(ctx, campaignID, nameSlug)
+	if lerr != nil {
+		return nil, lerr
+	}
+	for i := range candidates {
+		c := &candidates[i]
+		if Slugify(c.Name) == nameSlug && uniqueSuffixPattern.MatchString(c.Slug[len(nameSlug):]) {
+			return c, nil
+		}
+	}
+	return nil, err
 }
 
 // Update modifies an existing entity's name, type_label, privacy, entry, and fields.

@@ -552,10 +552,21 @@
     }
   });
 
+  // Back and Forward fetch the page without a beforeSwap and cannot be
+  // stopped, so one that brings another build's page reloads it in full; the
+  // restored markup is hidden and left unmounted until the reload lands.
+  var buildReload = false;
+  document.addEventListener('htmx:historyCacheMissLoad', function (event) {
+    if (!otherBuild(event.detail && event.detail.xhr)) return;
+    buildReload = true;
+    document.documentElement.style.visibility = 'hidden';
+    window.location.reload();
+  });
   // Back and Forward fetch the page and swap in a whole new body without a
   // beforeSwap or an afterSettle, so the widgets of the page that was left
   // are destroyed here and the restored page's are mounted.
   document.addEventListener('htmx:historyRestore', function (event) {
+    if (buildReload) return;
     mountedEls.forEach(function (el) {
       if (!el.isConnected) destroyElement(el);
     });
@@ -629,19 +640,28 @@
   });
 
   // After a deploy, an open tab still runs the scripts it first loaded,
-  // while a boosted link swaps in the new build's markup and CSS. When a
-  // boosted page comes from a different build than this page's meta names,
-  // load it in full instead, so its scripts match. Registered before the
-  // widget teardown below, which then leaves the page alone.
+  // while a boosted link swaps in the new build's markup and CSS, and so does
+  // a live refresh of the page (it targets #main-content, and the restart
+  // drops its socket, whose reconnect fetches the page). New markup run by
+  // old scripts leaves widgets on their loading state. When such a response
+  // comes from a different build than this page's meta names, load it in
+  // full instead, so its scripts match. It is checked on beforeOnLoad, ahead
+  // of the live refresh's update in place (which stops the swap there), and
+  // stopped before any later listener sees it.
   var pageBuild = (document.querySelector('meta[name="chronicle-build"]') || {}).content || '';
-  document.addEventListener('htmx:beforeSwap', function (event) {
+  function otherBuild(xhr) {
+    var build = pageBuild && xhr && xhr.getResponseHeader('X-Chronicle-Build');
+    return !!build && build !== pageBuild && xhr.status < 400;
+  }
+  document.addEventListener('htmx:beforeOnLoad', function (event) {
     var d = event.detail || {}, xhr = d.xhr, cfg = d.requestConfig || {};
-    if (!pageBuild || !xhr || !(d.boosted || cfg.boosted) || (cfg.verb && cfg.verb !== 'get')) return;
-    var build = xhr.getResponseHeader('X-Chronicle-Build');
-    if (!build || build === pageBuild || xhr.status >= 400) return;
+    var main = document.getElementById('main-content');
+    var whole = d.boosted || cfg.boosted || (main && d.target === main);
+    if (!whole || (cfg.verb && cfg.verb !== 'get') || !otherBuild(xhr)) return;
     var url = (d.pathInfo && (d.pathInfo.responsePath || d.pathInfo.finalRequestPath || d.pathInfo.requestPath)) || xhr.responseURL;
     if (!url) return;
-    d.shouldSwap = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
     window.location.assign(url);
   });
 
