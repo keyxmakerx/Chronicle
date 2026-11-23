@@ -450,6 +450,23 @@ textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
 .sb-section { min-width: 0; }
 .sb code { font-size: 0.78125rem; padding: 0 0.25rem; border-radius: var(--shape-r-tag); background: var(--sb-alt); }
 
+/* People › Changing heroes: the rule as rows, its times as sentences with
+   their numbers as the blanks. The times dim while "Any time" is chosen. */
+.sb-hc-set { margin: 0; min-width: 0; border-width: var(--shape-rule) 0 0; border-style: solid; border-color: var(--sb-line); }
+.sb-hc-set > legend { float: left; }
+.sb-hc-sum { display: block; }
+.sb-hc-opts { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+.sb-hc-lines { display: flex; flex-direction: column; gap: 0.375rem; }
+.sb-hc-opt { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.5rem; min-height: 2.25rem; font-size: 0.875rem; color: var(--sb-ink); }
+.sb-hc-opt input[type="radio"], .sb-hc-opt input[type="checkbox"] { accent-color: var(--sb-acc); }
+.sb-hc-check { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.25rem; cursor: pointer; }
+.sb-hc-num { width: 4.5rem; padding-top: 0.25rem; padding-bottom: 0.25rem; font-variant-numeric: tabular-nums; }
+.sb-hc-times { transition: opacity var(--dur-standard) var(--ease-out); }
+.sb-hc:has(input[name="when"][value="any"]:checked) .sb-hc-times { opacity: 0.55; }
+.sb-hc-acts { gap: 0.5rem 1rem; }
+.sb-hc-msg { font-size: 0.8125rem; }
+.sb-hc-more { flex: 1 1 16rem; text-align: right; }
+
 /* ---------- Narrow pages ---------- */
 @container sbpage (max-width: 52rem) {
   .sb-split { grid-template-columns: minmax(0, 1fr); }
@@ -465,6 +482,7 @@ textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
   .sb-flip .sb-knob { top: auto; bottom: 0.75rem; }
   .sb-choice { grid-template-columns: minmax(0, 1fr); }
   .sb-row > label, .sb-row > .sb-rl { flex-basis: 100%; }
+  .sb-hc-more { text-align: left; }
 }
 @container sbpage (max-width: 26rem) {
   .sb-w2 { grid-column: 1 / -1; }
@@ -476,11 +494,13 @@ textarea.sb-field { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
   .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
   .sb-av { width: 2.75rem; height: 2.75rem; }
   .sb-chip, .sb-word, .sb-delete, .sb-field, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+  .sb-hc-opt, .sb-hc-check, .sb-hc-num { min-height: 2.75rem; }
 }
 @media (pointer: coarse) {
   .sb-open { width: 2.75rem; height: 2.75rem; top: 0.25rem; right: 0.25rem; }
   .sb-av { width: 2.75rem; height: 2.75rem; }
   .sb-chip, .sb-word, .sb-delete, .sb-field, .sb .set-v, .sb .btn-primary, .sb .btn-secondary { min-height: 2.75rem; }
+  .sb-hc-opt, .sb-hc-check, .sb-hc-num { min-height: 2.75rem; }
 }
 
 /* Calm keeps the colours and drops the travel; Off keeps neither. */

@@ -50,31 +50,8 @@ type HeroChangeRow struct {
 	Open   bool
 }
 
-// heroChangeDefaults are the numbers the form suggests before a rule exists:
-// a week after making, and a week after each new level.
-const (
-	heroChangeDefaultDays  = 7
-	heroChangeDefaultLevel = 2
-)
-
 // heroRuleSummary says the rule in one sentence, as the Directors read it.
-func heroRuleSummary(rule *campaigns.HeroChangeRule) string {
-	if rule == nil {
-		return "Players can change their hero's picks any time."
-	}
-	var parts []string
-	if rule.AfterMakingDays > 0 {
-		parts = append(parts, "for the first "+dayWord(rule.AfterMakingDays)+" after making it")
-	}
-	if rule.AfterLevel {
-		p := "for " + dayWord(rule.AfterLevelDays) + " after each new level"
-		if rule.FromLevel > 2 {
-			p += fmt.Sprintf(" from level %d on", rule.FromLevel)
-		}
-		parts = append(parts, p)
-	}
-	return "Players can change their hero's picks " + strings.Join(parts, ", and ") + "."
-}
+func heroRuleSummary(rule *campaigns.HeroChangeRule) string { return rule.Summary() }
 
 // heroLockState is a hero's lock as the Directors' list says it.
 func heroLockState(l HeroLock, now time.Time) string {
@@ -106,19 +83,12 @@ func (h *Handler) heroChangesSection(c *echo.Context, cc *campaigns.CampaignCont
 		slog.Warn("cast page: hero change rule failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		return nil
 	}
+	f := rule.FormValues()
 	v := &HeroChangesView{
 		CampaignID: cc.Campaign.ID, CSRFToken: middleware.GetCSRFToken(c),
-		Ruled: rule != nil, Summary: heroRuleSummary(rule),
-		MakingDays: heroChangeDefaultDays, FromLevel: heroChangeDefaultLevel, LevelDays: heroChangeDefaultDays,
-	}
-	if rule != nil {
-		v.AfterMaking, v.AfterLevel = rule.AfterMakingDays > 0, rule.AfterLevel
-		if rule.AfterMakingDays > 0 {
-			v.MakingDays = rule.AfterMakingDays
-		}
-		if rule.AfterLevel {
-			v.FromLevel, v.LevelDays = max(rule.FromLevel, heroChangeDefaultLevel), rule.AfterLevelDays
-		}
+		Ruled: f.Ruled, Summary: heroRuleSummary(rule),
+		AfterMaking: f.AfterMaking, MakingDays: f.MakingDays,
+		AfterLevel: f.AfterLevel, FromLevel: f.FromLevel, LevelDays: f.LevelDays,
 	}
 	if rule == nil {
 		return v
@@ -169,37 +139,19 @@ func (h *Handler) SaveHeroChanges(c *echo.Context) error {
 	if h.heroChanges == nil || !cc.CanAuthorDmOnly() {
 		return apperror.NewNotFound("page not found")
 	}
-	var req struct {
-		When       string `form:"when"`
-		Making     string `form:"after_making"`
-		MakingDays string `form:"making_days"`
-		Level      string `form:"after_level"`
-		FromLevel  string `form:"from_level"`
-		LevelDays  string `form:"level_days"`
-	}
+	var form campaigns.HeroChangeForm
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, 8*1024)
-	if err := c.Bind(&req); err != nil {
+	if err := c.Bind(&form); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	var rule *campaigns.HeroChangeRule
-	if req.When == "set" {
-		rule = &campaigns.HeroChangeRule{}
-		if req.Making != "" {
-			rule.AfterMakingDays = formInt(req.MakingDays)
-			if rule.AfterMakingDays == 0 {
-				return h.castClaimedPageAlert(c, cc, "Say how many days after making a hero the picks stay open.")
-			}
-		}
-		if req.Level != "" {
-			rule.AfterLevel = true
-			rule.FromLevel = formInt(req.FromLevel)
-			rule.AfterLevelDays = formInt(req.LevelDays)
-		}
+	rule, err := form.Rule()
+	if err != nil {
+		return h.castClaimedPageAlert(c, cc, heroSentence(apperror.SafeMessage(err)))
 	}
 	if err := h.heroChanges.SaveRule(c.Request().Context(), cc.Campaign.ID, rule); err != nil {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) && ae.Code == http.StatusBadRequest {
-			return h.castClaimedPageAlert(c, cc, apperror.SafeMessage(err)+".")
+			return h.castClaimedPageAlert(c, cc, heroSentence(apperror.SafeMessage(err)))
 		}
 		return err
 	}
@@ -242,6 +194,15 @@ func (h *Handler) ReopenHeroChanges(c *echo.Context) error {
 		return err
 	}
 	return h.castClaimedPage(c, cc, fmt.Sprintf("%s's picks are open for %s.", e.Name, dayWord(n)))
+}
+
+// heroSentence ends a refusal with a full stop and starts it with a capital,
+// as the page's alerts read.
+func heroSentence(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:] + "."
 }
 
 // formInt reads a whole number from a form field; 0 when it is not one.

@@ -65,6 +65,9 @@ templ peopleSections(cc *CampaignContext, v MemberListView, transfer *OwnershipT
 	<div class="manage-split">
 		<div class="manage-split-main space-y-6">
 			@MemberListComponent(cc, v)
+			if v.HeroChanges != nil {
+				@heroChangesSection(v.HeroChanges)
+			}
 		</div>
 
 		if cc.MemberRole >= RoleOwner {

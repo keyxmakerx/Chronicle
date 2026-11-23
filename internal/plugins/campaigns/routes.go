@@ -179,6 +179,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.POST("/members/removed/:uid/allow", h.AllowMemberBack, RequireRole(RoleOwner))
 	cg.PUT("/members/:uid/role", h.UpdateRole, RequireRole(RoleOwner))
 	cg.PUT("/members/:uid/character", h.UpdateMemberCharacterAPI, RequireRole(RoleOwner))
+	cg.POST("/members/hero-changes", h.SaveHeroChangesSetting, RequireRole(RoleOwner))
 
 	// Ownership transfer (Owner only).
 	cg.GET("/transfer", h.TransferForm, RequireRole(RoleOwner))

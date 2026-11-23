@@ -184,6 +184,9 @@ type Handler struct {
 	// page's own row.
 	brushPrefs   BrushPrefs
 	pageCategory PageCategoryLookup
+	// heroChangesOn says whether People's "Changing heroes" section applies
+	// to a campaign (SetHeroChanges); nil hides it everywhere.
+	heroChangesOn func(ctx context.Context, campaignID string) bool
 }
 
 // NewHandler creates a new campaign handler.
@@ -1155,6 +1158,9 @@ type MemberListView struct {
 	// Figure redraws the People page's figures beside its title in place
 	// after a change; nil when the page itself is being drawn.
 	Figure templ.Component
+	// HeroChanges is the "Changing heroes" section, drawn with the page
+	// only; nil for a list redraw and for anyone but the owner.
+	HeroChanges *HeroChangesSetting
 }
 
 // memberListView loads the list for the People page. Removed people are the
@@ -1178,6 +1184,9 @@ func (h *Handler) renderPeoplePage(c *echo.Context, cc *CampaignContext, v Membe
 	ctx := c.Request().Context()
 	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
 	smtpConfigured := h.smtpChecker != nil && h.smtpChecker.IsConfigured(ctx)
+	if v.HeroChanges == nil {
+		v.HeroChanges = h.heroChangesSetting(c, cc)
+	}
 	return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, v, transfer, smtpConfigured))
 }
 

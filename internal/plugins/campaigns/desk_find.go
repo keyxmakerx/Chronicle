@@ -57,7 +57,10 @@ type deskFindInput struct {
 	Base           string
 	Media, Foundry bool
 	// Archived swaps "Archive" for "Unarchive", the row the page shows.
-	Archived     bool
+	Archived bool
+	// HeroChanges lists People's "Changing heroes", shown only while the
+	// lock it sets is wired.
+	HeroChanges  bool
 	Customize    []customizeFindEntry
 	SettingsTabs []SettingsTab
 }
@@ -120,6 +123,10 @@ func buildDeskFind(in deskFindInput) []customizeFindEntry {
 		customizeFindEntry{Label: "Transfer ownership", Path: deskFindPath("People"), Href: in.Base + "/members#transfer", Icon: "fa-right-left", Words: "hand over give new owner archive or delete danger zone"},
 		customizeFindEntry{Label: "Delete", Path: end, Href: data + "#danger", Icon: "fa-trash", Words: "delete this campaign remove destroy erase archive or delete"},
 	)
+	if in.HeroChanges {
+		out = append(out, customizeFindEntry{Label: "Changing heroes", Path: deskFindPath("People"), Href: in.Base + "/members#hero-changes", Icon: "fa-user-pen",
+			Words: "players change edit their character hero picks respec rebuild retrain window unlock lock level up days after making"})
+	}
 	for _, e := range in.Customize {
 		// Customize's own front page is the tool already listed above.
 		if e.Href == in.Base+"/customize" {
@@ -159,6 +166,7 @@ func (h *Handler) DeskFind(c *echo.Context) error {
 		Media:        in.Addons["media-gallery"],
 		Foundry:      in.Addons["sync-api"],
 		Archived:     cc.Campaign.IsArchived(),
+		HeroChanges:  h.heroChangesApply(ctx, cc.Campaign.ID),
 		Customize:    h.customizeFindEntries(cc, areas, h.CustomizeCategories(ctx, cc.Campaign.ID)),
 		SettingsTabs: h.visibleSettingsTabs(cc),
 	})

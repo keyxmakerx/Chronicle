@@ -4757,6 +4757,10 @@ func (a *App) RegisterRoutes() {
 		heroChangeSvc = entities.NewHeroChangeService(heroChangeRules{camps: campaignService},
 			entities.NewHeroChangeRepository(a.DB), heroChangeBell{camps: campaignService, bell: sessionsService})
 		entityHandler.SetHeroChanges(heroChangeSvc)
+		campaignHandler.SetHeroChanges(func(ctx context.Context, campaignID string) bool {
+			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, entities.AddonPlayerCharacterClaiming)
+			return err == nil && on
+		})
 	} else {
 		slog.Warn("hero changes schema degraded — players' hero picks are never locked")
 	}
