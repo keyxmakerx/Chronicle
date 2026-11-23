@@ -16,7 +16,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, siteAdmin, newCampaign, addMember, enableAddons, done, picture, ADMIN } from './_live.mjs';
+import { person, newCampaign, addMember, enableAddons, installDrawSteel, done, picture } from './_live.mjs';
 
 after(done);
 
@@ -25,30 +25,6 @@ const j = (who, url, method, body) => who.api(url, { method, body: body === unde
 
 // The marked entries, by the step they are on.
 const MARKED = { ancestry: { key: 'time-raider', name: 'Time Raider' }, class: { key: 'censor', name: 'Censor' } };
-
-// The package is added once for the whole server; the admin must have
-// confirmed their password within the last minutes first.
-async function installDrawSteel() {
-  const admin = await siteAdmin();
-  await admin.go('/admin/packages');
-  const reauth = await admin.api('/account/reauth', { method: 'POST', form: { password: ADMIN.password } });
-  assert.ok(reauth.ok, 'the admin could not confirm their password: ' + JSON.stringify(reauth.body));
-  const have = await admin.api('/admin/packages', { headers: { Accept: 'application/json' } });
-  if (!/Chronicle-Draw-Steel/i.test(typeof have.body === 'string' ? have.body : JSON.stringify(have.body))) {
-    const added = await admin.api('/admin/packages', { method: 'POST', form: { repo_url: 'https://github.com/keyxmakerx/Chronicle-Draw-Steel', type: 'system' } });
-    const said = JSON.stringify(added.body).slice(0, 300);
-    // GitHub out of reach or rate limited is the run's surroundings, not a
-    // fault in the page: the walk is skipped and says why.
-    if (!added.ok && /GitHub (didn't respond|had a temporary problem)|GitHub's rate limit/.test(said)) {
-      await admin.ctx.close();
-      return said;
-    }
-    assert.ok(added.ok, 'the Draw Steel package was not added: ' + said);
-  }
-  admin.assertClean();
-  await admin.ctx.close();
-  return '';
-}
 
 // A hero the person plays, made in the creator. A Director's hero is the
 // table's until they take it, and the builder shows only heroes the viewer has.
