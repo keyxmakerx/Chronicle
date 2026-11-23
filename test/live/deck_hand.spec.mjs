@@ -20,7 +20,7 @@
 
 import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { person, siteAdmin, newCampaign, addMember, enableAddons, done, once, resetErrors, ADMIN } from './_live.mjs';
+import { person, newCampaign, addMember, enableAddons, installDrawSteel, done, once, resetErrors } from './_live.mjs';
 
 // A card dealt to a hero pops up on its player's open page; Later sets it
 // aside into the Hand, where the walk goes on.
@@ -364,53 +364,6 @@ test('a stranger to the table and a signed-out visitor are told nothing is there
   await out.close();
 });
 
-// The Cards part as a tab on a hero page a game system draws. The walk installs
-// the Draw Steel package (the server fetches it from GitHub; with GitHub out of
-// reach it is skipped). With no Cards block on any layout: nothing dealt, no
-// Cards tab for anyone; a card dealt face down gives the hero's player the tab,
-// open on load, counting 1, with the card's back and the turn control; a
-// Director has the tab and no control; another player has the tab (counts only)
-// and no control; a card dealt while the tab is not showing arrives in it and
-// the count follows; with the Card decks add-on off, no tab for anyone.
-// The package is added once for the whole server; the admin must have
-// confirmed their password within the last minutes first.
-async function installDrawSteel() {
-  const admin = await siteAdmin();
-  await admin.go('/admin/packages');
-  const reauth = await admin.api('/account/reauth', { method: 'POST', form: { password: ADMIN.password } });
-  assert.ok(reauth.ok, 'the admin could not confirm their password: ' + JSON.stringify(reauth.body));
-  const have = await admin.api('/admin/packages', { headers: { Accept: 'application/json' } });
-  if (!/Chronicle-Draw-Steel/i.test(typeof have.body === 'string' ? have.body : JSON.stringify(have.body))) {
-    const added = await admin.api('/admin/packages', { method: 'POST', form: { repo_url: 'https://github.com/keyxmakerx/Chronicle-Draw-Steel', type: 'system' } });
-    const said = JSON.stringify(added.body).slice(0, 300);
-    // GitHub out of reach or rate limited is the run's surroundings, not a
-    // fault in the page: the walk is skipped and says why.
-    if (!added.ok && /GitHub (didn't respond|had a temporary problem)|GitHub's rate limit/.test(said)) {
-      await admin.ctx.close();
-      return said;
-    }
-    assert.ok(added.ok, 'the Draw Steel package was not added: ' + said);
-  }
-  // Adding still succeeds when GitHub gives no answer (the server tries again
-  // later), so the package's own version list is what says the releases
-  // arrived. Draw Steel has releases; none listed means GitHub was out of
-  // reach. Listed but none installed is a real install failure, and the walk
-  // fails at the switch below with the server's words.
-  const page = await admin.api('/admin/packages');
-  const html = typeof page.body === 'string' ? page.body : JSON.stringify(page.body);
-  const id = (html.match(/[?&](?:amp;)?pkg=([0-9a-f-]{36})/) || [])[1];
-  assert.ok(id, 'the Draw Steel package is not on the packages page');
-  const versions = await admin.api(`/admin/packages/${id}/versions`);
-  const listed = typeof versions.body === 'string' ? versions.body : JSON.stringify(versions.body);
-  if (!/font-mono font-bold[^>]*>\s*\d+\.\d+\.\d+/.test(listed)) {
-    await admin.ctx.close();
-    return 'the server added the package but got no releases from GitHub';
-  }
-  admin.assertClean();
-  await admin.ctx.close();
-  return '';
-}
-
 async function newSystemHero(owner, cid, name) {
   await owner.go(`/campaigns/${cid}/entities/new`);
   const etid = await owner.page.locator('select#entity_type_id').evaluate((el) => (([...el.options].find((o) => o.value && /character|hero/i.test(o.textContent)) || {}).value));
@@ -435,6 +388,14 @@ async function openDsHero(who, cid, hero) {
   await who.page.locator('[data-widget="page-tabs"] [data-pt-tab]').first().waitFor();
 }
 
+// The Cards part as a tab on a hero page a game system draws. The walk installs
+// the Draw Steel package (the server fetches it from GitHub; with GitHub out of
+// reach it is skipped). With no Cards block on any layout: nothing dealt, no
+// Cards tab for anyone; a card dealt face down gives the hero's player the tab,
+// open on load, counting 1, with the card's back and the turn control; a
+// Director has the tab and no control; another player has the tab (counts only)
+// and no control; a card dealt while the tab is not showing arrives in it and
+// the count follows; with the Card decks add-on off, no tab for anyone.
 test('the Cards part is a tab under a hero page a game system draws', async (t) => {
   const unreachable = await installDrawSteel();
   if (unreachable) { t.skip('this server could not fetch the Draw Steel package: ' + unreachable); return; }
