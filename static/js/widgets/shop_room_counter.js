@@ -2139,8 +2139,12 @@
       stage.classList.add('src-leave');
       goT = setTimeout(function () {
         stage.classList.remove('src-leave');
-        mountView(which);
-        if (side) { camSet(how === 'left' ? 1040 : 160, 350, .86); camTo(600, 350, 1, .6); } else camSet(600, 350, 1);
+        // Busy swallows Escape (see escape below), so a view that fails to
+        // draw must not leave it set, or Escape could never leave the shop.
+        try {
+          mountView(which);
+          if (side) { camSet(how === 'left' ? 1040 : 160, 350, .86); camTo(600, 350, 1, .6); } else camSet(600, 350, 1);
+        } catch (err) { busy = false; throw err; }
         stage.classList.add(side ? 'src-fadein' : 'src-arrive');
         arriveT = setTimeout(function () { stage.classList.remove('src-arrive', 'src-fadein'); busy = false; }, R.calm ? 0 : 520);
       }, R.calm ? 0 : 420);

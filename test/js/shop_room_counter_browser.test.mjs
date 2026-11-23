@@ -135,3 +135,16 @@ test('buying sends what is on the pile, and the pile becomes a parcel', { skip }
   await p.waitForSelector('.srcb-parcel');
   assert.equal(await count(p), '');
 });
+
+test('a goodbye that throws still stops the counter\'s loop and lets you out', { skip }, async (t) => {
+  const p = await shop(t);
+  await p.evaluate(() => {
+    window.ShopRoomKeeper = { MANNERS: {}, MOMENTS: [], ORDER: [], pick: function (m, ms, moment) { if (moment === 'bye') throw new Error('broken goodbye'); return ''; } };
+    var C = window.ShopRoomCounter, pause = C.pause;
+    window.__paused = null;
+    C.pause = function (host, on) { window.__paused = on; return pause(host, on); };
+  });
+  await p.click('.shr-out');
+  await p.waitForFunction(() => !document.querySelector('.shr-dlg').open, null, { timeout: 2000 });
+  assert.equal(await p.evaluate(() => window.__paused), true, 'the counter was paused on the way out');
+});

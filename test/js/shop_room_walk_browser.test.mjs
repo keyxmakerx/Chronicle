@@ -34,7 +34,7 @@ const HOST = `<!doctype html><html data-motion="__MOTION__"><head><style>
 body { margin: 0; width: 900px; }
 </style></head><body><div style="padding:20px"><div id="w" data-widget="shop_room" data-room-endpoint="/campaigns/c1/armory/shops/s1/room" data-relations-endpoint="/rel" data-shop-name="Hessa Ord's Workshop" data-campaign-url="/campaigns/c1" data-csrf-token="t"></div></div></body></html>`;
 
-async function page(t, motion) {
+async function page(t, motion, before) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -49,10 +49,14 @@ async function page(t, motion) {
       return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(body); } });
     }
   };` });
+  if (before) await p.addScriptTag({ content: before });
   for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room.js']) await p.addScriptTag({ content: read(f) });
   await p.waitForSelector('#w:not([hidden]) .shr-front');
   return p;
 }
+
+// A keeper whose goodbye throws: one fault in the room's extras.
+const BROKEN_BYE = `window.ShopRoomKeeper = { MANNERS: {}, MOMENTS: [], ORDER: [], pick: function (m, ms, moment) { if (moment === 'bye') throw new Error('broken goodbye'); return ''; } };`;
 
 test('closed, the door stands centred with its name and "Step inside" under it', { skip }, async (t) => {
   const p = await page(t);
@@ -142,4 +146,22 @@ test('a redraw keeps the flames and glows going rather than starting them over',
   await p.click('.shr-fx button[data-fx="full"]');
   const after = await loops();
   assert.ok(Math.min(...after) >= Math.min(...before), 'loops carry on from where they were: ' + Math.min(...before) + ' then ' + Math.min(...after));
+});
+
+test('a fault while saying goodbye still lets you out, by the door and by Escape', { skip }, async (t) => {
+  for (const motion of ['', 'off']) {
+    const p = await page(t, motion, BROKEN_BYE);
+    const logged = [];
+    p.on('console', (m) => { if (m.type() === 'error') logged.push(m.text()); });
+    await p.click('.shr-front');
+    await p.waitForFunction(() => document.querySelector('.shr-dlg').open, null, { timeout: 3000 });
+    await p.click('.shr-out');
+    await p.waitForFunction(() => !document.querySelector('.shr-dlg').open, null, { timeout: 2000 });
+    assert.equal(await p.getAttribute('.shr-front', 'aria-expanded'), 'false', 'the door is shut again');
+    await p.click('.shr-front');
+    await p.waitForFunction(() => document.querySelector('.shr-dlg').open, null, { timeout: 3000 });
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => !document.querySelector('.shr-dlg').open, null, { timeout: 2000 });
+    assert.ok(logged.some((l) => /leaving/.test(l)), 'the fault is still reported in the console');
+  }
 });
