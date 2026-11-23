@@ -43,6 +43,11 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		@layouts.AppFrame() {
 		@layouts.AppOpening(charactersOpening(cc, view)) {
 			<span>{ fmt.Sprintf("The cast of %s.", cc.Campaign.Name) }</span>
+			// A Director's way to what heroes can pick: the campaign's own
+			// entries and the marks on the game system's.
+			if ownEntriesLinkShown(ctx, cc) {
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/entries", cc.Campaign.ID)) } class="text-accent hover:underline" data-own-entries-link>Own entries: what heroes can pick</a>
+			}
 		}
 		if view.Alert != "" {
 			<link rel="stylesheet" href={ practiceCSS() }/>

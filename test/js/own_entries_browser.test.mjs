@@ -52,7 +52,7 @@ async function open(t, { director = true, checkCount = 0, requests = [REQUEST], 
   const pg = await browser.newPage({ viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light' });
   const errors = [];
   pg.on('pageerror', (e) => errors.push(e.message));
-  const seen = { put: [], check: [], post: [], entry: [], errors };
+  const seen = { put: [], check: [], post: [], entry: [], replace: [], errors };
   const store = entries.slice();
   await pg.route('http://t.test/**', (route) => {
     const req = route.request(), p = new URL(req.url()).pathname, m = req.method();
@@ -77,6 +77,14 @@ async function open(t, { director = true, checkCount = 0, requests = [REQUEST], 
       seen.entry.push({ method: m, path: p, body: b });
       const e = Object.assign(store.find((x) => '/system-entries/' + x.id === p.slice(C.length)) || {}, b);
       return ok({ entry: e });
+    }
+    if (p === C + '/system-entries/rewrite' && m === 'POST') {
+      seen.replace.push({ path: p, body: JSON.parse(req.postData()) });
+      return ok({ entry: { id: 52, slug: 'fury-2', name: 'Fury', fieldKey: 'class', visibility: 'directors', standsFor: 'fury' } }, 201);
+    }
+    if (/\/system-entries\/\d+\/tie$/.test(p) && m === 'POST') {
+      seen.replace.push({ path: p, body: JSON.parse(req.postData()) });
+      return ok({ entry: {} });
     }
     if (p === C + '/system-entries/grants') return ok({ grants });
     if (p === C + '/members') return ok([{ user_id: 'u2', display_name: 'Pat Lee' }]);
@@ -162,6 +170,39 @@ test('Suggest another sends the short note', { skip }, async (t) => {
   await pg.waitForTimeout(200);
   assert.equal(seen.post[0].p, C + '/choice-requests/7/suggest');
   assert.deepEqual(seen.post[0].body, { message: 'Try Fury, it suits the table' });
+});
+
+const own = (id, name, extra = {}) => ({ id, slug: name.toLowerCase(), name, fieldKey: 'class', status: 'accepted', visibility: 'everyone', createdBy: 'u1', ...extra });
+
+test('Replace with your own: a copy of the printed entry, opened in the editor', { skip }, async (t) => {
+  const { pg, seen } = await open(t, { entries: [own(41, 'Ashborn'), own(43, 'Stormcaller', { standsFor: 'tactician', standsForName: 'Tactician' })] });
+  await pg.waitForSelector('.oe-ent');
+  await row(pg, 'Fury').locator('.oe-dots').click();
+  await pg.getByRole('menuitem', { name: 'Replace with your own…' }).click();
+  assert.match(await pg.textContent('.oe-menu'), /Players get yours in place of Draw Steel’s Fury/);
+  assert.equal(await pg.getByRole('menuitem', { name: 'Use Ashborn' }).count(), 1, 'an entry of the campaign’s own can take the place');
+  assert.equal(await pg.getByRole('menuitem', { name: 'Use Stormcaller' }).count(), 0, 'one that already stands in for another is not offered');
+  await pg.getByRole('menuitem', { name: 'Start from a copy of Fury' }).click();
+  await pg.waitForURL(/entry=52/);
+  assert.deepEqual(seen.replace, [{ path: C + '/system-entries/rewrite', body: { fieldKey: 'class', slug: 'fury' } }]);
+  assert.match(pg.url(), /\?field=class&entry=52&made=1$/);
+});
+
+test('Replace with your own: the campaign’s entry of the same name takes the place', { skip }, async (t) => {
+  const { pg, seen } = await open(t, { entries: [own(41, 'Fury')] });
+  await pg.waitForSelector('.oe-ent');
+  await row(pg, 'Tactician').locator('.oe-dots').click();
+  await pg.getByRole('menuitem', { name: 'Replace with your own…' }).click();
+  assert.equal(await pg.getByRole('menuitem', { name: 'Start from a copy of Tactician' }).count(), 1);
+  await pg.getByRole('menuitem', { name: 'Back' }).click();
+  await pg.getByRole('menuitem', { name: 'Replace with your own…' }).waitFor();
+  await pg.keyboard.press('Escape');
+  await row(pg, 'Fury').first().locator('.oe-dots').click();
+  await pg.getByRole('menuitem', { name: 'Replace with your own…' }).click();
+  assert.equal(await pg.getByRole('menuitem', { name: /Start from a copy/ }).count(), 0, 'no copy while a Fury of its own exists');
+  await pg.getByRole('menuitem', { name: 'Use the Fury you wrote' }).click();
+  await pg.waitForURL(/entry=41/);
+  assert.deepEqual(seen.replace, [{ path: C + '/system-entries/41/tie', body: { slug: 'fury' } }]);
 });
 
 test('a player’s page has no marks', { skip }, async (t) => {

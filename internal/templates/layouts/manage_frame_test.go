@@ -17,7 +17,7 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 		c    navStateCase
 		want []string
 	}{
-		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Campaign settings", "People", "What players changed", "Customize", "Game & features", "Rolling tables", "Your AI", "Trash", "Campaign details", "Connections", "Data"}},
+		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Campaign settings", "People", "What players changed", "Customize", "Game & features", "Rolling tables", "Own entries", "Your AI", "Trash", "Campaign details", "Connections", "Data"}},
 		{"scribe", navStateCase{role: 2, path: "/campaigns/c1"}, nil},
 		{"player", navStateCase{role: 1, path: "/campaigns/c1"}, nil},
 		{"owner viewing as player", navStateCase{role: 1, player: true, path: "/campaigns/c1"}, nil},
@@ -51,7 +51,7 @@ func TestNavManageRows_FoundryNeedsSyncAPI(t *testing.T) {
 	for _, r := range NavManagePages(ctx) {
 		got = append(got, r.Label)
 	}
-	want := "Campaign settings,People,What players changed,Customize,Game & features,Rolling tables,Foundry,Your AI,Trash,Campaign details,Connections,Data"
+	want := "Campaign settings,People,What players changed,Customize,Game & features,Rolling tables,Own entries,Foundry,Your AI,Trash,Campaign details,Connections,Data"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("rows = %v, want %s", got, want)
 	}

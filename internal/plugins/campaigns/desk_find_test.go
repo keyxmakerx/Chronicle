@@ -142,6 +142,12 @@ func TestBuildDeskFind_WordsFindTheirRows(t *testing.T) {
 		{"rename", []string{"Name"}},
 		{"blurb", []string{"Description"}},
 		{"rules", []string{"Game system"}},
+		// What an owner types looking for the game's own lists.
+		{"homebrew", []string{"Own entries"}},
+		{"hide class", []string{"Own entries"}},
+		{"ancestry", []string{"Own entries"}},
+		{"race", []string{"Own entries"}},
+		{"rolling tables", []string{"Rolling tables"}},
 		// The names the page used to carry still find their rows.
 		{"safety net", []string{"Export", "Import", "Activity log", "Trash"}},
 		{"who can read", []string{"Private or public"}},

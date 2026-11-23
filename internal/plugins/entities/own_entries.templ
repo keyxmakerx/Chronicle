@@ -48,6 +48,8 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, v OwnEntriesView) {
 			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
 				if v.Director && cc.MemberRole >= campaigns.RoleOwner {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", cc.Campaign.ID)) } class="hover:text-fg">Campaign settings</a>
+					<span aria-hidden="true">/</span>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="hover:text-fg">Game</a>
 				} else if sys, ok := layouts.GetEnabledSystem(ctx); ok {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ rulesCrumb(sys) }</a>
 				} else {
