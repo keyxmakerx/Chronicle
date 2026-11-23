@@ -364,7 +364,7 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 		} else if err := strict(v, &en, "ending", endingShape); err != nil {
 			return e, err
 		}
-		end := Ending{Kind: en.Kind, After: en.After}
+		end := Ending(en)
 		e.ending = &end
 	}
 	return e, nil
