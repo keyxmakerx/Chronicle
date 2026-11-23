@@ -380,6 +380,21 @@ async function installDrawSteel() {
     }
     assert.ok(added.ok, 'the Draw Steel package was not added: ' + said);
   }
+  // Adding still succeeds when GitHub gives no answer (the server tries again
+  // later), so the package's own version list is what says the releases
+  // arrived. Draw Steel has releases; none listed means GitHub was out of
+  // reach. Listed but none installed is a real install failure, and the walk
+  // fails at the switch below with the server's words.
+  const page = await admin.api('/admin/packages');
+  const html = typeof page.body === 'string' ? page.body : JSON.stringify(page.body);
+  const id = (html.match(/[?&](?:amp;)?pkg=([0-9a-f-]{36})/) || [])[1];
+  assert.ok(id, 'the Draw Steel package is not on the packages page');
+  const versions = await admin.api(`/admin/packages/${id}/versions`);
+  const listed = typeof versions.body === 'string' ? versions.body : JSON.stringify(versions.body);
+  if (!/font-mono font-bold[^>]*>\s*\d+\.\d+\.\d+/.test(listed)) {
+    await admin.ctx.close();
+    return 'the server added the package but got no releases from GitHub';
+  }
   admin.assertClean();
   await admin.ctx.close();
   return '';
