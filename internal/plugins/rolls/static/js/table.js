@@ -1755,23 +1755,37 @@
       document.head.appendChild(s);
     });
   }
+  // Only the version token is read from the page; each path is fixed here, so
+  // a changed attribute can never point the loader at another script.
+  var DRAW_ASSETS = {
+    'data-dkd-src': '/static/plugins/decks/js/deck_draw.js',
+    'data-dkd-cards-src': '/static/plugins/decks/js/deck_cards.js',
+    'data-dkd-css': '/static/css/decks_draw.css',
+    'data-dkd-card-css': '/static/css/decks_card.css'
+  };
+  C.drawAsset = function (holder, attr) {
+    var v = holder && holder.getAttribute(attr);
+    if (!v) return '';
+    var m = /\?v=([A-Za-z0-9._-]{1,80})$/.exec(v);
+    return DRAW_ASSETS[attr] + (m ? '?v=' + encodeURIComponent(m[1]) : '');
+  };
   C.loadDeckDraw = function () {
     if (W.DeckDraw) return Promise.resolve(W.DeckDraw);
     if (drawLoad) return drawLoad;
     var holder = document.querySelector('[data-dkd-src]');
-    var src = holder && holder.getAttribute('data-dkd-src');
+    var src = C.drawAsset(holder, 'data-dkd-src');
     if (!src) return Promise.reject(new Error('no source'));
     // The overlay's own sheet, and the card sheet a page without cards lacks.
-    [['data-dkd-css', 'decks_draw.css'], ['data-dkd-card-css', 'decks_card.css']].forEach(function (pair) {
-      var href = holder.getAttribute(pair[0]);
-      if (!href || document.querySelector('link[' + pair[0] + '], link[href*="' + pair[1] + '"]')) return;
+    ['data-dkd-css', 'data-dkd-card-css'].forEach(function (attr) {
+      var href = C.drawAsset(holder, attr);
+      if (!href || document.querySelector('link[' + attr + '], link[href^="' + DRAW_ASSETS[attr] + '"]')) return;
       var link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = href;
-      link.setAttribute(pair[0], '');
+      link.setAttribute(attr, '');
       document.head.appendChild(link);
     });
-    var cards = W.DeckCards ? Promise.resolve() : loadScript(src.replace('deck_draw.js', 'deck_cards.js'));
+    var cards = W.DeckCards ? Promise.resolve() : loadScript(C.drawAsset(holder, 'data-dkd-cards-src') || DRAW_ASSETS['data-dkd-cards-src']);
     drawLoad = cards.then(function () { return loadScript(src); }).then(function () { return W.DeckDraw; }, function (e) {
       drawLoad = null;
       throw e;

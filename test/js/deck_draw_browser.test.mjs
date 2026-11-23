@@ -20,14 +20,14 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const FILES = {
-  '/js/deck_draw.js': read('internal/plugins/decks/static/js/deck_draw.js'),
-  '/js/deck_cards.js': read('internal/plugins/decks/static/js/deck_cards.js'),
+  '/static/plugins/decks/js/deck_draw.js': read('internal/plugins/decks/static/js/deck_draw.js'),
+  '/static/plugins/decks/js/deck_cards.js': read('internal/plugins/decks/static/js/deck_cards.js'),
   '/js/deck_hand.js': read('internal/plugins/decks/static/js/deck_hand.js'),
   '/js/table.js': read('internal/plugins/rolls/static/js/table.js'),
   '/js/dm_screen.js': read('static/js/widgets/dm_screen.js'),
-  '/css/decks_card.css': read('static/css/decks_card.css'),
+  '/static/css/decks_card.css': read('static/css/decks_card.css'),
   '/css/decks_hand.css': read('static/css/decks_hand.css'),
-  '/css/decks_draw.css': read('static/css/decks_draw.css'),
+  '/static/css/decks_draw.css': read('static/css/decks_draw.css'),
   '/css/table.css': read('internal/plugins/rolls/static/css/table.css'),
 };
 let browser;
@@ -130,8 +130,8 @@ const SERVER = `(function () {
 })();`;
 
 const PAGE = ({ viewer, heldHand = false }) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${TOKENS}</style><link rel="stylesheet" href="/css/decks_card.css"><link rel="stylesheet" href="/css/decks_hand.css"><link rel="stylesheet" href="/css/table.css"></head>
-<body data-dkd-src="/js/deck_draw.js" data-dkd-css="/css/decks_draw.css">
+<style>${TOKENS}</style><link rel="stylesheet" href="/static/css/decks_card.css"><link rel="stylesheet" href="/css/decks_hand.css"><link rel="stylesheet" href="/css/table.css"></head>
+<body data-dkd-src="/static/plugins/decks/js/deck_draw.js?v=t1" data-dkd-cards-src="/static/plugins/decks/js/deck_cards.js?v=t2" data-dkd-css="/static/css/decks_draw.css?v=t3">
 <header><div class="tt-host" data-widget="table" data-campaign-id="c1" data-user-id="u1" data-director="${viewer === 'director'}" data-decks="true" data-gm-term="Director">
 <button type="button" class="tt-tab" data-tt-tab aria-expanded="false" aria-controls="tt-drawer"><span data-tt-count hidden></span></button></div></header>
 <main id="main-content"><button id="elsewhere" type="button">Elsewhere</button><div id="host"></div></main>
@@ -255,7 +255,7 @@ test('the section folds a row to Draw and Quick draw, one row at a time', { skip
 test('the script loads only where the section is, and the overlay opens, traps focus and closes on Escape, not on the scrim', { skip }, async () => {
   const page = await open();
   await page.waitForFunction(() => window.DeckDraw);
-  assert.ok(page.loaded.includes('/js/deck_draw.js') && page.loaded.includes('/js/deck_cards.js') && page.loaded.includes('/css/decks_draw.css'));
+  assert.ok(page.loaded.includes('/static/plugins/decks/js/deck_draw.js') && page.loaded.includes('/static/plugins/decks/js/deck_cards.js') && page.loaded.includes('/static/css/decks_draw.css'));
   await page.click('[data-dkd-deck="d1"] [data-dkd-row]');
   const draw = '[data-dkd-deck="d1"] [data-dkd-draw]';
   await page.focus(draw);
@@ -732,7 +732,7 @@ test('a refused save of the picks says why under the list', { skip }, async () =
 
 test('a player\'s Draw opens the overlay, pulls with the hero, turns through the hand\'s turn and never shows the card before it', { skip }, async () => {
   const page = await openPlayer();
-  assert.ok(page.loaded.includes('/js/deck_draw.js'));
+  assert.ok(page.loaded.includes('/static/plugins/decks/js/deck_draw.js'));
   assert.equal(await text(page, '.dkd-subhead'), 'Events · 9 left');
   assert.equal(await text(page, '[data-dko-hint]'), SEVEN + ' 3 draws left.');
   await pullMiddle(page);
@@ -793,7 +793,7 @@ test('Quick draw keeps its behaviour: one request, no overlay', { skip }, async 
   await page.waitForTimeout(300);
   assert.equal(await page.$('[data-dkd-ov]'), null);
   assert.ok((await calls(page)).includes('POST /campaigns/c1/decks/d1/draw {"heroId":"h1","count":1}'));
-  assert.equal(page.loaded.includes('/js/deck_draw.js'), false, 'Quick draw loaded the overlay');
+  assert.equal(page.loaded.includes('/static/plugins/decks/js/deck_draw.js'), false, 'Quick draw loaded the overlay');
   await page.close2();
 });
 
@@ -900,8 +900,8 @@ test('a page with no fresh card never loads the overlay, and a Director is never
   const p = await open({ viewer: 'player' });
   await p.waitForFunction(() => window.__srv.calls.some((c) => /hand\/fresh$/.test(c)));
   await p.waitForTimeout(300);
-  assert.equal(p.loaded.includes('/js/deck_draw.js'), false);
-  assert.equal(p.loaded.includes('/css/decks_draw.css'), false);
+  assert.equal(p.loaded.includes('/static/plugins/decks/js/deck_draw.js'), false);
+  assert.equal(p.loaded.includes('/static/css/decks_draw.css'), false);
   await p.close2();
   const d = await open({ viewer: 'director' });
   await d.waitForFunction(() => window.__srv.calls.some((c) => /decks\/moments\/panel/.test(c)));
@@ -947,9 +947,11 @@ test('the DM Screen loads the overlay itself where the Table is not on the page'
   page.setDefaultTimeout(8000);
   const errors = [];
   const loaded = [];
+  const urls = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('request', (r) => urls.push(r.url()));
   const body = `<!doctype html><html><head><meta charset="utf-8"><style>${TOKENS}</style></head><body>
-<header id="app-topbar"><div data-widget="dm-screen" data-url="/campaigns/c1/dm-screen" data-dkd-src="/js/deck_draw.js" data-dkd-css="/css/decks_draw.css" data-dkd-card-css="/css/decks_card.css">
+<header id="app-topbar"><div data-widget="dm-screen" data-url="/campaigns/c1/dm-screen" data-dkd-src="/static/plugins/decks/js/deck_draw.js?v=t1" data-dkd-cards-src="/static/plugins/decks/js/deck_cards.js?v=t2" data-dkd-css="/static/css/decks_draw.css?v=t3" data-dkd-card-css="/static/css/decks_card.css?v=t4">
 <button type="button" data-dms-toggle aria-expanded="false">Screen</button></div></header><main id="main-content"></main>
 <script>${SERVER}
 window.__srv.viewer = 'director';
@@ -973,9 +975,12 @@ window.Chronicle = {
   await page.click('[data-dms-toggle]');
   await page.waitForSelector('[data-dms-stage] [data-dkd-screen] [data-dkd-row]');
   await page.waitForFunction(() => window.DeckDraw && document.querySelector('[data-dkd-screen]').__dkd);
-  for (const f of ['/js/deck_cards.js', '/js/deck_draw.js', '/css/decks_draw.css', '/css/decks_card.css']) {
+  for (const f of ['/static/plugins/decks/js/deck_cards.js', '/static/plugins/decks/js/deck_draw.js', '/static/css/decks_draw.css', '/static/css/decks_card.css']) {
     assert.equal(loaded.filter((p) => p === f).length, 1, f + ' loaded once');
   }
+  // The version token rides along; the path is the loader's own.
+  assert.ok(urls.includes('http://chronicle.test/static/plugins/decks/js/deck_draw.js?v=t1'));
+  assert.ok(urls.includes('http://chronicle.test/static/plugins/decks/js/deck_cards.js?v=t2'));
   await page.click('[data-dkd-deck="d1"] [data-dkd-row]');
   await page.click('[data-dkd-deck="d1"] [data-dkd-draw]');
   await page.waitForSelector('[data-dkd-ov] [data-dko-back]');
