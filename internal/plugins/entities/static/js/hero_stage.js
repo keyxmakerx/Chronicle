@@ -61,9 +61,27 @@
       return changed;
     };
 
-    // The window less whatever the docked Table bar covers.
+    // The amber strips a Director sees while looking in as a visitor or a
+    // player; each carries the way back, so the creator must not cover one.
+    var STRIPS = '[data-guest-preview], [data-pv-banner]';
+
+    // How far down the window the strips reach: the lowest bottom edge of one
+    // that is on screen. One the player view folded away has no height and
+    // counts for nothing.
+    function stripBottom() {
+      var low = 0;
+      qa(STRIPS, document).forEach(function (el) {
+        var r = el.getBoundingClientRect();
+        if (r.height > 0 && getComputedStyle(el).visibility !== 'hidden') low = Math.max(low, r.bottom);
+      });
+      return Math.min(Math.max(0, low), window.innerHeight);
+    }
+
+    // The window less the strip above and whatever the docked Table bar covers.
+    // The workshop's frame answers room() itself and never sets stripTop.
     P.room = function () {
-      return { height: window.innerHeight - dockedBar(window.innerHeight), min: 240 };
+      this.stripTop = stripBottom();
+      return { height: window.innerHeight - this.stripTop - dockedBar(window.innerHeight), min: 240 };
     };
 
     // The page behind is covered, never scrolled into place.
@@ -72,16 +90,18 @@
     // Everything else on the page is behind the creator, so it is out of reach
     // of the keyboard and screen readers while the look is open: at each level
     // from the mount up to the body, every sibling goes inert. Left usable:
-    // the docked Table bar (a body child or fixed, with its ancestors), and the
-    // site's toasts, which announce and offer Undo over the creator. Only what
-    // this took is given back, so a page that set its own inert is left as it
-    // was. It runs on every render and again when something joins a level the
+    // the docked Table bar (a body child or fixed, with its ancestors), the
+    // visitor and player strips (their button is the way out), and the site's
+    // toasts, which announce and offer Undo over the creator. Only what this
+    // took is given back, so a page that set its own inert is left as it was.
+    // It runs on every render and again when something joins a level the
     // walk crossed (a bar HTMX brings in late).
     var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, LINK: 1, TEMPLATE: 1, NOSCRIPT: 1 };
 
     P.usable = function () {
       var out = [], toast = document.getElementById('chronicle-toasts'), bar = document.getElementById('tt-drawer');
       if (toast) out.push(toast);
+      qa(STRIPS, document).forEach(function (el) { out.push(el); });
       if (bar && (bar.parentElement === document.body || getComputedStyle(bar).position === 'fixed')) out.push(bar);
       return out;
     };
@@ -152,10 +172,21 @@
         pend = requestAnimationFrame(function () { pend = 0; if (document.body.contains(self.root)) self.fit(); });
       };
       document.addEventListener('transitionend', this.onBarSlide, true);
+      // A strip that wraps, folds away or comes back changes where the creator
+      // starts. The workshop's frame is not fixed to the window, so it skips this.
+      if (window.ResizeObserver && !this.root.hasAttribute('data-workshop')) {
+        var seat = 0;
+        this.stripRo = new ResizeObserver(function () {
+          if (seat) return;
+          seat = requestAnimationFrame(function () { seat = 0; if (document.body.contains(self.root)) self.fit(); });
+        });
+        qa(STRIPS, document).forEach(function (el) { self.stripRo.observe(el); });
+      }
     };
 
     P.destroy = function () {
       if (this.borders) { this.borders.destroy(); this.borders = null; }
+      if (this.stripRo) { this.stripRo.disconnect(); this.stripRo = null; }
       if (this.onBarSlide) { document.removeEventListener('transitionend', this.onBarSlide, true); this.onBarSlide = null; }
       this.lockSite(false);
       base.destroy.call(this);
@@ -362,6 +393,8 @@
     P.refreshList = function () { base.refreshList.call(this); this.afterRoom(); this.tuckFor(this.scroller()); };
     P.fit = function () {
       base.fit.call(this);
+      var app = this.app();
+      if (app && this.stripTop != null) app.style.top = this.stripTop + 'px';
       // What the room alone asks of the intro line, before the cards ask more.
       this.roomShort = this.short;
       this.afterRoom();
