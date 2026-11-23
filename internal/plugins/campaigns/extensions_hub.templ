@@ -175,7 +175,10 @@ templ ExtensionsHubFragment(cc *CampaignContext, addons []PluginHubAddon, csrfTo
 			<p class="text-fg-muted">No extensions available yet.</p>
 		</div>
 	} else {
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+		// The grid counts its columns from its own width, not the window's:
+		// on a wide monitor the list sits beside the side panels, and a
+		// window-based three columns crushed each card to a sliver.
+		<div class="feature-grid">
 			for _, addon := range addons {
 				@extensionsHubCard(cc, addon, csrfToken)
 			}
@@ -202,9 +205,12 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 		data-extension-slug={ addon.Slug }
 		data-extension-enabled={ extensionEnabledAttr(addon.Enabled) }
 	>
-		<div class="flex items-start gap-3">
+		// Icon, name and switch share the top row; the description runs
+		// under the name across the full width, so the switch never narrows
+		// the words.
+		<div class="feature-card-head">
 			<div
-				class={ "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 tier-transition",
+				class={ "feature-card-icon w-10 h-10 rounded-lg flex items-center justify-center shrink-0 tier-transition",
 				templ.KV("bg-accent/10", addon.Enabled),
 				templ.KV("bg-surface-alt", !addon.Enabled) }
 			>
@@ -222,18 +228,18 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 					></i>
 				}
 			</div>
-			<div class="flex-1 min-w-0">
-				<div class="font-semibold text-fg text-sm flex items-center gap-2">
-					<span class="truncate">{ addon.Name }</span>
-					if addon.NeedsSetup {
-						<span class="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" title="This extension needs setup">
-							<i class="fa-solid fa-wrench text-[9px] mr-0.5"></i>Setup
-						</span>
-					}
-				</div>
-				<p class="text-xs text-fg-muted mt-0.5">{ addon.Description }</p>
+			<div class="feature-card-name font-semibold text-fg text-sm flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+				<span class="min-w-0 break-words">{ addon.Name }</span>
+				if addon.NeedsSetup {
+					<span class="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" title="This extension needs setup">
+						<i class="fa-solid fa-wrench text-[9px] mr-0.5"></i>Setup
+					</span>
+				}
 			</div>
-			@extensionsHubToggle(cc, addon, csrfToken)
+			<div class="feature-card-switch">
+				@extensionsHubToggle(cc, addon, csrfToken)
+			</div>
+			<p class="feature-card-desc text-xs text-fg-muted">{ addon.Description }</p>
 		</div>
 		// Footer affordances: an "Open setup" button for enabled extensions
 		// that expose a settings/onboarding page (SetupProvider registered),

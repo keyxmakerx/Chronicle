@@ -8018,6 +8018,35 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
   .manage-split .manage-split-main { grid-column: 1; grid-row: 1 / -1; margin: 0; }
 }
 
+/* Game › Features cards (internal/plugins/campaigns/extensions_hub.templ).
+   The grid fits as many 17rem columns as its own width holds, so the list
+   folds to one column wherever it is narrow (a phone, or the main column
+   beside the side panels) instead of crushing the words. Inside a card the
+   icon, name and switch share the top row and the description runs under
+   the name and the switch, so the switch never narrows it. */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+}
+.feature-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  row-gap: 0.25rem;
+  align-items: start;
+}
+.feature-card-icon { grid-column: 1; grid-row: 1 / span 2; }
+.feature-card-name { grid-column: 2; grid-row: 1; align-self: center; overflow-wrap: anywhere; }
+.feature-card-switch { grid-column: 3; grid-row: 1; display: flex; }
+.feature-card-switch > form { display: flex; }
+.feature-card-desc { grid-column: 2 / -1; grid-row: 2; }
+/* Touch gets 44: the switch's hit area grows without changing its look. */
+@media (pointer: coarse) {
+  .feature-card-switch button { position: relative; }
+  .feature-card-switch button::before { content: ""; position: absolute; inset: -10px -4px; }
+}
+
 /* Foundry page "Why?" (internal/plugins/syncapi/foundry_page.templ): a small
    button that opens a bubble floating over the players table. The bubble is
    the Grow move out of the button; the Calm and Off guards above settle it at
