@@ -145,6 +145,11 @@ func TestListMembersCharacter_Integration(t *testing.T) {
 				}
 			}
 		}
+		asScribe := append([]CampaignMember(nil), members...)
+		RedactMemberCharacters(asScribe, int(RoleScribe), ginko)
+		// A co-DM's visibility role is Owner (CampaignContext.VisibilityRole).
+		asCoDM := append([]CampaignMember(nil), members...)
+		RedactMemberCharacters(asCoDM, int(RoleOwner), howie)
 		asKit := append([]CampaignMember(nil), members...)
 		RedactMemberCharacters(asKit, int(RolePlayer), kit)
 		asOwner := append([]CampaignMember(nil), members...)
@@ -158,6 +163,12 @@ func TestListMembersCharacter_Integration(t *testing.T) {
 			}
 			if asOwner[i].CharacterName == nil {
 				t.Error("the Director lost sight of Kit's hero")
+			}
+			if asScribe[i].CharacterName != nil || asScribe[i].CharacterEntityID != nil {
+				t.Error("Kit's hidden hero reached a Scribe")
+			}
+			if asCoDM[i].CharacterName == nil {
+				t.Error("a co-DM lost sight of Kit's hero")
 			}
 		}
 	})
