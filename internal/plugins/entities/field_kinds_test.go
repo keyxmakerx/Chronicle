@@ -131,7 +131,7 @@ func TestRestrictedKeys(t *testing.T) {
 // fakeFieldWords answers only RuleExists; the rest is not used by saves.
 type fakeFieldWords struct{ rules map[int]bool }
 
-func (f fakeFieldWords) Evaluate(context.Context, string, []int, map[string]any) map[int]string {
+func (f fakeFieldWords) Evaluate(context.Context, string, string, []int, map[string]any, int, string) map[int]string {
 	return nil
 }
 func (f fakeFieldWords) WordsFor(context.Context, string, string, int, string) map[string]string {

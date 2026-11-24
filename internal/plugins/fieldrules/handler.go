@@ -94,9 +94,10 @@ func (h *Handler) ListRules(c *echo.Context) error {
 }
 
 type ruleBody struct {
-	Name    string    `json:"name"`
-	Follows string    `json:"follows"`
-	Rows    []RuleRow `json:"rows"`
+	Name    string       `json:"name"`
+	Follows string       `json:"follows"`
+	Rows    []RuleRow    `json:"rows"`
+	Adjust  []RuleAdjust `json:"adjust"`
 }
 
 // SaveRule creates (POST) or replaces (PUT) a rule.
@@ -113,7 +114,7 @@ func (h *Handler) SaveRule(c *echo.Context) error {
 	if err := bind(c, &b); err != nil {
 		return err
 	}
-	out, err := h.svc.SaveRule(c.Request().Context(), cc.Campaign.ID, RuleInput{ID: id, Name: b.Name, Follows: b.Follows, Rows: b.Rows}, v)
+	out, err := h.svc.SaveRule(c.Request().Context(), cc.Campaign.ID, RuleInput{ID: id, Name: b.Name, Follows: b.Follows, Rows: b.Rows, Adjust: b.Adjust}, v)
 	if err != nil {
 		return err
 	}

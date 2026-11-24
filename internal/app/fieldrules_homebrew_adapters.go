@@ -47,8 +47,9 @@ var hbFieldTypes = map[string]bool{
 // hbRule is a field's worked-out rule inside a recipe. It takes the field's
 // label as its name, so a field and its rule can't drift apart.
 type hbRule struct {
-	Follows string               `json:"follows"`
-	Rows    []fieldrules.RuleRow `json:"rows"`
+	Follows string                  `json:"follows"`
+	Rows    []fieldrules.RuleRow    `json:"rows"`
+	Adjust  []fieldrules.RuleAdjust `json:"adjust,omitempty"`
 }
 
 // hbField is one sheet field as a recipe describes it. Categories are named,
@@ -267,11 +268,11 @@ func cleanHBField(f hbField) (hbField, error) {
 		return f, apperror.NewValidation("only a worked-out field has a rule")
 	}
 	if f.Rule != nil {
-		r, err := fieldrules.CleanRule(fieldrules.RuleInput{Name: f.Label, Follows: f.Rule.Follows, Rows: f.Rule.Rows})
+		r, err := fieldrules.CleanRule(fieldrules.RuleInput{Name: f.Label, Follows: f.Rule.Follows, Rows: f.Rule.Rows, Adjust: f.Rule.Adjust})
 		if err != nil {
 			return f, err
 		}
-		f.Rule = &hbRule{Follows: r.Follows, Rows: r.Rows}
+		f.Rule = &hbRule{Follows: r.Follows, Rows: r.Rows, Adjust: r.Adjust}
 	}
 	return f, nil
 }

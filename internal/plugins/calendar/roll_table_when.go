@@ -495,3 +495,31 @@ func moonPhaseMatches(m *Moon, abs int, phase string, within float64) bool {
 	}
 	return false
 }
+
+// PhaseWords are the words a moon's phase on one day answers to, for rules
+// other plugins keep: its phase name ("Waning Crescent", or a hand-set
+// moon's state word), each turning point it sits on (new, full,
+// first-quarter, last-quarter, the day nearest each) and each stretch it is
+// in (waxing, waning, crescent, gibbous), matched as roll-table conditions
+// match them.
+func (m *Moon) PhaseWords(abs int) []string {
+	if !m.Manual() && m.CycleDays <= 0 {
+		return nil
+	}
+	out := []string{m.MoonPhaseName(abs)}
+	for _, w := range []string{"new", "full", "first-quarter", "last-quarter", "waxing", "waning", "crescent", "gibbous"} {
+		if moonPhaseMatches(m, abs, w, 0) {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// CycleDay is the day of the moon's cycle, the new moon's day being 1, or 0
+// for a moon set by hand or with no cycle.
+func (m *Moon) CycleDay(abs int) int {
+	if m.Manual() || m.CycleDays <= 0 {
+		return 0
+	}
+	return int(m.MoonPhase(abs)*m.CycleDays) + 1
+}

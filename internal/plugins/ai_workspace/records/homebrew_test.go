@@ -171,6 +171,40 @@ func TestFieldRuleKind_RowsParsing(t *testing.T) {
 	}
 }
 
+func TestFieldRuleKind_ConditionsAndAdjust(t *testing.T) {
+	hb := &fakeHB{}
+	r := rec("field-rule", ActionCreate, "Threshold", map[string]any{
+		"follows": "moon:Sanguin'mor",
+		"rows": []any{
+			map[string]any{"event_tag": "Bloodnight", "gives": 1},
+			map[string]any{"time": "night", "from": 23, "to": 1, "gives": 2},
+		},
+		"adjust": []any{map[string]any{"tracker": "The Hunger", "op": "gte", "value": 1, "add": -1, "Min": 1}},
+	}, "")
+	if err := (FieldRuleKind{Svc: hb}).Apply(context.Background(), camp, owner, r); err != nil {
+		t.Fatal(err)
+	}
+	got := hb.savedRules[0]
+	wantRows := []RuleRow{{EventTag: "Bloodnight", Gives: "1"}, {Time: "night", From: fp(23), To: fp(1), Gives: "2"}}
+	wantAdjust := []RuleAdjust{{Tracker: "The Hunger", Op: "gte", Value: 1, Add: -1, Min: fp(1)}}
+	if !reflect.DeepEqual(got.Rows, wantRows) || !reflect.DeepEqual(got.Adjust, wantAdjust) {
+		t.Fatalf("saved rows %+v adjust %+v", got.Rows, got.Adjust)
+	}
+	if block := ruleBlock(got); !strings.Contains(block, "event_tag: Bloodnight") || !strings.Contains(block, "adjust:\n  - tracker: The Hunger\n    op: gte") {
+		t.Errorf("the rule reads back without its conditions:\n%s", block)
+	}
+
+	t.Run("update without adjust keeps it", func(t *testing.T) {
+		hb := &fakeHB{rules: []HomebrewRule{got}}
+		if err := (FieldRuleKind{Svc: hb}).Apply(context.Background(), camp, owner, rec("field-rule", ActionUpdate, "Threshold", map[string]any{}, "")); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(hb.savedRules[0].Adjust, wantAdjust) {
+			t.Errorf("adjust = %+v", hb.savedRules[0].Adjust)
+		}
+	})
+}
+
 func TestFieldRuleKind_Apply(t *testing.T) {
 	existing := HomebrewRule{ID: 4, Name: "Guild rank", Follows: "echelon", Rows: []RuleRow{{Is: "1", Gives: "Copper"}}}
 	ctx := context.Background()

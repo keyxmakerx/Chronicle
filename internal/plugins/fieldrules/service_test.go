@@ -128,6 +128,12 @@ type fakeWorld struct {
 	eras   map[int]string
 	chain  []string
 	era    int
+	today  Situation
+	trks   map[string]float64
+	// reads counts calls, so a page asks only for what its rules use.
+	todayReads, trackerReads int
+	// lastViewer is who the last read was for.
+	lastViewer Viewer
 }
 
 func (w *fakeWorld) PlaceName(_ context.Context, _, id string) (string, bool) {
@@ -137,6 +143,16 @@ func (w *fakeWorld) PlaceName(_ context.Context, _, id string) (string, bool) {
 func (w *fakeWorld) EraNames(context.Context, string, Viewer) map[int]string { return w.eras }
 func (w *fakeWorld) PlaceChain(context.Context, string, string) []string     { return w.chain }
 func (w *fakeWorld) CurrentEra(context.Context, string, Viewer) int          { return w.era }
+func (w *fakeWorld) Today(_ context.Context, _ string, v Viewer) Situation {
+	w.todayReads++
+	w.lastViewer = v
+	return w.today
+}
+func (w *fakeWorld) PageTrackers(_ context.Context, _, _ string, v Viewer) map[string]float64 {
+	w.trackerReads++
+	w.lastViewer = v
+	return w.trks
+}
 
 var (
 	director = Viewer{UserID: "dm", Role: permissions.RoleOwner}
@@ -274,6 +290,23 @@ func TestCleanRule(t *testing.T) {
 		{"neither", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{row("  ", nil, nil, "g")}}, "needs the value it matches"},
 		{"from after to", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{row("", fp(5), fp(1), "g")}}, "starts after it ends"},
 		{"error names the failing row", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{row("a", nil, nil, "g"), row("", nil, nil, "g")}}, "row 2"},
+		{"moon", RuleInput{Name: "n", Follows: "moon:Red", Rows: okRows[:1]}, ""},
+		{"moon range may wrap", RuleInput{Name: "n", Follows: "moon:Red", Rows: []RuleRow{row("", fp(23), fp(1), "g")}}, ""},
+		{"moon with no name", RuleInput{Name: "n", Follows: "moon: ", Rows: okRows[:1]}, "name the moon"},
+		{"tracker", RuleInput{Name: "n", Follows: "tracker:The Hunger", Rows: okRows[:1]}, ""},
+		{"tracker with no name", RuleInput{Name: "n", Follows: "tracker:", Rows: okRows[:1]}, "name the tracker"},
+		{"time of day", RuleInput{Name: "n", Follows: "Time of Day", Rows: okRows[:1]}, ""},
+		{"unknown source", RuleInput{Name: "n", Follows: "sun:High", Rows: okRows[:1]}, "follows a field's key"},
+		{"key with a space", RuleInput{Name: "n", Follows: "my level", Rows: okRows[:1]}, "follows a field's key"},
+		{"condition-only row", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{{EventTag: "Bloodnight", Gives: "1"}}}, ""},
+		{"time row", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{{Time: "Night", Gives: "1"}}}, ""},
+		{"bad time", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{{Time: "noon", Gives: "1"}}}, "dawn, day, dusk or night"},
+		{"event tag too long", RuleInput{Name: "n", Follows: "f", Rows: []RuleRow{{EventTag: strings.Repeat("x", maxTagLen+1), Gives: "1"}}}, "too long"},
+		{"adjust", RuleInput{Name: "n", Follows: "f", Rows: okRows[:1], Adjust: []RuleAdjust{{Tracker: "H", Op: "GTE", Value: 1, Add: -1, Min: fp(1)}}}, ""},
+		{"adjust with no tracker", RuleInput{Name: "n", Follows: "f", Rows: okRows[:1], Adjust: []RuleAdjust{{Op: "gte"}}}, "adjustment 1 needs the tracker"},
+		{"adjust with a bad test", RuleInput{Name: "n", Follows: "f", Rows: okRows[:1], Adjust: []RuleAdjust{{Tracker: "H", Op: "above"}}}, "gte, gt, lte, lt or eq"},
+		{"adjust min above max", RuleInput{Name: "n", Follows: "f", Rows: okRows[:1], Adjust: []RuleAdjust{{Tracker: "H", Op: "eq", Min: fp(3), Max: fp(1)}}}, "minimum is above"},
+		{"too many adjustments", RuleInput{Name: "n", Follows: "f", Rows: okRows[:1], Adjust: make([]RuleAdjust, MaxRuleAdjust+1)}, "at most"},
 	}
 	svc := newTestService(&fakeRepo{})
 	for _, tc := range tests {
@@ -547,39 +580,68 @@ func TestEvaluate(t *testing.T) {
 	data := map[string]any{"echelon": 3.0, "level": 9.0}
 
 	t.Run("only requested ids", func(t *testing.T) {
-		got := svc.Evaluate(ctx, camp, []int{1}, data)
+		got := svc.Evaluate(ctx, camp, "page", []int{1}, data, director)
 		if len(got) != 1 || got[1] != "Steel" {
 			t.Errorf("got %v", got)
 		}
 	})
 	t.Run("matches nothing gives empty", func(t *testing.T) {
-		got := svc.Evaluate(ctx, camp, []int{1, 2}, data)
+		got := svc.Evaluate(ctx, camp, "page", []int{1, 2}, data, director)
 		if got[1] != "Steel" || got[2] != "" || len(got) != 2 {
 			t.Errorf("got %v", got)
 		}
 	})
 	t.Run("missing field gives empty", func(t *testing.T) {
-		got := svc.Evaluate(ctx, camp, []int{1}, map[string]any{})
+		got := svc.Evaluate(ctx, camp, "page", []int{1}, map[string]any{}, director)
 		if got[1] != "" {
 			t.Errorf("got %v", got)
 		}
 	})
 	t.Run("unknown id is absent", func(t *testing.T) {
-		if got := svc.Evaluate(ctx, camp, []int{42}, data); len(got) != 0 {
+		if got := svc.Evaluate(ctx, camp, "page", []int{42}, data, director); len(got) != 0 {
 			t.Errorf("got %v", got)
 		}
 	})
 	t.Run("no ids gives empty non-nil map", func(t *testing.T) {
-		if got := svc.Evaluate(ctx, camp, nil, data); got == nil || len(got) != 0 {
+		if got := svc.Evaluate(ctx, camp, "page", nil, data, director); got == nil || len(got) != 0 {
 			t.Errorf("got %v", got)
 		}
 	})
 	t.Run("repo error degrades to empty map", func(t *testing.T) {
 		bad := newTestService(&fakeRepo{err: errors.New("boom")})
-		if got := bad.Evaluate(ctx, camp, []int{1}, data); got == nil || len(got) != 0 {
+		if got := bad.Evaluate(ctx, camp, "page", []int{1}, data, director); got == nil || len(got) != 0 {
 			t.Errorf("got %v", got)
 		}
 	})
+}
+
+func TestEvaluateReadsOnlyWhatRulesUse(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepo{rules: []Rule{
+		{ID: 1, Follows: "echelon", Rows: []RuleRow{{From: fp(1), Gives: "Iron"}}},
+		{ID: 2, Follows: "moon:Red", Rows: []RuleRow{{Is: "full", Gives: "2"}}},
+		{ID: 3, Follows: "tracker:Hunger", Rows: []RuleRow{{From: fp(1), Gives: "hungry"}}},
+	}}
+	world := &fakeWorld{
+		today: Situation{Moons: map[string]MoonNow{"red": {Day: 13, Words: []string{"Full Moon", "full"}}}},
+		trks:  map[string]float64{"hunger": 2},
+	}
+	svc := NewService(repo, world)
+	data := map[string]any{"echelon": 1.0}
+
+	if got := svc.Evaluate(ctx, camp, "page", []int{1}, data, player); got[1] != "Iron" || world.todayReads+world.trackerReads != 0 {
+		t.Fatalf("a field rule read the calendar or trackers: %v, %d/%d", got, world.todayReads, world.trackerReads)
+	}
+	got := svc.Evaluate(ctx, camp, "page", []int{1, 2, 3}, data, player)
+	if got[2] != "2" || got[3] != "hungry" {
+		t.Errorf("got %v", got)
+	}
+	if world.todayReads != 1 || world.trackerReads != 1 {
+		t.Errorf("reads = %d calendar, %d trackers; want one each", world.todayReads, world.trackerReads)
+	}
+	if world.lastViewer != player {
+		t.Errorf("facts were read as %+v, want the viewer", world.lastViewer)
+	}
 }
 
 func TestWordsFor(t *testing.T) {

@@ -24,6 +24,13 @@ type World interface {
 	// CurrentEra is the era the main calendar's date is in for this viewer,
 	// or 0 (none, or one still hidden from them).
 	CurrentEra(ctx context.Context, campaignID string, v Viewer) int
+	// Today is the main calendar's current date as this viewer may see it:
+	// its moons, today's events and the time of day. Trackers is left nil.
+	// A calendar that can't be read leaves the maps nil.
+	Today(ctx context.Context, campaignID string, v Viewer) Situation
+	// PageTrackers is the trackers on one page this viewer may see, by
+	// lower-cased name; nil when they can't be read.
+	PageTrackers(ctx context.Context, campaignID, entityID string, v Viewer) map[string]float64
 }
 
 // Service is the homebrew rules and local words. Only the Director changes
@@ -47,9 +54,11 @@ type Service interface {
 	SaveWord(ctx context.Context, campaignID string, in WordInput, v Viewer) (*LocalWord, error)
 	DeleteWord(ctx context.Context, campaignID string, id int, v Viewer) error
 
-	// Evaluate gives, per rule id, what the rule gives for a page's field
-	// values. A rule that is gone or matches nothing gives "".
-	Evaluate(ctx context.Context, campaignID string, ruleIDs []int, data map[string]any) map[int]string
+	// Evaluate gives, per rule id, what the rule gives on a page for this
+	// viewer: from the page's field values, and the calendar and the page's
+	// trackers as the viewer may see them, so a result never rests on a fact
+	// hidden from them. A rule that is gone or matches nothing gives "".
+	Evaluate(ctx context.Context, campaignID, entityID string, ruleIDs []int, data map[string]any, v Viewer) map[int]string
 	// WordsFor is the local words a viewer sees on one page, keyed by the
 	// lower-cased usual word (see Rename).
 	WordsFor(ctx context.Context, campaignID, entityID string, v Viewer) map[string]string
@@ -100,27 +109,66 @@ func cleanRule(in RuleInput) (Rule, error) {
 	case len(in.Rows) > MaxRuleRows:
 		return r, apperror.NewBadRequest(fmt.Sprintf("a rule can have at most %d rows", MaxRuleRows))
 	}
+	lower := strings.ToLower(r.Follows)
+	moon := strings.HasPrefix(lower, FollowMoonPrefix)
+	switch {
+	case lower == FollowTimeOfDay:
+		r.Follows = FollowTimeOfDay
+	case moon && strings.TrimSpace(r.Follows[len(FollowMoonPrefix):]) == "":
+		return r, apperror.NewBadRequest(`name the moon the rule follows, as "moon:<name>"`)
+	case strings.HasPrefix(lower, FollowTrackerPrefix) && strings.TrimSpace(r.Follows[len(FollowTrackerPrefix):]) == "":
+		return r, apperror.NewBadRequest(`name the tracker the rule follows, as "tracker:<name>"`)
+	case !moon && !strings.HasPrefix(lower, FollowTrackerPrefix) && strings.ContainsAny(r.Follows, ": "):
+		return r, apperror.NewBadRequest(`a rule follows a field's key, "moon:<name>", "tracker:<name>" or "time of day"`)
+	}
 	for i, row := range in.Rows {
 		n := i + 1
 		row.Is = strings.TrimSpace(row.Is)
 		row.Gives = strings.TrimSpace(row.Gives)
+		row.EventTag = strings.TrimSpace(row.EventTag)
+		row.Time = strings.ToLower(strings.TrimSpace(row.Time))
 		ranged := row.From != nil || row.To != nil
+		conditional := row.EventTag != "" || row.Time != ""
 		switch {
 		case row.Gives == "":
 			return r, apperror.NewBadRequest(fmt.Sprintf("row %d needs what it gives", n))
-		case utf8.RuneCountInString(row.Gives) > MaxGivesLen || utf8.RuneCountInString(row.Is) > maxIsLen:
+		case utf8.RuneCountInString(row.Gives) > MaxGivesLen || utf8.RuneCountInString(row.Is) > maxIsLen ||
+			utf8.RuneCountInString(row.EventTag) > maxTagLen:
 			return r, apperror.NewBadRequest(fmt.Sprintf("row %d is too long", n))
 		case ranged && row.Is != "":
 			return r, apperror.NewBadRequest(fmt.Sprintf("row %d matches a value or a range of numbers, not both", n))
-		case !ranged && row.Is == "":
-			return r, apperror.NewBadRequest(fmt.Sprintf("row %d needs the value it matches", n))
-		case row.From != nil && row.To != nil && *row.From > *row.To:
+		case !ranged && row.Is == "" && !conditional:
+			return r, apperror.NewBadRequest(fmt.Sprintf("row %d needs the value it matches, an event or a time of day", n))
+		case row.Time != "" && !dayParts[row.Time]:
+			return r, apperror.NewBadRequest(fmt.Sprintf("row %d's time must be dawn, day, dusk or night", n))
+		case !moon && row.From != nil && row.To != nil && *row.From > *row.To:
 			return r, apperror.NewBadRequest(fmt.Sprintf("row %d's range starts after it ends", n))
 		}
 		r.Rows = append(r.Rows, row)
 	}
+	if len(in.Adjust) > MaxRuleAdjust {
+		return r, apperror.NewBadRequest(fmt.Sprintf("a rule can have at most %d adjustments", MaxRuleAdjust))
+	}
+	for i, a := range in.Adjust {
+		n := i + 1
+		a.Tracker = strings.TrimSpace(a.Tracker)
+		a.Op = strings.ToLower(strings.TrimSpace(a.Op))
+		switch {
+		case a.Tracker == "":
+			return r, apperror.NewBadRequest(fmt.Sprintf("adjustment %d needs the tracker it reads", n))
+		case utf8.RuneCountInString(a.Tracker) > MaxNameLen:
+			return r, apperror.NewBadRequest(fmt.Sprintf("adjustment %d's tracker name is too long", n))
+		case !validOps[a.Op]:
+			return r, apperror.NewBadRequest(fmt.Sprintf("adjustment %d's test must be gte, gt, lte, lt or eq", n))
+		case a.Min != nil && a.Max != nil && *a.Min > *a.Max:
+			return r, apperror.NewBadRequest(fmt.Sprintf("adjustment %d's minimum is above its maximum", n))
+		}
+		r.Adjust = append(r.Adjust, a)
+	}
 	return r, nil
 }
+
+var validOps = map[string]bool{"gte": true, "gt": true, "lte": true, "lt": true, "eq": true}
 
 // CleanRule checks a rule and returns it trimmed, the way it would be saved.
 // It reads nothing, so a rule kept elsewhere (a Workshop recipe) is held to
@@ -343,7 +391,7 @@ func (s *service) DeleteWord(ctx context.Context, campaignID string, id int, v V
 	return nil
 }
 
-func (s *service) Evaluate(ctx context.Context, campaignID string, ruleIDs []int, data map[string]any) map[int]string {
+func (s *service) Evaluate(ctx context.Context, campaignID, entityID string, ruleIDs []int, data map[string]any, v Viewer) map[int]string {
 	out := map[int]string{}
 	if len(ruleIDs) == 0 {
 		return out
@@ -358,10 +406,24 @@ func (s *service) Evaluate(ctx context.Context, campaignID string, ruleIDs []int
 	for _, id := range ruleIDs {
 		want[id] = true
 	}
+	var sit Situation
+	calRead, trkRead := false, false
 	for i := range rules {
-		if want[rules[i].ID] {
-			out[rules[i].ID] = rules[i].Gives(data[rules[i].Follows])
+		r := &rules[i]
+		if !want[r.ID] {
+			continue
 		}
+		cal, trk := r.Needs()
+		if cal && !calRead {
+			calRead = true
+			today := s.world.Today(ctx, campaignID, v)
+			sit.Moons, sit.EventTags, sit.DayPart = today.Moons, today.EventTags, today.DayPart
+		}
+		if trk && !trkRead && entityID != "" {
+			trkRead = true
+			sit.Trackers = s.world.PageTrackers(ctx, campaignID, entityID, v)
+		}
+		out[r.ID] = r.Result(data, sit)
 	}
 	return out
 }

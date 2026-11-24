@@ -167,3 +167,58 @@ func TestRename(t *testing.T) {
 		})
 	}
 }
+
+// The Sanguine Hunger rule: a moon table, a Bloodnight override and a Hunger
+// adjustment, read against different nights.
+func TestRuleResult(t *testing.T) {
+	hunger := Rule{
+		Follows: "moon:Sanguin'mor",
+		Rows: []RuleRow{
+			{EventTag: "Bloodnight", Gives: "1"},
+			{From: fp(24), To: fp(2), Gives: "none"},
+			{From: fp(12), To: fp(14), Gives: "2"},
+			{Is: "gibbous", Gives: "3"},
+			{From: fp(1), To: fp(24), Gives: "4"},
+		},
+		Adjust: []RuleAdjust{{Tracker: "The Hunger", Op: "gte", Value: 1, Add: -1, Min: fp(1)}},
+	}
+	moon := func(day int, words ...string) map[string]MoonNow {
+		return map[string]MoonNow{"sanguin'mor": {Day: day, Words: words}}
+	}
+	tests := []struct {
+		name string
+		rule Rule
+		data map[string]any
+		sit  Situation
+		want string
+	}{
+		{"crescent, no hunger", hunger, nil, Situation{Moons: moon(5, "Waxing Crescent", "crescent"), Trackers: map[string]float64{"the hunger": 0}}, "4"},
+		{"crescent, restless", hunger, nil, Situation{Moons: moon(5, "crescent"), Trackers: map[string]float64{"the hunger": 1}}, "3"},
+		{"gibbous by word", hunger, nil, Situation{Moons: moon(9, "Waxing Gibbous", "gibbous")}, "3"},
+		{"full, unbound, floor of 1", hunger, nil, Situation{Moons: moon(13, "full"), Trackers: map[string]float64{"the hunger": 3}}, "1"},
+		{"new wraps the cycle end", hunger, nil, Situation{Moons: moon(24)}, "none"},
+		{"new wraps the cycle start", hunger, nil, Situation{Moons: moon(1)}, "none"},
+		{"text is never adjusted", hunger, nil, Situation{Moons: moon(1), Trackers: map[string]float64{"the hunger": 3}}, "none"},
+		{"bloodnight overrides", hunger, nil, Situation{Moons: moon(5), EventTags: map[string]bool{"bloodnight": true}}, "1"},
+		{"no calendar, no result", hunger, nil, Situation{}, ""},
+		{"a moon not on the calendar", hunger, nil, Situation{Moons: map[string]MoonNow{"other": {Day: 5}}}, ""},
+		{"hand-set moon has no days", hunger, nil, Situation{Moons: moon(0, "Full")}, ""},
+		{"unread tracker leaves it alone", hunger, nil, Situation{Moons: moon(5)}, "4"},
+		{"tracker rule", Rule{Follows: "tracker:The Hunger", Rows: []RuleRow{{Is: "2", Gives: "3"}, {Is: "3", Gives: "2"}}}, nil,
+			Situation{Trackers: map[string]float64{"the hunger": 3}}, "2"},
+		{"time of day rule", Rule{Follows: "time of day", Rows: []RuleRow{{Is: "Night", Gives: "dark"}}}, nil, Situation{DayPart: "night"}, "dark"},
+		{"time condition", Rule{Follows: "level", Rows: []RuleRow{{Time: "night", From: fp(1), Gives: "A"}, {From: fp(1), Gives: "B"}}},
+			map[string]any{"level": 3.0}, Situation{DayPart: "day"}, "B"},
+		{"field rules still work", Rule{Follows: "level", Rows: []RuleRow{{From: fp(5), Gives: "High"}}}, map[string]any{"level": 7.0}, Situation{}, "High"},
+		{"adjust caps at max", Rule{Follows: "level", Rows: []RuleRow{{From: fp(0), Gives: "4"}},
+			Adjust: []RuleAdjust{{Tracker: "Boon", Op: "gt", Value: 0, Add: 5, Max: fp(6)}}},
+			map[string]any{"level": 1.0}, Situation{Trackers: map[string]float64{"boon": 1}}, "6"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.rule.Result(tc.data, tc.sit); got != tc.want {
+				t.Errorf("Result = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -111,7 +111,7 @@ func (s fieldRuleSync) planSheet(ctx context.Context, campaignID, kind string, p
 				def.LinkTo = to.ID
 			}
 			if f.Rule != nil {
-				plan.rules[hbFieldRef{et.ID, f.Key}] = fieldrules.RuleInput{Name: f.Label, Follows: f.Rule.Follows, Rows: f.Rule.Rows}
+				plan.rules[hbFieldRef{et.ID, f.Key}] = fieldrules.RuleInput{Name: f.Label, Follows: f.Rule.Follows, Rows: f.Rule.Rows, Adjust: f.Rule.Adjust}
 			}
 			at := -1
 			for j, d := range defs {
