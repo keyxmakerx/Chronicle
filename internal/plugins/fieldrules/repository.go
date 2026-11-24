@@ -37,16 +37,21 @@ type repository struct{ db *sql.DB }
 // NewRepository creates the repository.
 func NewRepository(db *sql.DB) Repository { return &repository{db: db} }
 
-const ruleColumns = `id, name, follows, rows_json, updated_at`
+const ruleColumns = `id, name, follows, rows_json, adjust_json, updated_at`
 
 func scanRule(row interface{ Scan(...any) error }) (*Rule, error) {
 	var r Rule
-	var raw []byte
-	if err := row.Scan(&r.ID, &r.Name, &r.Follows, &raw, &r.UpdatedAt); err != nil {
+	var raw, adjust []byte
+	if err := row.Scan(&r.ID, &r.Name, &r.Follows, &raw, &adjust, &r.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal(raw, &r.Rows); err != nil {
 		return nil, fmt.Errorf("reading rule %d rows: %w", r.ID, err)
+	}
+	if len(adjust) > 0 {
+		if err := json.Unmarshal(adjust, &r.Adjust); err != nil {
+			return nil, fmt.Errorf("reading rule %d adjustments: %w", r.ID, err)
+		}
 	}
 	return &r, nil
 }
@@ -87,13 +92,25 @@ func (s *repository) CountRules(ctx context.Context, campaignID string) (int, er
 	return n, err
 }
 
+// ruleJSON is a rule's rows and adjustments as stored; no adjustments is NULL.
+func ruleJSON(r Rule) (rows []byte, adjust any, err error) {
+	if rows, err = json.Marshal(r.Rows); err != nil {
+		return nil, nil, err
+	}
+	if len(r.Adjust) == 0 {
+		return rows, nil, nil
+	}
+	a, err := json.Marshal(r.Adjust)
+	return rows, a, err
+}
+
 func (s *repository) InsertRule(ctx context.Context, campaignID string, r Rule) (int, error) {
-	raw, err := json.Marshal(r.Rows)
+	raw, adjust, err := ruleJSON(r)
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO field_rules (campaign_id, name, follows, rows_json) VALUES (?, ?, ?, ?)`,
-		campaignID, r.Name, r.Follows, raw)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO field_rules (campaign_id, name, follows, rows_json, adjust_json) VALUES (?, ?, ?, ?, ?)`,
+		campaignID, r.Name, r.Follows, raw, adjust)
 	if err != nil {
 		return 0, dupOr(err, "adding rule")
 	}
@@ -102,12 +119,12 @@ func (s *repository) InsertRule(ctx context.Context, campaignID string, r Rule) 
 }
 
 func (s *repository) UpdateRule(ctx context.Context, campaignID string, r Rule) (bool, error) {
-	raw, err := json.Marshal(r.Rows)
+	raw, adjust, err := ruleJSON(r)
 	if err != nil {
 		return false, err
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE field_rules SET name = ?, follows = ?, rows_json = ? WHERE campaign_id = ? AND id = ?`,
-		r.Name, r.Follows, raw, campaignID, r.ID)
+	res, err := s.db.ExecContext(ctx, `UPDATE field_rules SET name = ?, follows = ?, rows_json = ?, adjust_json = ? WHERE campaign_id = ? AND id = ?`,
+		r.Name, r.Follows, raw, adjust, campaignID, r.ID)
 	if err != nil {
 		return false, dupOr(err, "changing rule")
 	}

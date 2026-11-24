@@ -41,14 +41,29 @@ type HomebrewRule struct {
 	Name    string
 	Follows string
 	Rows    []RuleRow
+	Adjust  []RuleAdjust
 }
 
-// RuleRow matches an exact value (Is) or a range of numbers (From, To).
+// RuleRow matches an exact value (Is) or a range of numbers (From, To), while
+// its conditions (EventTag, Time) hold.
 type RuleRow struct {
-	Is    string
-	From  *float64
-	To    *float64
-	Gives string
+	Is       string
+	From     *float64
+	To       *float64
+	EventTag string
+	Time     string
+	Gives    string
+}
+
+// RuleAdjust adds Add to a numeric result while a page tracker passes Op
+// against Value, then keeps it within Min and Max.
+type RuleAdjust struct {
+	Tracker string
+	Op      string
+	Value   float64
+	Add     float64
+	Min     *float64
+	Max     *float64
 }
 
 // HomebrewWord is what one place (PlaceID) or one era (EraID) calls Word.
@@ -83,7 +98,7 @@ type FieldRuleKind struct {
 func (FieldRuleKind) Name() string  { return "field-rule" }
 func (FieldRuleKind) Label() string { return "Worked-out field rule" }
 func (FieldRuleKind) Doc() string {
-	return "A rule that works one sheet field out from another, as a table: the first row that matches the followed field's value gives the result. `follows` is the key of the field it reads. Each of `rows` has `gives` and either `is` (an exact value) or `from` and/or `to` (a range of numbers, both ends included). Matched by `name`; `action: update` replaces what it names. A field shows the rule's result once a category has a field of `type: rule` naming it (see `kind: category-field`); a value typed into that field by hand wins over the rule.\n\n```\n---\nkind: field-rule\nname: Guild rank\nfollows: echelon\nrows:\n  - is: 1\n    gives: Copper\n  - is: 2\n    gives: Silver\n  - is: 3\n    gives: Gold\n  - from: 4\n    gives: Starsteel\n---\n```"
+	return "A rule that works one sheet field out, as a table: the first row that matches gives the result. `follows` is what it reads: a field's key on the same page, `moon:<moon name>` (that moon on the calendar's current date), `tracker:<tracker name>` (a tracker on the same page) or `time of day` (dawn, day, dusk or night). Each of `rows` has `gives` and either `is` (an exact value; for a moon, a phase such as `Waning Crescent` or a word: new, full, first-quarter, last-quarter, waxing, waning, crescent, gibbous) or `from` and/or `to` (a range of numbers, both ends included; for a moon, days of its cycle with the new moon's day as 1, and a range may wrap, from 23 to 1). A row may also need `event_tag` (an event today with that name or of that kind) or `time`; a row with only those matches whatever the rule follows, so put it first to override the rest. `adjust` changes a number the rows gave, each step in order while a tracker on the page passes its test: `tracker`, `op` (gte, gt, lte, lt, eq), `value`, `add`, optional `min` and `max`. The calendar and trackers are read as the viewer sees them, so a player's sheet never rests on something hidden from them. Matched by `name`; `action: update` replaces what it names (`rows` and `adjust` each replace their list when sent). A field shows the rule's result once a category has a field of `type: rule` naming it (see `kind: category-field`); a value typed into that field by hand wins over the rule.\n\n```\n---\nkind: field-rule\nname: Guild rank\nfollows: echelon\nrows:\n  - is: 1\n    gives: Copper\n  - is: 2\n    gives: Silver\n  - from: 3\n    gives: Gold\n---\n```\n\n```\n---\nkind: field-rule\nname: Tonight's threshold\nfollows: moon:Sanguin'mor\nrows:\n  - {event_tag: Bloodnight, gives: 1}\n  - {is: new, gives: none}\n  - {from: 11, to: 15, gives: 2}\n  - {is: gibbous, gives: 3}\n  - {from: 1, to: 24, gives: 4}\nadjust:\n  - {tracker: The Hunger, op: gte, value: 1, add: -1, min: 1}\n---\n```"
 }
 
 func (k FieldRuleKind) input(cur *HomebrewRule, r Record) (HomebrewRule, error) {
@@ -102,7 +117,52 @@ func (k FieldRuleKind) input(cur *HomebrewRule, r Record) (HomebrewRule, error) 
 		}
 		in.Rows = rows
 	}
+	if cur != nil {
+		in.Adjust = cur.Adjust
+	}
+	if r.Has("adjust") {
+		adj, err := ruleAdjust(r.List("adjust"))
+		if err != nil {
+			return in, err
+		}
+		in.Adjust = adj
+	}
 	return in, nil
+}
+
+// ruleAdjust reads the YAML adjustments; the service checks what they say.
+func ruleAdjust(list []any) ([]RuleAdjust, error) {
+	out := make([]RuleAdjust, 0, len(list))
+	for i, item := range list {
+		m, ok := item.(map[string]any)
+		if !ok {
+			return nil, badRequestf("adjust: step %d needs `tracker`, `op`, `value` and `add`", i+1)
+		}
+		row := Record{Fields: lowerKeys(m)}
+		a := RuleAdjust{Tracker: row.Str("tracker"), Op: row.Str("op")}
+		for _, f := range []string{"value", "add", "min", "max"} {
+			n, ok, err := row.Float(f)
+			if err != nil {
+				return nil, badRequestf("adjust: step %d: %s", i+1, planError(err))
+			}
+			if !ok {
+				continue
+			}
+			v := n
+			switch f {
+			case "value":
+				a.Value = v
+			case "add":
+				a.Add = v
+			case "min":
+				a.Min = &v
+			case "max":
+				a.Max = &v
+			}
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 // ruleRows reads the YAML rows; the service checks what they say.
@@ -114,7 +174,7 @@ func ruleRows(list []any) ([]RuleRow, error) {
 			return nil, badRequestf("rows: row %d needs `gives` and `is` or `from`/`to`", i+1)
 		}
 		row := Record{Fields: lowerKeys(m)}
-		rr := RuleRow{Is: row.Str("is"), Gives: row.Str("gives")}
+		rr := RuleRow{Is: row.Str("is"), Gives: row.Str("gives"), EventTag: row.Str("event_tag"), Time: row.Str("time")}
 		for _, end := range []string{"from", "to"} {
 			f, ok, err := row.Float(end)
 			if err != nil {
@@ -219,12 +279,29 @@ func (k FieldRuleKind) Export(ctx context.Context, campaignID string, a Actor) (
 		for _, row := range rule.Rows {
 			b.WriteString(" " + rowText(row) + " → " + row.Gives + ";")
 		}
+		for _, a := range rule.Adjust {
+			fmt.Fprintf(&b, " then %+g while %s %s %g;", a.Add, a.Tracker, a.Op, a.Value)
+		}
 		b.WriteString("\n")
 	}
 	return b.String(), nil
 }
 
 func rowText(row RuleRow) string {
+	var when string
+	if row.EventTag != "" {
+		when += " on " + row.EventTag
+	}
+	if row.Time != "" {
+		when += " at " + row.Time
+	}
+	if v := rowValue(row); v != "" {
+		return v + when
+	}
+	return strings.TrimSpace(when)
+}
+
+func rowValue(row RuleRow) string {
 	switch {
 	case row.Is != "":
 		return row.Is

@@ -7011,7 +7011,7 @@ func (a *App) RegisterRoutes() {
 	var frWorld *fieldRulesWorld
 	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
 		frWorld = &fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
-		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), *frWorld)
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), frWorld)
 		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
 		words := fieldWordsAdapter{svc: fieldRulesSvc}
 		entityHandler.SetFieldWords(words)
@@ -7042,6 +7042,10 @@ func (a *App) RegisterRoutes() {
 		trackers.RegisterRoutes(e, trackersHandler, campaignService, authService)
 		registerTrackersBlock(blockRegistry, trackersSvc)
 		registerRecipeBlock(blockRegistry)
+		// A worked-out field may follow a tracker on its page.
+		if frWorld != nil {
+			frWorld.trackers = trackersSvc
+		}
 		// Every tracker change, of any kind, may bring a card's moment.
 		decksFacts.trackers = trackersSvc
 		if o, ok := trackersSvc.(interface{ SetChangeObserver(trackers.ChangeObserver) }); ok {

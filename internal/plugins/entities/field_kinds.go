@@ -25,8 +25,10 @@ const (
 // which belong to the fieldrules plugin. It is wired in internal/app; unset,
 // rule fields show only values typed by hand and no word is renamed.
 type FieldWords interface {
-	// Evaluate gives, per rule id, what the rule gives for these values.
-	Evaluate(ctx context.Context, campaignID string, ruleIDs []int, data map[string]any) map[int]string
+	// Evaluate gives, per rule id, what the rule gives on this page for this
+	// viewer, from its values and what the viewer may see of the calendar
+	// and the page's trackers.
+	Evaluate(ctx context.Context, campaignID, entityID string, ruleIDs []int, data map[string]any, role int, userID string) map[int]string
 	// WordsFor is the local words this viewer sees on one page, keyed by the
 	// lower-cased usual word.
 	WordsFor(ctx context.Context, campaignID, entityID string, role int, userID string) map[string]string
@@ -193,7 +195,7 @@ func (h *Handler) shownFields(ctx context.Context, campaignID string, entity *En
 	var rename func(map[string]string, string) (string, bool)
 	if h.fieldWords != nil {
 		if len(ruleIDs) > 0 {
-			gives = h.fieldWords.Evaluate(ctx, campaignID, ruleIDs, data)
+			gives = h.fieldWords.Evaluate(ctx, campaignID, entity.ID, ruleIDs, data, role, userID)
 		}
 		if hasText || len(ruleIDs) > 0 {
 			words = h.fieldWords.WordsFor(ctx, campaignID, entity.ID, role, userID)

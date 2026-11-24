@@ -433,7 +433,7 @@ REST API for external tools (Foundry VTT); wire contract: `API-CONTRACT.md` in t
 
 | Table | Purpose |
 |-------|---------|
-| `field_rules` | A campaign's worked-out rules: `name` (unique per campaign), `follows` (the field key it reads), `rows_json` (rows of `is` or `from`/`to` with `gives`, read and written whole); FK to `campaigns` cascades |
+| `field_rules` | A campaign's worked-out rules: `name` (unique per campaign), `follows` (a field key, `moon:<name>`, `tracker:<name>` or `time of day`), `rows_json` (rows of `is` or `from`/`to`, optional `eventTag`/`time` conditions, with `gives`, read and written whole), `adjust_json` (NULL or the steps that change a numeric result by a page tracker); FK to `campaigns` cascades |
 | `local_words` | What one place or era calls a word: `word`, `local_word`, `place_id` (FK to `entities`, cascades) or `era_id` (no FK; eras are the calendar's), `scope_key` (`p:<page id>`/`e:<era id>`) for the one-per-place-or-era unique key, `dm_only`; FK to `campaigns` cascades |
 
 ### trackers (`internal/plugins/trackers/migrations/`)

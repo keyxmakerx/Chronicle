@@ -82,7 +82,25 @@ func ruleBlock(r HomebrewRule) string {
 		if row.To != nil {
 			put("to", num(*row.To))
 		}
+		if row.EventTag != "" {
+			put("event_tag", yamlStr(row.EventTag))
+		}
+		if row.Time != "" {
+			put("time", yamlStr(row.Time))
+		}
 		put("gives", yamlStr(row.Gives))
+	}
+	if len(r.Adjust) > 0 {
+		b.WriteString("adjust:\n")
+	}
+	for _, a := range r.Adjust {
+		b.WriteString("  - tracker: " + yamlStr(a.Tracker) + "\n    op: " + a.Op + "\n    value: " + num(a.Value) + "\n    add: " + num(a.Add) + "\n")
+		if a.Min != nil {
+			b.WriteString("    min: " + num(*a.Min) + "\n")
+		}
+		if a.Max != nil {
+			b.WriteString("    max: " + num(*a.Max) + "\n")
+		}
 	}
 	b.WriteString("---\n")
 	return b.String()
