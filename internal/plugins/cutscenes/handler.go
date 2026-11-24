@@ -292,6 +292,11 @@ func (h *Handler) Stop(c *echo.Context) error {
 	if !middleware.IsHTMX(c) {
 		return c.JSON(http.StatusOK, map[string]any{"showingId": sh.ID, "stopped": true})
 	}
+	// The same stop is pressed from a scene's live list or the "Shown
+	// lately" list; each gets its own row back.
+	if c.QueryParam("from") == "recent" {
+		return middleware.Render(c, http.StatusOK, RecentRow(cid, ReportOf(*sh, nowUTC()), nowUTC()))
+	}
 	return middleware.Render(c, http.StatusOK, StoppedRow(*sh, nowUTC()))
 }
 

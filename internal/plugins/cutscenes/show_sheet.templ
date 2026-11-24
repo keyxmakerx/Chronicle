@@ -25,9 +25,10 @@ templ ShowSheet(s showSheet) {
 			hx-target={ "#" + liveID(s.Scene.ID) }
 			hx-swap="afterbegin"
 		>
-			if len(s.Rows) == 0 {
+			if !s.anyoneElse() {
 				<p class="csw-quiet">Nobody else is in this campaign yet.</p>
-			} else {
+			}
+			if len(s.Rows) > 0 {
 				if s.anyHere() {
 					<p class="csw-sheet-tools">
 						<button type="button" class="quiet-word" onclick={ everyoneHereOnClick() }>Everyone here</button>
@@ -41,7 +42,7 @@ templ ShowSheet(s showSheet) {
 									type="checkbox"
 									name="to"
 									value={ r.UserID }
-									data-here={ hereFlag(r.Place) }
+									data-here={ hereFlag(r) }
 									checked?={ s.Picked[r.UserID] }
 								/>
 								<span class="csw-person-name">
@@ -55,7 +56,9 @@ templ ShowSheet(s showSheet) {
 						</li>
 					}
 				</ul>
-				<p class="csw-hint">Someone away gets it in their Watch again list instead of on screen.</p>
+				if s.anyoneElse() {
+					<p class="csw-hint">Someone away gets it in their Watch again list instead of on screen.</p>
+				}
 			}
 			<fieldset class="csw-rewatch">
 				<legend class="csw-flabel">They can watch it again for</legend>
@@ -76,8 +79,9 @@ templ ShowSheet(s showSheet) {
 	</section>
 }
 
-func hereFlag(p Place) string {
-	if p.Here() {
+// hereFlag marks the boxes "Everyone here" ticks.
+func hereFlag(r AudienceRow) string {
+	if everyoneHere(r) {
 		return "y"
 	}
 	return "n"

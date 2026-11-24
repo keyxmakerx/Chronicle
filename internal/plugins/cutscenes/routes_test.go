@@ -299,9 +299,19 @@ func TestDirectorAnswers(t *testing.T) {
 	if b := rec.Body.String(); rec.Code != 200 || !strings.Contains(b, "#rrggbb") || !strings.Contains(b, "Kept words") {
 		t.Errorf("refused save: %d %s", rec.Code, b)
 	}
+	// Stop from "Shown lately" answers that list's row, kept whole.
+	rec = r.do("POST", "/campaigns/camp-1/cutscenes/showings/"+r.showing.ID+"/stop?from=recent", "dir", nil, "HX-Request", "true")
+	if b := rec.Body.String(); rec.Code != 200 || !strings.Contains(b, recentRowID(r.showing.ID)) || !strings.Contains(b, "SECRET-SCENE-NAME") || !strings.Contains(b, "stopped") {
+		t.Errorf("stop from recent: %d %s", rec.Code, b)
+	}
+	rec = r.do("POST", "/campaigns/camp-1/cutscenes/showings/"+r.showing.ID+"/stop", "dir", nil, "Accept", "application/json")
+	if b := rec.Body.String(); rec.Code != 200 || !strings.Contains(b, `"stopped":true`) {
+		t.Errorf("stop as JSON: %d %s", rec.Code, b)
+	}
+
 	editor := r.do("GET", s, "dir", nil).Body.String()
 	for _, want := range []string{"Background", "On top", "Words", "Ending", "Preview", "Show to…", "data-engine-src", "cutscene_engine.js",
-		`name="bg_look"`, `name="ov_look"`, "The page drifts off", "Heavy eyelids", "Ink in water", "Sparks gather", "Lids part", "Burning seam", "data-csw-preview-box"} {
+		`name="bg_look"`, `name="ov_look"`, "The page drifts off", "Heavy eyelids", "Ink in water", "Sparks gather", "Lids part", "Burning seam", "data-csw-preview-box", "Preview on", ">Computer<", ">Tablet<", ">Phone<"} {
 		if !strings.Contains(editor, want) {
 			t.Errorf("editor lacks %q", want)
 		}

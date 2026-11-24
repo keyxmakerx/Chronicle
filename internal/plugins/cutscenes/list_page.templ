@@ -76,38 +76,46 @@ func sceneCountWords(n int) string {
 templ RecentList(campaignID string, list []ShowingReport, now time.Time) {
 	<ul class="csw-recent-list" id="csw-recent">
 		for _, r := range list {
-			<li class="csw-recent-row" id={ showingRowID(r.ShowingID) + "-recent" }>
-				<span class="csw-recent-name">{ r.Name }</span>
-				<span class="csw-quiet">
-					{ Ago(r.ShownAt, now) } to
-					for i, v := range r.Viewers {
-						if i > 0 {
-							{ ", " }
-						}
-						<span class={ "csw-who", templ.KV("is-watched", v.Watched) }>
-							{ v.Name }
-							if v.Watched {
-								<span class="sr-only">(watched)</span>
-								<i class="fa-solid fa-check csw-tick" aria-hidden="true"></i>
-							}
-						</span>
-					}
-				</span>
-				if w := Until(r.RewatchUntil, now); w != "" {
-					<span class="csw-quiet">· again for { w }</span>
-				} else {
-					<span class="csw-quiet">· window closed</span>
-				}
-				if r.Live {
-					<button
-						type="button"
-						class="quiet-word"
-						hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + r.ShowingID + "/stop" }
-						hx-target={ "#" + showingRowID(r.ShowingID) + "-recent" }
-						hx-swap="outerHTML"
-					>Stop</button>
-				}
-			</li>
+			@RecentRow(campaignID, r, now)
 		}
 	</ul>
+}
+
+// RecentRow is one recent showing. Stopping it from here swaps this same row
+// back in, marked stopped, so the scene's name and the watched ticks stay.
+templ RecentRow(campaignID string, r ShowingReport, now time.Time) {
+	<li class={ "csw-recent-row", templ.KV("is-stopped", r.Stopped) } id={ recentRowID(r.ShowingID) }>
+		<span class="csw-recent-name">{ r.Name }</span>
+		<span class="csw-quiet">
+			{ Ago(r.ShownAt, now) } to
+			for i, v := range r.Viewers {
+				if i > 0 {
+					{ ", " }
+				}
+				<span class={ "csw-who", templ.KV("is-watched", v.Watched) }>
+					{ v.Name }
+					if v.Watched {
+						<span class="sr-only">(watched)</span>
+						<i class="fa-solid fa-check csw-tick" aria-hidden="true"></i>
+					}
+				</span>
+			}
+		</span>
+		if w := Until(r.RewatchUntil, now); w != "" {
+			<span class="csw-quiet">· again for { w }</span>
+		} else {
+			<span class="csw-quiet">· window closed</span>
+		}
+		if r.Stopped {
+			<span class="csw-quiet csw-stopped">· stopped</span>
+		} else if r.CanStop {
+			<button
+				type="button"
+				class="quiet-word"
+				hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + r.ShowingID + "/stop?from=recent" }
+				hx-target={ "#" + recentRowID(r.ShowingID) }
+				hx-swap="outerHTML"
+			>Stop</button>
+		}
+	</li>
 }

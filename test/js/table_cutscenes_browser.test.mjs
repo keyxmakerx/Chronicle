@@ -1,6 +1,6 @@
 // table_cutscenes_browser.test.mjs — the Table's Tonight list on a phone: it
-// reads what was shown (the sheet used to leave it on "Reading…"), and lists
-// the cut scenes this person can watch again, gone once their time runs out.
+// reads what was shown rather than staying on "Reading…", and lists the cut
+// scenes this person can watch again, gone once their time runs out.
 //
 // Runs the real table.js in Chromium at phone width. Needs playwright-core and
 // a Chromium (see _browser_env.mjs); skips locally, and fails under CI, when

@@ -264,6 +264,22 @@ func TestMineAndWatched(t *testing.T) {
 		t.Errorf("watched flags %+v", mine)
 	}
 
+	// Stopped is sent so the stage never plays a called-off showing on
+	// opening; the showing stays in the list and stays readable.
+	if mine[0].Stopped || mine[1].Stopped {
+		t.Errorf("stopped before any stop: %+v", mine)
+	}
+	if _, err := r.svc.Stop(ctx, "camp-1", second.ID, vDir); err != nil {
+		t.Fatal(err)
+	}
+	mine, _ = r.svc.Mine(ctx, "camp-1", vAna)
+	if len(mine) != 2 || !mine[0].Stopped || mine[1].Stopped {
+		t.Errorf("stopped flags %+v", mine)
+	}
+	if _, err := r.svc.Read(ctx, "camp-1", second.ID, vAna); err != nil {
+		t.Errorf("a stopped showing could not be watched again: %v", err)
+	}
+
 	// The hour passes: the first showing leaves the list and can no longer be read.
 	r.clock.t = first.RewatchUntil.Add(time.Second)
 	mine, _ = r.svc.Mine(ctx, "camp-1", vAna)
@@ -319,6 +335,20 @@ func TestLiveAndRecent(t *testing.T) {
 	r.clock.t = r.clock.t.Add(LiveFor)
 	if live, _ := r.svc.LiveFor(ctx, "camp-1", sc.ID, vDir); len(live) != 0 {
 		t.Errorf("an old showing is still live")
+	}
+	// A scene waiting for a tap can still be up: Stop stays past Live, until
+	// the showing is stopped or its window closes.
+	if rec, _ := r.svc.Recent(ctx, "camp-1", vDir); rec[0].Live || !rec[0].CanStop {
+		t.Errorf("past live: %+v", rec[0])
+	}
+	r.clock.t = sh.RewatchUntil
+	if rec, _ := r.svc.Recent(ctx, "camp-1", vDir); rec[0].CanStop {
+		t.Errorf("stoppable after its window: %+v", rec[0])
+	}
+	sh2, _ := r.svc.Show(ctx, "camp-1", sc.ID, vDir, ShowInput{To: []string{"ana"}})
+	_, _ = r.svc.Stop(ctx, "camp-1", sh2.ID, vDir)
+	if rec, _ := r.svc.Recent(ctx, "camp-1", vDir); rec[0].ShowingID != sh2.ID || rec[0].CanStop || !rec[0].Stopped {
+		t.Errorf("stoppable once stopped: %+v", rec[0])
 	}
 }
 

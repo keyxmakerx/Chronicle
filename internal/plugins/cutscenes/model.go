@@ -208,9 +208,18 @@ type ShowingViewer struct {
 	WatchedAt *time.Time
 }
 
-// Live reports whether the showing may still be on someone's screen.
+// Live reports whether the showing was put on screens moments ago, which is
+// when the editor lists it as showing.
 func (s Showing) Live(now time.Time) bool {
 	return s.StoppedAt == nil && now.Sub(s.ShownAt) < LiveFor
+}
+
+// Stoppable reports whether Stop still means something: a scene that waits
+// for a tap can stay up long after Live, and a player may be rewatching it,
+// so Stop stays until the showing is stopped or its window closes. A stop
+// with nothing on screen is harmless.
+func (s Showing) Stoppable(now time.Time) bool {
+	return s.StoppedAt == nil && now.Before(s.RewatchUntil)
 }
 
 // Viewer is the person asking, as the service needs them. Director is the
@@ -263,13 +272,16 @@ type ShowInput struct {
 }
 
 // MineItem is one of the caller's own showings still inside its window, in
-// the shape GET /cutscenes/mine sends.
+// the shape GET /cutscenes/mine sends. Stopped tells the stage not to play a
+// showing the Director called off when the page opens; it can still be
+// watched again by choice.
 type MineItem struct {
 	ShowingID    string    `json:"showingId"`
 	Name         string    `json:"name"`
 	ShownAt      time.Time `json:"shownAt"`
 	RewatchUntil time.Time `json:"rewatchUntil"`
 	Watched      bool      `json:"watched"`
+	Stopped      bool      `json:"stopped"`
 }
 
 // ShowingRead is one showing as a viewer reads it to play it.
@@ -298,7 +310,19 @@ type ShowingReport struct {
 	RewatchUntil time.Time      `json:"rewatchUntil"`
 	Stopped      bool           `json:"stopped"`
 	Live         bool           `json:"live"`
+	CanStop      bool           `json:"canStop"`
 	Viewers      []ReportViewer `json:"viewers"`
+}
+
+// ReportOf is a showing as the Director's recent list shows it. Viewers'
+// names are the caller's to fill first.
+func ReportOf(sh Showing, now time.Time) ShowingReport {
+	r := ShowingReport{ShowingID: sh.ID, SceneID: sh.SceneID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil,
+		Stopped: sh.StoppedAt != nil, Live: sh.Live(now), CanStop: sh.Stoppable(now), Viewers: []ReportViewer{}}
+	for _, vw := range sh.Viewers {
+		r.Viewers = append(r.Viewers, ReportViewer{UserID: vw.UserID, Name: vw.Name, Watched: vw.WatchedAt != nil})
+	}
+	return r
 }
 
 // ReportViewer is one person on a showing report.

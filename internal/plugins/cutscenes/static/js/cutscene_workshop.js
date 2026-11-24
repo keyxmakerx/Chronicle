@@ -7,7 +7,8 @@
  * with the scene exactly as a save would store it, loads the engine
  * (static/js/cutscene_engine.js, from the mount's data-engine-src) the first
  * time, and plays the scene. On a wide screen it plays contained, in the
- * editor's preview box, so the Director keeps their place; on a phone the box
+ * editor's preview box (sized Computer, Tablet or Phone by the switch above
+ * it, which the server draws), so the Director keeps their place; on a phone the box
  * would be too small to judge the words by, so it plays over the whole window
  * as a player would see it. A refusal is shown in the form's error line in
  * the server's own words.

@@ -15,7 +15,9 @@
 (function () {
   'use strict';
 
-  // A showing this recent and unwatched plays when the page opens.
+  // A showing this recent, unwatched and not stopped plays when the page
+  // opens; a stopped one is the Director calling it off, so it waits in the
+  // Watch again list instead.
   var RECENT_MS = 2 * 60 * 1000;
 
   // pickRecent returns the showing to play now from the newest-first list of
@@ -24,7 +26,7 @@
     if (!Array.isArray(rows)) return null;
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
-      if (!r || !r.showingId || r.watched) continue;
+      if (!r || !r.showingId || r.watched || r.stopped) continue;
       var shown = Date.parse(r.shownAt), until = Date.parse(r.rewatchUntil);
       if (isNaN(shown) || now - shown > RECENT_MS || now - shown < -RECENT_MS) continue;
       if (!isNaN(until) && until <= now) continue;

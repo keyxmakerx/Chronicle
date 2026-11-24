@@ -353,12 +353,7 @@ func (s *service) Recent(ctx context.Context, campaignID string, v Viewer) ([]Sh
 	now := s.now()
 	out := make([]ShowingReport, 0, len(list))
 	for _, sh := range list {
-		r := ShowingReport{ShowingID: sh.ID, SceneID: sh.SceneID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil,
-			Stopped: sh.StoppedAt != nil, Live: sh.Live(now), Viewers: []ReportViewer{}}
-		for _, vw := range sh.Viewers {
-			r.Viewers = append(r.Viewers, ReportViewer{UserID: vw.UserID, Name: vw.Name, Watched: vw.WatchedAt != nil})
-		}
-		out = append(out, r)
+		out = append(out, ReportOf(sh, now))
 	}
 	return out, nil
 }
@@ -397,7 +392,7 @@ func (s *service) Mine(ctx context.Context, campaignID string, v Viewer) ([]Mine
 	out := make([]MineItem, 0, len(list))
 	for _, sh := range list {
 		watched := len(sh.Viewers) > 0 && sh.Viewers[0].WatchedAt != nil
-		out = append(out, MineItem{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Watched: watched})
+		out = append(out, MineItem{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Watched: watched, Stopped: sh.StoppedAt != nil})
 	}
 	return out, nil
 }

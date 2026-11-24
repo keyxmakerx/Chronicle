@@ -115,7 +115,16 @@ templ editorForm(p editorPage) {
 			</div>
 			<p class="csw-hint">Players can always close it with Esc or the small close mark after 2 seconds.</p>
 		</fieldset>
-		<div class="csw-preview" role="region" aria-label="Preview" data-csw-preview-box hidden></div>
+		<fieldset class="csw-screens">
+			<legend class="csw-flabel">Preview on</legend>
+			for i, z := range PreviewSizes {
+				<label class="csw-screen">
+					<input type="radio" name="csw_preview_size" value={ z.Key } checked?={ i == 0 } onchange={ previewSizeOnChange() }/>
+					<span>{ z.Name }</span>
+				</label>
+			}
+		</fieldset>
+		<div class="csw-preview" role="region" aria-label="Preview" data-csw-preview-box data-size={ PreviewSizes[0].Key } hidden></div>
 		<div class="csw-foot">
 			<button type="submit" class="btn-primary">
 				if p.New {

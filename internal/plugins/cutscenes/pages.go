@@ -61,11 +61,28 @@ func (s showSheet) rewatch() string {
 	return s.Rewatch
 }
 
-// anyHere is true when at least one listed person has Chronicle or Foundry
-// open, so "Everyone here" has someone to pick.
+// everyoneHere says whether "Everyone here" ticks a row: a player who has
+// Chronicle or Foundry open. Directors, the asker among them, are left out:
+// their screens are where the table is run from, and a Director's Foundry
+// screen is the GM's. A Director still ticks themselves by hand to see it.
+func everyoneHere(r AudienceRow) bool {
+	return r.Place.Here() && !r.Director && !r.You
+}
+
+// anyHere is true when "Everyone here" has someone to pick.
 func (s showSheet) anyHere() bool {
 	for _, r := range s.Rows {
-		if r.Place.Here() {
+		if everyoneHere(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// anyoneElse is true when the sheet lists someone besides the asker.
+func (s showSheet) anyoneElse() bool {
+	for _, r := range s.Rows {
+		if !r.You {
 			return true
 		}
 	}
@@ -76,6 +93,10 @@ func (s showSheet) anyHere() bool {
 // list under every row.
 func sheetID(sceneID string) string { return "csw-sheet-" + sceneID }
 func liveID(sceneID string) string  { return "csw-live-" + sceneID }
+
+// recentRowID is a showing's row on the "Shown lately" list, apart from its
+// row on a scene's live list.
+func recentRowID(showingID string) string { return showingRowID(showingID) + "-recent" }
 func showBtnID(sceneID string) string {
 	return "csw-showbtn-" + sceneID
 }
@@ -153,6 +174,21 @@ func bgKindOnChange() templ.ComponentScript {
 // ovKindOnChange does the same for one layer on top: only an eye has looks.
 func ovKindOnChange() templ.ComponentScript {
 	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}var l=r.querySelector('[data-csw-ov-look]');if(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;}})(this)`)
+}
+
+// PreviewSizes are the screens the editor's contained preview offers, the
+// first the one it opens on. A phone-width editor plays full-window instead,
+// which is a phone's own screen.
+var PreviewSizes = []Kind{
+	{"computer", "Computer", "a wide screen"},
+	{"tablet", "Tablet", "an upright tablet"},
+	{"phone", "Phone", "an upright phone"},
+}
+
+// previewSizeOnChange sizes the preview box to the screen picked; a scene
+// playing in it follows, since the engine watches its host's size.
+func previewSizeOnChange() templ.ComponentScript {
+	return inline("cswPreviewSize", `(function(i){var f=i.closest('form');if(!f){return;}var b=f.querySelector('[data-csw-preview-box]');if(b){b.setAttribute('data-size',i.value);}})(this)`)
 }
 
 func afterValue(e Ending) string {
