@@ -129,7 +129,8 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 		if span > 0 {
 			r.Left = float64(c.At.Sub(s.Start)) / float64(span) * 100
 		}
-		if c.Tool == toolAskName {
+		switch c.Tool {
+		case toolAskName:
 			r.Kind = "ask"
 			if p, ok := paired[c.ID]; ok {
 				r.Waiting = p.Waiting
@@ -137,7 +138,7 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 					r.Undo = &u
 				}
 			}
-		} else if c.Tool == toolWithdrawName {
+		case toolWithdrawName:
 			r.Kind = "ask"
 		}
 		out = append(out, r)
