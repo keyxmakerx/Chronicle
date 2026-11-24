@@ -100,6 +100,13 @@ test('a player finds and changes one campaign\'s settings under Account settings
   await picture(owner.page, 'account-campaign-owner-light', { about: 'A campaign\'s page in Account settings, as its owner', locator: owner.page.locator('.acct') });
   owner.assertClean();
 
+  // Previewing the campaign as a guest, the owner is stopped as a guest is.
+  const pv = await owner.api(`/campaigns/${cid}/view-as`, { method: 'POST', body: { as: 'guestcode' } });
+  assert.ok(pv.status < 400, `guest preview turns on (got ${pv.status})`);
+  const during = await owner.page.goto(`${process.env.LIVE_BASE || 'http://localhost:8080'}/account/campaigns/${cid}`);
+  assert.equal(during.status(), 403, 'the page is refused during the guest preview');
+  await owner.api(`/campaigns/${cid}/view-as`, { method: 'POST', body: { as: 'self' } });
+
   // A stranger is refused.
   const stranger = await person({ tag: 'acs-stranger' });
   const res = await stranger.page.goto(`${process.env.LIVE_BASE || 'http://localhost:8080'}/account/campaigns/${cid}`);

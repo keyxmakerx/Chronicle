@@ -58,11 +58,17 @@ type campaignSettingsView struct {
 // GET /account/campaigns/:id. It gathers the settings that change only what
 // this person sees in this campaign. The look picks save through the same
 // endpoint as Your look, so the owner's limits apply unchanged. It resolves
-// membership itself rather than through the campaign routes' middleware, so
-// the page keeps the account's frame instead of the campaign's sidebar.
+// membership itself, with the same guest-preview refusal as the campaign
+// routes' middleware, so the page keeps the account's frame instead of the
+// campaign's sidebar.
 func (h *Handler) CampaignSettings(c *echo.Context) error {
 	cc, err := resolveCampaignContext(c, h.service)
 	if err != nil {
+		return err
+	}
+	// An owner previewing the campaign as a guest is stopped here, as a
+	// real guest is (guests never reach /account).
+	if handled, err := refuseDuringGuestPreview(c, cc); handled {
 		return err
 	}
 	ctx := c.Request().Context()
