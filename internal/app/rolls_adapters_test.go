@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -113,7 +114,7 @@ func TestRollsPowerAdapter(t *testing.T) {
 		Characteristics: []systems.CraftingStat{{Key: "might", Label: "Might"}, {Key: "agility", Label: "Agility"}},
 	}}}
 	const heroType, noteType = 7, 9
-	hero := entities.Entity{Name: "Sivin", EntityTypeID: heroType, FieldsData: map[string]any{"might": float64(1), "agility": "+2"}}
+	hero := entities.Entity{ID: "e-sivin", Name: "Sivin", EntityTypeID: heroType, FieldsData: map[string]any{"might": float64(1), "agility": "+2"}}
 	plain := map[int]*entities.EntityType{heroType: {ID: heroType}}
 	chars := powerCharacters{heroType}
 
@@ -132,7 +133,7 @@ func TestRollsPowerAdapter(t *testing.T) {
 	t.Run("a hero's numbers", func(t *testing.T) {
 		a := &rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{mine: []entities.Entity{hero}, types: plain}, characters: chars}
 		got, err := a.PowerRoll(ctx, "c1", "u1", false)
-		if err != nil || !got.Declared || got.Hero != "Sivin" || len(got.Characteristics) != 2 {
+		if err != nil || !got.Declared || got.Hero != "Sivin" || got.HeroID != "e-sivin" || len(got.Characteristics) != 2 {
 			t.Fatalf("got %+v, %v", got, err)
 		}
 		if v := got.Characteristics[0].Value; v == nil || *v != 1 {
@@ -189,4 +190,78 @@ func TestRollsPowerAdapter(t *testing.T) {
 			}
 		})
 	}
+}
+
+type rollAsPages map[string]*entities.Entity
+
+func (p rollAsPages) GetByID(_ context.Context, id string) (*entities.Entity, error) {
+	if e, ok := p[id]; ok {
+		return e, nil
+	}
+	return nil, apperror.NewNotFound("entity not found")
+}
+
+type failingPages struct{}
+
+func (failingPages) GetByID(context.Context, string) (*entities.Entity, error) {
+	return nil, errors.New("database is down")
+}
+
+// A Table roll may name only a live page of this campaign that the viewer
+// has claimed, or any of them for a Director, since Foundry speaks as it; a
+// public roll only a page every player may see.
+func TestRollsCharacterAdapter(t *testing.T) {
+	ctx := context.Background()
+	const heroType, noteType = 7, 9
+	owner := "u-kai"
+	pages := rollAsPages{
+		"hero-kai":   {ID: "hero-kai", CampaignID: "c1", EntityTypeID: heroType, OwnerUserID: &owner},
+		"hero-free":  {ID: "hero-free", CampaignID: "c1", EntityTypeID: heroType},
+		"note-kai":   {ID: "note-kai", CampaignID: "c1", EntityTypeID: noteType, OwnerUserID: &owner},
+		"hero-other": {ID: "hero-other", CampaignID: "c2", EntityTypeID: heroType, OwnerUserID: &owner},
+		"hero-priv":  {ID: "hero-priv", CampaignID: "c1", EntityTypeID: heroType, OwnerUserID: &owner, IsPrivate: true},
+		"hero-cust":  {ID: "hero-cust", CampaignID: "c1", EntityTypeID: heroType, OwnerUserID: &owner, Visibility: entities.VisibilityCustom},
+		"hero-open":  {ID: "hero-open", CampaignID: "c1", EntityTypeID: heroType, OwnerUserID: &owner, Visibility: entities.VisibilityDefault},
+	}
+	a := &rollsCharacterAdapter{entities: pages}
+	kai := rolls.Viewer{UserID: owner}
+	mara := rolls.Viewer{UserID: "u-mara"}
+	dm := rolls.Viewer{UserID: "u-dm", Director: true}
+	for _, tt := range []struct {
+		name string
+		v    rolls.Viewer
+		id   string
+		mode string
+		want bool
+	}{
+		{"the hero's player", kai, "hero-kai", rolls.ModePublic, true},
+		{"a page every player sees, in public", kai, "hero-open", rolls.ModePublic, true},
+		{"a private page, in public", kai, "hero-priv", rolls.ModePublic, false},
+		{"a private page, in public, by a Director", dm, "hero-priv", rolls.ModePublic, false},
+		{"a private page, to the Directors", kai, "hero-priv", rolls.ModeGM, true},
+		{"a private page, blind", kai, "hero-priv", rolls.ModeBlind, true},
+		{"a page shared with some players, in public", dm, "hero-cust", rolls.ModePublic, false},
+		{"a page shared with some players, to the Directors", dm, "hero-cust", rolls.ModeGM, true},
+		{"another player", mara, "hero-kai", rolls.ModePublic, false},
+		{"a Director, someone's hero", dm, "hero-kai", rolls.ModePublic, true},
+		{"a Director, an unclaimed hero", dm, "hero-free", rolls.ModePublic, true},
+		{"a player, an unclaimed hero", kai, "hero-free", rolls.ModePublic, false},
+		{"a claimed page outside the characters list", kai, "note-kai", rolls.ModePublic, true},
+		{"a hero of another campaign", dm, "hero-other", rolls.ModePublic, false},
+		{"no such page", dm, "gone", rolls.ModePublic, false},
+		{"signed out", rolls.Viewer{Director: true}, "hero-kai", rolls.ModePublic, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := a.MayRollAs(ctx, "c1", tt.v, tt.id, tt.mode)
+			if err != nil || got != tt.want {
+				t.Fatalf("got %v, %v; want %v", got, err, tt.want)
+			}
+		})
+	}
+	t.Run("a read failure is an error, not a yes", func(t *testing.T) {
+		got, err := (&rollsCharacterAdapter{entities: failingPages{}}).MayRollAs(ctx, "c1", dm, "hero-kai", rolls.ModePublic)
+		if err == nil || got {
+			t.Fatalf("got %v, %v", got, err)
+		}
+	})
 }

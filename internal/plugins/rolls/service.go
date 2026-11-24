@@ -66,12 +66,14 @@ type service struct {
 	now   func() time.Time
 	limit *limiter
 	crits CritSource
+	chars CharacterSource
 }
 
 // NewService creates the roll log service. pub may be nil (nothing is sent
-// live); crits may be nil (the default crit rules apply).
-func NewService(repo Repository, pub Publisher, crits CritSource) Service {
-	return &service{repo: repo, pub: pub, crits: crits, roll: cryptoRoll, now: time.Now, limit: newLimiter(tableBurst, tableWindow)}
+// live); crits may be nil (the default crit rules apply); chars may be nil
+// (no roll is ever made as a hero).
+func NewService(repo Repository, pub Publisher, crits CritSource, chars CharacterSource) Service {
+	return &service{repo: repo, pub: pub, crits: crits, chars: chars, roll: cryptoRoll, now: time.Now, limit: newLimiter(tableBurst, tableWindow)}
 }
 
 // How many Table rolls one person may make in a window, so a held key or a
@@ -119,6 +121,7 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer, in Tab
 	if !s.limit.allow(campaignID+"/"+v.UserID, s.now()) {
 		return nil, apperror.NewTooManyRequests("That's a lot of rolls at once. Wait a moment and roll again.")
 	}
+	charID := s.rollAs(ctx, campaignID, v, in.CharacterID, mode)
 	dice, mod, total := throw(terms, s.roll)
 	markCrits(s.critRules(ctx, campaignID), dice, termGroups(terms))
 	label := clip(in.Label, LabelMax)
@@ -128,7 +131,7 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer, in Tab
 	r := Roll{
 		ID: uuid.New().String(), CampaignID: campaignID, Origin: OriginChronicle, Source: SourceTable,
 		RollerID: v.UserID, RollerName: clip(v.Name, NameMax), Label: label, Formula: shown,
-		Dice: dice, Modifier: mod, Total: total, Mode: mode, CreatedAt: s.now().UTC(),
+		Dice: dice, Modifier: mod, Total: total, Mode: mode, CharacterID: charID, CreatedAt: s.now().UTC(),
 	}
 	if _, _, err := s.repo.Insert(ctx, r); err != nil {
 		return nil, err
@@ -136,6 +139,27 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer, in Tab
 	s.publish(r, v.Director)
 	out := viewOf(r, v)
 	return &out, nil
+}
+
+// rollAs keeps the hero a Table roll names only when the viewer may roll as
+// it in this mode. Foundry posts the roll as that hero's actor, so a player
+// naming someone else's hero would speak as them, and a public roll naming a
+// hidden page would show it to the table; such a roll, or one whose hero
+// can't be checked, is still made, under the roller's own name.
+func (s *service) rollAs(ctx context.Context, campaignID string, v Viewer, characterID, mode string) string {
+	id := strings.TrimSpace(characterID)
+	if id == "" || len(id) > CharacterIDMax || s.chars == nil {
+		return ""
+	}
+	ok, err := s.chars.MayRollAs(ctx, campaignID, v, id, mode)
+	if err != nil {
+		slog.Warn("rolls: cannot check the hero a roll names; rolling without it", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return ""
+	}
+	if !ok {
+		return ""
+	}
+	return id
 }
 
 func (s *service) Report(ctx context.Context, campaignID string, in ReportInput) (string, bool, error) {
@@ -402,8 +426,8 @@ func visible(r Roll, v Viewer) bool {
 func viewOf(r Roll, v Viewer) View {
 	out := View{
 		ID: r.ID, Origin: r.Origin, OriginID: r.OriginID, Source: r.Source, RollerID: r.RollerID, RollerName: r.RollerName,
-		Label: r.Label, Formula: r.Formula, Why: r.Why, From: r.From, Mode: r.Mode, CreatedAt: r.CreatedAt,
-		Mine: r.RollerID != "" && r.RollerID == v.UserID,
+		Label: r.Label, Formula: r.Formula, Why: r.Why, From: r.From, Mode: r.Mode, CharacterID: r.CharacterID,
+		CreatedAt: r.CreatedAt, Mine: r.RollerID != "" && r.RollerID == v.UserID,
 	}
 	if r.Mode == ModeBlind && !v.Director {
 		out.Hidden = true

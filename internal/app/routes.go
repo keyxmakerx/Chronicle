@@ -7067,7 +7067,8 @@ func (a *App) RegisterRoutes() {
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
-		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler})
+		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
+			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
 		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)

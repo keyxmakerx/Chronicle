@@ -70,10 +70,25 @@ func (p *fakePub) RollMade(_ string, v View, a Audience) { p.got = append(p.got,
 
 func newTestService() (*service, *fakeRepo, *fakePub) {
 	repo, pub := &fakeRepo{}, &fakePub{}
-	s := NewService(repo, pub, nil).(*service)
+	s := NewService(repo, pub, nil, fakeChars{"c1": {"hero-kai": "u-player", "hero-mara": "u-other", "hero-secret": "hidden"}}).(*service)
 	s.roll = func(n int) int { return n } // every die shows its highest face
 	s.now = func() time.Time { return time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC) }
 	return s, repo, pub
+}
+
+// fakeChars is campaign → character id → the user who plays it.
+type fakeChars map[string]map[string]string
+
+func (f fakeChars) MayRollAs(_ context.Context, campaignID string, v Viewer, id, mode string) (bool, error) {
+	owner, ok := f[campaignID][id]
+	if !ok {
+		return false, nil
+	}
+	// "hidden" stands for a page players can't see: only a non-public roll may name it.
+	if owner == "hidden" {
+		return v.Director && mode != ModePublic, nil
+	}
+	return v.Director || owner == v.UserID, nil
 }
 
 var (
@@ -498,5 +513,64 @@ func TestDiceKeysFitTheirColumns(t *testing.T) {
 	}
 	if longest := len(strings.Join(DiceSetKeys, ",")) - shortest - 1; longest > width("dice_offered") {
 		t.Errorf("the longest list of offered sets is %d characters, dice_offered holds %d", longest, width("dice_offered"))
+	}
+}
+
+// A roll made from a hero's numbers names the hero on the live message, so
+// Foundry can speak as the hero's actor. Only the hero's player or a Director
+// may name it; anyone else's roll is still made, under their own name.
+func TestTableRollAsAHero(t *testing.T) {
+	cases := []struct {
+		name   string
+		viewer Viewer
+		charID string
+		mode   string
+		want   string
+	}{
+		{"no hero", player, "", "", ""},
+		{"own hero", player, "hero-kai", "", "hero-kai"},
+		{"own hero, spaces trimmed", player, "  hero-kai ", "", "hero-kai"},
+		{"someone else's hero", player, "hero-mara", "", ""},
+		{"a page that is no one's hero here", player, "hero-nobody", "", ""},
+		{"a Director, any hero", director, "hero-mara", "", "hero-mara"},
+		{"a Director, a hidden page, in public", director, "hero-secret", ModePublic, ""},
+		{"a Director, a hidden page, to the Directors", director, "hero-secret", ModeGM, "hero-secret"},
+		{"an over-long id", player, strings.Repeat("x", CharacterIDMax+1), "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, repo, pub := newTestService()
+			v, err := s.Table(context.Background(), "c1", tc.viewer, TableInput{Formula: "2d10+1", Mode: tc.mode, CharacterID: tc.charID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(repo.rolls) != 1 || v.RollerName != tc.viewer.Name {
+				t.Fatalf("rows = %d, roller %q; want one roll under the roller's name", len(repo.rolls), v.RollerName)
+			}
+			if v.CharacterID != tc.want || len(pub.got) != 1 || pub.got[0].v.CharacterID != tc.want {
+				t.Fatalf("view %q, sent %+v; want %q", v.CharacterID, pub.got, tc.want)
+			}
+		})
+	}
+}
+
+type brokenChars struct{}
+
+func (brokenChars) MayRollAs(context.Context, string, Viewer, string, string) (bool, error) {
+	return false, errors.New("database is down")
+}
+
+// Without a way to check the hero, or when the check fails, the roll is
+// made without one.
+func TestTableRollAsAHeroUnchecked(t *testing.T) {
+	for name, chars := range map[string]CharacterSource{"no source": nil, "a failing source": brokenChars{}} {
+		t.Run(name, func(t *testing.T) {
+			s, _, pub := newTestService()
+			s.chars = chars
+			v, err := s.Table(context.Background(), "c1", director, TableInput{Formula: "d20", CharacterID: "hero-kai"})
+			if err != nil || v.CharacterID != "" || pub.got[0].v.CharacterID != "" {
+				t.Fatalf("view %+v, err %v; want a roll with no hero", v, err)
+			}
+		})
 	}
 }
