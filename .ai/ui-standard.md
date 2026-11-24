@@ -1163,7 +1163,7 @@ look in the same piece of work, or files the issue to do it.
   at shipped quality: never placeholders or a lean out-of-context fragment.
 - Motion decisions are shown as playable clips, never stills.
 - **A mockup is held to the same bar as a screen.** Every option on a card
-  has its own mockup. Its words can be read at the size it is shown; nothing
+  has its own mockup (the card format is `.ai/signoff-cards.md`). Its words can be read at the size it is shown; nothing
   in it is squeezed, cut off or dark on dark; and it holds in light and
   dark.
 - A signed mockup is the contract until a new one is signed. A change to a
