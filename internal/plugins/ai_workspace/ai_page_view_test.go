@@ -106,3 +106,16 @@ func renderActivity(t *testing.T, v ConnectView) string {
 	}
 	return buf.String()
 }
+
+// A withdrawn request files under requests with its own icon, never paired
+// with a request, so it can't show Waiting or Undo.
+func TestSittingRows_Withdraw(t *testing.T) {
+	at := time.Date(2026, 10, 1, 20, 0, 0, 0, time.UTC)
+	s := connector.Sitting{Start: at, End: at, Calls: []connector.Call{
+		{ID: 1, Tool: toolWithdrawName, At: at, Summary: "Withdrew its request “Add the Ash Road”", Note: "The road already exists", OK: true},
+	}}
+	rows := sittingRows(ConnectView{Calls: s.Calls}, s)
+	if r := rows[0]; r.Kind != "ask" || r.Icon != "fa-rotate-left" || r.Waiting || r.Undo != nil {
+		t.Errorf("row = %+v", r)
+	}
+}

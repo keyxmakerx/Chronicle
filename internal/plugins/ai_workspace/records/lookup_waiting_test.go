@@ -39,8 +39,8 @@ func (fakeEntryStatus) Fields(context.Context, string, bool) (string, []SystemEn
 func TestLookups_Waiting(t *testing.T) {
 	at := time.Date(2026, 10, 26, 18, 0, 0, 0, time.UTC)
 	full := WaitingList{
-		Asks:    []WaitingAsk{{Summary: "Five characters for Coral Court", Counts: "5 to add", At: at}},
-		Decided: []WaitingAsk{{Summary: "Rename the inn", At: at, Outcome: "1 changed"}, {Summary: "Drop the moon", At: at, TurnedDown: true}, {Summary: "Add Umbra", At: at, Outcome: "1 added", Undone: true}},
+		Asks:    []WaitingAsk{{ID: 12, Summary: "Five characters for Coral Court", Counts: "5 to add", At: at}},
+		Decided: []WaitingAsk{{Summary: "Rename the inn", At: at, Outcome: "1 changed"}, {Summary: "Drop the moon", At: at, TurnedDown: true}, {Summary: "Add Umbra", At: at, Outcome: "1 added", Undone: true}, {ID: 9, Summary: "A second inn", At: at, Withdrawn: true, Outcome: "The inn already exists"}},
 		Entries: []WaitingEntry{
 			{Name: "Fairy", Field: "ancestry", Writer: "Sam", For: "Ash", HandedIn: true},
 			{Name: "Gnome", Field: "ancestry", Writer: "Lee", Note: "Wings cost 3"},
@@ -58,7 +58,9 @@ func TestLookups_Waiting(t *testing.T) {
 	}{
 		{name: "every queue", list: full, chip: "Waiting for review · 3", wants: []string{
 			"Only a Director can say yes or no",
-			"### Changes your AI asked for, waiting on the owner (1)\n\n- \"Five characters for Coral Court\" (5 to add), sent 2026-10-26",
+			"### Changes your AI asked for, waiting on the owner (1)\n\n- request 12: \"Five characters for Coral Court\" (5 to add), sent 2026-10-26",
+			"withdraw_request takes one of these back by its number",
+			"- request 9: \"A second inn\", withdrawn by your AI before the owner answered, nothing changed; the reason it gave: The inn already exists (2026-10-26)",
 			"- \"Rename the inn\", applied: 1 changed (2026-10-26)",
 			"- \"Drop the moon\", turned down by the owner, nothing changed; that was their choice, not an error (2026-10-26)",
 			"- \"Add Umbra\", applied, then undone by the owner, so none of its changes stand now (2026-10-26)",

@@ -64,7 +64,7 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 			missing("the AI's requests", err)
 		} else {
 			for _, q := range l {
-				out.Asks = append(out.Asks, records.WaitingAsk{Summary: q.Summary, Counts: q.Counts, At: q.CreatedAt})
+				out.Asks = append(out.Asks, records.WaitingAsk{ID: q.ID, Summary: q.Summary, Counts: q.Counts, At: q.CreatedAt})
 			}
 			if d, err := w.asks.Decided(ctx, campaignID, a.UserID, olderDays); err != nil {
 				missing("the AI's answered requests", err)
@@ -76,9 +76,10 @@ func (w aiWaitingAdapter) Waiting(ctx context.Context, campaignID string, a reco
 						at = *q.DecidedAt
 					}
 					out.Decided = append(out.Decided, records.WaitingAsk{
-						Summary: q.Summary, Counts: q.Counts, At: at,
-						TurnedDown: q.Status == connector.RequestTurnedDown, Outcome: q.Outcome,
-						Undone: undone[q.ID],
+						ID: q.ID, Summary: q.Summary, Counts: q.Counts, At: at,
+						TurnedDown: q.Status == connector.RequestTurnedDown, Withdrawn: q.Status == connector.RequestWithdrawn,
+						Outcome: q.Outcome,
+						Undone:  undone[q.ID],
 					})
 				}
 			}

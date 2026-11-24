@@ -78,6 +78,8 @@ const toolConnect = "connect"
 const (
 	toolHowTo = "how_to_write_changes"
 	toolAsk   = "ask_for_changes"
+	// toolWithdraw takes back one of the AI's own waiting requests.
+	toolWithdraw = "withdraw_request"
 )
 
 // tools is every tool, in the order an AI is shown them. Each maps onto one
@@ -174,6 +176,14 @@ var tools = []tool{
 			{Key: "summary", Required: true, Desc: "One line saying what this does, for example \"Five characters for Coral Court\""},
 			{Key: "changes", Required: true, Max: changesMax, Keep: true, Desc: "The blocks, written as how_to_write_changes says, one after another"},
 		}},
+	{Name: toolWithdraw, Title: "Withdraw a request", Did: "Withdrew a request", Asks: true,
+		Desc: "Take back one of your own requests for changes while it is still waiting, when it is wrong or no longer wanted. Give its number, as ask_for_changes and waiting_for_review show it, and a reason: the owner sees the reason in Chronicle. " +
+			"Nothing in the campaign changes. A request the owner already answered, or is applying, can't be withdrawn, and neither can anyone else's.",
+		PlayerDesc: "Take back one of your own requests for changes while it is still waiting, when it is wrong or no longer wanted. Give its number, as ask_for_changes showed it, and a reason, which is kept with it in Chronicle. Nothing changes.",
+		Args: []arg{
+			{Key: "request", Required: true, Desc: "The request's number, for example \"12\""},
+			{Key: "reason", Required: true, Max: withdrawReasonMax, Desc: "Why it is withdrawn, in a sentence, for the owner's record"},
+		}},
 }
 
 // toolsFor is the tools a connection may use, in order: the built-in ones,
@@ -234,9 +244,9 @@ func findTool(c *Connection, l *records.Lookups, name string) *tool {
 }
 
 // definition is the tool as tools/list describes it. Every lookup is marked
-// read-only, so an AI app may run it without asking. ask_for_changes is not
-// read-only, since it leaves the owner a request, but it is not destructive:
-// it applies nothing.
+// read-only, so an AI app may run it without asking. ask_for_changes and
+// withdraw_request are not read-only, since they leave or settle a request
+// for the owner, but they are not destructive: neither changes the campaign.
 func (t *tool) definition(forPlayer bool) map[string]any {
 	props := map[string]any{}
 	required := []string{}
@@ -258,13 +268,16 @@ func (t *tool) definition(forPlayer bool) map[string]any {
 		},
 		"annotations": map[string]any{
 			"title":           t.Title,
-			"readOnlyHint":    t.Name != toolAsk,
+			"readOnlyHint":    !t.writes(),
 			"destructiveHint": false,
-			"idempotentHint":  t.Name != toolAsk,
+			"idempotentHint":  !t.writes(),
 			"openWorldHint":   false,
 		},
 	}
 }
+
+// writes reports a tool that leaves or settles a request for the owner.
+func (t *tool) writes() bool { return t.Name == toolAsk || t.Name == toolWithdraw }
 
 // describe is the tool's description for the key's maker.
 func (t *tool) describe(forPlayer bool) string {

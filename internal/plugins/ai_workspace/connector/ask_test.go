@@ -77,7 +77,7 @@ func TestHandle_ToolsListForAskingConnection(t *testing.T) {
 		t.Fatalf("got %d tools, want %d", len(res.Tools), want)
 	}
 	for _, tl := range res.Tools {
-		wantRead := tl.Name != toolAsk
+		wantRead := tl.Name != toolAsk && tl.Name != toolWithdraw
 		if tl.Annotations["readOnlyHint"] != wantRead || tl.Annotations["destructiveHint"] != false {
 			t.Errorf("%s annotations = %v", tl.Name, tl.Annotations)
 		}
@@ -404,7 +404,7 @@ func TestHandle_AskForChangesNotes(t *testing.T) {
 		not   []string
 	}{
 		{"a note rides on the answer", []string{"block 1: the new page \"X\" closely matches the page \"Y\""},
-			[]string{"Nothing has changed yet", "Heads up, one thing", "- block 1: the new page", "still waiting as sent", "turned down"}, nil},
+			[]string{"Nothing has changed yet", "Heads up, one thing", "- block 1: the new page", "still waiting as sent", toolWithdraw}, nil},
 		{"several notes", []string{"a", "b"}, []string{"a few things", "- a\n- b"}, nil},
 		{"none, no heads up", nil, []string{"Nothing has changed yet"}, []string{"Heads up"}},
 	}

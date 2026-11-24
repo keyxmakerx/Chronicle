@@ -417,7 +417,7 @@ func (s *Service) Waiting(ctx context.Context, campaignID, userID string) ([]Req
 	return s.repo.Requests(ctx, campaignID, userID, RequestWaiting, requestsWaiting)
 }
 
-// Decided is userID's answered requests (applied or turned down) from one
+// Decided is userID's answered requests (applied, turned down or withdrawn by the AI) from one
 // seven-day window, newest answer first. olderDays is how many days back the
 // window starts: 0 is the last seven days, 7 the seven before those. At most
 // records.WaitingDecidedMax come back; Chronicle keeps no more than that per
@@ -447,9 +447,54 @@ func (s *Service) WaitingRequest(ctx context.Context, campaignID, userID string,
 	if q == nil {
 		return nil, apperror.NewNotFound("that request isn't here any more")
 	}
+	if q.Status == RequestWithdrawn {
+		return nil, apperror.NewBadRequest("your AI withdrew that request: " + oneLine(q.Outcome, outcomeMax))
+	}
 	if q.Status != RequestWaiting {
 		return nil, apperror.NewBadRequest("you already answered that request")
 	}
+	return q, nil
+}
+
+// Withdraw takes back one of the requests the key's maker's AI sent, while
+// it still waits, keeping the AI's reason as its outcome so the owner reads
+// why. It reaches only that person's requests (the same scope as
+// waiting_for_review), never anyone else's, and never one being applied or
+// already answered. Refusals are plain errors the AI can act on; a failure
+// on Chronicle's side is an apperror.
+func (s *Service) Withdraw(ctx context.Context, c *Connection, id int64, reason string) (*Request, error) {
+	if !c.CanAsk {
+		return nil, ErrCannotAsk
+	}
+	reason = oneLine(reason, withdrawReasonMax)
+	if reason == "" {
+		return nil, errors.New("give a reason: the owner sees it in Chronicle")
+	}
+	q, err := s.repo.Request(ctx, c.CampaignID, c.UserID, id)
+	if err != nil {
+		return nil, err
+	}
+	if q == nil {
+		return nil, fmt.Errorf("there is no request %d from your AI", id)
+	}
+	switch q.Status {
+	case RequestWaiting:
+	case RequestApplying:
+		return nil, errors.New("the owner is applying that request right now, so it can't be withdrawn")
+	case RequestWithdrawn:
+		return nil, errors.New("that request was already withdrawn")
+	default:
+		return nil, errors.New("the owner already answered that request, so it can't be withdrawn")
+	}
+	won, err := s.repo.MoveRequest(ctx, c.CampaignID, c.UserID, id, RequestWaiting, RequestWithdrawn, reason, s.now())
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		return nil, errors.New("that request stopped waiting a moment ago; the owner may be answering it")
+	}
+	s.prune(ctx, c.CampaignID, c.UserID)
+	q.Status, q.Outcome = RequestWithdrawn, reason
 	return q, nil
 }
 
