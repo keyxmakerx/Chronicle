@@ -43,7 +43,7 @@ var (
 		{BackgroundNone, "Nothing", "no background of its own; only the layers on top and the words are drawn"},
 	}
 	OverlayKinds = []Kind{
-		{OverlayEye, "An eye opens", "a single eye opens in the middle of the screen, burning with light in its colour"},
+		{OverlayEye, "An eye opens", "a single eye opens in the middle of the screen, burning with light in its colour, with fire blooming round it"},
 		{OverlayEmbers, "Embers", "glowing sparks drift up from the bottom of the screen in its colour"},
 	}
 	TextStyles = []Kind{
@@ -71,14 +71,14 @@ type Look struct {
 // or one not listed here, is dropped, and the engine plays the default.
 var Looks = map[string][]Look{
 	BackgroundFallAsleep: {
-		{"drift", "The page drifts off", "the screen itself blurs, loses its colour and sinks while darkness closes in like tunnel vision and soft dark spots float across it"},
-		{"eyelids", "Heavy eyelids", "soft dark patches breathe in from the edges while eyelids droop and flutter open twice before they give in"},
 		{"ink", "Ink in water", "darkness bleeds in from the edges like ink spreading through water, in curling soft tendrils that meet in the middle"},
+		{"eyelids", "Heavy eyelids", "soft dark patches breathe in from the edges while eyelids droop and flutter open twice before they give in"},
+		{"drift", "The page drifts off", "the screen itself blurs, loses its colour and sinks while darkness closes in like tunnel vision and soft dark spots float across it"},
 	},
 	OverlayEye: {
-		{"gather", "Sparks gather", "sparks drift out of the dark into a ring of fire; lines of light draw the eye around it and the pupil splits open"},
-		{"almond", "Lids part", "a thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil"},
-		{"rift", "Burning seam", "a line of fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you"},
+		{"rift", "Burning seam", "a line of fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you; as it opens, fire blooms around it in the eye's colour and a haze of heat veils the eye"},
+		{"almond", "Lids part", "a thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil; as they open, fire blooms around the eye and a haze of heat veils it"},
+		{"gather", "Sparks gather", "sparks drift out of the dark into a ring of fire; lines of light draw the eye around it, the pupil splits open and fire blooms around it under a haze of heat"},
 	},
 }
 

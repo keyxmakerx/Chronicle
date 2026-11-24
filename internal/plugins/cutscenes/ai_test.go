@@ -61,9 +61,9 @@ func TestAIPlan(t *testing.T) {
 			"overlays":   []any{map[any]any{"kind": "eye", "at": 1, "look": "rift"}, map[any]any{"kind": "eye", "params": map[any]any{"look": "almond"}}}}),
 			want: []string{`Background: falling asleep over 7 s, look "Heavy eyelids"`, `look "Burning seam"`, `look "Lids part"`}},
 		{name: "no look names the default", actor: aDirector, on: true, r: rec("create", "Default look", eyeFields()),
-			want: []string{`look "The page drifts off" (the default)`, `look "Sparks gather" (the default)`}},
+			want: []string{`look "Ink in water" (the default)`, `look "Burning seam" (the default)`}},
 		{name: "an unknown look is refused by name", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"background": map[string]any{"kind": "fall-asleep", "look": "swirl"}}),
-			wantErr: `"swirl" is not a look of fall-asleep; it is one of drift, eyelids, ink`},
+			wantErr: `"swirl" is not a look of fall-asleep; it is one of ink, eyelids, drift`},
 		{name: "an eye look from the wrong list is refused", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"overlays": []any{map[string]any{"kind": "eye", "look": "ink"}}}),
 			wantErr: `"ink" is not a look of eye`},
 		{name: "a look on a background without looks is refused", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"background": map[string]any{"kind": "black", "look": "drift"}}),
@@ -190,7 +190,7 @@ func TestAILookup(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"### The Eye Opens", "Background: falling asleep over 7 s", "kind: cut-scene", "`fall-asleep`", "`eye`", "`whisper`", "`auto`",
-		"`drift` (The page drifts off, the default):", "`eyelids` (Heavy eyelids):", "`ink` (Ink in water):", "`gather` (Sparks gather, the default):", "`almond` (Lids part):", "`rift` (Burning seam):"} {
+		"`ink` (Ink in water, the default):", "`eyelids` (Heavy eyelids):", "`drift` (The page drifts off):", "`rift` (Burning seam, the default):", "`almond` (Lids part):", "`gather` (Sparks gather):"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("answer lacks %q", want)
 		}
@@ -236,7 +236,7 @@ func TestAIDocNamesEveryKind(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(doc, "look: drift") || !strings.Contains(doc, "look: gather") {
+	if !strings.Contains(doc, "look: ink") || !strings.Contains(doc, "look: rift") {
 		t.Error("Doc's example does not show a look")
 	}
 	if !strings.Contains(doc, "never shows a scene") {

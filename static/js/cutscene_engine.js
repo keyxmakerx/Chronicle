@@ -38,17 +38,17 @@
   // and an unknown one falls back to it rather than drawing nothing.
   var LOOKS = {
     'fall-asleep': [
-      { id: 'drift', name: 'The page drifts off', about: 'The screen itself blurs, loses its colour and sinks, while darkness closes in like tunnel vision and soft dark spots float across it.' },
+      { id: 'ink', name: 'Ink in water', about: 'Darkness bleeds in from the edges like ink spreading through water, in curling soft tendrils that meet in the middle.' },
       { id: 'eyelids', name: 'Heavy eyelids', about: 'Soft dark patches breathe in from the edges while eyelids droop and flutter open twice before they give in.' },
-      { id: 'ink', name: 'Ink in water', about: 'Darkness bleeds in from the edges like ink spreading through water, in curling soft tendrils that meet in the middle.' }
+      { id: 'drift', name: 'The page drifts off', about: 'The screen itself blurs, loses its colour and sinks, while darkness closes in like tunnel vision and soft dark spots float across it.' }
     ],
     eye: [
-      { id: 'gather', name: 'Sparks gather', about: 'Sparks drift out of the dark into a ring of green fire; lines of light draw the eye around it and the pupil splits open.' },
-      { id: 'almond', name: 'Lids part', about: 'A thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil, flames licking up from the lid.' },
-      { id: 'rift', name: 'Burning seam', about: 'A line of green fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you.' }
+      { id: 'rift', name: 'Burning seam', about: 'A line of green fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you; as it opens, emerald fire blooms around it and a haze of heat veils the eye.' },
+      { id: 'almond', name: 'Lids part', about: 'A thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil; as they open, emerald fire blooms around the eye and a haze of heat veils it.' },
+      { id: 'gather', name: 'Sparks gather', about: 'Sparks drift out of the dark into a ring of green fire; lines of light draw the eye around it, the pupil splits open and emerald fire blooms around it under a haze of heat.' }
     ]
   };
-  var DEFAULT_LOOK = { 'fall-asleep': 'drift', eye: 'gather' };
+  var DEFAULT_LOOK = { 'fall-asleep': 'ink', eye: 'rift' };
   var DEFAULT_EYE = '#3dff7a';
   var DEFAULT_EMBER = '#ff9a3c';
 
@@ -348,24 +348,6 @@
     gr.addColorStop(1, css(col, 0));
     g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
 
-    // A flame tongue: drawn small and scaled up, so its edges are soft.
-    var small = canvasOf(24, 60), s = small.getContext('2d');
-    var lg = s.createLinearGradient(0, 58, 0, 2);
-    lg.addColorStop(0, css(hot, 0.95));
-    lg.addColorStop(0.3, css(col, 0.85));
-    lg.addColorStop(0.7, css(col, 0.3));
-    lg.addColorStop(1, css(col, 0));
-    s.fillStyle = lg;
-    s.beginPath();
-    s.moveTo(12, 2);
-    s.bezierCurveTo(16, 20, 23, 34, 21, 47);
-    s.bezierCurveTo(19, 58, 5, 58, 3, 47);
-    s.bezierCurveTo(1, 34, 8, 20, 12, 2);
-    s.fill();
-    var flame = canvasOf(64, 160), f = flame.getContext('2d');
-    f.imageSmoothingEnabled = true;
-    f.drawImage(small, 0, 0, 64, 160);
-
     var ember = canvasOf(32, 32), e = ember.getContext('2d');
     var eg = e.createRadialGradient(16, 16, 0, 16, 16, 16);
     eg.addColorStop(0, css(white, 1));
@@ -374,7 +356,7 @@
     eg.addColorStop(1, css(col, 0));
     e.fillStyle = eg; e.fillRect(0, 0, 32, 32);
 
-    spriteCache[hex] = { glow: glow, flame: flame, ember: ember };
+    spriteCache[hex] = { glow: glow, ember: ember };
     return spriteCache[hex];
   }
 
@@ -391,17 +373,6 @@
     } else {
       g.drawImage(img, x - w / 2, y - h / 2, w, h);
     }
-    g.globalAlpha = 1;
-  }
-  // A flame stands on its base at x, y and leans by a (0 is straight up).
-  function tongue(g, img, x, y, len, wid, a, alpha) {
-    if (alpha <= 0.003 || len < 0.5) return;
-    g.save();
-    g.translate(x, y);
-    g.rotate(a);
-    g.globalAlpha = alpha > 1 ? 1 : alpha;
-    g.drawImage(img, -wid / 2, -len, wid, len * 1.08);
-    g.restore();
     g.globalAlpha = 1;
   }
 
@@ -762,9 +733,243 @@
     this.e.draw(ctx, alpha);
   };
 
-  // ---------- The eye ----------
-
   var WHITE = [255, 255, 255], BLACK = [0, 0, 0];
+
+  // ---------- Fire ----------
+  // The eye's fire is a field of turbulent noise worked out per pixel on a
+  // small buffer and scaled up, so its cost follows the buffer, not the
+  // screen. Noise here reads a lookup table: the field samples it tens of
+  // thousands of times a frame, which sin-hash noise could not afford.
+
+  var NT = null;
+  function qn(x, y) {
+    if (!NT) {
+      NT = new Float32Array(65536);
+      var r = rng(4231);
+      for (var k = 0; k < 65536; k++) NT[k] = r();
+    }
+    var xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    var X0 = xi & 255, Y0 = (yi & 255) << 8, X1 = (X0 + 1) & 255, Y1 = ((yi + 1) & 255) << 8;
+    var a = NT[Y0 + X0], b = NT[Y0 + X1], c = NT[Y1 + X0], d = NT[Y1 + X1];
+    var u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+
+  // Pixels are written as whole words, so the colour table is laid out for
+  // the machine's byte order.
+  var LITTLE = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+  function word(r, g, b, a) {
+    return LITTLE ? ((a << 24) | (b << 16) | (g << 8) | r) >>> 0 : ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+  }
+  // A ramp of [heat, colour, alpha] stops turned into 256 packed pixels.
+  function rampTable(stops) {
+    var out = new Uint32Array(256);
+    for (var i = 0; i < 256; i++) {
+      var v = i / 255, k = 1;
+      while (k < stops.length - 1 && v > stops[k][0]) k++;
+      var a = stops[k - 1], b = stops[k], f = clamp01((v - a[0]) / (b[0] - a[0]));
+      var c = mix(a[1], b[1], f);
+      out[i] = word(c[0], c[1], c[2], Math.round(255 * lerp(a[2], b[2], f)));
+    }
+    return out;
+  }
+
+  // The eye's outline as a distance: negative inside, growing outward, in
+  // units of the eye's width. a and b are its half width and half height;
+  // pe 0.5 is a circle, higher is the pointed almond of a lid.
+  function outline(X, Y, a, b, pe) {
+    var ax = X < 0 ? -X : X, ay = Y < 0 ? -Y : Y, hb = 0, dx = 0;
+    if (ax < a) { var q = 1 - (ax * ax) / (a * a); hb = b * Math.pow(q, pe) * (Y > 0 ? 0.86 : 1); } else dx = ax - a;
+    var dy = ay - hb;
+    if (dx > 0) return Math.sqrt(dx * dx + (dy > 0 ? dy * dy : 0));
+    return dy;
+  }
+
+  // One small buffer of field values over a region round the eye, in the
+  // eye's own units, cut to what is on screen.
+  function Field(cols, x0, x1, y0, y1) {
+    this.cols = cols;
+    this.rx0 = x0; this.rx1 = x1; this.ry0 = y0; this.ry1 = y1;
+    this.c = canvasOf(2, 2);
+    this.g = this.c.getContext('2d');
+  }
+  Field.prototype.layout = function (cx, cy, W, vw, vh, q) {
+    var cell = W * (this.rx1 - this.rx0) / Math.max(24, Math.round(this.cols * q));
+    // Only the part of the region that is on screen is worked out.
+    var L = Math.max(cx + this.rx0 * W, 0), R = Math.min(cx + this.rx1 * W, vw);
+    var T = Math.max(cy + this.ry0 * W, 0), B = Math.min(cy + this.ry1 * W, vh);
+    var nx = Math.max(2, Math.ceil((R - L) / cell)), ny = Math.max(2, Math.ceil((B - T) / cell));
+    this.x = L; this.y = T; this.w = nx * cell; this.h = ny * cell;
+    this.nx = nx; this.ny = ny;
+    this.c.width = nx; this.c.height = ny;
+    this.img = this.g.createImageData(nx, ny);
+    this.px = new Uint32Array(this.img.data.buffer);
+    this.X = new Float32Array(nx);
+    this.Y = new Float32Array(ny);
+    for (var i = 0; i < nx; i++) this.X[i] = (L + (i + 0.5) * cell - cx) / W;
+    for (var j = 0; j < ny; j++) this.Y[j] = (T + (j + 0.5) * cell - cy) / W;
+  };
+  Field.prototype.put = function () { this.g.putImageData(this.img, 0, 0); };
+
+  // Fire: flames rise off the eye's outline, tallest above it, leaning out
+  // at the sides and curling as they climb. Each pixel's heat is how far up
+  // its flame it sits, broken by domain-warped noise carried up through the
+  // flame, so tongues lick, split and thin to smoke. A bright bed along the
+  // outline never goes out.
+  function Fire(hex) {
+    var col = rgb(hex), deep = mix(col, BLACK, 0.7), hot = mix(col, WHITE, 0.4);
+    this.lut = rampTable([
+      [0, mix(col, BLACK, 0.85), 0],
+      [0.06, deep, 0.07],
+      [0.16, deep, 0.32],
+      [0.3, mix(col, BLACK, 0.4), 0.65],
+      [0.5, col, 0.92],
+      [0.7, hot, 1],
+      [0.86, mix(col, WHITE, 0.72), 1],
+      [1, mix(col, WHITE, 0.94), 1]
+    ]);
+    this.smoke = rampTable([[0, deep, 0], [1, mix(col, BLACK, 0.6), 0.16]]);
+    this.f = new Field(200, -1.4, 1.4, -1.3, 0.62);
+    this.glow = canvasOf(2, 2);
+    this.gg = this.glow.getContext('2d');
+    this.q = 1;
+    this.cost = 0;
+    this.frames = 0;
+    this.key = '';
+    this.tg = null;
+  }
+  Fire.prototype.layout = function (cx, cy, W, vw, vh) {
+    this.args = [cx, cy, W, vw, vh];
+    this.f.layout(cx, cy, W, vw, vh, this.q);
+    this.glow.width = Math.max(2, Math.round(this.f.nx / 4));
+    this.glow.height = Math.max(2, Math.round(this.f.ny / 4));
+    this.tg = new Float32Array(this.f.nx);
+    this.key = '';
+  };
+  // render works the field out for shape s ({a, b, pe, H, heat}) at time t.
+  Fire.prototype.render = function (t, s) {
+    var key = t + '|' + s.a + '|' + s.b + '|' + s.H + '|' + s.heat;
+    if (key === this.key) return;
+    this.key = key;
+    var t0 = Date.now();
+    var f = this.f, X = f.X, Y = f.Y, px = f.px, lut = this.lut, smk = this.smoke, nx = f.nx, ny = f.ny;
+    var a = s.a, b = s.b, pe = s.pe, H = s.H, heat = s.heat, i, j;
+    var rise = t * 1.1, sway = t * 0.55;
+    // Some stretches of the outline burn higher for a while.
+    for (i = 0; i < nx; i++) this.tg[i] = 0.4 + 0.75 * qn(X[i] * 5 + 40.5, t * 0.45) + 0.45 * qn(X[i] * 1.7 + 12.5, t * 0.21);
+    // Short flames are small ones: the noise tightens as they shrink, so a
+    // low fire breaks into many small licks instead of a few stiff columns.
+    var vk = 0.5 / Math.max(0.12, H), uk = Math.sqrt(vk);
+    var top = H * 3.1 + b, o = 0;
+    for (j = 0; j < ny; j++) {
+      var y = Y[j];
+      for (i = 0; i < nx; i++, o++) {
+        var x = X[i];
+        if (y < -top || x > a + top || x < -a - top) { px[o] = 0; continue; }
+        var d = outline(x, y, a, b, pe);
+        if (d < -0.07) { px[o] = 0; continue; }
+        // Tall above the eye, short beneath it, where flames only peek out;
+        // anywhere over the outline counts as above, so a thin seam burns
+        // along its whole length.
+        var ax = x < 0 ? -x : x, ex = ax > a * 0.8 ? ax - a * 0.8 : 0;
+        var up = 0.5 - 0.5 * y / (Math.sqrt(ex * ex * 0.5 + y * y) + 0.0001);
+        // Tallest over the middle, so the fire rises as one plume round the
+        // eye rather than a wall.
+        var hk = H * (0.07 + 0.93 * up * up) * this.tg[i] * (1 - 0.7 * smooth(0.12, 0.9, ax));
+        if (d > hk * 1.9) { px[o] = 0; continue; }
+        var h01 = d / hk;
+        var dd = d > 0 ? d : 0;
+        // Flow lines: up through the flame and out at the sides, swaying
+        // more the higher a tongue reaches.
+        var u = (x - (x < 0 ? -1 : 1) * dd * 0.18 * (1 - up)) * uk, v = (y * 0.8 - dd * 0.35) * vk;
+        u += (qn(u * 2.6 + 9.1, v * 2.2 + sway) - 0.5) * 0.16 * (h01 > 0 ? h01 : 0);
+        var n = qn(u * 8, v * 3.4 + rise) * 0.6 + qn(u * 16 + 5.3, v * 7 + rise * 1.9) * 0.4;
+        var hh = h01 > 0 ? h01 : 0, val = (1 - hh) * 1.05 + (n - 0.5) * (1 + 2.8 * hh) - 0.08;
+        if (y > 0) val -= y * 2.6;
+        var bed = d / 0.016;
+        val = Math.max(val, Math.exp(-bed * bed) * (0.75 + 1.2 * (n - 0.5)));
+        if (d < -0.02) val *= smooth(-0.07, -0.02, d);
+        val *= heat;
+        if (val > 0.004) {
+          var k = Math.round(val * 165);
+          px[o] = lut[k > 255 ? 255 : k];
+        } else if (h01 > 0.55 && heat > 0) {
+          // Thin smoke off the tips, lit faintly by the fire below.
+          var sm = smooth(0.55, 1, h01) * (1 - smooth(1.2, 1.9, h01)) * smooth(0.5, 0.7, n) * heat;
+          px[o] = sm > 0.01 ? smk[sm >= 1 ? 255 : Math.round(sm * 255)] : 0;
+        } else px[o] = 0;
+      }
+    }
+    f.put();
+    this.gg.clearRect(0, 0, this.glow.width, this.glow.height);
+    this.gg.drawImage(f.c, 0, 0, this.glow.width, this.glow.height);
+    // A slow device gets a coarser field rather than a dropped frame.
+    var ms = Date.now() - t0;
+    this.cost = this.frames ? this.cost * 0.9 + ms * 0.1 : ms;
+    this.frames++;
+    if (this.frames > 12 && this.cost > 7 && this.q > 0.55) {
+      this.q *= 0.8;
+      this.frames = 0;
+      this.layout.apply(this, this.args);
+    }
+  };
+  Fire.prototype.draw = function (ctx, alpha, glow) {
+    var f = this.f;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.imageSmoothingEnabled = true;
+    if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'low';
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(f.c, f.x, f.y, f.w, f.h);
+    // The flames light the air round them: the field shrunk and drawn back
+    // up, which blurs it for free.
+    ctx.globalAlpha = alpha * glow;
+    ctx.drawImage(this.glow, f.x - f.w * 0.04, f.y - f.h * 0.04, f.w * 1.08, f.h * 1.08);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  };
+
+  // Haze: a luminous mist that hangs over the eye and drifts slowly upward,
+  // so the eye reads as seen through rising heat.
+  function Haze(hex) {
+    var col = rgb(hex);
+    this.lut = rampTable([[0, mix(col, BLACK, 0.3), 0], [0.4, col, 0.4], [1, mix(col, WHITE, 0.55), 0.85]]);
+    this.f = new Field(64, -0.66, 0.66, -0.42, 0.38);
+    this.key = '';
+  }
+  Haze.prototype.layout = function (cx, cy, W, vw, vh) { this.f.layout(cx, cy, W, vw, vh, 1); this.key = ''; };
+  Haze.prototype.render = function (t, s) {
+    // The mist moves slowly, so twenty updates a second are plenty.
+    var key = Math.round(t * 20) + '|' + s.a + '|' + s.b;
+    if (key === this.key) return;
+    this.key = key;
+    var f = this.f, X = f.X, Y = f.Y, px = f.px, lut = this.lut, o = 0;
+    var dr = t * 0.07, sw = t * 0.05;
+    for (var j = 0; j < f.ny; j++) {
+      for (var i = 0; i < f.nx; i++, o++) {
+        var x = X[i], y = Y[j];
+        var d = outline(x, y, s.a, s.b, s.pe);
+        var m = (1 - smooth(-0.05, 0.05 + (y < 0 ? -y * 0.35 : 0), d)) * (y < 0 ? 1 : 1 - smooth(0, 0.3, y) * 0.5);
+        if (m <= 0) { px[o] = 0; continue; }
+        var w = qn(x * 2.5 + sw + 5, y * 4 + dr);
+        var n = qn(x * 4 + w * 1.8 - sw, y * 6.5 + dr * 2.2 + w * 1.6) * 0.6 + qn(x * 9 + w * 2.4, y * 12 + dr * 3.5) * 0.4;
+        var v = (0.16 + 0.84 * smooth(0.36, 0.78, n)) * m;
+        px[o] = lut[Math.round(v * 255)];
+      }
+    }
+    f.put();
+  };
+  Haze.prototype.draw = function (ctx, alpha) {
+    var f = this.f;
+    if (alpha <= 0.003) return;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.imageSmoothingEnabled = true;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(f.c, f.x, f.y, f.w, f.h);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  };
+
+  // ---------- The eye ----------
 
   function Eye(ov, seed, rm) {
     var r = rng(seed);
@@ -779,14 +984,43 @@
     this.sparks = [];
     for (var i = 0; i < 130; i++) this.sparks.push({ a: r() * 6.283, r: 0.8 + r() * 1.6, d: r(), s: 0.5 + r() * 1.1, dir: r() < 0.5 ? -1 : 1 });
     this.e = new Embers(this.hex, rm);
+    this.fire = new Fire(this.hex);
+    this.haze = new Haze(this.hex);
     this.box = canvasOf(2, 2);
     this.g = this.box.getContext('2d');
   }
-  Eye.prototype.layout = function (cx, cy, W, dpr) {
+  Eye.prototype.layout = function (cx, cy, W, dpr, vw, vh) {
     this.cx = cx; this.cy = cy; this.W = W; this.dpr = dpr;
     this.bw = W * 1.75; this.bh = W * 1.45;
     this.box.width = Math.round(this.bw * dpr);
     this.box.height = Math.round(this.bh * dpr);
+    this.fire.layout(cx, cy, W, vw, vh);
+    this.haze.layout(cx, cy, W, vw, vh);
+  };
+
+  // shape is the outline the fire burns round at build-up u, in the eye's
+  // units, with how tall its flames stand (H) and how hot they burn. Each
+  // look keeps its own slow way of forming with only a low fire; the fire
+  // blooms as the eye opens, surges, then settles to a burn that breathes.
+  Eye.prototype.shape = function (t, u, after) {
+    var lk = this.lk, open = eyeOpen(lk, u), a, b, pe = 0.8, low, bloom;
+    if (lk === 'gather') {
+      var lineP = smooth(0.5, 0.8, u);
+      a = lerp(0.225, 0.54, lineP); b = lerp(0.225, 0.263, lineP); pe = lerp(0.5, 0.8, lineP);
+      low = 0.4 * smooth(0.3, 0.58, u); bloom = smooth(0.62, 1, u);
+    } else if (lk === 'almond') {
+      a = 0.5; b = Math.max(0.006, 0.235 * open);
+      low = 0.25 * smooth(0.04, 0.16, u); bloom = smooth(0.42, 0.92, u);
+    } else {
+      a = 0.5 * easeOut(smooth(0, 0.3, u)); b = Math.max(0.008, 0.235 * open);
+      low = 0.6 * smooth(0, 0.08, u); bloom = smooth(0.34, 0.85, u);
+    }
+    var surge = smooth(0.8, 1, u) * Math.exp(-Math.max(0, after) / 1.8), e = easeOut(bloom);
+    return {
+      a: a, b: b, pe: pe,
+      H: (0.1 + 0.42 * e) * (1 + 0.3 * surge) * (1 + 0.05 * Math.sin(t * 0.8)),
+      heat: Math.min(1.15, Math.max(low, e) * (1 + 0.15 * surge))
+    };
   };
 
   function bez(a, b, c, d, s) {
@@ -819,13 +1053,23 @@
     if (rm) { t = 3.3; u = 1; after = 4; }
     var I = lk === 'gather' ? smooth(0.2, 0.75, u) : lk === 'rift' ? smooth(0.03, 0.4, u) : smooth(0, 0.55, u);
     var beat = Math.pow(0.5 + 0.5 * Math.sin(t * 1.7), 10);
-    var flick = 0.86 + 0.14 * noise(t * 6.3);
-    var cx = this.cx, cy = this.cy;
-    // The light the eye throws onto the dark around it.
+    // Under reduced motion nothing flickers: the eye glows, still.
+    var flick = rm ? 0.93 : 0.86 + 0.14 * noise(t * 6.3);
+    var cx = this.cx, cy = this.cy, s = this.shape(t, u, after);
+    // The light the eye and its fire throw onto the dark around them,
+    // wavering with the flames.
+    var lit = Math.max(I * 0.6, s.heat) * (rm ? 1 : 0.88 + 0.12 * qn(t * 3.1, 17.5));
     ctx.globalCompositeOperation = 'lighter';
-    stamp(ctx, this.sp.glow, cx, cy, W * 6.5, W * 5, 0, 0.16 * I * alpha);
-    stamp(ctx, this.sp.glow, cx, cy - W * 0.02, W * 3 * (1 + 0.1 * beat), W * 2.1 * (1 + 0.1 * beat), 0, (0.42 + 0.2 * beat) * I * flick * alpha);
+    stamp(ctx, this.sp.glow, cx, cy - W * 0.25 * s.heat, W * 7.5, W * 6, 0, 0.17 * lit * alpha);
+    stamp(ctx, this.sp.glow, cx, cy - W * 0.02, W * 3 * (1 + 0.1 * beat), W * 2.1 * (1 + 0.1 * beat), 0, (0.3 + 0.15 * beat) * I * flick * alpha);
     ctx.globalCompositeOperation = 'source-over';
+    // The fire burns behind the eye.
+    if (s.heat > 0.003) {
+      // The whole fire brightens and dims a little as it burns.
+      if (!rm) s.heat *= 0.92 + 0.08 * qn(t * 4.7, 3.3);
+      this.fire.render(t, s);
+      this.fire.draw(ctx, rm ? alpha * 0.8 : alpha, 0.4);
+    }
     this.paint(t, u, after, I, beat, flick);
     var box = this.box, dpr = this.dpr, X = (cx - this.bw / 2) * dpr, Y = (cy - this.bh * 0.6) * dpr;
     ctx.save();
@@ -845,17 +1089,23 @@
       }
     }
     ctx.restore();
-    // Embers lift off the eye as it burns.
-    var hO = W * 0.235, open = eyeOpen(lk, u);
-    var rate = lk === 'rift' && u < 0.36 ? 26 * smooth(0.05, 0.2, u) : 22 * I * (0.6 + 0.4 * open);
-    this.e.step(dt, rate * Math.max(0.5, W / 420), function () {
+    // A haze of heat veils the eye once it is open.
+    var hz = lk === 'gather' ? smooth(0.75, 1, u) : smooth(0.3, 1, eyeOpen(lk, u));
+    if (hz > 0) {
+      this.haze.render(t, s);
+      this.haze.draw(ctx, alpha * 0.3 * hz);
+    }
+    // Embers rise off the flames, drift on the hot air and fade.
+    var k = Math.max(0.5, W / 420);
+    var rate = lk === 'rift' && u < 0.36 ? 26 * smooth(0.05, 0.2, u) : 30 * s.heat;
+    this.e.step(dt, rate * k, function () {
       if (lk === 'rift' && u < 0.36) {
         var end = (Math.random() < 0.5 ? -1 : 1) * W * 0.5 * easeOut(smooth(0, 0.3, u));
         return ember(cx + end, cy, (Math.random() - 0.5) * 140, -(40 + Math.random() * 90), 0.8 + Math.random() * 1.4, 0.8 + Math.random() * 1.4, 30);
       }
-      var x = (Math.random() - 0.5) * W * (lk === 'gather' ? 0.5 : 0.8);
-      var lidY = lk === 'gather' ? -W * 0.2 : -hO * open * (1 - Math.pow(Math.abs(x) / (W * 0.5), 2));
-      return ember(cx + x, cy + lidY - Math.random() * W * 0.05, (Math.random() - 0.5) * 24, -(22 + Math.random() * 50), 1.6 + Math.random() * 2.6, 0.7 + Math.random() * 1.9, 5 + Math.random() * 8);
+      var x = (Math.random() * 2 - 1) * s.a * 1.05, prof = Math.max(0, 1 - x * x / (s.a * s.a));
+      var y = -s.b * Math.pow(prof, s.pe) - Math.random() * s.H * (0.3 + 0.7 * prof);
+      return ember(cx + x * W, cy + y * W, x * 50 * k + (Math.random() - 0.5) * 30, -(30 + Math.random() * 60) * k, 1.4 + Math.random() * 2.6, 0.7 + Math.random() * 1.8, (6 + Math.random() * 10) * k);
     });
     this.e.draw(ctx, alpha);
   };
@@ -881,35 +1131,16 @@
     var lh = hO * 1.12, lw = hw * 1.08;
     if (lk === 'gather' && lineP > 0) {
       // The eye's white is dark smoke inside the lines of light.
-      var haze = g.createRadialGradient(0, 0, R * 0.8, 0, 0, lw);
-      haze.addColorStop(0, css(this.dark, 0.9 * lineP));
-      haze.addColorStop(1, css(BLACK, 0.5 * lineP));
-      g.fillStyle = haze;
+      var smoke = g.createRadialGradient(0, 0, R * 0.8, 0, 0, lw);
+      smoke.addColorStop(0, css(this.dark, 0.95 * lineP));
+      smoke.addColorStop(1, css(BLACK, 0.85 * lineP));
+      g.fillStyle = smoke;
       trace(g, lidPoints(lw, lh, -1, 24, 0, t, 0), lidPoints(lw, lh, 1, 24, 0, t, 0));
       g.fill();
     }
 
-    // Flames behind the eye.
     g.globalCompositeOperation = 'lighter';
-    if (top) {
-      for (i = 2; i < top.length - 2; i += 2) {
-        var p = top[i], edge = 1 - Math.abs(p.s - 0.5) * 1.5;
-        var len = W * (0.07 + 0.22 * noise2(i * 0.9, t * 1.6)) * (0.3 + 0.7 * open) * I * edge;
-        var lean = (p.s - 0.5) * 0.9 + (noise(i * 3.1 + t * 0.9) - 0.5) * 0.6;
-        tongue(g, sp.flame, p.x, p.y + W * 0.012, len, W * 0.08 * (0.8 + 0.4 * noise(i * 1.7 + t * 2)), lean, 0.8 * flick);
-        if (lk === 'rift') {
-          var q = bottom[i];
-          tongue(g, sp.flame, q.x, q.y - W * 0.01, len * 0.5, W * 0.06, Math.PI - lean * 0.6, 0.6 * flick);
-        }
-      }
-    }
     if (lk === 'gather') {
-      // A ring of flame stands off the iris, taller on top where heat rises.
-      for (i = 0; i < 30; i++) {
-        var th = i / 30 * 6.283 + t * 0.05, up = 0.55 + 0.45 * (1 - Math.sin(th)) / 2;
-        var fl = W * (0.05 + 0.15 * noise2(i * 0.8, t * 1.5)) * ignite * up;
-        tongue(g, sp.flame, Math.cos(th) * R * 0.98, Math.sin(th) * R * 0.98, fl, W * 0.07, th + Math.PI / 2, 0.75 * flick);
-      }
       // Sparks spiral in out of the dark and become the ring.
       for (i = 0; i < this.sparks.length; i++) {
         var s = this.sparks[i], v = clamp01((u - s.d * 0.32) / 0.4);
@@ -951,9 +1182,6 @@
           for (var k = 1; k < pts.length; k++) g.lineTo(pts[k][0], pts[k][1]);
           g.stroke();
         });
-        for (i = 2; i < pts.length - 2; i += 2) {
-          tongue(g, sp.flame, pts[i][0], pts[i][1], W * (0.03 + 0.1 * noise2(i, t * 2)) * fade, W * 0.05, (noise(i + t) - 0.5) * 0.5, 0.7 * fade);
-        }
       }
     }
 
@@ -982,14 +1210,6 @@
       if (lineP > 0) {
         var lt = lidPoints(lw, lh, -1, 32, 0, t, 0), lb = lidPoints(lw, lh, 1, 32, 0, t, 0);
         var from = Math.round(16 - 16 * lineP), to = Math.round(16 + 16 * lineP);
-        // Fire runs along the new lines as they draw, tallest on top.
-        for (var k = from + 1; k < to; k += 2) {
-          var edge2 = 1 - Math.abs(lt[k].s - 0.5) * 1.6;
-          var fl2 = W * (0.05 + 0.17 * noise2(k * 0.9, t * 1.6)) * lineP * edge2;
-          var lean2 = (lt[k].s - 0.5) * 0.9 + (noise(k * 3.1 + t * 0.9) - 0.5) * 0.6;
-          tongue(g, sp.flame, lt[k].x, lt[k].y + W * 0.01, fl2, W * 0.07, lean2, 0.7 * flick);
-          tongue(g, sp.flame, lb[k].x, lb[k].y - W * 0.008, fl2 * 0.35, W * 0.05, Math.PI - lean2 * 0.5, 0.45 * flick);
-        }
         [[W * 0.07, css(col, 0.12 * lineP)], [W * 0.026, css(col, 0.35 * lineP)], [W * 0.008, css(hot, 0.95 * lineP * flick)]].forEach(function (st) {
           g.lineWidth = st[0];
           g.strokeStyle = st[1];
@@ -1251,7 +1471,7 @@
       bg.resize(w, h);
       var W = Math.min(w * 0.72, h * 0.5, 560);
       var cy = hasEye && scene.text.length ? h * 0.4 : h * 0.47;
-      layers.forEach(function (l) { if (l instanceof Eye) l.layout(w / 2, cy, W, dpr); else l.layout(w, h); });
+      layers.forEach(function (l) { if (l instanceof Eye) l.layout(w / 2, cy, W, dpr, w, h); else l.layout(w, h); });
       if (hasEye) {
         wordsEl.classList.remove('cs-cut-mid');
         wordsEl.style.top = Math.round(cy + W * 0.235 * 1.3 + Math.max(26, h * 0.05)) + 'px';

@@ -92,7 +92,7 @@ for (const [look, eye] of [['drift', 'gather'], ['eyelids', 'almond'], ['ink', '
 
 test('at phone width the scene fits, a tap closes it at the end, and stop() ends it quietly', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 390, height: 844 });
-  await start(pg, SCENE('drift', 'gather'));
+  await start(pg, SCENE('ink', 'rift'));
   await pg.waitForFunction(() => window.run.time() >= 2.05);
   const fit = await pg.evaluate(() => {
     const x = document.querySelector('.cs-cut-x').getBoundingClientRect(), w = document.querySelector('.cs-cut-words').getBoundingClientRect();
@@ -111,10 +111,38 @@ test('at phone width the scene fits, a tap closes it at the end, and stop() ends
 
 test('reduced motion crossfades: no film grain, no backdrop blur, and it still closes by itself', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 1280, height: 800 }, true);
-  await start(pg, { ...SCENE('drift', 'gather'), ending: { kind: 'auto', after: 0.2 } });
+  await start(pg, { ...SCENE('ink', 'rift'), ending: { kind: 'auto', after: 0.2 } });
   const calm = await pg.evaluate(() => ({ calm: document.querySelector('.cs-cut').classList.contains('cs-cut-calm'), grain: !!document.querySelector('.cs-cut-grain'), veil: !!document.querySelector('.cs-cut-veil') }));
   assert.deepEqual(calm, { calm: true, grain: false, veil: false });
   await pg.waitForFunction(() => window.shut.length === 1, null, { timeout: 6000 });
   assert.deepEqual(await pg.evaluate(() => window.shut), ['auto']);
   assert.deepEqual(errors, []);
 });
+
+// The fire blooms round the eye once it opens, rising above it, in every
+// look; with reduced motion it is there but holds still.
+for (const eye of ['rift', 'almond', 'gather']) {
+  test(`the ${eye} eye opens into fire that burns above it, and holds still for reduced motion`, { skip }, async (t) => {
+    for (const rm of [false, true]) {
+      const { pg, errors } = await open(t, { width: 1280, height: 800 }, rm);
+      await start(pg, { id: 'f', name: 'Fire', background: { kind: 'black' }, overlays: [{ kind: 'eye', at: 0, seconds: 0.8, params: { look: eye } }], ending: { kind: 'tap' } });
+      await pg.waitForFunction(() => window.run.time() >= 1.6);
+      // The eye sits at 47% of the height with no words; sample a band of
+      // the canvas above it for bright green, twice, a moment apart.
+      const band = () => pg.evaluate(() => {
+        const c = document.querySelector('.cs-cut-canvas'), g = c.getContext('2d');
+        const y = Math.round(c.height * 0.47 - c.width * 0.07 - c.height * 0.12), d = g.getImageData(Math.round(c.width * 0.35), y, Math.round(c.width * 0.3), 40).data;
+        let lit = 0, sum = 0;
+        for (let i = 0; i < d.length; i += 4) { sum += d[i + 1]; if (d[i + 1] > 120 && d[i + 1] > d[i] + 30) lit++; }
+        return { lit, sum };
+      });
+      const a = await band();
+      await pg.waitForTimeout(400);
+      const b = await band();
+      assert.ok(a.lit > 50, `${eye}${rm ? ' (reduced)' : ''}: fire above the eye, ${a.lit} lit pixels`);
+      if (rm) assert.equal(a.sum, b.sum, `${eye}: still under reduced motion`);
+      else assert.notEqual(a.sum, b.sum, `${eye}: the fire moves`);
+      assert.deepEqual(errors, []);
+    }
+  });
+}

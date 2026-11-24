@@ -640,15 +640,15 @@ func (*sceneKind) Doc() string {
 		"Leaving `look` out plays the first look named. Numbers outside their range are brought to the nearest allowed value and the review says so; an unknown kind, style or look, a look on a kind that has none, or a colour not written #rrggbb is refused. "+
 		"On update only the layers written change, and a list (`overlays`, `text`) written replaces that whole list; `rename_to` renames. `action: delete` removes the scene named by `name` and takes no other key. "+
 		"The AI never shows a scene to anyone: who sees it and when is the Director's live choice on the Cut scenes page, so a block naming players, `show`, `to` or a rewatch time is refused. "+
-		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: fall-asleep, seconds: 7, look: drift}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: gather}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
+		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: fall-asleep, seconds: 7, look: ink}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: rift}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
 		keys(BackgroundKinds), num(MinSeconds), num(MaxSeconds), lookList(BackgroundFallAsleep),
 		MaxOverlays, keys(OverlayKinds), num(MaxAt), num(MinSeconds), num(MaxSeconds), DefaultEyeColor, lookList(OverlayEye),
 		MaxTextLines, MaxSayChars, num(MaxAt), num(MinSeconds), num(MaxSeconds), keys(TextStyles),
 		num(MaxAfter))
 }
 
-// lookList names a kind's looks for the block's description: "`drift` (The
-// page drifts off), …".
+// lookList names a kind's looks for the block's description: "`ink` (Ink
+// in water), …".
 func lookList(kind string) string {
 	parts := make([]string, 0, len(Looks[kind]))
 	for _, l := range Looks[kind] {
