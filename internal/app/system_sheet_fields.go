@@ -2,13 +2,12 @@ package app
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strconv"
 
-	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -19,11 +18,10 @@ import (
 // them. A system adds its fields to the type its preset matches by name or
 // preset category, so a campaign whose heroes live in "Character" and whose
 // monsters live in a "Creature" made before the system was enabled never got
-// them. Those fields are also how GM-only values are kept from players, so
-// they belong on the category, not just in the page data Foundry writes.
-
-// systemSheetFieldsKey is the site setting that records the sweep ran.
-const systemSheetFieldsKey = "reconcile.system_sheet_fields_added"
+// them, and a field a later system version adds reaches no category unless
+// something offers it. Those fields are also how GM-only values are kept from
+// players, so they belong on the category, not just in the page data Foundry
+// writes.
 
 // campaignManifest is the campaign's game system: its custom upload, else its
 // chosen built-in; nil when it has none.
@@ -70,22 +68,41 @@ func presetTypeIDs(ctx context.Context, m *systems.SystemManifest, types []entit
 	return out
 }
 
-// addSystemSheetFieldsOnce adds every campaign's system sheet fields to the
-// categories they belong on, once per site. It only adds fields a category
-// lacks (by key), so a field the owner already has, or renamed, keeps its
-// label; afterwards an owner who deletes one keeps it deleted. The setting is
-// written only after every campaign was tried, so a crash repeats the sweep,
-// which is harmless.
-func addSystemSheetFieldsOnce(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, manifest campaignManifest, ents sheetFieldTypes, lists entities.CharacterListReader) (int, error) {
-	if v, err := st.Get(ctx, systemSheetFieldsKey); err == nil && v == "1" {
-		return 0, nil
-	} else if err != nil {
-		var ae *apperror.AppError
-		if !errors.As(err, &ae) || ae.Code != 404 {
-			return 0, fmt.Errorf("reading %s: %w", systemSheetFieldsKey, err)
-		}
-	}
+// sheetFieldsKeyPrefix starts the per-campaign site setting that records which
+// of its system's sheet fields have already been offered to its categories.
+const sheetFieldsKeyPrefix = "sheet_fields."
 
+// sheetFieldsRecord is what a campaign's setting holds: the system it was
+// taken for and, per preset slug, the field keys that system declared.
+type sheetFieldsRecord struct {
+	System  string              `json:"system"`
+	Presets map[string][]string `json:"presets"`
+}
+
+// readSheetFieldsRecord is the campaign's record, or nil when it has none or
+// it cannot be read: every field the categories lack is then offered.
+func readSheetFieldsRecord(ctx context.Context, st pageExtrasSettings, campaignID string) *sheetFieldsRecord {
+	v, err := st.Get(ctx, sheetFieldsKeyPrefix+campaignID)
+	if err != nil || v == "" {
+		return nil
+	}
+	var rec sheetFieldsRecord
+	if json.Unmarshal([]byte(v), &rec) != nil {
+		return nil
+	}
+	return &rec
+}
+
+// addSystemSheetFields gives each campaign's categories the sheet fields its
+// game system declares that they lack, and runs on every boot. A system
+// version can add a field however it arrives (an update in Admin, a restart
+// onto a newer package, a custom upload), and the pages already hold its
+// value from Foundry or the sheet, but the AI tools, the Customizer and the
+// player filter only see a field the category declares. Each campaign
+// records the keys it was offered, so a field the owner deleted is not
+// offered again; a field new to the system is. A campaign whose categories
+// could not all be updated is not recorded, so the next boot tries again.
+func addSystemSheetFields(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, manifest campaignManifest, ents sheetFieldTypes, lists entities.CharacterListReader) (int, error) {
 	added := 0
 	for page := 1; ; page++ {
 		list, total, err := camps.ListAll(ctx, campaigns.ListOptions{Page: page, PerPage: 100})
@@ -93,37 +110,86 @@ func addSystemSheetFieldsOnce(ctx context.Context, st pageExtrasSettings, camps 
 			return added, fmt.Errorf("listing campaigns: %w", err)
 		}
 		for _, c := range list {
-			m := manifest(ctx, c.ID)
-			if m == nil {
-				continue
-			}
-			types, err := ents.GetEntityTypes(ctx, c.ID)
-			if err != nil {
-				slog.Warn("system sheet fields: entity types unavailable",
-					slog.String("campaign_id", c.ID), slog.Any("error", err))
-				continue
-			}
-			for p, ids := range presetTypeIDs(ctx, m, types, lists, c.ID) {
-				declared := mapPresetFields(p.Fields)
-				for _, id := range ids {
-					n, err := ents.ReconcileEntityTypeFields(ctx, id, declared)
-					if err != nil {
-						slog.Warn("system sheet fields: adding failed",
-							slog.String("campaign_id", c.ID), slog.Int("entity_type_id", id), slog.Any("error", err))
-						continue
-					}
-					added += n
-				}
-			}
+			added += addCampaignSheetFields(ctx, st, c.ID, manifest(ctx, c.ID), ents, lists)
 		}
 		if len(list) == 0 || page*100 >= total {
 			break
 		}
 	}
-	if err := st.Set(ctx, systemSheetFieldsKey, "1"); err != nil {
-		return added, fmt.Errorf("recording %s: %w", systemSheetFieldsKey, err)
-	}
 	return added, nil
+}
+
+// addCampaignSheetFields is addSystemSheetFields for one campaign.
+func addCampaignSheetFields(ctx context.Context, st pageExtrasSettings, campaignID string, m *systems.SystemManifest, ents sheetFieldTypes, lists entities.CharacterListReader) int {
+	if m == nil {
+		return 0
+	}
+	types, err := ents.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		slog.Warn("system sheet fields: entity types unavailable",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return 0
+	}
+	// Keys offered under another system say nothing about this one's.
+	known := map[string]map[string]bool{}
+	if rec := readSheetFieldsRecord(ctx, st, campaignID); rec != nil && rec.System == m.ID {
+		for slug, keys := range rec.Presets {
+			set := map[string]bool{}
+			for _, k := range keys {
+				set[k] = true
+			}
+			known[slug] = set
+		}
+	}
+	added, failed := 0, false
+	for p, ids := range presetTypeIDs(ctx, m, types, lists, campaignID) {
+		var declared []entities.FieldDefinition
+		for _, f := range mapPresetFields(p.Fields) {
+			if !known[p.Slug][f.Key] {
+				declared = append(declared, f)
+			}
+		}
+		if len(declared) == 0 {
+			continue
+		}
+		for _, id := range ids {
+			n, err := ents.ReconcileEntityTypeFields(ctx, id, declared)
+			if err != nil {
+				failed = true
+				slog.Warn("system sheet fields: adding failed",
+					slog.String("campaign_id", campaignID), slog.Int("entity_type_id", id), slog.Any("error", err))
+				continue
+			}
+			added += n
+		}
+	}
+	if failed {
+		return added
+	}
+	rec := sheetFieldsRecord{System: m.ID, Presets: map[string][]string{}}
+	changed := false
+	for _, p := range m.EntityPresets {
+		keys := make([]string, 0, len(p.Fields))
+		for _, f := range p.Fields {
+			keys = append(keys, f.Key)
+			if !known[p.Slug][f.Key] {
+				changed = true
+			}
+		}
+		rec.Presets[p.Slug] = keys
+	}
+	if !changed {
+		return added
+	}
+	b, err := json.Marshal(rec)
+	if err == nil {
+		err = st.Set(ctx, sheetFieldsKeyPrefix+campaignID, string(b))
+	}
+	if err != nil {
+		slog.Warn("system sheet fields: recording failed",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+	}
+	return added
 }
 
 // aiFieldNotes tells AI Import's brief what the campaign's game system says

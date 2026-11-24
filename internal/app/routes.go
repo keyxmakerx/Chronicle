@@ -6161,10 +6161,10 @@ func (a *App) RegisterRoutes() {
 	cardLookSvc.SetEntries(systemEntrySvc)
 	campaignHandler.RegisterCustomizeSection(newHeroLooksSection(cardLookSvc))
 	// AI Import's brief carries the system's notes on sheet fields, and the
-	// categories the system's sheets live on get its fields once
+	// categories the system's sheets live on get the fields they lack
 	// (system_sheet_fields.go).
 	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService, choices: characterChoiceSvc, linked: foundryLinked}
-	if n, err := addSystemSheetFieldsOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService, characterListService); err != nil {
+	if n, err := addSystemSheetFields(context.Background(), settingsRepo, campaignService, manifestFor, entityService, characterListService); err != nil {
 		slog.Error("adding system sheet fields failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
@@ -7270,10 +7270,14 @@ func (a *App) RegisterRoutes() {
 			{Name: "homebrew-drawer", Scripts: []string{"js/homebrew_drawer.js"}},
 		},
 	})
+	// aiWorkshop is the Workshop's store for the AI tools; nil while the
+	// plugin is degraded.
+	var aiWorkshop homebrew.Service
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
 			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+		aiWorkshop = homebrewSvc
 		craftingRespites.homebrew = homebrewSvc
 		decksStory.bindHomebrew(homebrewSvc)
 		// A saved recipe is placed with the Customizer only while the
@@ -7425,6 +7429,7 @@ func (a *App) RegisterRoutes() {
 		Layers:          layersSvc,
 		Decks:           aiDecks,
 		Cutscenes:       aiCutscenes,
+		Workshop:        aiWorkshop,
 		Timelines:       aiTimelines,
 		LookDrafts:      customizeDrafts,
 		FieldSwitch: aiFieldSwitchAdapter{

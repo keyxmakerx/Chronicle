@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 type fakeSheetTypes struct {
 	types map[string][]entities.EntityType
 	added map[int][]string
+	fail  bool
 }
 
 func (f *fakeSheetTypes) GetEntityTypes(_ context.Context, id string) ([]entities.EntityType, error) {
@@ -19,6 +21,9 @@ func (f *fakeSheetTypes) GetEntityTypes(_ context.Context, id string) ([]entitie
 }
 
 func (f *fakeSheetTypes) ReconcileEntityTypeFields(_ context.Context, id int, declared []entities.FieldDefinition) (int, error) {
+	if f.fail {
+		return 0, errors.New("write failed")
+	}
 	for _, d := range declared {
 		f.added[id] = append(f.added[id], d.Key)
 	}
@@ -47,8 +52,10 @@ func sheetManifest() *systems.SystemManifest {
 }
 
 // The heroes' category and the monsters' category get the system's fields,
-// whatever they are called; a campaign without a system is left alone.
-func TestAddSystemSheetFieldsOnce(t *testing.T) {
+// whatever they are called; a campaign without a system is left alone. A
+// later boot offers only the fields a newer system version added, so one the
+// owner deleted stays deleted.
+func TestAddSystemSheetFields(t *testing.T) {
 	types := []entities.EntityType{
 		{ID: 1, Slug: "character", Name: "Character", Enabled: true},
 		{ID: 2, Slug: "creature", Name: "Creature", Enabled: true},
@@ -56,25 +63,65 @@ func TestAddSystemSheetFieldsOnce(t *testing.T) {
 	}
 	st := &fakeExtrasSettings{vals: map[string]string{}}
 	ents := &fakeSheetTypes{types: map[string][]entities.EntityType{"c1": types, "c2": types}, added: map[int][]string{}}
+	m := sheetManifest()
 	manifest := func(_ context.Context, id string) *systems.SystemManifest {
 		if id == "c1" {
-			return sheetManifest()
+			return m
 		}
 		return nil
 	}
-	n, err := addSystemSheetFieldsOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1", "c2"}}, manifest, ents, fakePCLists{"c1": {1}})
-	if err != nil {
-		t.Fatal(err)
+	run := func() int {
+		t.Helper()
+		ents.added = map[int][]string{}
+		n, err := addSystemSheetFields(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1", "c2"}}, manifest, ents, fakePCLists{"c1": {1}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
 	}
-	if n != 6 || strings.Join(ents.added[1], ",") != "class,stamina_max,wealth" || strings.Join(ents.added[2], ",") != "level,abilities_json,book_source" || ents.added[3] != nil {
+	if n := run(); n != 6 || strings.Join(ents.added[1], ",") != "class,stamina_max,wealth" || strings.Join(ents.added[2], ",") != "level,abilities_json,book_source" || ents.added[3] != nil {
 		t.Fatalf("added %d: %v", n, ents.added)
 	}
-	if st.vals[systemSheetFieldsKey] != "1" {
-		t.Error("run was not recorded")
+	if st.vals[sheetFieldsKeyPrefix+"c1"] == "" || st.vals[sheetFieldsKeyPrefix+"c2"] != "" {
+		t.Errorf("records: %v", st.vals)
 	}
-	ents.added = map[int][]string{}
-	if n, _ := addSystemSheetFieldsOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1"}}, manifest, ents, fakePCLists{"c1": {1}}); n != 0 || len(ents.added) != 0 {
-		t.Fatalf("second run added %d", n)
+	if n := run(); n != 0 || len(ents.added) != 0 {
+		t.Fatalf("second run added %d: %v", n, ents.added)
+	}
+
+	// A newer version adds a hero field: only it is offered.
+	m.EntityPresets[0].Fields = append(m.EntityPresets[0].Fields, systems.FieldDef{Key: "complication", Label: "Complication", Type: "string", FoundryCollection: "items"})
+	if n := run(); n != 1 || strings.Join(ents.added[1], ",") != "complication" || ents.added[2] != nil {
+		t.Fatalf("update added %d: %v", n, ents.added)
+	}
+	if n := run(); n != 0 {
+		t.Fatalf("after update added %d", n)
+	}
+
+	// A record taken under another system offers everything again.
+	m.ID = "other"
+	if n := run(); n != 7 {
+		t.Fatalf("new system added %d: %v", n, ents.added)
+	}
+}
+
+// A category that could not be updated leaves the campaign unrecorded, so
+// the next boot tries again.
+func TestAddSystemSheetFields_RetriesAfterFailure(t *testing.T) {
+	types := []entities.EntityType{{ID: 1, Slug: "character", Name: "Character", Enabled: true}}
+	st := &fakeExtrasSettings{vals: map[string]string{}}
+	ents := &fakeSheetTypes{types: map[string][]entities.EntityType{"c1": types}, added: map[int][]string{}, fail: true}
+	manifest := func(context.Context, string) *systems.SystemManifest { return sheetManifest() }
+	if _, err := addSystemSheetFields(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1"}}, manifest, ents, fakePCLists{"c1": {1}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.vals[sheetFieldsKeyPrefix+"c1"]; ok {
+		t.Fatal("a failed campaign was recorded")
+	}
+	ents.fail = false
+	n, _ := addSystemSheetFields(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1"}}, manifest, ents, fakePCLists{"c1": {1}})
+	if n != 3 || st.vals[sheetFieldsKeyPrefix+"c1"] == "" {
+		t.Fatalf("retry added %d, record %q", n, st.vals[sheetFieldsKeyPrefix+"c1"])
 	}
 }
 
