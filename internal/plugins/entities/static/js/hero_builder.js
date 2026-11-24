@@ -296,7 +296,29 @@
   };
   Builder.prototype.left = function (h) {
     var self = this;
-    return this.stepsFor(h).filter(function (s) { return !h.values[s.fieldKey] && !self.waitingName(h, s); });
+    return this.stepsFor(h).filter(function (s) { return self.short(h, s) && !self.waitingName(h, s); });
+  };
+  // A multi step keeps its picks in one value joined with ", ".
+  function multiNames(v) {
+    return String(v || '').split(',').map(function (n) { return n.trim(); }).filter(Boolean);
+  }
+  // How many picks a step takes for the hero: a multi step's allowance, else one.
+  Builder.prototype.multiMax = function (h, st) {
+    if (!st.multi) return 1;
+    var a = this.allowanceOf(h.values, st);
+    return a.known && a.count > 1 ? a.count : 1;
+  };
+  // Whether the hero's value at a step holds this entry's name.
+  Builder.prototype.holds = function (h, st, name) {
+    var cur = h && h.values[st.fieldKey];
+    if (!cur) return false;
+    if (!st.multi) return lower(cur) === lower(name);
+    return multiNames(cur).some(function (n) { return lower(n) === lower(name); });
+  };
+  // A step still to fill: empty, or a multi step short of its allowance.
+  Builder.prototype.short = function (h, st) {
+    var v = h.values[st.fieldKey];
+    return !v || (st.multi && multiNames(v).length < this.multiMax(h, st));
   };
   Builder.prototype.waiting = function (h) {
     var self = this;
@@ -382,7 +404,7 @@
 
   // --- The choose panel: every entry on one list, with its rules ---
   Builder.prototype.panelHtml = function () {
-    var p = this.panel;
+    var p = this.panel, self = this;
     if (!p) return '';
     var h = this.heroById(p.hero), st = this.stepByKey(p.key);
     if (!h || !st) return '';
@@ -405,11 +427,11 @@
         '<span class="hb-rg">' + (ask ? '' : fmtRange(nr, rangeOf(nr, at))) + '</span><b>' + esc(c.name) +
         (c.mine && c.status ? ' <span class="hb-tag">' + (c.status === 'sent' ? 'waiting for your ' + gm() : c.reviewNote ? 'changes asked' : 'draft') + '</span>'
           : c.source === 'campaign' ? ' <span class="hb-tag">this campaign</span>' : '') + '</b>' +
-        (ask ? '<span class="hb-ask">Ask first</span>' : cur && lower(cur) === lower(c.name) ? '<span class="hb-cur">chosen</span>' : '<span></span>') + '</button>';
+        (ask ? '<span class="hb-ask">Ask first</span>' : self.holds(h, st, c.name) ? '<span class="hb-cur">chosen</span>' : '<span></span>') + '</button>';
     }).join('') + (this.canOwn(st) ? '<button type="button" class="hb-opt hb-opt--own" data-own-new><span class="hb-rg"></span><b>Make your own ' + esc(lower(st.label)) + '</b><span class="hb-ask">Your ' + gm() + ' allows one</span></button>' : '') +
       '<p class="hb-none" data-hb-none hidden>Nothing on this list matches.</p></div>' + this.notHereHtml(rules);
     html += '<div class="hb-detail" data-hb-detail>' + this.detailHtml(st, fo, h) + '</div>';
-    var chosen = cur && lower(cur) === lower(fo.name);
+    var chosen = this.holds(h, st, fo.name);
     if (this.locked(h, st)) {
       html += '<div class="hb-pf"><p class="hb-note hb-locked">' + esc(cur) + ' stays ' + esc(possessive(h.name)) + ' ' + esc(lower(st.label)) +
         ' for now. Your ' + gm() + ' can open the picks sooner.</p></div>';
@@ -473,7 +495,7 @@
 
   Builder.prototype.detailHtml = function (st, c, h) {
     var props = c.properties || {};
-    var chosen = h && h.values[st.fieldKey] && lower(h.values[st.fieldKey]) === lower(c.name);
+    var chosen = this.holds(h, st, c.name);
     var facts = Object.keys(props).filter(function (k) { return !/_display$/.test(k) && isScalar(props[k]); }).slice(0, 6);
     var body = '';
     if (c.description) {
@@ -689,7 +711,7 @@
   Builder.prototype.focusEntry = function (i) {
     this.panel.focus = i;
     var aside = this.el.querySelector('.hb-panel'), st = this.stepByKey(this.panel.key), c = st.choices[i];
-    var h = this.heroById(this.panel.hero), cur = h.values[st.fieldKey], chosen = cur && lower(cur) === lower(c.name);
+    var h = this.heroById(this.panel.hero), chosen = this.holds(h, st, c.name);
     aside.querySelectorAll('.hb-opt').forEach(function (o) { o.setAttribute('aria-selected', String(+o.getAttribute('data-focus') === i)); });
     var d = aside.querySelector('[data-hb-detail]');
     d.innerHTML = this.detailHtml(st, c, h);
@@ -819,6 +841,24 @@
   Builder.prototype.pick = function (heroId, key, name, note) {
     var h = this.heroById(heroId), self = this, v = {};
     v[key] = name;
+    var ms = this.stepByKey(key, h);
+    if (ms && ms.multi) {
+      // A pick toggles; past the allowance the oldest pick makes room. The
+      // panel stays on the step until it holds all its picks.
+      var max = this.multiMax(h, ms), names = multiNames(h.values[key]), had = this.holds(h, ms, name);
+      names = had ? names.filter(function (n) { return lower(n) !== lower(name); }) : names.concat([name]);
+      while (names.length > max) names.shift();
+      v[key] = names.length ? names.join(', ') : null;
+      if (names.length < max) {
+        this.panel = { hero: h.id, key: key, focus: null };
+        var stay = this.apply(h, v);
+        this.redrawHero(h);
+        stay.then(function () { self.tick(h, key); }, function () {});
+        var more = max - names.length;
+        this.toast(note || (name + (had ? ' taken off. ' : ' chosen. ') + 'Choose ' + (more === 1 ? 'one more' : more + ' more') + '.'));
+        return stay;
+      }
+    }
     var pc = this.choiceByName(this.stepByKey(key, h), name);
     if (pc && pc.state === 'ask_first' && !note) return this.askPick(h, this.stepByKey(key, h), pc);
     // Choosing moves the panel on to the next blank, so filling in a hero is
@@ -983,7 +1023,7 @@
 
   Builder.prototype.currentIndex = function (st) {
     var h = this.heroById(this.panel.hero), cur = h.values[st.fieldKey];
-    for (var i = 0; i < st.choices.length; i++) if (cur && lower(st.choices[i].name) === lower(cur)) return i;
+    for (var i = 0; i < st.choices.length; i++) if (cur && this.holds(h, st, st.choices[i].name)) return i;
     return 0;
   };
 

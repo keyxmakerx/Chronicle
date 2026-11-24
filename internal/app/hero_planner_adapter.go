@@ -32,7 +32,7 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 		step := entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake,
 			Choices: heroChoices(cctx, s.Choices), Held: heroChoices(cctx, s.Excluded), Rules: heroStepRules(s.Rules),
-			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom),
+			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom), Multi: s.Multi,
 		}
 		out.Steps = append(out.Steps, step)
 	}
@@ -53,7 +53,7 @@ func (a heroPlannerAdapter) VisitorPlan(ctx context.Context, campaignID string) 
 	for _, s := range p.Steps {
 		out.Steps = append(out.Steps, entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(ctx, s.Choices),
-			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom),
+			Needed: s.Needed, Parent: s.Parent, CountFrom: heroCounts(s.CountFrom), Multi: s.Multi,
 		})
 	}
 	return out, nil

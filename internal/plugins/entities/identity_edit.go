@@ -3,6 +3,7 @@ package entities
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -116,6 +117,34 @@ type builderStep struct {
 	// parentsOf lists, by lower-case entry name, every parent that lists an
 	// entry of that name: two classes can share a subclass name.
 	parentsOf map[string]map[string]bool
+	// multi: the step holds several names joined with heroMultiSeparator,
+	// as many as counts give (one when none does).
+	multi  bool
+	counts []builderCount
+}
+
+// builderCount is one count_from of a multi step: the step whose value sets
+// the count, and the count each of its entries gives, by lower-case name.
+type builderCount struct {
+	step string
+	by   map[string]int
+}
+
+// multiMax is how many names a multi step takes for the hero as the patch
+// leaves it; a later count overrides an earlier one, as in heroAllowance.
+func (st builderStep) multiMax(entity *Entity, patch map[string]any) int {
+	n := 1
+	for _, c := range st.counts {
+		v, has := patch[c.step]
+		if !has && entity != nil {
+			v = entity.FieldsData[c.step]
+		}
+		name, _ := v.(string)
+		if x, ok := c.by[strings.ToLower(strings.TrimSpace(name))]; ok {
+			n = x
+		}
+	}
+	return max(n, 1)
 }
 
 // builderPicks is what the hero builder lets a player choose: for each step's
@@ -156,11 +185,35 @@ func builderPicksFrom(plan *HeroPlan) builderPicks {
 				names[k] = ch
 			}
 		}
-		bs := builderStep{names: names, parent: st.Parent, parentsOf: parentsOf}
+		bs := builderStep{names: names, parent: st.Parent, parentsOf: parentsOf, multi: st.Multi}
+		if st.Multi {
+			bs.counts = builderCounts(plan, st.CountFrom)
+		}
 		if st.Rules != nil {
 			bs.limited, bs.required = st.Rules.Limited, st.Rules.Required
 		}
 		out[st.FieldKey] = bs
+	}
+	return out
+}
+
+// builderCounts reads, for each count_from of a multi step, the count every
+// entry of the named step gives.
+func builderCounts(plan *HeroPlan, from []HeroCount) []builderCount {
+	var out []builderCount
+	for _, cf := range from {
+		c := builderCount{step: cf.Step, by: map[string]int{}}
+		for _, st := range plan.Steps {
+			if st.FieldKey != cf.Step {
+				continue
+			}
+			for _, ch := range append(append([]HeroChoice(nil), st.Choices...), st.Held...) {
+				if n, ok := ch.Properties[cf.Property].(float64); ok && n >= 0 {
+					c.by[strings.ToLower(strings.TrimSpace(ch.Name))] = int(n)
+				}
+			}
+		}
+		out = append(out, c)
 	}
 	return out
 }
@@ -251,6 +304,10 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 			if err := checkStepOptions(entity, patch, step, v, picks[step], refuseAsk); err != nil {
 				held[k] = err
 			}
+		case isStep && listed.multi:
+			if err := checkMultiValue(entity, patch, k, v, listed, refuseAsk); err != nil {
+				held[k] = err
+			}
 		default:
 			if err := checkOwnerValue(entity, k, v, listed, isStep, refuseAsk); err != nil {
 				held[k] = err
@@ -312,6 +369,67 @@ func checkOwnerValue(entity *Entity, k string, v any, step builderStep, isStep, 
 		}
 		if on && !ch.Held && ch.State == HeroChoiceStateAskFirst && refuseAsk && !unchanged {
 			return apperror.NewForbidden(askYourDirector(ch.Name))
+		}
+	}
+	return nil
+}
+
+// checkMultiValue checks a multi step's value: distinct names from the list,
+// no more than the hero's count, each under the hero's parent entry. A name
+// the hero already holds stays, as on a single step. An ask-first name goes
+// through only alone, where takeAskFirst turns it into a request; beside
+// other names the request would replace them all.
+func checkMultiValue(entity *Entity, patch map[string]any, k string, v any, step builderStep, refuseAsk bool) error {
+	if v == nil {
+		if step.required {
+			return apperror.NewBadRequest(fmt.Sprintf("%q can't be left empty; choose from the list", k))
+		}
+		return nil
+	}
+	val, ok := v.(string)
+	if !ok {
+		return apperror.NewBadRequest(fmt.Sprintf("%q takes text", k))
+	}
+	if utf8.RuneCountInString(val) > maxOwnerIdentityValue {
+		return apperror.NewBadRequest(fmt.Sprintf("%q is too long", k))
+	}
+	names := heroMultiNames(val)
+	if len(names) == 0 {
+		if step.required {
+			return apperror.NewBadRequest(fmt.Sprintf("%q can't be left empty; choose from the list", k))
+		}
+		return nil
+	}
+	if n := step.multiMax(entity, patch); len(names) > n {
+		return apperror.NewBadRequest(fmt.Sprintf("%q takes up to %d", k, n))
+	}
+	var current []string
+	if entity != nil {
+		cur, _ := entity.FieldsData[k].(string)
+		current = heroMultiNames(cur)
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		key := strings.ToLower(n)
+		if seen[key] {
+			return apperror.NewBadRequest(fmt.Sprintf("%q is chosen twice", n))
+		}
+		seen[key] = true
+		held := slices.ContainsFunc(current, func(c string) bool { return strings.EqualFold(c, n) })
+		ch, on := step.names[key]
+		if (!on || ch.Held) && !held {
+			return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", n, k))
+		}
+		if on && !ch.Held && ch.State == HeroChoiceStateAskFirst && !held {
+			if refuseAsk {
+				return apperror.NewForbidden(askYourDirector(ch.Name))
+			}
+			if len(names) > 1 {
+				return apperror.NewBadRequest(fmt.Sprintf("%q needs your Director's yes first; choose it on its own and add the rest after", ch.Name))
+			}
+		}
+		if err := checkParentFit(entity, patch, k, n, step); err != nil && !held {
+			return err
 		}
 	}
 	return nil

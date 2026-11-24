@@ -430,6 +430,11 @@ type FieldDef struct {
 	// FoundryCollection is set.
 	FoundryItemSingle bool `json:"foundry_item_single,omitempty"`
 
+	// FoundryItemJoin, with FoundryItemSingle, takes every matching item's
+	// name joined with MultiPickSeparator instead of the first: a field that
+	// holds several picks (a creator Multi step, such as two kits).
+	FoundryItemJoin bool `json:"foundry_item_join,omitempty"`
+
 	// Play declares that this field may be changed during play and how, so
 	// core never needs to know a system's field names. Optional; a block that
 	// fails validation is dropped at load (see sanitizePlayBlocks) and the
@@ -459,7 +464,15 @@ type CreatorDef struct {
 	// CountFrom says how many of this step the chosen parent entries allow,
 	// read from a number in their property. Later entries override earlier.
 	CountFrom []CreatorCount `json:"count_from,omitempty"`
+
+	// Multi lets the step take several picks: as many as CountFrom gives,
+	// one when nothing gives a number. The field keeps them joined with
+	// MultiPickSeparator, so a reader that wants one name still gets text.
+	Multi bool `json:"multi,omitempty"`
 }
+
+// MultiPickSeparator joins the picks of a Multi step in its field.
+const MultiPickSeparator = ", "
 
 // CreatorFrom names the step and the entry property a dependent step reads.
 type CreatorFrom struct {
@@ -758,6 +771,7 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 			FoundryItemType:   f.FoundryItemType,
 			FoundryItemFields: f.FoundryItemFields,
 			FoundryItemSingle: f.FoundryItemSingle,
+			FoundryItemJoin:   f.FoundryItemJoin,
 		}
 	}
 
@@ -804,6 +818,7 @@ type CharacterFieldExport struct {
 	FoundryItemType   []string          `json:"foundry_item_type,omitempty"`
 	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
 	FoundryItemSingle bool              `json:"foundry_item_single,omitempty"`
+	FoundryItemJoin   bool              `json:"foundry_item_join,omitempty"`
 }
 
 // CharacterFieldsForAPI builds the API response for character preset fields.
