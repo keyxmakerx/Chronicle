@@ -387,6 +387,15 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		craft.POST("/crafting/fights", cr.FightEnded, RequirePermission(PermWrite))
 	}
 
+	// Cut scenes: a member's showings still inside their rewatch window, for
+	// the Foundry GM client to play again for that player. Owner or co-DM
+	// only (checked in the handler); gated by the Cut scenes addon (slug
+	// supplied by the wiring).
+	if cs := api.cutscenes; cs != nil {
+		cuts := addonRoutes{cg, RequireAddonAPI(addonChecker, cs.addonSlug)}
+		cuts.GET("/cutscenes/showings", cs.Showings, RequirePermission(PermRead))
+	}
+
 	// Stashes: move items and money as a named campaign member. The group is
 	// gated by the stash feature's addon (slug supplied by the wiring), and the
 	// acting member's own rules apply to each call — see StashAPIService.

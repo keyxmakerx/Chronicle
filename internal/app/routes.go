@@ -43,6 +43,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
+	"github.com/keyxmakerx/chronicle/internal/plugins/cutscenes"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designs"
@@ -1392,6 +1393,7 @@ var navAppCatalog = []navAppDef{
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone, group: "goods", line: "Every item, and who carries it"},
 	{slug: "crafting", label: "Crafting", icon: "fa-flask", path: "/crafting", addons: []string{crafting.AddonSlug}, needs: []string{"armory"}, access: campaigns.NavAccessMember, group: "goods", line: "Recipes, benches and tools"},
 	{slug: "decks", label: "Card decks", icon: "fa-layer-group", path: "/decks/workshop", addons: []string{decks.AddonSlug}, access: campaigns.NavAccessDirector, group: "table", line: "Hero, party and event decks"},
+	{slug: "cutscenes", label: "Cut scenes", icon: "fa-film", path: "/cutscenes", addons: []string{cutscenes.AddonSlug}, access: campaigns.NavAccessDirector, group: "table", line: "Full-screen moments you show your players"},
 	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone, group: "world", line: "What happened, and when"},
 	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin, group: "table", line: "The rulebook and your house rules"},
 }
@@ -4894,8 +4896,21 @@ func (a *App) RegisterRoutes() {
 	// Codes a player types in Foundry to link their account without the GM.
 	syncHistoryHandler.SetLinkCodes(syncapi.NewLinkCodes())
 
+	// Cut scenes: built here, ahead of the sync API, which serves the Foundry
+	// GM client a member's showings. The live channel and the presence hub
+	// are bound once the websocket hub exists; the sync route is left out
+	// while the plugin is degraded.
+	cutsceneLive := &cutsceneLivePublisher{}
+	cutscenePresence := &cutscenePresenceAdapter{foundry: foundryPlayerRepo}
+	cutscenesSvc := cutscenes.NewService(cutscenes.NewRepository(a.DB), &cutsceneMembersAdapter{svc: campaignService},
+		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive))
+	var cutsceneSyncHandler *syncapi.CutsceneAPIHandler
+	if a.PluginHealth.IsHealthy(cutscenes.PluginSlug) {
+		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)
+	}
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -6699,6 +6714,7 @@ func (a *App) RegisterRoutes() {
 	// --- WebSocket Hub ---
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
+	cutscenePresence.hub = wsHub
 	go wsHub.Run()
 	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
 	// A player reads as in the world only while the world itself is connected.
@@ -7204,6 +7220,24 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("decks plugin degraded — card decks are not available")
 	}
 
+	// Cut scenes: full-screen moments the Director shows chosen players,
+	// behind the Cut scenes add-on. aiCutscenes stays nil while the plugin is
+	// degraded, so its AI part is left out then.
+	a.registerPlugin(PluginRegistration{
+		Slug:     cutscenes.PluginSlug,
+		StaticFS: echo.MustSubFS(cutscenes.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_workshop.js"}},
+		},
+	})
+	var aiCutscenes cutscenes.Service
+	if a.PluginHealth.IsHealthy(cutscenes.PluginSlug) {
+		aiCutscenes = cutscenesSvc
+		cutscenes.RegisterRoutes(e, cutscenes.NewHandler(cutscenesSvc), campaignService, authService, addonService)
+	} else {
+		slog.Warn("cutscenes plugin degraded — cut scenes are not available")
+	}
+
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
 	// store and its routes exist only while its table migrated. Features add
 	// their parts from their own files (workshop_parts.go), so this block is
@@ -7384,6 +7418,7 @@ func (a *App) RegisterRoutes() {
 		Designs:         aiDesigns,
 		Layers:          layersSvc,
 		Decks:           aiDecks,
+		Cutscenes:       aiCutscenes,
 		Timelines:       aiTimelines,
 		LookDrafts:      customizeDrafts,
 		FieldSwitch: aiFieldSwitchAdapter{
@@ -7408,6 +7443,7 @@ func (a *App) RegisterRoutes() {
 	// setting holder.bus here makes future mutations broadcast over WS.
 	entityNotesNotifier.bus = wsEventBus
 	decksLive.bus = wsEventBus
+	cutsceneLive.bus = wsEventBus
 
 	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
 	drawingService.SetEventPublisher(mapEvents)
@@ -7500,6 +7536,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
 	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
 	{Name: "page-live", Scripts: []string{"/static/js/widgets/page_live.js"}},
+	{Name: "cutscene-stage", Scripts: []string{"/static/js/widgets/cutscene_stage.js"}},
 	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
 	{Name: "entity_manager", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/entity_manager.js"}},
 	{Name: "tag-picker", Scripts: []string{"/static/js/chip_ink.js", "/static/js/widgets/tag_picker.js"}},

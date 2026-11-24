@@ -1,0 +1,237 @@
+package cutscenes
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// EditorPage is one scene's editor: three separate layers (Background, On
+// top, Words), the ending, and Save, Preview and Show to….
+templ EditorPage(p editorPage) {
+	@layouts.App(p.title() + " · Cut scenes") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/cutscenes/css/cutscenes.css") }/>
+		@layouts.AppFrame() {
+			<div class="csw" data-widget="cutscene-workshop" data-engine-src={ layouts.AssetURL(EngineSrc) }>
+				<p class="csw-crumb"><a href={ templ.SafeURL(p.base()) }>Cut scenes</a></p>
+				<h1 class="cb-title text-2xl font-bold text-fg csw-h1">{ p.title() }</h1>
+				if !p.New {
+					<ul class="csw-live" id={ liveID(p.Scene.ID) } aria-live="polite">
+						for _, s := range p.Live {
+							@ShownRow(p.CampaignID, s, false)
+						}
+					</ul>
+				}
+				@editorForm(p)
+				if !p.New {
+					<div class="csw-sheet-host" id={ sheetID(p.Scene.ID) }></div>
+				}
+			</div>
+		}
+	}
+}
+
+// editorForm is the scene's form; an HTMX save swaps it whole, so what is on
+// screen after Save is what was stored.
+templ editorForm(p editorPage) {
+	<form
+		class="csw-form"
+		method="post"
+		action={ templ.SafeURL(p.action()) }
+		hx-post={ p.action() }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-csw-form
+		data-preview-url={ p.base() + "/preview" }
+	>
+		<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
+		<div class="csw-field">
+			<label for="csw-name">Name</label>
+			<input class="csw-line csw-name" id="csw-name" name="name" type="text" required maxlength={ strconv.Itoa(MaxNameChars) } value={ p.Scene.Name } placeholder="The Eye Opens"/>
+		</div>
+		<section class="csw-layer" aria-labelledby="csw-bg-h">
+			<h2 class="csw-lab" id="csw-bg-h">Background <span class="csw-quiet">how the screen goes dark</span></h2>
+			<div class="csw-row-fields">
+				<div class="csw-field">
+					<label for="csw-bg-kind">Effect</label>
+					<select class="csw-select" id="csw-bg-kind" name="bg_kind" onchange={ bgKindOnChange() }>
+						for _, k := range BackgroundKinds {
+							<option value={ k.Key } selected?={ p.Scene.Background.Kind == k.Key }>{ k.Name }</option>
+						}
+					</select>
+				</div>
+				<div class="csw-field" data-csw-bg-look hidden?={ p.Scene.Background.Kind != BackgroundFallAsleep }>
+					<label for="csw-bg-look">Look</label>
+					<select class="csw-select" id="csw-bg-look" name="bg_look">
+						for _, l := range Looks[BackgroundFallAsleep] {
+							<option value={ l.Key } selected?={ LookKey(BackgroundFallAsleep, p.Scene.Background.Params.Look) == l.Key }>{ l.Name }</option>
+						}
+					</select>
+				</div>
+				<div class="csw-field">
+					<label for="csw-bg-sec">Takes (seconds)</label>
+					<input class="csw-line csw-num" id="csw-bg-sec" name="bg_seconds" type="number" inputmode="decimal" min="0.5" max="60" step="0.1" value={ num(p.Scene.Background.Seconds) }/>
+				</div>
+			</div>
+			<p class="csw-hint">The look changes how falling asleep is drawn. Black ignores the time.</p>
+		</section>
+		<section class="csw-layer" aria-labelledby="csw-ov-h">
+			<h2 class="csw-lab" id="csw-ov-h">On top <span class="csw-quiet">drawn over the background, in order</span></h2>
+			<div class="csw-rows" id="csw-ov-list">
+				for _, o := range p.Scene.Overlays {
+					@overlayRow(o)
+				}
+			</div>
+			<template id="csw-ov-tpl">
+				@overlayRow(Overlay{Kind: OverlayEye, At: 0, Seconds: DefaultSeconds, Params: Params{Color: DefaultEyeColor}})
+			</template>
+			<button type="button" class="quiet-word" onclick={ addRowOnClick("csw-ov-list", "csw-ov-tpl", MaxOverlays) }>Add a layer on top</button>
+		</section>
+		<section class="csw-layer" aria-labelledby="csw-tx-h">
+			<h2 class="csw-lab" id="csw-tx-h">Words <span class="csw-quiet">plain text, shown in order</span></h2>
+			<div class="csw-rows" id="csw-tx-list">
+				for _, t := range p.Scene.Text {
+					@textRow(t)
+				}
+			</div>
+			<template id="csw-tx-tpl">
+				@textRow(TextLine{Style: StylePlain, Seconds: DefaultSeconds})
+			</template>
+			<button type="button" class="quiet-word" onclick={ addRowOnClick("csw-tx-list", "csw-tx-tpl", MaxTextLines) }>Add words</button>
+		</section>
+		<fieldset class="csw-layer csw-ending">
+			<legend class="csw-lab">Ending</legend>
+			<div class="csw-choices">
+				for _, k := range EndingKinds {
+					<label class="csw-choice">
+						<input type="radio" name="end_kind" value={ k.Key } checked?={ p.Scene.Ending.Kind == k.Key || (p.Scene.Ending.Kind == "" && k.Key == EndingTap) } onchange={ endingOnChange() }/>
+						<span>{ k.Name }</span>
+					</label>
+				}
+				<span class="csw-field csw-after" data-csw-after hidden?={ p.Scene.Ending.Kind != EndingAuto }>
+					<label for="csw-after">seconds after the last layer</label>
+					<input class="csw-line csw-num" id="csw-after" name="end_after" type="number" inputmode="decimal" min="0" max="60" step="0.1" value={ afterValue(p.Scene.Ending) }/>
+				</span>
+			</div>
+			<p class="csw-hint">Players can always close it with Esc or the small close mark after 2 seconds.</p>
+		</fieldset>
+		<fieldset class="csw-screens">
+			<legend class="csw-flabel">Preview on</legend>
+			for i, z := range PreviewSizes {
+				<label class="csw-screen">
+					<input type="radio" name="csw_preview_size" value={ z.Key } checked?={ i == 0 } onchange={ previewSizeOnChange() }/>
+					<span>{ z.Name }</span>
+				</label>
+			}
+		</fieldset>
+		<div class="csw-preview" role="region" aria-label="Preview" data-csw-preview-box data-size={ PreviewSizes[0].Key } hidden></div>
+		<div class="csw-foot">
+			<button type="submit" class="btn-primary">
+				if p.New {
+					Make scene
+				} else {
+					Save
+				}
+			</button>
+			<button type="button" class="btn-secondary" data-csw-preview onclick={ previewOnClick() }>Preview</button>
+			if !p.New {
+				<button
+					type="button"
+					class="btn-secondary"
+					id={ showBtnID(p.Scene.ID) }
+					hx-get={ p.action() + "/show" }
+					hx-target={ "#" + sheetID(p.Scene.ID) }
+					hx-swap="innerHTML"
+				>Show to…</button>
+			}
+			if p.Saved {
+				<span class="csw-saved" role="status">Saved</span>
+			}
+			<p class="csw-err" role="alert" data-csw-err hidden?={ p.Error == "" }>{ p.Error }</p>
+			if !p.New {
+				<button
+					type="button"
+					class="quiet-word csw-danger"
+					hx-post={ p.action() + "/delete" }
+					hx-confirm="Delete this scene? People it was shown to can still watch it again until their time runs out."
+				>Delete scene</button>
+			}
+		</div>
+	</form>
+}
+
+// overlayRow is one layer on top. Its fields are same-named runs (see
+// SceneFromForm), so the row has no checkbox.
+templ overlayRow(o Overlay) {
+	<div class="csw-item" data-csw-row>
+		<label class="csw-field">
+			<span class="csw-flabel">Animation</span>
+			<select class="csw-select" name="ov_kind" onchange={ ovKindOnChange() }>
+				for _, k := range OverlayKinds {
+					<option value={ k.Key } selected?={ o.Kind == k.Key }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field" data-csw-ov-look hidden?={ o.Kind != OverlayEye }>
+			<span class="csw-flabel">Look</span>
+			<select class="csw-select" name="ov_look">
+				for _, l := range Looks[OverlayEye] {
+					<option value={ l.Key } selected?={ LookKey(OverlayEye, o.Params.Look) == l.Key }>{ l.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field" data-csw-ov-pupil hidden?={ o.Kind != OverlayEye }>
+			<span class="csw-flabel">Pupil</span>
+			<select class="csw-select" name="ov_pupil">
+				<option value="" selected?={ PupilKey(o.Params.Pupil) == "" }>The look's own</option>
+				for _, p := range Pupils {
+					<option value={ p.Key } selected?={ PupilKey(o.Params.Pupil) == p.Key }>{ p.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Starts at (s)</span>
+			<input class="csw-line csw-num" name="ov_at" type="number" inputmode="decimal" min="0" max="120" step="0.1" value={ num(o.At) }/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Builds over (s)</span>
+			<input class="csw-line csw-num" name="ov_seconds" type="number" inputmode="decimal" min="0.5" max="60" step="0.1" value={ num(o.Seconds) }/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Colour</span>
+			<input class="csw-color" name="ov_color" type="color" value={ colorOr(o.Params.Color, defaultColor(o.Kind)) }/>
+		</label>
+		<button type="button" class="csw-icon" aria-label="Remove this layer" title="Remove" onclick={ removeRowOnClick() }>
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+	</div>
+}
+
+// textRow is one line of words.
+templ textRow(t TextLine) {
+	<div class="csw-item csw-item-words" data-csw-row>
+		<label class="csw-field csw-say">
+			<span class="csw-flabel">Words</span>
+			<input class="csw-line" name="tx_say" type="text" maxlength={ strconv.Itoa(MaxSayChars) } value={ t.Say } placeholder="Something has noticed you."/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Starts at (s)</span>
+			<input class="csw-line csw-num" name="tx_at" type="number" inputmode="decimal" min="0" max="120" step="0.1" value={ num(t.At) }/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">On screen (s, 0 = to the end)</span>
+			<input class="csw-line csw-num" name="tx_seconds" type="number" inputmode="decimal" min="0" max="60" step="0.1" value={ num(t.Seconds) }/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Style</span>
+			<select class="csw-select" name="tx_style">
+				for _, k := range TextStyles {
+					<option value={ k.Key } selected?={ t.Style == k.Key }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<button type="button" class="csw-icon" aria-label="Remove these words" title="Remove" onclick={ removeRowOnClick() }>
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+	</div>
+}

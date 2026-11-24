@@ -1,0 +1,121 @@
+package cutscenes
+
+import (
+	"strconv"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// ListPage is the Cut scenes page: the campaign's scenes, each with what it
+// shows in a line and "Show to…", and the showings of late with who watched.
+templ ListPage(p listPage) {
+	@layouts.App("Cut scenes") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/cutscenes/css/cutscenes.css") }/>
+		@layouts.AppFrame() {
+			<div class="csw" data-widget="cutscene-workshop" data-engine-src={ layouts.AssetURL(EngineSrc) }>
+				@layouts.AppOpening(listOpening(p.CampaignID, len(p.Scenes) == 0)) {
+					if len(p.Scenes) > 0 {
+						<span class="csw-quiet">{ sceneCountWords(len(p.Scenes)) }</span>
+					}
+				}
+				if len(p.Scenes) > 0 {
+					<ul class="csw-scenes">
+						for _, s := range p.Scenes {
+							<li class="csw-scene">
+								<div class="csw-scene-main">
+									<a class="csw-scene-name" href={ templ.SafeURL(sceneURL(p.CampaignID, s.ID)) }>{ s.Name }</a>
+									<span class="csw-quiet">{ SceneWords(s) }</span>
+								</div>
+								<button
+									type="button"
+									class="quiet-word csw-scene-show"
+									id={ showBtnID(s.ID) }
+									hx-get={ sceneURL(p.CampaignID, s.ID) + "/show" }
+									hx-target={ "#" + sheetID(s.ID) }
+									hx-swap="innerHTML"
+								>Show to…</button>
+								<div class="csw-sheet-host" id={ sheetID(s.ID) }></div>
+								<ul class="csw-live" id={ liveID(s.ID) } aria-live="polite"></ul>
+							</li>
+						}
+					</ul>
+				}
+				if len(p.Recent) > 0 {
+					<section class="csw-recent" aria-labelledby="csw-recent-h">
+						<h2 class="csw-lab" id="csw-recent-h">Shown lately</h2>
+						@RecentList(p.CampaignID, p.Recent, p.Now)
+					</section>
+				}
+			</div>
+		}
+	}
+}
+
+// listOpening is the page's introduction, the same in the empty and the full
+// page.
+func listOpening(campaignID string, empty bool) layouts.AppOpeningData {
+	line := "A cut scene takes over your players' screens for a moment: the screen goes dark, something appears, a few words. You pick who sees it, and they can watch it again for a while."
+	return layouts.AppOpeningData{
+		Name:   "Cut scenes",
+		Empty:  empty,
+		Intros: layouts.AppIntros{Player: line, CoDM: line, Owner: line},
+		Action: &layouts.AppAction{Label: "New scene", Href: "/campaigns/" + campaignID + "/cutscenes/new"},
+	}
+}
+
+func sceneCountWords(n int) string {
+	if n == 1 {
+		return "1 scene"
+	}
+	return strconv.Itoa(n) + " scenes"
+}
+
+// RecentList is the Director's recent showings: the scene, who it was for and
+// who has watched it, and Stop while it may still be on screens.
+templ RecentList(campaignID string, list []ShowingReport, now time.Time) {
+	<ul class="csw-recent-list" id="csw-recent">
+		for _, r := range list {
+			@RecentRow(campaignID, r, now)
+		}
+	</ul>
+}
+
+// RecentRow is one recent showing. Stopping it from here swaps this same row
+// back in, marked stopped, so the scene's name and the watched ticks stay.
+templ RecentRow(campaignID string, r ShowingReport, now time.Time) {
+	<li class={ "csw-recent-row", templ.KV("is-stopped", r.Stopped) } id={ recentRowID(r.ShowingID) }>
+		<span class="csw-recent-name">{ r.Name }</span>
+		<span class="csw-quiet">
+			{ Ago(r.ShownAt, now) } to
+			for i, v := range r.Viewers {
+				if i > 0 {
+					{ ", " }
+				}
+				<span class={ "csw-who", templ.KV("is-watched", v.Watched) }>
+					{ v.Name }
+					if v.Watched {
+						<span class="sr-only">(watched)</span>
+						<i class="fa-solid fa-check csw-tick" aria-hidden="true"></i>
+					}
+				</span>
+			}
+		</span>
+		if w := Until(r.RewatchUntil, now); w != "" {
+			<span class="csw-quiet">· again for { w }</span>
+		} else {
+			<span class="csw-quiet">· window closed</span>
+		}
+		if r.Stopped {
+			<span class="csw-quiet csw-stopped">· stopped</span>
+		} else if r.CanStop {
+			<button
+				type="button"
+				class="quiet-word"
+				hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + r.ShowingID + "/stop?from=recent" }
+				hx-target={ "#" + recentRowID(r.ShowingID) }
+				hx-swap="outerHTML"
+			>Stop</button>
+		}
+	</li>
+}

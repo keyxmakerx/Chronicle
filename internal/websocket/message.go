@@ -193,6 +193,27 @@ const MsgDecksChanged MessageType = "decks.changed"
 // which card, is the Director's alone. Not a change-feed type.
 const MsgDecksMoment MessageType = "decks.moment"
 
+// Cut scene messages. None is a change-feed type: a reconnecting screen asks
+// GET /campaigns/:id/cutscenes/mine for what it may still play, so a scene is
+// never replayed from the feed.
+const (
+	// MsgCutsceneShow puts a showing on its viewers' browser screens. Payload
+	// {showingId, scene}; AllowedUsers is the viewers with StrictAudience, so
+	// the Director's own tabs are taken over only when they picked
+	// themselves, and Sources is the browser only.
+	MsgCutsceneShow MessageType = "cutscene.show"
+	// MsgCutsceneStop takes a showing off those screens. Payload {showingId};
+	// the same audience as the show.
+	MsgCutsceneStop MessageType = "cutscene.stop"
+	// MsgCutsceneFoundry hands a showing to the campaign's Foundry module,
+	// which plays it for the viewers' linked Foundry users. Payload
+	// {showingId, viewers, scene, rewatchUntil}; RequiresDM and Sources the
+	// module only, so no browser socket ever learns who else it was for.
+	MsgCutsceneFoundry MessageType = "cutscene.foundry"
+	// MsgCutsceneFoundryStop relays a stop to the module. Payload {showingId}.
+	MsgCutsceneFoundryStop MessageType = "cutscene.foundry_stop"
+)
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"
@@ -256,6 +277,26 @@ type Message struct {
 	// a publisher that forgets to choose an audience reaches the GM side
 	// only, never players' sockets.
 	Public bool `json:"-"`
+
+	// Sources narrows delivery to sockets of these kinds (BrowserSource,
+	// foundry_vtt.ModuleSource, ...): a cut scene is for a person's open
+	// page, and its Foundry relay is for the module alone. Empty means every
+	// kind, as before. It narrows only; the audience gates above still
+	// apply. `json:"-"`: server-side routing, never sent.
+	Sources []string `json:"-"`
+}
+
+// sourceAllowed reports whether a socket of this kind may receive m.
+func (m *Message) sourceAllowed(source string) bool {
+	if len(m.Sources) == 0 {
+		return true
+	}
+	for _, s := range m.Sources {
+		if s == source {
+			return true
+		}
+	}
+	return false
 }
 
 // dmOnlyByDefault reports whether m names no audience, so the hub treats it

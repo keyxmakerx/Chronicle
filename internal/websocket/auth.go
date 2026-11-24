@@ -49,6 +49,9 @@ type NotesGrantAuthenticator interface {
 	AuthenticateNotesGrantForWS(ctx context.Context, token string) (campaignID, userID string, err error)
 }
 
+// BrowserSource tags a socket opened by a signed-in Chronicle page.
+const BrowserSource = "browser"
+
 // NotesAppSource tags a socket opened with a notes grant. The hub sends such
 // a socket note events only, since the grant reaches nothing else.
 const NotesAppSource = "notes-app"
@@ -217,7 +220,7 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 
 	// expiresAt stays nil: a session has no key expiry to carry.
 	isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
-	return campaignID, userID, "browser", role, isDmGranted, nil, nil
+	return campaignID, userID, BrowserSource, role, isDmGranted, nil, nil
 }
 
 // lookupDmGranted resolves the user's IsDmGranted flag, swallowing lookup

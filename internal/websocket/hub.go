@@ -260,6 +260,12 @@ func (m *Message) DeliversTo(client *Client) bool {
 		return false
 	}
 
+	// A message for certain kinds of socket (a cut scene for browsers, its
+	// relay for the Foundry module) skips every other kind.
+	if !m.sourceAllowed(client.Source) {
+		return false
+	}
+
 	// Audience gate: messages flagged RequiresDM only go to
 	// clients with Owner role or IsDmGranted=true — server-side
 	// defense pairing with client-side visibility filters, so
@@ -345,7 +351,7 @@ func (h *Hub) BrowserUserIDs(campaignID string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, c := range h.clients[campaignID] {
-		if c.Source != "browser" || c.UserID == "" || seen[c.UserID] {
+		if c.Source != BrowserSource || c.UserID == "" || seen[c.UserID] {
 			continue
 		}
 		seen[c.UserID] = true
