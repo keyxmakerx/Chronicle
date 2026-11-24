@@ -375,6 +375,10 @@
           "type": "boolean",
           "description": "Project the first matching item as one object instead of a list."
         },
+        "foundry_item_join": {
+          "type": "boolean",
+          "description": "With foundry_item_single: every matching item's name, joined with \", \", for a field that holds several picks."
+        },
         "play": {
           "type": "object",
           "description": "Declares the field can be changed during play. Dropped at load if invalid; see docs/system-plugin-marketplace.md.",
@@ -466,7 +470,8 @@
                 },
                 "additionalProperties": false
               }
-            }
+            },
+            "multi": { "type": "boolean", "description": "The step takes as many picks as count_from gives (one when none does), stored joined with \", \"." }
           },
           "additionalProperties": false
         }

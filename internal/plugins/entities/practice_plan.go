@@ -24,7 +24,7 @@ func practicePlan(plan *HeroPlan) *HeroPlan {
 	}
 	out.SystemID, out.SystemName = plan.SystemID, plan.SystemName
 	for _, st := range plan.Steps {
-		step := HeroStep{FieldKey: st.FieldKey, Label: st.Label, CanMake: st.CanMake, Needed: st.Needed, Parent: st.Parent, CountFrom: st.CountFrom}
+		step := HeroStep{FieldKey: st.FieldKey, Label: st.Label, CanMake: st.CanMake, Needed: st.Needed, Parent: st.Parent, CountFrom: st.CountFrom, Multi: st.Multi}
 		step.Choices = make([]HeroChoice, 0, len(st.Choices)+len(st.Held))
 		step.Choices = append(step.Choices, st.Choices...)
 		for _, c := range st.Held {

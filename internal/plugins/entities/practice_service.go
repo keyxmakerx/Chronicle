@@ -170,7 +170,7 @@ func (s *practiceService) check(ctx context.Context, campaignID, makerID string,
 	}
 	picks := make(map[string]HeroPick, len(resolved))
 	for key, r := range resolved {
-		picks[key] = HeroPick{Name: r.choice.Name, Options: r.bought}
+		picks[key] = HeroPick{Name: r.value(), Options: r.bought}
 	}
 	return name, picks, nil
 }

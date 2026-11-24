@@ -469,7 +469,9 @@
   Creator.prototype.adopt = function (d) {
     var self = this;
     Object.keys(d.picks || {}).forEach(function (k) {
-      var c = self.stepByKey(k) && self.choice(k, d.picks[k].name);
+      var sk = self.stepByKey(k);
+      if (sk && sk.multi && typeof d.picks[k].name === 'string') { self.picks[k] = { name: d.picks[k].name, options: [] }; return; }
+      var c = sk && self.choice(k, d.picks[k].name);
       if (!c) return;
       // Keep only options the entry still offers, in case the system changed.
       var bl = buyList(c.properties), opts = Array.isArray(d.picks[k].options) ? d.picks[k].options : [];
@@ -563,7 +565,21 @@
   // The entry picked at a step, whatever its position, or null.
   Creator.prototype.pickedAt = function (key) {
     var p = this.picks[key];
-    return p && p.name ? this.choice(key, p.name) : null;
+    return p && p.name ? this.choice(key, this.namesOf(key)[0] || p.name) : null;
+  };
+  // A multi step keeps its picks in one name joined with ", ", as the
+  // hero's field stores them; every other step holds one name.
+  Creator.prototype.namesOf = function (key) {
+    var st = this.stepByKey(key), p = this.picks[key];
+    if (!p || !p.name) return [];
+    if (!st || !st.multi) return [p.name];
+    return String(p.name).split(',').map(function (n) { return n.trim(); }).filter(Boolean);
+  };
+  // How many picks a step takes: a multi step's allowance, else one.
+  Creator.prototype.multiMax = function (st) {
+    if (!st.multi) return 1;
+    var a = this.allowance(st);
+    return a.known && a.count > 1 ? a.count : 1;
   };
   // How many of this step the picked parent entries allow. A later countFrom
   // entry whose picked entry defines the number overrides an earlier one;
@@ -616,9 +632,18 @@
       this.plan.steps.forEach(function (st) {
         var p = self.picks[st.fieldKey];
         if (!p || !p.name) return;
+        var fit = function (c) { return c && !self.unused(st) && (!st.parent || (self.picks[st.parent] && self.picks[st.parent].name && lower(c.parent) === lower(self.picks[st.parent].name))); };
+        if (st.multi) {
+          var all = self.namesOf(st.fieldKey), kept = all.filter(function (n) { return fit(self.choice(st.fieldKey, n)); }).slice(0, self.multiMax(st));
+          if (kept.length === all.length) return;
+          gone.push(st.label);
+          again = true;
+          if (kept.length) { p.name = kept.join(', '); return; }
+          delete self.picks[st.fieldKey];
+          return;
+        }
         var c = self.choice(st.fieldKey, p.name);
-        var fits = c && !self.unused(st) && (!st.parent || (self.picks[st.parent] && self.picks[st.parent].name && lower(c.parent) === lower(self.picks[st.parent].name)));
-        if (fits) return;
+        if (fit(c)) return;
         delete self.picks[st.fieldKey];
         gone.push(st.label);
         again = true;
@@ -710,8 +735,7 @@
     return '<div class="hc-notes" aria-live="polite">' + window.ChronicleHeroRules.notes(st, this.waitName(st), 'hc') + '</div>';
   };
   Creator.prototype.isPicked = function (st, c) {
-    var p = this.picks[st.fieldKey];
-    return !!(p && p.name && lower(p.name) === lower(c.name));
+    return this.namesOf(st.fieldKey).some(function (n) { return lower(n) === lower(c.name); });
   };
   // The bought options for an entry: the pick's own list once it is chosen,
   // else a list kept here so what was bought is still there if it is chosen.
@@ -910,6 +934,7 @@
         '<h2 class="hc-disp" tabindex="-1">' + (state === 'unused' ? esc(cap(st.label)) + ': not used' : 'Choose your ' + esc(lower(st.label))) + '</h2></div>';
     }
     var al = this.allowance(st), alNote = al.known && al.count >= 1 && al.note ? ' ' + esc(al.note) : '';
+    if (this.multiMax(st) > 1) alNote += ' Choose ' + this.multiMax(st) + '.';
     var hint = this.locked(st) ? 'Everyone starts with this. Open it to read the whole entry.' : desk ? 'Pick a card to read its rules on the right.' : 'Tap a card to read its rules.';
     return '<div class="hc-intro">' + (desk ? '<div class="hc-of">Step ' + (this.step + 1) + ' of ' + this.stepCount() + ' · ' + n + ' to choose from</div>' : '') +
       '<h2 class="hc-disp" tabindex="-1">Choose your ' + esc(lower(st.label)) + '</h2><p>' + hint + alNote + '</p></div>' + this.notesHTML(st);
@@ -1829,6 +1854,18 @@
 
   // Makes an entry the step's pick, keeping what was bought from it.
   Creator.prototype.commitPick = function (st, c) {
+    if (st.multi) {
+      // A pick toggles; past the allowance the oldest pick makes room.
+      var names = this.namesOf(st.fieldKey), had = names.some(function (n) { return lower(n) === lower(c.name); });
+      names = had ? names.filter(function (n) { return lower(n) !== lower(c.name); }) : names.concat([c.name]);
+      while (names.length > this.multiMax(st)) names.shift();
+      if (names.length) this.picks[st.fieldKey] = { name: names.join(', '), options: [] };
+      else delete this.picks[st.fieldKey];
+      delete this.skipped[st.fieldKey];
+      this.cleared = this.scrub();
+      this.save();
+      return;
+    }
     var arr = this.mine(st.fieldKey, c);
     this.picks[st.fieldKey] = { name: c.name, options: arr };
     delete this.skipped[st.fieldKey];
@@ -1845,6 +1882,16 @@
     var c = l[i];
     if (!c || this.chooseDisabled(c, st)) return;
     this.commitPick(st, c);
+    // A multi step stays put until it holds all its picks.
+    var left = st.multi ? this.multiMax(st) - this.namesOf(st.fieldKey).length : 0;
+    if (left > 0) {
+      var sh0 = this.$('.hc-shead'); if (sh0) sh0.outerHTML = this.sheadHTML();
+      var cs0 = this.$('.hc-chips'); if (cs0) cs0.innerHTML = this.chipsHTML();
+      var rl0 = this.$('.hc-rail'); if (rl0) rl0.outerHTML = this.railHTML();
+      this.refreshList();
+      this.say((this.isPicked(st, c) ? c.name + ' chosen. ' : c.name + ' taken off. ') + 'Choose ' + (left === 1 ? 'one more' : left + ' more') + '.');
+      return;
+    }
     var nx = this.nextOpen(si);
     this.say(c.name + ' chosen' + (this.cleared && this.cleared.length ? '. Cleared ' + lower(this.cleared.join(' and ')) + ', which no longer fit.' : ''));
     this.root.querySelector('.hc-app').setAttribute('data-mo', motion());
