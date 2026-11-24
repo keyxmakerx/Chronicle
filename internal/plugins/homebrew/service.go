@@ -19,6 +19,10 @@ type Service interface {
 	Create(ctx context.Context, campaignID string, v Viewer, in RecipeInput) (*Recipe, error)
 	Update(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) (*Recipe, error)
 	Delete(ctx context.Context, campaignID, id string, v Viewer) error
+	// Check says, without writing, whether Create (id "") or Update (the
+	// recipe's id) would take in: the same checks, and every owner's word
+	// on its parts. The AI review shows its answer before the owner approves.
+	Check(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) error
 	// Placements lists where the Customizer has placed a recipe.
 	Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error)
 
@@ -249,6 +253,26 @@ func (s *service) Update(ctx context.Context, campaignID, id string, v Viewer, i
 		return nil, err
 	}
 	return s.Get(ctx, campaignID, id, v)
+}
+
+func (s *service) Check(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) error {
+	if err := requireDirector(v); err != nil {
+		return err
+	}
+	if id != "" {
+		if _, err := s.get(ctx, campaignID, id); err != nil {
+			return err
+		}
+	} else {
+		// A new recipe has no id yet; owners are asked about one that no
+		// recipe holds, as Create asks before it stores.
+		id = s.newID()
+	}
+	_, doc, err := s.check(ctx, campaignID, in)
+	if err != nil {
+		return err
+	}
+	return s.syncCheck(ctx, campaignID, id, doc)
 }
 
 func (s *service) Delete(ctx context.Context, campaignID, id string, v Viewer) error {

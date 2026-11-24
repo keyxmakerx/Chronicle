@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
+	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
@@ -85,6 +86,7 @@ type aiDeps struct {
 	Designs         records.DesignsAPI               // nil while the designs plugin is degraded
 	Decks           decks.Service                    // nil while the decks plugin is degraded
 	Cutscenes       cutscenes.Service                // nil while the cutscenes plugin is degraded
+	Workshop        homebrew.Service                 // nil while the homebrew plugin is degraded
 	Timelines       timeline.TimelineService         // nil while the timeline plugin is degraded
 	LookDrafts      campaigns.CustomizeDraftService  // the owner's unpublished Customize draft; nil in tests
 	SystemState     systemstate.Service              // nil while the system state plugin is degraded
@@ -100,6 +102,7 @@ type aiDeps struct {
 	LayersAI   *transformations.AILayers // the transformations' own AI part; nil without the plugin
 	DecksAI    *decks.AI                 // the card decks' own AI part; nil without the plugin
 	CutsAI     *cutscenes.AI             // the cut scenes' own AI part; nil without the plugin
+	WorkshopAI *homebrew.AI              // the Homebrew Workshop's own AI part; nil without the plugin
 	CalLookups *calendarai.Lookups       // the calendar's own lookups
 	PageMaps   records.PageMapsAPI       // nil while page blocks are degraded
 	Tests      records.TestsAPI          // nil without the Tests block
@@ -147,6 +150,9 @@ func newAIDeps(d aiDeps) *aiDeps {
 			on, err := addons.IsEnabledForCampaign(ctx, campaignID, cutscenes.AddonSlug)
 			return err == nil && on
 		})
+	}
+	if d.Workshop != nil {
+		d.WorkshopAI = homebrew.NewAI(d.Workshop)
 	}
 	d.CalLookups = &calendarai.Lookups{Cal: d.Calendar, Weather: d.Calendar, Rolls: d.Rolls, Tiers: d.Campaigns, Places: d.Places}
 	if d.PageBlocks != nil {
@@ -279,6 +285,9 @@ func (d *aiDeps) plugged() []aiplug.Lookup {
 	if d.CutsAI != nil {
 		out = append(out, d.CutsAI.Lookup())
 	}
+	if d.WorkshopAI != nil {
+		out = append(out, d.WorkshopAI)
+	}
 	if d.SystemState != nil {
 		out = append(out, systemstate.NewAIPageState(d.SystemState, aiEnabledSystem{systems: d.Systems}))
 	}
@@ -307,6 +316,16 @@ func init() {
 			return nil
 		}
 		return []records.Kind{d.LayersAI}
+	})
+}
+
+// Workshop recipes follow the transformations they can wire.
+func init() {
+	addAIKinds(186, func(d *aiDeps) []records.Kind {
+		if d.WorkshopAI == nil {
+			return nil
+		}
+		return []records.Kind{d.WorkshopAI}
 	})
 }
 
