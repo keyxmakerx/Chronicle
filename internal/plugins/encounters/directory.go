@@ -16,6 +16,16 @@ type PageDirectory interface {
 	// the campaign's character list, creatures from its creature types and
 	// NPC list. Sub-types are included.
 	PickerTypes(ctx context.Context, campaignID string) (PickerTypes, error)
+	// Heroes lists the hero pages of typeIDs the viewer may see, by name:
+	// a player has the page, it is marked playable, or it names a class or
+	// hero choice. NPCs on the same types are left out.
+	Heroes(ctx context.Context, campaignID string, typeIDs []int, v Viewer) ([]HeroPage, error)
+}
+
+// HeroPage is one page the hero picker offers.
+type HeroPage struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // PickerTypes is which page types the builder's pickers search, and the

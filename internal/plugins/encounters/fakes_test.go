@@ -93,6 +93,8 @@ type fakePages struct {
 	names    map[string]string
 	hidden   map[string]bool
 	readOnly map[string]bool
+	// heroErr makes Heroes fail.
+	heroErr error
 	// pickerErr makes PickerTypes fail.
 	pickerErr error
 }
@@ -136,6 +138,17 @@ func (f *fakePages) PickerTypes(_ context.Context, _ string) (PickerTypes, error
 		return PickerTypes{}, f.pickerErr
 	}
 	return PickerTypes{Heroes: []int{1, 13}, Creatures: []int{5, 10}}, nil
+}
+
+// Heroes offers two heroes on the listed types, or fails with heroErr.
+func (f *fakePages) Heroes(_ context.Context, _ string, typeIDs []int, _ Viewer) ([]HeroPage, error) {
+	if f.heroErr != nil {
+		return nil, f.heroErr
+	}
+	if len(typeIDs) == 0 {
+		return []HeroPage{}, nil
+	}
+	return []HeroPage{{ID: "hero1", Name: "Ash"}, {ID: "hero2", Name: "Bryn"}}, nil
 }
 
 // fakeResults is a ResultDirectory over a fixed set of tests in campaign c1.
