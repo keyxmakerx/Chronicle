@@ -11,6 +11,7 @@ which code comments still cite.
 |------|----------------|
 | `architecture.md` | System design, three-tier extension model, request flow, dependency graph |
 | `ui-standard.md` | How Chronicle looks and behaves: what is on a page, opening and closing, motion, look, sign-off. Read before any UI change |
+| `signoff-cards.md` | The one format for a card on the Sign-offs page. Read before asking the operator anything |
 | `conventions.md` | Code patterns, CI guards, security rules, cross-plugin import rules |
 | `decisions.md` | Architecture Decision Records. Append-only; code cites ADR numbers, so never renumber |
 | `tech-stack.md` | Technology versions and configs |
