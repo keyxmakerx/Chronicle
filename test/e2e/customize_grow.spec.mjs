@@ -191,7 +191,9 @@ test('Calm fades the picture in place; Off and reduced motion swap with no copy,
     await p.click('.czw-tile[data-czw-key="cat-1"]');
     assert.equal((await state(p)).ghosts, 0, m + ' makes a copy');
     await p.evaluate((h) => window.__swap(h), WORKSHOP('cat-1', false));
-    await p.waitForTimeout(80);
+    // Focus lands after the swap settles; a loaded runner can take longer
+    // than a fixed pause, so wait for it, bounded, then check.
+    await p.waitForFunction(() => document.activeElement && document.activeElement.className === 'czs-catname is-static', null, { timeout: 1500 }).catch(() => {});
     assert.equal((await state(p)).focus, 'czs-catname is-static', m + ': focus is not on the name');
     await close();
   }
