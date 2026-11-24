@@ -280,7 +280,7 @@ func (k FieldRuleKind) Export(ctx context.Context, campaignID string, a Actor) (
 			b.WriteString(" " + rowText(row) + " → " + row.Gives + ";")
 		}
 		for _, a := range rule.Adjust {
-			b.WriteString(fmt.Sprintf(" then %+g while %s %s %g;", a.Add, a.Tracker, a.Op, a.Value))
+			fmt.Fprintf(&b, " then %+g while %s %s %g;", a.Add, a.Tracker, a.Op, a.Value)
 		}
 		b.WriteString("\n")
 	}
