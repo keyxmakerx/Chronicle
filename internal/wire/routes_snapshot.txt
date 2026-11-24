@@ -1378,6 +1378,7 @@ DELETE	/campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key	session	sys
 PUT	/campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key	session	systems.(*SystemHandler).BookPageSave	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 POST	/campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key/keep	session	systems.(*SystemHandler).BookPageKeep	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/edit	session	systems.(*SystemHandler).BookEditPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/book/entry/:cat/:entry	session	systems.(*SystemHandler).BookEntryAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/export	session	systems.(*SystemHandler).BookExport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/files/:name	session	systems.(*SystemHandler).BookFileAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/find	session	systems.(*SystemHandler).BookFindAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
