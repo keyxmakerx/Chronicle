@@ -42,8 +42,16 @@
     }
     var sub = esc(d.typeName || '');
     if (d.typeLabel) sub += ' · ' + esc(d.typeLabel);
+    // The token is a picture of its own, made from the portrait in the token
+    // maker (boot.js opens it from [data-token-maker]) and saved to the
+    // page's token field, so Foundry gets a token and a portrait.
+    var token = (p && p.endpoint && p.token && d.image)
+      ? '<button type="button" class="fx-chip" data-token-maker data-campaign-id="' + esc(d.campaignId || '') +
+        '" data-entity-id="' + esc(d.entityId || '') + '" data-name="' + esc(d.name || '') + '" data-art="' + esc(d.image) +
+        '" aria-label="' + esc('Make token for ' + (d.name || '')) + '"><i class="fa-solid fa-chess-pawn" aria-hidden="true"></i> Make token</button>'
+      : '';
     var inner = portrait +
-      '<div class="cs-ch__id">' + (sub ? '<div class="cs-ch__sub">' + sub + '</div>' : '') + '</div>';
+      '<div class="cs-ch__id">' + (sub ? '<div class="cs-ch__sub">' + sub + '</div>' : '') + token + '</div>';
     if (!(p && p.endpoint)) return '<div class="cs-ch__head">' + inner + '</div>';
     var head = document.createElement('div');
     head.className = 'cs-ch__head cs-ch__head--pick';

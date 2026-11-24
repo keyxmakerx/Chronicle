@@ -47,17 +47,23 @@ type characterSurfacePicture struct {
 	Endpoint  string `json:"endpoint"`
 	UploadURL string `json:"uploadUrl"`
 	CSRF      string `json:"csrf"`
+	// Token is set when the page keeps a token picture apart from the
+	// portrait, so the same viewer can make it in the token maker.
+	Token bool `json:"token,omitempty"`
 }
 
 // characterSurfaceSeed is the entity payload the client box renderers read.
 type characterSurfaceSeed struct {
-	Name      string                    `json:"name"`
-	Image     string                    `json:"image,omitempty"`
-	Picture   *characterSurfacePicture  `json:"picture,omitempty"`
-	TypeName  string                    `json:"typeName,omitempty"`
-	TypeLabel string                    `json:"typeLabel,omitempty"`
-	Sections  []characterSurfaceSection `json:"sections"`
-	Editor    *characterSurfaceEditor   `json:"editor,omitempty"`
+	Name    string                   `json:"name"`
+	Image   string                   `json:"image,omitempty"`
+	Picture *characterSurfacePicture `json:"picture,omitempty"`
+	// CampaignID and EntityID ride along with Picture for the token maker.
+	CampaignID string                    `json:"campaignId,omitempty"`
+	EntityID   string                    `json:"entityId,omitempty"`
+	TypeName   string                    `json:"typeName,omitempty"`
+	TypeLabel  string                    `json:"typeLabel,omitempty"`
+	Sections   []characterSurfaceSection `json:"sections"`
+	Editor     *characterSurfaceEditor   `json:"editor,omitempty"`
 }
 
 // CharacterSurfaceSchemaJSON builds the dynamic-surface mount schema (with the
@@ -97,7 +103,9 @@ func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaign
 		seed.Image = layouts.MediaURL(context.Background(), *entity.ImagePath)
 	}
 	if pictureEndpoint != "" {
-		seed.Picture = &characterSurfacePicture{Endpoint: pictureEndpoint, UploadURL: "/media/upload", CSRF: csrfToken}
+		seed.Picture = &characterSurfacePicture{Endpoint: pictureEndpoint, UploadURL: "/media/upload", CSRF: csrfToken,
+			Token: showsTokenMaker(entityType, entity)}
+		seed.CampaignID, seed.EntityID = campaignID, entity.ID
 	}
 	if entity.TypeLabel != nil {
 		seed.TypeLabel = *entity.TypeLabel

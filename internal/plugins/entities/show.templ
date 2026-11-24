@@ -386,7 +386,8 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 // who claimed the page, sees a "Change" chip on the picture itself, in view on
 // touch screens too, which opens the file picker; image_upload.js adds the
 // progress bar and the amber error bar. Everyone else sees the picture alone.
-// The token maker stays with Scribes.
+// The token maker comes with the same right: a claimed owner makes their
+// own token, which the fields API checks is a picture.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
 	// A viewer who can't add a picture gets no empty frame: on a phone it pushed
 	// the stats they came for a screen further down.
@@ -407,7 +408,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *Enti
 							alt={ entity.Name }
 							class="w-full h-56 object-cover"
 						/>
-						if cc.MemberRole >= campaigns.RoleScribe && showsTokenMaker(entityType, entity) {
+						if showsTokenMaker(entityType, entity) {
 							<div class="fx-chips">
 								<button
 									type="button"
