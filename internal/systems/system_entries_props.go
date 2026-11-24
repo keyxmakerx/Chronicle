@@ -86,6 +86,9 @@ func validateEntryProperties(p, stored map[string]any) error {
 			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number, yes/no or a list of named items.", k))
 		}
 	}
+	if err := validateHiddenList(p); err != nil {
+		return err
+	}
 	raw, err := json.Marshal(p)
 	if err != nil || len(raw) > maxEntryPropsBytes {
 		return apperror.NewValidation("The details are too large.")

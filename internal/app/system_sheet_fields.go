@@ -218,7 +218,7 @@ func pickListNote(step systems.CreatorStep) string {
 	if step.Parent != "" {
 		note += "; it must belong to the chosen `" + step.Parent + "`"
 	}
-	return note
+	return note + ". The field holds the name only: a homemade one is made first with `kind: system-entry`, `entry: " + step.FieldKey + "`"
 }
 
 // pickLists is the character fields that have a pick list, by key.
@@ -240,12 +240,32 @@ func (n aiFieldNotes) pickLists(ctx context.Context, campaignID string) map[stri
 
 // foundryKeeps reports whether Foundry is where a character field's value
 // comes from: it is read off the actor's items, or never written back. A
-// value written here would be replaced at the next sync.
+// value written here would be replaced at the next sync. Identity picks
+// (ancestry, kit, complication...) are the exception: the Foundry module
+// swaps the actor's item to match Chronicle's pick.
 func foundryKeeps(f systems.FieldDef) bool {
 	if f.FoundryCollection != "" {
-		return true
+		return !syncsBackToFoundry(f)
 	}
 	return f.FoundryPath != "" && f.FoundryWritable != nil && !*f.FoundryWritable
+}
+
+// syncsBackToFoundry mirrors the Foundry module's identity-field rule: a
+// single item of one concrete type, other than class and subclass (they
+// drive the system's advancement) and the values read off the class item.
+func syncsBackToFoundry(f systems.FieldDef) bool {
+	if f.FoundryCollection == "" || !f.FoundryItemSingle || len(f.FoundryItemType) != 1 {
+		return false
+	}
+	switch f.Key {
+	case "level", "heroic_resource_name":
+		return false
+	}
+	switch f.FoundryItemType[0] {
+	case "", "class", "subclass":
+		return false
+	}
+	return true
 }
 
 // FieldNotes is the system's notes on t's fields by key, or nil.
@@ -308,6 +328,12 @@ func (n aiFieldNotes) FieldNotes(ctx context.Context, campaignID string, t entit
 						note += ". "
 					}
 					note += pickListNote(st)
+				}
+				if f.FoundryItemJoin && !kept && !pulled {
+					if note != "" {
+						note += ". "
+					}
+					note += "Two or more picks are one text, comma-separated (`A, B`), not a list"
 				}
 				if r := rangeNote(f); r != "" && !pulled {
 					if note != "" {

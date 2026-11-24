@@ -56,7 +56,7 @@ func (h *APIHandler) ListSystemEntries(c *echo.Context) error {
 		if e.Visibility != systems.EntryVisibilityEveryone {
 			continue
 		}
-		props := e.Properties
+		props := systems.PlayerProperties(e.Properties)
 		if props == nil {
 			props = map[string]any{}
 		}

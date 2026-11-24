@@ -300,3 +300,31 @@ func TestCheckFields_Bounds(t *testing.T) {
 		})
 	}
 }
+
+// Two picks for one text field (two kits) are saved as the comma-separated
+// text the sheets split, never as JSON; a declared list field keeps JSON.
+func TestCheckFields_WordListInTextField(t *testing.T) {
+	defs := []entities.FieldDefinition{
+		{Key: "kit", Label: "Kit", Type: "text"},
+		{Key: "abilities_json", Label: "Abilities", Type: "textarea", JSONList: true},
+	}
+	tests := []struct {
+		name string
+		in   any
+		key  string
+		want string
+	}{
+		{"two kits", []any{"Shining Armor", " Spellsword "}, "kit", "Shining Armor, Spellsword"},
+		{"one kit in a list", []any{"Mountain"}, "kit", "Mountain"},
+		{"objects stay JSON", []any{map[string]any{"name": "Bite"}}, "kit", `[{"name":"Bite"}]`},
+		{"a list field keeps JSON", []any{"Bite"}, "abilities_json", `["Bite"]`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, problems := CheckFields(defs, map[string]any{tc.key: tc.in})
+			if len(problems) > 0 || got[tc.key] != tc.want {
+				t.Fatalf("got %#v, %q; want %q", got[tc.key], problems, tc.want)
+			}
+		})
+	}
+}

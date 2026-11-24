@@ -255,6 +255,7 @@ func (s *systemEntryService) visible(ctx context.Context, campaignID string, ent
 				}
 			}
 			e.Description = sanitize.StripSecretsHTML(e.Description)
+			e.Properties = PlayerProperties(e.Properties)
 			out = append(out, e)
 			continue
 		}
@@ -286,6 +287,7 @@ func (s *systemEntryService) visible(ctx context.Context, campaignID string, ent
 			continue
 		}
 		e.Description = sanitize.StripSecretsHTML(e.Description)
+		e.Properties = PlayerProperties(e.Properties)
 		out = append(out, e)
 	}
 	return out, nil
@@ -402,6 +404,9 @@ func (s *systemEntryService) prepareCreate(ctx context.Context, campaignID strin
 	}
 	if grant != nil {
 		holdBudget(e.Properties, grant.Budget)
+	}
+	if !actor.IsDirector {
+		e.Properties = keepHidden(e.Properties, nil)
 	}
 	if err := normalizeEntry(e); err != nil {
 		return nil, nil, err
@@ -586,6 +591,9 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	}
 	if grant != nil {
 		holdBudget(e.Properties, grant.Budget)
+	}
+	if !actor.IsDirector {
+		e.Properties = keepHidden(e.Properties, stored)
 	}
 	if err := normalizeEntryCarrying(e, stored); err != nil {
 		return nil, err
