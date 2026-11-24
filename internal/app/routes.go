@@ -5052,6 +5052,7 @@ func (a *App) RegisterRoutes() {
 	})
 	// The account page lists those grants beside the person's browsers.
 	authHandler.SetConnectedApps(&connectedNoteApps{grants: noteGrants, campaigns: campaignService})
+	authHandler.SetCampaignLister(campaigns.AccountCampaignLister{Service: campaignService})
 	// Deleting your own account: the campaign side runs first and refuses
 	// while the person still owns a campaign; once the account is emptied,
 	// the rest of what other plugins hold about the person goes.
@@ -7528,6 +7529,7 @@ func (a *App) RegisterRoutes() {
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
 	{Name: "campaign-leave", Scripts: []string{"/static/js/widgets/campaign_leave.js"}},
+	{Name: "account-campaign", Scripts: []string{"/static/js/widgets/account_campaign.js"}},
 	{Name: "invitation-time", Scripts: []string{"/static/js/widgets/invitation_time.js"}},
 	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},

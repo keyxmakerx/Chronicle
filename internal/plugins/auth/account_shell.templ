@@ -1,0 +1,84 @@
+// account_shell.templ is the frame every Account settings page shares: a rail
+// of the account's own sections ("Everywhere") and of each campaign the
+// person belongs to ("Your campaigns"), with the page's settings beside it.
+
+package auth
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// AccountShell lays out an Account settings page. active is "" on the
+// account page itself, or the id of the campaign whose page this is.
+templ AccountShell(list CampaignSettingsList, active string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/account_shell.css") }/>
+	<div class="acct">
+		@accountRail(list, active)
+		<div class="acct-main">
+			{ children... }
+		</div>
+	</div>
+}
+
+// accountSections are the account page's own sections, in page order, as
+// the rail lists them: anchor and label.
+var accountSections = [][2]string{
+	{"profile", "Profile"},
+	{"email", "Email and password"},
+	{"my-view", "My view"},
+	{"timezone", "Timezone"},
+	{"two-factor", "Sign-in and security"},
+	{"notifications", "Notifications"},
+	{"delete-account", "Delete account"},
+}
+
+// accountSectionHref points at a section of the account page: a jump within
+// the page when already on it, else the page and the section.
+func accountSectionHref(active, anchor string) templ.SafeURL {
+	if active == "" {
+		return templ.SafeURL("#" + anchor)
+	}
+	return templ.SafeURL("/account#" + anchor)
+}
+
+templ accountRail(list CampaignSettingsList, active string) {
+	<nav
+		class="acct-rail"
+		aria-label="Account settings"
+		if active != "" {
+			data-on-campaign
+		}
+	>
+		<a class="acct-back acct-more" href="/account">All account settings</a>
+		<p class="acct-tab acct-every" id="acct-everywhere">Everywhere</p>
+		<ul class="acct-list acct-every" aria-labelledby="acct-everywhere">
+			for _, s := range accountSections {
+				<li><a class="acct-item" href={ accountSectionHref(active, s[0]) }>{ s[1] }</a></li>
+			}
+		</ul>
+		<p class="acct-tab" id="acct-campaigns">Your campaigns</p>
+		if len(list.Campaigns) == 0 {
+			<p class="acct-none">Campaigns you join show here, each with the settings that change only what you see there.</p>
+		} else {
+			<ul class="acct-list" aria-labelledby="acct-campaigns">
+				for _, cp := range list.Campaigns {
+					<li>
+						<a
+							class="acct-item"
+							href={ templ.SafeURL("/account/campaigns/" + cp.ID) }
+							if cp.ID == active {
+								aria-current="page"
+							}
+						>
+							{ cp.Name }
+							if cp.Archived {
+								<small>Archived</small>
+							}
+						</a>
+					</li>
+				}
+			</ul>
+			if list.More > 0 {
+				<a class="acct-more" href="/campaigns" hx-boost="false">{ moreCampaignsText(list.More) }</a>
+			}
+		}
+	</nav>
+}
