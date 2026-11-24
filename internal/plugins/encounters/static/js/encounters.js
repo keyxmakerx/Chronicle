@@ -595,7 +595,7 @@
       var S = {
         el: el, cfg: cfg, id: 'enc' + (++mounted), list: [], canEdit: false,
         open: null, draft: null, saving: Promise.resolve(), timer: null, status: '', statusErr: false,
-        heroes: null, heroTypes: [], creatureTypes: null, drawer: null, opener: null, formsMap: null, formsKey: '',
+        heroes: null, creatureTypes: null, drawer: null, opener: null, formsMap: null, formsKey: '',
         statBlocks: [], folds: {}
       };
       el.classList.add('enc');
@@ -620,7 +620,7 @@
     return api(S, 'GET', base(S) + '/pages/' + encodeURIComponent(S.cfg.entityId) + '/encounters').then(function (v) {
       S.list = ((v && v.encounters) || []).map(normalise);
       S.canEdit = !!(v && v.canEdit);
-      S.heroTypes = pickTypes(v && v.heroTypeIds);
+      S.heroes = heroList(v && v.heroes);
       S.creatureTypes = pickTypes(v && v.creatureTypeIds);
       S.statBlocks = Array.isArray(v && v.statBlocks) ? v.statBlocks : [];
       S.players = Array.isArray(v && v.players) ? v.players : [];
@@ -730,7 +730,6 @@
     if (name) { name.focus(); if (fresh) name.select(); }
     // The panel slides in on the next frame so the browser sees it move.
     requestAnimationFrame(function () { root.classList.add('open'); });
-    loadPickers(S);
     loadTests(S);
     S.formsMap = null; S.formsKey = '';
     askForms(S);
@@ -871,28 +870,14 @@
     } catch (err) { /* a system panel failing never breaks the builder */ }
   }
 
-  // loadPickers fetches the hero pages once per block, from the categories
-  // the page list named. A failure leaves the hero picker empty; typing a
-  // creature's name still works.
-  function loadPickers(S) {
-    if (S.heroes) return;
-    Promise.all((S.heroTypes || []).map(function (tid) {
-      return api(S, 'GET', apiBase(S) + '/entities?type_id=' + tid + '&per_page=100');
-    })).then(function (pages) {
-      // A category's list can include its sub-categories' pages, which the
-      // server also names, so a page may arrive twice.
-      var all = [], seen = {};
-      (pages || []).forEach(function (env) {
-        ((env && env.data) || []).forEach(function (p) {
-          if (!seen[p.id]) { seen[p.id] = true; all.push({ id: p.id, name: p.name }); }
-        });
-      });
-      S.heroes = all.sort(function (a, b) { return a.name.localeCompare(b.name); });
-      if (S.drawer) drawDrawer(S);
-    }).catch(function () {
-      S.heroes = S.heroes || []; S.creatureTypes = S.creatureTypes || [];
-      if (S.drawer) drawDrawer(S);
+  // heroList reads the page list's heroes: the server picks them (claimed,
+  // playable, or with a class or hero choice), so NPCs never crowd the list.
+  function heroList(v) {
+    var out = [];
+    (Array.isArray(v) ? v : []).forEach(function (p) {
+      if (p && typeof p.id === 'string' && typeof p.name === 'string') out.push({ id: p.id, name: p.name });
     });
+    return out;
   }
 
   function searchCreatures(S, q) {
@@ -967,7 +952,7 @@
     d.heroes.forEach(function (x) {
       if (!list.some(function (p) { return p.id === x.id; })) list.push(x);
     });
-    if (!list.length) { sec.appendChild(h('p', 'enc-muted', 'No hero pages yet. Make a character page for each hero.')); return sec; }
+    if (!list.length) { sec.appendChild(h('p', 'enc-muted', 'No heroes yet. A character page shows here once a player has it, it is marked playable, or it has a class.')); return sec; }
     var wrap = h('div', 'enc-heroes');
     list.forEach(function (p) {
       var lab = h('label', 'enc-hero' + (on[p.id] ? ' on' : ''));

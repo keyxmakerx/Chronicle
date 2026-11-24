@@ -477,7 +477,7 @@ func (s *service) ListForPage(ctx context.Context, campaignID, entityID string, 
 	if err != nil {
 		return nil, err
 	}
-	out := &PageList{Encounters: list, CanEdit: a.CanEdit, HeroTypeIDs: []int{}, CreatureTypeIDs: []int{}, StatBlocks: []StatBlock{}, Players: []Player{}}
+	out := &PageList{Encounters: list, CanEdit: a.CanEdit, Heroes: []HeroPage{}, CreatureTypeIDs: []int{}, StatBlocks: []StatBlock{}, Players: []Player{}}
 	if s.scenes != nil {
 		if ps, err := s.scenes.Players(ctx, campaignID); err != nil {
 			slog.Warn("encounters: players unavailable for scenes", slog.String("campaign_id", campaignID), slog.Any("error", err))
@@ -490,8 +490,12 @@ func (s *service) ListForPage(ctx context.Context, campaignID, entityID string, 
 	if pt, err := s.pages.PickerTypes(ctx, campaignID); err != nil {
 		slog.Warn("encounters: picker types unavailable", slog.String("campaign_id", campaignID), slog.Any("error", err))
 	} else {
-		if pt.Heroes != nil {
-			out.HeroTypeIDs = pt.Heroes
+		if len(pt.Heroes) > 0 {
+			if hs, err := s.pages.Heroes(ctx, campaignID, pt.Heroes, v); err != nil {
+				slog.Warn("encounters: heroes unavailable", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			} else if hs != nil {
+				out.Heroes = hs
+			}
 		}
 		if pt.Creatures != nil {
 			out.CreatureTypeIDs = pt.Creatures

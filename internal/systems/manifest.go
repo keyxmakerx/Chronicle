@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -1440,4 +1441,36 @@ func creatorParentOf(p *EntityPresetDef, key string) string {
 		}
 	}
 	return ""
+}
+
+// HeroPickKeys names the character fields whose value marks a page as a
+// hero's: the class (the first field mapped to the system's class item, else
+// "class") and each single-item hero choice mapped to one concrete item type
+// (ancestry, culture, career, kit), leaving out subclass and the class item's
+// read-outs (level, heroic resource). It matches how the Foundry module reads
+// the same mapping to tell heroes from NPCs.
+func (p *EntityPresetDef) HeroPickKeys() []string {
+	classKey := ""
+	var picks []string
+	if p != nil {
+		for _, f := range p.Fields {
+			if f.Key == "" || f.Key == "level" || !f.FoundryItemSingle {
+				continue
+			}
+			if classKey == "" && len(f.FoundryItemFields) == 0 && slices.Contains(f.FoundryItemType, "class") {
+				classKey = f.Key
+				continue
+			}
+			if f.FoundryCollection == "" || f.Key == "heroic_resource_name" || len(f.FoundryItemType) != 1 {
+				continue
+			}
+			if t := f.FoundryItemType[0]; t != "" && t != "class" && t != "subclass" {
+				picks = append(picks, f.Key)
+			}
+		}
+	}
+	if classKey == "" {
+		classKey = "class"
+	}
+	return append([]string{classKey}, picks...)
 }

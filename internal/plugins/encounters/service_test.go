@@ -517,30 +517,34 @@ func TestStagesOnReadDropGoneReferences(t *testing.T) {
 	})
 }
 
-// The page list carries the campaign's picker types; when they can't be read
-// the list still loads, with empty pickers rather than an error.
+// The page list carries the hero picker's pages and the creature types; when
+// either can't be read the list still loads, with that picker empty rather
+// than an error.
 func TestListForPagePickerTypes(t *testing.T) {
 	cases := []struct {
 		name          string
 		pickerErr     error
+		heroErr       error
 		wantHeroes    int
 		wantCreatures int
 	}{
-		{"types offered", nil, 2, 2},
-		{"types unavailable", errors.New("types down"), 0, 0},
+		{"pickers offered", nil, nil, 2, 2},
+		{"types unavailable", errors.New("types down"), nil, 0, 0},
+		{"heroes unavailable", nil, errors.New("heroes down"), 0, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, _, pages := newTestService()
 			pages.pickerErr = tc.pickerErr
+			pages.heroErr = tc.heroErr
 			list, err := svc.ListForPage(context.Background(), "c1", "page1", dm)
 			if err != nil {
 				t.Fatalf("list: %v", err)
 			}
-			if len(list.HeroTypeIDs) != tc.wantHeroes || len(list.CreatureTypeIDs) != tc.wantCreatures {
-				t.Errorf("got heroes %v creatures %v", list.HeroTypeIDs, list.CreatureTypeIDs)
+			if len(list.Heroes) != tc.wantHeroes || len(list.CreatureTypeIDs) != tc.wantCreatures {
+				t.Errorf("got heroes %v creatures %v", list.Heroes, list.CreatureTypeIDs)
 			}
-			if list.HeroTypeIDs == nil || list.CreatureTypeIDs == nil {
+			if list.Heroes == nil || list.CreatureTypeIDs == nil {
 				t.Errorf("lists must encode as [], not null")
 			}
 		})

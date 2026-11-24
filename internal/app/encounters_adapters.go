@@ -105,6 +105,64 @@ func (a *encountersPageAdapter) PickerTypes(ctx context.Context, campaignID stri
 	}, nil
 }
 
+// Heroes walks every page of typeIDs the viewer may see, a page of results
+// at a time with no cap, and keeps the heroes (entities.IsHeroPage), so a
+// campaign's NPCs on the same characters list never crowd the picker.
+func (a *encountersPageAdapter) Heroes(ctx context.Context, campaignID string, typeIDs []int, v encounters.Viewer) ([]encounters.HeroPage, error) {
+	types, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	pcType := map[int]bool{}
+	for _, t := range types {
+		if entities.IsPlayerCharacterType(t) {
+			pcType[t.ID] = true
+		}
+	}
+	keys := a.heroPickKeys(ctx, campaignID)
+	out := []encounters.HeroPage{}
+	seen := map[string]bool{}
+	for _, tid := range typeIDs {
+		for page := 1; ; page++ {
+			items, total, err := a.svc.List(ctx, campaignID, tid, v.VisibilityRole, v.UserID, entities.ListOptions{Page: page, PerPage: heroPageSize})
+			if err != nil {
+				return nil, err
+			}
+			for i := range items {
+				e := &items[i]
+				if seen[e.ID] || !entities.IsHeroPage(e, pcType[e.EntityTypeID], keys) {
+					continue
+				}
+				seen[e.ID] = true
+				out = append(out, encounters.HeroPage{ID: e.ID, Name: e.Name})
+			}
+			if len(items) < heroPageSize || page*heroPageSize >= total {
+				break
+			}
+		}
+	}
+	slices.SortFunc(out, func(x, y encounters.HeroPage) int {
+		return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name))
+	})
+	return out, nil
+}
+
+// heroPageSize is the list API's largest page.
+const heroPageSize = 100
+
+// heroPickKeys is the enabled game system's class and hero-choice fields;
+// without a system only a "class" field counts.
+func (a *encountersPageAdapter) heroPickKeys(ctx context.Context, campaignID string) []string {
+	if a.sys != nil {
+		if s := a.sys.EnabledSystem(ctx, campaignID); s != nil && s.Info() != nil {
+			m := s.Info()
+			// The preset the sync API sends Foundry, so both read one mapping.
+			return m.CharacterPreset().HeroPickKeys()
+		}
+	}
+	return (*systems.EntityPresetDef)(nil).HeroPickKeys()
+}
+
 // statBlocks lists the game system's stat block widgets with the page types
 // each draws for. A stat block is a panel the system aims at creature pages;
 // where the same widget is also aimed at NPC pages it draws for those too,

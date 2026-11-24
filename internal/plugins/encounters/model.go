@@ -206,9 +206,11 @@ type Summary struct {
 type PageList struct {
 	Encounters []Encounter `json:"encounters"`
 	CanEdit    bool        `json:"canEdit"`
-	// The page types the hero and creature pickers list, so the widget
-	// uses the campaign's own choice instead of guessing from presets.
-	HeroTypeIDs     []int `json:"heroTypeIds"`
+	// Heroes is what the hero picker offers: the hero pages of the
+	// campaign's characters list, NPCs left out.
+	Heroes []HeroPage `json:"heroes"`
+	// The page types the creature picker searches, so the widget uses the
+	// campaign's own choice instead of guessing from presets.
 	CreatureTypeIDs []int `json:"creatureTypeIds"`
 	// The game system's stat block widgets, for the creature fold-out.
 	StatBlocks []StatBlock `json:"statBlocks"`

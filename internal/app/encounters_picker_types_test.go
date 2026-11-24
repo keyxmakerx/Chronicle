@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
@@ -101,5 +102,64 @@ func TestEncountersPickerTypes_StatBlocks(t *testing.T) {
 				t.Fatalf("stat blocks %+v, want %+v", got.StatBlocks, tt.want)
 			}
 		})
+	}
+}
+
+// heroListEntities serves pages by type in fixed-size pages, like the list
+// API, so the walk past the first page is exercised.
+type heroListEntities struct {
+	entities.EntityService
+	types []entities.EntityType
+	pages map[int][]entities.Entity
+}
+
+func (h *heroListEntities) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
+	return h.types, nil
+}
+
+func (h *heroListEntities) List(_ context.Context, _ string, typeID int, _ int, _ string, opts entities.ListOptions) ([]entities.Entity, int, error) {
+	all := h.pages[typeID]
+	from := (opts.Page - 1) * opts.PerPage
+	if from >= len(all) {
+		return nil, len(all), nil
+	}
+	return all[from:min(from+opts.PerPage, len(all))], len(all), nil
+}
+
+// The hero picker lists heroes only: claimed, playable, of the player
+// character sub-type, or with a class or hero choice picked. NPCs on the
+// same list stay out, and heroes past the first page of results are found.
+func TestEncountersHeroes(t *testing.T) {
+	pcCat := entities.PresetCategoryPlayerCharacter
+	types := []entities.EntityType{
+		{ID: 1, Slug: "character", Enabled: true},
+		{ID: 13, Slug: "player-character", PresetCategory: &pcCat, Enabled: true},
+	}
+	owner := "u1"
+	var chars []entities.Entity
+	for i := 0; i < 150; i++ {
+		chars = append(chars, entities.Entity{ID: "npc" + strconv.Itoa(i), Name: "NPC " + strconv.Itoa(i), EntityTypeID: 1})
+	}
+	chars = append(chars,
+		entities.Entity{ID: "tyne", Name: "Tyne", EntityTypeID: 1, OwnerUserID: &owner},
+		entities.Entity{ID: "orrin", Name: "Orrin", EntityTypeID: 1, Playable: true},
+		entities.Entity{ID: "ash", Name: "ash", EntityTypeID: 1, FieldsData: map[string]any{"ancestry": "Human"}},
+	)
+	pcs := []entities.Entity{{ID: "pc", Name: "Saatraaol", EntityTypeID: 13}}
+	sys := fakeEnabled{sys: fakeSystem{manifest: &systems.SystemManifest{ID: "drawsteel", EntityPresets: []systems.EntityPresetDef{{
+		Slug: "drawsteel-character",
+		Fields: []systems.FieldDef{
+			{Key: "class", FoundryCollection: "items", FoundryItemSingle: true, FoundryItemType: []string{"class"}},
+			{Key: "ancestry", FoundryCollection: "items", FoundryItemSingle: true, FoundryItemType: []string{"ancestry"}},
+		},
+	}}}}}
+	a := &encountersPageAdapter{svc: &heroListEntities{types: types, pages: map[int][]entities.Entity{1: append(chars, pcs...), 13: pcs}}, sys: sys}
+	got, err := a.Heroes(context.Background(), "c1", []int{1, 13}, encounters.Viewer{VisibilityRole: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []encounters.HeroPage{{ID: "ash", Name: "ash"}, {ID: "orrin", Name: "Orrin"}, {ID: "pc", Name: "Saatraaol"}, {ID: "tyne", Name: "Tyne"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
