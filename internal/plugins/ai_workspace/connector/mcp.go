@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,9 +66,11 @@ type CallLine struct {
 	OK                  bool
 }
 
-// Asker queues a request for changes (Service.Ask).
+// Asker queues a request for changes (Service.Ask) and takes one of the
+// connection's own waiting requests back (Service.Withdraw).
 type Asker interface {
 	Ask(ctx context.Context, c *Connection, summary, changes string) (*Request, error)
+	Withdraw(ctx context.Context, c *Connection, id int64, reason string) (*Request, error)
 }
 
 // InstructionsFunc writes how_to_write_changes' answer for the connection's
@@ -194,6 +197,7 @@ func instructions(sess Session) string {
 		}
 	} else if sess.Conn != nil && sess.Conn.CanAsk {
 		changes = "They only read, except " + toolAsk + ", which sends changes for the owner to review: nothing in the campaign changes until the owner says yes to each one in Chronicle. " +
+			toolWithdraw + " takes back one of your own waiting requests, with a reason the owner sees. " +
 			"Read " + toolHowTo + " before asking. "
 	}
 	return "These tools look things up in \"" + oneLine(sess.CampaignName, 120) + "\", a tabletop roleplaying campaign kept in Chronicle. " +
@@ -231,6 +235,8 @@ func (s *Server) call(ctx context.Context, m rpcMessage, sess Session) Outcome {
 		return s.ask(ctx, m.ID, sess, args)
 	case toolHowTo:
 		return s.howTo(ctx, m.ID, sess, args)
+	case toolWithdraw:
+		return s.withdraw(ctx, m.ID, sess, args)
 	}
 	text, note, ok := t.answer(ctx, s.Lookups, sess, args)
 	out := toolResult(m.ID, text, !ok)
@@ -283,19 +289,68 @@ func (s *Server) ask(ctx context.Context, id json.RawMessage, sess Session, args
 	if sess.Conn.ForPlayer {
 		who = "you"
 	}
-	msg := fmt.Sprintf("Sent to %s for review in Chronicle: %s. Nothing has changed yet: "+
-		"each one is answered yes or no from the AI button at the top of any Chronicle page. Say it is waiting there, and don't send the same changes again.", who, q.Counts)
+	msg := fmt.Sprintf("Sent to %s for review in Chronicle as request %d: %s. Nothing has changed yet: "+
+		"each one is answered yes or no from the AI button at the top of any Chronicle page. Say it is waiting there, and don't send the same changes again. "+
+		"If it turns out wrong before it is answered, %s takes it back with a reason.", who, q.ID, q.Counts, toolWithdraw)
 	if len(q.Notes) > 0 {
 		// Advice about a kept request: it is not refused, so the AI is told
 		// what to do if it was a slip without being asked to resend blindly.
 		msg += "\n\nHeads up, " + plural(len(q.Notes), "one thing", "a few things") + " about what you sent:\n- " + strings.Join(q.Notes, "\n- ") +
 			"\nThe request is still waiting as sent, and the owner is shown the same match when they review it. " +
-			"If it was a slip, send the change you meant and say the earlier request can be turned down."
+			"If it was a slip, send the change you meant and withdraw this one with " + toolWithdraw + "."
 		line.Note = "sent for your review, with a note on a matching page"
 	}
 	out := toolResult(id, msg, false)
 	out.Called = line
 	return out
+}
+
+// withdraw takes back one of the connection's own waiting requests. The log
+// line keeps the AI's reason, so the owner reads why on the Your AI page.
+func (s *Server) withdraw(ctx context.Context, id json.RawMessage, sess Session, args map[string]string) Outcome {
+	line := &CallLine{Tool: toolWithdraw, Summary: "Tried to withdraw a request", Note: oneLine(args["reason"], noteMax)}
+	if s.Asks == nil {
+		out := toolResult(id, "Not withdrawn: asking for changes isn't available on this Chronicle site.", true)
+		line.Note = "not available"
+		out.Called = line
+		return out
+	}
+	n, ok := requestNumber(args["request"])
+	if !ok {
+		out := toolResult(id, "Not withdrawn: request is the request's number, for example \"12\", as ask_for_changes or waiting_for_review shows it.", true)
+		out.Called = line
+		return out
+	}
+	q, err := s.Asks.Withdraw(ctx, sess.Conn, n, args["reason"])
+	if err != nil {
+		msg := err.Error()
+		if isAppError(err) {
+			msg = "Chronicle couldn't withdraw it just now. Try again in a moment"
+		}
+		out := toolResult(id, "Not withdrawn: "+strings.TrimRight(msg, ".")+".", true)
+		line.Summary = fmt.Sprintf("Tried to withdraw request %d, refused", n)
+		out.Called = line
+		return out
+	}
+	line.Summary = "Withdrew its request “" + oneLine(q.Summary, 120) + "”"
+	line.OK = true
+	who := "The owner"
+	if sess.Conn.ForPlayer {
+		who = "You"
+	}
+	out := toolResult(id, fmt.Sprintf("Withdrawn: request %d (“%s”) is no longer waiting, and nothing in the campaign changed. %s will see it was withdrawn and why.", n, oneLine(q.Summary, 120), who), false)
+	out.Called = line
+	return out
+}
+
+// requestNumber reads a request's number as an AI may write it: "12", "#12"
+// or "request 12".
+func requestNumber(s string) (int64, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	s = strings.TrimSpace(strings.TrimPrefix(s, "request"))
+	s = strings.TrimPrefix(s, "#")
+	n, err := strconv.ParseInt(s, 10, 64)
+	return n, err == nil && n > 0
 }
 
 // howTo answers how_to_write_changes, in the part asked for (howToPart).

@@ -115,6 +115,10 @@ type callRow struct {
 // toolAskName is the connector's request-for-changes tool, as calls log it.
 const toolAskName = "ask_for_changes"
 
+// toolWithdrawName is the tool an AI takes one of its requests back with; it
+// files under requests on What it did, with the AI's reason as its note.
+const toolWithdrawName = "withdraw_request"
+
 // sittingRows is a sitting's calls as rows, newest first.
 func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 	span := s.End.Sub(s.Start)
@@ -125,7 +129,8 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 		if span > 0 {
 			r.Left = float64(c.At.Sub(s.Start)) / float64(span) * 100
 		}
-		if c.Tool == toolAskName {
+		switch c.Tool {
+		case toolAskName:
 			r.Kind = "ask"
 			if p, ok := paired[c.ID]; ok {
 				r.Waiting = p.Waiting
@@ -133,6 +138,8 @@ func sittingRows(v ConnectView, s connector.Sitting) []callRow {
 					r.Undo = &u
 				}
 			}
+		case toolWithdrawName:
+			r.Kind = "ask"
 		}
 		out = append(out, r)
 	}
@@ -148,6 +155,8 @@ func callIcon(c connector.Call) string {
 	switch c.Tool {
 	case toolAskName:
 		return "fa-wand-magic-sparkles"
+	case toolWithdrawName:
+		return "fa-rotate-left"
 	case "read_page":
 		return "fa-file-lines"
 	case "list_pages", "list_tags", "my_notes", "game_nights":

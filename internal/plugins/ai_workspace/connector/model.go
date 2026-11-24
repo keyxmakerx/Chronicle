@@ -104,6 +104,9 @@ const (
 	RequestApplying   = "applying"
 	RequestAnswered   = "answered"
 	RequestTurnedDown = "turned_down"
+	// RequestWithdrawn: the AI that asked took the request back before it
+	// was answered; Outcome holds the reason it gave, for the owner.
+	RequestWithdrawn = "withdrawn"
 )
 
 // Limits on what a connection may do and keep.
@@ -132,6 +135,9 @@ const (
 	// outcomeMax matches ai_connection_requests.outcome: the counts and each
 	// failed change's reason.
 	outcomeMax = 1000
+	// withdrawReasonMax caps the reason an AI gives for withdrawing a
+	// request, which is kept as the request's outcome.
+	withdrawReasonMax = 300
 	// changesMax caps one request's size and blocksMax its blocks, which
 	// keeps what checking it costs small; requestsWaiting caps how many
 	// wait for the owner at once, so an AI can't bury them; requestsKept

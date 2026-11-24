@@ -247,7 +247,7 @@ func (r *memRepo) DecidedRequests(_ context.Context, campaignID, userID string, 
 	defer r.mu.Unlock()
 	var out []Request
 	for _, q := range r.reqs {
-		if q.CampaignID != campaignID || r.userOf(q.ConnectionID) != userID || (q.Status != RequestAnswered && q.Status != RequestTurnedDown) {
+		if q.CampaignID != campaignID || r.userOf(q.ConnectionID) != userID || (q.Status != RequestAnswered && q.Status != RequestTurnedDown && q.Status != RequestWithdrawn) {
 			continue
 		}
 		at := q.CreatedAt

@@ -47,10 +47,15 @@ type WaitingList struct {
 // WaitingAsk is one request for changes an AI sent. Summary is the AI's own
 // line; Counts is Chronicle's ("2 to add, 1 to change").
 type WaitingAsk struct {
+	// ID is the request's number, which withdraw_request takes.
+	ID              int64
 	Summary, Counts string
 	// At is when it was asked, or for a decided one when it was answered.
 	At         time.Time
 	TurnedDown bool
+	// Withdrawn is set when the AI took the request back; Outcome is then
+	// the reason it gave.
+	Withdrawn bool
 	// Outcome is what applying it did, in the review screen's words.
 	Outcome string
 	// Undone is set once the owner put an applied request's changes back.
@@ -113,16 +118,24 @@ func (run *lookupRun) waiting(r Record) (LookupAnswer, error) {
 	fmt.Fprintf(&b, "\n### Changes your AI asked for, waiting on the owner (%d)\n\n", len(w.Asks))
 	var lines []string
 	for _, q := range w.Asks {
-		lines = append(lines, fmt.Sprintf("- %s%s, sent %s", quoted(q.Summary), askCounts(q.Counts), askDay(q.At)))
+		lines = append(lines, fmt.Sprintf("- %s%s%s, sent %s", askNumber(q.ID), quoted(q.Summary), askCounts(q.Counts), askDay(q.At)))
 	}
 	writeOrNone(&b, lines, "None. The owner reviews them on the campaign's Your AI page.")
+	if len(w.Asks) > 0 {
+		b.WriteString("\nwithdraw_request takes one of these back by its number, with a reason the owner sees.\n")
+	}
 
 	b.WriteString("\n### Your AI's requests the owner answered, " + decidedWindow(older) + "\n\n")
 	b.WriteString("For 30 days after applying a request the owner can undo it from the Your AI page (What it did); an undone one says so below.\n\n")
 	lines = lines[:0]
 	for _, q := range w.Decided {
 		verdict := "applied"
-		if q.TurnedDown {
+		if q.Withdrawn {
+			verdict = "withdrawn by your AI before the owner answered, nothing changed"
+			if o := strings.TrimSpace(q.Outcome); o != "" {
+				verdict += "; the reason it gave: " + oneLine(o, 300)
+			}
+		} else if q.TurnedDown {
 			// Said plainly, so the AI doesn't take the owner's No for a
 			// fault and send the same changes again.
 			verdict = "turned down by the owner, nothing changed; that was their choice, not an error"
@@ -132,7 +145,7 @@ func (run *lookupRun) waiting(r Record) (LookupAnswer, error) {
 		} else if o := strings.TrimSpace(q.Outcome); o != "" {
 			verdict += ": " + oneLine(o, 1000)
 		}
-		lines = append(lines, fmt.Sprintf("- %s%s, %s (%s)", quoted(q.Summary), askCounts(q.Counts), verdict, askDay(q.At)))
+		lines = append(lines, fmt.Sprintf("- %s%s%s, %s (%s)", askNumber(q.ID), quoted(q.Summary), askCounts(q.Counts), verdict, askDay(q.At)))
 	}
 	b.WriteString(decidedCount(len(w.Decided), older))
 	if len(lines) > 0 {
@@ -244,4 +257,13 @@ func askDay(t time.Time) string {
 		return "date unknown"
 	}
 	return t.UTC().Format("2006-01-02")
+}
+
+// askNumber is "request 12: " for a request with a number, so the AI can
+// name it to withdraw_request; "" when the number is unknown.
+func askNumber(id int64) string {
+	if id <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("request %d: ", id)
 }

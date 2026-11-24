@@ -462,9 +462,9 @@ const answeredAt = `COALESCE(q.decided_at, q.created_at)`
 
 func (r *repository) DecidedRequests(ctx context.Context, campaignID, userID string, from, to time.Time, limit int) ([]Request, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+requestColumns+ofPerson+` AND q.status IN (?, ?) AND `+answeredAt+` >= ? AND `+answeredAt+` < ?
+		`SELECT `+requestColumns+ofPerson+` AND q.status IN (?, ?, ?) AND `+answeredAt+` >= ? AND `+answeredAt+` < ?
 		 ORDER BY `+answeredAt+` DESC, q.id DESC LIMIT ?`,
-		campaignID, userID, RequestAnswered, RequestTurnedDown, from.UTC(), to.UTC(), limit)
+		campaignID, userID, RequestAnswered, RequestTurnedDown, RequestWithdrawn, from.UTC(), to.UTC(), limit)
 	if err != nil {
 		return nil, dbError("listing answered requests", err)
 	}
