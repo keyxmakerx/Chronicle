@@ -178,6 +178,7 @@ func readerIndexChapter(ch BookChapter, m *SystemManifest, kinds BookKindList, c
 		pages = []BookPage{{Title: ch.Title, Director: ch.Director,
 			Blocks: []BookBlock{{Type: "index", Category: cat, Count: len(ie.items)}}}}
 	}
+	setIndexList(pages, ch.Pages[0].Blocks[0].List)
 	ch.Pages = pages
 	return ch, nil
 }

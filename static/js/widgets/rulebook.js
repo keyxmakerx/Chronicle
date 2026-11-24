@@ -135,6 +135,12 @@
   function inline(raw, terms) {
     var slots = [];
     var s = str(raw).replace(/\u0000/g, '');
+    // [[@category/id|shown]] names one rules-index entry, which opens in
+    // place; the server checks that the reader's book lists it.
+    s = s.replace(/\[\[@([a-z0-9_-]{1,64})\/([A-Za-z0-9_.-]{1,128})\|([^\[\]\n]+?)\]\]/g, function (_, cat, id, shown) {
+      slots.push('<span class="rb-term rb-ref" role="button" tabindex="0" data-ref-cat="' + esc(cat) + '" data-ref="' + esc(id) + '">' + esc(shown.trim()) + '</span>');
+      return '\u0000' + (slots.length - 1) + '\u0000';
+    });
     s = s.replace(/\[\[([^\[\]|\n]+?)(?:\|([^\[\]\n]+?))?\]\]/g, function (_, term, shown) {
       var key = term.trim().toLowerCase();
       var label = (shown || term).trim();
@@ -367,6 +373,11 @@
     if (window.Chronicle && Chronicle.hovercard) {
       this.unbindCard = Chronicle.hovercard.bind(this.el, '.rb-term', function (t) { return self.termCard(t); }, { pinOnClick: true });
     }
+    // The peek card lives outside the book; its own controls answer here.
+    this.on(document, 'click', function (e) { self.onCardClick(e); }, true);
+    this.on(document, 'keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.closest && e.target.closest('.chc .rb-peek .rb-term')) self.onCardClick(e);
+    }, true);
     this.on(this.el, 'input', function (e) { self.onInput(e); });
     this.on(this.el, 'touchstart', function (e) { self.onTouch(e, true); }, { passive: true });
     this.on(this.el, 'touchend', function (e) { self.onTouch(e, false); }, { passive: true });
@@ -1457,15 +1468,38 @@
 
   // --- Rules index -----------------------------------------------------------
   // A generated page lists one slice of a data category. The entries load
-  // when the page is shown (once per slice) and fold down like flaps.
+  // when the page is shown (once per slice) and fold down like flaps. A page
+  // whose chapter names filters offers them as index tabs over the list: each
+  // tab drops a drawer of the values on this page, with how many entries each
+  // would leave, and the chosen values narrow the list together with the
+  // word box, which reads every word of an entry.
+
+  var MAX_LIST_FILTERS = 6;
+
+  // The layout the server sent with the block, checked: property keys only,
+  // labels as text.
+  function indexList(b) {
+    var l = isObj(b.list) ? b.list : {};
+    var key = function (k) { return /^[a-z0-9_]{1,64}$/.test(str(k)) ? str(k) : ''; };
+    return {
+      filters: arr(l.filters).filter(isObj).map(function (f) { return { key: key(f.key), label: str(f.label) || key(f.key) }; })
+        .filter(function (f) { return f.key; }).slice(0, MAX_LIST_FILTERS),
+      sections: key(l.sections),
+      sectionLabel: str(l.sectionLabel),
+      tiers: arr(l.tiers).map(key).filter(Boolean).slice(0, 4)
+    };
+  }
 
   Rulebook.prototype.indexHTML = function (b) {
     var count = intOr(b.count, 0, 100000, 0);
     var noun = count === 1 ? 'entry' : 'entries';
+    var list = indexList(b);
     return '<div class="rb-ix" data-ix data-cat="' + esc(str(b.category)) + '" data-key="' + esc(str(b.key)) +
-      '" data-value="' + esc(str(b.value)) + '" data-from="' + intOr(b.from, 0, 100000, 0) + '" data-to="' + intOr(b.to, 0, 100000, 0) + '">' +
+      '" data-value="' + esc(str(b.value)) + '" data-from="' + intOr(b.from, 0, 100000, 0) + '" data-to="' + intOr(b.to, 0, 100000, 0) + '"' +
+      ' data-list="' + esc(JSON.stringify(list)) + '">' +
       '<div class="rb-ix-hd"><input type="search" class="rb-ix-filter" data-ix-filter placeholder="Filter ' + count + ' ' + noun + '"' +
       ' aria-label="Filter this page" autocomplete="off" spellcheck="false"><span class="rb-ix-n" aria-live="polite"></span></div>' +
+      (list.filters.length ? '<div class="rb-ixf" data-ixf></div>' : '') +
       '<ul class="rb-flaps rb-ix-list" data-ix-list><li class="rb-ix-wait">Opening the entries…</li></ul></div>';
   };
 
@@ -1505,37 +1539,268 @@
     hit.wait.push(box);
   };
 
+  function boxList(box) {
+    try { return indexList({ list: JSON.parse(box.getAttribute('data-list') || '{}') }); } catch (e) { return indexList({}); }
+  }
+  // An entry's values for one property, as the server sent them.
+  function facetVals(it, key) {
+    var f = arr(it.facets).filter(function (x) { return isObj(x) && x.key === key; })[0];
+    return f ? arr(f.values).map(str).filter(Boolean) : [];
+  }
+  // A number reads with its property's name ("Level 2"), an ordinal before
+  // it ("1st echelon"); a word reads alone.
+  function valueLabel(label, v) {
+    if (!label) return v;
+    if (/^-?\d+(\.\d+)?$/.test(v)) return label + ' ' + v;
+    return /^\d+(st|nd|rd|th)$/.test(v) ? v + ' ' + label.toLowerCase() : v;
+  }
+  function entryName(it) { return str(it.name); }
+  function entryText(it) {
+    return [it.name, it.summary, it.text].concat(arr(it.fields).map(function (f) { return isObj(f) ? f.value : ''; }))
+      .map(str).join(' ').toLowerCase();
+  }
+
+  // The line under an entry's name: its one-value filters, in order, so a
+  // reader can scan level and action without opening anything.
+  function metaLine(it, list) {
+    return list.filters.map(function (f) {
+      var v = facetVals(it, f.key);
+      return v.length === 1 ? esc(valueLabel(f.label, v[0])) : '';
+    }).filter(Boolean).join('<i aria-hidden="true">·</i>');
+  }
+
+  // An entry's body: the result tiers on the book's tier tiles, then every
+  // other field the line above does not already show, then its text.
+  function entryBodyHTML(it, list, terms) {
+    var shown = {};
+    list.filters.forEach(function (f) { if (facetVals(it, f.key).length === 1) shown[f.key] = 1; });
+    list.tiers.forEach(function (k) { shown[k] = 1; });
+    var fields = arr(it.fields).filter(isObj), tiers = [], rest = [];
+    fields.forEach(function (f) {
+      var k = str(f.key), base = k.replace(/_display$/, '');
+      if (list.tiers.indexOf(k) >= 0 || list.tiers.indexOf(base) >= 0) tiers.push(f);
+      else if (!shown[k] && !shown[base]) rest.push(f);
+    });
+    var h = '';
+    if (tiers.length) {
+      h += '<div class="rb-tiers rb-ix-tiers">' + tiers.map(function (f) {
+        // "Tier 1 (11 or lower)" is drawn as the tile's name and its range.
+        var m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(str(f.label));
+        return '<div class="rb-tier"><b>' + esc(m ? m[1] : str(f.label)) + '</b><small>' + esc(m ? m[2] : '') + '</small><span>' + inline(f.value, terms) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    if (rest.length) {
+      h += '<dl class="rb-ix-dl">' + rest.map(function (f) {
+        return '<div><dt>' + esc(f.label) + '</dt><dd>' + inline(f.value, terms) + '</dd></div>';
+      }).join('') + '</dl>';
+    }
+    if (str(it.text)) h += '<div class="rb-prose">' + rich(it.text, terms) + '</div>';
+    else if (!h && str(it.summary)) h += '<div class="rb-prose"><p>' + esc(it.summary) + '</p></div>';
+    return h;
+  }
+
   Rulebook.prototype.renderIndex = function (box, items) {
-    var list = box.querySelector('[data-ix-list]'), t = this.data.terms;
+    var list = box.querySelector('[data-ix-list]'), t = this.data.terms, lay = boxList(box);
     if (!items) {
       list.innerHTML = '<li class="rb-ix-wait">The entries could not be loaded. Turn away and back to try again.</li>';
       return;
     }
-    list.innerHTML = items.map(function (it) {
-      var fields = arr(it.fields).filter(isObj);
-      var body = (fields.length ? '<dl class="rb-ix-dl">' + fields.map(function (f) {
-        return '<div><dt>' + esc(f.label) + '</dt><dd>' + inline(f.value, t) + '</dd></div>';
-      }).join('') + '</dl>' : '') + (str(it.text) ? '<div class="rb-prose">' + rich(it.text, t) + '</div>' : '') +
-        (!fields.length && !str(it.text) && str(it.summary) ? '<div class="rb-prose"><p>' + esc(it.summary) + '</p></div>' : '');
-      return '<li class="rb-flap rb-ix-row" data-id="' + esc(str(it.id)) + '" data-find="' + esc((str(it.name) + ' ' + str(it.summary)).toLowerCase()) + '">' +
-        '<button type="button" aria-expanded="false"><span class="rb-ix-t"><b>' + esc(it.name) + '</b>' +
-        (str(it.summary) ? '<span>' + esc(it.summary) + '</span>' : '') + '</span></button>' +
-        '<div class="rb-body" hidden>' + body + '</div></li>';
-    }).join('');
+    box._items = items;
+    box._sel = box._sel || {};
+    var rows = items.slice(), sec = lay.sections;
+    if (sec) {
+      // Sections in their natural order (Level 1 before Level 10); entries
+      // without the property go last. Name order holds within a section.
+      var keyOf = function (it) { return facetVals(it, sec)[0] || ''; };
+      var natural = function (a, b) {
+        if (a === b) return 0;
+        if (!a || !b) return a ? -1 : 1;
+        var na = +a, nb = +b;
+        return !isNaN(na) && !isNaN(nb) ? na - nb : a.localeCompare(b);
+      };
+      rows = rows.map(function (it, i) { return { it: it, i: i }; })
+        .sort(function (a, b) { return natural(keyOf(a.it), keyOf(b.it)) || a.i - b.i; })
+        .map(function (x) { return x.it; });
+    }
+    var last = null, h = '';
+    rows.forEach(function (it) {
+      if (sec) {
+        var g = facetVals(it, sec)[0] || '';
+        if (g !== last) {
+          h += '<li class="rb-ix-sec" aria-hidden="true">' + esc(g ? valueLabel(lay.sectionLabel, g) : 'Other') + '</li>';
+          last = g;
+        }
+      }
+      var meta = metaLine(it, lay);
+      h += '<li class="rb-flap rb-ix-row" data-id="' + esc(str(it.id)) + '" data-find="' + esc(entryText(it)) + '">' +
+        '<button type="button" aria-expanded="false"><span class="rb-ix-t"><b>' + esc(entryName(it)) + '</b>' +
+        (meta ? '<span class="rb-ix-meta">' + meta + '</span>' : '') +
+        (str(it.summary) ? '<span class="rb-ix-sum">' + esc(it.summary) + '</span>' : '') + '</span></button>' +
+        '<div class="rb-body" hidden>' + entryBodyHTML(it, lay, t) + '</div></li>';
+    });
+    list.innerHTML = h;
+    // Each row keeps its entry, so filtering never parses the page again.
+    var lis = list.querySelectorAll('.rb-ix-row');
+    rows.forEach(function (it, i) { if (lis[i]) lis[i]._entry = it; });
     box.setAttribute('data-ready', '');
-    var f = box.querySelector('[data-ix-filter]');
-    if (f && f.value) this.filterIndex(f);
+    this.buildFilters(box);
+    this.applyFilters(box);
     this.openPending(box);
   };
 
-  Rulebook.prototype.filterIndex = function (input) {
-    var box = input.closest('[data-ix]'), q = input.value.trim().toLowerCase(), shown = 0, rows = box.querySelectorAll('.rb-ix-row');
+  // The values each filter takes on this page, in natural order. A filter
+  // with one value or none narrows nothing and is left out.
+  function facetTable(box) {
+    var lay = boxList(box), items = box._items || [];
+    return lay.filters.map(function (f) {
+      var seen = {};
+      items.forEach(function (it) { facetVals(it, f.key).forEach(function (v) { seen[v] = 1; }); });
+      var vals = Object.keys(seen).sort(function (a, b) {
+        var na = +a, nb = +b;
+        return !isNaN(na) && !isNaN(nb) ? na - nb : a.localeCompare(b);
+      });
+      return { key: f.key, label: f.label, values: vals };
+    }).filter(function (f) { return f.values.length > 1; });
+  }
+
+  function passes(it, sel, skip, q) {
+    for (var k in sel) {
+      if (k === skip || !has(sel, k) || !sel[k].length) continue;
+      var vals = facetVals(it, k);
+      if (!sel[k].some(function (v) { return vals.indexOf(v) >= 0; })) return false;
+    }
+    return !q || entryText(it).indexOf(q) >= 0;
+  }
+  function boxQuery(box) {
+    var f = box.querySelector('[data-ix-filter]');
+    return f ? f.value.trim().toLowerCase() : '';
+  }
+
+  Rulebook.prototype.buildFilters = function (box) {
+    var host = box.querySelector('[data-ixf]');
+    if (!host) return;
+    var facets = box._facets = facetTable(box);
+    host.hidden = !facets.length;
+    host.innerHTML = facets.length ? '<div class="rb-ixf-tabs" role="group" aria-label="Narrow this page by">' + facets.map(function (f) {
+      return '<button type="button" class="rb-ixf-tab" data-ixf-tab="' + esc(f.key) + '" aria-expanded="false">' +
+        esc(f.label) + '<span class="rb-ixf-n"></span></button>';
+    }).join('') + '</div><div class="rb-ixf-drawer" role="group" hidden></div><p class="rb-ixf-on" aria-live="polite"></p>' : '';
+  };
+
+  // A tab's drawer: each value with how many entries it would leave given
+  // every other choice, so a reader never picks into an empty list.
+  Rulebook.prototype.filterDrawerHTML = function (box, key) {
+    var f = (box._facets || []).filter(function (x) { return x.key === key; })[0];
+    if (!f) return '';
+    var sel = box._sel[key] || [], q = boxQuery(box);
+    var pool = (box._items || []).filter(function (it) { return passes(it, box._sel, key, q); });
+    return f.values.map(function (v) {
+      var n = pool.filter(function (it) { return facetVals(it, key).indexOf(v) >= 0; }).length;
+      var on = sel.indexOf(v) >= 0;
+      return '<button type="button" class="rb-ixf-val' + (n ? '' : ' none') + '"' + (n || on ? '' : ' disabled') + ' data-ixf-val="' + esc(key) + '" data-v="' + esc(v) +
+        '" aria-pressed="' + on + '" aria-label="' + esc(valueLabel(f.label, v) + ', ' + n + (n === 1 ? ' entry' : ' entries')) +
+        '">' + esc(v) + '<span aria-hidden="true">' + n + '</span></button>';
+    }).join('');
+  };
+
+  Rulebook.prototype.applyFilters = function (box) {
+    var sel = box._sel || {}, q = boxQuery(box), shown = 0, rows = box.querySelectorAll('.rb-ix-row');
     [].forEach.call(rows, function (li) {
-      var on = !q || li.getAttribute('data-find').indexOf(q) >= 0;
+      var on = li._entry ? passes(li._entry, sel, '', q) : (!q || li.getAttribute('data-find').indexOf(q) >= 0);
       li.hidden = !on;
       if (on) shown++;
     });
-    box.querySelector('.rb-ix-n').textContent = q ? shown + ' of ' + rows.length : '';
+    [].forEach.call(box.querySelectorAll('.rb-ix-sec'), function (g) {
+      var n = g.nextElementSibling, any = false;
+      while (n && !n.classList.contains('rb-ix-sec')) { if (!n.hidden) any = true; n = n.nextElementSibling; }
+      g.hidden = !any;
+    });
+    var none = box.querySelector('.rb-ix-none');
+    if (!shown && rows.length) {
+      if (!none) {
+        none = document.createElement('li');
+        none.className = 'rb-ix-wait rb-ix-none';
+        none.textContent = 'Nothing on this page matches. Let go of a choice or a word to see more.';
+        box.querySelector('[data-ix-list]').appendChild(none);
+      }
+      none.hidden = false;
+    } else if (none) {
+      none.hidden = true;
+    }
+    var picked = [];
+    (box._facets || []).forEach(function (f) { (sel[f.key] || []).forEach(function (v) { picked.push([f, v]); }); });
+    var on = box.querySelector('.rb-ixf-on'), n = box.querySelector('.rb-ix-n');
+    if (on) {
+      on.innerHTML = picked.length ? '<span class="rb-ixf-cnt">' + shown + ' of ' + rows.length + '</span>' + picked.map(function (p) {
+        return '<button type="button" class="rb-ixf-tok" data-ixf-drop="' + esc(p[0].key) + '" data-v="' + esc(p[1]) + '" aria-label="Stop narrowing by ' +
+          esc(p[0].label + ' ' + p[1]) + '">' + esc(valueLabel(p[0].label, p[1])) + '<i aria-hidden="true">×</i></button>';
+      }).join('') + '<button type="button" class="rb-ixf-clear" data-ixf-clear>Clear</button>' : '';
+    }
+    if (n) n.textContent = q && !picked.length ? shown + ' of ' + rows.length : '';
+    [].forEach.call(box.querySelectorAll('[data-ixf-tab]'), function (b) {
+      var c = (sel[b.getAttribute('data-ixf-tab')] || []).length;
+      b.querySelector('.rb-ixf-n').textContent = c ? ' ' + c : '';
+      b.classList.toggle('on', !!c);
+    });
+    var open = box.querySelector('[data-ixf-tab][aria-expanded="true"]');
+    if (open) box.querySelector('.rb-ixf-drawer').innerHTML = this.filterDrawerHTML(box, open.getAttribute('data-ixf-tab'));
+  };
+  Rulebook.prototype.filterIndex = function (input) { this.applyFilters(input.closest('[data-ix]')); };
+
+  // Clicks on the index tabs, their values and the chosen-values line.
+  // Closes every open choices drawer but the one the click landed in.
+  Rulebook.prototype.closeFilterDrawers = function (t) {
+    [].forEach.call(this.el.querySelectorAll('.rb-ixf-drawer:not([hidden])'), function (dr) {
+      var f = dr.closest('.rb-ixf');
+      if (t && f && f.contains(t)) return;
+      dr.hidden = true;
+      [].forEach.call(f ? f.querySelectorAll('[data-ixf-tab]') : [], function (b) { b.setAttribute('aria-expanded', 'false'); });
+    });
+  };
+
+  Rulebook.prototype.onIndexClick = function (t) {
+    var box = t.closest('[data-ix]'), x;
+    this.closeFilterDrawers(t);
+    if (!box) return false;
+    var dr = box.querySelector('.rb-ixf-drawer');
+    if ((x = t.closest('[data-ixf-tab]'))) {
+      var key = x.getAttribute('data-ixf-tab'), was = x.getAttribute('aria-expanded') === 'true';
+      [].forEach.call(box.querySelectorAll('[data-ixf-tab]'), function (b) { b.setAttribute('aria-expanded', 'false'); });
+      if (was) { dr.hidden = true; return true; }
+      x.setAttribute('aria-expanded', 'true');
+      dr.setAttribute('aria-label', x.firstChild.textContent);
+      dr.innerHTML = this.filterDrawerHTML(box, key);
+      // The drawer hangs from its tab's side line.
+      dr.style.setProperty('--ixf-x', x.offsetLeft + 'px');
+      dr.hidden = false;
+      return true;
+    }
+    if ((x = t.closest('[data-ixf-val]'))) {
+      var k = x.getAttribute('data-ixf-val'), v = x.getAttribute('data-v'), s = box._sel[k] = box._sel[k] || [];
+      var i = s.indexOf(v);
+      if (i >= 0) s.splice(i, 1); else s.push(v);
+      this.applyFilters(box);
+      var again = box.querySelector('[data-ixf-val="' + k + '"][data-v="' + (window.CSS && CSS.escape ? CSS.escape(v) : v) + '"]');
+      if (again) again.focus();
+      return true;
+    }
+    if ((x = t.closest('[data-ixf-drop]'))) {
+      var dk = x.getAttribute('data-ixf-drop'), ds = box._sel[dk] || [];
+      ds.splice(ds.indexOf(x.getAttribute('data-v')), 1);
+      this.applyFilters(box);
+      var f = box.querySelector('[data-ix-filter]'); if (f) f.focus({ preventScroll: true });
+      return true;
+    }
+    if (t.closest('[data-ixf-clear]')) {
+      box._sel = {};
+      this.applyFilters(box);
+      return true;
+    }
+    if (dr && !dr.hidden && !t.closest('.rb-ixf')) {
+      dr.hidden = true;
+      [].forEach.call(box.querySelectorAll('[data-ixf-tab]'), function (b) { b.setAttribute('aria-expanded', 'false'); });
+    }
+    return false;
   };
 
   // Opens the entry a search result asked for once its page is on screen.
@@ -1551,6 +1816,229 @@
     var scroller = row.closest('.rb-scroll');
     if (scroller) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
     btn.focus({ preventScroll: true });
+  };
+
+  // --- Entries in place ------------------------------------------------------
+  // A name written [[@category/id|shown]] opens its whole entry in the shared
+  // hover card, without leaving the page. A rule word inside that card
+  // follows in the same card, with a way back, so only one card is ever
+  // open. Hold clips the entry to the book's edge as a slip that stays while
+  // pages turn (a few at most, for this visit only); Turn to its page opens
+  // it where its index lists it.
+
+  var MAX_SLIPS = 3;
+
+  // The card sits outside the book, so it carries the book's colours and
+  // fonts with it. Only values that are plainly colours, lengths or font
+  // names are copied.
+  var BOOK_VARS = ['--rb-paper', '--rb-ink', '--rb-ink2', '--rb-mut', '--rb-edge', '--rb-acc', '--rb-box', '--rb-box2', '--rb-gold',
+    '--rb-ui', '--rb-body', '--rb-head', '--rb-display', '--rb-steel', '--rb-on-steel', '--rb-hot', '--rb-t1', '--rb-t2', '--rb-t3'];
+  Rulebook.prototype.bookVars = function () {
+    var cs = window.getComputedStyle(this.el), out = [];
+    BOOK_VARS.forEach(function (n) {
+      var v = cs.getPropertyValue(n).trim();
+      if (v && /^[#\w\s,.%()"'-]+$/.test(v)) out.push(n + ':' + v.replace(/"/g, "'"));
+    });
+    return out.join(';');
+  };
+
+  // An entry with its page's layout and where its index lists it. One fetch
+  // per entry and view; a failure is forgotten so a later hover asks again.
+  Rulebook.prototype.fetchEntry = function (cat, id) {
+    var base = this.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    var url = base + '/entry/' + encodeURIComponent(cat) + '/' + encodeURIComponent(id) + this.viewParam('?');
+    var cache = this.entryCache || (this.entryCache = {});
+    if (!cache[url]) {
+      cache[url] = Chronicle.apiFetch(url).then(function (res) {
+        if (!res.ok) throw new Error('http');
+        return res.json();
+      }).then(function (j) {
+        if (!isObj(j) || !isObj(j.entry)) throw new Error('shape');
+        return {
+          cat: cat, it: j.entry, list: indexList(j), chapter: SLUG_RE.test(str(j.chapter)) ? str(j.chapter) : '',
+          page: intOr(j.page, 0, 100000, 0), kind: str(j.pageTitle)
+        };
+      });
+      cache[url].catch(function () { delete cache[url]; });
+    }
+    return cache[url];
+  };
+
+  function shortName(it) { return entryName(it).replace(/\s*\([^)]*\)\s*$/, '') || entryName(it); }
+
+  // What the hover card shows for an entry name: a Promise, so the card says
+  // it is loading until the entry arrives, and closes if it never does.
+  Rulebook.prototype.refCard = function (t) {
+    var self = this;
+    this.peekStack = [];
+    return this.fetchEntry(t.getAttribute('data-ref-cat'), t.getAttribute('data-ref')).then(function (got) {
+      self.peekNow = self.peekContent(got);
+      return self.peekNow;
+    });
+  };
+
+  Rulebook.prototype.peekContent = function (got) {
+    var it = got.it, key = got.cat + '/' + str(it.id), meta = metaLine(it, got.list), back = this.peekStack && this.peekStack[this.peekStack.length - 1];
+    var foot = '';
+    if (!this.leafId) {
+      foot = '<div class="rb-peek-foot">' +
+        (got.chapter ? '<button type="button" class="rb-peek-go" data-peek-turn="' + esc(key) + '">Turn to its page</button>' : '<span></span>') +
+        '<button type="button" class="rb-peek-hold" data-peek-hold="' + esc(key) + '" aria-label="Hold ' + esc(shortName(it)) +
+        ' at the edge of the book">Hold</button></div>';
+    }
+    var c = {
+      kind: got.kind, title: entryName(it),
+      extraHTML: this.peekWrap((back ? this.crumbHTML(back) : '') + (meta ? '<p class="rb-ix-meta">' + meta + '</p>' : '') +
+        entryBodyHTML(it, got.list, this.data.terms), foot)
+    };
+    c.got = got;
+    return c;
+  };
+
+  // The card opens below its word, or above when there is more room there;
+  // its body scrolls to fit that side, and the foot with Hold stays below it.
+  var PEEK_HEAD = 140;
+  Rulebook.prototype.peekWrap = function (inner, foot) {
+    var cur = Chronicle.hovercard.current(), room = 520;
+    if (cur && cur.getBoundingClientRect) {
+      var r = cur.getBoundingClientRect();
+      room = Math.max(160, Math.min(520, Math.max(r.top, window.innerHeight - r.bottom) - 16 - PEEK_HEAD));
+    }
+    return '<div class="rb-peek" data-look="' + esc(this.el.getAttribute('data-look') || '') + '" style="' + esc(this.bookVars()) +
+      ';--rb-peek-max:' + Math.round(room) + 'px"><div class="rb-peek-body">' + inner + '</div>' + (foot || '') + '</div>';
+  };
+  Rulebook.prototype.crumbHTML = function (back) {
+    return '<button type="button" class="rb-peek-back" data-peek-back>‹ Back to ' + esc(back.title) + '</button>';
+  };
+
+  // Clicks inside this book's peek card: rule words and entry names follow
+  // in the card, Back returns, Hold and Turn to its page act on the book.
+  Rulebook.prototype.onCardClick = function (e) {
+    var hc = window.Chronicle && Chronicle.hovercard, t = e.target, x;
+    if (!hc || !t || !t.closest || !t.closest('.chc .rb-peek')) return;
+    var cur = hc.current();
+    if (!cur || !this.el.contains(cur)) return;
+    var self = this, stack = this.peekStack || (this.peekStack = []);
+    var showing = this.peekNow;
+    if ((x = t.closest('[data-peek-back]'))) {
+      e.preventDefault(); e.stopPropagation();
+      var prev = stack.pop();
+      if (prev) { this.peekNow = prev; hc.update(prev); }
+      return;
+    }
+    if ((x = t.closest('.rb-term'))) {
+      e.preventDefault(); e.stopPropagation();
+      if (!showing) return;
+      if (x.hasAttribute('data-ref')) {
+        this.fetchEntry(x.getAttribute('data-ref-cat'), x.getAttribute('data-ref')).then(function (got) {
+          if (hc.current() !== cur) return;
+          stack.push(showing);
+          self.peekNow = self.peekContent(got);
+          hc.update(self.peekNow);
+        }, function () { /* the card keeps what it shows */ });
+        return;
+      }
+      var def = this.data && has(this.data.terms, x.getAttribute('data-term')) ? this.data.terms[x.getAttribute('data-term')] : null;
+      if (!def) return;
+      stack.push(showing);
+      this.peekNow = { kind: 'Rule', title: def.name, extraHTML: this.peekWrap(this.crumbHTML(showing) + '<p class="rb-peek-text">' + esc(def.text) + '</p>') };
+      hc.update(this.peekNow);
+      return;
+    }
+    if ((x = t.closest('[data-peek-hold]'))) {
+      e.preventDefault(); e.stopPropagation();
+      this.holdEntry(x.getAttribute('data-peek-hold'));
+      return;
+    }
+    if ((x = t.closest('[data-peek-turn]')) && showing && showing.got) {
+      e.preventDefault(); e.stopPropagation();
+      hc.close();
+      this.goEntry(showing.got);
+    }
+  };
+
+  // Turns to the page whose index lists the entry and opens it there.
+  Rulebook.prototype.goEntry = function (got) {
+    for (var i = 0; i < this.items.length; i++) {
+      var it = this.items[i];
+      if (it.kind === 'page' && it.ch.id === got.chapter && it.p === it.ch.pages[got.page]) {
+        this.openAt(i, str(got.it.id));
+        return true;
+      }
+    }
+    return this.goChapter(got.chapter);
+  };
+
+  Rulebook.prototype.holdEntry = function (key) {
+    this.slips = (this.slips || []).filter(function (k) { return k !== key; });
+    this.slips.push(key);
+    if (this.slips.length > MAX_SLIPS) this.slips.shift();
+    this.hideCard();
+    this.paintSlips(key);
+  };
+
+  // The slips hang from the book's right edge, outside the pages, so turning
+  // a page never takes them away. One is open at a time.
+  Rulebook.prototype.paintSlips = function (openKey) {
+    var self = this, rail = null;
+    [].forEach.call(this.el.children, function (c) { if (c.classList.contains('rb-slips')) rail = c; });
+    if (!this.slips || !this.slips.length) { if (rail) rail.remove(); return; }
+    if (!rail) {
+      rail = document.createElement('aside');
+      rail.className = 'rb-slips';
+      rail.setAttribute('aria-label', 'Held entries');
+      this.el.appendChild(rail);
+    }
+    rail.innerHTML = '';
+    this.slips.forEach(function (key) {
+      var cut = key.indexOf('/'), open = key === openKey, slip = document.createElement('div');
+      slip.className = 'rb-slip' + (open ? ' open' : '');
+      slip.setAttribute('data-slip', key);
+      slip.innerHTML = '<button type="button" class="rb-slip-tab" data-slip-tab aria-expanded="' + open + '">…</button>' +
+        '<div class="rb-slip-body" role="region"' + (open ? '' : ' hidden') + '></div>';
+      rail.appendChild(slip);
+      self.fetchEntry(key.slice(0, cut), key.slice(cut + 1)).then(function (got) {
+        if (self.dead || !slip.isConnected) return;
+        var name = shortName(got.it), meta = metaLine(got.it, got.list), body = slip.querySelector('.rb-slip-body');
+        slip.querySelector('.rb-slip-tab').textContent = name;
+        body.setAttribute('aria-label', name);
+        body.innerHTML = '<header><b>' + esc(entryName(got.it)) + '</b><button type="button" class="rb-slip-x" data-slip-drop aria-label="Let go of ' +
+          esc(name) + '">×</button></header>' + (meta ? '<p class="rb-ix-meta">' + meta + '</p>' : '') + entryBodyHTML(got.it, got.list, self.data.terms);
+      }, function () {
+        // Not in this view (a Director's player preview): the slip goes.
+        if (self.dead) return;
+        self.slips = self.slips.filter(function (k) { return k !== key; });
+        slip.remove();
+        if (!self.slips.length && rail.isConnected) rail.remove();
+      });
+    });
+  };
+
+  // Clicks on a slip's tab and its close button.
+  Rulebook.prototype.onSlipClick = function (t) {
+    var slip = t.closest('.rb-slip'), x;
+    if (!slip) return false;
+    if ((x = t.closest('[data-slip-tab]'))) {
+      var on = !slip.classList.contains('open');
+      [].forEach.call(slip.parentNode.children, function (s) {
+        s.classList.remove('open');
+        s.querySelector('.rb-slip-body').hidden = true;
+        s.querySelector('[data-slip-tab]').setAttribute('aria-expanded', 'false');
+      });
+      slip.classList.toggle('open', on);
+      slip.querySelector('.rb-slip-body').hidden = !on;
+      x.setAttribute('aria-expanded', String(on));
+      return true;
+    }
+    if (t.closest('[data-slip-drop]')) {
+      var key = slip.getAttribute('data-slip'), tab = null;
+      this.slips = (this.slips || []).filter(function (k) { return k !== key; });
+      this.paintSlips('');
+      [].forEach.call(this.el.querySelectorAll('.rb-slip-tab'), function (b) { if (!tab) tab = b; });
+      if (tab) tab.focus(); else if (this.searchEl) this.searchEl.focus({ preventScroll: true });
+      return true;
+    }
+    return true;
   };
 
   // --- Search ----------------------------------------------------------------
@@ -1680,8 +2168,12 @@
 
   Rulebook.prototype.pickResult = function (btn) {
     if (btn.getAttribute('data-hit') === 'screen') { this.closeResults(); this.openScreen(); return; }
-    var n = +btn.getAttribute('data-hit'), id = btn.getAttribute('data-entry') || '';
     this.closeResults();
+    this.openAt(+btn.getAttribute('data-hit'), btn.getAttribute('data-entry') || '');
+  };
+
+  // Turns to item n and, when id names an entry its index lists, opens it.
+  Rulebook.prototype.openAt = function (n, id) {
     this.pendingEntry = '';
     var it = this.items[n], blk = it && it.kind === 'page' && it.p.blocks[0];
     if (id && isObj(blk) && blk.type === 'index') {
@@ -2025,6 +2517,7 @@
   // What a rule word's hover card says. Inside the book there is no
   // "open in the rulebook" link: the reader is already in it.
   Rulebook.prototype.termCard = function (t) {
+    if (t.hasAttribute('data-ref')) return this.refCard(t);
     var key = t.getAttribute('data-term');
     var def = this.data && has(this.data.terms, key) ? this.data.terms[key] : null;
     return def ? { kind: 'Rule', title: def.name, text: def.text } : null;
@@ -2129,6 +2622,8 @@
     this.rebuild(key);
     // Still on the same spread: keep the reader where they were on it.
     if (this.currentKey() === key) this.scrollTops(tops);
+    // Held entries are asked for again as this view would see them.
+    if (this.slips && this.slips.length) this.paintSlips('');
   };
 
   // Reads, or with an argument restores, how far each shown page is scrolled.
@@ -2145,13 +2640,15 @@
     if (!t || !t.closest) return;
     if (this.bmOpen() && !t.closest('.rb-bm')) this.bmSet(false, false);
     if (!t.closest('.rb-more')) this.setMore(false);
-    if (!this.el.contains(t)) { this.closeResults(); return; }
+    if (!this.el.contains(t)) { this.closeResults(); this.closeFilterDrawers(null); return; }
     var x;
     if (!this.data) {
       if (t.closest('[data-act="retry"]')) this.load();
       return;
     }
     if ((x = t.closest('.rb-results [data-hit]'))) { this.pickResult(x); return; }
+    if (this.onIndexClick(t)) return;
+    if (this.onSlipClick(t)) return;
     if (!t.closest('.rb-search')) this.closeResults();
     if ((x = t.closest('[data-bm]'))) { this.bmPick(+x.getAttribute('data-bm')); return; }
     if ((x = t.closest('[data-go]'))) { this.goItem(+x.getAttribute('data-go')); return; }
@@ -2217,7 +2714,7 @@
     if (!p || !this.data) return;
     if (start) {
       var t = e.target;
-      var ok = !this.frontShut && t && t.closest && t.closest('.rb-book') && !t.closest('.rb-drawer, .rb-screen, .rb-wslot, .rb-roll, select');
+      var ok = !this.frontShut && t && t.closest && t.closest('.rb-book') && !t.closest('.rb-drawer, .rb-screen, .rb-wslot, .rb-roll, .rb-ixf, select');
       this.touch = ok ? { x: p.clientX, y: p.clientY } : null;
       return;
     }
@@ -2242,6 +2739,7 @@
     if (window.Chronicle && Chronicle.hovercard) {
       this.unbindCard = Chronicle.hovercard.bind(this.el, '.rb-term', function (t) { return self.termCard(t); }, { pinOnClick: true });
     }
+    this.on(document, 'click', function (e) { self.onCardClick(e); }, true);
     // Closed, the leaf costs nothing: the book is asked for when the fold-out
     // it sits in first opens.
     if (!det || det.open) { this.leafStarted = true; this.load(); }
@@ -2448,6 +2946,7 @@
       return;
     }
     if ((x = t.closest('.rb-fc'))) { this.foldCard(x); return; }
+    if (this.onIndexClick(t)) return;
     if ((x = t.closest('.rb-flap > button'))) { this.toggleFlap(x); }
   };
 

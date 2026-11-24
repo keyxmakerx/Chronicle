@@ -167,6 +167,9 @@ index:
   category: abilities      # a manifest category; its data/<category>.json
   group: class             # optional: one page per value of this property
   other: Common abilities  # optional: the page for entries without one
+  filters: [level, type, action_type]  # optional: choices to narrow a page by
+  sections: level          # optional: head the entries by this property
+  tiers: [tier1_display, tier2_display, tier3_display]  # optional
 ```
 
 - With `group`, each value gets its own page, in order (numbers count up, so
@@ -175,6 +178,19 @@ index:
 - Each entry folds down to show the category's manifest fields (the same
   columns the category list shows) and its description. Rule markup such as
   `{@condition taunted|taunts}` becomes a hover word.
+- `filters` (up to 6 properties) puts a tab over each page's list for each
+  property; a tab opens the values found on that page, each with how many
+  entries it leaves, and choices narrow the list together with the word box.
+  A property may hold one value or a list (keywords). A tab with fewer than
+  two values on a page is left out, and each entry's one-value choices show
+  on a line under its name. Each tab is named by the manifest field's label,
+  or its `_display` twin's.
+- `sections` sorts each page by a property and heads each run of entries
+  with its value ("Level 2").
+- `tiers` (up to 4 properties) draws those fields as a power roll's result
+  tiles instead of plain rows.
+- None of the three may name a `gm_only` field: its values would reach
+  players as choices.
 - A field marked `gm_only` in the manifest is shown to Directors only.
 - `director: true` on the chapter keeps the whole index for Directors.
 - A chapter has `index` or `pages`, never both. Generated chapters can't be
@@ -190,6 +206,13 @@ index:
 - `**bold**` and `*italic*`.
 - `[[term]]` underlines a word and shows its definition on hover, tap or
   keyboard focus. `[[term|what to show]]` shows different wording.
+- `[[@category/id|what to show]]` names one rules-index entry by its data
+  slug (`[[@abilities/conduit-reap-5-piety|Reap]]`). It opens the whole entry
+  in a card on the page. A rule word inside the card opens in the same card,
+  with a way back; Hold keeps the entry at the edge of the book while pages
+  turn (three at most), and Turn to its page opens it in its index. It works
+  only when a rules-index chapter of the reader's book lists that entry;
+  otherwise the card does not open.
 - A blank line starts a new paragraph; a line starting with `- ` is a list item.
 
 ## Blocks

@@ -66,6 +66,7 @@ func registerBookEditorRoutes(mg *echo.Group, h *SystemHandler) {
 	// Rules-index pages and search; any reader, sliced to their own book.
 	mg.GET("/book/index/:cat", h.BookIndexAPI)
 	mg.GET("/book/find", h.BookFindAPI)
+	mg.GET("/book/entry/:cat/:entry", h.BookEntryAPI)
 	mg.GET("/book/source", h.BookSourceAPI)
 	// Only the cover and fonts book.yaml declares; book/ is never served whole.
 	mg.GET("/book/files/:name", h.BookFileAPI)

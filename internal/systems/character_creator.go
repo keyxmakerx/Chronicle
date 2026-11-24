@@ -36,6 +36,8 @@ type CreatorStep struct {
 	// CountFrom says how many of this step the chosen parent entries allow;
 	// see CreatorCount.
 	CountFrom []CreatorCount `json:"countFrom,omitempty"`
+	// Multi: the step takes as many picks as CountFrom gives (CreatorDef.Multi).
+	Multi bool `json:"multi,omitempty"`
 }
 
 // CreatorPlan is everything the creator needs to draw its steps. Steps is
@@ -91,6 +93,7 @@ func (s *characterChoiceService) CreatorPlan(ctx context.Context, campaignID str
 				step.Parent = c.From.Step
 			}
 			step.CountFrom = c.CountFrom
+			step.Multi = c.Multi
 		}
 		plan.Steps = append(plan.Steps, step)
 		if len(plan.Steps) == maxCreatorSteps {

@@ -88,6 +88,34 @@ type HeroStep struct {
 	Parent string `json:"parent,omitempty"`
 	// CountFrom says how many of this step the chosen parent entries allow.
 	CountFrom []HeroCount `json:"countFrom,omitempty"`
+	// Multi: the step takes up to its allowance of picks, stored in the one
+	// field joined with heroMultiSeparator.
+	Multi bool `json:"multi,omitempty"`
+}
+
+// heroMultiSeparator joins a multi step's picks in its field; it matches
+// systems.MultiPickSeparator, which this plugin may not import.
+const heroMultiSeparator = ", "
+
+// heroMultiNames splits a multi step's value into its picks, trimmed, with
+// empty parts dropped.
+func heroMultiNames(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// heroMultiMax is how many picks a multi step takes: the allowance its chosen
+// parents give, else one.
+func heroMultiMax(a heroStepAllowance) int {
+	if a.Known && a.Count > 1 {
+		return a.Count
+	}
+	return 1
 }
 
 // HeroCount names a step and a number property that sets how many of this
@@ -309,6 +337,22 @@ func heroBuyList(props map[string]any) (costs map[string]float64, budget float64
 type heroPickResult struct {
 	choice *HeroChoice
 	bought []string
+	// choices is every pick of a multi step, in the order sent; choice is
+	// its first. Nil for a single step.
+	choices []*HeroChoice
+}
+
+// value is what the step's field stores: the entry's name, or a multi
+// step's names joined.
+func (r heroPickResult) value() string {
+	if len(r.choices) == 0 {
+		return r.choice.Name
+	}
+	names := make([]string, len(r.choices))
+	for i, c := range r.choices {
+		names[i] = c.Name
+	}
+	return strings.Join(names, heroMultiSeparator)
 }
 
 // resolveHeroPicks checks every pick against the plan and returns, by step
@@ -333,6 +377,22 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 	// go first: two parents can list a child of the same name, and the
 	// dependent pick must match the entry under the parent actually picked.
 	found := make(map[string]*HeroChoice, len(picks))
+	multi := map[string][]*HeroChoice{}
+	match := func(step *HeroStep, name string, dependent bool) *HeroChoice {
+		var choice *HeroChoice
+		for i := range step.Choices {
+			if !strings.EqualFold(step.Choices[i].Name, name) {
+				continue
+			}
+			if choice == nil {
+				choice = &step.Choices[i]
+			}
+			if p := found[step.Parent]; dependent && p != nil && strings.EqualFold(step.Choices[i].Parent, p.Name) {
+				return &step.Choices[i]
+			}
+		}
+		return choice
+	}
 	for _, dependent := range []bool{false, true} {
 		for key, pick := range picks {
 			step := steps[key]
@@ -349,19 +409,26 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 				}
 				continue
 			}
-			var choice *HeroChoice
-			for i := range step.Choices {
-				if !strings.EqualFold(step.Choices[i].Name, name) {
-					continue
+			if step.Multi {
+				if len(pick.Options) > 0 {
+					return nil, apperror.NewBadRequest("the " + strings.ToLower(step.Label) + " has nothing to choose from")
 				}
-				if choice == nil {
-					choice = &step.Choices[i]
+				seen := map[string]bool{}
+				for _, n := range heroMultiNames(name) {
+					c := match(step, n, dependent)
+					if c == nil {
+						return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", n, strings.ToLower(step.Label)))
+					}
+					if seen[strings.ToLower(c.Name)] {
+						return nil, apperror.NewBadRequest(fmt.Sprintf("%s is chosen twice", c.Name))
+					}
+					seen[strings.ToLower(c.Name)] = true
+					multi[key] = append(multi[key], c)
 				}
-				if p := found[step.Parent]; dependent && p != nil && strings.EqualFold(step.Choices[i].Parent, p.Name) {
-					choice = &step.Choices[i]
-					break
-				}
+				found[key] = multi[key][0]
+				continue
 			}
+			choice := match(step, name, dependent)
 			if choice == nil {
 				return nil, apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", name, strings.ToLower(step.Label)))
 			}
@@ -376,6 +443,24 @@ func resolveHeroPicks(plan *HeroPlan, picks map[string]HeroPick, checkAsked bool
 			continue
 		}
 		step := steps[key]
+		if step.Multi {
+			all := multi[key]
+			if max := heroMultiMax(heroAllowance(step, chosen)); len(all) > max {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("choose up to %d for the %s", max, strings.ToLower(step.Label)))
+			}
+			for _, c := range all {
+				if err := checkHeroStepFit(step, steps, c, chosen); err != nil {
+					return nil, err
+				}
+				// An ask-first entry waits for a Director as a request that
+				// fills the whole field, which would drop the other picks.
+				if c.State == HeroChoiceStateAskFirst && len(all) > 1 && !checkAsked {
+					return nil, apperror.NewBadRequest(fmt.Sprintf("%s needs your Director's yes first; choose it on its own and add the rest after", c.Name))
+				}
+			}
+			out[key] = heroPickResult{choice: choice, choices: all}
+			continue
+		}
 		if err := checkHeroStepFit(step, steps, choice, chosen); err != nil {
 			return nil, err
 		}
@@ -467,7 +552,7 @@ func buildHeroFields(plan *HeroPlan, picks map[string]HeroPick) (fields map[stri
 			asked[key] = true
 			continue
 		}
-		fields[key] = r.choice.Name
+		fields[key] = r.value()
 		if len(r.bought) == 0 {
 			continue
 		}
