@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
@@ -103,6 +105,43 @@ func (a *rollsCritAdapter) CritRules(ctx context.Context, campaignID string) []s
 	return s.Info().CritRules()
 }
 
+// rollsCharacterAdapter lets a Table roll name the hero it was made for. The
+// page must be a live page of this campaign and the viewer its claimed player
+// or a Director, because Foundry posts the roll as the actor linked to it. A
+// public roll also needs a page every player may see: Foundry shows the
+// actor's name and picture to the table, and a hidden page's actor is hidden
+// there too. Its
+// category is not checked: which categories count as characters is a list the
+// Director keeps, and a hero outside it should still roll as itself.
+type rollsCharacterAdapter struct {
+	entities interface {
+		GetByID(ctx context.Context, id string) (*entities.Entity, error)
+	}
+}
+
+func (a *rollsCharacterAdapter) MayRollAs(ctx context.Context, campaignID string, v rolls.Viewer, characterID, mode string) (bool, error) {
+	if a.entities == nil || v.UserID == "" {
+		return false, nil
+	}
+	e, err := a.entities.GetByID(ctx, characterID)
+	if err != nil {
+		if apperror.SafeCode(err) == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if e == nil || e.CampaignID != campaignID {
+		return false, nil
+	}
+	if !v.Director && !e.IsOwnedBy(v.UserID) {
+		return false, nil
+	}
+	if mode == rolls.ModePublic && (e.IsPrivate || (e.Visibility != "" && e.Visibility != entities.VisibilityDefault)) {
+		return false, nil
+	}
+	return true, nil
+}
+
 // rollsPowerAdapter tells the Table the campaign's power roll (the game
 // system's crafting declaration) and the characteristics on the viewer's own
 // claimed hero. It reads only a character the viewer owns, so no one's sheet
@@ -145,7 +184,7 @@ func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID st
 	if hero == nil {
 		return out, nil
 	}
-	out.Hero = hero.Name
+	out.Hero, out.HeroID = hero.Name, hero.ID
 	for i, c := range rules.Characteristics {
 		if n, ok, _ := sheetNumber(fields[c.Key]); ok {
 			v := n

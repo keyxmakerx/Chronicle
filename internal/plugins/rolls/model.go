@@ -72,46 +72,53 @@ type Die struct {
 
 // Roll is one roll in the log.
 type Roll struct {
-	ID         string    `json:"id"`
-	CampaignID string    `json:"-"`
-	Origin     string    `json:"origin"`
-	OriginID   string    `json:"originId,omitempty"`
-	Source     string    `json:"source"`
-	RollerID   string    `json:"rollerId,omitempty"`
-	RollerName string    `json:"rollerName"`
-	Label      string    `json:"label"`
-	Formula    string    `json:"formula"`
-	Dice       []Die     `json:"dice,omitempty"`
-	Modifier   int       `json:"modifier"`
-	Total      int       `json:"total"`
-	Outcome    string    `json:"outcome,omitempty"`
-	Why        string    `json:"why,omitempty"`
-	From       string    `json:"from,omitempty"`
-	Mode       string    `json:"mode"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         string `json:"id"`
+	CampaignID string `json:"-"`
+	Origin     string `json:"origin"`
+	OriginID   string `json:"originId,omitempty"`
+	Source     string `json:"source"`
+	RollerID   string `json:"rollerId,omitempty"`
+	RollerName string `json:"rollerName"`
+	Label      string `json:"label"`
+	Formula    string `json:"formula"`
+	Dice       []Die  `json:"dice,omitempty"`
+	Modifier   int    `json:"modifier"`
+	Total      int    `json:"total"`
+	Outcome    string `json:"outcome,omitempty"`
+	Why        string `json:"why,omitempty"`
+	From       string `json:"from,omitempty"`
+	Mode       string `json:"mode"`
+	// CharacterID is the hero the roll was made for, when it came from a
+	// hero's own numbers (the sheet, or the Table's power roll line). It
+	// travels on the live message only, so Foundry can speak as the hero's
+	// actor; the log does not keep it.
+	CharacterID string    `json:"characterId,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // View is a roll as one viewer is told it. A blind roll reaches its roller
 // with Hidden set and no dice, modifier, total or outcome.
 type View struct {
-	ID         string    `json:"id"`
-	Origin     string    `json:"origin"`
-	OriginID   string    `json:"originId,omitempty"`
-	Source     string    `json:"source"`
-	RollerID   string    `json:"rollerId,omitempty"`
-	RollerName string    `json:"rollerName"`
-	Label      string    `json:"label"`
-	Formula    string    `json:"formula"`
-	Dice       []Die     `json:"dice,omitempty"`
-	Modifier   *int      `json:"modifier,omitempty"`
-	Total      *int      `json:"total,omitempty"`
-	Outcome    string    `json:"outcome,omitempty"`
-	Why        string    `json:"why,omitempty"`
-	From       string    `json:"from,omitempty"`
-	Mode       string    `json:"mode"`
-	Hidden     bool      `json:"hidden,omitempty"`
-	Mine       bool      `json:"mine,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         string `json:"id"`
+	Origin     string `json:"origin"`
+	OriginID   string `json:"originId,omitempty"`
+	Source     string `json:"source"`
+	RollerID   string `json:"rollerId,omitempty"`
+	RollerName string `json:"rollerName"`
+	Label      string `json:"label"`
+	Formula    string `json:"formula"`
+	Dice       []Die  `json:"dice,omitempty"`
+	Modifier   *int   `json:"modifier,omitempty"`
+	Total      *int   `json:"total,omitempty"`
+	Outcome    string `json:"outcome,omitempty"`
+	Why        string `json:"why,omitempty"`
+	From       string `json:"from,omitempty"`
+	Mode       string `json:"mode"`
+	Hidden     bool   `json:"hidden,omitempty"`
+	Mine       bool   `json:"mine,omitempty"`
+	// CharacterID is Roll.CharacterID; it is absent from the log.
+	CharacterID string    `json:"characterId,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // Viewer is who is asking. Director is true for the owner and members with
@@ -122,11 +129,27 @@ type Viewer struct {
 	Director bool
 }
 
-// TableInput is a roll asked for at the Table tab.
+// TableInput is a roll asked for at the Table tab. CharacterID names the
+// hero whose numbers the roll uses, when it has one; it is kept only when the
+// roller plays that hero or is a Director (CharacterSource).
 type TableInput struct {
-	Formula string `json:"formula"`
-	Label   string `json:"label"`
-	Mode    string `json:"mode"`
+	Formula     string `json:"formula"`
+	Label       string `json:"label"`
+	Mode        string `json:"mode"`
+	CharacterID string `json:"characterId"`
+}
+
+// CharacterIDMax bounds a character id from a client; entity ids are UUIDs.
+const CharacterIDMax = 64
+
+// CharacterSource says whether a viewer may roll as a page: a live page of
+// the campaign that the viewer has claimed, or any of them for a Director.
+// For a public roll the page must also be one every player may see, because
+// Foundry shows the linked actor's name and picture to the whole table. It is
+// implemented in internal/app over the entities plugin, so this plugin never
+// reads pages itself.
+type CharacterSource interface {
+	MayRollAs(ctx context.Context, campaignID string, v Viewer, characterID, mode string) (bool, error)
 }
 
 // ReportInput is a roll another app decided and reports (Foundry). RollerID
@@ -230,6 +253,9 @@ type PowerRollLine struct {
 	Tiers           []int       `json:"tiers,omitempty"`
 	Characteristics []PowerStat `json:"characteristics,omitempty"`
 	Hero            string      `json:"hero,omitempty"`
+	// HeroID is the hero's page id, which the Table sends back with a roll
+	// of its numbers so the roll is the hero's.
+	HeroID string `json:"heroId,omitempty"`
 }
 
 // PowerStat is one characteristic of the power roll. Value is nil when the

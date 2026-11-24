@@ -234,7 +234,7 @@
     var self = this;
     C.apiFetch(this.base + '/power').then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
       if (!p || !p.declared || !C.powerRoll || !(p.characteristics || []).length) return;
-      self.power = { dice: p.dice || '2d10', edge: num(p.edge), bane: num(p.bane), tiers: [num((p.tiers || [])[0]), num((p.tiers || [])[1])], characteristics: p.characteristics, hero: p.hero || '' };
+      self.power = { dice: p.dice || '2d10', edge: num(p.edge), bane: num(p.bane), tiers: [num((p.tiers || [])[0]), num((p.tiers || [])[1])], characteristics: p.characteristics, hero: p.hero || '', heroId: p.heroId || '' };
       if (self.loaded) self.refreshLog(true);
       var d = self.drawer();
       if (self.sheet && d) {
@@ -715,11 +715,13 @@
   };
 
   // powerRoll asks the server for one power roll; the edge or bane clears after.
-  Table.prototype.powerRoll = function (name, value, key) {
+  // A roll of the hero's own number names the hero, so Foundry posts it as
+  // the hero's actor.
+  Table.prototype.powerRoll = function (name, value, key, heroId) {
     var p = C.powerRoll.plan(this.power, name, value, this.step);
     this.lastStat = key || '';
     this.setStep(0);
-    this.roll(p.formula, p.label);
+    this.roll(p.formula, p.label, heroId);
     $$('[data-tt-pstat]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tt-pstat') === key)); });
   };
 
@@ -1621,9 +1623,10 @@
 
   // ---------- Rolling ----------
 
-  Table.prototype.roll = function (formula, label) {
+  Table.prototype.roll = function (formula, label, characterId) {
     var self = this, err = document.getElementById('tt-ferr'), mode = document.getElementById('tt-mode');
     var body = { formula: formula, label: label || '', mode: mode ? mode.value : 'public' };
+    if (characterId) body.characterId = characterId;
     C.apiFetch(this.base, { method: 'POST', body: body }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, data: data }; });
     }).then(function (out) {
@@ -1696,7 +1699,7 @@
       }
       if (self.power && d.ttPstat !== undefined) {
         var st = self.power.characteristics.filter(function (c) { return c.key === d.ttPstat; })[0];
-        if (st) self.powerRoll(st.label, st.value == null ? 0 : num(st.value), st.key);
+        if (st) self.powerRoll(st.label, st.value == null ? 0 : num(st.value), st.key, st.value == null ? '' : self.power.heroId);
         return;
       }
       if (self.power && b.hasAttribute('data-tt-pplain')) {
