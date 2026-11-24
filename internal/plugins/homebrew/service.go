@@ -25,6 +25,9 @@ type Service interface {
 	Check(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) error
 	// Placements lists where the Customizer has placed a recipe.
 	Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error)
+	// PartsOfKind lists every saved recipe's parts of the given kinds, so an
+	// owner can find the parts that point at one of its records.
+	PartsOfKind(ctx context.Context, campaignID string, v Viewer, kinds ...string) ([]RecipePart, error)
 
 	// Fire starts the saved rules an event meets (run.go). Owners call it
 	// once they know the change was a Director's.
@@ -133,6 +136,28 @@ func partKinds(doc Doc) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, kinds ...string) ([]RecipePart, error) {
+	if err := requireDirector(v); err != nil {
+		return nil, err
+	}
+	rs, err := s.repo.List(ctx, campaignID)
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	var out []RecipePart
+	for _, r := range rs {
+		for _, p := range r.Doc.Parts {
+			for _, k := range kinds {
+				if p.Kind == k {
+					out = append(out, RecipePart{RecipeID: r.ID, Part: p})
+					break
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 func (s *service) Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error) {

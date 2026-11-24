@@ -274,7 +274,7 @@ func TestChangeListenerAndLogOwned(t *testing.T) {
 		return r, h, k
 	}
 
-	t.Run("an owned kind's move is heard; a hand-made one's and a no-op aren't", func(t *testing.T) {
+	t.Run("an owned kind's and a hand-made one's moves are heard; a no-op isn't", func(t *testing.T) {
 		r, h, k := setup(t)
 		tv, err := r.svc.Log(ctx, cmp, pageA, dm, LogInput{KindID: k.ID, Owner: "homebrew:r1:", Op: OpAdd, Amount: 2})
 		if err != nil {
@@ -284,7 +284,10 @@ func TestChangeListenerAndLogOwned(t *testing.T) {
 		if _, err := r.svc.Log(ctx, cmp, pageA, dm, LogInput{TrackerID: hand.ID, Op: OpAdd, Amount: 1}); err != nil {
 			t.Fatal(err)
 		}
-		if want := []Change{{Owner: owner, EntityID: pageA, From: 0, To: 2}}; !reflect.DeepEqual(h.changes, want) {
+		// A hand-made kind is heard by name, so a recipe part linked to it
+		// can run its rules.
+		want := []Change{{Owner: owner, KindName: "Need", EntityID: pageA, From: 0, To: 2}, {KindName: "Hand", EntityID: pageA, From: 0, To: 1}}
+		if !reflect.DeepEqual(h.changes, want) {
 			t.Fatalf("heard %+v", h.changes)
 		}
 		// Striking the line moves it back, and that is heard too; a
@@ -298,7 +301,7 @@ func TestChangeListenerAndLogOwned(t *testing.T) {
 		if _, err := r.svc.Log(ctx, cmp, pageA, dm, LogInput{TrackerID: tv.ID, Op: OpSet, Amount: 0}); err != nil {
 			t.Fatal(err)
 		}
-		want := []Change{{Owner: owner, EntityID: pageA, From: 0, To: 2}, {Owner: owner, EntityID: pageA, From: 2, To: 0}}
+		want = append(want, Change{Owner: owner, KindName: "Need", EntityID: pageA, From: 2, To: 0})
 		if !reflect.DeepEqual(h.changes, want) {
 			t.Errorf("heard %+v", h.changes)
 		}
@@ -336,6 +339,71 @@ func TestChangeListenerAndLogOwned(t *testing.T) {
 		} {
 			if err == nil {
 				t.Errorf("%s: no error", name)
+			}
+		}
+	})
+
+	t.Run("LogKind changes a hand-made kind only where it already shows", func(t *testing.T) {
+		r, _, _ := setup(t)
+		dir := r.svc.(*service).entities.(*fakeDir)
+		dir.pages["page-b"] = PageAccess{Exists: true, CanView: true, TypeID: typeHero}
+		dir.pages["page-place"] = PageAccess{Exists: true, CanView: true, TypeID: 2}
+		r.addKind(t, Kind{ID: "k-heat", Name: "Heat", Shape: ShapeCount, EveryTypeID: typeHero})
+		r.addTracker(t, Tracker{ID: "t-hand", KindID: "k-hand", Name: "Hand"})
+
+		// By name, ignoring case; a page that has it.
+		one, err := r.svc.LogKind(ctx, cmp, pageA, " hand ", dm, OpAdd, 2, "Rule from Hunger")
+		if err != nil || len(one) != 1 || one[0].Value != 2 {
+			t.Fatalf("on pageA: %+v, %v", one, err)
+		}
+		// A page without it is left alone: no row is made.
+		none, err := r.svc.LogKind(ctx, cmp, "page-b", "Hand", dm, OpAdd, 1, "")
+		if err != nil || len(none) != 0 {
+			t.Fatalf("page without it: %+v, %v", none, err)
+		}
+		for _, tr := range r.repo.trackers {
+			if tr.EntityID == "page-b" {
+				t.Fatalf("a row was made on a page without the tracker: %+v", tr)
+			}
+		}
+		// A kind on every page of the category shows there unplaced, so its
+		// row is made; a page of another category is left alone.
+		heat, err := r.svc.LogKind(ctx, cmp, "page-b", "Heat", dm, OpAdd, 1, "")
+		if err != nil || len(heat) != 1 || heat[0].Value != 1 {
+			t.Fatalf("every-page kind: %+v, %v", heat, err)
+		}
+		if got, err := r.svc.LogKind(ctx, cmp, "page-place", "Heat", dm, OpAdd, 1, ""); err != nil || len(got) != 0 {
+			t.Fatalf("other category: %+v, %v", got, err)
+		}
+		// No page: every page that has it.
+		all, err := r.svc.LogKind(ctx, cmp, "", "Hand", dm, OpSet, 0, "")
+		if err != nil || len(all) != 1 || all[0].Value != 0 {
+			t.Fatalf("everywhere: %+v, %v", all, err)
+		}
+		for name, err := range map[string]error{
+			"owned kind by name": func() error { _, err := r.svc.LogKind(ctx, cmp, pageA, "Need", dm, OpAdd, 1, ""); return err }(),
+			"unknown":            func() error { _, err := r.svc.LogKind(ctx, cmp, pageA, "Nope", dm, OpAdd, 1, ""); return err }(),
+			"empty":              func() error { _, err := r.svc.LogKind(ctx, cmp, pageA, " ", dm, OpAdd, 1, ""); return err }(),
+			"player":             func() error { _, err := r.svc.LogKind(ctx, cmp, pageA, "Hand", player, OpAdd, 1, ""); return err }(),
+			"hidden page":        func() error { _, err := r.svc.LogKind(ctx, cmp, pageHid, "Hand", dm, OpAdd, 1, ""); return err }(),
+		} {
+			if err == nil {
+				t.Errorf("%s: no error", name)
+			}
+		}
+	})
+
+	t.Run("KindNamed finds a kind by name, ignoring case", func(t *testing.T) {
+		r, _, _ := setup(t)
+		if k, ok, err := r.svc.KindNamed(ctx, cmp, "  hAND "); err != nil || !ok || k.ID != "k-hand" {
+			t.Errorf("hand: %+v, %v, %v", k, ok, err)
+		}
+		if k, ok, err := r.svc.KindNamed(ctx, cmp, "need"); err != nil || !ok || k.Owner != owner {
+			t.Errorf("owned: %+v, %v, %v", k, ok, err)
+		}
+		for _, name := range []string{"", "Nope"} {
+			if _, ok, err := r.svc.KindNamed(ctx, cmp, name); err != nil || ok {
+				t.Errorf("%q: %v, %v", name, ok, err)
 			}
 		}
 	})

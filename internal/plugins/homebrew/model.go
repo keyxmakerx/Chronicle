@@ -66,6 +66,12 @@ type Part struct {
 	Data  json.RawMessage `json:"data,omitempty"`
 }
 
+// RecipePart is one part of a saved recipe, with the recipe it belongs to.
+type RecipePart struct {
+	RecipeID string
+	Part     Part
+}
+
 // Rule is one When/Then: an event, an optional test, and the actions it runs.
 type Rule struct {
 	When   When   `json:"when"`

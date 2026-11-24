@@ -264,6 +264,15 @@ func TestRegistryPreview(t *testing.T) {
 		{"action may not reach", func(r *Registry) error {
 			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewReach, Arg: "by"}, Check: okCheck})
 		}, true},
+		{"reach repeating by a whole field", func(r *Registry) error {
+			return r.RegisterEvent(EventDef{Name: "e", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewReach, Arg: "by", Every: "by"}, Check: okCheck})
+		}, false},
+		{"reach may not repeat by a text field", func(r *Registry) error {
+			return r.RegisterEvent(EventDef{Name: "e", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewReach, Arg: "by", Every: "note"}, Check: okCheck})
+		}, true},
+		{"only a reach repeats", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewAdd, Arg: "by", Every: "by"}, Check: okCheck})
+		}, true},
 		{"client-run may not preview", func(r *Registry) error {
 			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, ClientRun: true, Preview: &Preview{Op: PreviewAdd}, Check: okCheck})
 		}, true},
