@@ -174,6 +174,11 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .oe-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 4px 12px; align-items: end; }
 .oe-facts input { font: 600 14px var(--paper-font); }
 .oe-rm { border: 0; background: none; color: var(--hc-mute); font-size: 16px; padding: 2px 4px; }
+.oe-facts--dir { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; }
+/* A monochrome row-end icon, framed only on hover; pressed means hidden. */
+.oe-hide { border: 1px solid transparent; border-radius: 4px; background: none; color: var(--hc-mute); font-size: 14px; padding: 2px 5px; }
+.oe-hide:hover { border-color: currentColor; }
+.oe-hide[aria-pressed="true"] { color: var(--paper-ink); }
 .oe-rm:hover { color: var(--hc-neg); }
 .oe-who { display: grid; gap: 6px; }
 .oe-who legend { margin-bottom: 3px; padding: 0; }

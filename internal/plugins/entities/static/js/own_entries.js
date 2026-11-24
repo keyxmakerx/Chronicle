@@ -816,11 +816,17 @@
 
   Entries.prototype.writeHTML = function (d) {
     var f = this.cur();
+    var director = this.director;
     var facts = d.facts.map(function (p, i) {
       var val = p.long
         ? '<textarea class="oe-fact-long" rows="4" aria-label="' + esc(p.label || 'Fact') + '" data-fact="' + i + '" data-part="value" maxlength="2000">' + esc(p.value) + '</textarea>'
         : '<input aria-label="Fact value" data-fact="' + i + '" data-part="value" maxlength="200" value="' + esc(p.value) + '" placeholder="Value">';
-      return '<input aria-label="Fact name" data-fact="' + i + '" data-part="label" maxlength="40" value="' + esc(p.label) + '" placeholder="Name, e.g. Size">' + val +
+      // Only a Director keeps a fact from players; a player's own entry has
+      // nothing hidden from its writer.
+      var hide = director ? '<button type="button" class="oe-hide" data-act="hidefact" data-i="' + i + '" aria-pressed="' + !!p.hidden + '" title="' +
+        (p.hidden ? 'Hidden from players. Press to show it to them.' : 'Players see this. Press to hide it from them.') + '" aria-label="Hide ' + esc(p.label || 'this fact') + ' from players">' +
+        '<i class="fa-solid ' + (p.hidden ? 'fa-eye-slash' : 'fa-eye') + '" aria-hidden="true"></i></button>' : '';
+      return '<input aria-label="Fact name" data-fact="' + i + '" data-part="label" maxlength="40" value="' + esc(p.label) + '" placeholder="Name, e.g. Size">' + val + hide +
         '<button type="button" class="oe-rm" data-act="rmfact" data-i="' + i + '" aria-label="Remove ' + esc(p.label || 'this fact') + '">×</button>';
     }).join('');
     var hidden = /data-secret/.test(d.text);
@@ -851,7 +857,8 @@
         '<div class="oe-text" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="oe-text-k" data-k="text" data-placeholder="Write it as you would a page.">' + d.text + '</div>' +
         (this.director ? '<span class="oe-hint" data-hint>' + (hidden ? '<b>Part of this entry is hidden from players.</b> ' + gm() + 's still read it.'
           : 'Select a passage and press “Hide from players” to keep it for ' + gm() + 's.') + '</span>' : '') + '</div>' +
-      '<div class="oe-f"><span class="oe-k">Facts</span>' + (d.facts.length ? '<div class="oe-facts">' + facts + '</div>' : '') +
+      '<div class="oe-f"><span class="oe-k">Facts</span>' + (d.facts.length ? '<div class="oe-facts' + (director ? ' oe-facts--dir' : '') + '">' + facts + '</div>' : '') +
+        (director && d.facts.some(function (p) { return p.hidden; }) ? '<span class="oe-hint">Facts with a crossed-out eye are hidden from players, on the sheet and in Foundry. ' + gm() + 's still read them.</span>' : '') +
         '<div><button type="button" class="oe-link" data-act="addfact">+ Add a fact</button></div></div>' +
       (d.wordLists || []).map(function (w, i) {
         return '<label class="oe-f"><span class="oe-k">' + esc(w.label) + ' <small class="oe-hint">one per line</small></span>' +
@@ -1570,6 +1577,14 @@
           self.syncText();
           d.facts.splice(+t.getAttribute('data-i'), 1);
           self.redraw(); self.touched();
+          break;
+        case 'hidefact':
+          self.syncText();
+          var hf = d.facts[+t.getAttribute('data-i')];
+          if (hf) hf.hidden = !hf.hidden;
+          self.redraw(); self.touched();
+          var hb = root.querySelector('.oe-hide[data-i="' + t.getAttribute('data-i') + '"]');
+          if (hb) hb.focus();
           break;
         case 'additem':
           self.syncText();

@@ -147,3 +147,22 @@ test('the Waiting for you block names the writer and is empty when nothing waits
   p.entries = p.entries.filter((e) => e.status !== 'sent');
   assert.equal(p.draftsWaitingHTML(), '');
 });
+
+// A fact the Director hides is listed in director_only on save, the list is
+// never shown as a word list, and a hidden part the form shows otherwise
+// stays hidden as stored.
+test('hidden facts round-trip through director_only', () => {
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const e = { id: 9, name: 'The Red Tide', visibility: 'everyone', status: 'accepted', properties: {
+    benefit: 'Gain a surge.', drawback: 'Your shadow rises.', signature_traits: [{ name: 'Hunger' }], director_only: ['drawback', 'signature_traits'] } };
+  const d = OE.draftOf(e, field);
+  assert.deepEqual(plain(d.facts.map((p) => [p.key, p.hidden])), [['benefit', false], ['drawback', true]]);
+  assert.equal(d.wordLists.some((w) => w.key === 'director_only'), false);
+  assert.deepEqual(plain(OE.propsOf(d, field).props.director_only), ['drawback', 'signature_traits']);
+  d.facts[0].hidden = true;
+  d.facts[1].hidden = false;
+  assert.deepEqual(plain(OE.propsOf(d, field).props.director_only), ['benefit', 'signature_traits']);
+  d.facts[0].hidden = false;
+  d.lists.signature_traits = [];
+  assert.equal('director_only' in OE.propsOf(d, field).props, false);
+});

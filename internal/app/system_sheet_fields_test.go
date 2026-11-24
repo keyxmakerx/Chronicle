@@ -213,10 +213,12 @@ func TestAIFieldNotes_PickListsAndFoundryLink(t *testing.T) {
 	m := sheetManifest()
 	m.EntityPresets[0].Fields = append(m.EntityPresets[0].Fields,
 		systems.FieldDef{Key: "ancestry", Label: "Ancestry", Type: "string"},
-		systems.FieldDef{Key: "subclass", Label: "Subclass", Type: "string"})
+		systems.FieldDef{Key: "subclass", Label: "Subclass", Type: "string"},
+		systems.FieldDef{Key: "kit", Label: "Kit", Type: "string", FoundryCollection: "items", FoundryItemType: []string{"kit"}, FoundryItemSingle: true, FoundryItemJoin: true},
+		systems.FieldDef{Key: "path", Label: "Path", Type: "string", FoundryCollection: "items", FoundryItemType: []string{"subclass"}, FoundryItemSingle: true})
 	hero := entities.EntityType{ID: 1, Slug: "character", Enabled: true}
 	plan := fakeCreatorPlan{steps: []systems.CreatorStep{
-		{FieldKey: "class"}, {FieldKey: "ancestry"}, {FieldKey: "subclass", Parent: "class"},
+		{FieldKey: "class"}, {FieldKey: "ancestry"}, {FieldKey: "subclass", Parent: "class"}, {FieldKey: "kit"}, {FieldKey: "path"},
 	}}
 	yes := func(context.Context, string) bool { return true }
 	no := func(context.Context, string) bool { return false }
@@ -234,6 +236,8 @@ func TestAIFieldNotes_PickListsAndFoundryLink(t *testing.T) {
 		{"unwired link reads as linked", nil, "class", []string{"Foundry keeps"}, nil},
 		{"no list, not linked", no, "stamina_max", nil, []string{"Foundry keeps"}},
 		{"no list, linked", yes, "stamina_max", []string{"Foundry keeps"}, nil},
+		{"identity pick syncs to Foundry", yes, "kit", []string{"`kit` list", "made first with `kind: system-entry`, `entry: kit`", "comma-separated (`A, B`)"}, []string{"Foundry keeps"}},
+		{"subclass item stays Foundry's", yes, "path", []string{"Foundry keeps"}, []string{"system-entries", "comma-separated"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

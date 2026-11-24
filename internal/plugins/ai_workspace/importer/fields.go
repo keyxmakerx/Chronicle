@@ -234,6 +234,10 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 		text := ""
 		if s, ok := scalarText(v); ok {
 			text = s
+		} else if words, ok := wordList(v); ok && !def.JSONList {
+			// Two picks in one text field (two kits, two domains) are one
+			// comma-separated text, which the sheets and Foundry split.
+			text = strings.Join(words, ", ")
 		} else {
 			b, err := json.Marshal(jsonSafe(v))
 			if err != nil {
@@ -251,6 +255,25 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 		}
 		return text, ""
 	}
+}
+
+// wordList is v's items as text when v is a list of plain values.
+func wordList(v any) ([]string, bool) {
+	items, ok := v.([]any)
+	if !ok || len(items) == 0 {
+		return nil, false
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		s, ok := scalarText(it)
+		if !ok {
+			return nil, false
+		}
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out, true
 }
 
 // numberOf reads a number from the shapes YAML and the paste hand over,

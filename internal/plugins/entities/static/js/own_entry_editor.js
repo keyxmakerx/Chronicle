@@ -59,6 +59,9 @@
   // --- The card's border ----------------------------------------------------
 
   var CARD_B = 'card_border', CARD_C = 'card_colour';
+  // The detail naming the details only Directors read; the server drops them,
+  // and it, from every player's view.
+  var HIDDEN = 'director_only';
   var HEX6 = /^#[0-9a-f]{6}$/i;
   function has(o, k) { return !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k); }
   function cardKey(k) { return k === CARD_B || k === CARD_C; }
@@ -197,7 +200,12 @@
     var shared = {};
     f.lists.forEach(function (l) { shared[l.key] = true; });
     var lk = lookFromProps(props, borders);
+    // The details kept from players: each fact carries its own switch, and a
+    // hidden part the form shows otherwise (a list) stays hidden as stored.
+    var hiddenSet = {};
+    (Array.isArray(props[HIDDEN]) ? props[HIDDEN] : []).forEach(function (k) { hiddenSet[k] = true; });
     Object.keys(props).forEach(function (k) {
+      if (k === HIDDEN) return;
       var v = props[k];
       // With the Card border field the two details are its look; without it they
       // go back as stored, never as free-text facts.
@@ -208,7 +216,7 @@
         if (!shared[k]) extra.push({ key: k, label: words(k), buy: v.every(function (it) { return typeof it.cost === 'number'; }) });
       } else if (k === f.budgetKey && typeof v === 'number') budget = v;
       else if (wordList(v)) wls.push({ key: k, label: words(k), text: v.join('\n'), orig: v });
-      else if (typeof v === 'number' || typeof v === 'string') facts.push({ label: words(k), value: String(v), key: k, orig: v, long: longFact(v) });
+      else if (typeof v === 'number' || typeof v === 'string') facts.push({ label: words(k), value: String(v), key: k, orig: v, long: longFact(v), hidden: !!hiddenSet[k] });
       else carried[k] = v;
     });
     var who = e.visibility || 'everyone';
@@ -219,6 +227,7 @@
       forName: e.visibility === 'character' ? (e.forName || '') : undefined,
       look: lk.look, lookKept: borders && lk.kept || undefined, lookTouched: false,
       budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried,
+      hiddenOther: Object.keys(hiddenSet).filter(function (k) { return !facts.some(function (p) { return p.key === k; }); }),
       standsFor: e.standsFor || '', standsForName: e.standsForName || '', savedWho: e.visibility || 'everyone',
       status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
   }
@@ -232,7 +241,7 @@
   // lists, and each list with only its named items, an item keeping its
   // other keys while its name is unchanged.
   function propsOf(d, f) {
-    var props = {}, seen = {};
+    var props = {}, seen = {}, hidden = [];
     Object.keys(d.carried || {}).forEach(function (k) { props[k] = d.carried[k]; });
     for (var i = 0; i < d.facts.length; i++) {
       var p = d.facts[i];
@@ -244,6 +253,7 @@
       if (seen[k]) return { error: 'Two facts are both called “' + p.label.trim() + '”. Rename or remove one.' };
       seen[k] = true;
       props[k] = (p.orig !== undefined && k === p.key && p.value === String(p.orig)) ? p.orig : factValue(p.value);
+      if (p.hidden) hidden.push(k);
     }
     // A border the form could not show goes back as stored until the writer picks.
     if (d.lookKept && !d.lookTouched) Object.keys(d.lookKept).forEach(function (k) { props[k] = d.lookKept[k]; });
@@ -271,6 +281,8 @@
       });
       if (items.length) props[key] = items;
     });
+    (d.hiddenOther || []).forEach(function (k) { if (props[k] !== undefined && hidden.indexOf(k) < 0) hidden.push(k); });
+    if (hidden.length) props[HIDDEN] = hidden;
     return { props: props };
   }
 
