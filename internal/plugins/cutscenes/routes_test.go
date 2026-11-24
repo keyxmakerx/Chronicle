@@ -311,9 +311,15 @@ func TestDirectorAnswers(t *testing.T) {
 
 	editor := r.do("GET", s, "dir", nil).Body.String()
 	for _, want := range []string{"Background", "On top", "Words", "Ending", "Preview", "Show to…", "data-engine-src", "cutscene_engine.js",
-		`name="bg_look"`, `name="ov_look"`, `name="ov_pupil"`, ">The look's own<", ">Round<", ">Dragon slit<", "data-csw-ov-pupil", "The page drifts off", "Heavy eyelids", "Ink in water", "Sparks gather", "Lids part", "Burning seam", "data-csw-preview-box", "Preview on", ">Computer<", ">Tablet<", ">Phone<"} {
+		`name="bg_look"`, `name="ov_look"`, `name="ov_pupil"`, ">The look's own<", ">Round<", ">Dragon slit<", "data-csw-ov-pupil", "The page drifts off", "Heavy eyelids", "Ink in water", "Sparks gather", "Lids part", "Burning seam"} {
 		if !strings.Contains(editor, want) {
 			t.Errorf("editor lacks %q", want)
+		}
+	}
+	// Preview plays over the whole window as a player sees it, never in a box.
+	for _, gone := range []string{"data-csw-preview-box", "Preview on"} {
+		if strings.Contains(editor, gone) {
+			t.Errorf("editor still has the boxed preview's %q", gone)
 		}
 	}
 
