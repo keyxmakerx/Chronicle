@@ -177,21 +177,6 @@ func ovKindOnChange() templ.ComponentScript {
 	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});})(this)`)
 }
 
-// PreviewSizes are the screens the editor's contained preview offers, the
-// first the one it opens on. A phone-width editor plays full-window instead,
-// which is a phone's own screen.
-var PreviewSizes = []Kind{
-	{"computer", "Computer", "a wide screen"},
-	{"tablet", "Tablet", "an upright tablet"},
-	{"phone", "Phone", "an upright phone"},
-}
-
-// previewSizeOnChange sizes the preview box to the screen picked; a scene
-// playing in it follows, since the engine watches its host's size.
-func previewSizeOnChange() templ.ComponentScript {
-	return inline("cswPreviewSize", `(function(i){var f=i.closest('form');if(!f){return;}var b=f.querySelector('[data-csw-preview-box]');if(b){b.setAttribute('data-size',i.value);}})(this)`)
-}
-
 func afterValue(e Ending) string {
 	if e.After != nil {
 		return num(*e.After)
