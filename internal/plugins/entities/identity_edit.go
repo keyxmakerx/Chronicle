@@ -3,6 +3,7 @@ package entities
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"slices"
 	"sort"
 	"strings"
@@ -293,6 +294,14 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 			_, isOptions = picks[step]
 		}
 		switch {
+		case k == TokenFieldKey && !gmOnly[k]:
+			// The owner's map token, as made in the token maker: a media id
+			// or null, never free text, so it stays a picture.
+			if !known(k) {
+				held[k] = apperror.NewForbidden(fmt.Sprintf("this character has no %q field", k))
+			} else if err := checkOwnerToken(v); err != nil {
+				held[k] = err
+			}
 		case gmOnly[k] || (!ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] && !isStep && !isOptions):
 			// Naming the key lets a player's AI drop it and resend the rest.
 			held[k] = apperror.NewForbidden(fmt.Sprintf("%q is your GM's to change, not yours", k))
@@ -821,3 +830,20 @@ func HeroBuyList(c HeroChoice) (names []string, costs map[string]float64, budget
 // HeroOptionsKey is the field that keeps what a hero bought from a step's
 // entry ("ancestry" → "ancestry_choices_json").
 func HeroOptionsKey(step string) string { return step + heroOptionsSuffix }
+
+// checkOwnerToken checks a claimed owner's token picture: null clears it,
+// anything else must be one bare media id, the form the token maker saves and
+// the hover card and Foundry module read.
+func checkOwnerToken(v any) error {
+	if v == nil {
+		return nil
+	}
+	s, ok := v.(string)
+	if !ok || len(s) != 36 {
+		return apperror.NewBadRequest(fmt.Sprintf("%q takes an uploaded picture", TokenFieldKey))
+	}
+	if id, err := uuid.Parse(s); err != nil || id.String() != s {
+		return apperror.NewBadRequest(fmt.Sprintf("%q takes an uploaded picture", TokenFieldKey))
+	}
+	return nil
+}
