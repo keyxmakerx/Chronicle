@@ -70,6 +70,15 @@ func TestAIPlan(t *testing.T) {
 			wantErr: `"black" has no looks`},
 		{name: "a look on embers is refused", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"overlays": []any{map[string]any{"kind": "embers", "look": "gather"}}}),
 			wantErr: `"embers" has no looks`},
+		{name: "a pupil is read and named; none names the look's own", actor: aDirector, on: true, r: rec("create", "Pupils", map[string]any{
+			"overlays": []any{map[any]any{"kind": "eye", "look": "rift", "pupil": "slit"}, map[any]any{"kind": "eye", "params": map[any]any{"look": "almond", "pupil": "Round"}}, map[any]any{"kind": "eye", "look": "almond"}}}),
+			want: []string{`look "Burning seam", pupil "Dragon slit"`, `look "Lids part", pupil "Round"`, `pupil "Dragon slit" (the look's own)`}},
+		{name: "an unknown pupil is refused by name", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"overlays": []any{map[string]any{"kind": "eye", "pupil": "cat"}}}),
+			wantErr: `"cat" is not a pupil; it is one of round, slit`},
+		{name: "a pupil on embers is refused", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"overlays": []any{map[string]any{"kind": "embers", "pupil": "slit"}}}),
+			wantErr: `"embers" has no pupil`},
+		{name: "a pupil on the background is refused", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"background": map[string]any{"kind": "fall-asleep", "params": map[string]any{"pupil": "slit"}}}),
+			wantErr: "only an eye on top has a pupil"},
 		{name: "add-on off", actor: aDirector, on: false, r: rec("create", "X", eyeFields()), wantErr: "switched off"},
 		{name: "a player's key", actor: aPlayer, on: true, r: rec("create", "X", eyeFields()), wantErr: "only the Director"},
 		{name: "a member's own key", actor: aOwnKey, on: true, r: rec("create", "X", eyeFields()), wantErr: "only the Director"},
@@ -190,6 +199,7 @@ func TestAILookup(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"### The Eye Opens", "Background: falling asleep over 7 s", "kind: cut-scene", "`fall-asleep`", "`eye`", "`whisper`", "`auto`",
+		"`round` (Round, the own pupil of rift):", "`slit` (Dragon slit, the own pupil of almond and gather):",
 		"`ink` (Ink in water, the default):", "`eyelids` (Heavy eyelids):", "`drift` (The page drifts off):", "`rift` (Burning seam, the default):", "`almond` (Lids part):", "`gather` (Sparks gather):"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("answer lacks %q", want)
@@ -238,6 +248,14 @@ func TestAIDocNamesEveryKind(t *testing.T) {
 	}
 	if !strings.Contains(doc, "look: ink") || !strings.Contains(doc, "look: rift") {
 		t.Error("Doc's example does not show a look")
+	}
+	for _, p := range Pupils {
+		if !strings.Contains(doc, "`"+p.Key+"` ("+p.Name+")") {
+			t.Errorf("Doc lacks the pupil %q", p.Key)
+		}
+	}
+	if !strings.Contains(doc, "pupil: slit") {
+		t.Error("Doc's example does not show a pupil")
 	}
 	if !strings.Contains(doc, "never shows a scene") {
 		t.Error("Doc does not say the AI never shows a scene")

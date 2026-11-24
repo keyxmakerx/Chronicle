@@ -171,9 +171,10 @@ func bgKindOnChange() templ.ComponentScript {
 	return inline("cswBgKind", `(function(s){var f=s.closest('form');if(!f){return;}var l=f.querySelector('[data-csw-bg-look]');if(l){l.hidden=s.value!==`+jsStr(BackgroundFallAsleep)+`;}})(this)`)
 }
 
-// ovKindOnChange does the same for one layer on top: only an eye has looks.
+// ovKindOnChange does the same for one layer on top: only an eye has looks
+// and a pupil.
 func ovKindOnChange() templ.ComponentScript {
-	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}var l=r.querySelector('[data-csw-ov-look]');if(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;}})(this)`)
+	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});})(this)`)
 }
 
 // PreviewSizes are the screens the editor's contained preview offers, the

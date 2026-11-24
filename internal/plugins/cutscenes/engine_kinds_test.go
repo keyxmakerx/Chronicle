@@ -93,3 +93,47 @@ func TestEngineLooksMatchTheServer(t *testing.T) {
 		}
 	}
 }
+
+// The pupils the server keeps and names must be the engine's, in its order,
+// and each eye look's own pupil must be the one the engine draws for it, or
+// the review's "(the look's own)" would name a pupil the player never sees.
+func TestEnginePupilsMatchTheServer(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "static", "js", "cutscene_engine.js")
+	src, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		t.Skipf("%s does not exist yet", path)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	start := strings.Index(body, "var PUPILS = [")
+	if start < 0 {
+		t.Fatal("the engine has no PUPILS table")
+	}
+	end := strings.Index(body[start:], "\n  ];")
+	if end < 0 {
+		t.Fatal("the engine's PUPILS table does not end where expected")
+	}
+	got := regexp.MustCompile(`\{\s*id:\s*'([^']+)',\s*name:\s*'([^']+)'`).FindAllStringSubmatch(body[start:start+end], -1)
+	if len(got) != len(Pupils) {
+		t.Fatalf("the engine has %d pupils, the server %d", len(got), len(Pupils))
+	}
+	for i, p := range Pupils {
+		if got[i][1] != p.Key || got[i][2] != p.Name {
+			t.Errorf("pupil %d: the engine has %s %q, the server %s %q", i, got[i][1], got[i][2], p.Key, p.Name)
+		}
+	}
+	own := map[string]string{}
+	for _, m := range regexp.MustCompile(`\{\s*id:\s*'([^']+)',\s*name:\s*'[^']+',\s*about:\s*'(?:[^'\\]|\\.)*',\s*pupil:\s*'([^']+)'`).FindAllStringSubmatch(body, -1) {
+		own[m[1]] = m[2]
+	}
+	for _, l := range Looks[OverlayEye] {
+		if _, ok := pupilOf(l.Pupil); !ok {
+			t.Errorf("eye look %s names no known pupil (%q)", l.Key, l.Pupil)
+		}
+		if own[l.Key] != l.Pupil {
+			t.Errorf("eye look %s: the engine draws pupil %q, the server says %q", l.Key, own[l.Key], l.Pupil)
+		}
+	}
+}

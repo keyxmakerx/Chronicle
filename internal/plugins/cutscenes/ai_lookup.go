@@ -84,7 +84,7 @@ func SceneBlock(s Scene) string {
 	} else {
 		b.WriteString("overlays:\n")
 		for _, o := range s.Overlays {
-			fmt.Fprintf(&b, "  - {kind: %s, at: %s, seconds: %s, color: %s%s}\n", o.Kind, num(o.At), num(o.Seconds), strconv.Quote(o.Params.Color), lookField(o.Params.Look))
+			fmt.Fprintf(&b, "  - {kind: %s, at: %s, seconds: %s, color: %s%s}\n", o.Kind, num(o.At), num(o.Seconds), strconv.Quote(o.Params.Color), lookField(o.Params.Look)+pupilField(o.Params.Pupil))
 		}
 	}
 	if len(s.Text) == 0 {
@@ -105,6 +105,14 @@ func SceneBlock(s Scene) string {
 		b.WriteString("ending: {kind: tap}\n")
 	}
 	return b.String()
+}
+
+// pupilField is a block's `pupil:` for an eye that names one.
+func pupilField(pupil string) string {
+	if pupil == "" {
+		return ""
+	}
+	return ", pupil: " + pupil
 }
 
 // lookField is a block's `look:` for a layer that names one; a layer playing
@@ -141,6 +149,17 @@ func writeCatalog(b *strings.Builder) {
 	looks("Looks of falling asleep (`background.look`)", BackgroundFallAsleep)
 	section("Animations on top (`overlays[].kind`)", OverlayKinds)
 	looks("Looks of the eye (`overlays[].look`)", OverlayEye)
+	b.WriteString("Pupils of the eye (`overlays[].pupil`), any look; left out, the look's own:\n")
+	for _, p := range Pupils {
+		var own []string
+		for _, l := range Looks[OverlayEye] {
+			if l.Pupil == p.Key {
+				own = append(own, l.Key)
+			}
+		}
+		fmt.Fprintf(b, "- `%s` (%s, the own pupil of %s): %s\n", p.Key, p.Name, strings.Join(own, " and "), p.Looks)
+	}
+	b.WriteString("\n")
 	section("Text styles (`text[].style`)", TextStyles)
 	section("Endings (`ending.kind`)", EndingKinds)
 	fmt.Fprintf(b, "Players can always close a scene with Esc or a small close mark after 2 seconds. A good scene is short: the background reaches dark, one or two things appear, a line or two of words, all within about %s.\n", Secs(20))

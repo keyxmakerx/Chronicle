@@ -56,7 +56,26 @@ func OverlayWords(o Overlay) string {
 	if c != "" {
 		noun = c + " " + noun
 	}
-	return fmt.Sprintf("%s at %s, building over %s", noun, Secs(o.At), Secs(o.Seconds)) + LookWords(o.Kind, o.Params.Look)
+	return fmt.Sprintf("%s at %s, building over %s", noun, Secs(o.At), Secs(o.Seconds)) + LookWords(o.Kind, o.Params.Look) + PupilWords(o)
+}
+
+// PupilWords names an eye's pupil, saying when it is the look's own because
+// none was picked: `, pupil "Dragon slit"`. It is empty for anything but an eye.
+func PupilWords(o Overlay) string {
+	if o.Kind != OverlayEye {
+		return ""
+	}
+	if p, ok := pupilOf(o.Params.Pupil); ok {
+		return fmt.Sprintf(", pupil %q", p.Name)
+	}
+	p, _ := pupilOf(lookPupil(o.Params.Look))
+	return fmt.Sprintf(", pupil %q (the look's own)", p.Name)
+}
+
+// lookPupil is the pupil an eye look draws when the layer names none.
+func lookPupil(look string) string {
+	l, _ := lookOf(OverlayEye, LookKey(OverlayEye, look))
+	return l.Pupil
 }
 
 // LookWords names a layer's look for a kind that has several, saying when it
@@ -81,6 +100,15 @@ func LookKey(kind, key string) string {
 	}
 	if list := Looks[kind]; len(list) > 0 {
 		return list[0].Key
+	}
+	return ""
+}
+
+// PupilKey is the pupil the editor's picker shows selected: the layer's
+// own, or "" (the look's own) when it names none or an unknown one.
+func PupilKey(key string) string {
+	if _, ok := pupilOf(key); ok {
+		return key
 	}
 	return ""
 }

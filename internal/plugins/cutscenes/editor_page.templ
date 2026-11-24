@@ -180,6 +180,15 @@ templ overlayRow(o Overlay) {
 				}
 			</select>
 		</label>
+		<label class="csw-field" data-csw-ov-pupil hidden?={ o.Kind != OverlayEye }>
+			<span class="csw-flabel">Pupil</span>
+			<select class="csw-select" name="ov_pupil">
+				<option value="" selected?={ PupilKey(o.Params.Pupil) == "" }>The look's own</option>
+				for _, p := range Pupils {
+					<option value={ p.Key } selected?={ PupilKey(o.Params.Pupil) == p.Key }>{ p.Name }</option>
+				}
+			</select>
+		</label>
 		<label class="csw-field">
 			<span class="csw-flabel">Starts at (s)</span>
 			<input class="csw-line csw-num" name="ov_at" type="number" inputmode="decimal" min="0" max="120" step="0.1" value={ num(o.At) }/>

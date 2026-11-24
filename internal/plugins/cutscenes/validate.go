@@ -56,7 +56,7 @@ func Normalize(in Scene) (Scene, error) {
 		if err != nil {
 			return out, apperror.NewBadRequest(fmt.Sprintf("layer on top %d: %s", i+1, err.Error()))
 		}
-		out.Overlays = append(out.Overlays, Overlay{Kind: o.Kind, At: at(o.At), Seconds: seconds(o.Seconds, DefaultSeconds), Params: Params{Color: c, Look: look(o.Kind, o.Params.Look)}})
+		out.Overlays = append(out.Overlays, Overlay{Kind: o.Kind, At: at(o.At), Seconds: seconds(o.Seconds, DefaultSeconds), Params: Params{Color: c, Look: look(o.Kind, o.Params.Look), Pupil: pupil(o.Kind, o.Params.Pupil)}})
 	}
 
 	if len(in.Text) > MaxTextLines {
@@ -199,6 +199,19 @@ func plainText(s string) (string, error) {
 		return r
 	}, s)
 	return strings.Join(strings.Fields(s), " "), nil
+}
+
+// pupil keeps a pupil only on an eye and only when the engine knows it; an
+// unknown one is dropped like an unknown look, so the eye draws its look's own.
+func pupil(kind, key string) string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if kind != OverlayEye {
+		return ""
+	}
+	if _, ok := pupilOf(key); ok {
+		return key
+	}
+	return ""
 }
 
 // look keeps a look only on a kind that has it and only when the engine

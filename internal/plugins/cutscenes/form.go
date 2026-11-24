@@ -25,6 +25,7 @@ const (
 	fOvSeconds = "ov_seconds"
 	fOvColor   = "ov_color"
 	fOvLook    = "ov_look"
+	fOvPupil   = "ov_pupil"
 	fTxSay     = "tx_say"
 	fTxAt      = "tx_at"
 	fTxSeconds = "tx_seconds"
@@ -46,13 +47,13 @@ func SceneFromForm(f url.Values) (Scene, error) {
 	if s.Background.Seconds, err = number(f.Get(fBgSeconds), "the background's time"); err != nil {
 		return s, err
 	}
-	kinds, ats, secs, colors, looks := f[fOvKind], f[fOvAt], f[fOvSeconds], f[fOvColor], f[fOvLook]
+	kinds, ats, secs, colors, looks, pupils := f[fOvKind], f[fOvAt], f[fOvSeconds], f[fOvColor], f[fOvLook], f[fOvPupil]
 	for i, k := range kinds {
 		k = strings.TrimSpace(k)
 		if k == "" {
 			continue
 		}
-		o := Overlay{Kind: k, Params: Params{Color: nth(colors, i), Look: nth(looks, i)}}
+		o := Overlay{Kind: k, Params: Params{Color: nth(colors, i), Look: nth(looks, i), Pupil: nth(pupils, i)}}
 		if o.At, err = number(nth(ats, i), fmt.Sprintf("layer on top %d's start", len(s.Overlays)+1)); err != nil {
 			return s, err
 		}

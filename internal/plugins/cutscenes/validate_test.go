@@ -71,6 +71,23 @@ func TestNormalize(t *testing.T) {
 				t.Errorf("eye look %q", s.Overlays[0].Params.Look)
 			}
 		}},
+		{name: "an eye pupil is kept, case and spaces aside", edit: func(s *Scene) { s.Overlays[0].Params.Pupil = " Slit " }, check: func(t *testing.T, s Scene) {
+			if s.Overlays[0].Params.Pupil != PupilSlit {
+				t.Errorf("eye pupil %q", s.Overlays[0].Params.Pupil)
+			}
+		}},
+		{name: "an unknown pupil is dropped, so the look's own is drawn", edit: func(s *Scene) { s.Overlays[0].Params.Pupil = "cat" }, check: func(t *testing.T, s Scene) {
+			if s.Overlays[0].Params.Pupil != "" {
+				t.Errorf("eye pupil %q", s.Overlays[0].Params.Pupil)
+			}
+		}},
+		{name: "a pupil on embers is dropped", edit: func(s *Scene) {
+			s.Overlays = append(s.Overlays, Overlay{Kind: OverlayEmbers, Params: Params{Pupil: PupilSlit}})
+		}, check: func(t *testing.T, s Scene) {
+			if s.Overlays[1].Params.Pupil != "" {
+				t.Errorf("embers params %+v", s.Overlays[1].Params)
+			}
+		}},
 		{name: "a look on embers is dropped", edit: func(s *Scene) {
 			s.Overlays = append(s.Overlays, Overlay{Kind: OverlayEmbers, Params: Params{Look: "gather"}})
 		}, check: func(t *testing.T, s Scene) {
@@ -231,8 +248,8 @@ func TestSceneFromForm(t *testing.T) {
 			}
 		}},
 		{name: "looks are read, the eye's by row", form: url.Values{"name": {"N"}, "bg_kind": {"fall-asleep"}, "bg_look": {"eyelids"},
-			"ov_kind": {"embers", "", "eye"}, "ov_look": {"gather", "rift", "rift"}}, check: func(t *testing.T, s Scene) {
-			if s.Background.Params.Look != "eyelids" || len(s.Overlays) != 2 || s.Overlays[1].Params.Look != "rift" {
+			"ov_kind": {"embers", "", "eye"}, "ov_look": {"gather", "rift", "rift"}, "ov_pupil": {"", "", "slit"}}, check: func(t *testing.T, s Scene) {
+			if s.Background.Params.Look != "eyelids" || len(s.Overlays) != 2 || s.Overlays[1].Params.Look != "rift" || s.Overlays[1].Params.Pupil != "slit" {
 				t.Errorf("looks: bg %+v overlays %+v", s.Background, s.Overlays)
 			}
 		}},

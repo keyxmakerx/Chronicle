@@ -146,3 +146,28 @@ for (const eye of ['rift', 'almond', 'gather']) {
     }
   });
 }
+
+// A dragon slit is its own drawing, not the round pupil renamed: the same
+// eye, held still, paints its middle differently with each pupil.
+test('a slit pupil draws a different eye from a round one', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 1280, height: 800 }, true);
+  const middle = async (pupil) => {
+    await start(pg, { id: 'p', name: 'Pupil', background: { kind: 'black' }, overlays: [{ kind: 'eye', at: 0, seconds: 0.5, params: { look: 'rift', pupil } }], ending: { kind: 'tap' } });
+    await pg.waitForFunction(() => window.run.time() >= 1);
+    const px = await pg.evaluate(() => {
+      const c = document.querySelector('.cs-cut-canvas'), g = c.getContext('2d');
+      const w = Math.round(c.width * 0.06), x = Math.round(c.width / 2 - w / 2), y = Math.round(c.height * 0.47 - w / 2);
+      return Array.from(g.getImageData(x, y, w, w).data);
+    });
+    await pg.evaluate(() => window.run.stop());
+    await pg.waitForFunction(() => !document.querySelector('.cs-cut'));
+    return px;
+  };
+  const round = await middle('round'), slit = await middle('slit');
+  let differ = 0;
+  for (let i = 0; i < round.length; i += 4) if (Math.abs(round[i + 1] - slit[i + 1]) > 40) differ++;
+  assert.ok(differ > round.length / 4 * 0.1, `${differ} pixels differ between the pupils`);
+  // Each pupil holds still under reduced motion, so the comparison is fair.
+  assert.deepEqual(await middle('round'), round);
+  assert.deepEqual(errors, []);
+});

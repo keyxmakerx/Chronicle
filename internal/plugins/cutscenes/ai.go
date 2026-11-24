@@ -195,7 +195,7 @@ func strict(v any, dst any, what, shape string) error {
 
 const (
 	bgShape     = "{kind, seconds, look}"
-	ovShape     = "a list of {kind, at, seconds, color, look}"
+	ovShape     = "a list of {kind, at, seconds, color, look, pupil}"
 	textShape   = "a list of {say, at, seconds, style}"
 	endingShape = "{kind: tap} or {kind: auto, after}"
 )
@@ -214,7 +214,24 @@ type aiOverlay struct {
 	Color   string   `json:"color"`
 	Colour  string   `json:"colour"`
 	Look    string   `json:"look"`
+	Pupil   string   `json:"pupil"`
 	Params  *Params  `json:"params"`
+}
+
+// aiPupil checks a pupil an AI wrote, refusing an unknown one or one on
+// anything but an eye by name, as aiLook does for looks.
+func aiPupil(kind, pupil, where string) (string, error) {
+	pupil = strings.ToLower(strings.TrimSpace(pupil))
+	if pupil == "" {
+		return "", nil
+	}
+	if kind != OverlayEye {
+		return "", aiplug.BadRequestf("%s: %q has no pupil; only %s does", where, kind, OverlayEye)
+	}
+	if _, ok := pupilOf(pupil); !ok {
+		return "", aiplug.BadRequestf("%s: %q is not a pupil; it is one of %s", where, pupil, keys(Pupils))
+	}
+	return pupil, nil
 }
 
 // aiLook checks a look an AI wrote. The server drops an unknown look and
@@ -311,6 +328,9 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 		if err != nil {
 			return e, err
 		}
+		if b.Params != nil && b.Params.Pupil != "" {
+			return e, aiplug.BadRequestf("background: only an eye on top has a pupil")
+		}
 		bg := Background{Kind: b.Kind, Seconds: or(b.Seconds, DefaultSeconds), Params: Params{Look: lk}}
 		e.background = &bg
 	}
@@ -327,9 +347,17 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 			if lk == "" && o.Params != nil {
 				lk = o.Params.Look
 			}
+			pu := o.Pupil
+			if pu == "" && o.Params != nil {
+				pu = o.Params.Pupil
+			}
 			if known(OverlayKinds, o.Kind) {
 				var err error
-				if lk, err = aiLook(o.Kind, lk, fmt.Sprintf("layer on top %d", i+1)); err != nil {
+				where := fmt.Sprintf("layer on top %d", i+1)
+				if lk, err = aiLook(o.Kind, lk, where); err != nil {
+					return e, err
+				}
+				if pu, err = aiPupil(o.Kind, pu, where); err != nil {
 					return e, err
 				}
 			}
@@ -340,7 +368,7 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 			if c == "" && o.Params != nil {
 				c = o.Params.Color
 			}
-			out = append(out, Overlay{Kind: o.Kind, At: or(o.At, 0), Seconds: or(o.Seconds, DefaultSeconds), Params: Params{Color: c, Look: lk}})
+			out = append(out, Overlay{Kind: o.Kind, At: or(o.At, 0), Seconds: or(o.Seconds, DefaultSeconds), Params: Params{Color: c, Look: lk, Pupil: pu}})
 		}
 		e.overlays = &out
 	}
@@ -634,17 +662,27 @@ func (*sceneKind) Export(context.Context, string, aiplug.Actor) (string, error) 
 func (*sceneKind) Doc() string {
 	return fmt.Sprintf("A cut scene: a short full-screen moment the Director shows chosen players, matched by `name`. It has three separate layers and an ending; times are seconds from the start. "+
 		"`background` is `{kind, seconds, look}`: kind one of %s, seconds %s to %s (how long it takes to reach full dark; black ignores it), `look` only for fall-asleep: %s. "+
-		"`overlays` (the layers drawn on top, in order, at most %d) is a list of `{kind, at, seconds, color, look}`: kind one of %s, `at` 0 to %s (when it starts), `seconds` %s to %s (how long it builds up), `color` written #rrggbb (eye default %s), `look` only for eye: %s. "+
+		"`overlays` (the layers drawn on top, in order, at most %d) is a list of `{kind, at, seconds, color, look, pupil}`: kind one of %s, `at` 0 to %s (when it starts), `seconds` %s to %s (how long it builds up), `color` written #rrggbb (eye default %s), `look` only for eye: %s, `pupil` only for eye: %s. "+
 		"`text` (the words, at most %d lines) is a list of `{say, at, seconds, style}`: `say` plain text of 1 to %d characters (never HTML or markdown), `at` 0 to %s, `seconds` how long it stays on screen (%s to %s, or 0 to stay to the end), style one of %s. "+
 		"`ending` is `{kind: tap}` (a quiet Close appears once the last layer has finished) or `{kind: auto, after: 3}` (closes by itself that many seconds after the last layer, 0 to %s). "+
-		"Leaving `look` out plays the first look named. Numbers outside their range are brought to the nearest allowed value and the review says so; an unknown kind, style or look, a look on a kind that has none, or a colour not written #rrggbb is refused. "+
+		"Leaving `look` out plays the first look named; leaving `pupil` out draws the look's own (round for rift, slit for almond and gather), and `pupil: slit` makes any eye a dragon's. Numbers outside their range are brought to the nearest allowed value and the review says so; an unknown kind, style, look or pupil, a look on a kind that has none, a pupil on anything but an eye, or a colour not written #rrggbb is refused. "+
 		"On update only the layers written change, and a list (`overlays`, `text`) written replaces that whole list; `rename_to` renames. `action: delete` removes the scene named by `name` and takes no other key. "+
 		"The AI never shows a scene to anyone: who sees it and when is the Director's live choice on the Cut scenes page, so a block naming players, `show`, `to` or a rewatch time is refused. "+
-		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: fall-asleep, seconds: 7, look: ink}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: rift}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
+		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: fall-asleep, seconds: 7, look: ink}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: rift, pupil: slit}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
 		keys(BackgroundKinds), num(MinSeconds), num(MaxSeconds), lookList(BackgroundFallAsleep),
-		MaxOverlays, keys(OverlayKinds), num(MaxAt), num(MinSeconds), num(MaxSeconds), DefaultEyeColor, lookList(OverlayEye),
+		MaxOverlays, keys(OverlayKinds), num(MaxAt), num(MinSeconds), num(MaxSeconds), DefaultEyeColor, lookList(OverlayEye), pupilList(),
 		MaxTextLines, MaxSayChars, num(MaxAt), num(MinSeconds), num(MaxSeconds), keys(TextStyles),
 		num(MaxAfter))
+}
+
+// pupilList names the eye's pupils for the block's description: "`round`
+// (Round), …".
+func pupilList() string {
+	parts := make([]string, 0, len(Pupils))
+	for _, p := range Pupils {
+		parts = append(parts, fmt.Sprintf("`%s` (%s)", p.Key, p.Name))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // lookList names a kind's looks for the block's description: "`ink` (Ink

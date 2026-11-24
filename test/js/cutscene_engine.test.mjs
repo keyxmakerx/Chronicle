@@ -28,6 +28,10 @@ test('the kinds the engine lists are the ones it is built to draw', () => {
     for (const l of looks) assert.ok(l.id && l.name && l.about, kind + ' ' + l.id);
     assert.ok(looks.some((l) => l.id === engine._pure.DEFAULT_LOOK[kind]), kind + ' default');
   }
+  // Any eye takes either pupil, and each eye look names its own.
+  assert.deepEqual(engine.pupils.map((p) => p.id), ['round', 'slit']);
+  for (const p of engine.pupils) assert.ok(p.name && p.about, p.id);
+  for (const l of engine.looks.eye) assert.ok(engine.pupils.some((p) => p.id === l.pupil), l.id + ' pupil');
 });
 
 test('the server and the engine name the same kinds', () => {
@@ -79,6 +83,14 @@ test('normalise clamps, checks and fills in what a scene leaves out', () => {
         assert.equal(s.background.params.look, engine._pure.DEFAULT_LOOK['fall-asleep']);
         assert.equal(s.overlays[0].params.look, 'almond');
         assert.equal(s.overlays[1].params.look, engine._pure.DEFAULT_LOOK.eye);
+      }
+    },
+    {
+      name: 'an eye draws its look\'s own pupil unless it names a known one; nothing else has one',
+      in: { overlays: [{ kind: 'eye' }, { kind: 'eye', params: { look: 'almond' } }, { kind: 'eye', params: { look: 'gather' } }, { kind: 'eye', params: { pupil: 'slit' } },
+        { kind: 'eye', params: { look: 'almond', pupil: 'round' } }, { kind: 'eye', params: { look: 'almond', pupil: 'cat' } }, { kind: 'embers', params: { pupil: 'slit' } }] },
+      check: (s) => {
+        assert.deepEqual(s.overlays.map((o) => o.params.pupil), ['round', 'slit', 'slit', 'slit', 'round', 'slit', undefined]);
       }
     },
     {

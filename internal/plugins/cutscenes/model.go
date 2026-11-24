@@ -65,21 +65,45 @@ type Look struct {
 	Key   string
 	Name  string
 	Looks string
+	Pupil string // an eye look's own pupil, drawn when the layer names none
 }
 
 // Looks lists the looks of each kind that has them. A look on any other kind,
 // or one not listed here, is dropped, and the engine plays the default.
 var Looks = map[string][]Look{
 	BackgroundFallAsleep: {
-		{"ink", "Ink in water", "darkness bleeds in from the edges like ink spreading through water, in curling soft tendrils that meet in the middle"},
-		{"eyelids", "Heavy eyelids", "soft dark patches breathe in from the edges while eyelids droop and flutter open twice before they give in"},
-		{"drift", "The page drifts off", "the screen itself blurs, loses its colour and sinks while darkness closes in like tunnel vision and soft dark spots float across it"},
+		{"ink", "Ink in water", "darkness bleeds in from the edges like ink spreading through water, in curling soft tendrils that meet in the middle", ""},
+		{"eyelids", "Heavy eyelids", "soft dark patches breathe in from the edges while eyelids droop and flutter open twice before they give in", ""},
+		{"drift", "The page drifts off", "the screen itself blurs, loses its colour and sinks while darkness closes in like tunnel vision and soft dark spots float across it", ""},
 	},
 	OverlayEye: {
-		{"rift", "Burning seam", "a line of fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you; as it opens, fire blooms around it in the eye's colour and a haze of heat veils the eye"},
-		{"almond", "Lids part", "a thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil; as they open, fire blooms around the eye and a haze of heat veils it"},
-		{"gather", "Sparks gather", "sparks drift out of the dark into a ring of fire; lines of light draw the eye around it, the pupil splits open and fire blooms around it under a haze of heat"},
+		{"rift", "Burning seam", "a line of fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you; as it opens, fire blooms around it in the eye's colour and a haze of heat veils the eye", PupilRound},
+		{"almond", "Lids part", "a thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil; as they open, fire blooms around the eye and a haze of heat veils it", PupilSlit},
+		{"gather", "Sparks gather", "sparks drift out of the dark into a ring of fire; lines of light draw the eye around it, the pupil splits open and fire blooms around it under a haze of heat", PupilSlit},
 	},
+}
+
+// Pupils an eye can be drawn with, whatever its look. Ids and names mirror
+// the engine's ChronicleCutscene.pupils table, in its order; a Go test reads
+// the engine to keep them equal. A layer naming none gets its look's own.
+const (
+	PupilRound = "round"
+	PupilSlit  = "slit"
+)
+
+var Pupils = []Kind{
+	{PupilRound, "Round", "a round black pupil that widens and narrows"},
+	{PupilSlit, "Dragon slit", "a tall reptilian slit that narrows and flares with the fire, in a scaled, veined iris"},
+}
+
+// pupilOf returns the pupil's entry, or false for an unknown one.
+func pupilOf(key string) (Kind, bool) {
+	for _, p := range Pupils {
+		if p.Key == key {
+			return p, true
+		}
+	}
+	return Kind{}, false
 }
 
 // lookOf returns the look's entry for kind, or false when kind has no such
@@ -135,6 +159,7 @@ type Scene struct {
 type Params struct {
 	Color string `json:"color,omitempty"`
 	Look  string `json:"look,omitempty"`
+	Pupil string `json:"pupil,omitempty"` // eye only; empty draws its look's own
 }
 
 // Background is the bottom layer: how the screen goes dark.

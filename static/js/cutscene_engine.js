@@ -43,12 +43,18 @@
       { id: 'drift', name: 'The page drifts off', about: 'The screen itself blurs, loses its colour and sinks, while darkness closes in like tunnel vision and soft dark spots float across it.' }
     ],
     eye: [
-      { id: 'rift', name: 'Burning seam', about: 'A line of green fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you; as it opens, emerald fire blooms around it and a haze of heat veils the eye.' },
-      { id: 'almond', name: 'Lids part', about: 'A thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil; as they open, emerald fire blooms around the eye and a haze of heat veils it.' },
-      { id: 'gather', name: 'Sparks gather', about: 'Sparks drift out of the dark into a ring of green fire; lines of light draw the eye around it, the pupil splits open and emerald fire blooms around it under a haze of heat.' }
+      { id: 'rift', name: 'Burning seam', about: 'A line of green fire burns across the dark and tears open into a ragged eye with a round pupil that narrows onto you; as it opens, emerald fire blooms around it and a haze of heat veils the eye.', pupil: 'round' },
+      { id: 'almond', name: 'Lids part', about: 'A thin seam of light cracks, hesitates, then the lids part on a burning iris with a slit pupil; as they open, emerald fire blooms around the eye and a haze of heat veils it.', pupil: 'slit' },
+      { id: 'gather', name: 'Sparks gather', about: 'Sparks drift out of the dark into a ring of green fire; lines of light draw the eye around it, the pupil splits open and emerald fire blooms around it under a haze of heat.', pupil: 'slit' }
     ]
   };
   var DEFAULT_LOOK = { 'fall-asleep': 'ink', eye: 'rift' };
+  // Any eye can take either pupil; one that names none draws its look's own
+  // (the `pupil` of its LOOKS entry).
+  var PUPILS = [
+    { id: 'round', name: 'Round', about: 'A round black pupil that widens and narrows.' },
+    { id: 'slit', name: 'Dragon slit', about: 'A tall reptilian slit that narrows and flares with the fire, in a scaled, veined iris.' }
+  ];
   var DEFAULT_EYE = '#3dff7a';
   var DEFAULT_EMBER = '#ff9a3c';
 
@@ -69,6 +75,12 @@
   }
   function inList(v, list) { return list.indexOf(v) >= 0; }
   function colour(v, def) { return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : def; }
+  function pupil(v, lk) {
+    for (var i = 0; i < PUPILS.length; i++) if (PUPILS[i].id === v) return v;
+    var all = LOOKS.eye;
+    for (var j = 0; j < all.length; j++) if (all[j].id === lk) return all[j].pupil;
+    return 'round';
+  }
   function look(kind, v) {
     var all = LOOKS[kind] || [];
     for (var i = 0; i < all.length; i++) if (all[i].id === v) return v;
@@ -98,7 +110,10 @@
       var p = o.params && typeof o.params === 'object' ? o.params : {};
       var n = { kind: o.kind, at: num(o.at, 0, 120, 0), seconds: num(o.seconds, 0.5, 60, 3), params: {} };
       n.params.color = colour(p.color, o.kind === 'eye' ? DEFAULT_EYE : DEFAULT_EMBER);
-      if (o.kind === 'eye') n.params.look = look('eye', p.look);
+      if (o.kind === 'eye') {
+        n.params.look = look('eye', p.look);
+        n.params.pupil = pupil(p.pupil, n.params.look);
+      }
       out.overlays.push(n);
     });
     (Array.isArray(s.text) ? s.text : []).slice(0, 12).forEach(function (t) {
@@ -242,7 +257,7 @@
   }
 
   var pure = {
-    KINDS: KINDS, LOOKS: LOOKS, DEFAULT_LOOK: DEFAULT_LOOK, ESCAPE_AFTER: ESCAPE_AFTER, TEXT_IN: TEXT_IN, TEXT_OUT: TEXT_OUT,
+    KINDS: KINDS, LOOKS: LOOKS, PUPILS: PUPILS, DEFAULT_LOOK: DEFAULT_LOOK, ESCAPE_AFTER: ESCAPE_AFTER, TEXT_IN: TEXT_IN, TEXT_OUT: TEXT_OUT,
     normalise: normalise, timeline: timeline, activeAt: activeAt, ending: ending,
     lidOpen: lidOpen, eyeOpen: eyeOpen, noise: noise, rng: rng
   };
@@ -974,6 +989,7 @@
   function Eye(ov, seed, rm) {
     var r = rng(seed);
     this.lk = ov.params.look || DEFAULT_LOOK.eye;
+    this.pupil = pupil(ov.params.pupil, this.lk);
     this.hex = ov.params.color;
     this.col = rgb(this.hex);
     this.hot = mix(this.col, WHITE, 0.7);
@@ -1196,7 +1212,7 @@
         g.beginPath();
         g.arc(0, 0, R, 0, 6.283);
         g.clip();
-        this.iris(g, R, t, u, after, flick, beat, 'slit', false);
+        this.iris(g, R, t, u, after, flick, beat, this.pupil, false);
         g.restore();
       }
       // The ring forming as the sparks arrive.
@@ -1229,7 +1245,7 @@
     g.save();
     trace(g, top, bottom);
     g.clip();
-    this.iris(g, R, t, u, after, flick, beat, lk === 'rift' ? 'round' : 'slit', true);
+    this.iris(g, R, t, u, after, flick, beat, this.pupil, true);
     // The lids shade the eye they cover.
     var sh = g.createLinearGradient(0, -h * 1.1, 0, h * 1.1);
     sh.addColorStop(0, 'rgba(0,0,0,0.8)');
@@ -1305,6 +1321,7 @@
     g.arc(0, 0, R * 0.96, 0, 6.283);
     g.stroke();
     g.globalCompositeOperation = 'source-over';
+    if (pupil === 'slit') this.scales(g, R, t, flick);
     // The pupil, which widens as it notices you and breathes after.
     var idle = smooth(0, 2, after);
     var dil, split = 1;
@@ -1325,11 +1342,13 @@
     if (pupil === 'round') {
       g.arc(0, 0, R * (0.13 + 0.36 * clamp01(dil)), 0, 6.283);
     } else {
-      var pw = R * (0.06 + 0.18 * clamp01(dil)), ph = R * 0.9 * split;
+      // A dragon's slit: tall, sharp at both ends, and breathing with the
+      // fire, narrowing as it flares and opening as it settles.
+      var pw = R * (0.035 + 0.15 * clamp01(dil)) * (0.78 + 0.44 * qn(t * 1.6, 41.3)), ph = R * 0.97 * split;
       if (ph < 0.3) return;
       g.moveTo(0, -ph);
-      g.quadraticCurveTo(pw * 2, 0, 0, ph);
-      g.quadraticCurveTo(-pw * 2, 0, 0, -ph);
+      g.bezierCurveTo(pw * 1.55, -ph * 0.5, pw * 1.55, ph * 0.5, 0, ph);
+      g.bezierCurveTo(-pw * 1.55, ph * 0.5, -pw * 1.55, -ph * 0.5, 0, -ph);
     }
     g.fillStyle = '#000';
     g.fill();
@@ -1338,6 +1357,64 @@
     g.lineWidth = R * 0.025;
     g.stroke();
     stamp(g, this.sp.ember, -R * 0.34, -R * 0.38, R * 0.32, R * 0.26, 0, 0.5);
+    g.globalCompositeOperation = 'source-over';
+  };
+
+  // scales lays a reptile's iris over the plasma: a hot seam of light down
+  // the middle where the slit opens, dark veins that branch out across it,
+  // a crazing of scale-like cells round the rim, and flecks that glint.
+  // Fixed per eye, so it reads as anatomy rather than flicker.
+  Eye.prototype.scales = function (g, R, t, flick) {
+    var col = this.col, hot = this.hot, dark = this.dark, i, k;
+    g.globalCompositeOperation = 'lighter';
+    stamp(g, this.sp.glow, 0, 0, R * 0.8, R * 2.1, 0, 0.32 * flick);
+    g.globalCompositeOperation = 'source-over';
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.strokeStyle = css(dark, 0.5);
+    for (i = 0; i < 26; i++) {
+      var a = i / 26 * 6.283 + (hash(i + 70) - 0.5) * 0.2, r = R * (0.3 + 0.08 * hash(i + 71));
+      var x = Math.cos(a) * r, y = Math.sin(a) * r;
+      g.lineWidth = R * (0.009 + 0.011 * hash(i + 72));
+      g.beginPath();
+      g.moveTo(x, y);
+      for (k = 1; k <= 5; k++) {
+        a += (hash(i * 7 + k) - 0.5) * 0.5;
+        r += R * 0.12;
+        x = Math.cos(a) * r; y = Math.sin(a) * r;
+        g.lineTo(x, y);
+        // Every other vein forks once on its way out.
+        if (k === 3 && i % 2) {
+          var fa = a + (hash(i + k) < 0.5 ? -0.35 : 0.35);
+          g.moveTo(x, y);
+          g.lineTo(Math.cos(fa) * (r + R * 0.16), Math.sin(fa) * (r + R * 0.16));
+          g.moveTo(x, y);
+        }
+      }
+      g.stroke();
+    }
+    // Scale-like cells: short arcs in two staggered rings near the rim.
+    g.lineWidth = R * 0.016;
+    g.strokeStyle = css(dark, 0.5);
+    for (k = 0; k < 2; k++) {
+      var n = 22 + k * 6, rr = R * (0.74 + 0.12 * k);
+      for (i = 0; i < n; i++) {
+        var s0 = (i + k * 0.5) / n * 6.283;
+        g.beginPath();
+        g.arc(Math.cos(s0) * rr * 0.12, Math.sin(s0) * rr * 0.12, rr * 0.9, s0 - 0.11, s0 + 0.11);
+        g.stroke();
+      }
+    }
+    g.globalCompositeOperation = 'lighter';
+    for (i = 0; i < 14; i++) {
+      var fa2 = hash(i + 90) * 6.283, fr = R * (0.38 + 0.5 * hash(i + 91)), tw = 0.5 + 0.5 * Math.sin(t * (1.1 + hash(i + 92)) + i);
+      stamp(g, this.sp.ember, Math.cos(fa2) * fr, Math.sin(fa2) * fr, R * 0.09, R * 0.09, 0, 0.35 * tw * flick);
+    }
+    g.strokeStyle = css(mix(col, hot, 0.5), 0.35 * flick);
+    g.lineWidth = R * 0.02;
+    g.beginPath();
+    g.arc(0, 0, R * 0.99, 0, 6.283);
+    g.stroke();
     g.globalCompositeOperation = 'source-over';
   };
 
@@ -1637,6 +1714,7 @@
     play: function (host, scene, opts) { return play(host, scene, opts || {}); },
     kinds: { background: KINDS.background.slice(), overlays: KINDS.overlays.slice(), textStyles: KINDS.textStyles.slice() },
     looks: LOOKS,
+    pupils: PUPILS,
     _pure: pure
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
