@@ -168,6 +168,9 @@ type BookBlock struct {
 	From     int    `json:"from,omitempty"`
 	To       int    `json:"to,omitempty"`
 	Count    int    `json:"count,omitempty"`
+	// List is how an index page lays its entries out: the choices it offers
+	// and the properties it heads and draws specially.
+	List *BookIndexList `json:"list,omitempty"`
 }
 
 // BookDice is a parsed dice expression such as 2d10.
@@ -200,6 +203,9 @@ type BookItem struct {
 type BookStat struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
+	// Key is the data property a rules-index field came from, so the reader
+	// can leave out a field it already shows as a choice or a tier.
+	Key string `json:"key,omitempty"`
 }
 
 // --- YAML file shapes. Decoded with KnownFields so a misspelt key is

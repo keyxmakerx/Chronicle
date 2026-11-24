@@ -52,6 +52,7 @@ const rollPage = {
 };
 
 function bookFixture(opts = {}) {
+  if (opts.index) return indexFixture();
   if (opts.house) return houseFixture(opts);
   if (opts.screen) return screenFixture(opts);
   if (opts.contents) {
@@ -79,6 +80,27 @@ function bookFixture(opts = {}) {
       title: "Director's book", director: true,
       chapters: [{ id: 'running', title: 'Running the game', director: true, pages: [longPage('Pacing'), longPage('Rewards')] }],
     }],
+  };
+}
+
+// A rules index with choices, and a written page naming one of its entries
+// as an entry link and a rule word, shaped like GET .../book and the index
+// and entry answers the server sends.
+const IX_LIST = { filters: [{ key: 'level', label: 'Level' }, { key: 'keywords', label: 'Keywords' }], sections: 'level', sectionLabel: 'Level', tiers: ['tier1_display'] };
+const IX_ITEMS = [
+  { id: 'b-strike', name: 'Blade Strike', summary: 'A cut.', fields: [{ label: 'Level', value: '1', key: 'level' }, { label: 'Tier 1 (11 or lower)', value: '2 damage', key: 'tier1_display' }, { label: 'Effect', value: 'The target is [[slowed|slowed down]].', key: 'effect_display' }],
+    facets: [{ key: 'level', values: ['1'] }, { key: 'keywords', values: ['Melee', 'Strike'] }] },
+  { id: 'c-cleave', name: 'Cleave', summary: 'Two foes.', facets: [{ key: 'level', values: ['2'] }, { key: 'keywords', values: ['Melee'] }] },
+  { id: 'd-dash', name: 'Dash', summary: 'Go fast.', facets: [{ key: 'level', values: ['2'] }, { key: 'keywords', values: ['Move'] }] },
+];
+function indexFixture() {
+  return {
+    title: 'Handbook', systemName: 'Demo', turn: 'flip', look: 'bold', theme: BOLD_THEME, isDirector: true, start: 'spells', tabs: [],
+    terms: { slowed: { name: 'Slowed', text: 'Your speed is 2.' } },
+    parts: [{ title: "Player's book", chapters: [
+      { id: 'spells', title: 'Fighting', pages: [{ title: 'Moves', blocks: [{ type: 'text', text: 'A fury opens with [[@abilities/b-strike|Blade Strike]] and leaves a foe [[slowed]].\n\nA dead name: [[@abilities/nope|Nobody]].' }] }, longPage('More')] },
+      { id: 'all-abilities', title: 'All abilities', generated: true, pages: [{ title: 'Fury', blocks: [{ type: 'index', category: 'abilities', key: 'class', value: 'Fury', count: 3, list: IX_LIST }] }] },
+    ] }],
   };
 }
 
@@ -206,6 +228,7 @@ ${opts.nested ? '<main id="main-content">' : ''}<main id="main-content"><div id=
     return function () { window.__bc.push('release ' + name); };
   };` : ''}
 </script>
+${opts.index ? '<script src="/static/js/hovercard.js"></script>' : ''}
 <script src="/static/js/widgets/rulebook.js"></script>
 </body></html>`;
 }
@@ -233,6 +256,8 @@ async function withBook(fn, opts = {}) {
       if (p === BOOK_URL) page.bookRequests++;
       if (p === BOOK_URL && opts.failFirst && page.bookRequests === 1) return route.fulfill({ status: 500, body: '' });
       if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture(opts)) });
+      if (p === BOOK_URL + '/index/abilities') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: IX_ITEMS }) });
+      if (p === BOOK_URL + '/entry/abilities/b-strike') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entry: IX_ITEMS[0], chapter: 'all-abilities', page: 0, pageTitle: 'Fury', list: IX_LIST }) });
       if (p === COVER_URL) return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: COVER_SVG });
       if (p === FONT_URL) { fontRequests.push(p); return route.fulfill({ status: 200, contentType: 'font/woff2', body: 'wOF2' }); }
       return route.fulfill({ status: 404, body: '' });
@@ -1242,4 +1267,67 @@ test('a light paper gets the deep gold and red for text; a dark paper keeps the 
   const ink = (page) => page.$eval('.rb', (r) => { const cs = getComputedStyle(r); return [cs.getPropertyValue('--rb-gold-ink').trim(), cs.getPropertyValue('--rb-bad-ink').trim(), cs.getPropertyValue('--rb-gold').trim()]; });
   await withBook(async (page) => { assert.deepEqual(await ink(page), ['#8a5a00', '#a3271b', '#fbbf24']); }, { bold: true });
   await withBook(async (page) => { assert.deepEqual(await ink(page), ['#fbbf24', '#f87171', '#fbbf24']); }, { bold: true, theme: Object.assign({}, BOLD_THEME, { paper: '#141925', ink: '#f2f4fa' }) });
+});
+
+test('index tabs narrow a long list: each value counts what it leaves, choices combine, Clear lets go', async () => {
+  await withBook(async (page) => {
+    const box = page.locator('.rb-page [data-ix][data-ready]');
+    await box.waitFor();
+    assert.deepEqual(await box.locator('.rb-ix-sec').allTextContents(), ['Level 1', 'Level 2']);
+    assert.equal(await box.locator('.rb-ix-row').first().locator('.rb-ix-meta').textContent(), 'Level 1');
+    await box.locator('[data-ixf-tab="keywords"]').click();
+    const vals = () => box.locator('[data-ixf-val]').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') + (b.disabled ? ' (off)' : '')));
+    assert.deepEqual(await vals(), ['Melee, 2 entries', 'Move, 1 entry', 'Strike, 1 entry']);
+    await box.locator('[data-ixf-val][data-v="Melee"]').click();
+    assert.equal(await box.locator('.rb-ix-row:not([hidden])').count(), 2);
+    await box.locator('[data-ixf-tab="level"]').click();
+    assert.deepEqual(await vals(), ['Level 1, 1 entry', 'Level 2, 1 entry']);
+    await box.locator('[data-ixf-val][data-v="1"]').click();
+    assert.deepEqual(await box.locator('.rb-ix-row:not([hidden]) .rb-ix-t > b').allTextContents(), ['Blade Strike']);
+    assert.match(await box.locator('.rb-ixf-on').textContent(), /^1 of 3/);
+    // A value that would empty the list cannot be picked.
+    await box.locator('[data-ixf-tab="keywords"]').click();
+    assert.deepEqual(await vals(), ['Melee, 1 entry', 'Move, 0 entries (off)', 'Strike, 1 entry']);
+    await page.mouse.click(5, 5);
+    assert.equal(await box.locator('.rb-ixf-drawer').isHidden(), true, 'a click outside closes the drawer');
+    await box.locator('[data-ixf-clear]').click();
+    assert.equal(await box.locator('.rb-ix-row:not([hidden])').count(), 3);
+    await box.locator('[data-ix-filter]').fill('zzz');
+    assert.equal(await box.locator('.rb-ix-none').isVisible(), true, 'an empty list says so');
+  }, { index: true, hash: '#all-abilities' });
+});
+
+test('an entry name opens its entry in a card: rule words follow with Back, Hold keeps a slip, Turn opens it in its index', async () => {
+  await withBook(async (page) => {
+    // An entry the book does not list opens no card.
+    await page.locator('.rb-page .rb-ref', { hasText: 'Nobody' }).hover();
+    await page.waitForTimeout(900);
+    assert.equal(await page.locator('.chc.chc--show').count(), 0);
+    const ref = page.locator('.rb-page .rb-ref', { hasText: 'Blade Strike' });
+    await ref.hover();
+    const card = page.locator('.chc.chc--show');
+    await card.waitFor();
+    assert.equal(await card.locator('.chc__title').textContent(), 'Blade Strike');
+    assert.equal(await card.locator('.rb-tier b').textContent(), 'Tier 1');
+    await ref.click();
+    await card.locator('.rb-peek .rb-term', { hasText: 'slowed down' }).click();
+    assert.equal(await card.locator('.chc__title').textContent(), 'Slowed');
+    await card.locator('[data-peek-back]').click();
+    assert.equal(await card.locator('.chc__title').textContent(), 'Blade Strike');
+    await card.locator('[data-peek-hold]').click();
+    await page.waitForFunction(() => document.querySelector('.rb-slip-tab') && document.querySelector('.rb-slip-tab').textContent === 'Blade Strike');
+    assert.equal(await page.locator('.chc--show').count(), 0, 'Hold puts the card away');
+    await page.locator('.rb-pill[data-act="next"]').click();
+    await page.waitForTimeout(1200);
+    assert.equal(await page.locator('.rb-slip').count(), 1, 'the slip stays while pages turn');
+    await page.locator('[data-slip-drop]').click();
+    assert.equal(await page.locator('.rb-slip').count(), 0);
+    await page.locator('.rb-pill[data-act="prev"]').click();
+    await page.waitForTimeout(1200);
+    await page.locator('.rb-page .rb-ref', { hasText: 'Blade Strike' }).click();
+    await page.locator('.chc.chc--show [data-peek-turn]').click();
+    await page.waitForSelector('.rb-ix-row.open');
+    assert.equal(await page.locator('.rb-ix-row.open .rb-ix-t > b').textContent(), 'Blade Strike');
+
+  }, { index: true, hash: '#spells' });
 });

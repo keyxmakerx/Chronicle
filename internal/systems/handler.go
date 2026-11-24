@@ -700,7 +700,8 @@ func (h *SystemHandler) BookIndexAPI(c *echo.Context) error {
 	want := bookIndexSlice{Key: c.QueryParam("key"), Value: c.QueryParam("value")}
 	want.From, _ = strconv.Atoi(c.QueryParam("from"))
 	want.To, _ = strconv.Atoi(c.QueryParam("to"))
-	if !bookShowsSlice(b, cat, want) {
+	list, shown := sliceList(b, cat, want)
+	if !shown {
 		return apperror.NewNotFound("this book has no such index page")
 	}
 	ie, err := h.readerIndex(c, sysDir, manifest, cat, director)
@@ -714,10 +715,39 @@ func (h *SystemHandler) BookIndexAPI(c *echo.Context) error {
 	}
 	out := make([]BookIndexEntry, 0, len(items))
 	for _, it := range items {
-		out = append(out, ie.indexEntry(it, director, want.Key))
+		e := ie.indexEntry(it, director, want.Key)
+		e.Facets = ie.facets(it, list, director)
+		out = append(out, e)
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, map[string]any{"items": out})
+}
+
+// BookEntryAPI returns one rules-index entry, for a name in the book's text
+// that opens its entry in place, with the chapter and page that list it and the page's title. Only
+// an entry a page of the viewer's own book lists is served, as BookIndexAPI.
+// GET /campaigns/:id/systems/:mod/book/entry/:cat/:entry
+func (h *SystemHandler) BookEntryAPI(c *echo.Context) error {
+	b, sysDir, manifest, director, err := h.viewerBook(c)
+	if err != nil {
+		return err
+	}
+	cat, id := c.Param("cat"), c.Param("entry")
+	ie, hit, err := findBookEntry(b, cat, id, func() (*indexEntries, error) {
+		return h.readerIndex(c, sysDir, manifest, cat, director)
+	})
+	if err != nil {
+		return apperror.NewNotFound("this index could not be read")
+	}
+	if hit == nil {
+		return apperror.NewNotFound("this book lists no such entry")
+	}
+	e := ie.indexEntry(hit.Item, director, hit.Slice.Key)
+	e.Facets = ie.facets(hit.Item, hit.List, director)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]any{
+		"entry": e, "chapter": hit.Chapter, "page": hit.Page, "pageTitle": hit.PageTitle, "list": hit.List,
+	})
 }
 
 // BookFindAPI searches the rules-index chapters the viewer's book shows.

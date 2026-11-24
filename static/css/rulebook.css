@@ -333,6 +333,81 @@
 .rb-ix-dl dt:where(:not(.rb-wslot *)) { color: var(--rb-mut); font: 600 11px/1.9 var(--rb-ui); letter-spacing: 0.05em; text-transform: uppercase; }
 .rb-ix-dl dd:where(:not(.rb-wslot *)) { margin: 0; color: var(--rb-ink2); font: 500 14px/1.55 var(--rb-body); overflow-wrap: anywhere; }
 
+/* A row: the name, a line of its one-value filters, then the flavour line as a sentence. */
+.rb-ix-meta:where(:not(.rb-wslot *)) { font: 600 12.5px/1.4 var(--rb-ui) !important; color: var(--rb-ink2) !important; letter-spacing: 0.02em; }
+.rb-ix-meta i:where(:not(.rb-wslot *)) { font-style: normal; color: var(--rb-acc); padding: 0 6px; }
+.rb-ix-sum:where(:not(.rb-wslot *)) { font: italic 400 13.5px/1.45 var(--rb-body) !important; color: var(--rb-mut); }
+.rb-ix-sec:where(:not(.rb-wslot *)) { list-style: none; margin: 14px 0 0; padding: 0 0 4px; font: 700 12px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-acc); border-bottom: 2px solid var(--rb-edge2); }
+.rb-ix-sec:first-child:where(:not(.rb-wslot *)) { margin-top: 2px; }
+.rb-ix-tiers:where(:not(.rb-wslot *)) { margin: 2px 0 10px; }
+/* Index tabs: small capitals with a hairline under them and up one side; the
+   drawer of values hangs from the open tab's side line. */
+.rb-ixf:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; }
+.rb-ixf-tabs:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; gap: 0 14px; border-bottom: 1px solid var(--rb-edge); }
+.rb-ixf-tab:where(:not(.rb-wslot *)) { background: none; border: 0; border-left: 1px solid transparent; margin-bottom: -1px; border-bottom: 1px solid transparent; padding: 8px 8px 7px 9px; min-height: 32px; font: 700 12px/1 var(--rb-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--rb-mut); cursor: pointer; }
+.rb-ixf-tab:hover:where(:not(.rb-wslot *)), .rb-ixf-tab.on:where(:not(.rb-wslot *)) { color: var(--rb-ink); }
+.rb-ixf-tab[aria-expanded="true"]:where(:not(.rb-wslot *)) { color: var(--rb-ink); border-left-color: var(--rb-ink2); }
+.rb-ixf-tab:focus-visible:where(:not(.rb-wslot *)), .rb-ixf-val:focus-visible:where(:not(.rb-wslot *)), .rb-ixf-tok:focus-visible:where(:not(.rb-wslot *)), .rb-ixf-clear:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-acc3); outline-offset: 2px; }
+.rb-ixf-n:where(:not(.rb-wslot *)) { color: var(--rb-acc); }
+.rb-ixf-drawer:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-left: var(--ixf-x, 0); padding: 10px 2px 12px 10px; border-left: 1px solid var(--rb-ink2); border-bottom: 1px solid var(--rb-edge); }
+.rb-ixf-drawer[hidden]:where(:not(.rb-wslot *)) { display: none; }
+.rb-ixf-val:where(:not(.rb-wslot *)) { background: none; border: 0; padding: 4px 0; font: 600 14px var(--rb-ui); color: var(--rb-acc); cursor: pointer; }
+.rb-ixf-val span:where(:not(.rb-wslot *)) { margin-left: 4px; color: var(--rb-mut); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+.rb-ixf-val:hover:where(:not(.rb-wslot *)) { text-decoration: underline; }
+.rb-ixf-val[aria-pressed="true"]:where(:not(.rb-wslot *)) { color: var(--rb-ink); box-shadow: inset 0 -2px 0 var(--rb-acc); }
+.rb-ixf-val.none:where(:not(.rb-wslot *)) { color: var(--rb-mut); opacity: 0.6; }
+.rb-ixf-val:disabled:where(:not(.rb-wslot *)) { cursor: default; text-decoration: none; }
+.rb-ixf-on:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 8px 0 0; font: 600 13px var(--rb-ui); color: var(--rb-ink2); }
+.rb-ixf-on:empty:where(:not(.rb-wslot *)) { display: none; }
+.rb-ixf-cnt:where(:not(.rb-wslot *)) { color: var(--rb-ink); font-variant-numeric: tabular-nums; }
+.rb-ixf-tok:where(:not(.rb-wslot *)), .rb-ixf-clear:where(:not(.rb-wslot *)) { background: none; border: 0; padding: 2px 0; font: 600 13px var(--rb-ui); color: var(--rb-ink); cursor: pointer; }
+.rb-ixf-tok i:where(:not(.rb-wslot *)) { font-style: normal; color: var(--rb-acc); margin-left: 4px; }
+.rb-ixf-tok:hover:where(:not(.rb-wslot *)) { text-decoration: line-through; }
+.rb-ixf-clear:where(:not(.rb-wslot *)) { margin-left: auto; color: var(--rb-acc); }
+.rb-ixf-clear:hover:where(:not(.rb-wslot *)) { text-decoration: underline; }
+
+/* ---- entries in place: a name that opens its entry, the peek card, held slips ----
+   An entry name reads as a solid underline, a rule word as a dotted one.
+   The peek card lives in the shared hover card, outside the book, and gets
+   the book's colours through the variables the reader copies onto it. The
+   slips sit under the book's own drawer and its dim (35 and up). */
+.rb-term.rb-ref:where(:not(.rb-wslot *)) { text-decoration: underline solid color-mix(in srgb, var(--rb-acc) 80%, transparent); text-decoration-thickness: 2px; font-weight: 600; cursor: pointer; }
+.chc:has(.rb-peek) { width: min(400px, calc(100vw - 24px)); }
+.rb-peek { display: flex; flex-direction: column; gap: 8px; font: 13.5px/1.55 var(--rb-ui, inherit); }
+.rb-peek-body { display: flex; flex-direction: column; gap: 8px; max-height: var(--rb-peek-max, min(50vh, 520px)); overflow-y: auto; overscroll-behavior: contain; }
+.rb-peek .rb-ix-meta { margin: 0; }
+.rb-peek .rb-ix-dl, .rb-peek .rb-ix-tiers, .rb-peek .rb-prose p { margin: 0; }
+.rb-peek .rb-prose p + p { margin-top: 6px; }
+.rb-peek .rb-tiers { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.rb-peek .rb-tier { --tc: var(--rb-t2, var(--rb-gold, #fbbf24)); --on-tc: #15110a; display: grid; grid-template-columns: 76px 1fr; grid-template-rows: auto 1fr; align-items: center; column-gap: 10px; padding: 0 10px 0 0; border: 1px solid var(--rb-edge, currentColor); border-radius: 3px; background: linear-gradient(100deg, var(--tc) 0 68px, transparent 68px); overflow: hidden; }
+.rb-peek .rb-tier:first-child { --tc: var(--rb-t1, var(--rb-mut, #8a93a8)); --on-tc: #fff; }
+.rb-peek .rb-tier:last-child:not(:first-child) { --tc: var(--rb-t3, var(--rb-acc, #a78bfa)); --on-tc: #fff; }
+.rb-peek .rb-tier b { grid-column: 1; grid-row: 1; align-self: end; padding: 7px 0 0 8px; font: 800 13px/1 var(--rb-display, var(--rb-head, inherit)); text-transform: uppercase; color: var(--on-tc); }
+.rb-peek .rb-tier small { grid-column: 1; grid-row: 2; align-self: start; padding: 2px 0 7px 8px; font: 700 10px/1.2 var(--rb-ui, inherit); color: var(--on-tc); }
+.rb-peek .rb-tier span { grid-column: 2; grid-row: 1 / 3; padding: 6px 0; }
+.rb-peek .rb-peek-text { margin: 0; }
+.rb-peek-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 8px; border-top: 1px solid var(--rb-edge, currentColor); }
+.rb-peek-go, .rb-peek-back { padding: 0; border: 0; background: none; font: 600 13px var(--rb-ui, inherit); color: var(--rb-hot, var(--rb-acc, inherit)); cursor: pointer; text-align: left; }
+.rb-peek-back { align-self: flex-start; font-size: 12px; }
+.rb-peek-go:hover, .rb-peek-back:hover { text-decoration: underline; }
+.rb-peek-hold { min-height: 32px; padding: 4px 12px; border: 1px solid var(--rb-edge, currentColor); border-radius: 4px; background: none; font: 600 13px var(--rb-ui, inherit); color: var(--rb-ink, inherit); cursor: pointer; }
+.rb-peek-hold:hover { background: var(--rb-box2, transparent); }
+.rb-peek :focus-visible { outline: 2px solid var(--rb-acc, currentColor); outline-offset: 2px; }
+
+.rb-slips:where(:not(.rb-wslot *)) { position: absolute; right: 0; top: 120px; z-index: var(--z-scrim); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+.rb-slip:where(:not(.rb-wslot *)) { display: flex; align-items: flex-start; pointer-events: auto; }
+.rb-slip-tab:where(:not(.rb-wslot *)) { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 180px; padding: 12px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-left: 3px solid var(--rb-acc); border-radius: 0 4px 4px 0; background: var(--rb-box3); color: var(--rb-ink); font: 700 12px var(--rb-ui); letter-spacing: 0.06em; cursor: pointer; box-shadow: -2px 2px 6px rgba(0, 0, 0, 0.25); }
+.rb-slip.open .rb-slip-tab:where(:not(.rb-wslot *)) { background: var(--rb-acc); color: #fff; }
+.rb-slip-tab:focus-visible:where(:not(.rb-wslot *)), .rb-slip-x:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-acc); outline-offset: 2px; }
+.rb-slip-body:where(:not(.rb-wslot *)) { order: -1; width: min(360px, calc(100vw - 64px)); max-height: 70vh; overflow-y: auto; padding: 12px 14px; border: 1px solid var(--rb-edge); border-top: 4px solid var(--rb-acc); background: var(--rb-box); box-shadow: -10px 12px 28px -10px rgba(0, 0, 0, 0.45); animation: rb-slip-in var(--dur-standard, 200ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+.rb-slip-body header:where(:not(.rb-wslot *)) { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.rb-slip-body header b:where(:not(.rb-wslot *)) { font: 700 18px/1.15 var(--rb-head); color: var(--rb-ink); }
+.rb-slip-body .rb-ix-meta:where(:not(.rb-wslot *)) { margin: 0 0 8px; }
+.rb-slip-x:where(:not(.rb-wslot *)) { flex: none; width: 32px; height: 32px; border: 0; border-radius: 4px; background: none; color: var(--rb-mut); font: 400 22px/1 var(--rb-ui); cursor: pointer; }
+.rb-slip-x:hover:where(:not(.rb-wslot *)) { color: var(--rb-ink); background: var(--rb-box2); }
+@keyframes rb-slip-in { from { opacity: 0; transform: translateX(12px); } }
+@media (prefers-reduced-motion: reduce) { .rb-slip-body:where(:not(.rb-wslot *)) { animation: none; } }
+
 /* ---- section tabs (a book that names tabs) ---- */
 .rb-tabs:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; gap: 4px; padding: 8px 14px 0; overflow-x: auto; scrollbar-width: thin; }
 .rb-tab:where(:not(.rb-wslot *)) { flex: 0 0 auto; padding: 8px 14px 7px; border: 1px solid var(--rb-edge); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--rb-box); font: 600 13px/1.2 var(--rb-ui); letter-spacing: 0.01em; color: var(--rb-ink2); white-space: nowrap; }
@@ -408,6 +483,9 @@
   .rb-results:where(:not(.rb-wslot *)) { top: calc(100% + 4px); left: 8px; right: 8px; width: auto; }
   .rb-ix-dl:where(:not(.rb-wslot *)) { grid-template-columns: 1fr; gap: 0; }
   .rb-ix-dl dd:where(:not(.rb-wslot *)) { margin-bottom: 6px; }
+  .rb-ix-filter:where(:not(.rb-wslot *)) { max-width: none; min-height: 44px; font-size: 16px; }
+  .rb-ixf-tab:where(:not(.rb-wslot *)) { min-height: 44px; }
+  .rb-ixf-val:where(:not(.rb-wslot *)) { min-height: 36px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rb-leaf:where(:not(.rb-wslot *)), .rb-leaf.go:where(:not(.rb-wslot *)), .rb-fold:where(:not(.rb-wslot *)), .rb-body:where(:not(.rb-wslot *)), .rb-die.spin:where(:not(.rb-wslot *)), .rb-spinner:where(:not(.rb-wslot *)), .rb-results:where(:not(.rb-wslot *)) { animation: none !important; }
@@ -702,6 +780,19 @@
 .rb[data-look="bold"] .rb-flaps:where(:not(.rb-wslot *)) { border-top: 2px solid var(--rb-steel); }
 .rb[data-look="bold"] .rb-flap > button:where(:not(.rb-wslot *)) { font: 700 14px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; border-bottom-color: var(--rb-edge); }
 .rb[data-look="bold"] .rb-flap > button:where(:not(.rb-wslot *))::after { color: var(--rb-hot); }
+.rb[data-look="bold"] .rb-ix-row > button:where(:not(.rb-wslot *)) { text-transform: none; letter-spacing: 0; align-items: flex-start; }
+.rb[data-look="bold"] .rb-ix-row .rb-ix-t b:where(:not(.rb-wslot *)) { font: 700 14.5px/1.25 var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--rb-ink); }
+.rb[data-look="bold"] .rb-ix-sec:where(:not(.rb-wslot *)) { color: var(--rb-hot); border-bottom-color: var(--rb-steel); font-weight: 800; }
+.rb[data-look="bold"] .rb-ix-meta i:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-ixf-n:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-ixf-val:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-ixf-clear:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-ixf-tok i:where(:not(.rb-wslot *)) { color: var(--rb-hot); }
+.rb[data-look="bold"] .rb-term.rb-ref:where(:not(.rb-wslot *)) { text-decoration: none; border-bottom: 2px solid var(--rb-hot); }
+.rb[data-look="bold"] .rb-slip-tab:where(:not(.rb-wslot *)) { border-left-color: var(--rb-hot); background: var(--rb-steel); color: var(--rb-on-steel); text-transform: uppercase; letter-spacing: 0.1em; }
+.rb[data-look="bold"] .rb-slip.open .rb-slip-tab:where(:not(.rb-wslot *)) { background: var(--rb-hot); }
+.rb[data-look="bold"] .rb-slip-body:where(:not(.rb-wslot *)) { border-top-color: var(--rb-hot); }
+.rb[data-look="bold"] .rb-slip-body header b:where(:not(.rb-wslot *)) { font: 900 22px/1 var(--rb-display); text-transform: uppercase; }
+.rb-peek[data-look="bold"] .rb-ix-meta i { color: var(--rb-hot); }
+.rb[data-look="bold"] .rb-ixf-val[aria-pressed="true"]:where(:not(.rb-wslot *)) { color: var(--rb-ink); box-shadow: inset 0 -2px 0 var(--rb-hot); }
+.rb[data-look="bold"] .rb-ixf-val.none:where(:not(.rb-wslot *)) { color: var(--rb-mut); }
+.rb[data-look="bold"] .rb-ixf-tab[aria-expanded="true"]:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-ixf-drawer:where(:not(.rb-wslot *)) { border-left-color: var(--rb-steel); }
 .rb[data-look="bold"] .rb-ctitle:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-roll-hd span:where(:not(.rb-wslot *)) { font-family: var(--rb-ui); }
 
 /* The page-turn bar under the book: back, where the reader is, close the

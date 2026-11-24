@@ -39,6 +39,39 @@ type bookIndexSpecYAML struct {
 	Group    string `yaml:"group,omitempty"`
 	Other    string `yaml:"other,omitempty"`
 	PerPage  int    `yaml:"per-page,omitempty"`
+	// Filters names the properties a reader can narrow the page by.
+	Filters []string `yaml:"filters,omitempty"`
+	// Sections names a property whose values head the page's entries.
+	Sections string `yaml:"sections,omitempty"`
+	// Tiers names the properties drawn as a power roll's result tiers.
+	Tiers []string `yaml:"tiers,omitempty"`
+}
+
+const (
+	maxBookIndexFilters = 6
+	maxBookIndexTiers   = 4
+	maxBookFacetValues  = 12
+)
+
+// BookIndexList is the reader's layout for an index page.
+type BookIndexList struct {
+	Filters  []BookIndexFilter `json:"filters,omitempty"`
+	Sections string            `json:"sections,omitempty"`
+	// SectionLabel names the sections ("Level" makes "Level 2").
+	SectionLabel string   `json:"sectionLabel,omitempty"`
+	Tiers        []string `json:"tiers,omitempty"`
+}
+
+// BookIndexFilter is one property a reader can narrow an index page by.
+type BookIndexFilter struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+// BookIndexFacet is one entry's values for one filter.
+type BookIndexFacet struct {
+	Key    string   `json:"key"`
+	Values []string `json:"values"`
 }
 
 // bookIndexSlice is what one generated page shows: the entries whose Key
@@ -233,13 +266,157 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 	if len(ie.items) == 0 {
 		return ch, fmt.Sprintf("%s: data/%s.json has no entries", file, cat)
 	}
+	list, problem := ie.indexList(spec)
+	if problem != "" {
+		return ch, file + ": " + problem
+	}
 	pages, problem := indexPages(ch, cat, spec.Group, spec.Other, per, ie)
 	if problem != "" {
 		return ch, file + ": " + problem
 	}
+	setIndexList(pages, list)
 	ch.Pages = pages
 	ch.Generated = true
 	return ch, ""
+}
+
+// indexList checks a chapter's filters, sections and tiers against the
+// category and resolves each filter's label. Nil when the chapter names none.
+func (ie *indexEntries) indexList(spec *bookIndexSpecYAML) (*BookIndexList, string) {
+	if len(spec.Filters) == 0 && spec.Sections == "" && len(spec.Tiers) == 0 {
+		return nil, ""
+	}
+	if len(spec.Filters) > maxBookIndexFilters {
+		return nil, fmt.Sprintf("index filters may name at most %d properties", maxBookIndexFilters)
+	}
+	if len(spec.Tiers) > maxBookIndexTiers {
+		return nil, fmt.Sprintf("index tiers may name at most %d properties", maxBookIndexTiers)
+	}
+	// A Director-only field's values would reach players as choices.
+	check := func(what, key string) string {
+		if !bookIndexKeyPattern.MatchString(key) {
+			return fmt.Sprintf("index %s %q must be a property name (lower-case letters, digits and _)", what, key)
+		}
+		if ie.gmOnly(key) {
+			return fmt.Sprintf("index %s %q is a Director-only field", what, key)
+		}
+		return ""
+	}
+	list := &BookIndexList{}
+	seen := map[string]bool{}
+	for _, k := range spec.Filters {
+		if p := check("filter", k); p != "" {
+			return nil, p
+		}
+		if seen[k] {
+			return nil, fmt.Sprintf("index filter %q is named twice", k)
+		}
+		seen[k] = true
+		list.Filters = append(list.Filters, BookIndexFilter{Key: k, Label: ie.propertyLabel(k)})
+	}
+	if spec.Sections != "" {
+		if p := check("sections", spec.Sections); p != "" {
+			return nil, p
+		}
+		list.Sections, list.SectionLabel = spec.Sections, ie.propertyLabel(spec.Sections)
+	}
+	for _, k := range spec.Tiers {
+		if p := check("tier", k); p != "" {
+			return nil, p
+		}
+		list.Tiers = append(list.Tiers, k)
+	}
+	return list, ""
+}
+
+// propertyLabel names a property for a reader: its manifest label, its
+// display twin's, or the key in words ("subclass" reads "Subclass").
+func (ie *indexEntries) propertyLabel(key string) string {
+	for _, k := range []string{key, key + "_display"} {
+		if l := ie.fieldLabel(k); l != k {
+			return l
+		}
+	}
+	r := []rune(strings.ReplaceAll(key, "_", " "))
+	return string(unicode.ToUpper(r[0])) + string(r[1:])
+}
+
+// gmOnly reports whether a property, or its display twin, is a manifest
+// field only Directors see.
+func (ie *indexEntries) gmOnly(key string) bool {
+	for _, f := range ie.fields {
+		if f.GMOnly && (f.Key == key || f.Key == key+"_display") {
+			return true
+		}
+	}
+	return false
+}
+
+// setIndexList gives every index block of a generated chapter its layout.
+func setIndexList(pages []BookPage, list *BookIndexList) {
+	if list == nil {
+		return
+	}
+	for i := range pages {
+		for j := range pages[i].Blocks {
+			if pages[i].Blocks[j].Type == "index" {
+				pages[i].Blocks[j].List = list
+			}
+		}
+	}
+}
+
+// facets are an entry's values for the filters and sections of its page:
+// a plain value, or each plain value of a list. Lower-case words read with a
+// capital, as page titles do ("heroic" reads "Heroic").
+func (ie *indexEntries) facets(it ReferenceItem, list *BookIndexList, director bool) []BookIndexFacet {
+	if list == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(list.Filters)+1)
+	for _, f := range list.Filters {
+		keys = append(keys, f.Key)
+	}
+	if list.Sections != "" {
+		keys = append(keys, list.Sections)
+	}
+	var out []BookIndexFacet
+	seen := map[string]bool{}
+	for _, k := range keys {
+		if seen[k] || (!director && ie.gmOnly(k)) {
+			continue
+		}
+		seen[k] = true
+		var vals []string
+		add := func(v any) {
+			switch v.(type) {
+			case string, float64, int, int64, bool, json.Number:
+			default:
+				return
+			}
+			s := strings.TrimSpace(fmt.Sprint(v))
+			if s == "" || len(vals) >= maxBookFacetValues {
+				return
+			}
+			if strings.ToLower(s) == s {
+				r := []rune(s)
+				s = string(unicode.ToUpper(r[0])) + string(r[1:])
+			}
+			vals = append(vals, s)
+		}
+		switch v := it.Properties[k].(type) {
+		case []any:
+			for _, x := range v {
+				add(x)
+			}
+		default:
+			add(v)
+		}
+		if len(vals) > 0 {
+			out = append(out, BookIndexFacet{Key: k, Values: vals})
+		}
+	}
+	return out
 }
 
 // indexPages lays a category's entries out as a generated chapter's pages:
@@ -392,6 +569,8 @@ type BookIndexEntry struct {
 	Summary string     `json:"summary,omitempty"`
 	Text    string     `json:"text,omitempty"`
 	Fields  []BookStat `json:"fields,omitempty"`
+	// Facets are the entry's values for its page's filters and sections.
+	Facets []BookIndexFacet `json:"facets,omitempty"`
 }
 
 // refMarkupToTerms rewrites {@category term|shown} as the book's [[term|shown]].
@@ -443,7 +622,7 @@ func (ie *indexEntries) indexEntry(it ReferenceItem, director bool, groupKey str
 		if label == "" {
 			label = f.Key
 		}
-		e.Fields = append(e.Fields, BookStat{Label: label, Value: v})
+		e.Fields = append(e.Fields, BookStat{Label: label, Value: v, Key: f.Key})
 	}
 	return e
 }
@@ -463,6 +642,44 @@ func indexChapters(b *Book) []BookChapter {
 	return out
 }
 
+// bookEntryHit is where a book lists one rules-index entry: the chapter, the
+// page's place in it and title, the slice and layout of that page.
+type bookEntryHit struct {
+	Chapter   string
+	Page      int
+	PageTitle string
+	Slice     bookIndexSlice
+	List      *BookIndexList
+	Item      ReferenceItem
+}
+
+// findBookEntry finds the first page of b whose index lists the entry, so an
+// entry name in the text opens only what the reader's own book lists. load
+// reads the category's entries, once, and only if some page lists it.
+func findBookEntry(b *Book, cat, id string, load func() (*indexEntries, error)) (*indexEntries, *bookEntryHit, error) {
+	var ie *indexEntries
+	for _, ch := range indexChapters(b) {
+		for pi, p := range ch.Pages {
+			pc, s, ok := pageSlice(p)
+			if !ok || pc != cat {
+				continue
+			}
+			if ie == nil {
+				var err error
+				if ie, err = load(); err != nil {
+					return nil, nil, err
+				}
+			}
+			for _, it := range ie.slice(s) {
+				if it.ID == id {
+					return ie, &bookEntryHit{Chapter: ch.ID, Page: pi, PageTitle: p.Title, Slice: s, List: p.Blocks[0].List, Item: it}, nil
+				}
+			}
+		}
+	}
+	return ie, nil, nil
+}
+
 // pageSlice reads the slice a generated page shows.
 func pageSlice(p BookPage) (string, bookIndexSlice, bool) {
 	if len(p.Blocks) != 1 || p.Blocks[0].Type != "index" {
@@ -475,14 +692,21 @@ func pageSlice(p BookPage) (string, bookIndexSlice, bool) {
 // bookShowsSlice reports whether a page of b lists exactly the wanted entries, so
 // the index API serves only what the reader's own book shows.
 func bookShowsSlice(b *Book, category string, want bookIndexSlice) bool {
+	_, ok := sliceList(b, category, want)
+	return ok
+}
+
+// sliceList is the layout of the page of b that lists exactly the wanted
+// entries, and whether there is such a page.
+func sliceList(b *Book, category string, want bookIndexSlice) (*BookIndexList, bool) {
 	for _, ch := range indexChapters(b) {
 		for _, p := range ch.Pages {
 			if pc, s, ok := pageSlice(p); ok && pc == category && s == want {
-				return true
+				return p.Blocks[0].List, true
 			}
 		}
 	}
-	return false
+	return nil, false
 }
 
 // BookFindResult is one rules-index entry a search found, with the chapter
