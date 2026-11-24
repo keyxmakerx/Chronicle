@@ -1,0 +1,152 @@
+/* Account settings' frame (auth.AccountShell): a rail of the account's own
+   sections and of each campaign, beside the page's settings. Tool chrome, so
+   theme tokens only, light and dark through them. The current campaign wears
+   the leading accent edge; group names are index tabs. No motion of its own:
+   a rail entry is a link. */
+
+.acct {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 64rem;
+  margin: 0 auto;
+}
+.acct-main { min-width: 0; max-width: 42rem; }
+
+.acct-rail { min-width: 0; }
+.acct-tab {
+  margin: 0 0 0.25rem;
+  padding: 0.5rem 0 0.25rem;
+  border-bottom: var(--shape-edge, 1px) solid var(--color-border);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-primary);
+}
+.acct-list { list-style: none; margin: 0 0 1rem; padding: 0; }
+.acct-item {
+  display: block;
+  min-height: 2rem;
+  padding: 0.375rem 0.75rem;
+  border-left: 2px solid transparent;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.acct-item:hover { color: var(--color-text-primary); background: var(--color-bg-secondary); }
+.acct-item:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.acct-item[aria-current="page"] {
+  border-left-color: var(--color-accent);
+  background: rgb(var(--color-accent-rgb) / 0.1);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.acct-item small { display: block; font-size: 0.75rem; font-weight: 400; color: var(--color-text-muted); }
+.acct-none { margin: 0.25rem 0 1rem; font-size: 0.8125rem; color: var(--color-text-muted); max-width: 32ch; }
+.acct-more { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.8125rem; color: var(--color-accent-link, var(--color-accent)); }
+.acct-more:hover { text-decoration: underline; }
+
+/* A phone lists the rail above the settings; on a campaign's page it keeps
+   only the campaigns and a way back, so the settings start near the top.
+   From a tablet up it is a column that stays in view while they scroll. */
+.acct-back { display: none; }
+@media (max-width: 767px) {
+  .acct-rail[data-on-campaign] .acct-every { display: none; }
+  .acct-rail[data-on-campaign] .acct-back { display: inline-flex; margin-bottom: 0.75rem; }
+}
+@media (min-width: 768px) {
+  .acct { grid-template-columns: 13rem minmax(0, 1fr); align-items: start; }
+  .acct-rail { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; }
+}
+
+/* ---------- One campaign's page ---------- */
+.acct-head { margin-bottom: 1.5rem; }
+.acct-head h1 { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.acct-head p { margin: 0.25rem 0 0.5rem; font-size: 0.875rem; color: var(--color-text-secondary); }
+
+/* Each group of settings starts at its heading's hairline: the page itself,
+   no box around it. */
+.acct-sec { margin-bottom: 2rem; }
+.acct-sec > h2 {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.375rem;
+  border-bottom: var(--shape-edge, 1px) solid var(--color-border);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.acct-note { margin: 0.25rem 0; font-size: 0.8125rem; line-height: 1.5; color: var(--color-text-secondary); max-width: 60ch; }
+.acct-field { margin: 0.75rem 0 1rem; }
+.acct-label { margin: 0 0 0.375rem; font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
+
+/* The quiet word: accent text, no box, underline on hover. */
+.acct-word {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent-link, var(--color-accent));
+  cursor: pointer;
+  text-decoration: none;
+}
+.acct-word:hover { text-decoration: underline; }
+.acct-word:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--shape-r-small, 4px); }
+.acct-danger { color: var(--color-danger, #dc2626); }
+
+/* A value picker: one row of choices, the chosen one filled. */
+.acct-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  border: var(--shape-edge, 1px) solid var(--color-border);
+  border-radius: var(--shape-r-ctl, 8px);
+  background: var(--color-bg-primary);
+  overflow: hidden;
+}
+.acct-seg button {
+  min-height: 2rem;
+  padding: 0.3125rem 0.75rem;
+  border: 0;
+  border-left: var(--shape-edge, 1px) solid var(--color-border);
+  background: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--dur-micro, 80ms) var(--ease-out, ease-out), color var(--dur-micro, 80ms) var(--ease-out, ease-out);
+}
+.acct-seg button:first-child { border-left: 0; }
+.acct-seg button:hover { color: var(--color-text-primary); background: var(--color-bg-secondary); }
+.acct-seg button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-accent-on-fill, #fff); font-weight: 600; }
+.acct-seg button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.acct-seg button:disabled { cursor: progress; opacity: 0.7; }
+
+.acct-rows { list-style: none; margin: 0; padding: 0; }
+.acct-rows li { display: flex; flex-wrap: wrap; gap: 0.125rem 1rem; align-items: baseline; padding: 0.5rem 0; border-bottom: var(--shape-edge, 1px) solid var(--color-border); }
+.acct-rows li:last-child { border-bottom: 0; }
+.acct-rows a { flex: 0 0 11rem; font-size: 0.875rem; font-weight: 600; color: var(--color-accent-link, var(--color-accent)); text-decoration: none; }
+.acct-rows a:hover { text-decoration: underline; }
+.acct-rows span { flex: 1 1 14rem; font-size: 0.8125rem; color: var(--color-text-secondary); }
+
+.acct-linkrow { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
+.acct-linkrow input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.8125rem; }
+.acct-confirm { margin-top: 0.5rem; }
+
+/* Too narrow for one row, the choices become separate chips rather than a
+   bar broken across lines. */
+@media (max-width: 639px) {
+  .acct-seg { border: 0; background: none; gap: 0.375rem; overflow: visible; }
+  .acct-seg button { border: var(--shape-edge, 1px) solid var(--color-border); border-radius: var(--shape-r-ctl, 8px); background: var(--color-bg-primary); }
+  .acct-seg button:first-child { border-left: var(--shape-edge, 1px) solid var(--color-border); }
+  .acct-seg button[aria-pressed="true"] { border-color: var(--color-accent); }
+}
+
+@media (prefers-reduced-motion: reduce) { .acct-seg button { transition: none; } }
+:root[data-motion="off"] .acct-seg button { transition: none; }

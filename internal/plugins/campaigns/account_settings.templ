@@ -1,0 +1,125 @@
+// account_settings.templ is one campaign's page in Account settings: the
+// settings that change only what this person sees in this campaign.
+
+package campaigns
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CampaignSettingsPage draws the page inside the account's frame. The dice
+// and calendar sections are filled by account_campaign.js: the dice choices
+// live in this browser, and the calendar link is made when asked for.
+templ CampaignSettingsPage(v campaignSettingsView) {
+	@layouts.App(v.Campaign.Name + " - Account settings") {
+		@auth.AccountShell(v.Rail, v.Campaign.ID) {
+			<header class="acct-head">
+				<h1>{ v.Campaign.Name }</h1>
+				<p>Changes only what you see in this campaign. Nobody else sees your choices.</p>
+				<a class="acct-word" href={ templ.SafeURL("/campaigns/" + v.Campaign.ID) }>Open the campaign</a>
+			</header>
+			@campaignLookSection(v)
+			<div data-widget="account-campaign" data-campaign-id={ v.Campaign.ID } data-user-id={ v.UserID }>
+				<section class="acct-sec" aria-labelledby="acct-dice-h" data-acct-dice>
+					<h2 id="acct-dice-h">Your dice</h2>
+					<p class="acct-note">On this device only. Your other devices keep their own choice.</p>
+					<p class="acct-note" data-acct-dice-body>Reading the dice…</p>
+					<noscript><p class="acct-note">The dice settings need JavaScript.</p></noscript>
+				</section>
+				<section class="acct-sec" aria-labelledby="acct-cal-h" data-acct-cal hidden>
+					<h2 id="acct-cal-h">Game nights in your calendar</h2>
+					<p class="acct-note">Add this link to your phone or computer calendar. New game nights appear on their own, and a moved or cancelled one updates too.</p>
+					<div data-acct-cal-body>
+						<button type="button" class="acct-word" data-acct-cal-show>Show my calendar link</button>
+					</div>
+				</section>
+			</div>
+			if v.IsOwner {
+				@campaignBrushSection(v.Campaign.ID)
+			}
+			<section class="acct-sec" aria-labelledby="acct-else-h">
+				<h2 id="acct-else-h">Elsewhere in this campaign</h2>
+				<ul class="acct-rows">
+					if !v.IsOwner {
+						<li>
+							<a href={ templ.SafeURL("/campaigns/" + v.Campaign.ID + "/me") }>Your characters</a>
+							<span>Claim a character, or make one.</span>
+						</li>
+					}
+					<li>
+						<a href={ templ.SafeURL("/campaigns/" + v.Campaign.ID + "/availability") }>Your free times</a>
+						<span>When you can play, and the dates you are away.</span>
+					</li>
+					<li>
+						<a href={ templ.SafeURL("/campaigns/" + v.Campaign.ID + "?table=dice") } hx-boost="false">The Table</a>
+						if v.IsOwner {
+							<span>Your own rune dice, and the dice everyone starts on.</span>
+						} else {
+							<span>Your own rune dice and your bonus, where the owner allows them.</span>
+						}
+					</li>
+				</ul>
+			</section>
+			if !v.IsOwner {
+				<section class="acct-sec" aria-labelledby="acct-leave-h" data-widget="campaign-leave">
+					<h2 id="acct-leave-h">Leave this campaign</h2>
+					<p class="acct-note">Your posts and shared notes stay. Your private notes are put away until you come back.</p>
+					<button type="button" class="acct-word acct-danger" data-box={ leaveBoxID(v.Campaign.ID) } onclick={ leaveCall("ask") }>Leave { v.Campaign.Name }…</button>
+					@leaveBoxThen(v.Campaign, v.Characters, "/account")
+				</section>
+			}
+		}
+	}
+}
+
+// campaignLookSection is Your look, in place: each part the owner lets this
+// person change, with the campaign's own choice as the way back.
+templ campaignLookSection(v campaignSettingsView) {
+	<section class="acct-sec" aria-labelledby="acct-look-h">
+		<h2 id="acct-look-h">Your look</h2>
+		if v.IsOwner {
+			<p class="acct-note">You set this campaign's look for everyone.</p>
+			<a class="acct-word" href={ templ.SafeURL("/campaigns/" + v.Campaign.ID + "/customize/look") }>Open the look in Customize</a>
+		} else if len(v.Parts) == 0 {
+			<p class="acct-note">The campaign's owner sets the look for everyone here.</p>
+		} else {
+			for _, p := range v.Parts {
+				<div class="acct-field" data-look-part={ p.Part.Key }>
+					<p class="acct-label" id={ "acct-look-" + p.Part.Key }>{ p.Part.Label }</p>
+					<div class="acct-seg" role="group" aria-labelledby={ "acct-look-" + p.Part.Key }>
+						<button
+							type="button"
+							aria-pressed={ boolStr(p.Current == "") }
+							data-url={ p.URL }
+							data-value=""
+							onclick={ yourLookOnClick() }
+						>The campaign's ({ LookChoiceLabel(p.Campaign) })</button>
+						for _, ch := range p.Part.Choices {
+							<button
+								type="button"
+								aria-pressed={ boolStr(p.Current == ch) }
+								data-url={ p.URL }
+								data-value={ ch }
+								onclick={ yourLookOnClick() }
+							>{ LookChoiceLabel(ch) }</button>
+						}
+					</div>
+				</div>
+			}
+		}
+	</section>
+}
+
+// campaignBrushSection is the owner's choice to keep the Customize brush on
+// this campaign's header. It saves through PUT /account/brush/:id.
+templ campaignBrushSection(campaignID string) {
+	<section class="acct-sec" aria-labelledby="acct-brush-h">
+		<h2 id="acct-brush-h">Customize brush</h2>
+		<p class="acct-note">The brush in this campaign's header opens Customize. Put away, Campaign settings still opens it.</p>
+		<div class="acct-seg" role="group" aria-labelledby="acct-brush-h" data-acct-brush={ campaignID }>
+			<button type="button" data-brush="shown" aria-pressed={ boolStr(brushShownIn(ctx, campaignID)) }>Shown</button>
+			<button type="button" data-brush="hidden" aria-pressed={ boolStr(!brushShownIn(ctx, campaignID)) }>Put away</button>
+		</div>
+	</section>
+}

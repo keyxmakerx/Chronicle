@@ -156,6 +156,9 @@
         if (C.modal) C.modal(box, { opener: null }).close(); else box.classList.add('hidden');
         dropCard(box.getAttribute('data-campaign-id'));
         if (C.notify) C.notify('You left ' + name + '.', 'success');
+        // A page about the campaign itself has nothing left to show.
+        var then = box.getAttribute('data-leave-then');
+        if (then && then.charAt(0) === '/' && then.charAt(1) !== '/') window.location.assign(then);
       })
       .catch(function (e) { fail(box, btn, e && e.message ? e.message : 'Could not leave. Try again.'); });
   };

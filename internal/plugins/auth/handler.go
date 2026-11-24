@@ -98,6 +98,7 @@ type Handler struct {
 	securityLogger SecurityEventLogger
 	sessionTTL     time.Duration // Cookie MaxAge matches Redis session TTL.
 	apps           ConnectedApps // nil until wired: the sign-in list shows browsers only.
+	campaigns      CampaignLister // nil until wired: the rail lists no campaigns.
 }
 
 // NewHandler creates a new auth handler with the given service and session TTL.
@@ -826,7 +827,8 @@ func (h *Handler) AccountPage(c *echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned, twoFactor,
-		methods, signInOutcome(c.QueryParam("signin")), h.signedInView(c.Request().Context(), userID, getSessionToken(c), csrfToken)))
+		methods, signInOutcome(c.QueryParam("signin")), h.signedInView(c.Request().Context(), userID, getSessionToken(c), csrfToken),
+		h.settingsCampaigns(c.Request().Context(), userID)))
 }
 
 // DeleteAccountAPI deletes the signed-in person's own account

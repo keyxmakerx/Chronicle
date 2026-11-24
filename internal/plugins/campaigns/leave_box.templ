@@ -12,6 +12,12 @@ func leaveBoxID(campaignID string) string { return "leave-box-" + campaignID }
 // Stay and Leave call in through inline handlers so nothing depends on a
 // script inside a swapped fragment.
 templ leaveBox(campaign *Campaign, characters []string) {
+	@leaveBoxThen(campaign, characters, "")
+}
+
+// leaveBoxThen is leaveBox for a page that must not stay open once its
+// campaign is left: after leaving, the browser goes to then.
+templ leaveBoxThen(campaign *Campaign, characters []string, then string) {
 	<div
 		id={ leaveBoxID(campaign.ID) }
 		class="hidden fixed inset-0 flex items-center justify-center p-4"
@@ -20,6 +26,9 @@ templ leaveBox(campaign *Campaign, characters []string) {
 		data-leave-url={ fmt.Sprintf("/campaigns/%s/leave", campaign.ID) }
 		data-campaign-id={ campaign.ID }
 		data-campaign-name={ campaign.Name }
+		if then != "" {
+			data-leave-then={ then }
+		}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby={ leaveBoxID(campaign.ID) + "-title" }

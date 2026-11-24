@@ -4,6 +4,7 @@ GET	/account	session	plugins/auth.(*Handler).AccountPage	plugins/auth.RequireAut
 DELETE	/account/avatar	session	plugins/auth.(*Handler).ClearAvatarAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/avatar	session	plugins/auth.(*Handler).UploadAvatarAPI	plugins/auth.RequireAuth > middleware.RateLimit
 PUT	/account/brush/:campaignID	session	plugins/auth.(*Handler).SetBrushAPI	plugins/auth.RequireAuth
+GET	/account/campaigns/:id	session	plugins/campaigns.(*Handler).CampaignSettings	plugins/auth.RequireAuth
 POST	/account/delete	session	plugins/auth.(*Handler).DeleteAccountAPI	plugins/auth.RequireAuth > middleware.RateLimit
 PUT	/account/display-name	session	plugins/auth.(*Handler).UpdateDisplayNameAPI	plugins/auth.RequireAuth
 PUT	/account/email	session	plugins/auth.(*Handler).RequestEmailChangeAPI	plugins/auth.RequireAuth > middleware.RateLimit

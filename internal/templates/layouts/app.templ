@@ -1162,6 +1162,13 @@ templ Topbar() {
 							<a href="/account" class="dropdown-item" @click="open = false">
 								<i class="fa-solid fa-gear text-xs w-4 word-ic"></i> Account settings
 							</a>
+							// The settings that change only what this person sees in the
+							// campaign they are in, under Account settings.
+							if InCampaign(ctx) && IsCampaignMember(ctx) && !InSiteAdmin(ctx) {
+								<a href={ templ.SafeURL("/account/campaigns/" + GetCampaignID(ctx)) } class="dropdown-item" @click="open = false">
+									<i class="fa-solid fa-sliders text-xs w-4 word-ic" aria-hidden="true"></i> This campaign's settings
+								</a>
+							}
 						}
 						if !InSiteAdmin(ctx) {
 							<!-- theme.js shows the half that names the other look. -->

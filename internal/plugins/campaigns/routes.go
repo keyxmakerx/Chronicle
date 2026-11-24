@@ -20,6 +20,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	authed.GET("/campaigns/new", h.NewForm)
 	authed.POST("/campaigns", h.Create)
 
+	// One campaign's page in Account settings. It checks membership itself
+	// (see CampaignSettings), so it keeps the account's frame.
+	authed.GET("/account/campaigns/:id", h.CampaignSettings)
+
 	// Accept transfer requires auth but not campaign membership (uses token).
 	authed.GET("/campaigns/:id/accept-transfer", h.AcceptTransfer)
 
