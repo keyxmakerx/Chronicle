@@ -81,7 +81,7 @@ func TestRecipeUsesPageTrackers(t *testing.T) {
 	// sets the count back to 0. The reach came from Tam's page, so only Tam's
 	// Hunger moves; Orrin has no respite count to reach anything.
 	for i := 0; i < 3; i++ {
-		_, err := hb.Press(ctx, w.camp, respiteEvent, w.hbDirector)
+		_, err := hb.Press(ctx, w.camp, respiteEvent, "", w.hbDirector)
 		w.must(err)
 	}
 	if got := value(w.tamHero, "Respites since dose"); got != 0 {
