@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
 )
@@ -16,6 +17,9 @@ var errDuplicate = errors.New("duplicate name")
 // Repository is the persistence boundary for recipes.
 type Repository interface {
 	List(ctx context.Context, campaignID string) ([]Recipe, error)
+	// ListContaining lists the recipes whose stored document holds text, so
+	// a caller looking for a rare setting skips decoding every recipe.
+	ListContaining(ctx context.Context, campaignID, text string) ([]Recipe, error)
 	Get(ctx context.Context, campaignID, id string) (Recipe, bool, error)
 	Count(ctx context.Context, campaignID string) (int, error)
 	Create(ctx context.Context, r Recipe) error
@@ -50,8 +54,17 @@ func scanRecipe(sc interface{ Scan(...any) error }) (Recipe, error) {
 }
 
 func (s *sqlRepository) List(ctx context.Context, campaignID string) ([]Recipe, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+recipeCols+` FROM homebrew_recipes WHERE campaign_id = ? ORDER BY name`, campaignID)
+	return s.list(ctx, `SELECT `+recipeCols+` FROM homebrew_recipes WHERE campaign_id = ? ORDER BY name`, campaignID)
+}
+
+func (s *sqlRepository) ListContaining(ctx context.Context, campaignID, text string) ([]Recipe, error) {
+	// LIKE's own wildcards in text are escaped so it matches literally.
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(text)
+	return s.list(ctx, `SELECT `+recipeCols+` FROM homebrew_recipes WHERE campaign_id = ? AND doc LIKE ? ORDER BY name`, campaignID, "%"+esc+"%")
+}
+
+func (s *sqlRepository) list(ctx context.Context, q string, args ...any) ([]Recipe, error) {
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list recipes: %w", err)
 	}

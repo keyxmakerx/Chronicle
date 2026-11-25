@@ -183,10 +183,13 @@ func (t *trackerRules) TrackerChanged(ctx context.Context, campaignID string, v 
 	if c.KindName == "" {
 		return nil
 	}
-	linked, err := t.svc.PartsOfKind(ctx, campaignID, hv, "tracker", "clock")
+	linked, err := t.svc.PartsOfKind(ctx, campaignID, hv, linkKey, "tracker", "clock")
 	if err != nil {
 		return err
 	}
+	// The parts linked to one kind share one budget, as a chain of rules
+	// does, so several recipes on one tracker still stop after 50 runs.
+	ctx = t.svc.ShareBudget(ctx)
 	var errs []error
 	for _, rp := range linked {
 		if strings.EqualFold(partLink(&rp.Part), c.KindName) {

@@ -156,6 +156,10 @@ type trackerPartData struct {
 	Link string `json:"link,omitempty"`
 }
 
+// linkKey is how a link appears in a part's stored data, so the recipe store
+// can skip recipes with none before anything is decoded.
+const linkKey = `"link":`
+
 // partLink is the hand-made kind a part links to, or "".
 func partLink(p *homebrew.Part) string {
 	if p == nil || len(p.Data) == 0 {

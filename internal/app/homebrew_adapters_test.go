@@ -19,6 +19,9 @@ import (
 type memRecipes struct{ stored map[string]homebrew.Recipe }
 
 func (m *memRecipes) List(context.Context, string) ([]homebrew.Recipe, error) { return nil, nil }
+func (m *memRecipes) ListContaining(context.Context, string, string) ([]homebrew.Recipe, error) {
+	return nil, nil
+}
 func (m *memRecipes) Get(_ context.Context, _, id string) (homebrew.Recipe, bool, error) {
 	r, ok := m.stored[id]
 	return r, ok, nil

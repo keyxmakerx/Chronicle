@@ -138,6 +138,12 @@
       .sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0; });
   }
 
+  // isLinked says whether a part uses a page tracker, whose own audience
+  // applies, so the part's "who sees it" is not shown as if it did.
+  function isLinked(p) {
+    return !!(p && (p.kind === 'tracker' || p.kind === 'clock') && p.data && p.data.link);
+  }
+
   // linkData is a part's data for a link to kind: its name, and a copy of its
   // shape so the preview can act it out before the recipe is saved.
   function linkData(kind) {
@@ -357,7 +363,7 @@
     compatible: compatible, removePart: removePart, defaultData: defaultData,
     bounds: bounds, clampV: clampV, nowText: nowText, simStart: simStart, simSync: simSync, simFire: simFire,
     simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText,
-    crossesMark: crossesMark, linkable: linkable, linkData: linkData
+    crossesMark: crossesMark, linkable: linkable, linkData: linkData, isLinked: isLinked
   };
   if (typeof window !== 'undefined') window.HomebrewWorkshop = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
@@ -511,6 +517,8 @@
     var req = c.id ? api(S, '/recipes/' + encodeURIComponent(c.id), 'PUT', body) : api(S, '/recipes', 'POST', body);
     req.then(function (r) {
       S.busy = false; S.dirty = false;
+      // A save can let a recipe's own kind go, so it may be linkable now.
+      S.kinds = null;
       c.id = r.id; c.version = r.version; c.doc.layout = r.doc.layout || {};
       setStatus(S, 'Saved');
       S.where = null;
@@ -723,7 +731,7 @@
     if (c.type === 'part') {
       var p = partOf(doc, c.key), k = def(S, 'parts', p.kind);
       return { kind: 'Part · ' + (k ? k.label : p.kind), icon: p.kind === 'clock' ? 'fa-clock' : 'fa-cube', title: p.label,
-        body: p.kind === 'tracker' || p.kind === 'clock' ? shapeText(p.data) : '', see: p.see };
+        body: p.kind === 'tracker' || p.kind === 'clock' ? shapeText(p.data) : '', see: isLinked(p) ? '' : p.see };
     }
     var rule = doc.rules[c.rule];
     if (c.type === 'when') {
@@ -1328,7 +1336,7 @@
     doc.parts.forEach(function (p) {
       var row = src(S, h('div', 'hbw-pv-part'), 'p:' + p.key), k = def(S, 'parts', p.kind);
       var head = append(h('div', 'hbw-row'), [h('strong', 'hbw-pv-name', p.label)]);
-      if (p.see !== 'party') {
+      if (p.see !== 'party' && !isLinked(p)) {
         head.appendChild(append(h('span', 'hbw-pill' + (p.see === 'director' ? ' dm' : '')), [fa(SEE_ICON[p.see]),
           document.createTextNode(' ' + SEE.filter(function (x) { return x[0] === p.see; })[0][1])]));
       }

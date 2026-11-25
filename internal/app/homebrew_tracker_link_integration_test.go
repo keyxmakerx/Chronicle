@@ -21,7 +21,9 @@ func TestRecipeUsesPageTrackers(t *testing.T) {
 	reg := homebrew.NewRegistry()
 	w.must(registerTrackerParts(reg, w.trackers))
 	w.must(reg.RegisterEvent(homebrew.EventDef{Name: respiteEvent, Label: "A respite is logged", Press: "Log a respite",
-		Check: func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) { return json.RawMessage(`{}`), nil }}))
+		Check: func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{}`), nil
+		}}))
 	hb := homebrew.NewService(homebrew.NewRepository(w.db), reg, nil, homebrew.NewRunStore(w.db))
 	w.trackers.(interface{ SetChangeListener(trackers.ChangeListener) }).SetChangeListener(&trackerRules{svc: hb})
 

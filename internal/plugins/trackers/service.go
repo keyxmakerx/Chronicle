@@ -702,8 +702,8 @@ func (s *service) playerLog(ctx context.Context, campaignID, entityID string, v 
 	return s.writeLine(ctx, campaignID, t, v, in, SourceHand)
 }
 
-// writeLine adds one log line to a tracker and tells the listener when the
-// value of an owned kind's tracker moved.
+// writeLine adds one log line to a tracker and tells the listener when its
+// value moved.
 func (s *service) writeLine(ctx context.Context, campaignID string, t Tracker, v Viewer, in LogInput, source string) (*TrackerView, error) {
 	n, err := s.repo.CountEntries(ctx, campaignID, t.ID)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -25,9 +26,13 @@ type Service interface {
 	Check(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) error
 	// Placements lists where the Customizer has placed a recipe.
 	Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error)
-	// PartsOfKind lists every saved recipe's parts of the given kinds, so an
-	// owner can find the parts that point at one of its records.
-	PartsOfKind(ctx context.Context, campaignID string, v Viewer, kinds ...string) ([]RecipePart, error)
+	// PartsOfKind lists saved recipes' parts of the given kinds whose data
+	// holds dataHas (any data when ""), so an owner can find the parts that
+	// point at one of its records without reading every recipe.
+	PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error)
+	// ShareBudget gives ctx one budget of rule runs, so several firings an
+	// owner makes for one change stop together after the same 50 runs.
+	ShareBudget(ctx context.Context) context.Context
 
 	// Fire starts the saved rules an event meets (run.go). Owners call it
 	// once they know the change was a Director's.
@@ -139,17 +144,26 @@ func partKinds(doc Doc) []string {
 	return out
 }
 
-func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, kinds ...string) ([]RecipePart, error) {
+func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error) {
 	if err := requireDirector(v); err != nil {
 		return nil, err
 	}
-	rs, err := s.repo.List(ctx, campaignID)
+	var rs []Recipe
+	var err error
+	if dataHas == "" {
+		rs, err = s.repo.List(ctx, campaignID)
+	} else {
+		rs, err = s.repo.ListContaining(ctx, campaignID, dataHas)
+	}
 	if err != nil {
 		return nil, errInternal(err)
 	}
 	var out []RecipePart
 	for _, r := range rs {
 		for _, p := range r.Doc.Parts {
+			if dataHas != "" && !strings.Contains(string(p.Data), dataHas) {
+				continue
+			}
 			for _, k := range kinds {
 				if p.Kind == k {
 					out = append(out, RecipePart{RecipeID: r.ID, Part: p})
@@ -159,6 +173,11 @@ func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, 
 		}
 	}
 	return out, nil
+}
+
+func (s *service) ShareBudget(ctx context.Context) context.Context {
+	ctx, _ = withBudget(ctx)
+	return ctx
 }
 
 func (s *service) Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error) {

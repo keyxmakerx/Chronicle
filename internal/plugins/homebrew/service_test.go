@@ -2,6 +2,7 @@ package homebrew
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -29,6 +30,17 @@ type fakeRepo struct {
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{recipes: map[string]Recipe{}} }
+
+func (f *fakeRepo) ListContaining(ctx context.Context, c, text string) ([]Recipe, error) {
+	all, err := f.List(ctx, c)
+	var out []Recipe
+	for _, r := range all {
+		if raw, _ := json.Marshal(r.Doc); strings.Contains(string(raw), text) {
+			out = append(out, r)
+		}
+	}
+	return out, err
+}
 
 func (f *fakeRepo) List(_ context.Context, c string) ([]Recipe, error) {
 	f.calls++
@@ -500,5 +512,42 @@ func TestServicePlacements(t *testing.T) {
 	}
 	if got, err := none.Placements(ctx, camp, "rcp-1", dm); err != nil || got == nil || len(got) != 0 {
 		t.Fatalf("no finder = %v, %v", got, err)
+	}
+}
+
+func TestPartsOfKind(t *testing.T) {
+	repo := newFakeRepo()
+	svc := NewService(repo, testRegistry(t), nil, nil)
+	ctx := context.Background()
+	dm := Viewer{UserID: "dm", Director: true}
+	repo.recipes["a"] = Recipe{ID: "a", CampaignID: camp, Doc: Doc{Parts: []Part{
+		{Key: "x", Kind: "tracker", Data: json.RawMessage(`{"link":"Hunger"}`)},
+		{Key: "y", Kind: "tracker", Data: json.RawMessage(`{"max":3}`)},
+		{Key: "z", Kind: "words", Data: json.RawMessage(`{"link":"no"}`)},
+	}}}
+	repo.recipes["b"] = Recipe{ID: "b", CampaignID: camp, Doc: Doc{Parts: []Part{{Key: "c", Kind: "clock", Data: json.RawMessage(`{"max":4}`)}}}}
+	repo.recipes["other"] = Recipe{ID: "other", CampaignID: "elsewhere", Doc: Doc{Parts: []Part{{Key: "o", Kind: "tracker", Data: json.RawMessage(`{"link":"Hunger"}`)}}}}
+
+	keys := func(ps []RecipePart) string {
+		var out []string
+		for _, p := range ps {
+			out = append(out, p.RecipeID+"/"+p.Part.Key)
+		}
+		sort.Strings(out)
+		return strings.Join(out, ",")
+	}
+	got, err := svc.PartsOfKind(ctx, camp, dm, `"link":`, "tracker", "clock")
+	if err != nil || keys(got) != "a/x" {
+		t.Errorf("with data = %s, %v", keys(got), err)
+	}
+	got, err = svc.PartsOfKind(ctx, camp, dm, "", "tracker", "clock")
+	if err != nil || keys(got) != "a/x,a/y,b/c" {
+		t.Errorf("any data = %s, %v", keys(got), err)
+	}
+	if _, err := svc.PartsOfKind(ctx, camp, Viewer{UserID: "p"}, "", "tracker"); err == nil {
+		t.Error("a player listed recipe parts")
+	}
+	if b, ok := svc.ShareBudget(ctx).Value(budgetKey{}).(*budget); !ok || b.left != maxRunSteps {
+		t.Errorf("shared budget = %+v", b)
 	}
 }

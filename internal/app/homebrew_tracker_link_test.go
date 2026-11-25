@@ -160,13 +160,20 @@ func TestTrackerRunLinked(t *testing.T) {
 // linkedRecipes answers PartsOfKind with saved parts and records Fire.
 type linkedRecipes struct {
 	firedRecipes
-	parts []homebrew.RecipePart
-	kinds []string
+	parts   []homebrew.RecipePart
+	kinds   []string
+	dataHas string
+	shared  int
 }
 
-func (l *linkedRecipes) PartsOfKind(_ context.Context, _ string, _ homebrew.Viewer, kinds ...string) ([]homebrew.RecipePart, error) {
-	l.kinds = kinds
+func (l *linkedRecipes) PartsOfKind(_ context.Context, _ string, _ homebrew.Viewer, dataHas string, kinds ...string) ([]homebrew.RecipePart, error) {
+	l.kinds, l.dataHas = kinds, dataHas
 	return l.parts, nil
+}
+
+func (l *linkedRecipes) ShareBudget(ctx context.Context) context.Context {
+	l.shared++
+	return ctx
 }
 
 func TestTrackerRulesFireLinked(t *testing.T) {
@@ -184,8 +191,8 @@ func TestTrackerRulesFireLinked(t *testing.T) {
 	if err := l.TrackerChanged(context.Background(), "camp", player, trackers.Change{KindName: "The Hunger", EntityID: "saat", From: 2, To: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(svc.kinds, ",") != "tracker,clock" {
-		t.Errorf("asked for kinds %v", svc.kinds)
+	if strings.Join(svc.kinds, ",") != "tracker,clock" || svc.dataHas != `"link":` || svc.shared != 1 {
+		t.Errorf("asked for kinds %v with %q, shared %d budgets", svc.kinds, svc.dataHas, svc.shared)
 	}
 	var got []string
 	for _, f := range svc.fired {
