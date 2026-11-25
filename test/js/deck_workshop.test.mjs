@@ -183,6 +183,34 @@ test('a kind the campaign has nothing for is not offered', () => {
   assert.equal(DW.kindAvailable('tag', { available: true, tags: [] }), false);
   assert.equal(DW.kindAvailable('tracker', { available: true, trackers: [{}] }), true);
   assert.equal(DW.kindAvailable('number', { available: false, fields: [{}] }), false);
+  assert.equal(DW.kindAvailable('moon', { available: true, hasCalendar: true, moons: ['Nyx'] }), true);
+  assert.equal(DW.kindAvailable('moon', { available: true, hasCalendar: true, moons: [] }), false);
+  assert.equal(DW.kindAvailable('event', { available: true, hasCalendar: false }), false);
+  assert.equal(DW.kindAvailable('time', { available: true, hasCalendar: true }), true);
+  assert.equal(DW.kindAvailable('time', { available: false, hasCalendar: true }), false);
+});
+
+test('the calendar tests start with values the server accepts and name no page', () => {
+  const cal = { available: true, hasCalendar: true, moons: ['Nyx'], eventKinds: [{ slug: 'blood', name: 'Bloodnight' }] };
+  assert.deepEqual(plain(DW.whenBody([DW.newTest('moon', heroDeck, cal)])), [{ test: 'moon', open: false, name: 'Nyx', phase: 'full', is: true }]);
+  assert.deepEqual(plain(DW.whenBody([DW.newTest('event', heroDeck, cal)])), [{ test: 'event', open: false, name: 'Bloodnight', has: true }]);
+  assert.deepEqual(plain(DW.whenBody([DW.newTest('time', heroDeck, cal)])), [{ test: 'time', open: false, time: 'night', is: true }]);
+  assert.equal(DW.newTest('moon', heroDeck, { available: true, hasCalendar: true, moons: [] }), null);
+  const ev = DW.newTest('event', heroDeck, { available: true, hasCalendar: true, eventKinds: [] });
+  assert.equal(ev._draft, true, 'an event with no kind to offer is a draft');
+  assert.deepEqual(plain(DW.whenBody([ev])), []);
+});
+
+test('a moon test turns between a phase and days of its cycle', () => {
+  const m = DW.newTest('moon', heroDeck, { moons: ['Nyx'] });
+  const days = DW.changeTest(m, 'phase', 'days', opts);
+  assert.deepEqual(plain(DW.whenBody([days])), [{ test: 'moon', open: false, name: 'Nyx', from: 1, to: 1, is: true }]);
+  const range = DW.changeTest(DW.changeTest(days, 'from', 23, opts), 'to', 1, opts);
+  assert.deepEqual([range.from, range.to], [23, 1]);
+  const back = DW.changeTest(range, 'phase', 'waning', opts);
+  assert.deepEqual(plain(DW.whenBody([back])), [{ test: 'moon', open: false, name: 'Nyx', phase: 'waning', is: true }]);
+  assert.equal(DW.changeTest(back, 'is', 'false', opts).is, false);
+  assert.equal(DW.changeTest(DW.newTest('time', heroDeck, {}), 'time', 'dusk', opts).time, 'dusk');
 });
 
 test('changing one blank changes only that blank', () => {

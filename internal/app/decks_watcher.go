@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
@@ -142,5 +143,22 @@ func (n decksLayersNotifier) LayersChanged(campaignID, entityID string) {
 type decksTrackerObserver struct{ poke func(campaignID string) }
 
 func (o decksTrackerObserver) TrackersChanged(campaignID string) { o.poke(campaignID) }
+
+// decksCalendarEvents pokes the watcher after a calendar write a moon, event
+// or time test may read (the date and time, an event, the moons), then lets
+// the real publisher carry on. Weather writes do not wake it.
+type decksCalendarEvents struct {
+	next calendar.CalendarEventPublisher
+	poke func(campaignID string)
+}
+
+func (p *decksCalendarEvents) PublishCalendarEvent(eventType, campaignID, calendarID string, payload any) {
+	p.next.PublishCalendarEvent(eventType, campaignID, calendarID, payload)
+	switch eventType {
+	case calendar.PubDateAdvanced, calendar.PubEventCreated, calendar.PubEventUpdated, calendar.PubEventDeleted,
+		calendar.PubStructureUpdated, calendar.PubMoonPhaseChanged:
+		p.poke(campaignID)
+	}
+}
 
 var _ decks.MomentNotifier = (*decksLivePublisher)(nil)

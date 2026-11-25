@@ -215,14 +215,17 @@
   // ---- Comes up when: a card's tests (pinned to when.go by test/js/deck_workshop.test.mjs) ----
 
   var MAX_TESTS = 4; // MaxTests in when.go
-  var KIND_ORDER = ['number', 'tracker', 'tag', 'layer', 'say'];
+  var KIND_ORDER = ['number', 'tracker', 'tag', 'layer', 'moon', 'event', 'time', 'say'];
   // The keys each kind of test may carry besides "test" and "open"; the server refuses any other.
   var TEST_KEYS = {
     number: ['who', 'field', 'op', 'value', 'of', 'share'],
     tracker: ['who', 'kind', 'op', 'value'],
     tag: ['who', 'tag', 'has'],
     layer: ['who', 'name', 'on'],
-    say: []
+    say: [],
+    moon: ['name', 'phase', 'from', 'to', 'is'],
+    event: ['name', 'has'],
+    time: ['time', 'is']
   };
   var ORDINALS = ['first', 'second', 'third', 'fourth'];
 
@@ -270,18 +273,36 @@
     if (kind === 'number') return (o.fields || []).length > 0;
     if (kind === 'tracker') return (o.trackers || []).length > 0;
     if (kind === 'tag') return (o.tags || []).length > 0;
+    if (kind === 'moon') return !!o.hasCalendar && (o.moons || []).length > 0;
+    if (kind === 'event' || kind === 'time') return !!o.hasCalendar;
     return false;
   }
 
   /**
    * newTest: a test of a kind with sensible first values. On a hero deck it is
    * about that hero; a number test starts at "at or below half of" the first
-   * field that has a max field. A layer with no name on any hero yet starts as
-   * a draft, which is not saved until it has a name.
+   * field that has a max field. A layer with no name on any hero yet, or an
+   * event when the campaign has no kinds of event, starts as a draft, which is
+   * not saved until it has a name. A moon test starts at the first moon being
+   * full, a time test at night.
    */
   function newTest(kind, c, o) {
     var t = { test: kind, open: false };
     if (kind === 'say') return t;
+    if (kind === 'moon') {
+      var m = (o.moons || [])[0];
+      if (!m) return null;
+      t.name = m; t.phase = 'full'; t.is = true;
+      return t;
+    }
+    if (kind === 'event') {
+      var ek = (o.eventKinds || [])[0];
+      t.name = ek ? ek.name : '';
+      t.has = true;
+      if (!t.name) t._draft = true;
+      return t;
+    }
+    if (kind === 'time') { t.time = 'night'; t.is = true; return t; }
     t.who = c.heroDeck && c.holder ? 'holder' : 'any';
     if (kind === 'number') {
       var f = firstWith(o.fields, 'maxKey') || (o.fields || [])[0];
@@ -336,7 +357,20 @@
       case 'tag': n.tag = parseInt(val, 10); break;
       case 'has': n.has = val === 'true'; break;
       case 'on': n.on = val === 'true'; break;
-      case 'value': n.value = val; break;
+      case 'is': n.is = val === 'true'; break;
+      case 'time': n.time = val; break;
+      case 'value': case 'from': case 'to': n[key] = val; break;
+      case 'phase':
+        // "days" turns a phase into a range of the cycle's days and back.
+        if (val === 'days') {
+          delete n.phase;
+          n.from = t.from != null ? t.from : 1;
+          n.to = t.to != null ? t.to : n.from;
+        } else {
+          delete n.from; delete n.to;
+          n.phase = val;
+        }
+        break;
       case 'compare':
         if (val === 'number') {
           delete n.of; delete n.share;
@@ -462,8 +496,67 @@
     function choose(label, list, cur, key) {
       slot(function (k) { return blank(label, list, cur, pickOf(key, k)); });
     }
+    function wholeOf(key, k) {
+      return function (v) {
+        var x = parseNumber(v);
+        if (x == null || x !== Math.floor(x) || x < 1) { env.refuse('Type a day of the cycle: 1 or more.', 'b' + k); return; }
+        env.change(changeTest(t, key, x, o), 'b' + k);
+      };
+    }
+    // textSlot is a typed name with suggestions, saved when it is not empty.
+    function textSlot(label, placeholder, list, idPrefix, refusal) {
+      slot(function (k) {
+        var nm = node('input', 'dkw-textblank');
+        nm.type = 'text';
+        nm.maxLength = 80;
+        nm.setAttribute('autocomplete', 'off');
+        nm.setAttribute('aria-label', label);
+        nm.placeholder = placeholder;
+        nm.value = t.name || '';
+        var dl = node('datalist');
+        dl.id = idPrefix + env.index;
+        list.forEach(function (l) { var op = node('option'); op.value = l; dl.appendChild(op); });
+        nm.setAttribute('list', dl.id);
+        nm.addEventListener('change', function () {
+          var v = nm.value.trim();
+          if (!v) { env.refuse(refusal, 'b' + k); return; }
+          env.change(changeTest(t, 'name', v, o), 'b' + k);
+        });
+        p.appendChild(dl);
+        return nm;
+      });
+    }
     var opChoices = (o.ops || []).map(function (w) { return { v: w.key, l: w.phrase }; });
+    var isChoices = [{ v: 'true', l: 'is' }, { v: 'false', l: 'is not' }];
     if (t.test === 'say') { say('the Director says so'); return; }
+    if (t.test === 'moon') {
+      choose('Which moon', (o.moons || []).map(function (m) { return { v: m, l: m }; }), t.name, 'name');
+      choose('Is or is not', isChoices, String(t.is !== false), 'is');
+      var phases = (o.moonPhases || []).map(function (w) { return { v: w.key, l: w.phrase }; });
+      // A phase's own name (written by the AI, or a hand-set moon's state) is kept as a choice.
+      if (t.phase && !phases.some(function (c) { return c.v === t.phase; })) phases.unshift({ v: t.phase, l: t.phase });
+      phases.push({ v: 'days', l: 'on certain days of its cycle' });
+      choose('Which phase', phases, t.phase || 'days', 'phase');
+      if (!t.phase) {
+        say('from day');
+        slot(function (k) { return numberBlank('The first day', t.from, wholeOf('from', k)); });
+        say('to');
+        slot(function (k) { return numberBlank('The last day', t.to, wholeOf('to', k)); });
+      }
+      return;
+    }
+    if (t.test === 'event') {
+      textSlot('The event or kind of event', 'an event', (o.eventKinds || []).map(function (e) { return e.name; }), 'dkw-events-',
+        'Type the name of an event or a kind of event.');
+      choose('Is or is not', [{ v: 'true', l: 'is today' }, { v: 'false', l: 'is not today' }], String(t.has !== false), 'has');
+      return;
+    }
+    if (t.test === 'time') {
+      say('it');
+      choose('Is or is not', isChoices, String(t.is !== false), 'is');
+      choose('Which time of day', (o.dayParts || []).map(function (w) { return { v: w.key, l: w.phrase }; }), t.time, 'time');
+      return;
+    }
     choose('Whose page', whoChoices(t.test, env), t.who, 'who');
     if (t.test === 'number') {
       choose('Which number', (o.fields || []).map(function (f) { return { v: f.key, l: f.label }; }), t.field, 'field');
@@ -491,27 +584,8 @@
       say('the tag');
       choose('Which tag', (o.tags || []).map(function (g) { return { v: g.id, l: g.name }; }), t.tag, 'tag');
     } else if (t.test === 'layer') {
-      choose('Is or is not', [{ v: 'true', l: 'is' }, { v: 'false', l: 'is not' }], String(t.on !== false), 'on');
-      slot(function (k) {
-        var nm = node('input', 'dkw-textblank');
-        nm.type = 'text';
-        nm.maxLength = 80;
-        nm.setAttribute('autocomplete', 'off');
-        nm.setAttribute('aria-label', 'The transformation’s name');
-        nm.placeholder = 'a transformation';
-        nm.value = t.name || '';
-        var dl = node('datalist');
-        dl.id = 'dkw-layers-' + env.index;
-        (o.layers || []).forEach(function (l) { var op = node('option'); op.value = l; dl.appendChild(op); });
-        nm.setAttribute('list', dl.id);
-        nm.addEventListener('change', function () {
-          var v = nm.value.trim();
-          if (!v) { env.refuse('Type the name of a transformation.', 'b' + k); return; }
-          env.change(changeTest(t, 'name', v, o), 'b' + k);
-        });
-        p.appendChild(dl);
-        return nm;
-      });
+      choose('Is or is not', isChoices, String(t.on !== false), 'on');
+      textSlot('The transformation’s name', 'a transformation', o.layers || [], 'dkw-layers-', 'Type the name of a transformation.');
     }
   }
 

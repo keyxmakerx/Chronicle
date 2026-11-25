@@ -4833,7 +4833,10 @@ func (a *App) RegisterRoutes() {
 	// whenever one of them may have changed.
 	decksWatch := newDecksWatcher()
 	decksFacts := &decksFactsAdapter{entities: entityService, characters: characterListService, tags: tagService}
-	decksOn := func(ctx context.Context, campaignID string) bool {
+	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
+		decksFacts.calendars = calendarService
+	}
+	decksOn :=func(ctx context.Context, campaignID string) bool {
 		on, err := addonService.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
 		return err == nil && on
 	}
@@ -6817,10 +6820,12 @@ func (a *App) RegisterRoutes() {
 	// Calendar writes reach the Foundry module live; without this it only
 	// sees them on reconnect or a manual Pull. Reached by type assertion like
 	// the visibility gate, so the CalendarService interface stays unchanged.
+	// A card's moon, event and time tests read the calendar, so the same writes
+	// wake the decks watcher.
 	if pub, ok := calendarService.(interface {
 		SetEventPublisher(calendar.CalendarEventPublisher)
 	}); ok {
-		pub.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+		pub.SetEventPublisher(&decksCalendarEvents{next: &calendarEventPublisherAdapter{bus: wsEventBus}, poke: decksWatch.Poke})
 	}
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
