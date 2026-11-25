@@ -81,6 +81,9 @@ func TestDecksFactsTodayReadsTheCalendarAsTheViewerSeesIt(t *testing.T) {
 	if _, ok := pl.Moons["veil"]; ok || len(pl.Moons) != 1 {
 		t.Errorf("a player's day shows a hidden moon: %+v", pl.Moons)
 	}
+	if !pl.Events["bloodnight"] || pl.Events["omen"] || pl.Events["red omen"] {
+		t.Errorf("a player's day must name the event but not its kind: %v", pl.Events)
+	}
 	last := cal.viewers[len(cal.viewers)-1]
 	if last.Role() != permissions.RolePlayer || last.UserID() != "u-tam" {
 		t.Errorf("the player's calendar was read as role %d, user %q", last.Role(), last.UserID())
@@ -131,8 +134,8 @@ func TestFieldRulesTodaySharesTheCalendarReader(t *testing.T) {
 	if dm.DayPart != "day" || len(dm.Moons) != 2 || dm.Moons["nyx"].Words == nil || !dm.EventTags["bloodnight"] || !dm.EventTags["omen"] || !dm.EventTags["red omen"] {
 		t.Errorf("the Director's situation: %+v", dm)
 	}
-	if pl := w.Today(ctx, "camp", fieldrules.Viewer{Role: permissions.RolePlayer, UserID: "u-tam"}); len(pl.Moons) != 1 {
-		t.Errorf("a player's situation shows a hidden moon: %+v", pl.Moons)
+	if pl := w.Today(ctx, "camp", fieldrules.Viewer{Role: permissions.RolePlayer, UserID: "u-tam"}); len(pl.Moons) != 1 || pl.EventTags["omen"] || !pl.EventTags["bloodnight"] {
+		t.Errorf("a player's situation shows a hidden moon or an event's kind: %+v", pl)
 	}
 	if none := (&fieldRulesWorld{calendars: &decksCalendar{none: true}}).Today(ctx, "camp", fieldrules.Viewer{Role: permissions.RoleOwner}); none.Moons != nil || none.EventTags != nil {
 		t.Errorf("no calendar must read as missing facts: %+v", none)

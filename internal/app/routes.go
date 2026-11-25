@@ -4836,7 +4836,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		decksFacts.calendars = calendarService
 	}
-	decksOn :=func(ctx context.Context, campaignID string) bool {
+	decksOn := func(ctx context.Context, campaignID string) bool {
 		on, err := addonService.IsEnabledForCampaign(ctx, campaignID, decks.AddonSlug)
 		return err == nil && on
 	}

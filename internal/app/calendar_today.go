@@ -19,8 +19,9 @@ type calendarToday struct {
 	DayPart string
 	// Moons are the moons the viewer may see.
 	Moons []calendarMoonNow
-	// Events are the lower-cased names of today's events and the slugs and
-	// names of their kinds; nil when the events could not be read.
+	// Events are the lower-cased names of today's events and, for a viewer
+	// who may see the calendar's structure, the slugs and names of their
+	// kinds; nil when the events could not be read.
 	Events map[string]bool
 }
 
@@ -61,7 +62,9 @@ func readCalendarToday(ctx context.Context, cals calendar.CalendarService, campa
 			continue
 		}
 		out.Events[strings.ToLower(strings.TrimSpace(e.Name))] = true
-		if e.KindID == nil {
+		// Event kinds are Owner-only structure: a player's answer never
+		// rests on one, or a card or field would tell them its kind.
+		if e.KindID == nil || !pv.SkipsPerUserRules() {
 			continue
 		}
 		if kinds == nil {
