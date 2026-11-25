@@ -345,3 +345,23 @@ test('rules that set each other off stop instead of hanging the page', () => {
   assert.match(st.log.at(-1), /^Stopped after 50 steps/);
   assert.ok(st.log.length <= 40, 'the log stays short');
 });
+
+test('a named drawer button is a preview button that says its name, and starts with no name', () => {
+  const { H } = load();
+  const cat = Object.assign({}, CAT, { events: CAT.events.concat([{ name: 'button.pressed', label: 'A drawer button is pressed',
+    fields: [{ name: 'button', label: 'Button', type: 'text' }], pressArg: 'button' }]) });
+  assert.deepEqual(plain(H.startArgs(cat.events.at(-1))), {}, 'a text field starts empty, for the Director to name');
+  const doc = { parts: [{ key: 'need', kind: 'tracker', label: 'Need', see: 'party', data: { shape: 'count', min: 0, max: 5 } }],
+    rules: [{ when: { event: 'button.pressed', part: '', args: { button: 'Dose' } }, timing: 'now', then: [{ action: 'set', part: 'need', args: { to: 0 } }] },
+      { when: { event: 'button.pressed', part: '', args: {} }, timing: 'now', then: [] },
+      { when: { event: 'moon', part: '', args: {} }, timing: 'now', then: [] }] };
+  assert.deepEqual(plain(H.firable(doc, cat)), [0, 1, 2]);
+  assert.equal(H.whenText(doc, cat, doc.rules[0]), 'A drawer button is pressed: Dose');
+  assert.equal(H.whenText(doc, cat, doc.rules[1]), 'A drawer button is pressed');
+  assert.equal(H.whenText(doc, cat, doc.rules[2]), 'The moon turns');
+  const st = H.simStart(doc, cat);
+  H.simSetTo(doc, cat, st, 'need', 3);
+  H.simFire(doc, cat, st, 0);
+  assert.equal(st.v.need, 0);
+  assert.equal(st.log.at(-1), 'Set a tracker: Need 3 to 0');
+});

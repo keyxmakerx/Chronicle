@@ -224,13 +224,21 @@
     return (rule.then || []).some(function (d) { var a = findDef(cat, 'actions', d.action); return !!(a && a.waits); });
   }
 
+  // whenText names a rule's When in the preview: the event, its part, and
+  // for an event whose drawer buttons the rules name, the button, so two
+  // named buttons read apart.
+  function whenText(doc, cat, rule) {
+    var ev = findDef(cat, 'events', rule.when.event), p = rule.when.part ? doc.parts.filter(function (x) { return x.key === rule.when.part; })[0] : null;
+    var named = ev && ev.pressArg ? String((rule.when.args || {})[ev.pressArg] || '').trim() : '';
+    return (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '') + (named ? ': ' + named : '');
+  }
+
   // run starts a rule. A rule timed for later waits; one that runs now does
   // each Then in order. Returns the cards it lit, in order.
   function run(doc, cat, st, i, now, ctx) {
     var rule = doc.rules[i];
     if (!rule) return;
-    var ev = findDef(cat, 'events', rule.when.event), p = rule.when.part ? doc.parts.filter(function (x) { return x.key === rule.when.part; })[0] : null;
-    var what = (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '');
+    var what = whenText(doc, cat, rule);
     ctx.lit.push('r' + i);
     // A rule that ends in an action that is the Director's call is held at
     // the table however it is timed, so it waits here too.
@@ -348,7 +356,7 @@
     partKey: partKey, startArgs: startArgs, freeSpot: freeSpot, cardsOf: cardsOf, edgesOf: edgesOf, shapeText: shapeText, argsText: argsText,
     compatible: compatible, removePart: removePart, defaultData: defaultData,
     bounds: bounds, clampV: clampV, nowText: nowText, simStart: simStart, simSync: simSync, simFire: simFire,
-    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable,
+    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText,
     crossesMark: crossesMark, linkable: linkable, linkData: linkData
   };
   if (typeof window !== 'undefined') window.HomebrewWorkshop = H;
@@ -1344,8 +1352,7 @@
     if (fire.length) {
       var acts = h('div', 'hbw-pv-acts');
       fire.forEach(function (i) {
-        var r = doc.rules[i], ev = def(S, 'events', r.when.event), p = partOf(doc, r.when.part);
-        acts.appendChild(btn((ev ? ev.label : r.when.event) + (p ? ': ' + p.label : ''), '', function () { acted(S, simFire(doc, cat, st, i)); }, 'fa-bolt'));
+        acts.appendChild(btn(whenText(doc, cat, doc.rules[i]), '', function () { acted(S, simFire(doc, cat, st, i)); }, 'fa-bolt'));
       });
       append(box, [acts, h('p', 'hbw-muted', 'Press one to act out that When. Rules that watch a number run when you step it.')]);
     } else if (doc.rules.length) {

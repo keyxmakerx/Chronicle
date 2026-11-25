@@ -140,6 +140,9 @@ func catalogTail(e CatalogEntry) string {
 		}
 		out += "; args " + strings.Join(args, ", ")
 	}
+	if e.PressArg != "" {
+		out += "; each distinct `" + e.PressArg + "` among the saved rules is a drawer button of that name"
+	}
 	return out
 }
 
@@ -152,6 +155,10 @@ func writeDrawer(b *strings.Builder, d *Drawer) {
 		b.WriteString("- none\n")
 	}
 	for _, p := range d.Presses {
+		if p.Button != "" {
+			fmt.Fprintf(b, "- %s (`%s`, %s %q): starts %d saved rules\n", p.Label, p.Event, p.Arg, p.Button, p.Rules)
+			continue
+		}
 		fmt.Fprintf(b, "- %s (`%s`): starts %d saved rules\n", p.Label, p.Event, p.Rules)
 	}
 	b.WriteString("\nWaiting for the Director:\n")

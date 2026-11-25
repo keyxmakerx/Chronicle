@@ -307,7 +307,7 @@ func TestHeldRuns(t *testing.T) {
 		rg := newRunRig(t)
 		rg.save(t, "Held", []Part{counter("a")},
 			Rule{When: When{Event: "rest"}, Timing: TimingHeld, Then: []Do{{Action: "add", Part: "a"}, {Action: "browser"}, {Action: "hand"}}})
-		if _, err := rg.svc.Press(ctx, camp, "rest", dm); err != nil {
+		if _, err := rg.svc.Press(ctx, camp, "rest", "", dm); err != nil {
 			t.Fatal(err)
 		}
 		return rg, "id-2"
@@ -356,7 +356,7 @@ func TestHeldRuns(t *testing.T) {
 			"player run":     func() error { _, err := rg.svc.RunHeld(ctx, camp, id, player); return err }(),
 			"player dismiss": func() error { _, err := rg.svc.Dismiss(ctx, camp, id, player); return err }(),
 			"player drawer":  func() error { _, err := rg.svc.Drawer(ctx, camp, player); return err }(),
-			"player press":   func() error { _, err := rg.svc.Press(ctx, camp, "rest", player); return err }(),
+			"player press":   func() error { _, err := rg.svc.Press(ctx, camp, "rest", "", player); return err }(),
 		} {
 			if codeOf(err) != 403 {
 				t.Errorf("%s: %v", name, err)
@@ -366,9 +366,9 @@ func TestHeldRuns(t *testing.T) {
 			"other campaign":  func() error { _, err := rg.svc.RunHeld(ctx, "other-camp", id, dm); return err }(),
 			"missing":         func() error { _, err := rg.svc.RunHeld(ctx, camp, "nope", dm); return err }(),
 			"bad id":          func() error { _, err := rg.svc.Dismiss(ctx, camp, "../x", dm); return err }(),
-			"not a button":    func() error { _, err := rg.svc.Press(ctx, camp, "quiet", dm); return err }(),
-			"unknown button":  func() error { _, err := rg.svc.Press(ctx, camp, "nope", dm); return err }(),
-			"part event push": func() error { _, err := rg.svc.Press(ctx, camp, "counter.reached", dm); return err }(),
+			"not a button":    func() error { _, err := rg.svc.Press(ctx, camp, "quiet", "", dm); return err }(),
+			"unknown button":  func() error { _, err := rg.svc.Press(ctx, camp, "nope", "", dm); return err }(),
+			"part event push": func() error { _, err := rg.svc.Press(ctx, camp, "counter.reached", "", dm); return err }(),
 		} {
 			if codeOf(err) != 404 {
 				t.Errorf("%s: %v", name, err)
@@ -417,7 +417,7 @@ func TestPressTellsTheOwnerFirst(t *testing.T) {
 
 	t.Run("the owner hears the press, then the rules run", func(t *testing.T) {
 		svc, runs, heard := rig(t, nil)
-		if _, err := svc.Press(ctx, camp, "rest", dm); err != nil {
+		if _, err := svc.Press(ctx, camp, "rest", "", dm); err != nil {
 			t.Fatal(err)
 		}
 		if len(*heard) != 1 || (*heard)[0].UserID != dm.UserID || len(runs.runs) != 1 {
@@ -426,7 +426,7 @@ func TestPressTellsTheOwnerFirst(t *testing.T) {
 	})
 	t.Run("a player's press reaches no one", func(t *testing.T) {
 		svc, runs, heard := rig(t, nil)
-		if _, err := svc.Press(ctx, camp, "rest", player); codeOf(err) != 403 {
+		if _, err := svc.Press(ctx, camp, "rest", "", player); codeOf(err) != 403 {
 			t.Fatalf("player press: %v", err)
 		}
 		if len(*heard) != 0 || len(runs.runs) != 0 {
@@ -435,7 +435,7 @@ func TestPressTellsTheOwnerFirst(t *testing.T) {
 	})
 	t.Run("the owner failing stops the press before any rule", func(t *testing.T) {
 		svc, runs, _ := rig(t, errDB)
-		if _, err := svc.Press(ctx, camp, "rest", dm); codeOf(err) != 500 {
+		if _, err := svc.Press(ctx, camp, "rest", "", dm); codeOf(err) != 500 {
 			t.Fatalf("press: %v", err)
 		}
 		if len(runs.runs) != 0 {

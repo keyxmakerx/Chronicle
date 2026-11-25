@@ -34,8 +34,9 @@ type Service interface {
 	Fire(ctx context.Context, campaignID string, v Viewer, f Fired) error
 	// Drawer is what the Homebrew drawer shows about rules.
 	Drawer(ctx context.Context, campaignID string, v Viewer) (*Drawer, error)
-	// Press fires an event the drawer offers as a button.
-	Press(ctx context.Context, campaignID, event string, v Viewer) (*Drawer, error)
+	// Press fires an event the drawer offers as a button; button is a named
+	// button's name, "" for a registered press.
+	Press(ctx context.Context, campaignID, event, button string, v Viewer) (*Drawer, error)
 	// RunHeld runs a waiting rule now; Dismiss sets it aside.
 	RunHeld(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
 	Dismiss(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
