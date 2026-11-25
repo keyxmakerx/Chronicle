@@ -48,7 +48,20 @@
     return p.label + (p.rules === 1 ? ' (1 rule)' : ' (' + p.rules + ' rules)');
   }
 
-  var H = { statusText: statusText, ago: ago, stepNote: stepNote, pressLabel: pressLabel };
+  // pressURL is where a press goes. A button the Director named carries its
+  // name, since one event stands behind every named button.
+  function pressURL(endpoint, p) {
+    var url = endpoint + '/press/' + encodeURIComponent(p.event);
+    return p.button ? url + '?button=' + encodeURIComponent(p.button) : url;
+  }
+
+  // pressRunning is the status while a press runs; a named button keeps the
+  // Director's own spelling.
+  function pressRunning(p) {
+    return 'Running ' + (p.button ? p.label : p.label.toLowerCase()) + '…';
+  }
+
+  var H = { statusText: statusText, ago: ago, stepNote: stepNote, pressLabel: pressLabel, pressURL: pressURL, pressRunning: pressRunning };
   if (typeof window !== 'undefined') window.HomebrewDrawer = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
 
@@ -149,7 +162,7 @@
     var s = section('Set off', 'fa-hand-pointer', 'hbd-dm');
     var presses = S.drawer.presses || [];
     if (!presses.length) {
-      s.appendChild(h('p', 'hbd-muted', 'No saved rule starts from a button here. A rule whose When is "Log a respite" adds one.'));
+      s.appendChild(h('p', 'hbd-muted', 'No saved rule starts from a button here. A rule whose When is "A respite is logged" adds one, and "A drawer button is pressed" adds a button with the name you give it.'));
       return s;
     }
     var row = h('div', 'hbd-row');
@@ -162,8 +175,8 @@
 
   function press(S, p) {
     S.busy = true;
-    setStatus(S, 'Running ' + p.label.toLowerCase() + '…');
-    api(S.cfg.endpoint + '/press/' + encodeURIComponent(p.event), 'POST', null, csrf(S)).then(function (d) {
+    setStatus(S, pressRunning(p));
+    api(pressURL(S.cfg.endpoint, p), 'POST', null, csrf(S)).then(function (d) {
       S.busy = false; S.drawer = d;
       S.status = p.label + ': done. What changed is below.'; S.statusErr = false;
       draw(S);

@@ -120,13 +120,13 @@ func (h *Handler) Drawer(c *echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-// Press handles POST /campaigns/:id/homebrew/press/:event.
+// Press handles POST /campaigns/:id/homebrew/press/:event[?button=name].
 func (h *Handler) Press(c *echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
 	}
-	out, err := h.svc.Press(c.Request().Context(), cid, c.Param("event"), v)
+	out, err := h.svc.Press(c.Request().Context(), cid, c.Param("event"), c.QueryParam("button"), v)
 	if err != nil {
 		return err
 	}

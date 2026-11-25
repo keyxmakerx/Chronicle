@@ -36,8 +36,10 @@ func (s *service) WhenOptions(ctx context.Context, campaignID string, v Viewer) 
 		return WhenOptionsView{}, err
 	}
 	out := WhenOptionsView{
-		WhenOptions: WhenOptions{Heroes: []OptionHero{}, Fields: []NumberField{}, Trackers: []TrackerKindOption{}, Tags: []TagOption{}, Layers: []string{}},
-		Ops:         opPhrases, Shares: sharePhrases, TestKinds: testKindWords, MaxTests: MaxTests,
+		WhenOptions: WhenOptions{Heroes: []OptionHero{}, Fields: []NumberField{}, Trackers: []TrackerKindOption{}, Tags: []TagOption{}, Layers: []string{},
+			Moons: []string{}, EventKinds: []EventKindOption{}},
+		Ops: opPhrases, Shares: sharePhrases, TestKinds: testKindWords, MaxTests: MaxTests,
+		DayParts: dayParts, MoonPhases: moonPhases,
 	}
 	if s.facts == nil {
 		return out, nil
@@ -61,6 +63,13 @@ func (s *service) WhenOptions(ctx context.Context, campaignID string, v Viewer) 
 	}
 	if o.Layers != nil {
 		out.Layers = o.Layers
+	}
+	out.Calendar = o.Calendar
+	if o.Moons != nil {
+		out.Moons = o.Moons
+	}
+	if o.EventKinds != nil {
+		out.EventKinds = o.EventKinds
 	}
 	return out, nil
 }

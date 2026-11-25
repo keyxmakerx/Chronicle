@@ -26,7 +26,11 @@ const OPTIONS = {
   ops: [{ key: 'lte', phrase: 'at or below' }, { key: 'gte', phrase: 'at or above' }],
   shares: [{ key: 'half', phrase: 'half of' }, { key: 'all', phrase: '' }],
   testKinds: [{ key: 'number', phrase: 'a number on the page' }, { key: 'tracker', phrase: 'a tracker on the page' },
-    { key: 'tag', phrase: 'a tag on the page' }, { key: 'layer', phrase: 'a transformation on the page' }, { key: 'say', phrase: 'the Director says so' }],
+    { key: 'tag', phrase: 'a tag on the page' }, { key: 'layer', phrase: 'a transformation on the page' }, { key: 'say', phrase: 'the Director says so' },
+    { key: 'moon', phrase: 'a moon' }, { key: 'event', phrase: 'an event today' }, { key: 'time', phrase: 'the time of day' }],
+  hasCalendar: true, moons: ['Nyx'], eventKinds: [{ slug: 'blood', name: 'Bloodnight' }],
+  dayParts: [{ key: 'dawn', phrase: 'dawn' }, { key: 'day', phrase: 'day' }, { key: 'dusk', phrase: 'dusk' }, { key: 'night', phrase: 'night' }],
+  moonPhases: [{ key: 'full', phrase: 'full' }, { key: 'new', phrase: 'new' }],
 };
 const STORED = [
   { test: 'number', open: true, who: 'holder', field: 'hp', op: 'gte', value: 1, sentence: 'Tam’s Hit points is at or above 1', broken: false },
@@ -125,6 +129,9 @@ test('every kind can be added and sends only its own keys', { skip }, async () =
     tag: { test: 'tag', open: false, who: 'holder', tag: 7, has: true },
     layer: { test: 'layer', open: false, who: 'holder', name: 'Haunted', on: true },
     say: { test: 'say', open: false },
+    moon: { test: 'moon', open: false, name: 'Nyx', phase: 'full', is: true },
+    event: { test: 'event', open: false, name: 'Bloodnight', has: true },
+    time: { test: 'time', open: false, time: 'night', is: true },
   };
   for (const [kind, body] of Object.entries(want)) {
     const page = await open([]);
@@ -133,6 +140,28 @@ test('every kind can be added and sends only its own keys', { skip }, async () =
     assert.deepEqual((await puts(page))[0].body, { when: [body] }, kind);
     await page.context().close();
   }
+});
+
+test('a moon test turns from a phase to days of its cycle, and a day must be whole', { skip }, async () => {
+  const moon = [{ test: 'moon', open: true, name: 'Nyx', phase: 'full', is: true, sentence: 'Nyx is full', broken: false }];
+  const page = await open(moon);
+  assert.equal(await page.evaluate(() => document.querySelector('[aria-label="Whose page"]')), null, 'a calendar test names no page');
+  await page.selectOption('[data-when-row="0"] [aria-label="Which phase"]', 'days');
+  await page.waitForFunction(() => window.__puts.length === 1);
+  assert.deepEqual((await puts(page))[0].body, { when: [{ test: 'moon', open: true, name: 'Nyx', from: 1, to: 1, is: true }] });
+  await page.context().close();
+  const days = await open([{ test: 'moon', open: false, name: 'Nyx', from: 3, to: 5, is: false, sentence: 'Nyx is not on day 3 to 5 of its cycle', broken: false }]);
+  assert.equal(await blankValue(days, 0, 'Which phase'), 'days');
+  assert.equal(await blankValue(days, 0, 'Is or is not'), 'false');
+  await days.fill('[aria-label="The last day"]', '2.5');
+  await days.press('[aria-label="The last day"]', 'Tab');
+  await days.waitForFunction(() => /a day of the cycle/.test(document.querySelector('[data-when-row="0"]').textContent));
+  assert.deepEqual(await puts(days), []);
+  await days.fill('[aria-label="The last day"]', '1');
+  await days.press('[aria-label="The last day"]', 'Tab');
+  await days.waitForFunction(() => window.__puts.length === 1);
+  assert.deepEqual((await puts(days))[0].body.when[0], { test: 'moon', open: false, name: 'Nyx', from: 3, to: 1, is: false });
+  await days.context().close();
 });
 
 test('a refused save is said in the row and the row goes back to what is stored', { skip }, async () => {

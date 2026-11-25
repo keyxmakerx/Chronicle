@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -25,14 +26,22 @@ type Service interface {
 	Check(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) error
 	// Placements lists where the Customizer has placed a recipe.
 	Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error)
+	// PartsOfKind lists saved recipes' parts of the given kinds whose data
+	// holds dataHas (any data when ""), so an owner can find the parts that
+	// point at one of its records without reading every recipe.
+	PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error)
+	// ShareBudget gives ctx one budget of rule runs, so several firings an
+	// owner makes for one change stop together after the same 50 runs.
+	ShareBudget(ctx context.Context) context.Context
 
 	// Fire starts the saved rules an event meets (run.go). Owners call it
 	// once they know the change was a Director's.
 	Fire(ctx context.Context, campaignID string, v Viewer, f Fired) error
 	// Drawer is what the Homebrew drawer shows about rules.
 	Drawer(ctx context.Context, campaignID string, v Viewer) (*Drawer, error)
-	// Press fires an event the drawer offers as a button.
-	Press(ctx context.Context, campaignID, event string, v Viewer) (*Drawer, error)
+	// Press fires an event the drawer offers as a button; button is a named
+	// button's name, "" for a registered press.
+	Press(ctx context.Context, campaignID, event, button string, v Viewer) (*Drawer, error)
 	// RunHeld runs a waiting rule now; Dismiss sets it aside.
 	RunHeld(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
 	Dismiss(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
@@ -133,6 +142,42 @@ func partKinds(doc Doc) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error) {
+	if err := requireDirector(v); err != nil {
+		return nil, err
+	}
+	var rs []Recipe
+	var err error
+	if dataHas == "" {
+		rs, err = s.repo.List(ctx, campaignID)
+	} else {
+		rs, err = s.repo.ListContaining(ctx, campaignID, dataHas)
+	}
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	var out []RecipePart
+	for _, r := range rs {
+		for _, p := range r.Doc.Parts {
+			if dataHas != "" && !strings.Contains(string(p.Data), dataHas) {
+				continue
+			}
+			for _, k := range kinds {
+				if p.Kind == k {
+					out = append(out, RecipePart{RecipeID: r.ID, Part: p})
+					break
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *service) ShareBudget(ctx context.Context) context.Context {
+	ctx, _ = withBudget(ctx)
+	return ctx
 }
 
 func (s *service) Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error) {

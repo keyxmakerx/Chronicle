@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -45,6 +46,13 @@ type judge struct {
 	tags   map[string]tagRead
 	lays   map[string]layerRead
 	warned bool
+
+	// todayAs is who the calendar is read as: the Director, except for a
+	// player's own draw, which judges the calendar as that player sees it.
+	todayAs    Viewer
+	todayV     TodayFact
+	todayErr   error
+	todayTried bool
 }
 
 type numberRead struct {
@@ -65,7 +73,7 @@ type layerRead struct {
 }
 
 func newJudge(ctx context.Context, cid string, f Facts, d Deck, party func() ([]Hero, error), names *namer) *judge {
-	return &judge{ctx: ctx, cid: cid, facts: f, deck: d, party: party, names: names,
+	return &judge{ctx: ctx, cid: cid, facts: f, deck: d, party: party, names: names, todayAs: judgeDirector,
 		nums: map[string]numberRead{}, trks: map[string]trackerRead{}, tags: map[string]tagRead{}, lays: map[string]layerRead{}}
 }
 
@@ -162,6 +170,20 @@ func (j *judge) heroes() []Hero {
 	return j.partyV
 }
 
+// today is the main calendar as todayAs sees it, read once per run.
+func (j *judge) today() (TodayFact, error) {
+	if !j.todayTried {
+		j.todayTried = true
+		if j.facts == nil {
+			j.todayErr = ErrUnavailable
+		} else {
+			j.todayV, j.todayErr = j.facts.Today(j.ctx, j.cid, j.todayAs)
+			j.failed("today", j.todayErr)
+		}
+	}
+	return j.todayV, j.todayErr
+}
+
 // compare applies an operator with a hair of tolerance, so a third of 30 holds
 // "exactly 10".
 func compare(op string, a, b float64) bool {
@@ -205,8 +227,84 @@ func (j *judge) test(t WhenTest, page string, card Card) verdict {
 		return j.tag(t, page)
 	case TestLayer:
 		return j.layer(t, page)
+	case TestMoon, TestEvent, TestTime:
+		return j.calendar(t)
 	}
 	return verdict{why: "a test this server does not know"}
+}
+
+// calendar judges a moon, event or time test against today. A calendar that
+// can't be read, a moon that is not on it, events that can't be read and a
+// time of day the calendar can't say are all missing facts, so the test does
+// not hold in either its plain or its "not" form.
+func (j *judge) calendar(t WhenTest) verdict {
+	td, err := j.today()
+	if err != nil {
+		return verdict{why: "the calendar can't be read"}
+	}
+	switch t.Test {
+	case TestMoon:
+		m, ok := td.Moons[calendarKey(t.Name)]
+		if !ok {
+			return verdict{why: j.names.moon(t.Name) + " is not on the calendar"}
+		}
+		why := j.names.moon(t.Name) + " is " + moonNowWords(m)
+		return verdict{holds: moonMatches(m, t.Phase, t.From, t.To) == (t.Is != nil && *t.Is), why: why}
+	case TestEvent:
+		if td.Events == nil {
+			return verdict{why: "today's events can't be read"}
+		}
+		on := td.Events[calendarKey(t.Name)]
+		why := t.Name + " is not today"
+		if on {
+			why = t.Name + " is today"
+		}
+		return verdict{holds: on == (t.Has != nil && *t.Has), why: why}
+	case TestTime:
+		if td.DayPart == "" {
+			return verdict{why: "the calendar can't say the time of day"}
+		}
+		is := strings.EqualFold(td.DayPart, t.Time)
+		return verdict{holds: is == (t.Is != nil && *t.Is), why: "it is " + td.DayPart}
+	}
+	return verdict{why: "a test this server does not know"}
+}
+
+// moonNowWords says a moon's state now for a reason line: "Waxing Gibbous,
+// day 12 of its cycle".
+func moonNowWords(m MoonFact) string {
+	s := "in no phase"
+	if len(m.Words) > 0 {
+		s = m.Words[0]
+	}
+	if m.Day > 0 {
+		s += ", day " + strconv.Itoa(m.Day) + " of its cycle"
+	}
+	return s
+}
+
+// moonMatches is the moon matching worked-out sheet fields use (a field that
+// follows `moon:<name>`), kept here because plugins never import each other:
+// a phase matches any of the moon's words today, ignoring case; a range counts
+// days of the cycle and may wrap (23 to 1). A hand-set moon has words but no
+// days, so a range never matches it.
+func moonMatches(m MoonFact, phase string, from, to *int) bool {
+	if phase != "" {
+		for _, w := range m.Words {
+			if strings.EqualFold(strings.TrimSpace(phase), w) {
+				return true
+			}
+		}
+		return false
+	}
+	if m.Day == 0 || from == nil || to == nil {
+		return false
+	}
+	d, f, e := m.Day, *from, *to
+	if f > e {
+		return d >= f || d <= e
+	}
+	return d >= f && d <= e
 }
 
 func (j *judge) number(t WhenTest, page string) verdict {
@@ -362,11 +460,13 @@ func (j *judge) fitsFor(card Card, hero string) Fit {
 
 // judgeFor builds a judge for one deck, as a Director would read the facts.
 func (s *service) judgeFor(ctx context.Context, cid string, d Deck) *judge {
-	director := Viewer{Director: true, MemberRole: permissions.RoleOwner, VisibilityRole: permissions.RoleOwner}
 	return newJudge(ctx, cid, s.facts, d, func() ([]Hero, error) {
-		return s.heroes.Party(ctx, cid, director)
-	}, s.newNamer(ctx, cid, d, director))
+		return s.heroes.Party(ctx, cid, judgeDirector)
+	}, s.newNamer(ctx, cid, d, judgeDirector))
 }
+
+// judgeDirector is who a deck's tests are judged as.
+var judgeDirector = Viewer{Director: true, MemberRole: permissions.RoleOwner, VisibilityRole: permissions.RoleOwner}
 
 // cardsWithTests reports whether any card of the list has a test.
 func cardsWithTests(cards []Card) bool {
@@ -401,12 +501,15 @@ func (s *service) fittingCards(ctx context.Context, cid string, d Deck, cards []
 // holds, and its facts are not even read, so what a player is sent cannot
 // depend on a hidden fact. A printed test about a page this player cannot open
 // keeps the card out the same way: the draw would otherwise say how that page
-// stands.
+// stands. The calendar is read as this player sees it, so a moon hidden from
+// them is a missing fact (the card stays out) and an event they cannot see is
+// not today: the draw never says how a hidden moon or event stands.
 func (s *service) eligibleForPlayer(ctx context.Context, cid string, d Deck, cards []Card, v Viewer) map[string]bool {
 	if !cardsWithTests(cards) {
 		return nil
 	}
 	j := s.judgeFor(ctx, cid, d)
+	j.todayAs = v
 	out := make(map[string]bool, len(cards))
 	for _, c := range cards {
 		switch {

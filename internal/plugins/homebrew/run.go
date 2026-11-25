@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -123,6 +124,10 @@ type RunStep struct {
 type Press struct {
 	Event string `json:"event"`
 	Label string `json:"label"`
+	// Button is a named button's name, sent back with the press; Arg is the
+	// event's field that holds it. Both are empty for a registered press.
+	Button string `json:"button,omitempty"`
+	Arg    string `json:"arg,omitempty"`
 	// Rules counts the saved rules it would start.
 	Rules int `json:"rules"`
 }
@@ -217,7 +222,7 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 				}
 				*waiting = append(*waiting, run)
 			} else {
-				run.Status, run.Lines = s.execute(ctx, campaignID, r, rule, f.Scope, v)
+				run.Status, run.Lines = s.execute(ctx, campaignID, r, rule, f.Scope, f.Payload, v)
 				now := run.CreatedAt
 				run.DoneBy, run.DoneAt = v.UserID, &now
 			}
@@ -321,9 +326,11 @@ func (s *service) waitsOnPurpose(rule Rule) bool {
 }
 
 // execute runs a rule's actions in order and stops at the first that fails.
-// Actions the server can't run are listed for the Director.
-func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, scope string, v Viewer) (string, []string) {
+// Actions the server can't run are listed for the Director. payload is what
+// set the rule off, kept with a held run so its note is the same later.
+func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, scope string, payload json.RawMessage, v Viewer) (string, []string) {
 	lines := []string{}
+	note := s.note(r, rule, payload)
 	for _, d := range rule.Then {
 		a, ok := s.reg.action(d.Action)
 		if !ok {
@@ -334,7 +341,7 @@ func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule
 			lines = append(lines, a.Label+": "+map[bool]string{true: "run in your browser", false: "for you to do"}[a.ClientRun]+".")
 			continue
 		}
-		act := Act{RecipeID: r.ID, Args: d.Args, Scope: scope, By: v, Note: "Rule from " + r.Name}
+		act := Act{RecipeID: r.ID, Args: d.Args, Scope: scope, By: v, Note: note}
 		if d.Part != "" {
 			p, ok := partByKey(r.Doc, d.Part)
 			if !ok {
@@ -353,6 +360,61 @@ func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule
 		}
 	}
 	return RunDone, lines
+}
+
+// note names the rule in the line an owner writes to its own log. A rule
+// set off by a named button says the button ("Dose, from Remnant need"), so
+// the log reads as the Director's act rather than a rule acting alone.
+func (s *service) note(r Recipe, rule Rule, payload json.RawMessage) string {
+	if e, ok := s.reg.event(rule.When.Event); ok && e.PressArg != "" {
+		if name := buttonName(payload, e.PressArg); name != "" {
+			return name + ", from " + r.Name
+		}
+	}
+	return "Rule from " + r.Name
+}
+
+// buttonName reads a named button's name from a rule's args or a press's
+// payload, single-spaced; "" when it is missing, not text or too long to
+// be a button.
+func buttonName(raw json.RawMessage, arg string) string {
+	var m map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	s, _ := m[arg].(string)
+	s = strings.Join(strings.Fields(s), " ")
+	if utf8.RuneCountInString(s) > MaxNameChars {
+		return ""
+	}
+	return s
+}
+
+// namedButtons lists the buttons the saved rules name for an event with a
+// PressArg: each distinct name, compared without case, with the first
+// spelling met and how many rules use it, in the order first met.
+func namedButtons(recipes []Recipe, e EventDef) []Press {
+	out := []Press{}
+	at := map[string]int{}
+	for _, r := range recipes {
+		for _, rule := range r.Doc.Rules {
+			if rule.When.Event != e.Name {
+				continue
+			}
+			name := buttonName(rule.When.Args, e.PressArg)
+			if name == "" {
+				continue
+			}
+			k := strings.ToLower(name)
+			if i, ok := at[k]; ok {
+				out[i].Rules++
+				continue
+			}
+			at[k] = len(out)
+			out = append(out, Press{Event: e.Name, Label: name, Button: name, Arg: e.PressArg, Rules: 1})
+		}
+	}
+	return out
 }
 
 // plainError is an error as the Director may read it: an owner's own
@@ -460,6 +522,9 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 		}
 		out.Presses = append(out.Presses, p)
 	}
+	for _, e := range s.reg.named() {
+		out.Presses = append(out.Presses, namedButtons(recipes, e)...)
+	}
 	if s.runs == nil {
 		return out, nil
 	}
@@ -483,21 +548,50 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 	return out, nil
 }
 
-// Press sets off an event the Director starts from the drawer.
-func (s *service) Press(ctx context.Context, campaignID, event string, v Viewer) (*Drawer, error) {
+// Press sets off an event the Director starts from the drawer. button is ""
+// for a registered press and a named button's name otherwise; a name no
+// saved rule uses is not a button, so a stray request can't fire any text.
+func (s *service) Press(ctx context.Context, campaignID, event, button string, v Viewer) (*Drawer, error) {
 	if err := requireDirector(v); err != nil {
 		return nil, err
 	}
 	e, ok := s.reg.event(event)
-	if !ok || e.Press == "" {
+	if !ok {
 		return nil, errNotFound("button")
 	}
-	if e.Pressed != nil {
-		if err := e.Pressed(ctx, campaignID, v); err != nil {
+	f := Fired{Event: e.Name}
+	switch {
+	case e.Press != "" && button == "":
+		if e.Pressed != nil {
+			if err := e.Pressed(ctx, campaignID, v); err != nil {
+				return nil, errInternal(err)
+			}
+		}
+	case e.PressArg != "" && button != "":
+		recipes, err := s.repo.List(ctx, campaignID)
+		if err != nil {
 			return nil, errInternal(err)
 		}
+		want := strings.ToLower(strings.Join(strings.Fields(button), " "))
+		var found *Press
+		for _, p := range namedButtons(recipes, e) {
+			if strings.ToLower(p.Button) == want {
+				found = &p
+				break
+			}
+		}
+		if found == nil {
+			return nil, errNotFound("button")
+		}
+		// The first spelling goes out, so the note and the run say the
+		// button as the drawer shows it.
+		if f.Payload, err = json.Marshal(map[string]string{e.PressArg: found.Button}); err != nil {
+			return nil, errInternal(err)
+		}
+	default:
+		return nil, errNotFound("button")
 	}
-	if err := s.Fire(ctx, campaignID, v, Fired{Event: e.Name}); err != nil {
+	if err := s.Fire(ctx, campaignID, v, f); err != nil {
 		return nil, errInternal(err)
 	}
 	return s.Drawer(ctx, campaignID, v)
@@ -557,7 +651,7 @@ func (s *service) RunHeld(ctx context.Context, campaignID, id string, v Viewer) 
 		return nil, err
 	}
 	ctx, _ = withBudget(ctx)
-	status, lines := s.execute(ctx, campaignID, recipe, r.Rule, r.Scope, v)
+	status, lines := s.execute(ctx, campaignID, recipe, r.Rule, r.Scope, r.Payload, v)
 	return s.finish(ctx, r, RunRunning, status, lines, v)
 }
 

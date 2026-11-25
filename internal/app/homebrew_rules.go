@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
@@ -39,10 +41,13 @@ type trackerMove struct {
 }
 
 // trackerReached matches a rule when the tracker lands on its value or
-// moves past it, either way, as the Workshop's preview does.
+// moves past it, either way, as the Workshop's preview does. With every, the
+// value repeats upward (3, again every 3: 3, 6, 9 and on), and one move that
+// passes several of them is one firing.
 func trackerReached(args, payload json.RawMessage) (bool, error) {
 	var a struct {
 		Value *int `json:"value"`
+		Every *int `json:"every"`
 	}
 	var m trackerMove
 	if err := json.Unmarshal(args, &a); err != nil || a.Value == nil {
@@ -51,8 +56,34 @@ func trackerReached(args, payload json.RawMessage) (bool, error) {
 	if err := json.Unmarshal(payload, &m); err != nil {
 		return false, fmt.Errorf("tracker.reached payload: %w", err)
 	}
-	at := *a.Value
-	return (m.From < at && m.To >= at) || (m.From > at && m.To <= at), nil
+	every := 0
+	if a.Every != nil && *a.Every > 0 {
+		every = *a.Every
+	}
+	return crossesMark(m.From, m.To, *a.Value, every), nil
+}
+
+// crossesMark says whether moving from one value to another lands on or
+// passes at, or with every > 0 any of at, at+every, at+2*every and on.
+func crossesMark(from, to, at, every int) bool {
+	switch {
+	case from < to:
+		next := at
+		if every > 0 && from >= at {
+			next = at + ((from-at)/every+1)*every
+		}
+		return from < next && next <= to
+	case from > to:
+		if from <= at {
+			return false
+		}
+		prev := at
+		if every > 0 {
+			prev = at + ((from-at-1)/every)*every
+		}
+		return to <= prev && prev < from
+	}
+	return false
 }
 
 // trackerRun is a tracker action carried out by a rule: one log line,
@@ -76,42 +107,54 @@ func trackerRun(svc trackers.Service, op, arg string) func(ctx context.Context, 
 			}
 			n = *args[arg]
 		}
-		owner := recipeOwnerPrefix(a.RecipeID) + a.Part.Kind + ":" + a.Part.Key
 		v := trackers.Viewer{UserID: a.By.UserID, VisibilityRole: a.By.VisibilityRole, Director: a.By.Director}
-		views, err := svc.LogOwned(ctx, campaignID, a.Scope, owner, v, op, n, a.Note)
+		name := a.Part.Label
+		var views []trackers.TrackerView
+		var err error
+		if link := partLink(a.Part); link != "" {
+			name = link
+			k, ok, kerr := svc.KindNamed(ctx, campaignID, link)
+			if kerr != nil {
+				return "", kerr
+			}
+			if !ok || k.Owner != "" {
+				// Renamed or removed since the recipe was saved.
+				return "", apperror.NewValidation(a.Part.Label + " uses " + link + ", which is no longer a tracker made on a page; choose it again in the Workshop")
+			}
+			views, err = svc.LogKind(ctx, campaignID, a.Scope, link, v, op, n, a.Note)
+		} else {
+			owner := recipeOwnerPrefix(a.RecipeID) + a.Part.Kind + ":" + a.Part.Key
+			views, err = svc.LogOwned(ctx, campaignID, a.Scope, owner, v, op, n, a.Note)
+		}
 		if err != nil {
 			return "", err
 		}
 		switch len(views) {
 		case 0:
-			return a.Part.Label + " is on no page yet, so nothing changed.", nil
+			if a.Scope != "" && partLink(a.Part) != "" {
+				return name + " is not on that page, so nothing changed.", nil
+			}
+			return name + " is on no page yet, so nothing changed.", nil
 		case 1:
-			line := fmt.Sprintf("%s is now %d", a.Part.Label, views[0].Value)
+			line := fmt.Sprintf("%s is now %d", name, views[0].Value)
 			if views[0].Now != "" {
 				line += ": " + views[0].Now
 			}
 			return line + ".", nil
 		default:
-			return fmt.Sprintf("%s changed on %d pages.", a.Part.Label, len(views)), nil
+			return fmt.Sprintf("%s changed on %d pages.", name, len(views)), nil
 		}
 	}
 }
 
 // trackerRules hears tracker changes and fires tracker.reached on the
-// recipe that owns the tracker's kind.
+// recipe that owns the tracker's kind, or on every recipe part linked to a
+// hand-made kind by its name.
 type trackerRules struct {
 	svc homebrew.Service
 }
 
 func (t *trackerRules) TrackerChanged(ctx context.Context, campaignID string, v trackers.Viewer, c trackers.Change) error {
-	rest, ok := strings.CutPrefix(c.Owner, "homebrew:")
-	if !ok {
-		return nil
-	}
-	parts := strings.SplitN(rest, ":", 3)
-	if len(parts) != 3 {
-		return nil
-	}
 	payload, err := json.Marshal(trackerMove{From: c.From, To: c.To})
 	if err != nil {
 		return err
@@ -123,5 +166,35 @@ func (t *trackerRules) TrackerChanged(ctx context.Context, campaignID string, v 
 		// and Fire refuses them. The player stays the one who set it off.
 		hv.Director, hv.VisibilityRole = true, permissions.RoleOwner
 	}
-	return t.svc.Fire(ctx, campaignID, hv, homebrew.Fired{Event: "tracker.reached", RecipeID: parts[0], Part: parts[2], Scope: c.EntityID, Payload: payload})
+	fire := func(recipeID, part string) error {
+		return t.svc.Fire(ctx, campaignID, hv, homebrew.Fired{Event: "tracker.reached", RecipeID: recipeID, Part: part, Scope: c.EntityID, Payload: payload})
+	}
+	if c.Owner != "" {
+		rest, ok := strings.CutPrefix(c.Owner, "homebrew:")
+		if !ok {
+			return nil
+		}
+		parts := strings.SplitN(rest, ":", 3)
+		if len(parts) != 3 {
+			return nil
+		}
+		return fire(parts[0], parts[2])
+	}
+	if c.KindName == "" {
+		return nil
+	}
+	linked, err := t.svc.PartsOfKind(ctx, campaignID, hv, linkKey, "tracker", "clock")
+	if err != nil {
+		return err
+	}
+	// The parts linked to one kind share one budget, as a chain of rules
+	// does, so several recipes on one tracker still stop after 50 runs.
+	ctx = t.svc.ShareBudget(ctx)
+	var errs []error
+	for _, rp := range linked {
+		if strings.EqualFold(partLink(&rp.Part), c.KindName) {
+			errs = append(errs, fire(rp.RecipeID, rp.Part.Key))
+		}
+	}
+	return errors.Join(errs...)
 }

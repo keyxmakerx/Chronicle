@@ -143,6 +143,8 @@ test('new trackers and clocks start with shapes the server accepts', () => {
 test('a new When or Then starts with every whole-number field at 1', () => {
   const { H } = load();
   assert.deepEqual(plain(H.startArgs({ fields: [{ name: 'by', label: 'By', type: 'whole' }, { name: 'note', label: 'Note', type: 'text' }] })), { by: 1 });
+  assert.deepEqual(plain(H.startArgs({ fields: [{ name: 'value', type: 'whole' }, { name: 'every', type: 'whole', optional: true }] })), { value: 1 },
+    'an optional field starts empty, since 1 would mean something there');
   assert.deepEqual(plain(H.startArgs({})), {});
   assert.deepEqual(plain(H.startArgs(null)), {});
 });
@@ -232,6 +234,55 @@ test('a reach fires when the number lands on its value or moves past it, either 
   assert.equal(H.simSetTo(doc, CAT, st, 'need', 9), null, 'past the top');
 });
 
+// The server's crossesMark test uses the same cases, so the preview and the
+// table fire on the same moves.
+test('"again every" repeats a reach upward, matching the server', () => {
+  const { H } = load();
+  const cases = [
+    [2, 3, 3, 0, true], [1, 5, 3, 0, true], [5, 3, 3, 0, true], [4, 1, 3, 0, true],
+    [3, 4, 3, 0, false], [0, 2, 3, 0, false], [3, 3, 3, 0, false], [3, 2, 3, 0, false],
+    [5, 6, 3, 3, true], [8, 9, 3, 3, true], [6, 7, 3, 3, false], [4, 5, 3, 3, false],
+    [0, 1, 3, 3, false], [2, 3, 3, 3, true], [1, 20, 3, 3, true],
+    [7, 6, 3, 3, true], [10, 9, 3, 3, true], [6, 5, 3, 3, false], [4, 2, 3, 3, true], [3, 1, 3, 3, false],
+    [2, 1, 3, 3, false], [-6, -3, 3, 3, false], [-1, 0, 0, 2, true], [1, 2, 0, 2, true], [2, 3, 0, 2, false],
+    [4, 5, 3, 1, true], [1, 2, 3, 1, false]
+  ];
+  for (const [was, to, at, every, want] of cases) {
+    assert.equal(H.crossesMark(was, to, at, every), want, `from ${was} to ${to}, at ${at} every ${every}`);
+  }
+  const cat = JSON.parse(JSON.stringify(CAT));
+  cat.events[0].preview.every = 'every';
+  const doc = sample();
+  doc.parts[0].data = { shape: 'count', min: 0, max: 12 };
+  doc.rules[0] = { when: { event: 'tracker.reached', part: 'need', args: { value: 3, every: 3 } }, timing: 'now',
+    then: [{ action: 'tick', part: 'doom', args: {} }] };
+  const st = H.simStart(doc, cat);
+  for (let i = 0; i < 9; i++) H.simNudge(doc, cat, st, 'need', 1);
+  assert.equal(st.v.doom, 3, 'one rule ticks at 3, 6 and 9');
+});
+
+test('a part can use a tracker already kept on pages', () => {
+  const { H } = load();
+  const kinds = [
+    { name: 'the Hunger', shape: 'count', min: 0, max: 3, steps: [], bands: [{ at: 1, text: 'Restless' }] },
+    { name: 'Doom', shape: 'clock', max: 6, steps: [], bands: [] },
+    { name: 'Eye opened', shape: 'steps', steps: [{ name: 'Not yet' }, { name: 'Open' }], bands: [] },
+    { name: 'Kept', shape: 'count', managed: true }
+  ];
+  assert.deepEqual(plain(H.linkable(kinds, false)), ['Eye opened', 'the Hunger'], 'tracker parts: hand-made, not clocks, by name');
+  assert.deepEqual(plain(H.linkable(kinds, true)), ['Doom']);
+  assert.deepEqual(plain(H.linkable(null, false)), []);
+  const d = H.linkData(kinds[0]);
+  assert.deepEqual(plain(d), { link: 'the Hunger', shape: 'count', min: 0, max: 3, bands: [{ at: 1, text: 'Restless' }] });
+  assert.equal(H.shapeText(d), 'Uses the Hunger, kept on pages');
+  // The copied shape lets the preview act the linked tracker out.
+  const doc = sample();
+  doc.parts[0].data = d;
+  const st = H.simStart(doc, CAT);
+  H.simNudge(doc, CAT, st, 'need', 9);
+  assert.equal(st.v.need, 3, 'clamped to the page tracker\'s top');
+});
+
 test('a rule timed for later waits until it is run', () => {
   const { H } = load();
   const doc = sample();
@@ -293,4 +344,24 @@ test('rules that set each other off stop instead of hanging the page', () => {
   H.simNudge(doc, CAT, st, 'need', 1);
   assert.match(st.log.at(-1), /^Stopped after 50 steps/);
   assert.ok(st.log.length <= 40, 'the log stays short');
+});
+
+test('a named drawer button is a preview button that says its name, and starts with no name', () => {
+  const { H } = load();
+  const cat = Object.assign({}, CAT, { events: CAT.events.concat([{ name: 'button.pressed', label: 'A drawer button is pressed',
+    fields: [{ name: 'button', label: 'Button', type: 'text' }], pressArg: 'button' }]) });
+  assert.deepEqual(plain(H.startArgs(cat.events.at(-1))), {}, 'a text field starts empty, for the Director to name');
+  const doc = { parts: [{ key: 'need', kind: 'tracker', label: 'Need', see: 'party', data: { shape: 'count', min: 0, max: 5 } }],
+    rules: [{ when: { event: 'button.pressed', part: '', args: { button: 'Dose' } }, timing: 'now', then: [{ action: 'set', part: 'need', args: { to: 0 } }] },
+      { when: { event: 'button.pressed', part: '', args: {} }, timing: 'now', then: [] },
+      { when: { event: 'moon', part: '', args: {} }, timing: 'now', then: [] }] };
+  assert.deepEqual(plain(H.firable(doc, cat)), [0, 1, 2]);
+  assert.equal(H.whenText(doc, cat, doc.rules[0]), 'A drawer button is pressed: Dose');
+  assert.equal(H.whenText(doc, cat, doc.rules[1]), 'A drawer button is pressed');
+  assert.equal(H.whenText(doc, cat, doc.rules[2]), 'The moon turns');
+  const st = H.simStart(doc, cat);
+  H.simSetTo(doc, cat, st, 'need', 3);
+  H.simFire(doc, cat, st, 0);
+  assert.equal(st.v.need, 0);
+  assert.equal(st.log.at(-1), 'Set a tracker: Need 3 to 0');
 });

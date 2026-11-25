@@ -133,9 +133,15 @@ func catalogTail(e CatalogEntry) string {
 			if f.Type == FieldWhole {
 				kind = "a whole number"
 			}
+			if f.Optional {
+				kind += ", optional"
+			}
 			args = append(args, "`"+f.Name+"` ("+f.Label+", "+kind+")")
 		}
 		out += "; args " + strings.Join(args, ", ")
+	}
+	if e.PressArg != "" {
+		out += "; each distinct `" + e.PressArg + "` among the saved rules is a drawer button of that name"
 	}
 	return out
 }
@@ -149,6 +155,10 @@ func writeDrawer(b *strings.Builder, d *Drawer) {
 		b.WriteString("- none\n")
 	}
 	for _, p := range d.Presses {
+		if p.Button != "" {
+			fmt.Fprintf(b, "- %s (`%s`, %s %q): starts %d saved rules\n", p.Label, p.Event, p.Arg, p.Button, p.Rules)
+			continue
+		}
 		fmt.Fprintf(b, "- %s (`%s`): starts %d saved rules\n", p.Label, p.Event, p.Rules)
 	}
 	b.WriteString("\nWaiting for the Director:\n")
@@ -213,7 +223,7 @@ func (*AI) Brief() string {
 }
 
 func (*AI) Doc() string {
-	return "A Homebrew Workshop recipe: parts wired by When/Then rules. Matched by `name`. Keys: `parts`, a list of `{key, kind, label, see, data}` (`key` is short, lower-case letters, digits and dashes, unique in the recipe; `kind` is a part kind the `homebrew_workshop` tool lists; `see` is `party`, `name` (players see it exists, not its details) or `director`; `data` is the kind's own settings: a `tracker` takes `{shape: count, min, max}`, a `clock` `{max}`), and `rules`, a list of `{when: {event, part, args, test}, timing, then: [{action, part, args}]}` (`event` and `action` from the tool's lists; `part` names a part of this recipe, given exactly when the event or action needs one; `args` holds the fields it lists; `timing` is `now`, `encounter_end` or `held`, which waits in the Homebrew drawer). An update gives the whole recipe: both lists replace what is there, so send back every part and rule you keep. A new name with `rename`. `action: delete` removes the recipe; trackers it kept stay as hand-made trackers. Read the recipes and the lists first with the `homebrew_workshop` tool (`what: workshop`). Only Directors change recipes.\n\n```\n---\nkind: workshop-recipe\nname: The Hunger\nparts:\n  - {key: respites, kind: tracker, label: Respites, see: director, data: {shape: count, min: 0, max: 3}}\n  - {key: hunger, kind: tracker, label: The Hunger, see: party, data: {shape: count, min: 0, max: 5}}\nrules:\n  - when: {event: respite.logged}\n    timing: now\n    then:\n      - {action: step, part: respites, args: {by: 1}}\n  - when: {event: tracker.reached, part: respites, args: {value: 3}}\n    timing: now\n    then:\n      - {action: step, part: hunger, args: {by: 1}}\n      - {action: set, part: respites, args: {to: 0}}\n---\n```"
+	return "A Homebrew Workshop recipe: parts wired by When/Then rules. Matched by `name`. Keys: `parts`, a list of `{key, kind, label, see, data}` (`key` is short, lower-case letters, digits and dashes, unique in the recipe; `kind` is a part kind the `homebrew_workshop` tool lists; `see` is `party`, `name` (players see it exists, not its details) or `director`; `data` is the kind's own settings: a `tracker` takes `{shape: count, min, max}`, a `clock` `{max}`, or either `{link: <name>}` to use a tracker already on pages), and `rules`, a list of `{when: {event, part, args, test}, timing, then: [{action, part, args}]}` (`event` and `action` from the tool's lists; `part` names a part of this recipe, given exactly when the event or action needs one; `args` holds the fields it lists; `timing` is `now`, `encounter_end` or `held`, which waits in the Homebrew drawer). An update gives the whole recipe: both lists replace what is there, so send back every part and rule you keep. A new name with `rename`. `action: delete` removes the recipe; trackers it kept stay as hand-made trackers. Read the recipes and the lists first with the `homebrew_workshop` tool (`what: workshop`). Only Directors change recipes.\n\n```\n---\nkind: workshop-recipe\nname: The Hunger\nparts:\n  - {key: respites, kind: tracker, label: Respites, see: director, data: {shape: count, min: 0, max: 3}}\n  - {key: hunger, kind: tracker, label: The Hunger, see: party, data: {shape: count, min: 0, max: 5}}\nrules:\n  - when: {event: respite.logged}\n    timing: now\n    then:\n      - {action: step, part: respites, args: {by: 1}}\n  - when: {event: tracker.reached, part: respites, args: {value: 3}}\n    timing: now\n    then:\n      - {action: step, part: hunger, args: {by: 1}}\n      - {action: set, part: respites, args: {to: 0}}\n---\n```"
 }
 
 // findRecipe is the campaign's recipe of that name, or nil.

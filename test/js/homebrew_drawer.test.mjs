@@ -49,3 +49,14 @@ test('statusText and pressLabel read plainly', () => {
   assert.equal(H.pressLabel({ label: 'Log a respite', rules: 1 }), 'Log a respite (1 rule)');
   assert.equal(H.pressLabel({ label: 'Log a respite', rules: 3 }), 'Log a respite (3 rules)');
 });
+
+test('a named button posts its name and keeps its spelling', () => {
+  const { H } = load();
+  const respite = { event: 'respite.logged', label: 'Log a respite', rules: 1 };
+  const dose = { event: 'button.pressed', label: 'Dose & Calm', button: 'Dose & Calm', arg: 'button', rules: 2 };
+  assert.equal(H.pressURL('/campaigns/c1/homebrew', respite), '/campaigns/c1/homebrew/press/respite.logged');
+  assert.equal(H.pressURL('/campaigns/c1/homebrew', dose), '/campaigns/c1/homebrew/press/button.pressed?button=Dose%20%26%20Calm');
+  assert.equal(H.pressLabel(dose), 'Dose & Calm (2 rules)');
+  assert.equal(H.pressRunning(respite), 'Running log a respite…');
+  assert.equal(H.pressRunning(dose), 'Running Dose & Calm…');
+});

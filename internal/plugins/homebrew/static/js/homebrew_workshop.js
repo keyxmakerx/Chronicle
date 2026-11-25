@@ -68,6 +68,7 @@
   // shapeText says in words what a tracker or clock part holds.
   function shapeText(data) {
     var d = data || {};
+    if (d.link) return 'Uses ' + d.link + ', kept on pages';
     if (d.shape === 'clock') return 'Clock of ' + (d.max || '?') + ' segments';
     if (d.shape === 'steps') return 'Named steps: ' + (d.steps || []).map(function (s) { return s.name; }).join(', ');
     var lo = d.min == null ? 'no lowest' : d.min, hi = d.max == null ? 'no highest' : d.max;
@@ -120,11 +121,38 @@
   }
 
   // startArgs fills a new When's or Then's whole-number fields with 1, so a
-  // fresh card already saves; the Director changes it in the inspector.
+  // fresh card already saves; the Director changes it in the inspector. An
+  // optional field starts empty, since 1 would mean something there.
   function startArgs(defn) {
     var a = {};
-    ((defn && defn.fields) || []).forEach(function (f) { if (f.type === 'whole') a[f.name] = 1; });
+    ((defn && defn.fields) || []).forEach(function (f) { if (f.type === 'whole' && !f.optional) a[f.name] = 1; });
     return a;
+  }
+
+  // linkable lists the hand-made tracker kinds a part can use: clocks for a
+  // clock part, the rest for a tracker part. A recipe's own kinds are left
+  // out, as the server refuses them.
+  function linkable(kinds, clock) {
+    return (kinds || []).filter(function (k) { return k && !k.managed && (k.shape === 'clock') === !!clock; })
+      .map(function (k) { return k.name; })
+      .sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0; });
+  }
+
+  // isLinked says whether a part uses a page tracker, whose own audience
+  // applies, so the part's "who sees it" is not shown as if it did.
+  function isLinked(p) {
+    return !!(p && (p.kind === 'tracker' || p.kind === 'clock') && p.data && p.data.link);
+  }
+
+  // linkData is a part's data for a link to kind: its name, and a copy of its
+  // shape so the preview can act it out before the recipe is saved.
+  function linkData(kind) {
+    var d = { link: kind.name, shape: kind.shape };
+    if (kind.min != null) d.min = kind.min;
+    if (kind.max != null) d.max = kind.max;
+    if (kind.steps && kind.steps.length) d.steps = kind.steps;
+    if (kind.bands && kind.bands.length) d.bands = kind.bands;
+    return d;
   }
 
   // ---------- Live preview (pure; tested beside the helpers above) ----------
@@ -202,13 +230,21 @@
     return (rule.then || []).some(function (d) { var a = findDef(cat, 'actions', d.action); return !!(a && a.waits); });
   }
 
+  // whenText names a rule's When in the preview: the event, its part, and
+  // for an event whose drawer buttons the rules name, the button, so two
+  // named buttons read apart.
+  function whenText(doc, cat, rule) {
+    var ev = findDef(cat, 'events', rule.when.event), p = rule.when.part ? doc.parts.filter(function (x) { return x.key === rule.when.part; })[0] : null;
+    var named = ev && ev.pressArg ? String((rule.when.args || {})[ev.pressArg] || '').trim() : '';
+    return (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '') + (named ? ': ' + named : '');
+  }
+
   // run starts a rule. A rule timed for later waits; one that runs now does
   // each Then in order. Returns the cards it lit, in order.
   function run(doc, cat, st, i, now, ctx) {
     var rule = doc.rules[i];
     if (!rule) return;
-    var ev = findDef(cat, 'events', rule.when.event), p = rule.when.part ? doc.parts.filter(function (x) { return x.key === rule.when.part; })[0] : null;
-    var what = (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '');
+    var what = whenText(doc, cat, rule);
     ctx.lit.push('r' + i);
     // A rule that ends in an action that is the Director's call is held at
     // the table however it is timed, so it waits here too.
@@ -236,6 +272,24 @@
     });
   }
 
+  // crossesMark says whether a move from was to to lands on or passes at,
+  // or with every above 0 any of at, at+every, at+2*every and on, as the
+  // server's tracker.reached does.
+  function crossesMark(was, to, at, every) {
+    every = every > 0 ? Math.floor(every) : 0;
+    if (was < to) {
+      var next = at;
+      if (every && was >= at) next = at + (Math.floor((was - at) / every) + 1) * every;
+      return was < next && next <= to;
+    }
+    if (was > to) {
+      if (was <= at) return false;
+      var prev = every ? at + Math.floor((was - at - 1) / every) * every : at;
+      return to <= prev && prev < was;
+    }
+    return false;
+  }
+
   // change sets a part's number and starts every rule whose When it meets: a
   // reach fires when the number lands on its value or moves past it.
   function change(doc, cat, st, key, was, to, ctx) {
@@ -245,8 +299,9 @@
       if (ctx.stopped || r.when.part !== key) return;
       var ev = findDef(cat, 'events', r.when.event);
       if (!(ev && ev.preview && ev.preview.op === 'reach')) return;
-      var at = Number((r.when.args || {})[ev.preview.arg]);
-      if ((was < at && to >= at) || (was > at && to <= at)) run(doc, cat, st, i, false, ctx);
+      var args = r.when.args || {}, at = Number(args[ev.preview.arg]);
+      var every = ev.preview.every ? Number(args[ev.preview.every]) : 0;
+      if (crossesMark(was, to, at, Number.isFinite(every) ? every : 0)) run(doc, cat, st, i, false, ctx);
     });
   }
 
@@ -307,7 +362,8 @@
     partKey: partKey, startArgs: startArgs, freeSpot: freeSpot, cardsOf: cardsOf, edgesOf: edgesOf, shapeText: shapeText, argsText: argsText,
     compatible: compatible, removePart: removePart, defaultData: defaultData,
     bounds: bounds, clampV: clampV, nowText: nowText, simStart: simStart, simSync: simSync, simFire: simFire,
-    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable
+    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText,
+    crossesMark: crossesMark, linkable: linkable, linkData: linkData, isLinked: isLinked
   };
   if (typeof window !== 'undefined') window.HomebrewWorkshop = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
@@ -461,6 +517,8 @@
     var req = c.id ? api(S, '/recipes/' + encodeURIComponent(c.id), 'PUT', body) : api(S, '/recipes', 'POST', body);
     req.then(function (r) {
       S.busy = false; S.dirty = false;
+      // A save can let a recipe's own kind go, so it may be linkable now.
+      S.kinds = null;
       c.id = r.id; c.version = r.version; c.doc.layout = r.doc.layout || {};
       setStatus(S, 'Saved');
       S.where = null;
@@ -673,7 +731,7 @@
     if (c.type === 'part') {
       var p = partOf(doc, c.key), k = def(S, 'parts', p.kind);
       return { kind: 'Part · ' + (k ? k.label : p.kind), icon: p.kind === 'clock' ? 'fa-clock' : 'fa-cube', title: p.label,
-        body: p.kind === 'tracker' || p.kind === 'clock' ? shapeText(p.data) : '', see: p.see };
+        body: p.kind === 'tracker' || p.kind === 'clock' ? shapeText(p.data) : '', see: isLinked(p) ? '' : p.see };
     }
     var rule = doc.rules[c.rule];
     if (c.type === 'when') {
@@ -997,16 +1055,20 @@
   }
 
   function partForm(S, box, p, k) {
-    var forced = k && k.forceSee;
+    var forced = k && k.forceSee, counter = p.kind === 'tracker' || p.kind === 'clock', linked = counter && !!(p.data && p.data.link);
     append(box, [
       labelled('Name', input('text', p.label, function (v) { p.label = v.trim() || p.label; changed(S); }, { maxlength: '80' })),
-      seg('Who sees it', SEE, p.see, function (v) { p.see = v; changed(S); drawInspector(S); }, !!forced),
-      h('p', 'hbw-muted', forced ? 'This kind is always ' + SEE.filter(function (s) { return s[0] === forced; })[0][1].toLowerCase() + '.'
-        : 'Set once here, for every copy of this part.')
+      seg('Who sees it', SEE, p.see, function (v) { p.see = v; changed(S); drawInspector(S); }, !!forced || linked),
+      h('p', 'hbw-muted', linked ? 'Who sees it is set on the tracker itself, on its page.'
+        : forced ? 'This kind is always ' + SEE.filter(function (s) { return s[0] === forced; })[0][1].toLowerCase() + '.'
+          : 'Set once here, for every copy of this part.')
     ]);
-    if (p.kind === 'tracker' || p.kind === 'clock') {
-      shapeForm(S, box, p);
-      box.appendChild(h('p', 'hbw-muted', 'Saving the recipe saves this as a tracker kind of the same name, kept in step with the recipe.'));
+    if (counter) {
+      linkForm(S, box, p, linked);
+      if (!linked) {
+        shapeForm(S, box, p);
+        box.appendChild(h('p', 'hbw-muted', 'Saving the recipe saves this as a tracker kind of the same name, kept in step with the recipe.'));
+      }
     }
     else if (!(k && k.widget)) box.appendChild(livesAt(S, p));
     if (k && k.widget) box.appendChild(ownerMount(S, p, k, 'inspector'));
@@ -1019,6 +1081,56 @@
         S.sel = null; touch(S); redraw(S);
       }, 'hbw-danger')])
     ]);
+  }
+
+  // trackerKinds loads the campaign's tracker kinds once per page, for the
+  // parts that use one already kept on pages.
+  function trackerKinds(S) {
+    if (S.kinds) return S.kinds;
+    var m = /^\/campaigns\/([^/]+)\//.exec(S.cfg.endpoint || '');
+    S.kinds = Chronicle.apiFetch((m ? '/campaigns/' + m[1] : '') + '/tracker-kinds', { csrfToken: S.cfg.csrf })
+      .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('load')); })
+      .then(function (r) { return (r && r.kinds) || []; })
+      .catch(function (e) { S.kinds = null; throw e; });
+    return S.kinds;
+  }
+
+  // linkForm chooses between a part keeping its own count and using a
+  // tracker the campaign already keeps on pages, so rules, worked-out
+  // fields and card tests all read the one number.
+  function linkForm(S, box, p, linked) {
+    var clock = p.kind === 'clock', noun = clock ? 'clock' : 'count';
+    box.appendChild(seg('Keeps', [['own', 'Its own ' + noun], ['page', clock ? 'A clock on pages' : 'A tracker on pages']], linked ? 'page' : 'own', function (v) {
+      if (v === 'own') {
+        if (!linked) return;
+        p.data = defaultData(p.kind); changed(S); drawInspector(S);
+        return;
+      }
+      if (linked) return;
+      trackerKinds(S).then(function (kinds) {
+        var names = linkable(kinds, clock);
+        if (!names.length) { setStatus(S, 'There is no ' + (clock ? 'clock' : 'tracker') + ' made on a page to use yet. Add one with a page\'s Trackers block first.', true); return; }
+        p.data = linkData(kinds.filter(function (k) { return k.name === names[0]; })[0]);
+        changed(S); drawInspector(S);
+      }, function () { setStatus(S, 'The campaign\'s trackers could not be loaded. Try again.', true); });
+    }));
+    if (!linked) return;
+    var pick = select([[p.data.link, p.data.link]], p.data.link, function (v) {
+      trackerKinds(S).then(function (kinds) {
+        var k = kinds.filter(function (x) { return x.name === v; })[0];
+        if (k) { p.data = linkData(k); changed(S); drawInspector(S); }
+      });
+    });
+    append(box, [labelled(clock ? 'Clock' : 'Tracker', pick),
+      h('p', 'hbw-muted', 'Rules step and read ' + p.data.link + ' on the pages that have it. Its shape, bands and who sees it are set on the tracker itself.')]);
+    trackerKinds(S).then(function (kinds) {
+      var names = linkable(kinds, clock);
+      if (names.indexOf(p.data.link) < 0) names.unshift(p.data.link);
+      pick.textContent = '';
+      names.forEach(function (n) {
+        pick.appendChild(h('option', '', kinds.some(function (k) { return k.name === n && !k.managed; }) ? n : n + ' (not found)', { value: n, selected: n === p.data.link }));
+      });
+    }, function () {});
   }
 
   // usesOf says in words how many Whens and Thens point at a part.
@@ -1109,7 +1221,7 @@
           if (Number.isNaN(n)) { setStatus(S, 'Use a whole number for ' + f.label.toLowerCase() + '.', true); return; }
           if (n == null) delete args[f.name]; else args[f.name] = n;
           changed(S);
-        }, { step: '1' })
+        }, f.optional ? { step: '1', placeholder: 'None' } : { step: '1' })
         : input('text', args[f.name], function (v) { if (v.trim()) args[f.name] = v.trim(); else delete args[f.name]; changed(S); }, { maxlength: '200' });
       box.appendChild(labelled(f.label, ctl));
     });
@@ -1224,7 +1336,7 @@
     doc.parts.forEach(function (p) {
       var row = src(S, h('div', 'hbw-pv-part'), 'p:' + p.key), k = def(S, 'parts', p.kind);
       var head = append(h('div', 'hbw-row'), [h('strong', 'hbw-pv-name', p.label)]);
-      if (p.see !== 'party') {
+      if (p.see !== 'party' && !isLinked(p)) {
         head.appendChild(append(h('span', 'hbw-pill' + (p.see === 'director' ? ' dm' : '')), [fa(SEE_ICON[p.see]),
           document.createTextNode(' ' + SEE.filter(function (x) { return x[0] === p.see; })[0][1])]));
       }
@@ -1248,8 +1360,7 @@
     if (fire.length) {
       var acts = h('div', 'hbw-pv-acts');
       fire.forEach(function (i) {
-        var r = doc.rules[i], ev = def(S, 'events', r.when.event), p = partOf(doc, r.when.part);
-        acts.appendChild(btn((ev ? ev.label : r.when.event) + (p ? ': ' + p.label : ''), '', function () { acted(S, simFire(doc, cat, st, i)); }, 'fa-bolt'));
+        acts.appendChild(btn(whenText(doc, cat, doc.rules[i]), '', function () { acted(S, simFire(doc, cat, st, i)); }, 'fa-bolt'));
       });
       append(box, [acts, h('p', 'hbw-muted', 'Press one to act out that When. Rules that watch a number run when you step it.')]);
     } else if (doc.rules.length) {

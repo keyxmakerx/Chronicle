@@ -2,12 +2,14 @@ package app
 
 // decks_facts.go answers what a card's tests are judged on. The decks plugin
 // owns the Facts interface; this adapter reads it from the entities, tags,
-// trackers and transformations services so decks never imports another
-// plugin.
+// trackers, transformations and calendar services so decks never imports
+// another plugin.
 //
-// Everything is read as a Director would read it: a test may name a Director-
-// only tag, a hidden tracker or a layer no player can see. Who is then told
-// anything about the result is decided in the decks plugin, never here.
+// Everything but Today is read as a Director would read it: a test may name a
+// Director-only tag, a hidden tracker or a layer no player can see. Today is
+// read as the viewer decks names, so a player's own draw judges the calendar
+// as that player sees it. Who is then told anything about the result is
+// decided in the decks plugin, never here.
 
 import (
 	"context"
@@ -20,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
@@ -39,13 +42,15 @@ type decksCharacterTypes interface {
 
 // decksFactsAdapter implements decks.Facts. trackers and layers are bound after
 // they are built and stay nil while their plugin is degraded, which reads as
-// "not available" and never as an empty answer.
+// "not available" and never as an empty answer; calendars is nil while the
+// calendar plugin is degraded, the same way.
 type decksFactsAdapter struct {
 	entities   entities.EntityService
 	characters decksCharacterTypes
 	tags       tags.TagService
 	trackers   trackers.Service
 	layers     transformations.Service
+	calendars  calendar.CalendarService
 }
 
 var directorTrackers = trackers.Viewer{MemberRole: permissions.RoleOwner, VisibilityRole: permissions.RoleOwner, Director: true}
@@ -266,11 +271,57 @@ func (a *decksFactsAdapter) Layers(ctx context.Context, campaignID, pageID strin
 	return out, nil
 }
 
+// Today reads the main calendar as v sees it (the viewer's role and user, so a
+// player's hidden moons and events are left out exactly as the calendar page
+// leaves them out).
+func (a *decksFactsAdapter) Today(ctx context.Context, campaignID string, v decks.Viewer) (decks.TodayFact, error) {
+	if a.calendars == nil {
+		return decks.TodayFact{}, decks.ErrUnavailable
+	}
+	td, ok := readCalendarToday(ctx, a.calendars, campaignID, permissions.RequestViewer(v.VisibilityRole, v.UserID), "decks")
+	if !ok {
+		return decks.TodayFact{}, decks.ErrUnavailable
+	}
+	out := decks.TodayFact{DayPart: td.DayPart, Events: td.Events, Moons: make(map[string]decks.MoonFact, len(td.Moons))}
+	for _, m := range td.Moons {
+		out.Moons[strings.ToLower(m.Name)] = decks.MoonFact{Name: m.Name, Day: m.Day, Words: m.Words}
+	}
+	return out, nil
+}
+
+// calendarOptions fills what the editor may offer for the calendar tests: the
+// main calendar's moons as a Director sees them and the campaign's kinds of
+// event. A calendar that cannot be read leaves Calendar false, so a moon test
+// is not refused as naming a moon that is gone.
+func (a *decksFactsAdapter) calendarOptions(ctx context.Context, campaignID string, out *decks.WhenOptions) {
+	if a.calendars == nil {
+		return
+	}
+	c, err := a.calendars.GetDefaultCalendarForViewer(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	if err != nil || c == nil {
+		return
+	}
+	out.Calendar = true
+	for _, m := range c.Moons {
+		if n := strings.TrimSpace(m.Name); n != "" {
+			out.Moons = append(out.Moons, n)
+		}
+	}
+	if kinds, err := a.calendars.ListEventKinds(ctx, campaignID); err == nil {
+		for _, k := range kinds {
+			out.EventKinds = append(out.EventKinds, decks.EventKindOption{Slug: k.Slug, Name: k.Name})
+		}
+	}
+}
+
 // Options is what the editor may offer: the party, the number fields of the
-// party's category, and the tracker kinds and tags that exist. A part whose
-// plugin is not running is left empty rather than failing the whole list.
+// party's category, the tracker kinds and tags that exist, and the calendar's
+// moons and kinds of event. A part whose plugin is not running is left empty
+// rather than failing the whole list.
 func (a *decksFactsAdapter) Options(ctx context.Context, campaignID string) (decks.WhenOptions, error) {
-	out := decks.WhenOptions{Heroes: []decks.OptionHero{}, Fields: []decks.NumberField{}, Trackers: []decks.TrackerKindOption{}, Tags: []decks.TagOption{}, Layers: []string{}}
+	out := decks.WhenOptions{Heroes: []decks.OptionHero{}, Fields: []decks.NumberField{}, Trackers: []decks.TrackerKindOption{}, Tags: []decks.TagOption{}, Layers: []string{},
+		Moons: []string{}, EventKinds: []decks.EventKindOption{}}
+	a.calendarOptions(ctx, campaignID, &out)
 	party, err := a.entities.ListClaimed(ctx, campaignID, permissions.RoleOwner, "")
 	if err != nil {
 		return out, err

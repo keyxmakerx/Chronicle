@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -79,49 +78,16 @@ func (w *fieldRulesWorld) CurrentEra(ctx context.Context, campaignID string, v f
 // players or an event they can't see never moves a result they are shown.
 func (w *fieldRulesWorld) Today(ctx context.Context, campaignID string, v fieldrules.Viewer) fieldrules.Situation {
 	var out fieldrules.Situation
-	pv := permissions.RequestViewer(v.Role, v.UserID)
-	c, err := w.calendars.GetDefaultCalendarForViewer(ctx, campaignID, pv)
-	if err != nil || c == nil || c.CurrentMonth < 1 || c.CurrentDay < 1 {
+	td, ok := readCalendarToday(ctx, w.calendars, campaignID, permissions.RequestViewer(v.Role, v.UserID), "fieldrules")
+	if !ok {
 		return out
 	}
-	y, m, d := c.CurrentYear, c.CurrentMonth, c.CurrentDay
-	abs := c.CurrentDayIndex()
-	out.DayPart = c.DayPart(y, m, d, c.CurrentHour, c.CurrentMinute)
+	out.DayPart = td.DayPart
 	out.Moons = map[string]fieldrules.MoonNow{}
-	for i := range c.Moons {
-		mo := &c.Moons[i]
-		out.Moons[strings.ToLower(strings.TrimSpace(mo.Name))] = fieldrules.MoonNow{Day: mo.CycleDay(abs), Words: mo.PhaseWords(abs)}
+	for _, mo := range td.Moons {
+		out.Moons[strings.ToLower(mo.Name)] = fieldrules.MoonNow{Day: mo.Day, Words: mo.Words}
 	}
-	events, err := w.calendars.ListEventsForMonth(ctx, c.ID, campaignID, y, m, pv)
-	if err != nil {
-		slog.Warn("fieldrules: cannot read today's events", slog.String("campaign_id", campaignID), slog.Any("error", err))
-		return out
-	}
-	var kinds map[int]calendar.EventKind
-	out.EventTags = map[string]bool{}
-	for _, e := range events {
-		if !eventOn(e, y, m, d) {
-			continue
-		}
-		out.EventTags[strings.ToLower(strings.TrimSpace(e.Name))] = true
-		if e.KindID == nil {
-			continue
-		}
-		if kinds == nil {
-			kinds = map[int]calendar.EventKind{}
-			list, err := w.calendars.ListEventKinds(ctx, campaignID)
-			if err != nil {
-				slog.Warn("fieldrules: cannot read event kinds", slog.String("campaign_id", campaignID), slog.Any("error", err))
-			}
-			for _, k := range list {
-				kinds[k.ID] = k
-			}
-		}
-		if k, ok := kinds[*e.KindID]; ok {
-			out.EventTags[strings.ToLower(k.Slug)] = true
-			out.EventTags[strings.ToLower(strings.TrimSpace(k.Name))] = true
-		}
-	}
+	out.EventTags = td.Events
 	return out
 }
 

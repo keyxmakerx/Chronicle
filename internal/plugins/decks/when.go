@@ -24,6 +24,11 @@ const (
 	TestTag     = "tag"
 	TestLayer   = "layer"
 	TestSay     = "say"
+	// The calendar tests read the main calendar's current date: a moon's phase,
+	// an event on today's date and the time of day. They name no page.
+	TestMoon  = "moon"
+	TestEvent = "event"
+	TestTime  = "time"
 )
 
 // Who a test is about. Anything else is a page id of the campaign.
@@ -39,6 +44,10 @@ const (
 const (
 	MaxTests          = 4
 	MaxLayerNameChars = 80
+	// MaxCalendarNameChars bounds a moon's, a phase's or an event's name.
+	MaxCalendarNameChars = 80
+	// maxCycleDay bounds a moon test's days; no moon's cycle is that long.
+	maxCycleDay = 1000
 	// maxTestNumber keeps a typed number to something every comparison can hold.
 	maxTestNumber = 1e12
 )
@@ -62,9 +71,19 @@ type WhenTest struct {
 	// Tag is a tag id and Has whether the page has it.
 	Tag *int  `json:"tag,omitempty"`
 	Has *bool `json:"has,omitempty"`
-	// Name is a layer's name or source and On whether it is on the page.
+	// Name is a layer's name or source and On whether it is on the page. A
+	// moon test names the moon and an event test the event or kind of event.
 	Name string `json:"name,omitempty"`
 	On   *bool  `json:"on,omitempty"`
+	// Phase is a moon's phase word, or From and To a range of days of its
+	// cycle (the new moon's day is 1; a range may wrap, 23 to 1).
+	Phase string `json:"phase,omitempty"`
+	From  *int   `json:"from,omitempty"`
+	To    *int   `json:"to,omitempty"`
+	// Time is a part of the day.
+	Time string `json:"time,omitempty"`
+	// Is says whether the moon or the time of day is so, for the "not" form.
+	Is *bool `json:"is,omitempty"`
 }
 
 // WhenView is a test as a Director reads it back: the test, its sentence and
@@ -72,8 +91,8 @@ type WhenTest struct {
 type WhenView struct {
 	WhenTest
 	Sentence string `json:"sentence"`
-	// Broken is true when a hero, field, tracker kind or tag the test names no
-	// longer exists; such a test can never hold.
+	// Broken is true when a hero, field, tracker kind, tag or moon the test
+	// names no longer exists; such a test can never hold.
 	Broken bool `json:"broken"`
 }
 
@@ -89,8 +108,28 @@ var (
 	testKindWords = []OptionWord{
 		{TestNumber, "a number on the page"}, {TestTracker, "a tracker on the page"}, {TestTag, "a tag on the page"},
 		{TestLayer, "a transformation on the page"}, {TestSay, "the Director says so"},
+		{TestMoon, "a moon"}, {TestEvent, "an event today"}, {TestTime, "the time of day"},
+	}
+	// dayParts are Calendar.DayPart's four answers.
+	dayParts = []OptionWord{{"dawn", "dawn"}, {"day", "day"}, {"dusk", "dusk"}, {"night", "night"}}
+	// moonPhases are the words every moon matches (Moon.PhaseWords). A test may
+	// also name a phase's own name ("Waning Crescent", a hand-set moon's state).
+	moonPhases = []OptionWord{
+		{"full", "full"}, {"new", "new"}, {"waxing", "waxing"}, {"waning", "waning"},
+		{"crescent", "a crescent"}, {"gibbous", "gibbous"},
+		{"first-quarter", "at its first quarter"}, {"last-quarter", "at its last quarter"},
 	}
 )
+
+// phrase is the words a key is said with, or "" for a key not in the list.
+func phrase(list []OptionWord, key string) string {
+	for _, o := range list {
+		if o.Key == key {
+			return o.Phrase
+		}
+	}
+	return ""
+}
 
 func opPhrase(op string) string {
 	for _, o := range opPhrases {
@@ -138,6 +177,9 @@ var keysOf = map[string][]string{
 	TestTag:     {"who", "tag", "has"},
 	TestLayer:   {"who", "name", "on"},
 	TestSay:     {},
+	TestMoon:    {"name", "phase", "from", "to", "is"},
+	TestEvent:   {"name", "has"},
+	TestTime:    {"time", "is"},
 }
 
 // WhenList is a card's tests as they arrive in a request. Its decoder refuses
@@ -290,8 +332,8 @@ func (s *service) ValidateWhen(ctx context.Context, campaignID string, d Deck, t
 }
 
 // BrokenTests says, for a stored list, which tests no longer resolve: the hero,
-// field, tracker kind or tag they name is gone. A test that cannot be checked
-// because the facts cannot be read is not called broken.
+// field, tracker kind, tag or moon they name is gone. A test that cannot be
+// checked because the facts cannot be read is not called broken.
 func (s *service) BrokenTests(ctx context.Context, campaignID string, d Deck, tests []WhenTest) []bool {
 	out := make([]bool, len(tests))
 	if len(tests) == 0 {
@@ -413,7 +455,8 @@ func (c *testChecker) check(t WhenTest) (WhenTest, error) {
 	out := WhenTest{Test: t.Test, Open: t.Open}
 	if t.Test == TestSay {
 		if t.Who != "" || t.Field != "" || t.Op != "" || t.Value != nil || t.Of != "" || t.Share != "" ||
-			t.Kind != "" || t.Tag != nil || t.Has != nil || t.Name != "" || t.On != nil {
+			t.Kind != "" || t.Tag != nil || t.Has != nil || t.Name != "" || t.On != nil ||
+			t.Phase != "" || t.From != nil || t.To != nil || t.Time != "" || t.Is != nil {
 			return WhenTest{}, errors.New(`"say" takes no other keys`)
 		}
 		return out, nil
@@ -423,6 +466,13 @@ func (c *testChecker) check(t WhenTest) (WhenTest, error) {
 	}
 	if c.s.facts == nil {
 		return WhenTest{}, errors.New("this kind of test is not available on this server right now; only \"say\" is")
+	}
+	switch t.Test {
+	case TestMoon, TestEvent, TestTime:
+		if t.Who != "" {
+			return WhenTest{}, errors.New(`a calendar test is about no page, so it takes no "who"`)
+		}
+		return c.checkCalendar(t, out)
 	}
 	if err := c.checkWho(t); err != nil {
 		return WhenTest{}, err
@@ -531,6 +581,83 @@ func (c *testChecker) checkTracker(t, out WhenTest) (WhenTest, error) {
 	return out, nil
 }
 
+// checkCalendar validates a moon, event or time test. A moon must be one the
+// main calendar has, so a typo is refused rather than stored as a test that
+// never holds; an event is any name, since it may be one not on the calendar
+// yet, as a layer test may name a layer not on a page yet.
+func (c *testChecker) checkCalendar(t, out WhenTest) (WhenTest, error) {
+	switch t.Test {
+	case TestMoon:
+		if t.Is == nil {
+			return WhenTest{}, errors.New(`a moon test needs "name", "is", and a "phase" or "from" and "to"`)
+		}
+		name, err := plainText("the moon's name", t.Name, MaxCalendarNameChars)
+		if err != nil {
+			return WhenTest{}, err
+		}
+		if name == "" {
+			return WhenTest{}, errors.New("a moon test needs the moon's name")
+		}
+		if (t.Phase == "") == (t.From == nil && t.To == nil) {
+			return WhenTest{}, errors.New(`a moon test has either a "phase" or "from" and "to", not both and not neither`)
+		}
+		if t.Phase != "" {
+			phase, err := plainText("the phase", t.Phase, MaxCalendarNameChars)
+			if err != nil {
+				return WhenTest{}, err
+			}
+			if phrase(moonPhases, strings.ToLower(phase)) != "" {
+				phase = strings.ToLower(phase)
+			}
+			out.Phase = phase
+		} else {
+			if t.From == nil || t.To == nil || *t.From < 1 || *t.To < 1 || *t.From > maxCycleDay || *t.To > maxCycleDay {
+				return WhenTest{}, fmt.Errorf(`"from" and "to" are days of the moon's cycle, 1 to %d`, maxCycleDay)
+			}
+			from, to := *t.From, *t.To
+			out.From, out.To = &from, &to
+		}
+		o, err := c.options()
+		if err != nil {
+			return WhenTest{}, err
+		}
+		if !o.Calendar {
+			return WhenTest{}, fmt.Errorf("%w: the main calendar can't be read", errCannotCheck)
+		}
+		for _, m := range o.Moons {
+			if strings.EqualFold(strings.TrimSpace(m), name) {
+				out.Name = m
+			}
+		}
+		if out.Name == "" {
+			return WhenTest{}, errors.New("the main calendar has no moon by that name")
+		}
+		is := *t.Is
+		out.Is = &is
+	case TestEvent:
+		if t.Has == nil {
+			return WhenTest{}, errors.New(`an event test needs "name" and "has"`)
+		}
+		name, err := plainText("the event's name", t.Name, MaxCalendarNameChars)
+		if err != nil {
+			return WhenTest{}, err
+		}
+		if name == "" {
+			return WhenTest{}, errors.New("an event test needs the name of an event or a kind of event")
+		}
+		has := *t.Has
+		out.Name, out.Has = name, &has
+	case TestTime:
+		part := strings.ToLower(strings.TrimSpace(t.Time))
+		if phrase(dayParts, part) == "" || t.Is == nil {
+			return WhenTest{}, errors.New(`a time test needs "time" (dawn, day, dusk or night) and "is"`)
+		}
+		is := *t.Is
+		out.Time, out.Is = part, &is
+	}
+	return out, nil
+}
+
 // ---- sentences --------------------------------------------------------------
 
 // namer turns ids into the words a sentence says. A name that can no longer be
@@ -547,6 +674,10 @@ type namer struct {
 	tried  bool
 	fields map[string]map[string]string
 	heroes map[string]string
+	// today is the calendar as the viewer sees it, read once and only for a
+	// printed moon test a player reads.
+	today      *TodayFact
+	todayTried bool
 }
 
 func (s *service) newNamer(ctx context.Context, cid string, d Deck, v Viewer) *namer {
@@ -667,7 +798,8 @@ func fmtNum(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
 // sentence says one test in words: "Orrin's Stamina is at or below half of
 // Stamina max", "any hero's Hunger is at or above 4", "Orrin has the tag
-// Cursed", "Orrin is not Vampire Scion", "the Director says so".
+// Cursed", "Orrin is not Vampire Scion", "Nyx is full", "Bloodnight is today",
+// "it is night", "the Director says so".
 func (n *namer) sentence(t WhenTest) string {
 	switch t.Test {
 	case TestSay:
@@ -698,8 +830,62 @@ func (n *namer) sentence(t WhenTest) string {
 			return n.who(t.Who) + " is not " + t.Name
 		}
 		return n.who(t.Who) + " is " + t.Name
+	case TestMoon:
+		return n.moon(t.Name) + moonState(t)
+	case TestEvent:
+		if t.Has != nil && !*t.Has {
+			return t.Name + " is not today"
+		}
+		return t.Name + " is today"
+	case TestTime:
+		if t.Is != nil && !*t.Is {
+			return "it is not " + t.Time
+		}
+		return "it is " + t.Time
 	}
 	return "a test"
+}
+
+// moonState is the rest of a moon test's sentence: " is full", " is not on
+// day 3 to 5 of its cycle". A phase's own name is said as it is written.
+func moonState(t WhenTest) string {
+	is := " is "
+	if t.Is != nil && !*t.Is {
+		is = " is not "
+	}
+	if t.Phase != "" {
+		if p := phrase(moonPhases, t.Phase); p != "" {
+			return is + p
+		}
+		return is + t.Phase
+	}
+	from, to := intOf(t.From), intOf(t.To)
+	if from == to {
+		return is + "on day " + strconv.Itoa(from) + " of its cycle"
+	}
+	return is + "on day " + strconv.Itoa(from) + " to " + strconv.Itoa(to) + " of its cycle"
+}
+
+// moon is a moon's name as the viewer may read it: a player who is not shown
+// the moon on the calendar reads "a moon", as a hidden page reads "a page".
+func (n *namer) moon(name string) string {
+	if n.viewer.Director {
+		return name
+	}
+	if !n.todayTried {
+		n.todayTried = true
+		if n.s.facts != nil {
+			if td, err := n.s.facts.Today(n.ctx, n.cid, n.viewer); err == nil {
+				n.today = &td
+			}
+		}
+	}
+	if n.today != nil {
+		if _, ok := n.today.Moons[calendarKey(name)]; ok {
+			return name
+		}
+	}
+	return "a moon"
 }
 
 func intOf(p *int) int {

@@ -68,6 +68,13 @@ type EventDef struct {
 	// any rule (Crafting gives every project a roll for a respite). An
 	// error stops the press before anything else happens.
 	Pressed func(ctx context.Context, campaignID string, by Viewer) error
+	// PressArg, when set, names one of the event's text Fields: each distinct
+	// value of it among the saved rules is a drawer button of its own,
+	// labelled with that value ("Dose"), so the Director names a button by
+	// writing a rule. A press fires the event with {"<PressArg>": value}.
+	// It needs a Match, or every button would start every rule; only an
+	// event from no part can have it, and not with Press or Pressed.
+	PressArg string
 	// Match, when set, says whether a firing meets a rule's stored args,
 	// given what happened (the payload the owner fired it with). Nil
 	// matches every firing.
@@ -80,6 +87,9 @@ type Field struct {
 	Name  string `json:"name"`  // the arg's JSON key
 	Label string `json:"label"` // what the inspector calls it
 	Type  string `json:"type"`  // FieldWhole or FieldText
+	// Optional fields start empty on a new When or Then, where a whole
+	// number otherwise starts at 1.
+	Optional bool `json:"optional,omitempty"`
 }
 
 // Field types the inspector can draw.
@@ -137,6 +147,9 @@ type Preview struct {
 	// Arg is the whole-number field holding the amount; empty means 1 for
 	// PreviewAdd. PreviewReach and PreviewSet need one.
 	Arg string `json:"arg,omitempty"`
+	// Every, for PreviewReach only, is an optional whole-number field that
+	// repeats the value: reach 3, again every 3, fires at 3, 6, 9 and on.
+	Every string `json:"every,omitempty"`
 }
 
 // Preview ops. An event can only reach; an action can only add or set.
@@ -163,18 +176,28 @@ func checkPreview(what, name string, p *Preview, fields []Field, partKinds []str
 	if len(partKinds) == 0 {
 		return fmt.Errorf("homebrew: %s %q previews a number but takes no part", what, name)
 	}
+	if p.Every != "" && (p.Op != PreviewReach || !hasWhole(fields, p.Every)) {
+		return fmt.Errorf("homebrew: %s %q preview repeats by %q, which only a reach on a whole-number field can", what, name, p.Every)
+	}
 	if p.Arg == "" {
 		if p.Op != PreviewAdd {
 			return fmt.Errorf("homebrew: %s %q preview %q needs an arg", what, name, p.Op)
 		}
 		return nil
 	}
-	for _, f := range fields {
-		if f.Name == p.Arg && f.Type == FieldWhole {
-			return nil
-		}
+	if hasWhole(fields, p.Arg) {
+		return nil
 	}
 	return fmt.Errorf("homebrew: %s %q preview reads %q, which is not one of its whole-number fields", what, name, p.Arg)
+}
+
+func hasWhole(fields []Field, name string) bool {
+	for _, f := range fields {
+		if f.Name == name && f.Type == FieldWhole {
+			return true
+		}
+	}
+	return false
 }
 
 // Registry holds what other plugins have plugged into the Workshop. It is
@@ -264,6 +287,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 	if e.Press != "" && len(e.PartKinds) > 0 {
 		return fmt.Errorf("homebrew: event %q comes from a part, so it can't be a drawer button", e.Name)
 	}
+	if err := checkPressArg(e); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.events[e.Name]; dup {
@@ -271,6 +297,29 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 	}
 	r.events[e.Name] = e
 	return nil
+}
+
+// checkPressArg keeps a named-button event sound: its buttons come from a
+// text field, its Match tells one button from another, and nothing else
+// claims the drawer for it.
+func checkPressArg(e EventDef) error {
+	if e.PressArg == "" {
+		return nil
+	}
+	switch {
+	case len(e.PartKinds) > 0:
+		return fmt.Errorf("homebrew: event %q comes from a part, so it can't be a drawer button", e.Name)
+	case e.Press != "" || e.Pressed != nil:
+		return fmt.Errorf("homebrew: event %q names its buttons, so it can't also have Press or Pressed", e.Name)
+	case e.Match == nil:
+		return fmt.Errorf("homebrew: event %q names its buttons but has no Match, so every button would start every rule", e.Name)
+	}
+	for _, f := range e.Fields {
+		if f.Name == e.PressArg && f.Type == FieldText {
+			return nil
+		}
+	}
+	return fmt.Errorf("homebrew: event %q names its buttons by %q, which is not one of its text fields", e.Name, e.PressArg)
 }
 
 // RegisterAction adds an action.
@@ -345,6 +394,20 @@ func (r *Registry) presses() []EventDef {
 	return out
 }
 
+// named lists the events whose buttons the saved rules name, by name.
+func (r *Registry) named() []EventDef {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := []EventDef{}
+	for _, e := range r.events {
+		if e.PressArg != "" {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 func (r *Registry) action(name string) (ActionDef, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -371,6 +434,9 @@ type CatalogEntry struct {
 	// is held for the Director however it is timed.
 	Waits  bool    `json:"waits,omitempty"`
 	Fields []Field `json:"fields,omitempty"`
+	// PressArg is an event's PressArg, so the Workshop can name the drawer
+	// button a When stands for.
+	PressArg string `json:"pressArg,omitempty"`
 	// Preview is a part kind's PreviewShape, or an event's or action's op.
 	Preview any `json:"preview,omitempty"`
 }
@@ -389,7 +455,7 @@ func (r *Registry) Catalog() Catalog {
 		c.Parts = append(c.Parts, e)
 	}
 	for _, e := range r.events {
-		ce := CatalogEntry{Name: e.Name, Label: e.Label, PartKinds: e.PartKinds, Fields: e.Fields}
+		ce := CatalogEntry{Name: e.Name, Label: e.Label, PartKinds: e.PartKinds, Fields: e.Fields, PressArg: e.PressArg}
 		if e.Preview != nil {
 			ce.Preview = e.Preview
 		}

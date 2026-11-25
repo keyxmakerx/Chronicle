@@ -19,6 +19,9 @@ import (
 type memRecipes struct{ stored map[string]homebrew.Recipe }
 
 func (m *memRecipes) List(context.Context, string) ([]homebrew.Recipe, error) { return nil, nil }
+func (m *memRecipes) ListContaining(context.Context, string, string) ([]homebrew.Recipe, error) {
+	return nil, nil
+}
 func (m *memRecipes) Get(_ context.Context, _, id string) (homebrew.Recipe, bool, error) {
 	r, ok := m.stored[id]
 	return r, ok, nil
@@ -99,9 +102,13 @@ func TestRegisterTrackerParts(t *testing.T) {
 	for _, e := range append(append([]homebrew.CatalogEntry{}, cat.Events...), cat.Actions...) {
 		for _, f := range e.Fields {
 			fields[e.Name] += f.Name + ":" + f.Type
+			if f.Optional {
+				fields[e.Name] += "?"
+			}
+			fields[e.Name] += " "
 		}
 	}
-	wantFields := map[string]string{"tracker.reached": "value:whole", "step": "by:whole", "set": "to:whole"}
+	wantFields := map[string]string{"tracker.reached": "value:whole every:whole? ", "step": "by:whole ", "set": "to:whole "}
 	if fmt.Sprint(fields) != fmt.Sprint(wantFields) {
 		t.Errorf("fields = %v, want %v", fields, wantFields)
 	}
@@ -114,8 +121,8 @@ func TestRegisterTrackerParts(t *testing.T) {
 			previews[e.Name] = fmt.Sprint(e.Preview)
 		}
 	}
-	wantPreviews := map[string]string{"tracker": "shape", "clock": "shape", "tracker.reached": "&{reach value}",
-		"step": "&{add by}", "set": "&{set to}", "tick": "&{add }"}
+	wantPreviews := map[string]string{"tracker": "shape", "clock": "shape", "tracker.reached": "&{reach value every}",
+		"step": "&{add by }", "set": "&{set to }", "tick": "&{add  }"}
 	if fmt.Sprint(previews) != fmt.Sprint(wantPreviews) {
 		t.Errorf("previews = %v, want %v", previews, wantPreviews)
 	}

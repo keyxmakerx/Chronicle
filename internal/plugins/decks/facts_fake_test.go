@@ -18,6 +18,31 @@ type fakeFacts struct {
 	opts   WhenOptions
 	errs   map[string]error
 	reads  int
+	// cal is the calendar a Director sees and playerCal the one a player sees
+	// (cal when nil); a nil cal is a campaign with no calendar.
+	cal       *TodayFact
+	playerCal *TodayFact
+	// todayAs records who each calendar read was made as.
+	todayAs []Viewer
+}
+
+// Today answers the calendar as the viewer sees it.
+func (f *fakeFacts) Today(_ context.Context, _ string, v Viewer) (TodayFact, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reads++
+	f.todayAs = append(f.todayAs, v)
+	if err := f.errs["today"]; err != nil {
+		return TodayFact{}, err
+	}
+	cal := f.cal
+	if !v.Director && f.playerCal != nil {
+		cal = f.playerCal
+	}
+	if cal == nil {
+		return TodayFact{}, ErrUnavailable
+	}
+	return *cal, nil
 }
 
 func newFakeFacts() *fakeFacts {
