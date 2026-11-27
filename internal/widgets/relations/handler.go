@@ -217,11 +217,13 @@ func (h *Handler) CreateRelation(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 
 	// Both ends come from the request, so both must be in this campaign and
-	// visible to the caller; a listed relation shows the target's name.
-	for _, id := range []string{sourceEntityID, req.TargetEntityID} {
-		if err := h.requireViewableEntity(c, cc, id, userID); err != nil {
-			return err
-		}
+	// visible to the caller; a listed relation shows the target's name. The
+	// page the link is made from must be one they may edit.
+	if err := h.requireEditableEntity(c, cc, sourceEntityID, userID); err != nil {
+		return err
+	}
+	if err := h.requireViewableEntity(c, cc, req.TargetEntityID, userID); err != nil {
+		return err
 	}
 
 	// Only DMs (owners) and site admins can create DM-only relations.
@@ -266,7 +268,9 @@ func (h *Handler) requireRelationAccess(c *echo.Context, cc *campaigns.CampaignC
 			return err
 		}
 	}
-	return nil
+	// Changing a link changes the page it is listed on, which the caller
+	// must be allowed to edit.
+	return h.requireEditableEntity(c, cc, rel.SourceEntityID, userID)
 }
 
 // DeleteRelation removes a relation and its reverse direction
@@ -420,4 +424,26 @@ func (h *Handler) GraphPage(c *echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, GraphPage(cc, entityTypes))
+}
+
+// requireEditableEntity is requireViewableEntity for a write: the caller must
+// also be allowed to edit the page, so a page shown to them view only cannot
+// be changed through this widget. It fails closed when the gate cannot say.
+func (h *Handler) requireEditableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID, userID string) error {
+	gate, ok := h.entityGate.(EntityEditGate)
+	if !ok {
+		return apperror.NewInternal(errors.New("relations: entity edit gate not configured"))
+	}
+	campaignID, canView, canEdit, err := gate.ResolveEditableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), userID)
+	if err != nil {
+		return err
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !canEdit {
+		return apperror.NewForbidden("you can't edit this page")
+	}
+	return nil
 }

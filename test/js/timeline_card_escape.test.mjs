@@ -92,3 +92,16 @@ test('timeline card falls back to the default icon', () => {
   const html = viz._cardHtml({ event_year: 1, event_month: 1, event_day: 1, event_entity_name: 'Hero' });
   assert.ok(html.includes('fa-circle-dot'));
 });
+
+test('an event colour that is not a hex colour is never drawn', () => {
+  const viz = loadTimeline();
+  const ctx = Object.create(viz);
+  ctx.timelineColor = '#123456';
+  assert.equal(ctx._eventColor({ color_override: '#abc' }), '#abc');
+  assert.equal(ctx._eventColor({ color_override: '#A1B2C3' }), '#A1B2C3');
+  assert.equal(ctx._eventColor({ color_override: 'red"><img src=x onerror=alert(1)>' }), '#123456');
+  assert.equal(ctx._eventColor({ color_override: '#abc;background:url(x)' }), '#123456');
+  assert.equal(ctx._eventColor({}), '#123456');
+  ctx.timelineColor = 'x"><b>';
+  assert.equal(ctx._eventColor({}), '#6366f1');
+});

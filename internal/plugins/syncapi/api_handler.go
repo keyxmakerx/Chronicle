@@ -519,6 +519,18 @@ func (h *APIHandler) GetEntity(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	if err := h.viewerCopy(c, entity, role, userID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, entity)
+}
+
+// viewerCopy turns a stored page into the copy this caller may read, in
+// place: GetEntity's strips. Every answer that carries a page goes through
+// it, so a save's answer never hands back more than a read would. role is
+// the caller's visibility role (visibilityRoleFor).
+func (h *APIHandler) viewerCopy(c *echo.Context, entity *entities.Entity, role int, userID string) error {
+	ctx := c.Request().Context()
 	// Defense-in-depth egress sanitize — see egress_sanitize.go.
 	sanitizeEntityHTMLForEgress(entity)
 
@@ -545,8 +557,7 @@ func (h *APIHandler) GetEntity(c *echo.Context) error {
 		}
 		entity.FieldsData = entities.FilterRestrictedFields(entity.FieldsData, entities.RestrictionDefs(et.Fields, entity.FieldOverrides), false, entity.IsOwnedBy(userID))
 	}
-
-	return c.JSON(http.StatusOK, entity)
+	return nil
 }
 
 // --- Entity Write ---
@@ -681,6 +692,12 @@ func (h *APIHandler) CreateEntity(c *echo.Context) error {
 	}
 
 	noteSyncResource(c, entity.ID, entity.Name)
+	userID := h.resolveUserID(c)
+	if err := h.viewerCopy(c, entity, h.visibilityRoleFor(c.Request().Context(), entity.CampaignID, userID, h.resolveRole(c)), userID); err != nil {
+		// The page is already saved: an error here would make a retrying
+		// client create it twice, so answer with only what is safe to show.
+		return c.JSON(http.StatusCreated, map[string]any{"id": entity.ID, "name": entity.Name})
+	}
 	return c.JSON(http.StatusCreated, entity)
 }
 
@@ -776,6 +793,9 @@ func (h *APIHandler) UpdateEntity(c *echo.Context) error {
 	}
 
 	noteSyncResource(c, updated.ID, updated.Name)
+	if err := h.viewerCopy(c, updated, h.visibilityRoleFor(ctx, updated.CampaignID, userID, role), userID); err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, updated)
 }
 
