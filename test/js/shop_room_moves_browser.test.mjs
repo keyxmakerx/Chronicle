@@ -115,13 +115,20 @@ test('the owner drags the shelves, nudges a prop, sizes and puts back, and Save 
   assert.deepEqual(moves.anvil, [10, -40, 1.5]);
   assert.ok(Math.abs(moves.display[0] - Math.round(moves.display[0])) === 0 && moves.display[0] > 40, 'the shelves moved right in room units: ' + moves.display);
   assert.equal(moves.display[2], 1);
-  // A drag the browser cancels puts the piece back and saves nothing.
-  const was = await tf(p, 'banner');
-  const bb = await p.evaluate(() => { const b = document.querySelector('.src-svg [data-mvk="banner"]').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  // A prop is dragged by its drawing too, not only nudged.
   await p.click('[data-mode="arr"]');
   await p.waitForSelector('.shr-cb [data-cb-mode="place"]', { state: 'attached' });
   await p.click('[data-cb-mode="place"]');
+  await p.waitForSelector('.src-svg [data-mvk="anvil"][data-mvon]');
+  const before = await tf(p, 'anvil');
+  const ab = await p.evaluate(() => { const b = document.querySelector('.src-svg [data-mvk="anvil"]').getBoundingClientRect(); return { x: b.left + b.width * .45, y: b.top + b.height * .3 }; });
+  assert.equal(await p.evaluate((q) => document.elementsFromPoint(q.x, q.y).map((e) => e.closest('[data-mvk]')).filter(Boolean).map((e) => e.getAttribute('data-mvk'))[0], ab), 'anvil', 'the anvil lies under the press');
+  await p.mouse.move(ab.x, ab.y); await p.mouse.down(); await p.mouse.move(ab.x + 40, ab.y - 20, { steps: 5 }); await p.mouse.up();
+  await p.waitForFunction((was) => document.querySelector('.src-svg [data-mvk="anvil"]').getAttribute('transform') !== was, before);
+  // A drag the browser cancels puts the piece back and saves nothing.
   await p.waitForSelector('.src-svg [data-mvk="banner"][data-mvon]');
+  const was = await tf(p, 'banner');
+  const bb = await p.evaluate(() => { const b = document.querySelector('.src-svg [data-mvk="banner"]').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
   const calls = await p.evaluate(() => window.__calls.length);
   await p.mouse.move(bb.x, bb.y); await p.mouse.down(); await p.mouse.move(bb.x - 50, bb.y + 20, { steps: 5 });
   await p.evaluate(() => document.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })));

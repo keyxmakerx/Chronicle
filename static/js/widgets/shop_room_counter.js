@@ -485,6 +485,8 @@
     '.cm-slot{fill:rgb(255 255 255/.06);stroke:#ffd77a;stroke-width:2;stroke-dasharray:7 5;cursor:copy}',
     '.cm-slot.cm-on{fill:rgb(255 215 122/.28);stroke-width:3}',
     '[data-mvon]{cursor:grab;outline:none}[data-mvon]:active{cursor:grabbing}',
+    // A prop's drawing lets presses through to the goods behind it, except while it is a handle to move.
+    '.src-svg [data-mvon] .src-nohit{pointer-events:visiblePainted}',
     '.cm-mvring{fill:none;stroke:#ffd77a;stroke-width:2.5;stroke-dasharray:6 5}',
     '.cm-slotl{font:600 11px Inter,system-ui,sans-serif;fill:#ffd77a;pointer-events:none}',
     // Moving between views.
@@ -2236,7 +2238,11 @@
       if (!R.model.edit || where !== 'counter' || busy || e.button > 0 || !R.svg) return;
       // The goods on the shelves are a handle for the shelves too.
       var g = e.target.closest && e.target.closest('[data-mvk],[data-mvf]');
-      if (!g || !R.svg.contains(g) || e.target.closest('[data-slot]')) return;
+      // The dashed slots lie over the props they hold; a press there may still pick up the piece beneath (a plain click still reaches the slot).
+      if (!g && e.target.closest && e.target.closest('[data-slot]') && document.elementsFromPoint) {
+        g = document.elementsFromPoint(e.clientX, e.clientY).map(function (el) { return el.closest && el.closest('[data-mvon],[data-mvf]'); }).filter(Boolean)[0] || null;
+      }
+      if (!g || !R.svg.contains(g)) return;
       var k = g.getAttribute('data-mvk') || g.getAttribute('data-mvf'), p = mvPt(e); if (!p) return;
       var els = [].slice.call(R.svg.querySelectorAll('[data-mvk="' + k + '"],[data-mvf="' + k + '"]'));
       mvDrag = { k: k, x: p.x, y: p.y, dx: 0, dy: 0, moved: false, els: els.map(function (el) { return [el, el.getAttribute('transform') || '']; }) };
