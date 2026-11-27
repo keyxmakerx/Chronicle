@@ -2,8 +2,9 @@
 // their own (hanging pouches, lens clouds, St Elmo's fire, ball lightning, an
 // eruption, sky leviathans): each resolves from its built-in preset into what
 // the painter draws, finite everywhere; the lenses and the volcano stand on
-// the far range, the fire on the near wood's crowns; a change of weather
-// grows them in without a jump; and reduced motion holds them still.
+// the far range, the fire on the near wood's crowns, the balls low over the
+// land; a change of weather grows them in without a jump; particle sets of
+// different weathers never share a seed; and reduced motion holds them still.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -91,18 +92,25 @@ test('each new preset resolves to its effect and hands the painter only finite n
   }
 });
 
-test('lens clouds stand over the two highest peaks of the far range, and the volcano on the far ridge', () => {
+test('lens clouds stand over true peaks of the far range, kept whole in a narrow pane, and the volcano on the far ridge', () => {
   const env = load(), FX = env.SkyFX;
   const st = state(env, 'lenticular', 18.9);
   const lenses = st.fxItems.filter((f) => f.shape === 'lens');
   assert.equal(lenses.length, 2);
-  let highest = Infinity;
-  for (let x = W * .12; x <= W * .88; x += 1) highest = Math.min(highest, FX.ridgeAt(0, x, W, H));
-  assert.ok(FX.ridgeAt(0, lenses[0].x, W, H) - highest < 2, 'the first lens is over the highest peak');
+  // A true peak: the top of the ridge for a twentieth of the width either side.
+  const peakAt = (x) => { const y = FX.ridgeAt(0, x, W, H); for (let d = -W * .05; d <= W * .05; d += 1) if (FX.ridgeAt(0, x + d, W, H) < y - .5) return false; return true; };
+  for (const l of lenses) assert.ok(peakAt(l.x), 'a lens is over a true peak at ' + l.x);
+  assert.ok(FX.ridgeAt(0, lenses[0].x, W, H) <= FX.ridgeAt(0, lenses[1].x, W, H), 'the larger lens is over the higher peak');
   assert.ok(Math.abs(lenses[0].x - lenses[1].x) > W * .2, 'the peaks are apart');
   for (const l of lenses) {
     const peak = FX.ridgeAt(0, l.x, W, H);
-    assert.ok(l.y < peak - H * .1 && l.y > peak - H * .2, 'a lens floats just over its peak');
+    assert.ok(l.y < peak - H * .07 && l.y > peak - H * .15, 'a lens floats just over its peak');
+    assert.equal(l.k, 1, 'at rest a lens is solid; cloud and fog haze it instead');
+  }
+  const narrow = env.SkyPane.Scene.state(model(env, cal('lenticular', 18.9), { width: 360, height: 160 }), 5, -1);
+  for (const l of narrow.fxItems.filter((f) => f.shape === 'lens')) {
+    const half = 160 * .31 * l.sz;
+    assert.ok(l.x - half >= 0 && l.x + half <= 360, 'a lens stays whole in a phone-width pane');
   }
   const er = state(env, 'eruption', 21).fxItems.find((f) => f.shape === 'eruption');
   assert.ok(Math.abs(er.y - (FX.ridgeAt(0, er.x, W, H) + H * .02)) < 1e-6, 'the cone stands on the far ridge');
@@ -125,6 +133,38 @@ test("St Elmo's fire burns only on tree crowns of the near wood that stand clear
     assert.deepEqual(FX.particle(p, i, t, W, H, 1.6, .5, 3.1), o, 'the same moment draws the same fire');
   }
   assert.ok(lit > 50);
+});
+
+test('ball lightning wanders low, in front of the middle range, and never floats far', () => {
+  const env = load(), FX = env.SkyFX;
+  const p = state(env, 'ball-lightning', 21.2).look.parts.find((q) => q.p === 'ball');
+  for (const [w, h] of [[W, H], [360, 160]]) {
+    let lo = Infinity, hi = -Infinity;
+    for (let t = 0; t < 60; t += .5) for (let i = 0; i < p.n; i++) {
+      const o = FX.particle(p, i, t, w, h, Math.max(.65, Math.min(1.6, h / 150)), .4, 9);
+      if (o.x < 0 || o.x > w) continue;
+      assert.ok(o.y >= FX.ridgeAt(1, o.x, w, h), 'below the middle range\'s line at ' + o.x);
+      lo = Math.min(lo, o.y / h); hi = Math.max(hi, o.y / h);
+    }
+    assert.ok(lo > .6, 'never high in the sky (' + lo + ')');
+  }
+});
+
+test("St Elmo's fire keeps its prototype size in a full pane and takes its floor only in a short one", () => {
+  const env = load();
+  const p = state(env, 'st-elmos-fire', 21.6).look.parts.find((q) => q.mode === 'ridge');
+  assert.deepEqual(Array.from(p.s), [3.4, 5.6]);
+  assert.ok(p.rmin > 0);
+});
+
+test('particle sets of different weathers never share a seed, even when their names are the same length', () => {
+  const env = load(), L = env.SkyLooks, FX = env.SkyFX;
+  for (const [a, b] of [['leaves', 'petals'], ['embers', 'sparks'], ['wisps', 'motes'], ['volcano', 'st-elmo']]) {
+    if (!L.EFFECTS[a] || !L.EFFECTS[b]) continue;
+    const R = L.resolve({ id: 'x', like: 'clear', look: { effect: a, accents: [b] } });
+    const seeds = R.parts.map((p, i) => FX.seedOf(p, i));
+    assert.equal(new Set(seeds).size, seeds.length, a + ' and ' + b + ' draw different particles');
+  }
 });
 
 test('a change from clear to each new weather grows it in smoothly, with nothing jumping', () => {

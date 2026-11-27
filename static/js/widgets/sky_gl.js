@@ -522,7 +522,8 @@
       if (!a2){ AA.push(0, 0, 0, 0); AB.push(0, 1, -1, 1); AD.push(0, 0, 0, 0); AC.push(0, 0, 0); continue; }
       AA.push(Math.min(1.2, a2.k), LOOKS.AIR[a2.t], a2.sx || 0, a2.sy || 0);
       AB.push(a2.v[0], a2.v[1], a2.cx != null ? a2.cx : -1, a2.hw || 1);
-      AD.push(a2.d || 0, a2.rb ? 1 : 0, a2.e || 0, i * 3.7 + 1.3);
+      /* Seeded by what the layer is, not by its rank, so a layer keeps its pattern while strengths cross in a glide. */
+      AD.push(a2.d || 0, a2.rb ? 1 : 0, a2.e || 0, 1.3 + 11.1 * SW.hash01(a2.t + ':' + a2.c + ':' + (a2.v ? a2.v.join(',') : '') + ':' + (a2.d || 0)));
       var lc = LOOKS.lit(a2.c, a2.t === 'void' ? 'shade' : a2.e > .4 ? 'glow' : 'air', st.sl);
       /* Pouches are the underside of a storm deck, so they take the clouds' own light and shade, darkened by the storm
          as the clouds are, with a little of their colour. */
@@ -539,6 +540,10 @@
     U.uEv = [bm ? .8 * bm.k * smooth01(-3, 8, bm.M.m.alt / D2R) * Math.max(.35, st.dark) : 0, bm ? bm.M.i : 0, 0, ecl];
     U.uEvC = PAL.hexLin(bm ? bm.color : '#b8472f');
     U.uFxLight = [1, 1, 1, wx.fog];
+    /* An eruption's crater lights the cloud over it, mostly by night. */
+    var er = (st.fxItems || []).filter(function(f){ return f.shape === 'eruption'; })[0];
+    U.uGlowL = er ? [er.x, er.y - st.H * .22 * er.sz, er.k * (.15 + .85 * er.night), .22] : [0, 0, 0, .22];
+    U.uGlowC = er ? er.col : [0, 0, 0];
     var dark = document.documentElement.classList.contains('dark');
     U.uInk = PAL.hexLin(dark ? '#e9ebf2' : '#2b3040'); U.uPaper = PAL.hexLin(dark ? '#2a2d34' : '#fdfcf9');
     U.uGrade = [.012, 0, st.almanac ? 1 : 0, 0];
