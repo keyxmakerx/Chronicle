@@ -46,6 +46,9 @@ func TestHeroChangeDetail_Wording(t *testing.T) {
 		{"more than four a side cap with a count", []entities.HeroPickChange{list("Skills", names("a", "b", "c", "d", "e", "f"), names("g", "h", "i", "j", "k"))},
 			"Skills: added g, h, i, j and 1 more and removed a, b, c, d and 2 more"},
 		{"a story is never quoted", []entities.HeroPickChange{story("Backstory")}, "Backstory rewritten"},
+		{"a respite banks victories into XP", []entities.HeroPickChange{
+			{FieldKey: "victories", Label: "Victories", From: "2", To: "0", Kind: entities.HeroChangeNumber},
+			{FieldKey: "xp", Label: "XP", From: "4", To: "6", Kind: entities.HeroChangeNumber}}, "Victories: 2 → 0; XP: 4 → 6"},
 		{"three parts then a count", []entities.HeroPickChange{pick("A", "1", "2"), pick("B", "1", "2"), story("Backstory"), pick("D", "1", "2")},
 			"A: 1 → 2; B: 1 → 2; Backstory rewritten; and 1 more"},
 		{"five parts", []entities.HeroPickChange{pick("A", "1", "2"), pick("B", "1", "2"), pick("C", "1", "2"), pick("D", "1", "2"), pick("E", "1", "2")},

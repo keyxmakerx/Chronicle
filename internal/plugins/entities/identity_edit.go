@@ -274,13 +274,16 @@ func authorizeFieldsWriteAs(role campaigns.Role, entity *Entity, userID, campaig
 // of names (ownerListFieldKeys), a hero builder step in picks, which takes
 // only a name from that step's list, so a player can choose their class but
 // never type a stat into it, or what a step's entry lets the hero buy, which
-// must be on its list and fit its points. A key the type marks GM-only is
+// must be on its list and fit its points, or a number the system's play block
+// lets the owner change (checkPlayNumber). A key the type marks GM-only is
 // refused whatever it is, since the owner may not see it.
 func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []FieldDefinition, picks builderPicks, refuseAsk bool) map[string]error {
 	gmOnly := map[string]bool{}
 	onType := map[string]bool{}
+	field := map[string]*FieldDefinition{}
 	for i := range typeFields {
 		onType[typeFields[i].Key] = true
+		field[typeFields[i].Key] = &typeFields[i]
 		if typeFields[i].GMOnly {
 			gmOnly[typeFields[i].Key] = true
 		}
@@ -300,6 +303,11 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 			if !known(k) {
 				held[k] = apperror.NewForbidden(fmt.Sprintf("this character has no %q field", k))
 			} else if err := checkOwnerToken(v); err != nil {
+				held[k] = err
+			}
+		case !gmOnly[k] && !isStep && playOwnerNumber(field[k]):
+			// A number the system lets the owner change during play.
+			if err := checkPlayNumber(entity, patch, *field[k], v); err != nil {
 				held[k] = err
 			}
 		case gmOnly[k] || (!ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] && !isStep && !isOptions):
