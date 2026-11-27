@@ -2502,10 +2502,11 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 	}
 	// A sky event's moons are the exporting calendar's ids; one that cannot
 	// be mapped, or a sky event that no longer passes, is left off and
-	// reported rather than costing the event.
+	// reported rather than costing the event. The report's kind names the
+	// setting, not the event, because the event itself is restored.
 	payload, skyNote := calendar.ImportedEventPayload(evt.Payload, refs.moons)
 	if skyNote != "" {
-		report.Fail(campaigns.SectionCalendar, "sky event", evt.Name, skyNote)
+		report.Fail(campaigns.SectionCalendar, "event sky setting", evt.Name, skyNote)
 	}
 	created, err := a.svc.CreateEvent(ctx, calendarID, campaignID, calendar.CreateEventInput{
 		Name:                     evt.Name,

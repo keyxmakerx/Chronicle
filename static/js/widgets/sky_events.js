@@ -230,7 +230,8 @@
   // The stretch of time an event can be seen in, [from, to], in days.
   function windowOf(e, w) {
     var t = e.type, H = 1 / 24;
-    if (t === 'meteor-shower') return [w.n0 - .3, w.n1 + .4];
+    // From the afternoon before its first peak to the morning after its last.
+    if (t === 'meteor-shower') return [w.tp - .4, w.n1 + (w.tp - w.n0) + .4];
     if (t === 'meteor-storm') return [w.tp - 5 * H, w.tp + 5 * H];
     if (t === 'comet') return [w.n0 - .2, w.n1 + 1];
     if (t === 'eclipse-solar') return [w.tp - (span(e) + .1) * H, w.tp + (span(e) + .1) * H];
@@ -295,6 +296,10 @@
     (dayEvents || []).forEach(function (e) {
       if (e.type !== 'eclipse-solar' || !st.sp) return;
       var w = when(st, e); if (!w) return;
+      // The moon that crosses must be in this sky: one hidden from players
+      // would leave their noon dark with the sun uncovered.
+      var ms = (st.cal && st.cal.moons) || [];
+      if (!ms.length || ((e.moons || []).length && !ms.some(function (m) { return e.moons.indexOf(m.id) >= 0; }))) return;
       var s = e.sky, sp2 = span(e), u = (st.tNow - w.tp) * 24 / sp2;
       if (Math.abs(u) >= 1) return;
       var sr = st.R * .95, dur = (s.minutes || 4) / 60, q = clamp(dur * 1.02 / (2 * sp2), 0, .2), mr = sr, miss = 0;
@@ -303,7 +308,8 @@
       else miss = sr + mr - 2 * (s.magnitude != null ? s.magnitude : .6) * sr;
       var along = u * (sr + mr) * 1.02, th = -.22;
       var x = st.sp.x - along * Math.cos(th) - miss * Math.sin(th), y = st.sp.y - along * Math.sin(th) + miss * Math.cos(th);
-      st.eclMoon = { x: x, y: y, r: mr, id: e.moons.length ? e.moons[0] : null, type: s.subtype };
+      var crossing = (e.moons || []).filter(function (id) { return ms.some(function (m) { return m.id === id; }); })[0];
+      st.eclMoon = { x: x, y: y, r: mr, id: crossing != null ? crossing : null, type: s.subtype };
       st.ecl = discCover(sr, mr, Math.hypot(x - st.sp.x, y - st.sp.y));
       // The drawn ring is wider than a real one so it reads; the light dims as much as a real one's does.
       st.eclSky = s.subtype === 'annular' ? Math.min(1, st.ecl * 1.45) : st.ecl;
@@ -368,11 +374,13 @@
   function custom(st, e, k, seed) {
     var s = e.sky, p = place(st, s.direction, (h(seed, 1) - .5) * .4), dayK = .3 + .7 * night(st), cloudK = 1 - st.wx.cloud * .8;
     var col = lit(s.color || '#d8e8ff', 'glow', st.sl), hi = col.map(function (v) { return Math.min(1, v * 1.35 + .06); }), kk = k * dayK * cloudK;
-    var w = when(st, e), elapsed = w && w.hasHour ? (st.tNow - w.tp) * 24 : 24, SZ = window.SkyFX.SIZE || {}, sz = SZ[s.size] || 1, q = dirOf(s.direction);
+    // Without an hour a shape holds all day, open, and a wandering star
+    // stands an hour along its path rather than a day.
+    var w = when(st, e), timed = !!(w && w.hasHour), elapsed = timed ? (st.tNow - w.tp) * 24 : 1, SZ = window.SkyFX.SIZE || {}, sz = SZ[s.size] || 1, q = dirOf(s.direction);
     if (s.shape === 'comet') { var c = { alt: q.alt * D2R, az: q.az * D2R, v: vecOf(q.alt * D2R, q.az * D2R) }; st.comets.push({ x: p.x, y: p.y, ang: awayFromSun(st.L, c, st.sun), len: st.H * .5 * sz, k: kk, w: sz, day: 1, c: s.color || '#d8e8ff' }); return; }
     if (s.shape === 'curtain') { st.aur.push({ k: kk * 1.2, c0: s.color || '#9ff2d2', c1: deeper(s.color || '#9ff2d2'), az: q.az, span: sz > 1.2 ? 75 : sz < .8 ? 28 : 48, base: { low: .05, mid: .2, high: .38 }[s.direction.altitude] || .2, seed: seed % 89, own: true }); return; }
     if (s.shape === 'veil') { var cx = p.x / st.W, v = (st.L.hor - p.y) / Math.max(1, st.L.hor - st.L.top); st.airs.push({ t: 'veil', c: s.color || '#d8c8f0', k: kk * .9, sx: .01, sy: .02, v: [v - .45 * sz, v + .35 * sz], d: 0, cx: cx, hw: .14 * sz }); return; }
-    st.fxItems.push({ shape: s.shape, x: p.x, y: p.y, sz: sz, size: s.size, col: col, hi: hi, k: kk, seed: seed % 101, elapsed: Math.max(0, elapsed), open: smooth01(0, .3, Math.max(0, elapsed)) });
+    st.fxItems.push({ shape: s.shape, x: p.x, y: p.y, sz: sz, size: s.size, col: col, hi: hi, k: kk, seed: seed % 101, elapsed: Math.max(0, elapsed), open: timed ? smooth01(0, .3, Math.max(0, elapsed)) : 1 });
   }
   // The signed sky events that aren't moon nights, at this moment.
   function skyEvents(st, dayEvents) {

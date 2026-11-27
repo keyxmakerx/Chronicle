@@ -75,18 +75,18 @@ test('a comet on its days is drawn with a tail; before its first day it is not',
   assert.equal(before.comets.length, 0, 'nothing before its first day');
 });
 
-test('a meteor shower falls at night and never hands the painter a non-finite meteor', () => {
+test('a meteor shower falls on its own evening, over the odd shooting star any clear night has, and never hands the painter a non-finite meteor', () => {
   const env = load();
-  const shower = ev({ type: 'meteor-shower', direction: { compass: 'NE', altitude: 'high' }, rate_per_hour: 120, color: '#9fd8ff' });
-  let frames = 0;
-  for (let t = 0; t < 40; t += .1) {
-    const st = state(env, at(23), [shower], t);
-    finite(st.met, 'meteor');
-    if (st.met.length) frames++;
+  // Meteors summed over 40 seconds, so the night's own shooting stars are the baseline.
+  const count = (cal, events) => { let n = 0; for (let t = 0; t < 40; t += .1) { const st = state(env, cal, events, t); finite(st.met, 'meteor'); n += st.met.length; } return n; };
+  const plain = count(at(23), []);
+  for (const extra of [{}, { start_hour: 23 }, { start_hour: 22 }]) {
+    const shower = ev({ type: 'meteor-shower', direction: { compass: 'NE', altitude: 'high' }, rate_per_hour: 120, color: '#9fd8ff' }, extra);
+    const got = count(at(23), [shower]);
+    assert.ok(got > plain * 2 + 20, `the shower is falling at 23:00 (${JSON.stringify(extra)}): ${got} meteors against ${plain} without it`);
   }
-  assert.ok(frames > 15, 'the shower is falling, got ' + frames);
-  const noon = state(env, at(12), [shower], 5);
-  assert.equal(noon.met.length, 0, 'no meteors in daylight');
+  const shower = ev({ type: 'meteor-shower', direction: { compass: 'NE', altitude: 'high' }, rate_per_hour: 120 }, { start_hour: 23 });
+  assert.equal(state(env, at(12), [shower], 5).met.length, 0, 'no meteors in daylight');
 });
 
 test('a total solar eclipse covers the sun at its hour, darkens the sky and moves the moon over it', () => {
@@ -103,6 +103,25 @@ test('a total solar eclipse covers the sun at its hour, darkens the sky and move
   assert.equal(later.ecl, 0, 'over after the crossing');
   const annular = state(env, at(12), [ev({ type: 'eclipse-solar', subtype: 'annular', moons: [7] }, { start_hour: 12 })]);
   assert.ok(annular.ecl > .5 && annular.ecl < .9, 'an annular one leaves a ring, got ' + annular.ecl);
+});
+
+test('a solar eclipse whose moon is not in this sky (hidden from players) leaves the sun and the sky alone', () => {
+  const env = load();
+  const ecl = ev({ type: 'eclipse-solar', subtype: 'total', moons: [99] }, { start_hour: 12 });
+  const st = state(env, at(12), [ecl]), plain = state(env, at(12), []);
+  assert.equal(st.ecl, 0);
+  assert.equal(st.dark, plain.dark, 'the noon sky is as bright as without it');
+  const moonless = state(env, Object.assign(at(12), { moons: [] }), [ev({ type: 'eclipse-solar', subtype: 'total' }, { start_hour: 12 })]);
+  assert.equal(moonless.ecl, 0, 'no moon, no eclipse');
+});
+
+test('an untimed wandering star stands near its compass point, open, all day', () => {
+  const env = load();
+  const st = state(env, at(22), [ev({ type: 'custom', shape: 'star', size: 'large', direction: { compass: 'S', altitude: 'mid' } })]);
+  const it = st.fxItems.find((f) => f.shape === 'star');
+  assert.ok(it, 'the star is drawn');
+  assert.ok(it.elapsed <= 1, 'it has wandered an hour at most, got ' + it.elapsed);
+  assert.equal(it.open, 1);
 });
 
 test('an aurora night hangs over its compass point and turns the view toward it', () => {
