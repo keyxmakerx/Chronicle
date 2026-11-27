@@ -70,10 +70,10 @@ func registerVariantParts(reg *homebrew.Registry, states variantStates, pages va
 	marks := []string{"creature-mark"}
 	regs := []func() error{
 		func() error {
-			return reg.RegisterPart(homebrew.PartKind{Name: "creature-recipe", Label: "Creature recipe", ForceSee: "director", Check: v.checkRecipeLink})
+			return reg.RegisterPart(homebrew.PartKind{Name: "creature-recipe", Label: "Creature recipe", ForceSee: "director", Check: v.checkRecipeLink, Share: shareRecipeLink})
 		},
 		func() error {
-			return reg.RegisterPart(homebrew.PartKind{Name: "creature-mark", Label: "Creature mark", ForceSee: "director", Check: v.checkMark})
+			return reg.RegisterPart(homebrew.PartKind{Name: "creature-mark", Label: "Creature mark", ForceSee: "director", Check: v.checkMark, Share: shareCreatureMark})
 		},
 		func() error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: "creature.dies", Label: "A marked creature dies", PartKinds: marks, Check: none})

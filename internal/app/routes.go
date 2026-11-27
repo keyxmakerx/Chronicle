@@ -7344,6 +7344,9 @@ func (a *App) RegisterRoutes() {
 			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		aiWorkshop = homebrewSvc
+		// Recipes join the Store only while the Workshop is up; without it
+		// the kind is unknown and the Store refuses it.
+		designKinds.Register(homebrewRecipeKind, homebrewStoreKind{svc: homebrewSvc, members: campaignService})
 		craftingRespites.homebrew = homebrewSvc
 		decksStory.bindHomebrew(homebrewSvc)
 		// A saved recipe is placed with the Customizer only while the
