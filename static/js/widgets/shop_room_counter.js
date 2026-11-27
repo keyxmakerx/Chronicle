@@ -484,6 +484,8 @@
     '.cm-bub{animation:cm-bub 2.6s ease-in infinite}',
     '.cm-slot{fill:rgb(255 255 255/.06);stroke:#ffd77a;stroke-width:2;stroke-dasharray:7 5;cursor:copy}',
     '.cm-slot.cm-on{fill:rgb(255 215 122/.28);stroke-width:3}',
+    '[data-mvon]{cursor:grab;outline:none}[data-mvon]:active{cursor:grabbing}',
+    '.cm-mvring{fill:none;stroke:#ffd77a;stroke-width:2.5;stroke-dasharray:6 5}',
     '.cm-slotl{font:600 11px Inter,system-ui,sans-serif;fill:#ffd77a;pointer-events:none}',
     // Moving between views.
     '.src-stage.src-leave .src-svg{transform:scale(1.5);opacity:0}',
@@ -556,6 +558,25 @@
     if (!p || typeof p !== 'object' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(p.id || ''))) return null;
     return { id: String(p.id).toLowerCase(), on: cmPick(p.on, CM_PIC.on, 'wall'), fit: cmPick(p.fit, CM_PIC.fit, 'fill') };
   }
+  /* Where the owner moved the shelves or a prop: [dx, dy, size] from where
+     the room puts it, in room units, for 'display' and the theme's own props.
+     Must match shopRoomCounterMove in shop_room_validate.go. */
+  var CM_MOVE = { x: 600, y: 350, min: .5, max: 2 };
+  function cmMoves(m, props) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+    var out = {}, n = 0;
+    Object.keys(m).sort().forEach(function (k) {
+      var v = m[k];
+      if ((k !== 'display' && props.indexOf(k) < 0) || !Array.isArray(v) || v.length !== 3) return;
+      var dx = +v[0], dy = +v[1], z = +v[2];
+      if (!isFinite(dx) || !isFinite(dy) || !isFinite(z)) return;
+      dx = Math.round(Math.max(-CM_MOVE.x, Math.min(CM_MOVE.x, dx))); dy = Math.round(Math.max(-CM_MOVE.y, Math.min(CM_MOVE.y, dy)));
+      z = Math.round(Math.max(CM_MOVE.min, Math.min(CM_MOVE.max, z)) * 100) / 100;
+      if (!dx && !dy && z === 1) return;
+      out[k] = [dx, dy, z]; n++;
+    });
+    return n ? out : null;
+  }
   function cmHex(v, d) { return /^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v).toLowerCase() : d; }
   // Every field has a default and unknown values fall back, so a bad theme never breaks the room.
   function cmNorm(raw) {
@@ -571,6 +592,8 @@
     if (scene !== 'town') out.theme.scene = scene;
     var pic = cmPic(th.picture);
     if (pic) out.theme.picture = pic;
+    var mv = cmMoves(raw.moves, props);
+    if (mv) out.moves = mv;
     return out;
   }
   function cmRgb(c, k) { var a = hex(c); return a.map(function (v) { return Math.min(1, v / 255 * k); }); }
@@ -1255,6 +1278,24 @@
     var PILE = PILE0.map(function (p) { return [mx(p[0]), p[1], p[2]]; }), PX0 = Math.min(mx(700), mx(920)), PX1 = Math.max(mx(700), mx(920));
     var held = null, parcel = 0, sold = 0, lastHeld = '', parcelT = 0;
     var SL = D.slots.map(function (s) { return [mx(s[0]), s[1], s[2], D.counterTop ? (mx(s[0]) < LP.x ? 'R' : 'L') : t.side]; });
+    /* Moves: the shelves and each prop drawn [dx, dy, size] from their own
+       place, scaled about its centre. Goods on the shelves go with them;
+       goods on the counter top stay on the counter. */
+    var MV = t.n.moves || {}, ZX = D.zone ? (t.mir ? 1200 - D.zone[0] - D.zone[2] : D.zone[0]) : 0;
+    var DM = mvOf('display', D.zone ? [ZX + D.zone[2] / 2, D.zone[1] + D.zone[3] / 2] : SL.length ? [SL.reduce(function (a, q) { return a + q[0]; }, 0) / SL.length, SL.reduce(function (a, q) { return a + q[1]; }, 0) / SL.length] : [300, 260]);
+    function mvOf(k, c) { var v = MV[k]; return { k: k, dx: v ? v[0] : 0, dy: v ? v[1] : 0, s: v ? v[2] : 1, cx: c[0], cy: c[1] }; }
+    function mvAttr(m) { return m.dx || m.dy || m.s !== 1 ? ' transform="translate(' + f1(m.cx + m.dx) + ' ' + f1(m.cy + m.dy) + ') scale(' + m.s + ') translate(' + f1(-m.cx) + ' ' + f1(-m.cy) + ')"' : ''; }
+    // While placing by hand a piece is a handle: focusable, named, and moved by the arrow keys.
+    function mvOn(name) { return edit ? ' data-mvon="1" tabindex="0" role="button" aria-label="' + esc(name) + ': drag to move it, arrow keys to nudge it"' : ''; }
+    function mvTag(m, name, handle) { return ' data-mvk="' + m.k + '"' + (handle === false ? '' : mvOn(name)) + mvAttr(m); }
+    if (!D.counterTop) SL = SL.map(function (q) { return [DM.cx + DM.dx + (q[0] - DM.cx) * DM.s, DM.cy + DM.dy + (q[1] - DM.cy) * DM.s, q[2] * DM.s, q[3]]; });
+    // A prop's centre: its slot's, or for a prop lined up along the counter, its own place there.
+    function propC(p, mirror) {
+      var at = PROP_AT[p].at, q = CM_SLOTS[at] || [0, 0, 1200, 700], pp = P[p];
+      if (at === 'cL' && pp) return [mirror ? t.mx(pp.x) : pp.x, pp.y - 40];
+      var x = q[0] + q[2] / 2;
+      return [mirror && at !== 'over' && at !== 'air' && at !== 'lane' ? 1200 - x : x, q[1] + q[3] / 2];
+    }
     var placed = {}; t.props.forEach(function (p) { placed[p] = !!P[p]; }); R.placed(placed);
     function spot(i) { return SL[Math.min(i, SL.length - 1)]; }
     function shelfIt() { return R.place.shelf; }
@@ -1392,8 +1433,12 @@
     var BACKP = CM_LAYER.back, FRONTP = CM_LAYER.front, OVERP = CM_LAYER.over;
     function propsOf(list, mirror) {
       var s = '';
-      t.props.forEach(function (p) { if (list.indexOf(p) >= 0 && P[p]) s += PROPS[p](t, P[p]); });
-      return mirror ? cmM(t, s) : s;
+      t.props.forEach(function (p) {
+        if (list.indexOf(p) < 0 || !P[p]) return;
+        var art = PROPS[p](t, P[p]);
+        s += '<g' + mvTag(mvOf(p, propC(p, mirror)), p.charAt(0).toUpperCase() + p.slice(1).replace(/-/g, ' ')) + '>' + (mirror ? cmM(t, art) : art) + '</g>';
+      });
+      return s;
     }
     // Dashed slots while editing: where each kind of prop may be dropped, and the opening when there is none to press.
     function editSlots() {
@@ -1419,8 +1464,8 @@
         (t.air && cmWet(t) ? cmRainIn(t, -300, -100, 1800, 560, 7) : '') + open + lane +
         (LG.bake ? '<g data-bake="forge">' + LG.bake + '</g>' : '') + (LG.back || '') + (LG.hung ? cmLanterns(t, true) : '') +
         '<circle cx="' + LP.x + '" cy="' + LP.y + '" r="' + Math.round(t.L.reach * .55) + '" fill="url(#cm-glow)" data-flick=".32"/>' + (LG.moon ? '<circle cx="' + LP.x + '" cy="' + (LP.y + 40) + '" r="320" fill="url(#cm-glow)" opacity=".5" data-flick=".3"/>' : '') +
-        (D.art ? '<g data-bake="unit">' + cmM(t, D.art) + '</g>' : '') + (D.zone ? '<rect data-k="shelves" x="' + (t.mir ? 1200 - D.zone[0] - D.zone[2] : D.zone[0]) + '" y="' + D.zone[1] + '" width="' + D.zone[2] + '" height="' + D.zone[3] + '" fill="transparent"/>' : '') +
-        (D.counterTop ? '' : decor() + '<g id="srcb-wares"' + (D.floaty ? ' class="mp-floaty"' : '') + '>' + wares() + '</g>') + propsOf(BACKP, true) + (t.pend ? '' : '') + '</g>' +
+        (D.art ? '<g data-bake="unit"' + mvTag(DM, 'The shelves', !D.zone) + '>' + cmM(t, D.art) + '</g>' : '') + (D.zone ? '<rect data-k="shelves" data-mvk="display"' + mvOn('The shelves') + mvAttr(DM) + ' x="' + ZX + '" y="' + D.zone[1] + '" width="' + D.zone[2] + '" height="' + D.zone[3] + '" fill="transparent"/>' : '') +
+        (D.counterTop ? '' : decor() + '<g id="srcb-wares" data-mvf="display"' + (D.floaty ? ' class="mp-floaty"' : '') + '>' + wares() + '</g>') + propsOf(BACKP, true) + (t.pend ? '' : '') + '</g>' +
         '<g data-depth=".75">' + keeper() + '</g>' +
         '<g data-depth="1"><g data-bake="counter">' + COUNTERS[t.sk.counter](t) + '</g>' + ledger() + propsOf(FRONTP, true) + (LG.front || '') + cast(LP.x, 478, 40, 120, 0) + caseShut() +
           (D.counterTop ? decor() + '<g id="srcb-wares"' + (D.floaty ? ' class="mp-floaty"' : '') + '>' + wares() + '</g>' : '') + cloth() + '<g id="srcb-pile">' + pileSvg() + '</g>' + bell() + scales() + moreCard() + '<g id="srcb-held"></g></g>' +
@@ -2173,16 +2218,83 @@
       if (busy || !view || !R.svg || !R.svg.contains(e.target)) return;
       var t = target(e); closeMenu();
       if (!t) { hideCard(); if (cam.z > 1.01 && !R.dragging) stepBack(); return; }
-      if (R.dragging) return;
+      if (R.dragging || mvJust) return;
       press(t, e);
+    }
+    /* Moving the shelves and props while placing by hand: drag one, or focus
+       it and nudge it with the arrow keys (Shift for longer steps). A press
+       without a drag picks it, for the builder's size control. While dragging
+       only transforms change; the drop asks the builder to save the move,
+       which draws the room again. */
+    var mvDrag = null, mvJust = false, mvFocus = '', mvSel = '';
+    function mvNow(k) { var v = (cmNorm(R.model.counter || starterFor(R.model.roomType)).moves || {})[k]; return v ? v.slice() : [0, 0, 1]; }
+    function mvPt(e) { var m = R.svg && R.svg.getScreenCTM(); if (!m) return null; var p = R.svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(m.inverse()); }
+    function mvSave(k, v) { if (hooks.moved) hooks.moved(k, v); }
+    function onMvDown(e) {
+      if (!R.model.edit || where !== 'counter' || busy || e.button > 0 || !R.svg) return;
+      // The goods on the shelves are a handle for the shelves too.
+      var g = e.target.closest && e.target.closest('[data-mvk],[data-mvf]');
+      if (!g || !R.svg.contains(g) || e.target.closest('[data-slot]')) return;
+      var k = g.getAttribute('data-mvk') || g.getAttribute('data-mvf'), p = mvPt(e); if (!p) return;
+      var els = [].slice.call(R.svg.querySelectorAll('[data-mvk="' + k + '"],[data-mvf="' + k + '"]'));
+      mvDrag = { k: k, x: p.x, y: p.y, dx: 0, dy: 0, moved: false, els: els.map(function (el) { return [el, el.getAttribute('transform') || '']; }) };
+      e.preventDefault();
+      document.addEventListener('pointermove', onMvMove); document.addEventListener('pointerup', onMvUp); document.addEventListener('pointercancel', onMvUp);
+    }
+    function onMvMove(e) {
+      var d = mvDrag, p = mvPt(e); if (!d || !p) return;
+      d.dx = p.x - d.x; d.dy = p.y - d.y;
+      if (!d.moved && Math.abs(d.dx) + Math.abs(d.dy) < 4) return;
+      d.moved = true; R.dragging = true;
+      d.els.forEach(function (a) { a[0].setAttribute('transform', 'translate(' + f1(d.dx) + ' ' + f1(d.dy) + ') ' + a[1]); });
+    }
+    function onMvUp() {
+      var d = mvDrag; mvDrag = null;
+      document.removeEventListener('pointermove', onMvMove); document.removeEventListener('pointerup', onMvUp); document.removeEventListener('pointercancel', onMvUp);
+      if (!d) return;
+      // The click that follows the drop must not also press what is under it.
+      mvJust = true; setTimeout(function () { mvJust = false; R.dragging = false; }, 0);
+      mvSel = d.k; if (hooks.picked) hooks.picked(d.k);
+      if (d.moved) { var v = mvNow(d.k); v[0] += d.dx; v[1] += d.dy; mvSave(d.k, v); } else mvRing();
+    }
+    function mvKey(e) {
+      if (!R.model.edit || where !== 'counter') return false;
+      var g = e.target && e.target.closest && e.target.closest('[data-mvon]'), step = e.shiftKey ? 40 : 10;
+      var dir = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      if (!g || !dir) return false;
+      // Kept from the document's arrow keys, which turn the room.
+      e.preventDefault(); e.stopPropagation();
+      var k = g.getAttribute('data-mvk'), v = mvNow(k); v[0] += dir[0]; v[1] += dir[1];
+      mvSel = mvFocus = k; if (hooks.picked) hooks.picked(k); mvSave(k, v);
+      return true;
+    }
+    // A dashed ring round the piece the builder is working on.
+    function mvRing() {
+      var old = R.svg && R.svg.querySelector('#cm-mvring'); if (old) old.remove();
+      if (!R.model.edit || !mvSel || !R.svg || where !== 'counter') return;
+      var m = R.svg.getScreenCTM(), els = R.svg.querySelectorAll('[data-mvk="' + mvSel + '"]'); if (!m || !els.length) return;
+      var inv = m.inverse(), x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      [].forEach.call(els, function (el) {
+        var b = el.getBoundingClientRect(); if (!b.width) return;
+        [[b.left, b.top], [b.right, b.bottom]].forEach(function (c) { var p = R.svg.createSVGPoint(); p.x = c[0]; p.y = c[1]; p = p.matrixTransform(inv); x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+      });
+      if (!isFinite(x0)) return;
+      var r = document.createElementNS(NS, 'rect');
+      [['id', 'cm-mvring'], ['class', 'cm-mvring'], ['x', f1(x0 - 6)], ['y', f1(y0 - 6)], ['width', f1(x1 - x0 + 12)], ['height', f1(y1 - y0 + 12)], ['rx', 8], ['pointer-events', 'none']].forEach(function (a) { r.setAttribute(a[0], a[1]); });
+      R.svg.appendChild(r);
     }
     function onContext(e) { var t = target(e); if (!t) return; e.preventDefault(); openMenu(t, e); }
     function onKey(e) {
+      if (mvKey(e)) return;
       var t = target(e); if (!t) return;
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); press(t, e); }
       else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openMenu(t); }
     }
-    function onFocus(e) { var t = target(e); if (t && !pinned) showCard(t); }
+    function onFocus(e) {
+      var g = R.model.edit && e.target.closest && e.target.closest('[data-mvon]');
+      if (g) { mvSel = g.getAttribute('data-mvk'); mvRing(); if (hooks.picked) hooks.picked(mvSel); return; }
+      var t = target(e); if (t && !pinned) showCard(t);
+    }
     function onDocDown(e) { if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu(); }
     // Arrow keys turn between the counter and the shop floor while the shop is open.
     function onDocKey(e) {
@@ -2191,6 +2303,7 @@
       if (e.key === 'ArrowLeft' && where === 'counter') { e.preventDefault(); go('floor', 'left'); }
       else if (e.key === 'ArrowRight' && where === 'floor') { e.preventDefault(); go('counter', 'right'); }
     }
+    stage.addEventListener('pointerdown', onMvDown);
     stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerleave', onLeave); stage.addEventListener('click', onClick);
     stage.addEventListener('contextmenu', onContext); stage.addEventListener('keydown', onKey); stage.addEventListener('focusin', onFocus);
     document.addEventListener('pointerdown', onDocDown, true); document.addEventListener('keydown', onDocKey);
@@ -2212,6 +2325,10 @@
       veilT = setTimeout(function () { if (stage.classList.contains('src-baking')) stage.classList.add('src-veil'); }, 60);
       bake(s, defs, function () { if (R.svg !== s) return; clearTimeout(veilT); stage.classList.remove('src-baking', 'src-veil'); prebake(); });
       view.afterDraw(); view.hint(); addNav(); camApply(); liveMount(s);
+      if (which !== 'counter' || !R.model.edit) mvSel = '';
+      // After a nudge redraws the room, the piece keeps the keyboard; the ring waits a frame for the page to lay it out.
+      if (mvFocus) { var f = s.querySelector('[data-mvk="' + mvFocus + '"][data-mvon]'); mvFocus = ''; if (f) f.focus({ preventScroll: true }); }
+      requestAnimationFrame(function () { if (R.svg === s) mvRing(); });
     }
     /* The live sky: each box the room drew outside a baked layer gets the
        campaign's sky. Once the calendar is read, a room lit for another hour
@@ -2324,7 +2441,7 @@
       where: function () { return where; },
       go: go,
       destroy: function () {
-        pause(true); liveDrop(); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
+        pause(true); liveDrop(); onMvUp(); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
         document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey);
         host.innerHTML = '';
       }
@@ -2340,7 +2457,7 @@
   function call(host, fn, a) { var c = host && host._counter; return c ? c[fn](a) : false; }
   window.ShopRoomCounter = {
     render: render, layout: layout, starters: CM_STARTERS, starterFor: starterFor, normalise: cmNorm,
-    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside, scene: CM_OPT.scene }, picture: CM_PIC, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
+    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside, scene: CM_OPT.scene }, picture: CM_PIC, move: CM_MOVE, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
     // What the parts packs are written with: the room's tables and its drawing helpers.
     kit: { CM_SCENES: CM_SCENES, CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
     sync: function (host, model) { if (host && host._counter) host._counter.update(model); },

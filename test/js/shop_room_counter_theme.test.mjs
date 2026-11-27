@@ -108,6 +108,20 @@ test("the owner's picture is kept only as a media id, with known placements", ()
   assert.equal('picture' in plain(C.normalise(base)).theme, false, 'a theme without one gains none');
 });
 
+test("the owner's moves are kept for the shelves and the room's own props, clamped and rounded", () => {
+  const base = plain(C.starters[0]);
+  const withMoves = (moves) => plain(C.normalise(Object.assign({}, base, { props: ['anvil', 'sparks'], moves })));
+  const t = withMoves({ sparks: [0, 0, 1], display: [120.4, -2.5, 1.204], anvil: [-9000, 9000, 7], dragon: [5, 5, 1], banner: [40, 0, 1] });
+  assert.deepEqual(t.moves, { anvil: [-600, 350, 2], display: [120, -2, 1.2] }, 'no-op moves and props not in the room are dropped');
+  assert.deepEqual(Object.keys(t.moves), ['anvil', 'display'], 'kept in key order, as the server writes them');
+  for (const bad of [null, 'x', [], { display: [1, 2] }, { display: ['left', 0, 1] }, { display: [0, 0, 1] }, { display: [NaN, 0, 1] }]) {
+    assert.equal('moves' in withMoves(bad), false, 'no moves from ' + JSON.stringify(bad));
+  }
+  const m = goValidate.match(/shopRoomCounterMove = struct\{[^}]*\}\{([^}]*)\}/);
+  assert.ok(m, 'server bounds');
+  assert.deepEqual(m[1].split(',').map(Number), [C.options.move.x, C.options.move.y, C.options.move.min, C.options.move.max], 'the server bounds a move as the widget does');
+});
+
 test('the widget offers the options the server accepts', () => {
   const O = C.options;
   assert.deepEqual([...O.skeleton.shape].sort(), goSet('shopRoomCounterShapes'));
