@@ -1758,7 +1758,8 @@
       this.fvEl = $('#cal5-fv', this.el);
     },
 
-    // action, optional: {label, run} adds a button to the toast (Undo).
+    // action, optional: {label, run} adds a button to the toast (Undo);
+    // sticky keeps it up, with a close mark, until it is dismissed.
     say: function (msg, action) {
       this._announce(msg);
       this._toast(msg, action);
@@ -2108,17 +2109,21 @@
       if (!el) {
         el = document.createElement('div');
         el.className = 'toast';
-        el.innerHTML = '<span></span><button type="button" hidden></button>';
+        el.innerHTML = '<span></span><button type="button" hidden></button>' +
+          '<button type="button" class="tx" aria-label="Dismiss" title="Dismiss" hidden><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
         this.calEl.appendChild(el);
         this._toastEl = el;
-        el.querySelector('button').addEventListener('click', function () {
-          var run = el._run;
+        el.addEventListener('click', function (e) {
+          var b = e.target.closest('button');
+          if (!b) return;
+          var run = b.classList.contains('tx') ? null : el._run;
           el._run = null;
           el.classList.remove('on');
           if (run) run();
         });
       }
       var btn = el.querySelector('button');
+      el.querySelector('.tx').hidden = !(action && action.sticky);
       el.querySelector('span').textContent = msg;
       btn.hidden = !action;
       btn.textContent = action ? action.label : '';
@@ -2151,7 +2156,7 @@
       el.querySelector('span').setAttribute('aria-hidden', 'true');
       el.classList.add('on');
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
+      if (!(action && action.sticky)) this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
     },
 
     // --------------------------------------------------------------

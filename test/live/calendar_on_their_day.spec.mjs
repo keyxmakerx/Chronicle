@@ -230,9 +230,15 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   };
   await keep.click();
   await keptAll();
-  const undo = page.getByRole('button', { name: 'Undo' });
+  // The toast's Undo stays until it is dismissed, and the year's foot keeps
+  // a second one for as long as the page is open.
+  const undo = page.locator('.toast').getByRole('button', { name: 'Undo', exact: true });
+  const footUndo = page.locator('[data-yt="undo"]');
   await undo.waitFor();
   assert.match(await page.locator('body').innerText(), /Kept \d+ events?/);
+  assert.equal(await footUndo.innerText(), 'Undo the fill');
+  await page.waitForTimeout(9000);
+  assert.ok(await undo.isVisible(), 'the toast took its Undo away by itself');
 
   const kept = await yearEvents(owner, base, cal.current_year, months);
   assert.ok(kept.length > 0, 'Keep saved no events');
@@ -261,6 +267,7 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   assert.deepEqual(writes, ['POST /events/batch 200'], `Undo was not one request: ${writes.join(', ')}`);
   writes.length = 0;
   assert.equal((await yearEvents(owner, base, cal.current_year, months)).length, 0, 'Undo left events behind');
+  await footUndo.waitFor({ state: 'detached' });
 
   // A second fill replaces the first one's events instead of stacking on them.
   const fill = page.getByRole('button', { name: 'Fill the rest of the year' });
@@ -284,8 +291,11 @@ test('fill the rest of the year, keep it, see it director-only, and undo it', as
   assert.equal(second.filter((e) => firstIds.has(e.id)).length, 0, 'events of the first fill are still there after the second');
   assert.ok(second.length > 0, 'the second fill saved no events');
 
-  // Undoing the second fill puts the first back, still director-only and still marked.
-  await undo.click();
+  // Undoing the second fill puts the first back, still director-only and
+  // still marked, here from the year's foot once the toast is dismissed.
+  await page.locator('.toast .tx').click();
+  await undo.waitFor({ state: 'hidden', timeout: 2000 });
+  await footUndo.click();
   await page.locator('#cal5-live').filter({ hasText: 'Undone.' }).waitFor();
   const back = await yearEvents(owner, base, cal.current_year, months);
   assert.equal(back.length, first.length, 'Undo did not put the first fill back');
