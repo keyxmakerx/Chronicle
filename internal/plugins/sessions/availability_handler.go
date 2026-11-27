@@ -62,7 +62,9 @@ func (h *Handler) ShowAvailability(c *echo.Context) error {
 	userID := auth.GetUserID(c)
 	csrf := middleware.GetCSRFToken(c)
 	canSeeDetail := cc.MemberRole >= campaigns.RoleOwner || cc.IsDmGranted
-	storedTZ := h.resolveViewerTZ(c, userID)
+	// No UTC fallback here: an empty zone lets the page use the browser's,
+	// so a player who never set one paints in their own clock, not UTC's.
+	storedTZ := h.knownViewerTZ(c, userID)
 	return middleware.Render(c, http.StatusOK,
 		AvailabilityPage(cc, csrf, canSeeDetail, userID, storedTZ))
 }
@@ -78,10 +80,30 @@ func (h *Handler) GetMyAvailabilityAPI(c *echo.Context) error {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	if resp.TZ == "" {
-		// No pattern saved yet — seed the editor with the member's stored zone.
-		resp.TZ = h.resolveViewerTZ(c, userID)
+		// No pattern saved yet: seed the editor with the member's stored zone,
+		// or none, so the editor uses the browser's rather than UTC.
+		resp.TZ = h.knownViewerTZ(c, userID)
 	}
+	resp.AccountTZ = h.storedTZ(c.Request().Context(), userID)
 	return c.JSON(http.StatusOK, resp)
+}
+
+// ConfirmMyZoneAPI answers the one-time question about which zone the
+// member's weekly hours are in (see ConfirmZoneRequest).
+// POST /campaigns/:id/availability/mine/zone
+func (h *Handler) ConfirmMyZoneAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "campaign not found"})
+	}
+	var req ConfirmZoneRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if err := h.svc.ConfirmMyAvailabilityZone(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), req); err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // SaveMyAvailabilityAPI replaces the current user's recurring pattern.
@@ -454,6 +476,27 @@ func (h *Handler) resolveViewerTZ(c *echo.Context, userID string) string {
 // first: for most players it is the only zone they ever set. Then their
 // account's, then UTC.
 func (h *Handler) memberTZ(ctx context.Context, campaignID, userID string) string {
+	if tz := h.knownMemberTZ(ctx, campaignID, userID); tz != "" {
+		return tz
+	}
+	return "UTC"
+}
+
+// knownViewerTZ is resolveViewerTZ without the UTC fallback: "" when the
+// member has set no zone anywhere.
+func (h *Handler) knownViewerTZ(c *echo.Context, userID string) string {
+	if tz := c.QueryParam("tz"); timeutil.IsValidLocation(tz) {
+		return tz
+	}
+	campaignID := ""
+	if cc := campaigns.GetCampaignContext(c); cc != nil && cc.Campaign != nil {
+		campaignID = cc.Campaign.ID
+	}
+	return h.knownMemberTZ(c.Request().Context(), campaignID, userID)
+}
+
+// knownMemberTZ is memberTZ without the UTC fallback.
+func (h *Handler) knownMemberTZ(ctx context.Context, campaignID, userID string) string {
 	if campaignID != "" && userID != "" {
 		if zones, err := h.svc.CampaignMemberZones(ctx, campaignID); err == nil {
 			if tz := zones[userID]; tz != "" {
@@ -461,10 +504,7 @@ func (h *Handler) memberTZ(ctx context.Context, campaignID, userID string) strin
 			}
 		}
 	}
-	if tz := h.storedTZ(ctx, userID); tz != "" {
-		return tz
-	}
-	return "UTC"
+	return h.storedTZ(ctx, userID)
 }
 
 // viewerDays gives today's date where a member is, campaign by campaign, as

@@ -301,12 +301,14 @@ func homesLine(c *Campaign, in DeskInputs) DeskLine {
 }
 
 // tabLine is an area another plugin adds, with the words that plugin gives
-// for what is chosen now. A plugin that gives none shows its name and the
-// chevron alone.
+// for what is chosen now. A plugin that gives none shows what the area
+// holds instead, so the row is never just a name and a chevron.
 func tabLine(c *Campaign, t DeskTab) DeskLine {
 	v := figureValue(t.Summary.Text, "", deskHref(c.ID, "/customize/x/"+t.ID))
 	if t.Summary.Text != "" {
 		v.Sub, v.Joined = t.Summary.Sub, true
+	} else {
+		v.Sub = t.Blurb
 	}
 	return DeskLine{ID: "x-" + t.ID, Name: t.Label, Values: []DeskValue{v}}
 }

@@ -40,9 +40,13 @@ An item's parent is determined by checking (in order):
 Each list sorts by its own order: the category's top level reads
 `data-root-order` on `#sidebar-entity-tree`, a folder or page reads
 `data-child-order` on its row (copied to its children container as
-`data-order`); none means A to Z. `sortChildren(nodes, mode)` always puts
-folders first, then: `az` by name, `hand` by `data-sort-order`, `new` by
-`data-created`, newest first.
+`data-order`); none means A to Z. `sortChildren(nodes, mode)` puts pinned
+pages first (`data-pinned`, the pin's position), then folders, then: `az` by
+name, `hand` by `data-sort-order`, `new` by `data-created`, newest first.
+`markPinLast` puts `is-pin-last` (a thin rule) on a list's last pinned page
+when rows follow it. A pinned page has no arrows and is never stepped over;
+the row menu's "Pin to top" / "Unpin" is offered when the tree carries
+`data-can-pin` (the Director team) and calls `PUT /sidebar-pins`.
 
 In a list kept by hand, someone who may edit (`data-can-edit`) gets up and
 down arrows (`.tree-step`) left of a row's dots, and Alt+Up/Down on a focused
@@ -100,6 +104,7 @@ are appended and the tree is re-initialized.
 
 - `PUT /campaigns/:id/sidebar-order` — a list's order `{kind, id, mode}`
 - `PUT /campaigns/:id/sidebar-order/move` — `{kind, id, next_to, after}`
+- `PUT /campaigns/:id/sidebar-pins` — `{entity_id, pinned}` (Director team)
 - `PUT /campaigns/:id/entities/:eid/reorder` and
   `PUT /campaigns/:id/sidebar-nodes/:nid/reorder` — a drop onto a folder
 - `PUT /campaigns/:id/entities/:eid/metadata` and

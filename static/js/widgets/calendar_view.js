@@ -577,6 +577,11 @@
       return { hm: pad2(+p.hour % 24) + ':' + p.minute, abbr: p.timeZoneName || '', date: p.year + '-' + p.month + '-' + p.day };
     } catch (e) { return null; }
   }
+  // "America/Chicago" as people say it: "Chicago". "UTC" stays.
+  function zoneCity(zone) {
+    var s = String(zone || '').split('/').pop().replace(/_/g, ' ');
+    return s || 'UTC';
+  }
   function browserZone() {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
   }
@@ -1621,6 +1626,7 @@
       this.renderLegend();
       this._openFromLink();
       this.loadWaiting();
+      this._zoneCheck();
 
       // Hand the instance to calendar_editor.js (loaded only for an
       // Owner/co-Director viewer) without assuming load order.
@@ -1698,6 +1704,7 @@
               '</div>' +
             '</div>' +
           '</header>' +
+          (this.freeCan ? '<div class="zstrip" id="cal5-zstrip" role="region" aria-label="Your hours’ time zone" hidden></div>' : '') +
           '<div class="eratip" id="cal5-eratip" role="tooltip" hidden></div>' +
           '<div class="erapanel" id="cal5-erapanel" role="region" aria-label="Era" hidden></div>' +
           '<div class="pollbar" id="cal5-pollbar" role="region" aria-label="New date poll" hidden></div>' +
@@ -1751,7 +1758,8 @@
       this.fvEl = $('#cal5-fv', this.el);
     },
 
-    // action, optional: {label, run} adds a button to the toast (Undo).
+    // action, optional: {label, run} adds a button to the toast (Undo);
+    // sticky keeps it up, with a close mark, until it is dismissed.
     say: function (msg, action) {
       this._announce(msg);
       this._toast(msg, action);
@@ -2101,17 +2109,21 @@
       if (!el) {
         el = document.createElement('div');
         el.className = 'toast';
-        el.innerHTML = '<span></span><button type="button" hidden></button>';
+        el.innerHTML = '<span></span><button type="button" hidden></button>' +
+          '<button type="button" class="tx" aria-label="Dismiss" title="Dismiss" hidden><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
         this.calEl.appendChild(el);
         this._toastEl = el;
-        el.querySelector('button').addEventListener('click', function () {
-          var run = el._run;
+        el.addEventListener('click', function (e) {
+          var b = e.target.closest('button');
+          if (!b) return;
+          var run = b.classList.contains('tx') ? null : el._run;
           el._run = null;
           el.classList.remove('on');
           if (run) run();
         });
       }
       var btn = el.querySelector('button');
+      el.querySelector('.tx').hidden = !(action && action.sticky);
       el.querySelector('span').textContent = msg;
       btn.hidden = !action;
       btn.textContent = action ? action.label : '';
@@ -2144,7 +2156,7 @@
       el.querySelector('span').setAttribute('aria-hidden', 'true');
       el.classList.add('on');
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
+      if (!(action && action.sticky)) this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
     },
 
     // --------------------------------------------------------------
@@ -4181,6 +4193,122 @@
       if (body) body.scrollTop = top;
     },
 
+    // --------------------------------------------------------------
+    // Which zone are your hours in? Hours saved under a zone other than the
+    // viewer's own (their account's, or failing that their browser's) are
+    // asked about once: the boxes may have been meant in their own clock,
+    // in which case the Director sees them shifted. A strip at the top of
+    // the calendar names the hours in the viewer's clock; the hours panel
+    // carries all three answers.
+    // --------------------------------------------------------------
+    _zoneAsk: function () {
+      var mine = this.mine, to = mine && (mine.accountTz || browserZone());
+      if (!mine || !mine.answered || mine.zoneConfirmed || !mine.tz || !to || to === mine.tz) return null;
+      var blocks = mine.blocks || [];
+      if (!blocks.length) return null;
+      var now = Date.now(), shift;
+      try { shift = zoneOffsetMin(to, now) - zoneOffsetMin(mine.tz, now); } catch (e) { return null; }
+      if (!shift) return null;
+      // The start most of their days share, and those days.
+      var byStart = {};
+      blocks.forEach(function (b) { (byStart[b.startMinute] = byStart[b.startMinute] || []).push(b); });
+      var start = +Object.keys(byStart).sort(function (a, b) { return byStart[b].length - byStart[a].length || a - b; })[0];
+      var group = byStart[start], ends = {}, days = {};
+      group.forEach(function (b) { ends[b.endMinute] = 1; days[b.dayOfWeek] = 1; });
+      var end = Object.keys(ends).length === 1 ? group[0].endMinute : null;
+      var d = Object.keys(days).map(Number).sort(), part = start < 720 ? 'mornings' : start < 1020 ? 'afternoons' : 'evenings';
+      var names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      var when = d.join() === '1,2,3,4,5' ? 'weekday ' + part
+        : d.join() === '0,6' ? 'weekend ' + part
+        : d.length === 1 ? names[d[0]] + ' ' + part
+        : part + ' on ' + d.length + ' days';
+      var wrap = function (m) { return ((m % 1440) + 1440) % 1440; };
+      var say = function (m) { m = wrap(m); return m === 720 ? 'noon' : m === 0 ? 'midnight' : ampm(m); };
+      var seen = say(start + shift) + (end != null ? ' to ' + say(end + shift) : '');
+      return { from: mine.tz, to: to, when: when, start: say(start), seen: seen };
+    },
+
+    _zoneCheck: function () {
+      var self = this;
+      if (!this.freeCan) return;
+      this.fetchMine().then(function () { self._paintZoneStrip(); });
+    },
+
+    _zoneSkipKey: function () { return 'chronicle.calendar.zoneNotNow.' + this.campaignId; },
+
+    _paintZoneStrip: function () {
+      var el = this.el.querySelector('#cal5-zstrip');
+      if (!el) return;
+      var a = this._zoneAsk(), skipped = false;
+      try { skipped = window.sessionStorage.getItem(this._zoneSkipKey()) === '1'; } catch (e) { /* asked again */ }
+      if (!a || skipped) { el.hidden = true; el.innerHTML = ''; return; }
+      var self = this, city = zoneCity(a.to);
+      var who = this.role >= ROLE_OWNER ? 'Your calendar shows' : 'The ' + Chronicle.gmTerm() + ' sees';
+      el.innerHTML = '<div><b>Are your hours in ' + esc(city) + ' time?</b>' +
+        '<p>You painted ' + esc(a.when) + ' from ' + esc(a.start) + ', saved as ' + esc(zoneCity(a.from)) + ' time. ' + esc(who) + ' that as ' + esc(a.seen) + '.</p></div>' +
+        '<div class="zacts"><button type="button" class="btn sm primary" data-zone-answer="relabel">Yes, ' + esc(city) + ' time</button>' +
+        '<button type="button" class="btn sm" data-zone-more>Other answers</button>' +
+        '<button type="button" class="btn sm quiet" data-zone-later>Not now</button></div>';
+      el.hidden = false;
+      if (!el._wired) {
+        el._wired = true;
+        el.addEventListener('click', function (e) {
+          var t = e.target.closest('button');
+          if (!t) return;
+          if (t.hasAttribute('data-zone-later')) {
+            try { window.sessionStorage.setItem(self._zoneSkipKey(), '1'); } catch (er) { /* this view only */ }
+            self._paintZoneStrip();
+          } else if (t.hasAttribute('data-zone-more')) {
+            self.openPlanner({ paint: true });
+          } else if (t.dataset.zoneAnswer) {
+            self._zoneAnswer(t.dataset.zoneAnswer, t);
+          }
+        });
+      }
+    },
+
+    // The three answers, at the top of the viewer's hours.
+    _zoneAskHTML: function () {
+      var a = this._zoneAsk();
+      if (!a) return '';
+      var city = zoneCity(a.to), from = zoneCity(a.from);
+      return '<div class="zask" role="group" aria-labelledby="cal5-zaskh"><b id="cal5-zaskh">Which time zone are these hours in?</b>' +
+        '<p>They were saved as ' + esc(from) + ' time, but you’re set to ' + esc(city) + '. Your ' + esc(a.when) + ' read as ' + esc(a.seen) + ' ' + esc(city) + ' time.</p>' +
+        '<div class="zch">' +
+          '<button type="button" class="rec" data-zone-answer="relabel"><span class="t">' + esc(city) + ' time: keep my boxes</span><span class="s">Your ' + esc(a.when) + ' stay from ' + esc(a.start) + ', now in ' + esc(city) + ' time</span></button>' +
+          '<button type="button" data-zone-answer="convert"><span class="t">They were ' + esc(from) + ': convert them to ' + esc(city) + '</span><span class="s">The boxes move to ' + esc(a.seen) + '</span></button>' +
+          '<button type="button" data-zone-answer="keep"><span class="t">Keep ' + esc(from) + '</span><span class="s">Nothing changes</span></button>' +
+        '</div></div>';
+    },
+
+    _zoneAnswer: function (mode, btn) {
+      var self = this, a = this._zoneAsk();
+      if (!a || this._zoneBusy) return;
+      this._zoneBusy = true;
+      if (btn) btn.disabled = true;
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/mine/zone', { method: 'POST', body: { mode: mode, tz: a.to } })
+        .then(function (resp) {
+          if (!resp.ok) return Promise.reject();
+          // Everything that read the old hours reads them again.
+          self._minePromise = null;
+          self._freeWeeks = {};
+          self.freeByDate = {};
+          return self.fetchMine();
+        })
+        .then(function () {
+          self._zoneBusy = false;
+          self._paintZoneStrip();
+          if (self.plannerOpen()) { self._plLoadGrid(); self.refreshPlanner(); }
+          self.fetchFreeMonth(self.view.y, self.view.m).then(function () { self._paintMonth(); self.refreshWing(); });
+          self.say(mode === 'keep' ? 'Your hours stay in ' + zoneCity(a.from) + ' time.' : 'Your hours are now in ' + zoneCity(a.to) + ' time.');
+        })
+        .catch(function () {
+          self._zoneBusy = false;
+          if (btn) btn.disabled = false;
+          self.say('That could not be saved. Try again.');
+        });
+    },
+
     // The viewer's own painted hours (the Availability page's pattern),
     // read once per page; a player's view says whether they have given
     // them yet.
@@ -4798,7 +4926,7 @@
       var self = this, zone = (this.mine && this.mine.tz) || browserZone() || '', alt = this._plAlt;
       var tools = [['available', 'Free'], ['preferred', 'Best'], ['', 'Clear']];
       var inZone = zone ? ', in ' + esc(zone.replace(/_/g, ' ')) + ' time' : '';
-      var h = '<section class="dsec"><h4>Your hours</h4>' +
+      var h = '<section class="dsec"><h4>Your hours</h4>' + this._zoneAskHTML() +
         '<div class="rseg plalt" role="group" aria-label="How your hours repeat">' +
           '<button type="button" data-pl-alt="0" aria-pressed="' + !alt + '">Same every week</button>' +
           '<button type="button" data-pl-alt="1" aria-pressed="' + alt + '">Alternating weeks</button></div>' +
@@ -4877,6 +5005,8 @@
     _plClick: function (e) {
       var self = this, t = e.target;
       if (t.closest('[data-pl-close]')) { this.closePlanner(); return; }
+      var za = t.closest('[data-zone-answer]');
+      if (za) { this._zoneAnswer(za.dataset.zoneAnswer, za); return; }
       var tab = t.closest('[data-pl-tab]');
       if (tab) { this._plPaint = tab.dataset.plTab === 'mine'; this.refreshPlanner(); return; }
       var tool = t.closest('[data-pl-tool]');

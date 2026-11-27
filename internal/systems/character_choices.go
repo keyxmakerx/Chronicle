@@ -90,6 +90,9 @@ type Choice struct {
 	// LookChanged marks a package entry whose card_border / card_colour are the
 	// owner's choice, not the package's.
 	LookChanged bool `json:"-"`
+	// Pinned marks an entry the Director team put first in the list. Every
+	// reader gets it: the pinned entries lead, and a screen sets them apart.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -365,6 +368,8 @@ type CharacterChoiceService interface {
 	// SetChoiceLooks plugs in the owner's card borders for package entries.
 	// Every list then carries them, whoever reads it.
 	SetChoiceLooks(r CardLookReader)
+	// SetChoicePins plugs in the Director team's pins, which lead every list.
+	SetChoicePins(r ChoicePinReader)
 }
 
 type characterChoiceService struct {
@@ -374,11 +379,14 @@ type characterChoiceService struct {
 	dirOf     func(id string) string
 	limiter   ChoiceLimiter
 	looks     CardLookReader
+	pins      ChoicePinReader
 }
 
 func (s *characterChoiceService) SetChoiceLimiter(l ChoiceLimiter) { s.limiter = l }
 
 func (s *characterChoiceService) SetChoiceLooks(r CardLookReader) { s.looks = r }
+
+func (s *characterChoiceService) SetChoicePins(r ChoicePinReader) { s.pins = r }
 
 // NewCharacterChoiceService wires the service to the live system registry,
 // the campaign's addon switches and its custom uploaded system (either may
@@ -530,6 +538,8 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 			return nil, err
 		}
 	}
+	// Pins go on last, over the list each reader is actually served.
+	s.applyPins(ctx, campaignID, res)
 	res.CanMake = !choiceVisitor(ctx) && canMakeOwn(ctx, campaignID, fieldKey)
 	return res, nil
 }

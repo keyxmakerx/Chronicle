@@ -548,14 +548,15 @@ func (g armoryCraftGate) CanCraft(ctx context.Context, campaignID, characterID s
 	return ok
 }
 
-// registerCraftingBlock adds the Crafting block a character page can carry:
-// the hero's projects and the recipes they know. It renders for the
+// registerCraftingBlock adds the Projects block a character page can carry:
+// the hero's projects and the recipes they know, named like Foundry's
+// Projects tab so the two sheets agree. It renders for the
 // Director and for the player who claimed the character, and for no one
 // else, so a stranger's page shows no empty block.
 func registerCraftingBlock(blockRegistry *entities.BlockRegistry, svc crafting.Service) {
 	blockRegistry.Register(entities.BlockMeta{
-		Type: crafting.BlockType, Label: "Crafting", Icon: "fa-flask", Picture: entities.PictureCounter,
-		Description: "The hero's crafting projects and the recipes they know",
+		Type: crafting.BlockType, Label: "Projects", Icon: "fa-flask", Picture: entities.PictureCounter,
+		Description: "The hero's projects and the recipes they know",
 		Addon:       crafting.AddonSlug,
 		Contexts:    []string{"template"},
 		TileSizes:   []string{"2x2", "4x2", "1x2"},

@@ -758,8 +758,19 @@
     if (!rest) foot.insertAdjacentHTML('afterbegin', '<div class="yt-rest">' + this.word('fill', 'Fill the rest of the year') + '<button type="button" class="yt-word" data-yt="copy">Copy this month</button></div>');
     this.syncRest();
   };
+  // What the standing Undo says, by what was kept.
+  var UNDO_WORDS = { fill: 'Undo the fill', copy: 'Undo the copy', history: 'Undo the history' };
   // "Copy this month" is quiet when the month on show has nothing to copy.
+  // The last thing kept stays undoable here for as long as the page is open,
+  // so the Undo never depends on catching the toast.
   P.syncRest = function () {
+    var rest = $('.yt-rest', this.foot), un = $('[data-yt="undo"]', this.foot);
+    if (un && (!this.kept || un.dataset.kind !== this.kept.kind)) { un.remove(); un = null; }
+    if (rest && this.kept && !un) {
+      rest.insertAdjacentHTML('beforeend', '<button type="button" class="yt-word" data-yt="undo" data-kind="' + esc(this.kept.kind) + '">' + esc(UNDO_WORDS[this.kept.kind] || 'Undo') + '</button>');
+      un = $('[data-yt="undo"]', this.foot);
+    }
+    if (un) un.disabled = this.busy;
     var cp = $('[data-yt="copy"]', this.foot);
     if (!cp || !this.canGen) return;
     var v = this.view, here = v.view.y === this.now().year ? this.monthEventsToCopy(v.view.y, v.view.m).length : 0;
@@ -788,6 +799,7 @@
     if (!g || g.disabled || g.closest('.yt-barwrap')) return;
     var a = g.dataset.yt, v = this.view;
     if (a === 'fill') this.fill(g);
+    else if (a === 'undo') { if (this.kept) this.undo(this.kept); }
     else if (a === 'copy') {
       var n = this.monthEventsToCopy(v.view.y, v.view.m).length;
       this.picking = { month: v.view.m, n: n }; this.draw({});
@@ -1382,7 +1394,7 @@
     }
     this.busy = true;
     this.workingBar();
-    var rec = { created: [], removed: removed, retired: retired.map(function (e) { return { id: e.id, was: endOf(e) }; }), wx: [], prev: D.wxPrev || {} }, ok = false, status = 0;
+    var rec = { kind: D.kind, created: [], removed: removed, retired: retired.map(function (e) { return { id: e.id, was: endOf(e) }; }), wx: [], prev: D.wxPrev || {} }, ok = false, status = 0;
     var items = evs.map(function (e) { return { e: e, body: createBody(e, { lane: laneOf(e), onDay: D.see === 'day' }) }; });
     var put = wx.map(function (w2) {
       var b = G.weather.toWeatherInput(w2);
@@ -1431,7 +1443,10 @@
     this.render({ kept: ok });
     v.renderMonth();
     var did = ok && (rec.created.length || rec.removed.length || rec.retired.length || rec.wx.length);
-    v.say(msg, did ? { label: 'Undo', run: function () { self.undo(rec); } } : null);
+    // The toast's Undo waits until it is dismissed or the page is left, and
+    // the foot keeps a second one (syncRest) in case a later message covers it.
+    if (did) { this.kept = rec; this.syncRest(); }
+    v.say(msg, did ? { label: 'Undo', sticky: true, run: function () { self.undo(rec); } } : null);
   };
 
   // Undo takes away what Keep created, puts back what it replaced, and clears
@@ -1440,11 +1455,16 @@
     var self = this, v = this.view;
     if (this.busy) { v.say('Wait a moment, then press Undo again.'); return; }
     this.busy = true;
+    this.syncRest();
     var failed = false, status = 0;
     this.batch(undoBatchBody(rec)).catch(function (err) { failed = true; status = err && err.status || 0; })
       .then(function () { return self.reload(); })
       .then(function () {
         self.busy = false;
+        // Undone, or unknown (no answer: it may have happened, and a second
+        // Undo would put back what it replaced twice), it is no longer
+        // offered. A refusal changed nothing, so the foot's Undo stays.
+        if (self.kept === rec && (!failed || !status)) self.kept = null;
         self.setPreview();
         self.render({});
         v.renderMonth();

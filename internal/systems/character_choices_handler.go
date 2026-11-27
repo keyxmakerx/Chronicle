@@ -13,12 +13,45 @@ import (
 
 // CharacterChoiceHandler serves the pick lists for character fields.
 type CharacterChoiceHandler struct {
-	svc CharacterChoiceService
+	svc  CharacterChoiceService
+	pins ChoicePinService
 }
 
 // NewCharacterChoiceHandler creates the handler.
 func NewCharacterChoiceHandler(svc CharacterChoiceService) *CharacterChoiceHandler {
 	return &CharacterChoiceHandler{svc: svc}
+}
+
+// SetPins wires the Director team's pins. Without it the pin route refuses.
+func (h *CharacterChoiceHandler) SetPins(p ChoicePinService) { h.pins = p }
+
+// SetPinAPI pins an entry of a pick list first, or unpins it, and answers with
+// the list's pins in order. The service refuses anyone below the Director
+// team; the route lets every member reach it so that answer is one place.
+//
+// PUT /campaigns/:id/character-choices/:fieldKey/pins
+func (h *CharacterChoiceHandler) SetPinAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.pins == nil {
+		return apperror.NewNotFound("pins are not available")
+	}
+	var req struct {
+		Source string `json:"source"`
+		Key    string `json:"key"`
+		Pinned bool   `json:"pinned"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	pins, err := h.pins.SetPinned(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly(),
+		c.Param("fieldKey"), req.Source, req.Key, req.Pinned)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"pins": pins})
 }
 
 // ChoicesAPI returns the pick list for one character field.
@@ -76,4 +109,5 @@ func RegisterCharacterChoiceRoutes(e *echo.Echo, h *CharacterChoiceHandler, auth
 		campaigns.RequireRole(campaigns.RolePlayer),
 	)
 	g.GET("/:fieldKey", h.ChoicesAPI)
+	g.PUT("/:fieldKey/pins", h.SetPinAPI)
 }

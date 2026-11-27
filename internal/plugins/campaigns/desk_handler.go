@@ -48,7 +48,7 @@ func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
 		}
 	}
 	for _, t := range h.customizeTabsOn(cc, in.Addons) {
-		in.Tabs = append(in.Tabs, DeskTab{ID: t.ID, Label: t.Label, Summary: t.summary(ctx)})
+		in.Tabs = append(in.Tabs, DeskTab{ID: t.ID, Label: t.Label, Summary: t.summary(ctx), Blurb: t.Blurb})
 	}
 	in.BrushHidden = h.brushHidden(ctx, auth.GetUserID(c), cc.Campaign.ID)
 	return in

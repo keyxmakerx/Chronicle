@@ -230,3 +230,25 @@ func TestOverlayMembers_BatchesAccountZones(t *testing.T) {
 		})
 	}
 }
+
+// A member with no zone anywhere gets none from knownMemberTZ, so the hours
+// editors fall back to the browser's zone instead of saving their hours as
+// UTC; memberTZ still answers UTC for the places that must draw in a zone.
+func TestKnownMemberTZ_LeavesAnUnsetZoneEmpty(t *testing.T) {
+	h := zoneHandler([]string{"neither", "accounter"}, nil, map[string]string{"accounter": "America/Chicago"})
+	ctx := context.Background()
+	cases := []struct {
+		user, known, member string
+	}{
+		{"neither", "", "UTC"},
+		{"accounter", "America/Chicago", "America/Chicago"},
+	}
+	for _, tc := range cases {
+		if got := h.knownMemberTZ(ctx, "c1", tc.user); got != tc.known {
+			t.Errorf("knownMemberTZ(%s) = %q, want %q", tc.user, got, tc.known)
+		}
+		if got := h.memberTZ(ctx, "c1", tc.user); got != tc.member {
+			t.Errorf("memberTZ(%s) = %q, want %q", tc.user, got, tc.member)
+		}
+	}
+}

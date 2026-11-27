@@ -260,11 +260,15 @@ templ Sidebar() {
 			@campaignNavBrand()
 			@campaignNavTop()
 			@campaignNavCategories()
-			@campaignNavManage()
-			if GetIsAdmin(ctx) {
-				@SiteAdminEntry()
-			}
-			@campaignNavFooter()
+			<!-- The foot of the menu: Campaign settings, Site admin and the
+			     footer, one block so the phone drawer can pin it in view. -->
+			<div class="nav-tail">
+				@campaignNavManage()
+				if GetIsAdmin(ctx) {
+					@SiteAdminEntry()
+				}
+				@campaignNavFooter()
+			</div>
 		} else {
 			<!-- Logo / Brand -->
 			<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">

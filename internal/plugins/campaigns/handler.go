@@ -494,14 +494,37 @@ func (h *Handler) Update(c *echo.Context) error {
 	}
 
 	input := UpdateCampaignInput(req)
+	fields := changedCampaignFields(cc.Campaign, req)
 
 	if _, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input); err != nil {
 		return err
 	}
 
-	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
+	h.logAudit(c, cc.Campaign.ID, "campaign.updated", map[string]any{"fields": fields})
 
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
+}
+
+// changedCampaignFields names the settings an edit changes, by field name
+// only: the activity log says which settings changed, never their values.
+func changedCampaignFields(was *Campaign, req UpdateCampaignRequest) []string {
+	fields := []string{}
+	if req.Name != nil && *req.Name != was.Name {
+		fields = append(fields, "name")
+	}
+	if req.Description != nil {
+		old := ""
+		if was.Description != nil {
+			old = *was.Description
+		}
+		if *req.Description != old {
+			fields = append(fields, "description")
+		}
+	}
+	if req.IsPublic != nil && *req.IsPublic != was.IsPublic {
+		fields = append(fields, "is_public")
+	}
+	return fields
 }
 
 // Delete moves a campaign to the site Trash (DELETE /campaigns/:id). The owner

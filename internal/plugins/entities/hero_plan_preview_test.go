@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v5"
@@ -34,11 +35,13 @@ func TestHeroPlanAPI_ViewAsPlayer(t *testing.T) {
 		cookie       bool
 		query        string
 		wantDirector bool
+		wantCanPin   bool
 	}{
-		{"director, preview off", campaigns.RoleOwner, false, "?preview=player", true},
-		{"director viewing as player on a player's page", campaigns.RoleOwner, true, "?preview=player", false},
-		{"director viewing as player in a Directors' tool", campaigns.RoleOwner, true, "", true},
-		{"player with a stray cookie", campaigns.RolePlayer, true, "?preview=player", false},
+		{"director, preview off", campaigns.RoleOwner, false, "?preview=player", true, true},
+		{"director viewing as player on a player's page", campaigns.RoleOwner, true, "?preview=player", false, false},
+		{"director viewing as player in a Directors' tool", campaigns.RoleOwner, true, "", true, true},
+		{"player with a stray cookie", campaigns.RolePlayer, true, "?preview=player", false, false},
+		{"scribe", campaigns.RoleScribe, false, "?preview=player", false, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -54,7 +57,8 @@ func TestHeroPlanAPI_ViewAsPlayer(t *testing.T) {
 			if tc.cookie {
 				req.AddCookie(&http.Cookie{Name: "chronicle_view_as_player", Value: "c1"})
 			}
-			c := e.NewContext(req, httptest.NewRecorder())
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 			c.SetPathValues(echo.PathValues{{Name: "id", Value: "c1"}})
 			c.Set("auth_user_id", "u1")
 			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: tc.role})
@@ -63,6 +67,11 @@ func TestHeroPlanAPI_ViewAsPlayer(t *testing.T) {
 			}
 			if p.director != tc.wantDirector || p.user != "u1" {
 				t.Fatalf("read for %q director=%v, want u1 director=%v", p.user, p.director, tc.wantDirector)
+			}
+			// The pin control is offered only to the Director team seeing
+			// the creator as themselves.
+			if got := strings.Contains(rec.Body.String(), `"canPin":true`); got != tc.wantCanPin {
+				t.Errorf("canPin = %v, want %v", got, tc.wantCanPin)
 			}
 		})
 	}
