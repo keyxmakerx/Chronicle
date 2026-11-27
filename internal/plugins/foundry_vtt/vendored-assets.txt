@@ -19,13 +19,13 @@ c5149e3891e6  static/js/widgets/shop_room_parts_places.js  shop
 e7e1dda536ae  static/js/widgets/shop_room_parts_strange.js  shop
 118bc019657c  static/js/widgets/shop_room_parts_trades.js  shop
 e30f8b7e86e4  static/js/widgets/sky_2d.js  sky
-5d729336f046  static/js/widgets/sky_events.js  sky
-0f2322e880a5  static/js/widgets/sky_gl.js  sky
+494946e9464a  static/js/widgets/sky_events.js  sky
+a59aa6874e84  static/js/widgets/sky_gl.js  sky
 eef7ec91a10b  static/js/widgets/sky_looks.js  sky
 2a530ca4278a  static/js/widgets/sky_moon.js  sky
-e36fb751ab70  static/js/widgets/sky_pane.js  sky
+e3ab11ccd3e8  static/js/widgets/sky_pane.js  sky
 81ce6bdff71f  static/js/widgets/sky_shaders.js  sky
-ebf8cd9d5570  static/js/widgets/sky_world.js  sky
+7b950d26f02e  static/js/widgets/sky_world.js  sky
 7c89a0bb6e26  internal/plugins/crafting/static/js/crafting_lib.js  crafting
 f54f053a1260  internal/plugins/crafting/static/js/crafting_tray.js  crafting
 a8cbf348587f  internal/plugins/crafting/static/js/crafting_block.js  crafting

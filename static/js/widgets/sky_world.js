@@ -159,7 +159,17 @@
       var dec = decOf(lon) + incl * D2R, H = s.H - TAU * p, a = altAz(H, dec);
       return { id: mo.id, mo: mo, p: p, lit: (1 - Math.cos(TAU * p)) / 2, alt: a.alt, az: a.az, dec: dec, H: H, v: vec(a.alt, a.az) };
     }
-    return { LAT: LAT, sun: sun, moon: moon, altAz: altAz, vec: vec, dayOfYear: dayOfYear };
+    // Local sidereal time (radians) at a moment: the hour angle of the stars' zero point, so a fixed point among the
+    // stars (a comet's head, a shower's radiant) turns with them.
+    function lst(year, month, day, h24) { var s = sun(year, month, day, h24); return s.H + s.lon; }
+    function starAt(ra, dec, lstRad) { var a = altAz(lstRad - ra, dec); return { alt: a.alt, az: a.az, v: vec(a.alt, a.az) }; }
+    // The point among the stars that stands at (alt, az) when the sidereal time is lstRad: starAt's inverse.
+    function fixAt(alt, az, lstRad) {
+      var dec = Math.asin(clamp(Math.sin(LAT) * Math.sin(alt) - Math.cos(LAT) * Math.cos(alt) * Math.cos(az), -1, 1));
+      var H = Math.atan2(Math.sin(az), Math.cos(az) * Math.sin(LAT) + Math.tan(alt) * Math.cos(LAT));
+      return { ra: lstRad - H, dec: dec };
+    }
+    return { LAT: LAT, sun: sun, moon: moon, altAz: altAz, vec: vec, dayOfYear: dayOfYear, lst: lst, starAt: starAt, fixAt: fixAt };
   }
   // A moon set by hand (the calendar plugin's moon_marks.go) has no cycle:
   // it holds its latest mark's state all day. handState is that state on

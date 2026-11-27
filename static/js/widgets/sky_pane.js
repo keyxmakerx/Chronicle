@@ -174,14 +174,20 @@
       return { mo: mo, m: m, up: m.alt > -6 * SW.D2R };
     });
     var dayEvents = EV.parseDayEvents(model.todayEvents);
-    var cam = EV.camFor(dayEvents, astro);
+    var cam = EV.camFor(dayEvents, astro, sun.az / SW.D2R);
     var overlay = EV.overlaysFor(dayEvents, astro);
 
     var L = { W: model.width, H: model.height, hor: model.height * .82, top: model.height * .07, az0: cam };
     var sp = SW.PROJ.at(L, sun.alt, sun.az);
-    var altDeg = sun.alt / SW.D2R, eve = h24 >= 12 ? 1 : 0;
-    var dark = SW.smooth01(4, -14, altDeg);
+    var sunDeg = sun.alt / SW.D2R, eve = h24 >= 12 ? 1 : 0;
     var R = SW.clamp(model.height * .11, 7, 26);
+    // A solar eclipse slides its moon over the sun before the moons are
+    // placed, and darkens the sky as if the sun had set.
+    var when = { cal: cal, tNow: tCont, sp: sp, R: R };
+    if (EV.pre) EV.pre(when, dayEvents);
+    var eSky = when.eclSky || when.ecl || 0;
+    var altDeg = eSky > 0 ? sunDeg + (Math.min(sunDeg, -7) - sunDeg) * Math.pow(eSky, 5) : sunDeg;
+    var dark = SW.smooth01(4, -14, altDeg);
     // A folding pane draws at every height it passes through, but shades its
     // moons once, at the height it rests at (restH), and scales them.
     var RS = model.restH ? SW.clamp(model.restH * .11, 7, 26) : R;
@@ -193,11 +199,17 @@
       if (harvest) { r *= 1.18; sr *= 1.18; }
       var shadow = null;
       if (up && overlay.eclipse[mo.id] != null) shadow = [0, 0, r * .55, overlay.eclipse[mo.id]];
-      var p = up ? PROJ_at(L, a.m.alt, a.m.az) : { x: 0, y: 0 };
+      var p = up ? PROJ_at(L, a.m.alt, a.m.az) : { x: 0, y: 0 }, m = a.m;
       var rot = up ? SW.moonTurn(L, a.m, sun) : 0;
+      // A moon crossing the sun turns its unlit side to us, whatever the
+      // calendar's phase says. With no moon named, the first moon crosses.
+      var E = when.eclMoon;
+      if (E && (E.id === mo.id || (E.id == null && i === 0))) {
+        p = { x: E.x, y: E.y }; r = sr = E.r; up = true; rot = 0; m = Object.assign({}, a.m, { p: 0, lit: 0 });
+      }
       // i: the moon's slot in the painter's atlas; past its four slots a
       // moon is drawn in the painted sky's drawn layer instead.
-      return { i: i < 4 ? i : -1, extra: i >= 4, mo: mo, m: a.m, up: up, x: p.x, y: p.y, r: r, sr: sr, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
+      return { i: i < 4 ? i : -1, extra: i >= 4, mo: mo, m: m, up: up, x: p.x, y: p.y, r: r, sr: sr, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
     });
 
     var weatherSpec = LOOKS.spec(model.dayWeather || cal.weather);
@@ -251,7 +263,8 @@
 
     var st = {
       P: P, L: L, W: model.width, H: model.height, wx: wx, t: tSeconds, look: look, rm: !!model.reduced, almanac: false,
-      sun: sun, sp: sp, alt: sun.alt, altEff: altDeg, dark: dark, R: R, sunHue: sunHue,
+      sun: sun, sp: sp, alt: sun.alt, altEff: altDeg, altSun: sunDeg, dark: dark, R: R, sunHue: sunHue,
+      cal: cal, tNow: tCont, skym: skym, ecl: when.ecl || 0, eclMoon: when.eclMoon,
       moons: moons, cam: cam, sidereal: SW.mod((sun.H + sun.lon) / SW.D2R, 360),
       landSeed: model.landSeed, overlay: overlay, fxItems: [],
       weatherLabel: weatherSpec.label || 'Clear skies',
@@ -292,12 +305,23 @@
   // motion.
   function motionOf(st) {
     if (st.rm) return 0;
-    var lk = st.look, moving = !!(st.met.length || st.aur.length || st.bleed || st.fxItems.some(function (f) { return !f.still; }) || st.airs.length ||
+    var lk = st.look, moving = !!(st.met.length || st.aur.length || (st.comets && st.comets.length) || st.bleed || st.fxItems.some(function (f) { return !f.still; }) || st.airs.length ||
       st.moons.some(function (M) { return M.conj && M.up; }) ||
       (lk && (lk.parts.length || lk.rain + lk.snow + lk.hail > .04 || lk.storm > .1 || lk.air.length || lk.fire.length || lk.sigils.length || lk.funnel)));
     return moving ? 2 : 1;
   }
   function PROJ_at(L, alt, az) { return SW.PROJ.at(L, alt, az); }
+  // Today's events from a month's list: those on today, and a one-off event
+  // whose days run over today (a comet's weeks, an aurora's nights). The
+  // calendar page works this out itself, repeats included.
+  function eventsToday(cal, events) {
+    var now = SW.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    return (events || []).filter(function (e) {
+      if (e.year === cal.current_year && e.month === cal.current_month && e.day === cal.current_day) return true;
+      if (e.is_recurring || e.end_year == null || e.end_month == null || e.end_day == null) return false;
+      return SW.dayIndex(cal, e.year, e.month, e.day) <= now && now <= SW.dayIndex(cal, e.end_year, e.end_month, e.end_day);
+    });
+  }
 
   // paceOf(state): how often the sky must be painted. The painted sky
   // moves as motionOf says; the basic sky moves only for a blood moon or
@@ -384,7 +408,7 @@
         fetchDayWeather(cid, calid, cal)
       ]).then(function (got) {
         var events = got[0];
-        var todayEvents = (events || []).filter(function (e) { return e.year === cal.current_year && e.month === cal.current_month && e.day === cal.current_day; });
+        var todayEvents = eventsToday(cal, events);
         self.model = { calendar: cal, todayEvents: todayEvents, dayWeather: got[1], skym: SW.makeSkym(cal), landSeed: hashSeed(calid), width: 0, height: 0 };
         self.onDataReady();
       });
@@ -822,7 +846,7 @@
   // shows the same sky as the pane: the same state, painters, pace and words.
   window.SkyPane.Scene = {
     state: buildState, paint: paintSky, pace: paceOf, reduced: reducedMotion,
-    getJSON: getJSON, dayWeather: fetchDayWeather, seed: hashSeed, describe: describe, IDLE_S: IDLE_S
+    getJSON: getJSON, dayWeather: fetchDayWeather, seed: hashSeed, describe: describe, eventsToday: eventsToday, IDLE_S: IDLE_S
   };
 
   Chronicle.register('sky-pane', {
