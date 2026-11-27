@@ -71,7 +71,7 @@ func TestAuthenticateWS_NotesGrant(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, tt.url, nil)
 			r.Header.Set("Sec-WebSocket-Protocol", tt.protocols)
-			campaignID, userID, source, role, _, expiresAt, err := newNotesAuth(t).AuthenticateWS(r)
+			campaignID, userID, source, role, _, expiresAt, err := newNotesAuth(t).AuthenticateWS(r, "")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("signed in as %s/%s, want refused", campaignID, userID)
@@ -92,7 +92,7 @@ func TestAuthenticateWS_NotesGrantNotWiredIsRefused(t *testing.T) {
 	a := NewMultiAuthenticator(nil, failingSession{t}, fakeRoles{"camp:player": 1})
 	r := httptest.NewRequest(http.MethodGet, "/ws?campaign=camp", nil)
 	r.Header.Set("Sec-WebSocket-Protocol", "chronicle.notes, chronicle.grant.cnt_good")
-	if _, _, _, _, _, _, err := a.AuthenticateWS(r); err == nil {
+	if _, _, _, _, _, _, err := a.AuthenticateWS(r, ""); err == nil {
 		t.Fatal("a grant was accepted with no grant authenticator wired")
 	}
 }

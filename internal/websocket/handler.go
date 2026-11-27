@@ -84,7 +84,9 @@ type Authenticator interface {
 	// AuthenticateWS resolves identity from the upgrade request: campaign,
 	// user, source, role, DM-grant status, and the key's expiry if any
 	// (nil for a session or an unexpiring key).
-	AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error)
+	// clientIP is the caller's address as the REST chain reads it, so a sync
+	// key's address rules hold on the socket too.
+	AuthenticateWS(r *http.Request, clientIP string) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error)
 }
 
 // HandleUpgrade returns an Echo handler that upgrades HTTP connections to WebSocket
@@ -99,7 +101,7 @@ func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string, dynami
 	return func(c *echo.Context) error {
 		r := c.Request()
 
-		campaignID, userID, source, role, isDmGranted, expiresAt, err := auth.AuthenticateWS(r)
+		campaignID, userID, source, role, isDmGranted, expiresAt, err := auth.AuthenticateWS(r, c.RealIP())
 		if err != nil {
 			slog.Warn("ws: auth failed",
 				slog.Any("error", err),

@@ -15,7 +15,8 @@ As the campaign owner:
 2. Campaign settings > **Connections** > **Keys** (`/campaigns/:id/connections#keys`) > create a key.
    Pick permissions: **read** (GETs), **write** (create, update, delete),
    **sync** (`/sync` endpoints). Optional: rate limit (default 300 requests a
-   minute), expiry date, IP allowlist (IPs or CIDRs).
+   minute), expiry date, IP allowlist (IPs or CIDRs; it holds for the live
+   socket too).
 3. Copy the key (`chron_…`). It is shown once.
 
 A key belongs to one campaign and acts as the owner who made it: it stops

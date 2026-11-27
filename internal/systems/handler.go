@@ -32,6 +32,7 @@ type addonChecker interface {
 type SystemHandler struct {
 	campaignSystems *CampaignSystemManager
 	addonSvc        addonChecker
+	addonLister     campaigns.AddonLister
 	bookEdits       BookEditService
 	rules           *RulesPages
 }
@@ -71,6 +72,12 @@ func (h *SystemHandler) rulesPages() *RulesPages {
 // enabled per campaign. Used by widget metadata methods.
 func (h *SystemHandler) SetAddonService(svc addonChecker) {
 	h.addonSvc = svc
+}
+
+// SetAddonLister wires the addons listing the campaign's game system is read
+// from when none was saved (see campaigns.CampaignSystemID).
+func (h *SystemHandler) SetAddonLister(l campaigns.AddonLister) {
+	h.addonLister = l
 }
 
 // OperatorDiagnosticsAPI is a CATALOG of named, read-only, secret-redacted

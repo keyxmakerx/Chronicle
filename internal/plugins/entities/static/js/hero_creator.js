@@ -205,19 +205,26 @@
     return out;
   }
 
+  // The order an ability's parts read in, as the book prints them; a
+  // campaign's own entry comes back from the server with its keys sorted.
+  var PART_ORDER = ['flavor', 'type', 'action_type', 'cost', 'keywords', 'distance', 'target',
+    'trigger', 'power_roll', 'tier1', 'tier2', 'tier3', 'effect', 'special'];
+  function partRank(k) { var i = PART_ORDER.indexOf(k); return i < 0 ? PART_ORDER.length : i; }
+
   // A nested object (an ability, a signature move) as lines: its name, then
   // each field, with tier lines set apart.
   function objectHTML(o, terms) {
     var h = '', name = typeof o.name === 'string' ? o.name : '';
     if (name) h += '<p class="hc-obj"><b>' + esc(name) + '</b></p>';
-    Object.keys(o).forEach(function (k) {
+    Object.keys(o).sort(function (a, b) { return partRank(a) - partRank(b) || (a < b ? -1 : a > b ? 1 : 0); }).forEach(function (k) {
       var v = o[k];
       if (k === 'name' || k === 'type' || v == null || v === '') return;
       if (Array.isArray(v)) v = v.filter(function (x) { return typeof x === 'string' || typeof x === 'number'; }).join(', ');
       if (typeof v !== 'string' && typeof v !== 'number') return;
       var t = /^tier(\d)$/.exec(k);
       if (t) h += '<p class="hc-tier"><b>Tier ' + t[1] + '</b> ' + inline(v, terms) + '</p>';
-      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms) + '</p>';
+      // A part written over several lines keeps its line breaks.
+      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms).replace(/\n+/g, '<br>') + '</p>';
     });
     return h;
   }
