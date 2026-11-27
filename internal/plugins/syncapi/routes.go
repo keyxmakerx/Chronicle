@@ -171,6 +171,13 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// Addon discovery (read).
 	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
 
+	// Which versions of the page scripts the Foundry module copies this
+	// server runs, as hashes only. Behind the campaign key rather than on
+	// /api/version because exact hashes fingerprint the build.
+	if api.vendoredAssets != nil {
+		cg.GET("/vendored-assets", api.vendoredAssets.GetVendoredAssets, RequirePermission(PermRead))
+	}
+
 	// Tag endpoints (always available, not addon-gated).
 	cg.GET("/tags", tagAPI.ListTags, RequirePermission(PermRead))
 	cg.POST("/tags", tagAPI.CreateTag, RequirePermission(PermWrite))

@@ -69,6 +69,7 @@ type APIHandler struct {
 	encounters           *EncounterAPIHandler
 	crafting             *CraftingAPIHandler
 	cutscenes            *CutsceneAPIHandler
+	vendoredAssets       *VendoredAssetsHandler
 	homebrewAsks         *HomebrewAskAPIHandler
 	signer               *media.URLSigner
 	heroPlanner          entities.HeroPlanner

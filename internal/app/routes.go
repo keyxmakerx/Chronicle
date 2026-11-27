@@ -2613,6 +2613,18 @@ func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityI
 	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
 }
 
+// npcPartyCheckAdapter implements npcs.PartyCheck over the addon settings. A
+// failed lookup reads as no party, which keeps a playable character listed
+// rather than shown nowhere.
+type npcPartyCheckAdapter struct {
+	addons addons.AddonService
+}
+
+func (a *npcPartyCheckAdapter) ShowsParty(ctx context.Context, campaignID string) bool {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, entities.AddonPlayerCharacterClaiming)
+	return err == nil && on
+}
+
 // npcTagListerAdapter wraps tags.TagService to implement npcs.TagLister so NPC
 // cards carry tags and the Characters page can offer a tag filter. dm_only tags
 // are included only when the caller asks (the npcs handler decides by role).
@@ -4957,8 +4969,12 @@ func (a *App) RegisterRoutes() {
 		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)
 	}
 
+	// Hashes of the page scripts the Foundry module copies; filled after
+	// every plugin's static files are mounted, at the end of RegisterRoutes.
+	vendoredAssets := syncapi.NewVendoredAssetsHandler()
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithHomebrewAsks(syncapi.NewHomebrewAskAPIHandler(homebrewAskAPI, campaignService)))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithVendoredAssets(vendoredAssets), syncapi.WithHomebrewAsks(syncapi.NewHomebrewAskAPIHandler(homebrewAskAPI, campaignService)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -4973,6 +4989,7 @@ func (a *App) RegisterRoutes() {
 	npcRepo := npcs.NewNPCRepository(a.DB)
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: characterListService}, &entityVisibilityFilterAdapter{svc: entityService})
 	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
+	npcSvc.SetPartyCheck(&npcPartyCheckAdapter{addons: addonService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
@@ -7162,12 +7179,17 @@ func (a *App) RegisterRoutes() {
 	var rollsPower *rollsPowerAdapter     // nil while the roll log is degraded; layers join it later
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
+	// The Workshop's "rolls first" step rolls through the roll log; both are
+	// nil while it is degraded, and the step is then not offered.
+	var homebrewRolls rollTable
+	var homebrewPower rollFirstStats
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
 		rollsPower = &rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService}
 		rollsHandler.SetPowerRolls(rollsPower)
+		homebrewRolls, homebrewPower = rollsSvc, rollsPower
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
@@ -7356,6 +7378,8 @@ func (a *App) RegisterRoutes() {
 		Respites:       craftingListener,
 		Crafting:       craftingWorkshop,
 		Decks:          decksStory,
+		Rolls:          homebrewRolls,
+		PowerRolls:     homebrewPower,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -7372,7 +7396,8 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
 			homebrew.NewRunStore(a.DB), homebrew.WithAskPeople(&homebrewAskPeople{svc: campaignService}),
-			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}))
+			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}),
+			homebrew.WithPlayers(&homebrewScopePlayers{entities: entityService}))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		homebrewAskAPI.attach(homebrewSvc)
 		aiWorkshop = homebrewSvc
@@ -7626,6 +7651,14 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+
+	// Hash the vendored files from the same mounts, so the sync API reports
+	// what this deploy serves rather than what the repo manifest says.
+	var vendoredPaths []string
+	for _, va := range foundry_vtt.VendoredAssets() {
+		vendoredPaths = append(vendoredPaths, va.Path)
+	}
+	vendoredAssets.SetAssets(a.hashVendoredAssets(vendoredPaths))
 
 	// A wiring mistake leaves only the widgets it names unloaded, so it is
 	// logged rather than stopping the site.
