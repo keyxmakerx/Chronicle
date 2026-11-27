@@ -1275,8 +1275,9 @@ type Event struct {
 	AllDay bool    `json:"all_day"`
 	// Payload is one small nullable JSON slot for typed extras that vary by
 	// event — a moon night, a sky event — so a new one doesn't need another
-	// migration. Raw JSON text, parsed on demand via ParsePayload; nil means
-	// no payload. See MoonNightPayload for the one currently-defined shape.
+	// migration. Raw JSON text, parsed on demand; nil means no payload. A
+	// sky event (SkyEventPayload, read by SkyEvent) is the one shape checked
+	// field by field on write; MoonNightPayload is its moon-night subset.
 	Payload *string `json:"payload,omitempty"`
 	// Status is what became of the event (EventStatus*): planned until
 	// someone says otherwise, and an unanswered past event reads as
@@ -1421,9 +1422,8 @@ const (
 	MoonNightHarvest     = "harvest"
 )
 
-// MoonNightPayload is one shape an Event.Payload JSON blob can carry.
-// "a sky event" is a second shape the same column is meant to hold — its
-// fields aren't decided yet, so it isn't typed here.
+// MoonNightPayload is the moon-night subset of SkyEventPayload: just the
+// type and moons, for callers that only mark moon nights.
 type MoonNightPayload struct {
 	Type  string `json:"type"`
 	Moons []int  `json:"moons,omitempty"`

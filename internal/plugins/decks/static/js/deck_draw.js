@@ -44,6 +44,8 @@
   function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function esc(s) { return window.Chronicle.escapeHtml(s); }
   function enc(s) { return encodeURIComponent(s); }
+  // The campaign's own word for its game master, plural, as the Table drawer says it.
+  function gmPlural() { return (C.gmTerm ? C.gmTerm() : 'GM') + 's'; }
 
   /** cap: a server refusal as a sentence (it starts in lower case on the wire). */
   function cap(m) {
@@ -692,7 +694,7 @@
     function stateLine() {
       if (!cur) { setLine(''); return; }
       if (!cur.turned) { setLine('Face down. Turn it over to read it.'); return; }
-      setLine(isDir ? 'Drawn. Only Directors can see it.' : 'In your hand.');
+      setLine(isDir ? 'Drawn. Only ' + gmPlural() + ' can see it.' : 'In your hand.');
     }
 
     // ---- sequences: one at a time ----
