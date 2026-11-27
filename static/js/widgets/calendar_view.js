@@ -1072,8 +1072,14 @@
     var L = cell.x, R = L + cell.w, T = cell.y, Bt = T + cell.h, side = null, x, y;
     if (!isBand && R + W <= cr.width - 8) { side = 'right'; x = R; }
     else if (!isBand && L - W >= 8) { side = 'left'; x = L - W; }
-    if (side) y = T + H <= B.bot ? T : (Bt - H >= B.top ? Bt - H : Math.max(B.top, B.bot - H));
-    else {
+    if (side) {
+      y = T + H <= B.bot ? T : Bt - H;
+      // Beside its day it lines up with the day's top or bottom edge, but a
+      // day cut off by the window's edge (lower on the page when a strip
+      // sits above it) would carry the card past the edge with it, leaving
+      // the card's last part reachable only by scrolling the page.
+      y = Math.max(B.top, Math.min(y, B.bot - H));
+    } else {
       x = Math.max(8, Math.min(L + cell.w / 2 - W / 2, cr.width - W - 8));
       if (Bt + H <= B.bot) { side = 'down'; y = Bt; } else if (T - H >= B.top) { side = 'up'; y = T - H; } else { side = 'down'; y = Math.max(B.top, B.bot - H); }
     }
