@@ -118,3 +118,19 @@ test('Escape while a day card is opening closes it', { skip }, async (t) => {
     assert.equal(await p.$eval('#cal5-wing', (w) => w.classList.contains('open')), false, `run ${i + 1}: the card stayed open`);
   }
 });
+
+// A calendar message sits inside the window even when the card runs past
+// the window's bottom edge, so its Undo can always be seen and pressed.
+test('a calendar message and its Undo stay inside the window', { skip }, async (t) => {
+  const p = await page(t, { width: 1280, height: 640 });
+  const m = await p.evaluate(() => {
+    const cal = document.querySelector('#cal5-cal');
+    const el = document.createElement('div');
+    el.className = 'toast on';
+    el.innerHTML = '<span>Hidden for everyone.</span><button type="button">Undo</button>';
+    cal.appendChild(el);
+    return { calBottom: cal.getBoundingClientRect().bottom, btn: el.querySelector('button').getBoundingClientRect().bottom, h: innerHeight };
+  });
+  assert.ok(m.calBottom > m.h, `the fixture's card must run past the window (bottom ${m.calBottom}, window ${m.h})`);
+  assert.ok(m.btn <= m.h, `Undo's bottom ${m.btn} is below the window's ${m.h}`);
+});

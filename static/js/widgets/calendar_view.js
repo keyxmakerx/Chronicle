@@ -2116,6 +2116,10 @@
       btn.hidden = !action;
       btn.textContent = action ? action.label : '';
       el._run = action ? action.run : null;
+      // Pinned to the window (see .cal-v5 .toast), it is centred on the card.
+      var r = this.calEl.getBoundingClientRect();
+      el.style.setProperty('--toastX', Math.round(r.left + r.width / 2) + 'px');
+      el.style.setProperty('--toastW', Math.max(0, Math.round(r.width - 32)) + 'px');
       // The live region already reads the message; with an action only the
       // button is exposed, so nothing is heard twice.
       if (action) el.removeAttribute('aria-hidden'); else el.setAttribute('aria-hidden', 'true');
