@@ -2116,6 +2116,28 @@
       btn.hidden = !action;
       btn.textContent = action ? action.label : '';
       el._run = action ? action.run : null;
+      // Pinned to the window (see .cal-v5 .toast), it is centred on the card.
+      var r = this.calEl.getBoundingClientRect();
+      el.style.setProperty('--toastX', Math.round(r.left + r.width / 2) + 'px');
+      el.style.setProperty('--toastW', Math.max(0, Math.round(r.width - 32)) + 'px');
+      // On a phone it sits at the top of the screen, below the app's top bar
+      // while that bar shows: the card is its own layer, under the bar's.
+      var bar = document.getElementById('app-topbar');
+      var barB = bar ? bar.getBoundingClientRect().bottom : 0;
+      el.style.setProperty('--toastTop', Math.round(Math.max(0, barB) + 12) + 'px');
+      // An editor's calendar has the deck along its bottom (and its drawer
+      // above it while editing); the toast rises 12px clear of whatever of
+      // them is on screen. The drawer is measured by its height, not its
+      // box, since it slides in.
+      var deck = this.calEl.querySelector('.deck');
+      if (deck && deck.getClientRects().length) {
+        var top = deck.getBoundingClientRect().top;
+        var dr = deck.classList.contains('up') && deck.querySelector('.dkdrawer');
+        if (dr) top -= dr.offsetHeight;
+        el.style.setProperty('--toastB', Math.round(Math.max(0, innerHeight - top) + 12) + 'px');
+      } else {
+        el.style.removeProperty('--toastB');
+      }
       // The live region already reads the message; with an action only the
       // button is exposed, so nothing is heard twice.
       if (action) el.removeAttribute('aria-hidden'); else el.setAttribute('aria-hidden', 'true');
@@ -6116,7 +6138,9 @@
         if (self._pf.state !== 'closed') { self.closeFlap(); return; }
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
         if (self._roll) { if (!self._rollHolds()) self._roll.close(); return; }
-        if (self.wingFor) { self.closeWing(); return; }
+        // Mid-fold, a queued close can be lost if the opening is superseded,
+        // so a key closes at once, as other keyboard closes do.
+        if (self.wingFor) { self.closeWing(self._pw.state === 'opening' ? { instant: true } : undefined); return; }
         if (self._eraOpen != null) { self.closeEraPanel({ refocus: true }); return; }
         if (self._timeShowing()) self.closeTimeBar();
       };

@@ -1,6 +1,7 @@
 package calendarai
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -50,3 +51,64 @@ var eventKeys = keySet("year", "month", "day", "end_year", "end_month", "end_day
 	"page", "calendar", "announced", "move_to_year", "move_to_month", "move_to_day",
 	"repeat", "repeat_every", "repeat_times", "repeat_on", "repeat_offset_days",
 	"repeat_until_year", "repeat_until_month", "repeat_until_day", "roll", "status", "what_happened")
+
+// calendarListKeys are the keys each entry of a calendar block's lists is
+// read for. The calendar warns about any other key inside an entry, as it
+// does at the top level.
+var calendarListKeys = map[string]struct {
+	noun string
+	keys map[string]bool
+}{
+	"months":   {"month", listKeySet("name", "days", "leap_days", "intercalary", "season")},
+	"weekdays": {"weekday", listKeySet("name", "rest_day")},
+	"seasons":  {"season", listKeySet("name", "start_month", "start_day", "end_month", "end_day", "color")},
+	"moons": {"moon", listKeySet("name", "cycle", "cycle_days", "cycle_length", "phase_offset", "offset", "color",
+		"strength", "hidden", "page", "moves")},
+	"eras": {"era", listKeySet("name", "start_year", "start_month", "start_day", "end_year", "end_month", "end_day",
+		"color", "description", "page")},
+}
+
+func listKeySet(keys ...string) map[string]bool {
+	m := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		m[k] = true
+	}
+	return m
+}
+
+// listKeyWarnings names each key inside an entry of a calendar block's lists
+// (a month, weekday, season, moon or era) that the entry is not read for.
+// Entries that are plain names or unreadable are left to the readers.
+func listKeyWarnings(r Record) []string {
+	lists := make([]string, 0, len(calendarListKeys))
+	for list := range calendarListKeys {
+		lists = append(lists, list)
+	}
+	sort.Strings(lists)
+	var out []string
+	for _, list := range lists {
+		spec := calendarListKeys[list]
+		for _, v := range r.List(list) {
+			entry, ok := v.(map[string]any)
+			if !ok {
+				continue
+			}
+			name := ""
+			var keys []string
+			for k, val := range entry {
+				lk := strings.ToLower(strings.TrimSpace(k))
+				if lk == "name" {
+					name = strings.TrimSpace(fmt.Sprint(val))
+				}
+				if !spec.keys[lk] {
+					keys = append(keys, k)
+				}
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				out = append(out, "`"+k+"` is not a key of a "+spec.noun+" ("+quote(name)+"), so it was ignored")
+			}
+		}
+	}
+	return out
+}
