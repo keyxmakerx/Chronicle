@@ -115,10 +115,20 @@ test('the owner drags the shelves, nudges a prop, sizes and puts back, and Save 
   assert.deepEqual(moves.anvil, [10, -40, 1.5]);
   assert.ok(Math.abs(moves.display[0] - Math.round(moves.display[0])) === 0 && moves.display[0] > 40, 'the shelves moved right in room units: ' + moves.display);
   assert.equal(moves.display[2], 1);
-  // Put back: the anvil, picked, has a button that puts it where it was.
+  // A drag the browser cancels puts the piece back and saves nothing.
+  const was = await tf(p, 'banner');
+  const bb = await p.evaluate(() => { const b = document.querySelector('.src-svg [data-mvk="banner"]').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
   await p.click('[data-mode="arr"]');
   await p.waitForSelector('.shr-cb [data-cb-mode="place"]', { state: 'attached' });
   await p.click('[data-cb-mode="place"]');
+  await p.waitForSelector('.src-svg [data-mvk="banner"][data-mvon]');
+  const calls = await p.evaluate(() => window.__calls.length);
+  await p.mouse.move(bb.x, bb.y); await p.mouse.down(); await p.mouse.move(bb.x - 50, bb.y + 20, { steps: 5 });
+  await p.evaluate(() => document.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })));
+  await p.mouse.up();
+  assert.equal(await tf(p, 'banner'), was, 'back where it was');
+  assert.equal(await p.evaluate((n) => window.__calls.slice(n).some((c) => c.m === 'PUT'), calls), false);
+  // Put back: the anvil, picked, has a button that puts it where it was.
   await p.focus('.src-svg [data-mvk="anvil"][data-mvon]');
   await p.waitForSelector('[data-cb-unmove]:not([hidden])');
   await p.click('[data-cb-unmove]');

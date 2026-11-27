@@ -1729,7 +1729,7 @@
         placed: function (m) { if (window.ShopRoomBuilder) window.ShopRoomBuilder.placed(m); },
         // Moving the shelves and props by hand: a piece was picked, or moved to [dx, dy, size].
         picked: function (k) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.picked) window.ShopRoomBuilder.picked(k); },
-        moved: function (k, v) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.moved) window.ShopRoomBuilder.moved(k, v); },
+        moved: function (k, v, soft) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.moved) window.ShopRoomBuilder.moved(k, v, soft); },
         opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); }
       };
       /* The counter-room builder (shop_room_builder.js, owner only) reads and

@@ -341,7 +341,7 @@
       '<button type="button" class="shr-link" data-cb-unmove' + (v[0] || v[1] || v[2] !== 1 ? '' : ' hidden') + '>Put it back where it was</button></div>';
   }
   function picked(k) { if (!cur || mode !== 'place') return; sel = k; syncMv(); }
-  function moved(k, v) { if (!cur) return; sel = k; setMove(k, v); say(mvName(k) + ' moved. Save room to keep it.'); }
+  function moved(k, v, soft) { if (!cur) return; sel = k; setMove(k, v, soft); say(mvName(k) + ' moved. Save room to keep it.'); }
 
   window.ShopRoomBuilder = {
     mount: mount, opening: opening, picked: picked, moved: moved,

@@ -2227,9 +2227,11 @@
        only transforms change; the drop asks the builder to save the move,
        which draws the room again. */
     var mvDrag = null, mvJust = false, mvFocus = '', mvSel = '';
-    function mvNow(k) { var v = (cmNorm(R.model.counter || starterFor(R.model.roomType)).moves || {})[k]; return v ? v.slice() : [0, 0, 1]; }
+    // Nudges not yet drawn wait in mvPend, so quick presses add up before the room is drawn again.
+    var mvPend = {};
+    function mvNow(k) { if (mvPend[k]) return mvPend[k].slice(); var v = (cmNorm(R.model.counter || starterFor(R.model.roomType)).moves || {})[k]; return v ? v.slice() : [0, 0, 1]; }
     function mvPt(e) { var m = R.svg && R.svg.getScreenCTM(); if (!m) return null; var p = R.svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(m.inverse()); }
-    function mvSave(k, v) { if (hooks.moved) hooks.moved(k, v); }
+    function mvSave(k, v, soft) { if (hooks.moved) hooks.moved(k, v, soft); }
     function onMvDown(e) {
       if (!R.model.edit || where !== 'counter' || busy || e.button > 0 || !R.svg) return;
       // The goods on the shelves are a handle for the shelves too.
@@ -2248,12 +2250,15 @@
       d.moved = true; R.dragging = true;
       d.els.forEach(function (a) { a[0].setAttribute('transform', 'translate(' + f1(d.dx) + ' ' + f1(d.dy) + ') ' + a[1]); });
     }
-    function onMvUp() {
+    function onMvUp(e) { mvEnd(e && e.type === 'pointerup'); }
+    // A drop saves the move; a cancelled drag (the browser took the pointer, or the room closed) puts the piece back.
+    function mvEnd(keep) {
       var d = mvDrag; mvDrag = null;
       document.removeEventListener('pointermove', onMvMove); document.removeEventListener('pointerup', onMvUp); document.removeEventListener('pointercancel', onMvUp);
       if (!d) return;
       // The click that follows the drop must not also press what is under it.
       mvJust = true; setTimeout(function () { mvJust = false; R.dragging = false; }, 0);
+      if (!keep) { d.els.forEach(function (a) { if (a[1]) a[0].setAttribute('transform', a[1]); else a[0].removeAttribute('transform'); }); return; }
       mvSel = d.k; if (hooks.picked) hooks.picked(d.k);
       if (d.moved) { var v = mvNow(d.k); v[0] += d.dx; v[1] += d.dy; mvSave(d.k, v); } else mvRing();
     }
@@ -2265,7 +2270,10 @@
       // Kept from the document's arrow keys, which turn the room.
       e.preventDefault(); e.stopPropagation();
       var k = g.getAttribute('data-mvk'), v = mvNow(k); v[0] += dir[0]; v[1] += dir[1];
-      mvSel = mvFocus = k; if (hooks.picked) hooks.picked(k); mvSave(k, v);
+      mvSel = mvFocus = k; if (hooks.picked) hooks.picked(k);
+      // The piece steps at once; the room is drawn again once the presses pause.
+      [].forEach.call(R.svg.querySelectorAll('[data-mvk="' + k + '"],[data-mvf="' + k + '"]'), function (el) { el.setAttribute('transform', 'translate(' + dir[0] + ' ' + dir[1] + ') ' + (el.getAttribute('transform') || '')); });
+      mvPend[k] = v; mvRing(); mvSave(k, v, true);
       return true;
     }
     // A dashed ring round the piece the builder is working on.
@@ -2313,7 +2321,7 @@
       if (view && view.destroy) view.destroy();
       where = which; R.dragging = false; hov = null; hideCard(); closeMenu();
       var lv = CM_LIVE[R.model.campaignId]; cmLiveNow = lv && lv.time !== null ? lv.time : 'night'; liveDrawn = cmLiveNow;
-      view = VIEWS[which](R);
+      view = VIEWS[which](R); mvPend = {};
       var defs = common() + view.defs(), s = document.createElementNS(NS, 'svg');
       s.setAttribute('viewBox', '0 0 ' + W + ' ' + H); s.setAttribute('class', 'src-svg'); s.setAttribute('role', 'img'); s.setAttribute('aria-label', view.label);
       s.innerHTML = '<defs>' + defs + '</defs>' + view.svg();
@@ -2333,14 +2341,15 @@
     /* The live sky: each box the room drew outside a baked layer gets the
        campaign's sky. Once the calendar is read, a room lit for another hour
        is drawn again for this one. */
-    var skies = [], liveDrawn = 'night';
+    var skies = [], liveDrawn = 'night', dead = false;
     function liveDrop() { skies.forEach(function (k) { try { k.destroy(); } catch (e) { /* already gone */ } }); skies = []; }
     function liveMount(s) {
       liveDrop();
       var boxes = [].slice.call(s.querySelectorAll('[data-live-sky] canvas'));
       if (!boxes.length) return;
       cmLive(R.model.campaignId).then(function (got) {
-        if (!got || R.svg !== s) return;
+        // A reading that lands after the room was closed or redrawn draws nothing.
+        if (!got || dead || R.svg !== s || !s.isConnected) return;
         var H = window.Chronicle && window.Chronicle.headerSky;
         boxes.forEach(function (c) {
           if (!H || c.closest('[data-bake]') || !c.isConnected) return;
@@ -2441,7 +2450,7 @@
       where: function () { return where; },
       go: go,
       destroy: function () {
-        pause(true); liveDrop(); onMvUp(); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
+        dead = true; pause(true); liveDrop(); mvEnd(false); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
         document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey);
         host.innerHTML = '';
       }
