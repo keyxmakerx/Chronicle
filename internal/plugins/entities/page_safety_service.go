@@ -169,6 +169,9 @@ type PageSafetyService interface {
 	// RestoreVersion puts a version's title and text back on the page,
 	// saved as a new version so the restore can be undone too.
 	RestoreVersion(ctx context.Context, entityID, versionID string) error
+	// Version returns one saved version of a page; NotFound when the id
+	// names no version of it.
+	Version(ctx context.Context, entityID, versionID string) (*EntityVersion, error)
 	// RestoreText puts a title and text kept elsewhere back on the page, as
 	// RestoreVersion does for a saved version: the result is a new "restore"
 	// version, so the undo can be undone too. A nil entry clears the text.
@@ -300,6 +303,10 @@ func (p *pageSafetyService) RestoreVersion(ctx context.Context, entityID, versio
 	}
 	slog.Info("page version restored", slog.String("entity_id", entityID), slog.String("version_id", versionID), slog.String("name", after.Name))
 	return nil
+}
+
+func (p *pageSafetyService) Version(ctx context.Context, entityID, versionID string) (*EntityVersion, error) {
+	return p.repo.FindVersion(ctx, entityID, versionID)
 }
 
 func (p *pageSafetyService) RestoreText(ctx context.Context, entityID, name string, entry, entryHTML *string) error {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
+	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
@@ -283,4 +285,79 @@ func TestRollsCharacterAdapter(t *testing.T) {
 			t.Fatalf("got %v, %v", got, err)
 		}
 	})
+}
+
+// powerLayers stands in for the transformations plugin.
+type powerLayers struct {
+	layers []transformations.Layer
+	seen   transformations.Viewer
+}
+
+func (p *powerLayers) ListForPage(_ context.Context, _, _ string, v transformations.Viewer) (*transformations.PageLayers, error) {
+	p.seen = v
+	return &transformations.PageLayers{Layers: p.layers}, nil
+}
+
+type powerAddons bool
+
+func (p powerAddons) IsEnabledForCampaign(context.Context, string, string) (bool, error) {
+	return bool(p), nil
+}
+
+func layerOf(changes ...transformations.Change) transformations.Layer {
+	return transformations.Layer{Name: "Bite", Changes: changes}
+}
+
+func change(field, op, value string) transformations.Change {
+	return transformations.Change{Field: field, Op: op, Value: json.RawMessage(value)}
+}
+
+// A chip rolls the number the sheet shows: the hero's layers apply, oldest
+// first, the way the sheet applies them, and only with the add-on on.
+func TestRollsPowerAdapterLayers(t *testing.T) {
+	ctx := context.Background()
+	decl := fakeSystem{manifest: &systems.SystemManifest{Crafting: &systems.CraftingRules{
+		Dice: "2d10", Edge: 2, Bane: -2, Tiers: []int{11, 16},
+		Characteristics: []systems.CraftingStat{{Key: "might", Label: "Might"}, {Key: "agility", Label: "Agility"}},
+	}}}
+	const heroType = 7
+	hero := entities.Entity{ID: "e-sivin", Name: "Sivin", EntityTypeID: heroType, FieldsData: map[string]any{"might": float64(3), "agility": "+2"}}
+	plain := map[int]*entities.EntityType{heroType: {ID: heroType}}
+	value := func(l rolls.PowerRollLine, i int) any {
+		if v := l.Characteristics[i].Value; v != nil {
+			return *v
+		}
+		return nil
+	}
+	tests := []struct {
+		name          string
+		layers        []transformations.Layer
+		on            bool
+		might, agilty any
+	}{
+		{"add on: a layer adding 1 to Might", []transformations.Layer{layerOf(change("might", "add", "1"))}, true, 4, 2},
+		{"add-on off: the page's own numbers", []transformations.Layer{layerOf(change("might", "add", "1"))}, false, 3, 2},
+		{"set, then add, oldest first", []transformations.Layer{layerOf(change("might", "set", "5")), layerOf(change("might", "add", "-1"))}, true, 4, 2},
+		{"set to another field", []transformations.Layer{layerOf(change("agility", "set", `"@might"`))}, true, 3, 3},
+		{"set to a number written as text", []transformations.Layer{layerOf(change("might", "set", `"6"`))}, true, 6, 2},
+		{"set to something not a number", []transformations.Layer{layerOf(change("might", "set", `{"a":1}`))}, true, nil, 2},
+		{"other fields and ops change nothing", []transformations.Layer{layerOf(change("stamina", "add", "5"), change("might", "append", `{"name":"x"}`))}, true, 3, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lp := &powerLayers{layers: tt.layers}
+			a := &rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{mine: []entities.Entity{hero}, types: plain},
+				characters: powerCharacters{heroType}, layers: lp, addons: powerAddons(tt.on)}
+			got, err := a.PowerRoll(ctx, "c1", "u1", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m, g := value(got, 0), value(got, 1); m != tt.might || g != tt.agilty {
+				t.Errorf("might %v agility %v, want %v %v", m, g, tt.might, tt.agilty)
+			}
+			if tt.on && (lp.seen.UserID != "u1" || lp.seen.IsDM()) {
+				t.Errorf("layers read as %+v, want the player themself", lp.seen)
+			}
+		})
+	}
 }

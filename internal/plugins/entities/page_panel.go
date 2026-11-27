@@ -14,6 +14,11 @@ type PagePanel struct {
 	Addon string
 	// URL builds the fragment route for an entity.
 	URL func(campaignID, entityID string) string
+	// Draws reports whether the fragment shows anything to this viewer, by
+	// the serving plugin's own rule; nil means always ask. A page whose panel
+	// would come back empty leaves it out, so a game-system sheet keeps its
+	// own item list instead of deferring to a panel that never draws.
+	Draws func(ctx context.Context, campaignID, entityID, userID string, role int) bool
 }
 
 // SetCharacterPagePanel registers the panel shown on character pages.

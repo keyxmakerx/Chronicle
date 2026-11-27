@@ -64,6 +64,11 @@ func badRequest(err error) (string, bool) {
 	return "", false
 }
 
+// foundry says whether the editor offers Preview in Foundry.
+func (h *Handler) foundry(c *echo.Context, cid string, v Viewer) bool {
+	return h.svc.FoundryPreviewOffered(c.Request().Context(), cid, v)
+}
+
 func sceneURL(campaignID, sceneID string) string {
 	return "/campaigns/" + campaignID + "/cutscenes/" + sceneID
 }
@@ -97,11 +102,11 @@ func (h *Handler) List(c *echo.Context) error {
 
 // New handles GET /campaigns/:id/cutscenes/new.
 func (h *Handler) New(c *echo.Context) error {
-	cid, _, err := director(c)
+	cid, v, err := director(c)
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, EditorPage(editorPage{CampaignID: cid, Scene: NewScene(), New: true}))
+	return middleware.Render(c, http.StatusOK, EditorPage(editorPage{CampaignID: cid, Scene: NewScene(), New: true, Foundry: h.foundry(c, cid, v)}))
 }
 
 // Create handles POST /campaigns/:id/cutscenes.
@@ -125,7 +130,7 @@ func (h *Handler) Create(c *echo.Context) error {
 	if !ok {
 		return err
 	}
-	p := editorPage{CampaignID: cid, Scene: in, New: true, Error: msg}
+	p := editorPage{CampaignID: cid, Scene: in, New: true, Error: msg, Foundry: h.foundry(c, cid, v)}
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, editorForm(p))
 	}
@@ -147,7 +152,7 @@ func (h *Handler) Editor(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, EditorPage(editorPage{CampaignID: cid, Scene: *sc, Live: live}))
+	return middleware.Render(c, http.StatusOK, EditorPage(editorPage{CampaignID: cid, Scene: *sc, Live: live, Foundry: h.foundry(c, cid, v)}))
 }
 
 // Save handles POST /campaigns/:id/cutscenes/:sid. The editor posts the whole
@@ -173,14 +178,14 @@ func (h *Handler) Save(c *echo.Context) error {
 		if !ok {
 			return err
 		}
-		p := editorPage{CampaignID: cid, Scene: in, Error: msg}
+		p := editorPage{CampaignID: cid, Scene: in, Error: msg, Foundry: h.foundry(c, cid, v)}
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, editorForm(p))
 		}
 		return middleware.Render(c, http.StatusOK, EditorPage(p))
 	}
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, editorForm(editorPage{CampaignID: cid, Scene: *sc, Saved: true}))
+		return middleware.Render(c, http.StatusOK, editorForm(editorPage{CampaignID: cid, Scene: *sc, Saved: true, Foundry: h.foundry(c, cid, v)}))
 	}
 	return c.Redirect(http.StatusSeeOther, sceneURL(cid, sid))
 }
@@ -219,6 +224,28 @@ func (h *Handler) Preview(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, sc)
+}
+
+// PreviewInFoundry handles POST /campaigns/:id/cutscenes/preview/foundry: the
+// editor's form, checked as Preview checks it, played on the Director's own
+// Foundry screen. Answers {"sent": true}; a refusal carries the reason.
+func (h *Handler) PreviewInFoundry(c *echo.Context) error {
+	cid, v, err := director(c)
+	if err != nil {
+		return err
+	}
+	f, err := form(c)
+	if err != nil {
+		return err
+	}
+	in, err := SceneFromForm(f)
+	if err != nil {
+		return err
+	}
+	if _, err := h.svc.PreviewInFoundry(c.Request().Context(), cid, v, in); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]bool{"sent": true})
 }
 
 // ShowSheet handles GET /campaigns/:id/cutscenes/:sid/show, the "Show to…"

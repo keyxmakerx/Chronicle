@@ -92,14 +92,15 @@ func (n galleryUserNames) DisplayName(ctx context.Context, userID string) (strin
 }
 
 // roomThemeKind is the armory's say over designs of kind room-theme: the same
-// counter-theme rules a saved room is held to. It has no needs of the
-// receiving campaign, so Lacks says nothing.
+// counter-theme rules a saved room is held to, less the owner's picture, which
+// stays with its campaign. It has no needs of the receiving campaign, so Lacks
+// says nothing.
 type roomThemeKind struct{}
 
 var _ designs.Kind = roomThemeKind{}
 
 func (roomThemeKind) Validate(raw json.RawMessage) (json.RawMessage, error) {
-	return armory.NormalizeShopRoomCounter(raw)
+	return armory.NormalizeShopRoomCounterDesign(raw)
 }
 
 func (roomThemeKind) Lacks(context.Context, string, json.RawMessage) ([]string, error) {

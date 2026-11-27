@@ -35,6 +35,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	user := func(c *echo.Context) string { return auth.GetUserID(c) }
 	shows := middleware.UserRateLimit(user, showRateLimit, time.Minute)
 	watched := middleware.UserRateLimit(user, watchedRateLimit, time.Minute)
+	foundryPreviews := middleware.UserRateLimit(user, showRateLimit, time.Minute)
 
 	// Director only (404 for anyone else). Static paths win over :sid, so
 	// none of "new", "mine", "showings" or "preview" is read as a scene id.
@@ -42,6 +43,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/cutscenes/new", h.New)
 	cg.POST("/cutscenes", h.Create)
 	cg.POST("/cutscenes/preview", h.Preview)
+	cg.POST("/cutscenes/preview/foundry", h.PreviewInFoundry, foundryPreviews)
 	cg.GET("/cutscenes/showings", h.Showings)
 	cg.POST("/cutscenes/showings/:shid/stop", h.Stop)
 	cg.GET("/cutscenes/:sid", h.Editor)

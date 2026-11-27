@@ -86,6 +86,8 @@
   .pr-offer .btn-primary, .pr-device .btn-danger, .pr-row--stack .pr-confirm .btn-danger,
   .pr-acts .btn-primary, .pr-answers .btn-primary, .pr-confirm .btn-primary, .pr-confirm .btn-danger, .pr-no .btn-secondary { min-height: 44px; }
   .pr-answers, .pr-acts { gap: 4px 16px; }
+  /* Changing heroes' number boxes take a finger's height. */
+  input.hc-num { min-height: 44px; }
 }
 
 /* Changing heroes: the Directors' times for players' picks. Same quiet look:
@@ -97,6 +99,6 @@
 .hc-form { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 16px; }
 .hc-set { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .hc-opt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 36px; font-size: 14px; color: var(--color-text-primary); }
-.hc-num { width: 4.5rem; padding-top: 4px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
+input.hc-num { width: 4.5rem; padding-top: 4px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
 .hc-list { margin-top: 12px; }
 .hc-reopen { display: flex; flex: none; align-items: center; gap: 8px; }

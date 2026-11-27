@@ -4,6 +4,10 @@
 package audit
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -72,5 +76,60 @@ func TestEntityTypeWords(t *testing.T) {
 		if got := entityTypeWords(in); got != want {
 			t.Errorf("entityTypeWords(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Every campaign-wide action the code logs has words of its own, not the
+// area's "changed the campaign". The keys are read from the logging calls in
+// the source, so a new one fails here until it has words.
+func TestActionLabel_EveryLoggedCampaignActionHasWords(t *testing.T) {
+	call := regexp.MustCompile(`(logAudit|logAuditCtx|LogCampaignEvent|\.audit\(|event :?= )[^"\n]*"(campaign\.[a-z_.]*[a-z_])"`)
+	seen := map[string]bool{}
+	err := filepath.WalkDir("../..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range call.FindAllStringSubmatch(string(src), -1) {
+			seen[m[2]] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) < 20 {
+		t.Fatalf("found only %d logged campaign actions; the scan is broken", len(seen))
+	}
+	for k := range seen {
+		if got := actionLabel(k); got == actionFallback(k) {
+			t.Errorf("actionLabel(%q) = %q, the area's words; give it words of its own", k, got)
+		}
+	}
+}
+
+func TestEntryLabel_NamesTheChangedSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		e    AuditEntry
+		want string
+	}{
+		{"fields", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{"name", "description"}}}, "changed the campaign's description and name"},
+		{"public", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{"is_public"}}}, "changed the campaign's public setting"},
+		{"no details", AuditEntry{Action: ActionCampaignUpdated}, "updated campaign settings"},
+		{"nothing changed", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{}}}, "updated campaign settings"},
+		{"details save", AuditEntry{Action: "campaign.details.updated", Details: map[string]any{"name_sent": true, "description_sent": false}}, "changed the campaign's name"},
+		{"unknown field", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{"secret_thing"}}}, "updated campaign settings"},
+		{"other action", AuditEntry{Action: "campaign.welcome_message.updated"}, "changed the welcome message"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := entryLabel(tt.e); got != tt.want {
+				t.Errorf("entryLabel = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

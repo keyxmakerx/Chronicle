@@ -89,7 +89,7 @@ func (h *SystemHandler) HouseRulesBlock(c *echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	sysID := cc.Campaign.ParseSettings().SystemID
+	sysID := campaigns.CampaignSystemID(c.Request().Context(), h.addonLister, cc.Campaign)
 	if sysID == "" || h.bookEdits == nil {
 		return c.HTML(http.StatusOK, "")
 	}

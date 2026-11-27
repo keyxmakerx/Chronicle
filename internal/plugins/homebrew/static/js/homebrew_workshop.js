@@ -239,6 +239,17 @@
     return (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '') + (named ? ': ' + named : '');
   }
 
+  // saysText fills an action's own preview line: {part} is the part's label
+  // and any other {name} that arg's value. '' when the action has none.
+  function saysText(act, d, tp) {
+    if (!act || !act.says) return '';
+    var args = (d && d.args) || {};
+    return act.says.replace(/\{([^{}]*)\}/g, function (_, slot) {
+      if (slot === 'part') return tp ? tp.label : '';
+      return args[slot] == null ? '' : String(args[slot]);
+    });
+  }
+
   // run starts a rule. A rule timed for later waits; one that runs now does
   // each Then in order. Returns the cards it lit, in order.
   function run(doc, cat, st, i, now, ctx) {
@@ -285,7 +296,7 @@
         st.log.push(label + ': ' + tp.label + ' ' + was + ' to ' + to);
         change(doc, cat, st, tp.key, was, to, ctx);
       } else {
-        st.log.push((act && act.clientRun ? 'You would be asked to run: ' : 'At the table this would: ') + label + (tp ? ', ' + tp.label : ''));
+        st.log.push((act && act.clientRun ? 'You would be asked to run: ' : 'At the table this would: ') + (saysText(act, d, tp) || label + (tp ? ', ' + tp.label : '')));
       }
     });
   }
@@ -380,7 +391,7 @@
     partKey: partKey, startArgs: startArgs, freeSpot: freeSpot, cardsOf: cardsOf, edgesOf: edgesOf, shapeText: shapeText, argsText: argsText,
     compatible: compatible, removePart: removePart, defaultData: defaultData,
     bounds: bounds, clampV: clampV, nowText: nowText, simStart: simStart, simSync: simSync, simFire: simFire,
-    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText,
+    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText, saysText: saysText,
     crossesMark: crossesMark, linkable: linkable, linkData: linkData, isLinked: isLinked
   };
   if (typeof window !== 'undefined') window.HomebrewWorkshop = H;
