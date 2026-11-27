@@ -3772,6 +3772,8 @@ dialog.cb-bro[open] { display: flex; flex-direction: column; }
      right, small, in the accent colour; the words keep their room and the
      label gives way first. Site admin's own row follows with its own plate,
      so the two hairlines do not stack. */
+  /* The foot's three parts travel as one block (app.templ), never shrunk. */
+  .nav-tail { flex: none; }
   .nav-manage { flex: none; padding: 4px 0; border-top: 1px solid var(--nav-line); }
   .nav-manage + .site-admin-row { border-top: 0; padding-top: 0; }
   .nav-manage .nav-row[data-needs] .nav-tr {
