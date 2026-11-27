@@ -222,7 +222,7 @@ func TestAILookup(t *testing.T) {
 	looked := list[0]
 	looked.Background.Params.Look, looked.Overlays[0].Params.Look = "eyelids", "rift"
 	b := SceneBlock(looked)
-	if !strings.Contains(b, "background: {kind: fall-asleep, seconds: 7, look: eyelids}") || !strings.Contains(b, `color: "#3dff7a", look: rift}`) {
+	if !strings.Contains(b, "background: {kind: black, in: fall-asleep, seconds: 7, look: eyelids}") || !strings.Contains(b, `color: "#3dff7a", look: rift}`) {
 		t.Errorf("block with looks %s", b)
 	}
 }
@@ -232,7 +232,7 @@ func TestAILookup(t *testing.T) {
 func TestAIDocNamesEveryKind(t *testing.T) {
 	_, ai := newAIRig(true)
 	doc := ai.Kinds()[0].Doc()
-	for _, list := range [][]Kind{BackgroundKinds, OverlayKinds, TextStyles, TextLayouts, TextArrivals, TextLeavings, EndingKinds} {
+	for _, list := range [][]Kind{BackgroundKinds, Backdrops, Arrivals, OverlayKinds, TextStyles, TextLayouts, TextArrivals, TextLeavings, EndingKinds} {
 		for _, k := range list {
 			if !strings.Contains(doc, k.Key) {
 				t.Errorf("Doc lacks %q", k.Key)
