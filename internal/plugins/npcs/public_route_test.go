@@ -33,6 +33,7 @@ func (stubNPCSvc) ListTags(context.Context, string, int, string, bool) ([]NPCTag
 	return nil, nil
 }
 func (stubNPCSvc) SetTagLister(TagLister) {}
+func (stubNPCSvc) SetPartyCheck(PartyCheck) {}
 
 type stubCampaignSvc struct {
 	campaigns.CampaignService

@@ -46,6 +46,7 @@ func (f *fakeRoleCapturingNPCService) ListTags(ctx context.Context, campaignID s
 }
 
 func (f *fakeRoleCapturingNPCService) SetTagLister(TagLister) {}
+func (f *fakeRoleCapturingNPCService) SetPartyCheck(PartyCheck) {}
 
 func coDMContext()*campaigns.CampaignContext {
 	return &campaigns.CampaignContext{
