@@ -3151,31 +3151,6 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// Boot reconcilers for entity_types fields, run SERIALLY in a single
-	// goroutine. They write only the fields column; the one layout_json
-	// reconciler (placePageExtrasOnce) runs synchronously later in boot, so
-	// no two reconcilers rewrite the same layout. A new layout_json
-	// reconciler must run beside that one, not in a goroutine of its own.
-	// Each step is idempotent; a failure is logged and the chain continues.
-	go func() {
-		ctx := context.Background()
-
-		// Converge gm_only field flags from installed system manifests onto
-		// existing types so the GM-field egress filter covers characters
-		// created before the manifest carried gm_only.
-		reconcileFieldGMFlags(ctx, entityService)
-
-		// Same convergence for owner_only field flags, so backstory-style
-		// fields become owner-private on types created before the manifest
-		// carried owner_only.
-		reconcileFieldOwnerOnlyFlags(ctx, entityService)
-
-		// Same for play blocks, so an installed system's play declarations
-		// reach types created before it declared them.
-		reconcileFieldPlay(ctx, entityService)
-		reconcileFieldChecks(ctx, entityService)
-	}()
-
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)
@@ -3623,6 +3598,15 @@ func (a *App) RegisterRoutes() {
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
 	a.loadSystemsFromPackages(packages.NewPackageRepository(a.DB))
+	// Converge field marks from the systems just loaded onto existing types.
+	// It must start after the package load above, or it reads a registry
+	// without the packaged systems and a restart converges nothing for them.
+	// It writes only the fields column; the one layout_json reconciler
+	// (placePageExtrasOnce) runs synchronously later in boot, so no two
+	// reconcilers rewrite the same layout, and a new layout_json reconciler
+	// must run beside that one, not in a goroutine of its own. Detached so
+	// a slow query can't stall startup.
+	go reconcileFieldsFromSystems(context.Background(), entityService)
 	sysAddonInfos := systems.AddonInfos()
 	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
 	for _, info := range sysAddonInfos {
@@ -3744,10 +3728,7 @@ func (a *App) RegisterRoutes() {
 		// freshly installed/updated manifest is in the registry, so an
 		// updated system's flag changes take effect on existing types
 		// without a restart — mirrors the boot-time reconcile.
-		reconcileFieldGMFlags(context.Background(), entityService)
-		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
-		reconcileFieldPlay(context.Background(), entityService)
-		reconcileFieldChecks(context.Background(), entityService)
+		reconcileFieldsFromSystems(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
