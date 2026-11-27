@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -23,10 +24,14 @@ type FoldersAPI interface {
 	Delete(ctx context.Context, campaignID, id string) error
 }
 
-// FolderCategory is a category a folder can live in.
+// FolderCategory is a category a folder can live in. ParentID is the
+// category it is a sub-category of, 0 for none: the sidebar shows a
+// sub-category's pages in its parent's tree, so they can sit in the
+// parent's folders.
 type FolderCategory struct {
 	ID                 int
 	Name, Plural, Slug string
+	ParentID           int
 }
 
 // FolderRef is a stored folder. ParentID is set only when the parent is
@@ -46,7 +51,7 @@ type FolderKind struct {
 func (FolderKind) Name() string  { return "folder" }
 func (FolderKind) Label() string { return "Folder" }
 func (FolderKind) Doc() string {
-	return "A sidebar folder inside a category (for example \"Gods\" and \"Cosmology\" inside Lore), matched by `category` and `name`, ignoring capitals; two folders in a category never share a name. Keys: `category` (the category's name, required), `parent` (another folder of the same category to nest it in; `none` on an update moves it to the top level), `rename_to`. A folder holds no text of its own. To file a page in a folder, write `folder: Gods` on the page's block (the folder's name within the page's own category; `folder: none` takes it out). A folder made earlier in the same paste can be used by pages and by later folders, and a page names a folder by the name it will have after this paste. Removing a folder removes only the folder: the pages in it move to the top level of the category and its sub-folders move up one level; no page is deleted.\n\n```\n---\nkind: folder\ncategory: Lore\nname: Gods\n---\n```\n\n```\n---\nkind: folder\ncategory: Lore\nname: Elder Gods\nparent: Gods\n---\n```\n\n```\n---\nkind: folder\naction: update\ncategory: Lore\nname: Cosmology\nrename_to: The Heavens\n---\n```"
+	return "A sidebar folder inside a category (for example \"Gods\" and \"Cosmology\" inside Lore), matched by `category` and `name`, ignoring capitals; two folders in a category never share a name. `what: folders` lists every category's folders and how they nest, empty ones included; check it before renaming, moving or removing one. A page can sit in a folder of another category (a sub-category's pages sit in its parent category's folders): the page index then reads \"Name (in folder Races of Lore)\", and that folder's `category` is Lore. Keys: `category` (the category's name, required), `parent` (another folder of the same category to nest it in; `none` on an update moves it to the top level), `rename_to`. A folder holds no text of its own. To file a page in a folder, write `folder: Gods` on the page's block (the folder's name within the page's own category; `folder: none` takes it out). A folder made earlier in the same paste can be used by pages and by later folders, and a page names a folder by the name it will have after this paste. Removing a folder removes only the folder: the pages in it move to the top level of the category and its sub-folders move up one level; no page is deleted.\n\n```\n---\nkind: folder\ncategory: Lore\nname: Gods\n---\n```\n\n```\n---\nkind: folder\ncategory: Lore\nname: Elder Gods\nparent: Gods\n---\n```\n\n```\n---\nkind: folder\naction: update\ncategory: Lore\nname: Cosmology\nrename_to: The Heavens\n---\n```"
 }
 
 // pendingFoldersKey carries the folders earlier rows of one paste will make.
@@ -87,6 +92,8 @@ func folderKey(categoryID int, name string) string {
 // folderTarget is what a record's keys point at, resolved against the campaign.
 type folderTarget struct {
 	cat     FolderCategory
+	cats    []FolderCategory
+	all     []FolderRef // every folder in the campaign
 	folders []FolderRef // this category's folders
 	hit     *FolderRef  // the named folder, nil when it doesn't exist
 	parent  *FolderRef  // the `parent` folder, nil when absent or "none"
@@ -124,6 +131,7 @@ func (k FolderKind) resolve(ctx context.Context, campaignID string, r Record) (f
 	if err != nil {
 		return t, err
 	}
+	t.cats, t.all = cats, all
 	for _, f := range all {
 		if f.CategoryID == t.cat.ID {
 			t.folders = append(t.folders, f)
@@ -138,11 +146,56 @@ func (k FolderKind) resolve(ctx context.Context, campaignID string, r Record) (f
 		} else if t.parent, err = pick(t.folders, p); err != nil {
 			return t, err
 		} else if t.parent == nil && !pendingFolders(ctx)[folderKey(t.cat.ID, p)] {
-			return t, badRequestf("no folder called %s in %s to nest it in", quote(p), t.cat.Name)
+			return t, badRequestf("%s", t.missing(p, " to nest it in"))
 		}
 	}
 	t.newName = r.Str("rename_to")
 	return t, nil
+}
+
+// maxNamedFolders caps the folder names a refusal lists.
+const maxNamedFolders = 30
+
+// missing is the refusal for a folder name the category does not have. It
+// names the folders the category does have, and any other category holding
+// a folder of that name: a page can sit in another category's folder (a
+// sub-category's pages sit in its parent category's folders, and a page
+// moved to another category keeps its folder), and the page index then
+// shows that folder beside a page of this category.
+func (t folderTarget) missing(name, tail string) string {
+	msg := "no folder called " + quote(name) + " in " + t.cat.Name + tail
+	var names []string
+	for _, f := range t.folders {
+		names = append(names, quote(f.Name))
+	}
+	switch {
+	case len(names) == 0:
+		msg += "; " + t.cat.Name + " has no folders"
+	case len(names) > maxNamedFolders:
+		msg += fmt.Sprintf("; its folders are %s and %d more", strings.Join(names[:maxNamedFolders], ", "), len(names)-maxNamedFolders)
+	default:
+		msg += "; its folders are " + strings.Join(names, ", ")
+	}
+	catName := map[int]string{}
+	for _, c := range t.cats {
+		catName[c.ID] = c.Name
+	}
+	var elsewhere []string
+	seen := map[int]bool{}
+	for _, f := range t.all {
+		if f.CategoryID == t.cat.ID || seen[f.CategoryID] || !sameName(f.Name, name) {
+			continue
+		}
+		if n := catName[f.CategoryID]; n != "" {
+			seen[f.CategoryID] = true
+			elsewhere = append(elsewhere, n)
+		}
+	}
+	if len(elsewhere) > 0 {
+		msg += ". A folder called " + quote(name) + " is in " + strings.Join(elsewhere, " and ") +
+			"; give that category as `category:`"
+	}
+	return msg
 }
 
 // pick is the one folder with the name, nil for none, an error for several.
@@ -186,7 +239,7 @@ func (k FolderKind) Plan(ctx context.Context, campaignID string, a Actor, r Reco
 		return Plan{Summary: "makes the folder " + quote(r.Name) + where}
 	case ActionUpdate:
 		if t.hit == nil {
-			return Plan{Error: "no folder called " + quote(r.Name) + " in " + t.cat.Name}
+			return Plan{Error: t.missing(r.Name, "")}
 		}
 		var parts []string
 		if t.newName != "" {
@@ -212,7 +265,7 @@ func (k FolderKind) Plan(ctx context.Context, campaignID string, a Actor, r Reco
 		return Plan{Summary: strings.Join(parts, " and ")}
 	default:
 		if t.hit == nil {
-			return Plan{Error: "no folder called " + quote(r.Name) + " in " + t.cat.Name}
+			return Plan{Error: t.missing(r.Name, "")}
 		}
 		return Plan{Summary: "removes only the folder " + quote(r.Name) + ": its pages move to the top level of " +
 			t.cat.Name + " and its sub-folders move up one level; no page is deleted"}

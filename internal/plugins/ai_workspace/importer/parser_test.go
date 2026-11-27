@@ -161,28 +161,58 @@ type: location
 	}
 }
 
-// TestParse_UnknownYAMLKeys_Warning surfaces unknown keys via the
-// Warnings slice without blocking import.
-func TestParse_UnknownYAMLKeys_Warning(t *testing.T) {
+// TestParse_UnknownYAMLKeys_Refused refuses a page block carrying a key the
+// committer never reads: applying the rest would report the change as done
+// while that key was silently dropped.
+func TestParse_UnknownYAMLKeys_Refused(t *testing.T) {
 	input := `---
 name: Sigil
 type: creature
 mood: cheerful
 ai_generated_field: yes
+description: A short line nothing reads.
 ---
 
 # Sigil`
-	pages := Parse(input)
-	p := pages[0]
-	if p.Status != StatusNew {
-		t.Errorf("Status = %q, want StatusNew (unknown keys shouldn't block)", p.Status)
+	p := Parse(input)[0]
+	if p.Status != StatusParseError {
+		t.Fatalf("Status = %q, want parse_error", p.Status)
 	}
-	if len(p.Warnings) == 0 {
-		t.Errorf("expected warnings about unknown keys; got none")
+	for _, want := range []string{"mood", "ai_generated_field", "description", "Nothing in this block was changed"} {
+		if !strings.Contains(p.ParseError, want) {
+			t.Errorf("ParseError %q lacks %q", p.ParseError, want)
+		}
 	}
-	combined := strings.Join(p.Warnings, " ")
-	if !strings.Contains(combined, "mood") || !strings.Contains(combined, "ai_generated_field") {
-		t.Errorf("warnings missing one of mood/ai_generated_field: %v", p.Warnings)
+}
+
+// TestParse_RenameTo pins where a page block's rename_to is accepted.
+func TestParse_RenameTo(t *testing.T) {
+	tests := []struct {
+		name, fm, wantErr, wantNew string
+	}{
+		{"update renames", "name: The Drakari\naction: update\nrename_to: Drakari", "", "Drakari"},
+		{"new name trimmed", "name: The Khepri\naction: update\nrename_to: '  Khepri '", "", "Khepri"},
+		{"create refused", "name: The Drakari\nrename_to: Drakari", "add `action: update`", ""},
+		{"delete refused", "name: The Drakari\naction: delete\nrename_to: Drakari", "add `action: update`", ""},
+		{"empty refused", "name: The Drakari\naction: update\nrename_to: ''", "needs the page's new name", ""},
+		{"era refused", "name: The Drakari\naction: update\nera: Second Age\nrename_to: Drakari", "known_as", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := Parse("---\n" + tt.fm + "\n---\nText.")[0]
+			if tt.wantErr != "" {
+				if p.Status != StatusParseError || !strings.Contains(p.ParseError, tt.wantErr) {
+					t.Fatalf("got %q / %q, want a parse error with %q", p.Status, p.ParseError, tt.wantErr)
+				}
+				return
+			}
+			if p.Status == StatusParseError {
+				t.Fatalf("unexpected parse error: %s", p.ParseError)
+			}
+			if got := p.FrontMatter.NewName(); got != tt.wantNew {
+				t.Errorf("NewName = %q, want %q", got, tt.wantNew)
+			}
+		})
 	}
 }
 

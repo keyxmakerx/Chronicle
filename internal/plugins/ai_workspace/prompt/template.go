@@ -217,7 +217,9 @@ existing tag vocabulary where possible; a tag that doesn't exist yet is made. On
 ` + "`" + `action: update` + "`" + `, ` + "`" + `tags` + "`" + ` replaces the page's tags, ` + "`" + `tags: []` + "`" + ` clears them, and leaving
 the line out keeps them. A page's GM-only tags always stay. On ` + "`" + `action: update` + "`" + `, the body
 replaces the page's whole text, so send the full text; an update with no body keeps the
-text as it is and changes only the lines you give.
+text as it is and changes only the lines you give. To rename a page, send
+` + "`" + `action: update` + "`" + ` with its current ` + "`" + `name:` + "`" + ` and ` + "`" + `rename_to: New name` + "`" + `. A page block
+takes only the keys shown here; one with any other key is refused whole.
 
 ` + "`" + `reason` + "`" + ` is one sentence saying why you are asking for this change. I see it
 beside the change when I review, and it is never saved.
@@ -229,7 +231,10 @@ under Parent) or a page earlier in this same paste, so list parents first. With
 level, and leaving the line out keeps it where it is. A page cannot be its own parent.
 
 To file a page in a sidebar folder of its category (a folder shows as "Name (in folder Gods)"
-in the index), add ` + "`" + `folder: Gods` + "`" + `. Make the folder first with a ` + "`" + `kind: folder` + "`" + ` block, or
+in the index), add ` + "`" + `folder: Gods` + "`" + `. A lookup with ` + "`" + `what: folders` + "`" + ` lists every category's
+folders and how they nest, empty ones included; read it before renaming, moving or removing
+a folder. "Name (in folder Races of Lore)" means the folder belongs to Lore, so a
+` + "`" + `kind: folder` + "`" + ` block for it says ` + "`" + `category: Lore` + "`" + `. Make the folder first with a ` + "`" + `kind: folder` + "`" + ` block, or
 use one that already exists; ` + "`" + `folder: none` + "`" + ` takes the page out of its folder, and
 leaving the line out keeps it where it is. A page sits under a parent page or in a
 folder, not both.
