@@ -417,3 +417,19 @@ test('the new-leaf slot steps aside while the Style drawer is out', { skip }, as
   assert.equal(await slotShown(), before, 'the slot is back as it was');
   await page.done();
 });
+
+test('tabbing out past the Style drawer closes it', { skip }, async () => {
+  const srv = server();
+  const page = await open(srv);
+  await page.waitForSelector('[data-dms-sec="world"]:not([hidden])');
+  await page.click('[data-dms-styletab]');
+  await page.waitForSelector('.dms-sdrawer[data-open="1"]');
+  // Something after the screen to Tab to, as the browser wraps to the page's
+  // first link in the app.
+  await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<a href="#main-content" id="after">Skip to content</a>'));
+  await page.focus('.dms-sdrawer [data-dms-dens]:last-child');
+  await page.keyboard.press('Tab');
+  await page.waitForFunction(() => document.querySelector('.dms-sdrawer').getAttribute('data-open') === '0');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'after', 'focus moved on past the screen');
+  await page.done();
+});

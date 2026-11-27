@@ -694,6 +694,17 @@
         '<div class="dms-sd-sec"><div class="dms-lbl">Density</div>' + seg('Density', 'data-dms-dens', DENSITIES, P.style.density) + '</div>' +
         '<p class="dms-sd-foot">Kept with your account, on every device. The campaign’s pages keep their own look.</p>';
       dock.appendChild(drawer);
+      // The dock is last on the page, so a Tab past the drawer lands at the
+      // page's top: focus leaving the screen closes the drawer behind it.
+      drawer.addEventListener('focusout', function () {
+        // Checked a moment later, when focus has landed; leaving the window
+        // keeps focus where it was, so that never closes it.
+        setTimeout(function () {
+          var a = document.activeElement;
+          if (a && a !== document.body && !dock.contains(a)) closeDrawer(false);
+          else if ((!a || a === document.body) && document.hasFocus()) closeDrawer(false);
+        }, 0);
+      });
     }
 
     // The kits' faces load once, the first time the drawer can offer them.
