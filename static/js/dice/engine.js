@@ -2952,3 +2952,6 @@ export {
   registerSet, roll, setDown, shadeDie, share, simulate, smooth, solid, splitDie, spray, spriteTex,
   starTex, stop, strokePaths, strokeW, strokesFor, sub, symmetry, tintDie, wave, wholeDie, worldOf, writhe
 };
+// What the dice tray (rolls plugin, dice_tray_stage.js) builds its own scene from: it lays its
+// own flat drawn tray and throws the same dice, so it needs the die, light and teardown pieces.
+export { makeDie, coloursOf, environment, highlight, clearHighlight, disposeDie, libs, shadowTex, STEP };

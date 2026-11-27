@@ -430,7 +430,8 @@
     }
     this.byId[r.id] = r;
     this.rolls.push(r);
-    if (live) this.play(r);
+    // The Dice tray card listens for live rolls here; what it may draw is its own rule (public only).
+    if (live) { W.dispatchEvent(new CustomEvent('chronicle:roll-made', { detail: r })); this.play(r); }
   };
 
   Table.prototype.replace = function (old, r) {
@@ -1433,6 +1434,8 @@
   Table.prototype.throwDice = function (r, tray) {
     var look = this.myLook(), dice = r.dice || [];
     if (r.hidden || look === 'none' || !dice.length) return Promise.resolve();
+    // A roll made from the Dice tray card is thrown in that card's tray, not across the page as well.
+    if (C.diceTray && C.diceTray.owns && C.diceTray.owns(r)) return Promise.resolve();
     var rune = look === 'rune' && C.dice && typeof C.dice.roll === 'function' &&
       dice.every(function (d) { return RUNE_SIDES[d.sides]; });
     // Rune dice are thrown full screen whether or not a preview tray was offered: the tray is for

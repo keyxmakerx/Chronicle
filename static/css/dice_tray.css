@@ -1,0 +1,69 @@
+/* The Dice tray card (internal/plugins/rolls dice_tray*.js, mounted by the dmscreen plugin's
+ * tray_card.templ). The mat and the member's own tray are drawn by the script on the theme tokens;
+ * paper stays paper in dark mode, dimmed, never inverted. Only transform and opacity move. */
+
+.dtr { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dtr :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dtr button { font-family: inherit; }
+
+.dtr-core { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* The mat: one picture from above. Its shape is the art's, so the dice line up at any width. */
+.dtr-mat { position: relative; width: 100%; aspect-ratio: 10.7 / 7.5; overflow: hidden; border-radius: var(--shape-r-panel, 12px); }
+.dtr-matart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dtr-flat { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tray3d { position: absolute; inset: 0; }
+.tray3d[hidden] { display: none; }
+.tray3d-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.tray3d-tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tray3d-tag { position: absolute; left: 0; top: 0; padding: 1px 7px; border-radius: 999px; font-size: 0.6875rem; font-weight: 600; white-space: nowrap; color: #fff; background: var(--tag, var(--color-accent)); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25); transition: opacity var(--dur-micro, 120ms); }
+
+/* A flat die on the mat, drawn the way the Table's quick dice are. Simple wears the app's tokens;
+   Flat paper wears the shared paper stock (static/css/paper.css). */
+.dtr-fd { position: absolute; filter: drop-shadow(0 4px 4px rgb(0 0 0 / 0.22)); }
+.dtr-fd svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dtr-fd[data-look="simple"] { --td-body: var(--color-card-bg); --td-lit: var(--color-bg-tertiary); --td-shade: var(--color-border); --td-ink: var(--color-text-primary); }
+.dtr-fd[data-look="paper"] { --td-body: var(--paper); --td-lit: var(--paper-cut); --td-shade: var(--paper-edge); --td-ink: var(--paper-ink-soft); }
+.dark .dtr-fd[data-look="paper"] { filter: drop-shadow(0 4px 4px rgb(0 0 0 / 0.5)) brightness(0.82); }
+.dtr-fb { fill: var(--td-body); stroke: var(--td-shade); stroke-width: 1; stroke-linejoin: round; }
+.dtr-ff { fill: var(--td-lit); }
+.dtr-fs { fill: var(--td-shade); opacity: 0.55; }
+.dtr-fl { stroke: var(--td-shade); stroke-width: 1; }
+.dtr-fr { fill: none; stroke: var(--dtr-edge, transparent); stroke-width: 2.5; stroke-linejoin: round; }
+.dtr-fd text { font: 600 17px var(--font-sans, system-ui, sans-serif); fill: var(--td-ink); text-anchor: middle; dominant-baseline: central; font-variant-numeric: tabular-nums; }
+
+.dtr-result { margin: 0; min-height: 1.25rem; font-size: 0.8125rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+
+/* The member's own tray, below the mat. */
+.dtr-own { position: relative; width: 100%; aspect-ratio: 1.2 / 1; max-height: 300px; border-top: 1px solid var(--color-border); }
+.dtr-own-off { aspect-ratio: auto; font-size: 0.8125rem; color: var(--color-text-muted); padding-top: 8px; }
+
+/* The roll control and the four choices. */
+.dtr-lbl { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-muted); }
+.dtr-roll { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.dtr-dice, .dtr-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.dtr-die, .dtr-quiet, .dtr-step button, .dtr-seg button { min-height: 32px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--shape-r-ctl, 8px); background: var(--color-card-bg); color: var(--color-text-body); font-size: 0.8125rem; cursor: pointer; transition: background-color var(--dur-micro, 120ms), border-color var(--dur-micro, 120ms); }
+.dtr-die { position: relative; }
+.dtr-die:hover, .dtr-quiet:hover, .dtr-step button:hover, .dtr-seg button:hover { background: var(--color-bg-tertiary); }
+.dtr-die.dtr-on { border-color: var(--color-accent); }
+.dtr-n { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--color-accent); color: #fff; font-size: 0.6875rem; line-height: 18px; text-align: center; }
+.dtr-pool { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dtr-expr { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.dtr-step { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.dtr-step button { width: 32px; padding: 0; }
+.dtr-go { margin-left: auto; min-height: 34px; padding: 0 16px; border: 1px solid var(--color-accent); border-radius: var(--shape-r-ctl, 8px); background: var(--color-accent); color: #fff; font-weight: 600; cursor: pointer; }
+.dtr-go:disabled { opacity: 0.5; cursor: default; }
+.dtr-err { margin: 0; font-size: 0.8125rem; color: var(--color-danger); }
+.dtr-hint { margin: 0; font-size: 0.75rem; color: var(--color-text-muted); }
+
+.dtr-set { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.dtr-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.dtr-set-row[hidden] { display: none; }
+.dtr-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--color-border); border-radius: var(--shape-r-ctl, 8px); overflow: hidden; background: var(--color-card-bg); }
+.dtr-seg button { border: 0; border-radius: 0; min-height: 30px; }
+.dtr-seg button + button { border-left: 1px solid var(--color-border); }
+.dtr-seg button[aria-pressed="true"] { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tray3d-tag, .dtr-die, .dtr-quiet, .dtr-step button, .dtr-seg button { transition: none; }
+}
