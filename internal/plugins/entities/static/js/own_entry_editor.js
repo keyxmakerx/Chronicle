@@ -159,7 +159,7 @@
     // What every hero gets comes before what they buy, as in the creator.
     var shape = { facts: suggestedFacts(pkg), lists: keys.map(function (k) {
       return { key: k, label: words(k), buy: lists[k].buy * 2 >= lists[k].n };
-    }).sort(function (a, b) { return a.buy - b.buy; }), budgetKey: '', budget: 0 };
+    }).sort(function (a, b) { return a.buy - b.buy; }), abilities: abilityShapes(pkg), budgetKey: '', budget: 0 };
     var bk = Object.keys(budgets).sort()[0];
     if (bk && shape.lists.some(function (l) { return l.buy; })) {
       shape.budgetKey = bk;
@@ -194,9 +194,10 @@
     f.lists.forEach(function (l) { lists[l.key] = []; });
     if (!e) {
       return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '', look: null,
-        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }), wordLists: [], extraLists: [], carried: {} };
+        facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }), wordLists: [], extraLists: [], carried: {},
+        abilities: (f.abilities || []).map(function (sh) { return abilityDraft(sh, null); }) };
     }
-    var props = e.properties || {}, facts = [], wls = [], extra = [], carried = {}, budget = f.budget;
+    var props = e.properties || {}, facts = [], wls = [], extra = [], carried = {}, abs = {}, budget = f.budget;
     var shared = {};
     f.lists.forEach(function (l) { shared[l.key] = true; });
     var lk = lookFromProps(props, borders);
@@ -217,7 +218,14 @@
       } else if (k === f.budgetKey && typeof v === 'number') budget = v;
       else if (wordList(v)) wls.push({ key: k, label: words(k), text: v.join('\n'), orig: v });
       else if (typeof v === 'number' || typeof v === 'string') facts.push({ label: words(k), value: String(v), key: k, orig: v, long: longFact(v), hidden: !!hiddenSet[k] });
+      else if (isAbility(v)) abs[k] = v;
       else carried[k] = v;
+    });
+    // The field's abilities, then any other the entry holds; one the form
+    // cannot edit stays carried and gets no form.
+    var abilities = (f.abilities || []).filter(function (sh) { return !has(carried, sh.key); }).map(function (sh) { return abilityDraft(sh, abs[sh.key] || null); });
+    Object.keys(abs).sort().forEach(function (k) {
+      if (!abilities.some(function (a) { return a.key === k; })) abilities.push(abilityDraft({ key: k, label: words(k) }, abs[k]));
     });
     var who = e.visibility || 'everyone';
     // A player's draft is only theirs until accepted; accepting it offers
@@ -226,7 +234,7 @@
     return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: who,
       forName: e.visibility === 'character' ? (e.forName || '') : undefined,
       look: lk.look, lookKept: borders && lk.kept || undefined, lookTouched: false,
-      budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried,
+      budget: budget0 || budget, lists: lists, facts: facts, wordLists: wls, extraLists: extra, carried: carried, abilities: abilities,
       hiddenOther: Object.keys(hiddenSet).filter(function (k) { return !facts.some(function (p) { return p.key === k; }); }),
       standsFor: e.standsFor || '', standsForName: e.standsForName || '', savedWho: e.visibility || 'everyone',
       status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
@@ -281,6 +289,10 @@
       });
       if (items.length) props[key] = items;
     });
+    (d.abilities || []).forEach(function (a) {
+      var o = abilityProps(a);
+      if (o) props[a.key] = o;
+    });
     (d.hiddenOther || []).forEach(function (k) { if (props[k] !== undefined && hidden.indexOf(k) < 0) hidden.push(k); });
     if (hidden.length) props[HIDDEN] = hidden;
     return { props: props };
@@ -299,6 +311,379 @@
     if (traits.length) parts.push('the rules attached to ' + (traits.length > 3 ? traits.slice(0, 3).join(', ') + ' and ' + (traits.length - 3) + ' more' : traits.join(', ')));
     if (!parts.length) return '';
     return 'Kept as printed, not edited here: ' + parts.join('; ') + '.';
+  }
+
+  // --- Abilities ------------------------------------------------------------
+
+  // An ability detail is an object of named text parts, the shape a system's
+  // own entries give one (a kit's signature ability), so the creator draws
+  // it, the Foundry sync rolls it, and it can be copied to another campaign
+  // as it is: it holds words only, never an id. The server checks the same
+  // rules (internal/systems/entry_ability.go); checkAbility mirrors them so
+  // the form and a paste say what is wrong before a save is refused.
+  var AB_PARTS = ['name', 'flavor', 'type', 'action_type', 'cost', 'keywords', 'distance', 'target',
+    'trigger', 'power_roll', 'tier1', 'tier2', 'tier3', 'effect', 'special'];
+  var AB_LONG = { flavor: 1, trigger: 1, tier1: 1, tier2: 1, tier3: 1, effect: 1, special: 1 };
+  var AB_NAME = 100, AB_LINE = 200, AB_TEXT = 2000, AB_KW = 12;
+  // The parts the form always shows; the others get a box only when the
+  // ability already has them, so nothing it holds is lost.
+  var AB_SHOWN = { name: 1, flavor: 1, action_type: 1, keywords: 1, distance: 1, target: 1, power_roll: 1, tier1: 1, tier2: 1, tier3: 1, effect: 1 };
+  var AB_WORDS = { flavor: 'Flavour', action_type: 'Action', cost: 'Cost', trigger: 'Trigger', special: 'Special', distance: 'Distance', target: 'Target', effect: 'Effect' };
+  function plainObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+
+  // checkAbility lists what the server would refuse in an ability, in plain
+  // words; an empty list means it saves.
+  function checkAbility(a) {
+    if (!plainObj(a)) return ['An ability is written as an object of parts, like {"name": "…", "distance": "…"}.'];
+    var out = [], name = typeof a.name === 'string' ? a.name.trim() : '';
+    if (!name) out.push('Give the ability a name.');
+    else if (name.length > AB_NAME) out.push('The name can be at most ' + AB_NAME + ' characters.');
+    Object.keys(a).forEach(function (k) {
+      var v = a[k];
+      if (AB_PARTS.indexOf(k) < 0) { out.push('“' + k + '” isn’t a part an ability can have. The parts are ' + AB_PARTS.join(', ') + '.'); return; }
+      if (k === 'name') return;
+      if (k === 'keywords') {
+        if (!Array.isArray(v) || v.length > AB_KW || !v.every(function (w) { return typeof w === 'string' && w.trim() && w.length <= AB_LINE; })) {
+          out.push('Keywords are a list of at most ' + AB_KW + ' words, like ["Magic", "Ranged"].');
+        }
+        return;
+      }
+      if (k === 'cost' && typeof v === 'number') {
+        if (v !== Math.floor(v) || v < 0 || v > 99) out.push('A cost written as a number is a whole number from 0 to 99.');
+        return;
+      }
+      var limit = AB_LONG[k] ? AB_TEXT : AB_LINE;
+      if (typeof v !== 'string') out.push('The ' + k.replace(/_/g, ' ') + ' is written as text.');
+      else if (v.length > limit) out.push('The ' + k.replace(/_/g, ' ') + ' can be at most ' + limit + ' characters.');
+    });
+    return out;
+  }
+  function isAbility(v) { return plainObj(v) && !checkAbility(v).length; }
+
+  // The abilities a system's own entries share: object details with a name
+  // on at least half of them, with the type they share and the actions and
+  // keywords they use, offered as suggestions.
+  function abilityShapes(pkg) {
+    var seen = {};
+    pkg.forEach(function (c) {
+      var p = c.properties || {};
+      Object.keys(p).forEach(function (k) {
+        var v = p[k];
+        if (!plainObj(v) || typeof v.name !== 'string') return;
+        var s = seen[k] || (seen[k] = { n: 0, types: {}, actions: {}, keywords: {} });
+        s.n++;
+        if (typeof v.type === 'string' && v.type) s.types[v.type] = (s.types[v.type] || 0) + 1;
+        if (typeof v.action_type === 'string' && v.action_type) s.actions[v.action_type] = 1;
+        if (Array.isArray(v.keywords)) v.keywords.forEach(function (w) { if (typeof w === 'string' && w) s.keywords[w] = 1; });
+      });
+    });
+    return Object.keys(seen).filter(function (k) { return seen[k].n * 2 >= pkg.length; }).sort().map(function (k) {
+      var s = seen[k], type = Object.keys(s.types).sort(function (a, b) { return s.types[b] - s.types[a]; })[0] || '';
+      return { key: k, label: words(k), type: type, actions: Object.keys(s.actions).sort(), keywords: Object.keys(s.keywords).sort() };
+    });
+  }
+
+  // An ability as the form holds it: every part as text, keywords as a list,
+  // and orig, the ability as loaded, whose untouched parts go back exactly.
+  function abilityDraft(shape, v) {
+    var o = v || {}, a = { key: shape.key, label: shape.label, keywords: [], orig: v || null };
+    AB_PARTS.forEach(function (k) {
+      if (k === 'keywords') a.keywords = Array.isArray(o.keywords) ? o.keywords.map(String) : [];
+      else a[k] = o[k] == null ? '' : String(o[k]);
+    });
+    if (!v && shape.type) a.type = shape.type;
+    return a;
+  }
+  // Whether the form holds anything for the ability beyond its type.
+  function abilityFilled(a) {
+    return a.keywords.length > 0 || AB_PARTS.some(function (k) { return k !== 'type' && k !== 'keywords' && String(a[k] || '').trim(); });
+  }
+  // The ability to save: the parts in reading order, an untouched part as it
+  // was loaded, a cost of digits as a number, empty parts left out. Nothing
+  // when the form holds nothing.
+  function abilityProps(a) {
+    if (!abilityFilled(a)) return null;
+    var o = {}, orig = a.orig || {};
+    AB_PARTS.forEach(function (k) {
+      if (k === 'keywords') {
+        var kw = a.keywords.map(function (w) { return String(w).trim(); }).filter(Boolean);
+        if (kw.length) o.keywords = Array.isArray(orig.keywords) && orig.keywords.join('\n') === kw.join('\n') ? orig.keywords : kw;
+        return;
+      }
+      var v = a[k];
+      if (typeof v !== 'string') return;
+      if (orig[k] != null && v === String(orig[k])) { o[k] = orig[k]; return; }
+      v = v.trim();
+      if (v) o[k] = k === 'cost' && /^\d+$/.test(v) ? Number(v) : v;
+    });
+    return o;
+  }
+
+  // The power roll's characteristics as a list of the system's labels, or
+  // null when the words are not all characteristics (kept as written).
+  function rollStats(text, stats) {
+    var t = String(text || '').trim();
+    if (!t) return [];
+    var parts = t.split(/\s*,\s*(?:or\s+)?|\s+or\s+/i).map(function (w) { return w.trim().toLowerCase(); }).filter(Boolean), out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var hit = (stats || []).filter(function (s) { return lower(s.label) === parts[i]; })[0];
+      if (!hit) return null;
+      if (out.indexOf(hit.label) < 0) out.push(hit.label);
+    }
+    return out;
+  }
+  // The labels as a book prints them: "Might", "Might or Agility",
+  // "Agility, Reason, Intuition, or Presence", in the system's order.
+  function rollText(labels, stats) {
+    var order = (stats || []).map(function (s) { return s.label; });
+    var l = labels.slice().sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+    if (l.length < 3) return l.join(' or ');
+    return l.slice(0, -1).join(', ') + ', or ' + l[l.length - 1];
+  }
+  // A short mark for each characteristic: its first letter when that is
+  // unique among them, else its first three.
+  function statMark(label, stats) {
+    var first = label.charAt(0).toUpperCase();
+    var clash = (stats || []).filter(function (s) { return s.label.charAt(0).toUpperCase() === first; }).length > 1;
+    return clash ? label.slice(0, 3) : first;
+  }
+  // What each tier is called: the system's ranges when it declares a power
+  // roll ("11 or lower", "12 to 16", "17 or higher"), else Tier 1 to 3.
+  function tierNames(rules, short) {
+    var t = rules && Array.isArray(rules.tiers) && rules.tiers.length === 2 ? rules.tiers : null;
+    if (!t) return ['Tier 1', 'Tier 2', 'Tier 3'];
+    if (short) return ['≤ ' + t[0], (t[0] + 1) + '–' + t[1], (t[1] + 1) + '+'];
+    return [t[0] + ' or lower', (t[0] + 1) + ' to ' + t[1], (t[1] + 1) + ' or higher'];
+  }
+
+  // readAbility reads pasted JSON: an ability, or an entry or its details
+  // holding one under key. { ability } when it saves, else { error }.
+  function readAbility(text, key) {
+    var src = String(text || '').replace(/^\s*```[a-z]*\n?|\n?```\s*$/g, '').trim(), v;
+    if (!src) return { error: 'Paste the ability first.' };
+    try { v = JSON.parse(src); } catch (e) { return { error: 'This isn’t JSON Chronicle can read. Check the brackets and quotes; an example is in “Copy an example”.' }; }
+    if (plainObj(v) && plainObj(v.properties) && plainObj(v.properties[key])) v = v.properties[key];
+    else if (plainObj(v) && plainObj(v[key])) v = v[key];
+    var errs = checkAbility(v);
+    return errs.length ? { error: errs[0] } : { ability: v };
+  }
+  // An example to copy, in the shape a paste reads.
+  function abilityExample(shape) {
+    var a = { name: 'Burning Shot', flavor: 'The arrow catches light as it flies.' };
+    if (shape && shape.type) a.type = shape.type;
+    a.action_type = 'Main action';
+    a.keywords = ['Magic', 'Ranged', 'Strike', 'Weapon'];
+    a.distance = 'Ranged 10';
+    a.target = 'One creature';
+    a.power_roll = 'Agility or Reason';
+    a.tier1 = '3 + A or R fire damage';
+    a.tier2 = '5 + A or R fire damage';
+    a.tier3 = '8 + A or R fire damage';
+    a.effect = 'The target takes 2 fire damage at the start of its next turn.';
+    return JSON.stringify(a, null, 2);
+  }
+
+  // --- The ability form -----------------------------------------------------
+
+  // The form for each ability a draft holds, in a host's own field classes
+  // (c: f, k, hint, link). ctx: c, rules (the power roll the system declares,
+  // or null), shapes (the field's ability shapes, for suggestions) and ui
+  // (the paste boxes' state by ability key, kept out of the draft).
+  function abilityFormHTML(d, ctx) {
+    return (d.abilities || []).map(function (a, i) { return abilityOne(a, i, ctx); }).join('');
+  }
+  function abilityOne(a, i, ctx) {
+    var c = ctx.c, rules = ctx.rules, ui = (ctx.ui && ctx.ui[a.key]) || {};
+    var shape = (ctx.shapes || []).filter(function (s) { return s.key === a.key; })[0] || { actions: [], keywords: [] };
+    var id = 'oab' + i, stats = rules && rules.characteristics && rules.characteristics.length ? rules.characteristics : null;
+    var box = function (part, ph, long) {
+      var lab = AB_WORDS[part] || words(part);
+      return long
+        ? '<textarea rows="2" data-ab="' + i + '" data-part="' + part + '" maxlength="' + AB_TEXT + '" aria-label="' + esc(lab) + '" placeholder="' + esc(ph) + '">' + esc(a[part]) + '</textarea>'
+        : '<input data-ab="' + i + '" data-part="' + part + '" maxlength="' + (part === 'name' ? AB_NAME : AB_LINE) + '" aria-label="' + esc(lab) + '" placeholder="' + esc(ph) + '" value="' + esc(a[part]) + '" autocomplete="off"' +
+          (part === 'action_type' && shape.actions.length ? ' list="' + id + '-act"' : '') + '>';
+    };
+    var paste = ui.open
+      ? '<div class="oab-paste" role="group" aria-label="Paste JSON"><label class="' + c.hint + '" for="' + id + '-paste">Paste the ability as JSON: one object of parts, like the example. It fills the boxes so you can check them; nothing is saved until you save.</label>' +
+        '<textarea id="' + id + '-paste" rows="6" spellcheck="false" data-abpaste="' + i + '" placeholder="{&quot;name&quot;: &quot;…&quot;}">' + esc(ui.text || '') + '</textarea>' +
+        '<div class="oab-paste__acts"><button type="button" class="oab-btn" data-abact="pastego" data-ab="' + i + '">Fill the boxes</button>' +
+        '<button type="button" class="' + c.link + '" data-abact="example" data-ab="' + i + '">Copy an example</button>' +
+        '<button type="button" class="' + c.link + '" data-abact="paste" data-ab="' + i + '">Close</button></div>' +
+        '<p class="oab-msg' + (ui.bad ? ' is-bad' : '') + '" role="status">' + esc(ui.msg || '') + '</p></div>'
+      : (ui.msg ? '<p class="oab-msg" role="status">' + esc(ui.msg) + '</p>' : '');
+    var chips = chipsHTML(a, i);
+    var shown = stats ? rollStats(a.power_roll, stats) : null;
+    var roll = shown
+      ? '<div class="oab-row oab-roll"><span class="oab-stats" role="group" aria-labelledby="' + id + '-pr">' + stats.map(function (s) {
+        var on = shown.indexOf(s.label) >= 0;
+        return '<button type="button" data-abact="stat" data-ab="' + i + '" data-stat="' + esc(s.label) + '" aria-pressed="' + on + '" aria-label="' + esc(s.label) + '" title="' + esc(s.label) + '">' + esc(statMark(s.label, stats)) + '</button>';
+      }).join('') + '</span><span class="' + c.hint + '">The hero picks one of these to add.</span></div>'
+      : box('power_roll', stats ? 'Kept as written' : 'For example, Might or Agility') +
+        (stats && a.power_roll.trim() ? '<span class="' + c.hint + '">Kept as written, since it names more than the characteristics. Clear it to pick them instead.</span>' : '');
+    var names = tierNames(rules, false);
+    var extra = AB_PARTS.filter(function (k) { return !AB_SHOWN[k] && k !== 'type' && String(a[k] || '').trim(); });
+    return '<section class="oab ' + c.f + '" data-oab="' + i + '" aria-labelledby="' + id + '-h">' +
+      '<div class="oab-head"><h3 class="oab-h" id="' + id + '-h">' + esc(a.label) + '</h3>' +
+        '<button type="button" class="' + c.link + '" data-abact="paste" data-ab="' + i + '" aria-expanded="' + !!ui.open + '">Paste JSON</button></div>' +
+      '<p class="' + c.hint + '">Players get it with the ' + esc(lower(ctx.kind || 'entry')) + ', in Chronicle and as a rollable ability in Foundry. Leave it empty for none.</p>' + paste +
+      '<div class="oab-row">' + box('name', 'Ability name') + box('action_type', 'Action, e.g. Main action') + '</div>' +
+      (shape.actions.length ? '<datalist id="' + id + '-act">' + shape.actions.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' : '') +
+      box('flavor', 'A line of flavour') +
+      '<span class="oab-lab" id="' + id + '-kw">Keywords</span><div class="oab-chips">' + chips +
+        '<input data-abkw="' + i + '" aria-labelledby="' + id + '-kw" placeholder="Add a keyword"' + (a.keywords.length >= AB_KW ? ' disabled' : '') +
+        (shape.keywords.length ? ' list="' + id + '-kwl"' : '') + ' autocomplete="off"></div>' +
+      (shape.keywords.length ? '<datalist id="' + id + '-kwl">' + shape.keywords.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' : '') +
+      '<div class="oab-two"><label><span class="oab-lab">Distance</span>' + box('distance', 'Ranged 10') + '</label><label><span class="oab-lab">Target</span>' + box('target', 'One creature') + '</label></div>' +
+      '<span class="oab-lab" id="' + id + '-pr">Power roll +</span>' + roll +
+      [1, 2, 3].map(function (n) {
+        return '<label class="oab-tier"><b>' + esc(names[n - 1]) + '</b>' + box('tier' + n, n === 1 ? 'For example, 3 + M damage' : '') + '</label>';
+      }).join('') +
+      '<label><span class="oab-lab">Effect</span>' + box('effect', 'What else it does', true) + '</label>' +
+      extra.map(function (k) { return '<label><span class="oab-lab">' + esc(AB_WORDS[k] || words(k)) + '</span>' + box(k, '', !!AB_LONG[k]) + '</label>'; }).join('') +
+      '</section>';
+  }
+
+  function chipsHTML(a, i) {
+    return a.keywords.map(function (w, k) {
+      return '<span class="oab-chip">' + esc(w) + '<button type="button" data-abact="kwrm" data-ab="' + i + '" data-kw="' + k + '" aria-label="Remove ' + esc(w) + '">×</button></span>';
+    }).join('');
+  }
+  // Redraws only the keyword chips, so the boxes around them, and a press
+  // landing on one, are left alone.
+  function paintChips(scope, d) {
+    if (!scope || !d) return;
+    (d.abilities || []).forEach(function (a, i) {
+      var box = scope.querySelector('[data-oab="' + i + '"] .oab-chips');
+      if (!box) return;
+      box.querySelectorAll('.oab-chip').forEach(function (c) { c.remove(); });
+      box.insertAdjacentHTML('afterbegin', chipsHTML(a, i));
+      var inp = box.querySelector('[data-abkw]');
+      if (inp) inp.disabled = a.keywords.length >= AB_KW;
+    });
+  }
+
+  // The ability as a player reads it, the way the creator draws a card.
+  function abilityCardHTML(a, rules) {
+    var o = abilityProps(a);
+    if (!o || !o.name) return '';
+    var names = tierNames(rules, true);
+    var top = [o.type, o.action_type].filter(Boolean).map(function (x) { return esc(String(x)); }).join(' · ');
+    var rolls = !!(o.power_roll && o.tier1 && o.tier2 && o.tier3);
+    return '<div class="oab-card"><div class="oab-card__t"><b>' + esc(o.name) + '</b>' + (top ? '<small>' + top + '</small>' : '') + '</div>' +
+      (o.flavor ? '<p class="oab-card__fl">' + esc(o.flavor) + '</p>' : '') +
+      (o.keywords ? '<p>' + esc(o.keywords.join(', ')) + '</p>' : '') +
+      (o.distance || o.target ? '<p class="oab-card__two"><span>' + esc(o.distance || '') + '</span><span>' + esc(o.target || '') + '</span></p>' : '') +
+      (o.trigger ? '<p><b>Trigger:</b> ' + esc(o.trigger) + '</p>' : '') +
+      (o.power_roll ? '<p class="oab-card__pr">Power roll + ' + esc(o.power_roll) + '</p>' : '') +
+      [1, 2, 3].map(function (n) { return o['tier' + n] ? '<p class="oab-card__tr"><b>' + esc(names[n - 1]) + '</b><span>' + esc(o['tier' + n]) + '</span></p>' : ''; }).join('') +
+      (o.effect ? '<p><b>Effect:</b> ' + esc(o.effect) + '</p>' : '') +
+      (o.special ? '<p><b>Special:</b> ' + esc(o.special) + '</p>' : '') + '</div>' +
+      '<p class="oab-fd' + (rolls ? ' is-ok' : '') + '">' + (rolls ? '✓ Rolls in Foundry: the power roll and its three tiers.' : 'Add the power roll and all three tiers to roll it in Foundry.') + '</p>';
+  }
+
+  // A keystroke or edit in an ability's boxes, written into the draft.
+  // Returns true when it was one.
+  function abilityInput(d, el, ui) {
+    if (el.hasAttribute('data-abpaste')) {
+      var pa = d.abilities[+el.getAttribute('data-abpaste')];
+      if (pa && ui) (ui[pa.key] = ui[pa.key] || {}).text = el.value;
+      return false;
+    }
+    if (!el.hasAttribute('data-ab') || !el.hasAttribute('data-part')) return false;
+    var a = d.abilities && d.abilities[+el.getAttribute('data-ab')];
+    if (!a) return false;
+    a[el.getAttribute('data-part')] = el.value;
+    return true;
+  }
+  // Adds the keyword typed in an ability's keyword box; true when one went in.
+  function addKeyword(d, el) {
+    var a = d.abilities && d.abilities[+el.getAttribute('data-abkw')], w = String(el.value || '').replace(/,/g, ' ').trim();
+    if (!a || !w || a.keywords.length >= AB_KW) return false;
+    if (!a.keywords.some(function (x) { return lower(x) === lower(w); })) a.keywords.push(w.slice(0, AB_LINE));
+    el.value = '';
+    return true;
+  }
+  // A key in an ability's keyword box: Enter or a comma adds the word,
+  // Backspace on an empty box takes the last one off. Returns 'chips' when
+  // the chips changed, 'eat' when the key was used, '' otherwise.
+  function abilityKey(d, e) {
+    var el = e.target;
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-abkw') || !d) return '';
+    if (e.key === 'Enter' || e.key === ',') {
+      // Enter here adds a word; it must not reach a host that saves on Enter.
+      e.preventDefault();
+      e.stopPropagation();
+      return addKeyword(d, el) ? 'chips' : 'eat';
+    }
+    if (e.key === 'Backspace' && !el.value) {
+      var a = d.abilities[+el.getAttribute('data-abkw')];
+      if (a && a.keywords.length) { a.keywords.pop(); return 'chips'; }
+    }
+    return '';
+  }
+  // A press in an ability's form. Returns what the host does next: 'redraw'
+  // the form or repaint its 'chips' (focus names what to focus after),
+  // 'touched' (the preview follows), or '' when it was not an ability's.
+  function abilityClick(d, t, ctx) {
+    var act = t.getAttribute('data-abact'), a = d.abilities && d.abilities[+t.getAttribute('data-ab')];
+    if (!act || !a) return { next: '' };
+    var ui = ctx.ui, st = ui[a.key] || (ui[a.key] = {}), i = t.getAttribute('data-ab');
+    switch (act) {
+      case 'kwrm':
+        a.keywords.splice(+t.getAttribute('data-kw'), 1);
+        return { next: 'chips', focus: '[data-abkw="' + i + '"]' };
+      case 'stat':
+        var stats = ctx.rules && ctx.rules.characteristics || [], on = rollStats(a.power_roll, stats) || [], s = t.getAttribute('data-stat');
+        on = on.indexOf(s) >= 0 ? on.filter(function (x) { return x !== s; }) : on.concat([s]);
+        a.power_roll = rollText(on, stats);
+        t.setAttribute('aria-pressed', String(on.indexOf(s) >= 0));
+        return { next: 'touched' };
+      case 'paste':
+        st.open = !st.open;
+        st.msg = '';
+        return { next: 'redraw', focus: st.open ? '[data-abpaste="' + i + '"]' : '[data-abact="paste"][data-ab="' + i + '"]' };
+      case 'example':
+        var ex = abilityExample(ctx.shapes && ctx.shapes.filter(function (x) { return x.key === a.key; })[0]);
+        st.text = ex; st.msg = 'Example copied and put in the box.'; st.bad = false;
+        try { if (navigator.clipboard) navigator.clipboard.writeText(ex).catch(function () {}); } catch (e) {}
+        return { next: 'redraw', focus: '[data-abpaste="' + i + '"]' };
+      case 'pastego':
+        var r = readAbility(st.text, a.key);
+        if (r.error) { st.msg = r.error; st.bad = true; return { next: 'redraw', focus: '[data-abpaste="' + i + '"]' }; }
+        var fresh = abilityDraft({ key: a.key, label: a.label }, r.ability);
+        Object.keys(fresh).forEach(function (k) { a[k] = fresh[k]; });
+        st.open = false; st.text = ''; st.bad = false;
+        st.msg = 'Filled in from the paste. Check the boxes, then save.';
+        return { next: 'redraw', focus: '[data-ab="' + i + '"][data-part="name"]' };
+    }
+    return { next: '' };
+  }
+  // The problems with a draft's abilities, as problems() lists them.
+  function abilityProblems(d) {
+    var out = [];
+    (d.abilities || []).forEach(function (a) {
+      var o = abilityProps(a);
+      if (!o) return;
+      if (!o.name || !String(o.name).trim()) { out.push(['Give the ' + lower(a.label) + ' a name, or clear its boxes.', true, 'ability']); return; }
+      checkAbility(o).forEach(function (m) { out.push([a.label + ': ' + m, true, 'ability']); });
+    });
+    return out;
+  }
+
+  // The power roll the campaign's system declares, read once per campaign
+  // from the Table's own address; null when it declares none or the read
+  // fails, and the form then takes the roll as written.
+  // base is the campaign's address, /campaigns/<id>.
+  var powerReads = {};
+  function powerRules(base) {
+    if (!base) return Promise.resolve(null);
+    if (!powerReads[base]) {
+      powerReads[base] = api(base + '/rolls/power').then(json).then(function (r) {
+        var b = r.ok ? r.body : null;
+        return b && b.declared && Array.isArray(b.characteristics) ? { characteristics: b.characteristics.filter(function (s) { return s && typeof s.label === 'string' && s.label; }), tiers: b.tiers } : null;
+      }).catch(function () { return null; });
+    }
+    return powerReads[base];
   }
 
   // The writing box's HTML reduced to the few tags it can make, parsed in an
@@ -333,6 +718,7 @@
   function problems(d, f) {
     var out = [];
     if (!d.name.trim()) out.push(['Give it a name.', true, 'name']);
+    out = out.concat(abilityProblems(d));
     listsOf(d, f).forEach(function (l) {
       var items = d.lists[l.key] || [], seen = {}, total = 0;
       items.forEach(function (it) {
@@ -570,6 +956,8 @@
     this.confirm = false;
     this.tried = false;
     this.tryBuy = [];
+    this.power = null;
+    this.abUi = {};
     this.fresh = '';
     this.bodyEl = null;
     this.footEl = null;
@@ -582,8 +970,11 @@
     var self = this, reads = [api(this.base + '/grants').then(json)];
     var id = this.o.entry && this.o.entry.entryId;
     if (id) reads.push(api(this.base + '?fieldKey=' + encodeURIComponent(this.f.key)).then(json));
-    this.loading = Promise.all([ensureCss(), cardMap(this.o.root) ? ensureCardCss() : null, Promise.all(reads)]).then(function (r) {
+    // The system's power roll names the ability form's characteristics and tiers.
+    var power = this.f.abilities.length ? powerRules(this.base.replace(/\/system-entries$/, '')) : null;
+    this.loading = Promise.all([ensureCss(), cardMap(this.o.root) ? ensureCardCss() : null, Promise.all(reads), power]).then(function (r) {
       var res = r[2];
+      self.power = r[3] || null;
       if (!res[0].ok || (res[1] && !res[1].ok)) throw new Error('load');
       var key = self.f.key;
       self.grant = ((res[0].body && res[0].body.grants) || []).filter(function (g) { return g.fieldKey === key; })[0] || null;
@@ -618,6 +1009,8 @@
     function on(el, type, fn) { el.addEventListener(type, fn); self.listeners.push([el, type, fn]); }
     on(body, 'click', function (e) { self.onClick(e); });
     on(body, 'input', function (e) { self.onInput(e); });
+    on(body, 'keydown', function (e) { if (self.d && abilityKey(self.d, e) === 'chips') self.chips(); });
+    on(body, 'change', function (e) { if (self.d && e.target.hasAttribute && e.target.hasAttribute('data-abkw') && addKeyword(self.d, e.target)) self.chips(); });
     if (foot) on(foot, 'click', function (e) { self.onClick(e); });
     this.paint();
   };
@@ -749,13 +1142,26 @@
       '<div class="oed-field"><label for="oed-n">Name</label><input id="oed-n" class="oed-big" data-k="name" maxlength="100" autocomplete="off" value="' + esc(d.name) + '" placeholder="For example, Ashborn">' +
       '<span class="oed-ferr" id="oed-n-err" data-ferr="name" hidden>Give it a name first.</span></div>' +
       '<div class="oed-field"><label for="oed-s">A few words about it</label><textarea id="oed-s" rows="2" data-k="summary" maxlength="300" placeholder="What a player reads before opening it">' + esc(d.summary) + '</textarea></div>' +
-      (this.card ? this.card.html(d) : '') + this.factsHTML() + this.textHTML() + this.wordsHTML() + this.budgetHTML() +
+      (this.card ? this.card.html(d) : '') + this.factsHTML() + this.textHTML() + this.wordsHTML() + abilityFormHTML(d, this.abilityCtx()) + this.budgetHTML() +
       listsOf(d, f).map(function (l) { return self.listHTML(l); }).join('') + '<div data-prev>' + this.prevHTML() + '</div>';
     var kept = keptLine(d, f);
     h += (kept ? '<p class="oed-hint oed-kept">' + esc(kept) + '</p>' : '') + '<div class="oed-checks" data-checks>' + this.checksHTML() + '</div>' +
       '<p class="oed-who">Only you and your ' + gm() + ' see it until a ' + gm() + ' accepts it.</p>' +
       '<div class="oed-live oed-sr" aria-live="polite"></div></div>';
     return h;
+  };
+
+  // What the shared ability form needs from this editor.
+  Editor.prototype.abilityCtx = function () {
+    return { c: { f: 'oed-field', k: 'oed-k', hint: 'oed-hint', link: 'oed-link' }, rules: this.power, shapes: this.f.abilities, ui: this.abUi, kind: this.f.label };
+  };
+  // Repaints the ability's keyword chips; focus, when given, goes back to
+  // the keyword box after a chip's × took the button away.
+  Editor.prototype.chips = function (focus) {
+    paintChips(this.bodyEl, this.d);
+    this.touched();
+    var el = focus && this.bodyEl.querySelector(focus);
+    if (el) el.focus({ preventScroll: true });
   };
 
   Editor.prototype.factsHTML = function () {
@@ -945,10 +1351,19 @@
     if (el.hasAttribute('data-fact')) d.facts[+el.getAttribute('data-fact')][el.getAttribute('data-part')] = el.value;
     if (el.hasAttribute('data-li') && el.hasAttribute('data-part')) d.lists[el.getAttribute('data-li')][+el.getAttribute('data-ii')][el.getAttribute('data-part')] = el.value;
     if (el.hasAttribute('data-word')) d.wordLists[+el.getAttribute('data-word')].text = el.value;
-    if (k || el.hasAttribute('data-fact') || el.hasAttribute('data-li') || el.hasAttribute('data-word')) this.touched();
+    var ab = abilityInput(d, el, this.abUi);
+    if (k || ab || el.hasAttribute('data-fact') || el.hasAttribute('data-li') || el.hasAttribute('data-word')) this.touched();
   };
 
   Editor.prototype.onClick = function (e) {
+    var ta = this.d && e.target.closest && e.target.closest('[data-abact]');
+    if (ta) {
+      var r = abilityClick(this.d, ta, this.abilityCtx());
+      if (r.next === 'redraw') this.redraw(r.focus);
+      else if (r.next === 'chips') this.chips(r.focus);
+      else if (r.next === 'touched') this.touched();
+      return;
+    }
     var t = e.target.closest && e.target.closest('[data-oed]');
     if (!t) return;
     var d = this.d, act = t.getAttribute('data-oed'), li = t.getAttribute('data-li'), ii = +t.getAttribute('data-ii'), self = this;
@@ -1081,6 +1496,10 @@
     isDraft: isDraft, itemOf: itemOf, extraKeys: extraKeys, suggestedFacts: suggestedFacts, namedList: namedList, wordList: wordList,
     longFact: longFact, creditKey: creditKey, factValue: factValue, keyOf: keyOf, words: words, sing: sing, motion: motion,
     ensureCss: ensureCss, ensureCardCss: ensureCardCss, cardMap: cardMap, cardLib: cardLib, makeRow: makeRow, lookFromProps: lookFromProps,
-    Editor: Editor, choiceOf: choiceOf
+    Editor: Editor, choiceOf: choiceOf,
+    checkAbility: checkAbility, isAbility: isAbility, abilityShapes: abilityShapes, abilityDraft: abilityDraft, abilityProps: abilityProps,
+    readAbility: readAbility, abilityExample: abilityExample, rollStats: rollStats, rollText: rollText, tierNames: tierNames,
+    abilityFormHTML: abilityFormHTML, abilityCardHTML: abilityCardHTML, abilityInput: abilityInput, abilityKey: abilityKey,
+    addKeyword: addKeyword, abilityClick: abilityClick, paintChips: paintChips, powerRules: powerRules
   };
 })();
