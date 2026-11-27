@@ -67,6 +67,13 @@ type FrontMatter struct {
 	// Layout names which of its category's page layouts the page wears, by
 	// the layout's name; "" leaves it as it is.
 	Layout string `yaml:"layout"`
+	// RenameTo is the page's new name, on `action: update` only.
+	RenameTo string `yaml:"rename_to"`
+}
+
+// NewName is the trimmed `rename_to`, "" when the block keeps the name.
+func (f FrontMatter) NewName() string {
+	return strings.TrimSpace(f.RenameTo)
 }
 
 // IsEra reports a block that writes an era's version of a page.
@@ -201,7 +208,7 @@ type ParsedPage struct {
 
 	// Warnings is a slice of human-readable strings shown in the
 	// review row's expandable detail. Examples:
-	//   - "Unknown front-matter key 'description' (will be ignored)"
+	//   - "Page body is empty"
 	//   - "No H1 heading found; using filename as name"
 	// Errors that block import live in ParseError, not Warnings.
 	Warnings []string

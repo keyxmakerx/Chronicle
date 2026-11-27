@@ -217,7 +217,9 @@ existing tag vocabulary where possible; a tag that doesn't exist yet is made. On
 ` + "`" + `action: update` + "`" + `, ` + "`" + `tags` + "`" + ` replaces the page's tags, ` + "`" + `tags: []` + "`" + ` clears them, and leaving
 the line out keeps them. A page's GM-only tags always stay. On ` + "`" + `action: update` + "`" + `, the body
 replaces the page's whole text, so send the full text; an update with no body keeps the
-text as it is and changes only the lines you give.
+text as it is and changes only the lines you give. To rename a page, send
+` + "`" + `action: update` + "`" + ` with its current ` + "`" + `name:` + "`" + ` and ` + "`" + `rename_to: New name` + "`" + `. A page block
+takes only the keys shown here; one with any other key is refused whole.
 
 ` + "`" + `reason` + "`" + ` is one sentence saying why you are asking for this change. I see it
 beside the change when I review, and it is never saved.
