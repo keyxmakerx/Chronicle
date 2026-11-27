@@ -13,14 +13,15 @@ import (
 
 // A campaign entry's details are shaped like a package entry's, so every
 // consumer (the hero creator, pick lists, the Foundry sync) reads both the
-// same way: scalars, plain lists of short words, and lists of named items
-// (name, optional whole-number cost, optional plain-text description).
+// same way: scalars, plain lists of short words, lists of named items
+// (name, optional whole-number cost, optional plain-text description), and
+// abilities, objects of named text parts (entry_ability.go).
 //
-// A package entry can also hold richer values (a kit's signature ability
-// object, an ability object on a trait). Nobody can type one in. A rewrite
-// copies them verbatim from the package, which is trusted data, and a later
-// save may keep them only unchanged: the "carried" rule. Create never has
-// anything stored, so it never accepts one, and a player's own entry was
+// A package entry can also hold richer values (an ability object on a trait,
+// an object with parts an ability doesn't have). Nobody can type one in. A
+// rewrite copies them verbatim from the package, which is trusted data, and
+// a later save may keep them only unchanged: the "carried" rule. Create never
+// has anything stored, so it never accepts one, and a player's own entry was
 // created that way, so it never has one to carry.
 
 // ValidateEntryProperties checks details for a new entry (AI import's review
@@ -43,7 +44,7 @@ func validateEntryProperties(p, stored map[string]any) error {
 	if err := validateCardLook(p); err != nil {
 		return err
 	}
-	lists, wordLists := 0, 0
+	lists, wordLists, abilities := 0, 0, 0
 	for k, v := range p {
 		if !entryPropKeyPattern.MatchString(k) || len(k) > maxEntryPropKey {
 			return apperror.NewValidation("Detail names must start with a letter and use only letters, digits and underscores.")
@@ -79,11 +80,23 @@ func validateEntryProperties(p, stored map[string]any) error {
 			if err := validateEntryList(k, t, prev); err != nil {
 				return err
 			}
+		case map[string]any:
+			// A stored package object rides along unchanged; anything else
+			// must be an ability (entry_ability.go).
+			if carried(v, stored, k) {
+				continue
+			}
+			if abilities++; abilities > maxEntryAbilities {
+				return apperror.NewValidation(fmt.Sprintf("At most %d abilities are allowed.", maxEntryAbilities))
+			}
+			if err := validateAbility(k, t); err != nil {
+				return err
+			}
 		default:
 			if carried(v, stored, k) {
 				continue
 			}
-			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number, yes/no or a list of named items.", k))
+			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number, yes/no, a list of named items or an ability.", k))
 		}
 	}
 	if err := validateHiddenList(p); err != nil {

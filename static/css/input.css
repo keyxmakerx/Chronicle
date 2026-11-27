@@ -1791,6 +1791,23 @@
     min-width: 48px !important;
   }
 
+  /* The way back to the campaign this person was last in: the first row of
+     the menu outside a campaign, a soft tile so it reads as a way out rather
+     than one more destination. 44 tall for a thumb in the phone drawer. */
+  .nav-back {
+    display: flex; align-items: center; gap: 10px; min-height: 44px;
+    margin: 0 8px 12px; padding: 7px 10px; border-radius: var(--shape-r-ctl, 8px);
+    background: rgb(255 255 255 / 0.06); color: theme('colors.sidebar.active');
+    transition: background-color var(--dur-micro) var(--ease-standard);
+  }
+  .nav-admin-mode .nav-back { margin-top: 8px; }
+  .nav-back:hover { background: rgb(255 255 255 / 0.10); }
+  .nav-back:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .nav-back-ar { font-size: 0.75rem; color: theme('colors.sidebar.text'); }
+  .nav-back-name { display: block; font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-back small { display: block; font-size: 0.75rem; color: theme('colors.sidebar.text'); opacity: 0.8; }
+  .sidebar-collapsed .nav-back { justify-content: center; margin-inline: 4px; }
+
   /* Hide text labels, section headers, counts, and other non-icon content
      when sidebar is collapsed to icon strip. */
   .sidebar-collapsed .sidebar-text-content,

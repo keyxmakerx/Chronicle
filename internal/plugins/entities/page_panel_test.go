@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,14 +24,20 @@ func TestShow_ItemsPanelAskedForByMembersOnly(t *testing.T) {
 	SetGlobalBlockRegistry(reg)
 	t.Cleanup(func() { SetGlobalBlockRegistry(nil) })
 
+	player := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsMember: true}
 	cases := []struct {
-		name string
-		cc   *campaigns.CampaignContext
-		want bool
+		name  string
+		cc    *campaigns.CampaignContext
+		draws func(role int) bool
+		want  bool
 	}{
-		{"player", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsMember: true}, true},
-		{"owner", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner, IsMember: true}, true},
-		{"signed-out visitor on a public campaign", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1", IsPublic: true}, MemberRole: campaigns.RoleNone}, false},
+		{"player", player, nil, true},
+		{"owner", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner, IsMember: true}, nil, true},
+		{"signed-out visitor on a public campaign", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1", IsPublic: true}, MemberRole: campaigns.RoleNone}, nil, false},
+		// A player who can't act for the hero gets an empty panel, so the
+		// page leaves it out and a system sheet keeps its own item list.
+		{"player the panel won't draw for", player, func(int) bool { return false }, false},
+		{"player the panel draws for", player, func(role int) bool { return role == int(campaigns.RolePlayer) }, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,9 +46,16 @@ func TestShow_ItemsPanelAskedForByMembersOnly(t *testing.T) {
 			et.Layout = EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("r",
 				TemplateBlock{ID: "t", Type: "title"}, TemplateBlock{ID: "i", Type: BlockCharacterItems})}}
 			h := &Handler{service: &dmGrantEntitySvc{entity: ent, etype: et}}
-			h.SetCharacterPagePanel(PagePanel{Addon: "items-panel", URL: func(cid, eid string) string {
+			panel := PagePanel{Addon: "items-panel", URL: func(cid, eid string) string {
 				return "/campaigns/" + cid + "/items-panel/" + eid
-			}})
+			}}
+			if tc.draws != nil {
+				draws := tc.draws
+				panel.Draws = func(_ context.Context, cid, eid, uid string, role int) bool {
+					return cid == "c1" && eid == "e1" && uid == "u1" && draws(role)
+				}
+			}
+			h.SetCharacterPagePanel(panel)
 
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1", nil), rec)
