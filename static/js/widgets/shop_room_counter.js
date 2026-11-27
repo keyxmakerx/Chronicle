@@ -1614,11 +1614,10 @@
       var s = '<g data-k="door"><rect x="54" y="96" width="212" height="384" fill="#000" opacity=".5" filter="url(#src-blur8)"/><rect x="58" y="98" width="204" height="378" fill="url(#src-frame)"/>';
       s += '<rect x="72" y="112" width="176" height="364" fill="#6a4426"/><rect x="72" y="112" width="176" height="364" fill="#000" opacity=".35" filter="url(#src-cloth)"/>';
       for (var i = 1; i < 5; i++) s += '<path d="M' + (72 + i * 35) + ',300 V476" stroke="#120a04" stroke-opacity=".7" stroke-width="2"/>';
-      // With the counter room's sky set to the campaign's own, the door's panes show it too.
-      var live = cmNorm(R.model.counter || starterFor(R.model.roomType)).theme.outside === 'live';
-      s += '<g clip-path="url(#srcf-paneclip)">' + skyArt('srcf-sky', 98, 148, 124, 140, live ? cmLiveNow : R.model.time) + (live ? cmLiveBox(98, 148, 124, 140) : '') +
-        '<path d="M98,288 L98,250 L112,250 L112,240 L128,230 L144,240 L144,256 L170,256 L170,246 L188,238 L204,246 L204,262 L222,262 L222,288 Z" fill="#090d1a"/>' +
-        '<g fill="#e8b860" opacity=".6"><rect x="120" y="258" width="3" height="4"/><rect x="180" y="252" width="3" height="4"/></g><rect x="98" y="148" width="124" height="140" fill="url(#src-fog)" opacity=".5"/></g>';
+      // The panes show what the counter room's window shows: its sky, its view outside, or the owner's picture.
+      var t = cmCtx(R.model.counter || starterFor(R.model.roomType)), dark = t.time === 'night' || t.time === 'rain' ? '#090d1a' : t.time === 'dusk' ? '#2a1e30' : '#6a7684';
+      s += '<g clip-path="url(#srcf-paneclip)">' + cmSky(t, 'srcf-sky', 98, 148, 124, 140) + cmSkyline(98, 226, 124, 62, dark, 3) +
+        '<rect x="98" y="148" width="124" height="140" fill="url(#src-fog)" opacity=".5"/></g>';
       s += '<rect x="157" y="148" width="7" height="140" fill="#2e1e10"/><rect x="98" y="214" width="124" height="7" fill="#2e1e10"/><rect x="92" y="142" width="136" height="152" fill="none" stroke="#2e1e10" stroke-width="8"/>';
       [330, 420].forEach(function (y) { s += '<rect x="72" y="' + y + '" width="176" height="10" fill="url(#src-iron)"/>'; });
       s += '<circle cx="226" cy="372" r="8" fill="url(#src-iron)"/><path d="M262,96 h26 v6 h-20 v8" stroke="#2a2a2a" stroke-width="4" fill="none"/>' +
