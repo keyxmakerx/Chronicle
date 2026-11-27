@@ -269,15 +269,13 @@ type widgetMount struct {
 }
 
 // visitorSeed is the entity as a visitor may read it: name, visibility and
-// the field values left after GM-only and owner-only ones are taken out,
-// including fields added to just this page (RestrictionDefs). Without the
-// category nothing says which values are restricted, so none are sent.
+// the field values left after GM-only and owner-only ones are taken out.
 func visitorSeed(ctx EntityShowRenderContext) string {
-	var fields map[string]any
+	var defs []FieldDefinition
 	if ctx.EntityType != nil {
-		defs := RestrictionDefs(ctx.EntityType.Fields, ctx.Entity.FieldOverrides)
-		fields = FilterRestrictedFields(ctx.Entity.FieldsData, defs, ctx.CC.CanAuthorDmOnly(), ctx.Entity.IsOwnedBy(ctx.UserID))
+		defs = ctx.EntityType.Fields
 	}
+	fields := FilterRestrictedFields(ctx.Entity.FieldsData, defs, ctx.CC.CanAuthorDmOnly(), ctx.Entity.IsOwnedBy(ctx.UserID))
 	if fields == nil {
 		fields = map[string]any{}
 	}
