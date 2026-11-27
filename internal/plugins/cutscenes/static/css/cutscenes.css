@@ -54,7 +54,8 @@
 .csw-item:last-child { border-bottom: 0; }
 .csw-say { flex: 1 1 18rem; }
 /* The note is the Director's alone, so it carries the amber "only you" mark. */
-.csw-only { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: var(--shape-r-tag, 5px); background: rgb(var(--color-warn-rgb) / 0.14); color: rgb(var(--color-warn-rgb)); font-size: 0.625rem; font-weight: 650; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; vertical-align: 1px; }
+/* The amber mark, darkened toward the ink so its small capitals read at 4.5:1 or better on the tint in light and dark. */
+.csw-only { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: var(--shape-r-tag, 5px); background: rgb(var(--color-warn-rgb) / 0.14); color: color-mix(in srgb, rgb(var(--color-warn-rgb)) 60%, var(--color-text-primary)); font-size: 0.625rem; font-weight: 650; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; vertical-align: 1px; }
 .csw-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; margin: 0 0 12px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--color-text-muted); cursor: pointer; }
 .csw-icon:hover { border-color: var(--color-border); color: var(--color-text-primary); }
 .csw-icon:active { opacity: 0.7; }
