@@ -38,6 +38,9 @@ type Service interface {
 	Draw(ctx context.Context, campaignID, deckID string, v Viewer, in DrawInput) (*ActionResult, error)
 	// Act applies a verb to one copy.
 	Act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput) (*ActionResult, error)
+	// AnswerAsk is a Director's answer to a waiting play arriving from Asks
+	// (asks.go): the approve or turn-down itself.
+	AnswerAsk(ctx context.Context, campaignID, deckID, copyID string, v Viewer, a AskAnswer) (*ActionResult, error)
 	// DealCard deals a random pile copy of a named card.
 	DealCard(ctx context.Context, campaignID, deckID string, v Viewer, in DealCardInput) (*ActionResult, error)
 	Shuffle(ctx context.Context, campaignID, deckID string, v Viewer) (*ActionResult, error)
@@ -212,7 +215,10 @@ type service struct {
 	momentNote MomentNotifier
 	poke       func(campaignID string)
 	// story hears stored draws, deals and plays; nil tells no one.
-	story      Story
+	story Story
+	// asks puts waiting plays to the Director; nil leaves them on the deck's
+	// page.
+	asks       Asks
 	switchedOn func(ctx context.Context, campaignID string) bool
 	// looked is when each campaign's moments were last rechecked on a read.
 	looked   map[string]time.Time

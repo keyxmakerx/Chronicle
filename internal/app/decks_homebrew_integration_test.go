@@ -124,7 +124,7 @@ func newStoryWorld(t *testing.T) *storyWorld {
 	w.heroes, w.members = &decksHeroAdapter{svc: ents}, &decksMemberAdapter{svc: campSvc}
 	w.decks = decks.NewService(decks.NewRepository(db), w.heroes, w.members,
 		decks.WithNotifier(w.capture), decks.WithBell(w.capture), decks.WithMoments(w.moments),
-		decks.WithRandom(func(int) int { return 0 }), decks.WithStory(w.story))
+		decks.WithRandom(func(int) int { return 0 }), decks.WithStory(w.story), decks.WithAsks(w.story))
 	w.story.bindDecks(w.decks)
 
 	reg := homebrew.NewRegistry()
@@ -316,14 +316,22 @@ func TestAskFirstFiresWhenADirectorLetsThemNotWhenTheyAsk(t *testing.T) {
 	if _, err := w.decks.Act(storyCtx, w.camp, deck, copyID, "play", w.tam, decks.ActInput{}); err != nil {
 		t.Fatal(err)
 	}
-	if d := w.drawer(); len(d.Recent)+len(d.Waiting) != 0 {
+	// The ask is the drawer's ask card, and card.played has not fired.
+	if d := w.drawer(); len(d.Recent) != 0 || len(d.Waiting) != 1 || d.Waiting[0].Ask == nil || w.doomOn(w.tamHero) != -1 {
 		t.Fatalf("the ask fired a rule: %+v", d)
 	}
 	if _, err := w.decks.Act(storyCtx, w.camp, deck, copyID, "approve", w.dir, decks.ActInput{}); err != nil {
 		t.Fatal(err)
 	}
-	if d := w.drawer(); len(d.Recent) != 1 || d.Recent[0].Status != homebrew.RunDone || w.doomOn(w.tamHero) != 1 {
+	// Let them answered the ask (done) and the play set off the played rule.
+	d := w.drawer()
+	if len(d.Waiting) != 0 || len(d.Recent) != 2 || w.doomOn(w.tamHero) != 1 {
 		t.Fatalf("Let them fired %+v, doom %d", d, w.doomOn(w.tamHero))
+	}
+	for _, r := range d.Recent {
+		if r.Status != homebrew.RunDone {
+			t.Errorf("run %+v", r)
+		}
 	}
 }
 

@@ -105,6 +105,12 @@ func conflict(msg string) error { return errConflictMsg(msg) }
 
 // applyMove stores a move and turns a lost race into a conflict.
 func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, action string) error {
+	return s.applyMoveReply(ctx, d, card, m, action, "")
+}
+
+// applyMoveReply is applyMove with a Director's written reply, which the
+// asker's bell carries with a turn-down.
+func (s *service) applyMoveReply(ctx context.Context, d Deck, card string, m Move, action, reply string) error {
 	m.Log.Action = action
 	if err := s.repo.Move(ctx, m); err != nil {
 		if errors.Is(err, errLostClaim) {
@@ -112,7 +118,7 @@ func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, ac
 		}
 		return apperrorInternal(err)
 	}
-	s.announce(ctx, m.CampaignID, moveNote{Deck: d, Move: m, Action: action, Card: card})
+	s.announce(ctx, m.CampaignID, moveNote{Deck: d, Move: m, Action: action, Card: card, Reply: reply})
 	s.poked(m.CampaignID)
 	return nil
 }
@@ -337,6 +343,12 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 }
 
 func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput) (*ActionResult, error) {
+	return s.act(ctx, campaignID, deckID, copyID, verb, v, in, nil)
+}
+
+// act applies a verb. answer is set when an approve or turn-down comes back
+// from Asks, so it is done here rather than asked again.
+func (s *service) act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput, answer *AskAnswer) (*ActionResult, error) {
 	if !verbs[verb] {
 		return nil, errNotFound("page")
 	}
@@ -498,6 +510,21 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if c.AskedAt == nil {
 			return nil, conflict("that card is not waiting for an answer")
 		}
+		if answer == nil && s.asks != nil {
+			// One ask, answered in one place: Let them and Not now answer the
+			// ask the drawer shows, which comes back through AnswerAsk. A play
+			// with no ask waiting is answered here, as before.
+			found, err := s.asks.Answer(ctx, campaignID, d.ID, c.ID, v, verb == verbApprove)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				if verb == verbApprove && afterPlay(fateOf(d, card), c.HolderEntityID).Zone == ZonePile {
+					return r.result(d, "")
+				}
+				return r.result(d, c.ID)
+			}
+		}
 		m.ExpectAsked, m.Asked = true, AskedClear
 		if verb == verbApprove {
 			m.To, action = afterPlay(fateOf(d, card), c.HolderEntityID), ActApprove
@@ -541,12 +568,18 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		m.Log.Seen = c.FaceUp
 	}
 
-	if err := s.applyMove(ctx, d, card.Name, m, action); err != nil {
+	reply := ""
+	if answer != nil && action == ActTurnDown {
+		reply = answer.Reply
+	}
+	if err := s.applyMoveReply(ctx, d, card.Name, m, action, reply); err != nil {
 		return nil, err
 	}
 	// Only a stored deal or a play that really happened is told; an ask, a
-	// turn-down and every other verb are not.
+	// turn-down and every other verb are not. An ask is put to the Director.
 	switch action {
+	case ActAsk:
+		s.askOpened(ctx, campaignID, d, card, c, v)
 	case ActDeal:
 		s.tell(ctx, campaignID, false, d, card, m.To.HolderEntityID, v)
 	case ActPlay, ActApprove:
