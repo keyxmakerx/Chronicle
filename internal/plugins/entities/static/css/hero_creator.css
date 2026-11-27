@@ -253,23 +253,23 @@ html.dark .hc[data-skin="ornate"] {
 }
 /* The entry pane's word, at the end of the kind line. */
 .hc-panepin { display: inline-flex; align-items: center; gap: 10px; margin: -8px 0 -8px auto; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--hc-muted); }
-.hc-pp { min-height: 32px; padding: 0; gap: 6px; font-size: 14px; }
+.hc-pp { min-height: 32px; padding: 0; gap: 6px; font-size: 14px; font-weight: 500; }
+.hc-pp b { font-weight: 500; }
 .hc-pp:hover { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .hc-pp-on { display: inline-flex; align-items: center; gap: 6px; color: var(--hc-text); }
 .hc-pp .hc-pinsvg, .hc-pp-on .hc-pinsvg { width: 13px; height: 13px; }
 @media (pointer: coarse) { .hc-pp { min-height: 44px; } }
 /* "Sort: Book first", one quiet word, and its menu. */
 .hc-sortw { position: relative; display: inline-flex; align-items: center; margin-left: 4px; }
-.hc-mid .hc-sortw { margin-left: auto; }
-.hc-mid .hc-sortw + .hc-keys { margin-left: 12px; }
 .hc-sortb { min-height: 38px; padding: 0 6px; color: var(--hc-muted); font-weight: 400; font-size: 14px; white-space: nowrap; gap: 0; }
 .hc-sortb b { margin-left: .3em; font-weight: 600; color: var(--hc-link); }
 .hc-sortb:hover { background: transparent; }
 .hc-sortb:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .hc-car { margin-left: 3px; font-size: 11px; color: var(--hc-link); }
 .hc-sortline { display: flex; justify-content: flex-end; margin: 0 8px -4px 12px; }
-.hc-sortmenu { position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border-radius: var(--hc-radius-lg); background: var(--hc-surface); border: var(--hc-edge) solid var(--hc-line);
-  box-shadow: 0 2px 4px rgb(0 0 0 / .18), 0 12px 32px rgb(0 0 0 / .32); transform-origin: top right; text-align: left; }
+.hc-sortmenu { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border-radius: var(--hc-radius-lg); background: var(--hc-surface); border: var(--hc-edge) solid var(--hc-line);
+  box-shadow: 0 2px 4px rgb(0 0 0 / .18), 0 12px 32px rgb(0 0 0 / .32); transform-origin: top left; text-align: left; }
+.hc-sortline .hc-sortmenu { left: auto; right: 0; transform-origin: top right; }
 .hc-smi { width: 100%; display: grid; grid-template-columns: 20px 1fr; gap: 6px; align-items: start; padding: 8px 10px; min-height: 44px; border: 0; background: none; border-radius: var(--hc-radius); text-align: left; font: inherit; color: var(--hc-text); cursor: pointer; }
 .hc-smi:hover, .hc-smi:focus-visible { background: var(--hc-surface-2); }
 .hc-smi b { display: block; font-size: 15px; font-weight: 500; }
