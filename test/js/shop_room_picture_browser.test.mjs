@@ -148,6 +148,26 @@ test('the owner picks, moves, uploads and takes away the picture, and Save room 
 
 // The view outside is part of the same backdrop: picked in Arrange, drawn in
 // the opening in place of the town, and saved without a word for the town.
+test("the shop floor's door shows the window's sky, view and picture", { skip, timeout: 120000 }, async (t) => {
+  const browser = await launch(t);
+  const pane = async (counter) => {
+    const { p, errors } = await open(browser, counter);
+    await p.click('.src-turn');
+    await p.waitForSelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]');
+    const h = await p.evaluate(() => document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]').innerHTML);
+    assert.deepEqual(errors, []);
+    return h;
+  };
+  const night = (scene, picture) => { const c = smithy(picture || null); c.theme.outside = 'night'; if (scene) c.theme.scene = scene; return c; };
+  const town = await pane(night(''));
+  const castle = await pane(night('castle'));
+  assert.match(town, /stop-color="#0b1430"/, 'the night the theme names, not the shop’s own time');
+  assert.notEqual(castle, town, 'the view outside follows the theme');
+  const dusk = smithy(null); dusk.theme.scene = 'castle';
+  assert.match(await pane(dusk), /stop-color="#2a2a5a"/, 'and so does the sky');
+  assert.match(await pane(night('', { id: A, on: 'outside', fit: 'fill' })), /data-pic/, 'a picture through the window is through the door too');
+});
+
 test('the owner picks the view outside, and Save room sends it', { skip, timeout: 120000 }, async (t) => {
   const browser = await launch(t);
   const { p, errors } = await open(browser, smithy(null));
