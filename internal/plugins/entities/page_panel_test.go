@@ -39,8 +39,8 @@ func TestShow_ItemsPanelAskedForByMembersOnly(t *testing.T) {
 			et.Layout = EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("r",
 				TemplateBlock{ID: "t", Type: "title"}, TemplateBlock{ID: "i", Type: BlockCharacterItems})}}
 			h := &Handler{service: &dmGrantEntitySvc{entity: ent, etype: et}}
-			h.SetCharacterPagePanel(PagePanel{Addon: "armory", URL: func(cid, eid string) string {
-				return "/campaigns/" + cid + "/armory/characters/" + eid + "/panel"
+			h.SetCharacterPagePanel(PagePanel{Addon: "items-panel", URL: func(cid, eid string) string {
+				return "/campaigns/" + cid + "/items-panel/" + eid
 			}})
 
 			rec := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestShow_ItemsPanelAskedForByMembersOnly(t *testing.T) {
 			if err := h.Show(c); err != nil {
 				t.Fatalf("Show: %v", err)
 			}
-			if got := strings.Contains(rec.Body.String(), "/armory/characters/e1/panel"); got != tc.want {
+			if got := strings.Contains(rec.Body.String(), "/items-panel/e1"); got != tc.want {
 				t.Errorf("page asks for the items panel = %v, want %v", got, tc.want)
 			}
 		})
