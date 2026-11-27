@@ -207,6 +207,12 @@ func validateDocMode(ctx context.Context, reg *Registry, campaignID string, in D
 		if len(unlinked) > 0 && mode == modeSave {
 			return out, errInvalid(label + " still has " + pickList(unlinked) + " to choose before it can be saved")
 		}
+		// A marker is its owner's word. A kind with no Share has none to give,
+		// so one here is a sender's, and it would only exempt the data from
+		// checking.
+		if len(unlinked) > 0 && k.Share == nil {
+			return out, errInvalid(label + " can't have a link to choose")
+		}
 		see := p.See
 		if see == "" {
 			see = SeeDirector
@@ -218,13 +224,15 @@ func validateDocMode(ctx context.Context, reg *Registry, campaignID string, in D
 			see = k.ForceSee
 		}
 		var data json.RawMessage
-		if mode == modeShape || len(unlinked) > 0 {
+		if mode == modeShape {
 			data, err = shapeJSON(label, p.Data, MaxDataBytes)
-			if err == nil && mode == modeShape && k.Share != nil {
-				err = sharedAsIs(label, k, data)
+			if err == nil && k.Share != nil {
+				err = sharedAsIs(label, k, data, unlinked)
 			}
 		} else {
-			data, err = runCheck(ctx, campaignID, label, p.Data, MaxDataBytes, k.Check)
+			// The owner checks every field; a link still waiting to be chosen
+			// is the one thing it lets be empty (homebrew.Waiting).
+			data, err = runCheck(WithWaiting(ctx, unlinked), campaignID, label, p.Data, MaxDataBytes, k.Check)
 		}
 		if err != nil {
 			return out, err
@@ -255,6 +263,9 @@ func validateDocMode(ctx context.Context, reg *Registry, campaignID string, in D
 		var args json.RawMessage
 		if mode == modeShape {
 			args, err = shapeJSON(where+"'s when", r.When.Args, MaxArgsBytes)
+			if err == nil && ev.Share != nil {
+				err = argsSharedAsIs(where+"'s when", ev.Share, args)
+			}
 		} else {
 			args, err = runCheck(ctx, campaignID, where+"'s when", r.When.Args, MaxArgsBytes, ev.Check)
 		}
@@ -290,6 +301,9 @@ func validateDocMode(ctx context.Context, reg *Registry, campaignID string, in D
 			var a json.RawMessage
 			if mode == modeShape {
 				a, err = shapeJSON(dw, d.Args, MaxArgsBytes)
+				if err == nil && act.Share != nil {
+					err = argsSharedAsIs(dw, act.Share, a)
+				}
 			} else {
 				a, err = runCheck(ctx, campaignID, dw, d.Args, MaxArgsBytes, act.Check)
 			}
@@ -347,15 +361,45 @@ func pickList(us []Unlinked) string {
 // data: a shared recipe holds only what sharing leaves, so a sender who kept
 // Director-only text or a campaign's own link in it is turned away, not
 // trusted.
-func sharedAsIs(label string, k PartKind, data json.RawMessage) error {
-	clean, picks, err := k.Share(data)
+func sharedAsIs(label string, k PartKind, data json.RawMessage, markers []Unlinked) error {
+	clean, picks, err := k.Share(data, markers)
 	if err != nil {
 		return errInvalid(label + ": " + shareMessage(err))
 	}
-	if len(picks) > 0 || !sameJSON(clean, data) {
-		return errInvalid(label + " still holds Director-only text or a link to a record of another campaign, which a shared recipe leaves out")
+	if !sameJSON(clean, data) || !samePicks(picks, markers) {
+		return errInvalid(label + " still holds Director-only text, a link to a record of another campaign, or a link to choose its owner did not make; a shared recipe leaves them out")
 	}
 	return nil
+}
+
+// argsSharedAsIs is sharedAsIs for an event's or action's args.
+func argsSharedAsIs(where string, share ShareArgsFunc, args json.RawMessage) error {
+	clean, err := share(args)
+	if err != nil {
+		return errInvalid(where + ": " + shareMessage(err))
+	}
+	if !sameJSON(clean, args) {
+		return errInvalid(where + " still holds Director-only text, which a shared recipe leaves out")
+	}
+	return nil
+}
+
+// samePicks says whether two marker lists name the same picks.
+func samePicks(a, b []Unlinked) bool {
+	set := map[string]bool{}
+	for _, u := range a {
+		set[u.Pick] = true
+	}
+	if len(set) != len(a) {
+		return false
+	}
+	for _, u := range b {
+		if !set[u.Pick] {
+			return false
+		}
+		delete(set, u.Pick)
+	}
+	return len(set) == 0
 }
 
 // shareMessage keeps an owner's message when it is meant for the Director.

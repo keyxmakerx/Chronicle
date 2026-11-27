@@ -38,7 +38,7 @@ func shareTestRegistry(t *testing.T) *Registry {
 		}
 		return json.Marshal(d)
 	}
-	share := func(raw json.RawMessage) (json.RawMessage, []Unlinked, error) {
+	share := func(raw json.RawMessage, waiting []Unlinked) (json.RawMessage, []Unlinked, error) {
 		var d map[string]any
 		if err := json.Unmarshal(raw, &d); err != nil {
 			return nil, nil, apperror.NewValidation("can't be read")
@@ -48,6 +48,14 @@ func shareTestRegistry(t *testing.T) *Registry {
 		if _, ok := d["deckId"]; ok {
 			delete(d, "deckId")
 			picks = append(picks, Unlinked{Pick: "a deck"})
+		} else {
+			// A marker the sender wrote stays only when the owner would have
+			// made it: the data really has no deck.
+			for _, w := range waiting {
+				if w.Pick == "a deck" {
+					picks = append(picks, w)
+				}
+			}
 		}
 		out, _ := json.Marshal(d)
 		return out, picks, nil
@@ -56,6 +64,21 @@ func shareTestRegistry(t *testing.T) *Registry {
 		t.Fatal(err)
 	}
 	if err := reg.RegisterAction(ActionDef{Name: "browser-step", ClientRun: true, Check: okCheck}); err != nil {
+		t.Fatal(err)
+	}
+	// whisper is an action whose args can be for the Director only; such a
+	// step is refused, not shared.
+	if err := reg.RegisterAction(ActionDef{Name: "whisper", Check: okCheck,
+		Share: func(raw json.RawMessage) (json.RawMessage, error) {
+			var a struct {
+				See string `json:"see"`
+			}
+			_ = json.Unmarshal(raw, &a)
+			if a.See == "director" {
+				return nil, apperror.NewValidation("is only for the Director, so it is not shared")
+			}
+			return raw, nil
+		}}); err != nil {
 		t.Fatal(err)
 	}
 	reg.SetSystem(func(_ context.Context, campaignID string) string {
@@ -435,5 +458,110 @@ func TestAddPackagedLimits(t *testing.T) {
 	_, err := svc.AddPackaged(context.Background(), camp, dm, raw(`{"name":"X","doc":{"parts":[],"rules":[]}}`))
 	if err == nil || !strings.Contains(msgOf(err), "at most") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestSenderMarkersAreNeverTrusted(t *testing.T) {
+	svc, repo := shareService(t)
+	ctx := context.Background()
+	// The owner's Check is strict, and a marker used to exempt a part from it.
+	reviewer := `{"name":"Sneaky","doc":{"parts":[{"key":"k","kind":"keeper","label":"K","data":{"bogus":"zzz","name":"x"},"unlinked":[{"pick":"a deck"}]}],"rules":[]}}`
+	if _, err := svc.AddPackaged(ctx, "camp-2", dm, raw(reviewer)); err == nil || !strings.Contains(msgOf(err), "recognise") {
+		t.Errorf("a part with a marker skipped the owner's Check: %v", err)
+	}
+	// A marker the owner would not make is dropped, and the data checked.
+	made := `{"name":"Fine","doc":{"parts":[{"key":"k","kind":"keeper","label":"K","data":{"name":"x","deckId":"camp-2:d"},"unlinked":[{"pick":"anything"}]}],"rules":[]}}`
+	added, err := svc.AddPackaged(ctx, "camp-2", dm, raw(made))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := repo.recipes[added.ID].Doc.Parts[0]
+	if len(got.Unlinked) != 1 || got.Unlinked[0].Pick != "a deck" {
+		t.Errorf("markers = %+v, want only the owner's", got.Unlinked)
+	}
+	// A kind with no Share has no markers to give.
+	noShare := `{"name":"X","doc":{"parts":[{"key":"a","kind":"widget","label":"A","data":{"loose":1},"unlinked":[{"pick":"anything"}]}],"rules":[]}}`
+	if _, err := svc.StripPackage(raw(noShare)); err == nil || !strings.Contains(msgOf(err), "can't have a link") {
+		t.Errorf("strip kept a sender marker on a plain kind: %v", err)
+	}
+	if _, err := svc.ValidatePackage(raw(noShare)); err == nil {
+		t.Error("validate accepted a sender marker on a plain kind")
+	}
+	if _, err := svc.AddPackaged(ctx, "camp-2", dm, raw(noShare)); err == nil {
+		t.Error("add accepted a sender marker on a plain kind")
+	}
+	// Validate also refuses a marker its owner would not have made.
+	forged := `{"name":"X","doc":{"parts":[{"key":"k","kind":"keeper","label":"K","data":{"name":"x"},"unlinked":[{"pick":"a vault"}]}],"rules":[]}}`
+	if _, err := svc.ValidatePackage(raw(forged)); err == nil {
+		t.Error("validate accepted a forged marker")
+	}
+}
+
+func TestStepArgsAreShared(t *testing.T) {
+	svc, repo := shareService(t)
+	ctx := context.Background()
+	mk := func(see string) RecipeInput {
+		return RecipeInput{Name: "Whisper " + see, Doc: Doc{
+			Parts: []Part{w("a")},
+			Rules: []Rule{{When: When{Event: "moon"}, Timing: TimingNow,
+				Then: []Do{{Action: "whisper", Args: raw(`{"name":"Eclipse","text":"` + secretText + `","see":"` + see + `"}`)}}}},
+		}}
+	}
+	dirOnly, err := svc.Create(ctx, camp, dm, mk("director"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A Director-only step is refused on share, and the text is nowhere in
+	// what came back.
+	pkg, err := svc.Package(ctx, camp, dirOnly.ID, dm)
+	if err == nil || bytes.Contains(pkg, []byte(secretText)) {
+		t.Fatalf("a Director-only step was packaged: %s, %v", pkg, err)
+	}
+	if !strings.Contains(msgOf(err), "only for the Director") {
+		t.Errorf("message = %q", msgOf(err))
+	}
+	// A package that carries one anyway is refused by Validate, Strip and Add.
+	hostile := `{"name":"H","doc":{"parts":[],"rules":[{"when":{"event":"moon"},"then":[{"action":"whisper","args":{"see":"director","text":"` + secretText + `"}}]}]}}`
+	for name, call := range map[string]func() error{
+		"validate": func() error { _, err := svc.ValidatePackage(raw(hostile)); return err },
+		"strip":    func() error { _, err := svc.StripPackage(raw(hostile)); return err },
+		"add":      func() error { _, err := svc.AddPackaged(ctx, "camp-2", dm, raw(hostile)); return err },
+	} {
+		if err := call(); err == nil || !strings.Contains(msgOf(err), "only for the Director") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// A party-visible step travels.
+	open, err := svc.Create(ctx, camp, dm, mk("party"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(repo.recipes)
+	pkg, err = svc.Package(ctx, camp, open.ID, dm)
+	if err != nil || !bytes.Contains(pkg, []byte("Eclipse")) {
+		t.Errorf("a party step was not packaged: %s, %v", pkg, err)
+	}
+	if len(repo.recipes) != before {
+		t.Error("packaging stored a recipe")
+	}
+}
+
+func TestOffRecipesAreListedAndNotFound(t *testing.T) {
+	svc, _ := shareService(t)
+	ctx := context.Background()
+	id := seedRecipe(t, svc, camp, "Hunger")
+	pkg, _ := svc.Package(ctx, camp, id, dm)
+	if _, err := svc.AddPackaged(ctx, "camp-2", dm, pkg); err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.List(ctx, "camp-2", dm)
+	if err != nil || len(list) != 1 || !list[0].Off {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+	if got, _ := svc.PartsOfKind(ctx, "camp-2", dm, "", "keeper"); len(got) != 0 {
+		t.Errorf("an off recipe's parts were found: %v", got)
+	}
+	if got, _ := svc.PartsOfKind(ctx, camp, dm, "", "keeper"); len(got) != 1 {
+		t.Errorf("a live recipe's parts were not found: %v", got)
 	}
 }

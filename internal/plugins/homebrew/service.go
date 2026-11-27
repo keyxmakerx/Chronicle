@@ -97,7 +97,7 @@ func (s *service) List(ctx context.Context, campaignID string, v Viewer) ([]Reci
 	out := make([]RecipeSummary, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, RecipeSummary{ID: r.ID, Name: r.Name, Parts: len(r.Doc.Parts), Rules: len(r.Doc.Rules),
-			PartKinds: partKinds(r.Doc), Version: r.Version, UpdatedAt: r.UpdatedAt})
+			PartKinds: partKinds(r.Doc), Off: r.Doc.Off, Version: r.Version, UpdatedAt: r.UpdatedAt})
 	}
 	return out, nil
 }
@@ -170,6 +170,11 @@ func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, 
 	}
 	var out []RecipePart
 	for _, r := range rs {
+		// An off recipe's parts are not live, so an owner never finds one
+		// to fire its rules on.
+		if r.Doc.Off {
+			continue
+		}
 		for _, p := range r.Doc.Parts {
 			if dataHas != "" && !strings.Contains(string(p.Data), dataHas) {
 				continue

@@ -128,7 +128,9 @@ type RecipeSummary struct {
 	Rules int    `json:"rules"`
 	// PartKinds are the kinds of part the recipe has, sorted, so a caller
 	// can tell what a recipe can put on a page without loading it.
-	PartKinds []string  `json:"partKinds"`
+	PartKinds []string `json:"partKinds"`
+	// Off is true for a recipe from the Store that has not been switched on.
+	Off       bool      `json:"off"`
 	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

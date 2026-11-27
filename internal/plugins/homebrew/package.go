@@ -154,6 +154,19 @@ func (s *service) StripPackage(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(out)
 }
 
+// shareArgs runs an event's or action's Share over its args.
+func shareArgs(where string, share ShareArgsFunc, args json.RawMessage) (json.RawMessage, error) {
+	data, err := shapeJSON(where, args, MaxArgsBytes)
+	if err != nil {
+		return nil, err
+	}
+	clean, err := share(data)
+	if err != nil {
+		return nil, errInvalid(where + ": " + shareMessage(err))
+	}
+	return shapeJSON(where, clean, MaxArgsBytes)
+}
+
 func (s *service) strip(p packagedRecipe) (packagedRecipe, error) {
 	name, err := cleanName("name", p.Name)
 	if err != nil {
@@ -165,16 +178,13 @@ func (s *service) strip(p packagedRecipe) (packagedRecipe, error) {
 	if len(p.Doc.Rules) > MaxRules {
 		return p, errInvalid(fmt.Sprintf("a recipe holds at most %d rules", MaxRules))
 	}
-	out := packagedRecipe{Name: name, Doc: packageDoc{Parts: make([]Part, 0, len(p.Doc.Parts)), Rules: p.Doc.Rules, Layout: p.Doc.Layout}}
-	if out.Doc.Rules == nil {
-		out.Doc.Rules = []Rule{}
-	}
+	out := packagedRecipe{Name: name, Doc: packageDoc{Parts: make([]Part, 0, len(p.Doc.Parts)), Rules: make([]Rule, 0, len(p.Doc.Rules)), Layout: p.Doc.Layout}}
 	for i, part := range p.Doc.Parts {
 		label := strings.TrimSpace(part.Label)
 		if label == "" {
 			label = fmt.Sprintf("part %d", i+1)
 		}
-		kept, err := cleanUnlinked(label, part.Unlinked)
+		waiting, err := cleanUnlinked(label, part.Unlinked)
 		if err != nil {
 			return p, err
 		}
@@ -182,8 +192,9 @@ func (s *service) strip(p packagedRecipe) (packagedRecipe, error) {
 		if err != nil {
 			return p, err
 		}
+		kept := []Unlinked(nil)
 		if k, ok := s.reg.part(part.Kind); ok && k.Share != nil {
-			clean, picks, err := k.Share(data)
+			clean, picks, err := k.Share(data, waiting)
 			if err != nil {
 				return p, errInvalid(label + ": " + shareMessage(err))
 			}
@@ -192,14 +203,36 @@ func (s *service) strip(p packagedRecipe) (packagedRecipe, error) {
 			if data, err = shapeJSON(label, clean, MaxDataBytes); err != nil {
 				return p, err
 			}
-			kept, err = cleanUnlinked(label, append(kept, picks...))
-			if err != nil {
+			// Only what the owner returns is a marker; the sender's own are
+			// input to it, never kept as written.
+			if kept, err = cleanUnlinked(label, picks); err != nil {
 				return p, err
 			}
+		} else if len(waiting) > 0 {
+			return p, errInvalid(label + " can't have a link to choose")
 		}
 		part.Data = data
 		part.Unlinked = kept
 		out.Doc.Parts = append(out.Doc.Parts, part)
+	}
+	for i, r := range p.Doc.Rules {
+		where := fmt.Sprintf("rule %d", i+1)
+		nr := Rule{When: r.When, Timing: r.Timing, Then: make([]Do, 0, len(r.Then))}
+		var err error
+		if ev, ok := s.reg.event(r.When.Event); ok && ev.Share != nil {
+			if nr.When.Args, err = shareArgs(where+"'s when", ev.Share, r.When.Args); err != nil {
+				return p, err
+			}
+		}
+		for j, d := range r.Then {
+			if act, ok := s.reg.action(d.Action); ok && act.Share != nil {
+				if d.Args, err = shareArgs(fmt.Sprintf("%s, step %d", where, j+1), act.Share, d.Args); err != nil {
+					return p, err
+				}
+			}
+			nr.Then = append(nr.Then, d)
+		}
+		out.Doc.Rules = append(out.Doc.Rules, nr)
 	}
 	out.Needs = s.needsOf(out.Doc, p.Needs.System)
 	return out, nil
