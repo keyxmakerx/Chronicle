@@ -95,6 +95,7 @@ func wantStatus(t *testing.T, err error, status int) {
 
 func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 	owner := "user-owner"
+	zeroMin := 0.0
 	cases := []struct {
 		name       string
 		role       campaigns.Role
@@ -128,6 +129,8 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 		{"other player denied", campaigns.RolePlayer, "user-other", "c1", `{"fields_patch":{"ancestry":"Dwarf"}}`, 403, false},
 		{"anonymous user id denied", campaigns.RolePlayer, "", "c1", `{"fields_patch":{"ancestry":"Dwarf"}}`, 403, false},
 		{"owner of an entity in another campaign denied", campaigns.RolePlayer, owner, "c2", `{"fields_patch":{"ancestry":"Dwarf"}}`, 404, false},
+		{"owner changes a number the system lets them play", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"victories":3}}`, 200, true},
+		{"owner denied a play number below its min", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"victories":-1}}`, 400, false},
 		{"scribe unchanged: any key", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"might":5}}`, 200, true},
 		{"scribe unchanged: fields_data", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_data":{"might":5}}`, 200, true},
 		{"gm unchanged: fields_data", campaigns.RoleOwner, "user-gm", "c1", `{"fields_data":{"might":5}}`, 200, true},
@@ -135,7 +138,8 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Hero", OwnerUserID: &owner,
-				FieldOverrides: &FieldOverrides{Added: []FieldDefinition{{Key: "heritage", GMOnly: true}}}}}
+				FieldOverrides: &FieldOverrides{Added: []FieldDefinition{{Key: "heritage", GMOnly: true},
+					{Key: "victories", Label: "Victories", Play: &FieldPlay{Edit: "owner", Kind: "counter", Min: &zeroMin}}}}}}
 			err := runIdentityCall(t, svc, (*Handler).UpdateFieldsAPI, tc.role, tc.userID, tc.campaignID, tc.body)
 			wantStatus(t, err, tc.wantStatus)
 			if (svc.writeCount > 0) != tc.wantWrite {
@@ -375,6 +379,9 @@ func TestOwnPageWrites(t *testing.T) {
 		{"scribe may not overwrite secrets either", (*Handler).UpdateEntryAPI, campaigns.RoleScribe, "user-scribe", secretEntryHTML, entryBody, 403},
 		{"owner sets the picture", (*Handler).UpdateImageAPI, campaigns.RolePlayer, owner, "", `{"image_path":"pic-1"}`, 200},
 		{"other player may not set it", (*Handler).UpdateImageAPI, campaigns.RolePlayer, "user-other", "", `{"image_path":"pic-1"}`, 403},
+		{"the Director sets the picture", (*Handler).UpdateImageAPI, campaigns.RoleOwner, "user-dm", "", `{"image_path":"pic-1"}`, 200},
+		{"a co-Director sets the picture", (*Handler).UpdateImageAPI, campaigns.RoleScribe, "user-scribe", "", `{"image_path":"pic-1"}`, 200},
+		{"a guest may not set it", (*Handler).UpdateImageAPI, campaigns.RoleNone, "", "", `{"image_path":"pic-1"}`, 403},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -43,6 +43,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 		addons.RequireAddon(addonSvc, SessionsAddonSlug),
 	)
 	cg.POST("/sessions", h.CreateSession, campaigns.RequireRole(campaigns.RoleScribe))
+	// A night's page and the planned-nights list show real dates, the
+	// summary and every invited member's name and answer, so they are for
+	// members only; a visitor sees game nights only through the home blocks,
+	// which the owner places and which show a guest the date alone.
+	cg.GET("/sessions/:sid", h.ShowSession, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireRole(campaigns.RolePlayer))
 	// Move (schedule-changing edits) and delete run a game night, so a
 	// co-Director (the IsDmGranted capability — not necessarily Scribe role,
 	// see campaigns.CampaignContext.CanAuthorDmOnly) gets them too, so Co-Directors
@@ -111,6 +117,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/availability", h.ShowAvailability, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/mine", h.SaveMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/mine/zone", h.ConfirmMyZoneAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/overlay", h.GetOverlayAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Answers is Player+ (it says who has spoken, never what they said); the
 	// nudge is Player+ ON THE ROUTE and Owner/co-DM IN THE HANDLER, following
@@ -148,8 +155,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	)
 	// Game nights have no list page; the old address opens the calendar.
 	pub.GET("/sessions", h.GameNightsLink, campaigns.RequireViewAccess())
-	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireViewAccess())
-	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireViewAccess())
 	pub.GET("/game-nights", h.GameNightsLink, campaigns.RequireViewAccess())
 	// The home's "When we could play": the handler itself decides what a
 	// guest may see (set nights as date and time only).

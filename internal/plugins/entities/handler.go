@@ -1361,6 +1361,10 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		var orders map[string]string
 		if h.folders != nil {
 			orders, _ = h.folders.ChildOrders(c.Request().Context(), cc.Campaign.ID)
+			// Pins only arrange the list, so a failed read leaves none.
+			if pins, err := h.folders.SidebarPins(c.Request().Context(), cc.Campaign.ID); err == nil && len(pins) > 0 {
+				c.SetRequest(c.Request().WithContext(withSidebarPins(c.Request().Context(), servedPinRanks(pins, results))))
+			}
 		}
 		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs, orders))
 	}
@@ -1369,6 +1373,26 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 }
 
 // --- Reorder API (sidebar tree drag-and-drop) ---
+
+// folderInCampaign refuses a sidebar folder from another campaign. The page
+// or folder being moved is scoped to the campaign by its write, but the
+// folder it moves into is the caller's id and must be checked too.
+func (h *Handler) folderInCampaign(ctx context.Context, campaignID string, nodeID *string) error {
+	if nodeID == nil || *nodeID == "" {
+		return nil
+	}
+	if h.sidebarNodeRepo == nil {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+	node, err := h.sidebarNodeRepo.FindByID(ctx, *nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != campaignID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+	return nil
+}
 
 // ReorderAPI updates an entity's parent and sort order for sidebar tree reordering.
 // PUT /campaigns/:id/entities/:eid/reorder
@@ -1391,6 +1415,9 @@ func (h *Handler) ReorderAPI(c *echo.Context) error {
 	sortOrder := 0
 	if input.SortOrder != nil {
 		sortOrder = *input.SortOrder
+	}
+	if err := h.folderInCampaign(c.Request().Context(), cc.Campaign.ID, input.ParentNodeID); err != nil {
+		return err
 	}
 
 	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.ParentNodeID, sortOrder); err != nil {
@@ -1495,6 +1522,9 @@ func (h *Handler) BulkMoveAPI(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
+	if err := h.folderInCampaign(ctx, cc.Campaign.ID, req.ParentNodeID); err != nil {
+		return err
+	}
 	req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
 	// Where each moved page was, so the list's Undo can put it back. Each
 	// page goes to the end of its new list, in the order it was picked.
@@ -1555,10 +1585,11 @@ func (h *Handler) BulkChangeTypeAPI(c *echo.Context) error {
 	// A Scribe changes only pages they can edit, and cannot move pages into
 	// the DM-only category, where they would no longer see them.
 	if !cc.CanAuthorDmOnly() {
-		if et, err := h.service.GetEntityTypeByID(c.Request().Context(), req.EntityTypeID); err == nil && et.DMOnly() {
+		target, err := h.service.GetEntityTypeByID(c.Request().Context(), req.EntityTypeID)
+		if err == nil && target.DMOnly() {
 			return apperror.NewForbidden("only the owner or a Co-DM can move pages into this category")
 		}
-		req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
+		req.EntityIDs = h.keepHiddenOnMove(c, h.editablePageIDs(c, cc, req.EntityIDs), target)
 	}
 	// What each page was before, so the list's Undo can put it back.
 	previous := make(map[string]int, len(req.EntityIDs))
@@ -2055,6 +2086,9 @@ func (h *Handler) ReorderSidebarNodeAPI(c *echo.Context) error {
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.folderInCampaign(c.Request().Context(), cc.Campaign.ID, req.ParentID); err != nil {
+		return err
 	}
 
 	if err := h.sidebarNodeRepo.UpdateParent(c.Request().Context(), nodeID, cc.Campaign.ID, req.ParentID); err != nil {
@@ -2629,8 +2663,12 @@ func (h *Handler) UpdateFieldOverridesAPI(c *echo.Context) error {
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
+	overrides := &body
+	if !cc.CanAuthorDmOnly() {
+		overrides = keepRestrictedOverrides(entity.FieldOverrides, overrides)
+	}
 
-	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, &body); err != nil {
+	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, overrides); err != nil {
 		return err
 	}
 
@@ -2658,7 +2696,12 @@ func (h *Handler) ResetFieldOverridesAPI(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, nil); err != nil {
+	// A writer who may not show hidden content keeps the page's hidden fields.
+	var overrides *FieldOverrides
+	if !cc.CanAuthorDmOnly() {
+		overrides = keepRestrictedOverrides(entity.FieldOverrides, nil)
+	}
+	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, overrides); err != nil {
 		return err
 	}
 
@@ -5106,6 +5149,31 @@ func (h *Handler) SetSidebarOrderAPI(c *echo.Context) error {
 		}
 	}
 	if err := h.folders.SetChildOrder(c.Request().Context(), cc.Campaign.ID, req.Kind, req.ID, req.Mode); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SetSidebarPinAPI pins a page so it leads its list in the sidebar, or unpins
+// it. The service refuses anyone below the Director team; the route lets
+// every member reach it so that answer is one place.
+// PUT /campaigns/:id/sidebar-pins
+func (h *Handler) SetSidebarPinAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.folders == nil {
+		return apperror.NewNotFound("pins are not available")
+	}
+	var req struct {
+		EntityID string `json:"entity_id"`
+		Pinned   bool   `json:"pinned"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.folders.SetSidebarPin(c.Request().Context(), cc.Campaign.ID, req.EntityID, auth.GetUserID(c), cc.CanAuthorDmOnly(), req.Pinned); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

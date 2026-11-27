@@ -199,6 +199,14 @@ test('phone: the menu scrolls as one list, an open category included', async () 
   await page.waitForTimeout(500);
   assert.ok(await page.locator('#sidebar-drill.is-open').count(), 'the category panel is not open on its page');
 
+  // Campaign settings sits pinned at the foot: a tap reaches it with no
+  // scrolling, and it is still there once the menu has scrolled.
+  const settingsHit = () => page.evaluate(() => {
+    const a = document.querySelector('#sidebar .nav-manage a'), r = a.getBoundingClientRect();
+    return r.bottom <= innerHeight + 1 && a.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  assert.ok(await settingsHit(), 'Campaign settings needs scrolling to reach on a phone');
+
   // A real finger drag, as touch events: Playwright's wheel is not a swipe.
   const cdp = await page.context().newCDPSession(page);
   const swipe = async (dy) => {
@@ -211,6 +219,7 @@ test('phone: the menu scrolls as one list, an open category included', async () 
   const scrolled = () => page.evaluate(() => document.getElementById('sidebar').scrollTop);
   for (let i = 0; i < 6; i++) await swipe(400);
   assert.ok(await scrolled() > 300, 'a swipe on the open category did not move the menu');
+  assert.ok(await settingsHit(), 'Campaign settings scrolled away with the menu');
 
   // Only the menu scrolls in the drawer, and its last page row comes clear
   // of the foot.

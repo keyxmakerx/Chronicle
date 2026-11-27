@@ -362,6 +362,7 @@ type FieldPlay struct {
 	MaxLength       int      `json:"max_length,omitempty"`       // Bound for text/choice.
 	ToFoundry       *bool    `json:"to_foundry,omitempty"`       // nil = follow the field's foundry_writable.
 	CombatAuthority string   `json:"combat_authority,omitempty"` // foundry | chronicle | empty.
+	Bell            bool     `json:"bell,omitempty"`             // An owner's change rings the Directors' bell.
 }
 
 // Entity represents a single worldbuilding object — a character, location,
@@ -418,8 +419,10 @@ type Entity struct {
 	TypeColor      string `json:"type_color,omitempty"`
 	TypeSlug       string `json:"type_slug,omitempty"`
 	// TypeDMOnly is set when the page's category is for the DM team only, so
-	// the page is hidden from players whatever its own visibility says.
-	TypeDMOnly bool `json:"-"`
+	// the page is hidden from players whatever its own visibility says. It is
+	// on the wire so a GM-tier client (the Foundry module) can hide the page
+	// too; a player never receives such a page.
+	TypeDMOnly bool `json:"type_dm_only,omitempty"`
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`

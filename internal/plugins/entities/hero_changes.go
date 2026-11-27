@@ -97,6 +97,9 @@ const (
 	// HeroChangeStory is the player's long text. Its words never leave the
 	// page: a change carries no From or To.
 	HeroChangeStory HeroChangeKind = "story"
+	// HeroChangeNumber is a number the system's play block asks the bell to
+	// tell of (Victories, XP), From and To written as numbers.
+	HeroChangeNumber HeroChangeKind = "number"
 )
 
 // HeroPickChange is one field a player changed, as the Directors read it.
@@ -293,8 +296,10 @@ func heroBellChanges(e *Entity, patch map[string]any, picks builderPicks, stepLa
 	}
 	gmOnly, onType := map[string]bool{}, map[string]bool{}
 	fieldLabel := map[string]string{}
+	field := map[string]*FieldDefinition{}
 	for i := range typeFields {
 		f := typeFields[i]
+		field[f.Key] = &typeFields[i]
 		onType[f.Key] = true
 		fieldLabel[f.Key] = strings.TrimSpace(f.Label)
 		if f.GMOnly {
@@ -313,6 +318,11 @@ func heroBellChanges(e *Entity, patch map[string]any, picks builderPicks, stepLa
 				continue // judged above, as a pick
 			}
 			kind = HeroChangeText
+		case playBellNumber(field[k]):
+			if _, isStep := picks[k]; isStep {
+				continue
+			}
+			kind = HeroChangeNumber
 		default:
 			continue
 		}
@@ -349,6 +359,21 @@ func heroBellChanges(e *Entity, patch map[string]any, picks builderPicks, stepLa
 func bellChange(kind HeroChangeKind, k string, old, v any) (HeroPickChange, bool) {
 	ch := HeroPickChange{FieldKey: k, Kind: kind}
 	switch kind {
+	case HeroChangeNumber:
+		// Unset reads as 0, so a first award says "0 → 1". A value that is
+		// not a number is no change; the door refuses it anyway.
+		was, okWas := playNumber(old)
+		if old != nil && !okWas {
+			return ch, false
+		}
+		now, okNow := playNumber(v)
+		if v != nil && !okNow {
+			return ch, false
+		}
+		if was == now {
+			return ch, false
+		}
+		ch.From, ch.To = playNumberText(was), playNumberText(now)
 	case HeroChangeList:
 		was, okWas := listNames(old)
 		now, okNow := listNames(v)

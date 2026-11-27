@@ -107,3 +107,8 @@ func TestListRelations_CoDmReachesDmOnlySourceEntity(t *testing.T) {
 		t.Errorf("Co-DM must see the dm_only relation content; body=%s", rec.Body)
 	}
 }
+
+func (g relDmGrantGate) ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (string, bool, bool, error) {
+	camp, canView, err := g.ResolveViewableEntity(ctx, entityID, role, userID)
+	return camp, canView, canView, err
+}

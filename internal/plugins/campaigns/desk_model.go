@@ -166,6 +166,8 @@ type DeskInputs struct {
 type DeskTab struct {
 	ID, Label string
 	Summary   CustomizeSummary
+	// Blurb says what the area holds, for a plugin that gives no Summary.
+	Blurb string
 }
 
 // Desk is the Overview page: the board of tiles.

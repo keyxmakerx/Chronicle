@@ -129,6 +129,7 @@ view: { month: 1 },
 boot(){
   var self = this;
   this.ensureEngine(function(){
+    if (self.recall()) return;
     self.applyRecipeDefaults();
     self.seed = window.ChronicleGen.randomSeed();
     self.build();
@@ -336,6 +337,30 @@ applySeed(){
   if (this.seedDraft && this.seedDraft !== this.seed) { this.seed = this.seedDraft; this.touched(); this.build(); }
   this.seedEditing = false;
 },
+// Back from Review reloads this step from the server, so the sheet keeps
+// itself in this tab's sessionStorage on the way to Review and takes it
+// back once; a fresh visit from Start then gets a fresh calendar.
+memKey(){ return 'chronicle.calendarWizard.generate.' + (this.$root.dataset.campaign || ''); },
+memFields: ['recipe', 'culture', 'cultureSet', 'monthsOverride', 'weekOverride', 'moonsN', 'leap', 'fest', 'seasonsN', 'rnd', 'more', 'sky', 'suns', 'skyMoons', 'planets', 'seed', 'kept', 'keptOne', 'cal', 'summary', 'validOk', 'validText', 'view'],
+remember(){
+  if (!this.cal) return;
+  var self = this, out = {};
+  this.memFields.forEach(function (k) { out[k] = self[k]; });
+  try { sessionStorage.setItem(this.memKey(), JSON.stringify(out)); } catch (e) { /* Back starts over */ }
+},
+recall(){
+  var saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(this.memKey()) || 'null');
+    sessionStorage.removeItem(this.memKey());
+  } catch (e) { saved = null; }
+  if (!saved || !saved.cal || !Array.isArray(saved.cal.months)) return false;
+  var self = this;
+  this.memFields.forEach(function (k) { if (k in saved) self[k] = saved[k]; });
+  this.busy = false;
+  this.ready = true;
+  return true;
+},
 toPreset(){ return window.ChronicleGen.cal.toPreset({ format: 'chronicle-calendar-v1', version: 2, calendar: this.cal }); },
 reviewJSON(){ return this.cal ? JSON.stringify(this.toPreset()) : ''; }
 }`, recipesJSON, culturesJSON)
@@ -390,7 +415,7 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 	if formError != "" {
 		<p class="calv5-err">{ formError }</p>
 	}
-	<div x-data={ wizardGenerateXData() } x-init="boot()" data-engine-src={ layouts.AssetURL("/static/js/widgets/chronicle_gen.js") }>
+	<div x-data={ wizardGenerateXData() } x-init="boot()" data-engine-src={ layouts.AssetURL("/static/js/widgets/chronicle_gen.js") } data-campaign={ campaignID }>
 		<template x-if="err">
 			<p class="calv5-err" x-text="err"></p>
 		</template>
@@ -648,6 +673,7 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 			<form
 				x-init="window.htmx && htmx.process($el)"
 				hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/generate/preview", campaignID) }
+				x-on:submit="remember()"
 				hx-target="#calv5-wizard-root"
 				hx-swap="outerHTML"
 				hx-encoding="multipart/form-data"

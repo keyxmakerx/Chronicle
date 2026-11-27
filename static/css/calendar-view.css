@@ -598,20 +598,26 @@
 .cal-v5 .qadd input::placeholder{color:var(--mut)}
 .cal-v5 .qmore{flex:none;font:550 11.5px/1 var(--sans);color:var(--ink2);padding:7px 8px;border-radius:7px;white-space:nowrap}
 .cal-v5 .qmore:hover{background:var(--hair2);color:var(--ink)}
-/* Undo toast: inside the widget, never a confirm dialog. */
-.cal-v5 .toast{position:absolute;left:50%;bottom:16px;z-index:60;display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);padding:8px 8px 8px 14px;border-radius:12px;background:var(--ink);color:var(--paper);
+/* Undo toast: the widget's own, never a confirm dialog. */
+/* Pinned to the window, not the card: a card taller than the window would
+   put the message and its Undo below the window's edge. calendar_view.js
+   sets --toastX and --toastW from the card so it stays centred on it. */
+.cal-v5 .toast{position:fixed;left:var(--toastX,50%);bottom:calc(16px + var(--bottom-bar,0px));z-index:60;display:flex;align-items:center;gap:12px;max-width:var(--toastW,calc(100% - 32px));padding:8px 8px 8px 14px;border-radius:12px;background:var(--ink);color:var(--paper);
   font:500 12.5px/1.3 var(--sans);box-shadow:var(--shadow-l);opacity:0;visibility:hidden;transform:translate(-50%,14px);transition:transform var(--dur-everyday-out,80ms) var(--ease-in),opacity var(--dur-everyday-out,80ms) var(--ease-in),visibility 0s linear var(--dur-everyday-out,80ms)}
 .cal-v5 .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:transform var(--dur-standard,200ms) var(--ease-out),opacity var(--dur-standard,200ms) var(--ease-out),visibility 0s}
 .cal-v5 .toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .toast button{flex:none;font:650 12px/1 var(--sans);color:var(--paper);padding:7px 10px;border-radius:8px;box-shadow:inset 0 0 0 1px oklch(1 0 0 / .28)}
 .cal-v5 .toast button:hover{background:oklch(1 0 0 / .1)}
+.cal-v5 .toast .tx{padding:7px 8px;margin-left:-6px;box-shadow:none;color:oklch(1 0 0 / .72)}
+.cal-v5 .toast .tx:hover{color:var(--paper)}
 /* An editor's calendar has the deck along its bottom edge, and while editing
-   its drawer above that (--deckH, measured by calendar_editor.js), so a toast
-   rises clear of both. Below 600px the toast moves to the top of the screen
-   (the max-width:600px block further down), where it never meets them. */
+   its drawer above that, so a toast rises clear of both (--toastB, measured
+   by calendar_view.js when it shows; the fallbacks cover an unmeasured one).
+   Below 600px the toast moves to the top of the screen (the max-width:600px
+   block further down), where it never meets them. */
 @media (min-width:601px){
-  .cal-v5 .cal.decked .toast{bottom:58px}
-  .cal-v5 .cal.decked.editing .toast{bottom:calc(var(--deckH,64px) + 58px)}
+  .cal-v5 .cal.decked .toast{bottom:max(var(--toastB,64px),calc(16px + var(--bottom-bar,0px)))}
+  .cal-v5 .cal.decked.editing .toast{bottom:max(var(--toastB,calc(var(--deckH,64px) + 64px)),calc(16px + var(--bottom-bar,0px)))}
 }
 /* Era card: drops out of the era label's bottom edge. */
 .cal-v5 .flap{width:392px;border-radius:4px 14px 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
@@ -672,6 +678,25 @@
 .cal-v5 .dsec{padding:14px 0;border-top:1px solid var(--hair)}
 .cal-v5 .dsec:first-child{border-top:0}
 .cal-v5 .dsec h4{margin:0 0 8px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+/* Which zone are your hours in? Asked once: a strip under the header, and
+   all three answers at the top of the viewer's hours. */
+.cal-v5 .zstrip{display:grid;grid-template-columns:1fr auto;gap:10px 16px;align-items:center;margin:0 14px 12px;padding:12px 14px;border-radius:12px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge);animation:cal5-fadeIn var(--dur-standard,200ms) var(--ease-out) both}
+.cal-v5 .zstrip[hidden]{display:none}
+.cal-v5 .zstrip b{font:650 13.5px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .zstrip p{margin:2px 0 0;font:500 12.5px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .zacts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.cal-v5 .zask{margin:0 0 14px;padding:14px;border-radius:12px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .zask b{display:block;margin-bottom:4px;font:650 14px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .zask p{margin:0 0 10px;font:500 13px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .zch{display:flex;flex-direction:column;gap:6px}
+.cal-v5 .zch button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:44px;padding:10px 12px;border-radius:10px;text-align:left;color:var(--ink);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .zch button:hover{background:var(--hair)}
+.cal-v5 .zch button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.cal-v5 .zch button.rec{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .zch button:disabled{opacity:.55}
+.cal-v5 .zch .t{font:650 13px/1.3 var(--sans)}
+.cal-v5 .zch .s{font:500 12px/1.35 var(--sans);color:var(--mut)}
+@media (max-width:600px){.cal-v5 .zstrip{grid-template-columns:1fr}.cal-v5 .zacts{justify-content:flex-start}.cal-v5 .zacts .btn{height:44px}}
 .cal-v5 .bigdate{font:500 22px/1.15 var(--serif);color:var(--ink)}
 .cal-v5 .dnote{margin-top:6px;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
 .cal-v5 .brow{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -877,7 +902,7 @@
 .cal-v5 .two{grid-template-columns:1fr}
 .cal-v5 .wx{grid-template-columns:repeat(2,minmax(0,1fr))}
 .cal-v5 .caption{padding:0 16px}
-.cal-v5 .toast{position:fixed;bottom:auto;top:12px;transform:translate(-50%,-14px)}
+.cal-v5 .toast{position:fixed;bottom:auto;top:var(--toastTop,12px);transform:translate(-50%,-14px)}
 .cal-v5 .erow{grid-template-columns:40px minmax(0,1.4fr) minmax(0,.9fr) minmax(0,1fr)}
 
 }
@@ -2486,6 +2511,10 @@ html[data-motion="calm"] .cal-v5{--yt-s0:1}
 .cal-v5 .yt-mo::after{content:"";position:absolute;left:0;right:0;top:0;height:var(--yt-colh,76px);border-radius:8px;background:var(--hair2);opacity:0;pointer-events:none;transition:opacity var(--dur-micro,120ms) var(--ease-out)}
 .cal-v5 .yt-mo span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;font:550 12px/1 var(--sans);color:var(--ink2);opacity:0;pointer-events:none;transition:opacity var(--dur-micro,120ms) var(--ease-out)}
 .cal-v5 .yt-mo.cur span{opacity:1;color:var(--ink);font-weight:650}
+/* A name wider than its month would spill past the track's ends, under
+   the row names on the left; the end months start at their own edge. */
+.cal-v5 .yt-mo:first-child span{left:4px;transform:translate(0,-50%)}
+.cal-v5 .yt-mo:last-child span{left:auto;right:4px;transform:translate(0,-50%)}
 .cal-v5 .yt-mo:focus-visible span{opacity:1}
 .cal-v5 .yt-mo:active::after{opacity:1;background:var(--hair)}
 @media (hover:hover){

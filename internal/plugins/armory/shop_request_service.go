@@ -343,11 +343,15 @@ func (s *shopBuyService) pendingLines(ctx context.Context, campaignID string, a 
 			l.RequesterName = "A player"
 		}
 		in := BuyInput{BuyerEntityID: r.BuyerEntityID, Items: r.Basket}
-		if _, cur, total, err := s.priceBasket(ctx, campaignID, r.ShopEntityID, a, r.BuyerEntityID, in, false); err == nil {
+		if lines, cur, total, err := s.priceBasket(ctx, campaignID, r.ShopEntityID, a, r.BuyerEntityID, in, false); err == nil {
 			l.Total, l.Currency = &total, cur
 			if cur != r.QuotedCurrency || total > r.QuotedTotal {
 				q := r.QuotedTotal
 				l.Total, l.Currency, l.PriceRose = &q, r.QuotedCurrency, true
+			}
+			if ref, err := s.stash.Directory.GetEntity(ctx, campaignID, r.BuyerEntityID); err == nil && ref != nil && buyKind(ref) == BuyKindWealth {
+				w := highestUnit(lines)
+				l.Wealth = &w
 			}
 		}
 		out = append(out, l)

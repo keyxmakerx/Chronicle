@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -518,6 +519,18 @@ func (h *APIHandler) GetEntity(c *echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	if err := h.viewerCopy(c, entity, role, userID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, entity)
+}
+
+// viewerCopy turns a stored page into the copy this caller may read, in
+// place: GetEntity's strips. Every answer that carries a page goes through
+// it, so a save's answer never hands back more than a read would. role is
+// the caller's visibility role (visibilityRoleFor).
+func (h *APIHandler) viewerCopy(c *echo.Context, entity *entities.Entity, role int, userID string) error {
+	ctx := c.Request().Context()
 	// Defense-in-depth egress sanitize — see egress_sanitize.go.
 	sanitizeEntityHTMLForEgress(entity)
 
@@ -544,8 +557,7 @@ func (h *APIHandler) GetEntity(c *echo.Context) error {
 		}
 		entity.FieldsData = entities.FilterRestrictedFields(entity.FieldsData, entities.RestrictionDefs(et.Fields, entity.FieldOverrides), false, entity.IsOwnedBy(userID))
 	}
-
-	return c.JSON(http.StatusOK, entity)
+	return nil
 }
 
 // --- Entity Write ---
@@ -680,6 +692,12 @@ func (h *APIHandler) CreateEntity(c *echo.Context) error {
 	}
 
 	noteSyncResource(c, entity.ID, entity.Name)
+	userID := h.resolveUserID(c)
+	if err := h.viewerCopy(c, entity, h.visibilityRoleFor(c.Request().Context(), entity.CampaignID, userID, h.resolveRole(c)), userID); err != nil {
+		// The page is already saved: an error here would make a retrying
+		// client create it twice, so answer with only what is safe to show.
+		return c.JSON(http.StatusCreated, map[string]any{"id": entity.ID, "name": entity.Name})
+	}
 	return c.JSON(http.StatusCreated, entity)
 }
 
@@ -775,6 +793,9 @@ func (h *APIHandler) UpdateEntity(c *echo.Context) error {
 	}
 
 	noteSyncResource(c, updated.ID, updated.Name)
+	if err := h.viewerCopy(c, updated, h.visibilityRoleFor(ctx, updated.CampaignID, userID, role), userID); err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, updated)
 }
 
@@ -855,6 +876,51 @@ func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 		resp["held"] = heldKeysList(held)
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+// apiUpdateImageRequest is the JSON body for setting a page's picture.
+type apiUpdateImageRequest struct {
+	// ImagePath is a media id of this campaign, from POST /media; "" clears.
+	ImagePath string `json:"image_path"`
+	// ActingUserID names the member a Foundry player's change is for, as on
+	// the fields route: the player must own the page.
+	ActingUserID string `json:"actingUserId"`
+}
+
+// UpdateEntityImage sets a page's picture, so a portrait chosen in Foundry
+// reaches Chronicle. The media must be this campaign's (UpdateImage checks).
+// PUT /api/v1/campaigns/:id/entities/:entityID/image
+func (h *APIHandler) UpdateEntityImage(c *echo.Context) error {
+	entityID := c.Param("entityID")
+	ctx := c.Request().Context()
+
+	entity, err := h.entitySvc.GetByID(ctx, entityID)
+	if err != nil {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.CampaignID != c.Param("id") {
+		return apperror.NewNotFound("entity not found")
+	}
+	if err := h.pageGate().check(ctx, entity.CampaignID, entityID, h.resolveUserID(c), h.resolveRole(c)); err != nil {
+		return err
+	}
+
+	var req apiUpdateImageRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	// A player may change their own hero's picture and no one else's; with
+	// no fields to judge, this is only the membership and ownership check.
+	if _, err := h.judgeActingPlayer(ctx, entity, req.ActingUserID, map[string]any{}); err != nil {
+		return err
+	}
+	noteSyncActor(c, req.ActingUserID)
+
+	if err := h.entitySvc.UpdateImage(ctx, entityID, strings.TrimSpace(req.ImagePath)); err != nil {
+		return err
+	}
+	noteSyncResource(c, entity.ID, entity.Name)
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok"})
 }
 
 // ToggleEntityReveal sets or toggles an entity's is_private flag via the REST API.

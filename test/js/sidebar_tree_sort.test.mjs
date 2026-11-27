@@ -150,3 +150,25 @@ test('countPages of a single page (no folder wrapper) is 1', () => {
   const { countPages } = load();
   assert.equal(countPages(node('lone page')), 1);
 });
+
+test('pinned pages lead their list in pin order, ahead of folders, in every order', () => {
+  const { sortChildren } = load();
+  for (const mode of ['az', 'hand', 'new']) {
+    const nodes = [node('Apple'), node('Zed'), node('Folder', { folder: true }), node('Mid')];
+    nodes[1].pin = 0;
+    nodes[3].pin = 4;
+    sortChildren(nodes, mode);
+    assert.deepEqual(nodes.map((n) => n.id), ['Zed', 'Mid', 'Folder', 'Apple'], mode);
+  }
+});
+
+test('the rule goes under the last pinned page, and only when something follows it', () => {
+  const { markPinLast } = load();
+  const wrap = () => { const cls = []; return { classList: { add: (c) => cls.push(c) }, cls }; };
+  const list = [{ pin: 0, _wrapper: wrap() }, { pin: 1, _wrapper: wrap() }, { pin: null, _wrapper: wrap() }];
+  markPinLast(list);
+  assert.deepEqual(list.map((n) => n._wrapper.cls.join()), ['', 'is-pin-last', '']);
+  const all = [{ pin: 0, _wrapper: wrap() }];
+  markPinLast(all);
+  assert.deepEqual(all[0]._wrapper.cls, [], 'a list of pins only needs no rule');
+});

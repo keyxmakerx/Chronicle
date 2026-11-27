@@ -146,7 +146,8 @@
    * The menu's entries for a row in a category's page panel. info: kind
    * ("page", "place" for a page's extra listing, or "folder"), canEdit
    * (scribe or owner), canDelete (owner), hand (its list is kept by hand),
-   * canUp and canDown (it can move that way), hasChildren.
+   * canUp and canDown (it can move that way), hasChildren, canPin (the
+   * Director team) and pinned.
    */
   function treeItemsFor(info) {
     var out = [];
@@ -155,8 +156,15 @@
       out.push({ id: 'open-tab', label: 'Open in new tab', icon: 'fa-arrow-up-right-from-square' });
       out.push({ id: 'copy-link', label: 'Copy link', icon: 'fa-link' });
     }
+    // A pinned page leads its list for everyone; pinning is the Director
+    // team's, who may not all edit pages.
+    var pin = info.kind === 'page' && info.canPin
+      ? { id: info.pinned ? 'unpin' : 'pin', label: info.pinned ? 'Unpin' : 'Pin to top', icon: 'fa-thumbtack' } : null;
     // A listing follows its page: it is renamed or moved from the page's own row.
-    if (!info.canEdit || info.kind === 'place') return out;
+    if (!info.canEdit || info.kind === 'place') {
+      if (pin) out.push({ sep: true }, pin);
+      return out;
+    }
     if (out.length) out.push({ sep: true });
     if (info.kind === 'page') {
       out.push({ id: 'new-sub', label: 'New page inside', icon: 'fa-file-circle-plus' });
@@ -170,6 +178,7 @@
       out.push({ id: 'step-up', label: 'Move up', icon: 'fa-arrow-up', disabled: !info.canUp });
       out.push({ id: 'step-down', label: 'Move down', icon: 'fa-arrow-down', disabled: !info.canDown });
     }
+    if (pin) out.push(pin);
     if (info.hasChildren) out.push({ id: 'order', label: 'Order inside…', icon: 'fa-arrow-down-short-wide' });
     if (info.kind === 'page') {
       out.push({ id: 'history', label: 'Page history', icon: 'fa-clock-rotate-left' });
@@ -315,6 +324,8 @@
       typeId: tree ? parseInt(tree.getAttribute('data-entity-type-id') || '0', 10) || 0 : 0,
       canEdit: !!tree && tree.getAttribute('data-can-edit') === 'true',
       canDelete: !!tree && tree.getAttribute('data-can-delete-folders') === 'true',
+      canPin: !!tree && tree.getAttribute('data-can-pin') === 'true',
+      pinned: node.hasAttribute('data-pinned'),
       hand: !!st && kind !== 'place' && st.listOrder(node.parentElement) === 'hand',
       canUp: !!st && st.canStep(node, -1),
       canDown: !!st && st.canStep(node, 1),
@@ -595,6 +606,13 @@
         }, nm + ' could not be moved.');
         break;
       }
+      case 'pin':
+      case 'unpin':
+        treeSave(treeURL(info, '/sidebar-pins'), 'PUT', { entity_id: info.entityId, pinned: id === 'pin' }, function () {
+          reloadTree();
+          if (Chronicle.notify) Chronicle.notify(id === 'pin' ? nm + ' is pinned to the top of its list.' : nm + ' is back in its place.', 'success');
+        }, nm + (id === 'pin' ? ' could not be pinned.' : ' could not be unpinned.'));
+        break;
       case 'step-up':
       case 'step-down':
         // Focus is back on the row (choose), which stays put while its
