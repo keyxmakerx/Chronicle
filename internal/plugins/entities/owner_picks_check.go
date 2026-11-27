@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -36,6 +37,23 @@ func PlayerPicksHeld(entity *Entity, patch map[string]any, plan *HeroPlan) map[s
 	}
 	for k, err := range ownerFieldVerdicts(entity, judged, nil, picks, true) {
 		held[k] = apperror.SafeMessage(err)
+	}
+	return held
+}
+
+// PlayerGMOnlyHeld returns why each key the category marks GM-only may not be
+// stored from a sheet write made on a claimed player's behalf: the player
+// cannot see that field, so they may not set it either, whichever door the
+// write came through. A value sent back unchanged is never held.
+func PlayerGMOnlyHeld(entity *Entity, patch map[string]any, typeFields []FieldDefinition) map[string]string {
+	held := map[string]string{}
+	for i := range typeFields {
+		k := typeFields[i].Key
+		v, sent := patch[k]
+		if !typeFields[i].GMOnly || !sent || sentBackUnchanged(entity, k, v) {
+			continue
+		}
+		held[k] = fmt.Sprintf("%q is your GM's to change, not yours", k)
 	}
 	return held
 }

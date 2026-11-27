@@ -24,10 +24,12 @@ permissions:
   packages: write
 
 # A new push to a pull request cancels that PR's run still in progress, so a
-# burst of fixes does not queue behind runs nobody will read. Runs on main are
-# never cancelled: each one publishes that commit's image.
+# burst of fixes does not queue behind runs nobody will read. On main a run in
+# progress always finishes, but only the newest waiting run is kept: a burst
+# of merges runs twice, not once per merge, and the image ends at the newest
+# commit. Each release tag has its own ref, so no tag run is ever dropped.
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.head_ref) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:

@@ -2,17 +2,21 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/crafting"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
@@ -159,6 +163,14 @@ type rollsPowerAdapter struct {
 	characters interface {
 		CharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error)
 	}
+	// layers and addons are set once the transformations plugin is up; while
+	// either is nil the numbers are the page's own.
+	layers interface {
+		ListForPage(ctx context.Context, campaignID, entityID string, v transformations.Viewer) (*transformations.PageLayers, error)
+	}
+	addons interface {
+		IsEnabledForCampaign(ctx context.Context, campaignID, addonSlug string) (bool, error)
+	}
 }
 
 func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID string, canSeeGM bool) (rolls.PowerRollLine, error) {
@@ -185,13 +197,105 @@ func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID st
 		return out, nil
 	}
 	out.Hero, out.HeroID = hero.Name, hero.ID
+	layered := layeredNumbers(fields, a.heroLayers(ctx, campaignID, hero.ID, userID, canSeeGM))
 	for i, c := range rules.Characteristics {
-		if n, ok, _ := sheetNumber(fields[c.Key]); ok {
+		if n, ok := layered(c.Key); ok {
 			v := n
 			out.Characteristics[i].Value = &v
 		}
 	}
 	return out, nil
+}
+
+// heroLayers reads the hero's transformation layers as this viewer may, so
+// a chip rolls the number the sheet shows. With the add-on off the sheet
+// ignores layers, and so does the roll; any failure leaves the page's own
+// numbers.
+func (a *rollsPowerAdapter) heroLayers(ctx context.Context, campaignID, heroID, userID string, canSeeGM bool) []transformations.Layer {
+	if a.layers == nil || a.addons == nil {
+		return nil
+	}
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, transformations.AddonSlug)
+	if err != nil || !on {
+		return nil
+	}
+	role := permissions.RolePlayer
+	if canSeeGM {
+		role = permissions.RoleOwner
+	}
+	pl, err := a.layers.ListForPage(ctx, campaignID, heroID, transformations.Viewer{UserID: userID, VisibilityRole: role})
+	if err != nil || pl == nil {
+		if err != nil {
+			slog.Warn("rolls: cannot read the hero's layers; rolling the page's numbers", slog.Any("error", err))
+		}
+		return nil
+	}
+	return pl.Layers
+}
+
+func isSheetNumber(s string) bool { _, ok, _ := sheetNumber(s); return ok }
+
+// layeredNumbers applies the layers to the numbers the way the hero sheet
+// does, oldest first: set replaces a field (a number, or "@key" for another
+// field's value), add adds to it (an unset field counts as 0). A set to
+// anything else leaves the field with no number. It returns a lookup of a
+// field's number after every layer.
+func layeredNumbers(fields map[string]any, layers []transformations.Layer) func(key string) (int, bool) {
+	vals := map[string]float64{}
+	notNumber := map[string]bool{}
+	get := func(k string) (float64, bool) {
+		if notNumber[k] {
+			return 0, false
+		}
+		if v, ok := vals[k]; ok {
+			return v, true
+		}
+		n, ok, _ := sheetNumber(fields[k])
+		return float64(n), ok
+	}
+	for _, l := range layers {
+		for _, c := range l.Changes {
+			switch c.Op {
+			case transformations.OpSet:
+				var n float64
+				var ref string
+				switch {
+				case json.Unmarshal(c.Value, &n) == nil:
+					vals[c.Field] = n
+					delete(notNumber, c.Field)
+				case json.Unmarshal(c.Value, &ref) == nil && strings.HasPrefix(ref, "@"):
+					v, _ := get(ref[1:])
+					vals[c.Field] = v
+					delete(notNumber, c.Field)
+				case json.Unmarshal(c.Value, &ref) == nil && isSheetNumber(ref):
+					v, _, _ := sheetNumber(ref)
+					vals[c.Field] = float64(v)
+					delete(notNumber, c.Field)
+				default:
+					delete(vals, c.Field)
+					notNumber[c.Field] = true
+				}
+			case transformations.OpAdd:
+				var n float64
+				if json.Unmarshal(c.Value, &n) != nil {
+					continue
+				}
+				base, _ := get(c.Field)
+				vals[c.Field] = base + n
+				delete(notNumber, c.Field)
+			}
+		}
+	}
+	return func(key string) (int, bool) {
+		if notNumber[key] {
+			return 0, false
+		}
+		if v, ok := vals[key]; ok {
+			return int(math.Round(v)), true
+		}
+		n, ok, _ := sheetNumber(fields[key])
+		return n, ok
+	}
 }
 
 // heroFields picks the viewer's hero the way the hero creator does (the first

@@ -43,6 +43,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/rolls/settings", h.Settings, player)
 	cg.PUT("/rolls/settings", h.SetSettings, player)
 	cg.GET("/rolls/power", h.Power, player)
+	cg.GET("/rolls/my-dice", h.MyDice, player)
+	cg.PUT("/rolls/my-dice", h.SetMyDice, player)
 }
 
 // ViewerOf is who is asking, from the campaign context. A member with DM
@@ -127,6 +129,38 @@ func (h *Handler) SetSettings(c *echo.Context) error {
 		return err
 	}
 	out, err := h.svc.SetSettings(c.Request().Context(), campaignID, v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// MyDice returns the caller's own dice pick and the dice their rolls are
+// thrown in.
+func (h *Handler) MyDice(c *echo.Context) error {
+	campaignID, v, err := h.viewer(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.MyDice(c.Request().Context(), campaignID, v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// SetMyDice replaces the caller's own dice pick; the service checks it
+// against what the campaign offers.
+func (h *Handler) SetMyDice(c *echo.Context) error {
+	campaignID, v, err := h.viewer(c)
+	if err != nil {
+		return err
+	}
+	var in DicePick
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.SetMyDice(c.Request().Context(), campaignID, v, in)
 	if err != nil {
 		return err
 	}

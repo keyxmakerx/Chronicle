@@ -89,3 +89,22 @@ func (a *systemStateSyncReader) WriteSystemState(ctx context.Context, campaignID
 	}
 	return st.GM, st.Public, st.UpdatedAt, nil
 }
+
+// entryChangePublisher sends system_entry.changed when a campaign's own
+// entry is made, saved or deleted, so a connected Foundry world refreshes the
+// items it made from that field. The bus is set once the WebSocket bus is
+// built, after the entries service; until then nothing is sent. RequiresDM
+// keeps it to the GM side, and the payload names the field only.
+type entryChangePublisher struct {
+	bus ws.EventBus
+}
+
+// EntryChanged publishes the field whose entries changed.
+func (p *entryChangePublisher) EntryChanged(campaignID, fieldKey string) {
+	if p.bus == nil {
+		return
+	}
+	msg := ws.NewMessage(ws.MsgSystemEntryChanged, campaignID, "", map[string]string{"fieldKey": fieldKey})
+	msg.RequiresDM = true
+	p.bus.Publish(msg)
+}
