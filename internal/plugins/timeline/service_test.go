@@ -679,6 +679,36 @@ func TestLinkEvent_NoCalendar(t *testing.T) {
 	assertAppError(t, err, 422)
 }
 
+func TestLinkEvent_ColorOverrideMustBeHex(t *testing.T) {
+	calID := "cal-1"
+	var stored *EventLink
+	repo := &mockTimelineRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Timeline, error) {
+			return &Timeline{ID: "tl-1", CalendarID: &calID}, nil
+		},
+	}
+	repo.linkEventFn = func(_ context.Context, link *EventLink) error { stored = link; return nil }
+	svc := newTestTimelineService(repo)
+	str := func(s string) *string { return &s }
+
+	for _, bad := range []string{`red"><img src=x onerror=alert(1)>`, "#abcd", "#abc;x", "blue"} {
+		stored = nil
+		_, err := svc.LinkEvent(context.Background(), "tl-1", "evt-1", LinkEventInput{ColorOverride: str(bad)})
+		assertAppError(t, err, 422)
+		if stored != nil {
+			t.Errorf("%q was stored", bad)
+		}
+	}
+	link, err := svc.LinkEvent(context.Background(), "tl-1", "evt-1", LinkEventInput{ColorOverride: str("#A1b2C3")})
+	if err != nil || link.ColorOverride == nil || *link.ColorOverride != "#A1b2C3" {
+		t.Fatalf("a hex colour should be stored: %v %v", link, err)
+	}
+	link, err = svc.LinkEvent(context.Background(), "tl-1", "evt-1", LinkEventInput{ColorOverride: str("")})
+	if err != nil || link.ColorOverride != nil {
+		t.Fatalf("an empty colour means none: %v %v", link, err)
+	}
+}
+
 // --- CreateStandaloneEvent Tests ---
 
 func TestCreateStandaloneEvent_Success(t *testing.T) {

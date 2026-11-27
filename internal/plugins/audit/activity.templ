@@ -82,6 +82,9 @@ func actionLabel(action string) string {
 	case "addon.disabled":
 		return "switched off"
 	default:
+		if words, ok := campaignWords[action]; ok {
+			return words
+		}
 		return actionFallback(action)
 	}
 }
@@ -332,7 +335,7 @@ templ ActivityContent(cc *campaigns.CampaignContext, stats *CampaignStats, entri
 									<div class="flex-1 min-w-0 pt-0.5">
 										<div class="flex items-baseline flex-wrap gap-x-1">
 											<span class="font-semibold text-sm text-fg">{ entry.UserName }</span>
-											<span class="text-sm text-fg-secondary">{ actionLabel(entry.Action) }</span>
+											<span class="text-sm text-fg-secondary">{ entryLabel(entry) }</span>
 											if entry.EntityName != "" && entry.EntityID != "" {
 												<a
 													href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", entry.CampaignID, entry.EntityID)) }
@@ -410,7 +413,7 @@ templ ActivityEmbedFragment(cc *campaigns.CampaignContext, entries []AuditEntry)
 				<div class="flex-1 min-w-0">
 					<div class="flex items-baseline flex-wrap gap-x-1 text-xs">
 						<span class="font-semibold text-fg">{ entry.UserName }</span>
-						<span class="text-fg-secondary">{ actionLabel(entry.Action) }</span>
+						<span class="text-fg-secondary">{ entryLabel(entry) }</span>
 						if entry.EntityName != "" && entry.EntityID != "" {
 							<a
 								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entry.EntityID)) }

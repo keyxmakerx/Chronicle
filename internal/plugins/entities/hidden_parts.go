@@ -219,3 +219,97 @@ func (h *Handler) requireCreatableType(c *echo.Context, cc *campaigns.CampaignCo
 	}
 	return nil
 }
+
+// restrictionLevels maps each restricted key to how far it is hidden: 2 for
+// GM-only, 1 for owner-only. Unlisted keys are shown to everyone.
+func restrictionLevels(defs []FieldDefinition) map[string]int {
+	out := make(map[string]int, 2)
+	for i := range defs {
+		lv := 0
+		switch {
+		case defs[i].GMOnly:
+			lv = 2
+		case defs[i].OwnerOnly:
+			lv = 1
+		}
+		if lv > out[defs[i].Key] {
+			out[defs[i].Key] = lv
+		}
+	}
+	return out
+}
+
+// typeChangeUnhides reports whether moving a page from one category to
+// another would show a stored value its current category hides: hidden
+// fields are a deny-list, so a key the new category leaves unmarked is
+// public. An unknown category counts as unhiding, so a failed lookup refuses.
+func typeChangeUnhides(entity *Entity, from, to *EntityType) bool {
+	if from == nil || to == nil {
+		return true
+	}
+	now := restrictionLevels(RestrictionDefs(from.Fields, entity.FieldOverrides))
+	after := restrictionLevels(RestrictionDefs(to.Fields, entity.FieldOverrides))
+	for key, lv := range now {
+		if v, ok := entity.FieldsData[key]; ok && v != nil && v != "" && after[key] < lv {
+			return true
+		}
+	}
+	return false
+}
+
+// keepRestrictedOverrides is a page field-list save from a writer who may
+// not hide or show content: every field the stored list hides stays exactly
+// as stored, mark included, whatever the save carries for its key, so the
+// writer can neither unmark nor drop it. Fields the writer adds are theirs.
+// A nil incoming list (a reset) keeps only the hidden fields.
+func keepRestrictedOverrides(stored, incoming *FieldOverrides) *FieldOverrides {
+	var kept []FieldDefinition
+	keptKeys := map[string]bool{}
+	if stored != nil {
+		for _, f := range stored.Added {
+			if f.GMOnly || f.OwnerOnly {
+				kept = append(kept, f)
+				keptKeys[f.Key] = true
+			}
+		}
+	}
+	if len(kept) == 0 {
+		return incoming
+	}
+	out := &FieldOverrides{}
+	if incoming != nil {
+		out.Hidden = incoming.Hidden
+		out.Modified = incoming.Modified
+		for _, f := range incoming.Added {
+			if !keptKeys[f.Key] {
+				out.Added = append(out.Added, f)
+			}
+		}
+	}
+	out.Added = append(out.Added, kept...)
+	return out
+}
+
+// keepHiddenOnMove leaves out of a Scribe's category change the pages whose
+// move would show a value their current category hides; only the owner or a
+// Co-DM decides that.
+func (h *Handler) keepHiddenOnMove(c *echo.Context, ids []string, target *EntityType) []string {
+	ctx := c.Request().Context()
+	types := map[int]*EntityType{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		e, err := h.service.GetByID(ctx, id)
+		if err != nil || e == nil {
+			continue
+		}
+		from, seen := types[e.EntityTypeID]
+		if !seen {
+			from, _ = h.service.GetEntityTypeByID(ctx, e.EntityTypeID)
+			types[e.EntityTypeID] = from
+		}
+		if !typeChangeUnhides(e, from, target) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
