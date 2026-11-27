@@ -426,6 +426,15 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .oe-pop .oe-facts textarea.oe-fact-long:focus, .oe-pop .oe-f textarea.oe-words:focus {
   outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent); }
 .oe-pop .oe-f .oe-k small.oe-hint { font-weight: 500; }
+/* An ability's boxes are written like the facts above them. */
+.oe-pop .oab input, .oe-pop .oab textarea {
+  border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-card-bg); padding: 7px 10px; color: var(--color-text-primary);
+  font: 400 14px/1.5 var(--paper-ui-font); min-width: 0; resize: vertical;
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out); }
+.oe-pop .oab input:focus, .oe-pop .oab textarea:focus {
+  outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.oe-pop .oab .oab-chips input, .oe-pop .oab .oab-chips input:focus { border: 0; box-shadow: none; padding: 0 4px; background: transparent; }
+.oe-pop .oab .oab-h { font: 600 15px var(--paper-ui-font); color: var(--color-text-primary); }
 .oe-kept { margin: 0; }
 /* A Directors-only note wears the Director's amber edge, not the accent. */
 .oe-asked--dm { border-left-color: rgb(var(--color-warn-rgb)); background: color-mix(in srgb, rgb(var(--color-warn-rgb)) 8%, transparent); }
