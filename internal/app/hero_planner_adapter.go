@@ -80,7 +80,7 @@ func heroChoices(ctx context.Context, in []systems.Choice) []entities.HeroChoice
 			SystemLook: sysLook, LookChanged: changed,
 			Key: c.Key, Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
 			Description: c.Description, Properties: props, Look: look,
-			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State, Parent: c.Parent,
+			Status: c.Status, Mine: c.Mine, EntryID: c.EntryID, State: c.State, Parent: c.Parent, Pinned: c.Pinned,
 		})
 	}
 	return out

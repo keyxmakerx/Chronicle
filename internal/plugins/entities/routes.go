@@ -174,6 +174,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// also needs its own edit check, made in the handler).
 	cg.PUT("/sidebar-order", h.SetSidebarOrderAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/sidebar-order/move", h.MoveSidebarRowAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/sidebar-pins", h.SetSidebarPinAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Sub-category type reorder (Owner only): dense re-sequence of a sub-type
 	// among its parent's children. Owner-gated to match every other

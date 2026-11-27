@@ -64,7 +64,7 @@ window.CraftingProjects = (function () {
       var h = '<div class="crp-tab"><div class="crp-resp"><div><b>Log a respite</b><span class="cra-fine">' + esc(respiteLine(page, logged)) + '</span></div>' +
         '<button type="button" class="btn btn-primary btn-sm" data-act="respite"' + (busy ? ' disabled' : '') + '>Log a respite</button></div>' +
         '<div class="crp-twrap"><table class="crp-table" aria-label="Projects in progress"><thead><tr><th scope="col">Hero</th><th scope="col">Project</th><th scope="col">Progress</th><th scope="col">Rolls ready</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
-        (page.active.length ? page.active.map(row).join('') : '<tr><td colspan="5" class="cra-fine">No projects in progress. Players start them from the Crafting block on their character’s page.</td></tr>') +
+        (page.active.length ? page.active.map(row).join('') : '<tr><td colspan="5" class="cra-fine">No projects in progress. Players start them from the Projects block on their character’s page.</td></tr>') +
         '</tbody></table></div><section><h3 class="cra-ph">Finished lately</h3><ul class="crp-done">' +
         (page.finished.length ? page.finished.map(function (p) {
           return '<li><span>' + esc(p.hero) + ' made ' + esc(p.makes) + '</span>' +

@@ -49,6 +49,12 @@ type FolderService interface {
 	// renumbered, so rows the mover cannot see keep their places among
 	// themselves.
 	MoveNextTo(ctx context.Context, campaignID, kind, id, siblingID string, after bool) error
+	// SidebarPins returns each pinned page's position, lowest first.
+	SidebarPins(ctx context.Context, campaignID string) (map[string]int, error)
+	// SetSidebarPin pins a page (last among the pins) so it leads its own
+	// list in the sidebar, or unpins it. director is the caller's standing:
+	// anyone below the Director team is refused.
+	SetSidebarPin(ctx context.Context, campaignID, entityID, userID string, director, pinned bool) error
 }
 
 type folderService struct {
@@ -56,12 +62,48 @@ type folderService struct {
 	entities EntityRepository
 	types    EntityTypeRepository
 	orders   ChildOrderRepository
+	pins     SidebarPinRepository
 }
 
 // NewFolderService builds the folder service over the repositories it checks
 // against.
-func NewFolderService(nodes SidebarNodeRepository, ents EntityRepository, types EntityTypeRepository, orders ChildOrderRepository) FolderService {
-	return &folderService{nodes: nodes, entities: ents, types: types, orders: orders}
+func NewFolderService(nodes SidebarNodeRepository, ents EntityRepository, types EntityTypeRepository, orders ChildOrderRepository, pins SidebarPinRepository) FolderService {
+	return &folderService{nodes: nodes, entities: ents, types: types, orders: orders, pins: pins}
+}
+
+func (s *folderService) SidebarPins(ctx context.Context, campaignID string) (map[string]int, error) {
+	pins, err := s.pins.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return pins, nil
+}
+
+func (s *folderService) SetSidebarPin(ctx context.Context, campaignID, entityID, userID string, director, pinned bool) error {
+	if !director {
+		return apperror.NewForbidden("only the Director team can pin pages")
+	}
+	ent, err := s.entities.FindByID(ctx, entityID)
+	if err != nil || ent.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !pinned {
+		if err := s.pins.Unpin(ctx, campaignID, entityID); err != nil {
+			return apperror.NewInternal(err)
+		}
+		return nil
+	}
+	current, err := s.pins.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if _, ok := current[entityID]; !ok && len(current) >= MaxSidebarPins {
+		return apperror.NewBadRequest("this campaign already has the most pinned pages it can hold")
+	}
+	if err := s.pins.Pin(ctx, campaignID, entityID, userID); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
 }
 
 func (s *folderService) ListFolders(ctx context.Context, campaignID string, entityTypeID int) ([]SidebarNode, error) {

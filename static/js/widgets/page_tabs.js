@@ -14,10 +14,24 @@
  * or the first few seconds pass: the panel never changes tab under someone.
  * A page refresh that replaces the panel mounts a new copy straight after
  * destroying this one; the tab the viewer was on is kept for it.
+ *
+ * A game-system sheet can offer a dock: while its own tab row is on screen,
+ * the panel's tabs join that row and its panes open in the sheet's pane
+ * area, and the panel itself is hidden. A piece the sheet names a slot for
+ * (data-sheet-dock-piece, the Items piece on a hero's Equipment tab) goes
+ * into that slot and has no tab. When the sheet takes its dock away (a
+ * phone-width sheet, a redraw) every node comes back here as it was. The
+ * contract is in docs/system-package-rendering.md; a sheet without a dock
+ * keeps the panel as it is.
  */
 (function () {
 var CARRY_MS = 3000;
 var carried = null;
+// A live refresh compares the page part by part as the server sent it, so
+// the panel is whole while one runs and docks again once it has landed.
+var refreshing = false;
+document.addEventListener('chronicle:page-refreshing', function () { refreshing = true; }, true);
+document.addEventListener('chronicle:page-refreshed', function () { refreshing = false; }, true);
 
 Chronicle.register('page-tabs', {
   init: function (el) {
@@ -25,10 +39,19 @@ Chronicle.register('page-tabs', {
     var tabs = Array.prototype.slice.call(el.querySelectorAll('[data-pt-tab]'));
     var press = el.querySelector('[data-pt-press]');
     var pressLabel = el.querySelector('[data-pt-press-label]');
+    var bar = el.querySelector('.pt-tabs');
     var auto = true, queued = false;
     var autoTimer = setTimeout(function () { auto = false; }, AUTO_MS);
 
-    function paneOf(tab) { return el.querySelector('[data-pt-pane="' + tab.getAttribute('data-pt-tab') + '"]'); }
+    // Panes are found once: docked, they live in the sheet, not in el.
+    var panes = {};
+    tabs.forEach(function (t) { panes[t.getAttribute('data-pt-tab')] = el.querySelector('[data-pt-pane="' + t.getAttribute('data-pt-tab') + '"]'); });
+    function paneOf(tab) { return panes[tab.getAttribute('data-pt-tab')] || null; }
+    var allPanes = tabs.map(paneOf).filter(Boolean);
+
+    // While docked: the sheet's root, its slots, and which piece went into a
+    // slot of its own (by key). open is the panel's tab open in the sheet.
+    var dock = null, open = null, reopen = null, stripTab = null;
     function current() { for (var i = 0; i < tabs.length; i++) if (tabs[i].getAttribute('aria-selected') === 'true') return tabs[i]; return null; }
     function visible(tab) { return !tab.hidden; }
 
@@ -84,6 +107,9 @@ Chronicle.register('page-tabs', {
         else tab.hidden = isBlank;
         if (!first && n > 0 && !tab.hidden) first = tab;
       });
+      // Docked, the sheet's own tab is open unless the viewer picked one of
+      // these; nothing here picks a tab for them.
+      if (dock) { syncPress(); return; }
       var cur = current();
       if (cur && cur.hidden) cur = null;
       if (auto && first && first !== cur) select(first, false);
@@ -102,7 +128,8 @@ Chronicle.register('page-tabs', {
         t.setAttribute('aria-selected', on ? 'true' : 'false');
         t.tabIndex = on ? 0 : -1;
         var p = paneOf(t);
-        if (p) p.hidden = !on;
+        // A piece docked in a slot of the sheet's stays shown there.
+        if (p && !(dock && dock.pieces[key(t)])) p.hidden = !on;
       });
       if (focus) tab.focus();
       syncPress();
@@ -119,22 +146,27 @@ Chronicle.register('page-tabs', {
     function syncPress() {
       var t = target();
       var label = t ? t.textContent.replace(/\s+/g, ' ').trim() : '';
+      if (!press || !pressLabel) return;
       press.hidden = !label;
       if (pressLabel.textContent !== label) pressLabel.textContent = label;
     }
 
-    function onClick(ev) {
-      var tab = ev.target.closest('[data-pt-tab]');
-      if (tab && el.contains(tab)) { stopAuto(); select(tab, false); return; }
-      if (ev.target.closest('[data-pt-press]')) {
-        var t = target();
-        if (t) { stopAuto(); t.click(); }
-      }
+    // Listeners sit on the tabs, the button and the panes themselves, since
+    // docking moves them out of el.
+    function onTab(ev) {
+      var tab = ev.currentTarget;
+      stopAuto();
+      if (dock) openDocked(tab); else select(tab, false);
     }
-    // Arrow keys, Home and End move between tabs, as a tab list does.
+    function onPress() {
+      var t = target();
+      if (t) { stopAuto(); t.click(); }
+    }
+    // Arrow keys, Home and End move between tabs, as a tab list does. Docked,
+    // the sheet's row moves through every tab, these included.
     function onKey(ev) {
-      var tab = ev.target.closest('[data-pt-tab]');
-      if (!tab) return;
+      if (dock) return;
+      var tab = ev.currentTarget;
       var list = tabs.filter(visible), i = list.indexOf(tab), next = null;
       if (ev.key === 'ArrowRight') next = list[(i + 1) % list.length];
       else if (ev.key === 'ArrowLeft') next = list[(i - 1 + list.length) % list.length];
@@ -148,9 +180,103 @@ Chronicle.register('page-tabs', {
     function stopAuto() { auto = false; clearTimeout(autoTimer); }
     function onLoaded(ev) {
       var src = ev.target;
-      if (src && src.setAttribute && el.contains(src)) src.setAttribute('data-pt-done', '');
+      if (src && src.setAttribute && src !== el && allPanes.indexOf(src) === -1) src.setAttribute('data-pt-done', '');
       schedule();
     }
+    // Typing inside a piece is the viewer at work; the panel holds its tab.
+    function onFocus(ev) { if (!ev.target.closest('[data-pt-tab]')) stopAuto(); }
+
+    // ---- The sheet's dock ----
+    function say(node, name) { node.dispatchEvent(new CustomEvent(name, { bubbles: true })); }
+    function key(tab) { return tab.getAttribute('data-pt-tab'); }
+    function letGo() {
+      open = null;
+      tabs.forEach(function (t) {
+        if (dock && dock.pieces[key(t)]) return;
+        t.setAttribute('aria-selected', 'false');
+        t.tabIndex = -1;
+        var p = paneOf(t);
+        if (p) p.hidden = true;
+      });
+      syncPress();
+    }
+    function openDocked(tab) {
+      if (dock.pieces[key(tab)]) return;
+      select(tab, false);
+      open = key(tab);
+      say(tab, 'chronicle:sheet-dock-open');
+    }
+    function dockTo(root) {
+      if (dock || !root || !root.isConnected) return;
+      var tabSlot = root.querySelector('[data-sheet-dock-tabs]');
+      var paneSlot = root.querySelector('[data-sheet-dock-panes]');
+      if (!tabSlot || !paneSlot || !bar || !tabs.length) return;
+      var cur = current();
+      stripTab = cur ? key(cur) : null;
+      var wrap = document.createElement('div');
+      wrap.className = 'pt-docked';
+      if (press) wrap.appendChild(press);
+      dock = { root: root, wrap: wrap, pieces: {} };
+      tabs.forEach(function (t) {
+        var k = key(t), p = paneOf(t);
+        var slot = root.querySelector('[data-sheet-dock-piece="' + k + '"]');
+        if (slot && p) {
+          // The piece shows in the sheet's own pane; it is no tab panel there.
+          dock.pieces[k] = slot;
+          p.hidden = false;
+          p.classList.add('is-piece');
+          p.removeAttribute('role');
+          p.removeAttribute('tabindex');
+          slot.appendChild(p);
+          slot.setAttribute('data-docked', '');
+          return;
+        }
+        tabSlot.appendChild(t);
+        if (p) wrap.appendChild(p);
+      });
+      paneSlot.appendChild(wrap);
+      el.hidden = true;
+      letGo();
+      var back = reopen;
+      reopen = null;
+      var again = tabs.filter(function (t) { return key(t) === back; })[0];
+      if (again && !again.hidden && !dock.pieces[back]) openDocked(again);
+      schedule();
+    }
+    function undock() {
+      if (!dock) return;
+      reopen = open;
+      var d = dock;
+      dock = null;
+      open = null;
+      tabs.forEach(function (t) {
+        var k = key(t), p = paneOf(t);
+        bar.appendChild(t);
+        if (!p) return;
+        if (d.pieces[k]) {
+          p.classList.remove('is-piece');
+          p.setAttribute('role', 'tabpanel');
+          p.setAttribute('tabindex', '0');
+          d.pieces[k].removeAttribute('data-docked');
+        }
+        el.appendChild(p);
+      });
+      if (press) el.appendChild(press);
+      if (d.wrap.parentNode) d.wrap.parentNode.removeChild(d.wrap);
+      el.hidden = false;
+      var want = tabs.filter(function (t) { return key(t) === (reopen || stripTab) && !t.hidden; })[0];
+      if (want) select(want, false); else { tabs.forEach(function (t) { t.setAttribute('aria-selected', 'false'); }); update(); }
+    }
+    function sheetOpenDock() {
+      var s = page.querySelector('[data-sheet][data-sheet-dock="open"]');
+      if (s && !refreshing) dockTo(s);
+    }
+    function onDock(ev) { if (!refreshing && page.contains(ev.target)) dockTo(ev.target); }
+    // A sheet whose root is already off the page says it from its mount.
+    function onUndock(ev) { if (dock && (ev.target === dock.root || !dock.root.isConnected || ev.target.contains(dock.root))) undock(); }
+    function onSheetTab(ev) { if (dock && ev.target === dock.root) letGo(); }
+    function onRefreshing() { if (dock) undock(); }
+    function onRefreshed() { if (el.isConnected) sheetOpenDock(); }
 
     // The sheet above slides left while a paper is out beside it; the strip
     // takes the same shift so the two stay one column. The sheet stays the
@@ -181,24 +307,35 @@ Chronicle.register('page-tabs', {
     finder.observe(page, { childList: true, subtree: true });
     findFolio();
 
-    el.addEventListener('click', onClick);
-    el.addEventListener('keydown', onKey);
-    el.addEventListener('htmx:afterRequest', onLoaded);
-    // Typing inside a piece is the viewer at work; the panel holds its tab.
-    el.addEventListener('focusin', function (ev) { if (!ev.target.closest('[data-pt-tab]')) stopAuto(); });
+    tabs.forEach(function (t) { t.addEventListener('click', onTab); t.addEventListener('keydown', onKey); });
+    if (press) press.addEventListener('click', onPress);
+    var watched = [el].concat(allPanes);
     var mo = new MutationObserver(schedule);
-    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    watched.forEach(function (n) {
+      if (n !== el) { n.addEventListener('htmx:afterRequest', onLoaded); n.addEventListener('focusin', onFocus); }
+      mo.observe(n, { childList: true, subtree: true, characterData: true });
+    });
+    el.addEventListener('htmx:afterRequest', onLoaded);
+    el.addEventListener('focusin', onFocus);
+    var docEvents = [['chronicle:sheet-dock', onDock], ['chronicle:sheet-undock', onUndock], ['chronicle:sheet-tab', onSheetTab],
+      ['chronicle:page-refreshing', onRefreshing], ['chronicle:page-refreshed', onRefreshed]];
+    docEvents.forEach(function (p) { document.addEventListener(p[0], p[1]); });
 
     el._ptOff = function () {
+      // Everything goes home first, so the page's swap takes the pieces with
+      // the panel rather than leaving them in the sheet.
+      undock();
       var cur = current();
-      carried = !auto && cur ? { path: location.pathname, tab: cur.getAttribute('data-pt-tab'), at: Date.now() } : null;
+      var was = reopen;
+      carried = was || (!auto && cur) ? { path: location.pathname, tab: was || key(cur), docked: !!was, at: Date.now() } : null;
       clearTimeout(autoTimer);
       mo.disconnect();
       if (fo) fo.disconnect();
       finder.disconnect();
-      el.removeEventListener('click', onClick);
-      el.removeEventListener('keydown', onKey);
-      el.removeEventListener('htmx:afterRequest', onLoaded);
+      tabs.forEach(function (t) { t.removeEventListener('click', onTab); t.removeEventListener('keydown', onKey); });
+      if (press) press.removeEventListener('click', onPress);
+      watched.forEach(function (n) { n.removeEventListener('htmx:afterRequest', onLoaded); n.removeEventListener('focusin', onFocus); });
+      docEvents.forEach(function (p) { document.removeEventListener(p[0], p[1]); });
     };
     update();
     var c = carried;
@@ -206,7 +343,9 @@ Chronicle.register('page-tabs', {
     if (c && c.path === location.pathname && Date.now() - c.at < CARRY_MS) {
       var keep = el.querySelector('[data-pt-tab="' + c.tab + '"]');
       if (keep && !keep.hidden) { stopAuto(); select(keep, false); }
+      if (c.docked) { stopAuto(); reopen = c.tab; }
     }
+    sheetOpenDock();
   },
   // A page refresh calls this only when the panel's markup came back the
   // same (page_live.js): the tabs stay as the reader left them, and the

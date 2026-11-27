@@ -54,6 +54,10 @@ type HeroChoice struct {
 	// on entries of a step whose list lives inside another step's entries
 	// (a subclass inside its class).
 	Parent string `json:"parent,omitempty"`
+	// Pinned marks an entry the Director team put at the top of the list;
+	// pinned entries come first, in pin order, and the creator sets them
+	// apart from the rest.
+	Pinned bool `json:"pinned,omitempty"`
 	// Held marks an entry the rules took off the player's list, carried only
 	// so a hero that already holds it stays editable. Never served, and never
 	// a valid new pick.
@@ -185,6 +189,10 @@ type HeroPlan struct {
 	// Tryout marks the plan a look-around visitor builds from: only what a
 	// public reader may read, no rules, no reasons, nothing kept to a player.
 	Tryout bool `json:"tryout,omitempty"`
+	// CanPin says the viewer is on the Director team and sees the creator as
+	// themselves, so it offers the pin control. The server checks again on
+	// every pin; this only decides what is shown.
+	CanPin bool `json:"canPin,omitempty"`
 }
 
 // HeroPlanner supplies a campaign's creator steps. director says whether the
