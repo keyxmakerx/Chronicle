@@ -1,0 +1,20 @@
+# ============================================================================
+# Chronicle Docker Compose -- development overlay
+# ============================================================================
+# Publishes MariaDB and Redis on 127.0.0.1 so a server run from source
+# (`make run`, `make dev`) can reach them at the addresses Chronicle uses by
+# default, localhost:3306 and localhost:6379. `make docker-up` applies it:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d chronicle-db chronicle-redis
+#
+# Development only: production keeps both ports unpublished, so never add
+# this file to a deployed stack.
+# ============================================================================
+
+services:
+  chronicle-db:
+    ports:
+      - "127.0.0.1:3306:3306"
+
+  chronicle-redis:
+    ports:
+      - "127.0.0.1:6379:6379"

@@ -6,7 +6,8 @@
 # Pins: a human running the script against a live site is always refused;
 # --from-inside lifts that refusal only when the maintenance marker, the run
 # token and /healthz all agree; a failed safety backup stops the restore
-# before the database is touched; a by-hand restore clears a stale marker.
+# before the database is touched; a by-hand restore clears a stale marker;
+# both --manifest forms parse; `make restore` starts a one-off container.
 #
 # Exit: 0 if every case behaved as expected, 1 otherwise.
 
@@ -205,6 +206,19 @@ if run_case "stopped site, by hand" 0 "RESTORE=ok"; then
     [[ ! -f "$MARKER" ]] || { echo "FAIL: stale marker survived a by-hand restore"; FAIL=$((FAIL + 1)); }
 fi
 rm -f "$BACKUPS"/chronicle_pre_restore_*
+
+# 15. The `--manifest=PATH` form parses the same as `--manifest PATH`.
+RUN_ENV=(STUB_HEALTH=down); RUN_ARGS=("--manifest=$MANIFEST")
+run_case "--manifest=PATH form" 0 "RESTORE=ok"
+rm -f "$BACKUPS"/chronicle_pre_restore_*
+
+# 16. `make restore` must start a one-off container: the script refuses while
+# Chronicle runs, and `exec` needs it running.
+if grep -A1 '^restore:' "$SCRIPT_DIR/../Makefile" | grep -q 'run --rm chronicle sh /app/scripts/restore.sh'; then
+    echo "ok: make restore uses a one-off container"; PASS=$((PASS + 1))
+else
+    echo "FAIL: make restore does not use 'docker compose run --rm'"; FAIL=$((FAIL + 1))
+fi
 
 echo "restore.sh self-test: $PASS passed, $FAIL failed"
 [[ "$FAIL" == 0 ]]
