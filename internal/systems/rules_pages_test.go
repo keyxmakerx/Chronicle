@@ -391,6 +391,10 @@ func TestBuildTable_DisplayRule(t *testing.T) {
 			"figures:Signature traits=Grounded — Hard to move."},
 		{"campaign entry draws the rest", map[string]any{"speed": 6.0, "breath": map[string]any{"damage": "2d6"}, "lore_display": "x", "lore": "Old songs."}, true,
 			"figures:Speed=6,Lore=Old songs.|parts:Breath=Damage:2d6"},
+		{"a campaign entry's card look and provenance parts are not figures", map[string]any{"speed": 5.0,
+			"card_border": "thorn-glass", "card_colour": "#c4243a", "custom_fields": []any{"description"},
+			"derived_from": "dwarf", "omissions": []any{"x"}}, true,
+			"figures:Speed=5"},
 		{"an ability inside a trait is its own block, its repeated name dropped", map[string]any{
 			"signature_traits": []any{map[string]any{"name": "Shadowmeld", "description": "You have the following ability.",
 				"ability": map[string]any{"name": "Shadowmeld", "flavor": "You become an actual {@condition hidden|shadow}.",

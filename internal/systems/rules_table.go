@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/cardborders"
 )
 
 // "At the table" draws an entry's figures and lists the same way whether the
@@ -427,6 +429,15 @@ func twinText(props map[string]any, key string) (string, bool) {
 // tableKeys decides what to draw: the category's fields in order, each
 // twin swapped for its structured base when the entry holds one, then, for
 // a campaign entry, every remaining detail.
+// notAFigure is the properties a campaign entry can carry that say how it is
+// drawn or where its words came from, never something said at the table: the
+// card look, and the provenance parts the credit folds in. A printed entry
+// never lists them because its manifest fields decide what shows.
+var notAFigure = map[string]bool{
+	cardborders.PropBorder: true, cardborders.PropColour: true,
+	"custom_fields": true, "derived_from": true, "omissions": true,
+}
+
 func tableKeys(cat *CategoryDef, props map[string]any, campaign bool) []tableKey {
 	var out []tableKey
 	used := map[string]bool{}
@@ -450,7 +461,7 @@ func tableKeys(cat *CategoryDef, props map[string]any, campaign bool) []tableKey
 	}
 	rest := make([]string, 0, len(props))
 	for k := range props {
-		if used[k] {
+		if used[k] || notAFigure[k] {
 			continue
 		}
 		// A twin is never drawn beside its own base.
