@@ -12,6 +12,15 @@
  *   var run = ChronicleCutscene.play(host, scene, { reducedMotion, onClose, label });
  *   run.stop();
  *
+ * A moment is a beat where the scene stops and asks a question. The clock
+ * holds there, the question shows over the dimmed scene, and only
+ * run.go(i) lets it go on: the engine never resumes by itself. onMoment(i,
+ * moment) is called when it holds; run.hold(i) jumps a scene that has not
+ * reached moment i yet to it, for a screen that joins late; run.held() is
+ * the moment holding, or -1. With canContinue the question offers its own
+ * Continue (the Director's preview). The ways to answer are drawn but not
+ * yet answerable.
+ *
  * onClose(why) gets 'tap', 'auto', 'escape' or 'stopped'. With contained:
  * true the scene fills `host` instead of the window and leaves focus and the
  * page alone: the Director's preview and the sign-off mockups use it.
@@ -44,6 +53,9 @@
   // normalises to exactly what it was.
   var ARRIVALS = ['cut', 'fade', 'fall-asleep'];
   var ARRIVAL_KIND = { cut: 'black', fade: 'fade-to-black', 'fall-asleep': 'fall-asleep' };
+  // Ways to answer a moment, in the order they are drawn, and who answers.
+  // A moment that names no known way is written.
+  var WAYS = ['write', 'director'];
   var TEXT = {
     layouts: ['middle', 'corner'],
     arrivals: ['fade', 'rise', 'settle', 'slide'],
@@ -151,6 +163,22 @@
       if (inList(t.out, TEXT.leavings)) line.out = t.out;
       out.text.push(line);
     });
+    // Moments only when there are some, so an older scene normalises to the
+    // object it always did. The Director's note is never kept: it is not
+    // the player's to see.
+    var moments = [];
+    (Array.isArray(s.moments) ? s.moments : []).slice(0, 6).forEach(function (m) {
+      if (!m || typeof m !== 'object') return;
+      var ask = String(m.ask == null ? '' : m.ask).replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (!ask) return;
+      var named = (Array.isArray(m.ways) ? m.ways : []).map(function (w) { return w && typeof w === 'object' ? w.kind : w; });
+      var ways = WAYS.filter(function (k) { return named.indexOf(k) >= 0; }).map(function (k) { return { kind: k }; });
+      if (!ways.length) ways = [{ kind: WAYS[0] }];
+      var n = { at: num(m.at, 0, 120, 0), ask: ask, ways: ways };
+      if (m.to === 'one') n.to = 'one';
+      moments.push(n);
+    });
+    if (moments.length) out.moments = moments;
     var e = s.ending && typeof s.ending === 'object' ? s.ending : {};
     if (e.kind === 'auto') out.ending = { kind: 'auto', after: num(e.after, 0, 60, 3) };
     return out;
@@ -178,6 +206,9 @@
     });
     var last = 0;
     layers.forEach(function (l) { last = Math.max(last, l.end === Infinity ? l.built : l.end); });
+    // A moment is reached before the scene can end, so Close never shows
+    // before the last question has been asked.
+    (s.moments || []).forEach(function (m) { last = Math.max(last, m.at); });
     return {
       scene: s,
       layers: layers,
@@ -351,7 +382,33 @@
     '.cs-cut-end.cs-cut-on{opacity:1;visibility:visible;transition:opacity 1s ease-out,color .12s,background-color .12s}',
     '.cs-cut-end:hover{color:#fff;background:rgba(255,255,255,.08)}',
     '.cs-cut-x:focus-visible,.cs-cut-end:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}',
-    '.cs-cut-tapclose{cursor:pointer}'
+    '.cs-cut-tapclose{cursor:pointer}',
+    // A moment: the scene dims under a scrim and the question stands in the
+    // middle, rising a little as it fades in; Calm fades, Off just shows it.
+    '.cs-cut-scrim{position:absolute;inset:0;background:rgba(0,0,0,.58);opacity:0;pointer-events:none;transition:opacity .28s ease-out}',
+    '.cs-cut-held .cs-cut-scrim{opacity:1}',
+    // The scene's own words step back while the question stands, so the two
+    // never print over each other.
+    '.cs-cut-words{transition:opacity .28s ease-out}',
+    '.cs-cut-held .cs-cut-words{opacity:0}',
+    '.cs-cut-ask{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;box-sizing:border-box;padding:0 max(22px,env(safe-area-inset-right)) 0 max(22px,env(safe-area-inset-left));text-align:center;animation:cs-cut-ask .28s cubic-bezier(.2,.7,.2,1) both}',
+    '@keyframes cs-cut-ask{from{opacity:0;transform:translateY(calc(-50% + 10px))}to{opacity:1;transform:translateY(-50%)}}',
+    '.cs-cut-ask.cs-cut-ask-gone{animation:cs-cut-fadeout .16s ease-in forwards}',
+    '.cs-cut-calm .cs-cut-ask{animation-name:cs-cut-fade;animation-timing-function:ease-out}',
+    '.cs-cut-calm .cs-cut-ask.cs-cut-ask-gone{animation-name:cs-cut-fadeout}',
+    '.cs-cut-still .cs-cut-ask,.cs-cut-still .cs-cut-ask.cs-cut-ask-gone{animation:none}',
+    '.cs-cut-still .cs-cut-scrim,.cs-cut-still .cs-cut-words{transition:none}',
+    '.cs-cut-turn{margin:0 0 .9em;font:500 clamp(11px,2.3cqw,14px)/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.38em;text-indent:.38em;text-transform:uppercase;color:rgba(255,255,255,.72)}',
+    '.cs-cut-q{margin:0;max-width:min(30ch,100%);font-family:var(--font-heading,Georgia),Georgia,"Times New Roman",serif;font-size:clamp(20px,4.4cqw,32px);line-height:1.3;color:var(--cs-cut-ink,#e9f3ea);text-wrap:balance;overflow-wrap:break-word;text-shadow:0 0 2px rgba(0,0,0,.9)}',
+    '.cs-cut-ways{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;width:min(38em,100%);margin:1.4em 0 0;padding:0;list-style:none}',
+    '.cs-cut-way{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:0 1 11em;min-width:8.5em;min-height:72px;box-sizing:border-box;padding:12px 14px;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(18,20,24,.82);font:600 15px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif;color:#fff}',
+    '.cs-cut-way span{font-weight:400;font-size:12.5px;color:rgba(255,255,255,.66)}',
+    '.cs-cut-way[aria-disabled="true"]{opacity:.5}',
+    '.cs-cut-go{min-height:44px;min-width:120px;margin:1.4em 0 0;padding:0 22px;border:0;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;font:500 15px/44px system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.04em;cursor:pointer;transition:background-color .12s}',
+    '.cs-cut-go:hover{background:rgba(255,255,255,.24)}',
+    '.cs-cut-go:active{transform:scale(.97)}',
+    '.cs-cut-go:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}',
+    '@container (max-width:480px){.cs-cut-way{flex-basis:100%}}'
   ].join('\n');
 
   function injectStyle(doc) {
@@ -1570,6 +1627,16 @@
 
   var CLOSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
+  // Off is the end state with nothing moving at all: the motion setting says
+  // so, or the device asks for reduced motion. Calm still fades.
+  function motionOff(opts) {
+    if (opts.motion) return opts.motion === 'off';
+    try {
+      if (document.documentElement.getAttribute('data-motion') === 'off') return true;
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) { return false; }
+  }
+
   function backdropOK() {
     try {
       return !!(window.CSS && CSS.supports && (CSS.supports('backdrop-filter', 'blur(1px)') || CSS.supports('-webkit-backdrop-filter', 'blur(1px)')));
@@ -1582,12 +1649,16 @@
     injectStyle(doc);
     var tl = timeline(normalise(raw)), scene = tl.scene;
     var rm = opts.reducedMotion != null ? !!opts.reducedMotion : prefersReduced();
+    var still = motionOff(opts);
+    var words$ = opts.words || {};
+    var say = function (k, def) { return typeof words$[k] === 'string' && words$[k] ? words$[k] : def; };
+    var onMoment = typeof opts.onMoment === 'function' ? opts.onMoment : function () {};
     var boxed = !!opts.contained;
     var seed = seedOf(scene.id + '|' + scene.name);
     var onClose = typeof opts.onClose === 'function' ? opts.onClose : function () {};
 
     var el = doc.createElement('div');
-    el.className = 'cs-cut' + (boxed ? ' cs-cut-boxed' : '') + (rm ? ' cs-cut-calm' : '');
+    el.className = 'cs-cut' + (boxed ? ' cs-cut-boxed' : '') + (rm ? ' cs-cut-calm' : '') + (still ? ' cs-cut-still' : '');
     el.setAttribute('role', 'dialog');
     if (!boxed) el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', opts.label || scene.name || 'Cut scene');
@@ -1624,6 +1695,13 @@
     cornerEl.className = 'cs-cut-words cs-cut-corner';
     cornerEl.setAttribute('aria-live', 'polite');
     el.appendChild(cornerEl);
+    var scrim = null;
+    if (scene.moments) {
+      scrim = doc.createElement('div');
+      scrim.className = 'cs-cut-scrim';
+      scrim.setAttribute('aria-hidden', 'true');
+      el.appendChild(scrim);
+    }
     var xBtn = doc.createElement('button');
     xBtn.type = 'button';
     xBtn.className = 'cs-cut-x';
@@ -1667,13 +1745,18 @@
       }
     }
 
-    var t = 0, prev = null, raf = 0, done = false, resting = false, grainOn = false;
+    // t is the wall clock, which drives what only flickers and drifts; tc is
+    // the scene's clock, which stops while a moment holds. Without a moment
+    // the two are the same.
+    var t = 0, tc = 0, prev = null, raf = 0, done = false, resting = false, grainOn = false;
+    var moments = scene.moments || [], held = -1, released = moments.map(function () { return false; });
+    var askEl = null, goBtn = null, builtLag = [];
     var xOn = false, endOn = false, sized = false;
     var prevFocus = boxed ? null : doc.activeElement;
 
     function draw(dt) {
       if (!sized) { layout(); sized = true; }
-      var act = activeAt(tl, t);
+      var act = activeAt(tl, tc);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
@@ -1686,24 +1769,109 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       for (i = 0; i < act.length; i++) {
         if (act[i].type !== 'overlay') continue;
-        var ov = scene.overlays[act[i].index], since = t - ov.at - ov.seconds;
+        var ov = scene.overlays[act[i].index], since = tc - ov.at - ov.seconds;
+        // A layer already built goes on living through a hold.
+        if (since >= 0 && builtLag[act[i].index] == null) builtLag[act[i].index] = t - tc;
+        if (builtLag[act[i].index] != null) since += t - tc - builtLag[act[i].index];
         // Under reduced motion a layer simply fades in over its build-up.
         layers[act[i].index].draw(ctx, t, act[i].progress, since, dt, rm ? smooth(0, 1, act[i].progress) : 1);
       }
       words.update(act);
       if (grainEl && !grainOn && (bgp > 0.3 || scene.background.kind === 'black')) { grainOn = true; grainEl.style.opacity = '0.07'; }
-      var en = ending(tl, t);
-      if (en.canClose && !xOn) { xOn = true; xBtn.classList.add('cs-cut-on'); }
-      if (en.showClose && !endOn) {
+      var en = ending(tl, tc);
+      if (t >= ESCAPE_AFTER && !xOn) { xOn = true; xBtn.classList.add('cs-cut-on'); }
+      if (en.showClose && held < 0 && !endOn) {
         endOn = true;
         endBtn.classList.add('cs-cut-on');
         el.classList.add('cs-cut-tapclose');
         if (!boxed && doc.activeElement === el) endBtn.focus({ preventScroll: true });
       }
-      if (en.autoClose) { close('auto'); return; }
+      if (en.autoClose && held < 0) { close('auto'); return; }
       // Long after everything has arrived the last frame holds still, so an
       // unattended screen stops drawing.
-      if (t > tl.last + 60) resting = true;
+      if (held < 0 && tc > tl.last + 60) resting = true;
+    }
+
+    // due is the first moment not yet let go that the scene clock has
+    // reached by `to`, or -1.
+    function due(to) {
+      var at = -1;
+      for (var i = 0; i < moments.length; i++) {
+        if (!released[i] && moments[i].at <= to && (at < 0 || moments[i].at < moments[at].at)) at = i;
+      }
+      return at;
+    }
+
+    var WAY_WORDS = {
+      write: function () { return [say('write', 'Write it'), say('writeHint', 'in your words')]; },
+      director: function () { return [say('director', 'Leave it to your Director'), say('directorHint', 'they decide')]; }
+    };
+
+    // holdAt stops the scene clock at moment i and puts its question up.
+    function holdAt(i) {
+      var m = moments[i];
+      held = i;
+      tc = Math.max(tc, m.at);
+      el.classList.add('cs-cut-held');
+      if (askEl && askEl.parentNode) askEl.parentNode.removeChild(askEl);
+      askEl = doc.createElement('div');
+      askEl.className = 'cs-cut-ask';
+      askEl.setAttribute('role', 'group');
+      var q = doc.createElement('p');
+      q.className = 'cs-cut-q';
+      q.id = 'cs-cut-q-' + seed + '-' + i;
+      q.textContent = m.ask;
+      askEl.setAttribute('aria-labelledby', q.id);
+      var turn = doc.createElement('p');
+      turn.className = 'cs-cut-turn';
+      turn.textContent = say('turn', 'Your turn');
+      askEl.appendChild(turn);
+      askEl.appendChild(q);
+      var list = doc.createElement('ul');
+      list.className = 'cs-cut-ways';
+      m.ways.forEach(function (w) {
+        var li = doc.createElement('li');
+        li.className = 'cs-cut-way';
+        li.setAttribute('aria-disabled', 'true');
+        var label = (WAY_WORDS[w.kind] || WAY_WORDS.write)();
+        li.appendChild(doc.createTextNode(label[0]));
+        var sub = doc.createElement('span');
+        sub.textContent = label[1];
+        li.appendChild(sub);
+        list.appendChild(li);
+      });
+      askEl.appendChild(list);
+      goBtn = null;
+      if (opts.canContinue) {
+        goBtn = doc.createElement('button');
+        goBtn.type = 'button';
+        goBtn.className = 'cs-cut-go';
+        goBtn.textContent = say('go', 'Continue');
+        askEl.appendChild(goBtn);
+      }
+      el.insertBefore(askEl, xBtn);
+      if (goBtn && !boxed) goBtn.focus({ preventScroll: true });
+      try { onMoment(i, { at: m.at, ask: m.ask, ways: m.ways.slice(), to: m.to || 'each' }); } catch (e) { /* the caller's problem */ }
+    }
+
+    // goFrom lets moment i go: the question leaves and the clock runs on.
+    function goFrom(i) {
+      if (i < 0 || i >= moments.length) return;
+      released[i] = true;
+      if (held !== i) return;
+      held = -1;
+      el.classList.remove('cs-cut-held');
+      var leaving = askEl;
+      askEl = null;
+      goBtn = null;
+      if (leaving) {
+        if (still) { if (leaving.parentNode) leaving.parentNode.removeChild(leaving); } else {
+          leaving.classList.add('cs-cut-ask-gone');
+          setTimeout(function () { if (leaving.parentNode) leaving.parentNode.removeChild(leaving); }, 200);
+        }
+      }
+      if (!boxed && !done) el.focus({ preventScroll: true });
+      if (resting && !done) { resting = false; prev = null; raf = window.requestAnimationFrame(frame); }
     }
 
     function frame(now) {
@@ -1712,6 +1880,10 @@
       var dt = prev === null ? 0 : Math.min(0.1, (now - prev) / 1000);
       prev = now;
       t += dt;
+      if (held < 0) {
+        var next = due(tc + dt);
+        if (next >= 0) holdAt(next); else tc += dt;
+      }
       draw(dt);
       if (!done && !resting) raf = window.requestAnimationFrame(frame);
     }
@@ -1739,6 +1911,7 @@
       if (ev.key === 'Tab' && !boxed) {
         // Focus stays inside the scene while it is up.
         var can = [xBtn, endBtn].filter(function (b) { return b.classList.contains('cs-cut-on'); });
+        if (goBtn) can.unshift(goBtn);
         ev.preventDefault();
         if (!can.length) { el.focus({ preventScroll: true }); return; }
         var at = can.indexOf(doc.activeElement);
@@ -1754,7 +1927,9 @@
       if (done) return;
       var tgt = ev.target;
       if (xBtn.contains(tgt)) { if (t >= ESCAPE_AFTER) close('escape'); return; }
-      if (endBtn.contains(tgt) || ending(tl, t).tapCloses) close('tap');
+      if (goBtn && goBtn.contains(tgt)) { goFrom(held); return; }
+      if (held >= 0) return;
+      if (endBtn.contains(tgt) || ending(tl, tc).tapCloses) close('tap');
     }
 
     // While the scene covers the window the page under it is out of reach:
@@ -1806,12 +1981,25 @@
     if (!boxed) el.focus({ preventScroll: true });
     layout();
     sized = true;
+    var first = due(0);
+    if (first >= 0) holdAt(first);
     draw(0);
     raf = window.requestAnimationFrame(frame);
 
     return {
       stop: function () { close('stopped'); },
-      time: function () { return t; },
+      time: function () { return tc; },
+      held: function () { return held; },
+      go: function (i) { if (!done) goFrom(i); },
+      hold: function (i) {
+        if (done || i < 0 || i >= moments.length || held === i) return;
+        // Every moment before it counts as asked, so the scene lands on this one.
+        for (var j = 0; j < moments.length; j++) if (moments[j].at < moments[i].at && j !== i) released[j] = true;
+        released[i] = false;
+        if (held >= 0) goFrom(held);
+        if (tc <= moments[i].at) holdAt(i);
+        else released[i] = true;
+      },
       element: el
     };
   }
@@ -1823,7 +2011,8 @@
     play: function (host, scene, opts) { return play(host, scene, opts || {}); },
     kinds: {
       background: KINDS.background.slice(), arrivals: ARRIVALS.slice(), overlays: KINDS.overlays.slice(), textStyles: KINDS.textStyles.slice(),
-      layouts: TEXT.layouts.slice(), textArrivals: TEXT.arrivals.slice(), textLeavings: TEXT.leavings.slice()
+      layouts: TEXT.layouts.slice(), textArrivals: TEXT.arrivals.slice(), textLeavings: TEXT.leavings.slice(),
+      ways: WAYS.slice()
     },
     looks: LOOKS,
     pupils: PUPILS,

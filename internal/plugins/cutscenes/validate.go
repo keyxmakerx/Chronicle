@@ -103,6 +103,10 @@ func Normalize(in Scene) (Scene, error) {
 		out.Text = append(out.Text, line)
 	}
 
+	if out.Moments, err = checkMoments(in.Moments); err != nil {
+		return out, err
+	}
+
 	end := in.Ending
 	if end.Kind == "" {
 		end.Kind = EndingTap
@@ -118,6 +122,62 @@ func Normalize(in Scene) (Scene, error) {
 		out.Ending = Ending{Kind: EndingAuto, After: &after}
 	default:
 		return out, apperror.NewBadRequest(fmt.Sprintf("the ending %q is not one of %s", end.Kind, keys(EndingKinds)))
+	}
+	return out, nil
+}
+
+// checkMoments checks each moment: a question is needed, ways are known kinds
+// (none means writing it), and the note stays within its limit. A scene
+// with no moments keeps a nil list, so an older scene is stored unchanged.
+func checkMoments(in []Moment) ([]Moment, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	if len(in) > MaxMoments {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("a scene can have at most %d moments", MaxMoments))
+	}
+	out := make([]Moment, 0, len(in))
+	for i, m := range in {
+		ask, err := plainText(m.Ask)
+		if err != nil {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d: %s", i+1, err.Error()))
+		}
+		if ask == "" {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d has no question; write one or remove the moment", i+1))
+		}
+		if n := utf8.RuneCountInString(ask); n > MaxAskChars {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d's question is %d characters; the most is %d", i+1, n, MaxAskChars))
+		}
+		note, err := plainText(m.Note)
+		if err != nil {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d's note: %s", i+1, err.Error()))
+		}
+		if n := utf8.RuneCountInString(note); n > MaxNoteChars {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d's note is %d characters; the most is %d", i+1, n, MaxNoteChars))
+		}
+		mo := Moment{At: at(m.At), Ask: ask, Note: note}
+		if mo.To, err = choice(Answerers, m.To, ToEach); err != nil {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d: who answers %s", i+1, err.Error()))
+		}
+		seen := map[string]bool{}
+		for _, w := range m.Ways {
+			k := strings.ToLower(strings.TrimSpace(w.Kind))
+			if !known(WayKinds, k) {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d: the way to answer %q is not one of %s", i+1, w.Kind, keys(WayKinds)))
+			}
+			seen[k] = true
+		}
+		// Kept in WayKinds' order, the order the engine draws them, so the
+		// same choice is always stored the same way.
+		for _, k := range WayKinds {
+			if seen[k.Key] {
+				mo.Ways = append(mo.Ways, Way{Kind: k.Key})
+			}
+		}
+		if len(mo.Ways) == 0 {
+			mo.Ways = []Way{{Kind: WayKinds[0].Key}}
+		}
+		out = append(out, mo)
 	}
 	return out, nil
 }

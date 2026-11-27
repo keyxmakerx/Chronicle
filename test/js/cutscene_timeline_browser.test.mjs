@@ -184,6 +184,46 @@ test('an edge grabbed and pulled outward takes hold, short bars keep their words
   assert.deepEqual(errors, []);
 });
 
+test('a moment is a marker in its own lane, named by its question, moved by drag or key', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 1100, height: 800 });
+  await pg.waitForSelector('.csw-tl-bar');
+  // A saved form with one moment swaps in, as after a save.
+  await pg.evaluate((html) => {
+    const old = document.querySelector('form[data-csw-form]');
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    old.replaceWith(box.firstElementChild);
+  }, FORM().replace('</form>', `<div id="csw-mo-list"><div class="csw-item" data-csw-row><input name="mo_ask" value="What do they whisper?">
+<input name="mo_at" type="number" min="0" max="120" step="0.1" value="4.5"><select name="mo_ways"><option value="write">They write it</option></select></div></div></form>`));
+  await pg.waitForFunction(() => [...document.querySelectorAll('.csw-tl-name')].some((e) => e.textContent === 'What do they whisper?'));
+  const lane = '.csw-tl-lane:nth-child(6)';
+  const got = await pg.$eval(lane, (l) => {
+    const bar = l.querySelector('.csw-tl-bar');
+    const tr = l.querySelector('.csw-tl-track').getBoundingClientRect();
+    const r = bar.getBoundingClientRect();
+    return { name: l.querySelector('.csw-tl-name').textContent, mark: bar.classList.contains('is-mark'), centre: (r.left + r.width / 2 - tr.left) / tr.width * 9,
+      w: r.width, label: bar.getAttribute('aria-label'), text: bar.getAttribute('aria-valuetext'), ends: bar.querySelectorAll('.csw-tl-end, .csw-tl-grip').length };
+  });
+  assert.equal(got.name, 'What do they whisper?');
+  assert.ok(got.mark && got.ends === 0, 'a marker, with no ends to pick or stretch');
+  assert.ok(Math.abs(got.centre - 4.5) < 0.1, `centred on its moment: ${got.centre}`);
+  assert.equal(got.w, 14);
+  assert.equal(got.label, 'Moment 1: What do they whisper?, holds at');
+  assert.equal(got.text, 'holds at 4.5 s');
+
+  const track = await pg.$eval(`${lane} .csw-tl-track`, (e) => { const r = e.getBoundingClientRect(); return { x: r.left, w: r.width, y: r.top + r.height / 2 }; });
+  const per = track.w / 9;
+  await pg.mouse.move(track.x + 4.5 * per, track.y);
+  await pg.mouse.down();
+  await pg.mouse.move(track.x + 5.5 * per, track.y, { steps: 4 });
+  await pg.mouse.up();
+  await about(pg, '#csw-mo-list [name="mo_at"]', 5.5);
+  await pg.focus(`${lane} .csw-tl-bar`);
+  await pg.keyboard.press('ArrowLeft');
+  await about(pg, '#csw-mo-list [name="mo_at"]', 5.4);
+  assert.deepEqual(errors, []);
+});
+
 test('the keyboard moves a focused bar, and a faded end opens the row\'s own choices', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 1100, height: 800 });
   await pg.waitForSelector('.csw-tl-bar');
