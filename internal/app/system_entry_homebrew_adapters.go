@@ -30,13 +30,17 @@ func registerAncestryParts(reg *homebrew.Registry, entries ancestryEntries) erro
 	type ancestryData struct {
 		Slug string `json:"slug"`
 	}
-	return reg.RegisterPart(homebrew.PartKind{Name: "ancestry", Label: "Ancestry",
+	return reg.RegisterPart(homebrew.PartKind{Name: "ancestry", Label: "Ancestry", Share: shareAncestry,
 		Check: func(ctx context.Context, campaignID string, raw json.RawMessage) (json.RawMessage, error) {
 			var d ancestryData
 			if err := strictJSON(raw, &d); err != nil {
 				return nil, err
 			}
 			d.Slug = strings.TrimSpace(d.Slug)
+			if d.Slug == "" && homebrew.Waiting(ctx, pickAncestry) {
+				// A recipe from the Store waits for the Director to pick one.
+				return json.Marshal(d)
+			}
 			if d.Slug == "" {
 				return nil, apperror.NewValidation("pick one of the campaign's ancestries")
 			}

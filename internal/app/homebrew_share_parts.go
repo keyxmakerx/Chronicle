@@ -14,9 +14,32 @@ import (
 // exactly as it was, because the Store checks that a stripped part strips to
 // itself.
 
+// The picks a dropped link asks the Director to make. Each owner's Check
+// reads the same string back (homebrew.Waiting) for exactly that field.
+const (
+	pickPlacePage       = "a place page"
+	pickCraftingRecipes = "its crafting recipes"
+	pickCreatureRecipe  = "a creature recipe page"
+	pickAddonRecipes    = "its add-on recipe pages"
+	pickMarkedCreatures = "the creatures it marks"
+	pickAncestry        = "an ancestry"
+)
+
+// keepWaiting is what an owner does with a marker the sender wrote: it keeps
+// it only when the owner would have made it itself (the caller has checked
+// that the data really lacks the link), so a marker is always the owner's.
+func keepWaiting(waiting []homebrew.Unlinked, pick string) []homebrew.Unlinked {
+	for _, w := range waiting {
+		if w.Pick == pick {
+			return []homebrew.Unlinked{{Pick: pick}}
+		}
+	}
+	return nil
+}
+
 // shareFieldPart refuses a field only the Director sees: the field is itself
 // the Director's text, so there is nothing of it left to share.
-func shareFieldPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error) {
+func shareFieldPart(raw json.RawMessage, _ []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
 	var p hbFieldPart
 	if err := strictJSON(raw, &p); err != nil {
 		return nil, nil, err
@@ -29,7 +52,7 @@ func shareFieldPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, 
 }
 
 // shareItemPart drops the fields only the Director sees.
-func shareItemPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error) {
+func shareItemPart(raw json.RawMessage, _ []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
 	var p hbItemPart
 	if err := strictJSON(raw, &p); err != nil {
 		return nil, nil, err
@@ -50,7 +73,7 @@ func shareItemPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, e
 
 // shareWordsPart drops the words only the Director sees, and the place: a
 // page id means nothing in another campaign.
-func shareWordsPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error) {
+func shareWordsPart(raw json.RawMessage, waiting []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
 	var p hbWordsPart
 	if err := strictJSON(raw, &p); err != nil {
 		return nil, nil, err
@@ -68,14 +91,16 @@ func shareWordsPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, 
 	var picks []homebrew.Unlinked
 	if p.PlaceID != "" {
 		p.PlaceID = ""
-		picks = append(picks, homebrew.Unlinked{Pick: "a place page"})
+		picks = append(picks, homebrew.Unlinked{Pick: pickPlacePage})
+	} else if p.Era == "" {
+		picks = keepWaiting(waiting, pickPlacePage)
 	}
 	out, err := json.Marshal(p)
 	return out, picks, err
 }
 
 // shareCraftingPart drops the crafting recipes, which are held by id.
-func shareCraftingPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error) {
+func shareCraftingPart(raw json.RawMessage, waiting []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
 	var d craftingPartData
 	if err := strictJSON(raw, &d); err != nil {
 		return nil, nil, err
@@ -83,41 +108,68 @@ func shareCraftingPart(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinke
 	var picks []homebrew.Unlinked
 	if len(d.Recipes) > 0 {
 		d.Recipes = nil
-		picks = append(picks, homebrew.Unlinked{Pick: "its crafting recipes"})
+		picks = append(picks, homebrew.Unlinked{Pick: pickCraftingRecipes})
+	} else {
+		picks = keepWaiting(waiting, pickCraftingRecipes)
 	}
 	out, err := json.Marshal(d)
 	return out, picks, err
 }
 
 // shareRecipeLink drops the page a creature-recipe part points at.
-func shareRecipeLink(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error) {
+func shareRecipeLink(raw json.RawMessage, _ []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
 	var d recipeLink
 	if err := strictJSON(raw, &d); err != nil {
 		return nil, nil, err
 	}
-	var picks []homebrew.Unlinked
-	if d.Page != "" {
-		picks = append(picks, homebrew.Unlinked{Pick: "a creature recipe page"})
-	}
-	return json.RawMessage(`{"page":""}`), picks, nil
+	// An empty page is never valid, so the link is always waiting to be chosen.
+	return json.RawMessage(`{"page":""}`), []homebrew.Unlinked{{Pick: pickCreatureRecipe}}, nil
 }
 
 // shareCreatureMark drops every page a mark names; the variants it records
 // are the rise action's own work in the sending campaign.
-func shareCreatureMark(raw json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error) {
+func shareCreatureMark(raw json.RawMessage, waiting []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
 	var d creatureMark
 	if err := strictJSON(raw, &d); err != nil {
 		return nil, nil, err
 	}
-	var picks []homebrew.Unlinked
-	if d.Recipe != "" {
-		picks = append(picks, homebrew.Unlinked{Pick: "a creature recipe page"})
-	}
+	// An empty recipe is never valid, so it is always waiting to be chosen;
+	// the lists are waiting when they held pages or the sender says so.
+	picks := []homebrew.Unlinked{{Pick: pickCreatureRecipe}}
 	if len(d.Addons) > 0 {
-		picks = append(picks, homebrew.Unlinked{Pick: "its add-on recipe pages"})
+		picks = append(picks, homebrew.Unlinked{Pick: pickAddonRecipes})
+	} else {
+		picks = append(picks, keepWaiting(waiting, pickAddonRecipes)...)
 	}
 	if len(d.Marked) > 0 {
-		picks = append(picks, homebrew.Unlinked{Pick: "the creatures it marks"})
+		picks = append(picks, homebrew.Unlinked{Pick: pickMarkedCreatures})
+	} else {
+		picks = append(picks, keepWaiting(waiting, pickMarkedCreatures)...)
 	}
 	return json.RawMessage(`{"recipe":""}`), picks, nil
+}
+
+// shareAncestry drops the slug: it names an entry of the sending campaign.
+func shareAncestry(raw json.RawMessage, _ []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error) {
+	var d struct {
+		Slug string `json:"slug"`
+	}
+	if err := strictJSON(raw, &d); err != nil {
+		return nil, nil, err
+	}
+	// An empty slug is never valid, so the link is always waiting.
+	return json.RawMessage(`{"slug":""}`), []homebrew.Unlinked{{Pick: pickAncestry}}, nil
+}
+
+// sharePartyEffect refuses an effect only the Director sees: its name and
+// text are the Director's, so there is nothing of it to share.
+func sharePartyEffect(raw json.RawMessage) (json.RawMessage, error) {
+	var a partyEffectArgs
+	if err := strictJSON(raw, &a); err != nil {
+		return nil, err
+	}
+	if a.See == effectSeeDirector {
+		return nil, apperror.NewValidation("is an effect only the Director sees, so it is not shared; let the party see it or take the step out of the recipe")
+	}
+	return raw, nil
 }

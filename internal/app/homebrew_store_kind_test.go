@@ -199,7 +199,7 @@ func TestHomebrewStoreKindRefusesHostile(t *testing.T) {
 func TestShareHooksStripAndLeaveTheRestAlone(t *testing.T) {
 	tests := []struct {
 		name  string
-		share func(json.RawMessage) (json.RawMessage, []homebrew.Unlinked, error)
+		share func(json.RawMessage, []homebrew.Unlinked) (json.RawMessage, []homebrew.Unlinked, error)
 		in    string
 		want  string
 		picks int
@@ -213,10 +213,11 @@ func TestShareHooksStripAndLeaveTheRestAlone(t *testing.T) {
 		{"creature recipe drops its page", shareRecipeLink, `{"page":"p1"}`, `{"page":""}`, 1},
 		{"creature mark drops every page", shareCreatureMark,
 			`{"recipe":"a","addons":["b"],"marked":["c"],"variants":{"c":"d"}}`, `{"recipe":""}`, 3},
+		{"ancestry drops its slug", shareAncestry, `{"slug":"elf"}`, `{"slug":""}`, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, picks, err := tt.share(json.RawMessage(tt.in))
+			got, picks, err := tt.share(json.RawMessage(tt.in), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -226,14 +227,59 @@ func TestShareHooksStripAndLeaveTheRestAlone(t *testing.T) {
 			if len(picks) != tt.picks {
 				t.Errorf("picks = %v", picks)
 			}
-			// Stripping what is already stripped changes nothing.
-			again, more, err := tt.share(got)
-			if err != nil || string(again) != tt.want || len(more) != 0 {
+			// Stripping what is already stripped changes nothing, and the owner
+			// makes the same markers when given them back as the sender's.
+			again, more, err := tt.share(got, picks)
+			if err != nil || string(again) != tt.want || len(more) != len(picks) {
 				t.Errorf("second pass = %s, %v, %v", again, more, err)
 			}
 		})
 	}
-	if _, _, err := shareFieldPart(json.RawMessage(`{"category":"Heroes","label":"Curse","director":true}`)); err == nil {
+	// A marker the sender wrote is kept only where the owner would have made
+	// it, and never invented.
+	if _, picks, _ := shareWordsPart(json.RawMessage(`{"words":[{"word":"a","local":"b"}]}`), []homebrew.Unlinked{{Pick: "a place page"}, {Pick: "anything"}}); len(picks) != 1 || picks[0].Pick != "a place page" {
+		t.Errorf("words picks = %v", picks)
+	}
+	if _, picks, _ := shareWordsPart(json.RawMessage(`{"era":"Dusk","words":[{"word":"a","local":"b"}]}`), []homebrew.Unlinked{{Pick: "a place page"}}); len(picks) != 0 {
+		t.Errorf("an era's words kept a place marker: %v", picks)
+	}
+	if _, _, err := shareFieldPart(json.RawMessage(`{"category":"Heroes","label":"Curse","director":true}`), nil); err == nil {
 		t.Error("a Director-only field was shared")
+	}
+}
+
+func TestPartyEffectShare(t *testing.T) {
+	effect := func(see string) json.RawMessage {
+		return json.RawMessage(`{"name":"Eclipse","text":"` + storeSecretWord + `","who":"party","see":"` + see + `","lasts":"until_change"}`)
+	}
+	if _, err := sharePartyEffect(effect("director")); err == nil || !strings.Contains(err.Error(), "only the Director") {
+		t.Errorf("a Director-only effect was shared: %v", err)
+	}
+	if got, err := sharePartyEffect(effect("party")); err != nil || !bytes.Contains(got, []byte("Eclipse")) {
+		t.Errorf("a party effect was refused: %s, %v", got, err)
+	}
+	if _, err := sharePartyEffect(json.RawMessage(`{"name":"x","extra":1}`)); err == nil {
+		t.Error("an unknown setting was passed along")
+	}
+}
+
+// A Director-only party.effect can't be packaged, and one a sender slips in is
+// refused with its text nowhere in what is stored.
+func TestHomebrewStoreKindRefusesDirectorOnlyEffect(t *testing.T) {
+	k, store := storeKind(t)
+	reg := homebrew.NewRegistry()
+	if err := reg.RegisterAction(homebrew.ActionDef{Name: "party.effect", Label: "Effect", Check: checkPartyEffect, Share: sharePartyEffect}); err != nil {
+		t.Fatal(err)
+	}
+	k.svc = homebrew.NewService(store, reg, nil, nil)
+	hostile := `{"name":"X","doc":{"parts":[],"rules":[{"when":{"event":"moon.changed"},"then":[{"action":"party.effect","args":{"name":"Eclipse","text":"` + storeSecretWord + `","who":"party","see":"director","lasts":"until_change"}}]}]}}`
+	if _, err := k.Add(context.Background(), "camp-b", "dm", json.RawMessage(hostile)); err == nil || !strings.Contains(err.Error(), "only the Director") {
+		t.Errorf("add err = %v", err)
+	}
+	if _, err := k.Strip(json.RawMessage(hostile)); err == nil {
+		t.Error("strip passed a Director-only effect")
+	}
+	if len(store.stored) != 0 {
+		t.Error("a refused add stored a recipe")
 	}
 }
