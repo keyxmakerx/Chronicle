@@ -2439,12 +2439,13 @@
       thBusy = true;
       function done(u) { if (u) TH[q.key] = u; thBusy = false; q.cb(u || ''); thNext(); }
       setTimeout(function () {
-        var body = '';
+        // The drawing sets the module's shared scene and sky; the room's own are put back however it ends.
+        var body = '', was = curScene, live = cmLiveNow, pic = skyPic;
         try {
-          var Rf = Object.create(R), was = curScene, live = cmLiveNow; Rf.model = Object.assign({}, R.model, { counter: q.theme, edit: false, dress: false });
+          var Rf = Object.create(R); Rf.model = Object.assign({}, R.model, { counter: q.theme, edit: false, dress: false });
           var v = composedView(Rf); body = '<defs>' + common() + v.defs() + '</defs>' + v.svg(); if (v.destroy) v.destroy();
-          curScene = was; cmLiveNow = live;
-        } catch (e) { done(''); return; }
+        } catch (e) { body = ''; } finally { curScene = was; cmLiveNow = live; skyPic = pic; }
+        if (!body) { done(''); return; }
         var c = q.crop, w = TW, h = Math.round(TW * c[3] / c[2]), img = new Image();
         img.onload = function () {
           try {
