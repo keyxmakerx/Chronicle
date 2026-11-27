@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 )
 
 // AskAction is the "Ask the Director" step. A run that reaches it stops,
@@ -225,15 +223,6 @@ func askWords(rule Rule, step int) string {
 		return a.Ask
 	}
 	return ""
-}
-
-// upperFirst capitalises a sentence's first letter for a heading.
-func upperFirst(s string) string {
-	r, n := utf8.DecodeRuneInString(s)
-	if n == 0 {
-		return s
-	}
-	return string(unicode.ToUpper(r)) + s[n:]
 }
 
 func (s *service) nameOf(ctx context.Context, campaignID, userID string) string {
