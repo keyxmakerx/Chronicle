@@ -168,6 +168,20 @@ test("the shop floor's door shows the window's sky, view and picture", { skip, t
   const dusk = smithy(null); dusk.theme.scene = 'castle';
   assert.match(await pane(dusk), /stop-color="#2a2a5a"/, 'and so does the sky');
   assert.match(await pane(night('', { id: A, on: 'outside', fit: 'fill' })), /data-pic/, 'a picture through the window is through the door too');
+  // Arranging while facing the door shows a new view there straight away, not after turning round.
+  const { p, errors } = await open(browser, night(''));
+  const door = () => p.evaluate(() => document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]').innerHTML);
+  await p.click('[data-mode="arr"]');
+  await p.click('.src-turn');
+  await p.waitForSelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]');
+  const was = await door();
+  const sel = '.shr-cb select[data-cb-path="theme.scene"]';
+  await p.waitForSelector(sel, { state: 'attached' });
+  await p.evaluate((s) => { document.querySelector(s).closest('details').open = true; }, sel);
+  await p.selectOption(sel, 'castle');
+  await p.waitForFunction((w) => { const g = document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]'); return g && g.innerHTML !== w; }, was);
+  assert.equal(await door(), castle, 'the door shows the castle the theme now names');
+  assert.deepEqual(errors, []);
 });
 
 test('the owner picks the view outside, and Save room sends it', { skip, timeout: 120000 }, async (t) => {

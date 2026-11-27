@@ -2048,6 +2048,7 @@
     var gr = grain(); if (gr) stage.querySelector('.src-grain').style.backgroundImage = 'url(' + gr + ')';
 
     function themeKey() { return JSON.stringify([R.model.counter || R.model.roomType, !!R.model.edit]); }
+    function lookKey() { return JSON.stringify(R.model.counter || R.model.roomType); }
     function setModel(m) {
       R.model = { its: m.its || [], basket: m.basket || {}, icons: m.icons || window.ShopRoomIcons || {}, image: m.image || '', name: m.name || 'Shop', roomType: m.roomType || 'general', time: m.time || '', lines: !!m.lines,
         today: m.today && m.today.line ? { line: String(m.today.line), said: String(m.today.said || '') } : null,
@@ -2307,9 +2308,12 @@
     mountView('counter'); pause(false);
     return {
       update: function (m) {
-        var was = themeKey(); setModel(m);
-        // A changed theme (or place mode) redraws the counter room in place; the other views never read it.
-        if (view && where === 'counter' && !busy && was !== themeKey()) mountView('counter'); else if (view) view.sync();
+        var was = themeKey(), look = lookKey(); setModel(m);
+        // A changed theme (or place mode) redraws the counter room in place. The shop floor
+        // redraws only for a new look, since its door shows the window; the case never reads it.
+        if (view && where === 'counter' && !busy && was !== themeKey()) mountView('counter');
+        else if (view && where === 'floor' && !busy && look !== lookKey()) mountView('floor');
+        else if (view) view.sync();
       },
       escape: function () {
         if (!menuEl.hidden) { closeMenu(); return true; }
