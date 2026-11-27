@@ -254,6 +254,38 @@ test(`a long title that settles keeps its lines and its neighbours still while i
 });
 }
 
+// A box centres its lines as a group, so a line joining or leaving moves the
+// others: they glide there, never jump in one frame.
+test('lines in a box glide, never jump, when another line joins or leaves', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 1000, height: 640 });
+  await pg.evaluate(() => {
+    window.track = [];
+    const tick = () => {
+      const ls = [...document.querySelectorAll('.cs-cut-words:not(.cs-cut-corner) .cs-cut-line')];
+      window.track.push(ls.map((l) => ({ t: l.textContent, y: l.getBoundingClientRect().top })));
+      if (window.track.length < 400) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await start(pg, { ...CARDS, text: [
+    { say: 'Chapter two', at: 0.1, seconds: 0.9, style: 'caption', in: 'fade', out: 'fade' },
+    { say: 'The Drowned Bell', at: 0.6, seconds: 0, style: 'title', in: 'fade' }
+  ] });
+  await pg.waitForFunction(() => window.track.length >= 400 || (window.run.time() > 3.4));
+  const steps = { 'Chapter two': 0, 'The Drowned Bell': 0 };
+  const track = await pg.evaluate(() => window.track);
+  for (let i = 1; i < track.length; i++) {
+    for (const l of track[i]) {
+      const prev = track[i - 1].find((p) => p.t === l.t);
+      if (prev) steps[l.t] = Math.max(steps[l.t], Math.abs(l.y - prev.y));
+    }
+  }
+  assert.ok(track.some((f) => f.length === 2) && track.at(-1).length === 1, 'both lines shown, then the caption gone');
+  assert.ok(steps['Chapter two'] < 8, 'the caption jumped ' + steps['Chapter two'] + 'px in one frame');
+  assert.ok(steps['The Drowned Bell'] < 8, 'the title jumped ' + steps['The Drowned Bell'] + 'px in one frame');
+  assert.deepEqual(errors, []);
+});
+
 test('under reduced motion the chosen arrivals are plain fades and the bars are simply there', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 1280, height: 720 }, true);
   await start(pg, CARDS);
