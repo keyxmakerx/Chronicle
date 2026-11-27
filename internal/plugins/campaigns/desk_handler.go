@@ -35,7 +35,7 @@ const (
 
 // deskInputs gathers everything the whole desk draws, the Customize block's
 // words included: the look, the categories, what each plugin's Customize
-// area says is chosen now, and this viewer's own brush choice.
+// area says is chosen now, and this viewer's own brush and Store icon choices.
 func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
 	ctx := c.Request().Context()
 	in := h.deskInputsFor(ctx, cc.Campaign, deskAll)
@@ -51,6 +51,7 @@ func (h *Handler) deskInputs(c *echo.Context, cc *CampaignContext) DeskInputs {
 		in.Tabs = append(in.Tabs, DeskTab{ID: t.ID, Label: t.Label, Summary: t.summary(ctx), Blurb: t.Blurb})
 	}
 	in.BrushHidden = h.brushHidden(ctx, auth.GetUserID(c), cc.Campaign.ID)
+	in.StoreHidden = h.storeHidden(ctx, auth.GetUserID(c), cc.Campaign.ID)
 	return in
 }
 

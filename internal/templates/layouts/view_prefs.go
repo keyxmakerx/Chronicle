@@ -20,6 +20,9 @@ type ViewPrefsData struct {
 	// BrushHidden are the campaigns where the person put the header's
 	// Customize brush away.
 	BrushHidden []string
+	// StoreHidden are the campaigns where the person put the top bar's
+	// Store icon away.
+	StoreHidden []string
 }
 
 const keyViewPrefs ctxKey = "layout_view_prefs"

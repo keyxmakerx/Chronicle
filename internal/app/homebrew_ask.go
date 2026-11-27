@@ -85,7 +85,7 @@ func (l *homebrewAskLive) AskChanged(campaignID string, e homebrew.AskEvent) {
 		return
 	}
 	t := ws.MsgHomebrewAnswered
-	if e.State == homebrew.AskWaiting {
+	if e.State == homebrew.AskWaiting || e.State == homebrew.AskRoll {
 		t = ws.MsgHomebrewAsk
 	}
 	msg := ws.NewMessage(t, campaignID, e.ID, e)

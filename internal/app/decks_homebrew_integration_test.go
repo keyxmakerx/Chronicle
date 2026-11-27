@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
 
@@ -70,6 +71,7 @@ type storyWorld struct {
 	story      *decksStory
 	homebrew   homebrew.Service
 	trackers   trackers.Service
+	rolls      rolls.Service
 	capture    *deckCapture
 	asks       *askCapture
 	on         bool
@@ -94,7 +96,7 @@ func newStoryWorld(t *testing.T) *storyWorld {
 	}
 	db := dbtest.Open(t, dbtest.Options{Prefix: "chronicle_deckstory_", Plugins: []dbtest.PluginMigrations{
 		plugin(decks.PluginSlug, decks.MigrationsFS), plugin(trackers.PluginSlug, trackers.MigrationsFS),
-		plugin(homebrew.PluginSlug, homebrew.MigrationsFS)}})
+		plugin(homebrew.PluginSlug, homebrew.MigrationsFS), plugin(rolls.PluginSlug, rolls.MigrationsFS)}})
 	w := &storyWorld{t: t, db: db, on: true, capture: &deckCapture{}, asks: &askCapture{}}
 	exec := func(q string, args ...any) { t.Helper(); mustGalleryExec(t, db, q, args...) }
 	w.camp, w.owner, w.tamUser, w.ilseUser = galleryTestUUID(t), galleryTestUUID(t), galleryTestUUID(t), galleryTestUUID(t)
@@ -137,8 +139,13 @@ func newStoryWorld(t *testing.T) *storyWorld {
 	if err := reg.RegisterAction(homebrew.AskDirector()); err != nil {
 		t.Fatal(err)
 	}
+	w.rolls = rolls.NewService(rolls.NewRepository(db), nil, nil, &rollsCharacterAdapter{entities: ents})
+	if err := reg.RegisterAction(rollFirstAction(w.rolls, nil)); err != nil {
+		t.Fatal(err)
+	}
 	w.homebrew = homebrew.NewService(homebrew.NewRepository(db), reg, nil, homebrew.NewRunStore(db),
-		homebrew.WithAskPeople(&homebrewAskPeople{svc: campSvc}), homebrew.WithBell(w.asks), homebrew.WithLive(w.asks))
+		homebrew.WithAskPeople(&homebrewAskPeople{svc: campSvc}), homebrew.WithBell(w.asks), homebrew.WithLive(w.asks),
+		homebrew.WithPlayers(&homebrewScopePlayers{entities: ents}))
 	w.story.bindHomebrew(w.homebrew)
 
 	w.dir = decks.Viewer{UserID: w.owner, MemberRole: 3, VisibilityRole: 3, Director: true}

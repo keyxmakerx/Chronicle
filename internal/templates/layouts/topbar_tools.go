@@ -1,6 +1,9 @@
 package layouts
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // The top bar's tools and who has each. The bar draws a real button for every
 // tool the viewer has, and on a phone the Tools shelf lists the same set by
@@ -68,6 +71,29 @@ func topbarHasBrush(ctx context.Context) bool {
 	return true
 }
 
+// topbarMayStore reports whether the viewer may have the Store icon here:
+// the campaign's owner in their own view, the same check the design gallery
+// routes the Store reads make. It decides whether the bar carries the icon at
+// all, shown or put away.
+func topbarMayStore(ctx context.Context) bool {
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsOwner(ctx) && !IsGuest(ctx) &&
+		!IsViewingAsPlayer(ctx) && PreviewAs(ctx) == "" && !InSiteAdmin(ctx)
+}
+
+// topbarHasStore reports whether the Store icon is on the bar: the viewer
+// may have it and has not put it away in this campaign (their own display
+// choice, kept per campaign like the brush's).
+func topbarHasStore(ctx context.Context) bool {
+	if !topbarMayStore(ctx) {
+		return false
+	}
+	p := GetViewPrefs(ctx)
+	if p == nil {
+		return true
+	}
+	return !slices.Contains(p.StoreHidden, GetCampaignID(ctx))
+}
+
 // topbarToolCount is how many tools the shelf lists besides Find. A member's
 // AI is left out: it appears only once the plugin allows it, so the bar must
 // not depend on it to earn a shelf.
@@ -75,7 +101,7 @@ func topbarToolCount(ctx context.Context) int {
 	n := 0
 	for _, has := range []bool{
 		topbarHasOwnerAI(ctx), topbarHasBrush(ctx), topbarHasTable(ctx), topbarHasDMScreen(ctx),
-		topbarHasViewAs(ctx), topbarHasBell(ctx),
+		topbarHasViewAs(ctx), topbarHasBell(ctx), topbarHasStore(ctx),
 	} {
 		if has {
 			n++

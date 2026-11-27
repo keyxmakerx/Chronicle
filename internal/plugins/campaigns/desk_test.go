@@ -324,6 +324,8 @@ func TestDeskRows_Customize(t *testing.T) {
 		{"a plugin's area without words says what it holds", tabLine(c, DeskTab{ID: "hero-creator", Label: "Hero creator", Blurb: "The border each card wears in the hero creator."}), "Hero creator", "|The border each card wears in the hero creator.", "/campaigns/c1/customize/x/hero-creator"},
 		{"brush shown", brushLine("c1", false), "Header brush", "blank:Shown", ""},
 		{"brush hidden", brushLine("c1", true), "Header brush", "blank:Hidden", ""},
+		{"store shown", storeLine("c1", false), "Store icon", "blank:Shown", ""},
+		{"store hidden", storeLine("c1", true), "Store icon", "blank:Hidden", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -341,6 +343,9 @@ func TestDeskRows_Customize(t *testing.T) {
 	if b.URL != "/account/brush/c1" || b.Field != "brush" || b.Off != "" {
 		t.Errorf("the brush saves to the person's own choice for this campaign, never off: %+v", b)
 	}
+	if s := storeLine("c1", false).Values[0].Blank; s.URL != "/account/store/c1" || s.Method != "PUT" || s.Field != "store" || s.Off != "" {
+		t.Errorf("the Store icon saves to the person's own choice for this campaign, never off: %+v", s)
+	}
 	if v := lookLine(c, LookSummary{Look: "Classic", Colour: "Indigo"}).Values[0]; !v.SubSwatch || !v.Joined {
 		t.Errorf("the look row draws the colour's swatch beside its name: %+v", v)
 	}
@@ -349,7 +354,7 @@ func TestDeskRows_Customize(t *testing.T) {
 	for _, l := range order {
 		ids = append(ids, l.ID)
 	}
-	if got := strings.Join(ids, ","); got != "look,categories,homes,x-maps,x-dice,brush" {
+	if got := strings.Join(ids, ","); got != "look,categories,homes,x-maps,x-dice,brush,store" {
 		t.Errorf("Customize block order = %s", got)
 	}
 }

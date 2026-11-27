@@ -17,7 +17,8 @@ import (
 // imports the homebrew plugin. Items are opaque here and serialised as the
 // service returns them.
 type HomebrewAskAPIService interface {
-	// Waiting lists the asks waiting for a Director, oldest first.
+	// Waiting lists the asks waiting for a Director, and the rolls waiting on
+	// players (kind "roll"), oldest first.
 	Waiting(ctx context.Context, campaignID, userID string) (items any, total int, err error)
 	// Answer answers one; body is the answer as the drawer sends it.
 	Answer(ctx context.Context, campaignID, userID, runID string, body json.RawMessage) (any, error)
@@ -61,9 +62,10 @@ func (h *HomebrewAskAPIHandler) dmUser(c *echo.Context) (string, error) {
 	return "", apperror.NewForbidden("asks over the API need owner or co-DM access")
 }
 
-// Waiting lists the asks waiting for a Director.
+// Waiting lists the asks waiting for a Director, and the rolls waiting on
+// players, which a GM card can show but not make.
 // GET /api/v1/campaigns/:id/homebrew/asks
-// Response: {"data": [run views with "ask"], "total": N}
+// Response: {"data": [run views, "kind": "ask" with "ask" or "roll" with "roll"], "total": N}
 func (h *HomebrewAskAPIHandler) Waiting(c *echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
