@@ -59,6 +59,7 @@ const (
 	keyAdminNavPins        ctxKey = "layout_admin_nav_pins"
 	keyFontFamily          ctxKey = "layout_font_family"
 	keyUserCampaigns       ctxKey = "layout_user_campaigns"
+	keyReturnCampaign      ctxKey = "layout_return_campaign"
 )
 
 // NavCampaign holds the minimum info needed to render a campaign link
@@ -334,6 +335,18 @@ func SetUserCampaigns(ctx context.Context, campaigns []NavCampaign) context.Cont
 func GetUserCampaigns(ctx context.Context) []NavCampaign {
 	campaigns, _ := ctx.Value(keyUserCampaigns).([]NavCampaign)
 	return campaigns
+}
+
+// SetReturnCampaign stores the campaign this person was last in, offered as
+// the way back on pages outside any campaign (Account settings, Site admin).
+func SetReturnCampaign(ctx context.Context, c *NavCampaign) context.Context {
+	return context.WithValue(ctx, keyReturnCampaign, c)
+}
+
+// GetReturnCampaign returns the campaign to offer as the way back, or nil.
+func GetReturnCampaign(ctx context.Context) *NavCampaign {
+	c, _ := ctx.Value(keyReturnCampaign).(*NavCampaign)
+	return c
 }
 
 // --- Entity Types (for sidebar) ---

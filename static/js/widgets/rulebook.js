@@ -913,8 +913,11 @@
   // page. It is empty for a reader who opened the book themselves.
   Rulebook.prototype.returnLink = function () {
     if (this.inline || !this.deepLink) return null;
-    var ref;
-    try { ref = new URL(document.referrer); } catch (e) { return null; }
+    // Opening the book from a page is usually an in-page swap, which leaves
+    // document.referrer on the last page loaded in full; boot.js knows the
+    // page actually left.
+    var ref, from = window.Chronicle && Chronicle.cameFrom ? Chronicle.cameFrom() : document.referrer;
+    try { ref = new URL(from); } catch (e) { return null; }
     if (ref.origin !== window.location.origin || ref.pathname === window.location.pathname) return null;
     return {
       href: ref.pathname + ref.search + ref.hash,

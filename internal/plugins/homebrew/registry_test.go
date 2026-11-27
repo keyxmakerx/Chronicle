@@ -304,3 +304,34 @@ func TestRegistryPreview(t *testing.T) {
 		}
 	})
 }
+
+func TestRegistrySays(t *testing.T) {
+	count := []Field{{Name: "count", Label: "Cards", Type: FieldWhole}}
+	tests := []struct {
+		name    string
+		def     ActionDef
+		wantErr bool
+	}{
+		{"no line", ActionDef{Name: "a"}, false},
+		{"plain words", ActionDef{Name: "a", Says: "shuffles the deck"}, false},
+		{"a field and the part", ActionDef{Name: "a", PartKinds: []string{"deck"}, Fields: count, Says: "draws {count} from {part}"}, false},
+		{"an unknown field", ActionDef{Name: "a", Fields: count, Says: "draws {copies}"}, true},
+		{"the part on an action with none", ActionDef{Name: "a", Says: "draws from {part}"}, true},
+		{"an empty slot", ActionDef{Name: "a", Says: "draws {}"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.def.Check = okCheck
+			r := NewRegistry()
+			err := r.RegisterAction(tt.def)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil {
+				if got := r.Catalog().Actions[0].Says; got != tt.def.Says {
+					t.Errorf("catalog says %q, want %q", got, tt.def.Says)
+				}
+			}
+		})
+	}
+}

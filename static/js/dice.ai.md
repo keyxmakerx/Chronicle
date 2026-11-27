@@ -85,12 +85,15 @@ crit fail, quality Auto.
 `GET/PUT /campaigns/:id/rolls/settings`) and the Director sets them on Customize's
 Dice tab (`dice_customize.js`). The Table tab (`table.js`, on every campaign page
 for members) reads them and sets `Chronicle.diceTable` to the look of this
-person's own rolls: their personal picks (kept in the browser) where the
-Director lets players pick, else the campaign's. Shop, crafting and hero-builder
-rolls name no look and so pick it up from there. The Table draws other people's
-rolls with `opts.table` set to the campaign's look, so everyone sees the
-campaign's dice on someone else's roll. Until the settings arrive, rolls use the
-defaults.
+person's own rolls: their own picks (kept with their account,
+`GET/PUT /campaigns/:id/rolls/my-dice`) where the Director lets players pick and
+the set is on offer, else the campaign's. Shop, crafting and hero-builder rolls
+name no look and so pick it up from there. Every roll carries the dice the server
+settled for its roller (`rollerDice`), and the Table throws each roll, anyone's,
+with `opts.table` set to those (`Chronicle.rollDice.forRoll`), so a player's
+dice go with them to every screen. A roll that carries none (made before rolls
+carried them) is thrown in the campaign's look. Until the settings arrive, rolls
+use the defaults.
 
 **Crits in one throw.** The grand plays on one crit die. A die that counts goes
 before one that doesn't, a success before a failure, then the die nearest the
