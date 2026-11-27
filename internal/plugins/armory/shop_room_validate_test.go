@@ -569,3 +569,75 @@ func TestNormalizeShopRoomLayout_Rolls(t *testing.T) {
 		}
 	})
 }
+
+const testPictureID = "0b9c2f4e-1111-4222-8333-444455556666"
+
+func withPicture(p any) []byte {
+	return withCounter(counterField("theme", "picture", p))
+}
+
+func TestNormalizeShopRoomLayout_CounterPicture(t *testing.T) {
+	rejects := []struct {
+		name string
+		p    any
+	}{
+		{"a URL instead of an id", map[string]any{"id": "/media/" + testPictureID, "on": "wall", "fit": "fill"}},
+		{"another site", map[string]any{"id": "https://evil.example/a.png", "on": "wall", "fit": "fill"}},
+		{"no id", map[string]any{"on": "wall", "fit": "fill"}},
+		{"an id with a path tail", map[string]any{"id": testPictureID + "/../x", "on": "wall", "fit": "fill"}},
+		{"unknown place", map[string]any{"id": testPictureID, "on": "ceiling", "fit": "fill"}},
+		{"empty place", map[string]any{"id": testPictureID, "on": "", "fit": "fill"}},
+		{"unknown fit", map[string]any{"id": testPictureID, "on": "wall", "fit": "stretch"}},
+		{"not an object", "picture.png"},
+	}
+	for _, tc := range rejects {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			if _, err := NormalizeShopRoomLayout(withPicture(tc.p)); err == nil {
+				t.Errorf("accepted %v", tc.p)
+			}
+		})
+	}
+	t.Run("keeps a picture, its id lower-cased", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(withPicture(map[string]any{"id": strings.ToUpper(testPictureID), "on": "outside", "fit": "repeat"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var l ShopRoomLayout
+		if err := json.Unmarshal(out, &l); err != nil {
+			t.Fatal(err)
+		}
+		want := ShopRoomCounterPicture{ID: testPictureID, On: "outside", Fit: "repeat"}
+		if l.Counter.Theme.Picture == nil || *l.Counter.Theme.Picture != want {
+			t.Errorf("picture = %+v, want %+v", l.Counter.Theme.Picture, want)
+		}
+	})
+	t.Run("no picture stays absent", func(t *testing.T) {
+		out, err := NormalizeShopRoomLayout(withCounter(func(map[string]any) {}))
+		if err != nil || strings.Contains(string(out), `"picture"`) {
+			t.Errorf("picture written for a theme without one: %v %s", err, out)
+		}
+	})
+}
+
+func TestNormalizeShopRoomCounterDesign_DropsPicture(t *testing.T) {
+	var m map[string]any
+	_ = json.Unmarshal(ShopRoomCounterStarter("forge"), &m)
+	m["theme"].(map[string]any)["picture"] = map[string]any{"id": testPictureID, "on": "wall", "fit": "fill"}
+	raw, _ := json.Marshal(m)
+	room, err := NormalizeShopRoomCounter(raw)
+	if err != nil || !strings.Contains(string(room), testPictureID) {
+		t.Fatalf("a room's theme keeps its picture: %v %s", err, room)
+	}
+	design, err := NormalizeShopRoomCounterDesign(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(design), "picture") {
+		t.Errorf("a design carried the campaign's picture: %s", design)
+	}
+	m["theme"].(map[string]any)["picture"] = map[string]any{"id": "https://evil.example/a.png", "on": "wall", "fit": "fill"}
+	bad, _ := json.Marshal(m)
+	if _, err := NormalizeShopRoomCounterDesign(bad); err == nil {
+		t.Error("a design with a bad picture is refused, not quietly cleaned")
+	}
+}

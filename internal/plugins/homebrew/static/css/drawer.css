@@ -49,6 +49,46 @@
 .hbd-done .hbd-pill { color: var(--hbd-ok); }
 .hbd-failed .hbd-pill, .hbd-stopped .hbd-pill { color: var(--hbd-bad); }
 
+/* An ask: the answer card. Yes and No hold their pick (aria-pressed); after
+ * Yes, the steps that follow are rows of label and control ("Yes, and…"). */
+.hbd-count { margin-left: auto; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--hbd-muted); }
+.hbd-ask { gap: 10px; padding: 12px; }
+.hbd-ask-title { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.3; color: var(--hbd-ink); }
+.hbd-ask-title + .hbd-muted { margin-top: -6px; }
+.hbd-choice { min-width: 52px; justify-content: center; font-weight: 600; }
+.hbd-choice[aria-pressed="true"] { border-color: var(--hbd-acc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--hbd-acc) 35%, transparent); }
+.hbd-btn.hbd-other { padding: 5px 4px; font-weight: 600; }
+.hbd-btn.hbd-other[aria-pressed="true"] { text-decoration: underline; }
+.hbd-and { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.hbd-and-h { font-size: 12.5px; color: var(--hbd-muted); }
+.hbd-and-step { font-size: 12px; font-weight: 600; color: var(--hbd-ink); margin-top: 2px !important; }
+.hbd-cond {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; padding: 2px 4px 2px 12px;
+  border: 1px solid var(--hbd-line); border-radius: 8px; background: var(--hbd-tint); font-size: 13px;
+}
+.hbd-cond:focus-within { border-color: var(--hbd-acc); }
+.hbd-cond-l { color: var(--hbd-muted); flex: 0 0 auto; }
+.hbd-input {
+  min-width: 0; flex: 1 1 8rem; max-width: 14rem; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--hbd-ink); font: inherit; text-align: right;
+}
+.hbd-input:focus-visible { outline: none; }
+.hbd-chip {
+  justify-self: start; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--hbd-line); background: none;
+  color: var(--hbd-ink); font-size: 12.5px; cursor: pointer;
+}
+.hbd-chip:hover { background: var(--hbd-tint); }
+.hbd-reply {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--hbd-line); border-radius: 8px; background: var(--hbd-tint);
+  color: var(--hbd-ink); font: inherit; font-size: 13px; resize: vertical;
+}
+.hbd-reply:focus-visible { outline: none; border-color: var(--hbd-acc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hbd-acc) 25%, transparent); }
+.hbd-send { justify-self: start; font-weight: 600; }
+.hbd-send + .hbd-muted { padding-top: 8px; border-top: 1px solid var(--hbd-line); }
+.hbd-err { font-size: 12.5px; color: var(--hbd-bad); }
+.hbd-declined .hbd-pill, .hbd-withdrawn .hbd-pill { color: var(--hbd-muted); }
+@media (max-width: 480px) { .hbd-choice, .hbd-chip, .hbd-cond { min-height: 44px; } }
+
 .hbd-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding-top: 8px; border-top: 1px solid var(--hbd-line); }
 .hbd-page:first-of-type { border-top: 0; padding-top: 0; }
 .hbd-page-name { font-weight: 600; color: var(--hbd-ink); text-decoration: none; }

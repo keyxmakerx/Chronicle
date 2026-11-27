@@ -16,6 +16,14 @@ type ShopEntityChecker interface {
 	IsShopInCampaign(ctx context.Context, campaignID, entityID string) (bool, error)
 }
 
+// ShopRoomPictureChecker reports whether a media file is a picture of this
+// campaign that a room may show: an image, owned by the campaign, not in the
+// Trash and not bound to a note or page. Implemented in internal/app over the
+// media service. A missing file is a clean false, not an error.
+type ShopRoomPictureChecker interface {
+	IsCampaignPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
+}
+
 // ShopRoomService reads and saves shop room layouts.
 type ShopRoomService interface {
 	// GetRoom returns the stored layout for a shop the viewer can see, or
@@ -32,6 +40,15 @@ type shopRoomService struct {
 	repo       ShopRoomRepository
 	shops      ShopEntityChecker
 	visibility EntityVisibilityFilter
+	pictures   ShopRoomPictureChecker
+}
+
+// SetShopRoomPictures wires the check a room's own picture must pass. Without
+// it a layout naming a picture is refused (fail closed).
+func SetShopRoomPictures(svc ShopRoomService, pictures ShopRoomPictureChecker) {
+	if s, ok := svc.(*shopRoomService); ok {
+		s.pictures = pictures
+	}
 }
 
 // NewShopRoomService creates the service. With a nil visibility filter every
@@ -96,8 +113,41 @@ func (s *shopRoomService) SaveRoom(ctx context.Context, campaignID, shopEntityID
 	if err != nil {
 		return nil, err
 	}
+	if err := s.checkPicture(ctx, campaignID, layout); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Upsert(ctx, campaignID, shopEntityID, userID, layout); err != nil {
 		return nil, err
 	}
 	return layout, nil
+}
+
+// checkPicture refuses a layout whose own picture is not one of this
+// campaign's pictures, so a room can never be pointed at another campaign's
+// file, a note's picture or a page file.
+func (s *shopRoomService) checkPicture(ctx context.Context, campaignID string, layout json.RawMessage) error {
+	var l struct {
+		Counter *struct {
+			Theme struct {
+				Picture *ShopRoomCounterPicture `json:"picture"`
+			} `json:"theme"`
+		} `json:"counter"`
+	}
+	if err := json.Unmarshal(layout, &l); err != nil {
+		return apperror.NewInternal(err)
+	}
+	if l.Counter == nil || l.Counter.Theme.Picture == nil {
+		return nil
+	}
+	if s.pictures == nil {
+		return apperror.NewBadRequest("the room's picture can't be checked right now")
+	}
+	ok, err := s.pictures.IsCampaignPicture(ctx, campaignID, l.Counter.Theme.Picture.ID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperror.NewBadRequest("the room's picture is not one of this campaign's pictures")
+	}
+	return nil
 }

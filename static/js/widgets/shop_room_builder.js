@@ -15,6 +15,8 @@
  *   reset()        drop the saved theme, back to the shop type's starter
  *   place(v)       read or set place-by-hand mode
  *   campaign()     { url, csrf } for the saved-designs library (design_library.js)
+ * The owner's own picture (one of the campaign's pictures, on the back wall or
+ * through the window) is chosen from the campaign's pictures or uploaded here.
  * Every change redraws the room in place; players never load this file's UI.
  */
 (function () {
@@ -61,6 +63,12 @@
     '.shr-cbk{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px}.shr-cbk label{display:flex;gap:6px;align-items:center;min-height:32px;font-size:.8rem;color:var(--color-text-body,#374151)}',
     '.shr-cbk small{color:var(--color-text-secondary,#6b7280)}',
     '.shr-cb .shr-seg button{min-height:32px}',
+    '.shr-cbpic{width:100%;aspect-ratio:12/7;object-fit:cover;border-radius:6px;border:1px solid var(--color-border,#e5e7eb);display:block;background:var(--color-bg-secondary,#f3f4f6)}',
+    '.shr-cbgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.shr-cbgrid[hidden]{display:none}',
+    '.shr-cbgrid button{padding:0;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;overflow:hidden;aspect-ratio:3/2;cursor:pointer;background:var(--color-bg-secondary,#f3f4f6);min-height:44px}',
+    '.shr-cbgrid button[aria-pressed=true]{outline:2px solid var(--shr-acc);outline-offset:1px}.shr-cbgrid img{width:100%;height:100%;object-fit:cover;display:block}',
+    '.shr-cbpicf{display:grid;gap:8px}.shr-cbpicf .shr-chips{display:flex;flex-wrap:wrap;gap:4px 12px}',
+    '.shr-cbup{position:relative;cursor:pointer}.shr-cbup input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}',
     // The panel can sit on the left, so the right-hand slots are not covered, and on a phone it drops to the foot while placing.
     '.shr-panel.cbl{right:auto;left:0;border-left:0;border-right:1px solid var(--color-border,#e5e7eb);box-shadow:18px 0 40px -24px rgb(0 0 0/.45);transform:translateX(-105%)}.shr-panel.cbl.on{transform:none}',
     '@media (max-width:640px){.shr-panel.cbp{top:auto;height:56%;border-left:0;border-top:1px solid var(--color-border,#e5e7eb)}.shr-panel.cbp.cbl{left:0;right:0}.shr-panel.cbp .cbside{display:none}}'
@@ -113,7 +121,79 @@
         return '<label><input type="checkbox" data-cb-prop="' + p + '"><span>' + esc(lbl('prop', p)) + '</span><small data-cb-note="' + p + '"></small></label>';
       }).join('') + '</div>');
     }
+    h += group('Your own picture', '<div class="shr-cbpicf" data-cb-pic></div>', false);
     return h + '<p class="shr-note" role="status" aria-live="polite" data-cb-say></p>';
+  }
+
+  /* ---- The owner's own picture: one of the campaign's pictures, on the back
+     wall or as the view through the opening. The room keeps only the
+     picture's id; the server checks it is this campaign's. ---- */
+  var PIC_ON = [['wall', 'On the back wall'], ['outside', 'Through the window']];
+  var PIC_FIT = [['fill', 'Fill'], ['fit', 'Whole picture'], ['repeat', 'Repeat']];
+  var PIC_PAGE = 24, picKey = null, pics = { items: [], page: 0, total: 0, open: false, busy: false };
+  function campaignId() { var c = cur.api.campaign && cur.api.campaign(); var m = c && /^\/campaigns\/([^/?#]+)/.exec(c.url || ''); return m ? decodeURIComponent(m[1]) : ''; }
+  function seg(label, attr, list, val) {
+    return '<span class="shr-seg" role="group" aria-label="' + label + '">' + list.map(function (o) { return '<button type="button" ' + attr + '="' + o[0] + '" aria-pressed="' + (o[0] === val) + '">' + o[1] + '</button>'; }).join('') + '</span>';
+  }
+  function picGrid() {
+    if (!pics.open) return '<div class="shr-cbgrid" data-cb-grid hidden></div>';
+    var p = cur.api.theme().theme.picture, sel = p ? p.id : '';
+    var cells = pics.items.map(function (m) {
+      return '<button type="button" data-cb-use="' + esc(m.id) + '" aria-pressed="' + (m.id === sel) + '" aria-label="Use ' + esc(m.original_name || 'this picture') + '"><img src="' + esc(m.thumbnail_url || m.url) + '" alt="" loading="lazy"></button>';
+    }).join('');
+    var more = pics.page * PIC_PAGE < pics.total ? '<button type="button" class="shr-link" data-cb-more="1">More pictures</button>' : '';
+    var none = !pics.busy && !pics.items.length ? '<p class="shr-note">This campaign has no pictures yet. Upload one.</p>' : '';
+    return '<div class="shr-cbgrid" data-cb-grid>' + cells + '</div>' + none + more;
+  }
+  function syncPic(force) {
+    var box = cur && cur.box.querySelector('[data-cb-pic]'); if (!box) return;
+    var p = cur.api.theme().theme.picture || null, key = JSON.stringify(p) + '|' + pics.open + '|' + pics.items.length + '|' + pics.busy;
+    if (!force && key === picKey) return;
+    picKey = key;
+    var up = '<label class="shr-link shr-cbup">Upload a picture<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-cb-up aria-label="Upload a picture for the room"></label>';
+    var h = '';
+    if (p) {
+      h += '<img class="shr-cbpic" src="/media/' + esc(p.id) + '/thumb/800" alt="The room’s picture">' +
+        seg('Where the picture goes', 'data-cb-picon', PIC_ON, p.on) + seg('How it fills that space', 'data-cb-picfit', PIC_FIT, p.fit) +
+        '<span class="shr-chips"><button type="button" class="shr-link" data-cb-pics="1" aria-expanded="' + pics.open + '">' + (pics.open ? 'Hide the pictures' : 'Choose another') + '</button>' + up +
+        '<button type="button" class="shr-link" data-cb-picoff="1">Take the picture away</button></span>';
+    } else {
+      h += '<p class="shr-note">Use one of this campaign’s pictures as the back wall, or as the view through the window.</p>' +
+        '<span class="shr-chips"><button type="button" class="shr-link" data-cb-pics="1" aria-expanded="' + pics.open + '">' + (pics.open ? 'Hide the pictures' : 'Choose from this campaign’s pictures') + '</button>' + up + '</span>';
+    }
+    box.innerHTML = h + picGrid();
+  }
+  function loadPics(next) {
+    var c = cur.api.campaign && cur.api.campaign(); if (!c || !window.Chronicle || pics.busy) return;
+    pics.busy = true; syncPic(true);
+    var page = next ? pics.page + 1 : 1;
+    window.Chronicle.apiFetch(c.url + '/media/list?perPage=' + PIC_PAGE + '&page=' + page).then(function (r) {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json();
+    }).then(function (d) {
+      var got = (d && (d.items || d.media || d.data)) || (Array.isArray(d) ? d : []);
+      got = got.filter(function (m) { return m && /^image\//.test(m.mime_type || '') && /^[0-9a-f-]{36}$/i.test(m.id || ''); });
+      pics.items = next ? pics.items.concat(got) : got; pics.page = page; pics.total = +(d && d.total) || pics.items.length;
+    }).catch(function () { say('The campaign’s pictures could not be loaded. Try again.'); pics.open = false; })
+      .then(function () { pics.busy = false; syncPic(true); });
+  }
+  function usePic(id) {
+    change(function (t) { var p = t.theme.picture; t.theme.picture = { id: id, on: p ? p.on : 'wall', fit: p ? p.fit : 'fill' }; });
+    say('The room uses that picture now. Save room to keep it.');
+  }
+  function upload(file) {
+    var id = campaignId(); if (!file || !id || !window.Chronicle) return;
+    var fd = new FormData(); fd.append('file', file); fd.append('usage_type', 'attachment'); fd.append('campaign_id', id);
+    say('Uploading the picture…');
+    window.Chronicle.apiFetch('/media/upload', { method: 'POST', body: fd }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b && b.message || 'The picture did not upload.'); return b; });
+    }).then(function (m) {
+      if (!m || !/^[0-9a-f-]{36}$/i.test(m.id || '')) throw new Error('The picture did not upload. Try again.');
+      // The media library can answer with a file the campaign already has; it is listed once.
+      if (pics.open) pics.items = pics.items.filter(function (x) { return x.id !== m.id; });
+      if (pics.open) pics.items.unshift({ id: m.id, original_name: file.name, mime_type: m.mime_type || 'image/jpeg', thumbnail_url: m.thumbnail_url, url: m.url });
+      usePic(m.id);
+    }).catch(function (e) { say(e && e.message ? e.message : 'The picture did not upload. Try again.'); });
   }
   function say(t) { var e = cur && cur.box.querySelector('[data-cb-say]'); if (e) e.textContent = t || ''; }
 
@@ -133,7 +213,7 @@
     });
     var r = b.querySelector('[data-cb-reset]'); if (r) r.hidden = !cur.api.custom();
     var sm = b.closest('.shr-sec'), sh = sm && sm.querySelector('.shr-sh small'); if (sh) sh.textContent = t.name;
-    notes(); hilite();
+    syncPic(); notes(); hilite();
   }
   // A prop that found no free spot in this skeleton says so, and is never squeezed in.
   function notes() {
@@ -168,9 +248,15 @@
     if (d.cbSw) { var p = d.cbSw.split(':'); change(function (t) { t.theme[p[0]] = p[1]; }); return; }
     if (d.cbArm) { armed = armed === d.cbArm ? '' : d.cbArm; sync(); say(armed ? 'Now press the dashed slot “' + slotName(slotOf(armed)) + '”, or drag the chip there.' : ''); return; }
     if (d.cbDrop) { change(function (t) { var i = t.props.indexOf(d.cbDrop); if (i >= 0) t.props.splice(i, 1); }); return; }
-    if (d.cbSide) { var pn = b.closest('.shr-panel'); if (pn) pn.classList.toggle('cbl'); }
+    if (d.cbSide) { var pn = b.closest('.shr-panel'); if (pn) pn.classList.toggle('cbl'); return; }
+    if (d.cbPics) { pics.open = !pics.open; if (pics.open && !pics.page) loadPics(false); else syncPic(true); return; }
+    if (d.cbMore) { loadPics(true); return; }
+    if (d.cbUse) { usePic(d.cbUse); return; }
+    if (d.cbPicon || d.cbPicfit) { change(function (t) { if (!t.theme.picture) return; if (d.cbPicon) t.theme.picture.on = d.cbPicon; else t.theme.picture.fit = d.cbPicfit; }); return; }
+    if (d.cbPicoff) { change(function (t) { delete t.theme.picture; }); say('The picture is gone from the room. Save room to keep that.'); }
   }
   function onInput(e) {
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-cb-up')) { if (e.type === 'change' && e.target.files && e.target.files[0]) upload(e.target.files[0]); return; }
     var c = e.target, path = c.getAttribute && c.getAttribute('data-cb-path'), pr = c.getAttribute && c.getAttribute('data-cb-prop');
     if (path) { var v = c.type === 'range' ? +c.value : c.value; change(function (t) { pathSet(t, path, v); }, c.type === 'range' || c.type === 'color'); }
     else if (pr && e.type === 'change') {
@@ -192,7 +278,7 @@
     if (cur && cur.box !== box) armed = '';
     cur = { box: box, api: api };
     mode = api.place() ? 'place' : 'lists';
-    box.className = 'shr-cb'; box.innerHTML = html();
+    box.className = 'shr-cb'; box.innerHTML = html(); picKey = null;
     if (!box._cb) { box._cb = 1; box.addEventListener('click', onClick); box.addEventListener('input', onInput); box.addEventListener('change', onInput); box.addEventListener('dragstart', onDrag); box.addEventListener('dragend', function () { armed = ''; sync(); }); }
     var pn = box.closest('.shr-panel'); if (pn) pn.classList.toggle('cbp', mode === 'place');
     sync();
