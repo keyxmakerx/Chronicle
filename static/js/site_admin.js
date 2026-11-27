@@ -99,7 +99,8 @@
       // A way out that names a campaign keeps to it: the remembered page is
       // used only when it is inside that campaign.
       var cid = b.getAttribute ? b.getAttribute('data-admin-back-campaign') : null;
-      if (cid && path.indexOf('/campaigns/' + cid) !== 0) return;
+      var home = '/campaigns/' + cid;
+      if (cid && path !== home && path.indexOf(home + '/') !== 0 && path.indexOf(home + '?') !== 0) return;
       b.setAttribute('href', path);
     });
   };

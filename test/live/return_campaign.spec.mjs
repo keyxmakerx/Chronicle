@@ -18,6 +18,11 @@ test('Account settings and Site admin offer the way back to your campaign', asyn
   assert.equal(await row.getAttribute('href'), `/campaigns/${cid}`);
   const box = await row.boundingBox();
   assert.ok(box && box.height >= 44, `the row is ${box && box.height}px tall`);
+  // Following it brings back the campaign's own menu, not just its page.
+  await row.click();
+  await page.waitForURL(new RegExp(`/campaigns/${cid}`));
+  await page.locator('#sidebar .nav-tail').waitFor();
+  assert.equal(await page.locator('#sidebar .nav-back').count(), 0, 'the everyday menu is gone');
 
   await admin.go('/admin');
   assert.match(await page.locator('#admin-nav .nav-back').innerText(), /Back to Saltreach Keep/);

@@ -139,6 +139,12 @@ test('a way out that names a campaign keeps to that campaign', () => {
   delete globalThis.document.querySelectorAll;
   assert.equal(inside.href, '/campaigns/abc/entities?page=2', 'the remembered page inside the named campaign is used');
   assert.equal(other.href, '/campaigns/xyz', 'a page in another campaign never sits behind its name');
+  const near = mk('ab');
+  mem.set('chronicle-admin-return', '/campaigns/abc');
+  globalThis.document.querySelectorAll = (q) => (q === '[data-admin-back]' ? [near] : []);
+  C.siteAdminArrive({ querySelector: () => null });
+  delete globalThis.document.querySelectorAll;
+  assert.equal(near.href, '/campaigns/ab', 'an id that only starts the path is not that campaign');
 });
 
 test('no view transitions: the way out is marked and the link goes at once', () => {
