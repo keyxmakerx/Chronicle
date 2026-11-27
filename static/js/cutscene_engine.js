@@ -1488,13 +1488,46 @@
   // Lines are plain text nodes: a scene's words are never read as markup.
   // boxes holds one container per layout; a line goes to its layout's box,
   // in scene order among the lines already there.
-  function Words(boxes, scene) {
+  function Words(boxes, scene, still) {
     this.boxes = boxes;
+    this.still = !!still;
     this.lines = scene.text.map(function (t) { return { spec: t, box: boxes[t.layout || 'middle'] || boxes.middle, node: null, gone: false }; });
   }
+  // Where each shown line sits, by layout: its box's place on screen plus
+  // its offset in the box, so the line's own arrival transform is left out.
+  Words.prototype.places = function () {
+    var at = [], tops = [];
+    for (var i = 0; i < this.lines.length; i++) {
+      var l = this.lines[i];
+      if (!l.node) continue;
+      var k = tops.indexOf(l.box);
+      if (k < 0) { tops.push(l.box, l.box.getBoundingClientRect().top); k = tops.length - 2; }
+      at[i] = tops[k + 1] + l.node.offsetTop;
+    }
+    return at;
+  };
+  // A box centres its lines as a group, so a line joining or leaving moves
+  // the others. They glide to their new place rather than jump, on top of
+  // their own arrival; under reduced motion they are simply there.
+  Words.prototype.glide = function (before) {
+    if (this.still || !before) return;
+    var after = this.places();
+    for (var i = 0; i < this.lines.length; i++) {
+      var l = this.lines[i], dy = before[i] - after[i];
+      if (!l.node || before[i] == null || Math.abs(dy) < 1 || !l.node.animate) continue;
+      try {
+        l.node.animate([{ transform: 'translateY(' + dy + 'px)' }, { transform: 'translateY(0)' }],
+          { duration: 280, easing: 'cubic-bezier(.2,.7,.2,1)', composite: 'add' });
+      } catch (e) { /* no Web Animations: the line keeps its old jump */ }
+    }
+  };
   Words.prototype.update = function (act) {
-    var on = {}, i;
+    var on = {}, i, before = null;
     for (i = 0; i < act.length; i++) if (act[i].type === 'text') on[act[i].index] = act[i];
+    for (i = 0; i < this.lines.length; i++) {
+      var c = this.lines[i];
+      if ((on[i] && !c.node && !c.gone) || (!on[i] && c.node && c.gone)) { before = this.places(); break; }
+    }
     for (i = 0; i < this.lines.length; i++) {
       var l = this.lines[i], a = on[i];
       if (a && !l.node && !l.gone) {
@@ -1512,6 +1545,7 @@
         l.node = null;
       }
     }
+    this.glide(before);
   };
   Words.prototype.make = function (spec) {
     var p = document.createElement('p');
@@ -1609,7 +1643,7 @@
       if (o.kind === 'eye') return new Eye(o, seed + i + 1, rm);
       return o.kind === 'letterbox' ? new Letterbox(rm) : new EmberLayer(o, rm);
     });
-    var words = new Words({ middle: wordsEl, corner: cornerEl }, scene);
+    var words = new Words({ middle: wordsEl, corner: cornerEl }, scene, rm);
     var hasEye = scene.overlays.some(function (o) { return o.kind === 'eye'; });
     var w = 0, h = 0, dpr = 1;
 
