@@ -23,15 +23,11 @@
   'use strict';
   window.Chronicle = window.Chronicle || {};
 
-  // The Store's kinds and the gallery filter each one reads.
-  // TODO(#2910): read the kinds from the server once kinds register with the Store.
-  var KINDS = [
-    { id: 'rooms', label: 'Shop rooms', one: 'Shop room', where: 'Find it in your designs when you arrange a shop room.' },
-    { id: 'crafting', label: 'Crafting looks', one: 'Crafting look', where: 'Find it in your designs when you dress a crafting bench.' }
-  ];
-  var KIND_OF = { 'room-theme': 'rooms', 'crafting-circle': 'crafting', 'crafting-item-look': 'crafting', 'crafting-bench': 'crafting' };
-  var KIND_WORD = { 'room-theme': 'Shop room', 'crafting-circle': 'Magic circle', 'crafting-item-look': 'Item look', 'crafting-bench': 'Crafting bench' };
-  var SYSTEMS = { dnd5e: 'D&D 5e', drawsteel: 'Draw Steel', pathfinder2e: 'Pathfinder 2e', daggerheart: 'Daggerheart' };
+  // The Store's kinds, which design kinds belong to each, and the installed
+  // game systems' names all come from the server (GET .../designs/store), so a
+  // kind or a package added later shows without a change here. They fill in on
+  // the first open.
+  var KINDS = [], KIND_OF = {}, KIND_WORD = {}, SYSTEMS = {}, catalog = false;
   var REASONS = [['adult', 'Adult or vulgar'], ['spam', 'Spam or advertising'], ['other', 'Something else']];
   var HOME_COUNT = 6, CLOSE_MS = 150;
 
@@ -40,11 +36,30 @@
   function systemName(id) {
     if (!id) return 'no game system';
     if (SYSTEMS[id]) return SYSTEMS[id];
-    return String(id).indexOf('custom:') === 0 ? 'a custom game system' : nice(id);
+    // A system the server didn't name isn't installed here; its raw id would
+    // read as a typo, so it is said in words instead.
+    return String(id).indexOf('custom:') === 0 ? 'a custom game system' : 'a game system not on this server';
   }
   function kindById(id) { for (var i = 0; i < KINDS.length; i++) if (KINDS[i].id === id) return KINDS[i]; return null; }
   function kindWord(k) { return KIND_WORD[k] || nice(k) || 'Design'; }
   function kindOf(k) { return KIND_OF[k] || ''; }
+  // setCatalog takes the server's answer; anything malformed in it is skipped.
+  function setCatalog(c) {
+    KINDS.length = 0;
+    [KIND_OF, KIND_WORD, SYSTEMS].forEach(function (m) { Object.keys(m).forEach(function (k) { delete m[k]; }); });
+    ((c && c.kinds) || []).forEach(function (k) {
+      if (k && typeof k.id === 'string' && /^[a-z0-9-]+$/.test(k.id)) KINDS.push({ id: k.id, label: String(k.label || nice(k.id)), one: String(k.one || ''), where: String(k.where || '') });
+    });
+    var things = (c && c.things) || {};
+    Object.keys(things).forEach(function (dk) {
+      var t = things[dk] || {};
+      if (kindById(t.group)) KIND_OF[dk] = t.group;
+      if (t.one) KIND_WORD[dk] = String(t.one);
+    });
+    var sys = (c && c.systems) || {};
+    Object.keys(sys).forEach(function (id) { if (sys[id]) SYSTEMS[id] = String(sys[id]); });
+    catalog = true;
+  }
   // The gallery query for one view: a kind (or every kind), a search, a page,
   // and the campaign's game system unless "any game system" is chosen.
   function query(f) {
@@ -90,7 +105,7 @@
   var host = null, toggle = null, dlg = null, campaign = '', csrf = '', searchT = 0, seq = 0;
   var S = freshState();
   function freshState() {
-    return { view: 'home', all: false, q: '', page: 1, system: '', home: {}, list: null, item: null, from: 'home',
+    return { view: 'home', all: false, q: '', page: 1, system: '', sysKnown: false, home: {}, list: null, item: null, from: 'home',
       err: '', added: {}, report: null, reportErr: '' };
   }
 
@@ -99,7 +114,11 @@
     return window.Chronicle.apiAction('/campaigns/' + encodeURIComponent(campaign) + path, { method: method, body: body, csrfToken: csrf });
   }
   function $(sel) { return dlg ? dlg.querySelector(sel) : null; }
+  // The campaign's own system, as every gallery answer reports it (an empty id
+  // is a campaign with no game system). sysLabel is for sentences; the chip
+  // starts with a capital.
   function sysLabel() { return systemName(S.system); }
+  function sysChip() { var l = sysLabel(); return l.charAt(0).toUpperCase() + l.slice(1); }
 
   /* ---- Drawing ---- */
   function shell() {
@@ -117,13 +136,17 @@
   }
   function railHtml() {
     var h = '<button type="button" class="st-k" data-st="view" data-v="home" aria-current="' + (S.view === 'home' && !S.q) + '">For you</button>';
+    // Until the Store knows its kinds there is nothing true to filter by.
+    if (!catalog) return h;
     KINDS.forEach(function (k) {
       var d = S.home[k.id], n = d && typeof d.total === 'number' ? d.total : '';
       h += '<button type="button" class="st-k" data-st="view" data-v="' + k.id + '" aria-current="' + (S.view === k.id && !S.q) + '">' +
         '<span>' + esc(k.label) + '</span>' + (n === '' ? '' : '<span class="st-n"><span class="sr-only">, </span>' + esc(n) + '</span>') + '</button>';
     });
+    // The system choice waits for the first answer to say which system it is.
+    if (!S.sysKnown) return h;
     h += '<p class="st-lb" id="st-sys-lb">Game system</p><div class="st-sys" role="radiogroup" aria-labelledby="st-sys-lb">' +
-      '<button type="button" class="st-k" role="radio" data-st="sys" data-v="cur" aria-checked="' + !S.all + '">' + esc(sysLabel()) + '</button>' +
+      '<button type="button" class="st-k" role="radio" data-st="sys" data-v="cur" aria-checked="' + !S.all + '">' + esc(sysChip()) + '</button>' +
       '<button type="button" class="st-k" role="radio" data-st="sys" data-v="all" aria-checked="' + S.all + '">Any game system</button></div>';
     return h;
   }
@@ -132,7 +155,7 @@
     return '<li><button type="button" class="st-card" data-st="item" data-id="' + esc(c.id) + '">' +
       '<span class="st-cn">' + esc(c.name) + '</span><span class="st-cs">' + esc(sub) + '</span>' +
       (c.note ? '<span class="st-cnote">' + esc(c.note) + '</span>' : '') +
-      '<span class="st-cf">' + (S.added[c.id] ? '<span class="st-ok">In your designs</span>' : c.mine ? '<span class="st-dim">Yours</span>' : '') +
+      '<span class="st-cf">' + (S.added[c.id] ? '<span class="st-ok">Added</span>' : c.mine ? '<span class="st-dim">Yours</span>' : '') +
         (n.length ? '<span class="st-warn">' + esc(n.length === 1 ? 'One thing to know' : n.length + ' things to know') + '</span>' : '') + '</span>' +
       '</button></li>';
   }
@@ -188,7 +211,8 @@
     if (c.mine) {
       h += '<p class="st-dim">You shared this. Change or unpublish it from your designs.</p>';
     } else if (S.added[c.id]) {
-      h += '<p class="st-ok" role="status">Added to your designs. ' + esc(k ? k.where : '') + '</p>';
+      h += '<p class="st-ok" role="status">Added. ' + esc(k ? k.where : '') + '</p>';
+      S.added[c.id].left.forEach(function (l) { h += '<p class="st-know">' + esc(l) + '</p>'; });
     } else {
       h += '<div class="st-acts"><button type="button" class="btn btn-primary st-add" data-st="add" data-working-label="Adding…">Add to this campaign</button>' +
         '<span class="st-dim">Your copy is your own. If the maker changes theirs later, yours stays as it is.</span></div>';
@@ -210,21 +234,38 @@
     if (!dlg) return;
     $('.st-rail').innerHTML = railHtml();
     var main = $('.st-main');
-    var body = S.view === 'item' && S.item ? itemHtml() : (S.view === 'home' && !S.q ? homeHtml() : listHtml());
+    var body = !catalog ? (S.err ? '' : '<p class="sr-only" role="status">Loading the Store</p>' + placeholders(HOME_COUNT)) :
+      S.view === 'item' && S.item ? itemHtml() : (S.view === 'home' && !S.q ? homeHtml() : listHtml());
     main.innerHTML = (S.err ? '<div class="st-errbox" role="alert"><p>' + esc(S.err) + '</p><button type="button" class="st-word" data-st="retry">Try again</button></div>' : '') + body;
     var rn = $('#st-rnote'); if (rn && S.report) rn.value = S.report.note || '';
     if (focusSel) { var f = $(focusSel); if (f) f.focus({ preventScroll: false }); }
   }
 
   /* ---- Loading ---- */
+  function learnSystem(d) { if (d && typeof d.systemId === 'string') { S.system = d.systemId; S.sysKnown = true; } }
+  // withCatalog runs fn once the Store knows its kinds, asking the server the
+  // first time. A failure shows the usual error with Try again.
+  function withCatalog(mine, fn) {
+    if (catalog) { fn(); return; }
+    call('GET', '/designs/store').then(function (c) {
+      if (mine !== seq) return;
+      setCatalog(c);
+      var k = S.view; if (k !== 'home' && k !== 'item' && !kindById(k)) S.view = S.from = 'home';
+      fn();
+    }).catch(function (e) { if (mine !== seq) return; S.err = (e && e.message) || 'Could not load the Store. Try again.'; paint(); });
+  }
   function loadHome() {
     var mine = ++seq;
     S.home = {}; S.err = '';
     paint();
+    withCatalog(mine, function () { homeLists(mine); });
+  }
+  function homeLists(mine) {
+    paint();
     KINDS.forEach(function (k) {
       call('GET', '/designs/gallery' + query({ kind: k.id, all: S.all, page: 1 })).then(function (d) {
         if (mine !== seq) return;
-        S.home[k.id] = d; if (d && d.systemId && !S.all) S.system = d.systemId;
+        S.home[k.id] = d; learnSystem(d);
         paint();
       }).catch(function (e) { if (mine !== seq) return; S.home[k.id] = { entries: [], total: 0 }; S.err = (e && e.message) || 'Could not load the Store. Try again.'; paint(); });
     });
@@ -233,9 +274,12 @@
     var mine = ++seq;
     S.list = null; S.err = '';
     paint();
+    withCatalog(mine, function () { listOf(mine); });
+  }
+  function listOf(mine) {
     call('GET', '/designs/gallery' + query({ kind: S.q ? '' : S.view, all: S.all, q: S.q, page: S.page })).then(function (d) {
       if (mine !== seq) return;
-      S.list = d; S.page = d.page || 1; if (d && d.systemId && !S.all) S.system = d.systemId;
+      S.list = d; S.page = d.page || 1; learnSystem(d);
       paint();
     }).catch(function (e) { if (mine !== seq) return; S.list = { entries: [], total: 0, page: 1, perPage: 12 }; S.err = (e && e.message) || 'Could not load the Store. Try again.'; paint(); });
   }
@@ -250,9 +294,10 @@
   function addItem(btn) {
     var c = S.item; if (!c || S.added[c.id]) return;
     if (window.Chronicle.working) window.Chronicle.working(btn, true);
-    call('POST', '/designs/gallery/' + encodeURIComponent(c.id) + '/copy').then(function () {
-      S.added[c.id] = true; S.err = ''; paint('.st-ok');
-      if (window.Chronicle.notify) window.Chronicle.notify('“' + c.name + '” was added to your designs.', 'success');
+    call('POST', '/designs/gallery/' + encodeURIComponent(c.id) + '/copy').then(function (r) {
+      var left = (r && r.leftToPoint) || [];
+      S.added[c.id] = { left: left.filter(function (l) { return typeof l === 'string' && l; }) }; S.err = ''; paint('.st-ok');
+      if (window.Chronicle.notify) window.Chronicle.notify('“' + c.name + '” was added to this campaign.', 'success');
     }).catch(function (e) {
       if (window.Chronicle.working) window.Chronicle.working(btn, false);
       S.err = (e && e.message) || 'Could not add it. Try again.'; paint();
@@ -349,7 +394,9 @@
   }
   function show(opts) {
     if (!dlg) build();
-    var kind = opts && kindById(opts.kind) ? opts.kind : 'home';
+    // Before the first answer the kinds are unknown; withCatalog sends an
+    // unknown kind home once they are.
+    var kind = opts && typeof opts.kind === 'string' && /^[a-z0-9-]+$/.test(opts.kind) && (!catalog || kindById(opts.kind)) ? opts.kind : 'home';
     S.view = kind; S.from = kind; S.q = ''; S.page = 1; S.item = null; S.report = null; S.err = '';
     $('#st-q').value = '';
     dlg.setAttribute('data-motion', motion());
@@ -377,7 +424,7 @@
   window.Chronicle.Store = {
     open: open,
     close: close,
-    util: { query: query, pages: pages, notes: notes, systemName: systemName, kindWord: kindWord, kindOf: kindOf, reason: reason, emptyLine: emptyLine, KINDS: KINDS }
+    util: { query: query, pages: pages, notes: notes, systemName: systemName, kindWord: kindWord, kindOf: kindOf, reason: reason, emptyLine: emptyLine, setCatalog: setCatalog, KINDS: KINDS }
   };
 
   if (window.Chronicle.register) {
