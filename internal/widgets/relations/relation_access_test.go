@@ -91,3 +91,52 @@ func TestRelationWrites_RequireAccess(t *testing.T) {
 		}
 	}
 }
+
+// Changing a link changes the page it is listed on, so a page shown to the
+// caller view only keeps its links.
+func TestRelationWrites_RequireEditOnSource(t *testing.T) {
+	gate := relFakeEntityGate{
+		campaignOf: map[string]string{"ro": "camp-1", "rw": "camp-1"},
+		canView:    map[string]bool{"ro": true, "rw": true},
+		viewOnly:   map[string]bool{"ro": true},
+	}
+	scribe := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleScribe, IsMember: true}
+	ops := map[string]func(*Handler, *echo.Context) error{
+		"delete":   (*Handler).DeleteRelation,
+		"metadata": (*Handler).UpdateRelationMetadata,
+	}
+	for opName, op := range ops {
+		for _, tc := range []struct {
+			name      string
+			rel       Relation
+			wantCalls int
+		}{
+			{"from a view-only page", Relation{CampaignID: "camp-1", SourceEntityID: "ro", TargetEntityID: "rw"}, 0},
+			{"from an editable page", Relation{CampaignID: "camp-1", SourceEntityID: "rw", TargetEntityID: "ro"}, 1},
+		} {
+			t.Run(opName+"/"+tc.name, func(t *testing.T) {
+				rel := tc.rel
+				svc := &relWriteService{rel: &rel}
+				h := NewHandler(svc)
+				h.SetEntityGate(gate)
+				req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"metadata":{}}`))
+				c := echo.New().NewContext(req, httptest.NewRecorder())
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: rel.SourceEntityID}, {Name: "rid", Value: "7"}})
+				c.Set("campaign_context", scribe)
+				auth.SetSession(c, &auth.Session{UserID: "u1"})
+				err := op(h, c)
+				if tc.wantCalls == 0 {
+					var ae *apperror.AppError
+					if !errors.As(err, &ae) || ae.Code != http.StatusForbidden {
+						t.Fatalf("err = %v, want 403", err)
+					}
+				} else if err != nil {
+					t.Fatalf("err = %v, want success", err)
+				}
+				if svc.calls != tc.wantCalls {
+					t.Errorf("mutations = %d, want %d", svc.calls, tc.wantCalls)
+				}
+			})
+		}
+	}
+}

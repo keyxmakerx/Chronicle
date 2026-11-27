@@ -2570,6 +2570,20 @@ func (a *entityAccessAdapter) ResolveViewableEntity(ctx context.Context, entityI
 	return ent.CampaignID, access.CanView, nil
 }
 
+// ResolveEditableEntity is ResolveViewableEntity plus whether the caller may
+// edit the page, for the widgets' write routes.
+func (a *entityAccessAdapter) ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (string, bool, bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		return "", false, false, err
+	}
+	access, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return "", false, false, err
+	}
+	return ent.CampaignID, access.CanView, access.CanEdit, nil
+}
+
 // FilterViewableEntityIDs returns the subset of entityIDs the viewer may view,
 // batched (no N+1). Used to hide private-entity relation targets + graph nodes.
 func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error) {

@@ -176,6 +176,18 @@ func (h *PageSafetyHandler) RestoreVersion(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The editor's lock holds here too: a writer served the player copy may
+	// not put back text over hidden parts (erasing them), nor text that has
+	// hidden parts of its own (an older version may hold what is hidden now).
+	if !cc.CanAuthorDmOnly() {
+		v, err := h.svc.Version(c.Request().Context(), entity.ID, c.Param("vid"))
+		if err != nil {
+			return err
+		}
+		if h.hasHiddenParts(c, cc, entity.Entry, entity.EntryHTML) || h.hasHiddenParts(c, cc, v.Entry, v.EntryHTML) {
+			return apperror.NewForbidden(entryLockedMessage)
+		}
+	}
 	if err := h.svc.RestoreVersion(c.Request().Context(), entity.ID, c.Param("vid")); err != nil {
 		return err
 	}
@@ -248,4 +260,19 @@ func (h *PageSafetyHandler) RestoreOtherFromTrash(c *echo.Context) error {
 		return middleware.HTMXRedirect(c, link)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "id": c.Param("tid"), "url": link})
+}
+
+// hasHiddenParts reports whether this viewer's copy of the text would leave
+// something out: a GM-only block or a mention of a page they can't open. A
+// failed mention check counts as hidden. The texts are not changed.
+func (h *PageSafetyHandler) hasHiddenParts(c *echo.Context, cc *campaigns.CampaignContext, entry, entryHTML *string) bool {
+	if sanitize.HasSecrets(deref(entry), deref(entryHTML)) {
+		return true
+	}
+	if len(sanitize.MentionIDs(deref(entry))) == 0 && len(sanitize.MentionIDs(deref(entryHTML))) == 0 {
+		return false
+	}
+	e, html := deref(entry), deref(entryHTML)
+	n, err := h.entities.HideUnviewableMentions(c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()), auth.GetUserID(c), &e, &html)
+	return err != nil || n > 0
 }
