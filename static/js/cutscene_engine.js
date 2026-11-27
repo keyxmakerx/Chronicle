@@ -81,6 +81,16 @@
   var TEXT_IN = 1.4;
   var TEXT_OUT = 1.1;
 
+  // A duration from the page's motion tokens, so the owner's Motion speed
+  // retimes it. A page without them (Foundry) gets the fallback.
+  function tokenMs(el, name, fallback) {
+    try {
+      var m = /^(-?[\d.]+)(ms|s)$/.exec(getComputedStyle(el).getPropertyValue(name).trim());
+      var n = m ? parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1) : NaN;
+      return isFinite(n) && n >= 0 ? n : fallback;
+    } catch (e) { return fallback; }
+  }
+
   // ---------- Normalising a scene ----------
 
   // Times are clamped and kept to tenths of a second, as the server stores them.
@@ -1517,7 +1527,7 @@
       if (!l.node || before[i] == null || Math.abs(dy) < 1 || !l.node.animate) continue;
       try {
         l.node.animate([{ transform: 'translateY(' + dy + 'px)' }, { transform: 'translateY(0)' }],
-          { duration: 280, easing: 'cubic-bezier(.2,.7,.2,1)', composite: 'add' });
+          { duration: tokenMs(l.node, '--dur-large', 280), easing: 'cubic-bezier(.2,.7,.2,1)', composite: 'add' });
       } catch (e) { /* no Web Animations: the line keeps its old jump */ }
     }
   };
