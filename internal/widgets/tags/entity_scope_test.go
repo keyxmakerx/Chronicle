@@ -34,8 +34,9 @@ func (s scopeTagService) GetEntityTags(_ context.Context, _ string, _ bool) ([]T
 
 func TestSetEntityTags_ScopedToCampaign(t *testing.T) {
 	gate := tagFakeEntityGate{
-		campaignOf: map[string]string{"own-ent": "camp-1", "hidden-ent": "camp-1", "foreign-ent": "camp-2"},
-		canView:    map[string]bool{"own-ent": true, "hidden-ent": false, "foreign-ent": true},
+		campaignOf: map[string]string{"own-ent": "camp-1", "hidden-ent": "camp-1", "foreign-ent": "camp-2", "ro-ent": "camp-1"},
+		canView:    map[string]bool{"own-ent": true, "hidden-ent": false, "foreign-ent": true, "ro-ent": true},
+		viewOnly:   map[string]bool{"ro-ent": true},
 	}
 	tests := []struct {
 		name     string
@@ -47,6 +48,7 @@ func TestSetEntityTags_ScopedToCampaign(t *testing.T) {
 		{"page hidden from the caller is 404", "hidden-ent", gate, http.StatusNotFound},
 		{"another campaign's page is 404", "foreign-ent", gate, http.StatusNotFound},
 		{"unknown page is 404", "missing-ent", gate, http.StatusNotFound},
+		{"a page shown view only is 403", "ro-ent", gate, http.StatusForbidden},
 		{"no gate wired fails closed", "own-ent", nil, http.StatusInternalServerError},
 	}
 	for _, tc := range tests {

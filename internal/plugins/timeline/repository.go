@@ -292,6 +292,11 @@ func scanEventLinkOwn(scanner interface{ Scan(...any) error }) (*EventLink, erro
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	// A colour stored before LinkEvent checked it is dropped on read, so no
+	// reader ever draws one that is not a hex colour.
+	if el.ColorOverride != nil && !colorPattern.MatchString(*el.ColorOverride) {
+		el.ColorOverride = nil
+	}
 	return el, err
 }
 

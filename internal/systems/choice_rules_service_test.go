@@ -182,6 +182,9 @@ type testChoices struct {
 	pkg     []Choice
 	entries SystemEntryService
 	limiter ChoiceLimiter
+	// rewrites marks campaign entries, by name, as rewrites of a package
+	// slug, as the real list does for an entry that stands for one.
+	rewrites map[string]string
 }
 
 func (t *testChoices) CharacterChoices(ctx context.Context, c, k string) ([]Choice, error) {
@@ -197,6 +200,11 @@ func (t *testChoices) CharacterChoiceList(ctx context.Context, campaignID, field
 	extra, err := t.entries.Choices(ctx, campaignID, field)
 	if err != nil {
 		return nil, err
+	}
+	for i := range extra {
+		if slug, ok := t.rewrites[extra[i].Name]; ok {
+			extra[i].Origin, extra[i].StandsFor = OriginRewritten, slug
+		}
 	}
 	l.Choices = append(l.Choices, extra...)
 	if t.limiter != nil {
@@ -769,5 +777,134 @@ func TestChoiceRuleService_DirectorEntries(t *testing.T) {
 	}
 	if len(asPat.Entries) != 5 {
 		t.Fatalf("as Pat = %d entries, want 5", len(asPat.Entries))
+	}
+}
+
+// A rule on a standard entry holds for the campaign's rewrite of it, in the
+// player's list and in the Directors' view, where it is not an orphan.
+func TestChoiceRuleService_RuleFollowsRewrite(t *testing.T) {
+	env := newRuleEnv(t)
+	env.mark(t, "package", "fury", "", RuleNotOffered)
+	rewrite := Choice{Key: "40", Name: "Fury (our words)", Source: ChoiceSourceCampaign, Origin: OriginRewritten, StandsFor: "fury"}
+	env.choices.pkg = []Choice{rewrite, env.choices.pkg[1], env.choices.pkg[2]}
+
+	l, err := env.choices.CharacterChoiceList(env.ctxFor("lee"), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range l.Choices {
+		if c.Name == rewrite.Name {
+			t.Fatal("the rewrite of a not-here entry is offered to a player")
+		}
+	}
+
+	all, err := env.svc.DirectorEntries(context.Background(), camp, dirActor, "ancestry", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all.Orphans) != 0 {
+		t.Fatalf("orphans = %+v, want none: the rule holds for the rewrite", all.Orphans)
+	}
+	for _, e := range all.Entries {
+		if e.Name == rewrite.Name && (e.State != RuleNotOffered || e.Everyone == nil) {
+			t.Fatalf("rewrite = %+v, want not here with the everyone mark", e)
+		}
+	}
+}
+
+// A rewrite only Directors can read never reaches a player's list, so a rule
+// it inherits from the standard entry never names it to them as not here.
+func TestChoiceRuleService_DirectorsOnlyRewriteNotNamed(t *testing.T) {
+	env := newRuleEnv(t)
+	env.homebrew(t, "Fury (Directors' words)", EntryVisibilityDirectors)
+	env.choices.rewrites = map[string]string{"Fury (Directors' words)": "fury"}
+	env.choices.pkg = env.choices.pkg[1:]
+	env.mark(t, "package", "fury", "", RuleNotOffered)
+
+	l, err := env.choices.CharacterChoiceList(env.ctxFor("pat"), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range l.Choices {
+		if strings.Contains(c.Name, "Directors") {
+			t.Fatalf("a Directors-only rewrite is on a player's list: %+v", c)
+		}
+	}
+	if l.Rules != nil {
+		for _, n := range l.Rules.NotHere {
+			if strings.Contains(n.Name, "Directors") {
+				t.Fatalf("a Directors-only rewrite is named as not here: %+v", l.Rules.NotHere)
+			}
+		}
+	}
+
+	dl, err := env.choices.CharacterChoiceList(WithChoiceViewer(context.Background(), true), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range dl.Choices {
+		found = found || c.Name == "Fury (Directors' words)"
+	}
+	if !found {
+		t.Fatal("the fixture is wrong: a Director should read the rewrite")
+	}
+}
+
+// The Directors' view shows a standard entry's marks on its rewrite, so a mark
+// sent on the rewrite's key reaches that row: clearing lifts it, a new reason
+// edits it, and a mark with no standard row behind it goes on the rewrite.
+func TestChoiceRuleService_MarkOnRewriteReachesStandardRow(t *testing.T) {
+	env := newRuleEnv(t)
+	env.mark(t, "package", "fury", "", RuleNotOffered)
+	env.mark(t, "package", "fury", "pat", RuleOpen)
+	rewrite := Choice{Key: "40", Name: "Fury (our words)", Source: ChoiceSourceCampaign, Origin: OriginRewritten, StandsFor: "fury"}
+	env.choices.pkg = []Choice{rewrite, env.choices.pkg[1], env.choices.pkg[2]}
+	find := func(source, key, target string) *ChoiceRule {
+		for i := range env.repo.rules {
+			if r := &env.repo.rules[i]; r.Source == source && r.Key == key && r.Target == target {
+				return r
+			}
+		}
+		return nil
+	}
+
+	// "Same as everyone" for Pat, sent on the rewrite's key.
+	env.mark(t, "campaign", "40", "pat", "clear")
+	if find("package", "fury", "pat") != nil {
+		t.Fatal("clearing Pat's inherited mark on the rewrite left the standard row in place")
+	}
+	if find("campaign", "40", "pat") != nil {
+		t.Fatal("a clear wrote a row")
+	}
+
+	// A new reason on the inherited everyone mark edits that row.
+	why := "Not in this region"
+	if _, err := env.svc.SetMarks(context.Background(), camp, dirActor, ChoiceMarksInput{FieldKey: "ancestry",
+		Marks: []ChoiceMark{{Source: "campaign", Key: "40", State: RuleNotOffered, Reason: &why}}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := find("package", "fury", ""); r == nil || r.Reason != why {
+		t.Fatalf("standard row = %+v, want the new reason on it", r)
+	}
+	if find("campaign", "40", "") != nil {
+		t.Fatal("editing the inherited mark wrote a second row on the rewrite")
+	}
+
+	// With no standard row for Lee, a mark on the rewrite is the rewrite's own.
+	env.mark(t, "campaign", "40", "lee", RuleAskFirst)
+	if find("campaign", "40", "lee") == nil {
+		t.Fatal("a fresh per-player mark on the rewrite went nowhere")
+	}
+
+	// Precedence: a standard per-player row beats an everyone row on the rewrite.
+	env.mark(t, "package", "fury", "pat", RuleOpen)
+	env.repo.rules = append(env.repo.rules, ChoiceRule{CampaignID: camp, SystemID: "sys", FieldKey: "ancestry", Source: "campaign", Key: "40", State: RuleNotOffered})
+	l, err := env.choices.CharacterChoiceList(env.ctxFor("pat"), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if choiceByName(l.Choices, rewrite.Name) == nil {
+		t.Fatal("Pat's own opening on the standard entry should beat the everyone row on the rewrite")
 	}
 }
