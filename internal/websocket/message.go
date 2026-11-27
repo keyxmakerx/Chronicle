@@ -158,6 +158,14 @@ const (
 	MsgCreatureAddRequested MessageType = "creature_add.requested"
 )
 
+// MsgSystemEntryChanged tells the GM side that one of the campaign's own
+// pick-list entries was made, saved or deleted. The payload names the field
+// ("kit") only, never the entry, so a Directors-only entry's name never goes
+// out; the module re-reads that field's entries through /system-entries and
+// refreshes the items it made from them. Always published RequiresDM, and
+// not a change-feed type: the module re-checks those items on every connect.
+const MsgSystemEntryChanged MessageType = "system_entry.changed"
+
 // Quest messages. They carry ids only (and a quest's version), so a page
 // reading them fetches again through its own route; not change-feed types.
 const (
@@ -223,6 +231,11 @@ const (
 	MsgCutsceneFoundry MessageType = "cutscene.foundry"
 	// MsgCutsceneFoundryStop relays a stop to the module. Payload {showingId}.
 	MsgCutsceneFoundryStop MessageType = "cutscene.foundry_stop"
+	// MsgCutsceneFoundryPreview hands a Director's unsaved scene to the
+	// module, which plays it on that Director's own GM screen and relays it
+	// to no other client. Payload {previewId, director, scene}; the same
+	// audience as MsgCutsceneFoundry. Nothing is stored.
+	MsgCutsceneFoundryPreview MessageType = "cutscene.foundry_preview"
 )
 
 // Sync control messages.

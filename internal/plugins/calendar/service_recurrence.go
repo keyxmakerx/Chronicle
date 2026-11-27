@@ -605,7 +605,7 @@ func (s *calendarService) ListOccurrenceOverrides(ctx context.Context, calendarI
 // left pointing at the wrong moon or event would put the event on wrong
 // dates without anyone noticing.
 type importedRules struct {
-	cal     *Calendar // nil when no imported event repeats by a rule
+	cal     *Calendar // nil when no imported event repeats by a rule or names a moon
 	moons   map[int]int
 	seasons map[int]int
 	events  map[string]string
@@ -617,9 +617,11 @@ type importedRules struct {
 // import's; a count that does not match leaves that map empty.
 func (s *calendarService) newImportedRules(ctx context.Context, calendarID string, ir *ImportResult) (*importedRules, error) {
 	r := &importedRules{moons: map[int]int{}, seasons: map[int]int{}, events: map[string]string{}}
+	// A sky event names moons by id too, so it needs the moon map as much
+	// as a rule does.
 	anyRule := false
 	for _, ee := range ir.Events {
-		anyRule = anyRule || exportEventUsesRule(ee)
+		anyRule = anyRule || exportEventUsesRule(ee) || PayloadNamesMoons(ee.Payload)
 	}
 	if !anyRule {
 		return r, nil

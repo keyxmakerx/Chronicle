@@ -88,3 +88,8 @@ func TestListPosts_CoDmReachesDmOnlyEntity(t *testing.T) {
 		t.Errorf("Co-DM must see the dm_only post content; body=%s", rec.Body)
 	}
 }
+
+func (g postsDmGrantGate) ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (string, bool, bool, error) {
+	camp, canView, err := g.ResolveViewableEntity(ctx, entityID, role, userID)
+	return camp, canView, canView, err
+}

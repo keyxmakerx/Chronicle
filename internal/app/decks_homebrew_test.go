@@ -103,13 +103,12 @@ func TestDecksHomebrewRegistration(t *testing.T) {
 			t.Errorf("event %s = %+v", name, e)
 		}
 	}
-	for _, name := range []string{deckAddCopies, deckTakeOut, deckShuffleBack} {
+	for _, name := range []string{deckAddCopies, deckTakeOut, deckShuffleBack, deckDraw} {
 		if _, ok := actions[name]; !ok {
 			t.Errorf("action %s is not registered", name)
 		}
 	}
-	// A rule ending in any deck action is held, even timed for now, and
-	// nothing the rules can do deals, draws or plays a card.
+	// A rule ending in any deck action saves, timed for now, and is held.
 	svc := homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil, nil)
 	for _, a := range []struct{ name, args string }{
 		{deckAddCopies, `{"deck":"Omens","card":"Ash","copies":2}`},
@@ -123,7 +122,7 @@ func TestDecksHomebrewRegistration(t *testing.T) {
 		}
 	}
 	for name := range actions {
-		if strings.HasPrefix(name, "deck.") && name != deckAddCopies && name != deckTakeOut && name != deckShuffleBack {
+		if strings.HasPrefix(name, "deck.") && name != deckAddCopies && name != deckTakeOut && name != deckShuffleBack && name != deckDraw {
 			t.Errorf("an unexpected deck action %s", name)
 		}
 	}

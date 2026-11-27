@@ -26,6 +26,8 @@ type editorPage struct {
 	Live       []Showing
 	Saved      bool
 	Error      string
+	// Foundry offers Preview in Foundry: the campaign uses the module.
+	Foundry bool
 }
 
 func (p editorPage) base() string { return "/campaigns/" + p.CampaignID + "/cutscenes" }
@@ -157,6 +159,12 @@ func removeRowOnClick() templ.ComponentScript {
 // server for the checked scene and plays it with the engine.
 func previewOnClick() templ.ComponentScript {
 	return inline("cswPreview", `(function(b){var w=window.ChronicleCutsceneWorkshop;if(w){w.preview(b);}})(this)`)
+}
+
+// foundryPreviewOnClick hands the form to the workshop script, which asks
+// the server to play the checked scene on the Director's Foundry screen.
+func foundryPreviewOnClick() templ.ComponentScript {
+	return inline("cswFoundryPreview", `(function(b){var w=window.ChronicleCutsceneWorkshop;if(w){w.previewInFoundry(b);}})(this)`)
 }
 
 // endingAutoOnChange shows the wait field only for "By itself".

@@ -179,4 +179,42 @@ func TestRepoIntegration(t *testing.T) {
 			t.Fatal("an unknown setting name was accepted")
 		}
 	})
+	t.Run("a member's own dice", func(t *testing.T) {
+		if got, err := repo.DicePick(ctx, campaign, user); err != nil || !got.IsZero() {
+			t.Fatalf("no pick yet = %+v %v", got, err)
+		}
+		pick := DicePick{Set: "clockwork", Colour: "brass", CritSucc: "phoenix"}
+		if err := repo.SaveDicePick(ctx, campaign, user, pick); err != nil {
+			t.Fatal(err)
+		}
+		pick.CritFail = "abyss"
+		if err := repo.SaveDicePick(ctx, campaign, user, pick); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := repo.DicePick(ctx, campaign, user); got != pick {
+			t.Fatalf("saved %+v, read %+v", pick, got)
+		}
+		if err := repo.SaveDicePick(ctx, campaign, user, DicePick{}); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := repo.DicePick(ctx, campaign, user); !got.IsZero() {
+			t.Fatalf("a cleared pick reads %+v", got)
+		}
+	})
+	t.Run("a roll keeps the dice it was thrown in", func(t *testing.T) {
+		look := &DiceLook{Set: "clockwork", Colour: "brass", CritSucc: "storm", CritFail: "grasp", Own: true}
+		r := Roll{ID: uuid.New().String(), CampaignID: campaign, Origin: OriginChronicle, Source: SourceTable, RollerID: user,
+			RollerName: "Ana", Formula: "1d20", Dice: []Die{{Sides: 20, Value: 3}}, Total: 3, Mode: ModePublic, RollerDice: look, CreatedAt: at.Add(time.Minute)}
+		if _, _, err := repo.Insert(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := repo.List(ctx, campaign, Viewer{UserID: uuid.New().String()}, "", 1)
+		if err != nil || len(rows) != 1 || rows[0].RollerDice == nil || *rows[0].RollerDice != *look {
+			t.Fatalf("read back %+v %v", rows, err)
+		}
+		old, _ := repo.List(ctx, campaign, Viewer{UserID: user, Director: true}, rows[0].ID, 1)
+		if len(old) != 1 || old[0].RollerDice != nil {
+			t.Fatalf("a roll saved without dice reads %+v", old)
+		}
+	})
 }

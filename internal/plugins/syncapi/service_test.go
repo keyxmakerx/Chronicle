@@ -652,7 +652,7 @@ func TestAuthenticateKey_SharedByRESTAndWS(t *testing.T) {
 	}
 
 	// WS path: service.AuthenticateKeyForWS(rawKey) → (campaignID, userID, role, expiresAt, err)
-	wsCampaign, wsUser, wsRole, wsExpiresAt, wsErr := svc.AuthenticateKeyForWS(ctx, rawKey)
+	wsCampaign, wsUser, wsRole, wsExpiresAt, wsErr := svc.AuthenticateKeyForWS(ctx, rawKey, "")
 	if wsErr != nil {
 		t.Fatalf("WS AuthenticateKeyForWS returned error: %v", wsErr)
 	}

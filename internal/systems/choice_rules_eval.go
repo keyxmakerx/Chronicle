@@ -47,12 +47,23 @@ type resolved struct {
 func impliedOpen(c Choice) bool { return c.Mine || c.ForName != "" }
 
 func (ix ruleIndex) resolve(c Choice, viewer string) resolved {
-	look := func(key, target string) (resolved, bool) {
-		r, ok := ix[ruleRef{c.Source, key, target}]
+	lookAt := func(source, key, target string) (resolved, bool) {
+		r, ok := ix[ruleRef{source, key, target}]
 		if !ok {
 			return resolved{}, false
 		}
 		return resolved{State: r.State, Pinned: r.State == RuleOpen && target != "", Rule: &r}, true
+	}
+	// A rewrite takes a standard entry's place, so a row about that standard
+	// entry still holds for it; a row about the rewrite itself comes first.
+	look := func(key, target string) (resolved, bool) {
+		if v, ok := lookAt(c.Source, key, target); ok || key == RuleGroupKey {
+			return v, ok
+		}
+		if c.Origin == OriginRewritten && c.StandsFor != "" {
+			return lookAt(ChoiceSourcePackage, c.StandsFor, target)
+		}
+		return resolved{}, false
 	}
 	// A viewer with no account has no rows of their own.
 	player := func(key string) (resolved, bool) {

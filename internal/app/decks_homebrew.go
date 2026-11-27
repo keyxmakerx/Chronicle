@@ -2,10 +2,12 @@ package app
 
 // decks_homebrew.go puts card decks in the Homebrew Workshop: two events a
 // deck fires after a move is stored (a card is played, a card is drawn), the
-// ask a deck puts to the Director before an "ask first" card is played, and
-// three actions a rule can end in. A number on a sheet or a tracker moves at
-// once; anything bigger waits for a Director, so every deck action is marked
-// Waits and none of them deals, draws or plays a card for anyone.
+// ask a deck puts to the Director before an "ask first" card is played, a part
+// that points at one of the campaign's decks, and the actions a rule can end
+// in. A number on a sheet or a tracker moves at once; anything bigger waits for
+// a Director, so every deck action is marked Waits, and the one that deals
+// cards to a hero (decks_homebrew_draw.go) does it only when a Director
+// presses Run.
 
 import (
 	"context"
@@ -33,6 +35,8 @@ const (
 	deckAddCopies   = "deck.add-copies"
 	deckTakeOut     = "deck.take-out"
 	deckShuffleBack = "deck.shuffle-back"
+	deckDraw        = "deck.draw"
+	deckPartKind    = "deck"
 )
 
 // decksStoryBudget bounds one firing: a move carries no request context that
@@ -312,7 +316,8 @@ func cardMatches(args, payload json.RawMessage) (bool, error) {
 
 // registerDecksHomebrew plugs card decks into the Workshop. Every action is
 // Waits: it changes more than a number, so a rule that ends in one is held
-// for a Director to run.
+// for a Director to run. The deck part is the Director's: it places nothing a
+// player sees, and the deck's own rules decide who sees the deck.
 func registerDecksHomebrew(reg *homebrew.Registry, st *decksStory) error {
 	names := []homebrew.Field{
 		{Name: "deck", Label: "Deck", Type: homebrew.FieldText},
@@ -342,6 +347,14 @@ func registerDecksHomebrew(reg *homebrew.Registry, st *decksStory) error {
 		func() error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: deckShuffleBack, Label: "Shuffle the used pile back into a deck", Waits: true,
 				Fields: names[:1], Check: checkDeckOnly, Run: st.shuffleBack})
+		},
+		func() error {
+			return reg.RegisterPart(homebrew.PartKind{Name: deckPartKind, Label: "Deck", ForceSee: homebrew.SeeDirector, Check: st.checkDeckPart})
+		},
+		func() error {
+			return reg.RegisterAction(homebrew.ActionDef{Name: deckDraw, Label: "Draw cards for the hero", Waits: true,
+				PartKinds: []string{deckPartKind}, Fields: []homebrew.Field{{Name: "count", Label: "Cards", Type: homebrew.FieldWhole}},
+				Says: "draws {count} from {part}", Check: checkDrawArgs, Run: st.draw})
 		},
 	}
 	for _, r := range regs {
@@ -414,6 +427,33 @@ func asDirector(by homebrew.Viewer) (decks.Viewer, error) {
 	return decks.Viewer{UserID: by.UserID, VisibilityRole: by.VisibilityRole, Director: true}, nil
 }
 
+// ready is the deck service when card decks can be used in this campaign, or
+// the sentence saying why not.
+func (s *decksStory) ready(ctx context.Context, campaignID string) (decks.Service, error) {
+	svc, _ := s.services()
+	if svc == nil {
+		return nil, apperror.NewValidation("Card decks are not available right now.")
+	}
+	if s.enabled != nil && !s.enabled(ctx, campaignID) {
+		return nil, apperror.NewValidation("Card decks are switched off for this campaign.")
+	}
+	return svc, nil
+}
+
+// asDirectorHere is ready plus asDirector: the service and the Director who
+// pressed Run, as a decks viewer.
+func (s *decksStory) asDirectorHere(ctx context.Context, campaignID string, by homebrew.Viewer) (decks.Service, decks.Viewer, error) {
+	svc, err := s.ready(ctx, campaignID)
+	if err != nil {
+		return nil, decks.Viewer{}, err
+	}
+	v, err := asDirector(by)
+	if err != nil {
+		return nil, decks.Viewer{}, err
+	}
+	return svc, v, nil
+}
+
 // deckScene is the deck a rule named and the card in it, read as the Director.
 type deckScene struct {
 	svc  decks.Service
@@ -426,14 +466,7 @@ type deckScene struct {
 // regard to case. A name that matches none or more than one fails with the
 // sentence the drawer shows.
 func (s *decksStory) open(ctx context.Context, campaignID string, by homebrew.Viewer, deckName, cardName string) (*deckScene, error) {
-	svc, _ := s.services()
-	if svc == nil {
-		return nil, apperror.NewValidation("Card decks are not available right now.")
-	}
-	if s.enabled != nil && !s.enabled(ctx, campaignID) {
-		return nil, apperror.NewValidation("Card decks are switched off for this campaign.")
-	}
-	v, err := asDirector(by)
+	svc, v, err := s.asDirectorHere(ctx, campaignID, by)
 	if err != nil {
 		return nil, err
 	}
