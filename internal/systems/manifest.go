@@ -753,6 +753,14 @@ func (m *SystemManifest) CreatureFieldsForAPI() *CharacterFieldsResponse {
 
 // presetFieldsForAPI exports one preset's fields with their Foundry
 // annotations for the Foundry module. Returns nil for a nil preset.
+//
+// A GM-only field goes out with no Foundry mapping at all, whatever the
+// manifest declares: Foundry sends a document to every player who can see
+// it and system sheets show its fields, so a GM-only value written onto an
+// actor or item reaches players. Leaving the mapping out also stops a
+// player's edit of that Foundry field from flowing back into the GM-only
+// value. The declared path goes out as foundry_clear_path only, so the
+// module can clear a copy an earlier sync left there.
 func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterFieldsResponse {
 	if preset == nil {
 		return nil
@@ -760,10 +768,21 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 
 	fields := make([]CharacterFieldExport, len(preset.Fields))
 	for i, f := range preset.Fields {
+		if f.GMOnly {
+			fields[i] = CharacterFieldExport{
+				Key:              f.Key,
+				Label:            f.Label,
+				Type:             f.Type,
+				GMOnly:           true,
+				FoundryClearPath: f.FoundryPath,
+			}
+			continue
+		}
 		fields[i] = CharacterFieldExport{
 			Key:               f.Key,
 			Label:             f.Label,
 			Type:              f.Type,
+			OwnerOnly:         f.OwnerOnly,
 			FoundryPath:       f.FoundryPath,
 			FoundryWritable:   f.FoundryPath != "" && f.IsFoundryWritable(),
 			FoundryChoices:    f.FoundryChoices,
@@ -788,6 +807,32 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 	}
 }
 
+// Restrict applies restrictions a campaign added to the preset's fields: a
+// key in gmOnly goes out as a GM-only field (no Foundry mapping, as in
+// presetFieldsForAPI) and a key in ownerOnly is marked owner-only. A campaign
+// can only add restrictions here, never lift the manifest's.
+func (r *CharacterFieldsResponse) Restrict(gmOnly, ownerOnly map[string]bool) {
+	if r == nil {
+		return
+	}
+	for i, f := range r.Fields {
+		switch {
+		case f.GMOnly:
+			continue
+		case gmOnly[f.Key]:
+			r.Fields[i] = CharacterFieldExport{
+				Key:              f.Key,
+				Label:            f.Label,
+				Type:             f.Type,
+				GMOnly:           true,
+				FoundryClearPath: f.FoundryPath,
+			}
+		case ownerOnly[f.Key]:
+			r.Fields[i].OwnerOnly = true
+		}
+	}
+}
+
 // CharacterFieldsResponse is the API response shape for the character
 // fields endpoint, containing field definitions with Foundry annotations.
 type CharacterFieldsResponse struct {
@@ -808,9 +853,17 @@ type CharacterFieldsResponse struct {
 // CharacterFieldExport is a single field definition exported for the
 // Foundry module's generic adapter.
 type CharacterFieldExport struct {
-	Key               string            `json:"key"`
-	Label             string            `json:"label"`
-	Type              string            `json:"type"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Type  string `json:"type"`
+	// GMOnly marks a field whose value players never see; it carries no
+	// Foundry mapping (see presetFieldsForAPI).
+	GMOnly bool `json:"gm_only,omitempty"`
+	// OwnerOnly marks a field only the GM and the page's own player see.
+	OwnerOnly bool `json:"owner_only,omitempty"`
+	// FoundryClearPath is where the manifest maps a GM-only field. Sync never
+	// writes there; the module empties it when it still holds the GM-only value.
+	FoundryClearPath  string            `json:"foundry_clear_path,omitempty"`
 	FoundryPath       string            `json:"foundry_path,omitempty"`
 	FoundryWritable   bool              `json:"foundry_writable"`
 	FoundryChoices    string            `json:"foundry_choices,omitempty"`
