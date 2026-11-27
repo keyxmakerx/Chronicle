@@ -507,10 +507,10 @@
     '.cm-lyl button{border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:6px 8px;min-height:44px;border-radius:7px;display:inline-flex;align-items:center;gap:6px}',
     '.cm-lyl button:focus-visible,.cm-lyhint button:focus-visible{outline:2px solid #c4b0ff;outline-offset:1px}',
     '.cm-lyl small{color:#b9a8f0;font-size:11px;text-transform:capitalize}.cm-lyeye[aria-pressed=false]{opacity:.5}',
-    '.cm-lyl0{left:2%;top:20%}.cm-lyl1{left:26%;top:7%}.cm-lyl2{left:42%;bottom:13%}',
+    '.cm-lyl0{left:2%;top:69%}.cm-lyl1{left:26%;top:7%}.cm-lyl2{left:30%;bottom:13%}',
     '.cm-lyhint{position:absolute;left:36%;bottom:12px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;margin:0;padding:6px 8px 6px 14px;border-radius:999px;background:rgb(20 16 30/.86);border:1px solid rgb(255 255 255/.14);color:#e9e4f5;font:12.5px Inter,system-ui,sans-serif;max-width:calc(100% - 24px)}',
     '.cm-lyhint button{border:1px solid rgb(196 176 255/.5);background:rgb(196 176 255/.14);color:#efe8ff;font:inherit;border-radius:999px;padding:5px 12px;cursor:pointer;min-height:44px;white-space:nowrap}',
-    '@media (max-width:640px){.cm-ly{left:12%;width:62%}.cm-lyl2{left:30%}.cm-lyhint{left:50%}.cm-lyl{font-size:11px}.cm-lyl small{display:none}.cm-lyhint span{display:none}}',
+    '@media (max-width:640px){.cm-ly{left:12%;width:62%}.cm-lyl0{top:20%}.cm-lyl2{left:30%}.cm-lyhint{left:50%}.cm-lyl{font-size:11px}.cm-lyl small{display:none}.cm-lyhint span{display:none}}',
     // Moving between views.
     '.src-stage.src-leave .src-svg{transform:scale(1.5);opacity:0}',
     '.src-stage.src-arrive .src-svg{animation:src-arrive .5s cubic-bezier(.2,.7,.2,1)}@keyframes src-arrive{from{transform:scale(.92);opacity:0}to{transform:none;opacity:1}}',
@@ -2462,13 +2462,16 @@
        wall and shelves, the counter and props. Each layer is the drawn room
        with the others taken out; pressing one asks the builder for that
        part, and its eye hides it to see through (only while looking). */
-    var lay = null, layHid = {}, EYE = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
+    var lay = null, layHid = {}, layFrom = null, EYE = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
     var LAYS = [['back', 'Behind everything', 'window'], ['wall', 'Back wall and shelves', 'wall'], ['front', 'Counter and props', 'counter']];
     function layers(on) {
       if (on === undefined) return !!lay;
       if (!on) {
         if (!lay) return false;
-        var l = lay; lay = null; layHid = {};
+        var l = lay, a = document.activeElement; lay = null; layHid = {};
+        // Focus that was on the layers goes back to what opened them, if it is still there.
+        if (layFrom && layFrom.isConnected && (!a || a === document.body || l.contains(a))) layFrom.focus({ preventScroll: true });
+        layFrom = null;
         l.classList.remove('open'); setTimeout(function () { l.remove(); }, l.classList.contains('calm') ? 0 : 220);
         if (hooks.layered) hooks.layered(false);
         return false;
@@ -2476,6 +2479,7 @@
       if (where !== 'counter') go('counter', 'right');
       if (cam.z > 1.01) camSet(600, 350, 1);
       if (!lay) {
+        layFrom = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
         lay = document.createElement('div'); lay.className = 'cm-lay' + (still() ? ' calm' : ''); lay.setAttribute('role', 'group'); lay.setAttribute('aria-label', 'The room in its layers');
         lay.addEventListener('click', layClick); stage.appendChild(lay); layBuild();
         requestAnimationFrame(function () { requestAnimationFrame(function () { if (lay) lay.classList.add('open'); }); });

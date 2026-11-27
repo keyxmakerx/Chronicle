@@ -155,9 +155,11 @@ test('the room pulls apart into its layers: press one to dress it, hide one to s
   // A change redraws the layers, and they stay hidden as the owner left them.
   await p.click('[data-cb-tile="skeleton.counter"]:not([aria-pressed="true"])');
   await p.waitForFunction(() => document.querySelector('.cm-ly1') && document.querySelector('.cm-ly1').classList.contains('hid'));
+  await p.focus('[data-ly="front"]');
   await p.keyboard.press('Escape');
   await p.waitForFunction(() => !document.querySelector('.cm-lay'));
   assert.equal(await p.evaluate(() => document.querySelector('[data-cb-layers]').textContent), 'Pull the room apart into its layers');
+  assert.equal(await p.evaluate(() => document.activeElement && document.activeElement.hasAttribute('data-cb-layers')), true, 'focus goes back to the button that opened them');
   assert.deepEqual(errors, []);
 });
 
