@@ -1851,11 +1851,12 @@
         // A failed read keeps the wares already shown and says so, rather
         // than drawing an empty shop the player can't tell from a sold-out one.
         return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return null; }).catch(function () { return null; }).then(function (j) {
-          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return; }
+          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return false; }
           rels = (Array.isArray(j) ? j : (j && j.data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
             if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
             r.metadata = r.metadata || {}; return r;
           });
+          return true;
         });
       }
       function doBuy() {
@@ -1888,28 +1889,43 @@
             return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
-          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function () { draw(); note = settleBasket(names); gone = true; });
+          // A reload that failed keeps its own note: the basket can't be settled against shelves it couldn't read.
+          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function (ok) {
+            if (!ok[0]) return;
+            draw(); var c = settleBasket(names); note = refusedWords(c); gone = c.sold.length > 0;
+          });
           // A network failure's own text ("Failed to fetch") means nothing
           // to a player; the server's other refusals are already in plain words.
           note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
         }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); else if (gone) speak('gone'); });
       }
-      // After someone else took the stock: the basket keeps only what is still
-      // on the shelves, no more than is left, and the note names what changed.
-      // Nothing was charged, since the server refuses a basket whole.
+      // After the shelves changed under the basket: it keeps only what is still
+      // for sale, no more than is left. sold is what ran out, off what the GM
+      // took off sale or away, less what was cut to the count left. names holds
+      // the wares as they were, so a listing taken away can still be named.
       function settleBasket(names) {
-        var now = {}, gone = [], less = [];
+        var now = {}, c = { sold: [], off: [], less: [] };
         S.its.forEach(function (it) { now[String(it.id)] = it; });
         Object.keys(basket).forEach(function (k) {
           var it = now[k], q = basket[k];
-          if (!it || it.out) { gone.push(it ? it.n : names[k] || 'item'); delete basket[k]; }
-          else if (it.qty !== null && q > it.qty) { basket[k] = it.qty; less.push(it.qty + ' ' + it.n); }
+          if (!it || it.out) { (it && it.qty === 0 ? c.sold : c.off).push(it ? it.n : names[k] || 'item'); delete basket[k]; }
+          else if (it.qty !== null && q > it.qty) { basket[k] = it.qty; c.less.push(it.qty + ' ' + it.n); }
         });
-        var tail = ' Nothing was charged, and your basket is updated.';
-        if (gone.length === 1 && !less.length) return 'Someone just bought the last ' + gone[0] + '.' + tail;
-        if (gone.length) return 'These sold out while you shopped: ' + gone.join(', ') + '.' + (less.length ? ' Only ' + less.join(', ') + ' left.' : '') + tail;
-        if (less.length) return 'Someone just bought some of these. Only ' + less.join(', ') + ' left.' + tail;
-        return 'Some of that just sold out. Nothing was charged; the shelves are up to date, so check your basket and try again.';
+        return c;
+      }
+      // What changed, in a player's words; empty when the basket didn't.
+      function basketWords(c) {
+        var w = [];
+        if (c.sold.length === 1) w.push('Someone just bought the last ' + c.sold[0] + '.');
+        else if (c.sold.length) w.push('These sold out while you shopped: ' + c.sold.join(', ') + '.');
+        if (c.off.length) w.push(c.off.join(', ') + (c.off.length === 1 ? ' is' : ' are') + ' no longer for sale.');
+        if (c.less.length) w.push((c.sold.length || c.off.length ? 'Only ' : 'Someone just bought some of these. Only ') + c.less.join(', ') + ' left.');
+        return w.join(' ');
+      }
+      // A buy the server refused whole, so nothing was charged.
+      function refusedWords(c) {
+        var w = basketWords(c);
+        return w ? w + ' Nothing was charged, and your basket is updated.' : 'Some of that just sold out. Nothing was charged; the shelves are up to date, so check your basket and try again.';
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {
@@ -2323,7 +2339,7 @@
           h += '<div class="shr-field"><span>When</span><span class="shr-chips" role="group" aria-label="Moment of the visit">' + KP.MOMENTS.map(function (m) { return '<button type="button" class="shr-chip" data-moment="' + m[0] + '" aria-pressed="' + (momTab === m[0]) + '">' + esc(m[1]) + (S.moments[m[0]] ? ' ·' : '') + '</button>'; }).join('') + '</span></div>';
           var start = KP.linesFor(S.manner, null, momTab);
           h += '<label class="shr-field"><span>What the keeper says then (one line each, up to five)</span><textarea rows="3" data-moment-lines="1" maxlength="1100" placeholder="' + esc(start.length ? start.join('\n') : 'Pick a manner for lines to start from, or write your own.') + '"></textarea></label>' +
-            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : 'Leave it empty and the keeper says nothing then.') + '</small>';
+            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : momTab === 'gone' ? 'Leave it empty and the keeper says “' + esc(KP.GONE || '') + '”' : 'Leave it empty and the keeper says nothing then.') + '</small>';
         }
         return h + '<label class="shr-field"><span>When someone presses the keeper (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>';
       }
