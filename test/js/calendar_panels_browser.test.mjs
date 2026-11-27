@@ -54,7 +54,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><link rel="styles
 <script src="/static/js/widgets/calendar_game_night.js"></script>
 </body></html>`;
 
-async function page(t, viewport) {
+async function page(t, viewport, opts = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport });
@@ -70,6 +70,10 @@ async function page(t, viewport) {
       return route.fulfill({ contentType: u.pathname.endsWith('.css') ? 'text/css' : 'application/javascript', body: readFileSync(file) });
     }
     let body = [];
+    if (opts.route) {
+      const own = opts.route(u, route.request());
+      if (own !== undefined) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(own) });
+    }
     if (u.pathname.endsWith('/sessions/nights')) {
       body = u.searchParams.get('from') <= NIGHT.date && NIGHT.date <= u.searchParams.get('to') ? [NIGHT] : [];
     } else if (u.pathname.endsWith('/sessions/s1/page')) body = NIGHT_PAGE;
@@ -182,4 +186,51 @@ test('on a phone a calendar message sits below the app top bar', { skip }, async
   const bar = await p.$eval('#app-topbar', (b) => b.getBoundingClientRect().bottom);
   assert.ok(u.top >= bar, `Undo starts at ${u.top}, under the top bar ending at ${bar}`);
   assert.ok(u.pressable, 'Undo is the thing under its own centre');
+});
+
+// Hours saved as UTC by a player set to Chicago: asked once, at the top of
+// the calendar, in the player's own clock. The page's clock is in October,
+// so Chicago is on daylight time, 5 hours behind UTC.
+test("hours saved in another zone are asked about once, in the viewer's clock", { skip }, async (t) => {
+  const posts = [];
+  let mine = {
+    tz: 'UTC', answered: true, accountTz: 'America/Chicago', zoneConfirmed: false,
+    blocks: [1, 2, 3, 4, 5].map((d) => ({ dayOfWeek: d, startMinute: 1080, endMinute: 1440, state: 'available', weekCadence: 0 })),
+  };
+  const p = await page(t, { width: 1280, height: 800 }, {
+    route(u, req) {
+      if (!u.pathname.endsWith('/availability/mine/zone') && !u.pathname.endsWith('/availability/mine')) return undefined;
+      if (req.method() === 'POST') {
+        posts.push(JSON.parse(req.postData()));
+        mine = { ...mine, tz: 'America/Chicago', zoneConfirmed: true };
+        return { status: 'ok' };
+      }
+      return mine;
+    },
+  });
+  const strip = p.locator('#cal5-zstrip');
+  await strip.waitFor();
+  const words = (await strip.innerText()).replace(/\s+/g, ' ');
+  assert.match(words, /Are your hours in Chicago time\?/);
+  assert.match(words, /You painted weekday evenings from 6pm, saved as UTC time\. Your calendar shows that as 1pm to 7pm\./);
+
+  await strip.getByRole('button', { name: 'Other answers' }).click();
+  const ask = p.locator('.zask');
+  await ask.waitFor();
+  assert.equal(await ask.locator('[data-zone-answer]').count(), 3, 'the hours panel offers all three answers');
+
+  await ask.getByRole('button', { name: /Chicago time: keep my boxes/ }).click();
+  await p.waitForFunction(() => document.querySelector('#cal5-zstrip').hidden && !document.querySelector('.zask'));
+  assert.deepEqual(posts, [{ mode: 'relabel', tz: 'America/Chicago' }]);
+});
+
+test("hours already in the viewer's zone ask nothing", { skip }, async (t) => {
+  const p = await page(t, { width: 1280, height: 800 }, {
+    route(u) {
+      if (!u.pathname.endsWith('/availability/mine')) return undefined;
+      return { tz: 'America/Chicago', answered: true, accountTz: 'America/Chicago', zoneConfirmed: false, blocks: [{ dayOfWeek: 1, startMinute: 1080, endMinute: 1440, state: 'available', weekCadence: 0 }] };
+    },
+  });
+  await p.waitForTimeout(400);
+  assert.equal(await p.$eval('#cal5-zstrip', (el) => el.hidden), true);
 });

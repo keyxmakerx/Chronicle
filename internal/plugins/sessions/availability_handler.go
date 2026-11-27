@@ -84,7 +84,23 @@ func (h *Handler) GetMyAvailabilityAPI(c *echo.Context) error {
 		// or none, so the editor uses the browser's rather than UTC.
 		resp.TZ = h.knownViewerTZ(c, userID)
 	}
+	resp.AccountTZ = h.storedTZ(c.Request().Context(), userID)
 	return c.JSON(http.StatusOK, resp)
+}
+
+// ConfirmMyZoneAPI answers the one-time question about which zone the
+// member's weekly hours are in (see ConfirmZoneRequest).
+// POST /campaigns/:id/availability/mine/zone
+func (h *Handler) ConfirmMyZoneAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req ConfirmZoneRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if err := h.svc.ConfirmMyAvailabilityZone(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), req); err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // SaveMyAvailabilityAPI replaces the current user's recurring pattern.

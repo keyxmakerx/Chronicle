@@ -74,6 +74,9 @@ type mockSessionRepo struct {
 	latestCampaignNotificationAtFn   func(ctx context.Context, campaignID, ntype string) (time.Time, error)
 	listCampaignIDsUsingGameNightsFn func(ctx context.Context) ([]string, error)
 	touchAvailabilityAnsweredFn      func(ctx context.Context, campaignID, userID string, at time.Time) (bool, error)
+	rewriteAvailabilityZoneFn        func(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock, from string) error
+	confirmAvailabilityZoneFn        func(ctx context.Context, campaignID, userID string) error
+	zoneConfirmed                    bool
 	mergeUnreadNotificationFn        func(ctx context.Context, n *Notification) error
 	createNotificationFn             func(ctx context.Context, n *Notification) error
 	listNotificationsFn              func(ctx context.Context, userID string, limit int) ([]Notification, error)
@@ -620,6 +623,24 @@ func (m *mockSessionRepo) LatestCampaignNotificationAt(ctx context.Context, camp
 		return m.latestCampaignNotificationAtFn(ctx, campaignID, ntype)
 	}
 	return time.Time{}, nil
+}
+
+func (m *mockSessionRepo) RewriteAvailabilityZone(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock, from string) error {
+	if m.rewriteAvailabilityZoneFn != nil {
+		return m.rewriteAvailabilityZoneFn(ctx, campaignID, userID, tz, blocks, from)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ConfirmAvailabilityZone(ctx context.Context, campaignID, userID string) error {
+	if m.confirmAvailabilityZoneFn != nil {
+		return m.confirmAvailabilityZoneFn(ctx, campaignID, userID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) AvailabilityZoneConfirmed(ctx context.Context, campaignID, userID string) (bool, error) {
+	return m.zoneConfirmed, nil
 }
 
 func (m *mockSessionRepo) TouchAvailabilityAnswered(ctx context.Context, campaignID, userID string, at time.Time) (bool, error) {
