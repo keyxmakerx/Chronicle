@@ -40,9 +40,11 @@ func (s *writeRecorderService) Reorder(context.Context, string, string, []string
 
 func TestPostWrites_EntityGate(t *testing.T) {
 	gate := fakeEntityGate{
-		campaignOf: map[string]string{"ok": "camp-1", "priv": "camp-1", "foreign": "camp-2", "other": "camp-1"},
-		canView:    map[string]bool{"ok": true, "priv": false, "foreign": true, "other": true},
+		campaignOf: map[string]string{"ok": "camp-1", "priv": "camp-1", "foreign": "camp-2", "other": "camp-1", "ro": "camp-1"},
+		canView:    map[string]bool{"ok": true, "priv": false, "foreign": true, "other": true, "ro": true},
+		viewOnly:   map[string]bool{"ro": true},
 	}
+	roPost := &Post{ID: "p1", EntityID: "ro", CampaignID: "camp-1"}
 	ownPost := &Post{ID: "p1", EntityID: "ok", CampaignID: "camp-1"}
 	tests := []struct {
 		name      string
@@ -64,6 +66,10 @@ func TestPostWrites_EntityGate(t *testing.T) {
 		{"delete ok", "ok", ownPost, (*Handler).DeletePost, false, 1},
 		{"delete hidden entity", "priv", &Post{ID: "p1", EntityID: "priv", CampaignID: "camp-1"}, (*Handler).DeletePost, true, 0},
 		{"delete post of another entity", "ok", &Post{ID: "p1", EntityID: "other", CampaignID: "camp-1"}, (*Handler).DeletePost, true, 0},
+		{"create on a page shown view only", "ro", nil, (*Handler).CreatePost, true, 0},
+		{"reorder on a page shown view only", "ro", nil, (*Handler).ReorderPosts, true, 0},
+		{"update on a page shown view only", "ro", roPost, (*Handler).UpdatePost, true, 0},
+		{"delete on a page shown view only", "ro", roPost, (*Handler).DeletePost, true, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

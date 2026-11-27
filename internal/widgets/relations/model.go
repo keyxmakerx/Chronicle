@@ -203,6 +203,12 @@ type EntityGate interface {
 	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
 }
 
+// EntityEditGate answers whether the caller may edit a page. The gate set
+// with SetEntityGate must also satisfy it, or every write is refused.
+type EntityEditGate interface {
+	ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView, canEdit bool, err error)
+}
+
 // GraphData is the JSON response for the relations graph API.
 type GraphData struct {
 	Nodes []GraphNode `json:"nodes"`

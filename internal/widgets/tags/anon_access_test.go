@@ -33,6 +33,7 @@ func (m tagFakeCampaignSvc) GetByID(_ context.Context, id string) (*campaigns.Ca
 type tagFakeEntityGate struct {
 	campaignOf map[string]string
 	canView    map[string]bool
+	viewOnly   map[string]bool // shown but not editable
 }
 
 func (g tagFakeEntityGate) ResolveViewableEntity(_ context.Context, entityID string, _ int, _ string) (string, bool, error) {
@@ -106,4 +107,9 @@ func TestGetEntityTags_NilGateFailsClosed(t *testing.T) {
 	if rec.Code < 500 {
 		t.Errorf("tags handler with no EntityGate wired must fail closed (5xx), got %d: %q", rec.Code, rec.Body.String())
 	}
+}
+
+func (g tagFakeEntityGate) ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (string, bool, bool, error) {
+	camp, canView, err := g.ResolveViewableEntity(ctx, entityID, role, userID)
+	return camp, canView, canView && !g.viewOnly[entityID], err
 }

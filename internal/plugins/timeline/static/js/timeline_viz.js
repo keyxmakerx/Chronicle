@@ -617,8 +617,11 @@ var _impl = {
    * Get effective color for an event (override or timeline default).
    */
   _eventColor: function(evt) {
-    if (evt.color_override) return evt.color_override;
-    return this.timelineColor;
+    // The colour lands in markup and style attributes, so anything that is
+    // not a hex colour falls back rather than being drawn.
+    var hex = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+    if (typeof evt.color_override === 'string' && hex.test(evt.color_override)) return evt.color_override;
+    return hex.test(this.timelineColor) ? this.timelineColor : '#6366f1';
   },
 
   // ---- Zoom Level Helpers ----
