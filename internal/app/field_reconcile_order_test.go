@@ -7,9 +7,8 @@ import (
 )
 
 // The boot pass of the field reconcilers reads the system registry, so it
-// has to start after the installed packages are loaded into it; started
-// before, a restart converges nothing for packaged systems, which leaves a
-// field a system newly marks gm_only visible on older types.
+// has to start after the installed packages are loaded into it, or a
+// restart converges nothing for packaged systems.
 func TestFieldReconcilersStartAfterPackagesLoad(t *testing.T) {
 	src, err := os.ReadFile("routes.go")
 	if err != nil {
