@@ -150,6 +150,46 @@ test('the viewer\'s notes with a matching title follow the pages and open in the
   assert.deepEqual(await p.evaluate(() => window.opened), ['n5'], 'a jot opens on its page\'s notes panel');
 });
 
+// The header's search box widget sits outside the search, in the bar's
+// content, with the onclick app.templ gives it. Its click bubbles to the
+// close-on-outside-click listener, which must let it open the search.
+test('clicking the header\'s search box widget opens the search and keeps it open', { skip }, async (t) => {
+  const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const p = await browser.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  t.after(() => assert.deepEqual(errors, []));
+  const page = '<!doctype html><html><head><style>.hidden{display:none}</style></head><body>' +
+    '<div id="topbar-content"><button id="box" type="button" data-search-open ' +
+    'onclick="if(window.Chronicle&&Chronicle.openSearch){Chronicle.openSearch();}">Search the campaign</button></div>' +
+    '<div id="topbar-search" class="hidden" data-can-create="true">' +
+    '<input id="topbar-search-input"><div id="topbar-search-results" class="hidden"></div></div>' +
+    '<button id="topbar-search-trigger" type="button" onclick="Chronicle.openSearch()">Find</button>' +
+    '<p id="elsewhere">Page text</p></body></html>';
+  await p.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: page }));
+  await p.goto('http://chronicle.test/campaigns/c1/entities/e1');
+  await p.evaluate(() => {
+    window.Chronicle = {
+      escapeHtml: (s) => String(s), escapeAttr: (s) => String(s),
+      apiFetch: () => Promise.resolve({ json: () => Promise.resolve({ results: [] }) }),
+    };
+  });
+  await p.addScriptTag({ content: MODAL_JS });
+  await p.addScriptTag({ content: SEARCH_JS });
+  await p.evaluate(() => document.dispatchEvent(new Event('DOMContentLoaded')));
+  const isOpen = () => p.evaluate(() => !document.getElementById('topbar-search').classList.contains('hidden'));
+
+  await p.click('#box');
+  assert.equal(await isOpen(), true, 'the search box opens the search');
+  await p.waitForFunction(() => document.activeElement && document.activeElement.id === 'topbar-search-input');
+  await p.click('#elsewhere');
+  assert.equal(await isOpen(), false, 'a click elsewhere still closes it');
+
+  await p.click('#topbar-search-trigger');
+  assert.equal(await isOpen(), true, 'the icon still opens it');
+});
+
 // Where each row's name starts, and what is drawn in front of it.
 const drawnIcons = (p) => p.$$eval('#topbar-search-results a[data-index]', (as) => as.map((a) => {
   const ic = a.querySelector('.kind-ic');

@@ -1448,8 +1448,11 @@ templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 			<span class="truncate">{ tc.Live.NextNight.Label }</span>
 		</span>
 	} else if w == "search" {
+		<!-- data-search-open: topbar_search.js closes on any click outside the
+		     search, and this button sits outside it, so it is named as an opener. -->
 		<button
 			type="button"
+			data-search-open
 			onclick="if(window.Chronicle&&Chronicle.openSearch){Chronicle.openSearch();}"
 			class="inline-flex items-center gap-2 w-full min-w-[9rem] max-w-xs px-3 py-1.5 rounded-lg border border-edge bg-surface-alt text-xs text-fg-muted hover:text-fg text-left"
 			title="Search (Ctrl+K)"
