@@ -445,6 +445,7 @@ func mapPlayDef(p *systems.PlayDef) *entities.FieldPlay {
 		MaxLength:       p.MaxLength,
 		ToFoundry:       p.ToFoundry,
 		CombatAuthority: p.CombatAuthority,
+		Bell:            p.Bell,
 	}
 	if len(p.Options) > 0 {
 		out.Options = append([]string(nil), p.Options...)

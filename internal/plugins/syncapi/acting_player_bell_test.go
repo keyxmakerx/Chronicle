@@ -66,6 +66,7 @@ func bellFields() []entities.FieldDefinition {
 		{Key: "class", Type: "text"}, {Key: "stamina", Type: "number"}, {Key: "pronouns", Type: "text"},
 		{Key: "backstory", Label: "Backstory", Type: "textarea"}, {Key: "perks_json", Type: "text"},
 		{Key: "skills_json", Type: "text"}, {Key: "gm_notes", Type: "text", GMOnly: true},
+		{Key: "victories", Label: "Victories", Type: "number", Play: &entities.FieldPlay{Edit: "owner", Kind: "counter", Bell: true}},
 	}
 }
 
@@ -87,7 +88,7 @@ func TestUpdateEntityFields_ActingPlayerBell(t *testing.T) {
 		Choices: []entities.HeroChoice{{Name: "Fury"}, {Name: "Censor"}}}}}
 	start := func() map[string]any {
 		return map[string]any{"class": "Fury", "stamina": float64(20), "pronouns": "she/her", "backstory": "Old tale",
-			"skills_json": `["Sneak"]`, "perks_json": `[{"name":"Lucky","description":"x"}]`}
+			"skills_json": `["Sneak"]`, "perks_json": `[{"name":"Lucky","description":"x"}]`, "victories": float64(2)}
 	}
 	tests := []struct {
 		name      string
@@ -104,6 +105,8 @@ func TestUpdateEntityFields_ActingPlayerBell(t *testing.T) {
 		{"a locked pick is held, a list beside it stored and rung", true, `{"actingUserId":"pat","fields_data":{"class":"Censor","skills_json":"[]"}}`, 1, []string{"class"}, true},
 		{"a locked pick alone rings nothing", true, `{"actingUserId":"pat","fields_data":{"class":"Censor"}}`, 0, []string{"class"}, false},
 		{"a number rings nothing", true, `{"actingUserId":"pat","fields_data":{"stamina":30}}`, 0, nil, true},
+		{"a number the system asks the bell for rings", true, `{"actingUserId":"pat","fields_data":{"victories":3}}`, 1, nil, true},
+		{"that number resent unchanged rings nothing", true, `{"actingUserId":"pat","fields_data":{"victories":2}}`, 0, nil, true},
 		{"a Director's own edit rings nothing", true, `{"actingUserId":"dir","fields_data":{"skills_json":"[]","backstory":"x"}}`, 0, nil, true},
 		{"the plain sync rings nothing", true, `{"fields_data":{"skills_json":"[]","backstory":"x"}}`, 0, nil, true},
 	}
