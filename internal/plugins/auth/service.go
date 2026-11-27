@@ -196,6 +196,7 @@ type authService struct {
 	mail       MailSender
 	baseURL    string
 	sessionTTL time.Duration
+	siteNames  SiteNameSource
 
 	// Registration gate (beta lockdown, B-R4). Both are optional: when nil the
 	// service behaves exactly as before — registration is open — so a partial or
@@ -928,13 +929,14 @@ func (s *authService) InitiatePasswordReset(ctx context.Context, email string) e
 	// Send the email with the plaintext token in the link.
 	if s.mail != nil && s.mail.IsConfigured(ctx) {
 		link := fmt.Sprintf("%s/reset-password?token=%s", s.baseURL, plainToken)
+		site := s.siteName(ctx)
 		body := fmt.Sprintf(
-			"A password reset was requested for your Chronicle account.\n\n"+
+			"A password reset was requested for your %s account.\n\n"+
 				"Click the link below to set a new password:\n%s\n\n"+
 				"This link expires in 1 hour. If you did not request this, you can safely ignore this email.",
-			link,
+			site, link,
 		)
-		if err := s.mail.SendMail(ctx, []string{user.Email}, "Password Reset — Chronicle", body); err != nil {
+		if err := s.mail.SendMail(ctx, []string{user.Email}, "Password Reset — "+site, body); err != nil {
 			slog.Warn("failed to send password reset email",
 				slog.String("email", user.Email),
 				slog.Any("error", err),
@@ -1372,13 +1374,14 @@ func (s *authService) RequestEmailChange(ctx context.Context, userID, newEmail, 
 	// Send verification email to the NEW address.
 	if s.mail != nil && s.mail.IsConfigured(ctx) {
 		link := fmt.Sprintf("%s/account/email/verify?token=%s", s.baseURL, plainToken)
+		site := s.siteName(ctx)
 		body := fmt.Sprintf(
-			"An email change was requested for your Chronicle account.\n\n"+
+			"An email change was requested for your %s account.\n\n"+
 				"Click the link below to confirm your new email address:\n%s\n\n"+
 				"This link expires in 24 hours. If you did not request this change, you can safely ignore this email.",
-			link,
+			site, link,
 		)
-		if err := s.mail.SendMail(ctx, []string{newEmail}, "Verify Your New Email — Chronicle", body); err != nil {
+		if err := s.mail.SendMail(ctx, []string{newEmail}, "Verify Your New Email — "+site, body); err != nil {
 			slog.Warn("failed to send email verification",
 				slog.String("user_id", userID),
 				slog.String("new_email", newEmail),

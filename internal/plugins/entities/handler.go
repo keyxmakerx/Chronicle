@@ -879,7 +879,9 @@ func (h *Handler) prepareShowFor(c *echo.Context, entityID string) (*showPage, e
 	// places it, and on its own only on player-character pages without it
 	// (or a page a game-system renderer owns, which has no layout to place
 	// it in). The addon switch is only checked when one of those applies.
-	if p := h.characterPanel; p != nil && p.URL != nil {
+	// Members only: the panel's route is for players and up, and asking for
+	// it as a signed-out visitor sends htmx's whole tab to the sign-in page.
+	if p := h.characterPanel; p != nil && p.URL != nil && cc.MemberRole >= campaigns.RolePlayer {
 		auto := autoCharacterPanel(entityType) ||
 			(hasEntityShowRenderer(ctx, entityType) && mayHoldCharacterPanel(entityType))
 		placed := layoutPlacesBlock(entityType.Layout, BlockCharacterItems)

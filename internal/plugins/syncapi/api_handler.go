@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -857,6 +858,51 @@ func (h *APIHandler) UpdateEntityFields(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// apiUpdateImageRequest is the JSON body for setting a page's picture.
+type apiUpdateImageRequest struct {
+	// ImagePath is a media id of this campaign, from POST /media; "" clears.
+	ImagePath string `json:"image_path"`
+	// ActingUserID names the member a Foundry player's change is for, as on
+	// the fields route: the player must own the page.
+	ActingUserID string `json:"actingUserId"`
+}
+
+// UpdateEntityImage sets a page's picture, so a portrait chosen in Foundry
+// reaches Chronicle. The media must be this campaign's (UpdateImage checks).
+// PUT /api/v1/campaigns/:id/entities/:entityID/image
+func (h *APIHandler) UpdateEntityImage(c *echo.Context) error {
+	entityID := c.Param("entityID")
+	ctx := c.Request().Context()
+
+	entity, err := h.entitySvc.GetByID(ctx, entityID)
+	if err != nil {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.CampaignID != c.Param("id") {
+		return apperror.NewNotFound("entity not found")
+	}
+	if err := h.pageGate().check(ctx, entity.CampaignID, entityID, h.resolveUserID(c), h.resolveRole(c)); err != nil {
+		return err
+	}
+
+	var req apiUpdateImageRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	// A player may change their own hero's picture and no one else's; with
+	// no fields to judge, this is only the membership and ownership check.
+	if _, err := h.judgeActingPlayer(ctx, entity, req.ActingUserID, map[string]any{}); err != nil {
+		return err
+	}
+	noteSyncActor(c, req.ActingUserID)
+
+	if err := h.entitySvc.UpdateImage(ctx, entityID, strings.TrimSpace(req.ImagePath)); err != nil {
+		return err
+	}
+	noteSyncResource(c, entity.ID, entity.Name)
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok"})
+}
+
 // ToggleEntityReveal sets or toggles an entity's is_private flag via the REST API.
 // POST /api/v1/campaigns/:id/entities/:entityID/reveal
 // Used by Foundry VTT to sync NPC visibility changes bidirectionally.
@@ -1583,6 +1629,9 @@ func (h *APIHandler) GetCharacterFields(c *echo.Context) error {
 	if resp == nil {
 		return apperror.NewNotFound("character fields not found for system: " + systemID)
 	}
+	if err := h.restrictToCampaign(c.Request().Context(), campaignID, "character", resp); err != nil {
+		return err
+	}
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1620,6 +1669,9 @@ func (h *APIHandler) GetItemFields(c *echo.Context) error {
 			"fields":    []any{},
 		})
 	}
+	if err := h.restrictToCampaign(c.Request().Context(), campaignID, "item", resp); err != nil {
+		return err
+	}
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1650,6 +1702,9 @@ func (h *APIHandler) GetCreatureFields(c *echo.Context) error {
 			"system_id": systemID,
 			"fields":    []any{},
 		})
+	}
+	if err := h.restrictToCampaign(c.Request().Context(), campaignID, "creature", resp); err != nil {
+		return err
 	}
 
 	return c.JSON(http.StatusOK, resp)

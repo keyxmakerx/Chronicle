@@ -11,7 +11,7 @@
 # expected migration version.
 #
 # Usage: docker compose exec chronicle /app/scripts/restore.sh
-#   --manifest PATH [--db-only] [--media-only] [--yes] [--force]
+#   --manifest PATH (or --manifest=PATH) [--db-only] [--media-only] [--yes] [--force]
 #   [--no-safety-backup] [--from-inside]
 # --manifest (required) pairs the DB/media/redis artifacts, so a stale mix
 #   (e.g. last week's DB with last month's media) can't slip through.
@@ -44,6 +44,7 @@ FROM_INSIDE=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --manifest) MANIFEST="${2:-}"; shift ;;
+        --manifest=*) MANIFEST="${1#--manifest=}" ;;
         --db-only) DB_ONLY=1 ;;
         --media-only) MEDIA_ONLY=1 ;;
         --yes) ASSUME_YES=1 ;;

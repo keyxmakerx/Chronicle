@@ -50,8 +50,9 @@ var (
 
 // smtpService implements SMTPService.
 type smtpService struct {
-	repo   SMTPRepository
-	secret string // Application secret key for password encryption.
+	repo      SMTPRepository
+	secret    string // Application secret key for password encryption.
+	siteNames SiteNameSource
 }
 
 // NewSMTPService creates a new SMTP service.
@@ -100,7 +101,7 @@ func (s *smtpService) send(ctx context.Context, to []string, subject, plainBody,
 		return err
 	}
 
-	from := mail.Address{Name: row.FromName, Address: row.FromAddress}
+	from := mail.Address{Name: s.fromName(ctx, row.FromName), Address: row.FromAddress}
 	msg, err := buildMessage(from, to, subject, plainBody, htmlBody, time.Now())
 	if err != nil {
 		return apperror.NewInternalMessage("Chronicle couldn't build the email.", err)
@@ -361,9 +362,10 @@ func (s *smtpService) SendTestEmail(ctx context.Context, to string) error {
 		return apperror.NewBadRequest("invalid recipient email address")
 	}
 
-	subject := "Chronicle SMTP Test"
-	body := fmt.Sprintf("This is a test email from Chronicle.\n\nIf you are reading this, your SMTP configuration is working correctly.\n\nSent at: %s",
-		time.Now().UTC().Format(time.RFC1123Z))
+	site := s.siteName(ctx)
+	subject := site + " SMTP Test"
+	body := fmt.Sprintf("This is a test email from %s.\n\nIf you are reading this, your SMTP configuration is working correctly.\n\nSent at: %s",
+		site, time.Now().UTC().Format(time.RFC1123Z))
 
 	if err := s.SendMail(ctx, []string{to}, subject, body); err != nil {
 		var appErr *apperror.AppError

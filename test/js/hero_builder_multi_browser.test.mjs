@@ -117,3 +117,15 @@ test('a hero that holds both can take one off, which leaves the blank short agai
   await p.waitForSelector('.hb-tick');
   assert.deepEqual(lastPut(sent).at(-1), { subclass: 'Shade' });
 });
+
+test('with the picks shut, a conduit holding one domain can still take the second but not swap the first', { skip }, async (t) => {
+  const hs = [{ id: 'e1', name: 'Tess', values: { class: 'Conduit', subclass: 'Light' }, hidden: [], lock: { ruled: true, open: false } }];
+  const { p, sent } = await open(t, { heroes: hs });
+  await p.click('[data-blank="subclass"]');
+  await p.locator('.hb-panel .hb-opt', { hasText: 'Light' }).click();
+  assert.match(await p.locator('.hb-panel .hb-locked').innerText(), /stays Tess’s subclass for now/, 'the held domain stays');
+  assert.equal(await p.locator('.hb-panel [data-choose]').count(), 0);
+  await choose(p, 'Shade');
+  await p.waitForFunction(() => document.querySelectorAll('.hb-tick').length >= 1);
+  assert.deepEqual(lastPut(sent).at(-1), { subclass: 'Light, Shade' });
+});

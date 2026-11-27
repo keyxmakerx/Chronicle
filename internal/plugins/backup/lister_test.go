@@ -14,10 +14,11 @@ import (
 func TestListBackups_SortsAndClassifies(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]time.Time{
-		"chronicle_db_20260101T120000.sql.gz":         time.Now().Add(-2 * time.Hour),
-		"chronicle_media_20260101T120000.tar.gz":      time.Now().Add(-1 * time.Hour),
+		"chronicle_db_20260101T120000.sql.gz":          time.Now().Add(-2 * time.Hour),
+		"chronicle_media_20260101T120000.tar.gz":       time.Now().Add(-1 * time.Hour),
+		"chronicle_manifest_20260101T120000.txt":       time.Now().Add(-45 * time.Minute),
 		"chronicle_pre_migrate_20260102T030000.sql.gz": time.Now().Add(-30 * time.Minute),
-		"unrelated_dump.sql":                          time.Now().Add(-15 * time.Minute),
+		"unrelated_dump.sql":                           time.Now().Add(-15 * time.Minute),
 	}
 	for name, ts := range files {
 		path := filepath.Join(dir, name)
@@ -34,8 +35,8 @@ func TestListBackups_SortsAndClassifies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListBackups: %v", err)
 	}
-	if len(got) != 4 {
-		t.Fatalf("expected 4 artifacts, got %d", len(got))
+	if len(got) != 5 {
+		t.Fatalf("expected 5 artifacts, got %d", len(got))
 	}
 	if got[0].Name != "unrelated_dump.sql" {
 		t.Errorf("expected newest first, got order: %v", got)
@@ -43,6 +44,7 @@ func TestListBackups_SortsAndClassifies(t *testing.T) {
 	expectedKinds := map[string]string{
 		"chronicle_db_20260101T120000.sql.gz":          "db",
 		"chronicle_media_20260101T120000.tar.gz":       "media",
+		"chronicle_manifest_20260101T120000.txt":       "manifest",
 		"chronicle_pre_migrate_20260102T030000.sql.gz": "pre-migrate",
 		"unrelated_dump.sql":                           "other",
 	}

@@ -14,6 +14,8 @@ DOCKER_COMP := docker-compose.yml
 # Overlay that swaps the published GHCR image for a local source build. Kept
 # separate so the published tag has exactly one producer — see the file header.
 DOCKER_COMP_BUILD := docker-compose.build.yml
+# Overlay for `make docker-up`: publishes MariaDB and Redis on loopback.
+DOCKER_COMP_DEV := docker-compose.dev.yml
 
 # Database URL for migrations (override via env or .env file)
 DATABASE_URL ?= mysql://chronicle:chronicle@tcp(localhost:3306)/chronicle
@@ -26,12 +28,13 @@ help: ## Show this help message
 
 # --- Development ---
 .PHONY: dev
+# Both read .env when it exists (tools/with-env.sh); exported variables win.
 dev: ## Start dev server with hot reload (air)
-	air
+	./tools/with-env.sh air
 
 .PHONY: run
 run: ## Run the server directly (no hot reload)
-	go run $(MAIN_PKG)
+	./tools/with-env.sh go run $(MAIN_PKG)
 
 # --- Build ---
 # `build` depends on `templ`: *_templ.go is generated and gitignored, so a
@@ -166,6 +169,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: comment-clutter (self-test)"; ./tools/test-comment-clutter.sh
 	@echo "==> guard: comment-clutter";        ./tools/check-comment-clutter.sh
 	@echo "==> restore.sh self-test";          ./tools/test-restore-script.sh
+	@echo "==> with-env.sh self-test";         ./tools/test-with-env.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
 	@echo "==> guard: migration-numbers";     ./tools/check-migration-numbers.sh
 	@echo "==> guard: live-check todos";      ./tools/check-live-todos.sh
@@ -234,8 +238,9 @@ test-int-local: ## Run integration tests against the local test MariaDB (starts 
 	@./tools/start-test-db.sh >/dev/null
 	@CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:13306)/' go test ./... -count=1
 
-docker-up: ## Start MariaDB + Redis containers
-	docker compose -f $(DOCKER_COMP) up -d chronicle-db chronicle-redis
+# The dev overlay publishes both on 127.0.0.1 so a source run can reach them.
+docker-up: ## Start MariaDB + Redis containers for a source run (localhost:3306, localhost:6379)
+	docker compose -f $(DOCKER_COMP) -f $(DOCKER_COMP_DEV) up -d chronicle-db chronicle-redis
 
 .PHONY: docker-down
 docker-down: ## Stop all containers
@@ -293,5 +298,12 @@ backup-list: ## List backup artifacts in the chronicle-data volume
 	docker compose -f $(DOCKER_COMP) exec -T chronicle ls -lh /app/data/backups
 
 .PHONY: restore
-restore: ## Restore from a manifest (usage: make restore RESTORE_ARGS="--manifest=/app/data/backups/chronicle_manifest_TS.txt")
-	docker compose -f $(DOCKER_COMP) exec chronicle /app/scripts/restore.sh $(RESTORE_ARGS)
+# A one-off container, not `exec`, because Chronicle has to be stopped first.
+# restore.sh's own /healthz check can't see the server from a fresh container
+# (nothing listens on its localhost), so the target refuses here while the
+# chronicle container is running.
+restore: ## Restore from a manifest, Chronicle stopped (usage: docker compose stop chronicle; make restore RESTORE_ARGS="--manifest /app/data/backups/chronicle_manifest_TS.txt --force")
+	@if [ -n "$$(docker compose -f $(DOCKER_COMP) ps --status running -q chronicle)" ]; then \
+		echo "RESTORE=failed reason=server_running: run 'docker compose stop chronicle' first" >&2; exit 2; \
+	fi
+	docker compose -f $(DOCKER_COMP) run --rm chronicle sh /app/scripts/restore.sh $(RESTORE_ARGS)

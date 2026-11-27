@@ -432,7 +432,7 @@
       '<p class="hb-none" data-hb-none hidden>Nothing on this list matches.</p></div>' + this.notHereHtml(rules);
     html += '<div class="hb-detail" data-hb-detail>' + this.detailHtml(st, fo, h) + '</div>';
     var chosen = this.holds(h, st, fo.name);
-    if (this.locked(h, st)) {
+    if (this.lockedFor(h, st, chosen)) {
       html += '<div class="hb-pf"><p class="hb-note hb-locked">' + esc(cur) + ' stays ' + esc(possessive(h.name)) + ' ' + esc(lower(st.label)) +
         ' for now. Your ' + gm() + ' can open the picks sooner.</p></div>';
     } else {
@@ -460,6 +460,12 @@
   // A chosen step the Director's times keep from changing now.
   Builder.prototype.locked = function (h, st) {
     return !!(h && h.lock && !h.lock.open && h.values[st.fieldKey]);
+  };
+  // Whether the panel's entry can't be chosen now. A multi step short of its
+  // picks still takes the ones it lacks while locked, as a blank does; what
+  // it holds stays.
+  Builder.prototype.lockedFor = function (h, st, chosen) {
+    return this.locked(h, st) && (chosen || !st.multi || !this.short(h, st));
   };
 
   // The line under a hero's name that says when its picks may change. Only
@@ -717,6 +723,15 @@
     d.innerHTML = this.detailHtml(st, c, h);
     d.scrollTop = 0;
     var btn = aside.querySelector('[data-choose]');
+    // Moving between a held and a missing pick of a locked multi step swaps
+    // the button for the lock note, so the panel is drawn again.
+    if (!btn !== this.lockedFor(h, st, chosen)) {
+      this.drawPanel();
+      var opt = this.el.querySelector('.hb-panel .hb-opt[data-focus="' + i + '"]');
+      if (opt) opt.focus({ preventScroll: true });
+      return;
+    }
+    if (!btn) return;
     btn.textContent = this.chooseText(c, chosen, this.waitingName(h, st));
     if (chosen) btn.setAttribute('aria-pressed', 'true'); else btn.removeAttribute('aria-pressed');
   };

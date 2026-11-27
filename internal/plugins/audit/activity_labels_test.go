@@ -51,7 +51,7 @@ func TestActionLabel_NeverRawKey(t *testing.T) {
 		"group.member_added", "group.member_removed", "entity.place_added", "entity.place_removed",
 		"entity.clone", "tag.added", "tag.removed", "trash.campaign_restored", "trash.files_restored",
 		"trash.retention_changed", "trash.long_term_changed", "trash.emptied", "guest.joined",
-		"addon.changed", "session.terminated",
+		"addon.changed", "addon.enabled", "addon.disabled", "session.terminated",
 	}
 	for _, k := range keys {
 		if got := actionLabel(k); got == "" || strings.ContainsAny(got, "._") {

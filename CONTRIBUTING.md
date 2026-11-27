@@ -38,8 +38,11 @@ export SECRET_KEY="$(openssl rand -base64 32)"
 make run                 # http://localhost:8080; migrations run on startup
 ```
 
-Chronicle reads its settings from the environment only; `.env.example` lists
-them. To use your own MariaDB, point `DB_*` at it and create the database first.
+`.env.example` lists every setting. `make run` and `make dev` (hot reload,
+needs air) also read a `.env` copied from it; exported variables win. With
+Docker, `make docker-up` starts MariaDB and Redis on localhost in place of the
+`test-db-up` and `redis-server` lines (set `MYSQL_ROOT_PASSWORD` in `.env`
+first). To use your own MariaDB, point `DB_*` at it and create the database first.
 `make test-db-down` stops the local one. A new `SECRET_KEY` signs everyone out,
 so keep one value while you work. The first user to register becomes the site
 admin.

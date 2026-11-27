@@ -1,9 +1,12 @@
 package systems
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -455,6 +458,64 @@ func TestSystemManifest_CharacterFieldsForAPI_CollectionAnnotations(t *testing.T
 	}
 	if !resp.Fields[1].FoundryItemSingle {
 		t.Error("class FoundryItemSingle not carried through the API")
+	}
+}
+
+// A GM-only field reaches the Foundry module with no mapping in either
+// direction, for every preset the module reads (hero, creature, item), so
+// sync can never write its value onto a document players can open. Its
+// declared path survives only as the path to clear.
+func TestSystemManifest_FieldsForAPI_GMOnlyNeverMapped(t *testing.T) {
+	gmField := FieldDef{
+		Key: "gm_notes", Label: "GM Notes", Type: "markdown", GMOnly: true,
+		FoundryPath: "system.biography.director", FoundryChoices: "x", FoundryFormat: "y",
+		FoundryCollection: "items", FoundryItemType: []string{"note"},
+		FoundryItemFields: map[string]string{"a": "b"}, FoundryItemSingle: true, FoundryItemJoin: true,
+	}
+	ownerField := FieldDef{Key: "backstory", Label: "Backstory", Type: "markdown", OwnerOnly: true, FoundryPath: "system.biography.value"}
+	m := &SystemManifest{
+		ID: "drawsteel",
+		EntityPresets: []EntityPresetDef{
+			{Slug: "ds-character", Category: "character", Fields: []FieldDef{gmField, ownerField}},
+			{Slug: "ds-creature", Category: "creature", Fields: []FieldDef{gmField}},
+			{Slug: "ds-item", Category: "item", Fields: []FieldDef{gmField}},
+		},
+	}
+	tests := []struct {
+		name string
+		resp *CharacterFieldsResponse
+	}{
+		{"character", m.CharacterFieldsForAPI()},
+		{"creature", m.CreatureFieldsForAPI()},
+		{"item", m.ItemFieldsForAPI()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.resp == nil || len(tt.resp.Fields) == 0 {
+				t.Fatalf("no fields exported: %+v", tt.resp)
+			}
+			got := tt.resp.Fields[0]
+			want := CharacterFieldExport{
+				Key: "gm_notes", Label: "GM Notes", Type: "markdown",
+				GMOnly: true, FoundryClearPath: "system.biography.director",
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("gm_only field exported as %+v, want %+v", got, want)
+			}
+			raw, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{`"foundry_path"`, `"foundry_collection"`, `"foundry_writable":true`} {
+				if strings.Contains(string(raw), key) {
+					t.Errorf("gm_only field JSON carries %s: %s", key, raw)
+				}
+			}
+		})
+	}
+	owner := m.CharacterFieldsForAPI().Fields[1]
+	if !owner.OwnerOnly || owner.FoundryPath != "system.biography.value" || !owner.FoundryWritable || owner.GMOnly {
+		t.Errorf("owner_only field exported as %+v, want its mapping kept and owner_only set", owner)
 	}
 }
 

@@ -94,6 +94,10 @@ jobs:
         # scripts/restore.sh without a database.
         run: ./tools/test-restore-script.sh
 
+      - name: with-env.sh self-test
+        # `make run` and `make dev` read .env through it; exported values win.
+        run: ./tools/test-with-env.sh
+
       - name: Comment clutter guard
         # Diff-scoped FAIL: new comments may not carry tracking IDs, archive
         # paths, file:line pointers or dates (.ai/conventions.md, Comment

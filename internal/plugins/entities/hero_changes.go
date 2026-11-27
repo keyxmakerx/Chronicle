@@ -215,8 +215,10 @@ func heroLevel(fields map[string]any) int {
 // heroLockedChanges lists the picks a patch changes that the Director's times
 // lock: builder steps and what an entry lets the hero buy, each whose stored
 // value is not blank and differs from what the patch writes. Filling a blank
-// is not a change. A story or list key is never in this set whatever the plan
-// says, so the lock cannot widen to them.
+// is not a change, and neither is a multi step gaining the picks it is still
+// short of (a conduit's second domain): finishing a hero is not changing it.
+// A story or list key is never in this set whatever the plan says, so the
+// lock cannot widen to them.
 func heroLockedChanges(e *Entity, patch map[string]any, picks builderPicks, labels map[string]string) []HeroPickChange {
 	var out []HeroPickChange
 	for k, v := range patch {
@@ -238,6 +240,9 @@ func heroLockedChanges(e *Entity, patch map[string]any, picks builderPicks, labe
 		if was == "" || strings.EqualFold(was, now) {
 			continue
 		}
+		if !isOptions && fillsMulti(picks[step], e, patch, was, now) {
+			continue
+		}
 		label := labels[step]
 		if label == "" {
 			label = step
@@ -249,6 +254,30 @@ func heroLockedChanges(e *Entity, patch map[string]any, picks builderPicks, labe
 	}
 	slices.SortFunc(out, func(a, b HeroPickChange) int { return strings.Compare(a.FieldKey, b.FieldKey) })
 	return out
+}
+
+// fillsMulti reports whether now keeps every pick a multi step holds in was,
+// in any order, and adds at most what the hero's allowance leaves. Foundry
+// sends a hero's subclass items in its own order, so the same set reordered
+// is no change either.
+func fillsMulti(st builderStep, e *Entity, patch map[string]any, was, now string) bool {
+	if !st.multi {
+		return false
+	}
+	before, after := heroMultiNames(was), heroMultiNames(now)
+	if len(after) < len(before) || len(after) > st.multiMax(e, patch) {
+		return false
+	}
+	kept := make(map[string]bool, len(after))
+	for _, n := range after {
+		kept[strings.ToLower(n)] = true
+	}
+	for _, n := range before {
+		if !kept[strings.ToLower(n)] {
+			return false
+		}
+	}
+	return true
 }
 
 // heroBellChanges lists every change a claimed owner's patch makes that rings

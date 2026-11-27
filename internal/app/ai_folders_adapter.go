@@ -25,7 +25,11 @@ func (f aiFoldersAdapter) Categories(ctx context.Context, campaignID string) ([]
 	}
 	out := make([]records.FolderCategory, 0, len(types))
 	for _, t := range types {
-		out = append(out, records.FolderCategory{ID: t.ID, Name: t.Name, Plural: t.NamePlural, Slug: t.Slug})
+		c := records.FolderCategory{ID: t.ID, Name: t.Name, Plural: t.NamePlural, Slug: t.Slug}
+		if t.ParentTypeID != nil {
+			c.ParentID = *t.ParentTypeID
+		}
+		out = append(out, c)
 	}
 	return out, nil
 }

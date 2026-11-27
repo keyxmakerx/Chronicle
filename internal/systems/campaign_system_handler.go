@@ -328,8 +328,8 @@ func (h *CampaignSystemHandler) readUploadedZIP(c *echo.Context) ([]byte, error)
 		return nil, apperror.NewBadRequest("file is required")
 	}
 
-	if file.Size > maxSystemZipSize {
-		return nil, apperror.NewBadRequest(fmt.Sprintf("file exceeds maximum size of %d MB", maxSystemZipSize/(1024*1024)))
+	if file.Size > MaxSystemZipSize {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("file exceeds maximum size of %d MB", MaxSystemZipSize/(1024*1024)))
 	}
 
 	src, err := file.Open()
@@ -338,7 +338,7 @@ func (h *CampaignSystemHandler) readUploadedZIP(c *echo.Context) ([]byte, error)
 	}
 	defer func() { _ = src.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(src, maxSystemZipSize+1))
+	data, err := io.ReadAll(io.LimitReader(src, MaxSystemZipSize+1))
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("reading uploaded file: %w", err))
 	}

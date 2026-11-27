@@ -79,6 +79,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+	"github.com/keyxmakerx/chronicle/internal/sitelook"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -439,6 +440,39 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 		Action:     action,
 		Details:    details,
 	})
+}
+
+// addonCampaignActivityAdapter writes a campaign feature switch to that
+// campaign's activity log, with the feature's name as the line's subject.
+type addonCampaignActivityAdapter struct {
+	svc audit.AuditService
+}
+
+// LogCampaignActivity records one campaign-scoped feature switch.
+func (a *addonCampaignActivityAdapter) LogCampaignActivity(ctx context.Context, campaignID, userID, action, subject string) error {
+	return a.svc.Log(ctx, &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityName: subject,
+	})
+}
+
+// siteNameAdapter reads the Site look name for emails. A failed read falls
+// back to "Chronicle" rather than failing the email.
+type siteNameAdapter struct {
+	settings interface {
+		GetSiteLook(ctx context.Context) (sitelook.Settings, error)
+	}
+}
+
+// SiteName returns the name to put in account and site emails.
+func (a siteNameAdapter) SiteName(ctx context.Context) string {
+	look, err := a.settings.GetSiteLook(ctx)
+	if err != nil {
+		return sitelook.DefaultName
+	}
+	return look.DisplayName()
 }
 
 // systemManifestFinderAdapter bridges systems.Find to addons.SystemManifestFinder.
@@ -3503,15 +3537,17 @@ func (a *App) RegisterRoutes() {
 	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
 
 	// Daily backup, when the owner turns it on under Admin > Backup.
-	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService}).Run(a.ShutdownCtx)
+	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService, site: siteNameAdapter{settings: settingsService}}).Run(a.ShutdownCtx)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
 	// confirmation. Reverses ADR-035's "sysadmin-only" stance — see
-	// ADR-036 for the policy reasoning. Always registered: BackupDir
-	// defaults to /app/data/backups in config.Load, so
-	// restore.NewService(BackupDir=="") is unreachable from production
-	// wiring.
+	// ADR-036 for the policy reasoning. Always registered: an empty
+	// BACKUP_DIR (the documented way to turn the safety net off) leaves
+	// the page saying the folder isn't configured and refuses every run.
+	if a.Config.BackupDir == "" {
+		slog.Warn("BACKUP_DIR is empty: pre-update backups, backups and restores are off")
+	}
 	restoreSvc := restore.NewService(restore.Config{
 		ScriptPath: a.Config.RestoreScriptPath,
 		BackupDir:  a.Config.BackupDir,
@@ -3551,6 +3587,10 @@ func (a *App) RegisterRoutes() {
 	// media adapter; new campaigns read the same look through the campaigns
 	// service's narrow interface.
 	adminHandler.SetSiteLookService(admin.NewSiteLookService(settingsService, &siteMediaAdapter{svc: mediaService}))
+	// Account and site emails, and the default sender name, use the Site look name.
+	siteNames := siteNameAdapter{settings: settingsService}
+	auth.ConfigureSiteName(authService, siteNames)
+	smtp.ConfigureSiteName(smtpService, siteNames)
 	campaignService.SetSiteLookSource(settingsService)
 
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
@@ -5137,6 +5177,8 @@ func (a *App) RegisterRoutes() {
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)
 	auditService := audit.NewAuditService(auditRepo)
+	// A campaign's feature switches go to its own activity log.
+	addonHandler.SetCampaignActivityLogger(&addonCampaignActivityAdapter{svc: auditService})
 	shareAudit.svc = auditService
 	auditHandler := audit.NewHandler(auditService)
 	// Guard the entity-history endpoint with campaign ownership + per-entity

@@ -6,6 +6,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
+	"github.com/keyxmakerx/chronicle/internal/sitelook"
 )
 
 // backupAdminSearch is the slice of the user repository the failure email
@@ -26,6 +27,7 @@ type backupMailer interface {
 type backupFailureMailer struct {
 	users backupAdminSearch
 	mail  backupMailer
+	site  auth.SiteNameSource // nil says "Chronicle"
 }
 
 // backupAdminPageSize bounds the admin lookup; a site has a handful.
@@ -49,8 +51,14 @@ func (m backupFailureMailer) BackupFailed(ctx context.Context, run backup.Schedu
 	if len(to) == 0 {
 		return nil
 	}
-	body := fmt.Sprintf("Chronicle's daily backup on %s failed: %s.\n\n"+
+	site := sitelook.DefaultName
+	if m.site != nil {
+		if n := m.site.SiteName(ctx); n != "" {
+			site = n
+		}
+	}
+	body := fmt.Sprintf("%s's daily backup on %s failed: %s.\n\n"+
 		"Open Site admin > Backups & restore to run one now, and check the server log for the details.\n",
-		run.At.Format("2 Jan 2006 at 15:04 MST"), run.Detail)
-	return m.mail.SendMail(ctx, to, "Chronicle: the daily backup failed", body)
+		site, run.At.Format("2 Jan 2006 at 15:04 MST"), run.Detail)
+	return m.mail.SendMail(ctx, to, site+": the daily backup failed", body)
 }

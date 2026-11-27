@@ -254,3 +254,68 @@ func TestUpdateEntityFields_HeldLevelRingsNothing(t *testing.T) {
 		t.Fatalf("a held level rang %v", bell.rang)
 	}
 }
+
+// conduitEntitySvc is a claimed conduit holding one of its two domains.
+type conduitEntitySvc struct{ actingEntitySvc }
+
+func (s *conduitEntitySvc) GetByID(_ context.Context, id string) (*entities.Entity, error) {
+	owner := "pat"
+	return &entities.Entity{ID: id, CampaignID: "camp-1", EntityTypeID: 1, OwnerUserID: &owner,
+		FieldsData: map[string]any{"class": "Conduit", "subclass": "Love"}}, nil
+}
+
+func (s *conduitEntitySvc) GetEntityTypeByID(_ context.Context, id int) (*entities.EntityType, error) {
+	return &entities.EntityType{ID: id, CampaignID: "camp-1", Fields: []entities.FieldDefinition{
+		{Key: "class", Type: "text"}, {Key: "subclass", Type: "text"},
+	}}, nil
+}
+
+// A player who adds their conduit's second domain in Foundry while the
+// Director's times are shut finishes the hero, so Chronicle takes it; a
+// domain swapped for another is still held.
+func TestUpdateEntityFields_SecondDomainWhileShut(t *testing.T) {
+	plan := &entities.HeroPlan{Steps: []entities.HeroStep{
+		{FieldKey: "class", Choices: []entities.HeroChoice{
+			{Name: "Conduit", Properties: map[string]any{"subclass_count": float64(2)}},
+		}},
+		{FieldKey: "subclass", Parent: "class", Multi: true,
+			CountFrom: []entities.HeroCount{{Step: "class", Property: "subclass_count"}},
+			Choices: []entities.HeroChoice{
+				{Name: "Life", Parent: "Conduit"}, {Name: "Love", Parent: "Conduit"}, {Name: "War", Parent: "Conduit"},
+			}},
+	}}
+	roles := map[string]campaigns.Role{"u-1": campaigns.RoleOwner, "pat": campaigns.RolePlayer}
+	tests := []struct {
+		name     string
+		body     string
+		stored   string
+		wantHeld bool
+	}{
+		{"the second domain, in Foundry's order", `{"actingUserId":"pat","fields_data":{"class":"Conduit","subclass":"Life, Love"}}`, "Life, Love", false},
+		{"a domain swapped", `{"actingUserId":"pat","fields_data":{"class":"Conduit","subclass":"War"}}`, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ents := &conduitEntitySvc{}
+			h := NewAPIHandler(&stubSyncSvcForRole{}, ents, actingCampaignSvc{roles: roles}, nil)
+			h.SetHeroPlanner(fixedPlan{plan})
+			h.SetHeroChanges(entities.NewHeroChangeService(shutRules{}, nil, &levelBell{}))
+			c, rec := gateContext(http.MethodPut, tt.body)
+			if err := h.UpdateEntityFields(c); err != nil {
+				t.Fatalf("write refused: %v", err)
+			}
+			got := ""
+			for _, m := range ents.merges {
+				if s, ok := m["subclass"].(string); ok {
+					got = s
+				}
+			}
+			if got != tt.stored {
+				t.Fatalf("stored subclass %q, want %q (answer %s)", got, tt.stored, rec.Body.String())
+			}
+			if held := strings.Contains(rec.Body.String(), `"subclass"`) && strings.Contains(rec.Body.String(), "locked"); held != tt.wantHeld {
+				t.Fatalf("held = %v, want %v: %s", held, tt.wantHeld, rec.Body.String())
+			}
+		})
+	}
+}

@@ -103,6 +103,11 @@ for (const [label, width, touch] of [['1280', 1280, false], ['360', 360, true]])
     const { browser, page } = await open(width, 'refused', { touch });
     try {
       await page.click('.aic-undo-btn');
+      // The question grows open and its button moves while it does; a press
+      // that starts and ends on different spots is no click, so wait for the
+      // grow to finish first.
+      await page.waitForSelector('.aic-ask', { state: 'visible' });
+      await page.waitForFunction(() => document.querySelector('.aic-ask').getAnimations({ subtree: true }).length === 0);
       await page.click('.aic-ask button:has-text("Undo it")');
       await page.waitForSelector('.aic-undo-why');
       assert.match(await page.textContent('.aic-undo-why'), /“Lyra” has been changed since the AI applied it/);

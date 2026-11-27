@@ -168,6 +168,9 @@ test('the sun saves its kind at once, and Escape or a press elsewhere puts the t
   await p.focus('#cal5-sr-sun');
   await p.keyboard.press('Escape');
   assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), false);
+  // Focus goes back to the Moons button a frame after the rail closes; a
+  // loaded runner can read it before that, so wait for it, bounded, then check.
+  await p.waitForFunction(() => document.activeElement && document.activeElement.id === 'cal5-moonbtn', null, { timeout: 1500 }).catch(() => {});
   assert.equal(await p.evaluate(() => document.activeElement && document.activeElement.id), 'cal5-moonbtn');
 });
 

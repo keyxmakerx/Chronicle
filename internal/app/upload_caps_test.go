@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/config"
 )
 
@@ -37,10 +38,24 @@ func newUploadCapApp(ceiling *int64) *App {
 		UploadCeilingFn: func() int64 { return *ceiling },
 	}
 	a.setupMiddleware()
+	// The app's error handler answers an AppError with its own code; this
+	// stand-in does only that, so a cap that refuses with one reads as its code.
+	fallback := echo.DefaultHTTPErrorHandler(false)
+	a.Echo.HTTPErrorHandler = func(c *echo.Context, err error) {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) {
+			_ = c.String(ae.Code, ae.Message)
+			return
+		}
+		fallback(c, err)
+	}
 	ok := func(c *echo.Context) error { return c.NoContent(http.StatusOK) }
 	a.Echo.POST("/media/upload", ok)
 	a.Echo.POST("/campaigns/:id/calendars/wizard/import/preview", ok)
 	a.Echo.POST("/campaigns/:id/calendars/other", ok)
+	a.Echo.POST("/campaigns/:id/systems/upload", ok)
+	a.Echo.POST("/campaigns/:id/systems/preview", ok)
+	a.Echo.POST("/campaigns/:id/systems/other", ok)
 	return a
 }
 
@@ -67,6 +82,10 @@ func TestUploadCapsRunBeforeCSRF(t *testing.T) {
 		{"calendar import under its cap reaches CSRF", "/campaigns/c1/calendars/wizard/import/preview", 10*mb + mb/2, passedCap},
 		{"calendar import over its cap is refused up front", "/campaigns/c1/calendars/wizard/import/preview", 12 * mb, http.StatusRequestEntityTooLarge},
 		{"another calendar route keeps the global 2 MB cap", "/campaigns/c1/calendars/other", 3 * mb, http.StatusRequestEntityTooLarge},
+		{"game system zip over 2 MB reaches CSRF", "/campaigns/c1/systems/upload", 3 * mb, passedCap},
+		{"game system preview near its cap reaches CSRF", "/campaigns/c1/systems/preview", 50*mb + mb/2, passedCap},
+		{"game system zip over its cap is refused up front", "/campaigns/c1/systems/upload", 52 * mb, http.StatusRequestEntityTooLarge},
+		{"another systems route keeps the global 2 MB cap", "/campaigns/c1/systems/other", 3 * mb, http.StatusRequestEntityTooLarge},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,6 +94,9 @@ func TestUploadCapsRunBeforeCSRF(t *testing.T) {
 			a.Echo.ServeHTTP(rec, multipartRequest(tc.path, cr, tc.size))
 			if got := outcome(rec.Code); got != tc.wantStatus {
 				t.Errorf("outcome = %d (status %d), want %d", got, rec.Code, tc.wantStatus)
+			}
+			if isSystemZipPath(tc.path) && rec.Code == http.StatusRequestEntityTooLarge && !strings.Contains(rec.Body.String(), "maximum size of 50 MB") {
+				t.Errorf("a refused game system zip says %q, want the 50 MB limit named", rec.Body.String())
 			}
 			if tc.wantStatus == http.StatusRequestEntityTooLarge && cr.n != 0 {
 				t.Errorf("server read %d bytes of a refused body, want none", cr.n)
@@ -91,6 +113,7 @@ func TestUploadCapsRunBeforeCSRF(t *testing.T) {
 	}{
 		{"unsized media body is cut off at the ceiling", "/media/upload", 5 * mb},
 		{"unsized calendar import body is cut off at its cap", "/campaigns/c1/calendars/wizard/import/preview", 11 * mb},
+		{"unsized game system zip is cut off at its cap", "/campaigns/c1/systems/upload", 51 * mb},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cr := &countingReader{r: strings.NewReader(strings.Repeat("a", int(tc.cap)*2))}
