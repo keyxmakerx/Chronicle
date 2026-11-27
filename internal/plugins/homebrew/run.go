@@ -146,6 +146,8 @@ type RunStep struct {
 	ByHand bool `json:"byHand,omitempty"`
 	// Rolls is a step the player rolls for on their own screen.
 	Rolls bool `json:"rolls,omitempty"`
+	// Asks is an "Ask the Director" step, answered rather than run.
+	Asks bool `json:"asks,omitempty"`
 }
 
 // Press is an event the Director sets off from the drawer.
@@ -568,10 +570,15 @@ func (s *service) view(r Run) RunView {
 	default:
 		out.Waits = "Part of it is yours to run."
 	}
-	for _, d := range r.Rule.Then {
+	for i, d := range r.Rule.Then {
+		// A run that stopped part way has done the steps before the stop
+		// (an answered ask among them), so only what is left is listed.
+		if r.Asked > 0 && i < r.Asked-1 {
+			continue
+		}
 		st := RunStep{Action: d.Action, Label: d.Action, Part: d.Part, Args: d.Args}
 		if a, ok := s.reg.action(d.Action); ok {
-			st.Label, st.Browser, st.ByHand, st.Rolls = a.Label, a.ClientRun, !a.ClientRun && a.Run == nil && a.Rolls == nil, a.Rolls != nil
+			st.Label, st.Browser, st.ByHand, st.Rolls, st.Asks = a.Label, a.ClientRun, !a.ClientRun && a.Run == nil && !stops(a), a.Rolls != nil, a.Asks
 		}
 		out.Steps = append(out.Steps, st)
 	}

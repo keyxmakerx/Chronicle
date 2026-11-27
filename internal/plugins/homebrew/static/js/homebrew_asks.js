@@ -134,8 +134,22 @@
     });
   }
 
+  // FOCUS_KEYS are the attributes that name a focusable part of one ask, so
+  // a redraw (a live reload lands moments after a roll) can put focus back.
+  var FOCUS_KEYS = ['data-hba-result', 'data-hba-roll'];
+
+  function focusedPart(el) {
+    var a = document.activeElement;
+    if (!a || !el.contains(a)) return null;
+    for (var i = 0; i < FOCUS_KEYS.length; i++) {
+      if (a.hasAttribute(FOCUS_KEYS[i])) return [FOCUS_KEYS[i], a.getAttribute(FOCUS_KEYS[i])];
+    }
+    return null;
+  }
+
   function draw(S) {
     var el = S.el;
+    var keep = focusedPart(el);
     el.textContent = '';
     if (S.asks === false) {
       el.appendChild(h('p', 'hba-muted', 'Your asks could not be read. Reload the page to try again.'));
@@ -149,9 +163,13 @@
     S.asks.forEach(function (a) { list.appendChild(card(S, a)); });
     el.appendChild(list);
     // After a roll its button is gone; the result takes the focus it had.
-    if (S.focus) {
-      var res = el.querySelector('[data-hba-result="' + S.focus + '"]');
-      if (res) { res.focus(); S.focus = ''; }
+    // Any other redraw puts focus back on the part of the ask that had it.
+    var want = S.focus ? ['data-hba-result', S.focus] : keep;
+    if (!want) return;
+    var n = list.querySelector('[' + want[0] + '="' + String(want[1]).replace(/["\\]/g, '\\$&') + '"]');
+    if (n) {
+      n.focus();
+      S.focus = '';
     }
   }
 

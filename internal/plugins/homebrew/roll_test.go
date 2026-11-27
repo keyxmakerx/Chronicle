@@ -267,6 +267,15 @@ func TestRollFirstAfterAYes(t *testing.T) {
 	if yes.Message != "Your Director said yes, if you roll first: draw a card" || len(rr.bell.rung) != 3 {
 		t.Errorf("bells = %+v", rr.bell.rung)
 	}
+	// The drawer lists only what is left: the roll, waiting on the player,
+	// then the step after it; the answered ask is not "for you to do".
+	d, err := rr.svc.Drawer(ctx, camp, dm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := d.Waiting[0].Steps; len(st) != 2 || st[0].Action != "roll" || !st[0].Rolls || st[0].ByHand || st[1].Action != "add" {
+		t.Errorf("drawer steps = %+v", st)
+	}
 	mine, _ := rr.svc.MyAsks(ctx, camp, mira)
 	if len(mine) != 1 || mine[0].State != AskRoll || mine[0].Answered != AnswerYes || mine[0].Ask != "draw a card" ||
 		mine[0].Roll.Target != 14 || strings.Join(mine[0].Changes, "") != "Needs at least: 14 (was 12)" {

@@ -42,7 +42,7 @@ async function page(t, rolled, width) {
     window.Chronicle = {
       register: (name, impl) => { window.__impl = impl; },
       apiFetch: (url, opts) => {
-        if (url.endsWith('/asks/mine')) return json(200, { data: asks, total: asks.length });
+        if (url.endsWith('/asks/mine')) { window.__loads = (window.__loads || 0) + 1; return json(200, { data: asks, total: asks.length }); }
         window.__posts.push({ url, method: opts.method, body: opts.body || null });
         if (rolled.status >= 400) return json(rolled.status, { message: rolled.message });
         asks = [rolled];
@@ -74,6 +74,13 @@ test('the roll button asks the server to roll and shows its total', { skip }, as
     assert.equal(await p.textContent('.hba-pill'), pill);
     assert.equal(await p.$('.hba-rollbtn'), null, 'the button is gone once rolled');
     assert.equal(await p.evaluate(() => document.activeElement.className), 'hba-result hba-' + view.state, 'focus moves to the result');
+    // The socket's homebrew.answered for this run lands moments later and
+    // the list reads itself again; focus must stay on the result line.
+    const before = await p.evaluate(() => window.__loads);
+    await p.evaluate(() => window.dispatchEvent(new CustomEvent('chronicle:homebrew-asks', { detail: { id: 'run-1', state: 'rolled' } })));
+    await p.waitForFunction((n) => window.__loads > n, before);
+    await p.evaluate(() => new Promise((r) => setTimeout(r, 50)));
+    assert.equal(await p.evaluate(() => document.activeElement.getAttribute('data-hba-result')), 'run-1', 'focus survives the live reload');
   }
 });
 

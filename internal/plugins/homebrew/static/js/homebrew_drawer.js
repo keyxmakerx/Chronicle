@@ -43,7 +43,8 @@
   // stepNote says what Run does with one step of a waiting rule. have says
   // whether this browser has a handler for a browser step.
   function stepNote(step, have) {
-    if (step.rolls) return 'The player rolls this';
+    if (step.rolls) return 'Waiting on the player to roll';
+    if (step.asks) return 'Asks you before what follows';
     if (step.byHand) return 'For you to do';
     if (step.browser) return have ? 'Runs here' : 'For you to do: nothing on this page can run it';
     return 'Runs on the server';
