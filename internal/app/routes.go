@@ -6841,6 +6841,13 @@ func (a *App) RegisterRoutes() {
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
+	// Each person's screen layouts and style follow them between devices.
+	// With the plugin degraded they stay in the browser alone.
+	var screenPrefs dmscreen.PrefsRepository
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		screenPrefs = dmscreen.NewPrefsRepository(a.DB)
+	}
+	dmscreen.RegisterPrefsRoutes(e, dmscreen.NewPrefsHandler(dmscreen.NewPrefsService(screenPrefs, &screenKitAdapter{members: campaignService})), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
 	syncAPIHandler.SetDMScreen(&dmScreenSyncAPIAdapter{svc: dmScreenSvc})
