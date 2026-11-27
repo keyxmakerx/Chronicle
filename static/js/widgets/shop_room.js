@@ -1863,10 +1863,16 @@
         var items = S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) { return { relationId: it.id, quantity: basket[String(it.id)] }; });
         if (!items.length || busy) return;
         busy = true; note = ''; renderBasket();
-        var bought = false;
+        var bought = false, gone = false, names = {};
+        S.its.forEach(function (it) { names[String(it.id)] = it.n; });
         Chronicle.apiFetch(buyEndpoint, { method: 'POST', body: { buyerEntityId: payer, items: items }, csrfToken: ds.csrfToken }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
-            if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
+            if (!r.ok) {
+              var msg = (j && (j.message || j.error)) || '', err = new Error(msg || 'That didn’t go through. Try again.');
+              // The server words its stock refusals for the API; the room reads the shelves again and says it for players.
+              err.stock = r.status === 400 && /^(insufficient stock|this item is out of stock)/.test(msg);
+              throw err;
+            }
             var who = buyer(), name = who ? who.name : 'They';
             var what = sm.count + (sm.count === 1 ? ' item' : ' items');
             if (j.status !== 'requested' && counterOn()) window.ShopRoomCounter.bought(cel, sm.count);
@@ -1882,10 +1888,28 @@
             return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
+          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function () { draw(); note = settleBasket(names); gone = true; });
           // A network failure's own text ("Failed to fetch") means nothing
-          // to a player; the server's refusals are already in plain words.
+          // to a player; the server's other refusals are already in plain words.
           note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
-        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); });
+        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); else if (gone) speak('gone'); });
+      }
+      // After someone else took the stock: the basket keeps only what is still
+      // on the shelves, no more than is left, and the note names what changed.
+      // Nothing was charged, since the server refuses a basket whole.
+      function settleBasket(names) {
+        var now = {}, gone = [], less = [];
+        S.its.forEach(function (it) { now[String(it.id)] = it; });
+        Object.keys(basket).forEach(function (k) {
+          var it = now[k], q = basket[k];
+          if (!it || it.out) { gone.push(it ? it.n : names[k] || 'item'); delete basket[k]; }
+          else if (it.qty !== null && q > it.qty) { basket[k] = it.qty; less.push(it.qty + ' ' + it.n); }
+        });
+        var tail = ' Nothing was charged, and your basket is updated.';
+        if (gone.length === 1 && !less.length) return 'Someone just bought the last ' + gone[0] + '.' + tail;
+        if (gone.length) return 'These sold out while you shopped: ' + gone.join(', ') + '.' + (less.length ? ' Only ' + less.join(', ') + ' left.' : '') + tail;
+        if (less.length) return 'Someone just bought some of these. Only ' + less.join(', ') + ' left.' + tail;
+        return 'Some of that just sold out. Nothing was charged; the shelves are up to date, so check your basket and try again.';
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {
@@ -1939,7 +1963,7 @@
       function speak(moment) {
         var KP = window.ShopRoomKeeper; if (!KP || S.mode === 'arr' || !dlg.open) return;
         if (moment === 'look' || moment === 'poor') { var now = Date.now(); if (now - lookAt < 8000) return; lookAt = now; }
-        var text = KP.pick(S.manner, S.moments, moment);
+        var text = KP.pick(S.manner, S.moments, moment) || (moment === 'gone' ? KP.GONE || '' : '');
         if (text) talk(null, text);
       }
       // After something goes on the pile: the keeper remarks on it, or on the purse coming up short.

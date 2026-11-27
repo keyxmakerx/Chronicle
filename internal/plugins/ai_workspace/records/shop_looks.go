@@ -161,7 +161,7 @@ var (
 	roomLooks   = with(wordsOf("paper", "counter"), "pop-up book", "paper", "at the counter", "counter")
 	roomMoods   = with(wordsOf("cozy", "eldritch", "candy", "haunted", "festive", "underwater", "fey", "desert", "dwarven"), "none", "")
 	roomManners = with(wordsOf("warm", "gruff", "shrewd", "nervous", "grand"), "none", "")
-	roomMoments = []string{"hello", "look", "buy", "poor", "bye", "refuse"}
+	roomMoments = []string{"hello", "look", "buy", "poor", "gone", "bye", "refuse"}
 )
 
 // paperLookPaused mirrors the shop room widget's switch for the paper look
@@ -196,7 +196,7 @@ func (ShopRoomKind) Doc() string {
 		"`look` (counter, standing at the counter, which every shop opens at; paper, a pop-up book that is switched off for now, so a paper shop opens at the counter until it is back), " +
 		"`setting`, `size`, `furniture`, `decorations`, `palette` and `mood`, which shape only the paper look: they are accepted and saved, but nothing changes on screen until the paper look is back, so leave them out for now, " +
 		"`manner` (the keeper's manner, which gives them lines for every moment: warm, gruff, shrewd, nervous, grand, or none), " +
-		"`says` (the keeper's own lines for a moment of the visit, up to 5 each, which win over the manner's: `hello` on arriving, `look` when something goes on the pile, `buy` after a purchase, `poor` when the pile outgrows the purse, `bye` on leaving, `refuse` for a shop that won't serve the party; `none` gives a moment back to the manner) " +
+		"`says` (the keeper's own lines for a moment of the visit, up to 5 each, which win over the manner's: `hello` on arriving, `look` when something goes on the pile, `buy` after a purchase, `poor` when the pile outgrows the purse, `gone` when someone else bought it first, `bye` on leaving, `refuse` for a shop that won't serve the party; `none` gives a moment back to the manner) " +
 		"`chatter` (up to 10 lines the keeper says when pressed) and `counter` (the theme of the counter look, below). " +
 		"A key you leave out keeps what the room has; `says` changes only the moments it names. The goods, prices and stock are `shop-stock`. A room can't be removed by a block.\n\n" +
 		counterDoc + "\n\n" +

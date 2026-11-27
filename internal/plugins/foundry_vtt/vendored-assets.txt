@@ -10,10 +10,10 @@
 # when a listed file no longer matches its hash.
 69533c967f80  static/js/cutscene_engine.js  cutscenes
 58a97f609643  static/js/widgets/gl_shared.js  sky
-3d40b9a9065f  static/js/widgets/shop_room.js  shop
+0ecad054ad17  static/js/widgets/shop_room.js  shop
 a5c24d5a8e13  static/js/widgets/shop_room_counter.js  shop
 c20c1dbc2311  static/js/widgets/shop_room_icons.js  shop
-88519f50100b  static/js/widgets/shop_room_keeper.js  shop
+1b9e21880773  static/js/widgets/shop_room_keeper.js  shop
 58550cb3b961  static/js/widgets/shop_room_paper.js  shop
 c5149e3891e6  static/js/widgets/shop_room_parts_places.js  shop
 e7e1dda536ae  static/js/widgets/shop_room_parts_strange.js  shop

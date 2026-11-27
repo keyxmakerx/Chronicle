@@ -259,6 +259,13 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 				t.Errorf("manner/moments: %q %q", l.Manner, l.Moments)
 			}
 		}},
+		{"the someone-beat-you-to-it moment kept", mutate(func(m map[string]any) {
+			m["moments"] = map[string]any{"gone": []any{"Too slow."}}
+		}), func(t *testing.T, l ShopRoomLayout) {
+			if len(l.Moments["gone"]) != 1 || l.Moments["gone"][0] != "Too slow." {
+				t.Errorf("gone: %q", l.Moments)
+			}
+		}},
 		{"no manner or moments stays absent", mutate(func(m map[string]any) { m["moments"] = map[string]any{"look": []any{""}} }), func(t *testing.T, l ShopRoomLayout) {
 			if l.Manner != "" || l.Moments != nil {
 				t.Errorf("manner/moments: %q %q", l.Manner, l.Moments)
