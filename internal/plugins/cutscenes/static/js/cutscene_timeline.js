@@ -184,6 +184,8 @@
     var empty = q(this.box, '[data-csw-tl-empty]');
     if (empty) empty.hidden = bars.length > 0;
     for (var i = 0; i < bars.length; i++) lanes.appendChild(this.lane(bars[i], i));
+    var drawn = lanes.querySelectorAll('.csw-tl-bar');
+    for (var j = 0; j < drawn.length; j++) fit(drawn[j]);
     for (var t = 0; t <= this.total + 1e-9; t += sc.step) {
       var tick = el('span', 'csw-tl-tick', secs(t));
       tick.style.left = (t / this.total * 100) + '%';
@@ -246,13 +248,26 @@
   // timeline and of the bar.
   Timeline.prototype.place = function (bar, b) {
     var end = b.end === Infinity ? this.total : Math.min(b.end, this.total);
-    var start = Math.min(b.start, this.total);
+    // A start typed below zero is refused on save; drawn at zero meanwhile,
+    // so the bar never leaves its track.
+    var start = Math.max(Math.min(b.start, this.total), 0);
     var len = Math.max(end - start, 0.0001);
     bar.style.left = (start / this.total * 100) + '%';
     bar.style.width = (len / this.total * 100) + '%';
     bar.style.setProperty('--in', (Math.min(b.fadeIn, len) / len * 100) + '%');
     bar.style.setProperty('--out', (Math.min(b.fadeOut, len) / len * 100) + '%');
   };
+
+  // fit hides a bar's end words when the bar is too short to hold them, so
+  // a short line in a long scene never prints its words over each other.
+  // The row's own fields still carry the choice.
+  function fit(bar) {
+    var ends = bar.querySelectorAll('.csw-tl-end');
+    if (!ends.length) return;
+    var room = bar.clientWidth, need = 0, i;
+    for (i = 0; i < ends.length; i++) { ends[i].hidden = false; need += ends[i].scrollWidth; }
+    for (i = ends.length - 1; i >= 0 && need > room; i--) { need -= ends[i].scrollWidth; ends[i].hidden = true; }
+  }
 
   Timeline.prototype.value = function (bar, b) {
     bar.setAttribute('aria-valuenow', String(round(b.start)));
@@ -300,8 +315,13 @@
       self.drag = { bar: bar, b: b, what: what, x: e.clientX, per: self.total / Math.max(track.width, 1), moved: false,
         start: b.start, build: b.buildInput ? num(b.buildInput) : 0, len: b.shown || 0, id: e.pointerId };
       self.justDragged = false;
+      // Followed on the document until it takes hold: a press near an edge
+      // that moves outward leaves the bar before the drag begins.
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', finish);
+      document.addEventListener('pointercancel', finish);
     });
-    bar.addEventListener('pointermove', function (e) {
+    var move = function (e) {
       var d = self.drag;
       if (!d || d.bar !== bar || e.pointerId !== d.id) return;
       var dx = e.clientX - d.x;
@@ -326,11 +346,15 @@
         b.end = b.start + b.shown + TEXT_OUT;
       }
       self.place(bar, b);
+      fit(bar);
       if (b.atInput) self.value(bar, b);
-    });
+    };
     var finish = function (e) {
       var d = self.drag;
       if (!d || d.bar !== bar || e.pointerId !== d.id) return;
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', finish);
+      document.removeEventListener('pointercancel', finish);
       self.drag = null;
       if (!d.moved) return;
       self.justDragged = true;
@@ -340,8 +364,6 @@
       self.draw();
       self.refocus(null, d);
     };
-    bar.addEventListener('pointerup', finish);
-    bar.addEventListener('pointercancel', finish);
   };
 
   // refocus puts focus back on the bar a key or drag changed, after the

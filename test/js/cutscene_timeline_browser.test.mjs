@@ -1,7 +1,7 @@
 // cutscene_timeline_browser.test.mjs — the cut scene editor's timeline, in
 // Chromium: one bar per layer drawn from the rows' own fields, a drag or a
 // key writes back into those fields, a faded end opens the row's own
-// choices, and a row added or a form swapped in by a save is redrawn. At
+// choices, a short bar hides the words it can't hold, and a row added or a form swapped in by a save is redrawn. At
 // phone width and under reduced motion too, and without a console error.
 //
 // The form is the editor's fields by name (editor_page.templ; the Go test
@@ -124,10 +124,11 @@ test('dragging a bar moves its start in the row, and its right end stretches its
   await pg.mouse.move(track.x + 4 * per, track.y, { steps: 3 });
   await pg.mouse.up();
   await about(pg, '#csw-tx-list [data-csw-row]:nth-child(1) [name="tx_at"]', 2);
-  // Its length grip sits where its time on screen ends; pull it a second on.
+  // Its length grip sits on the bar's visible end, after the leaving fade;
+  // pull it a second on.
   const at = parseFloat(await val(pg, '#csw-tx-list [data-csw-row]:nth-child(1) [name="tx_at"]'));
   const grip = await pg.$eval('.csw-tl-lane:nth-child(3) .csw-tl-grip-len', (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-  assert.ok(Math.abs(grip.x - (track.x + (at + 4) * per)) < 8, 'the grip is at the end of its time on screen');
+  assert.ok(Math.abs(grip.x - (track.x + (at + 4 + 1.1) * per)) < 3, 'the grip is on the bar\'s visible end');
   await pg.mouse.move(grip.x, grip.y);
   await pg.mouse.down();
   await pg.mouse.move(grip.x + per, grip.y, { steps: 4 });
@@ -147,6 +148,39 @@ test('dragging a bar moves its start in the row, and its right end stretches its
   await pg.mouse.move(t0.x - 3 * per, t0.y, { steps: 4 });
   await pg.mouse.up();
   assert.equal(await val(pg, '#csw-ov-list [name="ov_at"]'), '0');
+  assert.deepEqual(errors, []);
+});
+
+test('an edge grabbed and pulled outward takes hold, short bars keep their words apart, and a start below zero stays on its track', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 1100, height: 800 });
+  await pg.waitForSelector('.csw-tl-bar');
+  // Press on the right end of Chapter two and pull outward one second: the
+  // first few pixels leave the bar, and the drag still follows.
+  const r = await pg.$eval('.csw-tl-lane:nth-child(3) .csw-tl-bar', (e) => { const b = e.getBoundingClientRect(); return { x: b.right, y: b.top + b.height / 2 }; });
+  const per = await pg.$eval('.csw-tl-lane:nth-child(3) .csw-tl-track', (e) => e.getBoundingClientRect().width / 9);
+  await pg.mouse.move(r.x - 2, r.y);
+  await pg.mouse.down();
+  for (let i = 1; i <= 6; i++) await pg.mouse.move(r.x - 2 + i * per / 6, r.y);
+  await pg.mouse.up();
+  await about(pg, '#csw-tx-list [data-csw-row]:nth-child(1) [name="tx_seconds"]', 5);
+
+  // One line far out makes a two-minute scene: the short bars hide their
+  // end words rather than print them over each other.
+  await pg.fill('#csw-tx-list [data-csw-row]:nth-child(3) [name="tx_at"]', '120');
+  await pg.waitForFunction(() => [...document.querySelectorAll('.csw-tl-tick')].some((x) => x.textContent === '120 s'));
+  const crowded = await pg.$$eval('.csw-tl-bar', (bs) => bs.filter((b) => {
+    const shown = [...b.querySelectorAll('.csw-tl-end')].filter((e) => !e.hidden);
+    const need = shown.reduce((n, e) => n + e.scrollWidth, 0);
+    return need > b.clientWidth + 0.5;
+  }).length);
+  assert.equal(crowded, 0, 'no bar shows more end words than it can hold');
+  const hidden = await pg.$$eval('.csw-tl-lane:nth-child(3) .csw-tl-end', (es) => es.filter((e) => e.hidden && getComputedStyle(e).display === 'none').length);
+  assert.ok(hidden > 0, 'a short bar in a long scene hides its words');
+
+  // A start typed below zero draws at zero until the save refuses it.
+  await pg.fill('#csw-tx-list [data-csw-row]:nth-child(2) [name="tx_at"]', '-5');
+  const off = await pg.$eval('.csw-tl-lane:nth-child(4)', (l) => l.querySelector('.csw-tl-bar').getBoundingClientRect().left - l.querySelector('.csw-tl-track').getBoundingClientRect().left);
+  assert.ok(off >= -0.5, `the bar stays on its track (${off}px)`);
   assert.deepEqual(errors, []);
 });
 
