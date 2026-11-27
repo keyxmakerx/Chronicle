@@ -322,7 +322,8 @@ html[data-motion] .hcw-f__in { transition: none; }
 }
 @media (pointer: coarse) {
   .oab-stats button { min-width: 44px; min-height: 44px; }
-  .oab-chip button { min-width: 32px; min-height: 32px; }
+  /* A 44px target that keeps the chip its size: the margin gives back the extra. */
+  .oab-chip button { min-width: 44px; min-height: 44px; margin: -10px -6px -10px -4px; }
 }
 html[data-motion="off"] .oab-stats button { transition: none; }
 @media (prefers-reduced-motion: reduce) { .oab-stats button { transition: none; } }

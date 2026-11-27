@@ -500,7 +500,7 @@
       var lab = AB_WORDS[part] || words(part);
       return long
         ? '<textarea rows="2" data-ab="' + i + '" data-part="' + part + '" maxlength="' + AB_TEXT + '" aria-label="' + esc(lab) + '" placeholder="' + esc(ph) + '">' + esc(a[part]) + '</textarea>'
-        : '<input data-ab="' + i + '" data-part="' + part + '" maxlength="' + (part === 'name' ? AB_NAME : AB_LINE) + '" aria-label="' + esc(lab) + '" placeholder="' + esc(ph) + '" value="' + esc(a[part]) + '" autocomplete="off"' +
+        : '<input data-ab="' + i + '" data-part="' + part + '" maxlength="' + (part === 'name' ? AB_NAME : AB_LONG[part] ? AB_TEXT : AB_LINE) + '" aria-label="' + esc(lab) + '" placeholder="' + esc(ph) + '" value="' + esc(a[part]) + '" autocomplete="off"' +
           (part === 'action_type' && shape.actions.length ? ' list="' + id + '-act"' : '') + '>';
     };
     var paste = ui.open

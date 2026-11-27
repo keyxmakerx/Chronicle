@@ -223,7 +223,8 @@
       if (typeof v !== 'string' && typeof v !== 'number') return;
       var t = /^tier(\d)$/.exec(k);
       if (t) h += '<p class="hc-tier"><b>Tier ' + t[1] + '</b> ' + inline(v, terms) + '</p>';
-      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms) + '</p>';
+      // A part written over several lines keeps its line breaks.
+      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms).replace(/\n+/g, '<br>') + '</p>';
     });
     return h;
   }

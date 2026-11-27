@@ -199,6 +199,16 @@ test('the form and the card escape what was typed', () => {
   assert.match(card, /Add the power roll and all three tiers/);
 });
 
+// A tier is written as sentences, so its box takes as much as the server does.
+test('the tier boxes take the long-part limit', () => {
+  const f = field(), d = OE.draftOf(null, f);
+  const html = OE.abilityFormHTML(d, { c: { f: 'f', k: 'k', hint: 'h', link: 'l' }, rules, shapes: f.abilities, ui: {}, kind: 'Kit' });
+  for (const part of ['tier1', 'tier2', 'tier3']) {
+    assert.match(html, new RegExp('data-part="' + part + '" maxlength="2000"'), part);
+  }
+  assert.match(html, /data-part="distance" maxlength="200"/);
+});
+
 // The Directors' "Paste from an AI" reads the same ability from YAML or JSON.
 const entries = (f) => ({ cur: () => f, fields: [f], draft: OE.draftOf(null, f), tryBuy: [] });
 
