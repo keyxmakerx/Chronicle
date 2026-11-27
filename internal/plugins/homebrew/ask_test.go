@@ -196,7 +196,7 @@ func TestAnswer(t *testing.T) {
 			r := ar.askRecipe(t)
 			ar.bell.rung = nil
 			_, err := ar.svc.Answer(ctx, camp, r.ID, tt.by, tt.in)
-			if appCode(err) != tt.code && !(tt.code == 0 && err == nil) {
+			if appCode(err) != tt.code && (tt.code != 0 || err != nil) {
 				t.Fatalf("err = %v, want code %d", err, tt.code)
 			}
 			got := ar.runs.runs[r.ID]
