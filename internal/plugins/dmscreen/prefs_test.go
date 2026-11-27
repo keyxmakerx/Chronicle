@@ -200,6 +200,11 @@ func TestCleanPrefsRefuses(t *testing.T) {
 		{"two layouts with one name", ScreenPrefs{Layouts: []Layout{{Name: "Fight"}, {Name: "fight"}}}},
 		{"a bad surface", ScreenPrefs{Style: Style{Surface: "neon"}}},
 		{"a bad density", ScreenPrefs{Style: Style{Density: "tiny"}}},
+		{"a bad tray level", ScreenPrefs{Style: Style{TrayLevel: "ultra"}}},
+		{"a bad tray finish", ScreenPrefs{Style: Style{TrayFinish: "gold"}}},
+		{"a bad tray shape", ScreenPrefs{Style: Style{TrayShape: "cup"}}},
+		{"a bad Others' dice value", ScreenPrefs{Style: Style{TrayOthers: "maybe"}}},
+		{"a tray key that is script", ScreenPrefs{Style: Style{TrayLevel: "<script>"}}},
 		{"a document past the size cap", ScreenPrefs{Layouts: big}},
 	}
 	for _, tt := range tests {
@@ -437,5 +442,36 @@ func TestPrefsHandlerGate(t *testing.T) {
 				t.Errorf("presence not kept: %+v", svc.in)
 			}
 		})
+	}
+}
+
+// The dice tray's choices are stored only when they differ from the starting
+// ones (Detailed, Paper, tower, On), and each stored one survives a merge with
+// a style change that does not name it.
+func TestPrefsTrayStyle(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want Style
+	}{
+		{"the starting values are not stored", `{"style":{"trayLevel":"detailed","trayFinish":"paper","trayShape":"tower","trayOthers":"on"}}`, Style{}},
+		{"every other value is kept", `{"style":{"trayLevel":"flat","trayFinish":"kit","trayShape":"bowl","trayOthers":"off"}}`, Style{TrayLevel: "flat", TrayFinish: "kit", TrayShape: "bowl", TrayOthers: "off"}},
+		{"simple is kept", `{"style":{"trayLevel":"simple"}}`, Style{TrayLevel: "simple"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := mergePrefs(ScreenPrefs{}, decodeInput(t, tt.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Style != tt.want {
+				t.Errorf("style = %+v, want %+v", got.Style, tt.want)
+			}
+		})
+	}
+	// A body that names an unknown value is refused through the same path a
+	// PUT takes.
+	if _, err := mergePrefs(ScreenPrefs{}, decodeInput(t, `{"style":{"trayLevel":"ultra"}}`)); errCode(err) != http.StatusBadRequest {
+		t.Errorf("unknown level: want 400, got %v", err)
 	}
 }

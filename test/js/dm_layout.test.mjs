@@ -84,18 +84,19 @@ test('cleanPrefs drops what the screen never writes', () => {
   const p = L.cleanPrefs({
     current: 'Gone', live: { open: ['x'] }, owner: 'u2',
     layouts: [{ name: 'Default', open: [] }, { name: 'Fight', open: ['fight'] }, { name: 'fight', open: [] }],
-    style: { surface: 'neon', density: 'compact' }
+    style: { surface: 'neon', density: 'compact', trayLevel: 'ultra', trayFinish: 'kit', trayShape: 'cup', trayOthers: 'off' }
   });
   assert.deepEqual(p.layouts.map((l) => l.name), ['Fight']);
   assert.equal(p.current, '');
   assert.equal(p.live, null);
   assert.equal(p.owner, undefined);
-  assert.deepEqual(p.style, { surface: 'solid', density: 'compact' });
+  // The Dice tray's choices keep an allowed value, and an unknown one is the starting value.
+  assert.deepEqual(p.style, { surface: 'solid', density: 'compact', trayLevel: 'detailed', trayFinish: 'kit', trayShape: 'tower', trayOthers: 'off' });
 });
 
 test('body carries only the named keys, defaults as empty', () => {
-  const p = L.cleanPrefs({ style: { surface: 'solid', density: 'compact' } });
-  assert.deepEqual(L.body(p, ['style']), { style: { surface: '', density: 'compact' } });
+  const p = L.cleanPrefs({ style: { surface: 'solid', density: 'compact', trayLevel: 'flat', trayShape: 'bowl' } });
+  assert.deepEqual(L.body(p, ['style']), { style: { surface: '', density: 'compact', trayLevel: 'flat', trayFinish: '', trayShape: 'bowl', trayOthers: '' } });
   assert.deepEqual(L.body(p, ['current', 'live']), { current: '', live: null });
 });
 

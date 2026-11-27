@@ -56,8 +56,8 @@ type PlayerView struct {
 
 // PlayerSections lists the players' screen's sections in rail order. Tonight,
 // Rolls and Dice are drawn in the browser by the Table, which every member
-// has, so they are always offered; any other section whose source is missing
-// is left out.
+// has, and the Dice tray by its own widget, so they are always offered; any
+// other section whose source is missing is left out.
 func (v *PlayerView) PlayerSections() []SectionView {
 	var out []SectionView
 	if v.HasParty {
@@ -89,6 +89,7 @@ func (v *PlayerView) PlayerSections() []SectionView {
 		SectionView{ID: "tonight", Title: "Tonight", Icon: "scroll", Summary: "What you were shown tonight"},
 		SectionView{ID: "rolls", Title: "Rolls", Icon: "dice", Summary: "The roll log and the roller"},
 		SectionView{ID: "dice", Title: "Dice", Icon: "dice-d6", Summary: "How your dice look"},
+		traySection,
 	)
 	if n := len(v.Conditions); n > 0 {
 		out = append(out, SectionView{ID: "rules", Title: "Rules", Icon: "book", Summary: plural(n, "condition", "conditions")})
