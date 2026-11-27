@@ -1583,6 +1583,9 @@ func (h *APIHandler) GetCharacterFields(c *echo.Context) error {
 	if resp == nil {
 		return apperror.NewNotFound("character fields not found for system: " + systemID)
 	}
+	if err := h.restrictToCampaign(c.Request().Context(), campaignID, "character", resp); err != nil {
+		return err
+	}
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1620,6 +1623,9 @@ func (h *APIHandler) GetItemFields(c *echo.Context) error {
 			"fields":    []any{},
 		})
 	}
+	if err := h.restrictToCampaign(c.Request().Context(), campaignID, "item", resp); err != nil {
+		return err
+	}
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1650,6 +1656,9 @@ func (h *APIHandler) GetCreatureFields(c *echo.Context) error {
 			"system_id": systemID,
 			"fields":    []any{},
 		})
+	}
+	if err := h.restrictToCampaign(c.Request().Context(), campaignID, "creature", resp); err != nil {
+		return err
 	}
 
 	return c.JSON(http.StatusOK, resp)

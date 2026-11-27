@@ -807,6 +807,32 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 	}
 }
 
+// Restrict applies restrictions a campaign added to the preset's fields: a
+// key in gmOnly goes out as a GM-only field (no Foundry mapping, as in
+// presetFieldsForAPI) and a key in ownerOnly is marked owner-only. A campaign
+// can only add restrictions here, never lift the manifest's.
+func (r *CharacterFieldsResponse) Restrict(gmOnly, ownerOnly map[string]bool) {
+	if r == nil {
+		return
+	}
+	for i, f := range r.Fields {
+		switch {
+		case f.GMOnly:
+			continue
+		case gmOnly[f.Key]:
+			r.Fields[i] = CharacterFieldExport{
+				Key:              f.Key,
+				Label:            f.Label,
+				Type:             f.Type,
+				GMOnly:           true,
+				FoundryClearPath: f.FoundryPath,
+			}
+		case ownerOnly[f.Key]:
+			r.Fields[i].OwnerOnly = true
+		}
+	}
+}
+
 // CharacterFieldsResponse is the API response shape for the character
 // fields endpoint, containing field definitions with Foundry annotations.
 type CharacterFieldsResponse struct {
