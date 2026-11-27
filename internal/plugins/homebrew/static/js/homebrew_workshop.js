@@ -239,6 +239,17 @@
     return (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '') + (named ? ': ' + named : '');
   }
 
+  // saysText fills an action's own preview line: {part} is the part's label
+  // and any other {name} that arg's value. '' when the action has none.
+  function saysText(act, d, tp) {
+    if (!act || !act.says) return '';
+    var args = (d && d.args) || {};
+    return act.says.replace(/\{([^{}]*)\}/g, function (_, slot) {
+      if (slot === 'part') return tp ? tp.label : '';
+      return args[slot] == null ? '' : String(args[slot]);
+    });
+  }
+
   // run starts a rule. A rule timed for later waits; one that runs now does
   // each Then in order. Returns the cards it lit, in order.
   function run(doc, cat, st, i, now, ctx) {
@@ -254,10 +265,20 @@
       st.log.push(what + ', waits' + (rule.timing === 'encounter_end' ? ' for the encounter to end' : ' for you to run it'));
       return;
     }
+    var asked = false;
     rule.then.forEach(function (d, j) {
+      if (asked) return;
       if (ctx.steps++ >= LIMIT) { ctx.stopped = true; return; }
       ctx.lit.push('r' + i + '.' + j);
       var act = findDef(cat, 'actions', d.action), tp = doc.parts.filter(function (x) { return x.key === d.part; })[0];
+      // An ask stops the rule for the Director's answer; the preview can't
+      // answer for them, so what follows it is not acted out.
+      if (act && act.asks) {
+        asked = true;
+        var w = String((d.args || {}).ask || '').trim();
+        st.log.push('Asks the Director' + (w ? ': wants to ' + w : '') + '. What follows waits for a yes.');
+        return;
+      }
       var label = act ? act.label : d.action;
       if (act && act.preview && tp && hasNumber(cat, tp)) {
         var n = act.preview.arg ? Number((d.args || {})[act.preview.arg]) : 1;
@@ -267,7 +288,7 @@
         st.log.push(label + ': ' + tp.label + ' ' + was + ' to ' + to);
         change(doc, cat, st, tp.key, was, to, ctx);
       } else {
-        st.log.push((act && act.clientRun ? 'You would be asked to run: ' : 'At the table this would: ') + label + (tp ? ', ' + tp.label : ''));
+        st.log.push((act && act.clientRun ? 'You would be asked to run: ' : 'At the table this would: ') + (saysText(act, d, tp) || label + (tp ? ', ' + tp.label : '')));
       }
     });
   }
@@ -362,7 +383,7 @@
     partKey: partKey, startArgs: startArgs, freeSpot: freeSpot, cardsOf: cardsOf, edgesOf: edgesOf, shapeText: shapeText, argsText: argsText,
     compatible: compatible, removePart: removePart, defaultData: defaultData,
     bounds: bounds, clampV: clampV, nowText: nowText, simStart: simStart, simSync: simSync, simFire: simFire,
-    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText,
+    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable, whenText: whenText, saysText: saysText,
     crossesMark: crossesMark, linkable: linkable, linkData: linkData, isLinked: isLinked
   };
   if (typeof window !== 'undefined') window.HomebrewWorkshop = H;
@@ -1260,6 +1281,7 @@
     argFields(S, box, act, d.args);
     if (act && act.clientRun) box.appendChild(h('p', 'hbw-muted', 'This runs in your browser when you press Run in the Homebrew drawer.'));
     if (act && act.waits) box.appendChild(h('p', 'hbw-muted', 'This is your call: a rule that ends in it waits in the Homebrew drawer until you press Run.'));
+    if (act && act.asks) box.appendChild(h('p', 'hbw-muted', 'The rule stops here and asks the Director in the Homebrew drawer. The steps before it have happened; the steps after it run only on Yes, and the Director can change their settings while answering. The player sees the answer.'));
     append(box, [
       h('p', 'hbw-muted', 'Part of the rule that starts on: ' + ((def(S, 'events', rule.when.event) || {}).label || rule.when.event) + '.'),
       append(h('div', 'hbw-row'), [quiet('Remove this step', function () {

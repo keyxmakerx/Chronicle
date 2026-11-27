@@ -81,7 +81,7 @@ test('it starts on the defaults', async () => {
     quality: document.querySelector('[data-dcz-quality][aria-pressed="true"]').dataset.dczQuality,
     look: document.querySelector('[data-dcz-look][aria-pressed="true"]').dataset.dczLook,
     picks: document.querySelector('[data-dcz-picks]').checked,
-    note: document.querySelector('.dcz').textContent.includes('Each player can change the die, colours and animations for their own rolls. Everyone else still sees the campaign’s.'),
+    note: document.querySelector('.dcz').textContent.includes('Each player can pick their own die, colours and animations from the sets on offer, and everyone sees their rolls in them. The campaign’s die above stays the starting point.'),
   }));
   await close();
   assert.deepEqual(got, { set: 'jewelled', colour: 'onyx', succ: 'phoenix', fail: 'grasp', quality: 'auto', look: 'quick', picks: true, note: true });

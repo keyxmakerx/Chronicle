@@ -23,6 +23,23 @@ type fakeRepo struct {
 	settings Settings
 	has      bool
 	saved    [][]string
+	picks    map[string]DicePick // campaign/user → pick
+}
+
+func (f *fakeRepo) DicePick(_ context.Context, campaignID, userID string) (DicePick, error) {
+	return f.picks[campaignID+"/"+userID], nil
+}
+
+func (f *fakeRepo) SaveDicePick(_ context.Context, campaignID, userID string, p DicePick) error {
+	if f.picks == nil {
+		f.picks = map[string]DicePick{}
+	}
+	if p.IsZero() {
+		delete(f.picks, campaignID+"/"+userID)
+		return nil
+	}
+	f.picks[campaignID+"/"+userID] = p
+	return nil
 }
 
 func (f *fakeRepo) Insert(_ context.Context, r Roll) (string, bool, error) {

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -80,5 +82,53 @@ func TestCutsceneLivePublisherAudiences(t *testing.T) {
 	(&cutsceneLivePublisher{bus: empty}).Show("camp-1", cutscenes.Showing{ID: "sh-2"})
 	if len(empty.got) != 0 {
 		t.Errorf("a showing with no viewers was published: %+v", empty.got)
+	}
+}
+
+type cutsceneFoundryHub struct{ connected bool }
+
+func (h cutsceneFoundryHub) FoundryPresence(string) (*time.Time, bool) { return nil, h.connected }
+
+// A preview goes only to the Foundry module's DM-held sockets, never a
+// browser, and only when the module is connected to hear it; the add-on
+// decides whether the editor offers it at all.
+func TestCutsceneFoundryPreview(t *testing.T) {
+	on := func(context.Context, string) (bool, error) { return true, nil }
+	off := func(context.Context, string) (bool, error) { return false, nil }
+	broken := func(context.Context, string) (bool, error) { return true, errors.New("down") }
+	if !(&cutsceneFoundryPreview{enabled: on}).Offered(context.Background(), "camp-1") {
+		t.Error("Sync API on: not offered")
+	}
+	for name, f := range map[string]func(context.Context, string) (bool, error){"off": off, "broken": broken, "unbound": nil} {
+		if (&cutsceneFoundryPreview{enabled: f}).Offered(context.Background(), "camp-1") {
+			t.Errorf("%s: offered", name)
+		}
+	}
+
+	sc := cutscenes.Scene{ID: "s-1", Name: "Unsaved"}
+	bus := &cutsceneBus{}
+	p := &cutsceneFoundryPreview{hub: cutsceneFoundryHub{connected: true}, bus: bus}
+	if !p.Preview("camp-1", "dir", sc) || len(bus.got) != 1 {
+		t.Fatalf("connected: sent %d", len(bus.got))
+	}
+	m := bus.got[0]
+	if m.Type != ws.MsgCutsceneFoundryPreview || !m.RequiresDM || !reflect.DeepEqual(m.Sources, []string{foundry_vtt.ModuleSource}) || len(m.AllowedUsers) != 0 {
+		t.Errorf("audience: %s dm=%v sources=%v allowed=%v", m.Type, m.RequiresDM, m.Sources, m.AllowedUsers)
+	}
+	var payload struct {
+		PreviewID string          `json:"previewId"`
+		Director  string          `json:"director"`
+		Scene     cutscenes.Scene `json:"scene"`
+	}
+	if err := json.Unmarshal(m.Payload, &payload); err != nil || payload.PreviewID == "" || payload.PreviewID != m.ResourceID || payload.Director != "dir" || payload.Scene.Name != "Unsaved" {
+		t.Errorf("payload %s (%v)", m.Payload, err)
+	}
+
+	quiet := &cutsceneBus{}
+	if (&cutsceneFoundryPreview{hub: cutsceneFoundryHub{}, bus: quiet}).Preview("camp-1", "dir", sc) || len(quiet.got) != 0 {
+		t.Error("Foundry not connected: still sent")
+	}
+	if (&cutsceneFoundryPreview{}).Preview("camp-1", "dir", sc) {
+		t.Error("unbound: reported sent")
 	}
 }

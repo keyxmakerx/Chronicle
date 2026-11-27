@@ -30,6 +30,8 @@ func TestOpenAsks_KeepsOnlyNightsThatStillTakeAnAnswer(t *testing.T) {
 		}
 		// A removed night reads as nil, the way the repository hides a deleted row.
 		return nights[id], nil
+	}, findProposalByIDFn: func(_ context.Context, id string) (*SlotProposal, error) {
+		return &SlotProposal{ID: id, Status: ProposalOpen}, nil
 	}}
 	svc := &sessionService{repo: repo, clock: func() time.Time { return now }}
 
@@ -51,7 +53,7 @@ func TestOpenAsks_KeepsOnlyNightsThatStillTakeAnAnswer(t *testing.T) {
 		{"a removed night", ask("removed"), false},
 		{"a night that cannot be read", ask("broken"), false},
 		{"an ask already answered is not this function's to judge", note(NotifSessionScheduled, true, sessionLink("c1", "played")), true},
-		{"a when-can-we-play ask is left alone", note(NotifProposalCreated, false, "/campaigns/c1/proposals/p1"), true},
+		{"an open, unanswered date poll is kept", note(NotifProposalCreated, false, "/campaigns/c1/proposals/p1"), true},
 		{"news is left alone", note(NotifProposalConfirmed, false, sessionLink("c1", "played")), true},
 		{"an ask with no link is left alone", note(NotifSessionScheduled, false, ""), true},
 	}
@@ -88,6 +90,79 @@ func TestOpenAsks_KeepsOnlyNightsThatStillTakeAnAnswer(t *testing.T) {
 		out := BuildCallout(mixed, true, now)
 		if out.Kind != CalloutRSVP || out.Count != 1 || out.Link != sessionLink("c1", "ahead") {
 			t.Errorf("banner = %+v, want one ask linking to the night ahead", out)
+		}
+	})
+}
+
+// A date poll asks only while it is open and the member has answered none of
+// its dates: once they answer, or the Director picks a date and closes it,
+// the banner stops sending them to it, though the notification row itself is
+// never marked read.
+func TestOpenAsks_KeepsOnlyDatePollsStillWaitingOnTheMember(t *testing.T) {
+	polls := map[string]*SlotProposal{
+		"open":     {ID: "open", Status: ProposalOpen},
+		"answered": {ID: "answered", Status: ProposalOpen},
+		"others":   {ID: "others", Status: ProposalOpen},
+		"closed":   {ID: "closed", Status: ProposalClosed},
+	}
+	responses := map[string][]SlotProposalResponse{
+		"answered": {{OptionID: "o1", UserID: "pip", Response: ResponseYes}},
+		"others":   {{OptionID: "o1", UserID: "quinn", Response: ResponseNo}},
+		"closed":   {{OptionID: "o1", UserID: "pip", Response: ResponseYes}},
+	}
+	reads := 0
+	repo := &mockSessionRepo{
+		findProposalByIDFn: func(_ context.Context, id string) (*SlotProposal, error) {
+			reads++
+			if id == "broken" {
+				return nil, errors.New("the database is away")
+			}
+			return polls[id], nil
+		},
+		listProposalResponsesFn: func(_ context.Context, id string) ([]SlotProposalResponse, error) {
+			return responses[id], nil
+		},
+	}
+	svc := &sessionService{repo: repo, clock: time.Now}
+	poll := func(id string) Notification {
+		n := note(NotifProposalCreated, false, proposalLink("c1", id))
+		n.UserID = "pip"
+		return n
+	}
+
+	cases := []struct {
+		name string
+		in   Notification
+		kept bool
+	}{
+		{"an open poll the member has not answered", poll("open"), true},
+		{"an open poll only others have answered", poll("others"), true},
+		{"an open poll the member answered", poll("answered"), false},
+		{"a poll the Director closed by picking a date", poll("closed"), false},
+		{"a removed poll", poll("removed"), false},
+		{"a poll that cannot be read", poll("broken"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := svc.OpenAsks(context.Background(), []Notification{tc.in}, nil)
+			if (len(got) == 1) != tc.kept {
+				t.Errorf("kept = %v, want %v", len(got) == 1, tc.kept)
+			}
+		})
+	}
+
+	t.Run("the banner follows, and a poll is read once", func(t *testing.T) {
+		reads = 0
+		settled := svc.OpenAsks(context.Background(), []Notification{poll("answered"), poll("closed"), poll("closed")}, nil)
+		if out := BuildCallout(settled, true, time.Now()); out.Kind != CalloutNone {
+			t.Errorf("settled polls raised a banner: %+v", out)
+		}
+		if reads != 2 {
+			t.Errorf("read the polls %d times, want 2", reads)
+		}
+		waiting := svc.OpenAsks(context.Background(), []Notification{poll("closed"), poll("open")}, nil)
+		if out := BuildCallout(waiting, true, time.Now()); out.Kind != CalloutRSVP || out.Count != 1 || out.Link != proposalLink("c1", "open") {
+			t.Errorf("banner = %+v, want one ask linking to the open poll", out)
 		}
 	})
 }

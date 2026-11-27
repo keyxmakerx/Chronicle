@@ -50,9 +50,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -2613,6 +2613,18 @@ func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityI
 	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
 }
 
+// npcPartyCheckAdapter implements npcs.PartyCheck over the addon settings. A
+// failed lookup reads as no party, which keeps a playable character listed
+// rather than shown nowhere.
+type npcPartyCheckAdapter struct {
+	addons addons.AddonService
+}
+
+func (a *npcPartyCheckAdapter) ShowsParty(ctx context.Context, campaignID string) bool {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, entities.AddonPlayerCharacterClaiming)
+	return err == nil && on
+}
+
 // npcTagListerAdapter wraps tags.TagService to implement npcs.TagLister so NPC
 // cards carry tags and the Characters page can offer a tag filter. dm_only tags
 // are included only when the caller asks (the npcs handler decides by role).
@@ -3151,31 +3163,6 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// Boot reconcilers for entity_types fields, run SERIALLY in a single
-	// goroutine. They write only the fields column; the one layout_json
-	// reconciler (placePageExtrasOnce) runs synchronously later in boot, so
-	// no two reconcilers rewrite the same layout. A new layout_json
-	// reconciler must run beside that one, not in a goroutine of its own.
-	// Each step is idempotent; a failure is logged and the chain continues.
-	go func() {
-		ctx := context.Background()
-
-		// Converge gm_only field flags from installed system manifests onto
-		// existing types so the GM-field egress filter covers characters
-		// created before the manifest carried gm_only.
-		reconcileFieldGMFlags(ctx, entityService)
-
-		// Same convergence for owner_only field flags, so backstory-style
-		// fields become owner-private on types created before the manifest
-		// carried owner_only.
-		reconcileFieldOwnerOnlyFlags(ctx, entityService)
-
-		// Same for play blocks, so an installed system's play declarations
-		// reach types created before it declared them.
-		reconcileFieldPlay(ctx, entityService)
-		reconcileFieldChecks(ctx, entityService)
-	}()
-
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)
@@ -3208,6 +3195,8 @@ func (a *App) RegisterRoutes() {
 	// choice to hide the brush.
 	campaignHandler.SetPageCategoryLookup(&pageCategoryAdapter{svc: entityService})
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
+	// The person's own choice to put the top bar's Store icon away.
+	campaignHandler.SetStorePrefs(&storePrefsAdapter{svc: authService})
 	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
 	campaignHandler.SetCustomizeDrafts(customizeDrafts)
 	// Publishing a draft's field list would undo a field switch, so the
@@ -3623,6 +3612,15 @@ func (a *App) RegisterRoutes() {
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
 	a.loadSystemsFromPackages(packages.NewPackageRepository(a.DB))
+	// Converge field marks from the systems just loaded onto existing types.
+	// It must start after the package load above, or it reads a registry
+	// without the packaged systems and a restart converges nothing for them.
+	// It writes only the fields column; the one layout_json reconciler
+	// (placePageExtrasOnce) runs synchronously later in boot, so no two
+	// reconcilers rewrite the same layout, and a new layout_json reconciler
+	// must run beside that one, not in a goroutine of its own. Detached so
+	// a slow query can't stall startup.
+	go reconcileFieldsFromSystems(context.Background(), entityService)
 	sysAddonInfos := systems.AddonInfos()
 	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
 	for _, info := range sysAddonInfos {
@@ -3744,10 +3742,7 @@ func (a *App) RegisterRoutes() {
 		// freshly installed/updated manifest is in the registry, so an
 		// updated system's flag changes take effect on existing types
 		// without a restart — mirrors the boot-time reconcile.
-		reconcileFieldGMFlags(context.Background(), entityService)
-		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
-		reconcileFieldPlay(context.Background(), entityService)
-		reconcileFieldChecks(context.Background(), entityService)
+		reconcileFieldsFromSystems(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
@@ -4784,11 +4779,12 @@ func (a *App) RegisterRoutes() {
 	// The stash directory caches page-type facts for a few seconds; drop them
 	// when the owner changes the lists so the change shows at once.
 	characterListService.SetChangeHook(stashDirectory.Forget)
+	panelActor := &armoryCharacterActorAdapter{svc: entityService}
 	stashSvc := armory.NewStashService(armory.StashDeps{
 		Repo:       stashRepo,
 		Directory:  stashDirectory,
 		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
-		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Actor:      panelActor,
 		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
 		Relations:  &armoryHasItemAdapter{svc: relService},
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
@@ -4843,6 +4839,9 @@ func (a *App) RegisterRoutes() {
 	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
 	// Encounters for the Foundry module; the service attaches below.
 	encounterAPI := &syncEncounterAPIAdapter{}
+	// Homebrew asks for the Foundry module's GM card; the Workshop attaches
+	// below, once it is built.
+	homebrewAskAPI := &syncHomebrewAskAdapter{}
 	// Crafting for the Foundry module; the service attaches below, once the
 	// crafting plugin is built.
 	craftingAPI := &syncCraftingAPIAdapter{actors: stashAPI}
@@ -4868,6 +4867,7 @@ func (a *App) RegisterRoutes() {
 		&armoryShopCheckerAdapter{svc: entityService},
 		&entityVisibilityFilterAdapter{svc: entityService},
 	)
+	armory.SetShopRoomPictures(shopRoomService, &shopRoomPictureAdapter{svc: mediaService})
 	syncAPIHandler.SetShopRoomReader(shopRoomService, "armory")
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
@@ -4959,15 +4959,18 @@ func (a *App) RegisterRoutes() {
 	// while the plugin is degraded.
 	cutsceneLive := &cutsceneLivePublisher{}
 	cutscenePresence := &cutscenePresenceAdapter{foundry: foundryPlayerRepo}
+	cutsceneFoundry := &cutsceneFoundryPreview{enabled: func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
+	}}
 	cutscenesSvc := cutscenes.NewService(cutscenes.NewRepository(a.DB), &cutsceneMembersAdapter{svc: campaignService},
-		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive))
+		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive), cutscenes.WithFoundryPreview(cutsceneFoundry))
 	var cutsceneSyncHandler *syncapi.CutsceneAPIHandler
 	if a.PluginHealth.IsHealthy(cutscenes.PluginSlug) {
 		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)
 	}
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithHomebrewAsks(syncapi.NewHomebrewAskAPIHandler(homebrewAskAPI, campaignService)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -4982,6 +4985,7 @@ func (a *App) RegisterRoutes() {
 	npcRepo := npcs.NewNPCRepository(a.DB)
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: characterListService}, &entityVisibilityFilterAdapter{svc: entityService})
 	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
+	npcSvc.SetPartyCheck(&npcPartyCheckAdapter{addons: addonService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
@@ -5042,6 +5046,15 @@ func (a *App) RegisterRoutes() {
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {
 			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
+		},
+		// The panel answers empty to anyone who can't act for the hero
+		// (the stash service's canAct: Scribe and up, else the actor rule).
+		Draws: func(ctx context.Context, campaignID, entityID, userID string, role int) bool {
+			if role >= int(campaigns.RoleScribe) {
+				return true
+			}
+			ok, err := panelActor.CanUserActAsBuyer(ctx, campaignID, entityID, userID, role)
+			return err == nil && ok
 		},
 	})
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
@@ -5194,7 +5207,16 @@ func (a *App) RegisterRoutes() {
 	// A campaign's feature switches go to its own activity log.
 	addonHandler.SetCampaignActivityLogger(&addonCampaignActivityAdapter{svc: auditService})
 	shareAudit.svc = auditService
+	// Recent Activity lists what Foundry wrote, connected and settled.
+	auditService.SetFoundryActivity(auditFoundryAdapter{repo: syncapi.NewSyncHistoryRepository(a.DB)})
 	auditHandler := audit.NewHandler(auditService)
+	auditHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
+		u, err := authService.GetUser(ctx, userID)
+		if err != nil || u == nil || u.Timezone == nil {
+			return nil
+		}
+		return timeutil.LoadLocation(*u.Timezone)
+	})
 	// Guard the entity-history endpoint with campaign ownership + per-entity
 	// visibility, resolved via the entities service (SEC-IDOR-2).
 	auditHandler.SetEntityViewGuard(&auditEntityViewGuardAdapter{svc: entityService})
@@ -6153,6 +6175,7 @@ func (a *App) RegisterRoutes() {
 	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
@@ -6212,7 +6235,11 @@ func (a *App) RegisterRoutes() {
 	// The Director team's pins lead every list, after the rules have narrowed it.
 	choicePinSvc := systems.NewChoicePinService(systems.NewChoicePinRepository(a.DB), characterChoiceSvc)
 	characterChoiceSvc.SetChoicePins(choicePinSvc)
+	// Entry writes reach a connected Foundry world; the bus is set below,
+	// once it exists.
+	entryChanges := &entryChangePublisher{}
 	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryChanges(entryChanges),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
 		systems.WithEntryRules(choiceRuleSvc),
 		systems.WithEntryLooks(cardLookSvc),
@@ -6394,7 +6421,7 @@ func (a *App) RegisterRoutes() {
 					if zones, zerr := authService.GetTimezonesByIDs(ctx, []string{session.UserID}); zerr == nil {
 						tz = zones[session.UserID]
 					}
-					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, BrushHidden: vp.BrushHidden})
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, BrushHidden: vp.BrushHidden, StoreHidden: vp.StoreHidden})
 				} else {
 					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
 				}
@@ -6417,6 +6444,7 @@ func (a *App) RegisterRoutes() {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
+			rememberCampaign(c, cc)
 
 			// Campaign visual customization from settings.
 			campaignSettings := cc.Campaign.ParseSettings()
@@ -6457,12 +6485,12 @@ func (a *App) RegisterRoutes() {
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
 
-					SheetStyle:    ap.SheetStyle,
-					CraftArt:      ap.CraftArt,
-					PageLook:      ap.PageLook,
-					StyleKit:      ap.StyleKit,
-					Entrance:      ap.Entrance,
-					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
+					SheetStyle:  ap.SheetStyle,
+					CraftArt:    ap.CraftArt,
+					PageLook:    ap.PageLook,
+					StyleKit:    ap.StyleKit,
+					Entrance:    ap.Entrance,
+					MomentSheen: ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 					BuilderLook:   ap.BuilderLook,
@@ -6736,6 +6764,13 @@ func (a *App) RegisterRoutes() {
 				}
 				ctx = layouts.SetUserCampaigns(ctx, navCampaigns)
 			}
+			// The campaign this device was last in, as the way back from
+			// Account settings and Site admin.
+			if ck, err := c.Request().Cookie(lastCampaignCookie); err == nil {
+				if rc := returnCampaign(reqCtx, campaignService, ck.Value, session.UserID, layouts.GetUserCampaigns(ctx)); rc != nil {
+					ctx = layouts.SetReturnCampaign(ctx, rc)
+				}
+			}
 		}
 
 		// CSRF token for forms.
@@ -6780,6 +6815,7 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	cutscenePresence.hub = wsHub
+	cutsceneFoundry.hub = wsHub
 	go wsHub.Run()
 	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
 	// A player reads as in the world only while the world itself is connected.
@@ -6882,6 +6918,7 @@ func (a *App) RegisterRoutes() {
 	// The recording wrapper appends allowlisted events to the change feed
 	// before they reach the hub, so no publisher can forget to record.
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
+	entryChanges.bus = wsEventBus
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	// The quests due-date events follow a page's visibility, so the entity
@@ -7141,20 +7178,22 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
-			// The Table's Rolls, Tonight and Dice drawn into a players' screen card.
-			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js", "js/table_leaf.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
+			// The Table's Rolls, Tonight, Hand and Dice drawn into a players' screen card.
+			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js", "js/table_leaf.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
 	})
+	var rollsPower *rollsPowerAdapter     // nil while the roll log is degraded; layers join it later
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
-		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
+		rollsPower = &rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService}
+		rollsHandler.SetPowerRolls(rollsPower)
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
@@ -7274,6 +7313,9 @@ func (a *App) RegisterRoutes() {
 		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages},
 			transformations.WithNotifier(decksLayersNotifier{next: &transformationsLayersPublisher{bus: wsEventBus}, poke: decksWatch.Poke}))
 		decksFacts.layers = layersSvc
+		if rollsPower != nil {
+			rollsPower.layers, rollsPower.addons = layersSvc, addonService
+		}
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
 		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
@@ -7347,6 +7389,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "homebrew-workshop", Scripts: []string{"js/homebrew_workshop.js"}},
 			{Name: "homebrew-drawer", Scripts: []string{"js/homebrew_drawer.js"}},
+			{Name: "homebrew-asks", Scripts: []string{"js/homebrew_asks.js"}},
 		},
 	})
 	// aiWorkshop is the Workshop's store for the AI tools; nil while the
@@ -7354,8 +7397,10 @@ func (a *App) RegisterRoutes() {
 	var aiWorkshop homebrew.Service
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
-			homebrew.NewRunStore(a.DB))
+			homebrew.NewRunStore(a.DB), homebrew.WithAskPeople(&homebrewAskPeople{svc: campaignService}),
+			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+		homebrewAskAPI.attach(homebrewSvc)
 		aiWorkshop = homebrewSvc
 		craftingRespites.homebrew = homebrewSvc
 		decksStory.bindHomebrew(homebrewSvc)
@@ -7480,6 +7525,7 @@ func (a *App) RegisterRoutes() {
 		PlayerNotes:     entityNotesService,
 		NoteAccess:      aiNoteAccessAPI,
 		Addons:          addonService,
+		AddonLister:     &addonListerAdapter{svc: addonService},
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
 		Boards:          aiBoards,
@@ -7534,6 +7580,7 @@ func (a *App) RegisterRoutes() {
 	entityNotesNotifier.bus = wsEventBus
 	decksLive.bus = wsEventBus
 	cutsceneLive.bus = wsEventBus
+	cutsceneFoundry.bus = wsEventBus
 
 	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
 	drawingService.SetEventPublisher(mapEvents)
@@ -7667,6 +7714,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_layout.js", "/static/js/widgets/dm_arrange.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "store", Scripts: []string{"/static/js/widgets/store.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},
 	{Name: "shop_good_note", Scripts: []string{"/static/js/widgets/shop_good_note.js"}},

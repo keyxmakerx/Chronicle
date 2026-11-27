@@ -397,6 +397,14 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		cuts.GET("/cutscenes/showings", cs.Showings, RequirePermission(PermRead))
 	}
 
+	// Homebrew asks: rules waiting at an "Ask the Director" step, for the
+	// Foundry GM client's card, and the answer from there. Owner or co-DM
+	// only (checked in the handler); the homebrew service checks again.
+	if ha := api.homebrewAsks; ha != nil {
+		cg.GET("/homebrew/asks", ha.Waiting, RequirePermission(PermRead))
+		cg.POST("/homebrew/asks/:runID/answer", ha.Answer, RequirePermission(PermWrite))
+	}
+
 	// Stashes: move items and money as a named campaign member. The group is
 	// gated by the stash feature's addon (slug supplied by the wiring), and the
 	// acting member's own rules apply to each call — see StashAPIService.

@@ -101,6 +101,7 @@ Character presets can include `foundry_path` for automatic VTT sync:
 - `foundry_path`: Dot-notation path in Foundry Actor system data
 - `foundry_writable`: Whether Chronicle can write this field back (default: true)
 - A `gm_only` field is never mapped to Foundry, whatever its `foundry_path` says: Foundry shows a document's fields to every player who can open it. The `character-fields`, `creature-fields` and `item-fields` endpoints send it with `gm_only: true` and no mapping; its declared path goes out as `foundry_clear_path`, which the module empties when it still holds the GM-only value. An `owner_only` field keeps its mapping and is sent with `owner_only: true`. A field the campaign's own category (or a sub-category) marks GM-only or owner-only is sent the same way, even when the manifest leaves it open; if the categories can't be read, the endpoint answers an error rather than the manifest's marks alone
+- `foundry_entry_fields` (optional, a single-item field: `foundry_collection: "items"` with `foundry_item_single`): when a hero picks a campaign's own entry, which has no Foundry item to copy, which of the entry's properties fill which fields of the item sync makes for it. Each key is an entry property and each value is `{"path": "system.…", "format": "number" | "text" | "tiers"}`. `number` writes a number (text such as `"+2"` is read as one; anything else is left out), `text` writes plain text, and `tiers` splits `"+2/+2/+4"` (or one number for all three) into `path.tier1`, `path.tier2` and `path.tier3`. The path must be under the item's `system` data, at most eight parts after `system`, each starting with a letter; `constructor` and `prototype` are refused. A bad mapping, or one on a field that is not a single item or is GM-only, is dropped at load with a warning on the system's diagnostics; the item is then made with its description only. Example: `"stamina_bonus": {"path": "system.bonuses.stamina", "format": "number"}`
 - `format` (optional, any preset field): how the value is written when it is not plain text or a number, such as the shape of one entry in a JSON list. AI Import's brief shows it beside the field
 - `min` / `max` (optional, number preset fields): the lowest and highest value AI Import accepts. Absent means no bound; a number must always be finite. A hand-typed sheet value is not checked
 - `json_list` (optional, text preset fields): the field holds a JSON list; AI Import flags text that does not parse as one
@@ -156,6 +157,30 @@ On a preset field, `creator` may carry:
 | `multi` `true` | The step takes as many picks as `count_from` gives (one when nothing gives a number): a pick toggles, the creator and builder keep the step open until it is full, and the field stores the names joined with `", "` ("Life, War"). The server refuses more than the count, a name twice, or an Ask first entry beside others. Pair it with the field's `foundry_item_join` so a Foundry push carries every matching item. |
 
 A part is dropped at load, with a log line and the field kept, when `from` or `count_from` names a step that is not another string field of the same preset, a property or note is not a plain identifier, or `from` steps depend on each other in a loop.
+
+### Hero Starting Numbers (`creator_numbers`)
+
+On the character preset, `creator_numbers` lets the hero creator fill in a new hero's numbers from the entries picked at its steps. Core keeps none of a system's field or property names; a system that declares nothing leaves every number for the sheet. Only the preset's own `number` fields are written; any other key is dropped when the plan is built. A number never overwrites a field a pick already wrote.
+
+```json
+"creator_numbers": {
+  "characteristics": {
+    "label": "Characteristics", "step": "class",
+    "fields": ["might", "agility", "reason", "intuition", "presence"],
+    "fixed_property": "primary_characteristics", "fixed_value": 2,
+    "arrays_property": "characteristic_arrays"
+  },
+  "sums": [
+    {"fields": ["stamina_max", "stamina_current"], "parts": [{"step": "class", "property": "starting_stamina"}, {"step": "kit", "property": "stamina_bonus"}]},
+    {"fields": ["winded"], "parts": [{"step": "class", "property": "starting_stamina"}, {"step": "kit", "property": "stamina_bonus"}], "half": true}
+  ]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `characteristics` | Adds a creator step after the pick steps. The entry picked at `step` fixes the fields its `fixed_property` names (by field key or label, any case) at `fixed_value`, and its `arrays_property` lists arrays as text (`"2, 1, 0, −1"`; a minus sign, en dash or hyphen for negatives) for the rest. Only arrays as long as the rest are offered. The player chooses an array, which is placed in field order, swaps any two numbers, or deals one at random. The server takes every characteristic or none, and refuses a fixed one off its value or numbers that are not one of the entry's arrays. Practice heroes and the try-out are not asked. |
+| `sums` | Sets each of `fields` to the total of `parts`, each a number property of the entry picked at a step (a JSON number or numeric text). A part with no pick, or no number, adds nothing; a sum with no part found sets nothing. `half` sets half the total, rounded down. An Ask first pick isn't the hero's yet, so it adds nothing. |
 
 ### Crafting (`crafting`)
 

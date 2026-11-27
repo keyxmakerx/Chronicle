@@ -8,11 +8,12 @@
  * or by crafting) arrives as a roll.made message on the campaign's socket,
  * already cut to what this person may see. This script only shows them.
  *
- * Per person, remembered in this browser: which section each leaf shows, how
- * dice are drawn (quick 2D, rune 3D or numbers only; a new player starts on the
- * table's choice) and, when the Director allows it, their own rune set,
- * colour and crit animations. Everyone else's rolls are always drawn in the
- * campaign's dice.
+ * Per person, remembered in this browser: which section each leaf shows and
+ * how dice are drawn (quick 2D, rune 3D or numbers only; a new player starts
+ * on the table's choice). Kept with their account (GET/PUT my-dice), when the
+ * Director allows it: their own rune set, colour and crit animations. Every
+ * roll carries the dice the server settled for its roller (rollerDice), and
+ * every screen throws it in them (roll_dice.js).
  */
 (function () {
   'use strict';
@@ -118,7 +119,9 @@
     this.tableLook = 'quick';
     // The campaign's dice settings, once read; rolls use the defaults until then.
     this.camp = null;
-    this.personal = readPicks(store('dice.' + key));
+    // This person's own dice, kept with their account; read with the settings.
+    this.personal = readPicks('');
+    this.pickErr = '';
     this.cat = null;
     // The game system's power roll and this person's hero (power_roll.js does the math).
     this.power = null;
@@ -237,7 +240,29 @@
       if (s) self.camp = s;
       self.applyDice();
       if (self.drawn()) self.renderSection('dice');
+      if (s) self.loadMyDice();
     }).catch(function () { /* the table's choice stays quick 2D */ });
+  };
+
+  // This person's own dice, kept with their account. A pick an older Table
+  // kept in this browser moves to the account the first time, then the
+  // browser's copy is dropped.
+  Table.prototype.loadMyDice = function () {
+    var self = this, local = 'dice.' + this.key;
+    C.apiFetch(this.base + '/my-dice').then(function (r) { return r.ok ? r.json() : null; }).then(function (m) {
+      if (!m || !self.alive) return;
+      self.personal = fromServer(m.pick);
+      var old = readPicks(store(local));
+      var hasOld = !!(old.set || old.colour || old.succ || old.fail);
+      if (hasOld && !self.hasPicks() && m.mayPick) {
+        self.personal = old;
+        self.savePicks(function () { store(local, ''); });
+      } else if (hasOld) {
+        store(local, '');
+      }
+      self.applyDice();
+      if (self.open) self.renderSection('dice');
+    }).catch(function () { /* the campaign's dice stand in */ });
   };
 
   // The campaign's power roll, when its game system declares one. Without it the
@@ -275,7 +300,13 @@
     return isFinite(n) ? Math.max(-9, Math.min(20, n)) : 0;
   };
 
-  // The personal picks kept in this browser: only known keys, as strings.
+  // The server's pick ({ set, colour, critSucc, critFail }) in the picker's own names.
+  function fromServer(p) {
+    p = p || {};
+    return readPicks(JSON.stringify({ set: p.set, colour: p.colour, succ: p.critSucc, fail: p.critFail }));
+  }
+
+  // Picks as JSON: only known keys, as strings shaped like a dice key.
   function readPicks(raw) {
     var out = { set: '', colour: '', succ: '', fail: '' };
     try {
@@ -288,9 +319,29 @@
     var p = this.personal;
     return !!(p.set || p.colour || p.succ || p.fail);
   };
-  Table.prototype.savePicks = function () {
-    store('dice.' + this.key, this.hasPicks() ? JSON.stringify(this.personal) : '');
+  // savePicks stores this person's pick with their account. The server checks it against
+  // what the campaign offers; a refused pick goes back to what was saved, with the reason.
+  // after runs once the server has answered, either way.
+  Table.prototype.savePicks = function (after, was) {
+    var self = this, p = this.personal;
+    this.pickErr = '';
     this.applyDice();
+    C.apiFetch(this.base + '/my-dice', { method: 'PUT', body: { set: p.set, colour: p.colour, critSucc: p.succ, critFail: p.fail } }).then(function (res) {
+      if (!res.ok) return res.json().catch(function () { return {}; }).then(function (b) { throw new Error((b && b.message) || ''); });
+      return res.json();
+    }).then(function (m) {
+      if (!self.alive) return;
+      self.personal = fromServer(m && m.pick);
+    }, function (e) {
+      if (!self.alive) return;
+      self.personal = was || readPicks('');
+      self.pickErr = 'That wasn’t saved. ' + (e && e.message ? e.message : 'Try again.');
+    }).then(function () {
+      if (!self.alive) return;
+      if (after) after();
+      self.applyDice();
+      if (self.open) self.renderSection('dice');
+    });
   };
 
   // The campaign's own 3D dice. An empty name is the default, which dice.js fills in.
@@ -314,6 +365,12 @@
     if (p.succ) out.succ = p.succ;
     if (p.fail) out.fail = p.fail;
     return out;
+  };
+
+  // The 3D dice one roll is thrown in. Without roll_dice.js loaded, the old rule stands.
+  Table.prototype.diceFor = function (r) {
+    if (C.rollDice) return C.rollDice.forRoll(r, this.campDice(), this.myDice());
+    return r.mine ? this.myDice() : this.campDice();
   };
 
   // The page-wide look for this person's rolls from other places (shop, crafting, hero builder).
@@ -349,6 +406,9 @@
       if (msg && msg.type === 'decks.changed') W.dispatchEvent(new CustomEvent('chronicle:decks-changed'));
       // Directors only; carries nothing, the moments panel fetches its own list.
       if (msg && msg.type === 'decks.moment') W.dispatchEvent(new CustomEvent('chronicle:decks-moment'));
+      // An ask to the Director was made, answered or taken back; carries only
+      // its id and state, the drawer and the asks list read their own.
+      if (msg && (msg.type === 'homebrew.ask' || msg.type === 'homebrew.answered')) W.dispatchEvent(new CustomEvent('chronicle:homebrew-asks', { detail: msg.payload || null }));
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;
@@ -668,6 +728,13 @@
     }
     if (r.why) rows += '<dt>Why</dt><dd>' + esc(r.why) + '</dd>';
     rows += '<dt>From</dt><dd>' + esc(fromWhere(r)) + (r.origin === 'foundry' ? ' <span class="tt-chip">Foundry</span>' : '') + '</dd>';
+    // Whose dice the roll was thrown in, named from the dice catalogue, which is read the
+    // first time a roll that carries its dice is opened.
+    if (!r.hidden && r.rollerDice && C.rollDice) {
+      if (!this.cat) this.loadCatalogue();
+      var dn = C.rollDice.name(r, this.cat, r.mine ? 'Your' : (r.rollerName || 'Their') + '’s');
+      if (dn) rows += '<dt>Dice</dt><dd>' + esc(dn) + '</dd>';
+    }
     rows += '<dt>Seen by</dt><dd>' + esc(this.seenBy(r.mode)) + '</dd>';
     return '<dl class="tt-dl">' + rows + '</dl>';
   };
@@ -803,7 +870,8 @@
     var sel = function (id, label, body) {
       return '<label class="tt-pick"><span class="tt-from">' + label + '</span><select class="tt-mode" data-tt-dpick="' + id + '">' + body + '</select></label>';
     };
-    var out = '<div class="tt-picks"><div><p class="tt-k">Your rune dice</p><p class="tt-from">Your own rolls only. Everyone else still sees the campaign’s.</p></div>';
+    var out = '<div class="tt-picks"><div><p class="tt-k">Your rune dice</p><p class="tt-from">Your rolls are thrown in these on everyone’s screen. Saved with your account.</p></div>';
+    if (this.pickErr) out += '<p class="tt-ferr" role="alert">' + esc(this.pickErr) + '</p>';
     out += sel('set', 'Die', opt('', 'The campaign’s die', set ? p.set : '') + sets.map(function (x) { return opt(x.key, x.name, p.set); }).join(''));
     if (set) {
       var col = set.colours.some(function (c) { return c.key === p.colour; }) ? p.colour : set.colours[0].key;
@@ -823,7 +891,10 @@
     this.catAsked = true;
     C.dice.catalogue().then(function (c) {
       self.cat = c;
-      if (self.alive && self.drawn()) self.renderSection('dice');
+      if (!self.alive) return;
+      if (self.drawn()) self.renderSection('dice');
+      // Rows' details are drawn with the rows, so they are redrawn to name their dice.
+      if (self.loaded) self.refreshLog(true);
     }).catch(function () { self.catAsked = false; });
   };
 
@@ -1365,7 +1436,7 @@
     var rune = look === 'rune' && C.dice && typeof C.dice.roll === 'function' &&
       dice.every(function (d) { return RUNE_SIDES[d.sides]; });
     // Rune dice are thrown full screen whether or not a preview tray was offered: the tray is for
-    // quick 2D. Your own rolls wear your dice; everyone else's wear the campaign's.
+    // quick 2D. Every roll wears the dice the server settled for its roller (rollDice.forRoll).
     if (rune) {
       // The server decides which dice crit under the campaign's game system. With animations off
       // every die says 'none', which dice.js treats as a die's own word, so nothing plays.
@@ -1373,7 +1444,7 @@
       return C.dice.roll([{ label: r.label || r.formula, dice: dice.map(function (d) {
         return { sides: d.sides, value: d.value, crit: crits && (d.crit === 'succ' || d.crit === 'fail') ? d.crit : 'none' };
       }) }], {
-        table: r.mine ? this.myDice() : this.campDice(),
+        table: this.diceFor(r),
         describe: function () { return ''; }
       }).then(function () {}, function () {});
     }
@@ -1888,8 +1959,9 @@
       }
       if (d.ttLook) { self.look = d.ttLook; store('look.' + self.key, self.look); self.renderSection('dice'); return; }
       if (b.hasAttribute('data-tt-picks-reset')) {
+        var before = readPicks(JSON.stringify(self.personal));
         self.personal = readPicks('');
-        self.savePicks();
+        self.savePicks(null, before);
         self.renderSection('dice');
         return;
       }
@@ -1935,10 +2007,11 @@
     this.on(document, 'change', function (ev) {
       var t = ev.target, id = t && t.getAttribute && t.getAttribute('data-tt-dpick');
       if (!id || !(id in self.personal)) return;
+      var was = readPicks(JSON.stringify(self.personal));
       self.personal[id] = /^[a-z0-9-]{0,24}$/.test(t.value) ? t.value : '';
       // A colour belongs to its die.
       if (id === 'set') self.personal.colour = '';
-      self.savePicks();
+      self.savePicks(null, was);
       self.renderSection('dice');
     });
 

@@ -122,6 +122,15 @@ type ActionDef struct {
 	// it is timed, and Run does it when the Director presses Run. It is for
 	// anything bigger than a number moving, which runs at once.
 	Waits bool
+	// Asks marks the step that puts the rule to the Director: a run stops
+	// there until a Director answers, having done the steps before it, and
+	// runs the steps after it only on Yes. It has no Run of its own.
+	Asks bool
+	// Says, when set, is the line the Workshop's preview writes for the
+	// action instead of its label: each {field} is that arg's value and
+	// {part} the label of the part it acts on, so the preview reads like the
+	// table without knowing the owner.
+	Says string
 }
 
 // Act is one action a rule is carrying out.
@@ -339,7 +348,13 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 	if a.ClientRun && a.Run != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't run on the server", a.Name)
 	}
+	if a.Asks && (a.ClientRun || a.Run != nil || a.Waits || a.Preview != nil || len(a.PartKinds) > 0) {
+		return fmt.Errorf("homebrew: action %q asks the Director, so it takes no part and can't run, wait or preview", a.Name)
+	}
 	if err := checkPreview("action", a.Name, a.Preview, a.Fields, a.PartKinds, PreviewAdd, PreviewSet); err != nil {
+		return err
+	}
+	if err := checkSays(a); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -348,6 +363,27 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 		return fmt.Errorf("homebrew: action %q is already registered", a.Name)
 	}
 	r.actions[a.Name] = a
+	return nil
+}
+
+var saysSlotRe = regexp.MustCompile(`\{([^{}]*)\}`)
+
+// checkSays keeps a preview line fillable: every {slot} names one of the
+// action's fields, or {part} on an action that takes a part.
+func checkSays(a ActionDef) error {
+	for _, m := range saysSlotRe.FindAllStringSubmatch(a.Says, -1) {
+		slot := m[1]
+		if slot == "part" && len(a.PartKinds) > 0 {
+			continue
+		}
+		found := false
+		for _, f := range a.Fields {
+			found = found || f.Name == slot
+		}
+		if !found {
+			return fmt.Errorf("homebrew: action %q says {%s}, which is not one of its fields or its part", a.Name, slot)
+		}
+	}
 	return nil
 }
 
@@ -432,11 +468,16 @@ type CatalogEntry struct {
 	ClientRun bool     `json:"clientRun,omitempty"`
 	// Waits is an action's Waits, so the editor can say a rule that ends in it
 	// is held for the Director however it is timed.
-	Waits  bool    `json:"waits,omitempty"`
+	Waits bool `json:"waits,omitempty"`
+	// Asks is an action's Asks, so the editor can say the rule stops there
+	// for the Director's answer.
+	Asks   bool    `json:"asks,omitempty"`
 	Fields []Field `json:"fields,omitempty"`
 	// PressArg is an event's PressArg, so the Workshop can name the drawer
 	// button a When stands for.
 	PressArg string `json:"pressArg,omitempty"`
+	// Says is an action's Says, the preview's line for it.
+	Says string `json:"says,omitempty"`
 	// Preview is a part kind's PreviewShape, or an event's or action's op.
 	Preview any `json:"preview,omitempty"`
 }
@@ -462,7 +503,7 @@ func (r *Registry) Catalog() Catalog {
 		c.Events = append(c.Events, ce)
 	}
 	for _, a := range r.actions {
-		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Fields: a.Fields}
+		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Asks: a.Asks, Fields: a.Fields, Says: a.Says}
 		if a.Preview != nil {
 			ce.Preview = a.Preview
 		}

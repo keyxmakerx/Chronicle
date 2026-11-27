@@ -205,19 +205,26 @@
     return out;
   }
 
+  // The order an ability's parts read in, as the book prints them; a
+  // campaign's own entry comes back from the server with its keys sorted.
+  var PART_ORDER = ['flavor', 'type', 'action_type', 'cost', 'keywords', 'distance', 'target',
+    'trigger', 'power_roll', 'tier1', 'tier2', 'tier3', 'effect', 'special'];
+  function partRank(k) { var i = PART_ORDER.indexOf(k); return i < 0 ? PART_ORDER.length : i; }
+
   // A nested object (an ability, a signature move) as lines: its name, then
   // each field, with tier lines set apart.
   function objectHTML(o, terms) {
     var h = '', name = typeof o.name === 'string' ? o.name : '';
     if (name) h += '<p class="hc-obj"><b>' + esc(name) + '</b></p>';
-    Object.keys(o).forEach(function (k) {
+    Object.keys(o).sort(function (a, b) { return partRank(a) - partRank(b) || (a < b ? -1 : a > b ? 1 : 0); }).forEach(function (k) {
       var v = o[k];
       if (k === 'name' || k === 'type' || v == null || v === '') return;
       if (Array.isArray(v)) v = v.filter(function (x) { return typeof x === 'string' || typeof x === 'number'; }).join(', ');
       if (typeof v !== 'string' && typeof v !== 'number') return;
       var t = /^tier(\d)$/.exec(k);
       if (t) h += '<p class="hc-tier"><b>Tier ' + t[1] + '</b> ' + inline(v, terms) + '</p>';
-      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms) + '</p>';
+      // A part written over several lines keeps its line breaks.
+      else h += '<p><span class="hc-lab">' + esc(words(k)) + '</span> ' + inline(v, terms).replace(/\n+/g, '<br>') + '</p>';
     });
     return h;
   }
@@ -366,6 +373,7 @@
     this.nh = {};
     this.name = '';
     this.about = {};
+    this.chars = null;
     this.terms = null;
     this.busy = false;
     this.sheet = null;
@@ -506,6 +514,14 @@
     var ab = d.about && typeof d.about === 'object' ? d.about : {};
     this.about = {};
     this.aboutFields().forEach(function (f) { if (typeof ab[f.key] === 'string') self.about[f.key] = ab[f.key]; });
+    // A kept placing comes back only as whole numbers; numbersState drops it
+    // if it no longer fits the class.
+    var ch = d.chars;
+    if (ch && typeof ch === 'object' && typeof ch.of === 'string' && typeof ch.arr === 'number' && ch.place && typeof ch.place === 'object') {
+      var place = {};
+      Object.keys(ch.place).forEach(function (k) { if (typeof ch.place[k] === 'number' && Math.floor(ch.place[k]) === ch.place[k]) place[k] = ch.place[k]; });
+      this.chars = { of: ch.of, arr: ch.arr, place: place, held: null };
+    }
   };
   Creator.prototype.save = function () {
     // A copy or a change starts from the server's hero, so it keeps no draft
@@ -513,7 +529,7 @@
     // A try-out has one place to live, written only when it is kept.
     if (this.preload || this.tryout) return;
     // Whether the last write held, for a look that tells the player.
-    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name, about: this.about })); this.kept = true; } catch (e) { this.kept = false; }
+    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ picks: this.picks, name: this.name, about: this.about, chars: this.chars })); this.kept = true; } catch (e) { this.kept = false; }
   };
   // The try-out kept in this browser, or null when there is none, it is not
   // one of ours, or the browser will not say.
@@ -547,11 +563,23 @@
     return !this.practice && Array.isArray(a) ? a.filter(function (f) { return f && typeof f.key === 'string'; }) : [];
   };
   Creator.prototype.hasAbout = function () { return this.aboutFields().length > 0; };
-  // After the plan's steps come About your hero, when the hero's page has
-  // those fields, and last Name and review.
-  Creator.prototype.last = function () { return this.plan.steps.length + (this.hasAbout() ? 1 : 0); };
+  // The system's characteristics step, when it declares one: the player puts
+  // one of the class's arrays on the characteristics it doesn't fix. A
+  // practice hero or a try-out never plays, so it isn't asked.
+  Creator.prototype.numbersDef = function () {
+    var n = this.plan && this.plan.numbers, c = n && n.characteristics;
+    return !this.practice && c && Array.isArray(c.fields) && c.fields.length ? c : null;
+  };
+  Creator.prototype.hasNumbers = function () { return !!this.numbersDef(); };
+  Creator.prototype.numIdx = function () { return this.plan.steps.length; };
+  Creator.prototype.isNumbers = function () { return this.hasNumbers() && this.step === this.numIdx(); };
+  // After the plan's steps come Characteristics, when the system declares
+  // them, About your hero, when the hero's page has those fields, and last
+  // Name and review.
+  Creator.prototype.aboutIdx = function () { return this.plan.steps.length + (this.hasNumbers() ? 1 : 0); };
+  Creator.prototype.last = function () { return this.aboutIdx() + (this.hasAbout() ? 1 : 0); };
   Creator.prototype.isDetails = function () { return this.step >= this.last(); };
-  Creator.prototype.isAbout = function () { return this.hasAbout() && this.step === this.plan.steps.length; };
+  Creator.prototype.isAbout = function () { return this.hasAbout() && this.step === this.aboutIdx(); };
   // Past the steps that pick from a list.
   Creator.prototype.isExtra = function () { return this.step >= this.plan.steps.length; };
   // What the About boxes hold, in a line: the short ones, then a count.
@@ -744,7 +772,11 @@
     for (i = 0; i < n; i++) if (!this.settled(i) && i !== from) return i;
     return n;
   };
-  Creator.prototype.stepWord = function (i) { return i >= this.last() ? 'Name and review' : i >= this.plan.steps.length ? 'About your hero' : this.plan.steps[i].label; };
+  Creator.prototype.stepWord = function (i) {
+    if (i >= this.last()) return 'Name and review';
+    if (this.hasNumbers() && i === this.numIdx()) return this.numbersDef().label || 'Characteristics';
+    return i >= this.plan.steps.length ? 'About your hero' : this.plan.steps[i].label;
+  };
   // A step the rules require can't be left empty; practice forces nothing.
   // The system's own expectations still show in practice: a step it needs
   // reads as not optional, though nothing refuses a hero without it.
@@ -929,7 +961,8 @@
     var self = this, n = this.stepCount();
     var pr = this.plan.steps.map(function (s, i) {
       return '<i class="' + (self.picked(i) ? 'is-ok' : '') + (i === self.step ? ' is-cur' : '') + '"></i>';
-    }).join('') + (this.hasAbout() ? '<i class="' + (this.aboutLine() ? 'is-ok' : '') + (this.isAbout() ? ' is-cur' : '') + '"></i>' : '') +
+    }).join('') + (this.hasNumbers() ? '<i class="' + (this.numbersLine() ? 'is-ok' : '') + (this.isNumbers() ? ' is-cur' : '') + '"></i>' : '') +
+      (this.hasAbout() ? '<i class="' + (this.aboutLine() ? 'is-ok' : '') + (this.isAbout() ? ' is-cur' : '') + '"></i>' : '') +
       '<i class="' + (this.isDetails() ? 'is-cur' : '') + '"></i>';
     return '<div class="hc-shead"><button class="hc-sbtn" type="button" aria-expanded="false" aria-label="All steps" data-act="steps">' +
       '<span class="hc-of">Step ' + (this.step + 1) + ' of ' + n + ' ·</span><span class="hc-nm">' + esc(this.stepWord(this.step)) + '</span>' + I.chev + '</button>' +
@@ -1371,8 +1404,13 @@
       h += '<button type="button" class="hc-row" data-go="' + i + '" data-k="' + esc(st.fieldKey) + '"' + (cur ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : cur ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span>' +
         '<span class="hc-lb"><b>' + esc(st.label) + '</b><span>' + (p ? esc(p) + (note && !self.locked(st) ? ' · ' + esc(note) : '') : self.stateWord(st)) + '</span></span></button>';
     });
+    if (this.hasNumbers()) {
+      var ni = this.numIdx(), nl = this.numbersLine();
+      h += '<button type="button" class="hc-row" data-go="' + ni + '"' + (this.isNumbers() ? ' aria-current="step"' : '') + '><span class="hc-num' + (nl ? ' is-done' : this.isNumbers() ? ' is-now' : '') + '">' + (nl ? '✓' : ni + 1) + '</span>' +
+        '<span class="hc-lb"><b>' + esc(this.stepWord(ni)) + '</b><span data-nums-line>' + (nl ? esc(nl) : 'Not placed yet') + '</span></span></button>';
+    }
     if (this.hasAbout()) {
-      var a = this.plan.steps.length, al = this.aboutLine();
+      var a = this.aboutIdx(), al = this.aboutLine();
       h += '<button type="button" class="hc-row" data-go="' + a + '"' + (this.isAbout() ? ' aria-current="step"' : '') + '><span class="hc-num' + (al ? ' is-done' : this.isAbout() ? ' is-now' : '') + '">' + (al ? '✓' : a + 1) + '</span>' +
         '<span class="hc-lb"><b>About your hero</b><span data-about-line>' + (al ? esc(al) : 'Optional') + '</span></span></button>';
     }
@@ -1406,7 +1444,7 @@
 
   // --- About your hero ---
 
-  Creator.prototype.extraHTML = function () { return this.isAbout() ? this.aboutHTML() : this.reviewHTML(); };
+  Creator.prototype.extraHTML = function () { return this.isNumbers() ? this.numbersHTML() : this.isAbout() ? this.aboutHTML() : this.reviewHTML(); };
   // Every box is optional, and each stays editable on the sheet. The
   // backstory is the one Foundry's Biography carries.
   var ABOUT_HINT = { pronouns: 'she/her, he/him, they/them…', appearance: 'Height, hair, scars, what they wear…', backstory: 'Where they come from, who they left behind…' };
@@ -1424,6 +1462,160 @@
     var back = this.plan.steps.length ? this.stepWord(this.step - 1) : '';
     return h + '<div class="hc-under hc-under--about">' + (back ? '<button type="button" class="hc-qw" data-act="back">' + I.back + esc(back) + '</button>' : '<span class="hc-qw-sp"></span>') +
       '<button type="button" class="hc-btn" data-act="next">Next: Name and review</button></div></div>';
+  };
+
+  // --- Characteristics ---
+
+  // An array as the system writes it, "2, 1, 0, −1", read into numbers;
+  // null when any part isn't a whole number.
+  function readArray(t) {
+    var parts = String(t == null ? '' : t).replace(/[−–]/g, '-').replace(/\+/g, '').split(','), out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].trim();
+      if (!/^-?\d+$/.test(p)) return null;
+      out.push(parseInt(p, 10));
+    }
+    return out.length ? out : null;
+  }
+  var LOCK = '<svg class="hc-lock" viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>';
+  function signedNum(v) { return v < 0 ? '−' + (-v) : String(v); }
+  function listOf(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : typeof v === 'string' ? [v] : []; }
+
+  // What the characteristics step works from: the entry picked at the
+  // declared step, the fields it fixes, the rest, and its arrays as long as
+  // the rest. The server checks the same.
+  Creator.prototype.numbersInfo = function () {
+    var def = this.numbersDef();
+    if (!def) return null;
+    var st = this.stepByKey(def.step), si = st ? this.plan.steps.indexOf(st) : -1;
+    var e = si >= 0 ? this.pickedEntry(si) : null;
+    var info = { def: def, step: st, si: si, entry: e && e.state !== 'ask_first' ? e : null, asked: !!(e && e.state === 'ask_first'), fixed: [], rest: [], arrays: [] };
+    if (!info.entry) return info;
+    var props = info.entry.properties || {}, names = {};
+    if (def.fixedProperty) listOf(props[def.fixedProperty]).forEach(function (n) { names[lower(n.trim())] = true; });
+    def.fields.forEach(function (f) { (names[lower(f.key)] || names[lower(f.label)] ? info.fixed : info.rest).push(f); });
+    listOf(props[def.arraysProperty]).forEach(function (a) {
+      var n = readArray(a);
+      if (n && n.length === info.rest.length) info.arrays.push(n);
+    });
+    return info;
+  };
+  // The player's placing, kept only while it still fits the picked entry.
+  Creator.prototype.numbersState = function (info) {
+    info = info || this.numbersInfo();
+    var c = this.chars;
+    if (!info || !info.entry || !c || c.of !== info.entry.name || !(c.arr >= 0 && c.arr < info.arrays.length)) return null;
+    return c;
+  };
+  // The numbers of the chosen array not yet on a characteristic.
+  Creator.prototype.numbersLeft = function (info, c) {
+    var left = info.arrays[c.arr].slice();
+    info.rest.forEach(function (f) {
+      var v = c.place[f.key];
+      if (v == null) return;
+      var at = left.indexOf(v);
+      if (at >= 0) left.splice(at, 1);
+    });
+    return left;
+  };
+  // Every characteristic, fixed ones included, once every number is placed.
+  Creator.prototype.numbersPlaced = function () {
+    var info = this.numbersInfo(), c = this.numbersState(info);
+    if (!c || this.numbersLeft(info, c).length) return null;
+    var out = {};
+    info.fixed.forEach(function (f) { out[f.key] = info.def.fixedValue; });
+    for (var i = 0; i < info.rest.length; i++) {
+      var v = c.place[info.rest[i].key];
+      if (v == null) return null;
+      out[info.rest[i].key] = v;
+    }
+    return out;
+  };
+  Creator.prototype.numbersLine = function () {
+    var info = this.numbersInfo(), all = this.numbersPlaced();
+    if (!all) return '';
+    return info.def.fields.map(function (f) { return f.label + ' ' + signedNum(all[f.key]); }).join(' · ');
+  };
+  // Choosing an array puts its numbers on the characteristics in order, so
+  // a player who is happy with that is done; any two can then be swapped.
+  Creator.prototype.numbersChoose = function (k) {
+    var info = this.numbersInfo();
+    if (!info || !info.entry || !info.arrays[k]) return;
+    var place = {};
+    info.rest.forEach(function (f, i) { place[f.key] = info.arrays[k][i]; });
+    this.chars = { of: info.entry.name, arr: k, place: place, held: null };
+  };
+  // Tap a number (on a characteristic or left over), then a characteristic:
+  // the two trade places.
+  Creator.prototype.numbersTap = function (key) {
+    var info = this.numbersInfo(), c = this.numbersState(info);
+    if (!c) return;
+    if (c.held == null) { c.held = key; return; }
+    if (c.held !== key) {
+      var a = c.place[c.held], b = c.place[key];
+      c.place[c.held] = b; c.place[key] = a;
+    }
+    c.held = null;
+  };
+  // Deals one of the arrays at random onto the characteristics.
+  Creator.prototype.numbersDeal = function () {
+    var info = this.numbersInfo();
+    if (!info || !info.arrays.length) return;
+    this.numbersChoose(Math.floor(Math.random() * info.arrays.length));
+    var vals = this.chars.place, keys = info.rest.map(function (f) { return f.key; }), pool = keys.map(function (k) { return vals[k]; });
+    for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+    keys.forEach(function (k, i) { vals[k] = pool[i]; });
+  };
+
+  Creator.prototype.numbersHTML = function () {
+    var info = this.numbersInfo(), def = info.def, c = this.numbersState(info), self = this;
+    var h = '<div class="hc-rev hc-nums" data-nums-step><h2 class="hc-disp hc-rev__t" tabindex="-1">' + esc(def.label || 'Characteristics') + '</h2>';
+    var stepWord = info.step ? lower(info.step.label) : 'class';
+    if (!info.entry) {
+      h += '<p class="hc-note hc-plain">' + (info.asked ? 'Your ' + esc(stepWord) + ' waits for your ' + gm() + '’s okay, so these wait too. Place them on the sheet once it’s agreed.'
+        : 'Your ' + esc(stepWord) + ' sets these. Choose it first.') + '</p>';
+      if (!info.asked && info.si >= 0) h += '<button type="button" class="hc-qw" data-go="' + info.si + '">Choose your ' + esc(stepWord) + '</button>';
+    } else if (!info.arrays.length) {
+      h += '<p class="hc-note hc-plain">' + esc(info.entry.name) + ' lists no arrays, so the sheet starts these at 0 for you to fill in.</p>';
+    } else {
+      var fixedWords = info.fixed.map(function (f) { return f.label + ' ' + signedNum(def.fixedValue); });
+      h += '<p class="hc-note hc-plain">' + (fixedWords.length ? 'A ' + esc(info.entry.name) + ' starts with ' + esc(fixedWords.join(' and ')) + '. ' : '') +
+        'Choose one array for the other ' + (info.rest.length === 1 ? 'one' : info.rest.length) + '.</p>';
+      h += '<div class="hc-arrs" role="radiogroup" aria-label="Arrays">' + info.arrays.map(function (a, k) {
+        // One Tab stop for the group, as a radio group has: the chosen array,
+        // or the first while none is; the arrow keys move between them.
+        var on = c && c.arr === k, stop = c && c.arr != null ? on : k === 0;
+        return '<button type="button" class="hc-arr' + (on ? ' is-on' : '') + '" role="radio" aria-checked="' + on + '" tabindex="' + (stop ? 0 : -1) + '" data-act="numsarr" data-arr="' + k + '">' + esc(a.map(signedNum).join(', ')) + '</button>';
+      }).join('') + '</div>';
+      h += '<div class="hc-chars">' + def.fields.map(function (f) {
+        var fixed = info.fixed.indexOf(f) >= 0, v = fixed ? def.fixedValue : c ? c.place[f.key] : null;
+        if (fixed) return '<div class="hc-char is-fixed"><b>' + esc(signedNum(v)) + '</b><small>' + esc(f.label) + ' ' + LOCK + '<span class="hc-sr">, set by ' + esc(info.entry.name) + '</span></small></div>';
+        if (!c) return '<div class="hc-char is-open"><b>?</b><small>' + esc(f.label) + '</small></div>';
+        var held = c.held === f.key;
+        return '<button type="button" class="hc-char' + (held ? ' is-held' : '') + '" aria-pressed="' + held + '" data-act="numstap" data-char="' + esc(f.key) + '"' +
+          ' aria-label="' + esc(f.label + ' ' + signedNum(v) + (held ? ', picked up: choose where it goes' : '')) + '"><b>' + esc(signedNum(v)) + '</b><small>' + esc(f.label) + '</small></button>';
+      }).join('') + '</div>';
+      var held = c && c.held ? def.fields.filter(function (f) { return f.key === c.held; })[0] : null;
+      h += '<p class="hc-note hc-plain" aria-live="polite" data-nums-say>' + (!c ? 'Or deal one at random.'
+        : held ? 'Now tap where the ' + esc(signedNum(c.place[held.key])) + ' from ' + esc(held.label) + ' goes.' : 'To move a number, tap it, then the characteristic it goes on.') + '</p>';
+      h += '<button type="button" class="hc-qw" data-act="numsdeal">Deal at random</button>';
+    }
+    var back = this.plan.steps.length ? this.stepWord(this.step - 1) : '';
+    return h + '<div class="hc-under hc-under--about">' + (back ? '<button type="button" class="hc-qw" data-act="back">' + I.back + esc(back) + '</button>' : '<span class="hc-qw-sp"></span>') +
+      '<button type="button" class="hc-btn" data-act="next">Next: ' + esc(this.stepWord(this.step + 1)) + '</button></div></div>';
+  };
+  // Redraws the step in place after a change, keeping focus on the same
+  // control, and the rail's line with it.
+  Creator.prototype.numbersRefresh = function (focusSel) {
+    var el = this.$('[data-nums-step]');
+    if (!el) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = this.numbersHTML();
+    el.parentNode.replaceChild(tmp.firstElementChild, el);
+    var line = this.$('[data-nums-line]'), nl = this.numbersLine();
+    if (line) line.textContent = nl || 'Not placed yet';
+    if (focusSel) { var f = this.$(focusSel); if (f) f.focus({ preventScroll: true }); }
+    this.save();
   };
 
   // --- Name and review ---
@@ -1455,10 +1647,16 @@
         (extra.length ? '<em>' + esc(extra.join(' · ')) + '</em>' : '') + '</span>' +
         (self.locked(st) || off ? '' : '<button type="button" class="hc-qw" data-go="' + i + '">' + (p ? 'Change' : 'Choose') + '</button>') + '</li>';
     });
+    if (this.hasNumbers()) {
+      var nl = this.numbersLine();
+      h += '<li><span class="hc-lb"><small>' + esc(this.stepWord(this.numIdx())) + '</small><b>' + (nl ? esc(nl) : 'Not placed yet') + '</b>' +
+        (nl ? '' : '<em>The sheet starts them at 0</em>') + '</span>' +
+        '<button type="button" class="hc-qw" data-go="' + this.numIdx() + '">' + (nl ? 'Change' : 'Place') + '</button></li>';
+    }
     if (this.hasAbout()) {
       var al = this.aboutLine();
       h += '<li><span class="hc-lb"><small>About your hero</small><b>' + (al ? esc(al) : 'None') + '</b></span>' +
-        '<button type="button" class="hc-qw" data-go="' + this.plan.steps.length + '">' + (al ? 'Change' : 'Add') + '</button></li>';
+        '<button type="button" class="hc-qw" data-go="' + this.aboutIdx() + '">' + (al ? 'Change' : 'Add') + '</button></li>';
     }
     h += '</ul><div class="hc-fin">';
     var mi = this.missing();
@@ -2056,9 +2254,10 @@
     d.style.maxHeight = 'calc(100% - ' + y + 'px)';
     var h = '';
     for (var i = 0; i <= this.last(); i++) {
-      var st = this.plan.steps[i], ab = !st && i < this.last(), p = ab ? this.aboutLine() : this.picked(i), note = st && this.pickNote(st);
+      var st = this.plan.steps[i], nm = !st && this.hasNumbers() && i === this.numIdx(), ab = !st && !nm && i < this.last();
+      var p = nm ? this.numbersLine() : ab ? this.aboutLine() : this.picked(i), note = st && this.pickNote(st);
       h += '<button type="button" class="hc-row" data-go="' + i + '"' + (i === this.step ? ' aria-current="step"' : '') + '><span class="hc-num' + (p ? ' is-done' : i === this.step ? ' is-now' : '') + '">' + (p ? '✓' : i + 1) + '</span><span class="hc-lb"><b>' + esc(this.stepWord(i)) + '</b><span>' +
-        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : ab ? (p ? esc(p) : 'Optional') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.stateWord(st)) + '</span></span></button>';
+        (i === this.last() ? (this.name.trim() ? esc(this.name.trim()) : 'Give your hero a name, then check everything') : nm ? (p ? esc(p) : 'Not placed yet') : ab ? (p ? esc(p) : 'Optional') : p ? esc(p) + (note && !this.locked(st) ? ' · ' + esc(note) : '') : this.stateWord(st)) + '</span></span></button>';
     }
     d.innerHTML = h;
     app.appendChild(scrim); app.appendChild(d);
@@ -2574,6 +2773,8 @@
     var body = { name: name, picks: picks }, self = this, about = {};
     this.aboutFields().forEach(function (f) { var v = String(self.about[f.key] || '').trim(); if (v) about[f.key] = v; });
     if (Object.keys(about).length) body.about = about;
+    var placed = this.numbersPlaced();
+    if (placed) body.characteristics = placed;
     // A copy of the player's own hero: the server reads that hero again.
     if (this.practice && !edit && this.preload && this.preload.copy) body.copy = true;
     return window.Chronicle && Chronicle.apiFetch
@@ -2614,6 +2815,9 @@
       case 'tipx': this.closeTip(false, true); break;
       case 'drape': this.toggleDrape(false); break;
       case 'steps': this.toggleDrape(); break;
+      case 'numsarr': this.numbersChoose(+el.getAttribute('data-arr')); this.numbersRefresh('[data-act="numsarr"][data-arr="' + el.getAttribute('data-arr') + '"]'); break;
+      case 'numstap': this.numbersTap(el.getAttribute('data-char')); this.numbersRefresh('[data-act="numstap"][data-char="' + el.getAttribute('data-char') + '"]'); break;
+      case 'numsdeal': this.numbersDeal(); this.numbersRefresh('[data-act="numsdeal"]'); break;
       case 'back': if (this.step > 0) this.goStep(this.step - 1, 'back'); break;
       case 'next': this.goStep(this.step + 1, 'fwd'); break;
       case 'skip': this.skipped[st.fieldKey] = true; this.goStep(this.nextOpen(this.step), 'fwd', st.fieldKey); break;
@@ -2758,6 +2962,14 @@
           if (ev.shiftKey && (t === first || !self.sh.el.contains(t) && !self.sh.ft.contains(t))) { ev.preventDefault(); last.focus(); }
           else if (!ev.shiftKey && t === last) { ev.preventDefault(); first.focus(); }
         }
+        return;
+      }
+      var arr = t.closest && t.closest('.hc-arrs .hc-arr');
+      if (arr && /^(Arrow(Right|Left|Down|Up)|Home|End)$/.test(ev.key)) {
+        var arrs = qa('.hc-arr', arr.parentNode), ai = arrs.indexOf(arr);
+        ai = ev.key === 'Home' ? 0 : ev.key === 'End' ? arrs.length - 1 : (ai + (/Right|Down/.test(ev.key) ? 1 : -1) + arrs.length) % arrs.length;
+        ev.preventDefault();
+        self.act('numsarr', arrs[ai]);
         return;
       }
       if (inField || !self.plan || self.isExtra()) return;
