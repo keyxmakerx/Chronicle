@@ -195,3 +195,24 @@ test("a person's own Calm in My view keeps the sheet from travelling", { skip },
   assert.match(t, /^matrix\(1, 0, 0, 1, [-\d.]+, 0\)$/);
   await page.close();
 });
+
+test('the first open waits for the stylesheet, so the sheet never shows unstyled', { skip }, async () => {
+  const page = await openPage();
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await page.route('https://store.test/store.css', async (route) => { await held; await route.fulfill({ contentType: 'text/css', body: '.st-dlg{--st-loaded:1}' }); });
+  await page.evaluate(() => {
+    document.getElementById('w').setAttribute('data-css', 'https://store.test/store.css');
+    document.querySelectorAll('link[data-store-css]').forEach((l) => l.remove());
+  });
+  await page.click('[data-store-toggle]');
+  await page.waitForTimeout(150);
+  assert.equal(await page.evaluate(() => !!document.querySelector('.st-dlg[open]')), false);
+  assert.equal(await page.getAttribute('[data-store-toggle]', 'data-working'), '');
+  await page.click('[data-store-toggle]');
+  release();
+  await page.waitForSelector('.st-dlg.st-in');
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.st-dlg').length), 1);
+  assert.equal(await page.getAttribute('[data-store-toggle]', 'data-working'), null);
+  await page.close();
+});

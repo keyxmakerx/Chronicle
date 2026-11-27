@@ -296,10 +296,21 @@
   }
 
   /* ---- Opening and closing ---- */
+  // The sheet's stylesheet loads on first use, and the sheet waits for it, so
+  // it never shows unstyled. Hovering or focusing the icon starts the fetch
+  // early; a stylesheet that never answers is given up on after 4s.
+  var cssReady = null;
   function styleOnce() {
+    if (cssReady) return cssReady;
     var href = host && host.getAttribute('data-css');
-    if (!href || document.querySelector('link[data-store-css]')) return;
-    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.setAttribute('data-store-css', ''); document.head.appendChild(l);
+    if (!href || document.querySelector('link[data-store-css]')) { cssReady = Promise.resolve(); return cssReady; }
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.setAttribute('data-store-css', '');
+    cssReady = new Promise(function (done) {
+      l.onload = l.onerror = function () { done(); };
+      setTimeout(done, 4000);
+    });
+    document.head.appendChild(l);
+    return cssReady;
   }
   function build() {
     dlg = document.createElement('dialog');
@@ -312,9 +323,18 @@
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
     document.body.appendChild(dlg);
   }
+  var opening = false;
   function open(opts) {
-    if (!host || (dlg && dlg.open)) return;
-    styleOnce();
+    if (!host || opening || (dlg && dlg.open)) return;
+    opening = true;
+    if (toggle && window.Chronicle.working) window.Chronicle.working(toggle, true);
+    styleOnce().then(function () {
+      opening = false;
+      if (toggle && window.Chronicle.working) window.Chronicle.working(toggle, false);
+      if (host) show(opts);
+    });
+  }
+  function show(opts) {
     if (!dlg) build();
     var kind = opts && kindById(opts.kind) ? opts.kind : 'home';
     S.view = kind; S.from = kind; S.q = ''; S.page = 1; S.item = null; S.report = null; S.err = '';
@@ -352,12 +372,16 @@
       init: function (el) {
         host = el; campaign = el.getAttribute('data-campaign') || ''; csrf = el.getAttribute('data-csrf') || '';
         toggle = el.querySelector('[data-store-toggle]');
-        if (toggle) toggle.addEventListener('click', function () { if (dlg && dlg.open) close(); else open(); });
+        if (toggle) {
+          toggle.addEventListener('click', function () { if (dlg && dlg.open) close(); else open(); });
+          toggle.addEventListener('pointerenter', styleOnce);
+          toggle.addEventListener('focus', styleOnce);
+        }
       },
       destroy: function () {
         if (dlg) { if (dlg.open) dlg.close(); dlg.remove(); dlg = null; }
         document.documentElement.classList.remove('st-open');
-        host = null; toggle = null; S = freshState();
+        host = null; toggle = null; opening = false; cssReady = null; S = freshState();
       }
     });
   }
