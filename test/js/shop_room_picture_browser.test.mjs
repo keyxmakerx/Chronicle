@@ -131,6 +131,11 @@ test('the owner picks, moves, uploads and takes away the picture, and Save room 
   await p.waitForFunction((n) => [...document.querySelectorAll('.src-svg [data-pic]')].some((e) => e.getAttribute('href') === '/media/' + n), NEW);
   const up = await p.evaluate(() => window.__calls.find((c) => c.url === '/media/upload'));
   assert.deepEqual(up.body, { file: 'file', usage_type: 'attachment', campaign_id: 'c1' });
+  // The same picture uploaded again comes back as the file the campaign has, and is listed once.
+  await p.setInputFiles('[data-cb-up]', { name: 'mine.jpg', mimeType: 'image/jpeg', buffer: JPEG });
+  await p.waitForFunction(() => window.__calls.filter((c) => c.url === '/media/upload').length === 2);
+  await p.waitForSelector('[data-cb-use]');
+  assert.equal(await p.$$eval('[data-cb-use="' + NEW + '"]', (e) => e.length), 1);
   await p.click('button:has-text("Save room")');
   await p.waitForFunction(() => window.__calls.some((c) => c.m === 'PUT'));
   const put = await p.evaluate(() => window.__calls.find((c) => c.m === 'PUT'));
@@ -145,6 +150,26 @@ test('the owner picks, moves, uploads and takes away the picture, and Save room 
 
 // The view outside is part of the same backdrop: picked in Arrange, drawn in
 // the opening in place of the town, and saved without a word for the town.
+test("the shop floor's door shows the window's sky, view and picture", { skip, timeout: 120000 }, async (t) => {
+  const browser = await launch(t);
+  const pane = async (counter) => {
+    const { p, errors } = await open(browser, counter);
+    await p.click('.src-turn');
+    await p.waitForSelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]');
+    const h = await p.evaluate(() => document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]').innerHTML);
+    assert.deepEqual(errors, []);
+    return h;
+  };
+  const night = (scene, picture) => { const c = smithy(picture || null); c.theme.outside = 'night'; if (scene) c.theme.scene = scene; return c; };
+  const town = await pane(night(''));
+  const castle = await pane(night('castle'));
+  assert.match(town, /stop-color="#0b1430"/, 'the night the theme names, not the shop’s own time');
+  assert.notEqual(castle, town, 'the view outside follows the theme');
+  const dusk = smithy(null); dusk.theme.scene = 'castle';
+  assert.match(await pane(dusk), /stop-color="#2a2a5a"/, 'and so does the sky');
+  assert.match(await pane(night('', { id: A, on: 'outside', fit: 'fill' })), /data-pic/, 'a picture through the window is through the door too');
+});
+
 test('the owner picks the view outside, and Save room sends it', { skip, timeout: 120000 }, async (t) => {
   const browser = await launch(t);
   const { p, errors } = await open(browser, smithy(null));

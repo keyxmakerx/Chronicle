@@ -207,6 +207,8 @@
       return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b && b.message || 'The picture did not upload.'); return b; });
     }).then(function (m) {
       if (!m || !/^[0-9a-f-]{36}$/i.test(m.id || '')) throw new Error('The picture did not upload. Try again.');
+      // The media library can answer with a file the campaign already has; it is listed once.
+      if (pics.open) pics.items = pics.items.filter(function (x) { return x.id !== m.id; });
       if (pics.open) pics.items.unshift({ id: m.id, original_name: file.name, mime_type: m.mime_type || 'image/jpeg', thumbnail_url: m.thumbnail_url, url: m.url });
       usePic(m.id);
     }).catch(function (e) { say(e && e.message ? e.message : 'The picture did not upload. Try again.'); });
