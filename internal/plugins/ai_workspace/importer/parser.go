@@ -507,7 +507,7 @@ func unknownKeysError(unknown []string) string {
 func unknownYAMLKeys(rawYAML string) []string {
 	known := map[string]bool{
 		"name": true, "type": true, "subcategory": true,
-		"visibility": true, "tags": true, "description": true,
+		"visibility": true, "tags": true,
 		"action": true, "kind": true, "parent": true,
 		"era": true, "known_as": true, "reason": true, "fields": true,
 		"folder": true, "layout": true, "rename_to": true,

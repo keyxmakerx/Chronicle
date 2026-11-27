@@ -170,6 +170,7 @@ name: Sigil
 type: creature
 mood: cheerful
 ai_generated_field: yes
+description: A short line nothing reads.
 ---
 
 # Sigil`
@@ -177,7 +178,7 @@ ai_generated_field: yes
 	if p.Status != StatusParseError {
 		t.Fatalf("Status = %q, want parse_error", p.Status)
 	}
-	for _, want := range []string{"mood", "ai_generated_field", "Nothing in this block was changed"} {
+	for _, want := range []string{"mood", "ai_generated_field", "description", "Nothing in this block was changed"} {
 		if !strings.Contains(p.ParseError, want) {
 			t.Errorf("ParseError %q lacks %q", p.ParseError, want)
 		}

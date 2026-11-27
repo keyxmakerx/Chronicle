@@ -30,7 +30,6 @@ type FrontMatter struct {
 	Subcategory string   `yaml:"subcategory"` // TypeLabel value
 	Visibility  string   `yaml:"visibility"`  // "private" | "dm_only" | "public"
 	Tags        []string `yaml:"tags"`
-	Description string   `yaml:"description"`
 	// Action declares the AI's intent for this row: "create" (default,
 	// same as ConflictMode=overwrite semantics), "update" (load
 	// existing entity by name, replace metadata + body), or "delete"
