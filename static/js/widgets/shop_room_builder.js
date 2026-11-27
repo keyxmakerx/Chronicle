@@ -28,6 +28,7 @@
     opening: { none: 'No window', 'window-left': 'Window, left', 'window-right': 'Window, right', 'window-centre': 'Window, centre', 'round-window': 'Round window', doorway: 'Doorway' },
     counter: { 'stall-table': 'Stall table', log: 'Fallen log', slab: 'Stone slab' },
     wall: { white: 'White nowhere', lair: 'Dragon’s lair' },
+    outside: { live: 'The campaign’s sky, live' },
     scene: { 'sky-islands': 'Sky islands', underdark: 'Underdark caverns', astral: 'Astral sea' },
     prop: { 'floating-books': 'Floating books', 'steam-cart': 'Steam cart' }
   };
