@@ -1470,6 +1470,7 @@
     }
     return out.length ? out : null;
   }
+  var LOCK = '<svg class="hc-lock" viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>';
   function signedNum(v) { return v < 0 ? '−' + (-v) : String(v); }
   function listOf(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : typeof v === 'string' ? [v] : []; }
 
@@ -1579,7 +1580,7 @@
       }).join('') + '</div>';
       h += '<div class="hc-chars">' + def.fields.map(function (f) {
         var fixed = info.fixed.indexOf(f) >= 0, v = fixed ? def.fixedValue : c ? c.place[f.key] : null;
-        if (fixed) return '<div class="hc-char is-fixed"><b>' + esc(signedNum(v)) + '</b><small>' + esc(f.label) + '</small><span class="hc-char__why">Set by ' + esc(info.entry.name) + '</span></div>';
+        if (fixed) return '<div class="hc-char is-fixed"><b>' + esc(signedNum(v)) + '</b><small>' + esc(f.label) + ' ' + LOCK + '<span class="hc-sr">, set by ' + esc(info.entry.name) + '</span></small></div>';
         if (!c) return '<div class="hc-char is-open"><b>?</b><small>' + esc(f.label) + '</small></div>';
         var held = c.held === f.key;
         return '<button type="button" class="hc-char' + (held ? ' is-held' : '') + '" aria-pressed="' + held + '" data-act="numstap" data-char="' + esc(f.key) + '"' +

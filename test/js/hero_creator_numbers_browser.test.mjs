@@ -62,7 +62,7 @@ const text = (pg, sel) => pg.locator(sel).first().innerText();
 const rail = (pg, key) => pg.locator('.hc-rail .hc-row[data-k="' + key + '"]');
 const numsRow = (pg) => pg.locator('.hc-rail .hc-row', { hasText: 'Characteristics' });
 const pick = async (pg, name) => { await pg.locator('.hc-gcard', { hasText: name }).click(); await pg.click('.hc-right [data-act="choose"]'); };
-const tiles = (pg) => pg.evaluate(() => [].map.call(document.querySelectorAll('.hc-char'), (n) => n.querySelector('small').textContent + ' ' + n.querySelector('b').textContent));
+const tiles = (pg) => pg.evaluate(() => [].map.call(document.querySelectorAll('.hc-char'), (n) => n.querySelector('small').firstChild.textContent.trim() + ' ' + n.querySelector('b').textContent));
 
 test('the step follows the picks, and asks for the class first', { skip }, async (t) => {
   const { pg, seen } = await open(t);
@@ -84,7 +84,8 @@ test('a Shadow: Agility fixed, an array placed in order, two numbers swapped, an
   assert.match(step, /A Shadow starts with Agility 2\. Choose one array for the other 4\./);
   assert.deepEqual(await pg.locator('.hc-arr').allInnerTexts(), ['2, 2, −1, −1', '2, 1, 1, −1', '2, 1, 0, 0', '1, 1, 1, 0']);
   assert.deepEqual(await tiles(pg), ['Might ?', 'Agility 2', 'Reason ?', 'Intuition ?', 'Presence ?']);
-  assert.match(await text(pg, '.hc-char.is-fixed'), /Set by Shadow/);
+  assert.match(await pg.locator('.hc-char.is-fixed').textContent(), /Agility , set by Shadow/, 'a screen reader hears why it is fixed');
+  assert.equal(await pg.locator('.hc-char.is-fixed svg.hc-lock').count(), 1, 'and the eye sees a lock');
 
   await pg.click('.hc-arr[data-arr="2"]');
   assert.equal(await pg.getAttribute('.hc-arr[data-arr="2"]', 'aria-checked'), 'true');

@@ -396,7 +396,7 @@ button.hc-char:active { transform: scale(.97); }
 .hc-char small { font-size: 12px; color: var(--hc-muted); overflow-wrap: anywhere; }
 .hc-char.is-fixed { background: transparent; border-style: dashed; }
 .hc-char.is-fixed b { color: var(--hc-muted); }
-.hc-char__why { font-size: 11px; color: var(--hc-muted); }
+.hc-lock { vertical-align: -1px; }
 .hc-char.is-open b { color: var(--hc-accent); }
 .hc-char.is-open { border-style: dashed; border-color: var(--hc-accent); }
 .hc-char.is-held { border-color: var(--hc-accent); box-shadow: 0 0 0 2px var(--hc-accent) inset; }
