@@ -9,8 +9,11 @@
  * trackers widget itself, so stepping one here is the same change as on the
  * page. A waiting rule's browser steps run through Chronicle.homebrewActions,
  * which the plugin owning that action fills; one nobody filled is named for
- * the Director to do. User text goes in with textContent, never as markup.
- * Styles are in ../css/drawer.css.
+ * the Director to do. A rule waiting at an "Ask the Director" step is drawn
+ * as an answer card: Yes, No or Other, and after Yes the steps that follow
+ * with their own fields and parts to change ("Yes, and…"); the server checks
+ * each change with the step's owner. User text goes in with textContent,
+ * never as markup. Styles are in ../css/drawer.css.
  */
 (function () {
   'use strict';
@@ -20,7 +23,8 @@
 
   // ---------- Pure helpers (tested in test/js/homebrew_drawer.test.mjs) ----------
 
-  var STATUS = { done: 'Done', failed: 'Stopped', stopped: 'Stopped', dismissed: 'Set aside', running: 'Running', held: 'Waiting' };
+  var STATUS = { done: 'Done', failed: 'Stopped', stopped: 'Stopped', dismissed: 'Set aside', running: 'Running', held: 'Waiting',
+    declined: 'Said no', replied: 'Replied', withdrawn: 'Taken back' };
 
   function statusText(s) { return STATUS[s] || s; }
 
@@ -61,7 +65,65 @@
     return 'Running ' + (p.button ? p.label : p.label.toLowerCase()) + '…';
   }
 
-  var H = { statusText: statusText, ago: ago, stepNote: stepNote, pressLabel: pressLabel, pressURL: pressURL, pressRunning: pressRunning };
+  // askTitle is an ask's heading: "Mira wants to draw a card".
+  function askTitle(ask) {
+    var who = (ask && ask.asker) || 'A player';
+    return ask && ask.ask ? who + ' wants to ' + ask.ask : who + ' is asking you';
+  }
+
+  // argValue reads one field of a step's args as the form shows it.
+  function argValue(args, f) {
+    var v = args ? args[f.name] : undefined;
+    return v == null ? '' : String(v);
+  }
+
+  // editsFor turns the answer card's values into the steps a Yes changes:
+  // only the steps whose part or fields differ from the rule, each with its
+  // whole args, so the owner's Check sees what will run. values is keyed
+  // by step, {part, args: {field: text}}; a whole-number field that is empty
+  // is left out, and one that is not a whole number comes back as an error.
+  function editsFor(later, values) {
+    var out = [], bad = '';
+    (later || []).forEach(function (st) {
+      var v = values[st.step];
+      if (!v) return;
+      var args = {}, changed = false, orig = st.args || {};
+      Object.keys(orig).forEach(function (k) { args[k] = orig[k]; });
+      (st.fields || []).forEach(function (f) {
+        if (!(f.name in v.args)) return;
+        var txt = String(v.args[f.name]).trim();
+        if (txt === argValue(orig, f)) return;
+        changed = true;
+        if (f.type === 'whole') {
+          if (txt === '') { delete args[f.name]; return; }
+          if (!/^-?\d+$/.test(txt)) { bad = bad || (f.label + ' needs a whole number.'); return; }
+          args[f.name] = parseInt(txt, 10);
+        } else if (txt === '') {
+          delete args[f.name];
+        } else {
+          args[f.name] = txt;
+        }
+      });
+      var edit = { step: st.step };
+      if (v.part != null && v.part !== (st.part || '')) { edit.part = v.part; changed = true; }
+      if (!changed) return;
+      edit.args = args;
+      out.push(edit);
+    });
+    return { steps: out, error: bad };
+  }
+
+  // sendLabel says what Send does for the answer picked.
+  function sendLabel(choice, later, changes) {
+    if (choice === 'no') return 'Send: no';
+    if (choice === 'other') return 'Send reply';
+    var names = (later || []).filter(function (st) { return !st.ask; }).map(function (st) { return st.label; });
+    if (!names.length) return 'Send: yes';
+    return 'Send: yes' + (changes ? ', with changes' : '') + ', then ' + names.join(', then ').toLowerCase();
+  }
+
+  var H = { statusText: statusText, ago: ago, stepNote: stepNote, pressLabel: pressLabel, pressURL: pressURL, pressRunning: pressRunning,
+    askTitle: askTitle, editsFor: editsFor, sendLabel: sendLabel };
   if (typeof window !== 'undefined') window.HomebrewDrawer = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
 
@@ -109,11 +171,19 @@
 
   Chronicle.register('homebrew-drawer', {
     init: function (el, cfg) {
-      var S = { el: el, cfg: cfg, drawer: null, pages: null, allPages: false, busy: false, status: '', statusErr: false };
+      var S = { el: el, cfg: cfg, drawer: null, pages: null, allPages: false, busy: false, status: '', statusErr: false, answers: {} };
       el._hbd = S;
+      // The Table's socket says when an ask is made, answered or taken back,
+      // here or in another screen; the list is read again rather than trusted
+      // from the message, which carries only an id.
+      S.onAsk = function () { if (!S.busy && !S.editing) reload(S); };
+      window.addEventListener('chronicle:homebrew-asks', S.onAsk);
       load(S);
     },
-    destroy: function (el) { el._hbd = null; }
+    destroy: function (el) {
+      if (el._hbd) window.removeEventListener('chronicle:homebrew-asks', el._hbd.onAsk);
+      el._hbd = null;
+    }
   });
 
   function load(S) {
@@ -194,8 +264,155 @@
       s.appendChild(h('p', 'hbd-muted', 'Nothing is waiting. A rule that is held, or runs in your browser, waits here.'));
       return s;
     }
-    runs.forEach(function (r) { s.appendChild(waitingCard(S, r)); });
+    s.querySelector('.hbd-h').appendChild(h('span', 'hbd-count', runs.length === 1 ? '1 needs you' : runs.length + ' need you'));
+    // Asks first, the first asked at the top: a player is waiting on them.
+    var asks = runs.filter(function (r) { return r.ask; }).reverse();
+    asks.forEach(function (r) { s.appendChild(askCard(S, r)); });
+    runs.forEach(function (r) { if (!r.ask) s.appendChild(waitingCard(S, r)); });
     return s;
+  }
+
+  // ---------- An ask: the answer card ----------
+
+  // answerState is what the Director has picked and typed on one ask, kept
+  // across redraws so a live reload does not wipe it.
+  function answerState(S, r) {
+    var a = S.answers[r.id];
+    if (!a) a = S.answers[r.id] = { choice: '', reply: '', values: {}, more: false, error: '' };
+    return a;
+  }
+
+  function askCard(S, r) {
+    var ask = r.ask, A = answerState(S, r);
+    var later = (ask.later || []).filter(function (st) { return st.action !== 'ask-director'; });
+    var c = h('div', 'hbd-card hbd-ask', '', { role: 'group', 'aria-label': askTitle(ask), 'data-hbd-ask': r.id });
+    c.appendChild(h('h5', 'hbd-ask-title', askTitle(ask)));
+    c.appendChild(h('p', 'hbd-muted', 'From the ' + r.recipe + ' recipe · ' + r.what));
+    var pick = h('div', 'hbd-row hbd-pick', '', { role: 'group', 'aria-label': 'Your answer' });
+    [['yes', 'Yes'], ['no', 'No']].forEach(function (o) {
+      pick.appendChild(h('button', 'hbd-btn hbd-choice', o[1], { type: 'button', 'aria-pressed': String(A.choice === o[0]), disabled: S.busy },
+        { click: function () { A.choice = o[0]; A.error = ''; draw(S); focusPick(S, r, o[0]); } }));
+    });
+    pick.appendChild(h('button', 'hbd-btn quiet hbd-other', 'Other…', { type: 'button', 'aria-pressed': String(A.choice === 'other'), disabled: S.busy },
+      { click: function () { A.choice = 'other'; A.error = ''; draw(S); var t = S.el.querySelector('[data-hbd-reply="' + r.id + '"]'); if (t) t.focus(); } }));
+    c.appendChild(pick);
+    if (A.choice === 'yes' && later.length) c.appendChild(conditions(S, r, A, later));
+    if (A.choice === 'other') {
+      var ta = h('textarea', 'hbd-reply', '', { rows: 2, maxlength: 200, 'aria-label': 'Your reply to ' + ((ask.asker) || 'the player'),
+        placeholder: 'Not yet: finish the fight first.', 'data-hbd-reply': r.id }, {
+        input: function () { A.reply = ta.value; }, focus: function () { S.editing = true; }, blur: function () { S.editing = false; }
+      });
+      ta.value = A.reply;
+      c.appendChild(ta);
+    }
+    if (A.error) c.appendChild(h('p', 'hbd-err', A.error, { role: 'alert' }));
+    if (A.choice) {
+      var ed = A.choice === 'yes' ? editsFor(ask.later, A.values) : { steps: [] };
+      var send = btn(sendLabel(A.choice, later, ed.steps.length > 0), 'primary hbd-send', function () { answer(S, r, send); }, null, S.busy);
+      send.setAttribute('data-working-label', 'Sending…');
+      send.setAttribute('data-hbd-send', r.id);
+      c.appendChild(send);
+      c.appendChild(h('p', 'hbd-muted', (ask.asker || 'The player') + ' sees your answer' + (A.choice === 'yes' ? ' and what you changed.' : '.')));
+    }
+    return c;
+  }
+
+  function focusPick(S, r, choice) {
+    var b = S.el.querySelector('[data-hbd-ask="' + r.id + '"] .hbd-choice[aria-pressed="true"]');
+    if (b) b.focus();
+  }
+
+  // conditions draws "Yes, and…": for each step after the ask, its part and
+  // its fields, as the rule has them, to change before sending. Whole-number
+  // fields wait behind "Change how many" so the common answer stays short.
+  function conditions(S, r, A, later) {
+    var box = h('div', 'hbd-and', '', { role: 'group', 'aria-label': 'Yes, and…' });
+    box.appendChild(h('p', 'hbd-and-h', 'Yes, and…'));
+    var wholes = 0;
+    later.forEach(function (st) {
+      var v = A.values[st.step] || (A.values[st.step] = { part: null, args: {} });
+      if (later.length > 1) box.appendChild(h('p', 'hbd-and-step', st.label));
+      if (st.parts && st.parts.length > 1) {
+        var sel = h('select', 'hbd-input', '', { 'aria-label': st.label + ': on' }, { change: function () { v.part = sel.value; refreshSend(S, r, A, later); } });
+        st.parts.forEach(function (p) {
+          var o = h('option', '', p.label, { value: p.key });
+          if (p.key === (v.part != null ? v.part : st.part)) o.selected = true;
+          sel.appendChild(o);
+        });
+        box.appendChild(condRow('On', sel));
+      }
+      (st.fields || []).forEach(function (f) {
+        if (f.type === 'whole') { wholes++; if (!A.more) return; }
+        var cur = f.name in v.args ? v.args[f.name] : argValue(st.args, f);
+        var inp = h('input', 'hbd-input', '', { type: f.type === 'whole' ? 'number' : 'text', inputmode: f.type === 'whole' ? 'numeric' : null,
+          step: f.type === 'whole' ? '1' : null, 'aria-label': st.label + ': ' + f.label, placeholder: f.type === 'whole' ? '' : 'Any' }, {
+          input: function () { v.args[f.name] = inp.value; refreshSend(S, r, A, later); },
+          focus: function () { S.editing = true; }, blur: function () { S.editing = false; }
+        });
+        inp.value = cur;
+        box.appendChild(condRow(f.label, inp));
+      });
+    });
+    if (wholes && !A.more) {
+      box.appendChild(h('button', 'hbd-chip', '+ Change how many', { type: 'button' }, { click: function () { A.more = true; draw(S); } }));
+    }
+    return box;
+  }
+
+  function condRow(label, control) {
+    return append(h('label', 'hbd-cond'), [h('span', 'hbd-cond-l', label), control]);
+  }
+
+  // refreshSend keeps the Send label true to the changes while typing,
+  // without redrawing the field being typed in.
+  function refreshSend(S, r, A, later) {
+    var b = S.el.querySelector('[data-hbd-send="' + r.id + '"]');
+    if (b) b.lastChild.textContent = sendLabel('yes', later, editsFor(r.ask.later, A.values).steps.length > 0);
+  }
+
+  // laterRun is the part of a waiting ask that a Yes runs in this browser:
+  // the steps after the ask, with the Director's changes, for browserSteps.
+  function laterRun(r, steps) {
+    var edits = {};
+    (steps || []).forEach(function (e) { edits[e.step] = e; });
+    var out = { id: r.id, recipeId: r.recipeId, scope: r.scope, steps: [] };
+    (r.steps || []).forEach(function (st, i) {
+      if (i <= r.ask.step) return;
+      var e = edits[i], copy = {};
+      Object.keys(st).forEach(function (k) { copy[k] = st[k]; });
+      if (e) { if (e.args) copy.args = e.args; if (e.part != null) copy.part = e.part; }
+      out.steps.push(copy);
+    });
+    return out;
+  }
+
+  function answer(S, r, button) {
+    var A = answerState(S, r);
+    var body = { answer: A.choice };
+    if (A.choice === 'other') {
+      if (!A.reply.trim()) { A.error = 'Write the reply ' + (r.ask.asker || 'the player') + ' gets.'; draw(S); return; }
+      body.reply = A.reply.trim();
+    }
+    if (A.choice === 'yes') {
+      var ed = editsFor(r.ask.later, A.values);
+      if (ed.error) { A.error = ed.error; draw(S); return; }
+      if (ed.steps.length) body.steps = ed.steps;
+    }
+    S.busy = true;
+    if (Chronicle.working) Chronicle.working(button, true);
+    api(S.cfg.endpoint + '/runs/' + encodeURIComponent(r.id) + '/answer', 'POST', JSON.stringify(body), csrf(S)).then(function (done) {
+      delete S.answers[r.id];
+      var failed = done && done.status === 'failed';
+      var after = A.choice === 'yes' && !failed && done.status !== 'held' ? browserSteps(S, laterRun(r, body.steps)) : Promise.resolve([]);
+      return after.then(function (extra) {
+        var said = A.choice === 'yes' ? 'Sent: yes.' : A.choice === 'no' ? 'Sent: no.' : 'Reply sent.';
+        S.status = said + (failed ? ' ' + (done.lines || []).slice(-1)[0] : '') + (extra.length ? ' ' + extra.join(' ') : '');
+        S.statusErr = failed;
+      });
+    }).catch(function (e) {
+      // A refused change keeps the card open with the owner's own words.
+      A.error = e.message;
+    }).then(function () { S.busy = false; return reload(S); });
   }
 
   function waitingCard(S, r) {

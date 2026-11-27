@@ -337,6 +337,9 @@
       if (msg && msg.type === 'decks.changed') W.dispatchEvent(new CustomEvent('chronicle:decks-changed'));
       // Directors only; carries nothing, the moments panel fetches its own list.
       if (msg && msg.type === 'decks.moment') W.dispatchEvent(new CustomEvent('chronicle:decks-moment'));
+      // An ask to the Director was made, answered or taken back; carries only
+      // its id and state, the drawer and the asks list read their own.
+      if (msg && (msg.type === 'homebrew.ask' || msg.type === 'homebrew.answered')) W.dispatchEvent(new CustomEvent('chronicle:homebrew-asks', { detail: msg.payload || null }));
     });
     sock.addEventListener('close', function () {
       if (!self.alive) return;

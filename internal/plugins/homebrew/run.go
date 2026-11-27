@@ -20,8 +20,11 @@ const (
 	RunHeld      = "held" // waits in the Homebrew drawer for the Director
 	RunFailed    = "failed"
 	RunDismissed = "dismissed"
-	RunStopped   = "stopped" // rules kept setting each other off
-	RunRunning   = "running" // claimed by a Director pressing Run
+	RunStopped   = "stopped"   // rules kept setting each other off
+	RunRunning   = "running"   // claimed by a Director pressing Run or answering
+	RunDeclined  = "declined"  // the Director said no to an ask
+	RunReplied   = "replied"   // the Director wrote back instead of answering yes
+	RunWithdrawn = "withdrawn" // the asker took the ask back
 )
 
 const (
@@ -74,6 +77,12 @@ type Run struct {
 	CreatedAt time.Time
 	DoneBy    string
 	DoneAt    *time.Time
+	// Asked is the "Ask the Director" step the run waits at, or last waited
+	// at, counted from 1; 0 for a run that never asked. A held run with it
+	// set is waiting for an answer rather than for Run.
+	Asked int
+	// Answer is the Director's answer to that ask, once given.
+	Answer *Answer
 }
 
 // RunStore keeps runs.
@@ -85,6 +94,9 @@ type RunStore interface {
 	FinishRun(ctx context.Context, r Run, from string) (bool, error)
 	// ListRuns lists held runs, or finished ones, newest first.
 	ListRuns(ctx context.Context, campaignID string, held bool, limit int) ([]Run, error)
+	// ListAsks lists the runs one person set off that asked the Director,
+	// waiting or answered, newest first.
+	ListAsks(ctx context.Context, campaignID, createdBy string, limit int) ([]Run, error)
 	// PruneRuns deletes all but the newest keep finished runs.
 	PruneRuns(ctx context.Context, campaignID string, keep int) error
 }
@@ -107,6 +119,9 @@ type RunView struct {
 	// action can read its part and act on that page.
 	RecipeID string `json:"recipeId,omitempty"`
 	Scope    string `json:"scope,omitempty"`
+	// Ask is set on a run that asked the Director: who asked, for what, the
+	// steps an answer may change, and the answer once given.
+	Ask *AskDetail `json:"ask,omitempty"`
 }
 
 // RunStep is one action of a held run.
@@ -203,8 +218,7 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 				return s.saveRun(ctx, run)
 			}
 			b.left--
-			if s.holds(rule) {
-				run.Status = RunHeld
+			if s.holds(rule) || s.asksAt(rule, 0) >= 0 {
 				if waiting == nil {
 					held, err := s.runs.ListRuns(ctx, campaignID, true, maxHeldRuns)
 					if err != nil {
@@ -221,13 +235,24 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 					continue
 				}
 				*waiting = append(*waiting, run)
+			}
+			if s.holds(rule) {
+				run.Status = RunHeld
 			} else {
-				run.Status, run.Lines = s.execute(ctx, campaignID, r, rule, f.Scope, f.Payload, v)
-				now := run.CreatedAt
-				run.DoneBy, run.DoneAt = v.UserID, &now
+				var at int
+				run.Status, run.Lines, at = s.execute(ctx, campaignID, r, rule, 0, f.Scope, f.Payload, v)
+				if run.Status == RunHeld {
+					run.Asked = at + 1
+				} else {
+					now := run.CreatedAt
+					run.DoneBy, run.DoneAt = v.UserID, &now
+				}
 			}
 			if err := s.saveRun(ctx, run); err != nil {
 				return err
+			}
+			if run.Status == RunHeld && run.Asked > 0 {
+				s.asked(ctx, run)
 			}
 			wrote = true
 		}
@@ -302,16 +327,33 @@ func (s *service) recipesFor(ctx context.Context, campaignID, recipeID string) (
 // holds says whether a rule waits for the Director: it is timed for later,
 // carries a test only a person can judge, does something the server can't, or
 // uses an action that is the Director's call even though the server can run it.
+//
+// Only the steps before the first ask count: the ask itself stops the run
+// for the Director, so what comes after it is the Director's to allow.
 func (s *service) holds(rule Rule) bool {
 	if rule.Timing != TimingNow || rule.When.Test != "" {
 		return true
 	}
 	for _, d := range rule.Then {
-		if a, ok := s.reg.action(d.Action); !ok || a.ClientRun || a.Run == nil || a.Waits {
+		a, ok := s.reg.action(d.Action)
+		if ok && a.Asks {
+			return false
+		}
+		if !ok || a.ClientRun || a.Run == nil || a.Waits {
 			return true
 		}
 	}
 	return false
+}
+
+// asksAt is the first "Ask the Director" step at or after from, or -1.
+func (s *service) asksAt(rule Rule, from int) int {
+	for i := from; i < len(rule.Then); i++ {
+		if a, ok := s.reg.action(rule.Then[i].Action); ok && a.Asks {
+			return i
+		}
+	}
+	return -1
 }
 
 // waitsOnPurpose says whether a rule has an action that is the Director's
@@ -325,17 +367,23 @@ func (s *service) waitsOnPurpose(rule Rule) bool {
 	return false
 }
 
-// execute runs a rule's actions in order and stops at the first that fails.
-// Actions the server can't run are listed for the Director. payload is what
-// set the rule off, kept with a held run so its note is the same later.
-func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, scope string, payload json.RawMessage, v Viewer) (string, []string) {
-	lines := []string{}
+// execute runs a rule's actions in order from step from and stops at the
+// first that fails. Actions the server can't run are listed for the
+// Director. payload is what set the rule off, kept with a held run so its
+// note is the same later. A run that reaches an "Ask the Director" step stops
+// there, held, and the step's index comes back as at (-1 otherwise).
+func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, from int, scope string, payload json.RawMessage, v Viewer) (status string, lines []string, at int) {
+	lines = []string{}
 	note := s.note(r, rule, payload)
-	for _, d := range rule.Then {
+	for i := from; i < len(rule.Then); i++ {
+		d := rule.Then[i]
 		a, ok := s.reg.action(d.Action)
 		if !ok {
 			lines = append(lines, "An action this server no longer has was skipped.")
 			continue
+		}
+		if a.Asks {
+			return RunHeld, lines, i
 		}
 		if a.ClientRun || a.Run == nil {
 			lines = append(lines, a.Label+": "+map[bool]string{true: "run in your browser", false: "for you to do"}[a.ClientRun]+".")
@@ -346,20 +394,20 @@ func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule
 			p, ok := partByKey(r.Doc, d.Part)
 			if !ok {
 				lines = append(lines, a.Label+" did not run: its part is no longer in the recipe.")
-				return RunFailed, lines
+				return RunFailed, lines, -1
 			}
 			act.Part = &p
 		}
 		line, err := a.Run(ctx, campaignID, act)
 		if err != nil {
 			lines = append(lines, a.Label+" did not run: "+plainError(err))
-			return RunFailed, lines
+			return RunFailed, lines, -1
 		}
 		if line != "" {
 			lines = append(lines, line)
 		}
 	}
-	return RunDone, lines
+	return RunDone, lines, -1
 }
 
 // note names the rule in the line an owner writes to its own log. A rule
@@ -475,11 +523,16 @@ func (s *service) view(r Run) RunView {
 	if r.DoneAt != nil {
 		out.At = *r.DoneAt
 	}
+	if r.Asked > 0 {
+		out.Ask = s.askDetail(r)
+	}
 	if r.Status != RunHeld {
 		return out
 	}
 	out.RecipeID, out.Scope = r.RecipeID, r.Scope
 	switch {
+	case r.Asked > 0:
+		out.Waits = "Asks you before it goes on."
 	case r.Rule.When.Test != "":
 		out.Waits = "Only if: " + r.Rule.When.Test
 	case r.Rule.Timing == TimingEncounterEnd:
@@ -538,10 +591,12 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 			return nil, errInternal(err)
 		}
 		for _, r := range rs {
+			rv := s.view(r)
+			s.fillAsk(ctx, campaignID, &rv, recipes)
 			if held {
-				out.Waiting = append(out.Waiting, s.view(r))
+				out.Waiting = append(out.Waiting, rv)
 			} else {
-				out.Recent = append(out.Recent, s.view(r))
+				out.Recent = append(out.Recent, rv)
 			}
 		}
 	}
@@ -634,11 +689,15 @@ func (s *service) finish(ctx context.Context, r Run, from, status string, lines 
 	return &out, nil
 }
 
-// RunHeld runs a waiting rule now, as it was when its event fired.
+// RunHeld runs a waiting rule now, as it was when its event fired. A rule
+// that is asking is answered instead, so Run can't skip the question.
 func (s *service) RunHeld(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error) {
 	r, err := s.heldRun(ctx, campaignID, id, v)
 	if err != nil {
 		return nil, err
+	}
+	if r.Asked > 0 {
+		return nil, errConflictMsg("this rule is asking you; answer it instead")
 	}
 	recipe := Recipe{ID: r.RecipeID, Name: r.RecipeName}
 	if got, ok, err := s.repo.Get(ctx, campaignID, r.RecipeID); err != nil {
@@ -651,15 +710,26 @@ func (s *service) RunHeld(ctx context.Context, campaignID, id string, v Viewer) 
 		return nil, err
 	}
 	ctx, _ = withBudget(ctx)
-	status, lines := s.execute(ctx, campaignID, recipe, r.Rule, r.Scope, r.Payload, v)
-	return s.finish(ctx, r, RunRunning, status, lines, v)
+	status, lines, at := s.execute(ctx, campaignID, recipe, r.Rule, 0, r.Scope, r.Payload, v)
+	if status == RunHeld {
+		r.Asked = at + 1
+	}
+	out, err := s.finish(ctx, r, RunRunning, status, lines, v)
+	if err == nil && status == RunHeld {
+		s.asked(ctx, r)
+	}
+	return out, err
 }
 
-// Dismiss sets a waiting rule aside without running it.
+// Dismiss sets a waiting rule aside without running it. An ask set aside
+// reads to its asker as a no.
 func (s *service) Dismiss(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error) {
 	r, err := s.heldRun(ctx, campaignID, id, v)
 	if err != nil {
 		return nil, err
+	}
+	if r.Asked > 0 {
+		return s.Answer(ctx, campaignID, id, v, AnswerInput{Answer: AnswerNo})
 	}
 	return s.finish(ctx, r, RunHeld, RunDismissed, []string{"Set aside."}, v)
 }

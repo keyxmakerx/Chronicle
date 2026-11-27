@@ -1,0 +1,48 @@
+/* asks.css: a person's own asks to the Director (homebrew_asks.js). It is
+ * a list on a page, so it takes the theme tokens and the campaign's accent;
+ * each ask is a sheet because it is a live thing the player is waiting on.
+ * Green, amber and red mean state only: amber is the ask still waiting. */
+.hba {
+  --hba-ink: var(--surface-text, var(--color-text-primary)); --hba-muted: var(--surface-text-muted, var(--color-text-muted));
+  --hba-line: var(--surface-border, var(--color-border)); --hba-tint: var(--surface-alt, var(--color-bg-tertiary));
+  --hba-panel: var(--surface-raised, var(--color-bg-primary));
+  --hba-acc: var(--annals-acc, var(--color-accent));
+  --hba-wait: rgb(var(--color-warn-rgb, 217 119 6));
+  --hba-bad: rgb(var(--color-danger-rgb, 220 38 38));
+  --hba-ok: rgb(var(--color-ok-rgb, 22 163 74));
+  max-width: 40rem; color: var(--hba-ink); font-size: 14px;
+}
+.hba *, .hba *::before, .hba *::after { box-sizing: border-box; }
+.hba :focus-visible { outline: 2px solid var(--hba-acc); outline-offset: 2px; }
+.hba p { margin: 0; }
+.hba-loading, .hba-muted { color: var(--hba-muted); font-size: 12.5px; }
+.hba-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.hba-card {
+  display: grid; justify-items: start; gap: 6px; padding: 14px 16px; border: 1px solid var(--hba-line); border-radius: 12px;
+  background: var(--hba-panel); box-shadow: 0 1px 2px rgb(0 0 0 / .06);
+}
+.hba-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
+.hba-pill {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 4px 12px; border: 1px solid var(--hba-line);
+  border-radius: 999px; font-size: 13px;
+}
+.hba-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--hba-muted); }
+.hba-pill.hba-wait::before { background: var(--hba-wait); }
+.hba-pill.hba-ok::before { background: var(--hba-ok); }
+.hba-pill.hba-bad::before { background: var(--hba-bad); }
+.hba-pill.hba-note::before { background: var(--hba-acc); }
+.hba-note { justify-self: stretch; margin-top: 6px !important; padding-top: 10px; border-top: 1px solid var(--hba-line); color: var(--hba-muted); font-size: 13px; }
+.hba-quiet {
+  min-height: 32px; padding: 4px 0; border: 0; background: none; color: var(--hba-acc); font: inherit; font-weight: 600; cursor: pointer;
+}
+.hba-quiet:hover:not(:disabled) { text-decoration: underline; }
+.hba-quiet:disabled { opacity: .55; cursor: default; }
+.hba-said {
+  justify-self: stretch; display: grid; gap: 4px; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--hba-line);
+  border-radius: 10px; background: var(--hba-tint);
+}
+.hba-said-h { color: var(--hba-muted); font-size: 12.5px; }
+.hba-said-t { font-size: 14.5px; }
+.hba-changes { margin: 0; padding-left: 18px; font-size: 14px; }
+.hba-err { color: var(--hba-bad); font-size: 12.5px; }
+@media (max-width: 480px) { .hba-quiet { min-height: 44px; } }
