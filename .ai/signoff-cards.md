@@ -43,6 +43,11 @@ Options:
 - `pic` is that option's own mockup. **Every option has one** on a look card;
   the page then shows Today and each letter in one box and animates what moves.
 - `rec: true` on exactly one option. It is pre-selected and marked "my pick".
+- When two options are not exclusive, add one that combines them ("Both",
+  "A on desktop, B on phones"). The page adds "Neither of these" to every
+  question by itself, so don't write a neither option; do write the real
+  alternative if "neither" would mean something specific (such as "leave it
+  as it is today").
 - `fresh: true` on at least one option that is a genuinely new approach, not
   the familiar version redrawn. Hard questions get research outside TTRPG
   tools first (`help` is a good place for one line of what others do).
