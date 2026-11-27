@@ -736,6 +736,7 @@ func (k CalendarKind) existing(ctx context.Context, campaignID string, a Actor) 
 func (k CalendarKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
 	p, _ := k.plan(ctx, campaignID, a, r)
 	p.Warnings = append(p.Warnings, unknownKeyWarnings(r, calendarKeys, KindCalendar)...)
+	p.Warnings = append(p.Warnings, listKeyWarnings(r)...)
 	return p
 }
 
