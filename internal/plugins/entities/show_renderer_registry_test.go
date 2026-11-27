@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"sync"
@@ -295,5 +296,62 @@ func TestMakeWidgetMountRenderer_EscapesAttributes(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "<script>") {
 		t.Errorf("script tag leaked through escaping: %s", buf.String())
+	}
+}
+
+// A visitor's seed copy of a page leaves out every restricted value, the
+// category's and those of fields added to just this page alike, and holds
+// no values at all when the category is unknown.
+func TestVisitorSeed_LeavesOutRestrictedValues(t *testing.T) {
+	visitor := &campaigns.CampaignContext{MemberRole: campaigns.RoleNone}
+	et := &EntityType{Fields: []FieldDefinition{
+		{Key: "lore", Type: "text"},
+		{Key: "gm_notes", Type: "text", GMOnly: true},
+		{Key: "backstory", Type: "text", OwnerOnly: true},
+	}}
+	added := &FieldOverrides{Added: []FieldDefinition{
+		{Key: "secret_weakness", Type: "text", GMOnly: true},
+		{Key: "diary", Type: "text", OwnerOnly: true},
+		{Key: "nickname", Type: "text"},
+	}}
+	data := map[string]any{
+		"lore": "public", "gm_notes": "x", "backstory": "x",
+		"secret_weakness": "x", "diary": "x", "nickname": "Red",
+	}
+	tests := []struct {
+		name string
+		et   *EntityType
+		want []string
+	}{
+		{"with its category", et, []string{"lore", "nickname"}},
+		{"category not loaded sends no values", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seed := visitorSeed(EntityShowRenderContext{
+				CC:         visitor,
+				Entity:     &Entity{ID: "e1", Name: "Ogre", FieldsData: data, FieldOverrides: added},
+				EntityType: tt.et,
+			})
+			var got struct {
+				FieldsData map[string]any `json:"fields_data"`
+			}
+			if err := json.Unmarshal([]byte(seed), &got); err != nil {
+				t.Fatalf("seed is not JSON: %v (%q)", err, seed)
+			}
+			if len(got.FieldsData) != len(tt.want) {
+				t.Errorf("fields_data = %v, want only %v", got.FieldsData, tt.want)
+			}
+			for _, k := range tt.want {
+				if _, ok := got.FieldsData[k]; !ok {
+					t.Errorf("fields_data lacks %q: %v", k, got.FieldsData)
+				}
+			}
+			for _, k := range []string{"secret_weakness", "diary"} {
+				if _, ok := got.FieldsData[k]; ok {
+					t.Errorf("page-added restricted field %q reached the visitor: %v", k, got.FieldsData)
+				}
+			}
+		})
 	}
 }
