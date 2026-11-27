@@ -2606,6 +2606,10 @@
         aliveT = setInterval(function () {
           var MR = window.MotionRest, sp = MR ? MR.speed() : 1;
           svg.getAnimations({ subtree: true }).concat(pel.getAnimations({ subtree: true }), cel.getAnimations({ subtree: true })).forEach(function (a) {
+            // Only loops: a one-off fade (the lamps' veil lifting) paused
+            // halfway would stay over the room for good.
+            var tm = a.effect && a.effect.getTiming ? a.effect.getTiming() : null;
+            if (!tm || tm.iterations !== Infinity) return;
             if (sp === 0) { if (a.playState === 'running') a.pause(); return; }
             // Setting a rate restarts the animation's timing in some browsers, so only when it changes.
             var r = Math.max(.02, sp); if (a.playbackRate !== r) a.playbackRate = r;
