@@ -29,7 +29,7 @@ globalThis.sessionStorage = {
   setItem: (k, v) => mem.set(k, String(v)),
   removeItem: (k) => mem.delete(k),
 };
-globalThis.location = { pathname: '/campaigns/abc/entities', search: '?page=2' };
+globalThis.location = { origin: 'https://chronicle.test', pathname: '/campaigns/abc/entities', search: '?page=2' };
 vm.runInThisContext(src);
 const C = globalThis.Chronicle;
 
@@ -145,6 +145,14 @@ test('a way out that names a campaign keeps to that campaign', () => {
   C.siteAdminArrive({ querySelector: () => null });
   delete globalThis.document.querySelectorAll;
   assert.equal(near.href, '/campaigns/ab', 'an id that only starts the path is not that campaign');
+  for (const odd of ['/campaigns/abc/../xyz', '/campaigns/abc/%2e%2e/xyz']) {
+    const b = mk('abc');
+    mem.set('chronicle-admin-return', odd);
+    globalThis.document.querySelectorAll = (q) => (q === '[data-admin-back]' ? [b] : []);
+    C.siteAdminArrive({ querySelector: () => null });
+    delete globalThis.document.querySelectorAll;
+    assert.equal(b.href, '/campaigns/abc', `${odd} resolves outside the campaign`);
+  }
 });
 
 test('no view transitions: the way out is marked and the link goes at once', () => {
