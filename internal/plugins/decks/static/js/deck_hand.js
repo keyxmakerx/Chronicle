@@ -26,7 +26,9 @@
 
   var LIVE_EVENT = 'chronicle:decks-changed';
   var REFRESH_WAIT = 150; // ms live messages are gathered before one refetch
-  var TURNED_DOWN = 'Your Director turned that down. You can ask again.';
+  // Said in the campaign's own word for its game master, as the rest of the
+  // Table drawer is.
+  function turnedDownLine() { return 'Your ' + (C.gmTerm ? C.gmTerm() : 'GM') + ' turned that down. You can ask again.'; }
   var REFRESH_FAIL = 'Your hand could not be refreshed.';
   var HEADERS = { 'HX-Request': 'true', 'Accept': 'text/html, application/json' };
 
@@ -250,7 +252,7 @@
             var p = document.createElement('p');
             p.className = 'dkh-note';
             p.setAttribute('data-dkh-told', '');
-            p.textContent = TURNED_DOWN + ' ';
+            p.textContent = turnedDownLine() + ' ';
             var x = document.createElement('button');
             x.type = 'button';
             x.className = 'dkh-word';
@@ -569,5 +571,5 @@
     }
   });
 
-  window.DeckHand = { urls: urls, words: words, moveFor: moveFor, waitingIn: waitingIn, copiesIn: copiesIn, heldIn: heldIn, turnedDown: turnedDown, TURNED_DOWN: TURNED_DOWN };
+  window.DeckHand = { urls: urls, words: words, moveFor: moveFor, waitingIn: waitingIn, copiesIn: copiesIn, heldIn: heldIn, turnedDown: turnedDown, turnedDownLine: turnedDownLine };
 })();

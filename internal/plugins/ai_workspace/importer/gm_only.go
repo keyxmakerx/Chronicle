@@ -54,8 +54,14 @@ func GMOnlyPartsAfter(e *entities.Entity, incomingHTML string) GMOnlyParts {
 
 // GMOnlyPartsForMarkdown is GMOnlyPartsAfter for the AI's raw page body, used
 // where the review screen has no converted HTML yet. rollTables resolves the
-// body's {roll{Name}} lines as the commit will.
+// body's {roll{Name}} lines as the commit will. A body with no text loses
+// nothing: the committer keeps the page's text for it (keepText in
+// commitUpdate), so measuring it as a replace would warn about a removal that
+// never happens.
 func GMOnlyPartsForMarkdown(e *entities.Entity, body string, rollTables map[string]string) GMOnlyParts {
+	if strings.TrimSpace(body) == "" {
+		return GMOnlyParts{}
+	}
 	links := NewPageLinks(context.Background(), noPages{}, "-", Viewer{Role: int(campaigns.RoleOwner)})
 	links.SetRollTables(rollTables)
 	html, err := MarkdownToHTML(body, WithPageLinks(links), WithKeptRollers(e), func(o *renderOpts) { o.markers, o.passages = true, true })

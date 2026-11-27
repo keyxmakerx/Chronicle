@@ -50,9 +50,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -3163,31 +3163,6 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// Boot reconcilers for entity_types fields, run SERIALLY in a single
-	// goroutine. They write only the fields column; the one layout_json
-	// reconciler (placePageExtrasOnce) runs synchronously later in boot, so
-	// no two reconcilers rewrite the same layout. A new layout_json
-	// reconciler must run beside that one, not in a goroutine of its own.
-	// Each step is idempotent; a failure is logged and the chain continues.
-	go func() {
-		ctx := context.Background()
-
-		// Converge gm_only field flags from installed system manifests onto
-		// existing types so the GM-field egress filter covers characters
-		// created before the manifest carried gm_only.
-		reconcileFieldGMFlags(ctx, entityService)
-
-		// Same convergence for owner_only field flags, so backstory-style
-		// fields become owner-private on types created before the manifest
-		// carried owner_only.
-		reconcileFieldOwnerOnlyFlags(ctx, entityService)
-
-		// Same for play blocks, so an installed system's play declarations
-		// reach types created before it declared them.
-		reconcileFieldPlay(ctx, entityService)
-		reconcileFieldChecks(ctx, entityService)
-	}()
-
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)
@@ -3635,6 +3610,15 @@ func (a *App) RegisterRoutes() {
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
 	a.loadSystemsFromPackages(packages.NewPackageRepository(a.DB))
+	// Converge field marks from the systems just loaded onto existing types.
+	// It must start after the package load above, or it reads a registry
+	// without the packaged systems and a restart converges nothing for them.
+	// It writes only the fields column; the one layout_json reconciler
+	// (placePageExtrasOnce) runs synchronously later in boot, so no two
+	// reconcilers rewrite the same layout, and a new layout_json reconciler
+	// must run beside that one, not in a goroutine of its own. Detached so
+	// a slow query can't stall startup.
+	go reconcileFieldsFromSystems(context.Background(), entityService)
 	sysAddonInfos := systems.AddonInfos()
 	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
 	for _, info := range sysAddonInfos {
@@ -3756,10 +3740,7 @@ func (a *App) RegisterRoutes() {
 		// freshly installed/updated manifest is in the registry, so an
 		// updated system's flag changes take effect on existing types
 		// without a restart — mirrors the boot-time reconcile.
-		reconcileFieldGMFlags(context.Background(), entityService)
-		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
-		reconcileFieldPlay(context.Background(), entityService)
-		reconcileFieldChecks(context.Background(), entityService)
+		reconcileFieldsFromSystems(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
@@ -4796,11 +4777,12 @@ func (a *App) RegisterRoutes() {
 	// The stash directory caches page-type facts for a few seconds; drop them
 	// when the owner changes the lists so the change shows at once.
 	characterListService.SetChangeHook(stashDirectory.Forget)
+	panelActor := &armoryCharacterActorAdapter{svc: entityService}
 	stashSvc := armory.NewStashService(armory.StashDeps{
 		Repo:       stashRepo,
 		Directory:  stashDirectory,
 		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
-		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Actor:      panelActor,
 		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
 		Relations:  &armoryHasItemAdapter{svc: relService},
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
@@ -5055,6 +5037,15 @@ func (a *App) RegisterRoutes() {
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {
 			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
+		},
+		// The panel answers empty to anyone who can't act for the hero
+		// (the stash service's canAct: Scribe and up, else the actor rule).
+		Draws: func(ctx context.Context, campaignID, entityID, userID string, role int) bool {
+			if role >= int(campaigns.RoleScribe) {
+				return true
+			}
+			ok, err := panelActor.CanUserActAsBuyer(ctx, campaignID, entityID, userID, role)
+			return err == nil && ok
 		},
 	})
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
@@ -6166,6 +6157,7 @@ func (a *App) RegisterRoutes() {
 	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
@@ -6225,7 +6217,11 @@ func (a *App) RegisterRoutes() {
 	// The Director team's pins lead every list, after the rules have narrowed it.
 	choicePinSvc := systems.NewChoicePinService(systems.NewChoicePinRepository(a.DB), characterChoiceSvc)
 	characterChoiceSvc.SetChoicePins(choicePinSvc)
+	// Entry writes reach a connected Foundry world; the bus is set below,
+	// once it exists.
+	entryChanges := &entryChangePublisher{}
 	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryChanges(entryChanges),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
 		systems.WithEntryRules(choiceRuleSvc),
 		systems.WithEntryLooks(cardLookSvc),
@@ -6430,6 +6426,7 @@ func (a *App) RegisterRoutes() {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
+			rememberCampaign(c, cc)
 
 			// Campaign visual customization from settings.
 			campaignSettings := cc.Campaign.ParseSettings()
@@ -6470,12 +6467,12 @@ func (a *App) RegisterRoutes() {
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
 
-					SheetStyle:    ap.SheetStyle,
-					CraftArt:      ap.CraftArt,
-					PageLook:      ap.PageLook,
-					StyleKit:      ap.StyleKit,
-					Entrance:      ap.Entrance,
-					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
+					SheetStyle:  ap.SheetStyle,
+					CraftArt:    ap.CraftArt,
+					PageLook:    ap.PageLook,
+					StyleKit:    ap.StyleKit,
+					Entrance:    ap.Entrance,
+					MomentSheen: ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 					BuilderLook:   ap.BuilderLook,
@@ -6749,6 +6746,13 @@ func (a *App) RegisterRoutes() {
 				}
 				ctx = layouts.SetUserCampaigns(ctx, navCampaigns)
 			}
+			// The campaign this device was last in, as the way back from
+			// Account settings and Site admin.
+			if ck, err := c.Request().Cookie(lastCampaignCookie); err == nil {
+				if rc := returnCampaign(reqCtx, campaignService, ck.Value, session.UserID, layouts.GetUserCampaigns(ctx)); rc != nil {
+					ctx = layouts.SetReturnCampaign(ctx, rc)
+				}
+			}
 		}
 
 		// CSRF token for forms.
@@ -6884,6 +6888,7 @@ func (a *App) RegisterRoutes() {
 	// The recording wrapper appends allowlisted events to the change feed
 	// before they reach the hub, so no publisher can forget to record.
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
+	entryChanges.bus = wsEventBus
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	// The quests due-date events follow a page's visibility, so the entity
@@ -7143,18 +7148,20 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
 	})
+	var rollsPower *rollsPowerAdapter     // nil while the roll log is degraded; layers join it later
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
-		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
+		rollsPower = &rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService}
+		rollsHandler.SetPowerRolls(rollsPower)
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
@@ -7274,6 +7281,9 @@ func (a *App) RegisterRoutes() {
 		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages},
 			transformations.WithNotifier(decksLayersNotifier{next: &transformationsLayersPublisher{bus: wsEventBus}, poke: decksWatch.Poke}))
 		decksFacts.layers = layersSvc
+		if rollsPower != nil {
+			rollsPower.layers, rollsPower.addons = layersSvc, addonService
+		}
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
 		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
@@ -7480,6 +7490,7 @@ func (a *App) RegisterRoutes() {
 		PlayerNotes:     entityNotesService,
 		NoteAccess:      aiNoteAccessAPI,
 		Addons:          addonService,
+		AddonLister:     &addonListerAdapter{svc: addonService},
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
 		Boards:          aiBoards,
