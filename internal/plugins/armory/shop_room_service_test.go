@@ -158,3 +158,66 @@ func TestShopRoomService_SaveRoom(t *testing.T) {
 		})
 	}
 }
+
+// fakePictures knows which media ids are pictures of which campaign.
+type fakePictures struct {
+	of  map[string]string // mediaID -> campaignID
+	err error
+}
+
+func (f fakePictures) IsCampaignPicture(_ context.Context, campaignID, mediaID string) (bool, error) {
+	return f.of[mediaID] == campaignID && f.of[mediaID] != "", f.err
+}
+
+func TestShopRoomService_SaveRoom_Picture(t *testing.T) {
+	shops := fakeShops{shops: map[string]string{"shop-1": "camp-1"}}
+	other := "1b9c2f4e-1111-4222-8333-444455556666"
+	pictures := fakePictures{of: map[string]string{testPictureID: "camp-1", other: "camp-2"}}
+	withPic := func(id string) []byte {
+		return withPicture(map[string]any{"id": id, "on": "wall", "fit": "fill"})
+	}
+	cases := []struct {
+		name    string
+		checker ShopRoomPictureChecker
+		body    []byte
+		wantErr int
+	}{
+		{"this campaign's picture is kept", pictures, withPic(testPictureID), 0},
+		{"another campaign's picture is refused", pictures, withPic(other), http.StatusBadRequest},
+		{"an unknown picture is refused", pictures, withPic("2b9c2f4e-1111-4222-8333-444455556666"), http.StatusBadRequest},
+		{"without a checker a picture is refused", nil, withPic(testPictureID), http.StatusBadRequest},
+		{"without a checker a room with no picture saves", nil, withCounter(func(map[string]any) {}), 0},
+		{"a failed check refuses", fakePictures{err: errors.New("db down")}, withPic(testPictureID), http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeShopRoomRepo{}
+			svc := NewShopRoomService(repo, shops, nil)
+			if tc.checker != nil {
+				SetShopRoomPictures(svc, tc.checker)
+			}
+			_, err := svc.SaveRoom(context.Background(), "camp-1", "shop-1", "owner-1", tc.body)
+			if tc.wantErr == 0 {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if repo.upserts != 1 {
+					t.Errorf("upserts = %d, want 1", repo.upserts)
+				}
+				return
+			}
+			if repo.upserts != 0 {
+				t.Errorf("a refused room was stored")
+			}
+			if tc.wantErr == http.StatusInternalServerError {
+				if err == nil || isStatus(err, http.StatusBadRequest) {
+					t.Fatalf("want a server error, got %v", err)
+				}
+				return
+			}
+			if !isStatus(err, tc.wantErr) {
+				t.Fatalf("want %d, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}

@@ -276,6 +276,9 @@ func (h *Handler) CreateHero(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := addHeroNumbers(plan, req, fields); err != nil {
+		return err
+	}
 	about, err := heroAboutValues(heroAbout(target), req.About)
 	if err != nil {
 		return err

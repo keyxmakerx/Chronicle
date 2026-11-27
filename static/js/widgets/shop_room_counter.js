@@ -546,6 +546,13 @@
   var CM_START_FOR = { forge: 1, apothecary: 2, library: 3, market: 4 };
   function starterFor(type) { return CM_STARTERS[Object.prototype.hasOwnProperty.call(CM_START_FOR, type) ? CM_START_FOR[type] : 0]; }
   function cmPick(v, list, d) { return list.indexOf(v) >= 0 ? v : d; }
+  /* The owner's own picture: a media id (never a URL), where it goes and how
+     it fills that space. Must match the sets beside NormalizeShopRoomLayout. */
+  var CM_PIC = { on: ['wall', 'outside'], fit: ['fill', 'fit', 'repeat'] };
+  function cmPic(p) {
+    if (!p || typeof p !== 'object' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(p.id || ''))) return null;
+    return { id: String(p.id).toLowerCase(), on: cmPick(p.on, CM_PIC.on, 'wall'), fit: cmPick(p.fit, CM_PIC.fit, 'fill') };
+  }
   function cmHex(v, d) { return /^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v).toLowerCase() : d; }
   // Every field has a default and unknown values fall back, so a bad theme never breaks the room.
   function cmNorm(raw) {
@@ -553,10 +560,13 @@
     var sk = raw.skeleton && typeof raw.skeleton === 'object' ? raw.skeleton : {}, th = raw.theme && typeof raw.theme === 'object' ? raw.theme : {}, D = CM_DEFAULT, w = +th.warmth;
     var props = [];
     (Array.isArray(raw.props) ? raw.props : []).forEach(function (p) { if (CM_PROPS.indexOf(p) >= 0 && props.indexOf(p) < 0) props.push(p); });
-    return { name: String(raw.name || D.name).slice(0, 60), version: 1,
+    var out = { name: String(raw.name || D.name).slice(0, 60), version: 1,
       skeleton: { shape: cmPick(sk.shape, CM_OPT.shape, D.skeleton.shape), opening: cmPick(sk.opening, CM_OPT.opening, D.skeleton.opening), display: cmPick(sk.display, CM_OPT.display, D.skeleton.display), counter: cmPick(sk.counter, CM_OPT.counter, D.skeleton.counter) },
       theme: { wall: cmPick(th.wall, CM_OPT.wall, D.theme.wall), wood: cmHex(th.wood, D.theme.wood), cloth: cmHex(th.cloth, D.theme.cloth), accent: cmHex(th.accent, D.theme.accent), trim: cmHex(th.trim, D.theme.trim),
         light: cmPick(th.light, CM_OPT.light, D.theme.light), warmth: w >= 0 && w <= 1 ? w : D.theme.warmth, outside: cmPick(th.outside, CM_OPT.outside, D.theme.outside) }, props: props };
+    var pic = cmPic(th.picture);
+    if (pic) out.theme.picture = pic;
+    return out;
   }
   function cmRgb(c, k) { var a = hex(c); return a.map(function (v) { return Math.min(1, v / 255 * k); }); }
   // The room's one real light: base colour, glow, ambient and how far it reaches.
@@ -581,6 +591,7 @@
     t.lc = th.light === 'moonlight' ? mix(L.base, '#ffd8b0', w * .4) : mix(mix(L.base, '#c0d0ff', .55), L.base, w);
     t.amb = mix(L.amb, '#4a3a4c', w * .4); t.L = L;
     t.time = { day: '', dusk: 'dusk', night: 'night', rain: 'rain' }[th.outside];
+    t.pic = th.picture || null; skyPic = false;
     // Where the light sits: on the counter, hung from the ceiling over a stall, in the forge's mouth, or from above through the opening.
     var lx = t.mx(404), ly = 372;
     var lq = CM_LPOS[th.light]; if (typeof lq === 'function') lq = lq(sk);
@@ -626,13 +637,40 @@
   /* ---- Outside: the sky and what stands against it, for the opening to
      show or, in an open-air stall, to fill the whole back. ---- */
   var CM_SKY = { rain: ['#46536a', '#8a98ab'] };
+  /* The owner's picture, filling a box. It is never inside a baked layer: a
+     picture drawn into an image cannot load another file, so there it would
+     vanish. Where a sky is asked for inside one, the sky under it still shows.
+     The address comes from pictureSrc, which a host (the Foundry module) may
+     replace with one it can load; a picture that fails to load leaves the
+     room's own wall or sky showing. */
+  function cmPicSrc(id) {
+    var f = window.ShopRoomCounter && window.ShopRoomCounter.pictureSrc;
+    return safeUrl(typeof f === 'function' ? f(id) : '/media/' + id);
+  }
+  function cmPicArt(t, id, x, y, w, h) {
+    var p = t.pic, u = cmPicSrc(p.id), box = ' x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '"';
+    if (!u) return '';
+    if (p.fit === 'repeat') {
+      var tw = Math.round(Math.min(w, h) * .6);
+      return '<defs><pattern id="' + id + '-pat" patternUnits="userSpaceOnUse" x="' + x + '" y="' + y + '" width="' + tw + '" height="' + tw + '"><image href="' + esc(u) + '" width="' + tw + '" height="' + tw + '" preserveAspectRatio="xMidYMid slice"/></pattern></defs><rect' + box + ' fill="url(#' + id + '-pat)" data-pic="1"/>';
+    }
+    return '<defs><clipPath id="' + id + '-clip"><rect' + box + '/></clipPath></defs><image href="' + esc(u) + '"' + box + ' clip-path="url(#' + id + '-clip)" preserveAspectRatio="xMidYMid ' + (p.fit === 'fit' ? 'meet' : 'slice') + '" data-pic="1"/>';
+  }
+  // Whether the sky just drawn carries the owner's picture; the skyline drawn straight after it then stands down.
+  var skyPic = false;
   function cmSky(t, id, x, y, w, h) {
+    skyPic = !!(t.pic && t.pic.on === 'outside' && !t.air);
+    if (skyPic) return cmSkyOwn(t, id, x, y, w, h) + cmPicArt(t, id, x, y, w, h);
+    return cmSkyOwn(t, id, x, y, w, h);
+  }
+  function cmSkyOwn(t, id, x, y, w, h) {
     if (t.time !== 'rain') return skyArt(id, x, y, w, h, t.time);
     var c = CM_SKY.rain, r = rng(13), s = '<defs>' + lin(id, 1, [[0, c[0]], [1, c[1]]]) + '</defs><rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#' + id + ')"/>', i;
     for (i = 0; i < 6; i++) s += '<ellipse cx="' + f1(x + r() * w) + '" cy="' + f1(y + h * (.08 + r() * .4)) + '" rx="' + f1(w * (.14 + r() * .12)) + '" ry="' + f1(h * (.05 + r() * .04)) + '" fill="#2c3648" opacity="' + f1(.28 + r() * .22) + '" filter="url(#src-blur14)"/>';
     return s;
   }
   function cmSkyline(x, y, w, h, col, seed) {
+    if (skyPic) return '';
     var r = rng(seed || 5), s = '', cx = x, bw, bh;
     while (cx < x + w) {
       bw = 26 + r() * 36; bh = 20 + r() * h * .5;
@@ -1302,9 +1340,11 @@
       if (t.sk.opening === 'none' && !t.air) { var wx = t.mir ? 1200 - 1018 : 806; s += '<rect class="cm-slot" data-k="window" x="' + wx + '" y="86" width="212" height="196" rx="9"/><text class="cm-slotl" x="' + (wx + 8) + '" y="104">Press to add a window</text>'; }
       return s + '</g>';
     }
+    // The owner's picture as the back wall (or, in a room open to the air, the whole back), over the drawn wall and under everything standing in front of it.
+    function picWall() { return t.pic && (t.pic.on === 'wall' || t.air) ? '<g data-pic-wall="1" pointer-events="none">' + cmPicArt(t, 'cm-picw', -150, -80, 1500, 525) + '</g>' : ''; }
     function svg() {
       var wall = SHAPES[t.sk.shape](t), open = t.air ? '' : cmM(t, OPENINGS[t.sk.opening](t)), lane = P['steam-cart'] ? PROPS['steam-cart'](t, P['steam-cart']) : '';
-      return '<rect width="1200" height="700" fill="#0a0705"/><g data-depth=".55"><rect x="-300" y="440" width="1800" height="460" fill="url(#src-wallfoot)"/><g data-bake="wall">' + wall + '</g>' +
+      return '<rect width="1200" height="700" fill="#0a0705"/><g data-depth=".55"><rect x="-300" y="440" width="1800" height="460" fill="url(#src-wallfoot)"/><g data-bake="wall">' + wall + '</g>' + picWall() +
         (t.air && cmWet(t) ? cmRainIn(t, -300, -100, 1800, 560, 7) : '') + open + lane +
         (LG.bake ? '<g data-bake="forge">' + LG.bake + '</g>' : '') + (LG.back || '') + (LG.hung ? cmLanterns(t, true) : '') +
         '<circle cx="' + LP.x + '" cy="' + LP.y + '" r="' + Math.round(t.L.reach * .55) + '" fill="url(#cm-glow)" data-flick=".32"/>' + (LG.moon ? '<circle cx="' + LP.x + '" cy="' + (LP.y + 40) + '" r="320" fill="url(#cm-glow)" opacity=".5" data-flick=".3"/>' : '') +
@@ -2206,7 +2246,7 @@
   function call(host, fn, a) { var c = host && host._counter; return c ? c[fn](a) : false; }
   window.ShopRoomCounter = {
     render: render, layout: layout, starters: CM_STARTERS, starterFor: starterFor, normalise: cmNorm,
-    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside }, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
+    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside }, picture: CM_PIC, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
     // What the parts packs are written with: the room's tables and its drawing helpers.
     kit: { CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
     sync: function (host, model) { if (host && host._counter) host._counter.update(model); },
