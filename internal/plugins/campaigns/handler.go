@@ -184,6 +184,9 @@ type Handler struct {
 	// page's own row.
 	brushPrefs   BrushPrefs
 	pageCategory PageCategoryLookup
+	// storePrefs reads the person's choice to put the top bar's Store icon
+	// away (store_prefs.go); nil leaves it shown.
+	storePrefs StorePrefs
 	// heroChangesOn says whether People's "Changing heroes" section applies
 	// to a campaign (SetHeroChanges); nil hides it everywhere.
 	heroChangesOn func(ctx context.Context, campaignID string) bool

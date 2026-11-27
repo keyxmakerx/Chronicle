@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -21,20 +22,26 @@ type ViewPrefs struct {
 	// Customize brush away. The choice is per campaign: hiding it in one
 	// leaves it shown in the rest. Newest last; never nil.
 	BrushHidden []string `json:"brushHidden"`
+	// StoreHidden lists the campaigns where this person put the top bar's
+	// Store icon away, kept exactly like BrushHidden. Newest last; never nil.
+	StoreHidden []string `json:"storeHidden"`
 }
 
 // maxBrushHidden bounds the list so a stored row cannot grow without limit;
 // past it the oldest choice is forgotten (that campaign shows the brush again).
 const maxBrushHidden = 200
 
+// maxStoreHidden bounds the Store list the same way and for the same reason.
+const maxStoreHidden = 200
+
 // HidesBrushIn reports whether the brush is put away in this campaign.
 func (p ViewPrefs) HidesBrushIn(campaignID string) bool {
-	for _, id := range p.BrushHidden {
-		if id == campaignID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.BrushHidden, campaignID)
+}
+
+// HidesStoreIn reports whether the Store icon is put away in this campaign.
+func (p ViewPrefs) HidesStoreIn(campaignID string) bool {
+	return slices.Contains(p.StoreHidden, campaignID)
 }
 
 // validBrushCampaignID accepts the shape of a campaign id (a UUID), so only
@@ -56,23 +63,46 @@ func validBrushCampaignID(id string) bool {
 // brought back in (!hidden) one campaign, leaving every other campaign as it
 // was.
 func (p ViewPrefs) WithBrushHidden(campaignID string, hidden bool) (ViewPrefs, error) {
-	if !validBrushCampaignID(campaignID) {
-		return p, apperror.NewBadRequest("invalid campaign")
+	next, err := withCampaignHidden(p.BrushHidden, campaignID, hidden, maxBrushHidden)
+	if err != nil {
+		return p, err
 	}
-	next := make([]string, 0, len(p.BrushHidden)+1)
-	for _, id := range p.BrushHidden {
+	p.BrushHidden = next
+	return p, nil
+}
+
+// WithStoreHidden returns the prefs with the Store icon put away in (hidden)
+// or brought back in (!hidden) one campaign, leaving every other campaign as
+// it was.
+func (p ViewPrefs) WithStoreHidden(campaignID string, hidden bool) (ViewPrefs, error) {
+	next, err := withCampaignHidden(p.StoreHidden, campaignID, hidden, maxStoreHidden)
+	if err != nil {
+		return p, err
+	}
+	p.StoreHidden = next
+	return p, nil
+}
+
+// withCampaignHidden adds (hidden) or removes one campaign from a per-campaign
+// "put away" list, newest last and capped at limit, always into a new slice so
+// the caller's stored list is never changed under it.
+func withCampaignHidden(list []string, campaignID string, hidden bool, limit int) ([]string, error) {
+	if !validBrushCampaignID(campaignID) {
+		return nil, apperror.NewBadRequest("invalid campaign")
+	}
+	next := make([]string, 0, len(list)+1)
+	for _, id := range list {
 		if id != campaignID {
 			next = append(next, id)
 		}
 	}
 	if hidden {
 		next = append(next, campaignID)
-		if len(next) > maxBrushHidden {
-			next = next[len(next)-maxBrushHidden:]
+		if len(next) > limit {
+			next = next[len(next)-limit:]
 		}
 	}
-	p.BrushHidden = next
-	return p, nil
+	return next, nil
 }
 
 // Allowed values per choice. The default is first so an empty or cleared
@@ -88,7 +118,7 @@ var (
 
 // DefaultViewPrefs is the look a person gets before choosing anything.
 func DefaultViewPrefs() ViewPrefs {
-	return ViewPrefs{Theme: viewThemes[0], Motion: viewMotions[0], TextSize: viewTextSizes[0], Contrast: viewContrasts[0], BrushHidden: []string{}}
+	return ViewPrefs{Theme: viewThemes[0], Motion: viewMotions[0], TextSize: viewTextSizes[0], Contrast: viewContrasts[0], BrushHidden: []string{}, StoreHidden: []string{}}
 }
 
 // UpdateViewPrefsInput is a PARTIAL update: each choice saves on its own as
@@ -174,17 +204,27 @@ func ParseViewPrefs(raw []byte) ViewPrefs {
 	// Rows from before the brush choice was per campaign carry "brush":
 	// "hidden" for the whole account. It is not read: the brush is shown
 	// again everywhere and the person hides it where they want it gone.
+	out.BrushHidden = parseCampaignHidden(stored["brushHidden"], maxBrushHidden)
+	out.StoreHidden = parseCampaignHidden(stored["storeHidden"], maxStoreHidden)
+	return out
+}
+
+// parseCampaignHidden reads one stored per-campaign "put away" list,
+// dropping duplicates and anything not shaped like a campaign id, and keeping
+// only the newest limit. A missing or wrongly typed list reads as empty.
+func parseCampaignHidden(raw json.RawMessage, limit int) []string {
 	var hidden []string
-	_ = json.Unmarshal(stored["brushHidden"], &hidden)
+	_ = json.Unmarshal(raw, &hidden)
+	out := []string{}
 	seen := map[string]bool{}
 	for _, id := range hidden {
 		if validBrushCampaignID(id) && !seen[id] {
 			seen[id] = true
-			out.BrushHidden = append(out.BrushHidden, id)
+			out = append(out, id)
 		}
 	}
-	if len(out.BrushHidden) > maxBrushHidden {
-		out.BrushHidden = out.BrushHidden[len(out.BrushHidden)-maxBrushHidden:]
+	if len(out) > limit {
+		out = out[len(out)-limit:]
 	}
 	return out
 }
