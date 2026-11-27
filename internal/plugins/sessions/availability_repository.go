@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -281,4 +282,76 @@ func (r *sessionRepository) DeleteException(ctx context.Context, campaignID, use
 		return apperror.NewNotFound("exception not found")
 	}
 	return nil
+}
+
+// RewriteAvailabilityZone stores a member's weekly hours under tz in one
+// transaction: blocks replace the old ones (already in tz), one-day changes
+// saved in relabelExceptionsFrom are relabelled tz ("" leaves them), and the
+// status row takes tz and marks the zone question answered. The answered
+// stamp is left as it is: the member confirmed a zone, not new hours.
+func (r *sessionRepository) RewriteAvailabilityZone(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock, relabelExceptionsFrom string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin availability zone tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM member_availability WHERE campaign_id = ? AND user_id = ?`,
+		campaignID, userID); err != nil {
+		return fmt.Errorf("clearing availability: %w", err)
+	}
+	const ins = `INSERT INTO member_availability
+		(id, campaign_id, user_id, day_of_week, start_minute, end_minute, state, tz, week_parity, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	now := time.Now().UTC()
+	for _, b := range blocks {
+		if _, err := tx.ExecContext(ctx, ins,
+			generateUUID(), campaignID, userID, b.DayOfWeek,
+			b.StartMinute, b.EndMinute, b.State, tz, b.WeekCadence, now); err != nil {
+			return fmt.Errorf("inserting availability block: %w", err)
+		}
+	}
+	if relabelExceptionsFrom != "" {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE availability_exceptions SET tz = ? WHERE campaign_id = ? AND user_id = ? AND tz = ?`,
+			tz, campaignID, userID, relabelExceptionsFrom); err != nil {
+			return fmt.Errorf("relabelling one-day changes: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE member_availability_status SET tz = ?, zone_confirmed_at = ? WHERE campaign_id = ? AND user_id = ?`,
+		tz, now, campaignID, userID); err != nil {
+		return fmt.Errorf("marking the zone confirmed: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit availability zone tx: %w", err)
+	}
+	return nil
+}
+
+// ConfirmAvailabilityZone marks the zone question answered, hours unchanged.
+func (r *sessionRepository) ConfirmAvailabilityZone(ctx context.Context, campaignID, userID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE member_availability_status SET zone_confirmed_at = ? WHERE campaign_id = ? AND user_id = ?`,
+		time.Now().UTC(), campaignID, userID); err != nil {
+		return fmt.Errorf("confirming availability zone: %w", err)
+	}
+	return nil
+}
+
+// AvailabilityZoneConfirmed reports whether the member answered the zone
+// question in this campaign.
+func (r *sessionRepository) AvailabilityZoneConfirmed(ctx context.Context, campaignID, userID string) (bool, error) {
+	var at sql.NullTime
+	err := r.db.QueryRowContext(ctx,
+		`SELECT zone_confirmed_at FROM member_availability_status WHERE campaign_id = ? AND user_id = ?`,
+		campaignID, userID).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("reading availability zone answer: %w", err)
+	}
+	return at.Valid, nil
 }

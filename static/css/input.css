@@ -3772,6 +3772,8 @@ dialog.cb-bro[open] { display: flex; flex-direction: column; }
      right, small, in the accent colour; the words keep their room and the
      label gives way first. Site admin's own row follows with its own plate,
      so the two hairlines do not stack. */
+  /* The foot's three parts travel as one block (app.templ), never shrunk. */
+  .nav-tail { flex: none; }
   .nav-manage { flex: none; padding: 4px 0; border-top: 1px solid var(--nav-line); }
   .nav-manage + .site-admin-row { border-top: 0; padding-top: 0; }
   .nav-manage .nav-row[data-needs] .nav-tr {
@@ -5679,6 +5681,9 @@ html[data-view-motion="calm"][data-cz-btn="keystone"] .btn:active { transform: n
    Nothing is ever drawn behind an icon. */
 .kind-ic { display: none; flex: none; width: 1.25em; text-align: center; font-size: 0.8125em; line-height: 1; }
 :is([data-cz-icons="names"], [data-cz-icons="all"]) .kind-ic { display: inline-block; }
+/* As strong as the icon font's own display rule, which loads after this
+   sheet, so a kind icon stays hidden while icons are Few. */
+:root:not([data-cz-icons="names"], [data-cz-icons="all"]) .kind-ic { display: none; }
 .kind-ic, .kind-themed:not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) { color: var(--color-text-muted); }
 [data-cz-icon-colour="accent"] :is(.kind-ic, .kind-themed):not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) {
   color: var(--color-accent-link, var(--color-accent));

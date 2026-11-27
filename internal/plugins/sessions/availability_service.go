@@ -82,6 +82,11 @@ func (s *sessionService) GetMyAvailability(ctx context.Context, campaignID, user
 	loc := timeutil.LoadLocation(resp.TZ) // falls back to UTC on empty/unknown
 	now := time.Now().In(loc)
 	today := timeutil.CivilDate{Year: now.Year(), Month: now.Month(), Day: now.Day()}
+	confirmed, err := s.repo.AvailabilityZoneConfirmed(ctx, campaignID, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	resp.ZoneConfirmed = confirmed
 	resp.WeekALabel = CadenceLabel(CadenceWeekA, today).String()
 	resp.WeekBLabel = CadenceLabel(CadenceWeekB, today).String()
 	return resp, nil
