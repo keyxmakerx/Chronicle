@@ -100,6 +100,7 @@ Character presets can include `foundry_path` for automatic VTT sync:
 
 - `foundry_path`: Dot-notation path in Foundry Actor system data
 - `foundry_writable`: Whether Chronicle can write this field back (default: true)
+- A `gm_only` field is never mapped to Foundry, whatever its `foundry_path` says: Foundry shows a document's fields to every player who can open it. The `character-fields`, `creature-fields` and `item-fields` endpoints send it with `gm_only: true` and no mapping; its declared path goes out as `foundry_clear_path`, which the module empties when it still holds the GM-only value. An `owner_only` field keeps its mapping and is sent with `owner_only: true`
 - `format` (optional, any preset field): how the value is written when it is not plain text or a number, such as the shape of one entry in a JSON list. AI Import's brief shows it beside the field
 - `min` / `max` (optional, number preset fields): the lowest and highest value AI Import accepts. Absent means no bound; a number must always be finite. A hand-typed sheet value is not checked
 - `json_list` (optional, text preset fields): the field holds a JSON list; AI Import flags text that does not parse as one
