@@ -26,6 +26,12 @@ type EntityGate interface {
 	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
 }
 
+// EntityEditGate answers whether the caller may edit a page. The gate set
+// with SetEntityGate must also satisfy it, or every write is refused.
+type EntityEditGate interface {
+	ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView, canEdit bool, err error)
+}
+
 // Handler handles HTTP requests for tag operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -247,9 +253,9 @@ func (h *Handler) SetEntityTags(c *echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	// The page must be in this campaign and visible to the caller: the tag ids
-	// are checked against the campaign, but the entity id comes from the URL.
-	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+	// The page must be in this campaign and editable by the caller: the tag
+	// ids are checked against the campaign, but the entity id comes from the URL.
+	if err := h.requireEditableEntity(c, cc, entityID); err != nil {
 		return err
 	}
 
@@ -326,4 +332,26 @@ func (h *Handler) GetEntityTags(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, tags)
+}
+
+// requireEditableEntity is requireViewableEntity for a write: the caller must
+// also be allowed to edit the page, so a page shown to them view only cannot
+// be changed through this widget. It fails closed when the gate cannot say.
+func (h *Handler) requireEditableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+	gate, ok := h.entityGate.(EntityEditGate)
+	if !ok {
+		return apperror.NewInternal(errors.New("tags: entity edit gate not configured"))
+	}
+	campaignID, canView, canEdit, err := gate.ResolveEditableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !canEdit {
+		return apperror.NewForbidden("you can't edit this page")
+	}
+	return nil
 }

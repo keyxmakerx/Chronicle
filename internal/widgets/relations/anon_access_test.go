@@ -39,6 +39,7 @@ func (m relFakeCampaignSvc) GetByID(_ context.Context, id string) (*campaigns.Ca
 type relFakeEntityGate struct {
 	campaignOf map[string]string
 	canView    map[string]bool
+	viewOnly   map[string]bool // shown but not editable
 	viewable   map[string]bool
 }
 
@@ -142,4 +143,9 @@ func TestListRelations_NilGateFailsClosed(t *testing.T) {
 	if rec.Code < 500 {
 		t.Errorf("relations handler with no EntityGate wired must fail closed (5xx), got %d: %q", rec.Code, rec.Body.String())
 	}
+}
+
+func (g relFakeEntityGate) ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (string, bool, bool, error) {
+	camp, canView, err := g.ResolveViewableEntity(ctx, entityID, role, userID)
+	return camp, canView, canView && !g.viewOnly[entityID], err
 }
