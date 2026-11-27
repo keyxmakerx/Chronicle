@@ -158,7 +158,7 @@ test('a goodbye that throws still stops the counter\'s loop and lets you out', {
 // not a loop.
 test('the counter room shows with motion still', { skip }, async (t) => {
   const p = await shop(t, null, { still: true });
-  await p.waitForTimeout(1200);
-  const veil = await p.evaluate(() => getComputedStyle(document.querySelector('.src-stage'), '::after').opacity);
-  assert.equal(veil, '0', 'the "Lighting the lamps" cover stayed over the room');
+  // The room bakes its lamps first, which a busy machine takes its time over.
+  const lifted = await p.waitForFunction(() => getComputedStyle(document.querySelector('.src-stage'), '::after').opacity === '0', null, { timeout: 15000 }).then(() => true, () => false);
+  assert.ok(lifted, 'the "Lighting the lamps" cover stayed over the room');
 });
