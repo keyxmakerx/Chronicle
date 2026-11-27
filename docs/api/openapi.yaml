@@ -2635,14 +2635,18 @@ paths:
   /campaigns/{campaignId}/homebrew/asks:
     get:
       tags: [Homebrew asks]
-      summary: The asks waiting for a Director, the first asked first
+      summary: The asks waiting for a Director and the rolls waiting on players, the first first
       description: >
-        Each is a run of a house rule that stopped at its "Ask the Director"
-        step: {id, recipe, what, status: "held", lines, at, waits, steps,
-        recipeId, scope, ask: {asker, askerId, ask, step, later}}. ask.ask is
-        what the asker wants to do ("draw a card"); later are the steps after
-        the ask, each {step, action, label, part, args, fields, parts}, which
-        an answer may change.
+        Each is a run of a house rule that stopped at a step. Kind "ask"
+        stopped at its "Ask the Director" step: {id, recipe, what, status:
+        "held", lines, at, waits, steps, recipeId, scope, kind, ask: {asker,
+        askerId, ask, step, later}}. ask.ask is what the asker wants to do
+        ("draw a card"); later are the steps after the ask, each {step,
+        action, label, part, args, fields, parts}, which an answer may change.
+        Kind "roll" waits on a player's "The player rolls first" roll: {...,
+        kind, roll: {player, playerId, label, formula, target, problem}}. Only
+        that player makes the roll, in Chronicle; a Director can't answer it
+        (409) and can only set it aside. No API route rolls as a player.
       operationId: listHomebrewAsks
       parameters:
         - $ref: "#/components/parameters/campaignId"
@@ -2700,7 +2704,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Already answered or taken back
+          description: Already answered or taken back, or waiting on a player's roll rather than an answer
         "422":
           description: A change a step's owner refused, or a missing reply
   /campaigns/{campaignId}/crafting/characters/{characterId}:
