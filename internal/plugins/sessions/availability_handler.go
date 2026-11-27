@@ -93,6 +93,9 @@ func (h *Handler) GetMyAvailabilityAPI(c *echo.Context) error {
 // POST /campaigns/:id/availability/mine/zone
 func (h *Handler) ConfirmMyZoneAPI(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "campaign not found"})
+	}
 	var req ConfirmZoneRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
