@@ -1,0 +1,38 @@
+// asks.templ: a person's own asks to the Director, where the bell's answers
+// lead. The page is a mount; the homebrew-asks widget reads the asks from
+// this plugin's API and keeps them current, so another screen (a player's
+// hand) can mount the same widget for its own asks.
+
+package homebrew
+
+import (
+	"context"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AsksPage renders the asks page inside the App shell.
+templ AsksPage(campaignID string, empty bool, csrfToken string) {
+	@layouts.App("Your asks") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/homebrew/css/asks.css") }/>
+		@layouts.AppFrame() {
+			@layouts.AppOpening(asksOpening(ctx, empty))
+			<div
+				class="hba"
+				data-widget="homebrew-asks"
+				data-endpoint={ "/campaigns/" + campaignID + "/homebrew" }
+				data-csrf-token={ csrfToken }
+				data-gm={ layouts.GMTerm(ctx) }
+			>
+				<p class="hba-loading" role="status">Reading your asks…</p>
+			</div>
+		}
+	}
+}
+
+func asksOpening(ctx context.Context, empty bool) layouts.AppOpeningData {
+	gm := layouts.GMTerm(ctx)
+	line := "When a house rule asks your " + gm + " before it goes on, your ask waits here, and so does the answer."
+	return layouts.AppOpeningData{Name: "Your asks", Empty: empty,
+		Intros: layouts.AppIntros{Player: line, CoDM: line, Owner: line}}
+}

@@ -175,7 +175,9 @@ test('on a phone every control and field is 44 tall; the keys pages keep the tab
     if (tab === 'data') {
       for (const s of await page.locator('.sb-step > summary, .sb-fold > summary').all()) await s.click();
       await page.locator('#activity-content').scrollIntoViewIfNeeded();
-      await page.getByText('invited someone').first().waitFor();
+      // The log folds each sitting; unfolded, its rows say what happened.
+      await page.locator('.ra-foldall').click();
+      await page.getByText(/invited someone/i).first().waitFor();
       assert.equal(await page.locator('#activity-content').getByText('member.invited').count(), 0, 'the log never shows a raw key');
     }
     // Links, buttons, folds and form fields. A check box, and a file picker

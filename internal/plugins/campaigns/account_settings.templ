@@ -37,6 +37,7 @@ templ CampaignSettingsPage(v campaignSettingsView) {
 			</div>
 			if v.IsOwner {
 				@campaignBrushSection(v.Campaign.ID)
+				@campaignStoreSection(v.Campaign.ID)
 			}
 			<section class="acct-sec" aria-labelledby="acct-else-h">
 				<h2 id="acct-else-h">Elsewhere in this campaign</h2>
@@ -120,6 +121,19 @@ templ campaignBrushSection(campaignID string) {
 		<div class="acct-seg" role="group" aria-labelledby="acct-brush-h" data-acct-brush={ campaignID }>
 			<button type="button" data-brush="shown" aria-pressed={ boolStr(brushShownIn(ctx, campaignID)) }>Shown</button>
 			<button type="button" data-brush="hidden" aria-pressed={ boolStr(!brushShownIn(ctx, campaignID)) }>Put away</button>
+		</div>
+	</section>
+}
+
+// campaignStoreSection is the owner's choice to keep the Store icon on this
+// campaign's top bar. It saves through PUT /account/store/:id.
+templ campaignStoreSection(campaignID string) {
+	<section class="acct-sec" aria-labelledby="acct-store-h">
+		<h2 id="acct-store-h">Store icon on the top bar</h2>
+		<p class="acct-note">The Store icon on this campaign's top bar opens the Store. Put away, you can bring it back here.</p>
+		<div class="acct-seg" role="group" aria-labelledby="acct-store-h" data-acct-store={ campaignID }>
+			<button type="button" data-store="shown" aria-pressed={ boolStr(storeShownIn(ctx, campaignID)) }>Shown</button>
+			<button type="button" data-store="hidden" aria-pressed={ boolStr(!storeShownIn(ctx, campaignID)) }>Put away</button>
 		</div>
 	</section>
 }

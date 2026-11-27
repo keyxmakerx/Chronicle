@@ -246,7 +246,7 @@ func gameFigure(in DeskInputs) DeskFigure {
 
 // ---- Customize -------------------------------------------------------------
 
-// The words of the brush choice, which is the viewer's own.
+// The words of the brush and Store icon choices, which are the viewer's own.
 const (
 	deskBrushShown  = "Shown"
 	deskBrushHidden = "Hidden"
@@ -333,14 +333,33 @@ func brushLine(campaignID string, hidden bool) DeskLine {
 	return DeskLine{ID: "brush", Name: "Header brush", Values: []DeskValue{{Blank: &b}}}
 }
 
+// storeLine is whether the top bar's Store icon shows for this person in
+// this campaign: their own choice, kept per campaign like the brush's, and
+// so never off on an archived campaign either.
+func storeLine(campaignID string, hidden bool) DeskLine {
+	b := DeskBlank{
+		Kind: DeskBlankChoice, ID: "store", Label: "Store icon",
+		URL: "/account/store/" + campaignID, Method: "PUT", Field: "store",
+		Options: []DeskOption{
+			{Value: "shown", Label: deskBrushShown, Hint: "On the top bar, from any page you're on"},
+			{Value: "hidden", Label: deskBrushHidden, Hint: "Only you, only in this campaign"},
+		},
+		Value: "shown", Shown: deskBrushShown,
+	}
+	if hidden {
+		b.Value, b.Shown = "hidden", deskBrushHidden
+	}
+	return DeskLine{ID: "store", Name: "Store icon", Values: []DeskValue{{Blank: &b}}}
+}
+
 // customizeLines are the Customize block: one row per Customize area in its
-// own order, then the brush.
+// own order, then the brush and the Store icon.
 func customizeLines(c *Campaign, in DeskInputs) []DeskLine {
 	out := []DeskLine{lookLine(c, in.Look), categoriesLine(c, in), homesLine(c, in)}
 	for _, t := range in.Tabs {
 		out = append(out, tabLine(c, t))
 	}
-	return append(out, brushLine(c.ID, in.BrushHidden))
+	return append(out, brushLine(c.ID, in.BrushHidden), storeLine(c.ID, in.StoreHidden))
 }
 
 func mediaFigure(f *DeskMediaFacts) DeskFigure {
