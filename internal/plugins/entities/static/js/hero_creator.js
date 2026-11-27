@@ -1575,8 +1575,10 @@
       h += '<p class="hc-note hc-plain">' + (fixedWords.length ? 'A ' + esc(info.entry.name) + ' starts with ' + esc(fixedWords.join(' and ')) + '. ' : '') +
         'Choose one array for the other ' + (info.rest.length === 1 ? 'one' : info.rest.length) + '.</p>';
       h += '<div class="hc-arrs" role="radiogroup" aria-label="Arrays">' + info.arrays.map(function (a, k) {
-        var on = c && c.arr === k;
-        return '<button type="button" class="hc-arr' + (on ? ' is-on' : '') + '" role="radio" aria-checked="' + on + '" data-act="numsarr" data-arr="' + k + '">' + esc(a.map(signedNum).join(', ')) + '</button>';
+        // One Tab stop for the group, as a radio group has: the chosen array,
+        // or the first while none is; the arrow keys move between them.
+        var on = c && c.arr === k, stop = c && c.arr != null ? on : k === 0;
+        return '<button type="button" class="hc-arr' + (on ? ' is-on' : '') + '" role="radio" aria-checked="' + on + '" tabindex="' + (stop ? 0 : -1) + '" data-act="numsarr" data-arr="' + k + '">' + esc(a.map(signedNum).join(', ')) + '</button>';
       }).join('') + '</div>';
       h += '<div class="hc-chars">' + def.fields.map(function (f) {
         var fixed = info.fixed.indexOf(f) >= 0, v = fixed ? def.fixedValue : c ? c.place[f.key] : null;
@@ -2953,6 +2955,14 @@
           if (ev.shiftKey && (t === first || !self.sh.el.contains(t) && !self.sh.ft.contains(t))) { ev.preventDefault(); last.focus(); }
           else if (!ev.shiftKey && t === last) { ev.preventDefault(); first.focus(); }
         }
+        return;
+      }
+      var arr = t.closest && t.closest('.hc-arrs .hc-arr');
+      if (arr && /^(Arrow(Right|Left|Down|Up)|Home|End)$/.test(ev.key)) {
+        var arrs = qa('.hc-arr', arr.parentNode), ai = arrs.indexOf(arr);
+        ai = ev.key === 'Home' ? 0 : ev.key === 'End' ? arrs.length - 1 : (ai + (/Right|Down/.test(ev.key) ? 1 : -1) + arrs.length) % arrs.length;
+        ev.preventDefault();
+        self.act('numsarr', arrs[ai]);
         return;
       }
       if (inField || !self.plan || self.isExtra()) return;

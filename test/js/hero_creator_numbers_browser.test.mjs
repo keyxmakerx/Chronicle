@@ -32,7 +32,7 @@ const PLAN = () => ({ systemName: 'Test System',
     { fieldKey: 'kit', label: 'Kit', choices: [ch('wp', 'Warrior Priest', { stamina_bonus: 9 })] },
   ] });
 
-const html = `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style><link rel="stylesheet" href="/hero_creator.css"></head><body>
+const html = `<!doctype html><html data-gm-term="Director"><head><meta charset="utf-8"><style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}svg{display:block}</style><link rel="stylesheet" href="/hero_creator.css"></head><body>
 <div class="hc" data-widget="hero-creator" data-hero-creator="true" data-campaign-id="c1" data-plan-url="${C}/characters/new/plan" data-create-url="${C}/characters/new"
   data-csrf="tok" data-type-name="Character" data-for-self="true" data-practice="PRACTICE"><p class="hc-loading__text">Opening</p></div>
 <script>window.Chronicle = { register: (n, d) => { window.hcImpl = d; document.querySelectorAll('[data-widget="' + n + '"]').forEach((el) => d.init(el)); }, escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])), gmTerm: () => 'Director' };</script>
@@ -86,6 +86,18 @@ test('a Shadow: Agility fixed, an array placed in order, two numbers swapped, an
   assert.deepEqual(await tiles(pg), ['Might ?', 'Agility 2', 'Reason ?', 'Intuition ?', 'Presence ?']);
   assert.match(await pg.locator('.hc-char.is-fixed').textContent(), /Agility , set by Shadow/, 'a screen reader hears why it is fixed');
   assert.equal(await pg.locator('.hc-char.is-fixed svg.hc-lock').count(), 1, 'and the eye sees a lock');
+  const lockGap = await pg.evaluate(() => { const l = document.querySelector('.hc-char.is-fixed .hc-lock').getBoundingClientRect(), t = document.querySelector('.hc-char.is-fixed small').getBoundingClientRect(); return l.top - t.top; });
+  assert.ok(lockGap < 8, 'the lock sits beside the name, even where every svg is a block: ' + lockGap);
+  // A radio group is one Tab stop; the arrow keys choose within it.
+  assert.deepEqual(await pg.locator('.hc-arr').evaluateAll((b) => b.map((x) => x.tabIndex)), [0, -1, -1, -1]);
+  await pg.focus('.hc-arr[data-arr="0"]');
+  await pg.keyboard.press('ArrowRight');
+  assert.equal(await pg.getAttribute('.hc-arr[data-arr="1"]', 'aria-checked'), 'true');
+  assert.equal(await pg.evaluate(() => document.activeElement.getAttribute('data-arr')), '1');
+  await pg.keyboard.press('ArrowLeft');
+  await pg.keyboard.press('ArrowLeft');
+  assert.equal(await pg.evaluate(() => document.activeElement.getAttribute('data-arr')), '3', 'the arrows wrap');
+  assert.deepEqual(await pg.locator('.hc-arr').evaluateAll((b) => b.map((x) => x.tabIndex)), [-1, -1, -1, 0]);
 
   await pg.click('.hc-arr[data-arr="2"]');
   assert.equal(await pg.getAttribute('.hc-arr[data-arr="2"]', 'aria-checked'), 'true');
