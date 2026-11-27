@@ -144,6 +144,11 @@ type SessionRepository interface {
 	// TouchAvailabilityAnswered moves a member's answered stamp to at
 	// without touching their hours; false when they never answered.
 	TouchAvailabilityAnswered(ctx context.Context, campaignID, userID string, at time.Time) (bool, error)
+	// The one-time "which zone are your hours in?" answer: hours rewritten
+	// under a zone, or the zone kept, and whether it was answered.
+	RewriteAvailabilityZone(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock, relabelExceptionsFrom string) error
+	ConfirmAvailabilityZone(ctx context.Context, campaignID, userID string) error
+	AvailabilityZoneConfirmed(ctx context.Context, campaignID, userID string) (bool, error)
 	ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	ListCampaignExceptionsInRange(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
 	AddException(ctx context.Context, e *AvailabilityException) error

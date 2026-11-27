@@ -320,7 +320,15 @@
     // changed, there is no place left to put it back, so the page takes the
     // whole swap.
     for (i = 0; i < after.length; i++) if (!live[i] && before[i].outerHTML !== after[i].outerHTML) return false;
-    for (i = 0; i < after.length; i++) if (live[i]) live[i] = updatePart(live[i], before[i], after[i]);
+    // Widgets that moved their own nodes elsewhere on the page (the page
+    // tabs docked in a sheet) put them back on refreshing and take them again
+    // on refreshed, so each part is compared as it was served.
+    m.dispatchEvent(new CustomEvent('chronicle:page-refreshing', { bubbles: true }));
+    try {
+      for (i = 0; i < after.length; i++) if (live[i]) live[i] = updatePart(live[i], before[i], after[i]);
+    } finally {
+      m.dispatchEvent(new CustomEvent('chronicle:page-refreshed', { bubbles: true }));
+    }
     if (now.title && now.title.textContent) document.title = now.title.textContent;
     Chronicle.served = html;
     known = { html: html, parts: live };

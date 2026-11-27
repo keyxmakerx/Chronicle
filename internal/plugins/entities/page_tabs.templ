@@ -126,25 +126,8 @@ templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *
 // goes first when the viewer can see a row of it, so it is the pane open on
 // load, and after Items when they can only add one.
 func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) []pageTab {
-	var tabs, seen, addable []pageTab
-	if reg := GetGlobalBlockRegistry(); reg != nil {
-		for _, m := range reg.PageTabBlocks() {
-			rows, canAdd, err := m.PageTab.State(ctx, BlockRenderContext{
-				Block: TemplateBlock{ID: "shell-" + m.Type, Type: m.Type},
-				CC: cc, Entity: entity, EntityType: entityType, CSRFToken: csrfToken,
-				UserID: layouts.GetUserID(ctx),
-			})
-			if err != nil {
-				continue
-			}
-			t := pageTab{Key: m.Type, Label: m.PageTab.Label, Count: m.PageTab.Count, Act: m.PageTab.Act, Block: m.Type}
-			if rows > 0 {
-				seen = append(seen, t)
-			} else if canAdd {
-				addable = append(addable, t)
-			}
-		}
-	}
+	var tabs []pageTab
+	seen, addable := blockPageTabs(ctx, cc, entity, entityType, csrfToken)
 	tabs = append(tabs, seen...)
 	if layouts.GetUserID(ctx) != "" && cc.MemberRole >= campaigns.RolePlayer {
 		tabs = append(tabs, pageTab{Key: "notes", Label: "Notes", Count: ".en-note[data-en-id]:not(.is-leaving)", Act: `[data-en-act="new"]`})
@@ -161,4 +144,31 @@ func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext, entit
 	// Links counts its groups, each by its own rows (data-pt-grp).
 	tabs = append(tabs, pageTab{Key: "links", Label: "Links", Act: ".rel-add-btn"})
 	return tabs
+}
+
+// blockPageTabs is the tabs plugins offer through a block's PageTab, split
+// into those the viewer sees a row of and those they can only add to; a block
+// with neither for this viewer offers no tab.
+func blockPageTabs(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) (seen, addable []pageTab) {
+	reg := GetGlobalBlockRegistry()
+	if reg == nil {
+		return nil, nil
+	}
+	for _, m := range reg.PageTabBlocks() {
+		rows, canAdd, err := m.PageTab.State(ctx, BlockRenderContext{
+			Block: TemplateBlock{ID: "shell-" + m.Type, Type: m.Type},
+			CC: cc, Entity: entity, EntityType: entityType, CSRFToken: csrfToken,
+			UserID: layouts.GetUserID(ctx),
+		})
+		if err != nil {
+			continue
+		}
+		t := pageTab{Key: m.Type, Label: m.PageTab.Label, Count: m.PageTab.Count, Act: m.PageTab.Act, Block: m.Type}
+		if rows > 0 {
+			seen = append(seen, t)
+		} else if canAdd {
+			addable = append(addable, t)
+		}
+	}
+	return seen, addable
 }

@@ -321,6 +321,7 @@ func TestDeskRows_Customize(t *testing.T) {
 		{"homes", homesLine(c, DeskInputs{GMTerm: "GM"}), "Home pages", "Everyone|no player home yet", "/campaigns/c1/customize/home"},
 		{"a plugin's area with words", tabLine(c, DeskTab{ID: "dice", Label: "Dice", Summary: CustomizeSummary{Text: "Jewelled, onyx", Sub: "players pick their own"}}), "Dice", "Jewelled, onyx|players pick their own", "/campaigns/c1/customize/x/dice"},
 		{"a plugin's area without words", tabLine(c, DeskTab{ID: "maps", Label: "Maps"}), "Maps", "|", "/campaigns/c1/customize/x/maps"},
+		{"a plugin's area without words says what it holds", tabLine(c, DeskTab{ID: "hero-creator", Label: "Hero creator", Blurb: "The border each card wears in the hero creator."}), "Hero creator", "|The border each card wears in the hero creator.", "/campaigns/c1/customize/x/hero-creator"},
 		{"brush shown", brushLine("c1", false), "Header brush", "blank:Shown", ""},
 		{"brush hidden", brushLine("c1", true), "Header brush", "blank:Hidden", ""},
 	}

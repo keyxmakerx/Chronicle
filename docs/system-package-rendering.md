@@ -380,6 +380,54 @@ person's Calm pick) fades in place and opens folds at once. Off (device
 reduced-motion or a person's Off pick) jumps to the end state. The engine
 enforces both; packages do nothing.
 
+### The sheet's dock (page pieces in the sheet's tab row)
+
+Under a page renderer Chronicle draws the page's own pieces (Trackers, Notes,
+Items, Files, Posts, Links, and any tab a plugin's block offers) as a tabbed
+panel under the sheet. A sheet that has its own tab row can take those pieces
+into it instead, so the page has one row of tabs. A sheet that offers no dock
+keeps the panel where it is.
+
+The sheet's side, all inside its `[data-sheet]` root:
+
+| Markup | Meaning |
+|---|---|
+| `[data-sheet-dock-tabs]` | An empty element inside the sheet's `role="tablist"`, after its own tabs (`display: contents` suits it). Chronicle moves its tab buttons (`role="tab"`, with `aria-controls`, `aria-selected` and a count in a child `span`) into it. Style them as your own tabs and keep `[hidden]` ones hidden. |
+| `[data-sheet-dock-panes]` | An empty element in the sheet's pane area. Chronicle moves its panes into it, wrapped in one `.pt-docked` block that also holds the open piece's add word. Show it only while one of Chronicle's tabs is open. |
+| `[data-sheet-dock-piece="key"]` | Optional, in one of your own panes. Chronicle puts the piece with that key (`items`, say) here instead of giving it a tab, shown and without a tab panel role, and sets `data-docked` on the slot while it is there. |
+| `data-sheet-dock="open"` on the root | Set while the slots are on screen and the tab row is showing. |
+
+Events, all bubbling:
+
+- `chronicle:sheet-dock` from the root when the dock opens (the tab row is
+  drawn and showing). Chronicle docks then, or when it mounts and finds a root
+  with `data-sheet-dock="open"`.
+- `chronicle:sheet-undock` from the root, synchronously, just before the slots
+  go: before every redraw, when the tab row stops showing (a phone-width
+  sheet), and on `destroy`. Chronicle moves every node back into its panel
+  before the listener returns. A root already off the page sends it from the
+  mount instead. After a redraw, open the dock again in the same task, so the
+  page never paints the panel back under the sheet in between.
+- `chronicle:sheet-tab` (`detail.tab`) from the root when the sheet opens one
+  of its own tabs; Chronicle unselects its tab.
+- `chronicle:sheet-dock-open`, sent by Chronicle from its tab inside
+  `[data-sheet-dock-tabs]` when the reader picks it: hide your own panes,
+  unselect your tabs (`tabindex="-1"`) and show `[data-sheet-dock-panes]`.
+
+Keyboard: the sheet's tab row handles arrow keys, Home and End across every
+tab in it, docked ones included, and presses (`click()`) a docked tab it lands
+on before focusing it. Chronicle leaves keys to the sheet while docked.
+
+The pieces are the same server-drawn blocks either way, so who sees and changes
+each is unchanged; only their place moves. While a live refresh compares the
+page with the server's copy, `static/js/widgets/page_live.js` sends
+`chronicle:page-refreshing` and then `chronicle:page-refreshed` from
+`#main-content`; the panel is whole in between.
+
+The Draw Steel hero sheet docks on its computer layout (the quiet look, 820px
+or wider): its Equipment tab takes the Items piece under "Pack and money", and
+its phone layout has no tab row, so the panel stays under it there.
+
 ### Hero creator
 
 The hero creator (Characters > Create hero) needs nothing beyond the sheet. It

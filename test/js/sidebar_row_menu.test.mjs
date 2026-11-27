@@ -174,3 +174,15 @@ test('a folder keeps Delete folder and gains no page rows', () => {
   assert.ok(rows.includes('Delete folder'));
   assert.ok(!rows.includes('Page history') && !rows.includes('Delete page'));
 });
+
+test('the Director team pins a page to the top of its list; nobody else is offered it', () => {
+  const { menu } = load();
+  const page = (extra) => labels(menu.treeItemsFor({ kind: 'page', hasChildren: false, ...extra }));
+  assert.ok(page({ canEdit: true, canDelete: true, canPin: true }).includes('Pin to top'));
+  assert.ok(page({ canEdit: true, canPin: true, pinned: true }).includes('Unpin'));
+  assert.ok(page({ canEdit: false, canPin: true }).includes('Pin to top'), 'a Director who cannot edit pages still pins');
+  assert.ok(!page({ canEdit: true, canDelete: false }).some((l) => /Pin to top|Unpin/.test(l)), 'a Scribe is not offered it');
+  assert.ok(!page({ canEdit: false }).some((l) => /Pin to top|Unpin/.test(l)), 'a player is not offered it');
+  assert.ok(!labels(menu.treeItemsFor({ kind: 'folder', canEdit: true, canPin: true })).includes('Pin to top'), 'only pages pin');
+  assert.ok(!labels(menu.treeItemsFor({ kind: 'place', canEdit: true, canPin: true })).includes('Pin to top'), 'a listing follows its page');
+});
