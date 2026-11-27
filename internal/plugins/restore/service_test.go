@@ -6,12 +6,15 @@ package restore
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/maintenance"
 )
 
 // writeManifest writes a fake chronicle_manifest_<TS>.txt that
@@ -371,5 +374,23 @@ func TestCapBuf_Truncates(t *testing.T) {
 	_, _ = b.Write([]byte(strings.Repeat("x", 100)))
 	if b.String() != "xxxxx" {
 		t.Errorf("buffer = %q, want %q", b.String(), "xxxxx")
+	}
+}
+
+// TestNewService_EmptyBackupDir pins that an empty BACKUP_DIR, which the
+// docs offer as the way to turn backups off, boots: the page lists nothing
+// with a reason and a restore is refused before anything runs.
+func TestNewService_EmptyBackupDir(t *testing.T) {
+	script := writeShim(t, `echo should not run`, 0)
+	svc := NewService(Config{ScriptPath: script, State: maintenance.NewState(filepath.Join(t.TempDir(), maintenance.MarkerName))})
+
+	if _, err := svc.ListManifests(); err == nil || !strings.Contains(err.Error(), "not configured") {
+		t.Errorf("ListManifests error = %v, want 'not configured'", err)
+	}
+	if err := svc.Start(context.Background(), StartRequest{Manifest: "chronicle_manifest_x.txt"}); !errors.Is(err, ErrInvalidManifest) {
+		t.Errorf("Start error = %v, want ErrInvalidManifest", err)
+	}
+	if svc.IsRunning() {
+		t.Error("a restore started with no backup folder")
 	}
 }

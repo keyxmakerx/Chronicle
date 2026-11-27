@@ -124,7 +124,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_SIGNING_SECRET_FILE` | `./data/.signing-secret` | Where the generated secret is persisted. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`; per-IP only works if `TRUSTED_PROXY_CIDRS` is right. |
 | `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDRs or addresses whose `X-Real-IP` / `X-Forwarded-For` are believed (which header: Site admin > Sign-ins & sessions > Visitor addresses). **Replaces** the default. See "Client IP behind a reverse proxy". |
-| `BACKUP_DIR` | `/app/data/backups` | Empty is unsupported: the admin UI reports "not configured" and the pre-migration backup is skipped. |
+| `BACKUP_DIR` | `/app/data/backups` | Empty turns backups off: the pre-migration backup is skipped, a warning is logged at boot, and the admin Backups and Restore pages say the folder is not configured. |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The pre-migration rotator has its own fixed 7 days. |
 | `BACKUP_REQUIRED` | `1` when `ENV=production`, else `0` (compose sets `1`) | `1`/`true` makes the pre-migration backup mandatory: any failure (no `mysqldump`, empty dump, manifest write failure) aborts startup before migrations apply, for pending core and plugin migrations. Unset, development warns and proceeds; set `0` to opt out in production. |
 | `BOOT_FAIL_BACKOFF` | `45s` | Sleep before `os.Exit(1)` on an unrecoverable boot error, so `restart: unless-stopped` retries about once a minute instead of looping hot and repeating pre-migration backups. Use `2s` in dev. |

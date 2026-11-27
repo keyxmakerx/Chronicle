@@ -3508,10 +3508,12 @@ func (a *App) RegisterRoutes() {
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
 	// confirmation. Reverses ADR-035's "sysadmin-only" stance — see
-	// ADR-036 for the policy reasoning. Always registered: BackupDir
-	// defaults to /app/data/backups in config.Load, so
-	// restore.NewService(BackupDir=="") is unreachable from production
-	// wiring.
+	// ADR-036 for the policy reasoning. Always registered: an empty
+	// BACKUP_DIR (the documented way to turn the safety net off) leaves
+	// the page saying the folder isn't configured and refuses every run.
+	if a.Config.BackupDir == "" {
+		slog.Warn("BACKUP_DIR is empty: pre-update backups, backups and restores are off")
+	}
 	restoreSvc := restore.NewService(restore.Config{
 		ScriptPath: a.Config.RestoreScriptPath,
 		BackupDir:  a.Config.BackupDir,

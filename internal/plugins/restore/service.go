@@ -148,7 +148,8 @@ type Config struct {
 	ScriptPath string
 
 	// BackupDir is where backup artifacts live (also where manifests
-	// resolve from). Required.
+	// resolve from). Empty means backups are off: listing reports the
+	// folder as not configured and every restore is refused.
 	BackupDir string
 
 	// Timeout caps a single RunRestore invocation. Default 30 minutes.
@@ -197,9 +198,6 @@ type service struct {
 func NewService(cfg Config) Service {
 	if cfg.ScriptPath == "" {
 		panic("restore: ScriptPath is required")
-	}
-	if cfg.BackupDir == "" {
-		panic("restore: BackupDir is required")
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 30 * time.Minute
