@@ -103,13 +103,9 @@ func (r *request) lookupCopy(d Deck, id string) (Copy, error) {
 
 func conflict(msg string) error { return errConflictMsg(msg) }
 
-// applyMove stores a move and turns a lost race into a conflict.
-func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, action string) error {
-	return s.applyMoveReply(ctx, d, card, m, action, "")
-}
-
-// applyMoveReply is applyMove with a Director's written reply, which the
-// asker's bell carries with a turn-down.
+// applyMoveReply stores a move and turns a lost race into a conflict. A
+// Director's written reply, when there is one, rides on the asker's bell with
+// a turn-down.
 func (s *service) applyMoveReply(ctx context.Context, d Deck, card string, m Move, action, reply string) error {
 	m.Log.Action = action
 	if err := s.repo.Move(ctx, m); err != nil {
