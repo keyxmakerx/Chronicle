@@ -45,7 +45,7 @@
 /* In a narrow column (the DM Screen, a phone) the name and its label wrap in
  * full and the controls take the line under them, rather than cutting the
  * name off. */
-@container (max-width: 340px) {
+@container (max-width: 400px) {
   .tk-top { flex-wrap: wrap; row-gap: 2px; column-gap: 8px; }
   .tk-name { white-space: normal; overflow-wrap: anywhere; }
   .tk-top > .tk-sp { flex: 1 0 100%; }

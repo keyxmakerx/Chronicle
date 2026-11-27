@@ -5505,6 +5505,11 @@ html[data-motion="off"] .manage-find { transition: none; }
   .keys-touch button { min-width: 2.75rem; }
   .keys-touch label:has(> input[type="checkbox"]) { min-height: 2.75rem; }
 }
+/* A page opening's one action (Create hero and the like, from AppOpening) is
+   44 tall on a phone or a touch screen, as the standard asks of touch targets. */
+@media (pointer: coarse), (max-width: 767px) {
+  [data-app-opening] :is(.btn-primary, .btn-secondary) { min-height: 2.75rem; }
+}
 .manage-intro { flex: 0 0 100%; margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--color-text-secondary); max-width: 65ch; }
 
 /* Shared block parts. Blocks mark their heading (cb-head), count (cb-count),
