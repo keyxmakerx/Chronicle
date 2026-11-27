@@ -109,7 +109,7 @@ test('lens clouds stand over true peaks of the far range, kept whole in a narrow
   }
   const narrow = env.SkyPane.Scene.state(model(env, cal('lenticular', 18.9), { width: 360, height: 160 }), 5, -1);
   for (const l of narrow.fxItems.filter((f) => f.shape === 'lens')) {
-    const half = 160 * .31 * l.sz;
+    const half = 160 * .62 * l.sz * 1.08 * .71;
     assert.ok(l.x - half >= 0 && l.x + half <= 360, 'a lens stays whole in a phone-width pane');
   }
   const er = state(env, 'eruption', 21).fxItems.find((f) => f.shape === 'eruption');

@@ -97,7 +97,7 @@
       'star-rain':[.05, 0, .2, null, 0], 'glimmersnow':[.8, .5, .2, 'snow', .45], 'witchfire':[.3, 0, .2, null, 0], 'brimstone':[.6, .05, .2, null, 0],
       'featherfall':[.45, 0, .2, null, 0], 'fey-lights':[.1, 0, .1, null, 0],
       'mammatus-sky':[.7, .2, .45, null, 0], 'lenticular':[.12, 0, .55, null, 0], 'st-elmos-fire':[.95, .5, .8, null, 0], 'ball-lightning':[.85, .4, .6, null, 0],
-      'eruption':[.3, 0, .6, null, 0], 'leviathans':[.25, 0, .2, null, 0]
+      'eruption':[.3, 0, .6, null, 0], 'leviathans':[.15, 0, .2, null, 0]
     };
     return L;
   })();
@@ -291,7 +291,7 @@
       parts:[{p:'ash', n:26, s:[1.2, 2.6], c:'#6e6862', c2:'#9a948e', v:[8, 9], wob:6, spin:.5, e:0, a:.75, mode:'fall'}]},
     /* Living things: great shapes swimming slowly far off, paler the farther they are; by night faint lights along
        their flanks. */
-    'leviathans':{n:'Sky leviathans', best:16.8, base:{cloud:.25, fog:.06, wind:.2}, sky:['#a9b9cc', .08, 1], shapes:[{s:'leviathan', c:'#33405a', k:1}]}
+    'leviathans':{n:'Sky leviathans', best:16.8, base:{cloud:.15, fog:.06, wind:.2}, sky:['#a9b9cc', .08, 1], shapes:[{s:'leviathan', c:'#33405a', k:1}]}
   };
 
   /* ── Colour. An owner's colour keeps its hue; its lightness and chroma are placed in a band tuned for what it colours
@@ -655,7 +655,7 @@
           if (gy < H + r && pa > .01) F.soft(ctx, o.x, gy + r * .2, r * 5, r * 1.1, A, pa);
         }
         F.soft(ctx, o.x, o.y, r * 2.6, r * 2.6, A, o.a * .3);
-        glow(ctx, o.x, o.y, r * .75, A, B, o.a);
+        glow(ctx, o.x, o.y, r * .75, A, B, Math.min(1, o.a * (o.core || 1)));
         var fq = Math.floor(t * 5 + i * 7);
         ctx.strokeStyle = LOOKS.srgb(B, o.a * .9); ctx.lineWidth = Math.max(.6, r * .12); ctx.lineCap = 'round';
         for (var k = 0; k < 4; k++){
@@ -788,8 +788,11 @@
         for (var i = 0; i < cnt; i++){
           var o = particle(p, i, t, W, H, sc, wind, seed);
           o.a *= p.a * fogA * (.55 + .45 * o.z) * (p.night ? dim : 1);
+          /* A ball's hot core stays bright by day; only its halo and arcs fade. */
+          if (p.p === 'ball') o.core = Math.max(1, .7 / dim);
           if (o.a <= .01 || o.x < -30 || o.x > W + 30 || o.y < -30 || o.y > H + 30) continue;
           var r = Math.max(H < 180 ? p.rmin || 0 : 0, (p.s[0] + (p.s[1] - p.s[0]) * h(i, seed + 8.8)) * sc * (.55 + .45 * o.z)) * (1 + .3 * sl.fog);
+          if (p.low) o.y = Math.min(o.y, H - 2 * r);
           var a = A, b = B;
           if (p.rb){ a = rainbow(i, t, sl); b = a.map(function(v){ return Math.min(1, v * 1.25 + .05); }); }
           draw(ctx, o, r, a, b, p, i, t, W, H, sc, wind, seed); n++;
@@ -976,7 +979,8 @@
       var lava = it.k * (.1 + .9 * it.night), bloom = it.k * (.1 + .9 * it.night), day = 1 - it.night, side = st.sp.x < x ? -1 : 1;
       var sunK = day * smooth01(-3, 8, st.altSun) * (1 - st.wx.cloud * .6);
       /* By day the cone is darker than the range in front (it is bare rock and ash) and hazes less, as it is so big. */
-      var cone = farTone(st, PAL.scale(P.h0, .74 - .24 * day), .32 - .17 * day);
+      var dusk = smooth01(-6, 0, st.altSun) * (1 - smooth01(4, 12, st.altSun));
+      var cone = farTone(st, PAL.scale(P.h0, .74 - .24 * day - .1 * dusk), .32 - .17 * day);
       var ashD = farTone(st, PAL.mixLin(P.cshade, [.05, .045, .04], .78), .18), ashL = farTone(st, PAL.mixLin(P.clit, [.42, .38, .34], .55), .22);
       /* Where the plume is at age u: rising, leaning with the wind, swaying a little. */
       function at(u, j){ return [x + Math.pow(u, 1.4) * H * .5 * wind + Math.sin(u * 7 + j) * H * .02, py - u * H * .75]; }
@@ -985,9 +989,9 @@
       for (var j = 13; j >= 0; j--){
         var u = (j / 14 + t / 46) % 1, pp = at(u, j), px2 = pp[0], py2 = pp[1];
         var rr = H * (.035 + .16 * u) * (1 + .4 * day), fade = it.k * smooth01(0, .05, u) * (1 - smooth01(.68, 1, u)), under = Math.exp(-u * 2.6);
-        puff(ctx, px2, py2, rr * 1.4, rr * 1.15, PAL.mixLin(ashD, it.col, under * .5 * bloom), Math.min(1, (.82 + .3 * day) * fade));
+        puff(ctx, px2, py2, rr * 1.4, rr * 1.15, PAL.mixLin(ashD, it.col, under * (.5 * bloom + .22 * dusk)), Math.min(1, (.82 + .3 * day) * fade));
         if (sunK > .02) soft(ctx, px2 + side * rr * .35, py2 - rr * .2, rr * .9, rr * .75, ashL, .38 * fade * sunK);
-        if (under * bloom > .03) soft(ctx, px2, py2 + rr * .45, rr * .9, rr * .55, it.col, .55 * fade * under * bloom);
+        if (under * (bloom + dusk) > .03) soft(ctx, px2, py2 + rr * .45, rr * .9, rr * .55, it.col, .55 * fade * under * Math.min(1, bloom + .25 * dusk));
       }
       /* Lightning born of the ash, every few seconds, for a moment: a fine jagged channel down the plume's own path
          with one branch, a hot core in a sheath and a glow lighting the ash round it, as the sky's own bolts are. */
@@ -1046,7 +1050,10 @@
       [.38, .62, 1].forEach(function(z, n){
         var len = H * .62 * z * it.sz, sp = H * .05 * z, span = W + len * 2, x0 = (.3 + .33 * n + .1 * h(it.seed, n + 1)) * span;
         var x = ((x0 + sp * t) % span + span) % span - len, y = L.top + (L.hor - L.top) * (.28 + .32 * h(it.seed, n + 5)) + Math.sin(t * TAU / (TEMPO.drift * 1.3) + n * 2) * H * .02;
-        var hz0 = .78 * (1 - z) + .12, haze = hz0 + (.92 - hz0) * st.wx.fog * .7, c = PAL.mixLin(it.col, P.mid, haze), back = PAL.mixLin(c, P.clit, .2 * (1 - night)), bh = len * .2, beat = Math.sin(t * TAU / (TEMPO.breath * 1.1) + n * 1.7) * .32;
+        /* Before the sun a body is a backlit silhouette: dark, lit on top no more, a bright edge round it. */
+        var bdx = Math.max(0, Math.abs(x - st.sp.x) - len * .4), bl = smooth01(-2, 4, st.altSun) * (1 - st.wx.cloud * .6) * Math.exp(-(bdx * bdx + Math.pow(y - st.sp.y, 2)) / Math.pow(len * .5, 2));
+        var hz0 = .78 * (1 - z) + .12, haze = hz0 + (.92 - hz0) * st.wx.fog * .7, c = PAL.mixLin(PAL.mixLin(it.col, P.mid, haze), PAL.scale(P.cshade, .1), .9 * bl);
+        var back = PAL.mixLin(c, P.clit, .2 * (1 - night) * (1 - bl)), bh = len * .2, beat = Math.sin(t * TAU / (TEMPO.breath * 1.1) + n * 1.7) * .32;
         var a = it.k, g = ctx.createLinearGradient(0, -bh * .7, 0, bh * .6);
         g.addColorStop(0, LOOKS.srgb(back, a)); g.addColorStop(1, LOOKS.srgb(PAL.scale(c, .85), a));
         ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(t * TAU / (TEMPO.drift * 1.3) + n * 2 + 1.2) * .05);
@@ -1056,6 +1063,10 @@
         ctx.quadraticCurveTo(-len * .42, -bh * .04, -len * .47, 0);
         ctx.quadraticCurveTo(-len * .4, bh * .2, -len * .28, bh * .24);
         ctx.bezierCurveTo(len * .05, bh * .64, len * .44, bh * .5, len * .5, bh * .08); ctx.fill();
+        if (bl > .02){
+          ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = LOOKS.srgb(PAL.mixLin(P.glow, [1, 1, 1], .4), .5 * bl * a);
+          ctx.lineWidth = Math.max(.8, bh * .08); ctx.stroke(); ctx.restore();
+        }
         /* The flukes beat about the tail's root; a long fin strokes slowly under the body. */
         ctx.save(); ctx.translate(-len * .46, 0); ctx.rotate(beat);
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-len * .08, -bh * .2, -len * .17, -bh * .62); ctx.quadraticCurveTo(-len * .1, -bh * .1, -len * .06, 0);
@@ -1110,10 +1121,10 @@
           st.fxItems.push({shape:'glow', x:W * .34, y:L.hor, sz:1.3, k:q.k * (.45 + .55 * night), col:LOOKS.lit(q.c, 'glow', sl), hi:LOOKS.lit('#ffd27a', 'glow', sl), seed:3 + n});
         } else if (q.s === 'lens'){
           /* Over the two highest peaks of the far range, warm underneath while the sun is low, kept whole inside a
-             narrow pane. Their strength is the change of weather's alone; cloud and fog haze them instead (vis). */
+             narrow pane (hw: the widest lens, its sideways jitter and its soft halo). Their strength is the change of weather's alone; cloud and fog haze them instead (vis). */
           var warm = smooth01(12, 1, sunAlt) * smooth01(-8, -1.5, sunAlt);
           peaks(st, 0, 2).forEach(function(pt, j){
-            var sz = j ? .72 : 1, hw = H * .31 * sz + 4, lx = W > hw * 2 ? clamp(pt[0], hw, W - hw) : W / 2;
+            var sz = j ? .72 : 1, hw = H * .62 * sz * 1.08 * (.62 + .09) + 4, lx = W > hw * 2 ? clamp(pt[0], hw, W - hw) : W / 2;
             st.fxItems.push({shape:'lens', x:lx, y:pt[1] - H * (.09 + .03 * j), sz:sz, k:q.k, vis:clear, warm:warm, seed:7 + j * 5, still:true});
           });
         } else if (q.s === 'eruption'){

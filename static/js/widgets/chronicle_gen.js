@@ -2075,7 +2075,7 @@ var PRESET_ROWS = {
   'st-elmos-fire': ['St Elmo’s Fire', 'Severe', 'storm', '#6fa8ff', 0.95, 0.5, 0.8, 'fleeting', null, 0, 0, -2, 0.6, 14, 0, 'storms', 'st-elmo'],
   'ball-lightning': ['Ball Lightning', 'Severe', 'storm', '#b8ccff', 0.85, 0.4, 0.6, 'fleeting', null, 0, 0, -2, 0.7, 4, 0, 'storms', 'ball-lightning'],
   'eruption': ['Eruption', 'Environmental', 'storm', '#d2552a', 0.3, 0, 0.6, 'fleeting', null, 0, 1, 1, 0.8, 6, 0, 'smoke-ash', 'volcano'],
-  'leviathans': ['Sky Leviathans', 'Fantasy', 'clear', '#8aa0c0', 0.25, 0, 0.2, 'fleeting', null, 0, 0, 0, 1, 0, 0, 'fantasy', 'leviathans']
+  'leviathans': ['Sky Leviathans', 'Fantasy', 'clear', '#8aa0c0', 0.15, 0, 0.2, 'fleeting', null, 0, 0, 0, 1, 0, 0, 'fantasy', 'leviathans']
 };
 var PRESETS = {};
 var PERSIST = { stable: 1, normal: 0.75, fleeting: 0.3 };
