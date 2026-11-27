@@ -97,15 +97,16 @@ type MyAvailabilityResponse struct {
 	// AnsweredAt is when they last saved or confirmed (RFC3339), so a
 	// "confirm your times" ask can tell whether they have answered it.
 	AnsweredAt string `json:"answeredAt,omitempty"`
-	// WeekALabel/WeekBLabel are the YYYY-MM-DD Sundays that start the next week
-	// of each alternating track, so the picker can offer two dates the member
-	// can find on a calendar instead of the words "odd" and "even".
 	// AccountTZ is the zone in the member's account settings, "" if none.
 	// ZoneConfirmed is true once they answered the one-time question about
 	// which zone their hours are in. Together with TZ they decide whether
 	// the calendar asks it.
 	AccountTZ     string `json:"accountTz,omitempty"`
 	ZoneConfirmed bool   `json:"zoneConfirmed"`
+
+	// WeekALabel/WeekBLabel are the YYYY-MM-DD Sundays that start the next week
+	// of each alternating track, so the picker can offer two dates the member
+	// can find on a calendar instead of the words "odd" and "even".
 	WeekALabel string `json:"weekALabel"`
 	WeekBLabel string `json:"weekBLabel"`
 }
