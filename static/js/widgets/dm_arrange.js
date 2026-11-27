@@ -32,9 +32,7 @@
   var TWO_COLS = '(min-width: 1180px)';
 
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
+    return Chronicle.escapeHtml(String(s == null ? '' : s));
   }
 
   function readJSON(key) {

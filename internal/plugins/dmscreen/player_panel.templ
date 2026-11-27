@@ -24,7 +24,7 @@ templ PlayerPanel(v *PlayerView) {
 				<i class="fa-solid fa-angles-right" aria-hidden="true"></i>
 			</button>
 			<hr/>
-			for _, sec := range v.PlayerSections() {
+			for _, sec := range v.SectionsIn(ctx) {
 				<button
 					type="button"
 					class="dms-ic"
@@ -50,7 +50,7 @@ templ PlayerPanel(v *PlayerView) {
 			</div>
 			<p class="dms-empty" data-dms-empty hidden>Pick a section on the bar to open it here.</p>
 			<div class="dms-cards" data-dms-cards>
-				for _, sec := range v.PlayerSections() {
+				for _, sec := range v.SectionsIn(ctx) {
 					@section(sec) {
 						@playerBody(v, sec.ID)
 					}
@@ -111,7 +111,7 @@ templ playerBody(v *PlayerView, id string) {
 					<span class="dms-small">No weather to see today.</span>
 				}
 			</div>
-		case "tonight", "rolls", "dice":
+		case "tonight", "rolls", "hand", "dice":
 			<div class="pls-table" data-widget="table-leaf" data-tt-mount={ id }>
 				<p class="dms-small">Reading the Table…</p>
 			</div>

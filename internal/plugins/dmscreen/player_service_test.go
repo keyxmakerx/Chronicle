@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/systems"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // fakePlayerParty records who asked and returns its heroes as the players'
@@ -274,6 +275,19 @@ func TestPlayerSections_Order(t *testing.T) {
 				t.Errorf("sections = %s, want %s", got, tt.want)
 			}
 		})
+	}
+}
+
+// The Hand card comes with the Card decks add-on and sits after Rolls, since
+// the screen replaces the drawer that held a player's cards.
+func TestPlayerSectionsIn_Hand(t *testing.T) {
+	v := PlayerView{HasParty: true}
+	if got := sectionIDs(v.SectionsIn(context.Background())); strings.Contains(got, "hand") {
+		t.Errorf("without Card decks: sections = %s, want no hand", got)
+	}
+	ctx := layouts.SetEnabledAddons(context.Background(), map[string]bool{"decks": true})
+	if got := sectionIDs(v.SectionsIn(ctx)); got != "hero,party,tonight,rolls,hand,dice" {
+		t.Errorf("with Card decks: sections = %s", got)
 	}
 }
 

@@ -888,6 +888,19 @@
     var h = this.plsHost, api = h && h._dmsApi;
     if (on && api && api.out()) api.toggle(false);
     if (this.mounts) { this.paintMounts(); if (!on) this.armScreen(); }
+    this.labelTab();
+  };
+
+  // labelTab names what the die opens: the players' screen on a computer,
+  // the drawer or the phone's sheet otherwise.
+  Table.prototype.labelTab = function () {
+    if (!this.plsHost) return;
+    var screen = !this.sheet;
+    var name = screen ? "Your screen: hero, rolls and dice" : 'The table: rolls and dice';
+    this.tab.setAttribute('aria-label', name);
+    this.tab.setAttribute('title', name + ' (T)');
+    if (screen) this.tab.removeAttribute('aria-controls');
+    else this.tab.setAttribute('aria-controls', 'tt-drawer');
   };
 
   Table.prototype.ensureSheet = function () {
@@ -1054,8 +1067,21 @@
     var self = this, h = this.plsHost;
     if (!h) return;
     this.armScreen();
+    this.labelTab();
+    // The screen stays on the page across boosted links, so what it shows of
+    // a hero or the day can go stale: coming out after a page change, or
+    // after a minute away, it fetches itself again.
+    this.plsFresh = 0;
+    this.plsStale = false;
+    this.on(document, 'htmx:pushedIntoHistory', function () { self.plsStale = true; });
     this.on(h, 'dms:docked', function (ev) {
       var d = ev.detail || {};
+      if (d.out) {
+        var old = self.plsStale || Date.now() - self.plsFresh > 60000;
+        if (old && h.querySelector('[data-pls]') && W.htmx) W.htmx.trigger(document.body, 'pls-refresh');
+        self.plsStale = false;
+        self.plsFresh = Date.now();
+      }
       self.tab.setAttribute('aria-expanded', d.out ? 'true' : 'false');
       if (d.refocus) self.tab.focus({ preventScroll: true });
     });
@@ -1882,7 +1908,16 @@
       if (b.hasAttribute('data-tt-tolog')) {
         var me = self.isl;
         if (me) { self.openRow = me.r.id; self.collapse(me); }
-        self.openTable('rolls');
+        var api = self.screen();
+        if (!api) { self.openTable('rolls'); return; }
+        // A Rolls card already on the screen is not drawn again by opening
+        // it, so it is redrawn here with the roll's details open.
+        self.openScreen(api, 'rolls').then(function () {
+          if (!self.mounts.rolls) return;
+          self.paintMount('rolls');
+          var det = self.openRow && document.getElementById('tt-det-' + self.openRow);
+          if (det && det.scrollIntoView) det.scrollIntoView({ block: 'nearest' });
+        });
       }
     });
 
@@ -2132,7 +2167,7 @@
   C.tableLeaf = {
     mount: function (el) {
       var sec = el.getAttribute('data-tt-mount');
-      if (['rolls', 'tonight', 'dice'].indexOf(sec) < 0) return;
+      if (['rolls', 'tonight', 'hand', 'dice'].indexOf(sec) < 0) return;
       var t = pageTable();
       if (t) t.mount(sec, el); else pendingMounts.push({ sec: sec, el: el });
     },

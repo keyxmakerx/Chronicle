@@ -1,6 +1,11 @@
 package dmscreen
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // player_view.go is the players' screen: the same docked rail and cards as the
 // DM Screen, for the members who cannot open that one (players and scribes,
@@ -92,6 +97,24 @@ func (v *PlayerView) PlayerSections() []SectionView {
 		out = append(out, SectionView{ID: "notes", Title: "My notes", Icon: "pen", Summary: v.Notes.Label})
 	}
 	return out
+}
+
+// SectionsIn is PlayerSections for the request: with the Card decks add-on
+// on, Hand follows Rolls, as it does in the Table's drawer, because the screen
+// replaces that drawer on a computer and a player's dealt cards and draw
+// invites live there. The Table draws it, like Rolls.
+func (v *PlayerView) SectionsIn(ctx context.Context) []SectionView {
+	out := v.PlayerSections()
+	if !layouts.IsAddonEnabled(ctx, "decks") {
+		return out
+	}
+	hand := SectionView{ID: "hand", Title: "Hand", Icon: "layer-group", Summary: "Your cards"}
+	for i, sec := range out {
+		if sec.ID == "rolls" {
+			return append(out[:i+1], append([]SectionView{hand}, out[i+1:]...)...)
+		}
+	}
+	return append(out, hand)
 }
 
 // HeroLine is the line under the hero's name: "Tactician, level 3", either

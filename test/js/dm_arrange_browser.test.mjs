@@ -82,6 +82,7 @@ window.__notes = [];
 window.Chronicle = {
   register: function (n, d) { widgets[n] = d; },
   mountWidgets: function () {}, destroyWidget: function () {},
+  escapeHtml: function (s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
   apiFetch: function (u, o) { o = o || {}; return fetch(u, { method: o.method, headers: Object.assign({ 'Content-Type': 'application/json' }, o.headers), body: o.body && typeof o.body === 'object' ? JSON.stringify(o.body) : o.body }); },
   notify: function (m, k) { window.__notes.push(k + ': ' + m); }, motionMs: function (n, d) { return d; }, reducedMotion: function () { return true; }, gmTerm: function () { return 'DM'; }
 };
