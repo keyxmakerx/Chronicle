@@ -201,6 +201,17 @@ const MsgDecksChanged MessageType = "decks.changed"
 // which card, is the Director's alone. Not a change-feed type.
 const MsgDecksMoment MessageType = "decks.moment"
 
+// Homebrew ask messages: a rule stopped at an "Ask the Director" step, or an
+// ask was answered or taken back. Payload is {"id": run id, "state": …}
+// only ("waiting" on an ask; "yes", "no", "other" or "taken_back" on an
+// answer), so a screen that hears one reads the asks again through its own
+// route. Each goes to the Directors and the person who asked. Not
+// change-feed types: the waiting asks are read through their own route.
+const (
+	MsgHomebrewAsk      MessageType = "homebrew.ask"
+	MsgHomebrewAnswered MessageType = "homebrew.answered"
+)
+
 // Cut scene messages. None is a change-feed type: a reconnecting screen asks
 // GET /campaigns/:id/cutscenes/mine for what it may still play, so a scene is
 // never replayed from the feed.
@@ -220,6 +231,11 @@ const (
 	MsgCutsceneFoundry MessageType = "cutscene.foundry"
 	// MsgCutsceneFoundryStop relays a stop to the module. Payload {showingId}.
 	MsgCutsceneFoundryStop MessageType = "cutscene.foundry_stop"
+	// MsgCutsceneFoundryPreview hands a Director's unsaved scene to the
+	// module, which plays it on that Director's own GM screen and relays it
+	// to no other client. Payload {previewId, director, scene}; the same
+	// audience as MsgCutsceneFoundry. Nothing is stored.
+	MsgCutsceneFoundryPreview MessageType = "cutscene.foundry_preview"
 )
 
 // Sync control messages.

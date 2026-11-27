@@ -120,7 +120,7 @@ func TestEntryLabel_NamesTheChangedSettings(t *testing.T) {
 		{"fields", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{"name", "description"}}}, "changed the campaign's description and name"},
 		{"public", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{"is_public"}}}, "changed the campaign's public setting"},
 		{"no details", AuditEntry{Action: ActionCampaignUpdated}, "updated campaign settings"},
-		{"nothing changed", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{}}}, "updated campaign settings"},
+		{"nothing changed", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{}}}, "saved the campaign's settings without changing them"},
 		{"details save", AuditEntry{Action: "campaign.details.updated", Details: map[string]any{"name_sent": true, "description_sent": false}}, "changed the campaign's name"},
 		{"unknown field", AuditEntry{Action: ActionCampaignUpdated, Details: map[string]any{"fields": []any{"secret_thing"}}}, "updated campaign settings"},
 		{"other action", AuditEntry{Action: "campaign.welcome_message.updated"}, "changed the welcome message"},

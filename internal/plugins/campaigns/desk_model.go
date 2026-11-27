@@ -160,6 +160,9 @@ type DeskInputs struct {
 	// BrushHidden is the viewer's own choice to hide the header's Customize
 	// brush in this campaign. It is the person's, not the campaign's.
 	BrushHidden bool
+	// StoreHidden is the viewer's own choice to hide the top bar's Store
+	// icon in this campaign, kept like BrushHidden.
+	StoreHidden bool
 }
 
 // DeskTab is one plugin-contributed Customize area as its row needs it.

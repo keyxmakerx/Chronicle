@@ -23,10 +23,12 @@ const WORKSHOP = readFileSync(join(root, 'internal/plugins/cutscenes/static/js/c
 // box is the old in-page preview's; a page cached from before must still get
 // the full-window preview.
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
-<div data-engine-src="/engine.js"><form data-csw-form data-preview-url="/preview">
+<div data-engine-src="/engine.js"><form data-csw-form data-preview-url="/preview" data-foundry-preview-url="/preview/foundry">
 <input name="name" value="The Eye Opens"><p data-csw-err hidden></p>
 <div data-csw-preview-box style="width:320px;height:180px" hidden></div>
 <button type="button" id="pv" onclick="window.ChronicleCutsceneWorkshop.preview(this)">Preview</button>
+<button type="button" id="pvf" onclick="window.ChronicleCutsceneWorkshop.previewInFoundry(this)">Preview in Foundry</button>
+<span data-csw-sent hidden></span>
 </form></div>
 <script>window.Chronicle = { apiFetch: function (u, o) { return fetch(u, o); } };</script>
 <script src="/workshop.js"></script></body></html>`;
@@ -39,7 +41,7 @@ const SCENE = {
   ending: { kind: 'tap' }
 };
 
-async function open(t, viewport) {
+async function open(t, viewport, foundry = { status: 200, body: { sent: true } }) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const pg = await (await browser.newContext({ viewport })).newPage();
@@ -51,6 +53,10 @@ async function open(t, viewport) {
     const p = new URL(route.request().url()).pathname;
     if (p === '/engine.js') return route.fulfill({ contentType: 'text/javascript', body: ENGINE });
     if (p === '/workshop.js') return route.fulfill({ contentType: 'text/javascript', body: WORKSHOP });
+    if (p === '/preview/foundry') {
+      posted++;
+      return route.fulfill({ status: foundry.status, contentType: 'application/json', body: JSON.stringify(foundry.body) });
+    }
     if (p === '/preview') {
       posted++;
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify(SCENE) });
@@ -82,3 +88,25 @@ for (const [name, viewport] of [['computer', { width: 1280, height: 800 }], ['ph
     assert.deepEqual(errors, []);
   });
 }
+
+// Preview in Foundry posts the same form to its own route and only says it
+// was sent: nothing plays on this page. A refusal shows in the error line in
+// the server's words, and clears the sent line.
+test('Preview in Foundry says it was sent and plays nothing here', { skip }, async (t) => {
+  const { pg, errors, posted } = await open(t, { width: 1280, height: 800 });
+  await pg.click('#pvf');
+  await pg.getByText('Sent to your Foundry screen').waitFor({ timeout: 5000 });
+  assert.equal(posted(), 1);
+  assert.equal(await pg.locator('.cs-cut').count(), 0, 'nothing plays in Chronicle');
+  assert.equal(await pg.locator('[data-csw-err]').isHidden(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('Preview in Foundry shows the server\'s refusal', { skip }, async (t) => {
+  const msg = 'Foundry isn\'t connected right now. Open your world in Foundry as the GM, then try again.';
+  const { pg } = await open(t, { width: 390, height: 844 }, { status: 409, body: { error: 'conflict', message: msg } });
+  await pg.click('#pvf');
+  await pg.getByText(msg).waitFor({ timeout: 5000 });
+  assert.equal(await pg.locator('[data-csw-sent]').isHidden(), true);
+  assert.equal(await pg.locator('#pvf').isDisabled(), false, 'the button can be pressed again');
+});

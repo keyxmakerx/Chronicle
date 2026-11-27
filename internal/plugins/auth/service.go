@@ -114,6 +114,7 @@ type AuthService interface {
 	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
 	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
 	SetBrushHidden(ctx context.Context, userID, campaignID string, hidden bool) (ViewPrefs, error)
+	SetStoreHidden(ctx context.Context, userID, campaignID string, hidden bool) (ViewPrefs, error)
 	GetNotifyPrefs(ctx context.Context, userID string) (notifyprefs.Prefs, error)
 	UpdateNotifyPrefs(ctx context.Context, userID string, in notifyprefs.Update) (notifyprefs.Prefs, error)
 	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
@@ -1121,6 +1122,20 @@ func (s *authService) SetBrushHidden(ctx context.Context, userID, campaignID str
 		return cur, err
 	}
 	next, err := cur.WithBrushHidden(campaignID, hidden)
+	if err != nil {
+		return cur, err
+	}
+	return s.saveViewPrefs(ctx, userID, cur, next)
+}
+
+// SetStoreHidden puts the top bar's Store icon away in one campaign, or
+// brings it back there, for this person only.
+func (s *authService) SetStoreHidden(ctx context.Context, userID, campaignID string, hidden bool) (ViewPrefs, error) {
+	cur, err := s.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return cur, err
+	}
+	next, err := cur.WithStoreHidden(campaignID, hidden)
 	if err != nil {
 		return cur, err
 	}

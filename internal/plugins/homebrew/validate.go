@@ -307,10 +307,11 @@ func validateDocMode(ctx context.Context, reg *Registry, campaignID string, in D
 			} else {
 				a, err = runCheck(ctx, campaignID, dw, d.Args, MaxArgsBytes, act.Check)
 			}
+			step := Do{Action: act.Name, Part: d.Part, Args: a}
 			if err != nil {
 				return out, err
 			}
-			rule.Then = append(rule.Then, Do{Action: act.Name, Part: d.Part, Args: a})
+			rule.Then = append(rule.Then, step)
 		}
 		out.Rules = append(out.Rules, rule)
 	}
@@ -422,6 +423,34 @@ func checkNamedPart(where, key string, kinds map[string]string) error {
 		return errInvalid(fmt.Sprintf("%s names a part %q this recipe doesn't have", where, key))
 	}
 	return nil
+}
+
+// checkStep checks one Then against the registry and the recipe's parts and
+// hands its args to the action's owner, as a saved step is checked. A
+// Director's "Yes, and…" answer goes through it, so an answer can change a
+// step only to something the recipe itself could have said.
+func checkStep(ctx context.Context, reg *Registry, campaignID, where string, d Do, kinds map[string]string) (Do, error) {
+	act, ok := reg.action(d.Action)
+	if !ok {
+		return Do{}, errInvalid(fmt.Sprintf("%s does %q, which this campaign doesn't have", where, d.Action))
+	}
+	if err := checkTarget(where, d.Part, act.PartKinds, kinds); err != nil {
+		return Do{}, err
+	}
+	a, err := runCheck(ctx, campaignID, where, d.Args, MaxArgsBytes, act.Check)
+	if err != nil {
+		return Do{}, err
+	}
+	return Do{Action: act.Name, Part: d.Part, Args: a}, nil
+}
+
+// partKindsByKey maps each part key of a doc to its kind, as checkTarget reads it.
+func partKindsByKey(doc Doc) map[string]string {
+	out := map[string]string{}
+	for _, p := range doc.Parts {
+		out[p.Key] = p.Kind
+	}
+	return out
 }
 
 var ruleCardRe = regexp.MustCompile(`^r(0|[1-9]\d?)(?:\.(0|[1-9]\d?))?$`)
