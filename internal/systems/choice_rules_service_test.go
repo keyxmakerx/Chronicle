@@ -182,6 +182,9 @@ type testChoices struct {
 	pkg     []Choice
 	entries SystemEntryService
 	limiter ChoiceLimiter
+	// rewrites marks campaign entries, by name, as rewrites of a package
+	// slug, as the real list does for an entry that stands for one.
+	rewrites map[string]string
 }
 
 func (t *testChoices) CharacterChoices(ctx context.Context, c, k string) ([]Choice, error) {
@@ -197,6 +200,11 @@ func (t *testChoices) CharacterChoiceList(ctx context.Context, campaignID, field
 	extra, err := t.entries.Choices(ctx, campaignID, field)
 	if err != nil {
 		return nil, err
+	}
+	for i := range extra {
+		if slug, ok := t.rewrites[extra[i].Name]; ok {
+			extra[i].Origin, extra[i].StandsFor = OriginRewritten, slug
+		}
 	}
 	l.Choices = append(l.Choices, extra...)
 	if t.limiter != nil {
@@ -801,6 +809,45 @@ func TestChoiceRuleService_RuleFollowsRewrite(t *testing.T) {
 		if e.Name == rewrite.Name && (e.State != RuleNotOffered || e.Everyone == nil) {
 			t.Fatalf("rewrite = %+v, want not here with the everyone mark", e)
 		}
+	}
+}
+
+// A rewrite only Directors can read never reaches a player's list, so a rule
+// it inherits from the standard entry never names it to them as not here.
+func TestChoiceRuleService_DirectorsOnlyRewriteNotNamed(t *testing.T) {
+	env := newRuleEnv(t)
+	env.homebrew(t, "Fury (Directors' words)", EntryVisibilityDirectors)
+	env.choices.rewrites = map[string]string{"Fury (Directors' words)": "fury"}
+	env.choices.pkg = env.choices.pkg[1:]
+	env.mark(t, "package", "fury", "", RuleNotOffered)
+
+	l, err := env.choices.CharacterChoiceList(env.ctxFor("pat"), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range l.Choices {
+		if strings.Contains(c.Name, "Directors") {
+			t.Fatalf("a Directors-only rewrite is on a player's list: %+v", c)
+		}
+	}
+	if l.Rules != nil {
+		for _, n := range l.Rules.NotHere {
+			if strings.Contains(n.Name, "Directors") {
+				t.Fatalf("a Directors-only rewrite is named as not here: %+v", l.Rules.NotHere)
+			}
+		}
+	}
+
+	dl, err := env.choices.CharacterChoiceList(WithChoiceViewer(context.Background(), true), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range dl.Choices {
+		found = found || c.Name == "Fury (Directors' words)"
+	}
+	if !found {
+		t.Fatal("the fixture is wrong: a Director should read the rewrite")
 	}
 }
 
