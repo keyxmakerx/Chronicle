@@ -534,8 +534,8 @@ type ExportCalendarEvent struct {
 	Color     *string `json:"color,omitempty"`
 	Icon      *string `json:"icon,omitempty"`
 	AllDay    bool    `json:"all_day,omitempty"`
-	// Payload is the raw JSON extras blob (e.g. a moon-night marker) — see
-	// calendar.Event.Payload / calendar.MoonNightPayload.
+	// Payload is the raw JSON extras blob (e.g. a sky event) — see
+	// calendar.Event.Payload / calendar.SkyEventPayload.
 	Payload *string `json:"payload,omitempty"`
 	// Ref is the event's id in the exporting campaign. RecurrenceRule is the
 	// event's repeat rule as stored, still naming moons, seasons and events
