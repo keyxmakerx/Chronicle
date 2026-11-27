@@ -38,8 +38,20 @@ func (f *fakeRuns) FinishRun(_ context.Context, r Run, from string) (bool, error
 		return false, nil
 	}
 	got.Status, got.Lines, got.DoneBy, got.DoneAt = r.Status, r.Lines, r.DoneBy, r.DoneAt
+	got.Rule, got.Asked, got.Answer, got.WaitFor = r.Rule, r.Asked, r.Answer, r.WaitFor
 	f.runs[r.ID] = got
 	return true, nil
+}
+
+func (f *fakeRuns) ListAsks(_ context.Context, c, by string, limit int) ([]Run, error) {
+	out := []Run{}
+	for i := len(f.order) - 1; i >= 0 && len(out) < limit; i-- {
+		r := f.runs[f.order[i]]
+		if r.CampaignID == c && (r.CreatedBy == by || r.WaitFor == by) && r.Asked > 0 {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeRuns) ListRuns(_ context.Context, c string, held bool, limit int) ([]Run, error) {

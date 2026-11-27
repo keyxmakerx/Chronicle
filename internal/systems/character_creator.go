@@ -47,6 +47,31 @@ type CreatorPlan struct {
 	SystemID   string        `json:"systemId"`
 	SystemName string        `json:"systemName"`
 	Steps      []CreatorStep `json:"steps"`
+	// Numbers is how the hero's starting numbers come from the picks, with
+	// only fields the character preset has; nil when the system declares none.
+	Numbers *CreatorNumbers `json:"numbers,omitempty"`
+}
+
+// CreatorNumbers is CreatorNumbersDef checked against the preset's fields.
+type CreatorNumbers struct {
+	Characteristics *CreatorCharacteristics `json:"characteristics,omitempty"`
+	Sums            []CreatorSumDef         `json:"sums,omitempty"`
+}
+
+// CreatorCharacteristics is the characteristics step with each field's label.
+type CreatorCharacteristics struct {
+	Label          string         `json:"label"`
+	Step           string         `json:"step"`
+	Fields         []CreatorField `json:"fields"`
+	FixedProperty  string         `json:"fixedProperty,omitempty"`
+	FixedValue     int            `json:"fixedValue"`
+	ArraysProperty string         `json:"arraysProperty"`
+}
+
+// CreatorField is one field the creator writes a number to.
+type CreatorField struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
 }
 
 // CreatorPlan lists the campaign system's character fields that have
@@ -66,6 +91,7 @@ func (s *characterChoiceService) CreatorPlan(ctx context.Context, campaignID str
 	if preset == nil {
 		return plan, nil
 	}
+	plan.Numbers = creatorNumbers(preset)
 	for _, f := range creatorOrdered(preset) {
 		// A key ending in the creator's options suffix would collide with the
 		// field that keeps another step's bought options.
@@ -134,6 +160,64 @@ func creatorOrdered(p *EntityPresetDef) []FieldDef {
 		if !used[f.Key] {
 			out = append(out, f)
 		}
+	}
+	return out
+}
+
+// creatorNumbers keeps the parts of the preset's declaration that name its
+// own number fields, so a stale or mistyped key never reaches a hero.
+func creatorNumbers(p *EntityPresetDef) *CreatorNumbers {
+	d := p.CreatorNumbers
+	if d == nil {
+		return nil
+	}
+	numeric := map[string]FieldDef{}
+	for _, f := range p.Fields {
+		if f.Type == "number" {
+			numeric[f.Key] = f
+		}
+	}
+	out := &CreatorNumbers{}
+	if c := d.Characteristics; c != nil && c.Step != "" && c.ArraysProperty != "" {
+		ch := &CreatorCharacteristics{Label: strings.TrimSpace(c.Label), Step: c.Step, FixedProperty: c.FixedProperty,
+			FixedValue: c.FixedValue, ArraysProperty: c.ArraysProperty}
+		if ch.Label == "" {
+			ch.Label = "Characteristics"
+		}
+		seen := map[string]bool{}
+		for _, k := range c.Fields {
+			if f, ok := numeric[k]; ok && !seen[k] {
+				seen[k] = true
+				label := strings.TrimSpace(f.Label)
+				if label == "" {
+					label = k
+				}
+				ch.Fields = append(ch.Fields, CreatorField{Key: k, Label: label})
+			}
+		}
+		if len(ch.Fields) > 0 {
+			out.Characteristics = ch
+		}
+	}
+	for _, sum := range d.Sums {
+		var fields []string
+		for _, k := range sum.Fields {
+			if _, ok := numeric[k]; ok {
+				fields = append(fields, k)
+			}
+		}
+		var parts []CreatorSumPart
+		for _, pt := range sum.Parts {
+			if pt.Step != "" && pt.Property != "" {
+				parts = append(parts, pt)
+			}
+		}
+		if len(fields) > 0 && len(parts) > 0 {
+			out.Sums = append(out.Sums, CreatorSumDef{Fields: fields, Parts: parts, Half: sum.Half})
+		}
+	}
+	if out.Characteristics == nil && len(out.Sums) == 0 {
+		return nil
 	}
 	return out
 }

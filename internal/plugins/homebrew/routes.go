@@ -10,7 +10,8 @@ import (
 
 // RegisterRoutes mounts the routes under the campaign group. Everything here
 // is the Director's, which the service checks (a role middleware cannot
-// express the co-Director grant). CSRF is enforced by the global middleware.
+// express the co-Director grant), except the asks routes, which are for
+// whoever set an ask off or the player a roll waits on. CSRF is enforced by the global middleware.
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	cg := e.Group("/campaigns/:id/homebrew",
 		auth.RequireAuth(authSvc),
@@ -29,4 +30,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/press/:event", h.Press)
 	cg.POST("/runs/:run/run", h.RunHeld)
 	cg.POST("/runs/:run/dismiss", h.Dismiss)
+	cg.POST("/runs/:run/answer", h.Answer)
+	cg.GET("/asks", h.AsksPage)
+	cg.GET("/asks/mine", h.MyAsks)
+	cg.POST("/asks/:run/take-back", h.TakeBack)
+	cg.POST("/asks/:run/roll", h.Roll)
 }

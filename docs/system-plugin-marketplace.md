@@ -159,6 +159,30 @@ On a preset field, `creator` may carry:
 
 A part is dropped at load, with a log line and the field kept, when `from` or `count_from` names a step that is not another string field of the same preset, a property or note is not a plain identifier, or `from` steps depend on each other in a loop.
 
+### Hero Starting Numbers (`creator_numbers`)
+
+On the character preset, `creator_numbers` lets the hero creator fill in a new hero's numbers from the entries picked at its steps. Core keeps none of a system's field or property names; a system that declares nothing leaves every number for the sheet. Only the preset's own `number` fields are written; any other key is dropped when the plan is built. A number never overwrites a field a pick already wrote.
+
+```json
+"creator_numbers": {
+  "characteristics": {
+    "label": "Characteristics", "step": "class",
+    "fields": ["might", "agility", "reason", "intuition", "presence"],
+    "fixed_property": "primary_characteristics", "fixed_value": 2,
+    "arrays_property": "characteristic_arrays"
+  },
+  "sums": [
+    {"fields": ["stamina_max", "stamina_current"], "parts": [{"step": "class", "property": "starting_stamina"}, {"step": "kit", "property": "stamina_bonus"}]},
+    {"fields": ["winded"], "parts": [{"step": "class", "property": "starting_stamina"}, {"step": "kit", "property": "stamina_bonus"}], "half": true}
+  ]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `characteristics` | Adds a creator step after the pick steps. The entry picked at `step` fixes the fields its `fixed_property` names (by field key or label, any case) at `fixed_value`, and its `arrays_property` lists arrays as text (`"2, 1, 0, −1"`; a minus sign, en dash or hyphen for negatives) for the rest. Only arrays as long as the rest are offered. The player chooses an array, which is placed in field order, swaps any two numbers, or deals one at random. The server takes every characteristic or none, and refuses a fixed one off its value or numbers that are not one of the entry's arrays. Practice heroes and the try-out are not asked. |
+| `sums` | Sets each of `fields` to the total of `parts`, each a number property of the entry picked at a step (a JSON number or numeric text). A part with no pick, or no number, adds nothing; a sum with no part found sets nothing. `half` sets half the total, rounded down. An Ask first pick isn't the hero's yet, so it adds nothing. |
+
 ### Crafting (`crafting`)
 
 An optional top-level block saying how the game rolls and counts a crafting project in the Crafting app. Recipes, benches and steps are each campaign's own and work under any system; this is only the arithmetic and the words.

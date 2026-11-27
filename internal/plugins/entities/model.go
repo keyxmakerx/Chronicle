@@ -812,6 +812,9 @@ type CastMember struct {
 	Entity    Entity
 	OwnerName string
 	IsViewer  bool
+	// Unclaimed marks a playable hero nobody plays yet; its card says so
+	// where a claimed one names its player.
+	Unclaimed bool
 }
 
 // CastView is the Characters page view-model. The page has addon-gated bands:
@@ -858,6 +861,9 @@ type CastView struct {
 	// Roster is who plays whom for the Party band's page types, for staff
 	// who may reassign; nil hides the control.
 	Roster *ClaimRoster
+	// Unclaimed is the playable heroes nobody has claimed yet, shown after
+	// the Party: a hero is a hero whoever made it, so it isn't an NPC.
+	Unclaimed []CastMember
 	// Pickable is, for a member with no character of their own, the playable
 	// characters nobody has claimed yet that they may see.
 	Pickable []Entity

@@ -159,6 +159,25 @@ func TestRollsPowerAdapter(t *testing.T) {
 			t.Fatalf("picked the wrong page: %+v", got)
 		}
 	})
+	// A house rule set off on one hero's page rolls that hero, when the
+	// player owns it; otherwise their first hero.
+	second := entities.Entity{ID: "e-orla", Name: "Orla", EntityTypeID: heroType, FieldsData: map[string]any{"might": float64(4)}}
+	for _, tt := range []struct {
+		name, heroID, want string
+		might              int
+	}{
+		{"no page: the first hero", "", "Sivin", 1},
+		{"a page they own: that hero", "e-orla", "Orla", 4},
+		{"a page they don't own: the first hero", "e-someone-else", "Sivin", 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &rollsPowerAdapter{sys: powerSystems{sys: decl}, entities: powerHeroes{mine: []entities.Entity{hero, second}, types: plain}, characters: chars}
+			got, err := a.PowerRollOn(ctx, "c1", "u1", tt.heroID, false)
+			if err != nil || got.Hero != tt.want || got.Characteristics[0].Value == nil || *got.Characteristics[0].Value != tt.might {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+		})
+	}
 
 	// A number the GM marked GM-only, on the category or on just this page,
 	// never reaches a player; a Director still sees it.

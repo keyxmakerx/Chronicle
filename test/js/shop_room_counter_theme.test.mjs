@@ -74,6 +74,18 @@ test('the theme round trips through the saved layout, and no theme is not saved'
   assert.deepEqual(plain(SR.toLayout(S2).counter), plain(S2.counter), 'and on the way out');
 });
 
+test("the owner's picture is kept only as a media id, with known placements", () => {
+  const id = '0b9c2f4e-1111-4222-8333-444455556666';
+  const base = plain(C.starters[1]);
+  const withPic = (picture) => plain(C.normalise(Object.assign({}, base, { theme: Object.assign({}, base.theme, { picture }) })));
+  assert.deepEqual(withPic({ id: id.toUpperCase(), on: 'outside', fit: 'repeat' }).theme.picture, { id, on: 'outside', fit: 'repeat' }, 'kept, id lower-cased');
+  assert.deepEqual(withPic({ id, on: 'ceiling', fit: 'stretch' }).theme.picture, { id, on: 'wall', fit: 'fill' }, 'odd placements fall back');
+  for (const bad of [null, 'x', { id: '/media/' + id }, { id: 'https://evil.example/a.png' }, { id: id + '/../x' }, { on: 'wall' }]) {
+    assert.equal('picture' in withPic(bad).theme, false, 'no picture from ' + JSON.stringify(bad));
+  }
+  assert.equal('picture' in plain(C.normalise(base)).theme, false, 'a theme without one gains none');
+});
+
 test('the widget offers the options the server accepts', () => {
   const O = C.options;
   assert.deepEqual([...O.skeleton.shape].sort(), goSet('shopRoomCounterShapes'));
@@ -84,6 +96,8 @@ test('the widget offers the options the server accepts', () => {
   assert.deepEqual([...O.theme.light].sort(), goSet('shopRoomCounterLights'));
   assert.deepEqual([...O.theme.outside].sort(), goSet('shopRoomCounterOutsides'));
   assert.deepEqual([...O.props].sort(), goSet('shopRoomCounterProps'));
+  assert.deepEqual([...O.picture.on].sort(), goSet('shopRoomPictureOn'));
+  assert.deepEqual([...O.picture.fit].sort(), goSet('shopRoomPictureFit'));
   for (const p of O.props) assert.ok(O.slots[O.propAt[p].at], p + ' has a slot to be placed in');
 });
 

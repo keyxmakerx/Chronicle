@@ -40,6 +40,8 @@ test('stepNote says what Run does with each step', () => {
   assert.equal(H.stepNote({ browser: true }, true), 'Runs here');
   assert.match(H.stepNote({ browser: true }, false), /^For you to do/);
   assert.equal(H.stepNote({}, false), 'Runs on the server');
+  assert.equal(H.stepNote({ rolls: true }, false), 'Waiting on the player to roll');
+  assert.equal(H.stepNote({ asks: true }, false), 'Asks you before what follows');
 });
 
 test('statusText and pressLabel read plainly', () => {
@@ -59,4 +61,41 @@ test('a named button posts its name and keeps its spelling', () => {
   assert.equal(H.pressLabel(dose), 'Dose & Calm (2 rules)');
   assert.equal(H.pressRunning(respite), 'Running log a respite…');
   assert.equal(H.pressRunning(dose), 'Running Dose & Calm…');
+});
+
+test('an ask reads as who wants what', () => {
+  const { H } = load();
+  assert.equal(H.askTitle({ asker: 'Mira', ask: 'draw a card' }), 'Mira wants to draw a card');
+  assert.equal(H.askTitle({ asker: 'Mira' }), 'Mira is asking you');
+  assert.equal(H.askTitle({}), 'A player is asking you');
+});
+
+test('editsFor sends only the steps the Director changed, with whole args', () => {
+  const { H } = load();
+  const later = [
+    { step: 2, action: 'deck.add-copies', args: { deck: 'Fortunes', card: 'Luck', copies: 1 },
+      fields: [{ name: 'deck', label: 'Deck', type: 'text' }, { name: 'card', label: 'Card', type: 'text' }, { name: 'copies', label: 'Copies', type: 'whole' }] },
+    { step: 3, action: 'step', part: 'doom', args: { by: 1 }, fields: [{ name: 'by', label: 'By', type: 'whole' }] }
+  ];
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  assert.deepEqual(plain(H.editsFor(later, {})), { steps: [], error: '' });
+  assert.deepEqual(plain(H.editsFor(later, { 2: { part: null, args: { deck: 'Fortunes', copies: '1' } } })), { steps: [], error: '' },
+    'values equal to the rule are no change');
+  assert.deepEqual(plain(H.editsFor(later, { 2: { part: null, args: { deck: ' Rewards ', copies: '3' } } })),
+    { steps: [{ step: 2, args: { deck: 'Rewards', card: 'Luck', copies: 3 } }], error: '' });
+  assert.deepEqual(plain(H.editsFor(later, { 3: { part: 'dread', args: {} } })),
+    { steps: [{ step: 3, part: 'dread', args: { by: 1 } }], error: '' });
+  assert.deepEqual(plain(H.editsFor(later, { 2: { part: null, args: { card: '' } } })).steps[0].args, { deck: 'Fortunes', copies: 1 },
+    'an emptied text field leaves the arg out');
+  assert.equal(H.editsFor(later, { 3: { part: null, args: { by: 'two' } } }).error, 'By needs a whole number.');
+});
+
+test('sendLabel says what Send does', () => {
+  const { H } = load();
+  const later = [{ label: 'Shuffle copies of a card into a deck' }, { label: 'Step' }];
+  assert.equal(H.sendLabel('no', later, false), 'Send: no');
+  assert.equal(H.sendLabel('other', later, false), 'Send reply');
+  assert.equal(H.sendLabel('yes', [], false), 'Send: yes');
+  assert.equal(H.sendLabel('yes', later, false), 'Send: yes, then shuffle copies of a card into a deck, then step');
+  assert.equal(H.sendLabel('yes', later.slice(1), true), 'Send: yes, with changes, then step');
 });

@@ -30,6 +30,10 @@ func (s *castEntitySvc) ListClaimed(_ context.Context, _ string, role int, userI
 	return []Entity{{ID: "pc1", Name: "Aldric", OwnerUserID: &owner, TypeName: "Player Character", EntityTypeID: 7}}, nil
 }
 
+func (s *castEntitySvc) ListRoster(context.Context, string, []int, int, string) ([]Entity, error) {
+	return nil, nil
+}
+
 func TestCharactersPage_AnonymousPublicVsPrivate(t *testing.T) {
 	const path = "/campaigns/camp-1/characters"
 

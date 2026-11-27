@@ -103,7 +103,10 @@ var (
 		"crystals", "brazier", "wisps", "star", "halo", "witchfire", "orb", "firelight", "votives", "frostfire",
 		"jellyfish", "pierced-lamp", "cauldron", "filament", "sunlight", "candelabra")
 	shopRoomCounterOutsides = setOf("day", "dusk", "night", "rain")
-	shopRoomCounterProps    = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
+	// Must match CM_PIC in static/js/widgets/shop_room_counter.js.
+	shopRoomPictureOn    = setOf("wall", "outside")
+	shopRoomPictureFit   = setOf("fill", "fit", "repeat")
+	shopRoomCounterProps = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
 		"fireflies", "drips", "cobwebs", "nets", "chains", "mushrooms", "tentacle", "petals", "butterflies", "embers",
 		"smoke", "comets", "floating-stones", "eyes", "glyphs", "magic-circle", "dew", "beads", "rune-chase", "arcs",
 		"bubbles", "ghostlights", "crumbs", "dust", "tankards", "keg", "antlers", "mannequin", "ribbons", "shears",
@@ -146,6 +149,35 @@ func NormalizeShopRoomLayout(raw []byte) (json.RawMessage, error) {
 // rules a room's `counter` field is held to, so a design can never hold a part
 // the counter look would refuse.
 func NormalizeShopRoomCounter(raw []byte) (json.RawMessage, error) {
+	c, err := decodeShopRoomCounter(raw)
+	if err != nil {
+		return nil, err
+	}
+	return marshalShopRoomCounter(c)
+}
+
+// NormalizeShopRoomCounterDesign is NormalizeShopRoomCounter for a saved
+// design. It drops the owner's picture: a picture is one campaign's file and
+// a design travels to other campaigns and the server gallery, where the id
+// would point at a file nobody there may open.
+func NormalizeShopRoomCounterDesign(raw []byte) (json.RawMessage, error) {
+	c, err := decodeShopRoomCounter(raw)
+	if err != nil {
+		return nil, err
+	}
+	c.Theme.Picture = nil
+	return marshalShopRoomCounter(c)
+}
+
+func marshalShopRoomCounter(c *ShopRoomCounter) (json.RawMessage, error) {
+	out, err := json.Marshal(c)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return out, nil
+}
+
+func decodeShopRoomCounter(raw []byte) (*ShopRoomCounter, error) {
 	if len(raw) > maxShopRoomBytes {
 		return nil, apperror.NewBadRequest("counter theme is too large")
 	}
@@ -160,11 +192,7 @@ func NormalizeShopRoomCounter(raw []byte) (json.RawMessage, error) {
 	if err := c.validate(); err != nil {
 		return nil, apperror.NewBadRequest(err.Error())
 	}
-	out, err := json.Marshal(c)
-	if err != nil {
-		return nil, apperror.NewInternal(err)
-	}
-	return out, nil
+	return &c, nil
 }
 
 // validate checks every field and rewrites l into its canonical form (empty
@@ -383,6 +411,15 @@ func (c *ShopRoomCounter) validate() error {
 		}
 		*col = strings.ToLower(*col)
 	}
+	if p := c.Theme.Picture; p != nil {
+		p.ID = strings.ToLower(p.ID)
+		if !shopRoomPictureIDRe.MatchString(p.ID) {
+			return fmt.Errorf("invalid counter picture")
+		}
+		if !shopRoomPictureOn[p.On] || !shopRoomPictureFit[p.Fit] {
+			return fmt.Errorf("invalid counter picture placement")
+		}
+	}
 	// NaN fails both comparisons, so it lands on the lower bound.
 	switch w := c.Theme.Warmth; {
 	case w > 1:
@@ -409,6 +446,9 @@ func (c *ShopRoomCounter) validate() error {
 }
 
 // shopRollStatRe is a sheet field key, the same slug a game system names its stats with.
+// A media file id is a UUID; the room stores the id alone, never a URL.
+var shopRoomPictureIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 var shopRollStatRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 
 // validate checks the counter roll settings. Stat keys are never looked up

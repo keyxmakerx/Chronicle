@@ -43,6 +43,9 @@ type counterPaint struct {
 	Light   string  `json:"light"`
 	Warmth  float64 `json:"warmth"`
 	Outside string  `json:"outside"`
+	// Picture is the owner's own picture. The AI never sets it; it is carried
+	// through unchanged so an edit keeps it.
+	Picture json.RawMessage `json:"picture,omitempty"`
 }
 
 // The counter's words, with the friendlier ways to say them. Lookups

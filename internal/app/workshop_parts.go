@@ -36,6 +36,10 @@ type workshopDeps struct {
 	// Decks fires the card events and runs the deck actions; nil while the
 	// card decks plugin is degraded.
 	Decks *decksStory
+	// Rolls makes the "rolls first" step's roll; nil while the roll log is
+	// degraded. PowerRolls reads the game system's characteristics.
+	Rolls      rollTable
+	PowerRolls rollFirstStats
 }
 
 // respiteListener is told of a respite the Director pressed.
