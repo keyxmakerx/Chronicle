@@ -129,6 +129,18 @@ test('every way out on the page, the top bar\'s too, points at the remembered pa
   assert.equal(leave.href, '/campaigns/abc');
 });
 
+test('a way out that names a campaign keeps to that campaign', () => {
+  mem.clear();
+  const mk = (cid) => ({ href: '/campaigns/' + cid, getAttribute: (n) => (n === 'data-admin-back-campaign' ? cid : null), setAttribute(n, v) { this[n] = v; } });
+  const inside = mk('abc'), other = mk('xyz');
+  mem.set('chronicle-admin-return', '/campaigns/abc/entities?page=2');
+  globalThis.document.querySelectorAll = (q) => (q === '[data-admin-back]' ? [inside, other] : []);
+  C.siteAdminArrive({ querySelector: () => null });
+  delete globalThis.document.querySelectorAll;
+  assert.equal(inside.href, '/campaigns/abc/entities?page=2', 'the remembered page inside the named campaign is used');
+  assert.equal(other.href, '/campaigns/xyz', 'a page in another campaign never sits behind its name');
+});
+
 test('no view transitions: the way out is marked and the link goes at once', () => {
   const rule = globalThis.CSSViewTransitionRule;
   delete globalThis.CSSViewTransitionRule;

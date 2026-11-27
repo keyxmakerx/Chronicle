@@ -82,8 +82,9 @@
     } catch (err) { /* storage full or blocked: the menu still works */ }
   });
 
-  // siteAdminArrive points every way out ("Back to Chronicle" in the menu,
-  // "Leave Site admin" in the top bar) at the remembered page. Called by the
+  // siteAdminArrive points every way out ("Back to Chronicle" or "Back to"
+  // a campaign in the menu, "Leave Site admin" in the top bar) at the
+  // remembered page. Called by the
   // admin menu's init, which also runs when a pin swaps the menu in again.
   window.Chronicle.siteAdminArrive = function (menu) {
     if (!menu) return;
@@ -93,7 +94,14 @@
     }
     var backs = [menu.querySelector('[data-admin-back]')];
     if (document.querySelectorAll) backs = backs.concat([].slice.call(document.querySelectorAll('[data-admin-back]')));
-    backs.forEach(function (b) { if (b) b.setAttribute('href', path); });
+    backs.forEach(function (b) {
+      if (!b) return;
+      // A way out that names a campaign keeps to it: the remembered page is
+      // used only when it is inside that campaign.
+      var cid = b.getAttribute ? b.getAttribute('data-admin-back-campaign') : null;
+      if (cid && path.indexOf('/campaigns/' + cid) !== 0) return;
+      b.setAttribute('href', path);
+    });
   };
 
   // Exposed for the unit test only.

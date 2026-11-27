@@ -339,12 +339,16 @@ templ AdminSidebarNav() {
 			<i class={ "fa-solid " + SiteAdminIcon + " text-xs" } aria-hidden="true"></i>
 			<span>Site admin</span>
 		</div>
-		<a href="/campaigns" data-admin-back hx-boost="false" class={ sidebarNavLink, sidebarNavInactive, "mt-2" }>
-			<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-				<i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-			</span>
-			Back to Chronicle
-		</a>
+		if rc := GetReturnCampaign(ctx); rc != nil {
+			@returnCampaignRow(rc, false)
+		} else {
+			<a href="/campaigns" data-admin-back hx-boost="false" class={ sidebarNavLink, sidebarNavInactive, "mt-2" }>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+				</span>
+				Back to Chronicle
+			</a>
+		}
 		<div hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 			@adminNavLink(adminNav.Home)
 			if len(pinned) > 0 {
@@ -450,6 +454,29 @@ templ adminNavRow(it AdminNavItem, makeRoom bool) {
 }
 
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
+// returnCampaignRow heads the menu outside a campaign: the campaign this
+// person was last in, one tap away. In Site admin it is the way out, so it
+// carries data-admin-back for site_admin.js.
+templ returnCampaignRow(rc *NavCampaign, sub bool) {
+	<a
+		href={ templ.SafeURL("/campaigns/" + rc.ID) }
+		class="nav-back"
+		if !sub {
+			data-admin-back
+			data-admin-back-campaign={ rc.ID }
+			hx-boost="false"
+		}
+	>
+		<i class="fa-solid fa-arrow-left nav-back-ar" aria-hidden="true"></i>
+		<span class="min-w-0 sidebar-hide-collapsed">
+			<span class="nav-back-name">Back to { rc.Name }</span>
+			if sub {
+				<small>the campaign you were in</small>
+			}
+		</span>
+	</a>
+}
+
 templ DefaultSidebarNav() {
 	// A guest is fenced to one campaign, so none of these lead anywhere for
 	// them; their way around is the campaign's own sidebar.
@@ -459,6 +486,9 @@ templ DefaultSidebarNav() {
 }
 
 templ defaultSidebarLinks() {
+	if rc := GetReturnCampaign(ctx); rc != nil {
+		@returnCampaignRow(rc, true)
+	}
 	<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
 		Navigation
 	</div>
@@ -946,11 +976,19 @@ templ Topbar() {
 			if InSiteAdmin(ctx) {
 				<!-- The way out of Site admin, always in view; site_admin.js points
 				     it at the page the admin came from. -->
-				<a href="/campaigns" data-admin-back hx-boost="false" class="btn-secondary btn-sm admin-leave gap-1.5 mr-1">
-					<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
-					<span class="hidden sm:inline">Leave Site admin</span>
-					<span class="sm:hidden">Leave</span>
-				</a>
+				if rc := GetReturnCampaign(ctx); rc != nil {
+					<a href={ templ.SafeURL("/campaigns/" + rc.ID) } data-admin-back data-admin-back-campaign={ rc.ID } hx-boost="false" class="btn-secondary btn-sm admin-leave gap-1.5 mr-1">
+						<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+						<span class="hidden sm:inline truncate max-w-[14rem]">Back to { rc.Name }</span>
+						<span class="sm:hidden">Back</span>
+					</a>
+				} else {
+					<a href="/campaigns" data-admin-back hx-boost="false" class="btn-secondary btn-sm admin-leave gap-1.5 mr-1">
+						<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+						<span class="hidden sm:inline">Leave Site admin</span>
+						<span class="sm:hidden">Leave</span>
+					</a>
+				}
 				<!-- The site check-up's shield. It loads itself and refreshes after
 				     each admin page; the checkup widget opens its sheet. -->
 				<div
