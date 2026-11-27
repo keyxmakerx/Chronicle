@@ -278,13 +278,25 @@ func (s *service) saveRun(ctx context.Context, run Run) error {
 	return nil
 }
 
+// running drops the recipes that are switched off, whose rules never fire
+// and whose buttons the drawer never offers.
+func running(rs []Recipe) []Recipe {
+	out := make([]Recipe, 0, len(rs))
+	for _, r := range rs {
+		if !r.Doc.Off {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func (s *service) recipesFor(ctx context.Context, campaignID, recipeID string) ([]Recipe, error) {
 	if recipeID == "" {
 		rs, err := s.repo.List(ctx, campaignID)
 		if err != nil {
 			return nil, fmt.Errorf("homebrew: list recipes: %w", err)
 		}
-		return rs, nil
+		return running(rs), nil
 	}
 	if !validToken(recipeID) {
 		return nil, nil
@@ -293,7 +305,7 @@ func (s *service) recipesFor(ctx context.Context, campaignID, recipeID string) (
 	if err != nil {
 		return nil, fmt.Errorf("homebrew: get recipe: %w", err)
 	}
-	if !ok {
+	if !ok || r.Doc.Off {
 		return nil, nil
 	}
 	return []Recipe{r}, nil
@@ -511,6 +523,7 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 	if err != nil {
 		return nil, errInternal(err)
 	}
+	recipes = running(recipes)
 	for _, e := range s.reg.presses() {
 		p := Press{Event: e.Name, Label: e.Press}
 		for _, r := range recipes {
@@ -572,6 +585,7 @@ func (s *service) Press(ctx context.Context, campaignID, event, button string, v
 		if err != nil {
 			return nil, errInternal(err)
 		}
+		recipes = running(recipes)
 		want := strings.ToLower(strings.Join(strings.Fields(button), " "))
 		var found *Press
 		for _, p := range namedButtons(recipes, e) {

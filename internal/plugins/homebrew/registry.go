@@ -33,6 +33,13 @@ type PartKind struct {
 	// Sync, when set, keeps records the owner holds for this kind's parts
 	// in step with the recipes that hold them.
 	Sync *PartSync
+	// Share, when set, is the owner's say over what leaves the campaign in a
+	// shared recipe: it returns the data without any Director-only text and
+	// without links to the campaign's own records (ids mean nothing in
+	// another campaign), plus what to pick to restore each dropped link. It
+	// holds no campaign, so it can't read one. Data of a kind without Share
+	// is shared as it is, which is right for kinds that hold only names.
+	Share func(raw json.RawMessage) (json.RawMessage, []Unlinked, error)
 }
 
 // PartSync keeps an owner's own records in step with a kind's parts: a
@@ -207,6 +214,26 @@ type Registry struct {
 	parts   map[string]PartKind
 	events  map[string]EventDef
 	actions map[string]ActionDef
+	// system names a campaign's game system, for the Store's "needs".
+	system func(ctx context.Context, campaignID string) string
+}
+
+// SetSystem tells the registry how to read a campaign's game system; without
+// it a shared recipe records no system.
+func (r *Registry) SetSystem(fn func(ctx context.Context, campaignID string) string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.system = fn
+}
+
+func (r *Registry) systemOf(ctx context.Context, campaignID string) string {
+	r.mu.RLock()
+	fn := r.system
+	r.mu.RUnlock()
+	if fn == nil {
+		return ""
+	}
+	return fn(ctx, campaignID)
 }
 
 // NewRegistry returns an empty registry.

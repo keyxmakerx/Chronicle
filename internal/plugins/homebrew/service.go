@@ -2,6 +2,7 @@ package homebrew
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -30,6 +31,15 @@ type Service interface {
 	// holds dataHas (any data when ""), so an owner can find the parts that
 	// point at one of its records without reading every recipe.
 	PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error)
+	// Package writes a recipe as the Store's package: its parts and rules
+	// without Director-only text or links to this campaign's records, and
+	// what it needs. StripPackage, ValidatePackage, PackageLacks and
+	// AddPackaged are the other sides of it (package.go).
+	Package(ctx context.Context, campaignID, recipeID string, v Viewer) (json.RawMessage, error)
+	StripPackage(raw json.RawMessage) (json.RawMessage, error)
+	ValidatePackage(raw json.RawMessage) (json.RawMessage, error)
+	PackageLacks(ctx context.Context, campaignID string, raw json.RawMessage) ([]string, error)
+	AddPackaged(ctx context.Context, campaignID string, v Viewer, raw json.RawMessage) (AddedRecipe, error)
 	// ShareBudget gives ctx one budget of rule runs, so several firings an
 	// owner makes for one change stop together after the same 50 runs.
 	ShareBudget(ctx context.Context) context.Context
