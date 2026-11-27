@@ -1370,6 +1370,26 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 
 // --- Reorder API (sidebar tree drag-and-drop) ---
 
+// folderInCampaign refuses a sidebar folder from another campaign. The page
+// or folder being moved is scoped to the campaign by its write, but the
+// folder it moves into is the caller's id and must be checked too.
+func (h *Handler) folderInCampaign(ctx context.Context, campaignID string, nodeID *string) error {
+	if nodeID == nil || *nodeID == "" {
+		return nil
+	}
+	if h.sidebarNodeRepo == nil {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+	node, err := h.sidebarNodeRepo.FindByID(ctx, *nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != campaignID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+	return nil
+}
+
 // ReorderAPI updates an entity's parent and sort order for sidebar tree reordering.
 // PUT /campaigns/:id/entities/:eid/reorder
 func (h *Handler) ReorderAPI(c *echo.Context) error {
@@ -1391,6 +1411,9 @@ func (h *Handler) ReorderAPI(c *echo.Context) error {
 	sortOrder := 0
 	if input.SortOrder != nil {
 		sortOrder = *input.SortOrder
+	}
+	if err := h.folderInCampaign(c.Request().Context(), cc.Campaign.ID, input.ParentNodeID); err != nil {
+		return err
 	}
 
 	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.ParentNodeID, sortOrder); err != nil {
@@ -1495,6 +1518,9 @@ func (h *Handler) BulkMoveAPI(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
+	if err := h.folderInCampaign(ctx, cc.Campaign.ID, req.ParentNodeID); err != nil {
+		return err
+	}
 	req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
 	// Where each moved page was, so the list's Undo can put it back. Each
 	// page goes to the end of its new list, in the order it was picked.
@@ -2055,6 +2081,9 @@ func (h *Handler) ReorderSidebarNodeAPI(c *echo.Context) error {
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.folderInCampaign(c.Request().Context(), cc.Campaign.ID, req.ParentID); err != nil {
+		return err
 	}
 
 	if err := h.sidebarNodeRepo.UpdateParent(c.Request().Context(), nodeID, cc.Campaign.ID, req.ParentID); err != nil {
