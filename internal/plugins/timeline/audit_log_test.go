@@ -37,6 +37,10 @@ func (m *mockAuditService) GetCampaignActivity(_ context.Context, _ string, _ in
 func (m *mockAuditService) GetEntityHistory(_ context.Context, _, _ string) ([]audit.AuditEntry, error) {
 	return nil, nil
 }
+func (m *mockAuditService) RecentActivity(_ context.Context, _ string) (audit.Feed, error) {
+	return audit.Feed{}, nil
+}
+func (m *mockAuditService) SetFoundryActivity(_ audit.FoundryActivitySource) {}
 func (m *mockAuditService) GetCampaignStats(_ context.Context, _ string) (*audit.CampaignStats, error) {
 	return nil, nil
 }

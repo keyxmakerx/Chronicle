@@ -2,6 +2,7 @@ package audit
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 	"unicode"
@@ -208,12 +209,13 @@ func pageID(r ActivityRow) string {
 	return ""
 }
 
+// pageHref and historyHref escape the id: a conflict's id comes from the module.
 func pageHref(v ActivityView, id string) string {
-	return fmt.Sprintf("/campaigns/%s/entities/%s", v.CampaignID, id)
+	return fmt.Sprintf("/campaigns/%s/entities/%s", v.CampaignID, url.PathEscape(id))
 }
 
 func historyHref(v ActivityView, id string) string {
-	return fmt.Sprintf("/campaigns/%s/entities/%s/history", v.CampaignID, id)
+	return fmt.Sprintf("/campaigns/%s/entities/%s/history", v.CampaignID, url.PathEscape(id))
 }
 
 // rowSide is the quiet link at a row's right: where to look further.
