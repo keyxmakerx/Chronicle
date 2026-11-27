@@ -99,6 +99,6 @@
 .hc-form { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 16px; }
 .hc-set { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .hc-opt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 36px; font-size: 14px; color: var(--color-text-primary); }
-.hc-num { width: 4.5rem; padding-top: 4px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
+input.hc-num { width: 4.5rem; padding-top: 4px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
 .hc-list { margin-top: 12px; }
 .hc-reopen { display: flex; flex: none; align-items: center; gap: 8px; }
