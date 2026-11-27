@@ -95,7 +95,7 @@ var (
 	counterLights = with(wordsOf("lamp", "forge", "candles", "lanterns", "moonlight",
 		"crystals", "brazier", "wisps", "star", "halo", "witchfire", "orb", "firelight", "votives", "frostfire",
 		"jellyfish", "pierced-lamp", "cauldron", "filament", "sunlight", "candelabra"), "candle", "candles", "lantern", "lanterns", "moon", "moonlight")
-	counterOutsides = with(wordsOf("day", "dusk", "night", "rain", "live"), "campaign", "live", "calendar", "live", "synced", "live")
+	counterOutsides = with(wordsOf("day", "dusk", "night", "rain", "live"), "campaign", "live", "skypane", "live", "synced", "live")
 	counterScenes   = with(wordsOf("town", "forest", "mountains", "coast", "desert", "swamp", "snowfield", "fields",
 		"jungle", "volcano", "ruins", "spires", "harbour", "underdark", "astral", "sky-islands", "castle", "graveyard"),
 		"city", "town", "woods", "forest", "mountain", "mountains", "sea", "coast", "beach", "coast", "dunes", "desert", "snow", "snowfield",
