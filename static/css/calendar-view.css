@@ -2509,6 +2509,10 @@ html[data-motion="calm"] .cal-v5{--yt-s0:1}
 .cal-v5 .yt-mo::after{content:"";position:absolute;left:0;right:0;top:0;height:var(--yt-colh,76px);border-radius:8px;background:var(--hair2);opacity:0;pointer-events:none;transition:opacity var(--dur-micro,120ms) var(--ease-out)}
 .cal-v5 .yt-mo span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;font:550 12px/1 var(--sans);color:var(--ink2);opacity:0;pointer-events:none;transition:opacity var(--dur-micro,120ms) var(--ease-out)}
 .cal-v5 .yt-mo.cur span{opacity:1;color:var(--ink);font-weight:650}
+/* A name wider than its month would spill past the track's ends, under
+   the row names on the left; the end months start at their own edge. */
+.cal-v5 .yt-mo:first-child span{left:4px;transform:translate(0,-50%)}
+.cal-v5 .yt-mo:last-child span{left:auto;right:4px;transform:translate(0,-50%)}
 .cal-v5 .yt-mo:focus-visible span{opacity:1}
 .cal-v5 .yt-mo:active::after{opacity:1;background:var(--hair)}
 @media (hover:hover){
