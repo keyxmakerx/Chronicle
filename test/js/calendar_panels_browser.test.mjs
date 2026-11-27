@@ -105,3 +105,16 @@ for (const [label, viewport] of [['a desktop', { width: 1280, height: 800 }], ['
     assert.ok(m.linksBottom <= m.einBottom + 1, 'scrolled to its end, Linked pages is in view');
   });
 }
+
+// Escape pressed while a day's card is still folding open closes it every
+// time, rather than queueing a close an interrupted opening could drop.
+test('Escape while a day card is opening closes it', { skip }, async (t) => {
+  const p = await page(t, { width: 1280, height: 800 });
+  for (let i = 0; i < 20; i++) {
+    await p.click('.day[data-key="2026_10_29"]');
+    await p.waitForTimeout(60);
+    await p.keyboard.press('Escape');
+    await settle(p);
+    assert.equal(await p.$eval('#cal5-wing', (w) => w.classList.contains('open')), false, `run ${i + 1}: the card stayed open`);
+  }
+});

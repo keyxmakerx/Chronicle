@@ -6116,7 +6116,9 @@
         if (self._pf.state !== 'closed') { self.closeFlap(); return; }
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
         if (self._roll) { if (!self._rollHolds()) self._roll.close(); return; }
-        if (self.wingFor) { self.closeWing(); return; }
+        // Mid-fold, a queued close can be lost if the opening is superseded,
+        // so a key closes at once, as other keyboard closes do.
+        if (self.wingFor) { self.closeWing(self._pw.state === 'opening' ? { instant: true } : undefined); return; }
         if (self._eraOpen != null) { self.closeEraPanel({ refocus: true }); return; }
         if (self._timeShowing()) self.closeTimeBar();
       };
