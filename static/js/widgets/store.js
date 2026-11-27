@@ -105,7 +105,7 @@
   var host = null, toggle = null, dlg = null, campaign = '', csrf = '', searchT = 0, seq = 0;
   var S = freshState();
   function freshState() {
-    return { view: 'home', all: false, q: '', page: 1, system: '', home: {}, list: null, item: null, from: 'home',
+    return { view: 'home', all: false, q: '', page: 1, system: '', sysKnown: false, home: {}, list: null, item: null, from: 'home',
       err: '', added: {}, report: null, reportErr: '' };
   }
 
@@ -114,7 +114,11 @@
     return window.Chronicle.apiAction('/campaigns/' + encodeURIComponent(campaign) + path, { method: method, body: body, csrfToken: csrf });
   }
   function $(sel) { return dlg ? dlg.querySelector(sel) : null; }
-  function sysLabel() { return S.system ? systemName(S.system) : 'This game system'; }
+  // The campaign's own system, as every gallery answer reports it (an empty id
+  // is a campaign with no game system). sysLabel is for sentences; the chip
+  // starts with a capital.
+  function sysLabel() { return systemName(S.system); }
+  function sysChip() { var l = sysLabel(); return l.charAt(0).toUpperCase() + l.slice(1); }
 
   /* ---- Drawing ---- */
   function shell() {
@@ -139,8 +143,10 @@
       h += '<button type="button" class="st-k" data-st="view" data-v="' + k.id + '" aria-current="' + (S.view === k.id && !S.q) + '">' +
         '<span>' + esc(k.label) + '</span>' + (n === '' ? '' : '<span class="st-n"><span class="sr-only">, </span>' + esc(n) + '</span>') + '</button>';
     });
+    // The system choice waits for the first answer to say which system it is.
+    if (!S.sysKnown) return h;
     h += '<p class="st-lb" id="st-sys-lb">Game system</p><div class="st-sys" role="radiogroup" aria-labelledby="st-sys-lb">' +
-      '<button type="button" class="st-k" role="radio" data-st="sys" data-v="cur" aria-checked="' + !S.all + '">' + esc(sysLabel()) + '</button>' +
+      '<button type="button" class="st-k" role="radio" data-st="sys" data-v="cur" aria-checked="' + !S.all + '">' + esc(sysChip()) + '</button>' +
       '<button type="button" class="st-k" role="radio" data-st="sys" data-v="all" aria-checked="' + S.all + '">Any game system</button></div>';
     return h;
   }
@@ -236,6 +242,7 @@
   }
 
   /* ---- Loading ---- */
+  function learnSystem(d) { if (d && typeof d.systemId === 'string') { S.system = d.systemId; S.sysKnown = true; } }
   // withCatalog runs fn once the Store knows its kinds, asking the server the
   // first time. A failure shows the usual error with Try again.
   function withCatalog(mine, fn) {
@@ -258,7 +265,7 @@
     KINDS.forEach(function (k) {
       call('GET', '/designs/gallery' + query({ kind: k.id, all: S.all, page: 1 })).then(function (d) {
         if (mine !== seq) return;
-        S.home[k.id] = d; if (d && d.systemId && !S.all) S.system = d.systemId;
+        S.home[k.id] = d; learnSystem(d);
         paint();
       }).catch(function (e) { if (mine !== seq) return; S.home[k.id] = { entries: [], total: 0 }; S.err = (e && e.message) || 'Could not load the Store. Try again.'; paint(); });
     });
@@ -272,7 +279,7 @@
   function listOf(mine) {
     call('GET', '/designs/gallery' + query({ kind: S.q ? '' : S.view, all: S.all, q: S.q, page: S.page })).then(function (d) {
       if (mine !== seq) return;
-      S.list = d; S.page = d.page || 1; if (d && d.systemId && !S.all) S.system = d.systemId;
+      S.list = d; S.page = d.page || 1; learnSystem(d);
       paint();
     }).catch(function (e) { if (mine !== seq) return; S.list = { entries: [], total: 0, page: 1, perPage: 12 }; S.err = (e && e.message) || 'Could not load the Store. Try again.'; paint(); });
   }

@@ -284,3 +284,19 @@ test('a Store that cannot learn its kinds says so and Try again asks again', { s
   await page.waitForSelector('#st-h-crafting');
   await page.close();
 });
+
+test('a campaign with no game system says so the same way everywhere', { skip }, async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    const orig = window.Chronicle.apiAction;
+    window.Chronicle.apiAction = function (url, o) {
+      return orig(url, o).then((d) => { if (d && 'systemId' in d && Array.isArray(d.entries)) { d.systemId = ''; d.entries = []; d.total = 0; } return d; });
+    };
+  });
+  await page.click('[data-store-toggle]');
+  await page.waitForSelector('.st-empty');
+  const rail = await page.$$eval('.st-rail .st-k', (b) => b.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  assert.ok(rail.includes('No game system'), JSON.stringify(rail));
+  assert.match(await page.textContent('.st-empty p'), /^Nothing has been shared for no game system yet\./);
+  await page.close();
+});
