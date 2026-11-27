@@ -255,9 +255,11 @@ test(`a long title that settles keeps its lines and its neighbours still while i
 }
 
 // A box centres its lines as a group, so a line joining or leaving moves the
-// others: they glide there, never jump in one frame. The glide's first
-// frame moves about 8px; the old jump was 36px, so 14px leaves room for a
-// slow runner without letting a jump through.
+// others: they glide there, never jump in one frame. A jump does the whole
+// move in one frame; a glide spreads it over several, so the biggest frame
+// stays well under the move it is part of. Measured as a share rather than
+// in pixels, it holds for the title's small move as for the caption's big
+// one, and on a slow runner whose frames are long.
 test('lines in a box glide, never jump, when another line joins or leaves', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 1000, height: 640 });
   await pg.evaluate(() => {
@@ -274,17 +276,33 @@ test('lines in a box glide, never jump, when another line joins or leaves', { sk
     { say: 'The Drowned Bell', at: 0.6, seconds: 0, style: 'title', in: 'fade' }
   ] });
   await pg.waitForFunction(() => window.track.length >= 400 || (window.run.time() > 3.4));
-  const steps = { 'Chapter two': 0, 'The Drowned Bell': 0 };
   const track = await pg.evaluate(() => window.track);
+  // Each line's frame-to-frame steps, in order.
+  const steps = { 'Chapter two': [], 'The Drowned Bell': [] };
   for (let i = 1; i < track.length; i++) {
     for (const l of track[i]) {
       const prev = track[i - 1].find((p) => p.t === l.t);
-      if (prev) steps[l.t] = Math.max(steps[l.t], Math.abs(l.y - prev.y));
+      if (prev) steps[l.t].push(l.y - prev.y);
     }
   }
   assert.ok(track.some((f) => f.length === 2) && track.at(-1).length === 1, 'both lines shown, then the caption gone');
-  assert.ok(steps['Chapter two'] < 14, 'the caption jumped ' + steps['Chapter two'] + 'px in one frame');
-  assert.ok(steps['The Drowned Bell'] < 14, 'the title jumped ' + steps['The Drowned Bell'] + 'px in one frame');
+  // The biggest step, against the whole move it belongs to: the steps in
+  // the same direction around it until the line comes to rest.
+  const share = (list) => {
+    let at = 0;
+    list.forEach((d, i) => { if (Math.abs(d) > Math.abs(list[at])) at = i; });
+    const big = list[at];
+    if (Math.abs(big) < 2) return { big, move: big, share: 0 };
+    let move = big;
+    for (let i = at - 1; i >= 0 && Math.sign(list[i]) === Math.sign(big) && Math.abs(list[i]) > 0.05; i--) move += list[i];
+    for (let i = at + 1; i < list.length && Math.sign(list[i]) === Math.sign(big) && Math.abs(list[i]) > 0.05; i++) move += list[i];
+    return { big, move, share: big / move };
+  };
+  for (const name of ['Chapter two', 'The Drowned Bell']) {
+    const got = share(steps[name]);
+    assert.ok(got.share < 0.7, `${name} moved ${got.big.toFixed(1)}px of a ${got.move.toFixed(1)}px move in one frame`);
+  }
+  assert.ok(Math.abs(share(steps['The Drowned Bell']).move) > 4, 'the title moves when the caption leaves');
   assert.deepEqual(errors, []);
 });
 
