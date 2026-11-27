@@ -84,7 +84,7 @@ func TestCampaignTabOf(t *testing.T) {
 	for _, l := range tab.Customize {
 		ids = append(ids, l.ID)
 	}
-	if strings.Join(ids, ",") != "categories,homes,x-dice,brush" || tab.CustomizerHref != "/campaigns/c1/customize" || tab.PicturesHref != "/campaigns/c1/customize/look" {
+	if strings.Join(ids, ",") != "categories,homes,x-dice,brush,store" || tab.CustomizerHref != "/campaigns/c1/customize" || tab.PicturesHref != "/campaigns/c1/customize/look" {
 		t.Errorf("customize rows = %v, links = %q / %q", ids, tab.CustomizerHref, tab.PicturesHref)
 	}
 	if tab.Card.Name != "Therin" || tab.Card.Description != "The last free city" || !tab.Card.Public || len(tab.Card.Faces) != campaignCardFaces {

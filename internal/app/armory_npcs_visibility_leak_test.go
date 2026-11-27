@@ -299,3 +299,56 @@ func galleryTestUUID(t *testing.T) string {
 	}
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
+
+type fixedPartyCheck bool
+
+func (p fixedPartyCheck) ShowsParty(context.Context, string) bool { return bool(p) }
+
+// A playable character nobody claimed is a hero waiting for a player: while
+// the campaign shows a party it leaves the NPC list (the Characters page
+// shows it there), and without one it stays, since nothing else would show it.
+func TestNPCGallery_PlayableHeroLeavesForTheParty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openGalleryTestDB(t)
+	ctx := context.Background()
+
+	fx := newGalleryFixture(t, db)
+	defer fx.cleanup()
+
+	charTypeID := fx.entityType("character", "Character", "", "")
+	npcID := fx.entity(charTypeID, "Old Hob", "old-hob", "default")
+	heroID := fx.entity(charTypeID, "Brannoc", "brannoc", "default")
+	mustGalleryExec(t, db, `UPDATE entities SET playable = 1 WHERE id = ?`, heroID)
+
+	for _, tc := range []struct {
+		name     string
+		party    bool
+		wantHero bool
+	}{
+		{"claiming on", true, false},
+		{"claiming off", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			npcSvc := npcs.NewNPCService(npcs.NewNPCRepository(db), &npcEntityTypeFinderAdapter{lists: fixedTypeLists{npc: []int{charTypeID}}},
+				&entityVisibilityFilterAdapter{svc: fx.entityService()})
+			npcSvc.SetPartyCheck(fixedPartyCheck(tc.party))
+			cards, total, err := npcSvc.ListNPCs(ctx, fx.campaignID, permissions.RolePlayer, "player-1", npcs.DefaultNPCListOptions())
+			if err != nil {
+				t.Fatalf("ListNPCs: %v", err)
+			}
+			got := map[string]bool{}
+			for _, c := range cards {
+				got[c.ID] = true
+			}
+			if !got[npcID] || got[heroID] != tc.wantHero {
+				t.Fatalf("listed %v, want Old Hob and Brannoc=%v", got, tc.wantHero)
+			}
+			count, err := npcSvc.CountNPCs(ctx, fx.campaignID, permissions.RolePlayer, "player-1")
+			if err != nil || count != total {
+				t.Fatalf("CountNPCs = %d, %v; want %d (the list's total)", count, err, total)
+			}
+		})
+	}
+}

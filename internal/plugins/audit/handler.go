@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -32,6 +33,7 @@ type EntityViewGuard interface {
 type Handler struct {
 	service     AuditService
 	entityGuard EntityViewGuard
+	zone        func(ctx context.Context, userID string) *time.Location
 }
 
 // NewHandler creates a new audit handler.
@@ -56,33 +58,38 @@ func (h *Handler) Activity(c *echo.Context) error {
 	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/data#activity", cc.Campaign.ID))
 }
 
-// ActivityFragment returns an HTMX fragment with stats and timeline for the
-// settings Activity tab. GET /campaigns/:id/activity/fragment
+// ActivityFragment returns the Recent Activity tab of Campaign settings'
+// Data page: the campaign's figures and its changes as sittings. shown asks
+// for more sittings. GET /campaigns/:id/activity/fragment
 func (h *Handler) ActivityFragment(c *echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
 	}
-
-	page, _ := strconv.Atoi(c.QueryParam("page"))
-	if page < 1 {
-		page = 1
-	}
-
 	ctx := c.Request().Context()
-	campaignID := cc.Campaign.ID
-
-	entries, total, err := h.service.GetCampaignActivity(ctx, campaignID, page)
+	feed, err := h.service.RecentActivity(ctx, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
-
-	stats, err := h.service.GetCampaignStats(ctx, campaignID)
+	stats, err := h.service.GetCampaignStats(ctx, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
+	v := ActivityView{CampaignID: cc.Campaign.ID, Feed: feed, Stats: stats, Now: time.Now(), Loc: time.UTC, Shown: sittingsStep}
+	if n, err := strconv.Atoi(c.QueryParam("shown")); err == nil && n > sittingsStep {
+		v.Shown = min(n, len(feed.Sittings)+sittingsStep)
+	}
+	if h.zone != nil {
+		if loc := h.zone(ctx, auth.GetUserID(c)); loc != nil {
+			v.Loc = loc
+		}
+	}
+	return middleware.Render(c, http.StatusOK, RecentActivity(v))
+}
 
-	return middleware.Render(c, http.StatusOK, ActivityContent(cc, stats, entries, total, page, perPage))
+// SetZone gives the activity the viewer's time zone for its times.
+func (h *Handler) SetZone(zone func(ctx context.Context, userID string) *time.Location) {
+	h.zone = zone
 }
 
 // EmbedActivity returns an HTMX fragment for the dashboard activity feed block.

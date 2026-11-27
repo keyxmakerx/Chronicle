@@ -378,7 +378,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		@eraPanel(cc, entity, csrfToken)
 		// The History panel loads here when History is clicked.
 		if isScribe {
-			<div id="page-history-slot"></div>
+			@pageHistorySlot(cc, entity)
 		}
 		if canRename && !editor {
 			// The fold renames the usual page, whichever era is shown.

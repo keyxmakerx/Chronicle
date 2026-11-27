@@ -71,6 +71,7 @@ type storyWorld struct {
 	homebrew   homebrew.Service
 	trackers   trackers.Service
 	capture    *deckCapture
+	asks       *askCapture
 	on         bool
 	dir        decks.Viewer
 	tam, ilse  decks.Viewer
@@ -94,7 +95,7 @@ func newStoryWorld(t *testing.T) *storyWorld {
 	db := dbtest.Open(t, dbtest.Options{Prefix: "chronicle_deckstory_", Plugins: []dbtest.PluginMigrations{
 		plugin(decks.PluginSlug, decks.MigrationsFS), plugin(trackers.PluginSlug, trackers.MigrationsFS),
 		plugin(homebrew.PluginSlug, homebrew.MigrationsFS)}})
-	w := &storyWorld{t: t, db: db, on: true, capture: &deckCapture{}}
+	w := &storyWorld{t: t, db: db, on: true, capture: &deckCapture{}, asks: &askCapture{}}
 	exec := func(q string, args ...any) { t.Helper(); mustGalleryExec(t, db, q, args...) }
 	w.camp, w.owner, w.tamUser, w.ilseUser = galleryTestUUID(t), galleryTestUUID(t), galleryTestUUID(t), galleryTestUUID(t)
 	for _, u := range []string{w.owner, w.tamUser, w.ilseUser} {
@@ -133,7 +134,11 @@ func newStoryWorld(t *testing.T) *storyWorld {
 	if err := registerDecksHomebrew(reg, w.story); err != nil {
 		t.Fatal(err)
 	}
-	w.homebrew = homebrew.NewService(homebrew.NewRepository(db), reg, nil, homebrew.NewRunStore(db))
+	if err := reg.RegisterAction(homebrew.AskDirector()); err != nil {
+		t.Fatal(err)
+	}
+	w.homebrew = homebrew.NewService(homebrew.NewRepository(db), reg, nil, homebrew.NewRunStore(db),
+		homebrew.WithAskPeople(&homebrewAskPeople{svc: campSvc}), homebrew.WithBell(w.asks), homebrew.WithLive(w.asks))
 	w.story.bindHomebrew(w.homebrew)
 
 	w.dir = decks.Viewer{UserID: w.owner, MemberRole: 3, VisibilityRole: 3, Director: true}
