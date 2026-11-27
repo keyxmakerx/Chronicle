@@ -127,6 +127,9 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
   .ra-chip, .ra-find input { min-height: 44px; }
   .ra-foldall, .ra-legend .quiet-word, .ra-side a, .ra-acts a { display: inline-flex; align-items: center; min-height: 44px; }
   .ra-w a { padding: 14px 0; margin: -14px 0; }
+  /* On a conflict's line the whole line opens the box; its page is a tap
+     away inside it, so the name doesn't take the tap. */
+  .ra-cf > summary .ra-w a { pointer-events: none; padding: 0; margin: 0; color: inherit; font-weight: 600; }
   .ra-cf > summary { min-height: 44px; }
 }
 

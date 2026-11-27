@@ -142,7 +142,7 @@ templ raSitting(v ActivityView, s Sitting) {
 					></i>
 				}
 			</span>
-			<span class="ra-what">{ sittingSummary(s) }</span>
+			<span class="ra-what" title={ sittingSummary(s) }>{ sittingSummary(s) }</span>
 			<span class="ra-pills">
 				if c := s.Count(KindConflict); c > 0 {
 					<span class="ra-pill" data-tone="conflict">{ plural(c, "conflict") }</span>
