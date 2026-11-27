@@ -98,7 +98,7 @@ func TestRollFirstEndToEnd(t *testing.T) {
 			}
 			r := page.Rolls[0]
 			if r.RollerID != w.tamUser || r.RollerName != "Tam" || r.Formula != "2d10" || r.Mode != rolls.ModePublic ||
-				r.Total == nil || *r.Total != *got.Roll.Total || r.Label != "Rule from Omens" {
+				r.Total == nil || *r.Total != *got.Roll.Total || r.Label != "House rule roll" {
 				t.Errorf("logged roll = %+v", r)
 			}
 			last := w.asks.rings[len(w.asks.rings)-1]

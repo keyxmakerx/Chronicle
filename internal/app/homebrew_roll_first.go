@@ -174,6 +174,9 @@ func (rf *rollFirst) offer(ctx context.Context, campaignID string, act homebrew.
 	return o, err
 }
 
+// houseRuleRollLabel names a roll-first roll with no characteristic.
+const houseRuleRollLabel = "House rule roll"
+
 // roll makes the roll as a public Table roll by the player, as their hero
 // when the characteristic came from one, so it lands in the roll log and
 // on everyone's Table like any roll they make.
@@ -182,9 +185,11 @@ func (rf *rollFirst) roll(ctx context.Context, campaignID string, act homebrew.A
 	if err != nil {
 		return homebrew.Rolled{}, err
 	}
+	// The roll is public, so its label never names the recipe: a Director
+	// may call a rule after a twist the players haven't met yet.
 	label := o.Label
 	if label == "" {
-		label = act.Note
+		label = houseRuleRollLabel
 	}
 	v, err := rf.rolls.Table(ctx, campaignID, rolls.Viewer{UserID: act.By.UserID, Name: act.By.Name, Director: act.By.Director},
 		rolls.TableInput{Formula: o.Formula, Label: label, Mode: rolls.ModePublic, CharacterID: heroID})

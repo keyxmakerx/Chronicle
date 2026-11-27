@@ -92,7 +92,7 @@ func TestRollFirstRollsThroughTheTable(t *testing.T) {
 		{"no scope hero: the first hero's Might is added", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "", "2d10+2", "Might", "hero-mira", false},
 		{"the rule's own hero's Might is added", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "hero-mira-2", "2d10+4", "Might", "hero-mira-2", false},
 		{"a scope page she doesn't own falls back to her first hero", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "hero-tam", "2d10+2", "Might", "hero-mira", false},
-		{"plain dice name the rule", `{"dice":"d20","target":12}`, "mira", "", "1d20", "Rule from Lucky draw", "", false},
+		{"plain dice never name the recipe", `{"dice":"d20","target":12}`, "mira", "", "1d20", "House rule roll", "", false},
 		{"a hero with no number can't roll", `{"dice":"2d10","characteristic":"Agility","target":12}`, "mira", "", "", "", "", true},
 		{"a player with no hero can't add Might", `{"dice":"2d10","characteristic":"Might","target":12}`, "tam", "", "", "", "", true},
 	}
