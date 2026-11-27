@@ -91,13 +91,14 @@ func pileLine(pile *int) string {
 // drawn as a faint place where the pile was.
 func pileEmpty(pile *int) bool { return pile != nil && *pile == 0 }
 
-// stateLine is what an opened card says about itself under the card.
-func (c *OpenedCard) stateLine() string {
+// stateLine is what an opened card says about itself under the card. gm is
+// the campaign's word for its game master, so the Table drawer uses one word.
+func (c *OpenedCard) stateLine(gm string) string {
 	switch {
 	case c.Copy.Waiting && c.Shown:
-		return "Waiting for your Director. Shown to the table."
+		return "Waiting for your " + gm + ". Shown to the table."
 	case c.Copy.Waiting:
-		return "Waiting for your Director"
+		return "Waiting for your " + gm
 	case c.Shown:
 		return "Shown to the table"
 	}
@@ -131,10 +132,12 @@ func (d HandDraw) knownLine() string {
 	return countWords(*d.Pile, "card in the pile", "cards in the pile")
 }
 
-func (d HandDraw) drawsLine() string {
+// drawsLine is how often the viewer may draw; gm is the campaign's word for
+// its game master.
+func (d HandDraw) drawsLine(gm string) string {
 	switch {
 	case d.Invited:
-		return "Your Director invites you to draw."
+		return "Your " + gm + " invites you to draw."
 	case d.DrawsLeft == nil:
 		return "You can draw as often as you like."
 	case *d.DrawsLeft == 1:

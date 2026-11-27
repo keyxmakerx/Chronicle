@@ -57,6 +57,12 @@ type Service interface {
 	// SetSettings changes the campaign's dice, partially: only the fields sent
 	// change. Directors only.
 	SetSettings(ctx context.Context, campaignID string, v Viewer, in UpdateSettingsInput) (*Settings, error)
+	// MyDice is the viewer's own dice pick and the dice their rolls are
+	// thrown in right now.
+	MyDice(ctx context.Context, campaignID string, v Viewer) (*MyDice, error)
+	// SetMyDice replaces the viewer's own pick, checked against what the
+	// campaign offers. The zero pick follows the campaign's dice again.
+	SetMyDice(ctx context.Context, campaignID string, v Viewer, p DicePick) (*MyDice, error)
 }
 
 type service struct {
@@ -132,6 +138,7 @@ func (s *service) Table(ctx context.Context, campaignID string, v Viewer, in Tab
 		ID: uuid.New().String(), CampaignID: campaignID, Origin: OriginChronicle, Source: SourceTable,
 		RollerID: v.UserID, RollerName: clip(v.Name, NameMax), Label: label, Formula: shown,
 		Dice: dice, Modifier: mod, Total: total, Mode: mode, CharacterID: charID, CreatedAt: s.now().UTC(),
+		RollerDice: s.rollerDice(ctx, campaignID, v.UserID),
 	}
 	if _, _, err := s.repo.Insert(ctx, r); err != nil {
 		return nil, err
@@ -199,6 +206,7 @@ func (s *service) Report(ctx context.Context, campaignID string, in ReportInput)
 		ID: uuid.New().String(), CampaignID: campaignID, Origin: in.Origin, OriginID: id, Source: SourceFoundry,
 		RollerID: in.RollerID, RollerName: name, Label: clip(in.Label, LabelMax), Formula: clip(in.Formula, FormulaMax),
 		Dice: dice, Modifier: in.Total - sum, Total: in.Total, Mode: in.Mode, CreatedAt: s.now().UTC(),
+		RollerDice: s.rollerDice(ctx, campaignID, in.RollerID),
 	}
 	if r.Label == "" {
 		r.Label = r.Formula
@@ -231,7 +239,7 @@ func (s *service) Record(ctx context.Context, campaignID string, in LogInput) (s
 		RollerID: in.RollerID, RollerName: clip(in.RollerName, NameMax), Label: clip(in.Label, LabelMax),
 		Formula: clip(in.Formula, FormulaMax), Dice: dice, Modifier: in.Modifier, Total: in.Total,
 		Outcome: clip(in.Outcome, OutcomeMax), Why: clip(in.Why, WhyMax), From: clip(in.From, FromMax),
-		Mode: mode, CreatedAt: s.now().UTC(),
+		Mode: mode, CreatedAt: s.now().UTC(), RollerDice: s.rollerDice(ctx, campaignID, in.RollerID),
 	}
 	if _, _, err := s.repo.Insert(ctx, r); err != nil {
 		return "", err
@@ -403,6 +411,111 @@ func cleanOffered(f patch.Field[[]string]) ([]string, error) {
 	return out, nil
 }
 
+// isOffered is whether players may pick set; an empty offer list offers every
+// set.
+func isOffered(st Settings, set string) bool {
+	return len(st.DiceOffered) == 0 || oneOf(set, st.DiceOffered)
+}
+
+// effectiveDice is the dice a member's rolls are thrown in, on every screen:
+// the campaign's, with the member's own pick laid over it field by field
+// while the campaign lets players pick. A stored pick that no longer counts
+// (picking turned off, its set taken off the offer, a name the engine no
+// longer has) is skipped, never deleted, so the campaign's dice show and
+// widening the offer again brings the pick back. A set that is skipped takes
+// its colour with it, since a colour belongs to its set.
+func effectiveDice(st Settings, p DicePick) DiceLook {
+	out := DiceLook{Set: st.DiceSet, Colour: st.DiceColour, CritSucc: st.CritSucc, CritFail: st.CritFail}
+	if !st.PlayersPick {
+		return out
+	}
+	if p.Set != "" && oneOf(p.Set, DiceSetKeys) && isOffered(st, p.Set) && (p.Colour == "" || diceColourSlug.MatchString(p.Colour)) {
+		out.Set, out.Colour, out.Own = p.Set, p.Colour, true
+	}
+	if p.CritSucc != "" && oneOf(p.CritSucc, CritSuccKeys) {
+		out.CritSucc, out.Own = p.CritSucc, true
+	}
+	if p.CritFail != "" && oneOf(p.CritFail, CritFailKeys) {
+		out.CritFail, out.Own = p.CritFail, true
+	}
+	return out
+}
+
+// rollerDice settles the dice a new roll is thrown in. A roll with no roller
+// (a Foundry user nobody linked) is thrown in the campaign's dice. When the
+// settings or the pick can't be read the roll is still made, carrying no
+// dice, and screens throw it in the campaign's.
+func (s *service) rollerDice(ctx context.Context, campaignID, rollerID string) *DiceLook {
+	st, err := s.repo.Settings(ctx, campaignID)
+	if err != nil {
+		slog.Warn("rolls: cannot read the campaign's dice; the roll carries none", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	var p DicePick
+	if rollerID != "" {
+		if p, err = s.repo.DicePick(ctx, campaignID, rollerID); err != nil {
+			slog.Warn("rolls: cannot read the roller's dice; using the campaign's", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			p = DicePick{}
+		}
+	}
+	look := effectiveDice(st, p)
+	return &look
+}
+
+func (s *service) MyDice(ctx context.Context, campaignID string, v Viewer) (*MyDice, error) {
+	if v.UserID == "" {
+		return nil, apperror.NewForbidden("sign in to pick your dice")
+	}
+	st, err := s.repo.Settings(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.repo.DicePick(ctx, campaignID, v.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &MyDice{Pick: p, Effective: effectiveDice(st, p), MayPick: st.PlayersPick}, nil
+}
+
+// SetMyDice stores the viewer's own pick. Only the viewer's own row is ever
+// written, the campaign must let players pick, and every name must be one the
+// engine draws, the set one on offer. The zero pick is always allowed, so
+// anyone can go back to the campaign's dice.
+func (s *service) SetMyDice(ctx context.Context, campaignID string, v Viewer, p DicePick) (*MyDice, error) {
+	if v.UserID == "" {
+		return nil, apperror.NewForbidden("sign in to pick your dice")
+	}
+	st, err := s.repo.Settings(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	// A colour belongs to its set; without a set the campaign's colour stands.
+	if p.Set == "" {
+		p.Colour = ""
+	}
+	if !p.IsZero() {
+		if !st.PlayersPick {
+			return nil, apperror.NewForbidden("Your Director has set everyone’s dice.")
+		}
+		if p.Set != "" && (!oneOf(p.Set, DiceSetKeys) || !isOffered(st, p.Set)) {
+			return nil, errInvalid("Pick one of the dice sets on offer.")
+		}
+		if p.Colour != "" && !diceColourSlug.MatchString(p.Colour) {
+			return nil, errInvalid("That dice colour isn't one of the set's.")
+		}
+		if p.CritSucc != "" && !oneOf(p.CritSucc, CritSuccKeys) {
+			return nil, errInvalid("Pick one of the crit success animations.")
+		}
+		if p.CritFail != "" && !oneOf(p.CritFail, CritFailKeys) {
+			return nil, errInvalid("Pick one of the crit fail animations.")
+		}
+	}
+	if err := s.repo.SaveDicePick(ctx, campaignID, v.UserID, p); err != nil {
+		return nil, err
+	}
+	return &MyDice{Pick: p, Effective: effectiveDice(st, p), MayPick: st.PlayersPick}, nil
+}
+
 // has is whether a field carries a value to write: an explicit null keeps the
 // stored one (Field.Val), so it writes nothing.
 func has[T any](f patch.Field[T]) bool { _, ok := f.Get(); return ok }
@@ -435,6 +548,7 @@ func viewOf(r Roll, v Viewer) View {
 	}
 	mod, total := r.Modifier, r.Total
 	out.Dice, out.Modifier, out.Total, out.Outcome = r.Dice, &mod, &total, r.Outcome
+	out.RollerDice = r.RollerDice
 	return out
 }
 
