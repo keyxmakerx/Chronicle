@@ -520,7 +520,9 @@
     counter: ['straight', 'curved', 'stall-table'],
     wall: ['plaster', 'stone', 'timber', 'brick', 'canvas', 'night-sky'],
     light: ['lamp', 'forge', 'candles', 'lanterns', 'moonlight'],
-    outside: ['day', 'dusk', 'night', 'rain']
+    outside: ['day', 'dusk', 'night', 'rain'],
+    // What stands outside under that sky; the town is the room's own, the parts packs add the rest.
+    scene: ['town']
   };
   var CM_PROPS = ['anvil', 'alembic', 'jars', 'crystal', 'herbs', 'floating-books', 'orrery', 'ladder', 'banner', 'sconce', 'sparks', 'lanterns', 'rain', 'steam-cart', 'motes'];
   /* What a parts pack (shop_room_parts_*.js) adds besides the option lists:
@@ -564,6 +566,8 @@
       skeleton: { shape: cmPick(sk.shape, CM_OPT.shape, D.skeleton.shape), opening: cmPick(sk.opening, CM_OPT.opening, D.skeleton.opening), display: cmPick(sk.display, CM_OPT.display, D.skeleton.display), counter: cmPick(sk.counter, CM_OPT.counter, D.skeleton.counter) },
       theme: { wall: cmPick(th.wall, CM_OPT.wall, D.theme.wall), wood: cmHex(th.wood, D.theme.wood), cloth: cmHex(th.cloth, D.theme.cloth), accent: cmHex(th.accent, D.theme.accent), trim: cmHex(th.trim, D.theme.trim),
         light: cmPick(th.light, CM_OPT.light, D.theme.light), warmth: w >= 0 && w <= 1 ? w : D.theme.warmth, outside: cmPick(th.outside, CM_OPT.outside, D.theme.outside) }, props: props };
+    var scene = cmPick(th.scene, CM_OPT.scene, 'town');
+    if (scene !== 'town') out.theme.scene = scene;
     var pic = cmPic(th.picture);
     if (pic) out.theme.picture = pic;
     return out;
@@ -592,6 +596,7 @@
     t.amb = mix(L.amb, '#4a3a4c', w * .4); t.L = L;
     t.time = { day: '', dusk: 'dusk', night: 'night', rain: 'rain' }[th.outside];
     t.pic = th.picture || null; skyPic = false;
+    t.scene = th.scene || 'town'; curScene = t;
     // Where the light sits: on the counter, hung from the ceiling over a stall, in the forge's mouth, or from above through the opening.
     var lx = t.mx(404), ly = 372;
     var lq = CM_LPOS[th.light]; if (typeof lq === 'function') lq = lq(sk);
@@ -669,8 +674,18 @@
     for (i = 0; i < 6; i++) s += '<ellipse cx="' + f1(x + r() * w) + '" cy="' + f1(y + h * (.08 + r() * .4)) + '" rx="' + f1(w * (.14 + r() * .12)) + '" ry="' + f1(h * (.05 + r() * .04)) + '" fill="#2c3648" opacity="' + f1(.28 + r() * .22) + '" filter="url(#src-blur14)"/>';
     return s;
   }
+  /* What stands outside, drawn by the scene the theme names. Openings ask for
+     it as a skyline in the lower part of their view (anything drawn above
+     that is clipped by the opening). The room in hand is the one cmCtx last
+     worked out: a room is composed in one synchronous pass, so this is the
+     room being drawn. */
+  var curScene = null, CM_SCENES = { town: cmTown };
   function cmSkyline(x, y, w, h, col, seed) {
     if (skyPic) return '';
+    var t = curScene, f = (t && CM_SCENES[t.scene]) || cmTown;
+    return f(x, y, w, h, col, seed, t ? t.time : 'night');
+  }
+  function cmTown(x, y, w, h, col, seed) {
     var r = rng(seed || 5), s = '', cx = x, bw, bh;
     while (cx < x + w) {
       bw = 26 + r() * 36; bh = 20 + r() * h * .5;
@@ -2246,9 +2261,9 @@
   function call(host, fn, a) { var c = host && host._counter; return c ? c[fn](a) : false; }
   window.ShopRoomCounter = {
     render: render, layout: layout, starters: CM_STARTERS, starterFor: starterFor, normalise: cmNorm,
-    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside }, picture: CM_PIC, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
+    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside, scene: CM_OPT.scene }, picture: CM_PIC, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
     // What the parts packs are written with: the room's tables and its drawing helpers.
-    kit: { CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
+    kit: { CM_SCENES: CM_SCENES, CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
     sync: function (host, model) { if (host && host._counter) host._counter.update(model); },
     escape: function (host) { return !!call(host, 'escape'); },
     pause: function (host, on) { call(host, 'pause', on); },
