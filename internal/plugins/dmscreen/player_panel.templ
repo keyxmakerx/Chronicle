@@ -1,0 +1,197 @@
+package dmscreen
+
+import "fmt"
+
+// PlayerPanel is the players' screen fragment. It is the DM Screen's markup
+// (rail, column, cards that fold, move and swing out onto leaves), so the
+// same dm-screen widget docks it; only the sections differ. Tonight, Rolls
+// and Dice are empty boxes the Table (rolls plugin, table.js) draws into when
+// the card is first shown, so those leaves have one implementation.
+templ PlayerPanel(v *PlayerView) {
+	<div
+		class="dms"
+		data-dms-root
+		data-pls
+		role="complementary"
+		aria-labelledby="dms-title"
+		hx-get={ fmt.Sprintf("/campaigns/%s/player-screen", v.CampaignID) }
+		hx-trigger="pls-refresh from:body"
+		hx-swap="outerHTML"
+	>
+		<h2 id="dms-title" class="sr-only">Players' screen</h2>
+		<nav class="dms-rail" aria-label="Players' screen sections">
+			<button type="button" class="dms-ic" data-dms-tuck aria-label="Tuck the players' screen away" title="Tuck away (T)">
+				<i class="fa-solid fa-angles-right" aria-hidden="true"></i>
+			</button>
+			<hr/>
+			for _, sec := range v.PlayerSections() {
+				<button
+					type="button"
+					class="dms-ic"
+					data-dms-open={ sec.ID }
+					aria-pressed="false"
+					aria-label={ sec.Title }
+					title={ sec.Title + ": " + sec.Summary + ". Drag toward the page to open it on its own leaf." }
+				>
+					<i class={ "fa-solid fa-" + sec.Icon } aria-hidden="true"></i>
+				</button>
+			}
+		</nav>
+		<div class="dms-col" data-dms-col>
+			<div class="dms-phonehead">
+				<span class="dms-phonehead-t" aria-hidden="true">Players' screen</span>
+				<button type="button" class="dms-ic dms-phonehead-x" data-dms-tuck aria-label="Put the players' screen away">
+					<span aria-hidden="true">×</span>
+				</button>
+			</div>
+			<div class="dms-colhead">
+				<span class="dms-count" data-dms-count></span>
+				<button type="button" class="dms-quiet" data-dms-closeall>Close all</button>
+			</div>
+			<p class="dms-empty" data-dms-empty hidden>Pick a section on the bar to open it here.</p>
+			<div class="dms-cards" data-dms-cards>
+				for _, sec := range v.PlayerSections() {
+					@section(sec) {
+						@playerBody(v, sec.ID)
+					}
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// playerBody is what fills each of the players' cards.
+templ playerBody(v *PlayerView, id string) {
+	switch id {
+		case "hero":
+			if v.Hero == nil {
+				<p class="dms-small">You have no hero in this campaign yet.</p>
+				<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", v.CampaignID)) }>See the characters</a>
+			} else {
+				@myHero(v.CampaignID, *v.Hero, v.PowerRoll)
+				if !v.PartyFilled {
+					<p class="dms-small">
+						if v.SystemName != "" {
+							{ v.SystemName } doesn't fill in hero numbers yet.
+						} else {
+							Turn on a game system to see your hero's numbers here.
+						}
+					</p>
+				}
+			}
+		case "party":
+			if len(v.Party) == 0 {
+				<p class="dms-small">No other heroes you can see yet.</p>
+			} else {
+				<div class="dms-partywrap">
+					<div class="dms-party" data-dms-party>
+						for _, hero := range v.Party {
+							@heroRow(hero)
+						}
+					</div>
+					<span class="dms-more" data-dms-more hidden></span>
+				</div>
+			}
+		case "world":
+			<div class="dms-blk">
+				<span class="dms-lbl">In the world</span>
+				<span class="dms-big">
+					{ v.World.DateLabel }
+					if v.World.TimeLabel != "" {
+						{ " · " + v.World.TimeLabel }
+					}
+				</span>
+				<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", v.CampaignID, v.World.CalendarID)) }>Open the calendar</a>
+			</div>
+			<div class="dms-blk">
+				<span class="dms-lbl">Weather today</span>
+				if v.World.Weather != "" {
+					<span>{ v.World.Weather }</span>
+				} else {
+					<span class="dms-small">No weather to see today.</span>
+				}
+			</div>
+		case "tonight", "rolls", "dice":
+			<div class="pls-table" data-widget="table-leaf" data-tt-mount={ id }>
+				<p class="dms-small">Reading the Table…</p>
+			</div>
+		case "rules":
+			<input type="search" class="dms-search" placeholder="Find a condition" aria-label="Find a condition" data-dms-filter/>
+			for _, cond := range v.Conditions {
+				<details class="dms-cond" data-dms-cond={ cond.Name }>
+					<summary>{ cond.Name }</summary>
+					<p>{ cond.Text }</p>
+				</details>
+			}
+		case "notes":
+			<textarea
+				class="dms-search dms-notes"
+				rows="10"
+				maxlength="20000"
+				aria-label="My notes"
+				placeholder="Jot down what you want to remember."
+				readonly?={ v.Notes.ReadOnly }
+				data-dms-note
+				data-dms-note-version={ v.Notes.Version }
+				data-dms-note-url={ fmt.Sprintf("/campaigns/%s/player-screen/notes", v.CampaignID) }
+				data-dms-note-ok={ "Saved · " + v.Notes.Label }
+			>{ v.Notes.Text }</textarea>
+			<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>
+				if v.Notes.ReadOnly {
+					This note has formatting, so edit it in the Journal
+				} else {
+					{ v.Notes.Label }
+				}
+			</span>
+			<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Journal</a>
+	}
+}
+
+// myHero is the viewer's own hero drawn whole: name and class, every meter
+// with its numbers, current conditions, and the Power roll when the game has
+// one. The numbers are read-only here; a hero is changed on its own page.
+templ myHero(campaignID string, h HeroView, powerDice string) {
+	<div class="pls-hero">
+		<div class="pls-id">
+			<span class="pls-av" aria-hidden="true">{ h.Initials() }</span>
+			<div>
+				<b>{ h.Name }</b>
+				if line := h.HeroLine(); line != "" {
+					<span>{ line }</span>
+				}
+			</div>
+		</div>
+		for _, m := range h.Meters {
+			if m.HasMax {
+				<div class="pls-meter">
+					<div class="pls-mtop">
+						<span class="dms-lbl">{ m.Label }</span>
+						<span class="pls-num"><b>{ m.Current }</b> / { m.Max }</span>
+					</div>
+					<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", m.Low) } style={ fmt.Sprintf("width:%d%%", m.Percent) }></span></span>
+				</div>
+			}
+		}
+		if _, chips, _ := h.Folded(); len(chips) > 0 {
+			<div class="pls-res">
+				for _, c := range chips {
+					<span><span class="dms-lbl">{ c.Label }</span><b>{ c.Current }</b></span>
+				}
+			</div>
+		}
+		if len(h.Conditions) > 0 {
+			<div class="dms-hconds" aria-label="Conditions">
+				for _, c := range h.Conditions {
+					<span>{ c }</span>
+				}
+			</div>
+		}
+		<div class="pls-acts">
+			if powerDice != "" {
+				<button type="button" class="dms-quiet" data-pls-power onclick={ powerRollOnClick() }>Power roll</button>
+				<span class="dms-small">{ powerDice } + a characteristic</span>
+			}
+			<a class="dms-quiet" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, h.ID)) }>Open the sheet</a>
+		</div>
+	</div>
+}

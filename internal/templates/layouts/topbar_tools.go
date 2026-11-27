@@ -39,6 +39,14 @@ func topbarHasDMScreen(ctx context.Context) bool {
 	return InCampaign(ctx) && (GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx))
 }
 
+// topbarHasPlayerScreen reports whether the Table's die opens the players'
+// screen: everyone with the Table who cannot open the DM Screen (players,
+// scribes, and the DM team viewing as a player), the rule the screen's own
+// route applies (dmscreen.CanOpenPlayers). It has no button of its own.
+func topbarHasPlayerScreen(ctx context.Context) bool {
+	return topbarHasTable(ctx) && !topbarHasDMScreen(ctx) && !InGuestPreview(ctx)
+}
+
 // topbarMayCustomize reports whether the viewer may open Customize here,
 // the check Customize's own routes make (the campaign's owner), and is not
 // looking at the campaign as a player or a guest. It decides whether the

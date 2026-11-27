@@ -6818,6 +6818,10 @@ func (a *App) RegisterRoutes() {
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
+		// The players' screen: the party as a player may see it, and each
+		// player's own private note (player_screen_adapters.go).
+		PlayerParty: &dmPartyAdapter{entities: entityService, campaigns: campaignService},
+		PlayerNotes: &playerNotesAdapter{notes: noteSvc},
 	}
 	// The Adventures tab needs its table; with the plugin degraded the rest of
 	// the screen still works and the tab is simply left out.
@@ -7131,6 +7135,8 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
+			// The Table's Rolls, Tonight and Dice drawn into a players' screen card.
+			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
