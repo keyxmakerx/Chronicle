@@ -331,7 +331,7 @@
     var wholes = 0;
     later.forEach(function (st) {
       var v = A.values[st.step] || (A.values[st.step] = { part: null, args: {} });
-      if (later.length > 1) box.appendChild(h('p', 'hbd-and-step', st.label));
+      box.appendChild(h('p', 'hbd-and-step', st.label));
       if (st.parts && st.parts.length > 1) {
         var sel = h('select', 'hbd-input', '', { 'aria-label': st.label + ': on' }, { change: function () { v.part = sel.value; refreshSend(S, r, A, later); } });
         st.parts.forEach(function (p) {
