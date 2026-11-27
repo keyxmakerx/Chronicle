@@ -276,7 +276,8 @@ type SessionService interface {
 	ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
 	// OpenAsks drops the scheduled-night asks whose night is over (played,
 	// completed, cancelled or removed), for the call-to-action banner and
-	// the bell. today is the reader's own date for a campaign's nights; nil
+	// the bell; for the banner it also drops date-poll asks whose poll is
+	// closed or already answered. today is the reader's own date for a campaign's nights; nil
 	// means the day where the date ends last, so no night is closed early.
 	OpenAsks(ctx context.Context, notes []Notification, today func(campaignID string) string) []Notification
 	// ListMyUnreadAsks returns the member's unread "are you coming?" asks.
