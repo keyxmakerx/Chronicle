@@ -232,6 +232,28 @@ for (const [label, viewport] of [['desktop', { width: 1280, height: 720 }], ['ph
   });
 }
 
+// A settling title draws its letters together without changing its layout:
+// the line keeps its wrapping, and the line above it never moves.
+for (const [label, viewport] of [['desktop', { width: 1280, height: 720 }], ['phone', { width: 390, height: 844 }]]) {
+test(`a long title that settles keeps its lines and its neighbours still while it draws together, on ${label}`, { skip }, async (t) => {
+  const { pg, errors } = await open(t, viewport);
+  await start(pg, { ...CARDS, text: CARDS.text.slice(0, 2).map((l) => ({ ...l, at: 0.1, seconds: 0 })) });
+  await pg.waitForFunction(() => document.querySelector('.cs-cut-in-settle'));
+  const samples = [];
+  for (let i = 0; i < 12; i++) {
+    samples.push(await pg.evaluate(() => {
+      const [cap, title] = document.querySelectorAll('.cs-cut-words:not(.cs-cut-corner) .cs-cut-line');
+      // Layout positions, which a rise or settle transform does not change.
+      return { cap: cap.offsetTop + cap.offsetParent.offsetTop, h: title.offsetHeight };
+    }));
+    await pg.waitForTimeout(150);
+  }
+  assert.equal(new Set(samples.map((s) => s.cap)).size, 1, 'the caption moved: ' + JSON.stringify(samples));
+  assert.equal(new Set(samples.map((s) => s.h)).size, 1, 'the title rewrapped: ' + JSON.stringify(samples));
+  assert.deepEqual(errors, []);
+});
+}
+
 test('under reduced motion the chosen arrivals are plain fades and the bars are simply there', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 1280, height: 720 }, true);
   await start(pg, CARDS);
