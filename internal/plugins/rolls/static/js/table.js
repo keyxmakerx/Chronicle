@@ -90,6 +90,9 @@
   var X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   var CHEV = '<svg class="tt-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
+  // Leaf boxes that mounted before the Table did; the Table adopts them.
+  var pendingMounts = [];
+
   // ---------- One table per page ----------
 
   function Table(host) {
@@ -159,6 +162,11 @@
     this.sheet = false;
     this.h = 'rest';
     this.mql = W.matchMedia ? W.matchMedia(SHEET_QUERY) : { matches: false };
+    // Rolls, Tonight and Dice drawn into the players' screen's cards, by
+    // section id; and that screen's element, for those who get it.
+    this.mounts = {};
+    this.mountSeen = null;
+    this.plsHost = this.director ? null : document.querySelector('[data-pls-host]');
     this.wire();
     this.connect();
     if (this.momentsOn) {
@@ -169,6 +177,8 @@
     this.loadPower();
     this.syncSheet();
     if (this.mql.addEventListener) this.on(this.mql, 'change', function () { me.syncSheet(); });
+    this.wireScreen();
+    pendingMounts.splice(0).forEach(function (m) { me.mount(m.sec, m.el); });
     this.openFromLink();
     this.watchDraw();
     if (this.cuts) this.wireCuts();
@@ -213,6 +223,8 @@
     clearTimeout(this.momTimer);
     clearTimeout(this.cutTimer);
     if (this.drawWatch) this.drawWatch.disconnect();
+    if (this.mountSeen) this.mountSeen.disconnect();
+    this.mounts = {};
   };
 
   // The dice this person sees: their own pick, else the table's.
@@ -224,7 +236,7 @@
       if (s && s.look) self.tableLook = s.look;
       if (s) self.camp = s;
       self.applyDice();
-      if (self.open) self.renderSection('dice');
+      if (self.drawn()) self.renderSection('dice');
     }).catch(function () { /* the table's choice stays quick 2D */ });
   };
 
@@ -241,7 +253,7 @@
         var keep = self.keepForm();
         d.innerHTML = self.drawerHTML();
         self.restoreForm(keep);
-      } else if (self.open) self.renderSection('rolls');
+      } else if (self.drawn()) self.renderSection('rolls');
     }).catch(function () { /* no power roll line */ });
   };
 
@@ -392,7 +404,7 @@
   };
 
   Table.prototype.reload = function () {
-    if (this.open || this.sheet) { this.load(); this.loadShown(); this.loadCuts(); } else { this.loaded = false; this.shownLoaded = false; this.cutAsked = false; }
+    if (this.drawn()) { this.load(); this.loadShown(); this.loadCuts(); } else { this.loaded = false; this.shownLoaded = false; this.cutAsked = false; }
   };
 
   // ---------- Tonight: what the director shows ----------
@@ -405,7 +417,7 @@
     this.shownById[it.id] = it;
     this.shown.push(it);
     if (!live) return;
-    if (this.open || this.sheet) this.renderSection('tonight');
+    if (this.drawn()) this.renderSection('tonight');
     if (this.leafShowing('tonight')) {
       var li = $('#tt-tonight li[data-id="' + (W.CSS && CSS.escape ? CSS.escape(it.id) : it.id) + '"]');
       if (li) li.classList.add('tt-fresh');
@@ -428,10 +440,10 @@
       Object.keys(known).forEach(function (id) { if (!self.shownById[id]) self.receiveShown(known[id], false); });
       self.shown.sort(function (a, b) { return a.shownAt < b.shownAt ? -1 : a.shownAt > b.shownAt ? 1 : 0; });
       self.shownError = '';
-      if (self.open || self.sheet) self.renderSection('tonight');
+      if (self.drawn()) self.renderSection('tonight');
     }).catch(function () {
       self.shownError = 'What was shown tonight could not be read. Close the Table and open it again to retry.';
-      if (self.open || self.sheet) self.renderSection('tonight');
+      if (self.drawn()) self.renderSection('tonight');
     });
   };
 
@@ -441,7 +453,7 @@
   // follows it rather than opening another socket.
   Table.prototype.wireCuts = function () {
     var self = this;
-    this.on(W, 'chronicle:cutscene-shown', function () { self.cutAsked = false; if (self.open || self.sheet) self.loadCuts(); });
+    this.on(W, 'chronicle:cutscene-shown', function () { self.cutAsked = false; if (self.drawn()) self.loadCuts(); });
     this.on(W, 'chronicle:cutscene-list', function (ev) { if (ev.detail && Array.isArray(ev.detail.rows)) self.takeCuts(ev.detail.rows); });
     this.on(W, 'chronicle:cutscene-watched', function (ev) {
       var id = ev.detail && ev.detail.showingId;
@@ -477,7 +489,7 @@
       if (until > now) next = Math.min(next, until);
     });
     if (next !== Infinity) this.cutTimer = setTimeout(function () { self.renderCuts(); }, Math.min(next - now + 500, 2147483000));
-    if (this.open || this.sheet) this.renderSection('tonight');
+    if (this.drawn()) this.renderSection('tonight');
   };
 
   Table.prototype.liveCuts = function () {
@@ -515,6 +527,7 @@
   // leafShowing says whether a section is on screen now: open, in a leaf,
   // and on a phone the leaf that is picked.
   Table.prototype.leafShowing = function (sec) {
+    if (this.mounts[sec] && !this.sheet) return this.mountShowing(sec);
     var i = this.leaves.indexOf(sec);
     if (!this.open || i < 0) return false;
     if (this.sheet) return this.h === 'full' && this.phoneLeaf === i;
@@ -810,7 +823,7 @@
     this.catAsked = true;
     C.dice.catalogue().then(function (c) {
       self.cat = c;
-      if (self.alive && self.open) self.renderSection('dice');
+      if (self.alive && self.drawn()) self.renderSection('dice');
     }).catch(function () { self.catAsked = false; });
   };
 
@@ -870,6 +883,11 @@
     } else {
       document.documentElement.removeAttribute('data-tt-sheet');
     }
+    // A phone keeps the sheet: the players' screen tucks away and its cards
+    // point to the sheet; back on a computer they are drawn again.
+    var h = this.plsHost, api = h && h._dmsApi;
+    if (on && api && api.out()) api.toggle(false);
+    if (this.mounts) { this.paintMounts(); if (!on) this.armScreen(); }
   };
 
   Table.prototype.ensureSheet = function () {
@@ -1010,11 +1028,125 @@
     d.addEventListener('pointercancel', end);
   };
 
+  // ---------- The players' screen ----------
+  // A player or scribe on a computer gets the players' screen (the dmscreen
+  // plugin's fragment, docked by dm_screen.js) instead of the drawer: the die,
+  // T and R show it, and its Tonight, Rolls and Dice cards are drawn here, so
+  // those leaves have one implementation. On a phone the sheet stays.
+
+  // armScreen names the screen's element a widget once there is a computer to
+  // show it on, so a phone never downloads the dock.
+  Table.prototype.armScreen = function () {
+    var h = this.plsHost;
+    if (!h || this.sheet || h.getAttribute('data-widget')) return;
+    h.setAttribute('data-widget', h.getAttribute('data-pls-widget') || 'dm-screen');
+    if (C.mountWidget) C.mountWidget(h);
+  };
+
+  // screen is the players' screen's handle when it, not the drawer, answers
+  // the die now; null for a Director, on a phone, or before its script runs.
+  Table.prototype.screen = function () {
+    var h = this.plsHost;
+    return h && !this.sheet && h._dmsApi ? h._dmsApi : null;
+  };
+
+  Table.prototype.wireScreen = function () {
+    var self = this, h = this.plsHost;
+    if (!h) return;
+    this.armScreen();
+    this.on(h, 'dms:docked', function (ev) {
+      var d = ev.detail || {};
+      self.tab.setAttribute('aria-expanded', d.out ? 'true' : 'false');
+      if (d.refocus) self.tab.focus({ preventScroll: true });
+    });
+  };
+
+  // openScreen shows the screen, on one section when sec is set; resolves
+  // once that card is drawn.
+  Table.prototype.openScreen = function (api, sec) {
+    if (!sec) { if (!api.out()) api.toggle(false); return Promise.resolve(null); }
+    return api.open(sec);
+  };
+
+  // openRoller opens Rolls with the roller in focus: the first of the hero's
+  // characteristics when stats is set and the game has a power roll, else the
+  // dice field.
+  Table.prototype.openRoller = function (stats) {
+    var done = function () {
+      var b = stats && $('[data-tt-pstat], [data-tt-pplain]');
+      var f = b || document.getElementById('tt-fx');
+      if (f) f.focus({ preventScroll: false });
+    };
+    var api = this.screen();
+    if (api) { this.openScreen(api, 'rolls').then(done); return; }
+    this.openTable('rolls');
+    done();
+  };
+
+  // mount draws a section into a box on the players' screen. A drawer left
+  // open (the die pressed before the screen's script came) closes first, so
+  // the two never hold the same ids.
+  Table.prototype.mount = function (sec, el) {
+    if (this.open && !this.sheet) this.closeTable(false);
+    this.mounts[sec] = el;
+    this.paintMount(sec);
+    if (!this.loaded) this.load();
+    if (!this.shownLoaded) this.loadShown();
+    this.loadCuts();
+    var self = this;
+    // A card unfolding or the screen coming out shows the log: that is when
+    // its rolls count as seen.
+    if (W.ResizeObserver) {
+      if (!this.mountSeen) {
+        this.mountSeen = new W.ResizeObserver(function () {
+          if (self.mountShowing('rolls')) { self.scrollLog(); self.seen(); }
+        });
+      }
+      this.mountSeen.observe(el);
+    }
+  };
+
+  Table.prototype.unmount = function (el) {
+    var self = this;
+    Object.keys(this.mounts).forEach(function (s) { if (self.mounts[s] === el) delete self.mounts[s]; });
+    if (this.mountSeen) this.mountSeen.unobserve(el);
+  };
+
+  Table.prototype.hasMounts = function () { return Object.keys(this.mounts).length > 0; };
+
+  // drawn says whether anything shows the Table's sections: the drawer, the
+  // phone's sheet, or a card on the players' screen.
+  Table.prototype.drawn = function () { return this.open || this.sheet || this.hasMounts(); };
+
+  Table.prototype.mountShowing = function (sec) {
+    var el = this.mounts[sec];
+    return !!el && !this.sheet && el.isConnected && el.getClientRects().length > 0;
+  };
+
+  // paintMount draws one card. On a phone the sheet holds these sections, so
+  // a card left on screen points there instead of drawing them twice.
+  Table.prototype.paintMount = function (sec) {
+    var el = this.mounts[sec];
+    if (!el) return;
+    el.setAttribute('data-tt-mount', sec);
+    el.classList.add('tt-mount');
+    if (this.sheet) { el.innerHTML = '<p class="tt-empty">On a phone this is on the Table at the foot of the screen.</p>'; return; }
+    el.innerHTML = this.sectionHTML(sec);
+    if (sec === 'rolls') this.scrollLog();
+  };
+
+  Table.prototype.paintMounts = function () {
+    var self = this;
+    Object.keys(this.mounts).forEach(function (s) { self.paintMount(s); });
+  };
+
   // ---------- Opening, closing, leaves ----------
 
   Table.prototype.drawer = function () { return document.getElementById('tt-drawer'); };
 
   Table.prototype.openTable = function (sec) {
+    var api = this.screen();
+    if (api) { this.openScreen(api, sec); return; }
     if (this.sheet) {
       if (sec) {
         var k = this.leaves.indexOf(sec);
@@ -1102,6 +1234,12 @@
   };
 
   Table.prototype.renderSection = function (sec) {
+    if (this.mounts[sec]) {
+      var k = this.keepForm();
+      this.paintMount(sec);
+      this.restoreForm(k);
+      if (!this.open) return;
+    }
     var i = this.leaves.indexOf(sec), b = document.getElementById('tt-lb-' + i);
     if (i < 0 || !b) return;
     var keep = this.keepForm();
@@ -1137,6 +1275,7 @@
   Table.prototype.scrollLog = function () { var log = document.getElementById('tt-log'); if (log) log.scrollTop = log.scrollHeight; };
 
   Table.prototype.logVisible = function () {
+    if (this.mounts.rolls && !this.sheet) return this.mountShowing('rolls');
     if (!this.open) return false;
     var i = this.leaves.indexOf('rolls');
     if (i < 0) return false;
@@ -1219,7 +1358,7 @@
     var self = this;
     this.throwDice(r).then(function () {
       if (!self.alive) return;
-      if (self.open || self.sheet) self.refreshLog();
+      if (self.drawn()) self.refreshLog();
       if (self.sheet) {
         // The sheet never lifts for a roll: the resting line changes.
         if (!self.logVisible()) self.bump();
@@ -1646,14 +1785,20 @@
 
   Table.prototype.wire = function () {
     var self = this;
-    this.on(this.tab, 'click', function () { if (self.open) self.closeTable(); else self.openTable(); });
+    this.on(this.tab, 'click', function (ev) {
+      // The players' screen answers the die on a computer; the click must
+      // not also reach the screen's own press-outside rule.
+      var api = self.screen();
+      if (api) { ev.stopPropagation(); api.toggle(true); return; }
+      if (self.open) self.closeTable(); else self.openTable();
+    });
     if (this.momentsOn) this.wireMoments();
 
     this.on(document, 'click', function (ev) {
       var t = ev.target;
       if (!t.closest('.tt-ltabs')) self.closeMenus();
       var b = t.closest('button');
-      if (!b || !(b.closest('#tt-drawer') || b.closest('#tt-isl-detail'))) return;
+      if (!b || !(b.closest('#tt-drawer') || b.closest('#tt-isl-detail') || b.closest('[data-tt-mount]'))) return;
       var d = b.dataset;
       if (b.hasAttribute('data-tt-close')) { self.closeTable(); return; }
       if (d.ttCut) { self.watchCut(d.ttCut, b); return; }
@@ -1799,8 +1944,9 @@
       // the drawer never opens where nobody can see it.
       if (typing(ev.target) || ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented || document.documentElement.hasAttribute('data-full-surface')) return;
       var k = (ev.key || '').toLowerCase();
-      if (k === 't') { ev.preventDefault(); if (self.open) self.closeTable(); else self.openTable(); }
-      else if (k === 'r') { ev.preventDefault(); self.openTable('rolls'); var fx = document.getElementById('tt-fx'); if (fx) fx.focus(); }
+      var api = self.screen();
+      if (k === 't') { ev.preventDefault(); if (api) api.toggle(false); else if (self.open) self.closeTable(); else self.openTable(); }
+      else if (k === 'r') { ev.preventDefault(); self.openRoller(false); }
     });
 
     this.on(W, 'resize', function () { if ($('.tt-isl-clip', self.header)) self.clip(); });
@@ -1974,4 +2120,33 @@
       if (el._table) { el._table.destroy(); el._table = null; }
     }
   });
+
+  function pageTable() {
+    var host = document.querySelector('[data-widget="table"]');
+    return host && host._table && host._table.alive ? host._table : null;
+  }
+
+  // A box on the players' screen that one of the Table's sections is drawn
+  // into (data-tt-mount names it); table_leaf.js is the widget that calls
+  // these. A box that comes before the Table has started waits for it.
+  C.tableLeaf = {
+    mount: function (el) {
+      var sec = el.getAttribute('data-tt-mount');
+      if (['rolls', 'tonight', 'dice'].indexOf(sec) < 0) return;
+      var t = pageTable();
+      if (t) t.mount(sec, el); else pendingMounts.push({ sec: sec, el: el });
+    },
+    unmount: function (el) {
+      var t = pageTable();
+      if (t) t.unmount(el);
+      pendingMounts = pendingMounts.filter(function (m) { return m.el !== el; });
+    }
+  };
+
+  // The players' screen's Power roll: Rolls, with the hero's characteristics
+  // ready to press.
+  C.tableRoller = function () {
+    var t = pageTable();
+    if (t) t.openRoller(true);
+  };
 })();

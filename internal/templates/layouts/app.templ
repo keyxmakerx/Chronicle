@@ -1055,6 +1055,27 @@ templ Topbar() {
 						<span class="hdr-n" data-tt-count hidden></span>
 					</button>
 				</div>
+				if topbarHasPlayerScreen(ctx) {
+					<!-- The players' screen: the DM Screen's dock with the
+					     players' sections. It has no button; on a computer the
+					     Table's die and T show and tuck it, and table.js names
+					     this the dm-screen widget only then, so a phone, which
+					     keeps the Table's bottom sheet, never loads the dock. -->
+					<div
+						hidden
+						data-pls-host
+						data-pls-widget="dm-screen"
+						data-dms-driven
+						data-url={ fmt.Sprintf("/campaigns/%s/player-screen", GetCampaignID(ctx)) }
+						data-dms-store="chronicle.pls."
+						data-dms-name="players' screen"
+						data-dms-tab-label="Show your screen"
+						data-dms-tab-icon="fa-dice-d20"
+						data-dms-default-open="hero,tonight,rolls,party"
+						data-dms-default-lines="hero"
+						data-dms-lazy="true"
+					></div>
+				}
 			}
 			if topbarHasBell(ctx) {
 				<!-- Notification bell. Server-rendered button + badge;

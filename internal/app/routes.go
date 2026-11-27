@@ -7136,7 +7136,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
 			// The Table's Rolls, Tonight and Dice drawn into a players' screen card.
-			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
+			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js", "js/table_leaf.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},

@@ -24,6 +24,11 @@
  * remembered per browser and per campaign. The dock lives on <body>, so a
  * boosted navigation (which swaps only #main-content) leaves it standing.
  *
+ * The players' screen is the same dock on another fragment: its element sets
+ * the storage prefix, name, tab and first cards in data-dms-* attributes and,
+ * having no button of its own, is shown and tucked by the Table through
+ * el._dmsApi.
+ *
  * Registered via Chronicle.register; boot.js mounts it on [data-widget="dm-screen"].
  */
 (function () {
@@ -113,26 +118,42 @@
     init: function (el) {
       var toggleBtn = el.querySelector('[data-dms-toggle]');
       var url = el.getAttribute('data-url');
-      if (!toggleBtn || !url) return;
+      // A screen with no button of its own (the players', whose die belongs
+      // to the Table) is marked data-dms-driven and worked through el._dmsApi.
+      if ((!toggleBtn && !el.hasAttribute('data-dms-driven')) || !url) return;
+
+      // The players' screen docks with this same code; its element names its
+      // own storage prefix, name, tucked tab and first cards.
+      var PREFIX = el.getAttribute('data-dms-store') || 'chronicle.dms.';
+      var NAME = el.getAttribute('data-dms-name') || (gmTerm() + ' Screen');
+      var TAB_LABEL = el.getAttribute('data-dms-tab-label') || ('Show the ' + NAME);
+      var TAB_ICON = el.getAttribute('data-dms-tab-icon') || 'fa-angles-left';
+      var LAZY = el.getAttribute('data-dms-lazy') === 'true';
+      function idList(attr, fallback) {
+        var v = (el.getAttribute(attr) || '').split(',').filter(Boolean);
+        return v.length ? v : fallback;
+      }
+      var defOpen = idList('data-dms-default-open', DEFAULT_OPEN);
+      var defLines = idList('data-dms-default-lines', DEFAULT_LINES);
 
       var cid = (url.match(/\/campaigns\/([^/]+)\//) || [])[1] || '';
-      var OUT_KEY = 'chronicle.dms.out.' + cid;
-      var OPEN_KEY = 'chronicle.dms.open.' + cid;
+      var OUT_KEY = PREFIX + 'out.' + cid;
+      var OPEN_KEY = PREFIX + 'open.' + cid;
       // A phone keeps its own unfolded lines, so the computer's order of
       // open cards is never disturbed.
-      var LINES_KEY = 'chronicle.dms.lines.' + cid;
+      var LINES_KEY = PREFIX + 'lines.' + cid;
       // Each leaf beside the column is a list of section ids, front card last.
-      var LEAVES_KEY = 'chronicle.dms.leaves.' + cid;
+      var LEAVES_KEY = PREFIX + 'leaves.' + cid;
       // Cards the person folded to their one line. Each card folds on its own,
       // so any number can sit open in the column or on a leaf.
-      var FOLDED_KEY = 'chronicle.dms.folded.' + cid;
+      var FOLDED_KEY = PREFIX + 'folded.' + cid;
 
-      var savedOpen = readJSON(OPEN_KEY, DEFAULT_OPEN);
-      var savedLines = readJSON(LINES_KEY, DEFAULT_LINES);
+      var savedOpen = readJSON(OPEN_KEY, defOpen);
+      var savedLines = readJSON(LINES_KEY, defLines);
       var st = {
-        lines: Array.isArray(savedLines) ? savedLines.filter(function (x) { return typeof x === 'string'; }) : DEFAULT_LINES.slice(),
+        lines: Array.isArray(savedLines) ? savedLines.filter(function (x) { return typeof x === 'string'; }) : defLines.slice(),
         out: readJSON(OUT_KEY, false) === true,
-        open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : DEFAULT_OPEN.slice(),
+        open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : defOpen.slice(),
         leaves: cleanLeaves(readJSON(LEAVES_KEY, [])),
         folded: cleanIds(readJSON(FOLDED_KEY, [])),
         dock: null, tab: null, loading: null, loaded: false, brewPv: false
@@ -169,9 +190,9 @@
         t.type = 'button';
         t.className = 'dms-tab';
         t.hidden = true;
-        t.setAttribute('aria-label', 'Show the ' + gmTerm() + ' Screen');
-        t.title = gmTerm() + ' Screen';
-        t.innerHTML = '<i class="fa-solid fa-angles-left" aria-hidden="true"></i><span class="dms-tab-n" hidden></span>';
+        t.setAttribute('aria-label', TAB_LABEL);
+        t.title = TAB_LABEL;
+        t.innerHTML = '<i class="fa-solid ' + TAB_ICON + '" aria-hidden="true"></i><span class="dms-tab-n" hidden></span>';
         t.addEventListener('click', function () { show(true); });
         document.body.appendChild(d);
         document.body.appendChild(t);
@@ -967,14 +988,17 @@
         var n = waiting(), badge = st.tab.querySelector('.dms-tab-n');
         badge.hidden = n === 0;
         badge.textContent = n;
-        st.tab.setAttribute('aria-label', 'Show the ' + gmTerm() + ' Screen' +
+        st.tab.setAttribute('aria-label', TAB_LABEL +
           (n ? ', ' + n + (n === 1 ? ' request' : ' requests') + ' waiting' : ''));
         st.tab.hidden = st.out;
       }
 
-      function setDocked(on) {
+      // refocus asks a driver with no button here (the Table) to take focus
+      // back, since a narrow window draws no tab to land on.
+      function setDocked(on, refocus) {
         document.documentElement.classList.toggle('dms-docked', on);
-        toggleBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        el.dispatchEvent(new CustomEvent('dms:docked', { detail: { out: on, refocus: !!refocus } }));
       }
 
       function show(focus) {
@@ -1004,13 +1028,14 @@
         var had = st.dock.contains(document.activeElement);
         st.out = false;
         writeJSON(OUT_KEY, false);
-        setDocked(false);
+        var back = narrow() ? toggleBtn : st.tab;
+        setDocked(false, (focus || had) && !back);
         var d = st.dock;
         var done = function () {
           if (st.out) return; // brought back out mid-slide
           d.hidden = true;
           paintTab();
-          if (focus || had) (narrow() ? toggleBtn : st.tab).focus({ preventScroll: true });
+          if ((focus || had) && back) back.focus({ preventScroll: true });
         };
         if (reduce()) { done(); return; }
         d.animate([{ transform: 'none' }, { transform: 'translateX(100%)' }],
@@ -1058,7 +1083,7 @@
           });
         }
         return st.loading.catch(function () {
-          if (asked && Chronicle.notify) Chronicle.notify('The ' + gmTerm() + ' Screen could not load. Try again in a moment.', 'error');
+          if (asked && Chronicle.notify) Chronicle.notify('The ' + NAME + ' could not load. Try again in a moment.', 'error');
         });
       }
 
@@ -1239,6 +1264,9 @@
 
       function noteBox() { var r = root(); return r && r.querySelector('[data-dms-note]'); }
 
+      // A note box may say who sees it once saved (a player's own note).
+      function noteOK() { var ta = noteBox(); return (ta && ta.getAttribute('data-dms-note-ok')) || NOTE_OK; }
+
       function noteStatus(text) {
         var r = root(), s = r && r.querySelector('[data-dms-note-status]');
         if (s) s.textContent = text;
@@ -1342,7 +1370,7 @@
             var box = noteBox();
             if (box && onScreen(n, box)) {
               box.setAttribute('data-dms-note-version', n.version);
-              noteStatus(n.dirty ? 'Unsaved changes' : NOTE_OK);
+              noteStatus(n.dirty ? 'Unsaved changes' : noteOK());
               var r = root(), a = r && r.querySelector('[data-dms-note-link]');
               if (a && j && j.link) { a.setAttribute('href', j.link); a.hidden = false; }
             }
@@ -1421,22 +1449,56 @@
 
       // ---- Start -------------------------------------------------------
 
-      toggleBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (st.out) tuck(true); else show(true);
-      });
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (st.out) tuck(true); else show(true);
+        });
+      }
+
+      // openCard shows a section whole: in the column (newest, first) unless
+      // it sits on a leaf, where it simply unfolds; on a phone its line opens.
+      function openCard(id) {
+        if (!sectionEl(id)) return null;
+        if (phone()) {
+          if (st.lines.indexOf(id) < 0) { st.lines.push(id); saveLines(); }
+          applyLines();
+          return sectionEl(id);
+        }
+        setFolded(id, false);
+        if (leafOf(id) < 0) {
+          st.open = st.open.filter(function (x) { return x !== id; });
+          st.open.push(id);
+          saveOpen();
+        }
+        applyOpen(id);
+        return sectionEl(id);
+      }
+
+      // The driver's handle on a screen with no button of its own.
+      el._dmsApi = {
+        out: function () { return st.out; },
+        toggle: function (focus) { if (st.out) tuck(focus); else show(focus); },
+        // Shows the screen with one section open whole; resolves to its card
+        // (null when the screen could not load or has no such section).
+        open: function (id) {
+          if (!st.out) show(false);
+          return ensure(true).then(function () { return openCard(id); });
+        }
+      };
 
       build();
       setDocked(false);
       if (st.out) {
         // Out last time: back out at once, without the slide, on a wide
         // window. A narrow window starts tucked so the page is readable.
-        if (narrow()) { st.out = false; paintTab(); ensure(false); }
+        if (narrow()) { st.out = false; paintTab(); if (!LAZY) ensure(false); }
         else { st.dock.hidden = false; setDocked(true); ensure(false); }
       } else {
-        // Tucked: the panel still loads so the tab can show the waiting count.
+        // Tucked: the panel still loads so the tab can show the waiting count,
+        // unless the screen has no count to show (data-dms-lazy).
         paintTab();
-        ensure(false);
+        if (!LAZY) ensure(false);
       }
 
       st.onKey = onKey;
