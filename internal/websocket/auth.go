@@ -17,7 +17,7 @@ import (
 type APIKeyAuthenticator interface {
 	// AuthenticateKeyForWS validates a raw API key and returns its campaign,
 	// owner, owner-level role, and expiry (nil if the key never expires).
-	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, expiresAt *time.Time, err error)
+	AuthenticateKeyForWS(ctx context.Context, rawKey, clientIP string) (campaignID, userID string, role int, expiresAt *time.Time, err error)
 }
 
 // SessionAuthenticator authenticates browser sessions for WebSocket connections.
@@ -137,7 +137,7 @@ func (a *MultiAuthenticator) authenticateNotesGrant(r *http.Request, token strin
 // AuthenticateWS implements the Authenticator interface.
 // Priority: API key (via ?token= query param) > notes grant (subprotocol) >
 // Session cookie.
-func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error) {
+func (a *MultiAuthenticator) AuthenticateWS(r *http.Request, clientIP string) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error) {
 	ctx := r.Context()
 
 	// foundrySource picks "foundry-module" when the Foundry module
@@ -160,7 +160,7 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 		if a.apiKeyAuth == nil {
 			return "", "", "", 0, false, nil, fmt.Errorf("api key auth not configured")
 		}
-		campaignID, userID, role, expiresAt, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, token)
+		campaignID, userID, role, expiresAt, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, token, clientIP)
 		if err != nil {
 			return "", "", "", 0, false, nil, fmt.Errorf("api key auth: %w", err)
 		}
@@ -196,7 +196,7 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			rawKey := strings.TrimPrefix(authHeader, "Bearer ")
 			if a.apiKeyAuth != nil {
-				campaignID, userID, role, expiresAt, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, rawKey)
+				campaignID, userID, role, expiresAt, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, rawKey, clientIP)
 				if err != nil {
 					return "", "", "", 0, false, nil, fmt.Errorf("bearer auth: %w", err)
 				}
