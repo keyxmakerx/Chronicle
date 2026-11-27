@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/cutscenes"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -135,6 +137,45 @@ func (p *cutsceneLivePublisher) Stop(campaignID string, s cutscenes.Showing) {
 	relay.RequiresDM = true
 	relay.Sources = []string{foundry_vtt.ModuleSource}
 	p.bus.Publish(relay)
+}
+
+// cutsceneFoundryPreview implements cutscenes.FoundryPreviewer. A campaign
+// uses Foundry when its Sync API add-on is on (making a Foundry key turns it
+// on); a module is there to hear a preview when the hub has seen its socket
+// lately. hub and bus are bound once they exist; until then nothing is sent.
+type cutsceneFoundryPreview struct {
+	hub interface {
+		FoundryPresence(string) (*time.Time, bool)
+	}
+	bus     ws.EventBus
+	enabled func(ctx context.Context, campaignID string) (bool, error)
+}
+
+func (p *cutsceneFoundryPreview) Offered(ctx context.Context, campaignID string) bool {
+	if p.enabled == nil {
+		return false
+	}
+	on, err := p.enabled(ctx, campaignID)
+	return err == nil && on
+}
+
+// Preview sends the scene to the module's DM-held sockets only, never a
+// browser, with who pressed it so the module picks that Director's screen.
+func (p *cutsceneFoundryPreview) Preview(campaignID, directorID string, sc cutscenes.Scene) bool {
+	if p.hub == nil || p.bus == nil {
+		return false
+	}
+	if _, connected := p.hub.FoundryPresence(campaignID); !connected {
+		return false
+	}
+	id := uuid.NewString()
+	msg := ws.NewMessage(ws.MsgCutsceneFoundryPreview, campaignID, id, map[string]any{
+		"previewId": id, "director": directorID, "scene": sc,
+	})
+	msg.RequiresDM = true
+	msg.Sources = []string{foundry_vtt.ModuleSource}
+	p.bus.Publish(msg)
+	return true
 }
 
 // cutsceneSyncAdapter implements syncapi.CutsceneAPIService over the cut

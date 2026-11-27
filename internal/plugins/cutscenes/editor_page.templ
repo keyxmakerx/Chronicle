@@ -43,6 +43,7 @@ templ editorForm(p editorPage) {
 		hx-swap="outerHTML"
 		data-csw-form
 		data-preview-url={ p.base() + "/preview" }
+		data-foundry-preview-url={ p.base() + "/preview/foundry" }
 	>
 		<input type="hidden" name="csrf_token" value={ layouts.GetCSRFToken(ctx) }/>
 		<div class="csw-field">
@@ -124,6 +125,9 @@ templ editorForm(p editorPage) {
 				}
 			</button>
 			<button type="button" class="btn-secondary" data-csw-preview onclick={ previewOnClick() }>Preview</button>
+			if p.Foundry {
+				<button type="button" class="btn-secondary" data-csw-foundry-preview onclick={ foundryPreviewOnClick() } title="Plays on your own Foundry screen only. Players don't see it.">Preview in Foundry</button>
+			}
 			if !p.New {
 				<button
 					type="button"
@@ -137,6 +141,7 @@ templ editorForm(p editorPage) {
 			if p.Saved {
 				<span class="csw-saved" role="status">Saved</span>
 			}
+			<span class="csw-saved" role="status" data-csw-sent hidden></span>
 			<p class="csw-err" role="alert" data-csw-err hidden?={ p.Error == "" }>{ p.Error }</p>
 			if !p.New {
 				<button

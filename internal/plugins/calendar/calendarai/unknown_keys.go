@@ -50,7 +50,7 @@ var eventKeys = keySet("year", "month", "day", "end_year", "end_month", "end_day
 	"end_hour", "end_minute", "all_day", "visibility", "color", "icon", "rename_to", "importance", "category",
 	"page", "calendar", "announced", "move_to_year", "move_to_month", "move_to_day",
 	"repeat", "repeat_every", "repeat_times", "repeat_on", "repeat_offset_days",
-	"repeat_until_year", "repeat_until_month", "repeat_until_day", "roll", "status", "what_happened")
+	"repeat_until_year", "repeat_until_month", "repeat_until_day", "roll", "status", "what_happened", "sky")
 
 // calendarListKeys are the keys each entry of a calendar block's lists is
 // read for. The calendar warns about any other key inside an entry, as it
