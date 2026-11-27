@@ -689,6 +689,7 @@ DELETE	/campaigns/:id/category-boards/:tid/boards/:bid/player-items	session	plug
 PUT	/campaigns/:id/category-boards/:tid/looks	session	plugins/quests.(*Handler).SetLooks	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/category-boards/:tid/order	session	plugins/quests.(*Handler).SetOrder	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/character-choices/:fieldKey	session	systems.(*CharacterChoiceHandler).ChoicesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/character-choices/:fieldKey/pins	session	systems.(*CharacterChoiceHandler).SetPinAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/characters	public-capable	plugins/entities.(*Handler).Characters	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/characters/entries	session	plugins/entities.(*Handler).OwnEntries	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/characters/hero-changes	session	plugins/entities.(*Handler).SaveHeroChanges	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
@@ -1341,6 +1342,7 @@ PUT	/campaigns/:id/sidebar-nodes/:nid	session	plugins/entities.(*Handler).Rename
 PUT	/campaigns/:id/sidebar-nodes/:nid/reorder	session	plugins/entities.(*Handler).ReorderSidebarNodeAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/sidebar-order	session	plugins/entities.(*Handler).SetSidebarOrderAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/sidebar-order/move	session	plugins/entities.(*Handler).MoveSidebarRowAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/sidebar-pins	session	plugins/entities.(*Handler).SetSidebarPinAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sidebar/drill/:slug	public-capable	plugins/campaigns.(*Handler).SidebarDrill	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/since-last-here	public-capable	app.(*sinceHandler).Show	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/since-last-here/seen	session	app.(*sinceHandler).Seen	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
