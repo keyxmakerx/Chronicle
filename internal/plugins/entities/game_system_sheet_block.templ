@@ -9,7 +9,12 @@ import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 const BlockGameSystemSheet = "game_system_sheet"
 
 // blockGameSystemSheet draws the game system's sheet for the page, or a note
-// for the Director team when the system draws none for it.
+// for the Director team when the system draws none for it. It carries what
+// the sheet needs from its page, as the whole-page sheet does: the picture
+// mount the sheet's Change picture reaches, and the blocks plugins hang under
+// a system sheet as tabs (Trackers, Cards) that the layout does not place
+// itself, so a custom layout loses none of the stock sheet's pieces. They are
+// drawn as plain blocks, not the tab strip, which a layout has no need of.
 templ blockGameSystemSheet(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, userID string) {
 	if comp := lookupEntityShowRenderer(EntityShowRenderContext{
 		CC:             cc,
@@ -22,8 +27,14 @@ templ blockGameSystemSheet(cc *campaigns.CampaignContext, entity *Entity, entity
 		System:         systemFor(ctx, entityType),
 	}); comp != nil {
 		<div data-block-game-system-sheet>
+			@systemImageMount(cc, entity, csrfToken)
 			@comp
 		</div>
+		for _, t := range unplacedPageTabs(ctx, cc, entity, entityType, csrfToken) {
+			<div class="mt-4" data-block-game-system-sheet-extra={ t.Block }>
+				@RenderBlock(ctx, TemplateBlock{ID: "sheet-" + t.Block, Type: t.Block}, cc, entity, entityType, csrfToken)
+			</div>
+		}
 	} else if canPickPageLayout(cc) {
 		<p class="text-sm text-fg-muted" data-block-game-system-sheet-empty>The game system has no sheet for this page.</p>
 	}

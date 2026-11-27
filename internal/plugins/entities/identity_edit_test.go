@@ -375,6 +375,9 @@ func TestOwnPageWrites(t *testing.T) {
 		{"scribe may not overwrite secrets either", (*Handler).UpdateEntryAPI, campaigns.RoleScribe, "user-scribe", secretEntryHTML, entryBody, 403},
 		{"owner sets the picture", (*Handler).UpdateImageAPI, campaigns.RolePlayer, owner, "", `{"image_path":"pic-1"}`, 200},
 		{"other player may not set it", (*Handler).UpdateImageAPI, campaigns.RolePlayer, "user-other", "", `{"image_path":"pic-1"}`, 403},
+		{"the Director sets the picture", (*Handler).UpdateImageAPI, campaigns.RoleOwner, "user-dm", "", `{"image_path":"pic-1"}`, 200},
+		{"a co-Director sets the picture", (*Handler).UpdateImageAPI, campaigns.RoleScribe, "user-scribe", "", `{"image_path":"pic-1"}`, 200},
+		{"a guest may not set it", (*Handler).UpdateImageAPI, campaigns.RoleNone, "", "", `{"image_path":"pic-1"}`, 403},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

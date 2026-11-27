@@ -268,8 +268,9 @@ type widgetMount struct {
 	seed            string // the entity as JSON, for a visitor who can't fetch it; "" for members
 }
 
-// visitorSeed is the entity as a visitor may read it: name, visibility and
-// the field values left after GM-only and owner-only ones are taken out.
+// visitorSeed is the entity as a visitor may read it: name, visibility, the
+// page picture and the field values left after GM-only and owner-only ones
+// are taken out.
 func visitorSeed(ctx EntityShowRenderContext) string {
 	var defs []FieldDefinition
 	if ctx.EntityType != nil {
@@ -284,11 +285,21 @@ func visitorSeed(ctx EntityShowRenderContext) string {
 		"name":        ctx.Entity.Name,
 		"visibility":  string(ctx.Entity.Visibility),
 		"fields_data": fields,
+		"image_path":  visitorImagePath(ctx.Entity),
 	})
 	if err != nil {
 		return ""
 	}
 	return string(b)
+}
+
+// visitorImagePath is the page picture a visitor's sheet draws as the
+// portrait, the same picture the page shows them everywhere else.
+func visitorImagePath(e *Entity) string {
+	if e.ImagePath == nil {
+		return ""
+	}
+	return *e.ImagePath
 }
 
 // FoundryLinkChecker reports whether a campaign has a Foundry world syncing
