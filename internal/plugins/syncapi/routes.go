@@ -171,6 +171,13 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// Addon discovery (read).
 	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
 
+	// Which versions of the page scripts the Foundry module copies this
+	// server runs, as hashes only. Behind the campaign key rather than on
+	// /api/version because exact hashes fingerprint the build.
+	if api.vendoredAssets != nil {
+		cg.GET("/vendored-assets", api.vendoredAssets.GetVendoredAssets, RequirePermission(PermRead))
+	}
+
 	// Tag endpoints (always available, not addon-gated).
 	cg.GET("/tags", tagAPI.ListTags, RequirePermission(PermRead))
 	cg.POST("/tags", tagAPI.CreateTag, RequirePermission(PermWrite))
@@ -395,6 +402,14 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	if cs := api.cutscenes; cs != nil {
 		cuts := addonRoutes{cg, RequireAddonAPI(addonChecker, cs.addonSlug)}
 		cuts.GET("/cutscenes/showings", cs.Showings, RequirePermission(PermRead))
+	}
+
+	// Homebrew asks: rules waiting at an "Ask the Director" step, for the
+	// Foundry GM client's card, and the answer from there. Owner or co-DM
+	// only (checked in the handler); the homebrew service checks again.
+	if ha := api.homebrewAsks; ha != nil {
+		cg.GET("/homebrew/asks", ha.Waiting, RequirePermission(PermRead))
+		cg.POST("/homebrew/asks/:runID/answer", ha.Answer, RequirePermission(PermWrite))
 	}
 
 	// Stashes: move items and money as a named campaign member. The group is

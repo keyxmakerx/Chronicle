@@ -55,7 +55,8 @@ const npcSelectColumns = `e.id, e.name, e.slug, e.image_path, e.type_label,
 // character types + search/tag filters, unfiltered by visibility and
 // unpaginated. See the NPCRepository doc comment for why visibility is
 // deliberately absent here. Claimed entities are left out: they are player
-// characters and belong to the Characters page's party section.
+// characters and belong to the Characters page's party section. So are
+// playable ones when the service asks (see PartyCheck).
 func (r *npcRepository) ListRevealedIDs(ctx context.Context, campaignID string, characterTypeIDs []int, opts NPCListOptions) ([]string, error) {
 	if len(characterTypeIDs) == 0 {
 		return nil, nil
@@ -65,6 +66,9 @@ func (r *npcRepository) ListRevealedIDs(ctx context.Context, campaignID string, 
 	args := []any{campaignID}
 	for _, id := range characterTypeIDs {
 		args = append(args, id)
+	}
+	if opts.hidePlayable {
+		where += " AND e.playable = false"
 	}
 
 	// Optional name search.

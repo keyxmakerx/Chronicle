@@ -20,6 +20,10 @@ type NPCListOptions struct {
 	// IncludeDmOnlyTags lets GM-only tags decorate cards. Off by default so a
 	// player-facing list can never carry a dm_only tag name.
 	IncludeDmOnlyTags bool
+
+	// hidePlayable leaves out characters marked playable; the service sets it
+	// from its PartyCheck, so no caller can turn it on or off by hand.
+	hidePlayable bool
 }
 
 // DefaultNPCListOptions returns sensible defaults for the NPC gallery.

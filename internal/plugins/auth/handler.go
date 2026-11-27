@@ -991,6 +991,31 @@ func (h *Handler) SetBrushAPI(c *echo.Context) error {
 	return c.JSON(http.StatusOK, prefs)
 }
 
+// SetStoreAPI saves whether the signed-in person sees the top bar's Store
+// icon in one campaign (PUT /account/store/:campaignID, {"store":"shown"|
+// "hidden"}). Like the brush, it writes only the caller's own row and no
+// other campaign's choice.
+func (h *Handler) SetStoreAPI(c *echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	var req struct {
+		Store string `json:"store"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if req.Store != "shown" && req.Store != "hidden" {
+		return apperror.NewBadRequest("invalid store choice")
+	}
+	prefs, err := h.service.SetStoreHidden(c.Request().Context(), userID, c.Param("campaignID"), req.Store == "hidden")
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, prefs)
+}
+
 // UpdateTimezoneAPI updates the user's timezone preference (PUT /account/timezone).
 func (h *Handler) UpdateTimezoneAPI(c *echo.Context) error {
 	userID := GetUserID(c)
