@@ -113,6 +113,9 @@ func (h *APIHandler) judgeActingPlayer(ctx context.Context, entity *entities.Ent
 	if held == nil {
 		held = map[string]string{}
 	}
+	for k, why := range entities.PlayerGMOnlyHeld(entity, patch, typeFields) {
+		held[k] = why
+	}
 	rest := make(map[string]any, len(patch))
 	for k, val := range patch {
 		if _, refused := held[k]; !refused {

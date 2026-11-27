@@ -108,7 +108,7 @@ type SyncAPIService interface {
 
 	// WebSocket authentication. expiresAt is the key's expiry (nil if it
 	// never expires) so the hub can cut the socket off when it passes.
-	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, expiresAt *time.Time, err error)
+	AuthenticateKeyForWS(ctx context.Context, rawKey, clientIP string) (campaignID, userID string, role int, expiresAt *time.Time, err error)
 
 	// Calendar date beacon.
 	RecordCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int) error
@@ -678,10 +678,29 @@ func (s *syncAPIService) GetCampaignStats(ctx context.Context, campaignID string
 // AuthenticateKeyForWS validates a raw key and returns its campaign, owner
 // user ID, Owner role (confirmed live, not just stored), and expiry — the
 // WS twin of the REST gate RequireKeyOwnerStillOwner.
-func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, expiresAt *time.Time, err error) {
+func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey, clientIP string) (campaignID, userID string, role int, expiresAt *time.Time, err error) {
 	key, err := s.AuthenticateKey(ctx, rawKey)
 	if err != nil {
 		return "", "", 0, nil, err
+	}
+
+	// The same address rules as every /api/v1 request (RequireAPIKey): an
+	// address an admin blocked, or one outside the key's own list, may not
+	// open the live feed either.
+	blocked, blockErr := s.IsIPBlocked(ctx, clientIP)
+	if blockErr != nil {
+		slog.Warn("websocket ip blocklist check failed", slog.Any("error", blockErr))
+	}
+	if blocked || !keyAllowsAddress(key, clientIP) {
+		reason := "ip not in allowlist"
+		if blocked {
+			reason = "ip blocked"
+		}
+		_ = s.LogSecurityEvent(ctx, &SecurityEvent{
+			EventType: EventIPBlocked, APIKeyID: &key.ID, IPAddress: clientIP,
+			Details: map[string]any{"reason": reason, "door": "websocket"},
+		})
+		return "", "", 0, nil, apperror.NewForbidden("ip address not allowed for this key")
 	}
 
 	// The campaign's "Sync API" toggle governs the push channel exactly as it
