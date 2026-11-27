@@ -80,13 +80,16 @@ func checkAskArgs(_ context.Context, _ string, raw json.RawMessage) (json.RawMes
 	return json.Marshal(askArgs{Ask: w})
 }
 
-// Answer is a Director's answer to an ask, as stored on the run.
+// Answer is a Director's answer to an ask, as stored on the run, and the
+// player's roll at a later "rolls first" step. Kind is "" on a run that
+// rolled without asking.
 type Answer struct {
 	Kind  string `json:"kind"`
 	Reply string `json:"reply,omitempty"`
 	// Changes say, one line each, what the Director changed in the steps
 	// after the ask ("Copies: 2 (was 1)").
-	Changes []string `json:"changes,omitempty"`
+	Changes []string    `json:"changes,omitempty"`
+	Roll    *RollResult `json:"roll,omitempty"`
 }
 
 // AnswerInput is a Director's answer as sent. Steps change the args or part
@@ -146,8 +149,15 @@ type AskView struct {
 	Reply   string    `json:"reply,omitempty"`
 	Changes []string  `json:"changes,omitempty"`
 	At      time.Time `json:"at"`
-	// CanTakeBack is true while the ask waits.
+	// CanTakeBack is true while the ask waits, for the person who asked.
 	CanTakeBack bool `json:"canTakeBack,omitempty"`
+	// Answered is the Director's answer kind on a run that went on to a
+	// roll ("yes"), so the roll reads as the condition of that yes.
+	Answered string `json:"answered,omitempty"`
+	// Roll is the roll step: what to roll while it waits, then the result.
+	Roll *RollView `json:"roll,omitempty"`
+	// CanRoll is true while the roll waits on this viewer and they can make it.
+	CanRoll bool `json:"canRoll,omitempty"`
 }
 
 // AskPeople names people and says who the Directors are. It is filled by
@@ -198,14 +208,21 @@ func WithBell(b Bell) Option { return func(s *service) { s.bell = b } }
 // WithLive sets who carries live ask messages.
 func WithLive(l Live) Option { return func(s *service) { s.live = l } }
 
-// askWords reads the ask step's words from a rule.
+// askWords reads the words of the ask at or before step, so a roll that is
+// the condition of an ask's yes still names what was asked.
 func askWords(rule Rule, step int) string {
-	if step < 0 || step >= len(rule.Then) {
+	if step >= len(rule.Then) {
 		return ""
 	}
-	var a askArgs
-	_ = json.Unmarshal(rule.Then[step].Args, &a)
-	return a.Ask
+	for i := step; i >= 0; i-- {
+		if rule.Then[i].Action != AskAction {
+			continue
+		}
+		var a askArgs
+		_ = json.Unmarshal(rule.Then[i].Args, &a)
+		return a.Ask
+	}
+	return ""
 }
 
 func (s *service) nameOf(ctx context.Context, campaignID, userID string) string {
@@ -318,14 +335,14 @@ func (s *service) asked(ctx context.Context, r Run) {
 
 // answered tells the asker what came back and every open screen that the ask
 // no longer waits. Nobody is rung about their own act.
-func (s *service) answered(ctx context.Context, r Run, state, by string) {
+func (s *service) answered(ctx context.Context, r Run, step int, state, by string) {
 	if s.live != nil {
 		s.live.AskChanged(r.CampaignID, AskEvent{ID: r.ID, State: state, Asker: r.CreatedBy})
 	}
 	if s.bell == nil || r.CreatedBy == "" || r.CreatedBy == by || r.Answer == nil {
 		return
 	}
-	w := askWords(r.Rule, r.Asked-1)
+	w := askWords(r.Rule, step)
 	if w == "" {
 		w = "your ask"
 	}
@@ -335,6 +352,9 @@ func (s *service) answered(ctx context.Context, r Run, state, by string) {
 		msg = "Your Director said yes: " + w
 		if len(r.Answer.Changes) > 0 {
 			msg = "Your Director said yes, with changes: " + w
+		}
+		if s.waitsOnRoll(r) && r.WaitFor == r.CreatedBy {
+			msg = "Your Director said yes, if you roll first: " + w
 		}
 	case AnswerNo:
 		msg = "Your Director said no: " + w
@@ -383,6 +403,9 @@ func (s *service) Answer(ctx context.Context, campaignID, id string, v Viewer, i
 	if err != nil {
 		return nil, err
 	}
+	if s.waitsOnRoll(r) {
+		return nil, errConflictMsg("this rule waits for the player's roll, not an answer; you can set it aside")
+	}
 	reply, err := cleanText("your reply", in.Reply, MaxReplyChars)
 	if err != nil {
 		return nil, err
@@ -404,7 +427,7 @@ func (s *service) Answer(ctx context.Context, campaignID, id string, v Viewer, i
 		if err != nil {
 			return nil, err
 		}
-		s.answered(ctx, r, in.Answer, v.UserID)
+		s.answered(ctx, r, r.Asked-1, in.Answer, v.UserID)
 		return out, nil
 	case AnswerYes:
 	default:
@@ -426,16 +449,21 @@ func (s *service) Answer(ctx context.Context, campaignID, id string, v Viewer, i
 	if _, err := s.finish(ctx, r, RunHeld, RunRunning, r.Lines, v); err != nil {
 		return nil, err
 	}
-	s.answered(ctx, r, AnswerYes, v.UserID)
+	asked := r.Asked
 	ctx, _ = withBudget(ctx)
 	status, lines, at := s.execute(ctx, campaignID, recipe, r.Rule, r.Asked, r.Scope, r.Payload, v)
 	lines = append(append(append([]string{}, r.Lines...), "Answered yes."), lines...)
 	if status == RunHeld {
 		r.Asked = at + 1
+		s.setWaiter(ctx, &r)
 	}
 	out, err := s.finish(ctx, r, RunRunning, status, lines, v)
+	r.Status = status
+	// The asker hears the yes once the steps it allowed have run, so a yes
+	// that stops at their roll says so in the same bell.
+	s.answered(ctx, r, asked-1, AnswerYes, v.UserID)
 	if err == nil && status == RunHeld {
-		s.asked(ctx, r)
+		s.announce(ctx, r, r.WaitFor != r.CreatedBy)
 	}
 	return out, err
 }
@@ -532,6 +560,9 @@ func (s *service) TakeBack(ctx context.Context, campaignID, id string, v Viewer)
 	if r.CreatedBy != v.UserID {
 		return nil, errForbidden("only the person who asked can take it back")
 	}
+	if s.waitsOnRoll(r) {
+		return nil, errConflictMsg("a roll can't be taken back; your Director can set it aside")
+	}
 	now := time.Now().UTC()
 	r.Status, r.Lines, r.DoneBy, r.DoneAt = RunWithdrawn, append(r.Lines, "Taken back by the player."), v.UserID, &now
 	ok, err := s.runs.FinishRun(ctx, r, RunHeld)
@@ -541,24 +572,53 @@ func (s *service) TakeBack(ctx context.Context, campaignID, id string, v Viewer)
 	if !ok {
 		return nil, errConflictMsg("this ask was already answered or taken back")
 	}
-	s.answered(ctx, r, AskTakenBack, v.UserID)
-	out := askView(r)
+	s.answered(ctx, r, r.Asked-1, AskTakenBack, v.UserID)
+	out := s.askView(ctx, r, v)
 	return &out, nil
 }
 
-// askView is a run as its asker sees it.
-func askView(r Run) AskView {
+// askView is a run as its asker, or the player its roll waits on, sees it:
+// their words, the state, what came back, and a roll step's offer or result.
+func (s *service) askView(ctx context.Context, r Run, v Viewer) AskView {
 	out := AskView{ID: r.ID, Ask: askWords(r.Rule, r.Asked-1), At: r.CreatedAt}
 	if r.DoneAt != nil {
 		out.At = *r.DoneAt
 	}
+	_, _, rollStop := s.rollStep(r)
+	if r.Answer != nil && r.Answer.Kind != "" {
+		out.Reply, out.Changes = r.Answer.Reply, r.Answer.Changes
+		if rollStop || r.Answer.Roll != nil {
+			out.Answered = r.Answer.Kind
+		}
+	}
 	switch {
+	case r.Status == RunHeld && rollStop:
+		out.State = AskRoll
+		out.Roll = &RollView{}
+		viewer := Viewer{UserID: r.WaitFor, VisibilityRole: v.VisibilityRole}
+		if o, err := s.offer(ctx, r, viewer); err != nil {
+			out.Roll.Problem = plainError(err)
+		} else {
+			out.Roll.Label, out.Roll.Formula, out.Roll.Target = o.Label, o.Formula, o.Target
+			out.CanRoll = v.UserID != "" && v.UserID == r.WaitFor
+		}
 	case r.Status == RunHeld:
-		out.State, out.CanTakeBack = AskWaiting, true
+		out.State, out.CanTakeBack = AskWaiting, v.UserID != "" && v.UserID == r.CreatedBy
 	case r.Status == RunWithdrawn:
 		out.State = AskTakenBack
-	case r.Answer != nil:
-		out.State, out.Reply, out.Changes = r.Answer.Kind, r.Answer.Reply, r.Answer.Changes
+	case r.Status == RunDismissed && rollStop:
+		out.State = AskSetAside
+	case r.Answer != nil && r.Answer.Roll != nil:
+		got := r.Answer.Roll
+		total := got.Total
+		out.Roll = &RollView{Label: got.Label, Formula: got.Formula, Target: got.Target, Total: &total, Made: got.Made}
+		out.State = AskRolled
+		if !got.Made {
+			out.State = AskMissed
+		}
+	case r.Answer != nil && r.Answer.Kind != "":
+		out.State = r.Answer.Kind
+		out.Answered = ""
 	default:
 		// Moving on from a yes: the Director has answered and it runs.
 		out.State = AnswerYes
@@ -566,9 +626,9 @@ func askView(r Run) AskView {
 	return out
 }
 
-// MyAsks lists the viewer's own asks, waiting ones and what came back, newest
-// first. It is the only read of runs open to players, and it shows them
-// nothing but their own words and the answer.
+// MyAsks lists the viewer's own asks, and the rolls that wait or waited on
+// them, newest first. It is the only read of runs open to players, and it
+// shows them nothing but the ask's words, the answer and their roll.
 func (s *service) MyAsks(ctx context.Context, campaignID string, v Viewer) ([]AskView, error) {
 	out := []AskView{}
 	if v.UserID == "" || s.runs == nil {
@@ -579,13 +639,15 @@ func (s *service) MyAsks(ctx context.Context, campaignID string, v Viewer) ([]As
 		return nil, errInternal(err)
 	}
 	for _, r := range rs {
-		out = append(out, askView(r))
+		out = append(out, s.askView(ctx, r, v))
 	}
 	return out, nil
 }
 
 // Asks lists the asks waiting for a Director, oldest first so the first
-// asked is answered first, as the drawer and the Foundry module show them.
+// asked is answered first, as the drawer and the Foundry module show them,
+// with the rolls waiting on players among them (kind "roll"), which a
+// Director can only set aside.
 func (s *service) Asks(ctx context.Context, campaignID string, v Viewer) ([]RunView, error) {
 	if err := requireDirector(v); err != nil {
 		return nil, err
@@ -608,6 +670,7 @@ func (s *service) Asks(ctx context.Context, campaignID string, v Viewer) ([]RunV
 		}
 		rv := s.view(rs[i])
 		s.fillAsk(ctx, campaignID, &rv, recipes)
+		s.fillRoll(ctx, campaignID, &rv, rs[i])
 		out = append(out, rv)
 	}
 	return out, nil
