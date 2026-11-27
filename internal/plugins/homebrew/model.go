@@ -93,6 +93,10 @@ type Do struct {
 	Action string          `json:"action"`
 	Part   string          `json:"part,omitempty"`
 	Args   json.RawMessage `json:"args,omitempty"`
+	// Recipe is the recipe a step comes from, set only in the rule of an
+	// owner's ask, which gathers steps from several recipes. A saved
+	// recipe's steps never carry it: checkStep drops it.
+	Recipe string `json:"recipe,omitempty"`
 }
 
 // RecipeInput is a create or update body. Version is required on update and

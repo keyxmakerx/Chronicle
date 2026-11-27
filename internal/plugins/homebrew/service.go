@@ -54,6 +54,14 @@ type Service interface {
 	// are for whoever set the ask off, player or Director.
 	MyAsks(ctx context.Context, campaignID string, v Viewer) ([]AskView, error)
 	TakeBack(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
+
+	// AskFor puts an owner's own ask to the Directors (owner_ask.go), with
+	// the steps of every saved rule on its event waiting behind it; it
+	// returns the waiting run's id, "" when runs aren't kept. AnswerFor
+	// answers the one waiting under the owner's key; found is false when
+	// none does.
+	AskFor(ctx context.Context, campaignID string, v Viewer, a OwnerAsk) (string, error)
+	AnswerFor(ctx context.Context, campaignID, event, key string, v Viewer, in AnswerInput) (out *RunView, found bool, err error)
 }
 
 type service struct {

@@ -185,6 +185,9 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 	if !ok {
 		return fmt.Errorf("homebrew: fired an unknown event %q", f.Event)
 	}
+	if def.Ask != nil {
+		return fmt.Errorf("homebrew: %q is an owner's ask, put through AskFor", f.Event)
+	}
 	recipes, err := s.recipesFor(ctx, campaignID, f.RecipeID)
 	if err != nil {
 		return err
@@ -374,9 +377,10 @@ func (s *service) waitsOnPurpose(rule Rule) bool {
 // there, held, and the step's index comes back as at (-1 otherwise).
 func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, from int, scope string, payload json.RawMessage, v Viewer) (status string, lines []string, at int) {
 	lines = []string{}
-	note := s.note(r, rule, payload)
+	docs := s.stepRecipes(ctx, campaignID, r)
 	for i := from; i < len(rule.Then); i++ {
 		d := rule.Then[i]
+		rec := docs.of(d)
 		a, ok := s.reg.action(d.Action)
 		if !ok {
 			lines = append(lines, "An action this server no longer has was skipped.")
@@ -389,9 +393,9 @@ func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule
 			lines = append(lines, a.Label+": "+map[bool]string{true: "run in your browser", false: "for you to do"}[a.ClientRun]+".")
 			continue
 		}
-		act := Act{RecipeID: r.ID, Args: d.Args, Scope: scope, By: v, Note: note}
+		act := Act{RecipeID: rec.ID, Args: d.Args, Scope: scope, By: v, Note: s.note(rec, rule, payload)}
 		if d.Part != "" {
-			p, ok := partByKey(r.Doc, d.Part)
+			p, ok := partByKey(rec.Doc, d.Part)
 			if !ok {
 				lines = append(lines, a.Label+" did not run: its part is no longer in the recipe.")
 				return RunFailed, lines, -1
@@ -592,7 +596,7 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 		}
 		for _, r := range rs {
 			rv := s.view(r)
-			s.fillAsk(ctx, campaignID, &rv, recipes)
+			s.fillAsk(ctx, campaignID, r, &rv, recipes, v)
 			if held {
 				out.Waiting = append(out.Waiting, rv)
 			} else {
