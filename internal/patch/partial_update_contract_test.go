@@ -50,6 +50,8 @@ var contractGoverned = map[string]string{
 	"calendar.UpdateEraInput":                "PUT .../eras/:eraID — a rename-only push must not reset the era's start/end dates, description or color",
 	"calendar.UpdateEventKindInput":          "PUT .../event-kinds/:kindID — a rename-only push must not reset the kind's icon, color or default_announced",
 
+	"dmscreen.UpdateScreenPrefsInput": "PUT /campaigns/:id/screen-prefs/:screen — the dock saves its arrangement, its layouts and its style as separate keys, often from two tabs; a style change must not undo a layout another tab just saved",
+
 	"systems.UpdateBookChapterInput": "PUT .../systems/:mod/book/chapters/:chapter — a rename-only push must not blank the house-rules chapter's introduction or flip its Directors-only flag, which would publish a hidden chapter to every player",
 
 	"systems.UpdateSystemEntryInput": "PUT /campaigns/:id/system-entries/:entryId — a summary-only push must not blank the description or flip a Directors-only entry to everyone, which would reveal a hidden ancestry to every player",

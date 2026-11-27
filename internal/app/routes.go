@@ -6845,6 +6845,13 @@ func (a *App) RegisterRoutes() {
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
+	// Each person's screen layouts and style follow them between devices.
+	// With the plugin degraded they stay in the browser alone.
+	var screenPrefs dmscreen.PrefsRepository
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		screenPrefs = dmscreen.NewPrefsRepository(a.DB)
+	}
+	dmscreen.RegisterPrefsRoutes(e, dmscreen.NewPrefsHandler(dmscreen.NewPrefsService(screenPrefs, &screenKitAdapter{members: campaignService})), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
 	syncAPIHandler.SetDMScreen(&dmScreenSyncAPIAdapter{svc: dmScreenSvc})
@@ -7659,7 +7666,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
-	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_layout.js", "/static/js/widgets/dm_arrange.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},
 	{Name: "shop_good_note", Scripts: []string{"/static/js/widgets/shop_good_note.js"}},
