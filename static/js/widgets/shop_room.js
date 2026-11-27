@@ -1323,7 +1323,44 @@
     });
   }
 
-  window.ShopRoom = { wealthPrices: wealthPrices, payingWithWealth: payingWithWealth, signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  /* Tells onChange when a shop's wares change, until the returned stop is
+     called. The server's shop.changed carries no content, so the room reads
+     its wares again over HTTP, filtered for the viewer as always. A host with
+     its own connection (the Foundry module) may supply ShopRoom.live(campaignId,
+     shopId, onChange) returning a stop; otherwise this opens the campaign's
+     socket, as an open page does, and reconnects with backoff. A reconnect
+     reads once, since a change meanwhile was announced to nobody. */
+  function liveShelves(cid, sid, onChange) {
+    var host = window.ShopRoom && window.ShopRoom.live;
+    if (typeof host === 'function') {
+      try { var stop = host(cid, sid, onChange); return typeof stop === 'function' ? stop : function () {}; } catch (e) { return function () {}; }
+    }
+    if (!cid || !sid || typeof WebSocket === 'undefined') return function () {};
+    var ws = null, dead = false, timer = 0, delay = 2000, dropped = false;
+    function connect() {
+      if (dead) return;
+      var s, opened = false;
+      try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws?campaign=' + encodeURIComponent(cid)); } catch (e) { return; }
+      ws = s;
+      s.addEventListener('open', function () { opened = true; delay = 2000; if (dropped) { dropped = false; onChange(); } });
+      s.addEventListener('message', function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m && m.type === 'shop.changed' && m.campaignId === cid && m.resourceId === sid) onChange();
+      });
+      s.addEventListener('error', function (e) { if (e.preventDefault) e.preventDefault(); });
+      s.addEventListener('close', function () {
+        if (ws !== s) return;
+        ws = null;
+        // Never opened: not signed in, so there is nothing to follow.
+        if (dead || !opened) return;
+        dropped = true; timer = setTimeout(connect, delay); delay = Math.min(delay * 2, 60000);
+      });
+    }
+    connect();
+    return function () { dead = true; clearTimeout(timer); if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } } };
+  }
+
+  window.ShopRoom = { live: null, wealthPrices: wealthPrices, payingWithWealth: payingWithWealth, signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1851,11 +1888,12 @@
         // A failed read keeps the wares already shown and says so, rather
         // than drawing an empty shop the player can't tell from a sold-out one.
         return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return null; }).catch(function () { return null; }).then(function (j) {
-          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return; }
+          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return false; }
           rels = (Array.isArray(j) ? j : (j && j.data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
             if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
             r.metadata = r.metadata || {}; return r;
           });
+          return true;
         });
       }
       function doBuy() {
@@ -1888,15 +1926,16 @@
             return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
-          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function () { draw(); note = settleBasket(names); gone = true; });
+          // A reload that failed keeps its own note: the basket can't be settled against shelves it couldn't read.
+          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function (ok) { gone = true; if (!ok[0]) return; draw(); note = refusedWords(settleBasket(names)); });
           // A network failure's own text ("Failed to fetch") means nothing
           // to a player; the server's other refusals are already in plain words.
           note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
         }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); else if (gone) speak('gone'); });
       }
       // After someone else took the stock: the basket keeps only what is still
-      // on the shelves, no more than is left, and the note names what changed.
-      // Nothing was charged, since the server refuses a basket whole.
+      // on the shelves, no more than is left. names holds the wares as they
+      // were, so a listing taken away entirely can still be named.
       function settleBasket(names) {
         var now = {}, gone = [], less = [];
         S.its.forEach(function (it) { now[String(it.id)] = it; });
@@ -1905,11 +1944,46 @@
           if (!it || it.out) { gone.push(it ? it.n : names[k] || 'item'); delete basket[k]; }
           else if (it.qty !== null && q > it.qty) { basket[k] = it.qty; less.push(it.qty + ' ' + it.n); }
         });
+        return { gone: gone, less: less };
+      }
+      // A buy the server refused whole, so nothing was charged.
+      function refusedWords(c) {
         var tail = ' Nothing was charged, and your basket is updated.';
-        if (gone.length === 1 && !less.length) return 'Someone just bought the last ' + gone[0] + '.' + tail;
-        if (gone.length) return 'These sold out while you shopped: ' + gone.join(', ') + '.' + (less.length ? ' Only ' + less.join(', ') + ' left.' : '') + tail;
-        if (less.length) return 'Someone just bought some of these. Only ' + less.join(', ') + ' left.' + tail;
+        if (c.gone.length === 1 && !c.less.length) return 'Someone just bought the last ' + c.gone[0] + '.' + tail;
+        if (c.gone.length) return 'These sold out while you shopped: ' + c.gone.join(', ') + '.' + (c.less.length ? ' Only ' + c.less.join(', ') + ' left.' : '') + tail;
+        if (c.less.length) return 'Someone just bought some of these. Only ' + c.less.join(', ') + ' left.' + tail;
         return 'Some of that just sold out. Nothing was charged; the shelves are up to date, so check your basket and try again.';
+      }
+      // The shelves changed under an open room; empty when the basket didn't.
+      function liveWords(c) {
+        var tail = ' Your basket is updated.';
+        if (c.gone.length === 1 && !c.less.length) return 'The last ' + c.gone[0] + ' just sold.' + tail;
+        if (c.gone.length) return 'Just sold out: ' + c.gone.join(', ') + '.' + (c.less.length ? ' Only ' + c.less.join(', ') + ' left.' : '') + tail;
+        if (c.less.length) return 'Someone just bought some of these. Only ' + c.less.join(', ') + ' left.' + tail;
+        return '';
+      }
+      /* Live shelves: while the room is open, another shopper's purchase, a
+         restock or a new price reads the wares again. A burst of writes (a
+         basket is one per line) is one read, a buy in flight reads them
+         itself, and an owner arranging is left alone until they are done. */
+      var stopLive = null, liveT = 0;
+      function liveOn(on) {
+        if (stopLive) { stopLive(); stopLive = null; }
+        clearTimeout(liveT);
+        if (on) stopLive = liveShelves(campaignId, eid.split('/')[0], function () { clearTimeout(liveT); liveT = setTimeout(shelvesChanged, 700); });
+      }
+      function shelvesChanged() {
+        if (!dlg.open) return;
+        if (busy || S.mode === 'arr') { liveT = setTimeout(shelvesChanged, 1500); return; }
+        var names = {};
+        S.its.forEach(function (it) { names[String(it.id)] = it.n; });
+        loadGoods().then(function (ok) {
+          if (!ok || !dlg.open) return;
+          draw();
+          var said = liveWords(settleBasket(names));
+          if (said) note = said;
+          renderList();
+        });
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {
@@ -2535,7 +2609,7 @@
       function showRoom() {
         root.classList.remove('closed'); root.classList.add('inside');
         if (!dlg.open) dlg.showModal();
-        draw(); alive(true);
+        draw(); alive(true); liveOn(true);
       }
       // Opening: the door swings open in place, then its dark doorway grows
       // past the edges of the window and the room is behind it.
@@ -2592,6 +2666,7 @@
       // won't close leaves the visitor no way back to the page.
       function leave() {
         var shut = function () {
+          liveOn(false);
           if (dlg.open) dlg.close();
           dlg.classList.remove('leaving'); dlg.style.transformOrigin = '';
           root.classList.remove('inside'); root.classList.add('closed');
@@ -2697,7 +2772,7 @@
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
           clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); clearTimeout(cbT); if (raf) cancelAnimationFrame(raf);
-          dropHole(); if (dlg.open) dlg.close();
+          dropHole(); liveOn(false); if (dlg.open) dlg.close();
           themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
           document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey); document.removeEventListener('shop-rolls:result', onRollResult); if (window.ShopRolls) window.ShopRolls.close();

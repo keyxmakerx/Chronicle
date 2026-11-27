@@ -21,6 +21,13 @@ const (
 // read: a hidden page never announces itself to a player's socket.
 const MsgPageChanged MessageType = "page.changed"
 
+// MsgShopChanged tells an open shop room that the shop's wares changed: a
+// purchase, a restock, a new price, a listing added or taken away. ResourceID
+// is the shop's page and there is no payload, so it can reach every member of
+// a shop page everyone may read; the room reads its wares again over HTTP,
+// where what each viewer sees is decided. Not a change-feed type.
+const MsgShopChanged MessageType = "shop.changed"
+
 // Map sync messages.
 const (
 	MsgMapUpdated     MessageType = "map.updated"
