@@ -307,7 +307,7 @@ func ownerFieldVerdicts(entity *Entity, patch map[string]any, typeFields []Field
 			}
 		case !gmOnly[k] && !isStep && playOwnerNumber(field[k]):
 			// A number the system lets the owner change during play.
-			if err := checkPlayNumber(entity, patch, *field[k], v); err != nil {
+			if err := checkPlayNumber(entity, patch, field, *field[k], v); err != nil {
 				held[k] = err
 			}
 		case gmOnly[k] || (!ownerIdentityFieldKeys[k] && !ownerStoryFieldKeys[k] && !ownerListFieldKeys[k] && !isStep && !isOptions):

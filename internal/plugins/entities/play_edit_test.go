@@ -16,6 +16,8 @@ func playType() []FieldDefinition {
 		{Key: "xp", Label: "XP", Play: &FieldPlay{Edit: "owner", Kind: "counter", Min: &zero, Step: 1, Bell: true}},
 		{Key: "stamina_current", Label: "Stamina", Play: &FieldPlay{Edit: "owner", Kind: "counter", MaxField: "stamina_max", Step: 1}},
 		{Key: "stamina_max", Label: "Max Stamina"},
+		{Key: "focus", Label: "Focus", Play: &FieldPlay{Edit: "owner", Kind: "counter", MaxField: "focus_max", Step: 1}},
+		{Key: "focus_max", Label: "Max Focus", Play: &FieldPlay{Edit: "owner", Kind: "counter", Min: &zero, Max: &ten, Step: 1}},
 		{Key: "surges", Label: "Surges", Play: &FieldPlay{Edit: "owner", Kind: "resource", Min: &zero, Max: &ten}},
 		{Key: "level", Label: "Level", Play: &FieldPlay{Edit: "gm", Kind: "counter"}},
 		{Key: "doom", Label: "Doom", GMOnly: true, Play: &FieldPlay{Edit: "owner", Kind: "counter"}},
@@ -68,9 +70,26 @@ func TestOwnerFieldVerdicts_PlayNumbers(t *testing.T) {
 		})
 	}
 
-	// A max field set in the same write bounds by its new value.
-	if held := ownerFieldVerdicts(e, map[string]any{"stamina_current": float64(19), "stamina_max": float64(20)}, playType(), nil, false); held["stamina_current"] != nil {
+	// A max the owner may also set bounds by the same write's value, once
+	// that value passes its own check.
+	f := &Entity{ID: "e1", FieldsData: map[string]any{"focus_max": float64(3)}}
+	if held := ownerFieldVerdicts(f, map[string]any{"focus": float64(5), "focus_max": float64(6)}, playType(), nil, false); len(held) != 0 {
 		t.Fatalf("the patch's own max should bound: %v", held)
+	}
+	if held := ownerFieldVerdicts(f, map[string]any{"focus": float64(11), "focus_max": float64(11)}, playType(), nil, false); held["focus"] == nil || held["focus_max"] == nil {
+		t.Fatalf("a max over its own bound must not lift the number it bounds: %v", held)
+	}
+	// A max the owner may not set never bounds by the write's value: on a door
+	// that holds that key and writes the rest, it would lift or clear the
+	// bound on the number it is bounding.
+	for _, raised := range []any{float64(999), nil} {
+		held := ownerFieldVerdicts(e, map[string]any{"stamina_current": float64(999), "stamina_max": raised}, playType(), nil, false)
+		if held["stamina_max"] == nil {
+			t.Fatalf("max %v: the max is the GM's: %v", raised, held)
+		}
+		if err := held["stamina_current"]; err == nil || !strings.Contains(err.Error(), "can't go above 18") {
+			t.Fatalf("max %v: the stored max must still bound: %v", raised, held)
+		}
 	}
 	// Without the type the door can't read a play block, so the number stays the GM's.
 	if held := ownerFieldVerdicts(e, map[string]any{"victories": float64(3)}, nil, nil, false); held["victories"] == nil {

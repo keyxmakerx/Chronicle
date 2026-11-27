@@ -64,9 +64,10 @@ func playNumber(v any) (float64, bool) {
 
 // checkPlayNumber checks a claimed owner's value for a play number: a number
 // (or null to clear it), never below the block's min and never above its
-// max_field's current value (the patch's, when it sets that too) or its max.
-// A counter or resource moves in whole steps, so a fraction is refused.
-func checkPlayNumber(entity *Entity, patch map[string]any, f FieldDefinition, v any) error {
+// max_field's value (see playMax) or its max. A counter or resource moves in
+// whole steps, so a fraction is refused. field is the category's fields by
+// key, for the max_field's own play block.
+func checkPlayNumber(entity *Entity, patch map[string]any, field map[string]*FieldDefinition, f FieldDefinition, v any) error {
 	if v == nil {
 		return nil
 	}
@@ -84,19 +85,23 @@ func checkPlayNumber(entity *Entity, patch map[string]any, f FieldDefinition, v 
 	if p.Min != nil && n < *p.Min {
 		return apperror.NewBadRequest(fmt.Sprintf("%s can't go below %s", fieldName(f), playNumberText(*p.Min)))
 	}
-	if limit, has := playMax(entity, patch, p); has && n > limit {
+	if limit, has := playMax(entity, patch, field, p); has && n > limit {
 		return apperror.NewBadRequest(fmt.Sprintf("%s can't go above %s", fieldName(f), playNumberText(limit)))
 	}
 	return nil
 }
 
-// playMax is a play block's upper bound: its max_field's value (the patch's
-// own when the same write sets it), else its max. A max_field holding no
-// number bounds nothing rather than refusing every write.
-func playMax(entity *Entity, patch map[string]any, p *FieldPlay) (float64, bool) {
+// playMax is a play block's upper bound: its max_field's value, else its max.
+// The same write's max counts only when the owner may set that max too and
+// the value passes its own check; otherwise a write the door holds back in
+// part could raise or clear the bound on the number it is bounding. A
+// max_field holding no number bounds nothing rather than refusing every write.
+func playMax(entity *Entity, patch map[string]any, field map[string]*FieldDefinition, p *FieldPlay) (float64, bool) {
 	if p.MaxField != "" {
 		if v, set := patch[p.MaxField]; set {
-			return playNumber(v)
+			if def := field[p.MaxField]; playOwnerNumber(def) && checkPlayNumber(entity, patch, nil, *def, v) == nil {
+				return playNumber(v)
+			}
 		}
 		if entity != nil {
 			if n, ok := playNumber(entity.FieldsData[p.MaxField]); ok {
