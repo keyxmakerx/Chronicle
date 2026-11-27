@@ -814,6 +814,7 @@ POST	/campaigns/:id/cutscenes/:sid/show	session	plugins/cutscenes.(*Handler).Sho
 GET	/campaigns/:id/cutscenes/mine	session	plugins/cutscenes.(*Handler).Mine	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 GET	/campaigns/:id/cutscenes/new	session	plugins/cutscenes.(*Handler).New	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 POST	/campaigns/:id/cutscenes/preview	session	plugins/cutscenes.(*Handler).Preview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
+POST	/campaigns/:id/cutscenes/preview/foundry	session	plugins/cutscenes.(*Handler).PreviewInFoundry	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon > middleware.UserRateLimit
 GET	/campaigns/:id/cutscenes/showings	session	plugins/cutscenes.(*Handler).Showings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 GET	/campaigns/:id/cutscenes/showings/:shid	session	plugins/cutscenes.(*Handler).ReadShowing	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
 POST	/campaigns/:id/cutscenes/showings/:shid/stop	session	plugins/cutscenes.(*Handler).Stop	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > plugins/addons.RequireAddon
@@ -1295,6 +1296,8 @@ PUT	/campaigns/:id/roll-tables	session	plugins/rolltables.(*Handler).Put	plugins
 GET	/campaigns/:id/roll-tables/manage	session	plugins/rolltables.(*Handler).Manage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/rolls	session	plugins/rolls.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/rolls	session	plugins/rolls.(*Handler).Roll	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/rolls/my-dice	session	plugins/rolls.(*Handler).MyDice	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/rolls/my-dice	session	plugins/rolls.(*Handler).SetMyDice	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/rolls/power	session	plugins/rolls.(*Handler).Power	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/rolls/settings	session	plugins/rolls.(*Handler).Settings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/rolls/settings	session	plugins/rolls.(*Handler).SetSettings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

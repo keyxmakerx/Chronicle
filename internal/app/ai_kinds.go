@@ -58,6 +58,7 @@ type aiDeps struct {
 	PlayerNotes     entity_notes.Service
 	NoteAccess      records.NoteAccessAPI // nil while the plugin's own tables are degraded
 	Addons          aiAddonChecker        // which add-ons a campaign has on
+	AddonLister     campaigns.AddonLister // the picker's view of them, for the game system
 	PageBlocks      pageblocks.Service
 	Quests          quests.QuestService // nil while the quests plugin is degraded
 	Boards          quests.BoardService
@@ -119,12 +120,15 @@ func newAIDeps(d aiDeps) *aiDeps {
 	}
 	d.Tables = records.TableKind{Svc: aiRollTablesAdapter{d.RollTables}}
 	campaignsSvc := d.Campaigns
+	hub := d.AddonLister
 	d.HouseRules = &records.HouseRuleKind{Book: d.Systems, SystemOf: func(ctx context.Context, campaignID string) string {
 		c, err := campaignsSvc.GetByID(ctx, campaignID)
 		if err != nil {
 			return ""
 		}
-		return c.ParseSettings().SystemID
+		// The picker's rule, so a campaign whose system was only ever switched
+		// on as an add-on still has its rulebook.
+		return campaigns.CampaignSystemID(ctx, hub, c)
 	}}
 	if d.FieldRules != nil {
 		d.Homebrew = aiHomebrewAdapter{svc: d.FieldRules}

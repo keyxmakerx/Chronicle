@@ -230,6 +230,26 @@ func (p *spyPublisher) Stop(_ string, s Showing) {
 	p.stops = append(p.stops, s)
 }
 
+// spyFoundry records Foundry previews; offered and connected are settable.
+type spyFoundry struct {
+	mu        sync.Mutex
+	offered   bool
+	connected bool
+	sent      []string
+}
+
+func (f *spyFoundry) Offered(context.Context, string) bool { return f.offered }
+
+func (f *spyFoundry) Preview(campaignID, directorID string, sc Scene) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.connected {
+		return false
+	}
+	f.sent = append(f.sent, campaignID+"/"+directorID+"/"+sc.Name)
+	return true
+}
+
 // clock is a settable now.
 type clock struct{ t time.Time }
 
@@ -237,8 +257,9 @@ func (c *clock) now() time.Time { return c.t }
 
 type rig struct {
 	repo  *memRepo
-	pub   *spyPublisher
-	clock *clock
+	pub     *spyPublisher
+	foundry *spyFoundry
+	clock   *clock
 	svc   Service
 }
 
@@ -251,10 +272,10 @@ var (
 )
 
 func newRig() *rig {
-	r := &rig{repo: newMemRepo(), pub: &spyPublisher{}, clock: &clock{t: time.Date(2026, 11, 20, 20, 0, 0, 0, time.UTC)}}
+	r := &rig{repo: newMemRepo(), pub: &spyPublisher{}, foundry: &spyFoundry{offered: true, connected: true}, clock: &clock{t: time.Date(2026, 11, 20, 20, 0, 0, 0, time.UTC)}}
 	r.svc = NewService(r.repo, fakeMembers{},
 		WithPresence(fakePresence{"ana": {Chronicle: true}, "bo": {Foundry: true}, "dir": {Chronicle: true, Foundry: true}}),
-		WithPublisher(r.pub), WithClock(r.clock.now))
+		WithPublisher(r.pub), WithFoundryPreview(r.foundry), WithClock(r.clock.now))
 	return r
 }
 

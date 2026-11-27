@@ -74,10 +74,29 @@ func takesAnswers(s *Session, today string) bool {
 // today gives the reader's own date for a campaign's nights, which is the
 // day the night's page marks it Played by; nil means the day where the date
 // ends last, so no night is closed early.
+//
+// A date poll's ask ("new scheduling proposal") is judged the same way: it
+// stays only while the poll is open and the member has answered none of its
+// dates. Answering from the calendar or an email, or the Director picking a
+// date, never touches that notification row, so the row alone would keep the
+// banner asking after the question was settled.
 func (s *sessionService) OpenAsks(ctx context.Context, notes []Notification, today func(campaignID string) string) []Notification {
 	out := make([]Notification, 0, len(notes))
 	open := map[string]bool{}
+	polls := map[string]bool{}
 	for _, n := range notes {
+		if pid := proposalIDFromLink(n.Link); n.Type == NotifProposalCreated && n.ReadAt == nil && pid != "" {
+			key := pid + "|" + n.UserID
+			waiting, seen := polls[key]
+			if !seen {
+				waiting = s.pollAwaits(ctx, pid, n.UserID)
+				polls[key] = waiting
+			}
+			if waiting {
+				out = append(out, n)
+			}
+			continue
+		}
 		id := sessionIDFromLink(n.Link)
 		if n.Type != NotifSessionScheduled || n.ReadAt != nil || id == "" {
 			out = append(out, n)
@@ -102,6 +121,39 @@ func (s *sessionService) OpenAsks(ctx context.Context, notes []Notification, tod
 		}
 	}
 	return out
+}
+
+// pollAwaits reports whether a date poll is still waiting on this member: it
+// is open and they have answered none of its dates. A poll that cannot be
+// read is not asked about, as with a night.
+func (s *sessionService) pollAwaits(ctx context.Context, proposalID, userID string) bool {
+	p, err := s.repo.FindProposalByID(ctx, proposalID)
+	if err != nil || p == nil || p.Status != ProposalOpen {
+		return false
+	}
+	responses, err := s.repo.ListProposalResponses(ctx, proposalID)
+	if err != nil {
+		return false
+	}
+	for _, r := range responses {
+		if r.UserID == userID {
+			return false
+		}
+	}
+	return true
+}
+
+// proposalIDFromLink reads the proposal id back out of a proposalLink, or ""
+// when the link is not one.
+func proposalIDFromLink(link *string) string {
+	if link == nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(strings.TrimSpace(*link), "/"), "/")
+	if len(parts) != 4 || parts[0] != "campaigns" || parts[2] != "proposals" {
+		return ""
+	}
+	return parts[3]
 }
 
 // unreadAskScan bounds how many of a member's unread asks the bell reads to
