@@ -147,7 +147,7 @@ func (h *Handler) CreatePost(c *echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, post)
+	return c.JSON(http.StatusCreated, h.servedPost(c, cc, post))
 }
 
 // UpdatePost updates a post's name, content, or visibility.
@@ -193,7 +193,7 @@ func (h *Handler) UpdatePost(c *echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, post)
+	return c.JSON(http.StatusOK, h.servedPost(c, cc, post))
 }
 
 // DeletePost removes a post.
