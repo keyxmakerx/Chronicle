@@ -1665,7 +1665,6 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 		Color:                    color,
 		Icon:                     ee.Icon,
 		AllDay:                   ee.AllDay,
-		Payload:                  ee.Payload,
 		Status:                   ee.Status,
 		Outcome:                  ee.Outcome,
 	}
@@ -1673,6 +1672,11 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 		input.MovedFrom = &DayDate{Year: *ee.MovedFromYear, Month: *ee.MovedFromMonth, Day: *ee.MovedFromDay}
 	}
 
+	var skyNote string
+	input.Payload, skyNote = ImportedEventPayload(ee.Payload, rules.moons)
+	if skyNote != "" {
+		ir.Warnings = append(ir.Warnings, fmt.Sprintf("event %q: %s", ee.Name, skyNote))
+	}
 	rules.prepare(&input, ee, ir)
 	evt, err := buildValidatedEvent(calendarID, input)
 	if err != nil {
@@ -1720,7 +1724,8 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 }
 
 // checkNewEvent is the calendar-dependent half of CreateEvent's checks (the
-// dates against cal's geometry, the secret-era refusal, the repeat rule).
+// dates against cal's geometry, the secret-era refusal, a sky event's moons,
+// the repeat rule).
 // cal must already carry its months and weekdays, so a batch loads them once
 // and not once per event.
 func (s *calendarService) checkNewEvent(ctx context.Context, cal *Calendar, campaignID string, evt *Event, author permissions.Viewer) error {
@@ -1730,7 +1735,32 @@ func (s *calendarService) checkNewEvent(ctx context.Context, cal *Calendar, camp
 	if err := s.refuseSecretEraDate(ctx, cal, evt, author); err != nil {
 		return err
 	}
+	if err := s.checkSkyEventMoons(ctx, cal, evt.Payload); err != nil {
+		return err
+	}
 	return s.validateEventRule(ctx, cal.ID, campaignID, "", evt, true, author)
+}
+
+// checkSkyEventMoons refuses a sky event naming a moon that is not one of
+// cal's: the sky would have nothing to draw it on, and an id from another
+// calendar must not be stored as if it meant something here. The moons are
+// read only when the payload names some.
+func (s *calendarService) checkSkyEventMoons(ctx context.Context, cal *Calendar, payload *string) error {
+	if payload == nil {
+		return nil
+	}
+	p, err := ParseSkyEventPayload(*payload)
+	if err != nil || p == nil || len(p.Moons) == 0 {
+		return err
+	}
+	moons, err := s.calRepo.GetMoons(ctx, cal.ID)
+	if err != nil {
+		return fmt.Errorf("load moons: %w", err)
+	}
+	if id, bad := skyEventMoonsUnknown(p, moons); bad {
+		return skyError("moon %d is not a moon of this calendar", id)
+	}
+	return nil
 }
 
 // validateEventDates refuses an event the calendar cannot show: a start,
@@ -2421,9 +2451,16 @@ func (s *calendarService) mergeEventUpdate(ctx context.Context, cal *Calendar, e
 	if a := derefString(announced); a != "" && !IsSupportedAnnounced(a) {
 		return apperror.NewValidation("announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
 	}
+	// A payload is checked when it is sent, like recurrence_rule above: an
+	// untouched stored one is not re-judged by an unrelated edit.
 	payload := input.Payload.Ptr(evt.Payload)
-	if err := validEventPayload(payload); err != nil {
-		return err
+	if input.Payload.Present() {
+		if err := validEventPayload(payload); err != nil {
+			return err
+		}
+		if err := s.checkSkyEventMoons(ctx, cal, payload); err != nil {
+			return err
+		}
 	}
 	color := input.Color.Ptr(evt.Color)
 	icon := input.Icon.Ptr(evt.Icon)
