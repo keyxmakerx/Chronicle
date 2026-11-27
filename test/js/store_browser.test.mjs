@@ -277,6 +277,9 @@ test('a Store that cannot learn its kinds says so and Try again asks again', { s
   await page.click('[data-store-toggle]');
   await page.waitForSelector('.st-errbox');
   assert.match(await page.textContent('.st-errbox'), /not available right now/);
+  // Nothing untrue around the error: no filters, no empty line.
+  assert.deepEqual(await page.$$eval('.st-rail .st-k', (b) => b.map((x) => x.textContent.trim())), ['For you']);
+  assert.equal(await page.$('.st-empty'), null);
   await page.click('[data-st="retry"]');
   await page.waitForSelector('#st-h-crafting');
   await page.close();

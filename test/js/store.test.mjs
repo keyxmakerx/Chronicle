@@ -74,5 +74,6 @@ test('the catalog from the server keeps only well-formed kinds and known groups'
   assert.equal(U.kindOf('stray'), '');
   assert.equal(U.kindWord('stray'), 'Stray');
   assert.equal(U.systemName('drawsteel'), 'Draw Steel');
-  assert.equal(U.systemName('newgame'), 'Newgame');
+  assert.equal(U.systemName('newgame'), 'a game system not on this server');
+  assert.equal(U.systemName('custom:abc'), 'a custom game system');
 });

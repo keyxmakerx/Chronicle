@@ -36,7 +36,9 @@
   function systemName(id) {
     if (!id) return 'no game system';
     if (SYSTEMS[id]) return SYSTEMS[id];
-    return String(id).indexOf('custom:') === 0 ? 'a custom game system' : nice(id);
+    // A system the server didn't name isn't installed here; its raw id would
+    // read as a typo, so it is said in words instead.
+    return String(id).indexOf('custom:') === 0 ? 'a custom game system' : 'a game system not on this server';
   }
   function kindById(id) { for (var i = 0; i < KINDS.length; i++) if (KINDS[i].id === id) return KINDS[i]; return null; }
   function kindWord(k) { return KIND_WORD[k] || nice(k) || 'Design'; }
@@ -112,7 +114,7 @@
     return window.Chronicle.apiAction('/campaigns/' + encodeURIComponent(campaign) + path, { method: method, body: body, csrfToken: csrf });
   }
   function $(sel) { return dlg ? dlg.querySelector(sel) : null; }
-  function sysLabel() { return systemName(S.system); }
+  function sysLabel() { return S.system ? systemName(S.system) : 'This game system'; }
 
   /* ---- Drawing ---- */
   function shell() {
@@ -130,6 +132,8 @@
   }
   function railHtml() {
     var h = '<button type="button" class="st-k" data-st="view" data-v="home" aria-current="' + (S.view === 'home' && !S.q) + '">For you</button>';
+    // Until the Store knows its kinds there is nothing true to filter by.
+    if (!catalog) return h;
     KINDS.forEach(function (k) {
       var d = S.home[k.id], n = d && typeof d.total === 'number' ? d.total : '';
       h += '<button type="button" class="st-k" data-st="view" data-v="' + k.id + '" aria-current="' + (S.view === k.id && !S.q) + '">' +
@@ -224,7 +228,8 @@
     if (!dlg) return;
     $('.st-rail').innerHTML = railHtml();
     var main = $('.st-main');
-    var body = S.view === 'item' && S.item ? itemHtml() : (S.view === 'home' && !S.q ? homeHtml() : listHtml());
+    var body = !catalog ? (S.err ? '' : '<p class="sr-only" role="status">Loading the Store</p>' + placeholders(HOME_COUNT)) :
+      S.view === 'item' && S.item ? itemHtml() : (S.view === 'home' && !S.q ? homeHtml() : listHtml());
     main.innerHTML = (S.err ? '<div class="st-errbox" role="alert"><p>' + esc(S.err) + '</p><button type="button" class="st-word" data-st="retry">Try again</button></div>' : '') + body;
     var rn = $('#st-rnote'); if (rn && S.report) rn.value = S.report.note || '';
     if (focusSel) { var f = $(focusSel); if (f) f.focus({ preventScroll: false }); }
