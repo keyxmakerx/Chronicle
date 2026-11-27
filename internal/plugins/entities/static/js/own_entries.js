@@ -107,6 +107,8 @@
     this.draft = null;
     this.confirm = false;
     this.paste = false;
+    this.power = null;  // the system's power roll, for the ability form
+    this.abUi = {};     // the ability form's paste boxes, never saved
     this.tryBuy = [];   // traits ticked in the player's view, never saved
     this.busy = false;
     // A Director's marks: each list's entries with their marks per field and
@@ -123,6 +125,8 @@
   Entries.prototype.load = function () {
     var self = this;
     var reads = [api(this.planUrl).then(json), api(this.entriesUrl).then(json), api(this.entriesUrl + '/grants').then(json)];
+    // The system's power roll names the ability form's characteristics and tiers.
+    OE.powerRules(this.apiBase).then(function (r) { self.power = r; });
     if (this.director) {
       reads.push(api(this.membersUrl, { headers: { Accept: 'application/json' } }).then(json));
       // The requests are a part of the page; failing to read them never stops it.
@@ -135,7 +139,7 @@
       self.fields = (plan.steps || []).map(function (st) {
         var pkg = (st.choices || []).filter(function (c) { return c.source !== 'campaign'; });
         var sh = shapeOf(pkg);
-        return { key: st.fieldKey, label: st.label, pkg: pkg.length, facts: sh.facts, lists: sh.lists,
+        return { key: st.fieldKey, label: st.label, pkg: pkg.length, facts: sh.facts, lists: sh.lists, abilities: sh.abilities,
           budgetKey: sh.budgetKey, budget: sh.budget, sample: pkg[0] || null };
       });
       self.entries = (res[1].body && res[1].body.entries) || [];
@@ -864,8 +868,15 @@
         return '<label class="oe-f"><span class="oe-k">' + esc(w.label) + ' <small class="oe-hint">one per line</small></span>' +
           '<textarea class="oe-words" rows="' + Math.min(6, Math.max(2, w.text.split('\n').length)) + '" data-word="' + i + '">' + esc(w.text) + '</textarea></label>';
       }).join('') +
+      OE.abilityFormHTML(d, this.abilityCtx()) +
       budget + lists + (keptLine(d, f) ? '<p class="oe-hint oe-kept">' + esc(keptLine(d, f)) + '</p>' : '') + this.whoHTML(d) +
       '</div>';
+  };
+
+  // What the shared ability form needs from this page.
+  Entries.prototype.abilityCtx = function () {
+    var f = this.cur();
+    return { c: { f: 'oe-f', k: 'oe-k', hint: 'oe-hint', link: 'oe-link' }, rules: this.power, shapes: f.abilities || [], ui: this.abUi, kind: f.label };
   };
 
   // Who sees the entry. A player doesn't choose: it is theirs and the
@@ -940,7 +951,11 @@
       (facts.length ? '<div class="hc-facts">' + facts.map(function (p) {
         return '<div><b>' + esc(p.value) + '</b><span class="hc-k">' + esc(p.label) + '</span></div>';
       }).join('') + '</div>' : '') +
-      (text ? '<div class="hc-text">' + text + '</div>' : '') + lists +
+      (text ? '<div class="hc-text">' + text + '</div>' : '') +
+      (d.abilities || []).map(function (a) {
+        var card = OE.abilityCardHTML(a, self.power);
+        return card ? '<div class="hc-sec"><span class="hc-k">' + esc(a.label) + '</span>' + card + '</div>' : '';
+      }).join('') + lists +
       '<div class="oe-checks" data-checks>' + this.checksHTML(d) + '</div>';
   };
 
@@ -1056,7 +1071,10 @@
     this.open = e ? String(e.id) : 'new';
     this.confirm = false;
     this.paste = false;
+    this.abUi = {};
     this.tryBuy = [];
+    // The ability form's look lives in the shared editor sheet.
+    if (this.draft.abilities && this.draft.abilities.length) OE.ensureCss();
     var desk = this.root.querySelector('.oe-desk'), pop = this.root.querySelector('.oe-pop');
     this.root.querySelectorAll('.hc-row').forEach(function (r) { r.setAttribute('aria-expanded', String(r === from)); });
     this.cardUp(pop);
@@ -1158,6 +1176,24 @@
     body = this.root.querySelector('.oe-pop__body');
     if (body) body.scrollTop = top;
     this.fit();
+  };
+
+  // Redraws after an ability's paste box opened, closed or filled the form,
+  // then puts focus where the press left it.
+  Entries.prototype.abRedraw = function (focus) {
+    this.syncText();
+    this.redraw();
+    this.touched();
+    var el = focus && this.root.querySelector('.oe-pop ' + focus);
+    if (el) el.focus({ preventScroll: true });
+  };
+  // Repaints an ability's keyword chips and the preview; focus, when given,
+  // goes back to the keyword box after a chip's × took the button away.
+  Entries.prototype.abChips = function (focus) {
+    OE.paintChips(this.root.querySelector('.oe-pop'), this.draft);
+    this.touched();
+    var el = focus && this.root.querySelector('.oe-pop ' + focus);
+    if (el) el.focus({ preventScroll: true });
   };
 
   Entries.prototype.syncText = function () {
@@ -1369,6 +1405,28 @@
       if (!m) { errs.push('Line ' + (i + 1) + ' isn’t “name: value”.'); i++; continue; }
       i++;
       if (m[2].trim()) { out[m[1]] = value(m[2], 0); continue; }
+      // An indented "key: value" first means an object of parts (an
+      // ability), whose values may be a [flow, list] or a "- word" list.
+      var peek = i;
+      while (peek < lines.length && !lines[peek].trim()) peek++;
+      if (peek < lines.length && /^\s+[A-Za-z_][\w-]*:/.test(lines[peek])) {
+        var obj = {}, sub = null;
+        while (i < lines.length && (!lines[i].trim() || /^\s/.test(lines[i]))) {
+          var ol = lines[i], oind = ol.match(/^\s*/)[0].length, okv = ol.trim().match(/^([A-Za-z_][\w-]*):\s*(.*)$/), ow = ol.trim().match(/^-\s+(.*)$/);
+          i++;
+          if (!ol.trim()) continue;
+          if (okv) {
+            var raw = okv[2].trim();
+            sub = null;
+            if (!raw) { obj[okv[1]] = []; sub = okv[1]; }
+            else if (/^\[.*\]$/.test(raw)) obj[okv[1]] = raw.slice(1, -1).split(',').map(function (w) { return unquote(w); }).filter(function (w) { return w !== ''; });
+            else obj[okv[1]] = value(raw, oind);
+          } else if (ow && sub) obj[sub].push(unquote(ow[1]));
+          else errs.push('Line ' + i + ' under “' + m[1] + '” isn’t “part: value”.');
+        }
+        out[m[1]] = obj;
+        continue;
+      }
       var list = [], cur = null;
       while (i < lines.length && (!lines[i].trim() || /^\s/.test(lines[i]))) {
         var l = lines[i], ind = l.match(/^\s*/)[0].length;
@@ -1384,11 +1442,27 @@
     return { data: out, errs: errs };
   }
 
+  // JSON is read too: the same keys as one object, with the details either
+  // beside them or under "properties", as Chronicle's API returns an entry.
+  function readJSONEntry(src) {
+    var v;
+    try { v = JSON.parse(src); } catch (e) { return { errs: ['This looks like JSON but Chronicle can’t read it. Check the brackets and quotes.'] }; }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return { errs: ['Paste one entry: a single { … } object.'] };
+    var out = {};
+    Object.keys(v).forEach(function (k) { if (k !== 'properties') out[k] = v[k]; });
+    if (v.properties && typeof v.properties === 'object' && !Array.isArray(v.properties)) {
+      Object.keys(v.properties).forEach(function (k) { if (!(k in out)) out[k] = v.properties[k]; });
+    }
+    if (out.fieldKey && !out.entry) out.entry = out.fieldKey;
+    delete out.fieldKey;
+    return { data: out, errs: [] };
+  }
+
   Entries.prototype.readIn = function (text) {
     var f = this.cur(), src = text.replace(/\r/g, '').replace(/^\s*```[a-z]*\n?|\n?```\s*$/g, '').trim(), body = '';
     var fm = src.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n([\s\S]*))?$/);
     if (fm) { body = (fm[2] || '').trim(); src = fm[1]; }
-    var y = readYAML(src), data = y.data;
+    var y = !fm && /^\{/.test(src) ? readJSONEntry(src) : readYAML(src), data = y.data;
     if (y.errs.length) return y.errs[0];
     if (data.kind && data.kind !== 'system-entry') return 'This is “' + data.kind + '”, not an entry.';
     if (data.entry && data.entry !== f.key) {
@@ -1396,8 +1470,16 @@
       return other ? 'This is ' + an(lower(other.label)) + ' ' + lower(other.label) + '. Open the ' + other.label + ' tab to read it in.' : 'This is for “' + data.entry + '”, which isn’t a pick list here.';
     }
     if (!data.name) return 'No name found. Check the text has a “name:” line.';
-    var d = this.draft, lists = {};
+    var d = this.draft, lists = {}, abs = {}, bad = '';
     f.lists.forEach(function (l) { lists[l.key] = []; });
+    Object.keys(data).forEach(function (k) {
+      var v = data[k];
+      if (bad || !v || typeof v !== 'object' || Array.isArray(v) || /^(kind|entry|name|summary|director|visibility|description|action|tags)$/.test(k)) return;
+      var why = OE.checkAbility(v);
+      if (why.length) bad = '“' + k + '” isn’t an ability Chronicle can read: ' + why[0];
+      else abs[k] = v;
+    });
+    if (bad) return bad;
     d.name = String(data.name);
     d.summary = data.summary ? String(data.summary) : '';
     // A paste that doesn't say who sees it keeps the entry's current choice.
@@ -1408,7 +1490,7 @@
     d.text = txt ? txt.split(/\n\s*\n/).map(function (para) { return '<p>' + esc(para.trim()).replace(/\n/g, '<br>') + '</p>'; }).join('') : '';
     Object.keys(data).forEach(function (k) {
       var v = data[k];
-      if (/^(kind|entry|name|summary|director|visibility|description|action|tags)$/.test(k)) return;
+      if (/^(kind|entry|name|summary|director|visibility|description|action|tags)$/.test(k) || abs[k]) return;
       if (Array.isArray(v)) {
         lists[k] = v.filter(function (it) { return it && it.name; }).map(function (it) {
           return { name: String(it.name), cost: typeof it.cost === 'number' ? it.cost : 1, description: String(it.description || it.text || '') };
@@ -1417,6 +1499,13 @@
       else d.facts.push({ label: words(k), value: String(v), key: k });
     });
     d.lists = lists;
+    // The field's abilities take what the paste holds; another ability it
+    // names joins them.
+    d.abilities = (f.abilities || []).map(function (sh) { return OE.abilityDraft(sh, abs[sh.key] || null); });
+    Object.keys(abs).sort().forEach(function (k) {
+      if (!d.abilities.some(function (a) { return a.key === k; })) d.abilities.push(OE.abilityDraft({ key: k, label: words(k) }, abs[k]));
+    });
+    this.abUi = {};
     this.tryBuy = [];
     return '';
   };
@@ -1440,7 +1529,15 @@
     f.facts.forEach(function (k) { out.push(k + ': …'); });
     if (f.budgetKey) out.push(f.budgetKey + ': ' + f.budget);
     f.lists.forEach(function (l) { out.push(l.key + ':', '  - name: …'); if (l.buy) out.push('    cost: 1'); out.push('    description: what it does'); });
+    // An ability is an object of parts, each as the book prints it.
+    (f.abilities || []).forEach(function (sh) {
+      out.push(sh.key + ':', '  name: …');
+      if (sh.type) out.push('  type: ' + yamlStr(sh.type));
+      out.push('  action_type: …', '  keywords: [' + (sh.keywords.slice(0, 2).join(', ') || '…') + ']', '  distance: …', '  target: …',
+        '  power_roll: …', '  tier1: …', '  tier2: …', '  tier3: …', '  effect: …');
+    });
     out.push('---', 'The whole entry, as plain paragraphs.');
+    if ((f.abilities || []).length) out.push('', 'Leave out the parts an ability doesn’t have. JSON with the same keys is read too.');
     var c = f.sample;
     if (c) {
       out.push('', 'One of ' + this.system + '’s own ' + plural(f.label) + ', in the same format, as a model:', '---', 'kind: system-entry', 'entry: ' + f.key, 'name: ' + yamlStr(c.name));
@@ -1454,6 +1551,16 @@
           out.push('  - name: ' + yamlStr(it.name));
           if (typeof it.cost === 'number') out.push('    cost: ' + it.cost);
           if (it.description) out.push('    description: ' + yamlStr(plainRules(it.description)));
+        });
+      });
+      (f.abilities || []).forEach(function (sh) {
+        var a = p[sh.key];
+        if (!a || typeof a !== 'object' || Array.isArray(a)) return;
+        out.push(sh.key + ':');
+        Object.keys(a).forEach(function (k) {
+          var v = a[k];
+          if (Array.isArray(v)) out.push('  ' + k + ': [' + v.map(function (w) { return yamlStr(plainRules(w)); }).join(', ') + ']');
+          else if (v != null && typeof v !== 'object') out.push('  ' + k + ': ' + yamlStr(plainRules(v)));
         });
       });
       out.push('---');
@@ -1514,6 +1621,13 @@
         return;
       }
       var d = self.draft, li = t.getAttribute('data-li'), ii = +t.getAttribute('data-ii');
+      if (d && t.hasAttribute('data-abact')) {
+        var r = OE.abilityClick(d, t, self.abilityCtx());
+        if (r.next === 'redraw') self.abRedraw(r.focus);
+        else if (r.next === 'chips') self.abChips(r.focus);
+        else if (r.next === 'touched') self.touched();
+        return;
+      }
       if (t.hasAttribute('data-cost')) {
         d.lists[li][ii].cost = +t.getAttribute('data-cost');
         t.parentNode.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
@@ -1681,11 +1795,13 @@
       if (el.hasAttribute('data-fact')) d.facts[+el.getAttribute('data-fact')][el.getAttribute('data-part')] = el.value;
       if (el.hasAttribute('data-li') && el.hasAttribute('data-part')) d.lists[el.getAttribute('data-li')][+el.getAttribute('data-ii')][el.getAttribute('data-part')] = el.value;
       if (el.hasAttribute('data-word')) d.wordLists[+el.getAttribute('data-word')].text = el.value;
-      if (k || el.hasAttribute('data-fact') || el.hasAttribute('data-li') || el.hasAttribute('data-word')) self.touched();
+      var ab = OE.abilityInput(d, el, self.abUi);
+      if (k || ab || el.hasAttribute('data-fact') || el.hasAttribute('data-li') || el.hasAttribute('data-word')) self.touched();
     });
     root.addEventListener('change', function (e) {
       var el = e.target;
       if (el.name === 'oe-who' && self.draft) { self.draft.who = el.value; self.touched(); return; }
+      if (el.hasAttribute && el.hasAttribute('data-abkw') && self.draft && OE.addKeyword(self.draft, el)) { self.abChips(); return; }
       if (el.hasAttribute && el.hasAttribute('data-try')) {
         var tk = el.getAttribute('data-try');
         if (el.checked) self.tryBuy.push(tk); else self.tryBuy = self.tryBuy.filter(function (x) { return x !== tk; });
@@ -1733,6 +1849,11 @@
             return;
           }
         }
+      }
+      if (self.open !== null && !self.confirm) {
+        var kw = OE.abilityKey(self.draft, e);
+        if (kw === 'chips') { self.abChips(); return; }
+        if (kw === 'eat') return;
       }
       if (e.key === 'Escape' && self.open !== null) {
         e.preventDefault();

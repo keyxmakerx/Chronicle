@@ -69,7 +69,8 @@ window.Chronicle = {
     });
   },
   apiFetch: function (url, o) { o = o || {}; return fetch(url, { method: o.method, headers: o.headers, body: o.body && typeof o.body === 'object' ? JSON.stringify(o.body) : o.body }); },
-  working: function (b, on) { if (on) b.setAttribute('data-working', ''); else b.removeAttribute('data-working'); }
+  working: function (b, on) { if (on) b.setAttribute('data-working', ''); else b.removeAttribute('data-working'); },
+  gmTerm: function () { return 'Keeper'; }
 };
 Object.defineProperty(navigator, 'hardwareConcurrency', { get: function () { return 8; } });
 </script>
@@ -217,7 +218,7 @@ test('a turned-down ask is said once and the card is askable again', { skip }, a
   await fire();
   await page.waitForTimeout(400);
   assert.equal(await page.$$eval('[data-dkh-notes] .dkh-note', (n) => n.length), 1, 'said more than once');
-  assert.match(await page.textContent('[data-dkh-notes]'), /turned that down/);
+  assert.match(await page.textContent('[data-dkh-notes]'), /Your Keeper turned that down/, 'not said in the campaign word for its game master');
   assert.equal(await page.$$eval('.dkh-chip-wait', (n) => n.length), 0);
   await page.context().close();
 });

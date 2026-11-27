@@ -223,3 +223,53 @@ func TestBreakFor(t *testing.T) {
 		t.Fatalf("break = %+v, want the Director's reason carried", b)
 	}
 }
+
+// A rewrite takes the standard entry's place, so a rule the Director set on
+// the standard entry still holds for it; a rule on the rewrite itself wins.
+func TestApplyChoiceRulesFollowRewrite(t *testing.T) {
+	rewrite := campChoice("12", "Fury (our words)")
+	rewrite.Origin, rewrite.StandsFor = OriginRewritten, "fury"
+	plain := campChoice("13", "Mothfolk")
+	devil := pkg("devil", "Devil")
+	all := []Choice{devil, rewrite, plain}
+	tests := []struct {
+		name    string
+		rows    []ChoiceRule
+		viewer  string
+		kept    []string
+		askNext string
+	}{
+		{name: "not here on the standard entry holds for the rewrite", viewer: "lee",
+			rows: []ChoiceRule{rule("package", "fury", "", RuleNotOffered)},
+			kept: []string{"Devil", "Mothfolk"}},
+		{name: "a player's own opening on the standard entry still lets them", viewer: "pat",
+			rows: []ChoiceRule{rule("package", "fury", "", RuleNotOffered), rule("package", "fury", "pat", RuleOpen)},
+			kept: []string{"Devil", "Fury (our words)", "Mothfolk"}},
+		{name: "a rule on the rewrite itself wins", viewer: "lee",
+			rows: []ChoiceRule{rule("package", "fury", "", RuleNotOffered), rule("campaign", "12", "", RuleOpen)},
+			kept: []string{"Devil", "Fury (our words)", "Mothfolk"}},
+		{name: "ask first follows the rewrite", viewer: "lee",
+			rows: []ChoiceRule{rule("package", "fury", "", RuleAskFirst)},
+			kept: []string{"Devil", "Fury (our words)", "Mothfolk"}, askNext: "Fury (our words)"},
+		{name: "a campaign entry that rewrites nothing is untouched", viewer: "lee",
+			rows: []ChoiceRule{rule("package", "13", "", RuleNotOffered)},
+			kept: []string{"Devil", "Fury (our words)", "Mothfolk"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := applyChoiceRules(all, tc.rows, tc.viewer)
+			if names := choiceNames(got.Kept); !reflect.DeepEqual(names, tc.kept) {
+				t.Errorf("kept = %v, want %v", names, tc.kept)
+			}
+			for _, c := range got.Kept {
+				want := ""
+				if c.Name == tc.askNext {
+					want = ChoiceStateAskFirst
+				}
+				if c.State != want {
+					t.Errorf("%s state = %q, want %q", c.Name, c.State, want)
+				}
+			}
+		})
+	}
+}

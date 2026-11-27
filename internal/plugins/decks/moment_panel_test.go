@@ -145,7 +145,7 @@ func TestAPlayersHandIsTheSameWhateverAMomentOrAHiddenTestSays(t *testing.T) {
 func TestOnlyTheInvitedPlayerIsToldToDraw(t *testing.T) {
 	r := newHeldRig(t, true, MomentInvited, "u-tam")
 	tam := r.get(handBase, "u-tam").Body.String()
-	if !strings.Contains(tam, "Your Director invites you to draw.") {
+	if !strings.Contains(tam, "Your GM invites you to draw.") {
 		t.Errorf("the invited player's hand lacks the invitation: %.400s", tam)
 	}
 	if ilse := r.get(handBase, "u-ilse").Body.String(); strings.Contains(ilse, "invites you to draw") {
