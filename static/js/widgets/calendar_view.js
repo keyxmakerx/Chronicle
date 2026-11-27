@@ -1077,8 +1077,14 @@
     var L = cell.x, R = L + cell.w, T = cell.y, Bt = T + cell.h, side = null, x, y;
     if (!isBand && R + W <= cr.width - 8) { side = 'right'; x = R; }
     else if (!isBand && L - W >= 8) { side = 'left'; x = L - W; }
-    if (side) y = T + H <= B.bot ? T : (Bt - H >= B.top ? Bt - H : Math.max(B.top, B.bot - H));
-    else {
+    if (side) {
+      y = T + H <= B.bot ? T : Bt - H;
+      // Beside its day it lines up with the day's top or bottom edge, but a
+      // day cut off by the window's edge (lower on the page when a strip
+      // sits above it) would carry the card past the edge with it, leaving
+      // the card's last part reachable only by scrolling the page.
+      y = Math.max(B.top, Math.min(y, B.bot - H));
+    } else {
       x = Math.max(8, Math.min(L + cell.w / 2 - W / 2, cr.width - W - 8));
       if (Bt + H <= B.bot) { side = 'down'; y = Bt; } else if (T - H >= B.top) { side = 'up'; y = T - H; } else { side = 'down'; y = Math.max(B.top, B.bot - H); }
     }
@@ -1235,6 +1241,18 @@
   function inCardView(el, card) {
     var r = el.getBoundingClientRect(), sc = (!isPhone() && el.closest('.lscroll')) || card, v = sc.getBoundingClientRect();
     return r.top >= v.top && r.bottom <= v.bottom - 4;
+  }
+  // Brings a row of a card into view by scrolling the card alone.
+  // scrollIntoView scrolls every box around it too, the page and even
+  // the shell's overflow-hidden column. Under reduced motion a card just
+  // placed still reads at its old place (every change is a 0.01ms
+  // transition), so its row looked off screen and the page moved after
+  // the card was fitted to the window, carrying the card and the night's
+  // page that opens over it past the window's bottom.
+  function showInCard(el, card) {
+    var sc = (!isPhone() && el.closest('.lscroll')) || card, r = el.getBoundingClientRect(), v = sc.getBoundingClientRect();
+    if (r.top < v.top) sc.scrollTop -= v.top - r.top;
+    else if (r.bottom > v.bottom) sc.scrollTop += Math.min(r.bottom - v.bottom, r.top - v.top);
   }
   function carryPairs(cell, card) {
     var out = [];
@@ -6364,7 +6382,7 @@
       var g = isPhone() ? null : wingGeometry(this.wingEl, btn, this.calEl);
       if (g) placeCard(this.wingEl, g);
       var row = highlightEventId ? this.wingEl.querySelector('.evd[data-ev="' + highlightEventId + '"]') : null;
-      if (row) row.scrollIntoView({ block: 'nearest' });
+      if (row) showInCard(row, this.wingEl);
       var depth = pressDepth(btn), dc = btn.querySelector('.dc');
       P.src = btn;
       P.g = g;
@@ -6473,7 +6491,7 @@
       var row = this.wingEl.querySelector('.evd[data-ev="' + id + '"]');
       if (!row) return;
       row.classList.add('hl');
-      row.scrollIntoView({ block: 'nearest' });
+      showInCard(row, this.wingEl);
       void row.offsetWidth;
       row.classList.add('pulse');
     },

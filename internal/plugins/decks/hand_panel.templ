@@ -19,7 +19,7 @@ templ HandPanel(p handPage) {
 templ HandBody(p handPage) {
 	<div class="dkh-body" data-dkh-body>
 		if p.View.Empty() {
-			<p class="dkh-empty">No cards yet. Your Director deals them.</p>
+			<p class="dkh-empty">No cards yet. Your { layouts.GMTerm(ctx) } deals them.</p>
 		}
 		for _, sp := range p.View.Mine {
 			<section class="dkh-sec" aria-label={ "Your hand" + heroSuffix(sp.Name, len(p.View.Mine)) }>
@@ -106,7 +106,7 @@ templ HandBody(p handPage) {
 						if d.kindsLine() != "" {
 							<p class="dkh-quiet">{ d.kindsLine() }</p>
 						}
-						<p class="dkh-quiet" data-dkh-draws>{ d.drawsLine() }</p>
+						<p class="dkh-quiet" data-dkh-draws>{ d.drawsLine(layouts.GMTerm(ctx)) }</p>
 						if len(d.Heroes) > 1 {
 							<label class="dkh-quiet" for={ "dkh-hero-" + d.DeckID }>Into the hand of</label>
 							<select id={ "dkh-hero-" + d.DeckID } class="dkh-pick" data-dkh-hero>

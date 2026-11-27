@@ -42,9 +42,12 @@ func TestClassify_GMOnlyCounted(t *testing.T) {
 		types: []entities.EntityType{{ID: 1, Slug: "character"}},
 	}
 	pages := []ParsedPage{
+		{Name: "Secretive", Body: "New text.", FrontMatter: FrontMatter{Type: "character", Action: ActionUpdate}, Status: StatusNew},
+		{Name: "Plain", Body: "New text.", FrontMatter: FrontMatter{Type: "character", Action: ActionUpdate}, Status: StatusNew},
+		{Name: "Secretive", Body: "New text.", FrontMatter: FrontMatter{Type: "character"}, Status: StatusNew}, // create-conflict
+		// No body keeps the text, so there is nothing to warn about.
 		{Name: "Secretive", FrontMatter: FrontMatter{Type: "character", Action: ActionUpdate}, Status: StatusNew},
-		{Name: "Plain", FrontMatter: FrontMatter{Type: "character", Action: ActionUpdate}, Status: StatusNew},
-		{Name: "Secretive", FrontMatter: FrontMatter{Type: "character"}, Status: StatusNew}, // create-conflict
+		{Name: "Secretive", Body: " \n\t", FrontMatter: FrontMatter{Type: "character", Action: ActionUpdate}, Status: StatusNew},
 	}
 	got, err := NewClassifier(lookup, "camp-1").ClassifyAll(context.Background(), pages)
 	if err != nil {
@@ -58,6 +61,11 @@ func TestClassify_GMOnlyCounted(t *testing.T) {
 	}
 	if !got[2].GMOnly.Any() {
 		t.Errorf("create row that conflicts with a GM-only page not flagged")
+	}
+	for _, i := range []int{3, 4} {
+		if got[i].GMOnly.Any() {
+			t.Errorf("row %d: update with no text flagged: %+v", i, got[i].GMOnly)
+		}
 	}
 }
 

@@ -6144,6 +6144,7 @@ func (a *App) RegisterRoutes() {
 	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
@@ -7121,7 +7122,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -7463,6 +7464,7 @@ func (a *App) RegisterRoutes() {
 		PlayerNotes:     entityNotesService,
 		NoteAccess:      aiNoteAccessAPI,
 		Addons:          addonService,
+		AddonLister:     &addonListerAdapter{svc: addonService},
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
 		Boards:          aiBoards,
