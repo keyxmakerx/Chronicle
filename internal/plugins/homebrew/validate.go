@@ -199,24 +199,44 @@ func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) 
 		}
 		rule := Rule{When: When{Event: ev.Name, Part: r.When.Part, Args: args, Test: test}, Timing: timing, Then: []Do{}}
 		for j, d := range r.Then {
-			dw := fmt.Sprintf("%s, step %d", where, j+1)
-			act, ok := reg.action(d.Action)
-			if !ok {
-				return out, errInvalid(fmt.Sprintf("%s does %q, which this campaign doesn't have", dw, d.Action))
-			}
-			if err := checkTarget(dw, d.Part, act.PartKinds, kinds); err != nil {
-				return out, err
-			}
-			a, err := runCheck(ctx, campaignID, dw, d.Args, MaxArgsBytes, act.Check)
+			step, err := checkStep(ctx, reg, campaignID, fmt.Sprintf("%s, step %d", where, j+1), d, kinds)
 			if err != nil {
 				return out, err
 			}
-			rule.Then = append(rule.Then, Do{Action: act.Name, Part: d.Part, Args: a})
+			rule.Then = append(rule.Then, step)
 		}
 		out.Rules = append(out.Rules, rule)
 	}
 	out.Layout = cleanLayout(in.Layout, out)
 	return out, nil
+}
+
+// checkStep checks one Then against the registry and the recipe's parts and
+// hands its args to the action's owner. A saved recipe and a Director's
+// "Yes, and…" answer both go through it, so an answer can change a step only
+// to something the recipe itself could have said.
+func checkStep(ctx context.Context, reg *Registry, campaignID, where string, d Do, kinds map[string]string) (Do, error) {
+	act, ok := reg.action(d.Action)
+	if !ok {
+		return Do{}, errInvalid(fmt.Sprintf("%s does %q, which this campaign doesn't have", where, d.Action))
+	}
+	if err := checkTarget(where, d.Part, act.PartKinds, kinds); err != nil {
+		return Do{}, err
+	}
+	a, err := runCheck(ctx, campaignID, where, d.Args, MaxArgsBytes, act.Check)
+	if err != nil {
+		return Do{}, err
+	}
+	return Do{Action: act.Name, Part: d.Part, Args: a}, nil
+}
+
+// partKindsByKey maps each part key of a doc to its kind, as checkTarget reads it.
+func partKindsByKey(doc Doc) map[string]string {
+	out := map[string]string{}
+	for _, p := range doc.Parts {
+		out[p.Key] = p.Kind
+	}
+	return out
 }
 
 var ruleCardRe = regexp.MustCompile(`^r(0|[1-9]\d?)(?:\.(0|[1-9]\d?))?$`)

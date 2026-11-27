@@ -265,10 +265,20 @@
       st.log.push(what + ', waits' + (rule.timing === 'encounter_end' ? ' for the encounter to end' : ' for you to run it'));
       return;
     }
+    var asked = false;
     rule.then.forEach(function (d, j) {
+      if (asked) return;
       if (ctx.steps++ >= LIMIT) { ctx.stopped = true; return; }
       ctx.lit.push('r' + i + '.' + j);
       var act = findDef(cat, 'actions', d.action), tp = doc.parts.filter(function (x) { return x.key === d.part; })[0];
+      // An ask stops the rule for the Director's answer; the preview can't
+      // answer for them, so what follows it is not acted out.
+      if (act && act.asks) {
+        asked = true;
+        var w = String((d.args || {}).ask || '').trim();
+        st.log.push('Asks the Director' + (w ? ': wants to ' + w : '') + '. What follows waits for a yes.');
+        return;
+      }
       var label = act ? act.label : d.action;
       if (act && act.preview && tp && hasNumber(cat, tp)) {
         var n = act.preview.arg ? Number((d.args || {})[act.preview.arg]) : 1;
@@ -1271,6 +1281,7 @@
     argFields(S, box, act, d.args);
     if (act && act.clientRun) box.appendChild(h('p', 'hbw-muted', 'This runs in your browser when you press Run in the Homebrew drawer.'));
     if (act && act.waits) box.appendChild(h('p', 'hbw-muted', 'This is your call: a rule that ends in it waits in the Homebrew drawer until you press Run.'));
+    if (act && act.asks) box.appendChild(h('p', 'hbw-muted', 'The rule stops here and asks the Director in the Homebrew drawer. The steps before it have happened; the steps after it run only on Yes, and the Director can change their settings while answering. The player sees the answer.'));
     append(box, [
       h('p', 'hbw-muted', 'Part of the rule that starts on: ' + ((def(S, 'events', rule.when.event) || {}).label || rule.when.event) + '.'),
       append(h('div', 'hbw-row'), [quiet('Remove this step', function () {
