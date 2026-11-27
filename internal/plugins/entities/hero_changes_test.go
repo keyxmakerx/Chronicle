@@ -107,6 +107,42 @@ func TestHeroLockedChanges(t *testing.T) {
 	}
 }
 
+// A multi step short of its allowance can be finished while the picks are
+// shut; what it already holds can't be swapped or dropped.
+func TestHeroLockedChangesMulti(t *testing.T) {
+	picks := builderPicksFrom(multiPlan())
+	labels := map[string]string{"subclass": "Subclass"}
+	hero := func(sub string) *Entity {
+		return &Entity{FieldsData: map[string]any{"class": "Conduit", "subclass": sub}}
+	}
+	cases := []struct {
+		name  string
+		e     *Entity
+		patch map[string]any
+		want  []string
+	}{
+		{"the second domain finishes the step", hero("War"), map[string]any{"subclass": "Life, War"}, nil},
+		{"the same domains in Foundry's order", hero("Life, War"), map[string]any{"subclass": "War, Life"}, nil},
+		{"a held domain swapped is a change", hero("War"), map[string]any{"subclass": "Life"}, []string{"Subclass: War → Life"}},
+		{"a full step swapped is a change", hero("Life, War"), map[string]any{"subclass": "Life, Fate"}, []string{"Subclass: Life, War → Life, Fate"}},
+		{"dropping a domain is a change", hero("Life, War"), map[string]any{"subclass": "Life"}, []string{"Subclass: Life, War → Life"}},
+		{"past the allowance is a change", hero("War"), map[string]any{"subclass": "Life, War, Fate"}, []string{"Subclass: War → Life, War, Fate"}},
+		{"a class with one subclass gets no second", &Entity{FieldsData: map[string]any{"class": "Fury", "subclass": "Reaver"}},
+			map[string]any{"subclass": "Reaver, Berserker"}, []string{"Subclass: Reaver → Reaver, Berserker"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []string
+			for _, ch := range heroLockedChanges(tc.e, tc.patch, picks, labels) {
+				got = append(got, ch.Label+": "+ch.From+" → "+ch.To)
+			}
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHeroLevel(t *testing.T) {
 	cases := []struct {
 		v    any
