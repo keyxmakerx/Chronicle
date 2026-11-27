@@ -2216,14 +2216,15 @@
     /* The live sky: each box the room drew outside a baked layer gets the
        campaign's sky. Once the calendar is read, a room lit for another hour
        is drawn again for this one. */
-    var skies = [], liveDrawn = 'night';
+    var skies = [], liveDrawn = 'night', dead = false;
     function liveDrop() { skies.forEach(function (k) { try { k.destroy(); } catch (e) { /* already gone */ } }); skies = []; }
     function liveMount(s) {
       liveDrop();
       var boxes = [].slice.call(s.querySelectorAll('[data-live-sky] canvas'));
       if (!boxes.length) return;
       cmLive(R.model.campaignId).then(function (got) {
-        if (!got || R.svg !== s) return;
+        // A reading that lands after the room was closed or redrawn draws nothing.
+        if (!got || dead || R.svg !== s || !s.isConnected) return;
         var H = window.Chronicle && window.Chronicle.headerSky;
         boxes.forEach(function (c) {
           if (!H || c.closest('[data-bake]') || !c.isConnected) return;
@@ -2324,7 +2325,7 @@
       where: function () { return where; },
       go: go,
       destroy: function () {
-        pause(true); liveDrop(); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
+        dead = true; pause(true); liveDrop(); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
         document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey);
         host.innerHTML = '';
       }

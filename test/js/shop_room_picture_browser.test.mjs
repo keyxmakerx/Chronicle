@@ -174,10 +174,11 @@ test('the owner picks the view outside, and Save room sends it', { skip, timeout
 // The campaign's own sky: the window holds a box the header's sky paints
 // into, for the default calendar this viewer may see, and the room is lit
 // for the hour that calendar is at.
-const LIVE_STUBS = (alt, weather) => `
+const LIVE_STUBS = (alt, weather, hold) => `
   window.__skies = [];
+  var gate = ${hold ? 'new Promise(function (r) { window.__release = r; })' : 'Promise.resolve()'};
   window.SkyPane = { Scene: {
-    getJSON: function (u) { window.__calls.push({ m: 'GET', url: u }); return Promise.resolve(/\\/calendars\\/list$/.test(u) ? [{ id: 'other', is_default: false }, { id: 'cal9', is_default: true }] : { current_year: 1, current_month: 1, current_day: 1, current_hour: 12 }); },
+    getJSON: function (u) { window.__calls.push({ m: 'GET', url: u }); return gate.then(function () { return /\\/calendars\\/list$/.test(u) ? [{ id: 'other', is_default: false }, { id: 'cal9', is_default: true }] : { current_year: 1, current_month: 1, current_day: 1, current_hour: 12 }; }); },
     dayWeather: function () { return Promise.resolve(${JSON.stringify(weather)}); } } };
   window.SkyWorld = { D2R: Math.PI / 180, hour24: function () { return 12; }, makeSkym: function () { return { sun: function () { return { alt: ${alt} * Math.PI / 180 }; } }; } };
   window.SkyLooks = { spec: function (w) { return { like: w && w.preset_id || 'clear' }; } };
@@ -202,5 +203,14 @@ test("the campaign's own sky fills the window and lights the room for its hour",
   const { p: dark } = await open(browser, live(), { before: LIVE_STUBS(-40, null) });
   await dark.waitForFunction(() => window.__skies.some((s) => s.k.live));
   assert.ok(await dark.evaluate(() => !!document.querySelector('#cm-osky stop[stop-color="#0b1430"]')), 'night until and after the reading');
+  // Closed before the calendar answers: the late reading draws no room and mounts no sky.
+  const { p: shut, errors: shutErrors } = await open(browser, live(), { before: LIVE_STUBS(40, null, true) });
+  await shut.waitForFunction(() => typeof window.__release === 'function' && window.__calls.some((c) => /calendars\/list$/.test(c.url)));
+  await shut.evaluate(() => { const h = document.querySelector('.shr-counter'); window.__stage = h.querySelector('.src-stage'); window.__svg = window.__stage.querySelector('.src-svg'); window.ShopRoomCounter.destroy(h); window.__release(); });
+  await shut.waitForTimeout(400);
+  assert.equal(await shut.evaluate(() => document.querySelector('.shr-counter').innerHTML), '', 'the closed room stays empty');
+  assert.equal(await shut.evaluate(() => window.__stage.querySelector('.src-svg') === window.__svg), true, 'the closed room is not drawn again');
+  assert.equal(await shut.evaluate(() => window.__skies.length), 0, 'no sky is mounted');
   assert.deepEqual(errors, []);
+  assert.deepEqual(shutErrors, []);
 });
