@@ -216,3 +216,20 @@ test('the first open waits for the stylesheet, so the sheet never shows unstyled
   assert.equal(await page.getAttribute('[data-store-toggle]', 'data-working'), null);
   await page.close();
 });
+
+test('a stylesheet that fails opens nothing unstyled, says so, and the next press tries again', { skip }, async () => {
+  const page = await openPage();
+  let fail = true;
+  await page.route('https://store.test/store.css', (route) => (fail ? route.abort() : route.fulfill({ contentType: 'text/css', body: '.st-dlg{--st-loaded:1}' })));
+  await page.evaluate(() => document.getElementById('w').setAttribute('data-css', 'https://store.test/store.css'));
+  await page.click('[data-store-toggle]');
+  await page.waitForFunction(() => window.__srv.notes.length === 1);
+  assert.equal(await page.evaluate(() => !!document.querySelector('.st-dlg[open]')), false);
+  assert.match(await page.evaluate(() => window.__srv.notes[0]), /^The Store could not load\./);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('link[data-store-css]').length), 0);
+  assert.equal(await page.getAttribute('[data-store-toggle]', 'data-working'), null);
+  fail = false;
+  await page.click('[data-store-toggle]');
+  await page.waitForSelector('.st-dlg.st-in');
+  await page.close();
+});

@@ -298,17 +298,26 @@
   /* ---- Opening and closing ---- */
   // The sheet's stylesheet loads on first use, and the sheet waits for it, so
   // it never shows unstyled. Hovering or focusing the icon starts the fetch
-  // early; a stylesheet that never answers is given up on after 4s.
+  // early. A stylesheet that fails or doesn't answer in 4s is not a sheet:
+  // the Store says so and the next press tries again.
   var cssReady = null;
   function styleOnce() {
     if (cssReady) return cssReady;
     var href = host && host.getAttribute('data-css');
-    if (!href || document.querySelector('link[data-store-css]')) { cssReady = Promise.resolve(); return cssReady; }
+    if (!href) { cssReady = Promise.resolve(true); return cssReady; }
+    var old = document.querySelector('link[data-store-css]');
+    if (old && old.sheet) { cssReady = Promise.resolve(true); return cssReady; }
+    if (old) old.remove();
     var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.setAttribute('data-store-css', '');
-    cssReady = new Promise(function (done) {
-      l.onload = l.onerror = function () { done(); };
-      setTimeout(done, 4000);
+    var p = new Promise(function (done) {
+      var t = setTimeout(function () { done(false); }, 4000);
+      l.onload = function () { clearTimeout(t); done(true); };
+      l.onerror = function () { clearTimeout(t); done(false); };
+    }).then(function (ok) {
+      if (!ok) { l.remove(); if (cssReady === p) cssReady = null; }
+      return ok;
     });
+    cssReady = p;
     document.head.appendChild(l);
     return cssReady;
   }
@@ -329,12 +338,13 @@
     opening = true;
     var mine = host, btn = toggle;
     if (btn && window.Chronicle.working) window.Chronicle.working(btn, true);
-    styleOnce().then(function () {
+    styleOnce().then(function (ok) {
       if (btn && window.Chronicle.working) window.Chronicle.working(btn, false);
       // A widget mounted again meanwhile is not the one that was clicked.
       if (host !== mine) return;
       opening = false;
-      show(opts);
+      if (ok) { show(opts); return; }
+      if (window.Chronicle.notify) window.Chronicle.notify('The Store could not load. Check your connection and try again.', 'error', { action: { label: 'Try again', dismiss: true, onClick: function () { open(opts); } } });
     });
   }
   function show(opts) {

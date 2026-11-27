@@ -409,6 +409,12 @@
   html[data-motion] .btn[data-working]::before { animation: btn-spin-show 1ms linear 300ms forwards; }
   @keyframes btn-spin { to { transform: rotate(360deg); } }
   @keyframes btn-spin-show { to { opacity: 1; } }
+  /* An icon button keeps its size while it works: the ring takes the icon's
+     place instead of standing beside it, so the bar around it never shifts. */
+  .btn-icon[data-working] { position: relative; }
+  .btn-icon[data-working]::before { position: absolute; inset: 0; margin: auto; }
+  .btn-icon[data-working] > svg { animation: btn-spin-hide 1ms linear 300ms forwards; }
+  @keyframes btn-spin-hide { to { opacity: 0; } }
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
