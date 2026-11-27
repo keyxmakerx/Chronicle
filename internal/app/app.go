@@ -205,7 +205,8 @@ func (a *App) setupMiddleware() {
 	// ~10MB cap of their own, enforced via an http.LimitReader in the
 	// calendar handler — this global 2MB limit would otherwise be the real
 	// (and silent, since it fails before the handler's own check ever runs)
-	// ceiling for every one of them.
+	// ceiling for every one of them. The custom game system zip routes are
+	// skipped for the same reason; registerUploadCaps gives them their cap.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
 		LimitBytes: 2 << 20,
 		Skipper: func(c *echo.Context) bool {
@@ -213,7 +214,7 @@ func (a *App) setupMiddleware() {
 			if strings.HasPrefix(path, "/media/upload") || path == "/ws" || path == siteLookPath {
 				return true
 			}
-			return isCalendarImportPath(path) || isVaultImportUploadPath(path)
+			return isCalendarImportPath(path) || isVaultImportUploadPath(path) || isSystemZipPath(path)
 		},
 	}))
 	// The Site look form carries a logo and a sign-in picture, so it gets a

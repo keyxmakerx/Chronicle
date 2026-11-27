@@ -16,8 +16,9 @@ import (
 	"sync"
 )
 
-// maxSystemZipSize limits custom system ZIP uploads to 50 MB.
-const maxSystemZipSize = 50 * 1024 * 1024
+// MaxSystemZipSize limits custom system ZIP uploads to 50 MB. The app gives
+// the upload and preview routes a matching body cap ahead of CSRF.
+const MaxSystemZipSize = 50 * 1024 * 1024
 
 // maxDataFileSize limits individual JSON data files to 10 MB.
 const maxDataFileSize = 10 * 1024 * 1024
@@ -93,8 +94,8 @@ func (m *CampaignSystemManager) Dir(campaignID string) string {
 // validates it, stores it on disk, and loads it into memory.
 // Returns the parsed manifest on success.
 func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, zipSize int64) (*SystemManifest, error) {
-	if zipSize > maxSystemZipSize {
-		return nil, fmt.Errorf("module ZIP exceeds maximum size of %d MB", maxSystemZipSize/(1024*1024))
+	if zipSize > MaxSystemZipSize {
+		return nil, fmt.Errorf("module ZIP exceeds maximum size of %d MB", MaxSystemZipSize/(1024*1024))
 	}
 
 	zr, err := zip.NewReader(zipData, zipSize)
