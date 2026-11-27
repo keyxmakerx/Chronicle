@@ -38,6 +38,17 @@ func (h *Handler) servePosts(c *echo.Context, cc *campaigns.CampaignContext, pos
 	}
 }
 
+// servedPost is a save's answer: the stored post as this viewer may read it,
+// the same copy ListPosts gives, so a save never hands back more than a read.
+func (h *Handler) servedPost(c *echo.Context, cc *campaigns.CampaignContext, post *Post) *Post {
+	if post == nil || cc.CanAuthorDmOnly() {
+		return post
+	}
+	served := []Post{*post}
+	h.servePosts(c, cc, served)
+	return &served[0]
+}
+
 // hideMentions hides, in place, the mentions in texts of pages this viewer
 // can't open, and reports how many it hid.
 func (h *Handler) hideMentions(c *echo.Context, cc *campaigns.CampaignContext, texts ...*string) int {

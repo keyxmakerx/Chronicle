@@ -47,6 +47,16 @@ func TestCreateRelation_ScopedToCampaign(t *testing.T) {
 		{"a target hidden from the caller is 404", "own-a", "hidden", gate, http.StatusNotFound},
 		{"an unknown target is 404", "own-a", "missing", gate, http.StatusNotFound},
 		{"no gate wired fails closed", "own-a", "own-b", nil, http.StatusInternalServerError},
+		{"a source shown view only is 403", "ro", "own-a", relFakeEntityGate{
+			campaignOf: map[string]string{"ro": "camp-1", "own-a": "camp-1"},
+			canView:    map[string]bool{"ro": true, "own-a": true},
+			viewOnly:   map[string]bool{"ro": true},
+		}, http.StatusForbidden},
+		{"a target shown view only can still be linked to", "own-a", "ro", relFakeEntityGate{
+			campaignOf: map[string]string{"ro": "camp-1", "own-a": "camp-1"},
+			canView:    map[string]bool{"ro": true, "own-a": true},
+			viewOnly:   map[string]bool{"ro": true},
+		}, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
