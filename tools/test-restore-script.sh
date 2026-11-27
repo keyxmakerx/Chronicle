@@ -7,7 +7,8 @@
 # --from-inside lifts that refusal only when the maintenance marker, the run
 # token and /healthz all agree; a failed safety backup stops the restore
 # before the database is touched; a by-hand restore clears a stale marker;
-# both --manifest forms parse; `make restore` starts a one-off container.
+# both --manifest forms parse; `make restore` refuses while the chronicle
+# container runs and otherwise starts a one-off container.
 #
 # Exit: 0 if every case behaved as expected, 1 otherwise.
 
@@ -212,12 +213,34 @@ RUN_ENV=(STUB_HEALTH=down); RUN_ARGS=("--manifest=$MANIFEST")
 run_case "--manifest=PATH form" 0 "RESTORE=ok"
 rm -f "$BACKUPS"/chronicle_pre_restore_*
 
-# 16. `make restore` must start a one-off container: the script refuses while
-# Chronicle runs, and `exec` needs it running.
-if grep -A1 '^restore:' "$SCRIPT_DIR/../Makefile" | grep -q 'run --rm chronicle sh /app/scripts/restore.sh'; then
-    echo "ok: make restore uses a one-off container"; PASS=$((PASS + 1))
+# 16. `make restore` refuses while the chronicle container runs (restore.sh
+# can't tell from inside a one-off container), and otherwise starts one.
+# A stub docker answers `ps` from STUB_RUNNING and logs everything else.
+cat > "$BIN/docker" <<'EOF'
+#!/bin/sh
+case " $* " in
+    *" ps "*) [ "${STUB_RUNNING:-0}" = 1 ] && echo c0ffee; exit 0 ;;
+esac
+echo "docker $*" >> "$DOCKER_LOG"
+EOF
+chmod +x "$BIN/docker"
+DOCKER_LOG="$WORK/docker.log"
+make_restore() { # STUB_RUNNING
+    : > "$DOCKER_LOG"
+    env -i PATH="$BIN:$PATH" HOME="$WORK" DOCKER_LOG="$DOCKER_LOG" STUB_RUNNING="$1" \
+        make -s -C "$SCRIPT_DIR/.." restore RESTORE_ARGS="--manifest /m.txt" 2>&1
+}
+if out="$(make_restore 1)"; then
+    echo "FAIL: make restore ran while chronicle was running"; FAIL=$((FAIL + 1))
+elif [[ -s "$DOCKER_LOG" ]] || ! grep -q 'reason=server_running' <<<"$out"; then
+    echo "FAIL: make restore refused badly: $out / $(cat "$DOCKER_LOG")"; FAIL=$((FAIL + 1))
 else
-    echo "FAIL: make restore does not use 'docker compose run --rm'"; FAIL=$((FAIL + 1))
+    echo "ok: make restore refuses while chronicle runs"; PASS=$((PASS + 1))
+fi
+if make_restore 0 >/dev/null && grep -q 'run --rm chronicle sh /app/scripts/restore.sh --manifest /m.txt' "$DOCKER_LOG"; then
+    echo "ok: make restore starts a one-off container"; PASS=$((PASS + 1))
+else
+    echo "FAIL: make restore did not run a one-off container: $(cat "$DOCKER_LOG")"; FAIL=$((FAIL + 1))
 fi
 
 echo "restore.sh self-test: $PASS passed, $FAIL failed"

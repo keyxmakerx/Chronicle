@@ -298,7 +298,12 @@ backup-list: ## List backup artifacts in the chronicle-data volume
 	docker compose -f $(DOCKER_COMP) exec -T chronicle ls -lh /app/data/backups
 
 .PHONY: restore
-# A one-off container, not `exec`: restore.sh refuses while Chronicle answers
-# /healthz, so the running container has to be stopped first.
+# A one-off container, not `exec`, because Chronicle has to be stopped first.
+# restore.sh's own /healthz check can't see the server from a fresh container
+# (nothing listens on its localhost), so the target refuses here while the
+# chronicle container is running.
 restore: ## Restore from a manifest, Chronicle stopped (usage: docker compose stop chronicle; make restore RESTORE_ARGS="--manifest /app/data/backups/chronicle_manifest_TS.txt --force")
+	@if [ -n "$$(docker compose -f $(DOCKER_COMP) ps --status running -q chronicle)" ]; then \
+		echo "RESTORE=failed reason=server_running: run 'docker compose stop chronicle' first" >&2; exit 2; \
+	fi
 	docker compose -f $(DOCKER_COMP) run --rm chronicle sh /app/scripts/restore.sh $(RESTORE_ARGS)
