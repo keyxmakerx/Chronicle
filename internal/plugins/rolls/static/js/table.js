@@ -877,8 +877,8 @@
       self.cat = c;
       if (!self.alive) return;
       if (self.open) self.renderSection('dice');
-      // An open roll's details name its dice once the names are known.
-      if (self.openRow) self.refreshLog(true);
+      // Rows' details are drawn with the rows, so they are redrawn to name their dice.
+      if (self.loaded) self.refreshLog(true);
     }).catch(function () { self.catAsked = false; });
   };
 
