@@ -15,6 +15,11 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(readFileSync(join(root, 'static/js/widgets/store.js'), 'utf8'), sandbox);
 const U = sandbox.Chronicle.Store.util;
+U.setCatalog({
+  kinds: [{ id: 'rooms', label: 'Shop rooms', one: 'Shop room', where: 'x' }, { id: 'crafting', label: 'Crafting looks', one: 'Crafting look', where: 'y' }, { id: 'bad"><x', label: 'Bad' }],
+  things: { 'room-theme': { group: 'rooms', one: 'Shop room' }, 'crafting-circle': { group: 'crafting', one: 'Magic circle' }, 'crafting-item-look': { group: 'crafting', one: 'Item look' }, 'crafting-bench': { group: 'crafting', one: 'Crafting bench' }, 'stray': { group: 'nowhere', one: 'Stray' } },
+  systems: { drawsteel: 'Draw Steel', dnd5e: 'D&D 5e' },
+});
 const plain = (o) => JSON.parse(JSON.stringify(o));
 
 test('the query carries only the filters that are set, and only known kinds', () => {
@@ -62,4 +67,12 @@ test('empty sentences say who fills the Store and never offer what is not there'
   assert.match(U.emptyLine('home', false, 'Draw Steel', ''), /^Nothing has been shared for Draw Steel yet\. When owners on this server share/);
   assert.match(U.emptyLine('rooms', true, 'Draw Steel', ''), /^No shop rooms have been shared on this server yet\./);
   assert.equal(U.emptyLine('rooms', false, 'Draw Steel', 'kettle'), 'Nothing matches “kettle”.');
+});
+
+test('the catalog from the server keeps only well-formed kinds and known groups', () => {
+  assert.deepEqual(plain(U.KINDS.map((k) => k.id)), ['rooms', 'crafting']);
+  assert.equal(U.kindOf('stray'), '');
+  assert.equal(U.kindWord('stray'), 'Stray');
+  assert.equal(U.systemName('drawsteel'), 'Draw Steel');
+  assert.equal(U.systemName('newgame'), 'Newgame');
 });

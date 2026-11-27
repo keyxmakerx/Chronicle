@@ -20,13 +20,22 @@ const card = (id, kind, name, extra) => Object.assign({ id, kind, systemId: 'dra
 const ROOMS = [card('g1', 'room-theme', 'The Gilded Kettle', { note: 'A warm forge counter with copper pots.' }), card('g2', 'room-theme', 'Salt Market Stall'), card('g3', 'room-theme', '<img src=x onerror="window.__pwned=1">')];
 const CRAFT = [card('g9', 'crafting-circle', 'Moonlit Circle', { sameSystem: false, systemId: 'dnd5e', lacks: ['This campaign has no silver dust.'] })];
 
+const CATALOG = {
+  kinds: [
+    { id: 'rooms', label: 'Shop rooms', one: 'Shop room', where: 'Find it in your designs when you arrange a shop room.' },
+    { id: 'crafting', label: 'Crafting looks', one: 'Crafting look', where: 'Find it in your designs when you dress a crafting bench.' },
+  ],
+  things: { 'room-theme': { group: 'rooms', one: 'Shop room' }, 'crafting-circle': { group: 'crafting', one: 'Magic circle' } },
+  systems: { drawsteel: 'Draw Steel', dnd5e: 'D&D 5e' },
+};
+
 const PAGE = `<!doctype html><html data-motion="full"><head><style>[hidden]{display:none}body{margin:0;font-family:system-ui,sans-serif}
 :root{--color-bg-primary:#fff;--color-bg-secondary:#f9fafb;--color-bg-tertiary:#f3f4f6;--color-card-bg:#fff;--color-text-primary:#111827;--color-text-body:#374151;--color-text-muted:#6b7280;--color-border:#e5e7eb;--color-accent:#6366f1;--color-warn:#b45309;--color-danger:#b91c1c;--surface-overlay:rgb(6 7 11/.55);--dur-standard:200ms;--dur-micro:120ms;--ease-out:ease-out;--ease-in:ease-in;--shape-edge:1px;--shape-rule:1px;--shape-r-panel:12px;--shape-r-ctl:8px;--shape-r-small:6px;--shape-r-tag:4px;--elev-resting:none;--elev-hover:none;--elev-dragged:none}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}${CSS}</style></head>
 <body><header style="height:56px"><div id="w" data-widget="store" data-campaign="c1" data-csrf="t" data-css=""><button type="button" data-store-toggle aria-expanded="false">Store</button></div></header><main style="height:1200px">Page</main></body></html>`;
 
 const FAKE = `
-window.__srv = { calls: [], rooms: ${JSON.stringify(ROOMS)}, craft: ${JSON.stringify(CRAFT)}, notes: [] };
+window.__srv = { calls: [], rooms: ${JSON.stringify(ROOMS)}, craft: ${JSON.stringify(CRAFT)}, notes: [], catalog: ${JSON.stringify(CATALOG)} };
 function done(v) { return new Promise(function (r) { setTimeout(function () { r(JSON.parse(JSON.stringify(v))); }, 5); }); }
 window.Chronicle = {
   register: function (n, impl) { if (n === 'store') impl.init(document.getElementById('w')); },
@@ -36,6 +45,7 @@ window.Chronicle = {
   apiAction: function (url, o) {
     var s = window.__srv, m = (o && o.method) || 'GET', p = url.replace('/campaigns/c1', '').split('?')[0], q = url.split('?')[1] || '';
     s.calls.push(m + ' ' + p + (q ? '?' + q : '') + (o && o.body ? ' ' + JSON.stringify(o.body) : ''));
+    if (m === 'GET' && p === '/designs/store') return done(s.catalog);
     if (m === 'GET' && p === '/designs/gallery') {
       var list = /kind=crafting/.test(q) ? s.craft : /kind=rooms/.test(q) ? s.rooms : s.rooms.concat(s.craft);
       var term = (q.match(/q=([^&]*)/) || [])[1];
@@ -76,7 +86,7 @@ test('the button opens a modal sheet on For you, with each kind and its count', 
   assert.deepEqual(heads, ['New shop rooms for Draw Steel', 'New crafting looks for Draw Steel']);
   const rail = await page.$$eval('.st-rail .st-k', (b) => b.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
   assert.deepEqual(rail, ['For you', 'Shop rooms, 3', 'Crafting looks, 1', 'Draw Steel', 'Any game system']);
-  assert.deepEqual((await calls(page)).sort(), ['GET /designs/gallery?page=1&kind=crafting', 'GET /designs/gallery?page=1&kind=rooms']);
+  assert.deepEqual((await calls(page)).sort(), ['GET /designs/gallery?page=1&kind=crafting', 'GET /designs/gallery?page=1&kind=rooms', 'GET /designs/store']);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
@@ -100,10 +110,10 @@ test('a thing opens in place and Add copies it once, then says where it went', {
   assert.match(await page.textContent('.st-item'), /Shop room · made for Draw Steel · by Ines/);
   await page.click('[data-st="add"]');
   await page.waitForSelector('.st-item .st-ok');
-  assert.match(await page.textContent('.st-item .st-ok'), /Added to your designs\. Find it in your designs when you arrange a shop room\./);
+  assert.match(await page.textContent('.st-item .st-ok'), /^Added\. Find it in your designs when you arrange a shop room\.$/);
   assert.equal(await page.$('[data-st="add"]'), null);
   assert.ok((await calls(page)).includes('POST /designs/gallery/g1/copy'));
-  assert.deepEqual(await page.evaluate(() => window.__srv.notes), ['“The Gilded Kettle” was added to your designs.']);
+  assert.deepEqual(await page.evaluate(() => window.__srv.notes), ['“The Gilded Kettle” was added to this campaign.']);
   await page.click('[data-st="back"]');
   await page.waitForSelector('[data-id="g1"] .st-ok');
   await page.close();
@@ -231,5 +241,43 @@ test('a stylesheet that fails opens nothing unstyled, says so, and the next pres
   fail = false;
   await page.click('[data-store-toggle]');
   await page.waitForSelector('.st-dlg.st-in');
+  await page.close();
+});
+
+test('the rail, words and system names come from the server, and an Adder says what is left to point', { skip }, async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    const s = window.__srv;
+    s.catalog = { kinds: [{ id: 'rooms', label: 'Rooms for rent', one: 'Rentable room', where: 'Find it under Shops.' }], things: { 'room-theme': { group: 'rooms', one: 'Rentable room' } }, systems: { drawsteel: 'Draw Steel (server)' } };
+    const orig = window.Chronicle.apiAction;
+    window.Chronicle.apiAction = function (url, o) {
+      if (o && o.method === 'POST' && /\/copy$/.test(url)) { s.calls.push('POST copy'); return Promise.resolve({ id: 'x1', leftToPoint: ['Point a shop at it to use it.'] }); }
+      return orig(url, o);
+    };
+  });
+  await page.click('[data-store-toggle]');
+  await page.waitForSelector('[data-id="g1"]');
+  const rail = await page.$$eval('.st-rail .st-k', (b) => b.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  assert.deepEqual(rail, ['For you', 'Rooms for rent, 3', 'Draw Steel (server)', 'Any game system']);
+  assert.match(await page.textContent('[data-id="g1"] .st-cs'), /^Rentable room · by Ines/);
+  await page.click('[data-id="g1"]');
+  await page.click('[data-st="add"]');
+  await page.waitForSelector('.st-item .st-ok');
+  assert.equal(await page.textContent('.st-item .st-ok'), 'Added. Find it under Shops.');
+  assert.deepEqual(await page.$$eval('.st-item .st-know', (n) => n.map((x) => x.textContent)), ['Point a shop at it to use it.']);
+  await page.close();
+});
+
+test('a Store that cannot learn its kinds says so and Try again asks again', { skip }, async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    const orig = window.Chronicle.apiAction; let n = 0;
+    window.Chronicle.apiAction = function (url, o) { if (/\/designs\/store$/.test(url) && n++ === 0) return Promise.reject(new Error('The Store is not available right now.')); return orig(url, o); };
+  });
+  await page.click('[data-store-toggle]');
+  await page.waitForSelector('.st-errbox');
+  assert.match(await page.textContent('.st-errbox'), /not available right now/);
+  await page.click('[data-st="retry"]');
+  await page.waitForSelector('#st-h-crafting');
   await page.close();
 });
