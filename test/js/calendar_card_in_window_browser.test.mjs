@@ -38,15 +38,18 @@ const NIGHT = {
 
 const attr = (v) => JSON.stringify(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
 // The shell the app draws: beside the sidebar, a top bar and a strip above the page, which
-// scrolls on its own (#main-content), all inside one window-high column.
+// scrolls on its own (#main-content), all inside one window-high column. With it, the app's
+// reduced-motion guard (input.css), which turns every style change into a 0.01ms transition,
+// so a box just placed still reads at its old place until the next frame.
 const html = (strip) => `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/css/calendar-view.css">
-<style>body{margin:0}#col{margin-left:256px;display:flex;flex-direction:column;height:100vh;overflow:hidden;position:relative}#bar{height:48px;flex:none}#strip{height:${strip}px;flex:none;background:#eee}#row{flex:1;display:flex;min-height:0}#main-content{flex:1;overflow-y:auto}</style></head><body>
+<style>body{margin:0}#col{margin-left:256px;display:flex;flex-direction:column;height:100vh;overflow:hidden;position:relative}#bar{height:48px;flex:none}#strip{height:${strip}px;flex:none;background:#eee}#row{flex:1;display:flex;min-height:0}#main-content{flex:1;overflow-y:auto}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important;scroll-behavior:auto!important}}</style></head><body>
 <div id="col"><div id="bar"></div><div id="strip"></div><div id="row"><main id="main-content">
 <div class="cal5-page" style="margin:0 auto;padding:24px 16px"><div style="height:140px">The breadcrumbs and whatever else sits above the calendar</div>
 <div class="cal-v5" data-widget="calendar_view" data-campaign-id="c1" data-calendar-id="k1" data-can-edit="false" data-can-author-dm-only="false"
   data-role="1" data-user-id="u1" data-game-nights="true" data-api-base="/campaigns/c1/calendars/k1">
 <div id="calendar-config" class="hidden" data-calendar='${attr(CAL)}' data-events="[]" data-zone="UTC"></div>
-</div></div></main></div></div>
+</div><div style="height:200px">The line of keys under the calendar</div></div></main></div></div>
 <script>window.htmx = { on: function () {}, process: function () {}, onLoad: function () {}, config: {} };</script>
 <script src="/static/js/motion_rest.js"></script>
 <script src="/static/js/boot.js"></script>
@@ -54,10 +57,10 @@ const html = (strip) => `<!doctype html><html><head><meta charset="utf-8"><link 
 <script src="/static/js/widgets/calendar_view.js"></script>
 </body></html>`;
 
-async function open(t, strip) {
+async function open(t, strip, viewport = { width: 1280, height: 800 }) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
-  const p = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+  const p = await browser.newPage({ viewport, reducedMotion: 'reduce' });
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
@@ -104,5 +107,37 @@ for (const strip of [0, 49]) {
     const page = await box(p, '#cal5-evp');
     assert.ok(page.bottom <= main.bottom + 0.5, `the night's page ends at ${page.bottom}, past the window's ${main.bottom}`);
     assert.equal(await p.$eval('#main-content', (m) => m.scrollTop), 0, 'the page was scrolled to reach the card');
+  });
+}
+
+// Pressing the night's mark on its day opens the card with the night picked
+// out. Picking it out used to scroll the row into view with scrollIntoView,
+// which scrolled the page too, after the card had been fitted to what was on
+// screen: the page moved, the card moved with it, and the card and the
+// night's page ended below the window.
+for (const [w, h] of [[1280, 800], [1440, 900]]) {
+  test(`the night's mark opens a card that fits the window, and the page stays put (${w}x${h})`, { skip }, async (t) => {
+    const p = await open(t, 49, { width: w, height: h });
+    // Scrolled to the page's end, the way a click's own scroll leaves a day low in the month:
+    // the day in view, the month's top scrolled away above.
+    const at = await p.evaluate(() => { const m = document.getElementById('main-content'); m.scrollTop = m.scrollHeight; return m.scrollTop; });
+    const day = await box(p, '.day[data-key="2026_11_28"]');
+    const main = await box(p, '#main-content');
+    const cal = await box(p, '.cal-v5');
+    assert.ok(at > 0 && day.top >= main.top && day.bottom <= main.bottom && cal.top < main.top, 'the case under test: the day in view, the month\'s top above it ' + JSON.stringify([day, main, cal]));
+    await press(p, '.day[data-key="2026_11_28"] .mk[data-ev^="gn:s1"]');
+    await p.waitForSelector('#cal5-wing.open');
+    await p.waitForTimeout(300);
+    assert.equal(await p.$eval('#main-content', (m) => m.scrollTop), at, 'picking the night out scrolled the page');
+    assert.equal(await p.$eval('#col', (c) => c.scrollTop), 0, 'picking the night out scrolled the shell');
+    const wing = await box(p, '#cal5-wing');
+    assert.ok(wing.bottom <= main.bottom + 0.5, `the day's card ends at ${wing.bottom}, past the window's ${main.bottom}`);
+    assert.ok(await p.$eval('#cal5-wing .gnb.hl', (r) => !!r), 'the night is picked out in the card');
+
+    await press(p, '#cal5-wing .gnb[data-ev^="gn:s1"]');
+    await p.waitForSelector('#cal5-evp.open');
+    await p.waitForTimeout(300);
+    const page = await box(p, '#cal5-evp');
+    assert.ok(page.bottom <= main.bottom + 0.5, `the night's page ends at ${page.bottom}, past the window's ${main.bottom}`);
   });
 }

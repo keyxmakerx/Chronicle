@@ -1237,6 +1237,18 @@
     var r = el.getBoundingClientRect(), sc = (!isPhone() && el.closest('.lscroll')) || card, v = sc.getBoundingClientRect();
     return r.top >= v.top && r.bottom <= v.bottom - 4;
   }
+  // Brings a row of a card into view by scrolling the card alone.
+  // scrollIntoView scrolls every box around it too, the page and even
+  // the shell's overflow-hidden column. Under reduced motion a card just
+  // placed still reads at its old place (every change is a 0.01ms
+  // transition), so its row looked off screen and the page moved after
+  // the card was fitted to the window, carrying the card and the night's
+  // page that opens over it past the window's bottom.
+  function showInCard(el, card) {
+    var sc = (!isPhone() && el.closest('.lscroll')) || card, r = el.getBoundingClientRect(), v = sc.getBoundingClientRect();
+    if (r.top < v.top) sc.scrollTop -= v.top - r.top;
+    else if (r.bottom > v.bottom) sc.scrollTop += Math.min(r.bottom - v.bottom, r.top - v.top);
+  }
   function carryPairs(cell, card) {
     var out = [];
     $$('.mk[data-ev]', cell).forEach(function (m) {
@@ -6216,7 +6228,7 @@
       var g = isPhone() ? null : wingGeometry(this.wingEl, btn, this.calEl);
       if (g) placeCard(this.wingEl, g);
       var row = highlightEventId ? this.wingEl.querySelector('.evd[data-ev="' + highlightEventId + '"]') : null;
-      if (row) row.scrollIntoView({ block: 'nearest' });
+      if (row) showInCard(row, this.wingEl);
       var depth = pressDepth(btn), dc = btn.querySelector('.dc');
       P.src = btn;
       P.g = g;
@@ -6325,7 +6337,7 @@
       var row = this.wingEl.querySelector('.evd[data-ev="' + id + '"]');
       if (!row) return;
       row.classList.add('hl');
-      row.scrollIntoView({ block: 'nearest' });
+      showInCard(row, this.wingEl);
       void row.offsetWidth;
       row.classList.add('pulse');
     },
