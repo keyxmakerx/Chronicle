@@ -15,8 +15,9 @@ import (
 // Handler handles addon-related HTTP requests. Admin routes manage the global
 // registry; campaign-scoped routes manage per-campaign toggles.
 type Handler struct {
-	activity ActivityRecorder
-	service  AddonService
+	activity         ActivityRecorder
+	campaignActivity CampaignActivityLogger
+	service          AddonService
 }
 
 // NewHandler creates a new addon handler.
@@ -169,6 +170,7 @@ func (h *Handler) ToggleCampaignAddon(c *echo.Context) error {
 			return err
 		}
 	}
+	h.logCampaignToggle(ctx, cc.Campaign.ID, userID, action == "enable", h.addonLabel(c, addonID))
 
 	// If the toggle came from the Plugin Hub page, trigger an in-place
 	// refresh of the addon list instead of a full-page redirect.

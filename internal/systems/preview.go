@@ -91,9 +91,9 @@ type TreeNode struct {
 func PreviewFromZIP(zipData []byte) (*PreviewResult, error) {
 	result := &PreviewResult{Valid: true}
 
-	if int64(len(zipData)) > maxSystemZipSize {
+	if int64(len(zipData)) > MaxSystemZipSize {
 		result.Valid = false
-		result.Errors = append(result.Errors, fmt.Sprintf("ZIP exceeds maximum size of %d MB", maxSystemZipSize/(1024*1024)))
+		result.Errors = append(result.Errors, fmt.Sprintf("ZIP exceeds maximum size of %d MB", MaxSystemZipSize/(1024*1024)))
 		return result, nil
 	}
 

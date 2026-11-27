@@ -35,7 +35,7 @@ const (
 	prefixOperatorDB    = "chronicle_db_"
 	prefixOperatorMedia = "chronicle_media_"
 	prefixOperatorRedis = "chronicle_redis_"
-	prefixManifest      = "chronicle_backup_"
+	prefixManifest      = "chronicle_manifest_"
 	prefixPreMigrate    = "chronicle_pre_migrate_"
 )
 

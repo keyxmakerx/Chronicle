@@ -77,6 +77,10 @@ func actionLabel(action string) string {
 		return "changed how long the Trash keeps things"
 	case "addon.changed":
 		return "switched a feature"
+	case "addon.enabled":
+		return "switched on"
+	case "addon.disabled":
+		return "switched off"
 	default:
 		return actionFallback(action)
 	}

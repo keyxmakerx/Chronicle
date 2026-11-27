@@ -277,11 +277,12 @@ func (s *authService) AdminDisableTwoFactor(ctx context.Context, userID string) 
 		return err
 	}
 	if s.mail != nil && s.mail.IsConfigured(ctx) {
-		body := "A site admin switched off two-factor sign-in for your Chronicle account, " +
+		site := s.siteName(ctx)
+		body := "A site admin switched off two-factor sign-in for your " + site + " account, " +
 			"usually because you asked after losing your phone.\n\n" +
 			"You can sign in with your password alone until you turn it back on under Account settings.\n\n" +
 			"If you didn't ask for this, change your password and contact your site admin."
-		if err := s.mail.SendMail(ctx, []string{user.Email}, "Two-factor sign-in was switched off — Chronicle", body); err != nil {
+		if err := s.mail.SendMail(ctx, []string{user.Email}, "Two-factor sign-in was switched off — "+site, body); err != nil {
 			slog.Warn("sending two-factor switch-off email", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	}
