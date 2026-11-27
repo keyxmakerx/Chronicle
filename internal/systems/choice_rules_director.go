@@ -44,7 +44,9 @@ type DirectorEntry struct {
 	Visibility string `json:"visibility,omitempty"`
 	Status     string `json:"status,omitempty"`
 	ForName    string `json:"forName,omitempty"`
-	// Everyone and Players are the marks stored on this entry itself.
+	// Everyone and Players are the marks stored on this entry itself, or for a
+	// rewrite with none of its own, on the standard entry it replaces; a mark
+	// sent on the rewrite reaches those rows (followRewrite).
 	Everyone *MarkView    `json:"everyone"`
 	Players  []PlayerMark `json:"players"`
 	// State is what the entry is for the viewed audience (everyone, or the

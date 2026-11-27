@@ -803,3 +803,61 @@ func TestChoiceRuleService_RuleFollowsRewrite(t *testing.T) {
 		}
 	}
 }
+
+// The Directors' view shows a standard entry's marks on its rewrite, so a mark
+// sent on the rewrite's key reaches that row: clearing lifts it, a new reason
+// edits it, and a mark with no standard row behind it goes on the rewrite.
+func TestChoiceRuleService_MarkOnRewriteReachesStandardRow(t *testing.T) {
+	env := newRuleEnv(t)
+	env.mark(t, "package", "fury", "", RuleNotOffered)
+	env.mark(t, "package", "fury", "pat", RuleOpen)
+	rewrite := Choice{Key: "40", Name: "Fury (our words)", Source: ChoiceSourceCampaign, Origin: OriginRewritten, StandsFor: "fury"}
+	env.choices.pkg = []Choice{rewrite, env.choices.pkg[1], env.choices.pkg[2]}
+	find := func(source, key, target string) *ChoiceRule {
+		for i := range env.repo.rules {
+			if r := &env.repo.rules[i]; r.Source == source && r.Key == key && r.Target == target {
+				return r
+			}
+		}
+		return nil
+	}
+
+	// "Same as everyone" for Pat, sent on the rewrite's key.
+	env.mark(t, "campaign", "40", "pat", "clear")
+	if find("package", "fury", "pat") != nil {
+		t.Fatal("clearing Pat's inherited mark on the rewrite left the standard row in place")
+	}
+	if find("campaign", "40", "pat") != nil {
+		t.Fatal("a clear wrote a row")
+	}
+
+	// A new reason on the inherited everyone mark edits that row.
+	why := "Not in this region"
+	if _, err := env.svc.SetMarks(context.Background(), camp, dirActor, ChoiceMarksInput{FieldKey: "ancestry",
+		Marks: []ChoiceMark{{Source: "campaign", Key: "40", State: RuleNotOffered, Reason: &why}}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := find("package", "fury", ""); r == nil || r.Reason != why {
+		t.Fatalf("standard row = %+v, want the new reason on it", r)
+	}
+	if find("campaign", "40", "") != nil {
+		t.Fatal("editing the inherited mark wrote a second row on the rewrite")
+	}
+
+	// With no standard row for Lee, a mark on the rewrite is the rewrite's own.
+	env.mark(t, "campaign", "40", "lee", RuleAskFirst)
+	if find("campaign", "40", "lee") == nil {
+		t.Fatal("a fresh per-player mark on the rewrite went nowhere")
+	}
+
+	// Precedence: a standard per-player row beats an everyone row on the rewrite.
+	env.mark(t, "package", "fury", "pat", RuleOpen)
+	env.repo.rules = append(env.repo.rules, ChoiceRule{CampaignID: camp, SystemID: "sys", FieldKey: "ancestry", Source: "campaign", Key: "40", State: RuleNotOffered})
+	l, err := env.choices.CharacterChoiceList(env.ctxFor("pat"), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if choiceByName(l.Choices, rewrite.Name) == nil {
+		t.Fatal("Pat's own opening on the standard entry should beat the everyone row on the rewrite")
+	}
+}
