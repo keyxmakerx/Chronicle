@@ -83,21 +83,18 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		if len(view.Pickable) > 0 {
 			@castPickBox(cc.Campaign.ID, view.CSRFToken, view.Pickable)
 		}
-		if view.ShowPlayers && (view.PartyListed || view.PartyEditor != nil || len(view.Party) > 0) {
+		if view.ShowPlayers && (view.PartyListed || view.PartyEditor != nil || len(view.Party) > 0 || len(view.Unclaimed) > 0) {
 			<section class="mb-8" data-band="characters">
 				@castBandHead("The Party", view.PartyEditor, view.Landed, view.Roster != nil, view.Open)
 				if view.PartyEditor != nil || view.Roster != nil {
 					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.PartyEditor, view.Roster, view.Open)
 				}
+				// An unclaimed hero can be of an NPC-list type, which the NPC list
+				// leaves out, so its card shows even before a Party type is listed.
 				if !view.PartyListed && view.PartyEditor != nil {
 					@castBandEmpty()
-				} else if len(view.Party) == 0 && len(view.Unclaimed) == 0 {
-					if view.ClaimTypeID != 0 {
-						@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
-					} else {
-						@castEmpty("fa-users", "No player characters yet", castEmptyPartyHint(view, layouts.GMTerm(ctx)))
-					}
-				} else {
+				}
+				if len(view.Party) > 0 || len(view.Unclaimed) > 0 {
 					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">
 						for _, m := range view.Party {
 							@castCard(cc.Campaign.ID, m)
@@ -106,6 +103,12 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 							@castCard(cc.Campaign.ID, m)
 						}
 					</div>
+				} else if view.PartyListed || view.PartyEditor == nil {
+					if view.ClaimTypeID != 0 {
+						@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
+					} else {
+						@castEmpty("fa-users", "No player characters yet", castEmptyPartyHint(view, layouts.GMTerm(ctx)))
+					}
 				}
 			</section>
 		}
