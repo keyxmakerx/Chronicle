@@ -1,0 +1,136 @@
+/* Recent Activity (internal/plugins/audit/recent_activity.templ): the
+ * campaign's changes as sittings, the way the AI's history shows its calls.
+ * A page, not a workshop: one list, quiet figures, no boxes around prose.
+ * Tokens only; light and dark come from them. */
+
+/* The figures: quiet numbers. Pages and words filter the list to pages. */
+.ra-stats { display: flex; flex-wrap: wrap; gap: 6px 28px; margin: 0 0 14px; }
+.ra-stat { display: block; padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; color: inherit; text-align: left; }
+button.ra-stat { cursor: pointer; }
+.ra-stat b { display: block; font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.ra-stat small { font-size: 0.75rem; color: var(--color-text-secondary); }
+button.ra-stat:hover small { color: var(--color-text-primary); }
+button.ra-stat[aria-pressed="true"] { border-bottom-color: var(--color-accent); }
+button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+
+/* A small rounded tag; a conflict's is red. */
+.ra-pill { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.ra-pill[data-tone="conflict"] { background: rgb(var(--color-bad-rgb) / 0.10); color: rgb(var(--color-bad-rgb)); }
+
+/* Chips, search and Fold all over the sittings. */
+.ra-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 0 0 8px; }
+.ra-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ra-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); font: inherit; font-size: 0.8125rem; color: var(--color-text-body); cursor: pointer; box-shadow: var(--elev-resting); transition: box-shadow var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.ra-chip:hover { box-shadow: var(--elev-hover); }
+.ra-chip:active { box-shadow: none; }
+.ra-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.ra-chip[aria-pressed="true"] { border-color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; box-shadow: none; }
+.ra-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ra-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--color-bad-rgb)); }
+.ra-find { position: relative; flex: 1 1 200px; max-width: 300px; min-width: 0; margin-left: auto; }
+.ra-find i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--color-text-muted); pointer-events: none; }
+.ra-find input { width: 100%; min-height: 32px; padding: 5px 10px 5px 30px; border-radius: 8px; border: 1px solid var(--color-input-border, var(--color-border)); background: var(--color-input-bg, var(--color-bg-secondary)); color: var(--color-text-primary); font: inherit; font-size: 0.875rem; }
+.ra-find input::placeholder { color: var(--color-text-muted); }
+.ra-find input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.15); }
+.ra-empty { padding: 16px 8px; color: var(--color-text-secondary); font-size: 0.875rem; }
+
+/* A sitting: chevron, who, when, a tick per change, what it came to. */
+.ra-list { border-top: 1px solid var(--color-border); }
+.ra-sit { border-bottom: 1px solid var(--color-border); }
+.ra-sit > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 14px 26px 12rem 9rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; min-height: 44px; padding: 10px 8px; border-radius: 8px; font-size: 0.875rem; transition: background-color var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.ra-sit > summary::-webkit-details-marker { display: none; }
+.ra-sit > summary:hover { background: color-mix(in srgb, var(--color-bg-tertiary) 70%, transparent); }
+.ra-sit > summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.ra-chev { font-size: 0.6875rem; color: var(--color-text-muted); transition: transform var(--dur-standard, 200ms) var(--ease-standard, ease); }
+.ra-sit[open] > summary .ra-chev { transform: rotate(90deg); }
+.ra-av { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 0.6875rem; font-weight: 650; }
+.ra-av[data-foundry] { border-radius: 7px; background: var(--color-text-primary); color: var(--color-bg-secondary); }
+.ra-when { min-width: 0; }
+.ra-when b { display: block; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ra-when time { display: block; font-size: 0.78rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.ra-what { min-width: 0; color: var(--color-text-body); }
+.ra-pills { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* The strip: pages in the accent, settings grey, players hollow, Foundry
+ * square, a conflict red and taller. Shape tells them apart, not only hue. */
+.ra-strip { display: block; position: relative; height: 20px; border-radius: 4px; background: color-mix(in srgb, var(--color-text-muted) 16%, transparent); }
+.ra-strip i { position: absolute; top: 5px; bottom: 5px; width: 2px; border-radius: 1px; background: var(--color-text-muted); transition: opacity var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.ra-strip i[data-kind="page"] { top: 4px; bottom: 4px; background: var(--color-accent); }
+.ra-strip i[data-kind="players"] { width: 4px; background: none; box-shadow: inset 0 0 0 1px var(--color-accent); }
+.ra-strip i[data-kind="foundry"] { width: 4px; border-radius: 0; background: var(--color-text-secondary); }
+.ra-strip i[data-kind="conflict"] { top: 2px; bottom: 2px; width: 3px; background: rgb(var(--color-bad-rgb)); }
+.ra-strip i.ra-dim { opacity: 0.18; }
+
+/* Opening a sitting: its rows fade down into place (Fold). */
+.ra-sit[open] > .ra-rows { animation: ra-fold var(--dur-standard, 200ms) var(--ease-out, ease-out) both; }
+@keyframes ra-fold { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* One change: time, words with a link, where to look further. */
+.ra-rows { padding: 0 0 10px; }
+.ra-row { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 7px 8px 7px 30px; border-top: 1px solid var(--color-border-light, var(--color-border)); font-size: 0.875rem; }
+.ra-t { color: var(--color-text-secondary); font-size: 0.8125rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ra-w { min-width: 0; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.ra-w a, .ra-side a { color: var(--color-accent-link, var(--color-accent)); text-decoration: none; }
+.ra-w a:hover, .ra-side a:hover { text-decoration: underline; }
+.ra-w b { font-weight: 600; }
+.ra-side { font-size: 0.8125rem; color: var(--color-text-secondary); text-align: right; white-space: nowrap; }
+
+/* A conflict opens again in place. */
+.ra-cf > summary { list-style: none; cursor: pointer; }
+.ra-cf > summary::-webkit-details-marker { display: none; }
+.ra-cf > summary:hover { background: color-mix(in srgb, var(--color-bg-tertiary) 70%, transparent); }
+.ra-cf > summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.ra-cfbox { margin: 2px 8px 10px 30px; padding: 12px 14px; border-radius: 10px; border: 1px solid rgb(var(--color-bad-rgb) / 0.22); background: rgb(var(--color-bad-rgb) / 0.06); font-size: 0.875rem; }
+.ra-cf[open] > .ra-cfbox { animation: ra-fold var(--dur-standard, 200ms) var(--ease-out, ease-out) both; }
+.ra-cfbox h4 { margin: 0 0 8px; font-size: 0.875rem; font-weight: 600; color: var(--color-text-primary); }
+.ra-cfbox p { margin: 8px 0 4px; color: var(--color-text-body); }
+.ra-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ra-sidebox { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); }
+.ra-sidebox b { display: block; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-secondary); }
+.ra-sidebox span { color: var(--color-text-body); }
+.ra-sidebox[data-kept] { border-color: var(--color-accent); }
+.ra-sidebox[data-kept] b { color: var(--color-accent-link, var(--color-accent)); }
+.ra-acts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin-top: 6px; }
+.ra-note { font-size: 0.8125rem; color: var(--color-text-secondary); }
+
+/* The key under the sittings, and older sittings. */
+.ra-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 8px; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.ra-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.ra-legend i { display: inline-block; width: 2px; height: 12px; border-radius: 1px; background: var(--color-text-muted); }
+.ra-legend i[data-kind="page"] { background: var(--color-accent); }
+.ra-legend i[data-kind="players"] { width: 4px; background: none; box-shadow: inset 0 0 0 1px var(--color-accent); }
+.ra-legend i[data-kind="foundry"] { width: 4px; border-radius: 0; background: var(--color-text-secondary); }
+.ra-legend i[data-kind="conflict"] { width: 3px; background: rgb(var(--color-bad-rgb)); }
+.ra-legend-gap { flex: 1; }
+.ra-legend .quiet-word { font-size: 0.8125rem; }
+
+/* A phone: the summary and strip move under the name, rows fold to two
+ * lines, and a conflict's two sides stack. */
+@media (max-width: 640px) {
+  .ra-find { flex: 1 1 100%; max-width: none; margin-left: 0; }
+  .ra-sit > summary { grid-template-columns: 14px 26px minmax(0, 1fr) auto; grid-template-areas: "c a w p" ". . s s" ". . t t"; }
+  .ra-sit > summary .ra-chev { grid-area: c; }
+  .ra-sit > summary .ra-av { grid-area: a; }
+  .ra-sit > summary .ra-when { grid-area: w; }
+  .ra-sit > summary .ra-pills { grid-area: p; }
+  .ra-sit > summary .ra-strip { grid-area: s; }
+  .ra-sit > summary .ra-what { grid-area: t; }
+  .ra-row { grid-template-columns: 3.75rem minmax(0, 1fr); padding-left: 8px; }
+  .ra-side { grid-column: 2; text-align: left; white-space: normal; }
+  .ra-cfbox { margin-left: 8px; }
+  .ra-sides { grid-template-columns: 1fr; }
+  /* Touch: every control answers a 44-tall tap. A link inside a sentence
+     keeps its line; unseen padding gives it the height. */
+  .ra-chip, .ra-find input { min-height: 44px; }
+  .ra-foldall, .ra-legend .quiet-word, .ra-side a, .ra-acts a { display: inline-flex; align-items: center; min-height: 44px; }
+  .ra-w a { padding: 12px 0; margin: -12px 0; }
+  .ra-cf > summary { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ra-chev, .ra-strip i, .ra-chip, .ra-sit > summary { transition: none; }
+  .ra-sit[open] > .ra-rows, .ra-cf[open] > .ra-cfbox { animation: none; }
+}
+html[data-motion="off"] .ra-sit[open] > .ra-rows, html[data-motion="off"] .ra-cf[open] > .ra-cfbox { animation: none; }
+html[data-motion="calm"] .ra-sit[open] > .ra-rows, html[data-motion="calm"] .ra-cf[open] > .ra-cfbox { animation-name: ra-fade; }
+@keyframes ra-fade { from { opacity: 0; } to { opacity: 1; } }

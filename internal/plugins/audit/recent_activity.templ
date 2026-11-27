@@ -1,0 +1,249 @@
+package audit
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// raState filters the list in place: a chip (f) and the search (q). A sitting
+// with no match hides and one with a match opens, as on the AI's history.
+const raState = `{ f: 'all', q: '', opened: 0,
+	on() { return this.f !== 'all' || this.q.trim() !== '' },
+	hit(el) { if (!el) return false; const q = this.q.trim().toLowerCase();
+		if (this.f !== 'all' && el.dataset.kind !== this.f) return false;
+		return !q || (el.dataset.text || '').includes(q) },
+	hits(root) { return [...root.querySelectorAll('[data-row]')].filter((r) => this.hit(r)).length },
+	count() { this.opened = document.querySelectorAll('#ra-list .ra-sit[open]').length },
+	fold(open) { document.querySelectorAll('#ra-list .ra-sit').forEach((d) => { if (!open || !this.on() || this.hits(d)) d.open = open }); this.count() } }`
+
+// RecentActivity is the activity tab: the campaign's figures, filters and
+// one folded line per sitting, each opening to its changes in words.
+// Foundry Sync is an author of its own, and a conflict it settled opens in
+// place to say which side was kept and why.
+templ RecentActivity(v ActivityView) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/recent_activity.css") }/>
+	<section id="ra" class="ra" aria-label="Recent Activity" x-data={ raState } x-init="count()">
+		if v.Stats != nil {
+			<div class="ra-stats" role="group" aria-label="The campaign at a glance">
+				<button type="button" class="ra-stat" :aria-pressed="f === 'page'" aria-pressed="false" @click="f = f === 'page' ? 'all' : 'page'" title="Show page changes">
+					<b>{ strconv.Itoa(v.Stats.TotalEntities) }</b><small>pages</small>
+				</button>
+				<button type="button" class="ra-stat" :aria-pressed="f === 'page'" aria-pressed="false" @click="f = f === 'page' ? 'all' : 'page'" title="Show page changes">
+					<b>~{ formatWordCount(v.Stats.TotalWords) }</b><small>words</small>
+				</button>
+				<span class="ra-stat">
+					<b>{ strconv.Itoa(v.Stats.ActiveEditors) }</b><small>people changed things this month</small>
+				</span>
+				<span class="ra-stat">
+					if v.Stats.LastEditedAt != nil {
+						<b>{ relativeTime(*v.Stats.LastEditedAt) }</b>
+					} else {
+						<b>Nothing yet</b>
+					}
+					<small>last change</small>
+				</span>
+			</div>
+		}
+		if len(v.Feed.Sittings) == 0 {
+			<p class="ra-empty">Nothing yet. Changes show here as people make them.</p>
+		} else {
+			<div class="ra-bar">
+				<div class="ra-chips" role="group" aria-label="Show">
+					@raChip("all", "Everything", kindCount(v, ""), false)
+					@raChip(KindPage, "Pages", kindCount(v, KindPage), false)
+					@raChip(KindSetting, "Settings", kindCount(v, KindSetting), false)
+					@raChip(KindPlayers, "Players", kindCount(v, KindPlayers), false)
+					@raChip(KindFoundry, "Foundry", kindCount(v, KindFoundry), false)
+					@raChip(KindConflict, "Conflicts", kindCount(v, KindConflict), true)
+				</div>
+				<label class="ra-find">
+					<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+					<input type="search" x-model="q" placeholder="Find a page, setting or person" aria-label="Find a page, setting or person"/>
+				</label>
+				<button type="button" class="quiet-word ra-foldall" @click="fold(!opened)" x-text="opened ? 'Fold all' : 'Unfold all'">Unfold all</button>
+			</div>
+			<div id="ra-list" class="ra-list">
+				for _, s := range shownSittings(v) {
+					@raSitting(v, s)
+				}
+				<p class="ra-empty" x-show="on() && hits(document.getElementById('ra-list')) === 0" x-cloak>
+					Nothing matches.
+					<button type="button" class="quiet-word" @click="f = 'all'; q = ''">Show everything</button>
+				</p>
+			</div>
+			<div class="ra-legend">
+				<span><i data-kind="page" aria-hidden="true"></i>a page</span>
+				<span><i data-kind="setting" aria-hidden="true"></i>a setting</span>
+				<span><i data-kind="players" aria-hidden="true"></i>players</span>
+				<span><i data-kind="foundry" aria-hidden="true"></i>Foundry</span>
+				<span><i data-kind="conflict" aria-hidden="true"></i>a conflict</span>
+				<span class="ra-legend-gap"></span>
+				<span>A sitting ends after 30 quiet minutes.</span>
+				if moreSittings(v) {
+					<button
+						type="button"
+						class="quiet-word"
+						hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment?shown=%d", v.CampaignID, v.Shown+sittingsStep) }
+						hx-target="#activity-content"
+						hx-swap="innerHTML"
+						hx-disabled-elt="this"
+					>Show older sittings</button>
+				}
+			</div>
+		}
+	</section>
+}
+
+// raChip is one filter, with how many changes it shows.
+templ raChip(key, label string, n int, dot bool) {
+	<button
+		type="button"
+		class="ra-chip"
+		if key == "all" {
+			aria-pressed="true"
+		} else {
+			aria-pressed="false"
+		}
+		:aria-pressed={ fmt.Sprintf("f === '%s'", key) }
+		@click={ fmt.Sprintf("f = '%s'", key) }
+	>
+		if dot {
+			<span class="ra-chip-dot" aria-hidden="true"></span>
+		}
+		{ label }
+		<b>{ strconv.Itoa(n) }</b>
+	</button>
+}
+
+// raSitting is one author's stretch of work: who, when, a tick per change,
+// what it came to, and the changes folded under it.
+templ raSitting(v ActivityView, s Sitting) {
+	<details
+		class="ra-sit"
+		x-show="!on() || hits($el) > 0"
+		x-effect="if (on()) $el.open = hits($el) > 0"
+		@toggle="count()"
+	>
+		<summary>
+			<i class="fa-solid fa-chevron-right ra-chev" aria-hidden="true"></i>
+			<span class="ra-av" data-foundry?={ s.Author == FoundryAuthor } aria-hidden="true">{ authorInitial(s) }</span>
+			<span class="ra-when">
+				<b>{ authorName(s) }</b>
+				<time datetime={ s.Start.UTC().Format("2006-01-02T15:04:05Z") }>{ sittingWhen(v, s) }</time>
+			</span>
+			<span class="ra-strip" aria-hidden="true">
+				for i, r := range s.Rows {
+					<i
+						style={ tickStyle(tickLeft(s, r)) }
+						data-kind={ r.Kind }
+						:class={ fmt.Sprintf("{ 'ra-dim': on() && !hit($el.closest('.ra-sit').querySelectorAll('[data-row]')[%d]) }", i) }
+					></i>
+				}
+			</span>
+			<span class="ra-what">{ sittingSummary(s) }</span>
+			<span class="ra-pills">
+				if c := s.Count(KindConflict); c > 0 {
+					<span class="ra-pill" data-tone="conflict">{ plural(c, "conflict") }</span>
+				}
+			</span>
+		</summary>
+		<div class="ra-rows">
+			for _, r := range s.Rows {
+				if r.Foundry != nil && r.Foundry.IsConflict() {
+					@raConflict(v, s, r)
+				} else {
+					@raRow(v, s, r)
+				}
+			}
+		</div>
+	</details>
+}
+
+// raRow is one change: when, what in words, and where to look further.
+templ raRow(v ActivityView, s Sitting, r ActivityRow) {
+	<div class="ra-row" data-row data-kind={ r.Kind } data-text={ rowText(s, r) } x-show="!on() || hit($el)">
+		<time class="ra-t" datetime={ r.At.UTC().Format("2006-01-02T15:04:05Z") }>{ clockText(v, r.At) }</time>
+		<span class="ra-w">
+			@raRowText(v, r)
+		</span>
+		{{ label, href := rowSide(v, r) }}
+		<span class="ra-side">
+			if href != "" {
+				<a href={ templ.SafeURL(href) }>{ label }</a>
+			} else {
+				{ label }
+			}
+		</span>
+	</div>
+}
+
+// raRowText is a row's words with the thing it names as a link.
+templ raRowText(v ActivityView, r ActivityRow) {
+	if w := rowWords(r); w != "" {
+		{ w }
+		{ " " }
+	}
+	if name := rowName(r); name != "" {
+		if id := pageID(r); id != "" && (r.Entry == nil || r.Entry.Action != ActionEntityDeleted) {
+			<a href={ templ.SafeURL(pageHref(v, id)) }>{ name }</a>{ rowTail(r) }
+		} else {
+			<b>{ name }</b>{ rowTail(r) }
+		}
+	} else {
+		{ rowTail(r) }
+	}
+}
+
+// raConflict is a conflict Foundry Sync settled. It opens in place: which
+// side was kept, the module's own reason and the fields it names, and the
+// page's History, where both versions can be compared and one restored.
+templ raConflict(v ActivityView, s Sitting, r ActivityRow) {
+	<details class="ra-cf" data-row data-kind={ r.Kind } data-text={ rowText(s, r) } x-show="!on() || hit($el)">
+		<summary class="ra-row">
+			<time class="ra-t" datetime={ r.At.UTC().Format("2006-01-02T15:04:05Z") }>{ clockText(v, r.At) }</time>
+			<span class="ra-w">
+				@raRowText(v, r)
+			</span>
+			<span class="ra-side"><span class="ra-pill" data-tone="conflict">{ conflictKept(r.Foundry) }</span></span>
+		</summary>
+		<div class="ra-cfbox">
+			<h4>Both sides changed this page before they synced</h4>
+			<div class="ra-sides">
+				<div class="ra-sidebox" data-kept?={ !r.Foundry.FoundryKept() }>
+					<b>
+						if r.Foundry.FoundryKept() {
+							Chronicle
+						} else {
+							Chronicle, kept
+						}
+					</b>
+					<span>The version in this campaign</span>
+				</div>
+				<div class="ra-sidebox" data-kept?={ r.Foundry.FoundryKept() }>
+					<b>
+						if r.Foundry.FoundryKept() {
+							Foundry, kept
+						} else {
+							Foundry
+						}
+					</b>
+					<span>The version in the world</span>
+				</div>
+			</div>
+			if r.Foundry.Message != "" {
+				<p>{ r.Foundry.Message }</p>
+			}
+			<div class="ra-acts">
+				if id := pageID(r); id != "" {
+					<a class="quiet-word" href={ templ.SafeURL(historyHref(v, id)) }>Compare in the page's history</a>
+					if r.Foundry.FoundryKept() {
+						<a class="quiet-word" href={ templ.SafeURL(historyHref(v, id)) }>Put Chronicle's words back</a>
+					}
+				}
+				<span class="ra-note">Change the conflict setting in Foundry, under Chronicle Sync's settings.</span>
+			</div>
+		</div>
+	</details>
+}

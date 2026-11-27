@@ -5180,7 +5180,16 @@ func (a *App) RegisterRoutes() {
 	// A campaign's feature switches go to its own activity log.
 	addonHandler.SetCampaignActivityLogger(&addonCampaignActivityAdapter{svc: auditService})
 	shareAudit.svc = auditService
+	// Recent Activity lists what Foundry wrote, connected and settled.
+	auditService.SetFoundryActivity(auditFoundryAdapter{repo: syncapi.NewSyncHistoryRepository(a.DB)})
 	auditHandler := audit.NewHandler(auditService)
+	auditHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
+		u, err := authService.GetUser(ctx, userID)
+		if err != nil || u == nil || u.Timezone == nil {
+			return nil
+		}
+		return timeutil.LoadLocation(*u.Timezone)
+	})
 	// Guard the entity-history endpoint with campaign ownership + per-entity
 	// visibility, resolved via the entities service (SEC-IDOR-2).
 	auditHandler.SetEntityViewGuard(&auditEntityViewGuardAdapter{svc: entityService})
