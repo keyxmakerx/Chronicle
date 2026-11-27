@@ -220,6 +220,11 @@ const (
 	MsgCutsceneFoundry MessageType = "cutscene.foundry"
 	// MsgCutsceneFoundryStop relays a stop to the module. Payload {showingId}.
 	MsgCutsceneFoundryStop MessageType = "cutscene.foundry_stop"
+	// MsgCutsceneFoundryPreview hands a Director's unsaved scene to the
+	// module, which plays it on that Director's own GM screen and relays it
+	// to no other client. Payload {previewId, director, scene}; the same
+	// audience as MsgCutsceneFoundry. Nothing is stored.
+	MsgCutsceneFoundryPreview MessageType = "cutscene.foundry_preview"
 )
 
 // Sync control messages.
