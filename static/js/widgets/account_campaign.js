@@ -1,5 +1,5 @@
 /**
- * account_campaign.js — the dice, calendar and brush sections of one
+ * account_campaign.js — the dice, calendar, brush and Store sections of one
  * campaign's page in Account settings (campaigns/account_settings.templ).
  *
  * Mount: <div data-widget="account-campaign" data-campaign-id data-user-id>.
@@ -13,8 +13,8 @@
  * (GET .../sessions/feed-settings), and is made the first time it is asked
  * for (POST .../sessions/feed/token), as on the calendar's game night menu.
  *
- * The Customize brush buttons, drawn for the owner only, save through
- * PUT /account/brush/:id.
+ * The Customize brush and Store icon buttons, drawn for the owner only, save
+ * through PUT /account/brush/:id and PUT /account/store/:id.
  */
 (function () {
   'use strict';
@@ -141,15 +141,21 @@
     return false;
   };
 
-  // The owner's brush choice, outside the widget's host because the page
-  // draws it only for the owner.
-  function brushClick(b) {
-    var group = b.closest('[data-acct-brush]');
+  // The owner's shown/put-away choices, outside the widget's host because
+  // the page draws them only for the owner. Each is a group marked
+  // data-acct-<key>="<campaign id>" whose buttons carry data-<key>, saved to
+  // PUT /account/<key>/<id> as {<key>: choice}.
+  var CHOICES = ['brush', 'store'];
+
+  function choiceClick(b, key) {
+    var group = b.closest('[data-acct-' + key + ']');
     if (!group || b.getAttribute('aria-pressed') === 'true') return;
-    var choice = b.getAttribute('data-brush');
+    var choice = b.getAttribute('data-' + key);
     var all = group.querySelectorAll('button');
+    var body = {};
+    body[key] = choice;
     Array.prototype.forEach.call(all, function (x) { x.disabled = true; });
-    C.apiFetch('/account/brush/' + encodeURIComponent(group.getAttribute('data-acct-brush')), { method: 'PUT', body: { brush: choice } })
+    C.apiFetch('/account/' + key + '/' + encodeURIComponent(group.getAttribute('data-acct-' + key)), { method: 'PUT', body: body })
       .then(function (r) {
         if (!r.ok) throw new Error('refused');
         Array.prototype.forEach.call(all, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
@@ -166,11 +172,13 @@
       var cal = new Calendar(host, base);
       dice.load();
       cal.load();
-      var brush = document.querySelector('[data-acct-brush]');
+      var groups = CHOICES.map(function (key) { return [key, document.querySelector('[data-acct-' + key + ']')]; });
       host._acctClick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
-        if (brush && brush.contains(b)) { brushClick(b); return; }
+        for (var i = 0; i < groups.length; i++) {
+          if (groups[i][1] && groups[i][1].contains(b)) { choiceClick(b, groups[i][0]); return; }
+        }
         if (!host.contains(b)) return;
         if (!dice.click(b)) cal.click(b);
       };

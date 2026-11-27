@@ -3208,6 +3208,8 @@ func (a *App) RegisterRoutes() {
 	// choice to hide the brush.
 	campaignHandler.SetPageCategoryLookup(&pageCategoryAdapter{svc: entityService})
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
+	// The person's own choice to put the top bar's Store icon away.
+	campaignHandler.SetStorePrefs(&storePrefsAdapter{svc: authService})
 	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
 	campaignHandler.SetCustomizeDrafts(customizeDrafts)
 	// Publishing a draft's field list would undo a field switch, so the
@@ -6394,7 +6396,7 @@ func (a *App) RegisterRoutes() {
 					if zones, zerr := authService.GetTimezonesByIDs(ctx, []string{session.UserID}); zerr == nil {
 						tz = zones[session.UserID]
 					}
-					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, BrushHidden: vp.BrushHidden})
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, BrushHidden: vp.BrushHidden, StoreHidden: vp.StoreHidden})
 				} else {
 					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
 				}
@@ -7654,6 +7656,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "store", Scripts: []string{"/static/js/widgets/store.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},
 	{Name: "shop_good_note", Scripts: []string{"/static/js/widgets/shop_good_note.js"}},

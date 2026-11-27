@@ -117,3 +117,13 @@ func brushShownIn(ctx context.Context, campaignID string) bool {
 	}
 	return !slices.Contains(p.BrushHidden, campaignID)
 }
+
+// storeShownIn reports whether the owner keeps the Store icon on the top bar
+// in this campaign, read the same way as brushShownIn.
+func storeShownIn(ctx context.Context, campaignID string) bool {
+	p := layouts.GetViewPrefs(ctx)
+	if p == nil {
+		return true
+	}
+	return !slices.Contains(p.StoreHidden, campaignID)
+}

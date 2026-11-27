@@ -4,8 +4,8 @@
  * Mount: <div data-widget="topbar-tools"> drawn by layouts/topbar_tools.templ,
  * only for a viewer with two or more tools. Under 768 wide the bar shows one
  * Tools tab; tapping it hangs a shelf from the bar with every tool and its
- * name. The bar's real tool buttons (AI, the Customize brush, Table, DM
- * Screen, the eye, the bell)
+ * name. The bar's real tool buttons (AI, the Customize brush, Table, the
+ * Store, DM Screen, the eye, the bell)
  * stay in the page with their hosts, only hidden by phone_shell.css, so an
  * entry here presses the real button and the tool opens exactly as it does
  * from the bar. Counts are mirrored from the real badges, never recounted.
@@ -27,8 +27,8 @@
   var KEY = 'chronicle-topbar-kept';
   var MAX_KEPT = 2;
   // The tools that can stay on the bar. Find is always there already.
-  var KEEPABLE = ['ai', 'brush', 'table', 'dms', 'pv', 'bell'];
-  var REAL = { ai: '[data-ai-chip]', brush: '[data-brush-toggle]', table: '[data-tt-tab]', dms: '[data-dms-toggle]', bell: '[data-notif-toggle]' };
+  var KEEPABLE = ['ai', 'brush', 'table', 'store', 'dms', 'pv', 'bell'];
+  var REAL = { ai: '[data-ai-chip]', brush: '[data-brush-toggle]', table: '[data-tt-tab]', store: '[data-store-toggle]', dms: '[data-dms-toggle]', bell: '[data-notif-toggle]' };
   var BADGE = { ai: '[data-ai-chip-n]', table: '[data-tt-count]', bell: '[data-notif-badge] [data-count]' };
 
   // The kept tools out of what storage held: known tools that are on this
