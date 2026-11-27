@@ -13,8 +13,12 @@
  * darkness would fall over a box that is already dark. A refusal is shown in
  * the form's error line in the server's own words.
  *
- * The Preview button calls window.ChronicleCutsceneWorkshop.preview from an
- * inline handler, so a form HTMX swaps in after a save keeps working.
+ * Preview in Foundry posts the same form to its own route, which checks the
+ * scene the same way and hands it to the campaign's Foundry module to play
+ * on the Director's own Foundry screen; this page only says it was sent.
+ *
+ * Both buttons call window.ChronicleCutsceneWorkshop from an inline handler,
+ * so a form HTMX swaps in after a save keeps working.
  */
 (function () {
   'use strict';
@@ -87,7 +91,42 @@
     });
   }
 
-  window.ChronicleCutsceneWorkshop = { preview: preview };
+  function showSent(form, msg) {
+    var el = form && form.querySelector('[data-csw-sent]');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.hidden = !msg;
+  }
+
+  function previewInFoundry(btn) {
+    var form = btn && btn.closest('form[data-csw-form]');
+    if (!form || btn.disabled) return;
+    showError(form, '');
+    showSent(form, '');
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    var done = function () {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+    };
+    C.apiFetch(form.getAttribute('data-foundry-preview-url'), { method: 'POST', body: new FormData(form) })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          if (!res.ok) throw new Error(body.message || body.error || 'The scene could not be sent to Foundry. Try again.');
+          return body;
+        });
+      })
+      .then(function () {
+        done();
+        showSent(form, 'Sent to your Foundry screen');
+      })
+      .catch(function (err) {
+        done();
+        showError(form, err && err.message ? err.message : 'The scene could not be sent to Foundry. Try again.');
+      });
+  }
+
+  window.ChronicleCutsceneWorkshop = { preview: preview, previewInFoundry: previewInFoundry };
 
   if (C.register) {
     C.register('cutscene-workshop', {
