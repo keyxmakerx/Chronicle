@@ -1363,7 +1363,7 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 			orders, _ = h.folders.ChildOrders(c.Request().Context(), cc.Campaign.ID)
 			// Pins only arrange the list, so a failed read leaves none.
 			if pins, err := h.folders.SidebarPins(c.Request().Context(), cc.Campaign.ID); err == nil && len(pins) > 0 {
-				c.SetRequest(c.Request().WithContext(withSidebarPins(c.Request().Context(), pins)))
+				c.SetRequest(c.Request().WithContext(withSidebarPins(c.Request().Context(), servedPinRanks(pins, results))))
 			}
 		}
 		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs, orders))

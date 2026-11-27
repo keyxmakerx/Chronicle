@@ -1000,7 +1000,9 @@
       '<button type="button" class="hc-ibtn hc-die" data-act="die" aria-label="Deal a random card" title="Deal a random card">' + I.die + '</button>' +
       '<div class="hc-mode" role="group" aria-label="Show as"><button type="button" data-mode="cards" aria-pressed="' + (this.mode === 'cards') + '">Cards</button>' +
       '<button type="button" data-mode="list" aria-pressed="' + (this.mode === 'list') + '">List</button></div>';
-    if (desk) h += this.sortWordHTML() + '<span class="hc-keys"><kbd>←</kbd> <kbd>→</kbd> move · <kbd>Enter</kbd> choose</span>';
+    // On a computer Sort and the key hints share their own line under the
+    // search, Sort at the left; still inside .hc-tools, which is redrawn whole.
+    if (desk) h += '<div class="hc-tline">' + this.sortWordHTML() + '<span class="hc-keys"><kbd>←</kbd> <kbd>→</kbd> move · <kbd>Enter</kbd> choose</span></div>';
     return h + '</div>';
   };
 

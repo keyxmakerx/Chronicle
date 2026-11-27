@@ -138,3 +138,31 @@ func TestSetSidebarPinAPI_Roles(t *testing.T) {
 		})
 	}
 }
+
+// TestServedPinRanks pins that a reader sees pin positions with no gaps, so a
+// pinned page hidden from them leaves no trace in the numbers.
+func TestServedPinRanks(t *testing.T) {
+	pins := map[string]int{"hidden": 0, "secret": 1, "a": 2, "b": 5}
+	tests := []struct {
+		name   string
+		served []Entity
+		want   map[string]int
+	}{
+		{"hidden pins leave no gap", []Entity{{ID: "b"}, {ID: "x"}, {ID: "a"}}, map[string]int{"a": 0, "b": 1}},
+		{"Director sees every pin", []Entity{{ID: "a"}, {ID: "hidden"}, {ID: "secret"}, {ID: "b"}}, map[string]int{"hidden": 0, "secret": 1, "a": 2, "b": 3}},
+		{"no pinned page served", []Entity{{ID: "x"}}, map[string]int{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := servedPinRanks(pins, tt.served)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}

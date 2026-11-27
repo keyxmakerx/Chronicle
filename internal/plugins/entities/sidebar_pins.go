@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 )
 
 // A pinned page leads its own list in the sidebar (the folder, page or
@@ -68,6 +69,24 @@ func (r *sidebarPinRepository) Unpin(ctx context.Context, campaignID, entityID s
 		return fmt.Errorf("unpinning sidebar page: %w", err)
 	}
 	return nil
+}
+
+// servedPinRanks renumbers the pins among the pages this reader is served,
+// 0 upward in pin order. Stored positions would leave gaps where a pinned page
+// is hidden from the reader, which tells them such a page exists.
+func servedPinRanks(pins map[string]int, served []Entity) map[string]int {
+	ids := make([]string, 0, len(pins))
+	for _, e := range served {
+		if _, ok := pins[e.ID]; ok {
+			ids = append(ids, e.ID)
+		}
+	}
+	sort.SliceStable(ids, func(i, j int) bool { return pins[ids[i]] < pins[ids[j]] })
+	ranks := make(map[string]int, len(ids))
+	for i, id := range ids {
+		ranks[id] = i
+	}
+	return ranks
 }
 
 type sidebarPinsKey struct{}
