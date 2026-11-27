@@ -137,7 +137,9 @@ func TestSystemEntryKind_Plan(t *testing.T) {
 		{"update with a trait list ok", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "ancestry_points": 3,
 			"purchased_traits": []any{map[string]any{"name": "Stone Skin", "cost": 2, "description": "Tough."}}}, ""), nil, ""},
 		{"update bad trait list refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "purchased_traits": []any{"Stone Skin", map[string]any{"cost": 1}}}, ""), nil, "needs a name"},
-		{"update nested detail refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "x": map[string]any{"a": 1}}, ""), nil, "must be text"},
+		{"update nested detail refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "x": map[string]any{"a": 1}}, ""), nil, "needs a name"},
+		{"update with an ability ok", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "signature_ability": map[string]any{"name": "Rune", "keywords": []any{"Magic"}, "tier1": "2 damage"}}, ""), nil, ""},
+		{"update ability with an unknown part refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "signature_ability": map[string]any{"name": "Rune", "damage": "2"}}, ""), nil, "can only have these parts"},
 		{"update with a border ok", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "card_border": "fire", "card_colour": "#c4243a"}, ""), nil, ""},
 		{"update unknown border refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "card_border": "lava"}, ""), nil, "great-rune"},
 		{"update bad colour refused", owner, rec("system-entry", "update", "Stoneborn", map[string]any{"entry": "ancestry", "card_colour": "red"}, ""), nil, "six hex digits"},
@@ -459,5 +461,39 @@ func TestSystemEntryKind_DocInPlaceOf(t *testing.T) {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the kind's notes lack %q", want)
 		}
+	}
+}
+
+// The kind's own kit example, read as the review reads a pasted block, saves
+// its signature ability as an object of parts with every part kept.
+func TestSystemEntryKind_DocKitAbility(t *testing.T) {
+	doc := SystemEntryKind{}.Doc()
+	at := strings.Index(doc, "A kit with a signature ability:")
+	if at < 0 {
+		t.Fatal("doc has no kit example")
+	}
+	blocks := parseBlocks(doc[at:])
+	if len(blocks) != 1 {
+		t.Fatalf("parsed %d blocks", len(blocks))
+	}
+	svc := &fakeEntrySvc{}
+	if err := (SystemEntryKind{Svc: svc}).Apply(context.Background(), camp, owner, blocks[0]); err != nil {
+		t.Fatal(err)
+	}
+	props := svc.created[0].Properties
+	if err := systems.ValidateEntryProperties(props); err != nil {
+		t.Fatalf("example refused: %v", err)
+	}
+	ab, ok := props["signature_ability"].(map[string]any)
+	if !ok {
+		t.Fatalf("signature_ability = %#v", props["signature_ability"])
+	}
+	for _, part := range []string{"name", "flavor", "type", "action_type", "keywords", "distance", "target", "power_roll", "tier1", "tier2", "tier3", "effect"} {
+		if _, has := ab[part]; !has {
+			t.Errorf("part %q lost", part)
+		}
+	}
+	if kw, _ := ab["keywords"].([]any); len(kw) != 4 {
+		t.Errorf("keywords = %#v", ab["keywords"])
 	}
 }

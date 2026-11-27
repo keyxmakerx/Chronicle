@@ -641,6 +641,18 @@ func buildOwnerOnlyFlagsByCategory() map[string]map[string]bool {
 	return buildFlagsByCategory(func(f systems.FieldDef) bool { return f.OwnerOnly })
 }
 
+// reconcileFieldsFromSystems runs the field reconcilers one after another:
+// gm_only and owner_only marks, play blocks and checks, each read from the
+// system manifests now in the registry. Call it only once installed
+// packages are loaded; on an earlier registry it converges nothing for them.
+// Each step is idempotent and logs its own failure, so the chain continues.
+func reconcileFieldsFromSystems(ctx context.Context, entityService entities.EntityService) {
+	reconcileFieldGMFlags(ctx, entityService)
+	reconcileFieldOwnerOnlyFlags(ctx, entityService)
+	reconcileFieldPlay(ctx, entityService)
+	reconcileFieldChecks(ctx, entityService)
+}
+
 // reconcileFieldGMFlags stamps the gm_only field flags declared by installed
 // system manifests onto existing entity types, making the GM-field egress
 // filter effective for characters created before their type's manifest

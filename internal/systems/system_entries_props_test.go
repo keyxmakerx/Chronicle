@@ -87,10 +87,12 @@ func TestValidateEntryProperties_Carried(t *testing.T) {
 		stored map[string]any
 		ok     bool
 	}{
-		{"object unchanged", map[string]any{"signature_ability": map[string]any{"keywords": []any{"Magic"}, "name": "Rune"}}, stored, true},
-		{"object changed", map[string]any{"signature_ability": map[string]any{"name": "Rune", "keywords": []any{"Fire"}}}, stored, false},
-		{"object with nothing stored", map[string]any{"signature_ability": stored["signature_ability"]}, nil, false},
-		{"object under another key", map[string]any{"sig": stored["signature_ability"]}, stored, false},
+		{"ability unchanged", map[string]any{"signature_ability": map[string]any{"keywords": []any{"Magic"}, "name": "Rune"}}, stored, true},
+		{"ability changed", map[string]any{"signature_ability": map[string]any{"name": "Rune", "keywords": []any{"Fire"}}}, stored, true},
+		{"ability with nothing stored", map[string]any{"signature_ability": stored["signature_ability"]}, nil, true},
+		{"ability under another key", map[string]any{"sig": stored["signature_ability"]}, stored, true},
+		{"object unchanged", map[string]any{"rune": map[string]any{"name": "Rune", "roll": "1"}}, map[string]any{"rune": map[string]any{"name": "Rune", "roll": "1"}}, true},
+		{"object changed", map[string]any{"rune": map[string]any{"name": "Rune", "roll": "2"}}, map[string]any{"rune": map[string]any{"name": "Rune", "roll": "1"}}, false},
 		{"item reworded, ability rides along", map[string]any{"traits": item("Stone Skin", ability, 2, "Tougher.")}, stored, true},
 		{"item matched by name in any casing", map[string]any{"traits": item("stone skin", map[string]any{"distance": 1, "type": "triggered"}, 1, "")}, stored, true},
 		{"ability changed", map[string]any{"traits": item("Stone Skin", map[string]any{"type": "action"}, 1, "")}, stored, false},
@@ -278,5 +280,71 @@ func TestValidateEntryProperties_CardLook(t *testing.T) {
 	}
 	if g := CardBorderGuide(); !strings.Contains(g, "thorn-glass (Thorn glass)") || !strings.Contains(g, "card_colour") {
 		t.Errorf("guide lacks a border or the colour property: %s", g)
+	}
+}
+
+// An ability detail: an object of named text parts, typed in by anyone who
+// may write the entry, refused when a part is unknown or out of shape.
+func TestValidateEntryProperties_Ability(t *testing.T) {
+	arrow := func(edit func(map[string]any)) map[string]any {
+		a := map[string]any{
+			"name": "Exploding Arrow", "flavor": "Your ammunition explodes with magical energy.",
+			"type": "signature", "action_type": "Main action",
+			"keywords": []any{"Magic", "Ranged", "Strike", "Weapon"},
+			"distance": "Ranged 15", "target": "One creature or object",
+			"power_roll": "Agility, Reason, Intuition, or Presence",
+			"tier1":      "5 + A, R, I, or P fire damage", "tier2": "7 + A, R, I, or P fire damage",
+			"tier3":  "10 + A, R, I, or P fire damage",
+			"effect": "One creature or object of your choice within 2 squares of the target takes fire damage.",
+		}
+		if edit != nil {
+			edit(a)
+		}
+		return map[string]any{"signature_ability": a}
+	}
+	five := map[string]any{}
+	for _, k := range []string{"a", "b", "c", "d", "e"} {
+		five[k] = map[string]any{"name": k}
+	}
+	tests := []struct {
+		name string
+		p    map[string]any
+		ok   bool
+	}{
+		{"a whole ability", arrow(nil), true},
+		{"name only", map[string]any{"sig": map[string]any{"name": "Rune"}}, true},
+		{"cost as a number", arrow(func(a map[string]any) { a["cost"] = 3.0 }), true},
+		{"cost as text", arrow(func(a map[string]any) { a["cost"] = "3 Wrath" }), true},
+		{"cost out of range", arrow(func(a map[string]any) { a["cost"] = 100.0 }), false},
+		{"yaml numbers are ints", arrow(func(a map[string]any) { a["cost"] = 2 }), true},
+		{"no name", arrow(func(a map[string]any) { delete(a, "name") }), false},
+		{"blank name", arrow(func(a map[string]any) { a["name"] = "  " }), false},
+		{"unknown part", arrow(func(a map[string]any) { a["damage"] = "5" }), false},
+		{"nested object part", arrow(func(a map[string]any) { a["effect"] = map[string]any{"x": "y"} }), false},
+		{"keywords not a list", arrow(func(a map[string]any) { a["keywords"] = "Magic" }), false},
+		{"a blank keyword", arrow(func(a map[string]any) { a["keywords"] = []any{"Magic", ""} }), false},
+		{"too many keywords", arrow(func(a map[string]any) { a["keywords"] = words(maxAbilityKeywords+1, 5) }), false},
+		{"a line part too long", arrow(func(a map[string]any) { a["distance"] = strings.Repeat("d", maxEntryPropString+1) }), false},
+		{"longest effect", arrow(func(a map[string]any) { a["effect"] = strings.Repeat("e", maxEntryItemText) }), true},
+		{"effect too long", arrow(func(a map[string]any) { a["effect"] = strings.Repeat("e", maxEntryItemText+1) }), false},
+		{"a number part", arrow(func(a map[string]any) { a["distance"] = 15.0 }), false},
+		{"too many abilities", five, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateEntryProperties(tt.p); (err == nil) != tt.ok {
+				t.Fatalf("ok = %v, err %v", tt.ok, err)
+			}
+		})
+	}
+}
+
+// The guide names every part, so the tools that read it write what saves.
+func TestAbilityGuideNamesEveryPart(t *testing.T) {
+	g := AbilityGuide()
+	for _, p := range abilityParts {
+		if !strings.Contains(g, p) {
+			t.Errorf("guide leaves out %q", p)
+		}
 	}
 }
