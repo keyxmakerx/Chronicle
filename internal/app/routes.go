@@ -4770,11 +4770,12 @@ func (a *App) RegisterRoutes() {
 	// The stash directory caches page-type facts for a few seconds; drop them
 	// when the owner changes the lists so the change shows at once.
 	characterListService.SetChangeHook(stashDirectory.Forget)
+	panelActor := &armoryCharacterActorAdapter{svc: entityService}
 	stashSvc := armory.NewStashService(armory.StashDeps{
 		Repo:       stashRepo,
 		Directory:  stashDirectory,
 		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
-		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Actor:      panelActor,
 		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
 		Relations:  &armoryHasItemAdapter{svc: relService},
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
@@ -5028,6 +5029,15 @@ func (a *App) RegisterRoutes() {
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {
 			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
+		},
+		// The panel answers empty to anyone who can't act for the hero
+		// (the stash service's canAct: Scribe and up, else the actor rule).
+		Draws: func(ctx context.Context, campaignID, entityID, userID string, role int) bool {
+			if role >= int(campaigns.RoleScribe) {
+				return true
+			}
+			ok, err := panelActor.CanUserActAsBuyer(ctx, campaignID, entityID, userID, role)
+			return err == nil && ok
 		},
 	})
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)

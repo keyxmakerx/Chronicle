@@ -885,7 +885,8 @@ func (h *Handler) prepareShowFor(c *echo.Context, entityID string) (*showPage, e
 		auto := autoCharacterPanel(entityType) ||
 			(hasEntityShowRenderer(ctx, entityType) && mayHoldCharacterPanel(entityType))
 		placed := layoutPlacesBlock(entityType.Layout, BlockCharacterItems)
-		if (auto || placed) && h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) {
+		if (auto || placed) && h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) &&
+			(p.Draws == nil || p.Draws(c.Request().Context(), cc.Campaign.ID, entity.ID, userID, int(cc.VisibilityRole()))) {
 			ctx = withPagePanelURL(ctx, p.URL(cc.Campaign.ID, entity.ID))
 			if auto {
 				ctx = withAutoPagePanel(ctx)
