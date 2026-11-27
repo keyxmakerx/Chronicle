@@ -4941,8 +4941,11 @@ func (a *App) RegisterRoutes() {
 	// while the plugin is degraded.
 	cutsceneLive := &cutsceneLivePublisher{}
 	cutscenePresence := &cutscenePresenceAdapter{foundry: foundryPlayerRepo}
+	cutsceneFoundry := &cutsceneFoundryPreview{enabled: func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
+	}}
 	cutscenesSvc := cutscenes.NewService(cutscenes.NewRepository(a.DB), &cutsceneMembersAdapter{svc: campaignService},
-		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive))
+		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive), cutscenes.WithFoundryPreview(cutsceneFoundry))
 	var cutsceneSyncHandler *syncapi.CutsceneAPIHandler
 	if a.PluginHealth.IsHealthy(cutscenes.PluginSlug) {
 		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)
@@ -6413,6 +6416,7 @@ func (a *App) RegisterRoutes() {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
+			rememberCampaign(c, cc)
 
 			// Campaign visual customization from settings.
 			campaignSettings := cc.Campaign.ParseSettings()
@@ -6732,6 +6736,13 @@ func (a *App) RegisterRoutes() {
 				}
 				ctx = layouts.SetUserCampaigns(ctx, navCampaigns)
 			}
+			// The campaign this device was last in, as the way back from
+			// Account settings and Site admin.
+			if ck, err := c.Request().Cookie(lastCampaignCookie); err == nil {
+				if rc := returnCampaign(reqCtx, campaignService, ck.Value, session.UserID, layouts.GetUserCampaigns(ctx)); rc != nil {
+					ctx = layouts.SetReturnCampaign(ctx, rc)
+				}
+			}
 		}
 
 		// CSRF token for forms.
@@ -6776,6 +6787,7 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	cutscenePresence.hub = wsHub
+	cutsceneFoundry.hub = wsHub
 	go wsHub.Run()
 	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
 	// A player reads as in the world only while the world itself is connected.
@@ -7524,6 +7536,7 @@ func (a *App) RegisterRoutes() {
 	entityNotesNotifier.bus = wsEventBus
 	decksLive.bus = wsEventBus
 	cutsceneLive.bus = wsEventBus
+	cutsceneFoundry.bus = wsEventBus
 
 	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
 	drawingService.SetEventPublisher(mapEvents)

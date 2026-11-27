@@ -181,10 +181,11 @@ func validateEventRefs(ctx context.Context, db dbExecutor, campaignID string, ki
 	return nil
 }
 
-// validEventPayload rejects a non-JSON payload before it ever reaches the
-// database; calendar_events.payload has no CHECK constraint, so a malformed
-// value would otherwise sit silently until ParsePayload fails to read it back.
-func validEventPayload(payload *string) error {
+// validEventPayloadJSON is the storage layer's last guard: JSON or nothing.
+// The field-by-field checks run in the service when a payload is written,
+// not here on every save, so an event whose stored payload predates a rule
+// can still have its other fields edited.
+func validEventPayloadJSON(payload *string) error {
 	if payload != nil && *payload != "" && !json.Valid([]byte(*payload)) {
 		return apperror.NewValidation("payload is not valid JSON")
 	}
@@ -204,7 +205,7 @@ func (r *eventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 // insertEvent is CreateEvent on a caller-chosen executor, so a batch can
 // run it inside its own transaction.
 func insertEvent(ctx context.Context, ex dbExecutor, evt *Event) error {
-	if err := validEventPayload(evt.Payload); err != nil {
+	if err := validEventPayloadJSON(evt.Payload); err != nil {
 		return err
 	}
 	res, err := ex.ExecContext(ctx,
@@ -354,7 +355,7 @@ func (r *eventRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 
 // updateEventRow is UpdateEvent on a caller-chosen executor.
 func updateEventRow(ctx context.Context, ex dbExecutor, evt *Event) error {
-	if err := validEventPayload(evt.Payload); err != nil {
+	if err := validEventPayloadJSON(evt.Payload); err != nil {
 		return err
 	}
 	var campaignID string

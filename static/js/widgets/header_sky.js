@@ -71,7 +71,7 @@
         var prev = self.model;
         self.model = {
           calendar: cal,
-          todayEvents: events.filter(function (e) { return e.year === cal.current_year && e.month === cal.current_month && e.day === cal.current_day; }),
+          todayEvents: S.eventsToday(cal, events),
           dayWeather: got[1], skym: window.SkyWorld.makeSkym(cal), landSeed: S.seed(self.calid),
           width: 0, height: 0, reduced: self.rm, glide: prev ? prev.glide : null
         };
