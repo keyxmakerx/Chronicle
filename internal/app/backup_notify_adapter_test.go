@@ -22,12 +22,13 @@ func (f *fakeAdminSearch) SearchUsers(_ context.Context, opts auth.UserSearchOpt
 type fakeBackupMailer struct {
 	configured bool
 	to         []string
+	subject    string
 	sent       int
 }
 
 func (f *fakeBackupMailer) IsConfigured(context.Context) bool { return f.configured }
-func (f *fakeBackupMailer) SendMail(_ context.Context, to []string, _, _ string) error {
-	f.to, f.sent = to, f.sent+1
+func (f *fakeBackupMailer) SendMail(_ context.Context, to []string, subject, _ string) error {
+	f.to, f.subject, f.sent = to, subject, f.sent+1
 	return nil
 }
 
@@ -62,6 +63,33 @@ func TestBackupFailureMailer(t *testing.T) {
 			}
 			if tt.configured && users.opts.Filter != auth.UserFilterAdmins {
 				t.Errorf("searched with filter %v, want admins", users.opts.Filter)
+			}
+		})
+	}
+}
+
+type fixedSiteName string
+
+func (n fixedSiteName) SiteName(context.Context) string { return string(n) }
+
+// The failure email names the site as set under Site look.
+func TestBackupFailureMailer_SiteName(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		site auth.SiteNameSource
+		want string
+	}{
+		{"site name set", fixedSiteName("Harbour Games"), "Harbour Games: the daily backup failed"},
+		{"not wired", nil, "Chronicle: the daily backup failed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mail := &fakeBackupMailer{configured: true}
+			m := backupFailureMailer{users: &fakeAdminSearch{users: []auth.User{{Email: "a@example.test"}}}, mail: mail, site: tt.site}
+			if err := m.BackupFailed(context.Background(), backup.ScheduledRun{At: time.Now(), Detail: "exit 3"}); err != nil {
+				t.Fatal(err)
+			}
+			if mail.subject != tt.want {
+				t.Errorf("subject = %q, want %q", mail.subject, tt.want)
 			}
 		})
 	}

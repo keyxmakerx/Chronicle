@@ -79,6 +79,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/transformations"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+	"github.com/keyxmakerx/chronicle/internal/sitelook"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -455,6 +456,23 @@ func (a *addonCampaignActivityAdapter) LogCampaignActivity(ctx context.Context, 
 		Action:     action,
 		EntityName: subject,
 	})
+}
+
+// siteNameAdapter reads the Site look name for emails. A failed read falls
+// back to "Chronicle" rather than failing the email.
+type siteNameAdapter struct {
+	settings interface {
+		GetSiteLook(ctx context.Context) (sitelook.Settings, error)
+	}
+}
+
+// SiteName returns the name to put in account and site emails.
+func (a siteNameAdapter) SiteName(ctx context.Context) string {
+	look, err := a.settings.GetSiteLook(ctx)
+	if err != nil {
+		return sitelook.DefaultName
+	}
+	return look.DisplayName()
 }
 
 // systemManifestFinderAdapter bridges systems.Find to addons.SystemManifestFinder.
@@ -3519,7 +3537,7 @@ func (a *App) RegisterRoutes() {
 	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
 
 	// Daily backup, when the owner turns it on under Admin > Backup.
-	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService}).Run(a.ShutdownCtx)
+	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService, site: siteNameAdapter{settings: settingsService}}).Run(a.ShutdownCtx)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
@@ -3569,6 +3587,10 @@ func (a *App) RegisterRoutes() {
 	// media adapter; new campaigns read the same look through the campaigns
 	// service's narrow interface.
 	adminHandler.SetSiteLookService(admin.NewSiteLookService(settingsService, &siteMediaAdapter{svc: mediaService}))
+	// Account and site emails, and the default sender name, use the Site look name.
+	siteNames := siteNameAdapter{settings: settingsService}
+	auth.ConfigureSiteName(authService, siteNames)
+	smtp.ConfigureSiteName(smtpService, siteNames)
 	campaignService.SetSiteLookSource(settingsService)
 
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
