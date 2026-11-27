@@ -374,3 +374,46 @@ test('where the server refuses this screen\'s prefs, the browser keeps them quie
   assert.equal(await sizeOf(page, 'world'), 'S');
   await page.done();
 });
+
+test('while arranging, a card\'s title never runs under its tools, in one or two columns', { skip }, async () => {
+  const srv = server();
+  srv.prefs = { home: { open: ['world', 'party', 'notes'] }, style: {} };
+  const page = await open(srv);
+  await page.waitForSelector('[data-dms-sec="party"]:not([hidden])');
+  await page.click('[data-dms-arrange]');
+  // Titles as long as the real ones, with the icon the real cards carry.
+  await page.evaluate(() => document.querySelectorAll('.dms-sec-t > span[id]').forEach((t) => {
+    t.textContent = 'The party tonight'; t.insertAdjacentHTML('beforebegin', '<i style="display:inline-block;width:1rem">*</i>');
+  }));
+  const overlaps = () => page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('[data-dms-sec]:not([hidden])').forEach((s) => {
+      const t = s.querySelector('.dms-sec-t > span[id]'), a = s.querySelector('[data-dms-arrtools]');
+      if (!t || !a || !a.getClientRects().length) return;
+      const r1 = t.getBoundingClientRect(), r2 = a.getBoundingClientRect();
+      if (r1.right > r2.left + 0.5 && r1.left < r2.right && r1.bottom > r2.top + 0.5 && r1.top < r2.bottom) out.push(s.getAttribute('data-dms-sec'));
+    });
+    return out;
+  });
+  assert.deepEqual(await overlaps(), [], 'one column');
+  await page.click('[data-dms-cols="2"]');
+  await page.waitForFunction(() => document.querySelector('.dms-dock').classList.contains('dms-cols2'));
+  assert.deepEqual(await overlaps(), [], 'two columns');
+  await page.done();
+});
+
+test('the new-leaf slot steps aside while the Style drawer is out', { skip }, async () => {
+  const srv = server();
+  const page = await open(srv);
+  await page.waitForSelector('[data-dms-sec="world"]:not([hidden])');
+  await page.click('[data-dms-arrange]');
+  const slotShown = () => visible(page, '[data-dms-leafslot]');
+  const before = await slotShown();
+  await page.click('[data-dms-styletab]');
+  await page.waitForSelector('.dms-sdrawer[data-open="1"]');
+  assert.equal(await slotShown(), false, 'no slot over the drawer');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.dms-dock').classList.contains('dms-styling'));
+  assert.equal(await slotShown(), before, 'the slot is back as it was');
+  await page.done();
+});

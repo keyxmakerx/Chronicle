@@ -714,6 +714,8 @@
       loadKits();
       drawer.hidden = false;
       drawer.setAttribute('data-open', '1');
+      // The new-leaf slot sits where the drawer lies, so it steps aside.
+      dock.classList.add('dms-styling');
       paintStyle();
       var m = motion();
       if (m !== 'off' && drawer.animate) {
@@ -727,6 +729,7 @@
     function closeDrawer(refocus) {
       if (!drawer || drawer.getAttribute('data-open') !== '1') return;
       drawer.setAttribute('data-open', '0');
+      dock.classList.remove('dms-styling');
       paintStyle();
       var tab = root() && root().querySelector('[data-dms-styletab]');
       if (refocus && tab) tab.focus({ preventScroll: true });
@@ -817,7 +820,9 @@
       // arrange mode. True when it closed something.
       escape: function () {
         if (menu) { closeMenu(true); return true; }
-        if (drawer && drawer.getAttribute('data-open') === '1') { closeDrawer(true); return true; }
+        // Focus goes back to the Style tab only from inside the drawer; focus
+        // that has moved on elsewhere stays where it is.
+        if (drawer && drawer.getAttribute('data-open') === '1') { closeDrawer(drawer.contains(document.activeElement)); return true; }
         if (arranging) { setArranging(false); return true; }
         return false;
       },
