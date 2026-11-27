@@ -5672,6 +5672,9 @@ html[data-view-motion="calm"][data-cz-btn="keystone"] .btn:active { transform: n
    Nothing is ever drawn behind an icon. */
 .kind-ic { display: none; flex: none; width: 1.25em; text-align: center; font-size: 0.8125em; line-height: 1; }
 :is([data-cz-icons="names"], [data-cz-icons="all"]) .kind-ic { display: inline-block; }
+/* As strong as the icon font's own display rule, which loads after this
+   sheet, so a kind icon stays hidden while icons are Few. */
+:root:not([data-cz-icons="names"], [data-cz-icons="all"]) .kind-ic { display: none; }
 .kind-ic, .kind-themed:not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) { color: var(--color-text-muted); }
 [data-cz-icon-colour="accent"] :is(.kind-ic, .kind-themed):not(.nav-ic, .nav-drill-ic, .nav-drill-sub-ic) {
   color: var(--color-accent-link, var(--color-accent));
