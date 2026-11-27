@@ -2613,6 +2613,18 @@ func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityI
 	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
 }
 
+// npcPartyCheckAdapter implements npcs.PartyCheck over the addon settings. A
+// failed lookup reads as no party, which keeps a playable character listed
+// rather than shown nowhere.
+type npcPartyCheckAdapter struct {
+	addons addons.AddonService
+}
+
+func (a *npcPartyCheckAdapter) ShowsParty(ctx context.Context, campaignID string) bool {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, entities.AddonPlayerCharacterClaiming)
+	return err == nil && on
+}
+
 // npcTagListerAdapter wraps tags.TagService to implement npcs.TagLister so NPC
 // cards carry tags and the Characters page can offer a tag filter. dm_only tags
 // are included only when the caller asks (the npcs handler decides by role).
@@ -4982,6 +4994,7 @@ func (a *App) RegisterRoutes() {
 	npcRepo := npcs.NewNPCRepository(a.DB)
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: characterListService}, &entityVisibilityFilterAdapter{svc: entityService})
 	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
+	npcSvc.SetPartyCheck(&npcPartyCheckAdapter{addons: addonService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)

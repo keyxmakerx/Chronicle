@@ -38,6 +38,14 @@ type TagLister interface {
 	ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error)
 }
 
+// PartyCheck reports whether a campaign lists its players' characters (the
+// player-character-claiming addon). While it does, a character marked
+// playable is a hero waiting for a player and shows with The Party, so it
+// leaves this list; while it doesn't, nothing would show it but this list.
+type PartyCheck interface {
+	ShowsParty(ctx context.Context, campaignID string) bool
+}
+
 // TagInfo holds tag display data returned by TagLister.
 type TagInfo struct {
 	ID    int
@@ -62,6 +70,10 @@ type NPCService interface {
 	// SetTagLister injects the batch tag fetcher; without it cards carry no tags
 	// and the tag filter is empty.
 	SetTagLister(tl TagLister)
+
+	// SetPartyCheck injects the check that moves playable characters out of
+	// the list; without it they stay.
+	SetPartyCheck(pc PartyCheck)
 }
 
 // npcService implements NPCService.
@@ -70,6 +82,7 @@ type npcService struct {
 	typeFinder       EntityTypeFinder
 	tagLister        TagLister
 	entityVisibility EntityVisibilityFilter
+	party            PartyCheck
 }
 
 // NewNPCService creates a new NPC service. entityVisibility is the canonical
@@ -83,6 +96,11 @@ func NewNPCService(repo NPCRepository, typeFinder EntityTypeFinder, entityVisibi
 // SetTagLister injects the tag batch fetcher for card decoration.
 func (s *npcService) SetTagLister(tl TagLister) {
 	s.tagLister = tl
+}
+
+// SetPartyCheck injects the check behind PartyCheck.
+func (s *npcService) SetPartyCheck(pc PartyCheck) {
+	s.party = pc
 }
 
 // ListNPCs resolves the character types, narrows the campaign's matching
@@ -210,6 +228,7 @@ func (s *npcService) characterTypeIDs(ctx context.Context, campaignID string) ([
 // (EntityVisibilityFilter), so this gallery can't disagree with the entity
 // page about what is hidden.
 func (s *npcService) visibleNPCIDs(ctx context.Context, campaignID string, characterTypeIDs []int, role int, userID string, opts NPCListOptions) ([]string, error) {
+	opts.hidePlayable = s.party != nil && s.party.ShowsParty(ctx, campaignID)
 	allIDs, err := s.repo.ListRevealedIDs(ctx, campaignID, characterTypeIDs, opts)
 	if err != nil {
 		return nil, err

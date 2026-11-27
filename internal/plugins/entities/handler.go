@@ -4374,6 +4374,7 @@ func (h *Handler) buildCastView(c *echo.Context, cc *campaigns.CampaignContext) 
 			}
 		}
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID, int(cc.VisibilityRole())), charTypes)
+		view.Unclaimed = h.unclaimedHeroes(ctx, cc, userID, charTypes)
 		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
 		view.HeroChanges = h.heroChangesSection(c, cc, view.Party)
 		// Only a member with no party yet needs a pointer to where claiming happens.
@@ -4816,6 +4817,43 @@ func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignCont
 	}
 
 	return assembleCastParty(claimed, mine, ownerNames, userID)
+}
+
+// unclaimedHeroes lists the playable characters nobody has claimed yet, of
+// the Party's types or the NPC list's: marked playable, a character is a hero
+// waiting for a player, and the NPC list leaves it out (npcs.PartyCheck). A
+// failed lookup leaves them off the page rather than breaking it.
+func (h *Handler) unclaimedHeroes(ctx context.Context, cc *campaigns.CampaignContext, userID string, charTypes []int) []CastMember {
+	types := append([]int(nil), charTypes...)
+	if h.charLists != nil {
+		if npc, err := h.charLists.NPCTypeIDs(ctx, cc.Campaign.ID); err == nil {
+			for _, id := range npc {
+				if !slices.Contains(types, id) {
+					types = append(types, id)
+				}
+			}
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	list, err := h.service.ListRoster(ctx, cc.Campaign.ID, types, int(cc.VisibilityRole()), userID)
+	if err != nil {
+		slog.Warn("cast page: unclaimed heroes failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return nil
+	}
+	return unclaimedCast(list)
+}
+
+// unclaimedCast keeps the playable pages with no owner.
+func unclaimedCast(list []Entity) []CastMember {
+	var out []CastMember
+	for _, e := range list {
+		if e.Playable && e.OwnerUserID == nil {
+			out = append(out, CastMember{Entity: e, Unclaimed: true})
+		}
+	}
+	return out
 }
 
 // claimTypeID picks the entity type to send a party-less player to: the Player

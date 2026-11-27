@@ -91,7 +91,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				}
 				if !view.PartyListed && view.PartyEditor != nil {
 					@castBandEmpty()
-				} else if len(view.Party) == 0 {
+				} else if len(view.Party) == 0 && len(view.Unclaimed) == 0 {
 					if view.ClaimTypeID != 0 {
 						@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
 					} else {
@@ -100,6 +100,9 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				} else {
 					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">
 						for _, m := range view.Party {
+							@castCard(cc.Campaign.ID, m)
+						}
+						for _, m := range view.Unclaimed {
 							@castCard(cc.Campaign.ID, m)
 						}
 					</div>
@@ -335,6 +338,10 @@ templ castCard(campaignID string, m CastMember) {
 				if m.OwnerName != "" {
 					<p class="text-[11px] text-fg-secondary mt-1 truncate">
 						<i class="fa-solid fa-user-tag mr-1 opacity-60"></i>{ m.OwnerName }
+					</p>
+				} else if m.Unclaimed {
+					<p class="text-[11px] text-fg-muted mt-1 truncate" data-unclaimed="true">
+						<i class="fa-regular fa-user mr-1 opacity-60" aria-hidden="true"></i>Not claimed yet
 					</p>
 				}
 			</div>
