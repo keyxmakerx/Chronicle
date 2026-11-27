@@ -1070,9 +1070,11 @@ func (s *service) Delete(ctx context.Context, campaignID, deckID string, v Viewe
 		return err
 	}
 	before := s.seersNow(ctx, campaignID, cur)
+	asked := s.askedCopies(ctx, campaignID, cur.ID, "")
 	if err := s.repo.DeleteDeck(ctx, campaignID, deckID); err != nil {
 		return apperrorInternal(err)
 	}
+	s.asksGone(ctx, campaignID, cur.ID, asked, v, goneWhy["removed"])
 	s.momentChanged(campaignID)
 	// The deck's cards leave every hand with it, so whoever saw it is told.
 	cur.Players = nil
@@ -1350,9 +1352,11 @@ func (s *service) DeleteCard(ctx context.Context, campaignID, deckID, cardID str
 			invited = om.InvitedUserID
 		}
 	}
+	asked := s.askedCopies(ctx, campaignID, d.ID, cardID)
 	if err := s.repo.DeleteCard(ctx, campaignID, d.ID, cardID); err != nil {
 		return nil, apperrorInternal(err)
 	}
+	s.asksGone(ctx, campaignID, d.ID, asked, v, goneWhy["removed"])
 	if invited != "" && s.notify != nil {
 		s.notify.Changed(campaignID, Audience{Users: []string{invited}})
 	}

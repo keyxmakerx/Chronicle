@@ -264,3 +264,99 @@ func TestOwnerAskKeysAndRegistration(t *testing.T) {
 		}
 	}
 }
+
+// A rule's ask rings the asker that it waits; an owner's ask rings nothing
+// from here, its owner rings its own, while both still go out live.
+func TestTheWaitingBellIsSkippedForAnOwnersAsk(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		owner     bool
+		wantKinds []string
+	}{
+		{"a rule's ask", false, []string{BellWaiting, BellAsked}},
+		{"an owner's ask", true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			or := newOwnerRig(t)
+			if tc.owner {
+				or.plea(t, "Pact", "copy-1")
+			} else {
+				or.askRecipe(t)
+			}
+			var kinds []string
+			for _, n := range or.bell.rung {
+				kinds = append(kinds, n.Kind)
+			}
+			if strings.Join(kinds, ",") != strings.Join(tc.wantKinds, ",") {
+				t.Errorf("rung %v, want %v", kinds, tc.wantKinds)
+			}
+			if len(or.live.events) != 1 || or.live.events[0].State != AskWaiting {
+				t.Errorf("live = %+v", or.live.events)
+			}
+		})
+	}
+}
+
+func TestCloseForEndsAnOwnersAskWithoutAnAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		key       string
+		by        Viewer
+		answered  bool // answered before the close
+		wantFound bool
+		wantCode  int
+		wantState string
+	}{
+		{name: "closes the waiting ask", key: "copy-1", by: dm, wantFound: true, wantState: RunWithdrawn},
+		{name: "a key nothing waits under", key: "copy-9", by: dm, wantState: RunHeld},
+		{name: "a player can't close it", key: "copy-1", by: mira, wantCode: 403, wantState: RunHeld},
+		{name: "an answer already given stands", key: "copy-1", by: dm, answered: true, wantState: RunDeclined},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			or := newOwnerRig(t)
+			or.save(t, "Omens", []Part{counter("doom")},
+				Rule{When: When{Event: "plea"}, Timing: TimingNow, Then: []Do{{Action: "add", Part: "doom"}}})
+			r := or.plea(t, "Pact", "copy-1")
+			if tc.answered {
+				if _, err := or.svc.Answer(context.Background(), camp, r.ID, dm, AnswerInput{Answer: AnswerNo}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			heard, events := len(or.heard), len(or.live.events)
+			found, err := or.svc.CloseFor(context.Background(), camp, "plea", tc.key, tc.by, "Closed: a Director took the card back.")
+			if found != tc.wantFound || appCode(err) != tc.wantCode {
+				t.Fatalf("found %v, err %v", found, err)
+			}
+			got := or.runs.runs[r.ID]
+			if got.Status != tc.wantState {
+				t.Errorf("status %s, want %s", got.Status, tc.wantState)
+			}
+			if len(or.heard) != heard || or.values["doom"] != 0 || len(or.bell.rung) != 0 {
+				t.Errorf("a close told the owner, ran a step or rang: heard %d, doom %d, rung %v", len(or.heard)-heard, or.values["doom"], or.bell.rung)
+			}
+			if !tc.wantFound {
+				if len(or.live.events) != events {
+					t.Errorf("nothing closed, yet live = %+v", or.live.events[events:])
+				}
+				return
+			}
+			if last := got.Lines[len(got.Lines)-1]; last != "Closed: a Director took the card back." {
+				t.Errorf("lines = %v", got.Lines)
+			}
+			if len(or.live.events) != events+1 || or.live.events[events].State != AskTakenBack || or.live.events[events].ID != r.ID {
+				t.Errorf("live = %+v", or.live.events)
+			}
+			d, err := or.svc.Drawer(context.Background(), camp, dm)
+			if err != nil || len(d.Waiting) != 0 {
+				t.Errorf("the drawer still shows it: %+v, %v", d, err)
+			}
+			if _, err := or.svc.Answer(context.Background(), camp, r.ID, dm, AnswerInput{Answer: AnswerYes}); appCode(err) != 409 {
+				t.Errorf("a closed ask was answered: %v", err)
+			}
+			mine, _ := or.svc.MyAsks(context.Background(), camp, mira)
+			if len(mine) != 1 || mine[0].State != AskTakenBack || mine[0].CanTakeBack {
+				t.Errorf("the asker sees %+v", mine)
+			}
+		})
+	}
+}

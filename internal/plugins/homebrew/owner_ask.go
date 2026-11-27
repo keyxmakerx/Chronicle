@@ -274,3 +274,36 @@ func (sr *stepRecipes) of(d Do) Recipe {
 	sr.got[d.Recipe] = r
 	return r
 }
+
+// CloseFor ends the owner's ask waiting under key when what it asked about
+// is gone some other way (a Director took the card back, discarded or played
+// it). Nothing runs and the owner is not told, since it closed it; the run
+// is withdrawn with the owner's line, and screens hear it stopped waiting.
+// found is false when no ask waits there.
+func (s *service) CloseFor(ctx context.Context, campaignID, event, key string, v Viewer, line string) (bool, error) {
+	if err := requireDirector(v); err != nil {
+		return false, err
+	}
+	if s.runs == nil || key == "" {
+		return false, nil
+	}
+	held, err := s.runs.ListRuns(ctx, campaignID, true, maxHeldRuns)
+	if err != nil {
+		return false, errInternal(err)
+	}
+	for _, r := range held {
+		if r.RecipeID != "" || r.Asked != 1 || r.Rule.When.Event != event || askKey(r.Payload) != key {
+			continue
+		}
+		if line == "" {
+			line = "Closed before an answer."
+		}
+		if _, err := s.finish(ctx, r, RunHeld, RunWithdrawn, append(r.Lines, clip(line, maxWhatChars)), v); err != nil {
+			// Answered in the same instant: that answer stands.
+			return false, nil
+		}
+		s.answered(ctx, r, AskTakenBack, v.UserID)
+		return true, nil
+	}
+	return false, nil
+}

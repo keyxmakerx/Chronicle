@@ -43,6 +43,11 @@ type Asks interface {
 	// for it (a play from before asks went this way, or one made while they
 	// couldn't), and the deck answers it itself.
 	Answer(ctx context.Context, campaignID, deckID, copyID string, v Viewer, yes bool) (found bool, err error)
+	// Close ends the ask waiting for a copy that left its wait some other
+	// way (a Director played, discarded, took back, kept or gathered it, or
+	// removed its card), so no answer is offered for a card that moved. why
+	// is the line the drawer keeps.
+	Close(ctx context.Context, campaignID, deckID, copyID string, v Viewer, why string) error
 }
 
 // WithAsks sets where waiting plays are asked. Without it a play waits on the
@@ -71,6 +76,58 @@ func (s *service) askOpened(ctx context.Context, campaignID string, d Deck, card
 		slog.Warn("decks: a waiting play was not put to the Director; it still waits on the deck's page",
 			slog.String("campaign_id", campaignID), slog.Any("error", err))
 	}
+}
+
+// goneWhy is the drawer's line for each move that ends a card's wait without
+// an answer; a move not listed leaves the ask waiting.
+var goneWhy = map[string]string{
+	ActPlay:     "Closed: a Director played the card.",
+	ActDiscard:  "Closed: the card was discarded.",
+	ActTakeBack: "Closed: a Director took the card back.",
+	ActKeep:     "Closed: a Director kept the card in another deck.",
+	ActGather:   "Closed: a Director gathered the deck.",
+	"removed":   "Closed: the card is no longer in the deck.",
+}
+
+// asksGone closes the asks of copies whose wait ended without an answer. It
+// never fails the move, which is stored and answered for. The close is the
+// deck's own bookkeeping, so it goes with a Director's standing even when
+// the move was a player's (their own discard of the waiting card).
+func (s *service) asksGone(ctx context.Context, campaignID, deckID string, copyIDs []string, v Viewer, why string) {
+	if s.asks == nil || len(copyIDs) == 0 {
+		return
+	}
+	v.Director = true
+	defer func() {
+		if p := recover(); p != nil {
+			slog.Error("decks: closing an ask panicked", slog.Any("panic", p), slog.String("campaign_id", campaignID))
+		}
+	}()
+	for _, id := range copyIDs {
+		if err := s.asks.Close(ctx, campaignID, deckID, id, v, why); err != nil {
+			slog.Warn("decks: an ask for a card that moved was not closed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
+	}
+}
+
+// askedCopies lists a deck's copies waiting for an answer, of one card or
+// of all (""), read before a change that takes them away. A failure reads as
+// none: the ask then stays, and its answer says the card moved.
+func (s *service) askedCopies(ctx context.Context, campaignID, deckID, cardID string) []string {
+	if s.asks == nil {
+		return nil
+	}
+	copies, err := s.repo.ListCopies(ctx, campaignID, deckID)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, c := range copies {
+		if c.AskedAt != nil && (cardID == "" || c.CardID == cardID) {
+			out = append(out, c.ID)
+		}
+	}
+	return out
 }
 
 // AnswerAsk lets a waiting play through or turns it down, as the Director

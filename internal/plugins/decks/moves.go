@@ -585,6 +585,12 @@ func (s *service) act(ctx context.Context, campaignID, deckID, copyID, verb stri
 	case ActPlay, ActApprove:
 		s.tell(ctx, campaignID, true, d, card, c.HolderEntityID, v)
 	}
+	// A waiting card a Director moved another way takes its ask with it.
+	if c.AskedAt != nil {
+		if why := goneWhy[action]; why != "" {
+			s.asksGone(ctx, campaignID, d.ID, []string{c.ID}, v, why)
+		}
+	}
 	// A copy back in the pile has a new id, so the old one names nothing.
 	if m.To.Zone == ZonePile {
 		return r.result(d, "")
@@ -607,9 +613,10 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 		return nil, err
 	}
 	log := LogLine{Action: action, ActorUserID: v.UserID}
-	var before []string
+	var before, asked []string
 	if action == ActGather {
 		before = s.holdersOf(ctx, campaignID, d)
+		asked = s.askedCopies(ctx, campaignID, d.ID, "")
 	}
 	if action == ActShuffle {
 		_, err = s.repo.Shuffle(ctx, campaignID, d.ID, log)
@@ -625,6 +632,7 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 	s.announce(ctx, campaignID, moveNote{Deck: d, Action: action, Before: before,
 		Move: Move{CampaignID: campaignID, DeckID: d.ID, From: Place{Zone: ZoneUsed}, To: Place{Zone: ZonePile}, Log: log}})
 	s.poked(campaignID)
+	s.asksGone(ctx, campaignID, d.ID, asked, v, goneWhy[ActGather])
 	return r.result(d, "")
 }
 
@@ -670,6 +678,9 @@ func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*Ac
 	s.announce(r.ctx, r.cid, moveNote{Deck: d, Action: ActKeep, Target: &target,
 		Move: Move{CampaignID: r.cid, DeckID: d.ID, CopyID: c.ID, From: here, To: Place{Zone: ZoneGone}, Log: plan.Log}})
 	s.poked(r.cid)
+	if c.AskedAt != nil {
+		s.asksGone(r.ctx, r.cid, d.ID, []string{c.ID}, r.v, goneWhy[ActKeep])
+	}
 	return r.result(d, c.ID)
 }
 

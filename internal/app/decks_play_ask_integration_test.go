@@ -260,3 +260,69 @@ func TestAPlayAskNamesTheCardOnlyToWhoSeesTheDeck(t *testing.T) {
 		}
 	}
 }
+
+// A waiting card a Director moves another way closes its ask: withdrawn, out
+// of the drawer, heard live, and the rule behind it never runs.
+func TestAWaitingCardMovedAnotherWayClosesTheAsk(t *testing.T) {
+	cases := []struct {
+		name string
+		move func(w *storyWorld, deck, copyID string) error
+		line string
+	}{
+		{"taken back", func(w *storyWorld, deck, copyID string) error {
+			_, err := w.decks.Act(storyCtx, w.camp, deck, copyID, "take-back", w.dir, decks.ActInput{})
+			return err
+		}, "Closed: a Director took the card back."},
+		{"discarded", func(w *storyWorld, deck, copyID string) error {
+			_, err := w.decks.Act(storyCtx, w.camp, deck, copyID, "discard", w.dir, decks.ActInput{})
+			return err
+		}, "Closed: the card was discarded."},
+		{"played by a Director", func(w *storyWorld, deck, copyID string) error {
+			_, err := w.decks.Act(storyCtx, w.camp, deck, copyID, "play", w.dir, decks.ActInput{})
+			return err
+		}, "Closed: a Director played the card."},
+		{"gathered", func(w *storyWorld, deck, _ string) error {
+			_, err := w.decks.Gather(storyCtx, w.camp, deck, w.dir)
+			return err
+		}, "Closed: a Director gathered the deck."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w, deck, _, copyID := playAskWorld(t)
+			ask := w.theAsk()
+			w.asks.mu.Lock()
+			w.asks.events = nil
+			w.asks.mu.Unlock()
+
+			w.must(tc.move(w, deck, copyID))
+			d := w.drawer()
+			if len(d.Waiting) != 0 {
+				t.Fatalf("the drawer still offers it: %+v", d.Waiting)
+			}
+			var closed *homebrew.RunView
+			for i := range d.Recent {
+				if d.Recent[i].ID == ask.ID {
+					closed = &d.Recent[i]
+				}
+			}
+			if closed == nil || closed.Status != homebrew.RunWithdrawn || closed.Lines[len(closed.Lines)-1] != tc.line {
+				t.Errorf("the ask = %+v", closed)
+			}
+			if w.doomOn(w.tamHero) != -1 {
+				t.Error("the rule behind a closed ask ran")
+			}
+			w.asks.mu.Lock()
+			events, rings := append([]homebrew.AskEvent(nil), w.asks.events...), len(w.asks.rings)
+			w.asks.mu.Unlock()
+			if len(events) != 1 || events[0].ID != ask.ID || events[0].State != homebrew.AskTakenBack || events[0].Asker != w.tamUser {
+				t.Errorf("live = %+v", events)
+			}
+			if rings != 0 {
+				t.Errorf("the Workshop rang about a closed deck ask")
+			}
+			if _, err := w.homebrew.Answer(storyCtx, w.camp, ask.ID, w.hbDirector, homebrew.AnswerInput{Answer: homebrew.AnswerYes}); appCodeOf(err) != 409 {
+				t.Errorf("a closed ask was answered: %v", err)
+			}
+		})
+	}
+}

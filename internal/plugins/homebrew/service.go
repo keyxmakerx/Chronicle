@@ -62,6 +62,9 @@ type Service interface {
 	// none does.
 	AskFor(ctx context.Context, campaignID string, v Viewer, a OwnerAsk) (string, error)
 	AnswerFor(ctx context.Context, campaignID, event, key string, v Viewer, in AnswerInput) (out *RunView, found bool, err error)
+	// CloseFor ends the owner's ask waiting under key without an answer,
+	// when what it asked about is gone; line says why, for the drawer.
+	CloseFor(ctx context.Context, campaignID, event, key string, v Viewer, line string) (found bool, err error)
 }
 
 type service struct {

@@ -15,6 +15,7 @@ type recAsks struct {
 	waiting map[string]bool
 	reply   string
 	fail    error
+	closed  []string
 }
 
 func (r *recAsks) Ask(_ context.Context, _ string, a PlayAsk) error {
@@ -33,6 +34,89 @@ func (r *recAsks) Answer(ctx context.Context, campaignID, deckID, copyID string,
 	delete(r.waiting, copyID)
 	_, err := r.svc.AnswerAsk(ctx, campaignID, deckID, copyID, v, AskAnswer{Yes: yes, Reply: r.reply})
 	return true, err
+}
+
+func (r *recAsks) Close(_ context.Context, _, _, copyID string, v Viewer, why string) error {
+	if !v.Director {
+		return errors.New("closed without a Director's standing")
+	}
+	if r.waiting[copyID] {
+		delete(r.waiting, copyID)
+		r.closed = append(r.closed, why)
+	}
+	return nil
+}
+
+// A waiting card that leaves its wait any other way closes its ask, so the
+// drawer never offers an answer for a card that moved; a move that keeps it
+// waiting leaves the ask open.
+func TestAWaitingCardMovedAnotherWayClosesItsAsk(t *testing.T) {
+	cases := []struct {
+		name string
+		move func(fx *fixture, deck, card, cp string) error
+		why  string
+	}{
+		{"a Director plays it", func(fx *fixture, deck, _, cp string) error {
+			_, err := fx.svc.Act(bg, camp, deck, cp, "play", fx.dir, ActInput{})
+			return err
+		}, "Closed: a Director played the card."},
+		{"a Director discards it", func(fx *fixture, deck, _, cp string) error {
+			_, err := fx.svc.Act(bg, camp, deck, cp, "discard", fx.dir, ActInput{})
+			return err
+		}, "Closed: the card was discarded."},
+		{"its player discards it", func(fx *fixture, deck, _, cp string) error {
+			_, err := fx.svc.Act(bg, camp, deck, cp, "discard", fx.tam, ActInput{})
+			return err
+		}, "Closed: the card was discarded."},
+		{"a Director takes it back", func(fx *fixture, deck, _, cp string) error {
+			_, err := fx.svc.Act(bg, camp, deck, cp, "take-back", fx.dir, ActInput{})
+			return err
+		}, "Closed: a Director took the card back."},
+		{"a Director keeps it in another deck", func(fx *fixture, deck, _, cp string) error {
+			other := fx.deck("Trophies", KindParty, nil)
+			_, err := fx.svc.Act(bg, camp, deck, cp, "keep", fx.dir, ActInput{TargetDeckID: other})
+			return err
+		}, "Closed: a Director kept the card in another deck."},
+		{"a Director gathers the deck", func(fx *fixture, deck, _, _ string) error {
+			_, err := fx.svc.Gather(bg, camp, deck, fx.dir)
+			return err
+		}, "Closed: a Director gathered the deck."},
+		{"its card is deleted", func(fx *fixture, deck, card, _ string) error {
+			_, err := fx.svc.DeleteCard(bg, camp, deck, card, fx.dir)
+			return err
+		}, "Closed: the card is no longer in the deck."},
+		{"its deck is deleted", func(fx *fixture, deck, _, _ string) error {
+			return fx.svc.Delete(bg, camp, deck, fx.dir)
+		}, "Closed: the card is no longer in the deck."},
+		{"a Director turning it keeps it waiting", func(fx *fixture, deck, _, cp string) error {
+			_, err := fx.svc.Act(bg, camp, deck, cp, "turn", fx.dir, ActInput{})
+			return err
+		}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			asks := &recAsks{waiting: map[string]bool{}}
+			fx := newFixtureWith(t, WithAsks(asks))
+			asks.svc = fx.svc
+			deck := fx.deck("Boons", KindHero, &SettingsInput{Arrives: ptr("up"), Discard: ptr(true)})
+			boon := fx.card(deck, CreateCardInput{Name: "Boon", AskFirst: true})
+			cp := fx.copiesOf(boon)[0]
+			fx.place(cp, ZoneHand, "h-tam", true)
+			_, err := fx.svc.Act(bg, camp, deck, cp, "play", fx.tam, ActInput{})
+			fx.must(err)
+
+			fx.must(tc.move(fx, deck, boon, cp))
+			if tc.why == "" {
+				if len(asks.closed) != 0 || !asks.waiting[cp] {
+					t.Errorf("the ask closed: %v", asks.closed)
+				}
+				return
+			}
+			if len(asks.closed) != 1 || asks.closed[0] != tc.why || asks.waiting[cp] {
+				t.Errorf("closed = %v, want [%s]", asks.closed, tc.why)
+			}
+		})
+	}
 }
 
 func TestAskFirstGoesThroughOneAsk(t *testing.T) {

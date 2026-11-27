@@ -197,6 +197,18 @@ func (s *decksStory) Answer(ctx context.Context, campaignID, _, copyID string, v
 	return found, err
 }
 
+// Close ends the Workshop's ask for a copy whose wait ended without an
+// answer, so the drawer stops offering one for a card that moved.
+func (s *decksStory) Close(ctx context.Context, campaignID, _, copyID string, v decks.Viewer, why string) error {
+	_, hb := s.services()
+	if hb == nil {
+		return nil
+	}
+	_, err := hb.CloseFor(ctx, campaignID, cardPlayAsked, copyID,
+		homebrew.Viewer{UserID: v.UserID, Director: v.Director, VisibilityRole: v.VisibilityRole}, why)
+	return err
+}
+
 // playAskWords says a waiting play to one reader: "Tam wants to play Pact
 // from Omens" to a Director, and to anyone else only what the deck shows
 // them. A reader the deck is hidden from reads "play a card".
