@@ -16,6 +16,11 @@ import (
 // colorPattern validates hex color values to prevent XSS injection.
 var colorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
+// IsHexColor reports whether s is a colour the timeline stores: #rgb or
+// #rrggbb. Callers outside this package use it to drop a bad colour rather
+// than have the whole write refused.
+func IsHexColor(s string) bool { return colorPattern.MatchString(s) }
+
 // generateID creates a random UUID v4 string.
 func generateID() string {
 	b := make([]byte, 16)
@@ -584,6 +589,15 @@ func (s *timelineService) DeleteTimeline(ctx context.Context, timelineID string)
 // LinkEvent links a calendar event to a timeline. Requires the timeline
 // to have a calendar (cannot link calendar events to calendar-free timelines).
 func (s *timelineService) LinkEvent(ctx context.Context, timelineID, eventID string, input LinkEventInput) (*EventLink, error) {
+	// The colour is drawn into the timeline as markup, so only a hex colour
+	// is stored; an empty one means the timeline's own.
+	if input.ColorOverride != nil && *input.ColorOverride == "" {
+		input.ColorOverride = nil
+	}
+	if input.ColorOverride != nil && !colorPattern.MatchString(*input.ColorOverride) {
+		return nil, apperror.NewValidation("color must be a valid hex color")
+	}
+
 	// Verify timeline exists.
 	t, err := s.repo.GetByID(ctx, timelineID)
 	if err != nil {
