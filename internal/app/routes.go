@@ -50,9 +50,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/pinschema"
-	"github.com/keyxmakerx/chronicle/internal/plugins/entities/herochangeschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities/practiceschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -6461,12 +6461,12 @@ func (a *App) RegisterRoutes() {
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
 
-					SheetStyle:    ap.SheetStyle,
-					CraftArt:      ap.CraftArt,
-					PageLook:      ap.PageLook,
-					StyleKit:      ap.StyleKit,
-					Entrance:      ap.Entrance,
-					MomentSheen:   ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
+					SheetStyle:  ap.SheetStyle,
+					CraftArt:    ap.CraftArt,
+					PageLook:    ap.PageLook,
+					StyleKit:    ap.StyleKit,
+					Entrance:    ap.Entrance,
+					MomentSheen: ap.MomentSheen, MomentCascade: ap.MomentCascade, MomentSpark: ap.MomentSpark,
 					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 					BuilderLook:   ap.BuilderLook,
@@ -7140,13 +7140,15 @@ func (a *App) RegisterRoutes() {
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
 	})
+	var rollsPower *rollsPowerAdapter     // nil while the roll log is degraded; layers join it later
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
-		rollsHandler.SetPowerRolls(&rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService})
+		rollsPower = &rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService}
+		rollsHandler.SetPowerRolls(rollsPower)
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
@@ -7266,6 +7268,9 @@ func (a *App) RegisterRoutes() {
 		layersSvc = transformations.NewService(transformations.NewRepository(a.DB), &transformationsPageAdapter{pages: encounterPages},
 			transformations.WithNotifier(decksLayersNotifier{next: &transformationsLayersPublisher{bus: wsEventBus}, poke: decksWatch.Poke}))
 		decksFacts.layers = layersSvc
+		if rollsPower != nil {
+			rollsPower.layers, rollsPower.addons = layersSvc, addonService
+		}
 		transformations.RegisterRoutes(e, transformations.NewHandler(layersSvc), campaignService, authService, addonService)
 		syncAPIHandler.SetLayersReader(&transformationsLayersSyncAdapter{svc: layersSvc})
 	} else {
