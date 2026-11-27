@@ -25,6 +25,12 @@ type EntityGate interface {
 	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
 }
 
+// EntityEditGate answers whether the caller may edit a page. The gate set
+// with SetEntityGate must also satisfy it, or every write is refused.
+type EntityEditGate interface {
+	ResolveEditableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView, canEdit bool, err error)
+}
+
 // Handler handles HTTP requests for entity post operations. Handlers are
 // thin: bind request, call service, render response. No business logic.
 type Handler struct {
@@ -122,7 +128,7 @@ func (h *Handler) CreatePost(c *echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+	if err := h.requireEditableEntity(c, cc, entityID); err != nil {
 		return err
 	}
 
@@ -141,7 +147,7 @@ func (h *Handler) CreatePost(c *echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, post)
+	return c.JSON(http.StatusCreated, h.servedPost(c, cc, post))
 }
 
 // UpdatePost updates a post's name, content, or visibility.
@@ -157,7 +163,7 @@ func (h *Handler) UpdatePost(c *echo.Context) error {
 	if entityID == "" || postID == "" {
 		return apperror.NewBadRequest("entity and post ID are required")
 	}
-	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+	if err := h.requireEditableEntity(c, cc, entityID); err != nil {
 		return err
 	}
 
@@ -187,7 +193,7 @@ func (h *Handler) UpdatePost(c *echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, post)
+	return c.JSON(http.StatusOK, h.servedPost(c, cc, post))
 }
 
 // DeletePost removes a post.
@@ -203,7 +209,7 @@ func (h *Handler) DeletePost(c *echo.Context) error {
 	if entityID == "" || postID == "" {
 		return apperror.NewBadRequest("entity and post ID are required")
 	}
-	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+	if err := h.requireEditableEntity(c, cc, entityID); err != nil {
 		return err
 	}
 
@@ -239,7 +245,7 @@ func (h *Handler) ReorderPosts(c *echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+	if err := h.requireEditableEntity(c, cc, entityID); err != nil {
 		return err
 	}
 
@@ -253,4 +259,26 @@ func (h *Handler) ReorderPosts(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// requireEditableEntity is requireViewableEntity for a write: the caller must
+// also be allowed to edit the page, so a page shown to them view only cannot
+// be changed through this widget. It fails closed when the gate cannot say.
+func (h *Handler) requireEditableEntity(c *echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+	gate, ok := h.entityGate.(EntityEditGate)
+	if !ok {
+		return apperror.NewInternal(errors.New("posts: entity edit gate not configured"))
+	}
+	campaignID, canView, canEdit, err := gate.ResolveEditableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !canEdit {
+		return apperror.NewForbidden("you can't edit this page")
+	}
+	return nil
 }
