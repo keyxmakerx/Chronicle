@@ -88,6 +88,13 @@
     var kit = null;
     var arranging = false, menu = null, drawer = null;
     var dirty = {}, timer = null, inflight = false, again = false, loaded = false, told = false;
+    // off: the server refuses this screen's prefs to this person (the DM team
+    // viewing as a player), so this browser keeps them without saying so.
+    var off = false, undoReset = null, undoTimer = null;
+    // Keys not yet saved are remembered beside the copy, so a failed save or a
+    // reload before the save went out never lets the server's copy win.
+    var PENDING = api.prefsKey + '.pending';
+    (readJSON(PENDING) || []).forEach(function (k) { if (typeof k === 'string') dirty[k] = true; });
 
     // The cache gives heights, wide cards, hidden cards and columns at once;
     // open, folded and leaves come from the dock's own keys, the freshest.
@@ -117,6 +124,7 @@
     function mark(keys) {
       keys.forEach(function (k) { dirty[k] = true; });
       writeJSON(api.prefsKey, P);
+      writeJSON(PENDING, Object.keys(dirty));
       clearTimeout(timer);
       timer = setTimeout(flush, 600);
     }
@@ -124,7 +132,7 @@
     // Sends the changed keys. A failure keeps everything here and says so
     // once; the keys go again with the next change.
     function flush() {
-      if (!loaded) return;
+      if (!loaded || off) return;
       if (inflight) { again = true; return; }
       var keys = Object.keys(dirty);
       if (!keys.length) return;
@@ -133,9 +141,13 @@
       inflight = true;
       Chronicle.apiFetch(url, { method: 'PUT', body: body })
         .then(function (r) { if (!r.ok) throw new Error('save ' + r.status); return r.json(); })
-        .then(function (j) { if (j && j.kit) kit = j.kit; })
+        .then(function (j) {
+          if (j && j.kit) kit = j.kit;
+          writeJSON(PENDING, Object.keys(dirty));
+        })
         .catch(function () {
           keys.forEach(function (k) { dirty[k] = true; });
+          writeJSON(PENDING, Object.keys(dirty));
           if (!told && Chronicle.notify) {
             told = true;
             Chronicle.notify('Your screen layout is kept in this browser for now. It could not be saved to your account.', 'info');
@@ -152,8 +164,13 @@
     // remembers becomes Default's starting point.
     function load() {
       Chronicle.apiFetch(url, { headers: { Accept: 'application/json' } })
-        .then(function (r) { if (!r.ok) throw new Error('load ' + r.status); return r.json(); })
+        .then(function (r) {
+          if (r.status === 403) { off = true; return null; }
+          if (!r.ok) throw new Error('load ' + r.status);
+          return r.json();
+        })
         .then(function (j) {
+          if (!j) return;
           kit = j.kit || null;
           if (j.stored) {
             var srv = L.cleanPrefs(j.prefs);
@@ -230,6 +247,7 @@
         bar.setAttribute('data-dms-arrbar', '');
         bar.innerHTML = BAR;
         head.parentNode.insertBefore(bar, head.nextSibling);
+        paintReset();
       }
       r.querySelectorAll('[data-dms-sec]').forEach(function (s) {
         var h = s.querySelector('.dms-sec-h');
@@ -432,14 +450,41 @@
       say(title + ' is ' + w.pos + ' of ' + w.of + (w.box === 'col' ? ' in the column.' : ' on leaf ' + (w.box + 2) + '.'));
     }
 
+    // Reset puts Default back to the starting cards; its Undo stays for a
+    // few seconds in place of the button, since Default is otherwise lost.
     function resetDefault() {
+      undoReset = { current: P.current, live: L.copy(P.live), home: L.copy(P.home), shown: snapshot() };
+      clearTimeout(undoTimer);
+      undoTimer = setTimeout(function () { undoReset = null; paintReset(); }, 10000);
       P.current = '';
       P.live = null;
       P.home = null;
       show(L.factory(api.factoryOpen));
       mark(['current', 'live', 'home']);
       paintBar();
-      say('Back to the starting layout.');
+      paintReset();
+      say('Default is back to the starting layout. Undo is beside Done for a few seconds.');
+    }
+
+    function undoResetDefault() {
+      var u = undoReset;
+      if (!u) return;
+      undoReset = null;
+      clearTimeout(undoTimer);
+      P.current = u.current; P.live = u.live; P.home = u.home;
+      show(u.shown);
+      mark(['current', 'live', 'home']);
+      paintBar();
+      paintReset();
+      say('Default is as it was.');
+    }
+
+    function paintReset() {
+      var b = root() && root().querySelector('[data-dms-resetlay]');
+      if (!b) return;
+      var had = document.activeElement === b;
+      b.textContent = undoReset ? 'Undo reset' : 'Reset to default';
+      if (had) b.focus({ preventScroll: true });
     }
 
     // ---- Layout menu --------------------------------------------------
@@ -587,7 +632,15 @@
       var yes = t.closest('[data-dms-ldelyes]');
       if (yes) {
         var gone = yes.getAttribute('data-dms-ldelyes');
-        if (!L.remove(P, gone)) { mark(['layouts', 'current', 'live']); say(gone + ' deleted.'); paintBar(); }
+        var wasCurrent = P.current === gone;
+        if (!L.remove(P, gone)) {
+          // Deleting the layout on screen goes back to Default, so the screen
+          // never shows a layout that no longer exists under Default's name.
+          if (wasCurrent) show(L.shown(P, api.factoryOpen));
+          mark(['layouts', 'current', 'live']);
+          say(gone + ' deleted.' + (wasCurrent ? ' Back on Default.' : ''));
+          paintBar();
+        }
         redrawMenu('[data-dms-lsave]');
         return;
       }
@@ -609,7 +662,7 @@
       if (!kit.canPick) {
         var line = kit.owner ?
           'Wears ' + esc(kitName(kit.campaign)) + ', the campaign’s choice. Change it in <a class="dms-link" href="/campaigns/' + encodeURIComponent(api.cid) + '/customize/look">Customize</a>.' :
-          'Follows the campaign’s choice: ' + esc(kitName(kit.campaign)) + '. The owner decides who can change it.';
+          'Follows the campaign’s choice: ' + esc(kitName(kit.campaign)) + (api.screen === 'player' ? '.' : '. The owner decides who can change it.');
         return head + '<p class="dms-sd-note">' + line + '</p>';
       }
       var cur = kit.mine || '';
@@ -729,7 +782,7 @@
       if (dn) { setStyle('density', dn.getAttribute('data-dms-dens')); return; }
       var cs = t.closest('[data-dms-cols]');
       if (cs && !cs.disabled) { setCols(+cs.getAttribute('data-dms-cols')); return; }
-      if (t.closest('[data-dms-resetlay]')) { resetDefault(); return; }
+      if (t.closest('[data-dms-resetlay]')) { if (undoReset) undoResetDefault(); else resetDefault(); return; }
       var sec = t.closest('[data-dms-sec]');
       var id = sec && sec.getAttribute('data-dms-sec');
       var sz = t.closest('[data-dms-sz]');

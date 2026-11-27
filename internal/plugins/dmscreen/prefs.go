@@ -254,8 +254,9 @@ func cleanIDs(ids []string) ([]string, error) {
 func cleanArrangement(a Arrangement) (Arrangement, error) {
 	var out Arrangement
 	var err error
+	// A first bound before empty leaves are dropped; the real limit follows.
 	if len(a.Leaves) > maxSectionIDs {
-		return out, apperror.NewBadRequest(fmt.Sprintf("a screen opens %d leaves at most", maxPrefsLeaves))
+		return out, apperror.NewBadRequest("too many leaves")
 	}
 	onLeaf := map[string]bool{}
 	for _, l := range a.Leaves {

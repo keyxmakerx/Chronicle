@@ -99,6 +99,7 @@ window.Chronicle = {
     if (path === '/campaigns/c1/dm-screen') return r.fulfill({ contentType: 'text/html', body: panel() });
     if (path === '/campaigns/c1/screen-prefs/dm/kits.css') return r.fulfill({ contentType: 'text/css', body: '.dms-kt[data-dms-kit] { outline: 0; }' });
     if (path === '/campaigns/c1/screen-prefs/dm') {
+      if (srv.forbid) return json({ message: 'no' }, 403);
       if (method === 'GET') return json({ screen: 'dm', stored: !!srv.prefs, prefs: srv.prefs || { style: {} }, kit: srv.kit });
       if (srv.failPut) return json({ message: 'no' }, 500);
       const b = JSON.parse(req.postData());
@@ -121,7 +122,7 @@ window.Chronicle = {
 }
 
 function server() {
-  return { prefs: null, puts: [], looks: [], calls: [], failPut: false,
+  return { prefs: null, puts: [], looks: [], calls: [], failPut: false, forbid: false,
     kit: { campaign: 'material', canPick: true, part: 'dmscreen' } };
 }
 
@@ -316,5 +317,60 @@ test('a fresh browser gets the account\'s layouts; a failed save is said once', 
   assert.match(notes[0], /kept in this browser/);
   // The browser keeps it all the same.
   assert.equal(await sizeOf(page, 'notes'), 'L');
+  await page.done();
+});
+
+test('a change that failed to save survives a reload and goes out once the server answers', { skip }, async () => {
+  const srv = server();
+  srv.prefs = { home: { open: ['world', 'party'] }, style: {} };
+  const page = await open(srv);
+  await page.waitForSelector('[data-dms-sec="world"]:not([hidden])');
+  srv.failPut = true;
+  await page.click('[data-dms-arrange]');
+  await page.click('[data-dms-sec="world"] [data-dms-sz="S"]');
+  await page.waitForFunction(() => window.__notes.length === 1, null, { timeout: 4000 });
+
+  // The server is back, but still holds the old Default: the browser's unsaved
+  // change wins over it and is sent.
+  srv.failPut = false;
+  await page.reload();
+  // The dock remembers it was out; bring it out only if it is not.
+  await new Promise((r) => setTimeout(r, 500));
+  if (!(await visible(page, '[data-dms-arrange]'))) await page.click('[data-dms-toggle]');
+  await page.waitForSelector('[data-dms-sec="world"]:not([hidden])');
+  assert.equal(await sizeOf(page, 'world'), 'S', 'the unsaved height is still there');
+  await waitPut(page, srv, (b) => b.home && b.home.sizes && b.home.sizes.world === 'S');
+  await page.done();
+});
+
+test('Reset to default can be undone, back to the layout that was on', { skip }, async () => {
+  const srv = server();
+  srv.prefs = { current: 'Fight', layouts: [{ name: 'Fight', open: ['notes'] }], home: { open: ['world', 'party'], sizes: { world: 'S' } }, style: {} };
+  const page = await open(srv);
+  await page.waitForSelector('[data-dms-sec="notes"]:not([hidden])');
+  await page.click('[data-dms-arrange]');
+  await page.click('[data-dms-resetlay]');
+  assert.equal((await page.textContent('[data-dms-resetlay]')).trim(), 'Undo reset');
+  assert.equal(await page.textContent('[data-dms-layname]'), 'Default');
+  assert.notEqual(await sizeOf(page, 'world'), 'S', 'Default is back to the starting cards');
+
+  await page.click('[data-dms-resetlay]');
+  assert.equal((await page.textContent('[data-dms-resetlay]')).trim(), 'Reset to default');
+  assert.equal(await page.textContent('[data-dms-layname]'), 'Fight');
+  await waitPut(page, srv, (b) => b.home && b.home.sizes && b.home.sizes.world === 'S' && b.current === 'Fight');
+  await page.done();
+});
+
+test('where the server refuses this screen\'s prefs, the browser keeps them quietly', { skip }, async () => {
+  const srv = server();
+  srv.forbid = true;
+  const page = await open(srv);
+  await page.waitForSelector('[data-dms-sec="world"]:not([hidden])');
+  await page.click('[data-dms-arrange]');
+  await page.click('[data-dms-sec="world"] [data-dms-sz="S"]');
+  await new Promise((r) => setTimeout(r, 900));
+  assert.deepEqual(await page.evaluate(() => window.__notes), [], 'nothing is said');
+  assert.ok(!srv.calls.some((c) => c.startsWith('PUT /campaigns/c1/screen-prefs')), 'nothing is sent');
+  assert.equal(await sizeOf(page, 'world'), 'S');
   await page.done();
 });
