@@ -46,7 +46,7 @@ func (r announcingEntryRepo) Update(ctx context.Context, e *SystemEntry) error {
 // Delete reads the entry first for its field; an entry that can't be read is
 // still deleted, just not announced.
 func (r announcingEntryRepo) Delete(ctx context.Context, campaignID string, id int64) (bool, error) {
-	e, _ := r.SystemEntryRepository.Get(ctx, campaignID, id)
+	e, _ := r.Get(ctx, campaignID, id)
 	ok, err := r.SystemEntryRepository.Delete(ctx, campaignID, id)
 	if err == nil && ok && e != nil {
 		r.announce.EntryChanged(campaignID, e.FieldKey)
