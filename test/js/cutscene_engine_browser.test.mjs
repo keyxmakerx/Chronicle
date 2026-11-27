@@ -255,7 +255,9 @@ test(`a long title that settles keeps its lines and its neighbours still while i
 }
 
 // A box centres its lines as a group, so a line joining or leaving moves the
-// others: they glide there, never jump in one frame.
+// others: they glide there, never jump in one frame. The glide's first
+// frame moves about 8px; the old jump was 36px, so 14px leaves room for a
+// slow runner without letting a jump through.
 test('lines in a box glide, never jump, when another line joins or leaves', { skip }, async (t) => {
   const { pg, errors } = await open(t, { width: 1000, height: 640 });
   await pg.evaluate(() => {
@@ -281,8 +283,8 @@ test('lines in a box glide, never jump, when another line joins or leaves', { sk
     }
   }
   assert.ok(track.some((f) => f.length === 2) && track.at(-1).length === 1, 'both lines shown, then the caption gone');
-  assert.ok(steps['Chapter two'] < 8, 'the caption jumped ' + steps['Chapter two'] + 'px in one frame');
-  assert.ok(steps['The Drowned Bell'] < 8, 'the title jumped ' + steps['The Drowned Bell'] + 'px in one frame');
+  assert.ok(steps['Chapter two'] < 14, 'the caption jumped ' + steps['Chapter two'] + 'px in one frame');
+  assert.ok(steps['The Drowned Bell'] < 14, 'the title jumped ' + steps['The Drowned Bell'] + 'px in one frame');
   assert.deepEqual(errors, []);
 });
 
