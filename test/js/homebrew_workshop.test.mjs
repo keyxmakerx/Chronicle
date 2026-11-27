@@ -332,6 +332,27 @@ test('a rule that ends in an action marked as your call waits, though it is time
   assert.equal(st.waiting.length, 0);
 });
 
+test('an action with its own line says it in the preview, filled from its args and part', () => {
+  const { H } = load();
+  const draw = { name: 'deck.draw', label: 'Draw cards for the hero', partKinds: ['deck'], waits: true,
+    fields: [{ name: 'count', label: 'Cards', type: 'whole' }], says: 'draws {count} from {part}' };
+  const cat = { ...CAT, parts: CAT.parts.concat([{ name: 'deck', label: 'Deck', forceSee: 'director' }]), actions: CAT.actions.concat([draw]) };
+  const omens = { key: 'omens', kind: 'deck', label: 'Omens', see: 'director', data: { deckId: 'd1', name: 'Omens' } };
+  const cases = [
+    [{ action: 'deck.draw', part: 'omens', args: { count: 2 } }, omens, 'draws 2 from Omens'],
+    [{ action: 'deck.draw', part: 'omens', args: {} }, omens, 'draws  from Omens'],
+    [{ action: 'step', part: 'need', args: { by: 1 } }, null, '']
+  ];
+  for (const [d, tp, want] of cases) assert.equal(H.saysText(cat.actions.filter((a) => a.name === d.action)[0], d, tp), want);
+  const doc = sample();
+  doc.parts.push(omens);
+  doc.rules[1].then = [{ action: 'deck.draw', part: 'omens', args: { count: 2 } }];
+  const st = H.simStart(doc, cat);
+  H.simFire(doc, cat, st, 1);
+  H.simRunWaiting(doc, cat, st, 0);
+  assert.equal(st.log.at(-1), 'At the table this would: draws 2 from Omens');
+});
+
 test('rules that set each other off stop instead of hanging the page', () => {
   const { H } = load();
   const doc = sample();

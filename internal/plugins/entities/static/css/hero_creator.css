@@ -380,6 +380,31 @@ html.dark .hc[data-skin="ornate"] {
 .hc-field textarea::placeholder { color: var(--hc-muted); opacity: 1; }
 .hc-about .hc-field { max-width: 640px; }
 .hc-under--about { justify-content: space-between; gap: 12px; padding: 8px 0 0; flex-wrap: wrap; }
+/* Characteristics: the class's arrays as chips, then one tile per characteristic. */
+.hc-nums > .hc-note { margin-bottom: 12px; max-width: 640px; }
+.hc-arrs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.hc-arr { min-height: 44px; padding: 0 14px; border: var(--hc-edge) solid var(--hc-line); border-radius: var(--hc-radius); background: var(--hc-surface); color: var(--hc-text); font-size: 16px; font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out); }
+.hc-arr:hover { border-color: var(--hc-accent); }
+.hc-arr.is-on { border-color: var(--hc-accent); box-shadow: 0 0 0 2px var(--hc-accent) inset; font-weight: 600; }
+.hc-chars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; max-width: 640px; margin: 0 0 12px; }
+.hc-char { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 76px; padding: 8px 2px; border: var(--hc-edge) solid var(--hc-line); border-radius: var(--hc-radius-lg, 10px); background: var(--hc-surface); color: var(--hc-text); font: inherit; text-align: center; }
+button.hc-char { cursor: pointer; transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), transform 60ms; }
+button.hc-char:hover { border-color: var(--hc-accent); }
+button.hc-char:active { transform: scale(.97); }
+.hc-char b { font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hc-char small { font-size: 12px; color: var(--hc-muted); overflow-wrap: anywhere; }
+.hc-char.is-fixed { background: transparent; border-style: dashed; }
+.hc-char.is-fixed b { color: var(--hc-muted); }
+/* Inline: the site's base styles make every svg a block, which would drop the
+   lock to a line of its own under the name. */
+.hc-lock { display: inline; vertical-align: -1px; }
+.hc-char.is-open b { color: var(--hc-accent); }
+.hc-char.is-open { border-style: dashed; border-color: var(--hc-accent); }
+.hc-char.is-held { border-color: var(--hc-accent); box-shadow: 0 0 0 2px var(--hc-accent) inset; }
+.hc-char.is-held b { color: var(--hc-accent); }
+@media (max-width: 420px) { .hc-chars { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { button.hc-char:active { transform: none; } }
 .hc-hero { padding: 22px 16px 18px; border-radius: var(--hc-radius-lg); border: var(--hc-edge) solid var(--hc-line); background-color: var(--hc-surface); background-image: var(--hc-texture); box-shadow: var(--hc-shadow); overflow: hidden; }
 .hc-hero::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--hc-accent); }
 .hc-who { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--hc-muted); }

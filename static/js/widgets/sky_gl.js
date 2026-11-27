@@ -418,12 +418,15 @@
     U.uT = t;
     U.uView = [L.hor, L.top, sc, H < 110 ? 1 : 0];
     U.uCam = [(st.cam || 0) * D2R, 0, 0, 0];
-    U.uSun = [st.sp.x, st.sp.y, st.R * .95, alt];
-    U.uSunCol = sunColour(alt);
+    /* The sun's own height for its disc and colour; the darkness of the sky (alt) is lower in an eclipse. */
+    var sunAlt = st.altSun != null ? st.altSun : alt, ecl = st.ecl || 0;
+    U.uSun = [st.sp.x, st.sp.y, st.R * .95, sunAlt];
+    U.uSunCol = sunColour(sunAlt);
     U.uStar = st.sunHue ? st.sunHue.mul : [1, 1, 1];
     if (st.sunHue) U.uSunCol = U.uSunCol.map(function(v, i){ return v * st.sunHue.mul[i]; });
     var sunVis = (1 - wx.cloud * .82) * (1 - wx.fog * .5) * (1 - wx.dark * .5) * (1 - clamp(wx.rain, 0, 1) * .85) * (1 - (lk ? lk.sun.dim : 0));
-    U.uSunK = [sunVis * smooth01(-4, .5, alt), 0, 0, lk ? lk.sun['void'] : 0];
+    /* An eclipse covers the disc; near totality the corona and the diamond ring show. */
+    U.uSunK = [sunVis * smooth01(-4, .5, sunAlt), ecl, ecl > .985 ? smooth01(.985, 1, ecl) : 0, lk ? lk.sun['void'] : 0];
     U.uSunT = lk && lk.sun.tint ? PAL.hexLin(lk.sun.tint).concat([.6]) : [1, 1, 1, 0];
     /* Moons: four slots, a moon's slot its place in the calendar's list. */
     var mv = [], ma = [], mk = [], mc = [], me = [], rects = {};
@@ -486,8 +489,15 @@
       var A0 = auroraLin(au.c0, false), A1 = auroraLin(au.c1, true); c0.push(A0[0], A0[1], A0[2]); c1.push(A1[0], A1[1], A1[2]);
     }
     U.uAurA = aA; U.uAurB = aB; U.uAurC0 = c0; U.uAurC1 = c1;
-    /* Comets: no Chronicle event places one yet, so both slots stay empty. */
-    U.uComet = [0, 0, 0, 1, 0, 0, 0, 1]; U.uCometK = [0, 1, 1, 0, 0, 1, 1, 0]; U.uCometC = [1, 1, 1, 1, 1, 1];
+    /* Comets, two at most: the dust tail's colour is the engine's hue, pale as dust lit by the sun. */
+    var CA = [], CK = [], CC = [];
+    for (i = 0; i < 2; i++){
+      var cm = (st.comets || [])[i];
+      if (!cm){ CA.push(0, 0, 0, 1); CK.push(0, 1, 1, 0); CC.push(1, 1, 1); continue; }
+      CA.push(cm.x, cm.y, cm.ang, cm.len); CK.push(clamp(cm.k, 0, 1.2), cm.w || 1, cm.day == null ? 1 : cm.day, 0);
+      var co = LOOKS.okOf(cm.c), cl = LOOKS.okLin(.9, Math.min(.09, co.C), co.h); CC.push(cl[0], cl[1], cl[2]);
+    }
+    U.uComet = CA; U.uCometK = CK; U.uCometC = CC;
     /* Air: the look's layers, the three strongest, each lit by the scene. */
     var airs = (lk ? lk.air : []).concat(st.airs).filter(function(a){ return a.k > .005; }).sort(function(a, b){ return b.k - a.k; }).slice(0, 3), AA = [], AB = [], AD = [], AC = [];
     for (i = 0; i < 3; i++){
@@ -505,7 +515,7 @@
     else { U.uFunnel = [0, 0, 1, 0]; U.uFunnelC = [0, 0, 0]; st.funnelAt = null; }
     /* A blood moon's stain on the sky. */
     var bm = st.bleed;
-    U.uEv = [bm ? .8 * bm.k * smooth01(-3, 8, bm.M.m.alt / D2R) * Math.max(.35, st.dark) : 0, bm ? bm.M.i : 0, 0, 0];
+    U.uEv = [bm ? .8 * bm.k * smooth01(-3, 8, bm.M.m.alt / D2R) * Math.max(.35, st.dark) : 0, bm ? bm.M.i : 0, 0, ecl];
     U.uEvC = PAL.hexLin(bm ? bm.color : '#b8472f');
     U.uFxLight = [1, 1, 1, wx.fog];
     var dark = document.documentElement.classList.contains('dark');

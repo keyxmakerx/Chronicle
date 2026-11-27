@@ -127,6 +127,7 @@ func (r *routeRig) directorRoutes() []route {
 		{"GET", base + "/new", nil},
 		{"POST", base, url.Values{"name": {"Another"}}},
 		{"POST", base + "/preview", good},
+		{"POST", base + "/preview/foundry", good},
 		{"GET", base + "/showings", nil},
 		{"POST", base + "/showings/" + r.showing.ID + "/stop", url.Values{}},
 		{"GET", s, nil},
@@ -159,6 +160,9 @@ func TestDirectorRoutesAre404ForPlayersAndScribes(t *testing.T) {
 	}
 	if len(r.pub.shown) != 1 || len(r.pub.stops) != 0 {
 		t.Errorf("a player's request went out live: %d shown, %d stopped", len(r.pub.shown), len(r.pub.stops))
+	}
+	if len(r.foundry.sent) != 0 {
+		t.Errorf("a player's request reached Foundry: %v", r.foundry.sent)
 	}
 	if _, err := r.svc.Get(ctx, "camp-1", r.scene.ID, vDir); err != nil {
 		t.Errorf("a player's delete went through: %v", err)
@@ -332,5 +336,60 @@ func TestDirectorAnswers(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"look":"ink"`) {
 		t.Errorf("the look is not sent as params.look: %s", rec.Body.String())
+	}
+}
+
+// Preview in Foundry: offered only when the campaign uses Foundry, checked as
+// a save would be, sent with who pressed it, and worded plainly when Foundry
+// is not there to play it.
+func TestPreviewInFoundry(t *testing.T) {
+	r := newRouteRig(t, true)
+	path := "/campaigns/camp-1/cutscenes/preview/foundry"
+	editor := "/campaigns/camp-1/cutscenes/" + r.scene.ID
+	if b := r.do("GET", editor, "dir", nil).Body.String(); !strings.Contains(b, "Preview in Foundry") || !strings.Contains(b, `data-foundry-preview-url="/campaigns/camp-1/cutscenes/preview/foundry"`) {
+		t.Error("editor lacks Preview in Foundry")
+	}
+	if b := r.do("GET", "/campaigns/camp-1/cutscenes/new", "dir", nil).Body.String(); !strings.Contains(b, "Preview in Foundry") {
+		t.Error("a new scene lacks Preview in Foundry")
+	}
+
+	tests := []struct {
+		name               string
+		user               string
+		offered, connected bool
+		form               url.Values
+		code               int
+		want               string
+		sent               int
+	}{
+		{"Director, connected", "dir", true, true, url.Values{"name": {"Unsaved words"}}, 200, `"sent":true`, 1},
+		{"co-DM", "codm", true, true, url.Values{"name": {"Unsaved words"}}, 200, `"sent":true`, 1},
+		{"refused scene", "dir", true, true, url.Values{"name": {"P"}, "ov_kind": {"dragon"}}, 400, "", 0},
+		{"Foundry not open", "dir", true, false, url.Values{"name": {"P"}}, 409, "Open your world in Foundry", 0},
+		{"campaign without Foundry", "dir", false, true, url.Values{"name": {"P"}}, 409, "isn't connected to Foundry", 0},
+		{"player", "ana", true, true, url.Values{"name": {"P"}}, 404, "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r.foundry.offered, r.foundry.connected, r.foundry.sent = tt.offered, tt.connected, nil
+			rec := r.do("POST", path, tt.user, tt.form, "Accept", "application/json")
+			if rec.Code != tt.code || !strings.Contains(rec.Body.String(), tt.want) {
+				t.Errorf("%d %s", rec.Code, rec.Body.String())
+			}
+			if len(r.foundry.sent) != tt.sent {
+				t.Errorf("sent %v", r.foundry.sent)
+			}
+			if tt.sent == 1 && r.foundry.sent[0] != "camp-1/"+tt.user+"/Unsaved words" {
+				t.Errorf("sent %v", r.foundry.sent)
+			}
+		})
+	}
+	if len(r.pub.shown) != 1 {
+		t.Errorf("a preview made a showing: %d", len(r.pub.shown))
+	}
+
+	r.foundry.offered = false
+	if b := r.do("GET", editor, "dir", nil).Body.String(); strings.Contains(b, "Preview in Foundry") {
+		t.Error("a campaign without Foundry is offered Preview in Foundry")
 	}
 }

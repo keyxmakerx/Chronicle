@@ -568,11 +568,27 @@
     document.documentElement.style.visibility = 'hidden';
     window.location.reload();
   });
+  // --- The page this one was reached from ---
+  // A boosted link swaps the page in place, so document.referrer still names
+  // the last page loaded in full, not the one the reader just left. htmx
+  // pushes the new address before it swaps the page in, so the address
+  // read just before the push is the page left; a page loaded in full has
+  // the browser's referrer. null means "loaded in full".
+  var cameFrom = null;
+  document.addEventListener('htmx:beforeHistoryUpdate', function (event) {
+    var h = event.detail && event.detail.history;
+    if (h && h.type === 'push') cameFrom = location.href;
+  });
+  Chronicle.cameFrom = function () { return cameFrom === null ? document.referrer : cameFrom; };
+
   // Back and Forward fetch the page and swap in a whole new body without a
   // beforeSwap or an afterSettle, so the widgets of the page that was left
   // are destroyed here and the restored page's are mounted.
   document.addEventListener('htmx:historyRestore', function (event) {
     if (buildReload) return;
+    // A page brought back by Back or Forward was not reached from the one
+    // shown before it, so the restored widgets are told nothing (cameFrom).
+    cameFrom = '';
     mountedEls.forEach(function (el) {
       if (!el.isConnected) destroyElement(el);
     });

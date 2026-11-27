@@ -344,7 +344,7 @@
       '<section class="dcz-sec" aria-labelledby="dcz-h-players"><h2 id="dcz-h-players" class="dcz-h">Players</h2>' +
       '<label class="dcz-switch"><input type="checkbox" role="switch" data-dcz-picks' + (s.playersPick ? ' checked' : '') + '><span class="dcz-track" aria-hidden="true"></span>' +
       '<span class="dcz-main"><span class="dcz-nm">Players may pick their own dice</span>' +
-      '<span class="dcz-what">Each player can change the die, colours and animations for their own rolls. Everyone else still sees the campaign’s.</span></span></label>' +
+      '<span class="dcz-what">Each player can pick their own die, colours and animations from the sets on offer, and everyone sees their rolls in them. The campaign’s die above stays the starting point.</span></span></label>' +
       (s.playersPick ? '<div class="dcz-offer"><p class="dcz-lab">Sets on offer to players</p><div class="dcz-chks">' + this.offerList() + '</div></div>' : '') + '</section>' +
 
       '<section class="dcz-sec" aria-labelledby="dcz-h-look"><h2 id="dcz-h-look" class="dcz-h">Players’ starting dice</h2>' +
