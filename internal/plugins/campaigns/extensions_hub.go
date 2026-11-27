@@ -105,3 +105,19 @@ func currentSystemID(settingID string, addons []PluginHubAddon) string {
 	}
 	return ""
 }
+
+// CampaignSystemID is the game system a campaign uses by the picker's rule,
+// for callers outside the picker (AI Import, the home House rules block) so
+// they cannot drift from it. The saved setting wins without touching the
+// addons store; a lister that is nil or fails leaves only the setting.
+func CampaignSystemID(ctx context.Context, lister AddonLister, c *Campaign) string {
+	setting := c.ParseSettings().SystemID
+	if setting != "" || lister == nil {
+		return setting
+	}
+	hub, err := lister.ListForPluginHub(ctx, c.ID)
+	if err != nil {
+		return ""
+	}
+	return currentSystemID(setting, hub)
+}

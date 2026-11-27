@@ -6139,6 +6139,7 @@ func (a *App) RegisterRoutes() {
 	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
@@ -7448,6 +7449,7 @@ func (a *App) RegisterRoutes() {
 		PlayerNotes:     entityNotesService,
 		NoteAccess:      aiNoteAccessAPI,
 		Addons:          addonService,
+		AddonLister:     &addonListerAdapter{svc: addonService},
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
 		Boards:          aiBoards,
