@@ -30,6 +30,7 @@ window.__srv = { calls: [], rooms: ${JSON.stringify(ROOMS)}, craft: ${JSON.strin
 function done(v) { return new Promise(function (r) { setTimeout(function () { r(JSON.parse(JSON.stringify(v))); }, 5); }); }
 window.Chronicle = {
   register: function (n, impl) { if (n === 'store') impl.init(document.getElementById('w')); },
+  escapeHtml: function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
   working: function (b, on) { if (on) b.setAttribute('data-working', ''); else b.removeAttribute('data-working'); },
   notify: function (m) { window.__srv.notes.push(m); },
   apiAction: function (url, o) {
@@ -181,5 +182,16 @@ test('under Off the sheet shows at once, with no move', { skip }, async () => {
   assert.equal(await page.getAttribute('.st-dlg', 'data-motion'), 'off');
   const t = await page.evaluate(() => getComputedStyle(document.querySelector('.st-sheet')).transitionDuration);
   assert.match(t, /^0s/);
+  await page.close();
+});
+
+test("a person's own Calm in My view keeps the sheet from travelling", { skip }, async () => {
+  const page = await openPage();
+  await page.evaluate(() => document.documentElement.setAttribute('data-view-motion', 'calm'));
+  await page.click('[data-store-toggle]');
+  assert.equal(await page.getAttribute('.st-dlg', 'data-motion'), 'calm');
+  await page.waitForSelector('.st-dlg.st-in');
+  const t = await page.evaluate(() => getComputedStyle(document.querySelector('.st-sheet')).transform);
+  assert.match(t, /^matrix\(1, 0, 0, 1, [-\d.]+, 0\)$/);
   await page.close();
 });

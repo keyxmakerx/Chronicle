@@ -77,9 +77,13 @@
     return what + (all ? ' on this server yet.' : ' for ' + sys + ' yet.') + ' When owners on this server share something, it shows here.';
   }
   function motion() {
-    var m = document.documentElement.getAttribute('data-motion') || '';
+    var html = document.documentElement, m = html.getAttribute('data-motion') || '';
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 'off';
-    return m === 'calm' || m === 'off' ? m : 'full';
+    if (m === 'calm' || m === 'off') return m;
+    // A person's own Calm or Off in My view also sets these older flags
+    // (theme.js), and the sheet must not travel for them either.
+    if (html.getAttribute('data-view-motion') === 'calm' || html.classList.contains('nav-rm')) return 'calm';
+    return 'full';
   }
 
   /* ---- State ---- */
@@ -90,7 +94,7 @@
       err: '', added: {}, report: null, reportErr: '' };
   }
 
-  function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function esc(t) { return window.Chronicle.escapeHtml(t); }
   function call(method, path, body) {
     return window.Chronicle.apiAction('/campaigns/' + encodeURIComponent(campaign) + path, { method: method, body: body, csrfToken: csrf });
   }
@@ -168,7 +172,7 @@
     var p = pages(d.total, d.page, d.perPage);
     if (p.pages > 1) {
       h += '<div class="st-pager"><button type="button" class="st-word" data-st="page" data-v="-1"' + (p.prev ? '' : ' disabled') + '>Newer</button>' +
-        '<span class="st-dim">' + p.from + '–' + p.to + ' of ' + d.total + '</span>' +
+        '<span class="st-dim">' + esc(String(p.from)) + '–' + esc(String(p.to)) + ' of ' + esc(String(d.total)) + '</span>' +
         '<button type="button" class="st-word" data-st="page" data-v="1"' + (p.next ? '' : ' disabled') + '>Older</button></div>';
     }
     return h;
