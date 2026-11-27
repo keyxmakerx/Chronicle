@@ -84,3 +84,37 @@ func TestCreatorPlanCampaignOnlyField(t *testing.T) {
 		t.Fatalf("steps = %+v", plan.Steps)
 	}
 }
+
+// The creator's starting numbers keep only the preset's own number fields,
+// so a mistyped or text key in a package's declaration never reaches a hero.
+func TestCreatorNumbersKeepsOnlyNumberFields(t *testing.T) {
+	p := &EntityPresetDef{Fields: []FieldDef{
+		{Key: "might", Label: "Might", Type: "number"}, {Key: "agility", Type: "number"},
+		{Key: "class", Type: "string"}, {Key: "stamina_max", Type: "number"},
+	}}
+	if creatorNumbers(p) != nil {
+		t.Fatal("no declaration should give no numbers")
+	}
+	p.CreatorNumbers = &CreatorNumbersDef{
+		Characteristics: &CreatorCharacteristicsDef{Step: "class", Fields: []string{"might", "class", "nope", "agility", "might"}, ArraysProperty: "arrays", FixedValue: 2},
+		Sums: []CreatorSumDef{
+			{Fields: []string{"stamina_max", "class"}, Parts: []CreatorSumPart{{Step: "class", Property: "stamina"}, {Step: "", Property: "x"}}, Half: true},
+			{Fields: []string{"nope"}, Parts: []CreatorSumPart{{Step: "class", Property: "stamina"}}},
+		},
+	}
+	n := creatorNumbers(p)
+	if n == nil || n.Characteristics == nil {
+		t.Fatal("characteristics dropped")
+	}
+	c := n.Characteristics
+	if c.Label != "Characteristics" || len(c.Fields) != 2 || c.Fields[0] != (CreatorField{Key: "might", Label: "Might"}) || c.Fields[1] != (CreatorField{Key: "agility", Label: "agility"}) {
+		t.Fatalf("characteristics = %+v", c)
+	}
+	if len(n.Sums) != 1 || len(n.Sums[0].Fields) != 1 || n.Sums[0].Fields[0] != "stamina_max" || len(n.Sums[0].Parts) != 1 || !n.Sums[0].Half {
+		t.Fatalf("sums = %+v", n.Sums)
+	}
+	p.CreatorNumbers = &CreatorNumbersDef{Characteristics: &CreatorCharacteristicsDef{Step: "class", Fields: []string{"class"}, ArraysProperty: "a"}}
+	if creatorNumbers(p) != nil {
+		t.Fatal("a declaration naming no number field should give no numbers")
+	}
+}

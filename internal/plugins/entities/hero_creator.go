@@ -193,6 +193,9 @@ type HeroPlan struct {
 	// themselves, so it offers the pin control. The server checks again on
 	// every pin; this only decides what is shown.
 	CanPin bool `json:"canPin,omitempty"`
+	// Numbers is how the hero's starting numbers come from the picks; nil
+	// when the game system declares none.
+	Numbers *HeroNumbers `json:"numbers,omitempty"`
 }
 
 // HeroPlanner supplies a campaign's creator steps. director says whether the
@@ -223,6 +226,9 @@ type HeroRequest struct {
 	Picks map[string]HeroPick `json:"picks"`
 	// About is the "About your hero" step's boxes, by field key.
 	About map[string]string `json:"about,omitempty"`
+	// Characteristics is where the player put the picked entry's array, by
+	// field key, fixed ones included; absent leaves them for the sheet.
+	Characteristics map[string]int `json:"characteristics,omitempty"`
 }
 
 // heroAccess says whether the viewer may use the creator and, if so, whether
