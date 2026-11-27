@@ -104,9 +104,9 @@ var (
 		"jellyfish", "pierced-lamp", "cauldron", "filament", "sunlight", "candelabra")
 	shopRoomCounterOutsides = setOf("day", "dusk", "night", "rain")
 	// Must match CM_PIC in static/js/widgets/shop_room_counter.js.
-	shopRoomPictureOn  = setOf("wall", "outside")
-	shopRoomPictureFit = setOf("fill", "fit", "repeat")
-	shopRoomCounterProps    = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
+	shopRoomPictureOn    = setOf("wall", "outside")
+	shopRoomPictureFit   = setOf("fill", "fit", "repeat")
+	shopRoomCounterProps = setOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
 		"fireflies", "drips", "cobwebs", "nets", "chains", "mushrooms", "tentacle", "petals", "butterflies", "embers",
 		"smoke", "comets", "floating-stones", "eyes", "glyphs", "magic-circle", "dew", "beads", "rune-chase", "arcs",
 		"bubbles", "ghostlights", "crumbs", "dust", "tankards", "keg", "antlers", "mannequin", "ribbons", "shears",
