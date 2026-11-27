@@ -7112,7 +7112,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
