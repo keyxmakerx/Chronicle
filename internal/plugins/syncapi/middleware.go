@@ -247,7 +247,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			}
 
 			// Verify IP allowlist if configured.
-			if len(key.IPAllowlist) > 0 && !isIPAllowed(ip, key.IPAllowlist) {
+			if !keyAllowsAddress(key, ip) {
 				_ = service.LogSecurityEvent(ctx, &SecurityEvent{
 					EventType: EventIPBlocked,
 					APIKeyID:  &key.ID,
@@ -532,6 +532,13 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// keyAllowsAddress reports whether a key may be used from ip: any address
+// when the key has no list, else only one on it. Both doors (RequireAPIKey
+// and the live socket's AuthenticateKeyForWS) ask it.
+func keyAllowsAddress(key *APIKey, ip string) bool {
+	return len(key.IPAllowlist) == 0 || isIPAllowed(ip, key.IPAllowlist)
 }
 
 // isIPAllowed checks if an IP is in the allowlist.
