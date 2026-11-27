@@ -384,6 +384,14 @@ func (s *choiceRuleService) planMarks(ctx context.Context, campaignID string, ac
 			entries[ruleRef{source: c.Source, key: c.Key}] = c
 		}
 	}
+	// A standard entry a rewrite replaced is off the list, but its rows still
+	// hold for the rewrite, so a mark followed there must find an entry.
+	for _, c := range list.Choices {
+		std := ruleRef{source: ChoiceSourcePackage, key: c.StandsFor}
+		if _, listed := entries[std]; c.Origin == OriginRewritten && c.StandsFor != "" && !listed {
+			entries[std] = c
+		}
+	}
 	existing, err := s.repo.List(ctx, campaignID, m.ID, in.FieldKey)
 	if err != nil {
 		return nil, err
@@ -409,6 +417,7 @@ func (s *choiceRuleService) planMarks(ctx context.Context, campaignID string, ac
 		if err != nil {
 			return nil, err
 		}
+		ref = followRewrite(ref, entries, byRef)
 		if ref.target != "" && len(members) > 0 {
 			if _, ok := known[ref.target]; !ok {
 				return nil, apperror.NewValidation("That person isn't a member of this campaign.")
@@ -429,6 +438,9 @@ func (s *choiceRuleService) planMarks(ctx context.Context, campaignID string, ac
 				return nil, apperror.NewValidation("That entry isn't on this list.")
 			}
 			name = c.Name
+			if had, ok := byRef[ref]; ok && had.Name != "" {
+				name = had.Name
+			}
 			if state == RuleRequired {
 				if err := s.checkRequirable(ctx, campaignID, in.FieldKey, ref, c); err != nil {
 					return nil, err
@@ -467,6 +479,28 @@ func (s *choiceRuleService) planMarks(ctx context.Context, campaignID string, ac
 	return plan, nil
 }
 
+// followRewrite points a mark on a rewrite at the standard entry's row when
+// the rewrite has no row of its own for that target and the standard entry
+// does: the Directors' view shows that row on the rewrite (the evaluator
+// lets it hold there), so clearing or editing it there must reach it.
+func followRewrite(ref ruleRef, entries map[ruleRef]Choice, byRef map[ruleRef]ChoiceRule) ruleRef {
+	if ref.key == RuleGroupKey {
+		return ref
+	}
+	if _, own := byRef[ref]; own {
+		return ref
+	}
+	c, ok := entries[ruleRef{source: ref.source, key: ref.key}]
+	if !ok || c.Origin != OriginRewritten || c.StandsFor == "" {
+		return ref
+	}
+	std := ruleRef{source: ChoiceSourcePackage, key: c.StandsFor, target: ref.target}
+	if _, has := byRef[std]; has {
+		return std
+	}
+	return ref
+}
+
 // normalizeMark trims and checks the shape of one mark. Open for everyone is
 // the default, so it clears.
 func normalizeMark(mk ChoiceMark) (ruleRef, string, error) {
@@ -502,7 +536,7 @@ func (s *choiceRuleService) checkRequirable(ctx context.Context, campaignID, fie
 			return err
 		}
 		for _, pc := range pl.Choices {
-			if pc.Source == ref.source && pc.Key == ref.key {
+			if (pc.Source == ref.source && pc.Key == ref.key) || (pc.Source == c.Source && pc.Key == c.Key) {
 				return nil
 			}
 		}

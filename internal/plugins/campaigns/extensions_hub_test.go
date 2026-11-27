@@ -18,6 +18,7 @@ package campaigns
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -406,5 +407,49 @@ func TestExtensionsHubPage_UnavailablePiece(t *testing.T) {
 				t.Errorf("unavailable notes = %d, want %d", n, c.wantMissing)
 			}
 		})
+	}
+}
+
+type stubHubLister struct {
+	addons []PluginHubAddon
+	err    error
+	calls  int
+}
+
+func (s *stubHubLister) ListForPluginHub(context.Context, string) ([]PluginHubAddon, error) {
+	s.calls++
+	return s.addons, s.err
+}
+
+// CampaignSystemID is the picker's rule for callers outside the picker: an
+// older campaign with only the add-on switched on still has a system.
+func TestCampaignSystemID(t *testing.T) {
+	on := []PluginHubAddon{{Slug: "drawsteel", Category: "system", Enabled: true}}
+	cases := []struct {
+		name      string
+		settings  string
+		lister    *stubHubLister
+		want      string
+		wantCalls int
+	}{
+		{"saved system wins, no lookup", `{"system_id":"dnd5e"}`, &stubHubLister{addons: on}, "dnd5e", 0},
+		{"nothing saved, add-on on", `{}`, &stubHubLister{addons: on}, "drawsteel", 1},
+		{"empty settings, add-on on", ``, &stubHubLister{addons: on}, "drawsteel", 1},
+		{"nothing saved, add-on off", `{}`, &stubHubLister{addons: []PluginHubAddon{{Slug: "drawsteel", Category: "system"}}}, "", 1},
+		{"lister fails", `{}`, &stubHubLister{err: errors.New("down")}, "", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			camp := &Campaign{ID: "c-1", Settings: c.settings}
+			if got := CampaignSystemID(context.Background(), c.lister, camp); got != c.want {
+				t.Errorf("CampaignSystemID = %q, want %q", got, c.want)
+			}
+			if c.lister.calls != c.wantCalls {
+				t.Errorf("lister calls = %d, want %d", c.lister.calls, c.wantCalls)
+			}
+		})
+	}
+	if got := CampaignSystemID(context.Background(), nil, &Campaign{ID: "c-1", Settings: `{}`}); got != "" {
+		t.Errorf("nil lister = %q, want empty", got)
 	}
 }
