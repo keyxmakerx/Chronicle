@@ -403,7 +403,7 @@
       unmountBench();
       var ready = 0, waiting = T.count(D.spoils), unknown = T.locked(D.spoils);
       D.projects.forEach(function (p) { if (p.status === 'active' && !p.waits) ready += p.rollsReady; });
-      var h = '<div class="cra crp"><div class="crp-head"><h3 class="cb-head"><i class="fa-solid fa-flask" aria-hidden="true"></i> Crafting</h3>' +
+      var h = '<div class="cra crp"><div class="crp-head"><h3 class="cb-head"><i class="fa-solid fa-flask" aria-hidden="true"></i> Projects</h3>' +
         (waiting ? '<span class="crp-pill">' + waiting + ' to take</span>' : '') + (unknown ? '<span class="crp-pill is-warn">' + unknown + ' to study</span>' : '') +
         (ready ? '<span class="crp-pill is-ok">' + plural(ready, 'roll', 'rolls') + ' ready</span>' : '') + '</div>' + spoils() +
         '<p class="cra-fine">Each project gets one roll for every respite the Director logs.' + (D.today ? ' Today is ' + esc(D.today) + '.' : '') + '</p>' +
@@ -460,7 +460,7 @@
     }
     function fail(err) {
       if (dead) return;
-      el.innerHTML = '<div class="cra-empty cra-bad" role="alert">Crafting couldn’t load: ' + esc(err.message || 'something went wrong') +
+      el.innerHTML = '<div class="cra-empty cra-bad" role="alert">Projects couldn’t load: ' + esc(err.message || 'something went wrong') +
         '. <button type="button" class="cra-link" data-retry>Try again</button></div>';
       el.querySelector('[data-retry]').addEventListener('click', function () { load().catch(fail); });
     }
@@ -829,7 +829,7 @@
   Chronicle.register('crafting-block', {
     init: function (el, cfg) {
       if (!window.CraftingLib || !window.CraftingTray || !window.CraftingTurns) {
-        el.innerHTML = '<p class="text-sm text-fg-muted" role="status">Crafting couldn’t load. Reload the page to try again.</p>';
+        el.innerHTML = '<p class="text-sm text-fg-muted" role="status">Projects couldn’t load. Reload the page to try again.</p>';
         return;
       }
       el._crk = mount(el, cfg || {});

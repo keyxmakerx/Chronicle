@@ -127,10 +127,11 @@
 /* In the drawer the campaign menu scrolls as one list. The docked sidebar's
    split (a capped top part and a categories area with its own scroller) leaves
    a phone two small scroll areas, and an open category's list almost no room
-   under its heading. Here the brand row stays at the top and the foot at the
-   bottom while everything between scrolls with one swipe. An open category's
-   panel takes the categories list's place in the flow, so the panel's own
-   rows scroll with the rest. The query is navDrawerQuery in app.templ. */
+   under its heading. Here the brand row stays at the top and the menu's foot
+   (Campaign settings, Site admin and the footer) at the bottom, so settings
+   are always one tap away, while everything between scrolls with one swipe.
+   An open category's panel takes the categories list's place in the flow,
+   so the panel's own rows scroll with the rest. The query is navDrawerQuery in app.templ. */
 @media (max-width: 767px), (max-width: 1023.98px) and (pointer: coarse) {
   #sidebar {
     overflow-x: hidden;
@@ -138,20 +139,21 @@
     overscroll-behavior: contain;
     scrollbar-width: thin;
     scrollbar-color: rgb(255 255 255 / 0.14) transparent;
-    /* Focus and scrollIntoView stop clear of the brand row and the foot. */
-    scroll-padding-block: 56px 40px;
+    /* Focus and scrollIntoView stop clear of the brand row and the foot
+       (Campaign settings, Site admin and the footer at their tallest). */
+    scroll-padding-block: 56px 136px;
   }
   :is([data-cz-corner="banner"], [data-cz-hdr="tall"]) #sidebar { scroll-padding-top: 6rem; }
   /* Their own layers keep each part's row buttons under the brand row and
      the foot as they scroll past. */
-  #sidebar > :not(.nav-brand, .nav-foot) { isolation: isolate; }
+  #sidebar > :not(.nav-brand, .nav-tail) { isolation: isolate; }
   #sidebar > .nav-brand {
     position: sticky;
     top: 0;
     z-index: 3;
     background: var(--nav-bg);
   }
-  #sidebar > .nav-foot {
+  #sidebar > .nav-tail {
     position: sticky;
     bottom: 0;
     z-index: 3;

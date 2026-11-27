@@ -197,6 +197,7 @@ type SessionService interface {
 	// Availability scheduler. See availability_service.go.
 	GetMyAvailability(ctx context.Context, campaignID, userID string) (*MyAvailabilityResponse, error)
 	SaveMyAvailability(ctx context.Context, campaignID, userID string, req SaveAvailabilityRequest) error
+	ConfirmMyAvailabilityZone(ctx context.Context, campaignID, userID string, req ConfirmZoneRequest) error
 	ListMyExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error
 	ReplaceMyDayExceptions(ctx context.Context, campaignID, userID string, req ReplaceDayExceptionsRequest) error

@@ -183,6 +183,10 @@
     this.userID = root.getAttribute('data-user-id');
     this.canDetail = root.getAttribute('data-can-detail') === 'true';
     this.tz = root.getAttribute('data-tz') || detectTZ() || 'UTC';
+    // The server leaves the zone empty when the member never set one; name
+    // the browser's zone the grid now uses.
+    var tzLabel = $('[data-tz-label-text]', root);
+    if (tzLabel && !tzLabel.textContent.trim()) tzLabel.textContent = this.tz;
     this.commonTZ = loadCommonTZ(root);
     this.live = $('[data-avail-live]', root);
     // grid[displayCol 0..6][hour 0..23] = '' | 'available' | 'preferred'

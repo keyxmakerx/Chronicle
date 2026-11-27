@@ -3284,7 +3284,7 @@ func (a *App) RegisterRoutes() {
 		practiceRepo = entities.NewPracticeRepository(a.DB)
 	}
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
-	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB))
+	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo, entities.NewChildOrderRepository(a.DB), entities.NewSidebarPinRepository(a.DB))
 	entityHandler.SetFolderService(folderService)
 	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
@@ -6209,6 +6209,9 @@ func (a *App) RegisterRoutes() {
 	// The owner's card borders for package entries are laid over every list.
 	cardLookSvc := systems.NewCardLookService(systems.NewCardLookRepository(a.DB), characterChoiceSvc)
 	characterChoiceSvc.SetChoiceLooks(cardLookSvc)
+	// The Director team's pins lead every list, after the rules have narrowed it.
+	choicePinSvc := systems.NewChoicePinService(systems.NewChoicePinRepository(a.DB), characterChoiceSvc)
+	characterChoiceSvc.SetChoicePins(choicePinSvc)
 	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
 		systems.WithEntryRules(choiceRuleSvc),
@@ -6241,7 +6244,9 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Foundry fills the items it makes for these entries from the player view.
 	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
-	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
+	characterChoiceHandler := systems.NewCharacterChoiceHandler(characterChoiceSvc)
+	characterChoiceHandler.SetPins(choicePinSvc)
+	systems.RegisterCharacterChoiceRoutes(e, characterChoiceHandler, authService, campaignService)
 	systems.RegisterChoiceRuleRoutes(e, systems.NewChoiceRuleHandler(choiceRuleSvc), authService, campaignService)
 	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 	// AI Import's review warns about hero values the creator would refuse.

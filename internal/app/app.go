@@ -390,6 +390,19 @@ func (a *App) errorHandler(c *echo.Context, err error) {
 		}
 	}
 
+	// A request the browser gave up on (someone left the page mid-load)
+	// surfaces as context.Canceled from whatever it was waiting on. Nothing
+	// failed and nobody is left to answer, so it is neither a server error
+	// nor an update-health failure.
+	if code >= http.StatusInternalServerError &&
+		(errors.Is(err, context.Canceled) || errors.Is(c.Request().Context().Err(), context.Canceled)) {
+		slog.Debug("request abandoned by the client",
+			slog.String("path", c.Request().URL.Path),
+			slog.String("method", c.Request().Method),
+		)
+		return
+	}
+
 	// Always log server errors (5xx) so silent failures are visible.
 	if code >= http.StatusInternalServerError {
 		slog.Error("server error",

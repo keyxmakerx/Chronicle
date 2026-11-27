@@ -111,6 +111,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/availability", h.ShowAvailability, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/mine", h.SaveMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/mine/zone", h.ConfirmMyZoneAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/overlay", h.GetOverlayAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Answers is Player+ (it says who has spoken, never what they said); the
 	// nudge is Player+ ON THE ROUTE and Owner/co-DM IN THE HANDLER, following

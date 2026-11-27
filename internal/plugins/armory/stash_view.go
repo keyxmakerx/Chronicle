@@ -98,8 +98,8 @@ func purchaseRequestsURL(campaignID string) string {
 // price is omitted when the basket can no longer be priced from the listings.
 func purchaseRequestText(p PurchaseRequestLine) string {
 	text := fmt.Sprintf("wants to buy %s at %s", plural(p.ItemCount(), "item"), p.ShopName)
-	if p.Total != nil {
-		text += fmt.Sprintf(" for %s %s", p.Total.String(), p.Currency)
+	if price := purchasePrice(p); price != "" {
+		text += " for " + price
 		if p.PriceRose {
 			text += ", but the price has gone up since they asked"
 		}
@@ -117,10 +117,23 @@ func MoveRequestText(l MoveLine) string {
 // the requester: "buy 3 items at The Gilded Cup (12 gp)".
 func PurchaseRequestSentence(p PurchaseRequestLine) string {
 	text := fmt.Sprintf("buy %s at %s", plural(p.ItemCount(), "item"), p.ShopName)
-	if p.Total != nil {
-		text += fmt.Sprintf(" (%s %s)", p.Total.String(), p.Currency)
+	if price := purchasePrice(p); price != "" {
+		text += " (" + price + ")"
 	}
 	return text
+}
+
+// purchasePrice is a waiting purchase's figure in the buyer's own terms:
+// "Wealth 2" for a buyer who keeps Wealth, "35 gp" for coins, "" when the
+// basket can no longer be priced.
+func purchasePrice(p PurchaseRequestLine) string {
+	if p.Wealth != nil {
+		return "Wealth " + p.Wealth.String()
+	}
+	if p.Total != nil {
+		return p.Total.String() + " " + p.Currency
+	}
+	return ""
 }
 
 func downtimeURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/downtime" }

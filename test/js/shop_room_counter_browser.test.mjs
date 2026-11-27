@@ -32,7 +32,7 @@ const ROOM = { layout: { version: 1, roomType: 'apothecary', setting: 'room', si
 const HOST = `<!doctype html><html data-motion="calm"><head><style>[hidden] { display: none } body { margin: 0 }</style></head><body>
 <div id="w" data-widget="shop_room" data-room-endpoint="/campaigns/c1/armory/shops/s1/room" data-relations-endpoint="/rel" data-shop-name="Hessa Ord's Workshop" data-campaign-url="/campaigns/c1" data-csrf-token="t"></div></body></html>`;
 
-async function shop(t, room) {
+async function shop(t, room, opts = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const p = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -40,6 +40,10 @@ async function shop(t, room) {
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
   await p.setContent(HOST);
+  if (opts.still) {
+    await p.evaluate(() => document.documentElement.setAttribute('data-view-motion', 'calm'));
+    await p.addScriptTag({ content: readFileSync(join(root, 'static/js/motion_rest.js'), 'utf8') });
+  }
   await p.addScriptTag({ content: `window.__posts = []; window.Chronicle = {
     register: function (n, impl) { impl.init(document.getElementById('w')); },
     apiFetch: function (url, o) {
@@ -147,4 +151,14 @@ test('a goodbye that throws still stops the counter\'s loop and lets you out', {
   await p.click('.shr-out');
   await p.waitForFunction(() => !document.querySelector('.shr-dlg').open, null, { timeout: 2000 });
   assert.equal(await p.evaluate(() => window.__paused), true, 'the counter was paused on the way out');
+});
+
+// With motion still (My view > Motion at Calm or Off), the looping details
+// pause, but the lamps' veil still finishes lifting: it is a one-off fade,
+// not a loop.
+test('the counter room shows with motion still', { skip }, async (t) => {
+  const p = await shop(t, null, { still: true });
+  // The room bakes its lamps first, which a busy machine takes its time over.
+  const lifted = await p.waitForFunction(() => getComputedStyle(document.querySelector('.src-stage'), '::after').opacity === '0', null, { timeout: 15000 }).then(() => true, () => false);
+  assert.ok(lifted, 'the "Lighting the lamps" cover stayed over the room');
 });

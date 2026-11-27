@@ -232,6 +232,7 @@ func (h *Handler) HeroPlanAPI(c *echo.Context) error {
 		return err
 	}
 	h.addHeroAbout(c, cc, plan)
+	plan.CanPin = cc.CanAuthorDmOnly() && !plan.Practice && !plan.Tryout
 	return c.JSON(http.StatusOK, plan)
 }
 

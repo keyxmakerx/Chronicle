@@ -97,6 +97,13 @@ type MyAvailabilityResponse struct {
 	// AnsweredAt is when they last saved or confirmed (RFC3339), so a
 	// "confirm your times" ask can tell whether they have answered it.
 	AnsweredAt string `json:"answeredAt,omitempty"`
+	// AccountTZ is the zone in the member's account settings, "" if none.
+	// ZoneConfirmed is true once they answered the one-time question about
+	// which zone their hours are in. Together with TZ they decide whether
+	// the calendar asks it.
+	AccountTZ     string `json:"accountTz,omitempty"`
+	ZoneConfirmed bool   `json:"zoneConfirmed"`
+
 	// WeekALabel/WeekBLabel are the YYYY-MM-DD Sundays that start the next week
 	// of each alternating track, so the picker can offer two dates the member
 	// can find on a calendar instead of the words "odd" and "even".
@@ -296,4 +303,13 @@ var availabilityPalette = []string{
 // paletteColor returns a stable lane color for the member at index i.
 func paletteColor(i int) string {
 	return availabilityPalette[i%len(availabilityPalette)]
+}
+
+// ConfirmZoneRequest answers the one-time question about which zone a
+// member's weekly hours are in. Mode is "relabel" (keep the boxes, they were
+// meant in TZ), "convert" (they really were in the saved zone; move them so
+// the real times stay, now told in TZ) or "keep" (the saved zone is right).
+type ConfirmZoneRequest struct {
+	Mode string `json:"mode"`
+	TZ   string `json:"tz"`
 }

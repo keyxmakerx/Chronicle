@@ -28,13 +28,17 @@
   var INDENT_PX = 14;
   var STORAGE_KEY_PREFIX = 'chronicle-tree-collapsed-';
 
-  // Folders first, then pages. Within each group the list's order decides:
+  // Pinned pages first, in pin order, whatever the list's order; then
+  // folders, then pages. Within each group the list's order decides:
   // 'hand' by sort_order (the name breaks a tie), 'new' newest first, and
   // anything else A to Z (sort_order breaks a tie between two same-named
   // rows). Pure over its arguments, so it is hoisted out of initTree() for
   // the test suite.
   function sortChildren(childNodes, mode) {
     childNodes.sort(function (a, b) {
+      var aPin = a.pin != null, bPin = b.pin != null;
+      if (aPin !== bPin) return aPin ? -1 : 1;
+      if (aPin && a.pin !== b.pin) return a.pin - b.pin;
       var aFolder = a.el.hasAttribute('data-is-folder'), bFolder = b.el.hasAttribute('data-is-folder');
       if (aFolder !== bFolder) return aFolder ? -1 : 1;
       var nameA = (a.el.getAttribute('data-entity-name') || '').toLowerCase();
@@ -44,6 +48,14 @@
       if (mode === 'new') return ((b.created || 0) - (a.created || 0)) || byName;
       return byName || (a.sortOrder - b.sortOrder);
     });
+  }
+
+  // The thin rule under a list's pinned pages goes on the last of them, and
+  // only when something follows it.
+  function markPinLast(sorted) {
+    var last = -1;
+    sorted.forEach(function (n, i) { if (n.pin != null) last = i; });
+    if (last >= 0 && last < sorted.length - 1 && sorted[last]._wrapper) sorted[last]._wrapper.classList.add('is-pin-last');
   }
 
   // A folder's own count badge: every page (not a folder) in its subtree, at
@@ -88,6 +100,7 @@
       var sortOrder = parseInt(el.getAttribute('data-sort-order') || '0', 10);
       var created = parseInt(el.getAttribute('data-created') || '0', 10);
       var isNode = el.hasAttribute('data-node-id');
+      var pinAttr = placeKey ? null : el.getAttribute('data-pinned');
 
       nodes[id] = {
         el: el,
@@ -97,7 +110,8 @@
         created: created,
         children: [],
         isNode: isNode,
-        isPlace: !!placeKey
+        isPlace: !!placeKey,
+        pin: pinAttr != null && pinAttr !== '' ? parseInt(pinAttr, 10) : null
       };
     });
 
@@ -162,6 +176,7 @@
       if (node.el.hasAttribute('data-sidebar-hidden')) {
         wrapper.setAttribute('data-sidebar-hidden', 'true');
       }
+      if (node.pin != null) wrapper.setAttribute('data-pinned', String(node.pin));
 
       // Clone the original element and apply indentation.
       var link = node.el.cloneNode(true);
@@ -279,8 +294,9 @@
       // Drag: within a list kept by hand, and onto a folder from anywhere.
       if (canEdit && !node.isPlace) link.setAttribute('draggable', 'true');
 
-      // A listing follows its page, so it never moves on its own.
-      if (canEdit && listMode === 'hand' && !node.isPlace) {
+      // A listing follows its page, so it never moves on its own; a pinned
+      // page holds its place at the top until it is unpinned.
+      if (canEdit && listMode === 'hand' && !node.isPlace && node.pin == null) {
         var steps = document.createElement('span');
         steps.className = 'tree-step';
         steps.appendChild(stepButton(-1, node.el.getAttribute('data-entity-name') || ''));
@@ -304,6 +320,7 @@
           renderNode(child, depth + 1, childMode);
           childContainer.appendChild(child._wrapper);
         });
+        markPinLast(node.children);
         wrapper.appendChild(childContainer);
       }
 
@@ -318,6 +335,7 @@
     roots.forEach(function (node) {
       renderNode(node, 0, rootMode);
     });
+    markPinLast(roots);
     refreshSteps(container);
 
     markCurrent(container);
@@ -380,12 +398,12 @@
     var folder = wrapper.hasAttribute('data-node-id');
     return Array.prototype.filter.call(list.children, function (w) {
       return w.classList && w.classList.contains('sidebar-tree-node') &&
-        !w.hasAttribute('data-place-key') && w.hasAttribute('data-node-id') === folder;
+        !w.hasAttribute('data-place-key') && !w.hasAttribute('data-pinned') && w.hasAttribute('data-node-id') === folder;
     });
   }
 
   function canStep(wrapper, dir) {
-    if (!wrapper || wrapper.hasAttribute('data-place-key') || listOrder(wrapper.parentElement) !== 'hand') return false;
+    if (!wrapper || wrapper.hasAttribute('data-place-key') || wrapper.hasAttribute('data-pinned') || listOrder(wrapper.parentElement) !== 'hand') return false;
     var sibs = stepSiblings(wrapper);
     var i = sibs.indexOf(wrapper);
     return i >= 0 && !!sibs[i + dir];
@@ -873,6 +891,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       sortChildren: sortChildren,
+      markPinLast: markPinLast,
       countPages: countPages,
       startInlineRename: startInlineRename
     };

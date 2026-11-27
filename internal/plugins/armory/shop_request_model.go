@@ -57,6 +57,9 @@ type PurchaseRequestLine struct {
 	RequesterName string
 	Total         *Cents
 	Currency      string
+	// Wealth is set instead of a coin figure when the buyer keeps Wealth:
+	// the dearest item's price, the Wealth the purchase needs.
+	Wealth *Cents
 	// PriceRose means today's prices add up to more than the player was
 	// quoted, so approving will fail; the row shows the quote and says so.
 	PriceRose bool

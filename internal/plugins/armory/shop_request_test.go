@@ -798,3 +798,23 @@ func TestShopRequest_HistoryWithdrawFlag(t *testing.T) {
 		})
 	}
 }
+
+// A buyer who keeps Wealth is asked for Wealth, not coins: the waiting row
+// names the dearest item's price as the Wealth the purchase needs.
+func TestShopRequest_WealthBuyerIsWordedInWealth(t *testing.T) {
+	f := newBuyFx()
+	stash := f.fx.svc.(*stashService)
+	f.ask(t, pU1, basket("c1", [2]int{1, 2}, [2]int{2, 6})) // units 10 and 2.50
+	f.dir.ents["c1"].MoneyKey = MoneyKeyWealth
+	view, err := stash.StashesPage(context.Background(), "camp", owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := view.PendingPurchases[0]
+	if got := purchaseRequestText(l); got != "wants to buy 8 items at The Gilded Cup for Wealth 10" {
+		t.Errorf("row text = %q", got)
+	}
+	if got := PurchaseRequestSentence(l); got != "buy 8 items at The Gilded Cup (Wealth 10)" {
+		t.Errorf("sentence = %q", got)
+	}
+}
