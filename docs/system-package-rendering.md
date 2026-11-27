@@ -180,7 +180,7 @@ The mount also carries, all `"true"`/`"false"` except the name and visibility:
 | `data-visibility` | The page's visibility mode. |
 | `data-can-edit-identity` | Viewer may rename the page and set the identity fields (ancestry, culture, career, kit, race, species, heritage, background): Scribe and up, or the claimed owner. The server enforces the same rule. |
 | `data-can-change-image` | Viewer may replace the picture (Scribe and up; the claimed owner may not). |
-| `data-armory-items` | The Items and money panel draws on this same page, so the widget leaves its own item list out. |
+| `data-armory-items` | The Items and money panel draws on this same page for this viewer, so the widget leaves its own item list out. False for a viewer the panel shows nothing to, such as a player who can't act for the hero. |
 | `data-foundry-linked` | A Foundry world syncs with this campaign, so the sheet may say a value is set in Foundry. |
 | `data-claimed` | Someone has claimed the page. |
 | `data-claimed-by-me` | The viewer is that someone. |

@@ -30,6 +30,12 @@ type Service interface {
 	// Check returns the scene as Save would store it, for the editor's
 	// Preview, without storing anything.
 	Check(ctx context.Context, campaignID string, v Viewer, in Scene) (Scene, error)
+	// FoundryPreviewOffered says whether the editor offers Preview in
+	// Foundry: the campaign is connected to the Foundry module.
+	FoundryPreviewOffered(ctx context.Context, campaignID string, v Viewer) bool
+	// PreviewInFoundry plays the scene, checked as Check does, on the
+	// Director's own Foundry screen. Nothing is stored and no player sees it.
+	PreviewInFoundry(ctx context.Context, campaignID string, v Viewer, in Scene) (Scene, error)
 
 	// Audience lists every member with where they are now, for the Show sheet.
 	Audience(ctx context.Context, campaignID string, v Viewer) ([]AudienceRow, error)
@@ -76,6 +82,16 @@ type Publisher interface {
 	Stop(campaignID string, s Showing)
 }
 
+// FoundryPreviewer plays a Director's scene on their own Foundry screen;
+// implemented in internal/app over the websocket hub and bus. Offered says
+// whether the campaign uses the Foundry module at all; Preview hands the
+// scene to the module's GM-held socket alone and reports whether one was
+// connected to hear it.
+type FoundryPreviewer interface {
+	Offered(ctx context.Context, campaignID string) bool
+	Preview(campaignID, directorID string, sc Scene) bool
+}
+
 // recentLimit is how many showings the Director's list holds.
 const recentLimit = 20
 
@@ -84,6 +100,7 @@ type service struct {
 	members  Members
 	presence Presence
 	pub      Publisher
+	foundry  FoundryPreviewer
 	now      func() time.Time
 }
 
@@ -97,6 +114,10 @@ func WithPresence(p Presence) Option { return func(s *service) { s.presence = p 
 // WithPublisher wires the live channel; without it a showing is only stored,
 // and players find it in their Watch again list.
 func WithPublisher(p Publisher) Option { return func(s *service) { s.pub = p } }
+
+// WithFoundryPreview wires Preview in Foundry; without it the editor does not
+// offer it.
+func WithFoundryPreview(p FoundryPreviewer) Option { return func(s *service) { s.foundry = p } }
 
 // WithClock replaces time.Now, for tests.
 func WithClock(now func() time.Time) Option { return func(s *service) { s.now = now } }
@@ -139,6 +160,26 @@ func (s *service) Check(_ context.Context, _ string, v Viewer, in Scene) (Scene,
 		return Scene{}, err
 	}
 	return Normalize(in)
+}
+
+func (s *service) FoundryPreviewOffered(ctx context.Context, campaignID string, v Viewer) bool {
+	return mustDirect(v) == nil && s.foundry != nil && s.foundry.Offered(ctx, campaignID)
+}
+
+// PreviewInFoundry checks the scene first, so Foundry never plays something a
+// save would refuse, and says plainly when no Foundry is there to play it.
+func (s *service) PreviewInFoundry(ctx context.Context, campaignID string, v Viewer, in Scene) (Scene, error) {
+	sc, err := s.Check(ctx, campaignID, v, in)
+	if err != nil {
+		return Scene{}, err
+	}
+	if s.foundry == nil || !s.foundry.Offered(ctx, campaignID) {
+		return Scene{}, apperror.NewConflict("This campaign isn't connected to Foundry. Connect it under Foundry VTT in the campaign's settings.")
+	}
+	if !s.foundry.Preview(campaignID, v.UserID, sc) {
+		return Scene{}, apperror.NewConflict("Foundry isn't connected right now. Open your world in Foundry as the GM, then try again.")
+	}
+	return sc, nil
 }
 
 func (s *service) Create(ctx context.Context, campaignID string, v Viewer, in Scene) (*Scene, error) {

@@ -27,7 +27,7 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 	if err != nil {
 		return nil, err
 	}
-	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
+	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps)), Numbers: heroNumbers(p.Numbers)}
 	for _, s := range p.Steps {
 		step := entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake,
@@ -49,7 +49,7 @@ func (a heroPlannerAdapter) VisitorPlan(ctx context.Context, campaignID string) 
 	if err != nil {
 		return nil, err
 	}
-	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
+	out := &entities.HeroPlan{SystemID: p.SystemID, SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps)), Numbers: heroNumbers(p.Numbers)}
 	for _, s := range p.Steps {
 		out.Steps = append(out.Steps, entities.HeroStep{
 			FieldKey: s.FieldKey, Label: s.Label, Choices: heroChoices(ctx, s.Choices),
@@ -183,4 +183,28 @@ func (c heroPickChecker) HeroPickWarnings(ctx context.Context, campaignID, userI
 		return nil
 	}
 	return entities.HeroFieldWarnings(plan, fields, written)
+}
+
+// heroNumbers copies the system's starting-number declaration across.
+func heroNumbers(n *systems.CreatorNumbers) *entities.HeroNumbers {
+	if n == nil {
+		return nil
+	}
+	out := &entities.HeroNumbers{}
+	if c := n.Characteristics; c != nil {
+		ch := &entities.HeroCharacteristics{Label: c.Label, Step: c.Step, FixedProperty: c.FixedProperty,
+			FixedValue: c.FixedValue, ArraysProperty: c.ArraysProperty}
+		for _, f := range c.Fields {
+			ch.Fields = append(ch.Fields, entities.HeroField{Key: f.Key, Label: f.Label})
+		}
+		out.Characteristics = ch
+	}
+	for _, s := range n.Sums {
+		sum := entities.HeroSum{Fields: append([]string(nil), s.Fields...), Half: s.Half}
+		for _, p := range s.Parts {
+			sum.Parts = append(sum.Parts, entities.HeroSumPart{Step: p.Step, Property: p.Property})
+		}
+		out.Sums = append(out.Sums, sum)
+	}
+	return out
 }
