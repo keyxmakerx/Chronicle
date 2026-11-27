@@ -250,3 +250,80 @@ html[data-motion] .hcw-f__in { transition: none; }
 .hcw-f--base .hc-disp { font-family: var(--hc-face-display); letter-spacing: var(--hc-display-track); font-weight: var(--hc-display-weight); }
 .hcw-f--base .hc-gcard h3 { margin: 0; font-size: 22px; line-height: 1.1; }
 .hcw-f--base .hc-sum { margin: 0; font-size: 15px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* An ability: a homemade entry's rollable ability (a kit's signature
+   ability), written part by part. Shared by the player's editor and the
+   Directors' page, so its colours fall back from this editor's tokens to the
+   page's paper or site tokens. */
+.oab, .oab-card, .oab-fd {
+  --ab-line: var(--o-line, var(--paper-edge, var(--color-border)));
+  --ab-text: var(--o-text, var(--paper-ink, var(--color-text-primary)));
+  --ab-muted: var(--o-muted, var(--hc-mute, var(--color-text-secondary)));
+  --ab-accent: var(--o-accent, var(--paper-accent, var(--color-accent)));
+  --ab-link: var(--o-link, var(--paper-accent, var(--color-accent-link, var(--color-accent))));
+  --ab-ink: var(--o-ink, var(--color-accent-on-fill, #fff));
+  --ab-bg2: var(--o-bg2, var(--paper-under, var(--color-bg-tertiary)));
+  --ab-ok: var(--o-ok, rgb(var(--color-ok-rgb, 4 120 87)));
+  --ab-bad: var(--o-danger, var(--hc-neg, var(--color-danger-strong, #b91c1c)));
+  --ab-r: var(--o-r, var(--shape-r-ctl, 8px));
+  --ab-edge: var(--o-edge, var(--shape-edge, 1px));
+}
+.oab { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 14px; padding-top: 14px; border-top: var(--ab-edge) solid var(--ab-line); }
+.oab-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.oab-h { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; color: var(--ab-text); }
+.oab-lab { display: block; margin: 4px 0 2px; font-size: 13px; font-weight: 600; color: var(--ab-text); }
+.oab label { display: block; min-width: 0; }
+.oab-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.oab-row > input { flex: 1 1 160px; min-width: 0; }
+.oab-row > input[data-part="action_type"] { flex: 0 1 190px; }
+.oab-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.oab-two input, .oab-tier input, .oab textarea, .oab > input { width: 100%; box-sizing: border-box; }
+.oab-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 4px 6px; border: var(--ab-edge) solid var(--ab-line); border-radius: var(--ab-r); }
+.oab-chips:focus-within { border-color: var(--ab-accent); }
+.oab .oab-chips input { flex: 1 1 120px; min-width: 100px; min-height: 32px; border: 0; box-shadow: none; padding: 0 4px; background: transparent; }
+.oab .oab-chips input:focus { box-shadow: none; outline: none; }
+.oab-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--ab-bg2); color: var(--ab-text); font-size: 13px; line-height: 1.4; }
+.oab-chip button { border: 0; background: none; color: var(--ab-muted); font: inherit; font-size: 15px; line-height: 1; padding: 4px 6px; border-radius: 999px; cursor: pointer; }
+.oab-chip button:hover { color: var(--ab-bad); }
+.oab-chip button:focus-visible { outline: 2px solid var(--ab-accent); outline-offset: 1px; }
+.oab-roll { gap: 10px; }
+.oab-stats { display: inline-flex; gap: 6px; }
+.oab-stats button { min-width: 40px; min-height: 40px; padding: 0 8px; border: var(--ab-edge) solid var(--ab-line); border-radius: var(--ab-r); background: transparent; color: var(--ab-text);
+  font: inherit; font-weight: 700; cursor: pointer; transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), border-color var(--dur-micro, 120ms) var(--ease-out, ease-out); }
+.oab-stats button:hover { border-color: var(--ab-accent); }
+.oab-stats button[aria-pressed="true"] { background: var(--ab-accent); border-color: var(--ab-accent); color: var(--ab-ink); }
+.oab-stats button:focus-visible { outline: 2px solid var(--ab-accent); outline-offset: 2px; }
+.oab-tier { display: grid !important; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 10px; }
+.oab-tier b { font-size: 12.5px; font-weight: 600; color: var(--ab-muted); }
+.oab-paste { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: var(--ab-edge) dashed var(--ab-line); border-radius: var(--ab-r); }
+.oab-paste textarea { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
+.oab-paste__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.oab-btn { min-height: 36px; padding: 0 14px; border: var(--ab-edge) solid var(--ab-accent); border-radius: var(--ab-r); background: var(--ab-accent); color: var(--ab-ink); font: inherit; font-weight: 600; cursor: pointer; }
+.oab-btn:focus-visible { outline: 2px solid var(--ab-accent); outline-offset: 2px; }
+.oab-msg { margin: 0; font-size: 13px; color: var(--ab-ok); }
+.oab-msg:empty { display: none; }
+.oab-msg.is-bad { color: var(--ab-bad); }
+.oab-card { margin-top: 4px; padding: 12px 14px; border: var(--ab-edge) solid var(--ab-line); border-radius: var(--ab-r); color: var(--ab-text); font-size: 13.5px; line-height: 1.45; }
+.oab-card p { margin: 3px 0 0; }
+.oab-card__t { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.oab-card__t b { font-size: 15px; }
+.oab-card__t small { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ab-muted); }
+.oab-card__fl { font-style: italic; color: var(--ab-muted); }
+.oab-card__two { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.oab-card__pr { margin-top: 8px !important; font-weight: 700; }
+.oab-card__tr { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; }
+.oab-card__tr b { font-weight: 600; color: var(--ab-muted); }
+.oab-fd { margin: 6px 0 0; font-size: 12.5px; color: var(--ab-muted); }
+.oab-fd.is-ok { color: var(--ab-ok); }
+@media (max-width: 599px) {
+  .oab-two { grid-template-columns: minmax(0, 1fr); }
+  .oab-tier { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .oab-row > input[data-part="action_type"] { flex-basis: 100%; }
+}
+@media (pointer: coarse) {
+  .oab-stats button { min-width: 44px; min-height: 44px; }
+  /* A 44px target that keeps the chip its size: the margin gives back the extra. */
+  .oab-chip button { min-width: 44px; min-height: 44px; margin: -10px -6px -10px -4px; }
+}
+html[data-motion="off"] .oab-stats button { transition: none; }
+@media (prefers-reduced-motion: reduce) { .oab-stats button { transition: none; } }
