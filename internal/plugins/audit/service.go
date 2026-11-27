@@ -34,11 +34,19 @@ type AuditService interface {
 	// GetCampaignStats returns aggregate statistics for a campaign including
 	// entity counts, word counts, and editor activity.
 	GetCampaignStats(ctx context.Context, campaignID string) (*CampaignStats, error)
+
+	// RecentActivity returns the newest changes, Foundry's included, as
+	// sittings for the activity page.
+	RecentActivity(ctx context.Context, campaignID string) (Feed, error)
+
+	// SetFoundryActivity wires the sync history into RecentActivity.
+	SetFoundryActivity(src FoundryActivitySource)
 }
 
 // auditService implements AuditService.
 type auditService struct {
-	repo AuditRepository
+	repo    AuditRepository
+	foundry FoundryActivitySource
 }
 
 // NewAuditService creates a new audit service with the given repository.

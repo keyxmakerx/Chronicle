@@ -52,6 +52,10 @@ type SyncEvent struct {
 	Children     []SyncEvent `json:"children,omitempty"`
 }
 
+// RecordedByChronicle reports a row Chronicle wrote for a call it received,
+// as opposed to one the module reported.
+func (e SyncEvent) RecordedByChronicle() bool { return e.ReportedBy == reportedByChronicle }
+
 // SyncHistoryFilter narrows a history read. Before pages backwards by id.
 type SyncHistoryFilter struct {
 	Before     int64

@@ -36,6 +36,12 @@ tags:
       the key's Owner role. Only a caller who is themselves Owner or co-DM may
       name someone else (anyone else gets 403), so naming a player only narrows
       what the call may do.
+  - name: Homebrew asks
+    description: >
+      House rules waiting at an "Ask the Director" step, for the Foundry
+      module's GM card, and the answer from there. For the campaign owner or a
+      co-DM only. The live messages homebrew.ask and homebrew.answered say
+      when one is made, answered or taken back.
   - name: Encounters
     description: >
       Fights the DM planned on a page, for the Foundry module to load. For the
@@ -2626,6 +2632,77 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/homebrew/asks:
+    get:
+      tags: [Homebrew asks]
+      summary: The asks waiting for a Director, the first asked first
+      description: >
+        Each is a run of a house rule that stopped at its "Ask the Director"
+        step: {id, recipe, what, status: "held", lines, at, waits, steps,
+        recipeId, scope, ask: {asker, askerId, ask, step, later}}. ask.ask is
+        what the asker wants to do ("draw a card"); later are the steps after
+        the ask, each {step, action, label, part, args, fields, parts}, which
+        an answer may change.
+      operationId: listHomebrewAsks
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: '{"data": [...], "total": N}'
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /campaigns/{campaignId}/homebrew/asks/{runId}/answer:
+    post:
+      tags: [Homebrew asks]
+      summary: Answer an ask yes, no, or with a written reply
+      description: >
+        Yes runs the steps after the ask; steps changes some of them first,
+        each checked by its owner as a saved recipe is, and a refusal answers
+        422 with nothing run. No and other run nothing more; other needs a
+        reply. An ask is answered once: a second answer is 409.
+      operationId: answerHomebrewAsk
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: runId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer: {type: string, enum: ["yes", "no", "other"]}
+                reply: {type: string, maxLength: 200}
+                steps:
+                  type: array
+                  items:
+                    type: object
+                    required: [step]
+                    properties:
+                      step: {type: integer}
+                      part: {type: string}
+                      args: {type: object}
+      responses:
+        "200":
+          description: The run as it now stands
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Already answered or taken back
+        "422":
+          description: A change a step's owner refused, or a missing reply
   /campaigns/{campaignId}/crafting/characters/{characterId}:
     get:
       tags: [Crafting]

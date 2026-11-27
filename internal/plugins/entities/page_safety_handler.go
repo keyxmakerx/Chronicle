@@ -3,6 +3,7 @@ package entities
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -104,6 +105,15 @@ func (h *PageSafetyHandler) History(c *echo.Context) error {
 	entity, err := h.pageInCampaign(c, cc, false)
 	if err != nil {
 		return err
+	}
+	// The panel is a fragment. A link followed in the browser lands on the
+	// page, which opens its History panel as it loads.
+	if !middleware.IsHTMX(c) {
+		v := c.QueryParam("v")
+		if v == "" {
+			v = "1"
+		}
+		return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID+"?history="+url.QueryEscape(v))
 	}
 	ctx := c.Request().Context()
 	versions, selected, err := h.svc.History(ctx, entity.ID, c.QueryParam("v"), h.redactFor(c, cc))
