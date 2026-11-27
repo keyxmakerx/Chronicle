@@ -54,6 +54,9 @@ type Service interface {
 	// are for whoever set the ask off, player or Director.
 	MyAsks(ctx context.Context, campaignID string, v Viewer) ([]AskView, error)
 	TakeBack(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
+	// Roll makes the roll a "rolls first" step waits on (roll.go), only as
+	// the player it waits on; the server rolls and judges it.
+	Roll(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
 }
 
 type service struct {
@@ -67,6 +70,9 @@ type service struct {
 	people AskPeople
 	bell   Bell
 	live   Live
+	// players finds the player of a run's page, for a roll; nil means the
+	// roll waits on whoever set the rule off.
+	players Players
 }
 
 // NewService builds the service over a repository and the registry the app

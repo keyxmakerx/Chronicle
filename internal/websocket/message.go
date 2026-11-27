@@ -193,12 +193,14 @@ const MsgDecksChanged MessageType = "decks.changed"
 // which card, is the Director's alone. Not a change-feed type.
 const MsgDecksMoment MessageType = "decks.moment"
 
-// Homebrew ask messages: a rule stopped at an "Ask the Director" step, or an
-// ask was answered or taken back. Payload is {"id": run id, "state": …}
-// only ("waiting" on an ask; "yes", "no", "other" or "taken_back" on an
-// answer), so a screen that hears one reads the asks again through its own
-// route. Each goes to the Directors and the person who asked. Not
-// change-feed types: the waiting asks are read through their own route.
+// Homebrew ask messages: a rule stopped at an "Ask the Director" step or at
+// a player's roll, or an ask was answered or taken back, or the roll was made
+// or set aside. Payload is {"id": run id, "state": …} only (homebrew.ask:
+// "waiting" for an answer, "roll" for a player's roll; homebrew.answered:
+// "yes", "no", "other", "taken_back", "rolled", "missed" or
+// "set_aside"), so a screen that hears one reads the asks again through its
+// own route. Each goes to the Directors and the person who asked or rolls.
+// Not change-feed types: the waiting asks are read through their own route.
 const (
 	MsgHomebrewAsk      MessageType = "homebrew.ask"
 	MsgHomebrewAnswered MessageType = "homebrew.answered"

@@ -25,6 +25,7 @@ const (
 	RunDeclined  = "declined"  // the Director said no to an ask
 	RunReplied   = "replied"   // the Director wrote back instead of answering yes
 	RunWithdrawn = "withdrawn" // the asker took the ask back
+	RunMissed    = "missed"    // the player's roll fell short of the target
 )
 
 const (
@@ -81,8 +82,12 @@ type Run struct {
 	// at, counted from 1; 0 for a run that never asked. A held run with it
 	// set is waiting for an answer rather than for Run.
 	Asked int
-	// Answer is the Director's answer to that ask, once given.
+	// Answer is the Director's answer to that ask, once given, and the
+	// player's roll at a "rolls first" step, once made.
 	Answer *Answer
+	// WaitFor is who a held run waits on when that is a player (their roll);
+	// "" while it waits on a Director.
+	WaitFor string
 }
 
 // RunStore keeps runs.
@@ -94,9 +99,9 @@ type RunStore interface {
 	FinishRun(ctx context.Context, r Run, from string) (bool, error)
 	// ListRuns lists held runs, or finished ones, newest first.
 	ListRuns(ctx context.Context, campaignID string, held bool, limit int) ([]Run, error)
-	// ListAsks lists the runs one person set off that asked the Director,
-	// waiting or answered, newest first.
-	ListAsks(ctx context.Context, campaignID, createdBy string, limit int) ([]Run, error)
+	// ListAsks lists the runs one person set off, or that wait or waited on
+	// their roll, that stopped for an ask or a roll, newest first.
+	ListAsks(ctx context.Context, campaignID, userID string, limit int) ([]Run, error)
 	// PruneRuns deletes all but the newest keep finished runs.
 	PruneRuns(ctx context.Context, campaignID string, keep int) error
 }
@@ -120,8 +125,14 @@ type RunView struct {
 	RecipeID string `json:"recipeId,omitempty"`
 	Scope    string `json:"scope,omitempty"`
 	// Ask is set on a run that asked the Director: who asked, for what, the
-	// steps an answer may change, and the answer once given.
+	// steps an answer may change, and the answer once given. It is not set
+	// while the run waits on a player's roll, which no Director answers.
 	Ask *AskDetail `json:"ask,omitempty"`
+	// Kind says what a held run that stopped at a step waits for: "ask" (a
+	// Director's answer) or "roll" (a player's roll).
+	Kind string `json:"kind,omitempty"`
+	// Roll is who a run waiting on a roll waits for and what they roll.
+	Roll *RollWait `json:"roll,omitempty"`
 }
 
 // RunStep is one action of a held run.
@@ -133,6 +144,8 @@ type RunStep struct {
 	Browser bool            `json:"browser,omitempty"`
 	// ByHand is an action no one can run for the Director.
 	ByHand bool `json:"byHand,omitempty"`
+	// Rolls is a step the player rolls for on their own screen.
+	Rolls bool `json:"rolls,omitempty"`
 }
 
 // Press is an event the Director sets off from the drawer.
@@ -218,7 +231,7 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 				return s.saveRun(ctx, run)
 			}
 			b.left--
-			if s.holds(rule) || s.asksAt(rule, 0) >= 0 {
+			if s.holds(rule) || s.stopAt(rule, 0) >= 0 {
 				if waiting == nil {
 					held, err := s.runs.ListRuns(ctx, campaignID, true, maxHeldRuns)
 					if err != nil {
@@ -243,6 +256,7 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 				run.Status, run.Lines, at = s.execute(ctx, campaignID, r, rule, 0, f.Scope, f.Payload, v)
 				if run.Status == RunHeld {
 					run.Asked = at + 1
+					s.setWaiter(ctx, &run)
 				} else {
 					now := run.CreatedAt
 					run.DoneBy, run.DoneAt = v.UserID, &now
@@ -252,7 +266,7 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 				return err
 			}
 			if run.Status == RunHeld && run.Asked > 0 {
-				s.asked(ctx, run)
+				s.announce(ctx, run, true)
 			}
 			wrote = true
 		}
@@ -336,7 +350,7 @@ func (s *service) holds(rule Rule) bool {
 	}
 	for _, d := range rule.Then {
 		a, ok := s.reg.action(d.Action)
-		if ok && a.Asks {
+		if ok && stops(a) {
 			return false
 		}
 		if !ok || a.ClientRun || a.Run == nil || a.Waits {
@@ -346,10 +360,14 @@ func (s *service) holds(rule Rule) bool {
 	return false
 }
 
-// asksAt is the first "Ask the Director" step at or after from, or -1.
-func (s *service) asksAt(rule Rule, from int) int {
+// stops says whether an action stops a run to wait on a person: a
+// Director's answer or a player's roll.
+func stops(a ActionDef) bool { return a.Asks || a.Rolls != nil }
+
+// stopAt is the first step at or after from that stops a run, or -1.
+func (s *service) stopAt(rule Rule, from int) int {
 	for i := from; i < len(rule.Then); i++ {
-		if a, ok := s.reg.action(rule.Then[i].Action); ok && a.Asks {
+		if a, ok := s.reg.action(rule.Then[i].Action); ok && stops(a) {
 			return i
 		}
 	}
@@ -370,8 +388,9 @@ func (s *service) waitsOnPurpose(rule Rule) bool {
 // execute runs a rule's actions in order from step from and stops at the
 // first that fails. Actions the server can't run are listed for the
 // Director. payload is what set the rule off, kept with a held run so its
-// note is the same later. A run that reaches an "Ask the Director" step stops
-// there, held, and the step's index comes back as at (-1 otherwise).
+// note is the same later. A run that reaches an "Ask the Director" step or a
+// player's roll stops there, held, and the step's index comes back as at
+// (-1 otherwise).
 func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, from int, scope string, payload json.RawMessage, v Viewer) (status string, lines []string, at int) {
 	lines = []string{}
 	note := s.note(r, rule, payload)
@@ -382,7 +401,7 @@ func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule
 			lines = append(lines, "An action this server no longer has was skipped.")
 			continue
 		}
-		if a.Asks {
+		if stops(a) {
 			return RunHeld, lines, i
 		}
 		if a.ClientRun || a.Run == nil {
@@ -523,7 +542,8 @@ func (s *service) view(r Run) RunView {
 	if r.DoneAt != nil {
 		out.At = *r.DoneAt
 	}
-	if r.Asked > 0 {
+	rolling := s.waitsOnRoll(r)
+	if r.Asked > 0 && !rolling {
 		out.Ask = s.askDetail(r)
 	}
 	if r.Status != RunHeld {
@@ -531,7 +551,11 @@ func (s *service) view(r Run) RunView {
 	}
 	out.RecipeID, out.Scope = r.RecipeID, r.Scope
 	switch {
+	case rolling:
+		out.Kind, out.Roll = KindRoll, &RollWait{PlayerID: r.WaitFor}
+		out.Waits = "Waits for the player's roll; only they can make it."
 	case r.Asked > 0:
+		out.Kind = KindAsk
 		out.Waits = "Asks you before it goes on."
 	case r.Rule.When.Test != "":
 		out.Waits = "Only if: " + r.Rule.When.Test
@@ -547,7 +571,7 @@ func (s *service) view(r Run) RunView {
 	for _, d := range r.Rule.Then {
 		st := RunStep{Action: d.Action, Label: d.Action, Part: d.Part, Args: d.Args}
 		if a, ok := s.reg.action(d.Action); ok {
-			st.Label, st.Browser, st.ByHand = a.Label, a.ClientRun, !a.ClientRun && a.Run == nil
+			st.Label, st.Browser, st.ByHand, st.Rolls = a.Label, a.ClientRun, !a.ClientRun && a.Run == nil && a.Rolls == nil, a.Rolls != nil
 		}
 		out.Steps = append(out.Steps, st)
 	}
@@ -593,6 +617,7 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 		for _, r := range rs {
 			rv := s.view(r)
 			s.fillAsk(ctx, campaignID, &rv, recipes)
+			s.fillRoll(ctx, campaignID, &rv, r)
 			if held {
 				out.Waiting = append(out.Waiting, rv)
 			} else {
@@ -713,20 +738,24 @@ func (s *service) RunHeld(ctx context.Context, campaignID, id string, v Viewer) 
 	status, lines, at := s.execute(ctx, campaignID, recipe, r.Rule, 0, r.Scope, r.Payload, v)
 	if status == RunHeld {
 		r.Asked = at + 1
+		s.setWaiter(ctx, &r)
 	}
 	out, err := s.finish(ctx, r, RunRunning, status, lines, v)
 	if err == nil && status == RunHeld {
-		s.asked(ctx, r)
+		s.announce(ctx, r, true)
 	}
 	return out, err
 }
 
 // Dismiss sets a waiting rule aside without running it. An ask set aside
-// reads to its asker as a no.
+// reads to its asker as a no; a roll set aside tells its player so.
 func (s *service) Dismiss(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error) {
 	r, err := s.heldRun(ctx, campaignID, id, v)
 	if err != nil {
 		return nil, err
+	}
+	if s.waitsOnRoll(r) {
+		return s.setRollAside(ctx, r, v)
 	}
 	if r.Asked > 0 {
 		return s.Answer(ctx, campaignID, id, v, AnswerInput{Answer: AnswerNo})

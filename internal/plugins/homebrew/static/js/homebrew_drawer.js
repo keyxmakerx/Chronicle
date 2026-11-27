@@ -24,7 +24,7 @@
   // ---------- Pure helpers (tested in test/js/homebrew_drawer.test.mjs) ----------
 
   var STATUS = { done: 'Done', failed: 'Stopped', stopped: 'Stopped', dismissed: 'Set aside', running: 'Running', held: 'Waiting',
-    declined: 'Said no', replied: 'Replied', withdrawn: 'Taken back' };
+    declined: 'Said no', replied: 'Replied', withdrawn: 'Taken back', missed: 'Roll fell short' };
 
   function statusText(s) { return STATUS[s] || s; }
 
@@ -43,6 +43,7 @@
   // stepNote says what Run does with one step of a waiting rule. have says
   // whether this browser has a handler for a browser step.
   function stepNote(step, have) {
+    if (step.rolls) return 'The player rolls this';
     if (step.byHand) return 'For you to do';
     if (step.browser) return have ? 'Runs here' : 'For you to do: nothing on this page can run it';
     return 'Runs on the server';
@@ -264,7 +265,9 @@
       s.appendChild(h('p', 'hbd-muted', 'Nothing is waiting. A rule that is held, or runs in your browser, waits here.'));
       return s;
     }
-    s.querySelector('.hbd-h').appendChild(h('span', 'hbd-count', runs.length === 1 ? '1 needs you' : runs.length + ' need you'));
+    // A roll waits on a player, not on you, so it is not counted.
+    var needs = runs.filter(function (r) { return r.kind !== 'roll'; }).length;
+    if (needs) s.querySelector('.hbd-h').appendChild(h('span', 'hbd-count', needs === 1 ? '1 needs you' : needs + ' need you'));
     // Asks first, the first asked at the top: a player is waiting on them.
     var asks = runs.filter(function (r) { return r.ask; }).reverse();
     asks.forEach(function (r) { s.appendChild(askCard(S, r)); });
@@ -428,7 +431,10 @@
       });
       c.appendChild(ul);
     }
-    c.appendChild(append(h('div', 'hbd-row'), [
+    // Only the player can make a roll the rule waits on; you can set it aside.
+    c.appendChild(append(h('div', 'hbd-row'), r.kind === 'roll' ? [
+      btn('Set aside', '', function () { dismiss(S, r); }, null, S.busy)
+    ] : [
       btn('Run', 'primary', function () { runHeld(S, r); }, 'fa-play', S.busy),
       btn('Set aside', '', function () { dismiss(S, r); }, null, S.busy)
     ]));

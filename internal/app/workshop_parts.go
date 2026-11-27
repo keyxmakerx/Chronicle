@@ -9,6 +9,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolls"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -36,6 +37,10 @@ type workshopDeps struct {
 	// Decks fires the card events and runs the deck actions; nil while the
 	// card decks plugin is degraded.
 	Decks *decksStory
+	// Rolls makes the "rolls first" step's roll; nil while the roll log is
+	// degraded. PowerRolls reads the game system's characteristics.
+	Rolls      rollTable
+	PowerRolls rolls.PowerRollSource
 }
 
 // respiteListener is told of a respite the Director pressed.

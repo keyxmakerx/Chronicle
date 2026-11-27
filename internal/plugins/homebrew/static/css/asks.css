@@ -46,3 +46,18 @@
 .hba-changes { margin: 0; padding-left: 18px; font-size: 14px; }
 .hba-err { color: var(--hba-bad); font-size: 12.5px; }
 @media (max-width: 480px) { .hba-quiet { min-height: 44px; } }
+/* The roll a house rule waits on: the card's one main action, in the accent.
+ * The result line after it uses the state colours like the pill. */
+.hba-rollbtn {
+  min-height: 36px; margin-top: 4px; padding: 6px 16px; border: 1px solid transparent; border-radius: 8px;
+  background: var(--hba-acc); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  transition: filter var(--dur-micro, 120ms) var(--ease-out, ease-out), transform var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.hba-rollbtn:hover:not(:disabled) { filter: brightness(1.08); }
+.hba-rollbtn:active:not(:disabled) { transform: scale(.98); }
+.hba-rollbtn:disabled { opacity: .6; cursor: progress; }
+html[data-motion="off"] .hba-rollbtn, html[data-motion="calm"] .hba-rollbtn:active { transition: none; transform: none; }
+.hba-result { font-size: 14px; }
+.hba-result:focus { outline: none; }
+.hba-result.hba-missed { color: var(--hba-bad); }
+@media (max-width: 480px) { .hba-rollbtn { min-height: 44px; } }
