@@ -609,12 +609,13 @@
 .cal-v5 .toast button{flex:none;font:650 12px/1 var(--sans);color:var(--paper);padding:7px 10px;border-radius:8px;box-shadow:inset 0 0 0 1px oklch(1 0 0 / .28)}
 .cal-v5 .toast button:hover{background:oklch(1 0 0 / .1)}
 /* An editor's calendar has the deck along its bottom edge, and while editing
-   its drawer above that (--deckH, measured by calendar_editor.js), so a toast
-   rises clear of both. Below 600px the toast moves to the top of the screen
-   (the max-width:600px block further down), where it never meets them. */
+   its drawer above that, so a toast rises clear of both (--toastB, measured
+   by calendar_view.js when it shows; the fallbacks cover an unmeasured one).
+   Below 600px the toast moves to the top of the screen (the max-width:600px
+   block further down), where it never meets them. */
 @media (min-width:601px){
-  .cal-v5 .cal.decked .toast{bottom:calc(58px + var(--bottom-bar,0px))}
-  .cal-v5 .cal.decked.editing .toast{bottom:calc(var(--deckH,64px) + 58px + var(--bottom-bar,0px))}
+  .cal-v5 .cal.decked .toast{bottom:max(var(--toastB,64px),calc(16px + var(--bottom-bar,0px)))}
+  .cal-v5 .cal.decked.editing .toast{bottom:max(var(--toastB,calc(var(--deckH,64px) + 64px)),calc(16px + var(--bottom-bar,0px)))}
 }
 /* Era card: drops out of the era label's bottom edge. */
 .cal-v5 .flap{width:392px;border-radius:4px 14px 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
@@ -880,7 +881,7 @@
 .cal-v5 .two{grid-template-columns:1fr}
 .cal-v5 .wx{grid-template-columns:repeat(2,minmax(0,1fr))}
 .cal-v5 .caption{padding:0 16px}
-.cal-v5 .toast{position:fixed;bottom:auto;top:12px;transform:translate(-50%,-14px)}
+.cal-v5 .toast{position:fixed;bottom:auto;top:var(--toastTop,12px);transform:translate(-50%,-14px)}
 .cal-v5 .erow{grid-template-columns:40px minmax(0,1.4fr) minmax(0,.9fr) minmax(0,1fr)}
 
 }
