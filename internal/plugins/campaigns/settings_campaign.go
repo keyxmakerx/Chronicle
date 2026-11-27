@@ -23,7 +23,7 @@ type CampaignTab struct {
 	Look    LookSummary
 	// CustomizerHref opens the Customizer at its front page and PicturesHref
 	// at Look, where the emblem and the cover are chosen; Customize are the
-	// other Customize areas and the header brush, one row each.
+	// other Customize areas, the header brush and the Store icon, one row each.
 	CustomizerHref, PicturesHref string
 	Customize                    []DeskLine
 	// Card is what the campaign's card on My campaigns shows.

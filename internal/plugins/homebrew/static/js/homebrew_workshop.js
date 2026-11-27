@@ -279,6 +279,14 @@
         st.log.push('Asks the Director' + (w ? ': wants to ' + w : '') + '. What follows waits for a yes.');
         return;
       }
+      // A player's roll is made on their own screen and judged by the
+      // server; the preview can't roll it for them either.
+      if (act && act.rolls) {
+        asked = true;
+        var a = d.args || {}, what = String(a.dice || 'the dice') + (a.characteristic ? ' + ' + a.characteristic : '');
+        st.log.push('The player rolls ' + what + ', needing ' + (a.target || '?') + '. What follows runs only if they make it.');
+        return;
+      }
       var label = act ? act.label : d.action;
       if (act && act.preview && tp && hasNumber(cat, tp)) {
         var n = act.preview.arg ? Number((d.args || {})[act.preview.arg]) : 1;
@@ -1282,6 +1290,7 @@
     if (act && act.clientRun) box.appendChild(h('p', 'hbw-muted', 'This runs in your browser when you press Run in the Homebrew drawer.'));
     if (act && act.waits) box.appendChild(h('p', 'hbw-muted', 'This is your call: a rule that ends in it waits in the Homebrew drawer until you press Run.'));
     if (act && act.asks) box.appendChild(h('p', 'hbw-muted', 'The rule stops here and asks the Director in the Homebrew drawer. The steps before it have happened; the steps after it run only on Yes, and the Director can change their settings while answering. The player sees the answer.'));
+    if (act && act.rolls) box.appendChild(h('p', 'hbw-muted', 'The rule stops here until the player rolls, on their own Your asks page. Chronicle makes the roll and checks it: at or over the target the steps after it run; under it the rule stops and says so. Put it after an Ask the Director step and the Director can change the target while answering Yes.'));
     append(box, [
       h('p', 'hbw-muted', 'Part of the rule that starts on: ' + ((def(S, 'events', rule.when.event) || {}).label || rule.when.event) + '.'),
       append(h('div', 'hbw-row'), [quiet('Remove this step', function () {

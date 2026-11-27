@@ -2613,6 +2613,18 @@ func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityI
 	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
 }
 
+// npcPartyCheckAdapter implements npcs.PartyCheck over the addon settings. A
+// failed lookup reads as no party, which keeps a playable character listed
+// rather than shown nowhere.
+type npcPartyCheckAdapter struct {
+	addons addons.AddonService
+}
+
+func (a *npcPartyCheckAdapter) ShowsParty(ctx context.Context, campaignID string) bool {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, entities.AddonPlayerCharacterClaiming)
+	return err == nil && on
+}
+
 // npcTagListerAdapter wraps tags.TagService to implement npcs.TagLister so NPC
 // cards carry tags and the Characters page can offer a tag filter. dm_only tags
 // are included only when the caller asks (the npcs handler decides by role).
@@ -3183,6 +3195,8 @@ func (a *App) RegisterRoutes() {
 	// choice to hide the brush.
 	campaignHandler.SetPageCategoryLookup(&pageCategoryAdapter{svc: entityService})
 	campaignHandler.SetBrushPrefs(&brushPrefsAdapter{svc: authService})
+	// The person's own choice to put the top bar's Store icon away.
+	campaignHandler.SetStorePrefs(&storePrefsAdapter{svc: authService})
 	customizeDrafts := campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB))
 	campaignHandler.SetCustomizeDrafts(customizeDrafts)
 	// Publishing a draft's field list would undo a field switch, so the
@@ -4975,6 +4989,7 @@ func (a *App) RegisterRoutes() {
 	npcRepo := npcs.NewNPCRepository(a.DB)
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: characterListService}, &entityVisibilityFilterAdapter{svc: entityService})
 	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
+	npcSvc.SetPartyCheck(&npcPartyCheckAdapter{addons: addonService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
@@ -6410,7 +6425,7 @@ func (a *App) RegisterRoutes() {
 					if zones, zerr := authService.GetTimezonesByIDs(ctx, []string{session.UserID}); zerr == nil {
 						tz = zones[session.UserID]
 					}
-					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, BrushHidden: vp.BrushHidden})
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast, Timezone: tz, BrushHidden: vp.BrushHidden, StoreHidden: vp.StoreHidden})
 				} else {
 					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
 				}
@@ -7164,12 +7179,17 @@ func (a *App) RegisterRoutes() {
 	var rollsPower *rollsPowerAdapter     // nil while the roll log is degraded; layers join it later
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
+	// The Workshop's "rolls first" step rolls through the roll log; both are
+	// nil while it is degraded, and the step is then not offered.
+	var homebrewRolls rollTable
+	var homebrewPower rollFirstStats
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
 		rollsPower = &rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService}
 		rollsHandler.SetPowerRolls(rollsPower)
+		homebrewRolls, homebrewPower = rollsSvc, rollsPower
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
@@ -7358,6 +7378,8 @@ func (a *App) RegisterRoutes() {
 		Respites:       craftingListener,
 		Crafting:       craftingWorkshop,
 		Decks:          decksStory,
+		Rolls:          homebrewRolls,
+		PowerRolls:     homebrewPower,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -7374,7 +7396,8 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
 			homebrew.NewRunStore(a.DB), homebrew.WithAskPeople(&homebrewAskPeople{svc: campaignService}),
-			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}))
+			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}),
+			homebrew.WithPlayers(&homebrewScopePlayers{entities: entityService}))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		homebrewAskAPI.attach(homebrewSvc)
 		aiWorkshop = homebrewSvc
@@ -7698,6 +7721,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "store", Scripts: []string{"/static/js/widgets/store.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},
 	{Name: "shop_good_note", Scripts: []string{"/static/js/widgets/shop_good_note.js"}},
