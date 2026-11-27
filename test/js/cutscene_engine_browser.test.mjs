@@ -171,3 +171,72 @@ test('a slit pupil draws a different eye from a round one', { skip }, async (t) 
   assert.deepEqual(await middle('round'), round);
   assert.deepEqual(errors, []);
 });
+
+// A title card and a place card built from separate layers: film bars on
+// top, a caption and a title that settle in the middle, then a corner card
+// that slides in at the bottom left, above the bars, and slides away.
+const CARDS = {
+  id: 'c1', name: 'Chapter two',
+  background: { kind: 'none', seconds: 1 },
+  overlays: [{ kind: 'letterbox', at: 0, seconds: 0.6 }],
+  text: [
+    { say: 'Chapter two', at: 0.2, seconds: 1.4, style: 'caption', in: 'rise' },
+    { say: 'The Drowned Bell', at: 0.3, seconds: 1.3, style: 'title', in: 'settle', out: 'fade' },
+    { say: 'Saltreach', at: 1.8, seconds: 0, style: 'title', layout: 'corner', in: 'slide' },
+    { say: 'Three days later', at: 1.9, seconds: 0.8, style: 'whisper', layout: 'corner', in: 'slide', out: 'slide' }
+  ],
+  ending: { kind: 'tap' }
+};
+
+for (const [label, viewport] of [['desktop', { width: 1280, height: 720 }], ['phone', { width: 390, height: 844 }]]) {
+  test(`a title card and a place card from separate layers, on ${label}`, { skip }, async (t) => {
+    const { pg, errors } = await open(t, viewport);
+    await start(pg, CARDS);
+    await pg.waitForFunction(() => document.querySelectorAll('.cs-cut-words:not(.cs-cut-corner) .cs-cut-line').length === 2);
+    const middle = await pg.evaluate(() => [...document.querySelectorAll('.cs-cut-words:not(.cs-cut-corner) .cs-cut-line')].map((p) => ({ text: p.textContent, cls: p.className })));
+    assert.deepEqual(middle, [
+      { text: 'Chapter two', cls: 'cs-cut-line cs-cut-caption cs-cut-in-rise' },
+      { text: 'The Drowned Bell', cls: 'cs-cut-line cs-cut-title cs-cut-in-settle' }
+    ]);
+    // Film bars cover the top and bottom of the canvas once built.
+    await pg.waitForTimeout(800);
+    const bars = await pg.evaluate(() => {
+      const c = document.querySelector('.cs-cut-canvas'), g = c.getContext('2d');
+      const at = (y) => Array.from(g.getImageData(Math.floor(c.width / 2), y, 1, 1).data);
+      return { top: at(2), bottom: at(c.height - 3), mid: at(Math.floor(c.height / 2)) };
+    });
+    assert.deepEqual(bars.top, [0, 0, 0, 255]);
+    assert.deepEqual(bars.bottom, [0, 0, 0, 255]);
+    assert.equal(bars.mid[3], 0, 'the middle shows what is under the scene');
+
+    await pg.waitForFunction(() => document.querySelectorAll('.cs-cut-corner .cs-cut-line').length === 2);
+    const corner = await pg.evaluate(() => {
+      const box = document.querySelector('.cs-cut-corner').getBoundingClientRect();
+      const lines = [...document.querySelectorAll('.cs-cut-corner .cs-cut-line')];
+      return {
+        lines: lines.map((p) => ({ text: p.textContent, cls: p.className, words: p.querySelectorAll('.cs-cut-w').length })),
+        left: box.left < innerWidth * 0.12, aboveBars: box.bottom <= innerHeight * 0.88 + 1, clear: box.right <= innerWidth,
+        aligned: getComputedStyle(lines[0]).textAlign
+      };
+    });
+    assert.deepEqual(corner.lines, [
+      { text: 'Saltreach', cls: 'cs-cut-line cs-cut-title cs-cut-in-slide', words: 0 },
+      { text: 'Three days later', cls: 'cs-cut-line cs-cut-whisper cs-cut-in-slide', words: 0 }
+    ], 'a whisper with its own arrival chosen is one line, not word by word');
+    assert.ok(corner.left && corner.aboveBars && corner.clear, JSON.stringify(corner));
+    assert.equal(corner.aligned, 'left');
+    // Each line leaves its chosen way, and a line with none leaves the old way.
+    await pg.waitForFunction(() => document.querySelector('.cs-cut-out-slide'));
+    assert.ok(await pg.evaluate(() => !!document.querySelector('.cs-cut-corner .cs-cut-gone.cs-cut-out-slide')));
+    assert.deepEqual(errors, []);
+  });
+}
+
+test('under reduced motion the chosen arrivals are plain fades and the bars are simply there', { skip }, async (t) => {
+  const { pg, errors } = await open(t, { width: 1280, height: 720 }, true);
+  await start(pg, CARDS);
+  await pg.waitForFunction(() => document.querySelectorAll('.cs-cut-line').length >= 2);
+  const names = await pg.evaluate(() => [...document.querySelectorAll('.cs-cut-line')].map((p) => getComputedStyle(p).animationName));
+  for (const n of names) assert.equal(n, 'cs-cut-fade');
+  assert.deepEqual(errors, []);
+});

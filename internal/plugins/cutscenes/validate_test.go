@@ -38,6 +38,53 @@ func TestNormalize(t *testing.T) {
 				t.Errorf("bg %+v", s.Background)
 			}
 		}},
+		{name: "a black background's separate arrival is stored as its old kind name", edit: func(s *Scene) {
+			s.Background = Background{Kind: BackgroundBlack, In: ArriveFade, Seconds: 3}
+		}, check: func(t *testing.T, s Scene) {
+			if s.Background != (Background{Kind: BackgroundFadeToBlack, Seconds: 3}) {
+				t.Errorf("bg %+v", s.Background)
+			}
+		}},
+		{name: "an arrival wins over an old kind name, and nothing stays nothing", edit: func(s *Scene) {
+			s.Background = Background{Kind: BackgroundFallAsleep, In: ArriveCut}
+		}, check: func(t *testing.T, s Scene) {
+			if s.Background.Kind != BackgroundBlack || s.Background.In != "" {
+				t.Errorf("bg %+v", s.Background)
+			}
+			n, err := Normalize(Scene{Name: "N", Background: Background{Kind: BackgroundNone, In: ArriveFallAsleep}})
+			if err != nil || n.Background.Kind != BackgroundNone {
+				t.Errorf("none: %+v %v", n.Background, err)
+			}
+		}},
+		{name: "an unknown arrival is refused", edit: func(s *Scene) { s.Background.In = "swirl" }, wantErr: `the background's arrival "swirl" is not one of cut, fade, fall-asleep`},
+		{name: "a line's place, arrival and leaving are kept, the defaults stored blank", edit: func(s *Scene) {
+			s.Text = []TextLine{
+				{Say: "Saltreach", Style: StyleTitle, Layout: " Corner ", In: TextSlide, Out: TextSlide},
+				{Say: "Middle", Layout: LayoutMiddle},
+				{Say: "Chapter two", Style: StyleCaption, In: TextSettle, Out: TextSink},
+			}
+		}, check: func(t *testing.T, s Scene) {
+			want := []TextLine{
+				{Say: "Saltreach", Seconds: 0, Style: StyleTitle, Layout: LayoutCorner, In: TextSlide, Out: TextSlide},
+				{Say: "Middle", Style: StylePlain},
+				{Say: "Chapter two", Style: StyleCaption, In: TextSettle, Out: TextSink},
+			}
+			for i := range want {
+				if s.Text[i] != want[i] {
+					t.Errorf("line %d: %+v, want %+v", i+1, s.Text[i], want[i])
+				}
+			}
+		}},
+		{name: "an unknown place is refused", edit: func(s *Scene) { s.Text[0].Layout = "top" }, wantErr: `words 1: the place "top" is not one of middle, corner`},
+		{name: "an unknown arrival for words is refused", edit: func(s *Scene) { s.Text[0].In = "spin" }, wantErr: `words 1: the arrival "spin" is not one of fade, rise, settle, slide`},
+		{name: "an unknown leaving for words is refused", edit: func(s *Scene) { s.Text[0].Out = "explode" }, wantErr: `words 1: the leaving "explode" is not one of fade, sink, slide`},
+		{name: "film bars take no colour", edit: func(s *Scene) {
+			s.Overlays = append(s.Overlays, Overlay{Kind: OverlayLetterbox, Seconds: 1, Params: Params{Color: "#ff0000"}})
+		}, check: func(t *testing.T, s Scene) {
+			if s.Overlays[1] != (Overlay{Kind: OverlayLetterbox, Seconds: 1}) {
+				t.Errorf("letterbox %+v", s.Overlays[1])
+			}
+		}},
 		{name: "background params are dropped", edit: func(s *Scene) { s.Background.Params.Color = "#ffffff" }, check: func(t *testing.T, s Scene) {
 			if s.Background.Params.Color != "" {
 				t.Errorf("bg params kept: %+v", s.Background.Params)
@@ -251,6 +298,18 @@ func TestSceneFromForm(t *testing.T) {
 			"ov_kind": {"embers", "", "eye"}, "ov_look": {"gather", "rift", "rift"}, "ov_pupil": {"", "", "slit"}}, check: func(t *testing.T, s Scene) {
 			if s.Background.Params.Look != "eyelids" || len(s.Overlays) != 2 || s.Overlays[1].Params.Look != "rift" || s.Overlays[1].Params.Pupil != "slit" {
 				t.Errorf("looks: bg %+v overlays %+v", s.Background, s.Overlays)
+			}
+		}},
+		{name: "the background's arrival and each line's place, arrival and leaving are read by row", form: url.Values{
+			"name": {"N"}, "bg_kind": {"black"}, "bg_in": {"fall-asleep"},
+			"tx_say": {"one", "", "three"}, "tx_layout": {"corner", "corner", "middle"}, "tx_in": {"slide", "fade", ""}, "tx_out": {"", "sink", "fade"},
+		}, check: func(t *testing.T, s Scene) {
+			if s.Background.Kind != BackgroundBlack || s.Background.In != ArriveFallAsleep {
+				t.Errorf("bg %+v", s.Background)
+			}
+			if len(s.Text) != 2 || s.Text[0].Layout != LayoutCorner || s.Text[0].In != TextSlide || s.Text[0].Out != "" ||
+				s.Text[1].Layout != LayoutMiddle || s.Text[1].In != "" || s.Text[1].Out != TextFade {
+				t.Errorf("text %+v", s.Text)
 			}
 		}},
 		{name: "empty numbers read as 0", form: url.Values{"name": {"N"}, "tx_say": {"x"}}, check: func(t *testing.T, s Scene) {

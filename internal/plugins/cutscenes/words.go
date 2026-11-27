@@ -47,9 +47,13 @@ func BackgroundWords(b Background) string {
 // OverlayWords says one layer on top: "green eye at 7.5 s".
 func OverlayWords(o Overlay) string {
 	noun := "eye"
-	if o.Kind == OverlayEmbers {
+	switch o.Kind {
+	case OverlayEye:
+	case OverlayEmbers:
 		noun = "embers"
-	} else if o.Kind != OverlayEye {
+	case OverlayLetterbox:
+		noun = "film bars"
+	default:
 		noun = o.Kind
 	}
 	c := ColorName(o.Params.Color)
@@ -123,6 +127,15 @@ func TextWords(t TextLine) string {
 	}
 	if t.Style != "" && t.Style != StylePlain {
 		s += ", " + strings.ToLower(kindName(TextStyles, t.Style))
+	}
+	if t.Layout != "" {
+		s += ", " + strings.ToLower(kindName(TextLayouts, t.Layout))
+	}
+	if t.In != "" {
+		s += ", " + strings.ToLower(kindName(TextArrivals, t.In))
+	}
+	if t.Out != "" {
+		s += ", " + strings.ToLower(kindName(TextLeavings, t.Out))
 	}
 	return s
 }

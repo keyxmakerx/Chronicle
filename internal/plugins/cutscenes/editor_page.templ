@@ -50,13 +50,21 @@ templ editorForm(p editorPage) {
 			<input class="csw-line csw-name" id="csw-name" name="name" type="text" required maxlength={ strconv.Itoa(MaxNameChars) } value={ p.Scene.Name } placeholder="The Eye Opens"/>
 		</div>
 		<section class="csw-layer" aria-labelledby="csw-bg-h">
-			<h2 class="csw-lab" id="csw-bg-h">Background <span class="csw-quiet">how the screen goes dark</span></h2>
+			<h2 class="csw-lab" id="csw-bg-h">Background <span class="csw-quiet">what is behind everything, and how it arrives</span></h2>
 			<div class="csw-row-fields">
 				<div class="csw-field">
-					<label for="csw-bg-kind">Effect</label>
+					<label for="csw-bg-kind">Background</label>
 					<select class="csw-select" id="csw-bg-kind" name="bg_kind" onchange={ bgKindOnChange() }>
-						for _, k := range BackgroundKinds {
-							<option value={ k.Key } selected?={ p.Scene.Background.Kind == k.Key }>{ k.Name }</option>
+						for _, k := range Backdrops {
+							<option value={ k.Key } selected?={ BackdropOf(p.Scene.Background.Kind) == k.Key }>{ k.Name }</option>
+						}
+					</select>
+				</div>
+				<div class="csw-field" data-csw-bg-in hidden?={ p.Scene.Background.Kind == BackgroundNone }>
+					<label for="csw-bg-in">Arrives</label>
+					<select class="csw-select" id="csw-bg-in" name="bg_in" onchange={ bgKindOnChange() }>
+						for _, k := range Arrivals {
+							<option value={ k.Key } selected?={ ArrivalOf(p.Scene.Background.Kind) == k.Key }>{ k.Name }</option>
 						}
 					</select>
 				</div>
@@ -68,12 +76,12 @@ templ editorForm(p editorPage) {
 						}
 					</select>
 				</div>
-				<div class="csw-field">
+				<div class="csw-field" data-csw-bg-sec hidden?={ p.Scene.Background.Kind == BackgroundBlack || p.Scene.Background.Kind == BackgroundNone }>
 					<label for="csw-bg-sec">Takes (seconds)</label>
 					<input class="csw-line csw-num" id="csw-bg-sec" name="bg_seconds" type="number" inputmode="decimal" min="0.5" max="60" step="0.1" value={ num(p.Scene.Background.Seconds) }/>
 				</div>
 			</div>
-			<p class="csw-hint">The look changes how falling asleep is drawn. Black ignores the time.</p>
+			<p class="csw-hint">The look changes how falling asleep is drawn.</p>
 		</section>
 		<section class="csw-layer" aria-labelledby="csw-ov-h">
 			<h2 class="csw-lab" id="csw-ov-h">On top <span class="csw-quiet">drawn over the background, in order</span></h2>
@@ -187,7 +195,7 @@ templ overlayRow(o Overlay) {
 			<span class="csw-flabel">Builds over (s)</span>
 			<input class="csw-line csw-num" name="ov_seconds" type="number" inputmode="decimal" min="0.5" max="60" step="0.1" value={ num(o.Seconds) }/>
 		</label>
-		<label class="csw-field">
+		<label class="csw-field" data-csw-ov-color hidden?={ o.Kind == OverlayLetterbox }>
 			<span class="csw-flabel">Colour</span>
 			<input class="csw-color" name="ov_color" type="color" value={ colorOr(o.Params.Color, defaultColor(o.Kind)) }/>
 		</label>
@@ -217,6 +225,32 @@ templ textRow(t TextLine) {
 			<select class="csw-select" name="tx_style">
 				for _, k := range TextStyles {
 					<option value={ k.Key } selected?={ t.Style == k.Key }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Place</span>
+			<select class="csw-select" name="tx_layout">
+				for _, k := range TextLayouts {
+					<option value={ k.Key } selected?={ t.Layout == k.Key || (t.Layout == "" && k.Key == LayoutMiddle) }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Arrives</span>
+			<select class="csw-select" name="tx_in">
+				<option value="" selected?={ t.In == "" }>The style's own</option>
+				for _, k := range TextArrivals {
+					<option value={ k.Key } selected?={ t.In == k.Key }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Leaves</span>
+			<select class="csw-select" name="tx_out">
+				<option value="" selected?={ t.Out == "" }>Blurs away</option>
+				for _, k := range TextLeavings {
+					<option value={ k.Key } selected?={ t.Out == k.Key }>{ k.Name }</option>
 				}
 			</select>
 		</label>
