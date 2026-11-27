@@ -73,17 +73,8 @@ func (m *SystemManifest) sanitizeEntryFields() {
 					slog.String("field", f.Key),
 					slog.String("reason", reason))
 			}
-			switch {
-			case f.FoundryCollection != "items" || !f.FoundryItemSingle:
-				warn("ignored: the field is not a single Foundry item")
-				f.FoundryEntryFields = nil
-				continue
-			case f.GMOnly:
-				warn("ignored: the field is GM-only")
-				f.FoundryEntryFields = nil
-				continue
-			case len(f.FoundryEntryFields) > maxEntryFields:
-				warn(fmt.Sprintf("ignored: more than %d properties", maxEntryFields))
+			if reason := entryMappingRefused(f, len(f.FoundryEntryFields)); reason != "" {
+				warn(reason)
 				f.FoundryEntryFields = nil
 				continue
 			}
@@ -103,6 +94,20 @@ func (m *SystemManifest) sanitizeEntryFields() {
 			}
 		}
 	}
+}
+
+// entryMappingRefused returns why a field can't carry entry mappings at all,
+// or "" when it can.
+func entryMappingRefused(f *FieldDef, n int) string {
+	switch {
+	case f.FoundryCollection != "items" || !f.FoundryItemSingle:
+		return "ignored: the field is not a single Foundry item"
+	case f.GMOnly:
+		return "ignored: the field is GM-only"
+	case n > maxEntryFields:
+		return fmt.Sprintf("ignored: more than %d properties", maxEntryFields)
+	}
+	return ""
 }
 
 // validateEntryField returns why one mapping is unusable, or "" when it is
