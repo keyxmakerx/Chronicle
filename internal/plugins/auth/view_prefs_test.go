@@ -28,7 +28,7 @@ func decodeViewPrefsInput(t *testing.T, body string) UpdateViewPrefsInput {
 }
 
 func TestUpdateViewPrefsInput_ApplyTo(t *testing.T) {
-	stored := ViewPrefs{Theme: "dark", Motion: "calm", TextSize: "larger", Contrast: "high", BrushHidden: []string{}}
+	stored := ViewPrefs{Theme: "dark", Motion: "calm", TextSize: "larger", Contrast: "high", BrushHidden: []string{}, StoreHidden: []string{}}
 	tests := []struct {
 		name    string
 		body    string
@@ -37,18 +37,18 @@ func TestUpdateViewPrefsInput_ApplyTo(t *testing.T) {
 		wantErr bool
 	}{
 		{"absent keys preserve everything", `{}`, stored, stored, false},
-		{"a theme-only body keeps the other three", `{"theme":"light"}`, stored, ViewPrefs{"light", "calm", "larger", "high", []string{}}, false},
-		{"each value replaces", `{"theme":"device","motion":"owner","textSize":"largest","contrast":"standard"}`, stored, ViewPrefs{"device", "owner", "largest", "standard", []string{}}, false},
-		{"explicit null resets just that choice", `{"textSize":null}`, stored, ViewPrefs{"dark", "calm", "standard", "high", []string{}}, false},
-		{"empty string means the default", `{"motion":""}`, stored, ViewPrefs{"dark", "owner", "larger", "high", []string{}}, false},
+		{"a theme-only body keeps the other three", `{"theme":"light"}`, stored, ViewPrefs{"light", "calm", "larger", "high", []string{}, []string{}}, false},
+		{"each value replaces", `{"theme":"device","motion":"owner","textSize":"largest","contrast":"standard"}`, stored, ViewPrefs{"device", "owner", "largest", "standard", []string{}, []string{}}, false},
+		{"explicit null resets just that choice", `{"textSize":null}`, stored, ViewPrefs{"dark", "calm", "standard", "high", []string{}, []string{}}, false},
+		{"empty string means the default", `{"motion":""}`, stored, ViewPrefs{"dark", "owner", "larger", "high", []string{}, []string{}}, false},
 		{"unknown theme refused", `{"theme":"sepia"}`, stored, stored, true},
-		{"off is a motion choice", `{"motion":"off"}`, stored, ViewPrefs{"dark", "off", "larger", "high", []string{}}, false},
+		{"off is a motion choice", `{"motion":"off"}`, stored, ViewPrefs{"dark", "off", "larger", "high", []string{}, []string{}}, false},
 		{"unknown motion refused", `{"motion":"none"}`, stored, stored, true},
 		{"unknown size refused", `{"textSize":"huge"}`, stored, stored, true},
 		{"unknown contrast refused", `{"contrast":"max"}`, stored, stored, true},
 		{"case matters", `{"theme":"Dark"}`, stored, stored, true},
 		{"one bad key refuses the whole body", `{"theme":"light","contrast":"x"}`, stored, stored, true},
-		{"defaults from nothing", `{"theme":"dark"}`, DefaultViewPrefs(), ViewPrefs{"dark", "owner", "standard", "standard", []string{}}, false},
+		{"defaults from nothing", `{"theme":"dark"}`, DefaultViewPrefs(), ViewPrefs{"dark", "owner", "standard", "standard", []string{}, []string{}}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,13 +75,17 @@ func TestParseViewPrefs(t *testing.T) {
 		{"NULL column", ``, def},
 		{"malformed JSON", `{nope`, def},
 		{"not an object", `["dark"]`, def},
-		{"full row", `{"theme":"light","motion":"calm","textSize":"largest","contrast":"high"}`, ViewPrefs{"light", "calm", "largest", "high", []string{}}},
-		{"partial row fills defaults", `{"theme":"dark"}`, ViewPrefs{"dark", "owner", "standard", "standard", []string{}}},
-		{"hidden in two campaigns", `{"brushHidden":["c-1","c-2"]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{"c-1", "c-2"}}},
-		{"an account-wide hidden from before is not carried over", `{"theme":"dark","brush":"hidden"}`, ViewPrefs{"dark", "owner", "standard", "standard", []string{}}},
-		{"duplicates and malformed ids are dropped", `{"brushHidden":["c-1","c-1","<x>","",7]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{"c-1"}}},
+		{"full row", `{"theme":"light","motion":"calm","textSize":"largest","contrast":"high"}`, ViewPrefs{"light", "calm", "largest", "high", []string{}, []string{}}},
+		{"partial row fills defaults", `{"theme":"dark"}`, ViewPrefs{"dark", "owner", "standard", "standard", []string{}, []string{}}},
+		{"hidden in two campaigns", `{"brushHidden":["c-1","c-2"]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{"c-1", "c-2"}, []string{}}},
+		{"an account-wide hidden from before is not carried over", `{"theme":"dark","brush":"hidden"}`, ViewPrefs{"dark", "owner", "standard", "standard", []string{}, []string{}}},
+		{"duplicates and malformed ids are dropped", `{"brushHidden":["c-1","c-1","<x>","",7]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{"c-1"}, []string{}}},
 		{"a brush list of the wrong type is ignored", `{"brushHidden":"c-1"}`, def},
-		{"invalid value falls back for that choice only", `{"theme":"neon","contrast":"high"}`, ViewPrefs{"device", "owner", "standard", "high", []string{}}},
+		{"store hidden in two campaigns", `{"storeHidden":["c-1","c-2"]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{}, []string{"c-1", "c-2"}}},
+		{"store and brush lists are kept apart", `{"brushHidden":["c-1"],"storeHidden":["c-2"]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{"c-1"}, []string{"c-2"}}},
+		{"store duplicates and malformed ids are dropped", `{"storeHidden":["c-1","c-1","<x>","",7]}`, ViewPrefs{"device", "owner", "standard", "standard", []string{}, []string{"c-1"}}},
+		{"a store list of the wrong type is ignored", `{"storeHidden":"c-1"}`, def},
+		{"invalid value falls back for that choice only", `{"theme":"neon","contrast":"high"}`, ViewPrefs{"device", "owner", "standard", "high", []string{}, []string{}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,7 +108,7 @@ func TestService_UpdateViewPrefs_MergesAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second update: %v", err)
 	}
-	if want := (ViewPrefs{"dark", "owner", "standard", "high", []string{}}); !reflect.DeepEqual(got, want) {
+	if want := (ViewPrefs{"dark", "owner", "standard", "high", []string{}, []string{}}); !reflect.DeepEqual(got, want) {
 		t.Errorf("second update returned %+v, want %+v (the theme must survive a contrast-only save)", got, want)
 	}
 	if read, _ := svc.GetViewPrefs(ctx, "u1"); !reflect.DeepEqual(read, got) {
@@ -352,6 +356,163 @@ func TestHandler_SetBrushAPI(t *testing.T) {
 			}
 			if stub.user != tc.userID || stub.campaign != "c-7" || stub.hidden != tc.wantHid {
 				t.Errorf("saved %+v", stub)
+			}
+		})
+	}
+}
+
+func TestViewPrefs_WithStoreHidden(t *testing.T) {
+	tests := []struct {
+		name   string
+		cur    []string
+		id     string
+		hidden bool
+		want   []string
+		bad    bool
+	}{
+		{"hide in one campaign", []string{}, "c-1", true, []string{"c-1"}, false},
+		{"hiding again does not duplicate", []string{"c-1"}, "c-1", true, []string{"c-1"}, false},
+		{"hiding one leaves the other hidden", []string{"c-1"}, "c-2", true, []string{"c-1", "c-2"}, false},
+		{"showing one leaves the others hidden", []string{"c-1", "c-2"}, "c-1", false, []string{"c-2"}, false},
+		{"showing one never hidden is harmless", []string{"c-1"}, "c-9", false, []string{"c-1"}, false},
+		{"empty id refused", []string{}, "", true, nil, true},
+		{"markup refused", []string{}, `"><script>`, true, nil, true},
+		{"overlong id refused", []string{}, strings.Repeat("a", 65), true, nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cur := DefaultViewPrefs()
+			cur.StoreHidden = tc.cur
+			cur.BrushHidden = []string{"b-1"}
+			got, err := cur.WithStoreHidden(tc.id, tc.hidden)
+			if tc.bad {
+				assertAppError(t, err, http.StatusBadRequest)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.StoreHidden, tc.want) {
+				t.Errorf("StoreHidden = %v, want %v", got.StoreHidden, tc.want)
+			}
+			if got.HidesStoreIn(tc.id) != tc.hidden {
+				t.Errorf("HidesStoreIn(%q) = %v, want %v", tc.id, !tc.hidden, tc.hidden)
+			}
+			if !reflect.DeepEqual(got.BrushHidden, []string{"b-1"}) {
+				t.Errorf("a Store choice changed the brush list: %v", got.BrushHidden)
+			}
+		})
+	}
+}
+
+func TestViewPrefs_StoreListIsBounded(t *testing.T) {
+	p := DefaultViewPrefs()
+	var err error
+	for i := 0; i < maxStoreHidden+5; i++ {
+		if p, err = p.WithStoreHidden(fmt.Sprintf("c-%d", i), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(p.StoreHidden) != maxStoreHidden || p.HidesStoreIn("c-0") || !p.HidesStoreIn(fmt.Sprintf("c-%d", maxStoreHidden+4)) {
+		t.Errorf("list not bounded to the newest %d: len %d", maxStoreHidden, len(p.StoreHidden))
+	}
+	// A stored row past the cap reads back as the newest ones only.
+	raw, _ := json.Marshal(map[string]any{"storeHidden": append(append([]string{}, "old-1", "old-2"), p.StoreHidden...)})
+	read := ParseViewPrefs(raw)
+	if len(read.StoreHidden) != maxStoreHidden || read.HidesStoreIn("old-1") {
+		t.Errorf("stored list not bounded on read: len %d", len(read.StoreHidden))
+	}
+}
+
+func TestService_SetStoreHidden_PerCampaignAndKeepsOtherChoices(t *testing.T) {
+	repo := &mockUserRepo{}
+	svc := newTestAuthService(repo)
+	ctx := context.Background()
+	if _, err := svc.SetBrushHidden(ctx, "u1", "c-1", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetStoreHidden(ctx, "u1", "c-1", true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.SetStoreHidden(ctx, "u1", "c-2", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.HidesStoreIn("c-1") || !got.HidesStoreIn("c-2") || !got.HidesBrushIn("c-1") {
+		t.Errorf("got %+v", got)
+	}
+	got, _ = svc.SetStoreHidden(ctx, "u1", "c-1", false)
+	read, _ := svc.GetViewPrefs(ctx, "u1")
+	if got.HidesStoreIn("c-1") || read.HidesStoreIn("c-1") || !read.HidesStoreIn("c-2") || !read.HidesBrushIn("c-1") {
+		t.Errorf("showing the Store in c-1 must leave c-2 hidden and the brush alone: %+v", read)
+	}
+	// A later theme-only save keeps the Store choices.
+	after, _ := svc.UpdateViewPrefs(ctx, "u1", decodeViewPrefsInput(t, `{"contrast":"high"}`))
+	if !after.HidesStoreIn("c-2") {
+		t.Errorf("a contrast-only save dropped the Store choice: %+v", after)
+	}
+}
+
+// storeStub records who a Store icon save targets.
+type storeStub struct {
+	AuthService
+	user, campaign string
+	hidden         bool
+}
+
+func (s *storeStub) SetStoreHidden(_ context.Context, userID, campaignID string, hidden bool) (ViewPrefs, error) {
+	// The id check the real service makes, so a bad id is refused here as
+	// it would be there.
+	if _, err := DefaultViewPrefs().WithStoreHidden(campaignID, hidden); err != nil {
+		return DefaultViewPrefs(), err
+	}
+	s.user, s.campaign, s.hidden = userID, campaignID, hidden
+	return DefaultViewPrefs(), nil
+}
+
+func TestHandler_SetStoreAPI(t *testing.T) {
+	tests := []struct {
+		name     string
+		userID   string
+		campaign string
+		body     string
+		wantCode int // 0 means saved
+		wantHid  bool
+	}{
+		{"visitor refused", "", "c-7", `{"store":"hidden"}`, http.StatusUnauthorized, false},
+		{"hide", "u1", "c-7", `{"store":"hidden"}`, 0, true},
+		{"show", "u1", "c-7", `{"store":"shown"}`, 0, false},
+		{"unknown value refused", "u1", "c-7", `{"store":"off"}`, http.StatusBadRequest, false},
+		{"the brush's key is not the Store's", "u1", "c-7", `{"brush":"hidden"}`, http.StatusBadRequest, false},
+		{"malformed refused", "u1", "c-7", `{`, http.StatusBadRequest, false},
+		{"bad campaign id refused", "u1", "<x>", `{"store":"hidden"}`, http.StatusBadRequest, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &storeStub{}
+			h := &Handler{service: stub}
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPut, "/account/store/c-7", strings.NewReader(tc.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPathValues(echo.PathValues{{Name: "campaignID", Value: tc.campaign}})
+			if tc.userID != "" {
+				c.Set(contextKeyUserID, tc.userID)
+			}
+			err := h.SetStoreAPI(c)
+			if tc.wantCode != 0 {
+				assertAppError(t, err, tc.wantCode)
+				if stub.user != "" {
+					t.Fatalf("a refusal reached the save: %+v", stub)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusOK || stub.user != tc.userID || stub.campaign != tc.campaign || stub.hidden != tc.wantHid {
+				t.Errorf("code %d, saved %+v", rec.Code, stub)
 			}
 		})
 	}

@@ -85,6 +85,24 @@ func (a *brushPrefsAdapter) BrushHidden(ctx context.Context, userID, campaignID 
 	return vp.HidesBrushIn(campaignID), nil
 }
 
+// storePrefsAdapter reads the person's choice to put the top bar's Store icon
+// away, from the same display choices as the brush's.
+type storePrefsAdapter struct {
+	svc interface {
+		GetViewPrefs(ctx context.Context, userID string) (auth.ViewPrefs, error)
+	}
+}
+
+// StoreHidden reports whether the person put the Store icon away in this
+// campaign.
+func (a *storePrefsAdapter) StoreHidden(ctx context.Context, userID, campaignID string) (bool, error) {
+	vp, err := a.svc.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return vp.HidesStoreIn(campaignID), nil
+}
+
 // categoriesApplier is the slice of the entity service the section needs.
 type categoriesApplier interface {
 	ApplyCustomizeCategories(ctx context.Context, campaignID string, in entities.CustomizeCategoriesPatch) (entities.CustomizeCategoriesResult, error)
