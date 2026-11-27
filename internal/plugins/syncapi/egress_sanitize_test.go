@@ -371,11 +371,15 @@ func TestEgressSanitize_HandlersInvokeHelpers(t *testing.T) {
 		fn         string
 		mustCall   string
 	}{
-		{"api_handler.go", "GetEntity", "sanitizeEntityHTMLForEgress"},
+		// Every answer carrying one page goes through viewerCopy, which runs
+		// the sanitize and then the role-aware secret strip, or a player-role
+		// caller reads raw GM prose (from a read or a save's answer).
+		{"api_handler.go", "GetEntity", "viewerCopy"},
+		{"api_handler.go", "UpdateEntity", "viewerCopy"},
+		{"api_handler.go", "CreateEntity", "viewerCopy"},
+		{"api_handler.go", "viewerCopy", "sanitizeEntityHTMLForEgress"},
+		{"api_handler.go", "viewerCopy", "stripEntitySecretsForEgress"},
 		{"api_handler.go", "ListEntities", "sanitizeEntitiesHTMLForEgress"},
-		// The entity read handlers must ALSO invoke the role-aware secret
-		// stripper, or a player-role caller reads raw GM prose.
-		{"api_handler.go", "GetEntity", "stripEntitySecretsForEgress"},
 		{"api_handler.go", "ListEntities", "stripEntitiesSecretsForEgress"},
 		{"note_api_handler.go", "GetNote", "sanitizeNoteHTMLForEgress"},
 		{"note_api_handler.go", "ListNotes", "sanitizeNotesHTMLForEgress"},

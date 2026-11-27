@@ -181,3 +181,62 @@ func TestListPosts_HiddenMentions(t *testing.T) {
 		})
 	}
 }
+
+// storedPostService answers every save with the whole stored post, as the
+// real service does.
+type storedPostService struct {
+	PostService
+	stored *Post
+}
+
+func (s storedPostService) GetByID(context.Context, string) (*Post, error) { return s.stored, nil }
+func (s storedPostService) Update(context.Context, string, UpdatePostRequest) (*Post, error) {
+	p := *s.stored
+	return &p, nil
+}
+func (s storedPostService) Create(context.Context, string, string, string, string, CreatePostRequest) (*Post, error) {
+	p := *s.stored
+	return &p, nil
+}
+
+// A save's answer is the copy a read would give: a Scribe's name-only save
+// of a post with GM-only text must not hand that text back.
+func TestPostSaveAnswer_GMOnlyContent(t *testing.T) {
+	html := `<p>Public lore. <span data-secret="true">The duke is a vampire.</span></p>`
+	entry := json.RawMessage(`{"type":"doc","content":[{"type":"paragraph","content":[` +
+		`{"type":"text","text":"Public lore. "},` +
+		`{"type":"text","text":"The duke is a vampire.","marks":[{"type":"secret"}]}]}]}`)
+	ops := map[string]func(*Handler, *echo.Context) error{
+		"update": (*Handler).UpdatePost,
+		"create": (*Handler).CreatePost,
+	}
+	for opName, op := range ops {
+		for _, tt := range []struct {
+			name       string
+			role       campaigns.Role
+			wantSecret bool
+		}{
+			{"scribe", campaigns.RoleScribe, false},
+			{"owner", campaigns.RoleOwner, true},
+		} {
+			t.Run(opName+"/"+tt.name, func(t *testing.T) {
+				h := NewHandler(storedPostService{stored: &Post{ID: "p1", EntityID: "ent", CampaignID: "camp-1", Name: "Lore", Entry: entry, EntryHTML: &html}})
+				h.SetEntityGate(postsDmGrantGate{campaignOf: map[string]string{"ent": "camp-1"}})
+				req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"name":"Renamed"}`))
+				rec := httptest.NewRecorder()
+				c := echo.New().NewContext(req, rec)
+				c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "eid", Value: "ent"}, {Name: "pid", Value: "p1"}})
+				c.Set("campaign_context", &campaigns.CampaignContext{
+					Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: tt.role, IsMember: true,
+				})
+				auth.SetSession(c, &auth.Session{UserID: "u1"})
+				if err := op(h, c); err != nil {
+					t.Fatalf("%s: %v", opName, err)
+				}
+				if got := strings.Contains(rec.Body.String(), "vampire"); got != tt.wantSecret {
+					t.Errorf("secret in answer = %v, want %v; body=%s", got, tt.wantSecret, rec.Body.String())
+				}
+			})
+		}
+	}
+}
