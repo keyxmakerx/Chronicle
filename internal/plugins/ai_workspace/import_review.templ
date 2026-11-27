@@ -445,6 +445,9 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			if page.FrontMatter.KnownAs != "" {
 				<span class="air-line">{ "Known as " + page.FrontMatter.KnownAs + " in that era" }</span>
 			}
+			if to := page.FrontMatter.NewName(); to != "" && page.FrontMatter.Action == importer.ActionUpdate {
+				<span class="air-line">{ "Renames it to " + to }</span>
+			}
 			@reviewRowMeta(page)
 			if cls.FieldsSummary != "" {
 				<span class="air-line">{ cls.FieldsSummary }</span>

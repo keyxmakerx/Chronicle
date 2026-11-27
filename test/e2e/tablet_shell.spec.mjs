@@ -43,7 +43,7 @@ function cut(from, to) {
 const layersCSS = cut(':root {\n  --z-raised:', '}\n') + '}\n';
 const sidebarCSS = cut('  .sidebar-mobile-open {', '  /* Hide text labels, section headers');
 const motionCSS = cut('html[data-cz-reduce] *:not(.czp *),', '\n\n/* ======');
-const comingUpCSS = cut('.cu-card { container:', '/* Header widgets below md:');
+const comingUpCSS = cut('.cu-card { container:', '/* Header widgets (app.templ');
 
 const UTILITIES = `
   *, ::before, ::after { box-sizing: border-box; }

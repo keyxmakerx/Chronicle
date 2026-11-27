@@ -41,7 +41,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><link rel="styles
 <style>html,body{margin:0}</style></head><body>
 <div style="display:flex;height:100vh;overflow:hidden"><div style="width:240px"></div>
 <div style="position:relative;flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
-<div style="height:56px;flex:none"></div>
+<header id="app-topbar" style="height:56px;flex:none;position:relative;isolation:isolate;z-index:20;background:#fff"></header>
 <main id="main-content" style="flex:1;overflow-y:auto;padding:16px 20px"><div style="max-width:64rem;margin:0 auto;padding:24px 16px">
 <div class="cal-v5" data-widget="calendar_view" data-campaign-id="c1" data-calendar-id="k1" data-can-edit="true" data-can-author-dm-only="true"
   data-role="3" data-user-id="u0" data-game-nights="true" data-api-base="/campaigns/c1/calendars/k1">
@@ -105,3 +105,81 @@ for (const [label, viewport] of [['a desktop', { width: 1280, height: 800 }], ['
     assert.ok(m.linksBottom <= m.einBottom + 1, 'scrolled to its end, Linked pages is in view');
   });
 }
+
+// Escape pressed while a day's card is still folding open closes it every
+// time, rather than queueing a close an interrupted opening could drop.
+test('Escape while a day card is opening closes it', { skip }, async (t) => {
+  const p = await page(t, { width: 1280, height: 800 });
+  for (let i = 0; i < 20; i++) {
+    await p.click('.day[data-key="2026_10_29"]');
+    await p.waitForTimeout(60);
+    await p.keyboard.press('Escape');
+    await settle(p);
+    assert.equal(await p.$eval('#cal5-wing', (w) => w.classList.contains('open')), false, `run ${i + 1}: the card stayed open`);
+  }
+});
+
+// A calendar message sits inside the window even when the card runs past
+// the window's bottom edge, so its Undo can always be seen and pressed.
+const showToast = (p) => p.evaluate(() => {
+  document.querySelector('[data-widget="calendar_view"]').calendarView._toast('Hidden for everyone.', { label: 'Undo', run() {} });
+});
+const undoAt = (p) => p.evaluate(() => {
+  const b = document.querySelector('#cal5-cal .toast button').getBoundingClientRect();
+  const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+  return { top: b.top, bottom: b.bottom, h: innerHeight, pressable: !!hit && hit.matches('.toast button') };
+});
+
+test('a calendar message and its Undo stay inside the window', { skip }, async (t) => {
+  const p = await page(t, { width: 1280, height: 640 });
+  const calBottom = await p.$eval('#cal5-cal', (c) => c.getBoundingClientRect().bottom);
+  assert.ok(calBottom > 640, `the fixture's card must run past the window (bottom ${calBottom})`);
+  await showToast(p);
+  await settle(p);
+  const u = await undoAt(p);
+  assert.ok(u.bottom <= u.h, `Undo's bottom ${u.bottom} is below the window's ${u.h}`);
+  assert.ok(u.pressable, 'Undo is the thing under its own centre');
+});
+
+// An editor's calendar has the Look/Edit bar along its bottom; the message
+// rises clear of it, and of the drawer while editing.
+test('a calendar message clears the Look/Edit bar and its drawer', { skip }, async (t) => {
+  const p = await page(t, { width: 1280, height: 800 });
+  await p.evaluate(() => {
+    const cal = document.querySelector('#cal5-cal');
+    const deck = document.createElement('div');
+    deck.className = 'deck';
+    deck.innerHTML = '<div class="dkdrawer"><div class="dkr" style="height:64px">Tools</div></div>' +
+      '<div class="dkstrip"><button type="button" class="dktab">Look</button><button type="button" class="dktab">Edit</button></div>';
+    cal.appendChild(deck);
+    cal.classList.add('decked');
+  });
+  for (const editing of [false, true]) {
+    await p.evaluate((on) => {
+      document.querySelector('#cal5-cal').classList.toggle('editing', on);
+      document.querySelector('#cal5-cal .deck').classList.toggle('up', on);
+    }, editing);
+    await settle(p);
+    await showToast(p);
+    await settle(p);
+    const m = await p.evaluate(() => {
+      const deck = document.querySelector('#cal5-cal .deck');
+      const dr = deck.querySelector('.dkdrawer');
+      const top = deck.classList.contains('up') ? dr.getBoundingClientRect().top : deck.getBoundingClientRect().top;
+      return { toast: document.querySelector('#cal5-cal .toast').getBoundingClientRect().bottom, top };
+    });
+    assert.ok(m.toast <= m.top - 8, `${editing ? 'editing' : 'looking'}: the message ends at ${m.toast}, the bar starts at ${m.top}`);
+  }
+});
+
+// On a phone the message moves to the top of the screen, below the app's
+// top bar, where Undo can be tapped.
+test('on a phone a calendar message sits below the app top bar', { skip }, async (t) => {
+  const p = await page(t, { width: 390, height: 800 });
+  await showToast(p);
+  await settle(p);
+  const u = await undoAt(p);
+  const bar = await p.$eval('#app-topbar', (b) => b.getBoundingClientRect().bottom);
+  assert.ok(u.top >= bar, `Undo starts at ${u.top}, under the top bar ending at ${bar}`);
+  assert.ok(u.pressable, 'Undo is the thing under its own centre');
+});

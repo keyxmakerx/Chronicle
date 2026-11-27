@@ -5580,19 +5580,26 @@ html[data-motion="off"] .manage-find { transition: none; }
   .cu-words { flex-basis: calc(100% - 3.25rem); }
   .cu-end { margin-inline-start: 3.25rem; }
 }
-/* Header widgets below md: when the bar can't fit even the first widget,
-   it joins the rest in the tray and the button counts it (app.templ,
-   topbarCenterContent). A lone widget gets the button only then. */
+/* Header widgets (app.templ, topbarCenterContent). Below md only the first
+   widget sits in the bar and the button opens the tray with the rest. At any
+   width, when the bar can't fit even the first widget, every widget moves to
+   the tray and the button counts them all, so a widget is never hidden with
+   no way to reach it (a tablet-wide window with the sidebar open lands here).
+   A lone widget gets the button only then. */
 .tb-slot { container: tbslot / inline-size; }
-.tb-first-copy, .tb-n-all, .tb-solo { display: none; }
+.tb-more, .tb-first-copy, .tb-n-all { display: none; }
+@media (max-width: 767.98px) { .tb-more:not(.tb-solo) { display: inline-flex; } }
+/* An open tray hides when the bar widens past it; x-show's inline
+   display:none still wins whenever the tray is shut. */
+@media (min-width: 768px) { #topbar-tray { display: none; } }
 @container tbslot (max-width: 8rem) {
-  .tb-first { display: none; }
+  .tb-slot #topbar-tray { display: flex; }
+  .tb-slot .tb-first, .tb-slot .tb-rest { display: none; }
   .tb-first-copy { display: contents; }
   .tb-n { display: none; }
   .tb-n-all { display: inline; }
-  .tb-solo { display: inline-flex; }
+  .tb-more { display: inline-flex; }
 }
-@media (min-width: 768px) { .tb-solo { display: none; } }
 
 .cz-hdr-light #topbar-tray {
   --color-text-primary: var(--cz-page-ink-1);

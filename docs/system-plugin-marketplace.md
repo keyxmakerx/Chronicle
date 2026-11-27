@@ -130,6 +130,9 @@ An entity preset field may carry a `play` object declaring it can be changed dur
 | `max_length` | Length bound for `text` and `choice` |
 | `to_foundry` | Whether a play edit is written to Foundry; absent means follow the field's `foundry_writable` |
 | `combat_authority` | `foundry` or `chronicle`: which side wins during combat; absent leaves it undecided |
+| `bell` | `true` rings the campaign Directors' bell when the hero's player changes the value ("Victories: 2 → 3"), from the sheet or from Foundry; for numbers a table awards, not ones that move every turn |
+
+The claimed owner may write a `counter` or `resource` field with `edit: owner` through the page's fields route: a whole number (or null to clear it) within `min`, and `max_field`'s current value or `max`. The same write's `max_field` value counts only when the owner may set that field too and it passes its own check, so a write the door holds back in part can't lift the bound; anything else is refused with the field's name. Other kinds keep their own checks (identity text, builder picks).
 
 A `play` block is dropped at load, leaving an ordinary field, when: `edit`, `kind` or `combat_authority` is unknown; `max_field` names a missing field, the field itself or a non-number field; `options` is empty for `conditions`/`choice`, has over 50 entries, or holds an empty or over-64-character value; `min` > `max`; `step` or `max_length` is negative; or the field is `gm_only` with `edit: owner`. The rest of the system still loads. Each drop is logged and listed in the system's validation warnings (diagnostics page, install preview).
 

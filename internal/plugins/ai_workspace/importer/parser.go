@@ -246,10 +246,13 @@ func parseOnePage(raw string) ParsedPage {
 		p.FrontMatter = fm
 		p.Body = body
 		_ = yaml.Unmarshal([]byte(fmRaw), &p.Fields)
-		// Warn for unknown YAML keys (records carry per-kind keys).
+		// A key the page committer doesn't read would be dropped while the
+		// rest of the block applies, so the change would be reported done
+		// without it. Refuse the block instead (records check their own keys).
 		if unknown := unknownYAMLKeys(fmRaw); len(unknown) > 0 && !p.IsRecord() {
-			p.Warnings = append(p.Warnings,
-				"Unknown front-matter key(s): "+strings.Join(unknown, ", "))
+			p.Status = StatusParseError
+			p.ParseError = unknownKeysError(unknown)
+			return p
 		}
 	}
 
@@ -288,6 +291,15 @@ func parseOnePage(raw string) ParsedPage {
 		p.ParseError = "known_as: only works together with era: (it is the page's name in that era). " +
 			"Add the era's name as `era:`, or remove known_as."
 		return p
+	}
+
+	// rename_to renames a page that exists; an era's own name is known_as.
+	if _, has := p.Fields["rename_to"]; has {
+		if msg := renameProblem(p.FrontMatter); msg != "" {
+			p.Status = StatusParseError
+			p.ParseError = msg
+			return p
+		}
 	}
 
 	// A page sits in a folder or under a parent page, never both.
@@ -466,16 +478,39 @@ func eraIgnoredWarnings(f FrontMatter) []string {
 		strings.Join(ignored, ", ")}
 }
 
+// renameProblem is why a page block's `rename_to` can't be used, "" when it can.
+func renameProblem(fm FrontMatter) string {
+	switch {
+	case fm.IsEra():
+		return "rename_to: can't be used with era:; the page's name in an era is known_as:."
+	case fm.Action != ActionUpdate:
+		return "rename_to: only renames a page that exists; add `action: update` and name the page by its current name."
+	case fm.NewName() == "":
+		return "rename_to: needs the page's new name."
+	case len(fm.NewName()) > 200:
+		return "rename_to: is too long (a page name is at most 200 characters)."
+	}
+	return ""
+}
+
+// unknownKeysError names the keys a page block can't use and the ones it can.
+func unknownKeysError(unknown []string) string {
+	return "Unknown key(s) on a page block: " + strings.Join(unknown, ", ") +
+		". Nothing in this block was changed. A page block takes name, type, subcategory, visibility, tags, " +
+		"action, parent, folder, layout, fields, era, known_as, rename_to and reason; " +
+		"a sheet value goes under fields:."
+}
+
 // unknownYAMLKeys returns the top-level YAML keys that aren't in
 // the FrontMatter schema. Used to populate the row's Warnings slice.
 // Tolerant of comments + blank lines.
 func unknownYAMLKeys(rawYAML string) []string {
 	known := map[string]bool{
 		"name": true, "type": true, "subcategory": true,
-		"visibility": true, "tags": true, "description": true,
+		"visibility": true, "tags": true,
 		"action": true, "kind": true, "parent": true,
 		"era": true, "known_as": true, "reason": true, "fields": true,
-		"folder": true, "layout": true,
+		"folder": true, "layout": true, "rename_to": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {

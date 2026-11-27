@@ -467,16 +467,22 @@
   // Toggle body.is-loading to show/hide the global progress bar. Not htmx's
   // own htmx-request class: on body, htmx's ".htmx-request .htmx-indicator"
   // rule would light every inline spinner on the page during any request.
-  var activeRequests = 0;
-  document.addEventListener('htmx:beforeRequest', function () {
-    activeRequests++;
+  // Each request is counted by its own XHR and ends on the XHR's loadend
+  // (done, failed, aborted or timed out). htmx fires afterRequest on the
+  // element that asked, and an element removed mid-request (a lazy block when
+  // the page is swapped or refreshed) never lets it reach document, which
+  // left the bar running until a reload. beforeSend, not beforeRequest, so a
+  // request cancelled before it is sent is never counted.
+  var activeRequests = new Set();
+  document.addEventListener('htmx:beforeSend', function (event) {
+    var xhr = event.detail && event.detail.xhr;
+    if (!xhr || activeRequests.has(xhr)) return;
+    activeRequests.add(xhr);
     document.body.classList.add('is-loading');
-  });
-  document.addEventListener('htmx:afterRequest', function () {
-    activeRequests = Math.max(0, activeRequests - 1);
-    if (activeRequests === 0) {
-      document.body.classList.remove('is-loading');
-    }
+    xhr.addEventListener('loadend', function () {
+      activeRequests.delete(xhr);
+      if (activeRequests.size === 0) document.body.classList.remove('is-loading');
+    });
   });
 
   // --- Form Validation Feedback ---

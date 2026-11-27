@@ -42,10 +42,13 @@
     input.addEventListener('input', onInput);
     input.addEventListener('keydown', onKeydown);
 
-    // Close when clicking outside the search area.
+    // Close when clicking outside the search area. The click that opened the
+    // search bubbles here too, so every control that opens it is skipped:
+    // the icon and the header's search box widget (data-search-open), or the
+    // search would close in the same click that opened it.
     document.addEventListener('click', function (e) {
       if (!isActive) return;
-      if (e.target.closest('#topbar-search') || e.target.closest('#topbar-search-trigger')) return;
+      if (e.target.closest('#topbar-search, #topbar-search-trigger, [data-search-open]')) return;
       closeSearch();
     });
 

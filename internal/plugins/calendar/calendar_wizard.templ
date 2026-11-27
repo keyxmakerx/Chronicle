@@ -333,8 +333,10 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 				Back
 			</button>
 			<span class="sp" style="flex:1"></span>
+			// Says why Create is unavailable rather than leaving a grey button.
+			<span id="calv5-review-why" class="calv5-wz-why" x-show="!m || !d" x-cloak>Pick today's month and day to create it.</span>
 			<i id="calv5-review-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
-			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!m || !d">
+			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!m || !d" aria-describedby="calv5-review-why">
 				Create calendar
 			</button>
 		</div>
@@ -538,8 +540,10 @@ templ wizardRealWorldReviewBody(campaignID, csrfToken, backURL, formError, defau
 				Back
 			</button>
 			<span class="sp" style="flex:1"></span>
+			// Says why Create is unavailable rather than leaving a grey button.
+			<span id="calv5-review-why" class="calv5-wz-why" x-show="!followsReal && (!m || !d)" x-cloak>Pick today's month and day to create it.</span>
 			<i id="calv5-review-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
-			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!followsReal && (!m || !d)">
+			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!followsReal && (!m || !d)" aria-describedby="calv5-review-why">
 				Create calendar
 			</button>
 		</div>

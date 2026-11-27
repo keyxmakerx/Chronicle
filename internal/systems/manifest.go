@@ -546,6 +546,11 @@ type PlayDef struct {
 
 	// CombatAuthority is foundry or chronicle; empty leaves it undecided.
 	CombatAuthority string `json:"combat_authority,omitempty"`
+
+	// Bell rings the campaign Directors' bell when the hero's player changes
+	// the field, for numbers a table awards (Victories, XP) rather than ones
+	// that move every turn.
+	Bell bool `json:"bell,omitempty"`
 }
 
 // IsFoundryWritable returns whether this field should be written back to

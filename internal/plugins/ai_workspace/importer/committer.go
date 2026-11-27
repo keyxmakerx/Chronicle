@@ -730,8 +730,20 @@ func (c *Committer) commitUpdate(
 		typeLabel = patch.Of(dec.Subcategory)
 	}
 
-	if _, err := c.creator.Update(ctx, existing.ID, entities.UpdateEntityInput{
-		Name:      patch.Of(existing.Name), // update keeps the existing name
+	// rename_to is the only way an update changes the name. A name another
+	// page already has would give two pages one name, so it is refused.
+	name := existing.Name
+	if to := page.FrontMatter.NewName(); to != "" && to != existing.Name {
+		if other, _ := c.creator.GetBySlug(ctx, existing.CampaignID, entities.Slugify(to)); other != nil && other.ID != existing.ID {
+			out.Status = StatusFailed
+			out.Reason = "Not renamed: another page is already called " + strconv.Quote(other.Name) + ". The page is unchanged."
+			return out
+		}
+		name = to
+	}
+
+	updated, err := c.creator.Update(ctx, existing.ID, entities.UpdateEntityInput{
+		Name:      patch.Of(name),
 		TypeLabel: typeLabel,
 		IsPrivate: isPrivateField,
 		// Absent keeps the page where it is; the service validates a
@@ -740,7 +752,8 @@ func (c *Committer) commitUpdate(
 		// FieldsData is ABSENT (nil), never an empty map: the service
 		// replaces all fields on any non-nil map. The named fields are
 		// merged below instead, so the others keep their values.
-	}); err != nil {
+	})
+	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = parentReason(err, "Could not update the existing page's settings. The original page is unchanged.")
 		return out
@@ -775,10 +788,17 @@ func (c *Committer) commitUpdate(
 		return out
 	}
 	out.Status = StatusUpdated
+	if name != existing.Name {
+		out.Name = name
+		if updated != nil {
+			out.Slug = updated.Slug
+		}
+		out.Reason = "Renamed from " + strconv.Quote(existing.Name)
+	}
 	// Only the title and text are kept (what the page's history holds), so a
 	// block that also changed sheet fields, tags, folder, parent, layout or
 	// visibility offers no Undo rather than a half one.
-	if !keepText && changesOnlyText(page) {
+	if (!keepText || name != existing.Name) && changesOnlyText(page) {
 		out.Before = &was
 	}
 	return out

@@ -362,6 +362,7 @@ type FieldPlay struct {
 	MaxLength       int      `json:"max_length,omitempty"`       // Bound for text/choice.
 	ToFoundry       *bool    `json:"to_foundry,omitempty"`       // nil = follow the field's foundry_writable.
 	CombatAuthority string   `json:"combat_authority,omitempty"` // foundry | chronicle | empty.
+	Bell            bool     `json:"bell,omitempty"`             // An owner's change rings the Directors' bell.
 }
 
 // Entity represents a single worldbuilding object — a character, location,

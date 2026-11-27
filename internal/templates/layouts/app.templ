@@ -1272,7 +1272,7 @@ templ topbarCenterContent(ctx context.Context) {
 							@topbarWidget(ctx, tc, w)
 						</div>
 					} else {
-						<div class="hidden md:flex items-center min-w-0">
+						<div class="tb-rest hidden md:flex items-center min-w-0">
 							@topbarWidget(ctx, tc, w)
 						</div>
 					}
@@ -1283,7 +1283,7 @@ templ topbarCenterContent(ctx context.Context) {
 					@click="more = !more"
 					:aria-expanded="more ? 'true' : 'false'"
 					aria-controls="topbar-tray"
-					class={ "md:hidden shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-semibold text-fg", templ.KV("tb-solo", len(ws) == 1) }
+					class={ "tb-more shrink-0 items-center px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-semibold text-fg", templ.KV("tb-solo", len(ws) == 1) }
 				>
 					if len(ws) > 1 {
 						<span class="tb-n">+{ strconv.Itoa(len(ws) - 1) }</span>
@@ -1302,7 +1302,7 @@ templ topbarCenterContent(ctx context.Context) {
 					x-transition:leave-start="mn-to"
 					x-transition:leave-end="mn-from"
 					:style="(more, 'transform-origin:' + Math.round($refs.moreBtn.getBoundingClientRect().left + $refs.moreBtn.offsetWidth / 2 - document.getElementById('app-topbar').getBoundingClientRect().left - 8) + 'px 0')"
-					class="tb-pop md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-elev-hover"
+					class="tb-pop absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-elev-hover"
 				>
 					<div class="tb-first-copy">
 						@topbarWidget(ctx, tc, ws[0])
@@ -1448,8 +1448,11 @@ templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 			<span class="truncate">{ tc.Live.NextNight.Label }</span>
 		</span>
 	} else if w == "search" {
+		<!-- data-search-open: topbar_search.js closes on any click outside the
+		     search, and this button sits outside it, so it is named as an opener. -->
 		<button
 			type="button"
+			data-search-open
 			onclick="if(window.Chronicle&&Chronicle.openSearch){Chronicle.openSearch();}"
 			class="inline-flex items-center gap-2 w-full min-w-[9rem] max-w-xs px-3 py-1.5 rounded-lg border border-edge bg-surface-alt text-xs text-fg-muted hover:text-fg text-left"
 			title="Search (Ctrl+K)"
