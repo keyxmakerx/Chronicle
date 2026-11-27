@@ -180,6 +180,10 @@ func (s *choiceRuleService) DirectorEntries(ctx context.Context, campaignID stri
 	present := map[ruleRef]bool{}
 	for _, c := range all.Choices {
 		present[ruleRef{source: c.Source, key: c.Key}] = true
+		// Rules on a standard entry follow its rewrite, so they aren't orphans.
+		if c.Origin == OriginRewritten && c.StandsFor != "" {
+			present[ruleRef{source: ChoiceSourcePackage, key: c.StandsFor}] = true
+		}
 	}
 	for i, c := range audience {
 		cl := classes[i]
@@ -195,7 +199,11 @@ func (s *choiceRuleService) DirectorEntries(ctx context.Context, campaignID stri
 		if !cl.listed && cl.State != RuleNotOffered {
 			e.State = "left_out"
 		}
-		if mk := byEntry[ruleRef{source: c.Source, key: c.Key}]; mk != nil {
+		mk := byEntry[ruleRef{source: c.Source, key: c.Key}]
+		if mk == nil && c.Origin == OriginRewritten && c.StandsFor != "" {
+			mk = byEntry[ruleRef{source: ChoiceSourcePackage, key: c.StandsFor}]
+		}
+		if mk != nil {
 			e.Everyone, e.RuleCount = mk.everyone, mk.count
 			if mk.players != nil {
 				e.Players = mk.players

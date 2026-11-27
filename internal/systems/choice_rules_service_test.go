@@ -771,3 +771,35 @@ func TestChoiceRuleService_DirectorEntries(t *testing.T) {
 		t.Fatalf("as Pat = %d entries, want 5", len(asPat.Entries))
 	}
 }
+
+// A rule on a standard entry holds for the campaign's rewrite of it, in the
+// player's list and in the Directors' view, where it is not an orphan.
+func TestChoiceRuleService_RuleFollowsRewrite(t *testing.T) {
+	env := newRuleEnv(t)
+	env.mark(t, "package", "fury", "", RuleNotOffered)
+	rewrite := Choice{Key: "40", Name: "Fury (our words)", Source: ChoiceSourceCampaign, Origin: OriginRewritten, StandsFor: "fury"}
+	env.choices.pkg = []Choice{rewrite, env.choices.pkg[1], env.choices.pkg[2]}
+
+	l, err := env.choices.CharacterChoiceList(env.ctxFor("lee"), camp, "ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range l.Choices {
+		if c.Name == rewrite.Name {
+			t.Fatal("the rewrite of a not-here entry is offered to a player")
+		}
+	}
+
+	all, err := env.svc.DirectorEntries(context.Background(), camp, dirActor, "ancestry", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all.Orphans) != 0 {
+		t.Fatalf("orphans = %+v, want none: the rule holds for the rewrite", all.Orphans)
+	}
+	for _, e := range all.Entries {
+		if e.Name == rewrite.Name && (e.State != RuleNotOffered || e.Everyone == nil) {
+			t.Fatalf("rewrite = %+v, want not here with the everyone mark", e)
+		}
+	}
+}
