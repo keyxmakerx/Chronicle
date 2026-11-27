@@ -231,7 +231,10 @@ under Parent) or a page earlier in this same paste, so list parents first. With
 level, and leaving the line out keeps it where it is. A page cannot be its own parent.
 
 To file a page in a sidebar folder of its category (a folder shows as "Name (in folder Gods)"
-in the index), add ` + "`" + `folder: Gods` + "`" + `. Make the folder first with a ` + "`" + `kind: folder` + "`" + ` block, or
+in the index), add ` + "`" + `folder: Gods` + "`" + `. A lookup with ` + "`" + `what: folders` + "`" + ` lists every category's
+folders and how they nest, empty ones included; read it before renaming, moving or removing
+a folder. "Name (in folder Races of Lore)" means the folder belongs to Lore, so a
+` + "`" + `kind: folder` + "`" + ` block for it says ` + "`" + `category: Lore` + "`" + `. Make the folder first with a ` + "`" + `kind: folder` + "`" + ` block, or
 use one that already exists; ` + "`" + `folder: none` + "`" + ` takes the page out of its folder, and
 leaving the line out keeps it where it is. A page sits under a parent page or in a
 folder, not both.

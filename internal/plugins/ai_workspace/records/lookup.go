@@ -154,6 +154,10 @@ type Lookups struct {
 	// Folders names the sidebar folders so pages show which one holds them;
 	// nil leaves folders out.
 	Folders aiexport.FolderNamer
+	// FolderTree answers `what: folders`, adds every folder to a Director's
+	// page index and names the category of a folder a page sits in when it
+	// is not the page's own; nil says folders can't be looked up.
+	FolderTree FoldersAPI
 	// Aliases adds a page's other names to the `page` answer; nil leaves
 	// them out.
 	Aliases AliasesAPI
@@ -305,6 +309,7 @@ type LookupAnswer struct {
 // its keys for the prompt's description.
 var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character) and `tag` (a tag's name)", "page names with their tags, by type or tag"},
+	{"folders", "optional `category` (one category's name)", "each category's sidebar folders as a nested tree, empty ones included, with how many pages each holds: the names a `folder` block and a page's `folder:` take"},
 	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
 	{"search", "`query` (words to find), optional `type` (a kind of page)", "the pages whose name, other names or text hold the words, with a short quote from each, as far as you can see them; `piece` steps to the next hits"},
 	{"page", "`name`", "one page: its text, tags and links, its item look, and for a Director its quest notice and notice boards"},
@@ -480,6 +485,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	switch what {
 	case "pages":
 		ans, err = run.pagesIndex(r.Str("type"), r.Str("tag"))
+	case "folders", "folder":
+		ans, err = run.foldersLookup(firstNonEmpty(r.Str("category"), r.Str("type"), r.Name))
 	case "search", "find":
 		ans, err = run.search(firstNonEmpty(r.Str("query"), r.Name), r.Str("type"))
 	case "page":
@@ -635,16 +642,21 @@ func (run *lookupRun) folderNames() map[string]string {
 }
 
 // withParent labels a page "Name (in Parent)" when its parent is visible, or
-// "Name (in folder Gods)" when it is filed in a folder.
-func withParent(p entities.Entity, names, folders map[string]string) string {
+// "Name (in folder Gods)" when it is filed in a folder. A folder of another
+// category reads "in folder Gods of Lore" when its category is known, since
+// a folder block must name the folder's own category, not the page's.
+func withParent(p entities.Entity, names map[string]string, folders map[string]folderPlace) string {
 	if p.ParentID != nil {
 		if parent := names[*p.ParentID]; parent != "" {
 			return p.Name + " (in " + parent + ")"
 		}
 	}
 	if p.ParentNodeID != nil {
-		if f := folders[*p.ParentNodeID]; f != "" {
-			return p.Name + " (in folder " + f + ")"
+		if f := folders[*p.ParentNodeID]; f.name != "" {
+			if f.category != "" && f.categoryID != p.EntityTypeID {
+				return p.Name + " (in folder " + f.name + " of " + f.category + ")"
+			}
+			return p.Name + " (in folder " + f.name + ")"
 		}
 	}
 	return p.Name
@@ -742,7 +754,7 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 		return LookupAnswer{Chip: "Pages"}, badRequestf("tags can't be looked up on this server")
 	}
 	groups, order := map[string][]string{}, []string{}
-	parents, folders := run.parentNames(), run.folderNames()
+	parents, folders := run.parentNames(), run.folderPlaces()
 	director := run.director()
 	kindMark, marked := map[string]string{}, false
 	for _, p := range pages {
@@ -846,7 +858,8 @@ func hasTag(ts []tags.Tag, slug string) bool {
 // PageIndex is the prompt's compact list of page names per type, capped,
 // so the AI knows what it can ask about without the whole world. A
 // sub-page reads "Name (in Parent)" so the AI can place new pages with
-// `parent:` or `folder:`; a parent the reader cannot see is not named.
+// `parent:` or `folder:`; a parent the reader cannot see is not named. A
+// Director's index ends with every folder, empty ones included.
 func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) string {
 	if l == nil || l.Pages == nil {
 		return ""
@@ -862,7 +875,7 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	// wear, so the AI can tell a hero from an NPC in one Characters list.
 	worn := run.layoutNames()
 	byLayout, layoutOrder := map[string]map[string][]string{}, map[string][]string{}
-	parents, folders := run.parentNames(), run.folderNames()
+	parents, folders := run.parentNames(), run.folderPlaces()
 	director := run.director()
 	kindMark, marked := map[string]string{}, false
 	for _, p := range pages {
@@ -919,7 +932,10 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 		}
 		fmt.Fprintf(&b, "- **%s** (%d)%s: %s\n", label, len(names), kindMark[label], list(names))
 	}
-	return capText(b.String(), 8*1024)
+	// The folders go last but are kept out of the cap on the pages, so a
+	// long index never cuts them off.
+	outline := run.folderOutline()
+	return capText(b.String(), 8*1024-len(outline)) + outline
 }
 
 // MenuOrder is the sidebar menu's categories in order, for the owner only

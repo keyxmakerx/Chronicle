@@ -159,7 +159,7 @@ func callIcon(c connector.Call) string {
 		return "fa-rotate-left"
 	case "read_page":
 		return "fa-file-lines"
-	case "list_pages", "list_tags", "my_notes", "game_nights":
+	case "list_pages", "list_folders", "list_tags", "my_notes", "game_nights":
 		return "fa-list"
 	case "house_rules", "block_format", "how_to_write_changes":
 		return "fa-book-open"
