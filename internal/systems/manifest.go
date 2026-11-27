@@ -450,6 +450,11 @@ type FieldDef struct {
 	// Effect changes (entry_effects.go). A bad mapping is dropped at load.
 	FoundryEntryEffects map[string]EntryEffectDef `json:"foundry_entry_effects,omitempty"`
 
+	// FoundryEntryItems, on the same kind of field, says which list
+	// properties of a campaign's own entry become Foundry items of their own
+	// beside its item (entry_items.go). A bad mapping is dropped at load.
+	FoundryEntryItems map[string]EntryItemDef `json:"foundry_entry_items,omitempty"`
+
 	// Play declares that this field may be changed during play and how, so
 	// core never needs to know a system's field names. Optional; a block that
 	// fails validation is dropped at load (see sanitizePlayBlocks) and the
@@ -814,6 +819,7 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 
 			FoundryEntryFields:  f.FoundryEntryFields,
 			FoundryEntryEffects: f.FoundryEntryEffects,
+			FoundryEntryItems:   f.FoundryEntryItems,
 		}
 	}
 
@@ -899,6 +905,8 @@ type CharacterFieldExport struct {
 	FoundryEntryFields map[string]EntryFieldDef `json:"foundry_entry_fields,omitempty"`
 	// FoundryEntryEffects: see FieldDef.FoundryEntryEffects.
 	FoundryEntryEffects map[string]EntryEffectDef `json:"foundry_entry_effects,omitempty"`
+	// FoundryEntryItems: see FieldDef.FoundryEntryItems.
+	FoundryEntryItems map[string]EntryItemDef `json:"foundry_entry_items,omitempty"`
 }
 
 // CharacterFieldsForAPI builds the API response for character preset fields.
@@ -1170,6 +1178,7 @@ func ValidateManifest(m *SystemManifest) error {
 	m.sanitizeCreatorBlocks()
 	m.sanitizeEntryFields()
 	m.sanitizeEntryEffects()
+	m.sanitizeEntryItems()
 
 	// Validate widgets.
 	if len(m.Widgets) > maxWidgets {
