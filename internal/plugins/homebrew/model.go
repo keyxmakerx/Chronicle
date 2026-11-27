@@ -26,6 +26,9 @@ type Viewer struct {
 	// VisibilityRole is passed on to owners whose actions check page
 	// access as this person.
 	VisibilityRole int
+	// Name is the person's display name where the service knows it, for an
+	// owner that writes it into its own record (the roll log).
+	Name string
 }
 
 // Recipe is one saved recipe. Doc is the part the Workshop edits.

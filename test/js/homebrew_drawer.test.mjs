@@ -40,6 +40,8 @@ test('stepNote says what Run does with each step', () => {
   assert.equal(H.stepNote({ browser: true }, true), 'Runs here');
   assert.match(H.stepNote({ browser: true }, false), /^For you to do/);
   assert.equal(H.stepNote({}, false), 'Runs on the server');
+  assert.equal(H.stepNote({ rolls: true }, false), 'Waiting on the player to roll');
+  assert.equal(H.stepNote({ asks: true }, false), 'Asks you before what follows');
 });
 
 test('statusText and pressLabel read plainly', () => {

@@ -82,6 +82,14 @@ func parseFormula(src string) (terms []term, shown string, ok bool) {
 	return terms, b.String(), true
 }
 
+// CheckFormula says whether src is a formula the Table can roll, and gives
+// it as the log will show it. Another plugin that stores a formula to roll
+// later checks it here, through an adapter, so the grammar has one home.
+func CheckFormula(src string) (shown string, ok bool) {
+	_, shown, ok = parseFormula(src)
+	return shown, ok
+}
+
 // digits reads the run of digits at s[i:], returning its value and where it
 // ends; a run too long to be a sensible number reads as out of range.
 func digits(s string, i int) (int, int) {

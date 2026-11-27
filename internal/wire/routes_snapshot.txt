@@ -20,6 +20,7 @@ POST	/account/sign-in/unlink	session	plugins/auth.(*Handler).UnlinkOIDCAPI	plugi
 POST	/account/signed-in/apps/:id/disconnect	session	plugins/auth.(*Handler).DisconnectAppAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/signed-in/sessions/:id/sign-out	session	plugins/auth.(*Handler).SignOutSessionAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/signed-in/sign-out-everywhere	session	plugins/auth.(*Handler).SignOutEverywhereAPI	plugins/auth.RequireAuth > middleware.RateLimit
+PUT	/account/store/:campaignID	session	plugins/auth.(*Handler).SetStoreAPI	plugins/auth.RequireAuth
 PUT	/account/timezone	session	plugins/auth.(*Handler).UpdateTimezoneAPI	plugins/auth.RequireAuth
 POST	/account/two-factor/disable	session	plugins/auth.(*Handler).TwoFactorDisableAPI	plugins/auth.RequireAuth > middleware.RateLimit
 POST	/account/two-factor/enable	session	plugins/auth.(*Handler).TwoFactorEnableAPI	plugins/auth.RequireAuth > middleware.RateLimit
@@ -427,6 +428,7 @@ GET	/api/v1/campaigns/:id/tags	session-or-bearer	plugins/syncapi.(*TagAPIHandler
 POST	/api/v1/campaigns/:id/tags	session-or-bearer	plugins/syncapi.(*TagAPIHandler).CreateTag	plugins/syncapi.RequireAuthOrAPIKey > plugins/syncapi.RequireKeyOwnerStillOwner > plugins/syncapi.RequireSyncAPIAddon > plugins/syncapi.RateLimit > plugins/syncapi.RequireJSONContentType > plugins/syncapi.WithChangeSource > plugins/syncapi.RequireCampaignMatch > plugins/syncapi.RecordSyncHistory > plugins/syncapi.RequirePermission
 DELETE	/api/v1/campaigns/:id/tags/:tagId	session-or-bearer	plugins/syncapi.(*TagAPIHandler).DeleteTag	plugins/syncapi.RequireAuthOrAPIKey > plugins/syncapi.RequireKeyOwnerStillOwner > plugins/syncapi.RequireSyncAPIAddon > plugins/syncapi.RateLimit > plugins/syncapi.RequireJSONContentType > plugins/syncapi.WithChangeSource > plugins/syncapi.RequireCampaignMatch > plugins/syncapi.RecordSyncHistory > plugins/syncapi.RequirePermission
 PUT	/api/v1/campaigns/:id/tags/:tagId	session-or-bearer	plugins/syncapi.(*TagAPIHandler).UpdateTag	plugins/syncapi.RequireAuthOrAPIKey > plugins/syncapi.RequireKeyOwnerStillOwner > plugins/syncapi.RequireSyncAPIAddon > plugins/syncapi.RateLimit > plugins/syncapi.RequireJSONContentType > plugins/syncapi.WithChangeSource > plugins/syncapi.RequireCampaignMatch > plugins/syncapi.RecordSyncHistory > plugins/syncapi.RequirePermission
+GET	/api/v1/campaigns/:id/vendored-assets	session-or-bearer	plugins/syncapi.(*VendoredAssetsHandler).GetVendoredAssets	plugins/syncapi.RequireAuthOrAPIKey > plugins/syncapi.RequireKeyOwnerStillOwner > plugins/syncapi.RequireSyncAPIAddon > plugins/syncapi.RateLimit > plugins/syncapi.RequireJSONContentType > plugins/syncapi.WithChangeSource > plugins/syncapi.RequireCampaignMatch > plugins/syncapi.RecordSyncHistory > plugins/syncapi.RequirePermission
 GET	/api/version	none	plugins/syncapi.VersionHandler	-
 GET	/bestiary	session	plugins/bestiary.(*Handler).Browse	plugins/auth.RequireAuth > plugins/bestiary.UserRateLimit
 POST	/bestiary	session	plugins/bestiary.(*Handler).Create	plugins/auth.RequireAuth > plugins/bestiary.UserRateLimit
@@ -1102,6 +1104,7 @@ GET	/campaigns/:id/groups/manage	session	plugins/campaigns.(*Handler).GroupsPage
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew	session	plugins/homebrew.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/asks	session	plugins/homebrew.(*Handler).AsksPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/homebrew/asks/:run/roll	session	plugins/homebrew.(*Handler).Roll	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/homebrew/asks/:run/take-back	session	plugins/homebrew.(*Handler).TakeBack	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/asks/mine	session	plugins/homebrew.(*Handler).MyAsks	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/catalog	session	plugins/homebrew.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

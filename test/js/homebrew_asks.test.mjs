@@ -53,3 +53,24 @@ test('said is what came back', () => {
   assert.equal(H.said({ state: 'no' }), 'No. The rule stops here.');
   assert.equal(H.said({ state: 'other', reply: 'After the fight.' }), 'After the fight.');
 });
+
+test('a roll step reads as the condition of a yes, then as its result', () => {
+  const { H } = load();
+  const roll = { label: 'Might', formula: '2d10+2', target: 12 };
+  assert.equal(H.rollButton(roll), 'Roll Might (2d10 + 2)');
+  assert.equal(H.rollButton({ formula: '1d20-1', target: 5 }), 'Roll 1d20 - 1');
+  const cases = [
+    [{ state: 'roll', answered: 'yes', roll }, ['Yes, with a step first', 'ok'], 'Yes, if you roll Might 12 or more first.', ''],
+    [{ state: 'roll', roll: { formula: '2d6', target: 7 } }, ['Your roll first', 'wait'], 'Roll 7 or more on 2d6 first.', ''],
+    [{ state: 'rolled', answered: 'yes', roll: Object.assign({ total: 15, made: true }, roll) }, ['Made the roll', 'ok'],
+      'Yes, if you roll Might 12 or more first.', 'Rolled 15. The rule carries on.'],
+    [{ state: 'missed', answered: 'yes', roll: Object.assign({ total: 9 }, roll) }, ['Roll fell short', 'bad'],
+      'Yes, if you roll Might 12 or more first.', 'Rolled 9, under 12. The rule stops here.'],
+    [{ state: 'set_aside' }, ['Set aside', 'off'], 'Set aside before the roll. The rule stops here.', '']
+  ];
+  for (const [a, pill, said, result] of cases) {
+    assert.deepEqual(Array.from(H.pill(a, 'Director')), pill, a.state);
+    assert.equal(H.said(a), said, a.state);
+    assert.equal(H.result(a), result, a.state);
+  }
+});

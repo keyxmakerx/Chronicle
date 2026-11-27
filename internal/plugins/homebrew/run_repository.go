@@ -14,7 +14,7 @@ func NewRunStore(db *sql.DB) RunStore { return &sqlRunStore{db: db} }
 
 const runCols = `id, campaign_id, recipe_id, recipe_name, what, rule_json, COALESCE(scope, ''), COALESCE(payload, ''),
 	status, COALESCE(outcome, ''), COALESCE(created_by, ''), created_at, COALESCE(done_by, ''), done_at,
-	COALESCE(ask_at, -1), COALESCE(answer, '')`
+	COALESCE(ask_at, -1), COALESCE(answer, ''), COALESCE(wait_for, '')`
 
 func scanRun(sc interface{ Scan(...any) error }) (Run, error) {
 	var r Run
@@ -22,7 +22,7 @@ func scanRun(sc interface{ Scan(...any) error }) (Run, error) {
 	var doneAt sql.NullTime
 	var askAt int
 	if err := sc.Scan(&r.ID, &r.CampaignID, &r.RecipeID, &r.RecipeName, &r.What, &rule, &r.Scope, &payload,
-		&r.Status, &lines, &r.CreatedBy, &r.CreatedAt, &r.DoneBy, &doneAt, &askAt, &answer); err != nil {
+		&r.Status, &lines, &r.CreatedBy, &r.CreatedAt, &r.DoneBy, &doneAt, &askAt, &answer, &r.WaitFor); err != nil {
 		return r, err
 	}
 	r.Asked = askAt + 1
@@ -101,10 +101,10 @@ func (s *sqlRunStore) CreateRun(ctx context.Context, r Run) error {
 		return fmt.Errorf("encode run answer: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO homebrew_runs
-		(id, campaign_id, recipe_id, recipe_name, what, rule_json, scope, payload, status, outcome, created_by, created_at, done_by, done_at, ask_at, answer)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, campaign_id, recipe_id, recipe_name, what, rule_json, scope, payload, status, outcome, created_by, created_at, done_by, done_at, ask_at, answer, wait_for)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.CampaignID, r.RecipeID, r.RecipeName, r.What, string(rule), nullable(r.Scope), nullable(string(r.Payload)),
-		r.Status, lines, nullable(r.CreatedBy), r.CreatedAt, nullable(r.DoneBy), r.DoneAt, askAt(r), answer)
+		r.Status, lines, nullable(r.CreatedBy), r.CreatedAt, nullable(r.DoneBy), r.DoneAt, askAt(r), answer, nullable(r.WaitFor))
 	if err != nil {
 		return fmt.Errorf("create run: %w", err)
 	}
@@ -139,9 +139,9 @@ func (s *sqlRunStore) FinishRun(ctx context.Context, r Run, from string) (bool, 
 		return false, fmt.Errorf("encode run answer: %w", err)
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE homebrew_runs SET status = ?, outcome = ?, done_by = ?, done_at = ?,
-		rule_json = ?, ask_at = ?, answer = ?
+		rule_json = ?, ask_at = ?, answer = ?, wait_for = ?
 		WHERE campaign_id = ? AND id = ? AND status = ?`,
-		r.Status, lines, nullable(r.DoneBy), r.DoneAt, string(rule), askAt(r), answer, r.CampaignID, r.ID, from)
+		r.Status, lines, nullable(r.DoneBy), r.DoneAt, string(rule), askAt(r), answer, nullable(r.WaitFor), r.CampaignID, r.ID, from)
 	if err != nil {
 		return false, fmt.Errorf("finish run: %w", err)
 	}
@@ -192,10 +192,11 @@ func (s *sqlRunStore) ListRunningAsks(ctx context.Context, campaignID string, li
 	return out, rows.Err()
 }
 
-func (s *sqlRunStore) ListAsks(ctx context.Context, campaignID, createdBy string, limit int) ([]Run, error) {
+func (s *sqlRunStore) ListAsks(ctx context.Context, campaignID, userID string, limit int) ([]Run, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+runCols+` FROM homebrew_runs
-		WHERE campaign_id = ? AND created_by = ? AND ask_at IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT ?`,
-		campaignID, createdBy, limit)
+		WHERE campaign_id = ? AND (created_by = ? OR wait_for = ?) AND ask_at IS NOT NULL
+		ORDER BY created_at DESC, id DESC LIMIT ?`,
+		campaignID, userID, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list asks: %w", err)
 	}

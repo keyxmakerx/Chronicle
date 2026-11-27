@@ -65,6 +65,9 @@ type Service interface {
 	// CloseFor ends the owner's ask waiting under key without an answer,
 	// when what it asked about is gone; line says why, for the drawer.
 	CloseFor(ctx context.Context, campaignID, event, key string, v Viewer, line string) (found bool, err error)
+	// Roll makes the roll a "rolls first" step waits on (roll.go), only as
+	// the player it waits on; the server rolls and judges it.
+	Roll(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
 }
 
 type service struct {
@@ -78,6 +81,9 @@ type service struct {
 	people AskPeople
 	bell   Bell
 	live   Live
+	// players finds the player of a run's page, for a roll; nil means the
+	// roll waits on whoever set the rule off.
+	players Players
 }
 
 // NewService builds the service over a repository and the registry the app

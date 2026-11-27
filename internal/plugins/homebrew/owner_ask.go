@@ -347,6 +347,6 @@ func (s *service) CloseFor(ctx context.Context, campaignID, event, key string, v
 		// Answered in the same instant: that answer stands.
 		return true, errBeingAnswered()
 	}
-	s.answered(ctx, *r, AskTakenBack, v.UserID)
+	s.answered(ctx, *r, r.Asked-1, AskTakenBack, v.UserID)
 	return true, nil
 }
