@@ -43,6 +43,11 @@ Options:
 - `pic` is that option's own mockup. **Every option has one** on a look card;
   the page then shows Today and each letter in one box and animates what moves.
 - `rec: true` on exactly one option. It is pre-selected and marked "my pick".
+- When two options are not exclusive, add one that combines them ("Both",
+  "A on desktop, B on phones"). The page adds "Neither of these" to every
+  question by itself, so don't write a neither option; do write the real
+  alternative if "neither" would mean something specific (such as "leave it
+  as it is today").
 - `fresh: true` on at least one option that is a genuinely new approach, not
   the familiar version redrawn. Hard questions get research outside TTRPG
   tools first (`help` is a good place for one line of what others do).
@@ -58,6 +63,18 @@ light and dark, using the page's `--c-*` colours.
 3. To replace a card, give the new one `replaces: "<old key>"` and set the old
    one's `status: "archived"`, `archiveReason: "replaced"`, `replacedBy`. Never
    delete a card or an answer in `decisions`.
+
+## Answered cards are archived
+
+The page downloads every document in `cards` on each visit, so answered cards
+keep only their small fields there. Their full content (`body`, `questions`,
+`today`, `more`, `context`, `what`, `why`) is in the `archive` collection under
+the same key, and the card carries `bodyIn: "archive"`. The page reads the
+archive copy only when a card is opened from history or comes back to Waiting.
+
+To change an archived card, read `archive/<key>`, edit it, and write the whole
+card back to `cards/<key>` with `version` raised and without `bodyIn`. Pictures
+are best kept small: every image inside a card is downloaded with it.
 
 ## Example
 
