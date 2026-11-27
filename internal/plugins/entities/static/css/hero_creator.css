@@ -230,6 +230,53 @@ html.dark .hc[data-skin="ornate"] {
 .hc-lrow .hc-s { font-size: 14px; color: var(--hc-muted); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .hc-lrow.is-picked b { color: var(--hc-link); }
 .hc-lrow.is-focus { background: var(--hc-accent-soft); box-shadow: inset 3px 0 0 var(--hc-accent); }
+/* Pins (Director team): the pinned entries lead, a gap sets them apart.
+   The row's pin has no frame at rest, is framed under the pointer, and stays
+   faint on a pinned row; touch has no hover, so there it is only a mark. */
+.hc-lrow { position: relative; }
+.hc-lrow.has-pin { padding-right: 48px; }
+.hc-lrow.is-pinlast { margin-bottom: 16px; }
+.hc-card.is-pinlast { margin-right: 14px; }
+.hc-pinbreak { grid-column: 1 / -1; height: 2px; margin: -6px 0; }
+.hc-pinsvg { width: 14px; height: 14px; display: block; flex: none; }
+.hc-rpin { position: absolute; right: 8px; top: 50%; margin-top: -16px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid transparent; color: var(--hc-muted); opacity: 0;
+  transition: opacity var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
+.hc-gcard .hc-rpin { top: 8px; margin-top: 0; }
+.hc-rpin.is-on { opacity: .75; }
+.hc-lrow:hover .hc-rpin, .hc-lrow.is-focus .hc-rpin, .hc-gcard:hover .hc-rpin, .hc-gcard.is-focus .hc-rpin { opacity: 1; }
+.hc-rpin:hover { border-color: var(--hc-line); color: var(--hc-text); background: var(--hc-surface); }
+.hc-rpin.is-on:hover { color: var(--hc-link); }
+@media (hover: none) {
+  .hc-rpin { pointer-events: none; }
+  .hc-rpin:not(.is-on) { display: none; }
+  .hc-lrow.has-pin:not(:has(.hc-rpin.is-on)) { padding-right: 12px; }
+}
+/* The entry pane's word, at the end of the kind line. */
+.hc-panepin { display: inline-flex; align-items: center; gap: 10px; margin: -8px 0 -8px auto; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--hc-muted); }
+.hc-pp { min-height: 32px; padding: 0; gap: 6px; font-size: 14px; }
+.hc-pp:hover { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.hc-pp-on { display: inline-flex; align-items: center; gap: 6px; color: var(--hc-text); }
+.hc-pp .hc-pinsvg, .hc-pp-on .hc-pinsvg { width: 13px; height: 13px; }
+@media (pointer: coarse) { .hc-pp { min-height: 44px; } }
+/* "Sort: Book first", one quiet word, and its menu. */
+.hc-sortw { position: relative; display: inline-flex; align-items: center; margin-left: 4px; }
+.hc-mid .hc-sortw { margin-left: auto; }
+.hc-mid .hc-sortw + .hc-keys { margin-left: 12px; }
+.hc-sortb { min-height: 38px; padding: 0 6px; color: var(--hc-muted); font-weight: 400; font-size: 14px; white-space: nowrap; gap: 0; }
+.hc-sortb b { margin-left: .3em; font-weight: 600; color: var(--hc-link); }
+.hc-sortb:hover { background: transparent; }
+.hc-sortb:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.hc-car { margin-left: 3px; font-size: 11px; color: var(--hc-link); }
+.hc-sortline { display: flex; justify-content: flex-end; margin: 0 8px -4px 12px; }
+.hc-sortmenu { position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border-radius: var(--hc-radius-lg); background: var(--hc-surface); border: var(--hc-edge) solid var(--hc-line);
+  box-shadow: 0 2px 4px rgb(0 0 0 / .18), 0 12px 32px rgb(0 0 0 / .32); transform-origin: top right; text-align: left; }
+.hc-smi { width: 100%; display: grid; grid-template-columns: 20px 1fr; gap: 6px; align-items: start; padding: 8px 10px; min-height: 44px; border: 0; background: none; border-radius: var(--hc-radius); text-align: left; font: inherit; color: var(--hc-text); cursor: pointer; }
+.hc-smi:hover, .hc-smi:focus-visible { background: var(--hc-surface-2); }
+.hc-smi b { display: block; font-size: 15px; font-weight: 500; }
+.hc-smi.is-on b { font-weight: 600; }
+.hc-smi small { display: block; margin-top: 1px; font-size: 13px; color: var(--hc-muted); line-height: 1.35; }
+.hc-smi-c { color: var(--hc-link); font-weight: 700; padding-top: 1px; }
+.hc-smf { margin: 4px 10px 6px; padding-top: 8px; border-top: var(--hc-edge) solid var(--hc-line); font-size: 13px; color: var(--hc-muted); }
 .hc-empty { padding: 28px 16px; text-align: center; color: var(--hc-muted); }
 .hc-nhbox { margin: 14px 4px 4px; padding: 12px 14px; border: var(--hc-edge) dashed var(--hc-line); border-radius: var(--hc-radius); font-size: 15px; color: var(--hc-muted); }
 .hc-nh { margin: 8px 0 0; font-size: 15px; color: var(--hc-muted); }

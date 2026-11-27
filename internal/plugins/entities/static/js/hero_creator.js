@@ -80,6 +80,28 @@
   var NO_STORAGE = 'This browser won\'t keep things, so the try-out can\'t be saved here.';
 
   function lower(s) { return String(s || '').toLowerCase(); }
+
+  // The ways a player may arrange a list. 'book' is the order the list is
+  // served in: the game's own entries, then the campaign's. Pinned entries
+  // and a player's own unaccepted entries lead in either order.
+  var SORTS = [
+    { id: 'book', label: 'Book first', note: 'The game’s own entries, then this campaign’s' },
+    { id: 'az', label: 'A to Z', note: 'Every entry by name' }
+  ];
+  function sortRest(list, mode) {
+    if (mode !== 'az') return list;
+    var lead = [], rest = [];
+    list.forEach(function (c) { (c.pinned || (c.mine && c.status) ? lead : rest).push(c); });
+    return lead.concat(rest.slice().sort(function (a, b) { return lower(a.name).localeCompare(lower(b.name)); }));
+  }
+  // The index of the last pinned entry when unpinned ones follow it, else -1:
+  // the gap that sets the pins apart goes after that one.
+  function pinBreak(list) {
+    var last = -1;
+    list.forEach(function (c, i) { if (c.pinned) last = i; });
+    return last >= 0 && last < list.length - 1 ? last : -1;
+  }
+  function pinKey(c) { return (c.source || '') + ':' + (c.key || ''); }
   function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
   function an(w) { return /^[aeiou]/i.test(w) ? 'an' : 'a'; }
   function hasOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -349,6 +371,7 @@
     this.sheet = null;
     this.own = null;
     this.grants = {};
+    this.sorts = {};
   }
 
   Creator.prototype.load = function () {
@@ -597,10 +620,36 @@
   // The entries a step offers now: all of them, or for a dependent step only
   // those under the parent entry picked.
   Creator.prototype.pool = function (st) {
-    if (!st.parent) return st.choices;
+    if (!st.parent) return sortRest(st.choices, this.sortOf(st));
     var p = this.picks[st.parent];
     if (!p || !p.name) return [];
-    return st.choices.filter(function (c) { return lower(c.parent) === lower(p.name); });
+    return sortRest(st.choices.filter(function (c) { return lower(c.parent) === lower(p.name); }), this.sortOf(st));
+  };
+
+  // A player's sort is theirs alone and only arranges what they see, so it
+  // is kept in this browser per campaign and list; the server's order stays
+  // the one every reader shares.
+  Creator.prototype.sortKey = function (st) { return 'chronicle:hero-sort:' + this.campaignId + ':' + st.fieldKey; };
+  Creator.prototype.sortOf = function (st) {
+    var k = st.fieldKey;
+    if (this.sorts[k] == null) {
+      var v = '';
+      try { v = window.localStorage.getItem(this.sortKey(st)) || ''; } catch (e) { /* the default order */ }
+      this.sorts[k] = v === 'az' ? 'az' : 'book';
+    }
+    return this.sorts[k];
+  };
+  Creator.prototype.setSort = function (st, mode) {
+    var cur = this.curEntry();
+    this.sorts[st.fieldKey] = mode;
+    try { if (mode === 'book') window.localStorage.removeItem(this.sortKey(st)); else window.localStorage.setItem(this.sortKey(st), mode); } catch (e) { /* kept for this visit only */ }
+    // The entry being read stays the one being read.
+    if (cur) this.at[st.fieldKey] = Math.max(0, this.entries(this.step).indexOf(cur));
+  };
+  // The pin control is the Director team's, on entries the list really
+  // holds; a player's own unaccepted entry is not on the shared list yet.
+  Creator.prototype.canPin = function (c) {
+    return !!(this.plan && this.plan.canPin && !this.practice && !this.tryout && c && c.key && !c.status && (c.source === 'package' || c.source === 'campaign'));
   };
   // 'wait': the parent is not picked yet. 'unused': the picked entries leave
   // this step nothing to ask (a count of 0, or a parent that lists none).
@@ -813,7 +862,8 @@
     next: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4.5L13 10l-5.5 5.5"/></svg>',
     find: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2L17 17"/></svg>',
     die: '<svg class="hc-ico hc-ico--die" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M4 7.4l8 4.6 8-4.6M12 12v9.2"/><circle cx="12" cy="7.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="7.6" cy="13.6" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.4" cy="13.6" r="1.1" fill="currentColor" stroke="none"/></svg>',
-    up: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5-5 5 5"/></svg>'
+    up: '<svg class="hc-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5-5 5 5"/></svg>',
+    pin: '<svg class="hc-pinsvg" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.6 1.4l4 4-1.4.6-2.5 2.5.3 3.3-1.4 1.4L6.3 10 2.5 13.8l-.3-.3L6 9.7 2.8 6.4l1.4-1.4 3.3.3L10 2.8z" fill="currentColor"/></svg>'
   };
 
   Creator.prototype.title = function () {
@@ -950,8 +1000,60 @@
       '<button type="button" class="hc-ibtn hc-die" data-act="die" aria-label="Deal a random card" title="Deal a random card">' + I.die + '</button>' +
       '<div class="hc-mode" role="group" aria-label="Show as"><button type="button" data-mode="cards" aria-pressed="' + (this.mode === 'cards') + '">Cards</button>' +
       '<button type="button" data-mode="list" aria-pressed="' + (this.mode === 'list') + '">List</button></div>';
-    if (desk) h += '<span class="hc-keys"><kbd>←</kbd> <kbd>→</kbd> move · <kbd>Enter</kbd> choose</span>';
+    if (desk) h += this.sortWordHTML() + '<span class="hc-keys"><kbd>←</kbd> <kbd>→</kbd> move · <kbd>Enter</kbd> choose</span>';
     return h + '</div>';
+  };
+
+  // "Sort: Book first ▾", one quiet word. Offered where there is something
+  // to arrange: more than two entries.
+  Creator.prototype.hasSort = function (st) { return this.stepState(st) === 'open' && this.pool(st).length > 2; };
+  Creator.prototype.sortWordHTML = function () {
+    var st = this.cur();
+    if (!this.hasSort(st)) return '';
+    var now = this.sortOf(st), lbl = SORTS.filter(function (o) { return o.id === now; })[0].label;
+    return '<span class="hc-sortw"><button type="button" class="hc-qw hc-sortb" data-act="sort" aria-haspopup="menu" aria-expanded="false" aria-label="Sort the list, now ' + lbl + '">' +
+      'Sort: <b>' + lbl + '</b><span class="hc-car" aria-hidden="true">▾</span></button></span>';
+  };
+  // A phone's tool row is full: the word is the list's first line, at its
+  // right end. The phone's cards keep their room; List is where to sort.
+  Creator.prototype.sortLineHTML = function () {
+    var w = this.sortWordHTML();
+    return w ? '<p class="hc-sortline">' + w + '</p>' : '';
+  };
+  Creator.prototype.sortMenuHTML = function () {
+    var now = this.sortOf(this.cur()), pins = this.pool(this.cur()).some(function (c) { return c.pinned; });
+    return '<div class="hc-sortmenu" role="menu" aria-label="Sort the list">' + SORTS.map(function (o) {
+      var on = o.id === now;
+      return '<button type="button" role="menuitemradio" aria-checked="' + on + '" class="hc-smi' + (on ? ' is-on' : '') + '" data-sort="' + o.id + '" tabindex="-1">' +
+        '<span class="hc-smi-c" aria-hidden="true">' + (on ? '✓' : '') + '</span><span><b>' + o.label + '</b><small>' + o.note + '</small></span></button>';
+    }).join('') + (pins ? '<p class="hc-smf">Pinned entries stay first.</p>' : '') + '</div>';
+  };
+  Creator.prototype.openSort = function (btn) {
+    this.closeSort();
+    btn.setAttribute('aria-expanded', 'true');
+    btn.parentNode.insertAdjacentHTML('beforeend', this.sortMenuHTML());
+    var menu = btn.parentNode.querySelector('.hc-sortmenu'), on = menu.querySelector('.is-on') || menu.querySelector('.hc-smi');
+    this.anim(menu, [{ opacity: 0, transform: 'scale(.97) translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: ms(160), fill: 'none', slide: true });
+    if (on) on.focus();
+  };
+  Creator.prototype.closeSort = function (refocus) {
+    var m = this.$('.hc-sortmenu');
+    if (!m) return false;
+    var b = m.parentNode.querySelector('.hc-sortb');
+    m.parentNode.removeChild(m);
+    if (b) { b.setAttribute('aria-expanded', 'false'); if (refocus) b.focus(); }
+    return true;
+  };
+  Creator.prototype.pickSort = function (mode) {
+    var st = this.cur();
+    this.closeSort();
+    if (mode !== this.sortOf(st)) {
+      this.setSort(st, mode);
+      this.$$('.hc-sortw').forEach(function (w) { w.outerHTML = this.sortWordHTML(); }, this);
+      this.refreshList();
+      this.say('Sorted ' + (mode === 'az' ? 'A to Z' : 'book first') + '.');
+    }
+    var b = this.$('.hc-sortb'); if (b) b.focus();
   };
 
   Creator.prototype.nhHTML = function (st) {
@@ -1014,7 +1116,7 @@
 
   Creator.prototype.cardHTML = function (c, i, n, st) {
     var pk = this.isPicked(st, c);
-    return '<div class="hc-card' + (pk ? ' is-picked' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules"' + this.cardAttrs(c) + '>' +
+    return '<div class="hc-card' + (pk ? ' is-picked' : '') + (i === this.pinAt ? ' is-pinlast' : '') + '" role="button" tabindex="0" data-i="' + i + '" aria-label="' + esc(c.name) + ', read the rules"' + this.cardAttrs(c) + '>' +
       '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your ' + esc(lower(st.label)) : esc(st.label)) + '</span>' + this.marksHTML(st, c, false) + this.cardIx(i, n) + '</span>' +
       '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + this.factsHTML(c, 3) +
       '<span class="hc-more">Read the rules ' + I.up + '</span></div>';
@@ -1023,6 +1125,7 @@
   Creator.prototype.handHTML = function () {
     var st = this.cur(), l = this.entries(this.step), self = this;
     if (!l.length && !this.showNh(st) && !this.canOwn(st)) return this.emptyHTML();
+    this.pinAt = pinBreak(l);
     return '<div class="hc-hand" data-hand aria-label="' + esc(st.label) + ' cards">' + l.map(function (c, i) { return self.cardHTML(c, i, l.length, st); }).join('') +
       this.ownCardHTML('card') + (this.showNh(st) ? '<div class="hc-card hc-card--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>' : '') + '</div>';
   };
@@ -1030,11 +1133,12 @@
   Creator.prototype.listHTML = function () {
     var st = this.cur(), l = this.entries(this.step), self = this, desk = this.view === 'desk';
     if (!l.length && !this.showNh(st) && !this.canOwn(st)) return '<div class="hc-list">' + this.emptyHTML() + '</div>';
-    var h = '<div class="hc-list" data-list>', ci = this.curIdx();
+    var h = '<div class="hc-list" data-list>' + (desk ? '' : this.sortLineHTML()), ci = this.curIdx(), br = pinBreak(l);
     l.forEach(function (c, i) {
       var pk = self.isPicked(st, c);
-      h += '<button type="button" class="hc-lrow' + (pk ? ' is-picked' : '') + (desk && i === ci ? ' is-focus' : '') + '" data-i="' + i + '"><span class="hc-h"><b>' + esc(c.name) + '</b>' +
-        self.marksHTML(st, c, false) + (pk ? '<span class="hc-mark is-own">Chosen</span>' : '') + '</span><span class="hc-s">' + esc(plain(c.summary)) + '</span></button>';
+      h += '<button type="button" class="hc-lrow' + (pk ? ' is-picked' : '') + (desk && i === ci ? ' is-focus' : '') + (i === br ? ' is-pinlast' : '') + (self.canPin(c) ? ' has-pin' : '') +
+        '" data-i="' + i + '" data-k="' + esc(pinKey(c)) + '"><span class="hc-h"><b>' + esc(c.name) + '</b>' +
+        self.marksHTML(st, c, false) + (pk ? '<span class="hc-mark is-own">Chosen</span>' : '') + '</span><span class="hc-s">' + esc(plain(c.summary)) + '</span>' + self.rowPinHTML(c) + '</button>';
     });
     h += this.ownCardHTML('row');
     if (this.showNh(st)) h += '<div class="hc-nhbox">' + this.nhHTML(st) + '</div>';
@@ -1044,12 +1148,14 @@
   Creator.prototype.gridHTML = function () {
     var st = this.cur(), l = this.entries(this.step), ci = this.curIdx(), self = this;
     if (!l.length && !this.showNh(st) && !this.canOwn(st)) return '<div class="hc-grid">' + this.emptyHTML() + '</div>';
-    var h = '<div class="hc-grid" data-grid role="listbox" aria-label="' + esc(st.label) + '">';
+    var h = '<div class="hc-grid" data-grid role="listbox" aria-label="' + esc(st.label) + '">', br = pinBreak(l);
     l.forEach(function (c, i) {
       var pk = self.isPicked(st, c), ft = factsOf(c).slice(0, 2).map(function (x) { return '<b>' + esc(x[0]) + '</b> ' + esc(x[1]); }).join(' · ');
-      h += '<div class="hc-gcard' + (i === ci ? ' is-focus' : '') + (pk ? ' is-picked' : '') + '" role="option" tabindex="' + (i === ci ? 0 : -1) + '" aria-selected="' + (i === ci) + '" data-i="' + i + '"' + self.cardAttrs(c) + '>' +
+      h += '<div class="hc-gcard' + (i === ci ? ' is-focus' : '') + (pk ? ' is-picked' : '') + (self.canPin(c) ? ' has-pin' : '') + '" role="option" tabindex="' + (i === ci ? 0 : -1) + '" aria-selected="' + (i === ci) + '" data-i="' + i + '" data-k="' + esc(pinKey(c)) + '"' + self.cardAttrs(c) + '>' +
         '<span class="hc-top"><span' + (pk ? ' class="hc-pk"' : '') + '>' + (pk ? 'Your choice' : esc(st.label)) + '</span>' + self.marksHTML(st, c, false) + '</span>' +
-        '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + (ft ? '<span class="hc-ft">' + ft + '</span>' : '') + '</div>';
+        '<h3 class="hc-disp">' + esc(c.name) + '</h3><p class="hc-sum">' + esc(plain(c.summary)) + '</p>' + (ft ? '<span class="hc-ft">' + ft + '</span>' : '') + self.rowPinHTML(c) + '</div>';
+      // The rest start on a row of their own, under the pinned cards.
+      if (i === br) h += '<div class="hc-pinbreak" aria-hidden="true"></div>';
     });
     h += this.ownCardHTML('grid');
     if (this.showNh(st)) h += '<div class="hc-gcard hc-gcard--nh"><span class="hc-top"><span class="hc-mark is-quiet" data-tip="nh">Not offered here</span></span>' + this.nhHTML(st) + '</div>';
@@ -1078,6 +1184,121 @@
     return this.introHTML() + (this.stepState(this.cur()) === 'open' ? this.toolsHTML() : '') + (this.mode === 'cards' ? this.gridHTML() : this.listHTML());
   };
 
+  // The row's pin: no frame at rest, framed under the pointer; faint on a row
+  // already pinned. Pointer only (it sits inside the row's own button): the
+  // entry pane's word is the way in for a keyboard and a phone.
+  Creator.prototype.rowPinHTML = function (c) {
+    if (!this.canPin(c)) return '';
+    return '<span class="hc-rpin' + (c.pinned ? ' is-on' : '') + '" data-pin="' + (c.pinned ? 'off' : 'on') + '" aria-hidden="true" title="' + (c.pinned ? 'Unpin' : 'Pin to the top') + '">' + I.pin + '</span>';
+  };
+  // The entry pane's quiet word: "Pin to the top", or "Pinned to the top ·
+  // Unpin".
+  Creator.prototype.paneWordHTML = function (c) {
+    if (!this.canPin(c)) return '';
+    return '<span class="hc-panepin">' + (c.pinned
+      ? '<span class="hc-pp-on">' + I.pin + 'Pinned to the top</span><button type="button" class="hc-qw hc-pp" data-act="unpin">Unpin</button>'
+      : '<button type="button" class="hc-qw hc-pp" data-act="pin">' + I.pin + '<b>Pin to the top</b></button>') + '</span>';
+  };
+
+  // Pins or unpins an entry for everyone at the table. The server decides who
+  // may and answers with the list's pins in order; the list is put in that
+  // order here, with the moved entry gliding to its place.
+  Creator.prototype.pinUrl = function (st) {
+    return '/campaigns/' + encodeURIComponent(this.campaignId) + '/character-choices/' + encodeURIComponent(st.fieldKey) + '/pins';
+  };
+  Creator.prototype.togglePin = function (c, on) {
+    var self = this, st = this.cur();
+    if (!this.canPin(c) || this.pinBusy) return;
+    this.pinBusy = true;
+    var body = { source: c.source, key: c.key, pinned: !!on };
+    var req = window.Chronicle && Chronicle.apiFetch
+      ? Chronicle.apiFetch(this.pinUrl(st), { method: 'PUT', body: body, csrfToken: this.csrf })
+      : fetch(this.pinUrl(st), { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf }, body: JSON.stringify(body) });
+    Promise.resolve(req).then(function (r) {
+      if (!r || !r.ok) throw new Error('pin ' + (r && r.status));
+      return r.json();
+    }).then(function (j) {
+      var pins = (j && j.pins) || [];
+      // An unpinned entry goes back to the place the served list gives it,
+      // which only the server knows; the plan is read again for that order.
+      return self.servedOrder(st).then(function (order) {
+        self.pinBusy = false;
+        self.placePins(st, pins, c, order);
+        self.say(on ? c.name + ' is pinned to the top for everyone.' : c.name + ' is back in its place.');
+      });
+    }).catch(function () {
+      self.pinBusy = false;
+      self.say('The pin could not be saved. Try again.');
+    });
+  };
+  // The step's entries in the order the server serves them now, as pin keys;
+  // null when the plan cannot be read, and the list then keeps its order.
+  Creator.prototype.servedOrder = function (st) {
+    var get = window.Chronicle && Chronicle.apiFetch ? Chronicle.apiFetch(this.planUrl) : fetch(this.planUrl, { credentials: 'same-origin' });
+    return Promise.resolve(get).then(function (r) { return r && r.ok ? r.json() : null; }).then(function (plan) {
+      var s2 = plan && (plan.steps || []).filter(function (x) { return x.fieldKey === st.fieldKey; })[0];
+      return s2 ? (s2.choices || []).map(pinKey) : null;
+    }).catch(function () { return null; });
+  };
+  // Puts a step's entries in the order the pins give: a player's own
+  // unaccepted entries, then the pins in order, then the rest in the served
+  // order (or, when that could not be read, the order they are in).
+  Creator.prototype.placePins = function (st, pins, moved, order) {
+    var at = {}, ord = {};
+    pins.forEach(function (k, i) { if (at[k] == null) at[k] = i; });
+    (order || []).forEach(function (k, i) { if (ord[k] == null) ord[k] = i; });
+    var own = [], lead = [], rest = [];
+    st.choices.forEach(function (c) {
+      c.pinned = at[pinKey(c)] != null;
+      if (c.mine && c.status) own.push(c); else if (c.pinned) lead.push(c); else rest.push(c);
+    });
+    lead.sort(function (a, b) { return at[pinKey(a)] - at[pinKey(b)]; });
+    if (order) {
+      var big = order.length;
+      rest = rest.map(function (c, i) { return { c: c, i: i }; }).sort(function (a, b) {
+        var oa = ord[pinKey(a.c)], ob = ord[pinKey(b.c)];
+        return (oa == null ? big + a.i : oa) - (ob == null ? big + b.i : ob);
+      }).map(function (x) { return x.c; });
+    }
+    var cur = this.curEntry(), old = this.rects();
+    st.choices = own.concat(lead, rest);
+    if (cur) this.at[st.fieldKey] = Math.max(0, this.entries(this.step).indexOf(cur));
+    this.relist(old, moved);
+  };
+  // Where each entry's row or card is now, by its pin key.
+  Creator.prototype.rects = function () {
+    var out = {};
+    this.$$('.hc-lrow[data-k], .hc-gcard[data-k]').forEach(function (el) { out[el.getAttribute('data-k')] = el.getBoundingClientRect(); });
+    return out;
+  };
+  // Redraws the list after the pins change: rows and cards glide from where
+  // they were (FLIP), the moved one glows once, and the pane's word and the
+  // sheet's follow without the pane redrawing.
+  Creator.prototype.relist = function (old, moved) {
+    var self = this, b = this.$('[data-body]') || this.$('[data-mid]');
+    var focusWord = document.activeElement && document.activeElement.closest && document.activeElement.closest('.hc-panepin');
+    if (!b || this.$('[data-hand]')) this.refreshList();
+    else {
+      var cur = this.$('.hc-list, .hc-grid', b), tmp = document.createElement('div');
+      tmp.innerHTML = this.desk() ? (this.mode === 'cards' ? this.gridHTML() : this.listHTML()) : this.listHTML();
+      if (cur && cur.parentNode) cur.parentNode.replaceChild(tmp.firstElementChild, cur);
+      if (!this.still()) {
+        this.$$('.hc-lrow[data-k], .hc-gcard[data-k]').forEach(function (el) {
+          var was = old[el.getAttribute('data-k')], now = el.getBoundingClientRect();
+          if (!was) return;
+          var dx = was.left - now.left, dy = was.top - now.top;
+          if (!dx && !dy) return;
+          try { el.animate([{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'none' }], { duration: ms(self.lively() ? 280 : 180), easing: 'cubic-bezier(.16,1,.3,1)' }); } catch (e) { /* lands in place */ }
+        });
+      }
+    }
+    var mv = moved && this.$('[data-k="' + pinKey(moved) + '"]');
+    if (mv) { mv.classList.remove('is-flash'); void mv.offsetWidth; mv.classList.add('is-flash'); }
+    var c = this.curEntry();
+    this.$$('.hc-panepin').forEach(function (w) { w.outerHTML = c ? self.paneWordHTML(c) : ''; });
+    if (focusWord) { var nb = this.$('.hc-panepin button'); if (nb) nb.focus({ preventScroll: true }); }
+  };
+
   // --- The open entry ---
 
   Creator.prototype.chooseLabel = function (c, st) {
@@ -1095,7 +1316,7 @@
   Creator.prototype.detHTML = function (c, st) {
     var T = this.terms, pk = this.isPicked(st, c);
     var h = '<div class="hc-det"><div class="hc-kind"><span>' + esc(st.label) + ' · ' + (c.source === 'campaign' ? 'this campaign' : esc(this.plan.systemName || 'game system')) + '</span>' +
-      this.marksHTML(st, c, true) + (pk ? '<span class="hc-yours">Your choice</span>' : '') + '</div>';
+      this.marksHTML(st, c, true) + (pk ? '<span class="hc-yours">Your choice</span>' : '') + this.paneWordHTML(c) + '</div>';
     h += '<h3 class="hc-disp" id="hc-dt" tabindex="-1">' + esc(c.name) + '</h3>';
     if (c.mine && c.status && !this.tryout && this.ownEnabled()) {
       h += (c.reviewNote && c.status === 'draft' ? '<p class="hc-note"><b>Your ' + gm() + ' asked:</b> ' + esc(c.reviewNote) + '</p>' : '') +
@@ -2402,6 +2623,9 @@
         var inp = this.$('[data-find]'); if (inp) inp.focus();
         break;
       case 'die': this.dealRandom(el); break;
+      case 'sort': if (!this.closeSort()) this.openSort(el); break;
+      case 'pin': this.togglePin(this.curEntry(), true); break;
+      case 'unpin': this.togglePin(this.curEntry(), false); break;
       case 'quick': this.quick(); break;
       case 'unbuy': this.unbuy(); break;
       case 'create': this.create(); break;
@@ -2424,6 +2648,16 @@
       if (term && root.contains(term) && !term.closest('.hc-card, .hc-gcard, .hc-lrow')) {
         ev.preventDefault();
         if (self.tipPinned && self.tipFor === term) self.closeTip(); else self.showTip(term, true);
+        return;
+      }
+      var so = t.closest('[data-sort]');
+      if (so && root.contains(so)) { self.pickSort(so.getAttribute('data-sort')); return; }
+      if (self.$('.hc-sortmenu') && !t.closest('.hc-sortw')) self.closeSort();
+      var pn = t.closest('[data-pin]');
+      if (pn && root.contains(pn) && self.plan) {
+        ev.preventDefault();
+        var row = pn.closest('[data-i]'), ent = row && self.entries(self.step)[+row.getAttribute('data-i')];
+        if (ent) self.togglePin(ent, pn.getAttribute('data-pin') === 'on');
         return;
       }
       var a = t.closest('[data-act]');
@@ -2499,7 +2733,15 @@
 
     root.addEventListener('keydown', function (ev) {
       var t = ev.target, inField = /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
+      var menu = t.closest && t.closest('.hc-sortmenu');
+      if (menu && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp' || ev.key === 'Home' || ev.key === 'End')) {
+        var its = qa('.hc-smi', menu), ix = its.indexOf(t);
+        ix = ev.key === 'Home' ? 0 : ev.key === 'End' ? its.length - 1 : (ix + (ev.key === 'ArrowDown' ? 1 : -1) + its.length) % its.length;
+        its[ix].focus(); ev.preventDefault(); return;
+      }
+      if (menu && ev.key === 'Tab') { self.closeSort(); return; }
       if (ev.key === 'Escape') {
+        if (self.closeSort(true)) { ev.preventDefault(); return; }
         if (self.tip) { self.closeTip(false, true); ev.preventDefault(); return; }
         if (self.$('[data-drape]')) { self.toggleDrape(false); var sb = self.$('.hc-sbtn'); if (sb) sb.focus(); ev.preventDefault(); return; }
         if (self.sh) { self.closeSheet(false, null, true); ev.preventDefault(); return; }
@@ -2561,6 +2803,7 @@
     });
     // A tap anywhere else puts a pinned card away.
     this.onDocDown = function (ev) {
+      if (!root.contains(ev.target) && self.plan) self.closeSort();
       if (!document.body.contains(root) || !self.tip || !self.tipPinned) return;
       if (ev.target.closest && (ev.target.closest('.hc-tip') || ev.target.closest('[data-term], [data-tip]'))) return;
       self.closeTip();
@@ -2623,6 +2866,6 @@
       }
     });
   }
-  window.ChronicleHeroCreator = { termKey: termKey, motion: motion, marked: marked, plain: plain, factsOf: factsOf, indexFor: indexFor, rollable: rollable };
+  window.ChronicleHeroCreator = { termKey: termKey, motion: motion, marked: marked, plain: plain, factsOf: factsOf, indexFor: indexFor, rollable: rollable, sortRest: sortRest, pinBreak: pinBreak };
   if (window.Chronicle && Chronicle.register) register();
 })();
