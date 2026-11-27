@@ -4406,6 +4406,8 @@ dialog.cb-bro[open] { display: flex; flex-direction: column; }
   .tree-row.is-place > .tree-lb { color: var(--nav-text-2); }
   .tree-also { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--nav-text-3); }
   .tree-also i { font-size: 8.5px; }
+  /* A list's pinned pages lead it; a thin rule sets them apart from the rest. */
+  .sidebar-tree-node.is-pin-last::after { content: ""; display: block; margin: 4px 14px; border-top: 1px solid var(--nav-line); }
   .tree-rename {
     flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid rgb(var(--nav-accent) / 0.6);
     background: rgb(255 255 255 / 0.06); color: #fff; font-size: 12.5px;

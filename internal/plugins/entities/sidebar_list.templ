@@ -23,7 +23,9 @@ import (
 // orders says how each container sorts what is directly inside it
 // (FolderService.ChildOrders): data-root-order on the tree for the category's
 // top level, data-child-order on a folder or page row; none means A to Z.
-// data-created feeds "Newest first".
+// data-created feeds "Newest first". data-pinned (the pin's position) puts
+// a page first in its own list; data-can-pin offers the Director team the
+// row menu's pin.
 //
 // typeID is the drilled category's own entity type (the sidebar URL's ?type=),
 // NOT a per-row type. It drives data-entity-type-id, which sidebar_tree.js
@@ -53,6 +55,9 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 			}
 			if cc.MemberRole >= campaigns.RoleOwner {
 				data-can-delete-folders="true"
+			}
+			if cc.CanAuthorDmOnly() {
+				data-can-pin="true"
 			}
 		>
 			// Render sidebar folder nodes (pure organizational containers).
@@ -97,6 +102,9 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					}
 					if hiddenIDs[entity.ID] {
 						data-sidebar-hidden="true"
+					}
+					if p, ok := sidebarPinOf(ctx, entity.ID); ok {
+						data-pinned={ strconv.Itoa(p) }
 					}
 				>
 					<span class="tree-lb">{ entity.Name }</span>

@@ -153,7 +153,7 @@ func folderFixture() (FolderService, *fakeNodes, *fakeFolderEntities) {
 		3: {ID: 3, CampaignID: "c1", ParentTypeID: &lore},
 		9: {ID: 9, CampaignID: "c2"},
 	}}
-	return NewFolderService(nodes, ents, types, &fakeOrders{set: map[string]string{}}), nodes, ents
+	return NewFolderService(nodes, ents, types, &fakeOrders{set: map[string]string{}}, &fakeSidebarPins{at: map[string]int{}}), nodes, ents
 }
 
 func TestFolderService_FindFolder(t *testing.T) {

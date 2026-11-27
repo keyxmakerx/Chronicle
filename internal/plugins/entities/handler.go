@@ -1359,6 +1359,10 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		var orders map[string]string
 		if h.folders != nil {
 			orders, _ = h.folders.ChildOrders(c.Request().Context(), cc.Campaign.ID)
+			// Pins only arrange the list, so a failed read leaves none.
+			if pins, err := h.folders.SidebarPins(c.Request().Context(), cc.Campaign.ID); err == nil && len(pins) > 0 {
+				c.SetRequest(c.Request().WithContext(withSidebarPins(c.Request().Context(), pins)))
+			}
 		}
 		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs, orders))
 	}
@@ -5104,6 +5108,31 @@ func (h *Handler) SetSidebarOrderAPI(c *echo.Context) error {
 		}
 	}
 	if err := h.folders.SetChildOrder(c.Request().Context(), cc.Campaign.ID, req.Kind, req.ID, req.Mode); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SetSidebarPinAPI pins a page so it leads its list in the sidebar, or unpins
+// it. The service refuses anyone below the Director team; the route lets
+// every member reach it so that answer is one place.
+// PUT /campaigns/:id/sidebar-pins
+func (h *Handler) SetSidebarPinAPI(c *echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.folders == nil {
+		return apperror.NewNotFound("pins are not available")
+	}
+	var req struct {
+		EntityID string `json:"entity_id"`
+		Pinned   bool   `json:"pinned"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.folders.SetSidebarPin(c.Request().Context(), cc.Campaign.ID, req.EntityID, auth.GetUserID(c), cc.CanAuthorDmOnly(), req.Pinned); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
