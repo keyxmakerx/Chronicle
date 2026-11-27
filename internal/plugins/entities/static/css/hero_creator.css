@@ -267,7 +267,7 @@ html.dark .hc[data-skin="ornate"] {
 .hc-sortb:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .hc-car { margin-left: 3px; font-size: 11px; color: var(--hc-link); }
 .hc-sortline { display: flex; justify-content: flex-end; margin: 0 8px -4px 12px; }
-.hc-sortmenu { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border-radius: var(--hc-radius-lg); background: var(--hc-surface); border: var(--hc-edge) solid var(--hc-line);
+.hc-sortmenu { position: absolute; z-index: var(--z-raised); top: calc(100% + 4px); left: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border-radius: var(--hc-radius-lg); background: var(--hc-surface); border: var(--hc-edge) solid var(--hc-line);
   box-shadow: 0 2px 4px rgb(0 0 0 / .18), 0 12px 32px rgb(0 0 0 / .32); transform-origin: top left; text-align: left; }
 .hc-sortline .hc-sortmenu { left: auto; right: 0; transform-origin: top right; }
 .hc-smi { width: 100%; display: grid; grid-template-columns: 20px 1fr; gap: 6px; align-items: start; padding: 8px 10px; min-height: 44px; border: 0; background: none; border-radius: var(--hc-radius); text-align: left; font: inherit; color: var(--hc-text); cursor: pointer; }
