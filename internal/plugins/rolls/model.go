@@ -92,8 +92,13 @@ type Roll struct {
 	// hero's own numbers (the sheet, or the Table's power roll line). It
 	// travels on the live message only, so Foundry can speak as the hero's
 	// actor; the log does not keep it.
-	CharacterID string    `json:"characterId,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
+	CharacterID string `json:"characterId,omitempty"`
+	// RollerDice is the 3D dice the roll is thrown in on every screen: the
+	// roller's own pick where the campaign lets them pick, else the
+	// campaign's, settled when the roll is made. Nil on rolls kept from
+	// before rolls carried it.
+	RollerDice *DiceLook `json:"rollerDice,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // View is a roll as one viewer is told it. A blind roll reaches its roller
@@ -117,8 +122,45 @@ type View struct {
 	Hidden     bool   `json:"hidden,omitempty"`
 	Mine       bool   `json:"mine,omitempty"`
 	// CharacterID is Roll.CharacterID; it is absent from the log.
-	CharacterID string    `json:"characterId,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
+	CharacterID string `json:"characterId,omitempty"`
+	// RollerDice is Roll.RollerDice. Old clients ignore it and throw the
+	// campaign's dice.
+	RollerDice *DiceLook `json:"rollerDice,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// DiceLook is one set of 3D dice: the die (set and colour) and the crit
+// success and crit fail animations. An empty field is the dice engine's
+// default. Own says the roller's own pick was used rather than the
+// campaign's, so a screen can name whose dice they are.
+type DiceLook struct {
+	Set      string `json:"set"`
+	Colour   string `json:"colour"`
+	CritSucc string `json:"critSucc"`
+	CritFail string `json:"critFail"`
+	Own      bool   `json:"own,omitempty"`
+}
+
+// DicePick is one member's own dice in one campaign, kept with their account.
+// An empty field follows the campaign's. Whether it is honoured is decided
+// each time from the campaign's settings, so a narrowed offer never needs the
+// stored pick cleaned, and widening it again brings the pick back.
+type DicePick struct {
+	Set      string `json:"set"`
+	Colour   string `json:"colour"`
+	CritSucc string `json:"critSucc"`
+	CritFail string `json:"critFail"`
+}
+
+// IsZero is whether the pick follows the campaign's dice in every field.
+func (p DicePick) IsZero() bool { return p == DicePick{} }
+
+// MyDice is what the Table's My dice leaf reads: the stored pick, the dice
+// the member's rolls are thrown in right now, and whether they may pick.
+type MyDice struct {
+	Pick      DicePick `json:"pick"`
+	Effective DiceLook `json:"effective"`
+	MayPick   bool     `json:"mayPick"`
 }
 
 // Viewer is who is asking. Director is true for the owner and members with
@@ -213,13 +255,16 @@ var (
 // picked starts on) and the 3D dice every roll is drawn with. An empty string
 // in a dice field means "the default", so the browser's own defaults apply.
 type Settings struct {
-	Look        string `json:"look"`
-	DiceSet     string `json:"diceSet"`
-	DiceColour  string `json:"diceColour"`
-	CritSucc    string `json:"critSucc"`
-	CritFail    string `json:"critFail"`
-	Quality     string `json:"quality"`
-	PlayersPick bool   `json:"playersPick"`
+	Look       string `json:"look"`
+	DiceSet    string `json:"diceSet"`
+	DiceColour string `json:"diceColour"`
+	CritSucc   string `json:"critSucc"`
+	CritFail   string `json:"critFail"`
+	Quality    string `json:"quality"`
+	// PlayersPick is whether members may pick their own dice from the sets
+	// on offer; their rolls are then thrown in their pick on every screen.
+	// Off, every roll is thrown in the campaign's dice.
+	PlayersPick bool `json:"playersPick"`
 	// DiceOffered is the sets a player may pick from, in catalogue order. It
 	// is empty when every set is on offer. The campaign's own set is always
 	// among them.

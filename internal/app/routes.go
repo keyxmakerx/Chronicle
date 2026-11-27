@@ -6151,6 +6151,7 @@ func (a *App) RegisterRoutes() {
 	fieldSwitchOffers.setSystems(systemHandler)
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	systems.RegisterHouseRulesRoute(e, systemHandler, authService, campaignService)
@@ -6210,7 +6211,11 @@ func (a *App) RegisterRoutes() {
 	// The Director team's pins lead every list, after the rules have narrowed it.
 	choicePinSvc := systems.NewChoicePinService(systems.NewChoicePinRepository(a.DB), characterChoiceSvc)
 	characterChoiceSvc.SetChoicePins(choicePinSvc)
+	// Entry writes reach a connected Foundry world; the bus is set below,
+	// once it exists.
+	entryChanges := &entryChangePublisher{}
 	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryChanges(entryChanges),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
 		systems.WithEntryRules(choiceRuleSvc),
 		systems.WithEntryLooks(cardLookSvc),
@@ -6415,6 +6420,7 @@ func (a *App) RegisterRoutes() {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
+			rememberCampaign(c, cc)
 
 			// Campaign visual customization from settings.
 			campaignSettings := cc.Campaign.ParseSettings()
@@ -6734,6 +6740,13 @@ func (a *App) RegisterRoutes() {
 				}
 				ctx = layouts.SetUserCampaigns(ctx, navCampaigns)
 			}
+			// The campaign this device was last in, as the way back from
+			// Account settings and Site admin.
+			if ck, err := c.Request().Cookie(lastCampaignCookie); err == nil {
+				if rc := returnCampaign(reqCtx, campaignService, ck.Value, session.UserID, layouts.GetUserCampaigns(ctx)); rc != nil {
+					ctx = layouts.SetReturnCampaign(ctx, rc)
+				}
+			}
 		}
 
 		// CSRF token for forms.
@@ -6870,6 +6883,7 @@ func (a *App) RegisterRoutes() {
 	// The recording wrapper appends allowlisted events to the change feed
 	// before they reach the hub, so no publisher can forget to record.
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
+	entryChanges.bus = wsEventBus
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	// The quests due-date events follow a page's visibility, so the entity
@@ -7129,7 +7143,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     rolls.PluginSlug,
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/table.js"}},
+			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -7471,6 +7485,7 @@ func (a *App) RegisterRoutes() {
 		PlayerNotes:     entityNotesService,
 		NoteAccess:      aiNoteAccessAPI,
 		Addons:          addonService,
+		AddonLister:     &addonListerAdapter{svc: addonService},
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
 		Boards:          aiBoards,

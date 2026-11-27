@@ -1,5 +1,7 @@
 package decks
 
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
 // HandOpened is one card opened at full size, with its controls: the card at
 // open size (the plate with its leaf for tall, the compact card for the
 // others) and, under it, Play it or Ask to play, Show the table, Throw it
@@ -18,7 +20,7 @@ templ HandOpened(p openedPage) {
 			<div class="dkh-big" data-dkh-big>
 				@CardView(c.Look, FaceUp(f, pictureURL(f.Picture, SizeOpen)), CardOpts{Size: SizeOpen})
 			</div>
-			<p class="dkh-state" role="status" aria-live="polite" data-dkh-state>{ c.stateLine() }</p>
+			<p class="dkh-state" role="status" aria-live="polite" data-dkh-state>{ c.stateLine(layouts.GMTerm(ctx)) }</p>
 			<div class="dkh-acts">
 				if c.InHand {
 					if c.CanPlay && !c.Copy.Waiting {
