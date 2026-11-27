@@ -327,7 +327,10 @@
     '.cs-cut-line.cs-cut-in-rise{animation:cs-cut-rise 1.3s cubic-bezier(.2,.7,.2,1) forwards}',
     '@keyframes cs-cut-rise{from{opacity:0;transform:translateY(.6em)}to{opacity:1;transform:none}}',
     '.cs-cut-line.cs-cut-in-settle{animation:cs-cut-settle 1.9s cubic-bezier(.16,.8,.2,1) forwards}',
-    '@keyframes cs-cut-settle{0%{opacity:0;filter:blur(8px);letter-spacing:.5em}55%{opacity:1}100%{opacity:1;filter:blur(0)}}',
+    // Drawn together by transform, never letter-spacing: spacing widens the
+    // line, so a long title would wrap, then jump back to one line mid-move.
+    '@keyframes cs-cut-settle{0%{opacity:0;filter:blur(8px);transform:scaleX(1.3)}55%{opacity:1}100%{opacity:1;filter:blur(0);transform:none}}',
+    '.cs-cut-corner .cs-cut-line.cs-cut-in-settle{transform-origin:left center}',
     '.cs-cut-line.cs-cut-in-slide{animation:cs-cut-slide 1.1s cubic-bezier(.2,.8,.2,1) forwards}',
     '@keyframes cs-cut-slide{from{opacity:0;transform:translateX(-.9em)}to{opacity:1;transform:none}}',
     '.cs-cut-line.cs-cut-gone.cs-cut-out-fade{animation:cs-cut-fadeout 1s ease-in forwards}',
