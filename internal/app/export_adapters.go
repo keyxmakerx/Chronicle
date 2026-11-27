@@ -2064,7 +2064,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	// to another, so two passes always suffice), and skips and moves go on
 	// last, once every event they depend on exists.
 	refs := calendarRuleRefs{events: map[string]string{}}
-	if calendarDataHasRules(data) {
+	if calendarDataHasRules(data) || calendarDataHasSkyMoons(data) {
 		refs = a.ruleRefsFor(ctx, cal.ID, campaignID, data)
 	}
 	created := make([]string, len(data.Events))
@@ -2365,6 +2365,17 @@ type calendarRuleRefs struct {
 	events  map[string]string
 }
 
+// calendarDataHasSkyMoons reports whether any event's sky event names a
+// moon, whose id must be mapped like a rule's.
+func calendarDataHasSkyMoons(data *campaigns.ExportCalendarData) bool {
+	for _, e := range data.Events {
+		if calendar.PayloadNamesMoons(e.Payload) {
+			return true
+		}
+	}
+	return false
+}
+
 // calendarDataHasRules reports whether any event carries a repeat rule.
 func calendarDataHasRules(data *campaigns.ExportCalendarData) bool {
 	for _, e := range data.Events {
@@ -2489,6 +2500,13 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 		report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, "unreadable repeat rule")
 		return ""
 	}
+	// A sky event's moons are the exporting calendar's ids; one that cannot
+	// be mapped, or a sky event that no longer passes, is left off and
+	// reported rather than costing the event.
+	payload, skyNote := calendar.ImportedEventPayload(evt.Payload, refs.moons)
+	if skyNote != "" {
+		report.Fail(campaigns.SectionCalendar, "sky event", evt.Name, skyNote)
+	}
 	created, err := a.svc.CreateEvent(ctx, calendarID, campaignID, calendar.CreateEventInput{
 		Name:                     evt.Name,
 		Description:              evt.Description,
@@ -2520,7 +2538,7 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 		Color:                    evt.Color,
 		Icon:                     evt.Icon,
 		AllDay:                   evt.AllDay,
-		Payload:                  evt.Payload,
+		Payload:                  payload,
 		Status:                   evt.Status,
 		Outcome:                  evt.Outcome,
 		MovedFrom:                backupMovedFrom(evt),
