@@ -6204,7 +6204,11 @@ func (a *App) RegisterRoutes() {
 	// The Director team's pins lead every list, after the rules have narrowed it.
 	choicePinSvc := systems.NewChoicePinService(systems.NewChoicePinRepository(a.DB), characterChoiceSvc)
 	characterChoiceSvc.SetChoicePins(choicePinSvc)
+	// Entry writes reach a connected Foundry world; the bus is set below,
+	// once it exists.
+	entryChanges := &entryChangePublisher{}
 	systemEntrySvc := systems.NewSystemEntryService(systemEntryRepo, systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryChanges(entryChanges),
 		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}),
 		systems.WithEntryRules(choiceRuleSvc),
 		systems.WithEntryLooks(cardLookSvc),
@@ -6863,6 +6867,7 @@ func (a *App) RegisterRoutes() {
 	// The recording wrapper appends allowlisted events to the change feed
 	// before they reach the hub, so no publisher can forget to record.
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
+	entryChanges.bus = wsEventBus
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	// The quests due-date events follow a page's visibility, so the entity

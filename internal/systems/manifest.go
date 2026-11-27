@@ -27,6 +27,10 @@ type SystemManifest struct {
 	// kept for the diagnostics report like PlayWarnings. Never serialized.
 	DesignWarnings []string `json:"-"`
 
+	// EntryFieldWarnings lists foundry_entry_fields mappings dropped at load
+	// (entry_fields.go), kept for the diagnostics report. Never serialized.
+	EntryFieldWarnings []string `json:"-"`
+
 	// ID is the unique machine-readable identifier (e.g., "dnd5e").
 	ID string `json:"id"`
 
@@ -436,6 +440,11 @@ type FieldDef struct {
 	// holds several picks (a creator Multi step, such as two kits).
 	FoundryItemJoin bool `json:"foundry_item_join,omitempty"`
 
+	// FoundryEntryFields, on a single-item field, says which properties of a
+	// campaign's own entry fill which fields of the Foundry item sync makes
+	// for it (entry_fields.go). A bad mapping is dropped at load.
+	FoundryEntryFields map[string]EntryFieldDef `json:"foundry_entry_fields,omitempty"`
+
 	// Play declares that this field may be changed during play and how, so
 	// core never needs to know a system's field names. Optional; a block that
 	// fails validation is dropped at load (see sanitizePlayBlocks) and the
@@ -797,6 +806,8 @@ func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterF
 			FoundryItemFields: f.FoundryItemFields,
 			FoundryItemSingle: f.FoundryItemSingle,
 			FoundryItemJoin:   f.FoundryItemJoin,
+
+			FoundryEntryFields: f.FoundryEntryFields,
 		}
 	}
 
@@ -878,6 +889,8 @@ type CharacterFieldExport struct {
 	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
 	FoundryItemSingle bool              `json:"foundry_item_single,omitempty"`
 	FoundryItemJoin   bool              `json:"foundry_item_join,omitempty"`
+	// FoundryEntryFields: see FieldDef.FoundryEntryFields.
+	FoundryEntryFields map[string]EntryFieldDef `json:"foundry_entry_fields,omitempty"`
 }
 
 // CharacterFieldsForAPI builds the API response for character preset fields.
@@ -969,6 +982,7 @@ func (m *SystemManifest) BuildValidationReport() *ValidationReport {
 	// Play blocks dropped at load.
 	r.Warnings = append(r.Warnings, m.PlayWarnings...)
 	r.Warnings = append(r.Warnings, m.DesignWarnings...)
+	r.Warnings = append(r.Warnings, m.EntryFieldWarnings...)
 
 	// Generate warnings.
 	if r.CategoryCount == 0 {
@@ -1146,6 +1160,7 @@ func ValidateManifest(m *SystemManifest) error {
 
 	m.sanitizePlayBlocks()
 	m.sanitizeCreatorBlocks()
+	m.sanitizeEntryFields()
 
 	// Validate widgets.
 	if len(m.Widgets) > maxWidgets {
