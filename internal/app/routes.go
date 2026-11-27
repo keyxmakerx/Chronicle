@@ -4825,6 +4825,9 @@ func (a *App) RegisterRoutes() {
 	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
 	// Encounters for the Foundry module; the service attaches below.
 	encounterAPI := &syncEncounterAPIAdapter{}
+	// Homebrew asks for the Foundry module's GM card; the Workshop attaches
+	// below, once it is built.
+	homebrewAskAPI := &syncHomebrewAskAdapter{}
 	// Crafting for the Foundry module; the service attaches below, once the
 	// crafting plugin is built.
 	craftingAPI := &syncCraftingAPIAdapter{actors: stashAPI}
@@ -4850,6 +4853,7 @@ func (a *App) RegisterRoutes() {
 		&armoryShopCheckerAdapter{svc: entityService},
 		&entityVisibilityFilterAdapter{svc: entityService},
 	)
+	armory.SetShopRoomPictures(shopRoomService, &shopRoomPictureAdapter{svc: mediaService})
 	syncAPIHandler.SetShopRoomReader(shopRoomService, "armory")
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
@@ -4956,7 +4960,7 @@ func (a *App) RegisterRoutes() {
 	vendoredAssets := syncapi.NewVendoredAssetsHandler()
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithVendoredAssets(vendoredAssets))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithVendoredAssets(vendoredAssets), syncapi.WithHomebrewAsks(syncapi.NewHomebrewAskAPIHandler(homebrewAskAPI, campaignService)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -5192,7 +5196,16 @@ func (a *App) RegisterRoutes() {
 	// A campaign's feature switches go to its own activity log.
 	addonHandler.SetCampaignActivityLogger(&addonCampaignActivityAdapter{svc: auditService})
 	shareAudit.svc = auditService
+	// Recent Activity lists what Foundry wrote, connected and settled.
+	auditService.SetFoundryActivity(auditFoundryAdapter{repo: syncapi.NewSyncHistoryRepository(a.DB)})
 	auditHandler := audit.NewHandler(auditService)
+	auditHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
+		u, err := authService.GetUser(ctx, userID)
+		if err != nil || u == nil || u.Timezone == nil {
+			return nil
+		}
+		return timeutil.LoadLocation(*u.Timezone)
+	})
 	// Guard the entity-history endpoint with campaign ownership + per-entity
 	// visibility, resolved via the entities service (SEC-IDOR-2).
 	auditHandler.SetEntityViewGuard(&auditEntityViewGuardAdapter{svc: entityService})
@@ -7352,6 +7365,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: "homebrew-workshop", Scripts: []string{"js/homebrew_workshop.js"}},
 			{Name: "homebrew-drawer", Scripts: []string{"js/homebrew_drawer.js"}},
+			{Name: "homebrew-asks", Scripts: []string{"js/homebrew_asks.js"}},
 		},
 	})
 	// aiWorkshop is the Workshop's store for the AI tools; nil while the
@@ -7359,8 +7373,10 @@ func (a *App) RegisterRoutes() {
 	var aiWorkshop homebrew.Service
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
-			homebrew.NewRunStore(a.DB))
+			homebrew.NewRunStore(a.DB), homebrew.WithAskPeople(&homebrewAskPeople{svc: campaignService}),
+			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+		homebrewAskAPI.attach(homebrewSvc)
 		aiWorkshop = homebrewSvc
 		craftingRespites.homebrew = homebrewSvc
 		decksStory.bindHomebrew(homebrewSvc)

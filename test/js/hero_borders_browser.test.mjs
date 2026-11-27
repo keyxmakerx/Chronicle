@@ -375,10 +375,13 @@ test('"Read the rules" sits wholly inside the padding of a bordered card on a 36
 // --- A card reads whole as the room shrinks ---
 
 // Where each part of a card sits against the card's padding box, for the card
-// at index j (brought to the middle of the hand first).
-const insideOf = (pg, j) => pg.evaluate((n) => {
+// at index j (brought to the middle of the hand first). The hand fits only the
+// cards near its middle, in the frame after it scrolls, so the card is read two
+// frames later: reading it at once raced that frame on a busy machine.
+const insideOf = (pg, j) => pg.evaluate(async (n) => {
   const h = document.querySelector('[data-hand]'), c = h.querySelectorAll('.hc-card[data-i]')[n];
   h.scrollLeft = c.offsetLeft - (h.clientWidth - c.offsetWidth) / 2;
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const cs = getComputedStyle(c), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom);
   const top = c.querySelector('.hc-top'), h3 = c.querySelector('h3'), more = c.querySelector('.hc-more');
   return { name: h3.textContent, foot: c.clientHeight - pb - (more.offsetTop + more.offsetHeight), label: top.offsetTop - pt, nameTop: h3.offsetTop - pt, nameGap: more.offsetTop - (h3.offsetTop + h3.offsetHeight) };
