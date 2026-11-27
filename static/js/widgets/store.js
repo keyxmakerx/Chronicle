@@ -327,11 +327,14 @@
   function open(opts) {
     if (!host || opening || (dlg && dlg.open)) return;
     opening = true;
-    if (toggle && window.Chronicle.working) window.Chronicle.working(toggle, true);
+    var mine = host, btn = toggle;
+    if (btn && window.Chronicle.working) window.Chronicle.working(btn, true);
     styleOnce().then(function () {
+      if (btn && window.Chronicle.working) window.Chronicle.working(btn, false);
+      // A widget mounted again meanwhile is not the one that was clicked.
+      if (host !== mine) return;
       opening = false;
-      if (toggle && window.Chronicle.working) window.Chronicle.working(toggle, false);
-      if (host) show(opts);
+      show(opts);
     });
   }
   function show(opts) {
