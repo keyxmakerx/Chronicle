@@ -255,6 +255,11 @@ func TestPartyEffectShare(t *testing.T) {
 	if _, err := sharePartyEffect(effect("director")); err == nil || !strings.Contains(err.Error(), "only the Director") {
 		t.Errorf("a Director-only effect was shared: %v", err)
 	}
+	for _, see := range []string{"", "Director", "gm", "everyone"} {
+		if _, err := sharePartyEffect(effect(see)); err == nil {
+			t.Errorf("an effect seen by %q was shared", see)
+		}
+	}
 	if got, err := sharePartyEffect(effect("party")); err != nil || !bytes.Contains(got, []byte("Eclipse")) {
 		t.Errorf("a party effect was refused: %s, %v", got, err)
 	}

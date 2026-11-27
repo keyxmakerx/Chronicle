@@ -161,14 +161,15 @@ func shareAncestry(raw json.RawMessage, _ []homebrew.Unlinked) (json.RawMessage,
 	return json.RawMessage(`{"slug":""}`), []homebrew.Unlinked{{Pick: pickAncestry}}, nil
 }
 
-// sharePartyEffect refuses an effect only the Director sees: its name and
-// text are the Director's, so there is nothing of it to share.
+// sharePartyEffect shares only an effect the party sees: any other audience
+// (the Director's, or one a hand-edited package invents) may carry the
+// Director's own words, so it is refused rather than guessed at.
 func sharePartyEffect(raw json.RawMessage) (json.RawMessage, error) {
 	var a partyEffectArgs
 	if err := strictJSON(raw, &a); err != nil {
 		return nil, err
 	}
-	if a.See == effectSeeDirector {
+	if a.See != effectSeeParty {
 		return nil, apperror.NewValidation("is an effect only the Director sees, so it is not shared; let the party see it or take the step out of the recipe")
 	}
 	return raw, nil
