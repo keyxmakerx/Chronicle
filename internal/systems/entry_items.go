@@ -23,6 +23,7 @@ var entryItemType = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,31}$`)
 // recording a warning for each, the same way and on the same fields as
 // sanitizeEntryFields.
 func (m *SystemManifest) sanitizeEntryItems() {
+	identity := m.identityItemTypes()
 	for i := range m.EntityPresets {
 		preset := &m.EntityPresets[i]
 		for j := range preset.Fields {
@@ -57,6 +58,9 @@ func (m *SystemManifest) sanitizeEntryItems() {
 				case !entryItemType.MatchString(f.FoundryEntryItems[k].Type):
 					warn(fmt.Sprintf("%q ignored: type must be a Foundry item type name (letters and digits, starting with a letter)", k))
 					delete(f.FoundryEntryItems, k)
+				case identity[f.FoundryEntryItems[k].Type]:
+					warn(fmt.Sprintf("%q ignored: %s is a type a single-item field syncs (an ancestry, a kit), and a second one would be read as the hero's", k, f.FoundryEntryItems[k].Type))
+					delete(f.FoundryEntryItems, k)
 				}
 			}
 			if len(f.FoundryEntryItems) == 0 {
@@ -64,4 +68,21 @@ func (m *SystemManifest) sanitizeEntryItems() {
 			}
 		}
 	}
+}
+
+// identityItemTypes is every item type a single-item field syncs. A list item
+// of one of those types would sit beside the hero's real one and sync would
+// read whichever came first as the hero's ancestry or kit.
+func (m *SystemManifest) identityItemTypes() map[string]bool {
+	types := map[string]bool{}
+	for _, preset := range m.EntityPresets {
+		for _, f := range preset.Fields {
+			if f.FoundryCollection == "items" && f.FoundryItemSingle {
+				for _, t := range f.FoundryItemType {
+					types[t] = true
+				}
+			}
+		}
+	}
+	return types
 }

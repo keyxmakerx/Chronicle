@@ -21,6 +21,7 @@ func TestEntryItemValidation(t *testing.T) {
 		{"a missing type", ancestry + `,"foundry_entry_items":{"signature_traits":{}}}`, 0, "type must be"},
 		{"a type too long", ancestry + `,"foundry_entry_items":{"signature_traits":{"type":"` + strings.Repeat("a", 33) + `"}}}`, 0, "type must be"},
 		{"a property that is not an identifier", ancestry + `,"foundry_entry_items":{"a b":{"type":"feature"}}}`, 0, "plain identifier"},
+		{"the field's own identity type", ancestry + `,"foundry_entry_items":{"signature_traits":{"type":"ancestry"}}}`, 0, "single-item field syncs"},
 		{"a GM-only field", ancestry + `,"gm_only":true,"foundry_entry_items":{"signature_traits":{"type":"feature"}}}`, 0, "GM-only"},
 		{"not a single item", `{"key":"abilities","label":"A","type":"string","foundry_collection":"items","foundry_item_type":["ability"],
 			"foundry_entry_items":{"x":{"type":"feature"}}}`, 0, "not a single Foundry item"},
