@@ -105,3 +105,21 @@ func TestEntryFieldsExported(t *testing.T) {
 		t.Fatalf("a GM-only field must go out unmapped: %v", got)
 	}
 }
+
+// A value the system counts into the hero when the item arrives (a career's
+// renown) is marked once, and the mark reaches the module; others go out
+// without it.
+func TestEntryFieldOnceExported(t *testing.T) {
+	m := entryFieldsManifest(t, `{"key":"career","label":"Career","type":"string","foundry_collection":"items","foundry_item_type":["career"],"foundry_item_single":true,
+		"foundry_entry_fields":{
+			"renown":{"path":"system.renown","format":"number","once":true},
+			"project_points":{"path":"system.projectPoints","format":"number"}}}`)
+	if len(m.EntryFieldWarnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", m.EntryFieldWarnings)
+	}
+	raw, _ := json.Marshal(m.CharacterFieldsForAPI().Fields[0].FoundryEntryFields)
+	want := `{"project_points":{"path":"system.projectPoints","format":"number"},"renown":{"path":"system.renown","format":"number","once":true}}`
+	if string(raw) != want {
+		t.Fatalf("wire shape %s, want %s", raw, want)
+	}
+}
