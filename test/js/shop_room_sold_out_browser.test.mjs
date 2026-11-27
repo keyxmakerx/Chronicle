@@ -52,7 +52,7 @@ async function shop(t, refusal, opts = {}) {
     apiFetch: function (url, o) {
       if (o && o.method === 'POST') { window.__posts.push(o.body); return Promise.resolve({ ok: false, status: ${refusal.status}, json: function () { return Promise.resolve({ type: 'bad_request', message: ${JSON.stringify(refusal.message)} }); } }); }
       if (url === '/rel') window.__reads++;
-      var body = /\\/room$/.test(url) ? ${JSON.stringify(ROOM)} : /\\/buyers$/.test(url) ? ${JSON.stringify(BUYERS)} : window.__posts.length || window.__after ? ${JSON.stringify(AFTER)} : ${JSON.stringify(BEFORE)};
+      var body = /\\/room$/.test(url) ? ${JSON.stringify(ROOM)} : /\\/buyers$/.test(url) ? ${JSON.stringify(BUYERS)} : window.__posts.length || window.__after ? ${JSON.stringify(opts.after || AFTER)} : ${JSON.stringify(BEFORE)};
       return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(JSON.parse(JSON.stringify(body))); } });
     }
   };` });
@@ -75,8 +75,8 @@ test('a buy someone beat you to reads the shelves again, settles the basket and 
   assert.equal(await count(p), '4');
   const reads = await p.evaluate(() => window.__reads);
   await p.click('[data-buy]');
-  await p.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /sold out/.test(n.textContent); });
-  assert.equal(await note(p), 'These sold out while you shopped: Healing Potion. Only 1 Toolbox left. Nothing was charged, and your basket is updated.');
+  await p.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /last/.test(n.textContent); });
+  assert.equal(await note(p), 'Someone just bought the last Healing Potion. Only 1 Toolbox left. Nothing was charged, and your basket is updated.');
   assert.ok(await p.evaluate((n) => window.__reads > n, reads), 'the wares are read again');
   assert.equal(await count(p), '2', 'the potion is gone and the toolbox cut to the one left');
   assert.doesNotMatch(await note(p), /insufficient/);
@@ -115,8 +115,8 @@ test("another shopper's buy reaches an open room: the wares are read again and t
   assert.equal(await p.evaluate(() => window.__reads), reads);
   // A burst for this shop is one read.
   await p.evaluate(() => { window.__after = true; for (let i = 0; i < 3; i++) window.__ws[0].emit({ type: 'shop.changed', campaignId: 'c1', resourceId: 's1' }); });
-  await p.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /Just sold out/.test(n.textContent); });
-  assert.equal(await note(p), 'Just sold out: Healing Potion. Only 1 Toolbox left. Your basket is updated.');
+  await p.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /last/.test(n.textContent); });
+  assert.equal(await note(p), 'Someone just bought the last Healing Potion. Only 1 Toolbox left. Your basket is updated.');
   assert.equal(await p.evaluate(() => window.__reads), reads + 1);
   assert.equal(await count(p), '2');
   assert.equal(await p.evaluate(() => window.__posts.length), 0, 'nothing is bought');
@@ -133,4 +133,21 @@ test("a host's own connection stands in for the socket", { skip, timeout: 60000 
   await p.waitForFunction(() => document.querySelector('.shr-cnt').textContent === '2');
   await leave(p);
   await p.waitForFunction(() => window.__stopped === true);
+});
+
+test('a cut-only basket says what is left, a listing taken off sale is not called bought, and the keeper stays quiet', { skip, timeout: 60000 }, async (t) => {
+  const offSale = sells(11, 'Healing Potion', 2, 4); offSale.metadata.in_stock = false;
+  const p = await shop(t, { status: 400, message: 'insufficient stock: 1 available, 2 requested' }, { after: [offSale, sells(13, 'Fever tea', 1, null), sells(15, 'Toolbox', 4, 1)] });
+  await p.click('[data-buy]');
+  await p.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /left/.test(n.textContent); });
+  assert.equal(await note(p), 'Healing Potion is no longer for sale. Only 1 Toolbox left. Nothing was charged, and your basket is updated.');
+  assert.equal(await count(p), '2');
+  assert.doesNotMatch(await p.evaluate(() => document.querySelector('.shr-say') ? document.querySelector('.shr-say').textContent : ''), /someone else already bought/);
+
+  const q = await shop(t, { status: 400, message: 'insufficient stock: 1 available, 2 requested' }, { after: [sells(11, 'Healing Potion', 2, 4), sells(13, 'Fever tea', 1, null), sells(15, 'Toolbox', 4, 1)] });
+  await q.click('[data-buy]');
+  await q.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /left/.test(n.textContent); });
+  assert.equal(await note(q), 'Someone just bought some of these. Only 1 Toolbox left. Nothing was charged, and your basket is updated.');
+  assert.equal(await count(q), '3');
+  assert.doesNotMatch(await q.evaluate(() => document.querySelector('.shr-say') ? document.querySelector('.shr-say').textContent : ''), /someone else already bought/);
 });

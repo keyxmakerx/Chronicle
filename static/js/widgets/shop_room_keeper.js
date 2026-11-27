@@ -5,7 +5,8 @@
  * A shop's saved layout may name a manner and hold the GM's own lines per
  * moment (layout.manner, layout.moments). The GM's lines for a moment always
  * win; a moment with none falls back to the manner's starting lines; with no
- * manner either, the keeper says nothing then. The keeper's general lines
+ * manner either, the keeper says nothing then, except for gone, which has a
+ * plain line of its own (GONE). The keeper's general lines
  * (layout.lines, said when pressed) are separate and unchanged. The refuse
  * moment is what the keeper says when the shop won't serve the party; the
  * player Shops page shows it at a refusing shop's door.
