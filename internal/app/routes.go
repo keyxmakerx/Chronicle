@@ -7129,7 +7129,7 @@ func (a *App) RegisterRoutes() {
 	// The Workshop's "rolls first" step rolls through the roll log; both are
 	// nil while it is degraded, and the step is then not offered.
 	var homebrewRolls rollTable
-	var homebrewPower rolls.PowerRollSource
+	var homebrewPower rollFirstStats
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})

@@ -52,14 +52,20 @@ type rollTable interface {
 	Table(ctx context.Context, campaignID string, v rolls.Viewer, in rolls.TableInput) (*rolls.View, error)
 }
 
-type rollFirst struct {
-	rolls rollTable
-	// power reads the game system's characteristics and a player's numbers
-	// for them; nil leaves the step to plain dice.
-	power rolls.PowerRollSource
+// rollFirstStats reads the game system's characteristics and one player's
+// numbers for them: heroID's when the player owns that page, else their first
+// hero's (rollsPowerAdapter).
+type rollFirstStats interface {
+	PowerRollOn(ctx context.Context, campaignID, userID, heroID string, canSeeGM bool) (rolls.PowerRollLine, error)
 }
 
-func rollFirstAction(svc rollTable, power rolls.PowerRollSource) homebrew.ActionDef {
+type rollFirst struct {
+	rolls rollTable
+	// power is nil while no game system can be read, leaving plain dice.
+	power rollFirstStats
+}
+
+func rollFirstAction(svc rollTable, power rollFirstStats) homebrew.ActionDef {
 	rf := &rollFirst{rolls: svc, power: power}
 	return homebrew.ActionDef{Name: RollFirstAction, Label: "The player rolls first",
 		Fields: []homebrew.Field{
@@ -85,7 +91,7 @@ func (rf *rollFirst) check(ctx context.Context, campaignID string, raw json.RawM
 	a.Dice = shown
 	a.Characteristic = strings.Join(strings.Fields(a.Characteristic), " ")
 	if a.Characteristic != "" {
-		st, err := rf.stat(ctx, campaignID, "", a.Characteristic)
+		st, _, err := rf.stat(ctx, campaignID, "", "", a.Characteristic)
 		if err != nil {
 			return nil, err
 		}
@@ -98,33 +104,35 @@ func (rf *rollFirst) check(ctx context.Context, campaignID string, raw json.RawM
 }
 
 // stat finds a characteristic the game system declares, by its key or label
-// in any case, with userID's numbers for it when userID is set.
-func (rf *rollFirst) stat(ctx context.Context, campaignID, userID, name string) (rolls.PowerStat, error) {
+// in any case, with userID's numbers for it when userID is set (heroID's,
+// when they own that page), and the page the numbers came from.
+func (rf *rollFirst) stat(ctx context.Context, campaignID, userID, heroID, name string) (rolls.PowerStat, string, error) {
 	none := apperror.NewValidation("This campaign's game system names no characteristics. Leave it empty and put any bonus in the dice.")
 	if rf.power == nil {
-		return rolls.PowerStat{}, none
+		return rolls.PowerStat{}, "", none
 	}
-	line, err := rf.power.PowerRoll(ctx, campaignID, userID, false)
+	line, err := rf.power.PowerRollOn(ctx, campaignID, userID, heroID, false)
 	if err != nil {
-		return rolls.PowerStat{}, err
+		return rolls.PowerStat{}, "", err
 	}
 	if !line.Declared {
-		return rolls.PowerStat{}, none
+		return rolls.PowerStat{}, "", none
 	}
 	for _, c := range line.Characteristics {
 		if strings.EqualFold(c.Key, name) || strings.EqualFold(c.Label, name) {
-			return c, nil
+			return c, line.HeroID, nil
 		}
 	}
 	names := make([]string, 0, len(line.Characteristics))
 	for _, c := range line.Characteristics {
 		names = append(names, c.Label)
 	}
-	return rolls.PowerStat{}, apperror.NewValidation(fmt.Sprintf("%q is not one of the game system's characteristics (%s).", name, strings.Join(names, ", ")))
+	return rolls.PowerStat{}, "", apperror.NewValidation(fmt.Sprintf("%q is not one of the game system's characteristics (%s).", name, strings.Join(names, ", ")))
 }
 
 // work is what the player would roll: the dice plus their hero's number
-// for the characteristic, and that hero's page.
+// for the characteristic, and that hero's page. The hero is the page the
+// rule's event happened on when the player owns it, else their first hero.
 func (rf *rollFirst) work(ctx context.Context, campaignID string, act homebrew.Act) (homebrew.RollOffer, string, error) {
 	var a rollFirstArgs
 	if err := json.Unmarshal(act.Args, &a); err != nil {
@@ -133,15 +141,14 @@ func (rf *rollFirst) work(ctx context.Context, campaignID string, act homebrew.A
 	o := homebrew.RollOffer{Formula: a.Dice, Target: a.Target}
 	heroID := ""
 	if a.Characteristic != "" {
-		st, err := rf.stat(ctx, campaignID, act.By.UserID, a.Characteristic)
+		st, hero, err := rf.stat(ctx, campaignID, act.By.UserID, act.Scope, a.Characteristic)
 		if err != nil {
 			return o, "", err
 		}
 		if st.Value == nil {
 			return o, "", apperror.NewValidation(fmt.Sprintf("Your hero's page has no %s number, so this roll can't be made here.", st.Label))
 		}
-		line, _ := rf.power.PowerRoll(ctx, campaignID, act.By.UserID, false)
-		heroID = line.HeroID
+		heroID = hero
 		o.Label, o.Formula = st.Label, withBonus(a.Dice, *st.Value)
 	}
 	shown, ok := rolls.CheckFormula(o.Formula)

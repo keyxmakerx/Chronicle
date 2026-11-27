@@ -264,7 +264,7 @@ func TestRollFirstAfterAYes(t *testing.T) {
 		t.Fatalf("run = %+v", held)
 	}
 	yes := rr.bell.rung[len(rr.bell.rung)-1]
-	if yes.Message != "Your Director said yes, if you roll first: draw a card" || len(rr.bell.rung) != 2 {
+	if yes.Message != "Your Director said yes, if you roll first: draw a card" || len(rr.bell.rung) != 3 {
 		t.Errorf("bells = %+v", rr.bell.rung)
 	}
 	mine, _ := rr.svc.MyAsks(ctx, camp, mira)
@@ -279,6 +279,53 @@ func TestRollFirstAfterAYes(t *testing.T) {
 	}
 	if got.State != AskRolled || got.Answered != AnswerYes || rr.values["b"] != 1 {
 		t.Fatalf("view = %+v, b = %d", got, rr.values["b"])
+	}
+}
+
+// TestRollFirstRingsThePlayerOnce pins that a roll starting to wait rings
+// its player one bell: never "Waiting for your Director" as well, since no
+// Director is being waited on, and after a Yes only the answer's own bell.
+func TestRollFirstRingsThePlayerOnce(t *testing.T) {
+	tests := []struct {
+		name   string
+		by     Viewer
+		scope  string
+		ask    bool
+		player string
+		want   []string // the bell kinds the player gets once the roll waits
+	}{
+		{"a roll on its own", miraFires, "", false, "mira-1", []string{BellRoll}},
+		{"a Director's press, waiting on the hero's player", dm, "hero-tam", false, "tam-1", []string{BellRoll}},
+		{"a roll after the Director's yes", miraFires, "", true, "mira-1", []string{BellAnswered}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := newRollRig(t)
+			rr.svc.players = scopePlayers{"hero-tam": "tam-1"}
+			r := rr.rollRecipe(t, tt.by, tt.scope, tt.ask)
+			from := len(rr.bell.rung)
+			if tt.ask {
+				if _, err := rr.svc.Answer(context.Background(), camp, r.ID, dm, AnswerInput{Answer: AnswerYes}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				from = 0
+			}
+			if got := rr.runs.runs[r.ID]; !rr.svc.waitsOnRoll(got) || got.WaitFor != tt.player {
+				t.Fatalf("run = %+v", got)
+			}
+			var kinds []string
+			for _, n := range rr.bell.rung[from:] {
+				for _, u := range n.Users {
+					if u == tt.player {
+						kinds = append(kinds, n.Kind)
+					}
+				}
+			}
+			if strings.Join(kinds, ",") != strings.Join(tt.want, ",") {
+				t.Errorf("the player was rung %v, want %v", kinds, tt.want)
+			}
+		})
 	}
 }
 

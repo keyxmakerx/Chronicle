@@ -162,6 +162,13 @@ type rollsPowerAdapter struct {
 }
 
 func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID string, canSeeGM bool) (rolls.PowerRollLine, error) {
+	return a.PowerRollOn(ctx, campaignID, userID, "", canSeeGM)
+}
+
+// PowerRollOn is PowerRoll with the numbers of heroID when the viewer owns
+// that page, and of their first hero otherwise, so a house rule set off on
+// one hero's page rolls that hero's characteristic.
+func (a *rollsPowerAdapter) PowerRollOn(ctx context.Context, campaignID, userID, heroID string, canSeeGM bool) (rolls.PowerRollLine, error) {
 	if a.sys == nil {
 		return rolls.PowerRollLine{}, nil
 	}
@@ -180,7 +187,7 @@ func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID st
 	}
 	// The numbers are a convenience: without them the line still rolls, so
 	// any failure below leaves them out rather than failing the request.
-	hero, fields := a.heroFields(ctx, campaignID, userID, canSeeGM)
+	hero, fields := a.heroFields(ctx, campaignID, userID, heroID, canSeeGM)
 	if hero == nil {
 		return out, nil
 	}
@@ -194,13 +201,14 @@ func (a *rollsPowerAdapter) PowerRoll(ctx context.Context, campaignID, userID st
 	return out, nil
 }
 
-// heroFields picks the viewer's hero the way the hero creator does (the first
-// page they own of a character type) and returns its values with GM-only
+// heroFields picks the viewer's hero: heroID when they own that page, or
+// else the way the hero creator does (the first page they own of a character
+// type). It returns its values with GM-only
 // fields removed for a viewer who may not see them. GM-only covers the
 // category's fields and the fields added to just this page. When the
 // category cannot be read, a player gets no values at all: a field's
 // restriction is unknown then, and unknown is treated as hidden.
-func (a *rollsPowerAdapter) heroFields(ctx context.Context, campaignID, userID string, canSeeGM bool) (*entities.Entity, map[string]any) {
+func (a *rollsPowerAdapter) heroFields(ctx context.Context, campaignID, userID, heroID string, canSeeGM bool) (*entities.Entity, map[string]any) {
 	if a.entities == nil || a.characters == nil || userID == "" {
 		return nil, nil
 	}
@@ -216,6 +224,15 @@ func (a *rollsPowerAdapter) heroFields(ctx context.Context, campaignID, userID s
 	}
 	var hero *entities.Entity
 	for i := range mine {
+		if heroID != "" && mine[i].ID == heroID {
+			hero = &mine[i]
+			break
+		}
+	}
+	for i := range mine {
+		if hero != nil {
+			break
+		}
 		if slices.Contains(charTypes, mine[i].EntityTypeID) {
 			hero = &mine[i]
 			break

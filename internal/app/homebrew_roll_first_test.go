@@ -22,18 +22,23 @@ func (f *fakeTable) Table(_ context.Context, _ string, v rolls.Viewer, in rolls.
 	return &rolls.View{ID: "roll-9", Total: &t}, nil
 }
 
-// fakePower declares Might and Agility; mira's hero has Might 2 and no
-// Agility number.
+// fakePower declares Might and Agility. Mira's first hero has Might 2 and
+// no Agility number; her second hero, hero-mira-2, has Might 4. Asked for a
+// page she doesn't own, it gives her first hero, as rollsPowerAdapter does.
 type fakePower struct{ declared bool }
 
-func (f fakePower) PowerRoll(_ context.Context, _, userID string, _ bool) (rolls.PowerRollLine, error) {
+func (f fakePower) PowerRollOn(_ context.Context, _, userID, heroID string, _ bool) (rolls.PowerRollLine, error) {
 	if !f.declared {
 		return rolls.PowerRollLine{}, nil
 	}
 	line := rolls.PowerRollLine{Declared: true, Characteristics: []rolls.PowerStat{{Key: "might", Label: "Might"}, {Key: "agility", Label: "Agility"}}}
 	if userID == "mira" {
-		two := 2
-		line.HeroID, line.Characteristics[0].Value = "hero-mira", &two
+		n := 2
+		line.HeroID = "hero-mira"
+		if heroID == "hero-mira-2" {
+			n, line.HeroID = 4, heroID
+		}
+		line.Characteristics[0].Value = &n
 	}
 	return line, nil
 }
@@ -78,21 +83,24 @@ func TestRollFirstRollsThroughTheTable(t *testing.T) {
 		name    string
 		args    string
 		user    string
+		scope   string
 		formula string
 		label   string
 		hero    string
 		refused bool
 	}{
-		{"the hero's Might is added", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "2d10+2", "Might", "hero-mira", false},
-		{"plain dice name the rule", `{"dice":"d20","target":12}`, "mira", "1d20", "Rule from Lucky draw", "", false},
-		{"a hero with no number can't roll", `{"dice":"2d10","characteristic":"Agility","target":12}`, "mira", "", "", "", true},
-		{"a player with no hero can't add Might", `{"dice":"2d10","characteristic":"Might","target":12}`, "tam", "", "", "", true},
+		{"no scope hero: the first hero's Might is added", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "", "2d10+2", "Might", "hero-mira", false},
+		{"the rule's own hero's Might is added", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "hero-mira-2", "2d10+4", "Might", "hero-mira-2", false},
+		{"a scope page she doesn't own falls back to her first hero", `{"dice":"2d10","characteristic":"Might","target":12}`, "mira", "hero-tam", "2d10+2", "Might", "hero-mira", false},
+		{"plain dice name the rule", `{"dice":"d20","target":12}`, "mira", "", "1d20", "Rule from Lucky draw", "", false},
+		{"a hero with no number can't roll", `{"dice":"2d10","characteristic":"Agility","target":12}`, "mira", "", "", "", "", true},
+		{"a player with no hero can't add Might", `{"dice":"2d10","characteristic":"Might","target":12}`, "tam", "", "", "", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tbl := &fakeTable{total: 15}
 			def := rollFirstAction(tbl, fakePower{declared: true})
-			act := homebrew.Act{Args: json.RawMessage(tt.args), By: homebrew.Viewer{UserID: tt.user, Name: "Mira"}, Note: "Rule from Lucky draw"}
+			act := homebrew.Act{Args: json.RawMessage(tt.args), Scope: tt.scope, By: homebrew.Viewer{UserID: tt.user, Name: "Mira"}, Note: "Rule from Lucky draw"}
 			got, err := def.Rolls.Roll(context.Background(), "camp", act)
 			if tt.refused {
 				if err == nil || len(tbl.asked) != 0 {
