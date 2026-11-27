@@ -246,7 +246,7 @@ func TestPackageLacks(t *testing.T) {
 		{"unknown kind event and action", camp, pkgOf(`{"key":"a","kind":"far-off","label":"A"}`, `{"when":{"event":"far.event"},"then":[{"action":"far.action"}]}`),
 			[]string{`"far-off" kind of part`, `"far.event" When`, `"far.action" Then`}},
 		{"browser step needs a system", camp, raw(`{"name":"X","doc":{"parts":[],"rules":[{"when":{"event":"moon"},"then":[{"action":"browser-step"}]}]},"needs":{"system":"drawsteel"}}`),
-			[]string{"drawsteel game system's package", "no game system"}},
+			[]string{"package of the \"drawsteel\" game system", "no game system"}},
 		{"same system is fine", "camp-sys", raw(`{"name":"X","doc":{"parts":[],"rules":[{"when":{"event":"moon"},"then":[{"action":"browser-step"}]}]},"needs":{"system":"drawsteel"}}`), nil},
 		{"an owner refuses in this campaign", camp, pkgOf(`{"key":"p","kind":"picky","label":"P"}`, ``), []string{"won't fit this campaign", "bad thing"}},
 	}

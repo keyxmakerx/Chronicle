@@ -294,7 +294,8 @@ func (s *service) PackageLacks(ctx context.Context, campaignID string, raw json.
 			if have != "" {
 				now = "the " + have + " game system"
 			}
-			out = append(out, fmt.Sprintf("Some steps run in the Director's browser through the %s game system's package, and this campaign uses %s.", needs.System, now))
+			// No apostrophes in this sentence: it carries values from the package.
+			out = append(out, fmt.Sprintf("Some steps run in the browser of the Director, through the package of the %q game system, and this campaign uses %s.", needs.System, now))
 		}
 	}
 	if len(out) > 0 {
