@@ -119,7 +119,7 @@
     var p = pill(a, S.gm);
     li.appendChild(h('span', 'hba-pill hba-' + p[1], p[0]));
     if (a.state === 'waiting') {
-      li.appendChild(h('p', 'hba-note', 'You can keep playing. This tells you when the answer comes.'));
+      li.appendChild(h('p', 'hba-aside', 'You can keep playing. This tells you when the answer comes.'));
       if (a.canTakeBack) {
         var b = h('button', 'hba-quiet', S.busy === a.id ? 'Taking it back…' : 'Take back my ask', { type: 'button', disabled: !!S.busy },
           { click: function () { takeBack(S, a); } });

@@ -125,9 +125,16 @@ func TestAskHoldsTheRun(t *testing.T) {
 	if len(ar.live.events) != 1 || ar.live.events[0] != (AskEvent{ID: r.ID, State: AskWaiting, Asker: "mira-1"}) {
 		t.Errorf("live = %+v", ar.live.events)
 	}
-	if len(ar.bell.rung) != 1 || ar.bell.rung[0].Kind != BellAsked || ar.bell.rung[0].Message != "Mira wants to draw a card" ||
-		strings.Join(ar.bell.rung[0].Users, ",") != "dm-1,dm-2" || !strings.HasSuffix(ar.bell.rung[0].Link, "/dm-screen") {
-		t.Errorf("bell = %+v", ar.bell.rung)
+	if len(ar.bell.rung) != 2 {
+		t.Fatalf("bell = %+v", ar.bell.rung)
+	}
+	if w := ar.bell.rung[0]; w.Kind != BellWaiting || w.Message != "Waiting for your Director: draw a card" ||
+		strings.Join(w.Users, ",") != "mira-1" || !strings.HasSuffix(w.Link, "/homebrew/asks") {
+		t.Errorf("the asker is told the ask waits: %+v", w)
+	}
+	if d := ar.bell.rung[1]; d.Kind != BellAsked || d.Message != "Mira wants to draw a card" ||
+		strings.Join(d.Users, ",") != "dm-1,dm-2" || !strings.HasSuffix(d.Link, "/dm-screen") {
+		t.Errorf("bell = %+v", d)
 	}
 	d, err := ar.svc.Drawer(context.Background(), camp, dm)
 	if err != nil {

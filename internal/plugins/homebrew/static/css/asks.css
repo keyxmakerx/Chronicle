@@ -31,7 +31,7 @@
 .hba-pill.hba-ok::before { background: var(--hba-ok); }
 .hba-pill.hba-bad::before { background: var(--hba-bad); }
 .hba-pill.hba-note::before { background: var(--hba-acc); }
-.hba-note { justify-self: stretch; margin-top: 6px !important; padding-top: 10px; border-top: 1px solid var(--hba-line); color: var(--hba-muted); font-size: 13px; }
+.hba-aside { justify-self: stretch; margin-top: 6px !important; padding-top: 10px; border-top: 1px solid var(--hba-line); color: var(--hba-muted); font-size: 13px; }
 .hba-quiet {
   min-height: 32px; padding: 4px 0; border: 0; background: none; color: var(--hba-acc); font: inherit; font-weight: 600; cursor: pointer;
 }

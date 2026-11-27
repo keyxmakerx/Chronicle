@@ -106,7 +106,10 @@ func TestAskTheDirectorEndToEnd(t *testing.T) {
 			if len(mine) != 1 || mine[0].State != homebrew.AskWaiting {
 				t.Fatalf("Tam's asks = %+v", mine)
 			}
-			if len(w.asks.rings) != 1 || w.asks.rings[0].Message != "Tam wants to play Second wind" || strings.Join(w.asks.rings[0].Users, ",") != w.owner {
+			if len(w.asks.rings) != 2 || w.asks.rings[0].Message != "Waiting for your Director: play Second wind" || strings.Join(w.asks.rings[0].Users, ",") != w.tamUser {
+				t.Fatalf("Tam's waiting bell = %+v", w.asks.rings)
+			}
+			if w.asks.rings[1].Message != "Tam wants to play Second wind" || strings.Join(w.asks.rings[1].Users, ",") != w.owner {
 				t.Fatalf("Director's bell = %+v", w.asks.rings)
 			}
 

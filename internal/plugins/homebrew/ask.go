@@ -43,6 +43,7 @@ const (
 const (
 	BellAsked    = "homebrew_ask"
 	BellAnswered = "homebrew_ask_answered"
+	BellWaiting  = "homebrew_ask_waiting"
 )
 
 // askArgs is the ask step's own args: what the asker wants to do, in the
@@ -288,16 +289,34 @@ func (s *service) asked(ctx context.Context, r Run) {
 		return
 	}
 	var to []string
+	askerIsDirector := false
 	for _, id := range dirs {
+		if id == r.CreatedBy {
+			askerIsDirector = true
+		}
 		if id != "" && id != r.CreatedBy {
 			to = append(to, id)
+		}
+	}
+	w := askWords(r.Rule, r.Asked-1)
+	// A rule, not the player, raised the ask, so the player may not know it
+	// waits on anyone until the bell says so. A Director answers their own.
+	if r.CreatedBy != "" && !askerIsDirector {
+		what := w
+		if what == "" {
+			what = "your ask"
+		}
+		n := Notice{Users: []string{r.CreatedBy}, Kind: BellWaiting, Message: clip("Waiting for your Director: "+what, maxWhatChars),
+			Link: "/campaigns/" + r.CampaignID + "/homebrew/asks"}
+		if err := s.bell.Ring(ctx, r.CampaignID, n); err != nil {
+			slog.Warn("homebrew: waiting notice not written", slog.Any("error", err))
 		}
 	}
 	if len(to) == 0 {
 		return
 	}
 	msg := s.nameOf(ctx, r.CampaignID, r.CreatedBy)
-	if w := askWords(r.Rule, r.Asked-1); w != "" {
+	if w != "" {
 		msg += " wants to " + w
 	} else {
 		msg += " asks you about " + r.RecipeName
