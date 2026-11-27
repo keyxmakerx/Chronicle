@@ -86,6 +86,8 @@
   .pr-offer .btn-primary, .pr-device .btn-danger, .pr-row--stack .pr-confirm .btn-danger,
   .pr-acts .btn-primary, .pr-answers .btn-primary, .pr-confirm .btn-primary, .pr-confirm .btn-danger, .pr-no .btn-secondary { min-height: 44px; }
   .pr-answers, .pr-acts { gap: 4px 16px; }
+  /* Changing heroes' number boxes take a finger's height. */
+  input.hc-num { min-height: 44px; }
 }
 
 /* Changing heroes: the Directors' times for players' picks. Same quiet look:
