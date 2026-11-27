@@ -4952,8 +4952,12 @@ func (a *App) RegisterRoutes() {
 		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)
 	}
 
+	// Hashes of the page scripts the Foundry module copies; filled after
+	// every plugin's static files are mounted, at the end of RegisterRoutes.
+	vendoredAssets := syncapi.NewVendoredAssetsHandler()
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithVendoredAssets(vendoredAssets))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -7575,6 +7579,14 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+
+	// Hash the vendored files from the same mounts, so the sync API reports
+	// what this deploy serves rather than what the repo manifest says.
+	var vendoredPaths []string
+	for _, va := range foundry_vtt.VendoredAssets() {
+		vendoredPaths = append(vendoredPaths, va.Path)
+	}
+	vendoredAssets.SetAssets(a.hashVendoredAssets(vendoredPaths))
 
 	// A wiring mistake leaves only the widgets it names unloaded, so it is
 	// logged rather than stopping the site.
