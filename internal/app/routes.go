@@ -4868,6 +4868,7 @@ func (a *App) RegisterRoutes() {
 		&armoryShopCheckerAdapter{svc: entityService},
 		&entityVisibilityFilterAdapter{svc: entityService},
 	)
+	armory.SetShopRoomPictures(shopRoomService, &shopRoomPictureAdapter{svc: mediaService})
 	syncAPIHandler.SetShopRoomReader(shopRoomService, "armory")
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
