@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 // Entry field formats: how the Foundry module turns an entry property into the
@@ -30,8 +31,25 @@ type EntryFieldDef struct {
 }
 
 // entryFieldPath allows only the item's own system data: never its name,
-// flags, ownership or embedded documents, which sync manages itself.
-var entryFieldPath = regexp.MustCompile(`^system(\.[A-Za-z0-9_]+){1,8}$`)
+// flags, ownership or embedded documents, which sync manages itself. Each
+// segment starts with a letter, and reservedPathSegments are refused too, so
+// a path can't name a JavaScript object's shared internals.
+var entryFieldPath = regexp.MustCompile(`^system(\.[A-Za-z][A-Za-z0-9_]*){1,8}$`)
+
+var reservedPathSegments = map[string]bool{"constructor": true, "prototype": true}
+
+// usableEntryPath reports whether a mapping's path may be written on an item.
+func usableEntryPath(path string) bool {
+	if !entryFieldPath.MatchString(path) {
+		return false
+	}
+	for _, seg := range strings.Split(path, ".") {
+		if reservedPathSegments[seg] {
+			return false
+		}
+	}
+	return true
+}
 
 // sanitizeEntryFields drops foundry_entry_fields mappings that can't be used,
 // recording a warning for each, so a bad mapping never refuses the system: the
@@ -93,8 +111,8 @@ func validateEntryField(key string, d EntryFieldDef) string {
 	switch {
 	case !ValidChoiceFieldKey(key):
 		return "the property is not a plain identifier"
-	case !entryFieldPath.MatchString(d.Path):
-		return "path must be a dotted path under system (system.a.b)"
+	case !usableEntryPath(d.Path):
+		return "path must be a dotted path under system (system.a.b), each part starting with a letter"
 	case d.Format != EntryFieldNumber && d.Format != EntryFieldText && d.Format != EntryFieldTiers:
 		return "format must be number, text or tiers"
 	}
