@@ -441,6 +441,22 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 	})
 }
 
+// addonCampaignActivityAdapter writes a campaign feature switch to that
+// campaign's activity log, with the feature's name as the line's subject.
+type addonCampaignActivityAdapter struct {
+	svc audit.AuditService
+}
+
+// LogCampaignActivity records one campaign-scoped feature switch.
+func (a *addonCampaignActivityAdapter) LogCampaignActivity(ctx context.Context, campaignID, userID, action, subject string) error {
+	return a.svc.Log(ctx, &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityName: subject,
+	})
+}
+
 // systemManifestFinderAdapter bridges systems.Find to addons.SystemManifestFinder.
 // Used for self-healing addon registration when a system is in the registry but
 // not yet in the addons database.
@@ -5139,6 +5155,8 @@ func (a *App) RegisterRoutes() {
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)
 	auditService := audit.NewAuditService(auditRepo)
+	// A campaign's feature switches go to its own activity log.
+	addonHandler.SetCampaignActivityLogger(&addonCampaignActivityAdapter{svc: auditService})
 	shareAudit.svc = auditService
 	auditHandler := audit.NewHandler(auditService)
 	// Guard the entity-history endpoint with campaign ownership + per-entity
