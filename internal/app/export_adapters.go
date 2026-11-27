@@ -2782,8 +2782,14 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 					report.Fail("timelines", "timeline event link", tl.Name, "its calendar event is not in the file")
 					continue
 				}
+				// An older file may carry a colour that is not a hex colour;
+				// the link comes back without it rather than not at all.
+				color := l.ColorOverride
+				if color != nil && !timeline.IsHexColor(*color) {
+					color = nil
+				}
 				if _, err := a.svc.LinkEvent(ctx, newTimeline.ID, eventID, timeline.LinkEventInput{
-					Label: l.Label, ColorOverride: l.ColorOverride,
+					Label: l.Label, ColorOverride: color,
 				}); err != nil {
 					slog.Warn("import: link timeline event failed", slog.String("name", tl.Name), slog.Any("error", err))
 					report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
