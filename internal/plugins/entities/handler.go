@@ -874,6 +874,7 @@ func (h *Handler) prepareShowFor(c *echo.Context, entityID string) (*showPage, e
 	ctx = withPagePlaces(ctx, h.loadPagePlaces(c.Request().Context(), cc, entity,
 		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit && !campaigns.ViewingAsPlayer(c, cc), userID))
 	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
+	ctx = withOpenHistory(ctx, c.QueryParam("history"))
 
 	// The items-and-money panel another plugin serves: drawn where the layout
 	// places it, and on its own only on player-character pages without it

@@ -6,7 +6,7 @@
 /* The figures: quiet numbers. Pages and words filter the list to pages. */
 .ra-stats { display: flex; flex-wrap: wrap; gap: 6px 28px; margin: 0 0 14px; }
 .ra-stat { display: block; padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; color: inherit; text-align: left; }
-button.ra-stat { cursor: pointer; }
+button.ra-stat { cursor: pointer; min-width: 44px; min-height: 44px; }
 .ra-stat b { display: block; font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
 .ra-stat small { font-size: 0.75rem; color: var(--color-text-secondary); }
 button.ra-stat:hover small { color: var(--color-text-primary); }
@@ -25,18 +25,19 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
 .ra-chip:active { box-shadow: none; }
 .ra-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .ra-chip[aria-pressed="true"] { border-color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.10); color: var(--color-accent-link, var(--color-accent)); font-weight: 600; box-shadow: none; }
-.ra-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ra-chip b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+.ra-chip[aria-pressed="true"] b { color: var(--color-accent-link, var(--color-accent)); }
 .ra-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--color-bad-rgb)); }
 .ra-find { position: relative; flex: 1 1 200px; max-width: 300px; min-width: 0; margin-left: auto; }
 .ra-find i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--color-text-muted); pointer-events: none; }
-.ra-find input { width: 100%; min-height: 32px; padding: 5px 10px 5px 30px; border-radius: 8px; border: 1px solid var(--color-input-border, var(--color-border)); background: var(--color-input-bg, var(--color-bg-secondary)); color: var(--color-text-primary); font: inherit; font-size: 0.875rem; }
+.ra-find input { width: 100%; min-height: 32px; padding: 5px 12px 5px 30px; border-radius: 999px; border: 1px solid var(--color-input-border, var(--color-border)); background: var(--color-input-bg, var(--color-bg-secondary)); color: var(--color-text-primary); font: inherit; font-size: 0.875rem; }
 .ra-find input::placeholder { color: var(--color-text-muted); }
 .ra-find input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.15); }
 .ra-empty { padding: 16px 8px; color: var(--color-text-secondary); font-size: 0.875rem; }
 
 /* A sitting: chevron, who, when, a tick per change, what it came to. */
-.ra-list { border-top: 1px solid var(--color-border); }
-.ra-sit { border-bottom: 1px solid var(--color-border); }
+.ra-list { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--shape-r-panel); box-shadow: var(--elev-resting); padding: 4px 10px; }
+.ra-sit + .ra-sit { border-top: 1px solid var(--color-border); }
 .ra-sit > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 14px 26px 12rem 9rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; min-height: 44px; padding: 10px 8px; border-radius: 8px; font-size: 0.875rem; transition: background-color var(--dur-micro, 120ms) var(--ease-standard, ease); }
 .ra-sit > summary::-webkit-details-marker { display: none; }
 .ra-sit > summary:hover { background: color-mix(in srgb, var(--color-bg-tertiary) 70%, transparent); }
@@ -48,7 +49,7 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
 .ra-when { min-width: 0; }
 .ra-when b { display: block; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ra-when time { display: block; font-size: 0.78rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
-.ra-what { min-width: 0; color: var(--color-text-body); }
+.ra-what { min-width: 0; color: var(--color-text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ra-pills { display: flex; gap: 6px; justify-content: flex-end; }
 
 /* The strip: pages in the accent, settings grey, players hollow, Foundry
@@ -73,6 +74,8 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
 .ra-w a, .ra-side a { color: var(--color-accent-link, var(--color-accent)); text-decoration: none; }
 .ra-w a:hover, .ra-side a:hover { text-decoration: underline; }
 .ra-w b { font-weight: 600; }
+.ra-open { color: var(--color-accent-link, var(--color-accent)); }
+.ra-cf[open] .ra-open { display: none; }
 .ra-side { font-size: 0.8125rem; color: var(--color-text-secondary); text-align: right; white-space: nowrap; }
 
 /* A conflict opens again in place. */
@@ -114,7 +117,7 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
   .ra-sit > summary .ra-when { grid-area: w; }
   .ra-sit > summary .ra-pills { grid-area: p; }
   .ra-sit > summary .ra-strip { grid-area: s; }
-  .ra-sit > summary .ra-what { grid-area: t; }
+  .ra-sit > summary .ra-what { grid-area: t; white-space: normal; }
   .ra-row { grid-template-columns: 3.75rem minmax(0, 1fr); padding-left: 8px; }
   .ra-side { grid-column: 2; text-align: left; white-space: normal; }
   .ra-cfbox { margin-left: 8px; }
@@ -123,7 +126,7 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
      keeps its line; unseen padding gives it the height. */
   .ra-chip, .ra-find input { min-height: 44px; }
   .ra-foldall, .ra-legend .quiet-word, .ra-side a, .ra-acts a { display: inline-flex; align-items: center; min-height: 44px; }
-  .ra-w a { padding: 12px 0; margin: -12px 0; }
+  .ra-w a { padding: 14px 0; margin: -14px 0; }
   .ra-cf > summary { min-height: 44px; }
 }
 
@@ -132,5 +135,10 @@ button.ra-stat:focus-visible { outline: 2px solid var(--color-accent); outline-o
   .ra-sit[open] > .ra-rows, .ra-cf[open] > .ra-cfbox { animation: none; }
 }
 html[data-motion="off"] .ra-sit[open] > .ra-rows, html[data-motion="off"] .ra-cf[open] > .ra-cfbox { animation: none; }
-html[data-motion="calm"] .ra-sit[open] > .ra-rows, html[data-motion="calm"] .ra-cf[open] > .ra-cfbox { animation-name: ra-fade; }
+/* Calm fades the fold. The site-wide Calm rule jumps keyframes to their end,
+   so the fade takes its time back here; a device asking for less motion
+   keeps the jump. */
 @keyframes ra-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="calm"] .ra-sit[open] > .ra-rows, html[data-motion="calm"] .ra-cf[open] > .ra-cfbox { animation-name: ra-fade; animation-duration: var(--dur-standard, 200ms) !important; }
+}

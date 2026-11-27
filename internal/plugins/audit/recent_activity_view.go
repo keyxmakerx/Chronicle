@@ -114,15 +114,20 @@ func sittingDay(v ActivityView, t time.Time) string {
 	}
 }
 
+// clockText is a time the way people write it: "7:02pm".
 func clockText(v ActivityView, t time.Time) string {
-	return strings.ToLower(t.In(v.Loc).Format("3:04 PM"))
+	return strings.ToLower(t.In(v.Loc).Format("3:04PM"))
 }
 
-// sittingWhen is a sitting's day and span: "Today, 7:02 to 7:48pm".
+// sittingWhen is a sitting's day and span: "Today, 7:02 to 7:48pm". The
+// first time drops its am or pm when both share it.
 func sittingWhen(v ActivityView, s Sitting) string {
 	from, to := clockText(v, s.Start), clockText(v, s.End)
 	if from == to {
 		return sittingDay(v, s.Start) + ", " + from
+	}
+	if from[len(from)-2:] == to[len(to)-2:] {
+		from = from[:len(from)-2]
 	}
 	return sittingDay(v, s.Start) + ", " + from + " to " + to
 }
@@ -209,13 +214,13 @@ func pageID(r ActivityRow) string {
 	return ""
 }
 
-// pageHref and historyHref escape the id: a conflict's id comes from the module.
+// historyHref opens the page with its History panel. Both escape the id: a conflict's id comes from the module.
 func pageHref(v ActivityView, id string) string {
 	return fmt.Sprintf("/campaigns/%s/entities/%s", v.CampaignID, url.PathEscape(id))
 }
 
 func historyHref(v ActivityView, id string) string {
-	return fmt.Sprintf("/campaigns/%s/entities/%s/history", v.CampaignID, url.PathEscape(id))
+	return fmt.Sprintf("/campaigns/%s/entities/%s?history=1", v.CampaignID, url.PathEscape(id))
 }
 
 // rowSide is the quiet link at a row's right: where to look further.
@@ -231,7 +236,7 @@ func rowSide(v ActivityView, r ActivityRow) (label, href string) {
 	case r.Kind == KindSetting:
 		return "Settings", fmt.Sprintf("/campaigns/%s/settings", v.CampaignID)
 	case r.Kind == KindPlayers:
-		return "People", fmt.Sprintf("/campaigns/%s/members", v.CampaignID)
+		return "Players", fmt.Sprintf("/campaigns/%s/members", v.CampaignID)
 	}
 	return "", ""
 }

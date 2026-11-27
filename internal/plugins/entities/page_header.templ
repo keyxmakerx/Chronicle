@@ -110,7 +110,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 		@pageNameFold(cc, entity, isScribe)
 	}
 	if isScribe {
-		<div id="page-history-slot"></div>
+		@pageHistorySlot(cc, entity)
 	}
 }
 

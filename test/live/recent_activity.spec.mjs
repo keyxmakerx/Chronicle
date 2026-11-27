@@ -57,11 +57,20 @@ test('changes read as a sitting in words, and a Foundry conflict opens in place'
   await box.waitFor();
   assert.match(await box.innerText(), /Foundry, kept/i);
   assert.match(await box.innerText(), /Fields the Foundry edit sent: name, entry\./);
-  assert.equal(await box.getByRole('link', { name: "Compare in the page's history" }).getAttribute('href'), `/campaigns/${cid}/entities/${eid}/history`);
+  assert.equal(await box.getByRole('link', { name: "Compare in the page's history" }).getAttribute('href'), `/campaigns/${cid}/entities/${eid}?history=1`);
 
   // The Conflicts chip leaves only the conflict.
   await page.locator('.ra-chip', { hasText: 'Conflicts' }).click();
   await page.waitForFunction(() => [...document.querySelectorAll('#ra-list [data-row]')].filter((r) => r.offsetParent).length === 1);
   assert.equal(await mine.isVisible(), false, "the owner's sitting stays under the Conflicts chip");
+
+  // History links land on the page itself with its History panel open, the
+  // old bare-panel address included.
+  await box.getByRole('link', { name: "Compare in the page's history" }).click();
+  await page.locator('#page-history').waitFor();
+  assert.equal(await page.locator('#page-history-slot').count(), 1, 'the panel opened inside the page, not on its own');
+  await page.goto(`${BASE}/campaigns/${cid}/entities/${eid}/history`);
+  await page.locator('#page-history').waitFor();
+  assert.match(page.url(), /\?history=1$/);
   owner.assertClean();
 });

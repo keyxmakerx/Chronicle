@@ -98,7 +98,7 @@ func TestRecentActivity_RendersConflict(t *testing.T) {
 		}
 		html := buf.String()
 		for _, want := range []string{"Foundry Sync", tc.kept, "The Drowned Bell", "changed on both sides", "Fields the Foundry edit sent: name, entry.",
-			"/campaigns/c1/entities/p1/history", "Compare in the page", "Brought 0 changes", "1 conflict"} {
+			"/campaigns/c1/entities/p1?history=1", "Compare in the page", "Brought 0 changes", "1 conflict"} {
 			if want == "Brought 0 changes" {
 				if strings.Contains(html, want) {
 					t.Errorf("%s: summary counts nothing as changes: %s", tc.action, want)
@@ -112,5 +112,27 @@ func TestRecentActivity_RendersConflict(t *testing.T) {
 		if got := strings.Contains(html, "words back"); got != tc.restore {
 			t.Errorf("%s: restore offered = %v, want %v", tc.action, got, tc.restore)
 		}
+	}
+}
+
+func TestSittingWhen(t *testing.T) {
+	now := time.Date(2026, 11, 27, 22, 0, 0, 0, time.UTC)
+	v := ActivityView{Now: now, Loc: time.UTC}
+	at := func(h, m int) time.Time { return time.Date(2026, 11, 27, h, m, 0, 0, time.UTC) }
+	tests := []struct {
+		name       string
+		start, end time.Time
+		want       string
+	}{
+		{"one time", at(19, 2), at(19, 2), "Today, 7:02pm"},
+		{"same half of the day", at(19, 2), at(19, 48), "Today, 7:02 to 7:48pm"},
+		{"across noon", at(11, 40), at(12, 20), "Today, 11:40am to 12:20pm"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sittingWhen(v, Sitting{Start: tt.start, End: tt.end}); got != tt.want {
+				t.Errorf("sittingWhen = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
