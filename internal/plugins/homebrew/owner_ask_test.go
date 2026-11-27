@@ -15,7 +15,9 @@ import (
 // records each answer it hears, failing when told to.
 type ownerRig struct {
 	*askRig
-	heard  []AskAnswered
+	heard []AskAnswered
+	// during runs inside the owner's answer, while the run is claimed.
+	during func()
 	fail   error
 	hidden bool
 }
@@ -44,6 +46,9 @@ func newOwnerRig(t *testing.T) *ownerRig {
 			},
 			Answered: func(_ context.Context, _ string, a AskAnswered) error {
 				or.heard = append(or.heard, a)
+				if or.during != nil {
+					or.during()
+				}
 				return or.fail
 			}}})
 	if err != nil {
@@ -358,5 +363,68 @@ func TestCloseForEndsAnOwnersAskWithoutAnAnswer(t *testing.T) {
 				t.Errorf("the asker sees %+v", mine)
 			}
 		})
+	}
+}
+
+// While a Yes is going through (the run claimed as running, the owner
+// acting), the ask is found, not missing: a second answer or a close is a
+// 409, so the owner never acts on it a second way, and the Yes completes.
+func TestAnAskBeingAnsweredIsFoundAndRefused(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(or *ownerRig) (bool, error)
+	}{
+		{"a second yes", func(or *ownerRig) (bool, error) {
+			_, found, err := or.svc.AnswerFor(context.Background(), camp, "plea", "copy-1", dm2, AnswerInput{Answer: AnswerYes})
+			return found, err
+		}},
+		{"a no", func(or *ownerRig) (bool, error) {
+			_, found, err := or.svc.AnswerFor(context.Background(), camp, "plea", "copy-1", dm2, AnswerInput{Answer: AnswerNo})
+			return found, err
+		}},
+		{"a close", func(or *ownerRig) (bool, error) {
+			return or.svc.CloseFor(context.Background(), camp, "plea", "copy-1", dm2, "Closed: a Director took the card back.")
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			or := newOwnerRig(t)
+			or.save(t, "Omens", []Part{counter("doom")},
+				Rule{When: When{Event: "plea"}, Timing: TimingNow, Then: []Do{{Action: "add", Part: "doom"}}})
+			r := or.plea(t, "Pact", "copy-1")
+			var found bool
+			var err error
+			or.during = func() {
+				or.during = nil
+				if got := or.runs.runs[r.ID].Status; got != RunRunning {
+					t.Errorf("the owner acts while the run is %s", got)
+				}
+				found, err = tc.call(or)
+			}
+			if _, _, aerr := or.svc.AnswerFor(context.Background(), camp, "plea", "copy-1", dm, AnswerInput{Answer: AnswerYes}); aerr != nil {
+				t.Fatal(aerr)
+			}
+			if !found || appCode(err) != 409 || !strings.Contains(err.Error(), "already being answered") {
+				t.Errorf("found %v, err %v", found, err)
+			}
+			if len(or.heard) != 1 || or.runs.runs[r.ID].Status != RunDone || or.values["doom"] != 1 {
+				t.Errorf("the first yes must complete alone: heard %d, %s, doom %d", len(or.heard), or.runs.runs[r.ID].Status, or.values["doom"])
+			}
+		})
+	}
+}
+
+// The stored ask step holds what a reader who may see nothing reads, so the
+// owner's names can't show through; the drawer still asks the owner.
+func TestTheStoredAskWordsAreReaderNeutral(t *testing.T) {
+	or := newOwnerRig(t)
+	or.hidden = true
+	r := or.plea(t, "Pact", "copy-1")
+	if got := askWords(r.Rule, 0); got != "play a card" {
+		t.Errorf("stored words = %q", got)
+	}
+	asks, err := or.svc.Asks(context.Background(), camp, dm)
+	if err != nil || len(asks) != 1 || asks[0].Ask.Ask != "play Pact" {
+		t.Errorf("the Director reads %+v, %v", asks, err)
 	}
 }

@@ -5,14 +5,19 @@ package app
 // services on a scratch database. Skipped under -short and without one.
 
 import (
+	"encoding/json"
 	"errors"
+	"io/fs"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/decks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
+	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 )
 
 func appCodeOf(err error) int {
@@ -200,6 +205,105 @@ func TestTheDeckPageAndTheDrawerCantBothAnswer(t *testing.T) {
 	zone, asked := w.zoneOf(deck, copyID)
 	if asked || (errs[0] == nil && zone != decks.ZoneUsed) || (errs[1] == nil && zone != decks.ZoneHand) {
 		t.Errorf("the card is %s asked=%v after %v", zone, asked, errs)
+	}
+}
+
+// The drawer's Yes and the deck page's Let them landing together: whichever
+// is first, the card is played once through the ask and the rule's step runs.
+func TestYesAndLetThemTogetherPlayOnceThroughTheAsk(t *testing.T) {
+	for try := 0; try < 8; try++ {
+		w, deck, _, copyID := playAskWorld(t)
+		ask := w.theAsk()
+		var wg sync.WaitGroup
+		errs := make([]error, 2)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, errs[0] = w.homebrew.Answer(storyCtx, w.camp, ask.ID, w.hbDirector, homebrew.AnswerInput{Answer: homebrew.AnswerYes})
+		}()
+		go func() {
+			defer wg.Done()
+			_, errs[1] = w.decks.Act(storyCtx, w.camp, deck, copyID, "approve", w.dir, decks.ActInput{})
+		}()
+		wg.Wait()
+		ok := 0
+		for _, err := range errs {
+			if err == nil {
+				ok++
+			} else if appCodeOf(err) != 409 {
+				t.Errorf("try %d: the loser's error is %v, want a 409", try, err)
+			}
+		}
+		if ok != 1 {
+			t.Fatalf("try %d: answers taken = %d (%v)", try, ok, errs)
+		}
+		if zone, asked := w.zoneOf(deck, copyID); zone != decks.ZoneUsed || asked {
+			t.Errorf("try %d: the card is %s asked=%v", try, zone, asked)
+		}
+		var state string
+		for _, r := range w.drawer().Recent {
+			if r.ID == ask.ID {
+				state = r.Status
+			}
+		}
+		if state != homebrew.RunDone || w.doomOn(w.tamHero) != 2 {
+			t.Errorf("try %d: the ask is %q and doom %d; the rule's step must run once", try, state, w.doomOn(w.tamHero))
+		}
+	}
+}
+
+// An ask claimed by a Yes still going through is found by Let them and Not
+// now, which are refused instead of playing the card the old way.
+func TestAnAskBeingAnsweredRefusesTheDeckPage(t *testing.T) {
+	for _, verb := range []string{"approve", "turn-down"} {
+		t.Run(verb, func(t *testing.T) {
+			w, deck, _, copyID := playAskWorld(t)
+			ask := w.theAsk()
+			mustGalleryExec(t, w.db, `UPDATE homebrew_runs SET status = 'running' WHERE id = ?`, ask.ID)
+			_, err := w.decks.Act(storyCtx, w.camp, deck, copyID, verb, w.dir, decks.ActInput{})
+			if appCodeOf(err) != 409 || !strings.Contains(err.Error(), "already being answered") {
+				t.Errorf("the deck page answered a claimed ask: %v", err)
+			}
+			if zone, asked := w.zoneOf(deck, copyID); zone != decks.ZoneHand || !asked {
+				t.Errorf("the card is %s asked=%v; it must still wait for the Yes", zone, asked)
+			}
+		})
+	}
+}
+
+// The player's bell after a written reply stores the reply as its detail.
+func TestAReplyIsStoredOnThePlayersBell(t *testing.T) {
+	w, _, _, _ := playAskWorld(t)
+	ask := w.theAsk()
+	// The bell's table, as the sessions plugin's migration makes it; the rest
+	// of that plugin's schema needs tables this world doesn't have.
+	mig, err := fs.ReadFile(sessions.MigrationsFS, database.PluginMigrationsSubdir+"/003_proposals.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := regexp.MustCompile(`(?s)CREATE TABLE IF NOT EXISTS notifications \(.*?\) ENGINE=[^;]*;`).Find(mig)
+	if create == nil {
+		t.Fatal("the notifications table is not in the sessions migration")
+	}
+	mustGalleryExec(t, w.db, string(create))
+	bellDecks := decks.NewService(decks.NewRepository(w.db), w.heroes, w.members, decks.WithRandom(func(int) int { return 0 }),
+		decks.WithBell(&decksBellAdapter{notify: sessions.NewSessionService(sessions.NewSessionRepository(w.db), nil, nil)}),
+		decks.WithStory(w.story), decks.WithAsks(w.story))
+	w.story.bindDecks(bellDecks)
+	if _, err := w.homebrew.Answer(storyCtx, w.camp, ask.ID, w.hbDirector, homebrew.AnswerInput{Answer: homebrew.AnswerOther, Reply: "Not on holy ground."}); err != nil {
+		t.Fatal(err)
+	}
+	var payload string
+	if err := w.db.QueryRowContext(storyCtx, `SELECT payload FROM notifications WHERE user_id = ? AND campaign_id = ? AND type = ?`,
+		w.tamUser, w.camp, decks.BellAnswered).Scan(&payload); err != nil {
+		t.Fatalf("no stored bell for Tam: %v", err)
+	}
+	var p struct{ Message, Detail string }
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Message != "Your Director replied to your ask to play Pact" || p.Detail != "Not on holy ground." {
+		t.Errorf("stored bell = %s", payload)
 	}
 }
 

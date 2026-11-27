@@ -67,6 +67,17 @@ func (f *fakeRuns) ListRuns(_ context.Context, c string, held bool, limit int) (
 
 func (f *fakeRuns) PruneRuns(context.Context, string, int) error { f.pruned++; return nil }
 
+func (f *fakeRuns) ListRunningAsks(_ context.Context, c string, limit int) ([]Run, error) {
+	out := []Run{}
+	for i := len(f.order) - 1; i >= 0 && len(out) < limit; i-- {
+		r := f.runs[f.order[i]]
+		if r.CampaignID == c && r.Status == RunRunning && r.Asked > 0 {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 // rig is a service over a registry with a numbered "counter" part whose
 // add action changes an in-memory value and fires counter.reached, so
 // rules can set each other off as tracker rules do.

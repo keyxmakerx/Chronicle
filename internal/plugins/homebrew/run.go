@@ -97,6 +97,9 @@ type RunStore interface {
 	// ListAsks lists the runs one person set off that asked the Director,
 	// waiting or answered, newest first.
 	ListAsks(ctx context.Context, campaignID, createdBy string, limit int) ([]Run, error)
+	// ListRunningAsks lists the runs that asked and are being answered right
+	// now (claimed by a Yes, not yet finished), newest first.
+	ListRunningAsks(ctx context.Context, campaignID string, limit int) ([]Run, error)
 	// PruneRuns deletes all but the newest keep finished runs.
 	PruneRuns(ctx context.Context, campaignID string, keep int) error
 }

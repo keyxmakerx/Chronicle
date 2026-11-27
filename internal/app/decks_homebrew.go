@@ -222,7 +222,7 @@ func (s *decksStory) playAskWords(ctx context.Context, campaignID string, raw js
 		return named
 	}
 	svc, _ := s.services()
-	if svc == nil {
+	if svc == nil || reader.UserID == "" {
 		return homebrew.AskWords{What: "play a card"}
 	}
 	if _, err := svc.Get(ctx, campaignID, p.DeckID, decks.Viewer{UserID: reader.UserID, MemberRole: reader.VisibilityRole, VisibilityRole: reader.VisibilityRole}); err != nil {

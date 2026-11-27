@@ -410,6 +410,13 @@
         S.statusErr = failed;
       });
     }).catch(function (e) {
+      if (e.status === 409) {
+        // Answered elsewhere first, or what it asked about moved: the card
+        // leaves on reload, so the reason goes on the status line instead.
+        delete S.answers[r.id];
+        S.status = e.message; S.statusErr = true;
+        return;
+      }
       // A refused change keeps the card open with the owner's own words.
       A.error = e.message;
     }).then(function () { S.busy = false; return reload(S); });

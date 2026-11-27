@@ -152,7 +152,10 @@ func (s *service) AskFor(ctx context.Context, campaignID string, v Viewer, a Own
 	}
 	run := Run{ID: s.newID(), CampaignID: campaignID, RecipeName: clip(def.Ask.Owner, MaxNameChars), What: clip(def.Label, maxWhatChars),
 		Scope: a.Scope, Payload: payload, Status: RunHeld, Lines: []string{}, CreatedBy: v.UserID, CreatedAt: time.Now().UTC(), Asked: 1}
-	words := s.ownerWords(ctx, campaignID, def.Ask, run, v)
+	// The stored words are what a reader who may see nothing reads, so the
+	// owner's names never show through where its Words can't be asked (an
+	// event no longer registered); every view asks Words for its reader.
+	words := s.ownerWords(ctx, campaignID, def.Ask, run, Viewer{})
 	args, err := json.Marshal(askArgs{Ask: words.What})
 	if err != nil {
 		return "", err
@@ -208,9 +211,11 @@ func (s *service) gather(ctx context.Context, campaignID string, def EventDef, p
 	return then, nil
 }
 
-// AnswerFor answers the owner's ask waiting under key, as Answer does. found
-// is false when none waits there: an ask from before the owner asked through
-// the Workshop, or one already answered, which the owner then handles alone.
+// AnswerFor answers the owner's ask waiting under key, as Answer does. One
+// being answered right now is found and refused with a 409, so the owner
+// never acts on it a second way. found is false only when no ask is open:
+// a move from before the owner asked through the Workshop, or one whose ask
+// has finished, which the owner then handles alone.
 func (s *service) AnswerFor(ctx context.Context, campaignID, event, key string, v Viewer, in AnswerInput) (*RunView, bool, error) {
 	if err := requireDirector(v); err != nil {
 		return nil, false, err
@@ -218,14 +223,50 @@ func (s *service) AnswerFor(ctx context.Context, campaignID, event, key string, 
 	if s.runs == nil || key == "" {
 		return nil, false, nil
 	}
+	r, busy, err := s.ownerRun(ctx, campaignID, event, key)
+	if err != nil {
+		return nil, false, err
+	}
+	if busy {
+		return nil, true, errBeingAnswered()
+	}
+	if r == nil {
+		return nil, false, nil
+	}
+	out, err := s.Answer(ctx, campaignID, r.ID, v, in)
+	return out, true, err
+}
+
+// errBeingAnswered is the answer to a second answer that lands while the
+// first is still going through.
+func errBeingAnswered() error {
+	return errConflictMsg("this ask is already being answered")
+}
+
+// ownerRun finds the owner's ask under key: the run waiting there, or busy
+// when one is being answered right now (a Yes claimed it and has not
+// finished). Neither means no ask is open for it; an ask already answered
+// and finished is not open, so a second ask of the same thing is new.
+func (s *service) ownerRun(ctx context.Context, campaignID, event, key string) (*Run, bool, error) {
+	match := func(r Run) bool {
+		return r.RecipeID == "" && r.Asked == 1 && r.Rule.When.Event == event && askKey(r.Payload) == key
+	}
 	held, err := s.runs.ListRuns(ctx, campaignID, true, maxHeldRuns)
 	if err != nil {
 		return nil, false, errInternal(err)
 	}
-	for _, r := range held {
-		if r.RecipeID == "" && r.Asked == 1 && r.Rule.When.Event == event && askKey(r.Payload) == key {
-			out, err := s.Answer(ctx, campaignID, r.ID, v, in)
-			return out, true, err
+	for i := range held {
+		if match(held[i]) {
+			return &held[i], false, nil
+		}
+	}
+	running, err := s.runs.ListRunningAsks(ctx, campaignID, maxHeldRuns)
+	if err != nil {
+		return nil, false, errInternal(err)
+	}
+	for _, r := range running {
+		if match(r) {
+			return nil, true, nil
 		}
 	}
 	return nil, false, nil
@@ -287,23 +328,25 @@ func (s *service) CloseFor(ctx context.Context, campaignID, event, key string, v
 	if s.runs == nil || key == "" {
 		return false, nil
 	}
-	held, err := s.runs.ListRuns(ctx, campaignID, true, maxHeldRuns)
+	r, busy, err := s.ownerRun(ctx, campaignID, event, key)
 	if err != nil {
-		return false, errInternal(err)
+		return false, err
 	}
-	for _, r := range held {
-		if r.RecipeID != "" || r.Asked != 1 || r.Rule.When.Event != event || askKey(r.Payload) != key {
-			continue
-		}
-		if line == "" {
-			line = "Closed before an answer."
-		}
-		if _, err := s.finish(ctx, r, RunHeld, RunWithdrawn, append(r.Lines, clip(line, maxWhatChars)), v); err != nil {
-			// Answered in the same instant: that answer stands.
-			return false, nil
-		}
-		s.answered(ctx, r, AskTakenBack, v.UserID)
-		return true, nil
+	if busy {
+		// A Yes is going through; it finds the thing moved and fails with
+		// the owner's words, so that answer is what the drawer keeps.
+		return true, errBeingAnswered()
 	}
-	return false, nil
+	if r == nil {
+		return false, nil
+	}
+	if line == "" {
+		line = "Closed before an answer."
+	}
+	if _, err := s.finish(ctx, *r, RunHeld, RunWithdrawn, append(r.Lines, clip(line, maxWhatChars)), v); err != nil {
+		// Answered in the same instant: that answer stands.
+		return true, errBeingAnswered()
+	}
+	s.answered(ctx, *r, AskTakenBack, v.UserID)
+	return true, nil
 }
