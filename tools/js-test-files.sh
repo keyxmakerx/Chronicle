@@ -6,7 +6,7 @@
 # they gain nothing from sharing a runner; every other file, a new one
 # included, lands in `general`.
 #
-# Usage: js-test-files.sh general|dice|crits-succ|crits-fail|all
+# Usage: js-test-files.sh general|dice|dice-tray|crits-succ|crits-fail|all
 #        js-test-files.sh --check   every file is in exactly one group
 #
 # Exit: 0 / 1 a file is in no group or in two / 2 bad usage.
@@ -15,13 +15,14 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-GROUPS_ALL=(general dice crits-succ crits-fail)
+GROUPS_ALL=(general dice dice-tray crits-succ crits-fail)
 
 group() {
   local f
   case "$1" in
     general)    for f in test/js/*.test.mjs; do [[ $f == test/js/dice_*browser.test.mjs ]] || echo "$f"; done ;;
-    dice)       echo test/js/dice_browser.test.mjs; echo test/js/dice_tray_browser.test.mjs ;;
+    dice)       echo test/js/dice_browser.test.mjs ;;
+    dice-tray)  echo test/js/dice_tray_browser.test.mjs ;;
     crits-succ) echo test/js/dice_crits_succ_browser.test.mjs ;;
     crits-fail) echo test/js/dice_crits_fail_browser.test.mjs ;;
     all)        ls test/js/*.test.mjs ;;

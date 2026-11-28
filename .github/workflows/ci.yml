@@ -224,7 +224,7 @@ jobs:
   # --- JS tests ---
   # The node --test suite, split into groups on runners of their own
   # (tools/js-test-files.sh says which file goes where). The browser tests draw
-  # on a software GPU and are CPU-bound, so the dice and their crit animations,
+  # on a software GPU and are CPU-bound, so the dice, the dice tray and the crit animations,
   # several minutes of real-time play, each get a runner rather than queueing
   # behind one another. Every file lands in some group by its name.
   js:
@@ -235,7 +235,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [general, dice, crits-succ, crits-fail]
+        group: [general, dice, dice-tray, crits-succ, crits-fail]
     steps:
       - uses: actions/checkout@v7
 

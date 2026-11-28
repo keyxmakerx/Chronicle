@@ -87,7 +87,7 @@ const deliver = (pg, view) => pg.evaluate((v) => document.querySelector('.tt-hos
 const tray = (pg) => pg.evaluate(() => document.querySelector('#card')._dtr.tray.state());
 // Dice count on the mat at its current level, either kind.
 const dice = (s) => s.three + s.flat;
-const settle = (pg, want) => pg.waitForFunction((n) => { const s = document.querySelector('#card')._dtr.tray.state(); return s.three + s.flat >= n; }, want, { timeout: 20000 });
+const settle = (pg, want) => pg.waitForFunction((n) => { const s = document.querySelector('#card')._dtr.tray.state(); return s.three + s.flat >= n; }, want, { timeout: 40000 });
 
 test('a public roll from another member lands on the mat with their name tag', { skip }, async (t) => {
   const pg = await open(t);
@@ -178,7 +178,8 @@ test('at Flat paper and Simple a name tag never covers its roller\'s own dice', 
     await deliver(pg, roll({ id: 'r-' + id, rollerId: id, rollerName: name, dice: six.slice(0, n), formula: n + 'd', modifier: 0, total: 2 * n }));
   }
   await pg.waitForFunction(() => document.querySelectorAll('.dtr-fd').length === 10 && document.querySelectorAll('.dtr-tag').length === 4, null, { timeout: 20000 });
-  await pg.waitForTimeout(700);
+  // Measure where the dice come to rest, not mid-throw.
+  await pg.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null))));
   for (const look of ['flat', 'simple']) {
     if (look === 'simple') { await pg.click('[data-dtr-set="trayLevel"][data-v="simple"]'); await pg.waitForFunction(() => document.querySelectorAll('.dtr-fd[data-look="simple"]').length === 10); }
     const hits = await pg.evaluate(() => {
