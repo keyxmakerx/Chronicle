@@ -28,12 +28,13 @@
     opening: { none: 'No window', 'window-left': 'Window, left', 'window-right': 'Window, right', 'window-centre': 'Window, centre', 'round-window': 'Round window', doorway: 'Doorway' },
     counter: { 'stall-table': 'Stall table', log: 'Fallen log', slab: 'Stone slab' },
     wall: { white: 'White nowhere', lair: 'Dragon’s lair' },
+    scene: { 'sky-islands': 'Sky islands', underdark: 'Underdark caverns', astral: 'Astral sea' },
     prop: { 'floating-books': 'Floating books', 'steam-cart': 'Steam cart' }
   };
   // The server takes at most this many props in one theme.
   var MAX_PROPS = 24, FULL = 'A room holds up to 24 props. Take one out first.';
   var SKEL = [['shape', 'Back wall'], ['opening', 'Opening'], ['display', 'Display'], ['counter', 'Counter']];
-  var LOOK = [['wall', 'Wall'], ['light', 'Light'], ['outside', 'Outside']];
+  var LOOK = [['wall', 'Wall'], ['light', 'Light'], ['outside', 'Outside'], ['scene', 'View outside']];
   var COLS = [['wood', 'Wood'], ['cloth', 'Cloth'], ['accent', 'Accent'], ['trim', 'Trim']];
   var SW = { wood: ['#6b4527', '#4a3220', '#7a5230', '#3a2a20', '#8a6a3a', '#4a3a5a'], cloth: ['#5a2024', '#3a5a3a', '#4a2a6a', '#2a4a6a', '#8a2a2e', '#5a3a22'],
     accent: ['#e0a83a', '#ff9a50', '#3fae6a', '#8ab4ff', '#d23a4a', '#c4b0ff'], trim: ['#c89a4a', '#9aa0a8', '#d9b25a', '#b87a4a', '#e8e0d0', '#7a8a9a'] };
@@ -201,7 +202,10 @@
   function sync() {
     var b = cur.box, t = cur.api.theme(), j = JSON.stringify(t);
     Array.prototype.forEach.call(b.querySelectorAll('[data-cb-path]'), function (c) {
-      var v = pathGet(t, c.getAttribute('data-cb-path')); if (String(c.value) !== String(v)) c.value = v;
+      var v = pathGet(t, c.getAttribute('data-cb-path'));
+      // A word the theme leaves out (no scene is the town) shows as the list's first.
+      if (v == null && c.tagName === 'SELECT') v = c.options[0] ? c.options[0].value : '';
+      if (String(c.value) !== String(v)) c.value = v;
     });
     var w = b.querySelector('[data-cb-warm]'); if (w) w.textContent = Math.round(t.theme.warmth * 100) + '%';
     Array.prototype.forEach.call(b.querySelectorAll('[data-cb-sw]'), function (e) { var p = e.getAttribute('data-cb-sw').split(':'); e.setAttribute('aria-pressed', String(t.theme[p[0]] === p[1])); });
