@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -452,6 +453,45 @@ func (c *ShopRoomCounter) validate() error {
 		}
 	}
 	c.Props = props
+	return c.normalizeMoves(seen)
+}
+
+// shopRoomCounterMove bounds a move: how far the shelves or a prop may go
+// from their own place and how small or large they may be drawn. Must match
+// CM_MOVE in static/js/widgets/shop_room_counter.js.
+var shopRoomCounterMove = struct{ x, y, min, max float64 }{600, 350, 0.5, 2}
+
+// normalizeMoves keeps moves for the shelves and the theme's own props,
+// clamped and rounded as the widget does, and drops ones that move nothing.
+func (c *ShopRoomCounter) normalizeMoves(props map[string]bool) error {
+	if len(c.Moves) > maxShopRoomCounterProps+1 {
+		return fmt.Errorf("too many counter moves")
+	}
+	clamp := func(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
+	// Rounds halves up, as JavaScript's Math.round does, so both sides agree
+	// on -2.5. Adding zero turns a rounded -0 into 0, as JSON.stringify writes it.
+	round := func(v float64) float64 { return math.Floor(v+0.5) + 0 }
+	m := shopRoomCounterMove
+	for k, v := range c.Moves {
+		if len(v) != 3 {
+			return fmt.Errorf("counter move %q is not [x, y, size]", k)
+		}
+		if k != "display" && !props[k] {
+			delete(c.Moves, k)
+			continue
+		}
+		dx := round(clamp(v[0], -m.x, m.x))
+		dy := round(clamp(v[1], -m.y, m.y))
+		z := round(clamp(v[2], m.min, m.max)*100) / 100
+		if dx == 0 && dy == 0 && z == 1 {
+			delete(c.Moves, k)
+			continue
+		}
+		c.Moves[k] = []float64{dx, dy, z}
+	}
+	if len(c.Moves) == 0 {
+		c.Moves = nil
+	}
 	return nil
 }
 

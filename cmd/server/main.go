@@ -164,6 +164,13 @@ func main() {
 	} else if n > 0 {
 		slog.Info("public text reconcile: removed GM-only parts", slog.Int("rows", n))
 	}
+	// Apply the write path's HTML policy to campaign entry item texts saved
+	// before it covered them. Same placement and failure rule.
+	if n, err := systems.ReconcileEntryItemTexts(context.Background(), db); err != nil {
+		slog.Error("entry item text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+	} else if n > 0 {
+		slog.Info("entry item text reconcile: cleaned stored item texts", slog.Int("rows", n))
+	}
 
 	// --- Connect to Redis ---
 	rdb, err := database.NewRedis(cfg.Redis)

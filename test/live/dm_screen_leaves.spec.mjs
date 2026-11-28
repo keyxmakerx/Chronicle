@@ -3,10 +3,11 @@
 // On a computer, a rail icon dragged toward the page opens that section on a
 // leaf beside the column, lying over the page; a second icon opens a second
 // leaf. The leaves come back after a reload. With both out, a third icon
-// dropped on a leaf joins it. A leaf's bar merges it back into the column, or
-// closes it, and dragging the bar onto the column merges it there. A plain
-// click on a rail icon still opens the card in the column. On a phone there
-// are no leaves: every section is a line, as before.
+// dropped on a leaf joins it, and one dropped on the column opens there. A
+// leaf's bar merges it back into the column, or closes it, and dragging the
+// bar onto the column merges it there. A plain click on a rail icon still
+// opens the card in the column. On a phone there are no leaves: every section
+// is a line, as before.
 //
 // RUN: tools/live-checks.sh test/live/dm_screen_leaves.spec.mjs
 
@@ -110,6 +111,21 @@ test('a rail icon dragged toward the page opens its section on a leaf, and the l
   await page.mouse.up();
   await page.waitForTimeout(300);
   assert.deepEqual(await leaves(page), [['adventures', 'reveal'], ['homebrew']]);
+  // With both out, the column takes a drop too: Notes dropped on it opens
+  // there, and no leaf changes.
+  const colBox = await page.locator('.dms-col').boundingBox();
+  const nt = await page.locator('.dms-rail [data-dms-open="notes"]').boundingBox();
+  await page.mouse.move(nt.x + nt.width / 2, nt.y + nt.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(nt.x - ((nt.x - (colBox.x + 120)) * i) / 12, nt.y + 10 * i);
+  assert.equal(await page.locator('.dms-col').evaluate((e) => e.classList.contains('dms-hot')), true, 'the column is not marked as a drop target');
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  assert.deepEqual(await column(page), ['notes', 'party', 'world']);
+  assert.deepEqual(await leaves(page), [['adventures', 'reveal'], ['homebrew']]);
+  await page.locator('.dms-rail [data-dms-open="notes"]').click();
+  assert.deepEqual(await column(page), ['party', 'world']);
+
   // Both cards on the leaf stay open: the older one is not forced to fold.
   assert.equal(await page.locator('.dms-leaf [data-dms-sec="adventures"]').evaluate((e) => e.classList.contains('dms-folded')), false, 'the older card on the leaf was folded');
   assert.equal(await page.locator('.dms-leaf [data-dms-sec="reveal"]').evaluate((e) => e.classList.contains('dms-folded')), false);

@@ -142,6 +142,10 @@ type ShopRoomCounter struct {
 	Skeleton ShopRoomCounterSkeleton `json:"skeleton"`
 	Theme    ShopRoomCounterTheme    `json:"theme"`
 	Props    []string                `json:"props"`
+	// Moves is where the owner moved the shelves ("display") or a prop:
+	// [dx, dy, size] from the room's own place for it, in room units;
+	// validate requires exactly three numbers.
+	Moves map[string][]float64 `json:"moves,omitempty"`
 }
 
 // ShopRoomCounterSkeleton is the room's shape, before any paint.

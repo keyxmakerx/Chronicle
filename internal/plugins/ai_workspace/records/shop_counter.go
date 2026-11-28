@@ -25,6 +25,10 @@ type counterTheme struct {
 	Skeleton counterSkeleton `json:"skeleton"`
 	Theme    counterPaint    `json:"theme"`
 	Props    []string        `json:"props"`
+	// Moves is where the owner moved the shelves and props. The AI never
+	// sets it; it is carried through so an edit keeps it (the armory drops
+	// moves for props the edit took away).
+	Moves json.RawMessage `json:"moves,omitempty"`
 }
 
 type counterSkeleton struct {
@@ -197,6 +201,8 @@ func (k ShopRoomKind) counter(room map[string]any, v any) (string, error) {
 		if name, named := counterStartName[w]; named {
 			starter = k.Svc.CounterStarterNamed(name)
 		}
+		// A starter is a whole new room, so the old one's moves go with it.
+		next.Moves = nil
 		if err := json.Unmarshal(starter, &next); err != nil {
 			return "", badRequestf("counter.start: the starter can't be read")
 		}
