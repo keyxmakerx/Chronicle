@@ -198,10 +198,10 @@ func TestWeatherKindNotes(t *testing.T) {
 }
 
 func TestWeatherTables(t *testing.T) {
-	if len(weatherPresets) != 84 || weatherPresets[0].ID != "clear" {
+	if len(weatherPresets) != 90 || weatherPresets[0].ID != "clear" {
 		t.Errorf("presets: %d entries, first %v", len(weatherPresets), weatherPresets[0])
 	}
-	if len(weatherEffects) != 82 || weatherEffects[0].ID != "clear" {
+	if len(weatherEffects) != 88 || weatherEffects[0].ID != "clear" {
 		t.Errorf("effects: %d entries, first %v", len(weatherEffects), weatherEffects[0])
 	}
 	seen := map[string]bool{}
