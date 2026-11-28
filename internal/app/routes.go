@@ -7350,7 +7350,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     cutscenes.PluginSlug,
 		StaticFS: echo.MustSubFS(cutscenes.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_workshop.js"}},
+			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_timeline.js", "js/cutscene_workshop.js"}},
 		},
 	})
 	var aiCutscenes cutscenes.Service

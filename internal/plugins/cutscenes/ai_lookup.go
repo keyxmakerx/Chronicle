@@ -17,10 +17,10 @@ type scenesLookup struct{ *aiCore }
 func (*scenesLookup) LookupInfo() aiplug.LookupInfo {
 	return aiplug.LookupInfo{
 		What: "cut-scenes", Aliases: []string{"cutscenes", "cut-scene", "cutscene"}, Keys: "`scene` (a scene's name, optional)",
-		Brief: "the campaign's cut scenes, each layer in words and in the cut-scene block's format, and every background, animation, text style and ending a scene can use with what it looks like (Director only)",
+		Brief: "the campaign's cut scenes, each layer in words and in the cut-scene block's format (the same timeline the editor draws: every layer's start, length, arrival and leaving), and every background, animation, text style and ending a scene can use with what it looks like (Director only)",
 		Tool: aiplug.Tool{
 			Name: "cut_scenes", Title: "Cut scenes", Did: "Looked at the cut scenes", Owner: true,
-			Desc: "The campaign's cut scenes: short full-screen moments the Director shows chosen players. Every scene with its background, the animations on top, its words and its ending, in words and as a ready cut-scene block to change; and every kind of background, animation, text style and ending with what each looks like on screen, so a new scene can be written well. `scene` narrows it to one scene. Scenes are made, changed and deleted with cut-scene blocks in ask_for_changes; the AI never shows a scene to anyone.",
+			Desc: "The campaign's cut scenes: short full-screen moments the Director shows chosen players. Every scene with its background, the animations on top, its words and its ending, in words and as a ready cut-scene block to change, the block being the same timeline the editor draws (each layer a bar with a start, a length, how it arrives and how it leaves); and every kind of background, animation, text style and ending with what each looks like on screen, so a new scene can be written well. `scene` narrows it to one scene. Scenes are made, changed and deleted with cut-scene blocks in ask_for_changes; the AI never shows a scene to anyone.",
 			Args: []aiplug.Arg{{Key: "scene", Desc: "A scene's name; leave out for every scene"}},
 		},
 	}
@@ -78,7 +78,13 @@ func writeScene(b *strings.Builder, s Scene) {
 func SceneBlock(s Scene) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "kind: %s\nname: %s\n", KindName, aiplug.Quote(s.Name))
-	fmt.Fprintf(&b, "background: {kind: %s, seconds: %s%s}\n", s.Background.Kind, num(s.Background.Seconds), lookField(s.Background.Params.Look))
+	// The background is written as the editor shows it: what is behind,
+	// then how it arrives.
+	arrive := ""
+	if BackdropOf(s.Background.Kind) != BackgroundNone {
+		arrive = ", in: " + ArrivalOf(s.Background.Kind)
+	}
+	fmt.Fprintf(&b, "background: {kind: %s%s, seconds: %s%s}\n", BackdropOf(s.Background.Kind), arrive, num(s.Background.Seconds), lookField(s.Background.Params.Look))
 	if len(s.Overlays) == 0 {
 		b.WriteString("overlays: []\n")
 	} else {

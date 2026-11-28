@@ -50,6 +50,7 @@ templ editorForm(p editorPage) {
 			<label for="csw-name">Name</label>
 			<input class="csw-line csw-name" id="csw-name" name="name" type="text" required maxlength={ strconv.Itoa(MaxNameChars) } value={ p.Scene.Name } placeholder="The Eye Opens"/>
 		</div>
+		@timeline()
 		<section class="csw-layer" aria-labelledby="csw-bg-h">
 			<h2 class="csw-lab" id="csw-bg-h">Background <span class="csw-quiet">what is behind everything, and how it arrives</span></h2>
 			<div class="csw-row-fields">
