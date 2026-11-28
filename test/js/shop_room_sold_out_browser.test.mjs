@@ -45,7 +45,8 @@ async function shop(t, refusal, opts = {}) {
     self.addEventListener = function (k, f) { (on[k] = on[k] || []).push(f); };
     self.close = function () { self.closed = true; (on.close || []).forEach(function (f) { f({}); }); };
     self.emit = function (m) { (on.message || []).forEach(function (f) { f({ data: JSON.stringify(m) }); }); };
-    setTimeout(function () { (on.open || []).forEach(function (f) { f({}); }); }, 0);
+    // window.__wsFail makes a socket close without opening, as one does while the server is down.
+    setTimeout(function () { if (window.__wsFail) self.close(); else (on.open || []).forEach(function (f) { f({}); }); }, 0);
   };` });
   // The fixtures go in as data, so no test value is ever built into script text.
   await p.evaluate((fx) => {
@@ -154,4 +155,28 @@ test('a cut-only basket says what is left, a listing taken off sale is not calle
   assert.equal(await note(q), 'Someone just bought some of these. Only 1 Toolbox left. Nothing was charged, and your basket is updated.');
   assert.equal(await count(q), '3');
   assert.doesNotMatch(await q.evaluate(() => document.querySelector('.shr-say') ? document.querySelector('.shr-say').textContent : ''), /someone else already bought/);
+});
+
+test('after a dropped connection the room keeps retrying until the server is back, then reads the shelves', { skip, timeout: 60000 }, async (t) => {
+  const p = await shop(t, { status: 400, message: 'unused' });
+  await p.waitForFunction(() => window.__ws.length === 1);
+  await p.waitForTimeout(100);
+  const reads = await p.evaluate(() => window.__reads);
+  // The server goes away: the first retry fails too.
+  await p.evaluate(() => { window.__wsFail = true; window.__ws[0].close(); });
+  await p.waitForFunction(() => window.__ws.length === 2 && window.__ws[1].closed, null, { timeout: 5000 });
+  // It is back before the next try, which opens and reads what was missed.
+  await p.evaluate(() => { window.__wsFail = false; window.__after = true; });
+  await p.waitForFunction(() => window.__ws.length === 3, null, { timeout: 8000 });
+  await p.waitForFunction((n) => window.__reads > n, reads);
+  await p.waitForFunction(() => document.querySelector('.shr-cnt').textContent === '2');
+});
+
+test('a new price on something in the basket is said, so the total never changes unexplained', { skip, timeout: 60000 }, async (t) => {
+  const p = await shop(t, { status: 400, message: 'unused' }, { after: [sells(11, 'Healing Potion', 2, 4), sells(13, 'Fever tea', 1, null), sells(15, 'Toolbox', 5, 2)] });
+  await p.waitForFunction(() => window.__ws.length === 1);
+  await p.evaluate(() => { window.__after = true; window.__ws[0].emit({ type: 'shop.changed', campaignId: 'c1', resourceId: 's1' }); });
+  await p.waitForFunction(() => { const n = document.querySelector('.shr-bk .shr-note'); return n && /costs/.test(n.textContent); });
+  assert.equal(await note(p), 'Toolbox now costs 5 gp. Your basket is updated.');
+  assert.equal(await count(p), '4', 'nothing is taken out');
 });

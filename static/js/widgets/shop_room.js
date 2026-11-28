@@ -1336,13 +1336,13 @@
       try { var stop = host(cid, sid, onChange); return typeof stop === 'function' ? stop : function () {}; } catch (e) { return function () {}; }
     }
     if (!cid || !sid || typeof WebSocket === 'undefined') return function () {};
-    var ws = null, dead = false, timer = 0, delay = 2000, dropped = false;
+    var ws = null, dead = false, timer = 0, delay = 2000, dropped = false, ever = false;
     function connect() {
       if (dead) return;
-      var s, opened = false;
+      var s;
       try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws?campaign=' + encodeURIComponent(cid)); } catch (e) { return; }
       ws = s;
-      s.addEventListener('open', function () { opened = true; delay = 2000; if (dropped) { dropped = false; onChange(); } });
+      s.addEventListener('open', function () { ever = true; delay = 2000; if (dropped) { dropped = false; onChange(); } });
       s.addEventListener('message', function (ev) {
         var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
         if (m && m.type === 'shop.changed' && m.campaignId === cid && m.resourceId === sid) onChange();
@@ -1351,8 +1351,10 @@
       s.addEventListener('close', function () {
         if (ws !== s) return;
         ws = null;
-        // Never opened: not signed in, so there is nothing to follow.
-        if (dead || !opened) return;
+        // The first socket never opening means not signed in: nothing to
+        // follow. Once one has opened, a retry that fails (the server
+        // restarting, the network gone) keeps retrying with the backoff.
+        if (dead || !ever) return;
         dropped = true; timer = setTimeout(connect, delay); delay = Math.min(delay * 2, 60000);
       });
     }
@@ -1901,8 +1903,7 @@
         var items = S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) { return { relationId: it.id, quantity: basket[String(it.id)] }; });
         if (!items.length || busy) return;
         busy = true; note = ''; renderBasket();
-        var bought = false, gone = false, names = {};
-        S.its.forEach(function (it) { names[String(it.id)] = it.n; });
+        var bought = false, gone = false, was = shelfSnap();
         Chronicle.apiFetch(buyEndpoint, { method: 'POST', body: { buyerEntityId: payer, items: items }, csrfToken: ds.csrfToken }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
             if (!r.ok) {
@@ -1929,24 +1930,33 @@
           // A reload that failed keeps its own note: the basket can't be settled against shelves it couldn't read.
           if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function (ok) {
             if (!ok[0]) return;
-            draw(); var c = settleBasket(names); note = refusedWords(c); gone = c.sold.length > 0;
+            draw(); var c = settleBasket(was); note = refusedWords(c); gone = c.sold.length > 0;
           });
           // A network failure's own text ("Failed to fetch") means nothing
           // to a player; the server's other refusals are already in plain words.
           note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
         }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); else if (gone) speak('gone'); });
       }
+      // The wares as they are now, by id: what settleBasket compares against
+      // once the shelves have been read again.
+      function shelfSnap() {
+        var was = {};
+        S.its.forEach(function (it) { was[String(it.id)] = { n: it.n, p: it.p }; });
+        return was;
+      }
       // After the shelves changed under the basket: it keeps only what is still
       // for sale, no more than is left. sold is what ran out, off what the GM
-      // took off sale or away, less what was cut to the count left. names holds
-      // the wares as they were, so a listing taken away can still be named.
-      function settleBasket(names) {
-        var now = {}, c = { sold: [], off: [], less: [] };
+      // took off sale or away, less what was cut to the count left, priced what
+      // now costs something else, so the total never changes unexplained. was
+      // holds the wares as they were, so a listing taken away can still be named.
+      function settleBasket(was) {
+        var now = {}, c = { sold: [], off: [], less: [], priced: [] };
         S.its.forEach(function (it) { now[String(it.id)] = it; });
         Object.keys(basket).forEach(function (k) {
           var it = now[k], q = basket[k];
-          if (!it || it.out) { (it && it.qty === 0 ? c.sold : c.off).push(it ? it.n : names[k] || 'item'); delete basket[k]; }
-          else if (it.qty !== null && q > it.qty) { basket[k] = it.qty; c.less.push(it.qty + ' ' + it.n); }
+          if (!it || it.out) { (it && it.qty === 0 ? c.sold : c.off).push(it ? it.n : (was[k] && was[k].n) || 'item'); delete basket[k]; return; }
+          if (it.qty !== null && q > it.qty) { basket[k] = it.qty; c.less.push(it.qty + ' ' + it.n); }
+          if (was[k] && was[k].p !== it.p) c.priced.push([it.n, it.price]);
         });
         return c;
       }
@@ -1957,6 +1967,8 @@
         else if (c.sold.length) w.push('These sold out while you shopped: ' + c.sold.join(', ') + '.');
         if (c.off.length) w.push(c.off.join(', ') + (c.off.length === 1 ? ' is' : ' are') + ' no longer for sale.');
         if (c.less.length) w.push((c.sold.length || c.off.length ? 'Only ' : 'Someone just bought some of these. Only ') + c.less.join(', ') + ' left.');
+        if (c.priced.length === 1) w.push(c.priced[0][0] + ' now costs ' + c.priced[0][1] + '.');
+        else if (c.priced.length) w.push('New prices: ' + c.priced.map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + '.');
         return w.join(' ');
       }
       // A buy the server refused whole, so nothing was charged.
@@ -1982,12 +1994,11 @@
       function shelvesChanged() {
         if (!dlg.open) return;
         if (busy || S.mode === 'arr') { liveT = setTimeout(shelvesChanged, 1500); return; }
-        var names = {};
-        S.its.forEach(function (it) { names[String(it.id)] = it.n; });
+        var was = shelfSnap();
         loadGoods().then(function (ok) {
           if (!ok || !dlg.open) return;
           draw();
-          var said = liveWords(settleBasket(names));
+          var said = liveWords(settleBasket(was));
           if (said) note = said;
           renderList();
         });
