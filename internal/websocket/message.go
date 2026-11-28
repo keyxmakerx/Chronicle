@@ -238,6 +238,26 @@ const (
 	// to no other client. Payload {previewId, director, scene}; the same
 	// audience as MsgCutsceneFoundry. Nothing is stored.
 	MsgCutsceneFoundryPreview MessageType = "cutscene.foundry_preview"
+	// MsgCutsceneMomentAnswer tells the Director's browser screens that a
+	// viewer answered a moment, so the scene's panel redraws. Payload
+	// {showingId, sceneId, moment}, never the words; RequiresDM and Sources
+	// the browser only.
+	MsgCutsceneMomentAnswer MessageType = "cutscene.moment_answer"
+	// MsgCutsceneMomentAnswering tells a showing's other viewers who is
+	// adding to the story at a moment, so their screens say so. Payload
+	// {showingId, moment, userId, name}, never the words; AllowedUsers is
+	// the other viewers with StrictAudience, browser only.
+	MsgCutsceneMomentAnswering MessageType = "cutscene.moment_answering"
+	// MsgCutsceneMomentGo lets a held moment go on the viewers' screens.
+	// Payload {showingId, moment, lines: [{line, from}]}, the lines that
+	// joined the story there; the same audience as MsgCutsceneShow.
+	MsgCutsceneMomentGo MessageType = "cutscene.moment_go"
+	// MsgCutsceneFoundryAnswering and MsgCutsceneFoundryGo relay those two
+	// to the module, which tells or plays them for the viewers' linked
+	// Foundry users. Payloads as above plus viewers; the same audience as
+	// MsgCutsceneFoundry.
+	MsgCutsceneFoundryAnswering MessageType = "cutscene.foundry_answering"
+	MsgCutsceneFoundryGo        MessageType = "cutscene.foundry_go"
 )
 
 // Sync control messages.

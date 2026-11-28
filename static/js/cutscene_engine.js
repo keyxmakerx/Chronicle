@@ -18,8 +18,18 @@
  * moment) is called when it holds; run.hold(i) jumps a scene that has not
  * reached moment i yet to it, for a screen that joins late; run.held() is
  * the moment holding, or -1. With canContinue the question offers its own
- * Continue (the Director's preview). The ways to answer are drawn but not
- * yet answerable.
+ * Continue (the Director's preview).
+ *
+ * With onAnswer(i, {way, text}) the ways can be answered: Write it opens a
+ * box, Leave it to your Director sends at once, and onAnswer returns a
+ * promise that rejects with words a person may read. Without it the ways are
+ * drawn but not answerable. run.answered(i, ans) shows an answer already
+ * sent, for a screen that opens mid-hold; run.status(i, text, closed) sets
+ * the quiet line under the question ("Ana is adding to the story…"), and
+ * closed shuts the ways when someone else is answering for everyone;
+ * run.go(i, lines) shows the lines that joined the story there, each
+ * {line, from}, for a few seconds before the scene goes on. opts.released
+ * lists moments already let go, so the scene plays past them.
  *
  * onClose(why) gets 'tap', 'auto', 'escape' or 'stopped'. With contained:
  * true the scene fills `host` instead of the window and leaves focus and the
@@ -414,6 +424,29 @@
     '.cs-cut-way{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:0 1 11em;min-width:8.5em;min-height:72px;box-sizing:border-box;padding:12px 14px;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(18,20,24,.82);font:600 15px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif;color:#fff}',
     '.cs-cut-way span{font-weight:400;font-size:12.5px;color:rgba(255,255,255,.66)}',
     '.cs-cut-way[aria-disabled="true"]{opacity:.5}',
+    'button.cs-cut-way{margin:0;cursor:pointer;transition:background-color .12s,border-color .12s}',
+    'button.cs-cut-way:hover{background:rgba(40,44,50,.9);border-color:rgba(255,255,255,.4)}',
+    'button.cs-cut-way:active{transform:scale(.98)}',
+    'button.cs-cut-way:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}',
+    'button.cs-cut-way:disabled{opacity:.5;cursor:default}',
+    '.cs-cut-body{display:flex;flex-direction:column;align-items:center;width:100%}',
+    '.cs-cut-box{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:min(30em,100%);margin:1.4em 0 0}',
+    '.cs-cut-box textarea{box-sizing:border-box;width:100%;min-height:88px;padding:10px 12px;border:1px solid rgba(255,255,255,.28);border-radius:10px;background:rgba(18,20,24,.86);color:#fff;font:400 16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;resize:vertical}',
+    '.cs-cut-box textarea:focus{outline:2px solid rgba(255,255,255,.85);outline-offset:1px}',
+    '.cs-cut-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px}',
+    '.cs-cut-row .cs-cut-go{margin:0}',
+    '.cs-cut-go:disabled{opacity:.6;cursor:default}',
+    '.cs-cut-quiet{min-height:44px;margin:0;padding:0 14px;border:0;border-radius:22px;background:none;color:rgba(255,255,255,.7);font:500 15px/44px system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer;transition:color .12s,background-color .12s}',
+    '.cs-cut-quiet:hover{color:#fff;background:rgba(255,255,255,.08)}',
+    '.cs-cut-quiet:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}',
+    '.cs-cut-note{margin:.9em 0 0;max-width:min(34em,100%);font:400 15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:rgba(255,255,255,.72);overflow-wrap:break-word}',
+    '.cs-cut-said{margin:1.2em 0 0;max-width:min(30em,100%);font:italic 400 17px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#fff;overflow-wrap:break-word}',
+    '.cs-cut-err{margin:0;font:500 14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#ffd2c8}',
+    '.cs-cut-status{min-height:1.4em;margin:1em 0 0;font:400 14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:rgba(255,255,255,.66)}',
+    '.cs-cut-lines{margin:1.2em 0 0;padding:0;list-style:none;max-width:min(32em,100%)}',
+    '.cs-cut-lines li{margin:0 0 .7em;font-family:var(--font-heading,Georgia),Georgia,"Times New Roman",serif;font-size:clamp(17px,3cqw,22px);line-height:1.4;color:var(--cs-cut-ink,#e9f3ea);overflow-wrap:break-word;animation:cs-cut-fade .28s ease-out both}',
+    '.cs-cut-lines li span{display:block;margin-top:2px;font:400 13px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;color:rgba(255,255,255,.62)}',
+    '.cs-cut-still .cs-cut-lines li{animation:none}',
     '.cs-cut-go{min-height:44px;min-width:120px;margin:1.4em 0 0;padding:0 22px;border:0;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;font:500 15px/44px system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.04em;cursor:pointer;transition:background-color .12s}',
     '.cs-cut-go:hover{background:rgba(255,255,255,.24)}',
     '.cs-cut-go:active{transform:scale(.97)}',
@@ -1663,6 +1696,7 @@
     var words$ = opts.words || {};
     var say = function (k, def) { return typeof words$[k] === 'string' && words$[k] ? words$[k] : def; };
     var onMoment = typeof opts.onMoment === 'function' ? opts.onMoment : function () {};
+    var onAnswer = typeof opts.onAnswer === 'function' ? opts.onAnswer : null;
     var boxed = !!opts.contained;
     var seed = seedOf(scene.id + '|' + scene.name);
     var onClose = typeof opts.onClose === 'function' ? opts.onClose : function () {};
@@ -1760,7 +1794,12 @@
     // the two are the same.
     var t = 0, tc = 0, prev = null, raf = 0, done = false, resting = false, grainOn = false;
     var moments = scene.moments || [], held = -1, released = moments.map(function () { return false; });
-    var askEl = null, goBtn = null, builtLag = [];
+    (Array.isArray(opts.released) ? opts.released : []).forEach(function (i) { if (i >= 0 && i < moments.length) released[i] = true; });
+    // What this screen already sent at each moment, the quiet line under
+    // each question, and whether its ways are shut.
+    var sent = moments.map(function () { return null; });
+    var statusOf = moments.map(function () { return ''; }), shut = moments.map(function () { return false; });
+    var askEl = null, goBtn = null, bodyEl = null, statusEl = null, turnEl = null, leaveTimer = 0, builtLag = [];
     var xOn = false, endOn = false, sized = false;
     var prevFocus = boxed ? null : doc.activeElement;
 
@@ -1817,6 +1856,157 @@
       director: function () { return [say('director', 'Leave it to your Director'), say('directorHint', 'they decide')]; }
     };
 
+    function btn(cls, text) {
+      var b = doc.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = text;
+      return b;
+    }
+    function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+    function focusFirst() {
+      var f = askEl && askEl.querySelector('textarea, button:not([disabled])');
+      if (f) f.focus({ preventScroll: true }); else el.focus({ preventScroll: true });
+    }
+    function failure(e) {
+      return e && e.plain && e.message ? e.message : say('failed', "That didn't send. Check the connection and try again.");
+    }
+
+    // showWays draws the ways to answer moment i: answerable buttons when
+    // there is somewhere to send the answer, otherwise only their names.
+    function showWays(i) {
+      clear(bodyEl);
+      var list = doc.createElement('ul');
+      list.className = 'cs-cut-ways';
+      moments[i].ways.forEach(function (w) {
+        var li = doc.createElement('li');
+        var label = (WAY_WORDS[w.kind] || WAY_WORDS.write)();
+        var item = li;
+        if (onAnswer) {
+          li.style.display = 'contents';
+          item = btn('cs-cut-way', label[0]);
+          item.disabled = shut[i];
+          item.addEventListener('click', function () {
+            if (w.kind === 'write') showWrite(i); else send(i, { way: w.kind, text: '' }, item);
+          });
+          li.appendChild(item);
+        } else {
+          li.className = 'cs-cut-way';
+          li.setAttribute('aria-disabled', 'true');
+          li.appendChild(doc.createTextNode(label[0]));
+        }
+        var sub = doc.createElement('span');
+        sub.textContent = label[1];
+        item.appendChild(sub);
+        list.appendChild(li);
+      });
+      bodyEl.appendChild(list);
+    }
+
+    // showWrite opens the box for a written answer, with what was sent
+    // before when the answer is being changed.
+    function showWrite(i) {
+      clear(bodyEl);
+      var box = doc.createElement('div');
+      box.className = 'cs-cut-box';
+      var ta = doc.createElement('textarea');
+      ta.maxLength = 280;
+      ta.rows = 3;
+      ta.setAttribute('aria-label', say('yourAnswer', 'Your answer'));
+      ta.value = sent[i] && sent[i].way === 'write' ? sent[i].text : '';
+      box.appendChild(ta);
+      var err = doc.createElement('p');
+      err.className = 'cs-cut-err';
+      err.setAttribute('role', 'alert');
+      box.appendChild(err);
+      var row = doc.createElement('div');
+      row.className = 'cs-cut-row';
+      var back = btn('cs-cut-quiet', say('back', 'Back'));
+      var go = btn('cs-cut-go', say('send', 'Send'));
+      row.appendChild(back);
+      row.appendChild(go);
+      box.appendChild(row);
+      bodyEl.appendChild(box);
+      back.addEventListener('click', function () { if (sent[i]) showSent(i); else showWays(i); if (!boxed) focusFirst(); });
+      function submit() {
+        var text = ta.value.replace(/\s+/g, ' ').trim();
+        if (!text) { err.textContent = say('empty', 'Write a few words first.'); ta.focus(); return; }
+        send(i, { way: 'write', text: text }, go, err);
+      }
+      go.addEventListener('click', submit);
+      ta.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submit(); }
+        if (ev.key === 'Escape' || ev.key === 'Esc') { ev.preventDefault(); ev.stopPropagation(); back.click(); }
+      });
+      if (!boxed) ta.focus({ preventScroll: true });
+    }
+
+    // send hands the answer over and shows it sent, or why it was not.
+    function send(i, ans, button, errEl) {
+      if (!onAnswer || done) return;
+      var was = button.textContent;
+      button.disabled = true;
+      if (button.className === 'cs-cut-go') button.textContent = say('sending', 'Sending…');
+      var p;
+      try { p = Promise.resolve(onAnswer(i, { way: ans.way, text: ans.text })); } catch (e) { p = Promise.reject(e); }
+      p.then(function () {
+        sent[i] = { way: ans.way, text: ans.text };
+        if (held === i && !done) { showSent(i); if (!boxed) focusFirst(); }
+      }, function (e) {
+        if (done || held !== i) return;
+        button.disabled = false;
+        if (button.className === 'cs-cut-go') button.textContent = was;
+        if (errEl) { errEl.textContent = failure(e); return; }
+        statusEl.textContent = failure(e);
+      });
+    }
+
+    // showSent is the answer as it went, and that the Director reads it
+    // before it joins the story; it can be changed until the scene goes on.
+    function showSent(i) {
+      clear(bodyEl);
+      var a = sent[i];
+      if (a.way === 'write' && a.text) {
+        var said = doc.createElement('p');
+        said.className = 'cs-cut-said';
+        said.textContent = '\u201c' + a.text + '\u201d';
+        bodyEl.appendChild(said);
+      }
+      var note = doc.createElement('p');
+      note.className = 'cs-cut-note';
+      note.textContent = a.way === 'write' ? say('sent', 'Your Director reads it before it joins the story.') : say('leftIt', 'You left it to your Director. They decide what happens.');
+      bodyEl.appendChild(note);
+      if (onAnswer && !shut[i]) {
+        var row = doc.createElement('div');
+        row.className = 'cs-cut-row';
+        var change = btn('cs-cut-quiet', say('change', 'Change my answer'));
+        change.addEventListener('click', function () { showWays(i); if (!boxed) focusFirst(); });
+        row.appendChild(change);
+        bodyEl.appendChild(row);
+      }
+    }
+
+    // showLines is what joined the story at moment i, just before it goes on.
+    function showLines(i, lines) {
+      clear(bodyEl);
+      if (statusEl) statusEl.textContent = '';
+      if (turnEl) turnEl.textContent = say('joined', 'Joins the story');
+      var ul = doc.createElement('ul');
+      ul.className = 'cs-cut-lines';
+      ul.setAttribute('aria-live', 'polite');
+      lines.forEach(function (l) {
+        var li = doc.createElement('li');
+        li.appendChild(doc.createTextNode('\u201c' + l.line + '\u201d'));
+        if (l.from) {
+          var by = doc.createElement('span');
+          by.textContent = say('from', 'from') + ' ' + l.from;
+          li.appendChild(by);
+        }
+        ul.appendChild(li);
+      });
+      bodyEl.appendChild(ul);
+    }
+
     // holdAt stops the scene clock at moment i and puts its question up.
     function holdAt(i) {
       var m = moments[i];
@@ -1832,25 +2022,20 @@
       q.id = 'cs-cut-q-' + seed + '-' + i;
       q.textContent = m.ask;
       askEl.setAttribute('aria-labelledby', q.id);
-      var turn = doc.createElement('p');
+      var turn = turnEl = doc.createElement('p');
       turn.className = 'cs-cut-turn';
       turn.textContent = say('turn', 'Your turn');
       askEl.appendChild(turn);
       askEl.appendChild(q);
-      var list = doc.createElement('ul');
-      list.className = 'cs-cut-ways';
-      m.ways.forEach(function (w) {
-        var li = doc.createElement('li');
-        li.className = 'cs-cut-way';
-        li.setAttribute('aria-disabled', 'true');
-        var label = (WAY_WORDS[w.kind] || WAY_WORDS.write)();
-        li.appendChild(doc.createTextNode(label[0]));
-        var sub = doc.createElement('span');
-        sub.textContent = label[1];
-        li.appendChild(sub);
-        list.appendChild(li);
-      });
-      askEl.appendChild(list);
+      bodyEl = doc.createElement('div');
+      bodyEl.className = 'cs-cut-body';
+      askEl.appendChild(bodyEl);
+      statusEl = doc.createElement('p');
+      statusEl.className = 'cs-cut-status';
+      statusEl.setAttribute('aria-live', 'polite');
+      statusEl.textContent = statusOf[i];
+      askEl.appendChild(statusEl);
+      if (sent[i]) showSent(i); else showWays(i);
       goBtn = null;
       if (opts.canContinue) {
         goBtn = doc.createElement('button');
@@ -1861,6 +2046,7 @@
       }
       el.insertBefore(askEl, xBtn);
       if (goBtn && !boxed) goBtn.focus({ preventScroll: true });
+      else if (!boxed) focusFirst();
       try { onMoment(i, { at: m.at, ask: m.ask, ways: m.ways.slice(), to: m.to || 'each' }); } catch (e) { /* the caller's problem */ }
     }
 
@@ -1870,10 +2056,13 @@
       released[i] = true;
       if (held !== i) return;
       held = -1;
+      if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = 0; }
       el.classList.remove('cs-cut-held');
       var leaving = askEl;
       askEl = null;
       goBtn = null;
+      bodyEl = null;
+      statusEl = null;
       if (leaving) {
         if (still) { if (leaving.parentNode) leaving.parentNode.removeChild(leaving); } else {
           leaving.classList.add('cs-cut-ask-gone');
@@ -1912,6 +2101,9 @@
     function onKey(ev) {
       if (done) return;
       if (boxed && !el.contains(ev.target)) return;
+      // The answer box takes its own keys (Enter sends, Escape steps back);
+      // onBoxKey keeps them from the page.
+      if (ev.key !== 'Tab' && askEl && ev.target && ev.target.tagName === 'TEXTAREA' && askEl.contains(ev.target)) return;
       if (ev.key === 'Escape' || ev.key === 'Esc') {
         ev.preventDefault();
         ev.stopPropagation();
@@ -1921,7 +2113,7 @@
       if (ev.key === 'Tab' && !boxed) {
         // Focus stays inside the scene while it is up.
         var can = [xBtn, endBtn].filter(function (b) { return b.classList.contains('cs-cut-on'); });
-        if (goBtn) can.unshift(goBtn);
+        if (askEl) can = Array.prototype.slice.call(askEl.querySelectorAll('textarea, button:not([disabled])')).concat(can);
         ev.preventDefault();
         if (!can.length) { el.focus({ preventScroll: true }); return; }
         var at = can.indexOf(doc.activeElement);
@@ -1966,6 +2158,7 @@
     function close(why) {
       if (done) return;
       done = true;
+      if (leaveTimer) clearTimeout(leaveTimer);
       if (raf) window.cancelAnimationFrame(raf);
       if (relayout) window.cancelAnimationFrame(relayout);
       doc.removeEventListener('keydown', onKey, true);
@@ -1982,7 +2175,10 @@
       try { onClose(why); } catch (e) { /* the caller's problem, not the scene's */ }
     }
 
+    function onBoxKey(ev) { if (askEl && askEl.contains(ev.target)) ev.stopPropagation(); }
+
     doc.addEventListener('keydown', onKey, true);
+    el.addEventListener('keydown', onBoxKey);
     el.addEventListener('click', onClick);
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
@@ -2000,7 +2196,32 @@
       stop: function () { close('stopped'); },
       time: function () { return tc; },
       held: function () { return held; },
-      go: function (i) { if (!done) goFrom(i); },
+      go: function (i, lines) {
+        if (done || i < 0 || i >= moments.length) return;
+        var shown = (Array.isArray(lines) ? lines : []).filter(function (l) { return l && typeof l.line === 'string' && l.line; }).slice(0, 12)
+          .map(function (l) { return { line: String(l.line).slice(0, 280), from: typeof l.from === 'string' ? l.from.slice(0, 80) : '' }; });
+        if (held !== i || !shown.length) { goFrom(i); return; }
+        // The lines stay long enough to read, then the scene goes on.
+        released[i] = true;
+        showLines(i, shown);
+        if (leaveTimer) clearTimeout(leaveTimer);
+        leaveTimer = setTimeout(function () { leaveTimer = 0; goFrom(i); }, Math.min(9000, 2500 + 1500 * shown.length));
+      },
+      answered: function (i, ans) {
+        if (done || i < 0 || i >= moments.length || !ans || typeof ans !== 'object') return;
+        var way = ans.way === 'director' ? 'director' : 'write';
+        sent[i] = { way: way, text: way === 'write' ? String(ans.text || '').slice(0, 280) : '' };
+        if (held === i && bodyEl && !leaveTimer) showSent(i);
+      },
+      status: function (i, text, closed) {
+        if (done || i < 0 || i >= moments.length) return;
+        statusOf[i] = typeof text === 'string' ? text.slice(0, 200) : '';
+        var wasShut = shut[i];
+        shut[i] = !!closed;
+        if (held !== i || !statusEl || leaveTimer) return;
+        statusEl.textContent = statusOf[i];
+        if (wasShut !== shut[i] && bodyEl && !bodyEl.querySelector('textarea')) { if (sent[i]) showSent(i); else showWays(i); }
+      },
       hold: function (i) {
         if (done || i < 0 || i >= moments.length || held === i) return;
         // Every moment before it counts as asked, so the scene lands on this one.

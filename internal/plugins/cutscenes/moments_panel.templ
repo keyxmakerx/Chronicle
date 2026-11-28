@@ -1,0 +1,114 @@
+package cutscenes
+
+import "strconv"
+
+// MomentsPanel is the Director's live panel on a scene's page: for each
+// showing that holds on a moment, the question, the Director's own note, and
+// what the viewers answered, each to add to the story, change or turn down,
+// then Continue. It redraws whole when an answer comes (the stage raises
+// cutscene-moment on the page) and after every press here.
+templ MomentsPanel(campaignID, sceneID string, list []LiveMoment, errMsg string) {
+	<section
+		class="csw-moments"
+		id={ momentsID(sceneID) }
+		aria-live="polite"
+		hx-get={ sceneURL(campaignID, sceneID) + "/live" }
+		hx-trigger="cutscene-moment from:body"
+		hx-swap="outerHTML"
+	>
+		if errMsg != "" {
+			<p class="csw-err" role="alert">{ errMsg }</p>
+		}
+		for _, lm := range list {
+			if lm.Current >= 0 {
+				@momentCard(campaignID, sceneID, lm)
+			}
+		}
+	</section>
+}
+
+templ momentCard(campaignID, sceneID string, lm LiveMoment) {
+	<div class="csw-mo">
+		<p class="csw-lab">
+			if lm.Waiting() > 0 {
+				Waiting on you
+			} else {
+				A moment
+			}
+			<span class="csw-quiet">the scene holds at { Clock(lm.Moment.At) } · showing to { viewersOf(lm.Showing) }</span>
+		</p>
+		<p class="csw-mo-ask">{ lm.Moment.Ask }</p>
+		if lm.Moment.Note != "" {
+			<p class="csw-mo-note"><span class="csw-only">Only you</span> { lm.Moment.Note }</p>
+		}
+		if len(lm.Answers) == 0 {
+			<p class="csw-quiet">No answer yet.</p>
+		}
+		for _, a := range lm.Answers {
+			@answerRow(campaignID, sceneID, lm, a)
+		}
+		if len(lm.Pages) > 0 {
+			<datalist id={ pagesListID(lm.Showing.ID) }>
+				for _, p := range lm.Pages {
+					<option value={ p.Name }></option>
+				}
+			</datalist>
+		}
+		<div class="csw-mo-go">
+			<button
+				type="button"
+				class="btn-secondary"
+				hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + lm.Showing.ID + "/moments/" + strconv.Itoa(lm.Current) + "/go" }
+				hx-target={ "#" + momentsID(sceneID) }
+				hx-swap="outerHTML"
+			>Continue the scene</button>
+			if lm.Waiting() > 0 {
+				<span class="csw-quiet">Answers you haven't decided stay out of the story.</span>
+			}
+		</div>
+	</div>
+}
+
+templ answerRow(campaignID, sceneID string, lm LiveMoment, a Answer) {
+	<div class="csw-mo-ans">
+		<p class="csw-mo-by">{ answerBy(a) }</p>
+		if a.Text != "" {
+			<p class="csw-mo-said">“{ a.Text }”</p>
+		}
+		switch a.Status {
+			case AnswerWaiting:
+				<form
+					class="csw-mo-form"
+					hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + lm.Showing.ID + "/answers/" + a.ID }
+					hx-target={ "#" + momentsID(sceneID) }
+					hx-swap="outerHTML"
+				>
+					<div class="csw-field csw-mo-page">
+						<label class="csw-flabel" for={ "csw-mo-page-" + a.ID }>Page</label>
+						<input class="csw-line" id={ "csw-mo-page-" + a.ID } name="page" type="text" list={ pagesListID(lm.Showing.ID) } autocomplete="off" placeholder="The page the line goes on"/>
+					</div>
+					<div class="csw-mo-acts">
+						if a.Text != "" {
+							<button type="submit" name="action" value={ ResolveAdd } class="btn-primary">Add to the story</button>
+						}
+						<details class="csw-mo-change">
+							<summary class="btn-secondary">Change it</summary>
+							<div class="csw-field">
+								<label class="csw-flabel" for={ "csw-mo-line-" + a.ID }>The line as it joins the story</label>
+								<textarea class="csw-line" id={ "csw-mo-line-" + a.ID } name="line" rows="2" maxlength={ strconv.Itoa(MaxAnswer) }>{ a.Text }</textarea>
+							</div>
+							<button type="submit" name="action" value={ ResolveChange } class="btn-primary">Add the changed line</button>
+						</details>
+						<button type="submit" name="action" value={ ResolveDecline } class="btn-secondary">Turn down</button>
+					</div>
+					<p class="csw-quiet">Added lines go on the page you pick, marked “from { a.Name }”.</p>
+				</form>
+			case AnswerDeclined:
+				<p class="csw-quiet">Turned down. It stays out of the story.</p>
+			case AnswerChanged:
+				<p class="csw-quiet">Added to the story in your words: “{ a.Line }”</p>
+			default:
+				<p class="csw-quiet">Added to the story.</p>
+		}
+	</div>
+}

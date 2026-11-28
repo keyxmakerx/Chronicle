@@ -2,13 +2,18 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"html"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/cutscenes"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
@@ -139,6 +144,63 @@ func (p *cutsceneLivePublisher) Stop(campaignID string, s cutscenes.Showing) {
 	p.bus.Publish(relay)
 }
 
+// Answered tells the Director's browser tabs to redraw the scene's panel,
+// and the showing's other viewers, in Chronicle and through the module in
+// Foundry, who is adding to the story. Neither carries the answer's words.
+func (p *cutsceneLivePublisher) Answered(campaignID string, s cutscenes.Showing, a cutscenes.Answer) {
+	if p.bus == nil {
+		return
+	}
+	dir := ws.NewMessage(ws.MsgCutsceneMomentAnswer, campaignID, s.ID, map[string]any{
+		"showingId": s.ID, "sceneId": s.SceneID, "moment": a.Moment,
+	})
+	dir.RequiresDM = true
+	dir.Sources = []string{ws.BrowserSource}
+	p.bus.Publish(dir)
+
+	var others []string
+	for _, id := range viewerIDs(s) {
+		if id != a.UserID {
+			others = append(others, id)
+		}
+	}
+	payload := map[string]any{"showingId": s.ID, "moment": a.Moment, "userId": a.UserID, "name": a.Name}
+	if len(others) > 0 {
+		live := ws.NewMessage(ws.MsgCutsceneMomentAnswering, campaignID, s.ID, payload)
+		live.AllowedUsers, live.StrictAudience = others, true
+		live.Sources = []string{ws.BrowserSource}
+		p.bus.Publish(live)
+	}
+	relay := ws.NewMessage(ws.MsgCutsceneFoundryAnswering, campaignID, s.ID, map[string]any{
+		"showingId": s.ID, "moment": a.Moment, "userId": a.UserID, "name": a.Name, "viewers": viewerIDs(s),
+	})
+	relay.RequiresDM = true
+	relay.Sources = []string{foundry_vtt.ModuleSource}
+	p.bus.Publish(relay)
+}
+
+// Go lets moment i go on the viewers' screens with the lines that joined
+// the story there, in Chronicle and through the module in Foundry.
+func (p *cutsceneLivePublisher) Go(campaignID string, s cutscenes.Showing, i int, lines []cutscenes.ShownLine) {
+	if p.bus == nil || len(s.Viewers) == 0 {
+		return
+	}
+	if lines == nil {
+		lines = []cutscenes.ShownLine{}
+	}
+	live := ws.NewMessage(ws.MsgCutsceneMomentGo, campaignID, s.ID, map[string]any{"showingId": s.ID, "moment": i, "lines": lines})
+	live.AllowedUsers, live.StrictAudience = viewerIDs(s), true
+	live.Sources = []string{ws.BrowserSource}
+	p.bus.Publish(live)
+
+	relay := ws.NewMessage(ws.MsgCutsceneFoundryGo, campaignID, s.ID, map[string]any{
+		"showingId": s.ID, "moment": i, "lines": lines, "viewers": viewerIDs(s),
+	})
+	relay.RequiresDM = true
+	relay.Sources = []string{foundry_vtt.ModuleSource}
+	p.bus.Publish(relay)
+}
+
 // cutsceneFoundryPreview implements cutscenes.FoundryPreviewer. A campaign
 // uses Foundry when its Sync API add-on is on (making a Foundry key turns it
 // on); a module is there to hear a preview when the hub has seen its socket
@@ -190,4 +252,89 @@ func (a cutsceneSyncAdapter) MemberShowings(ctx context.Context, campaignID, use
 		return nil, 0, err
 	}
 	return list, len(list), nil
+}
+
+func (a cutsceneSyncAdapter) Answer(ctx context.Context, campaignID, showingID string, moment int, userID, way, text string) (any, error) {
+	return a.svc.Answer(ctx, campaignID, showingID, moment, cutscenes.Viewer{UserID: userID}, cutscenes.AnswerInput{Way: way, Text: text})
+}
+
+// cutsceneStoryAdapter implements cutscenes.Story over the entities
+// service: the pages a Director can add a moment's line to, and the append.
+type cutsceneStoryAdapter struct {
+	svc entities.EntityService
+}
+
+func (a cutsceneStoryAdapter) Pages(ctx context.Context, campaignID string) ([]cutscenes.PageRef, error) {
+	// The Director sees every page, so the owner's view lists them all.
+	list, err := a.svc.ListEntityNames(ctx, campaignID, int(campaigns.RoleOwner), "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]cutscenes.PageRef, 0, len(list))
+	for _, e := range list {
+		if !e.IsAlias {
+			out = append(out, cutscenes.PageRef{ID: e.ID, Name: e.Name})
+		}
+	}
+	return out, nil
+}
+
+// AddLine appends the line as its own paragraph at the end of the page's
+// words, followed by who it came from. It saves against the page's revision
+// and tries again when someone saved the page in between, so an open editor
+// never loses its words to this or this to it.
+func (a cutsceneStoryAdapter) AddLine(ctx context.Context, campaignID, pageID, line, from string) error {
+	for try := 0; try < 3; try++ {
+		rev, err := a.svc.EntryRev(ctx, pageID)
+		if err != nil {
+			return err
+		}
+		e, err := a.svc.GetByID(ctx, pageID)
+		if err != nil {
+			return err
+		}
+		if e.CampaignID != campaignID {
+			return apperror.NewNotFound("page not found")
+		}
+		doc, htm, err := appendStoryLine(e.Entry, e.EntryHTML, line, from)
+		if err != nil {
+			return err
+		}
+		_, conflict, err := a.svc.SaveEntry(ctx, pageID, doc, htm, &rev)
+		if err != nil {
+			return err
+		}
+		if conflict == nil {
+			return nil
+		}
+	}
+	return apperror.NewConflict("The page was being edited. Try Add to the story again.")
+}
+
+// appendStoryLine is a page's entry with one paragraph added at the end: the
+// line in quotes, then "from <name>" in italics. An empty page starts a new
+// document; words that can't be read as one are refused, never replaced.
+func appendStoryLine(entry, entryHTML *string, line, from string) (string, string, error) {
+	para := map[string]any{"type": "paragraph", "content": []any{
+		map[string]any{"type": "text", "text": "“" + line + "” "},
+		map[string]any{"type": "text", "text": "from " + from, "marks": []any{map[string]any{"type": "italic"}}},
+	}}
+	doc := map[string]any{"type": "doc"}
+	if entry != nil && strings.TrimSpace(*entry) != "" {
+		doc = map[string]any{}
+		if err := json.Unmarshal([]byte(*entry), &doc); err != nil || doc["type"] != "doc" {
+			return "", "", apperror.NewConflict("That page's words can't be added to here. Open the page and add the line by hand.")
+		}
+	}
+	content, _ := doc["content"].([]any)
+	doc["content"] = append(content, para)
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return "", "", err
+	}
+	prev := ""
+	if entryHTML != nil {
+		prev = *entryHTML
+	}
+	return string(b), prev + "<p>“" + html.EscapeString(line) + "” <em>from " + html.EscapeString(from) + "</em></p>", nil
 }

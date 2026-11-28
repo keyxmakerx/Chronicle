@@ -2,6 +2,7 @@ package cutscenes
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -25,8 +26,10 @@ type editorPage struct {
 	Scene      Scene
 	New        bool
 	Live       []Showing
-	Saved      bool
-	Error      string
+	// Moments are the live showings holding on a moment, for the panel.
+	Moments []LiveMoment
+	Saved   bool
+	Error   string
 	// Foundry offers Preview in Foundry: the campaign uses the module.
 	Foundry bool
 }
@@ -226,3 +229,22 @@ func colorOr(c, def string) string {
 
 // viewersOf is a showing's people for the live row.
 func viewersOf(s Showing) string { return names(s.Viewers) }
+
+// momentsID is the scene's live moments panel; pagesListID the page names a
+// showing's answers can join.
+func momentsID(sceneID string) string     { return "csw-moments-" + sceneID }
+func pagesListID(showingID string) string { return "csw-pages-" + showingID }
+
+// answerBy says who answered and how, in the panel.
+func answerBy(a Answer) string {
+	if a.Way == WayDirector {
+		return a.Name + " left it to you"
+	}
+	return a.Name + " wrote"
+}
+
+// Clock is a time on the scene's clock as the panel says it: 0:12, 1:05.
+func Clock(secs float64) string {
+	s := int(secs + 0.5)
+	return strconv.Itoa(s/60) + ":" + fmt.Sprintf("%02d", s%60)
+}

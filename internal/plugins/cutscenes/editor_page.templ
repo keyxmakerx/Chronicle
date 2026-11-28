@@ -21,6 +21,7 @@ templ EditorPage(p editorPage) {
 							@ShownRow(p.CampaignID, s, false)
 						}
 					</ul>
+					@MomentsPanel(p.CampaignID, p.Scene.ID, p.Moments, "")
 				}
 				@editorForm(p)
 				if !p.New {

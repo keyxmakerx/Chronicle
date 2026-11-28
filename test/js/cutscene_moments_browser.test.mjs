@@ -1,9 +1,11 @@
 // cutscene_moments_browser.test.mjs — a cut scene's moments, played for real
 // in Chromium: the scene clock stops at the beat and the question stands over
-// the dimmed scene, as text and never markup, with its ways shown but not yet
-// answerable. Only go() (or the preview's own Continue) lets it run on; Esc
-// still gets the player out. hold() lands a late screen on a moment. Calm
-// fades the question in, Off just shows it, and a phone stacks the ways.
+// the dimmed scene, as text and never markup. With onAnswer a viewer writes or
+// leaves it to the Director and sees it sent; without it the ways are only
+// drawn. Only go() (or the preview's own Continue) lets it run on, showing the
+// lines that joined the story first; Esc still gets the player out. hold()
+// and released land a late screen on a moment. Calm fades the question in,
+// Off just shows it, and a phone stacks the ways.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -181,5 +183,123 @@ test('a scene without moments draws nothing new', { skip }, async (t) => {
   const { pg, errors } = await open(t);
   await start(pg, SCENE(undefined));
   assert.deepEqual(await pg.evaluate(() => [document.querySelectorAll('.cs-cut-scrim, .cs-cut-ask').length, window.run.held()]), [0, -1]);
+  assert.deepEqual(errors, []);
+});
+
+// startAnswering plays a scene whose onAnswer records each answer and
+// settles the way window.reply says: 'ok', or a message to reject with.
+function startAnswering(pg, scene, opts = {}) {
+  return pg.evaluate(([scene, opts]) => {
+    window.sent = [];
+    window.reply = 'ok';
+    window.shut = [];
+    window.run = ChronicleCutscene.play(document.body, scene, {
+      ...opts,
+      onClose: (why) => window.shut.push(why),
+      onAnswer: (i, a) => {
+        window.sent.push([i, a.way, a.text]);
+        if (window.reply === 'ok') return Promise.resolve({});
+        const e = new Error(window.reply); e.plain = true; return Promise.reject(e);
+      }
+    });
+  }, [scene, opts]);
+}
+
+test('a viewer writes an answer in the scene, sees it sent, can change it, and a refusal says why', { skip }, async (t) => {
+  const { pg, errors } = await open(t);
+  await startAnswering(pg, SCENE([{ at: 0.3, ask: ASK, ways: [{ kind: 'write' }, { kind: 'director' }] }]));
+  await pg.waitForFunction(() => window.run.held() === 0);
+  const ways = await pg.$$eval('.cs-cut-ways button.cs-cut-way', (bs) => bs.map((b) => [b.firstChild.textContent, b.disabled]));
+  assert.deepEqual(ways, [['Write it', false], ['Leave it to your Director', false]]);
+  assert.equal(await pg.evaluate(() => document.activeElement.textContent.startsWith('Write it')), true, 'the first way takes focus');
+
+  await pg.click('.cs-cut-way >> nth=0');
+  assert.equal(await pg.evaluate(() => document.activeElement.tagName), 'TEXTAREA');
+  assert.equal(await pg.getAttribute('.cs-cut-box textarea', 'maxlength'), '280');
+  await pg.keyboard.press('Enter');
+  assert.match(await pg.textContent('.cs-cut-err'), /Write a few words/);
+  assert.deepEqual(await pg.evaluate(() => window.sent), [], 'an empty answer is not sent');
+
+  await pg.keyboard.type('<b>It</b> rang   twice.');
+  await pg.evaluate(() => { window.reply = 'The scene has moved on from this moment.'; });
+  await pg.keyboard.press('Enter');
+  await pg.waitForFunction(() => document.querySelector('.cs-cut-err').textContent.includes('moved on'));
+  assert.equal(await pg.inputValue('.cs-cut-box textarea'), '<b>It</b> rang   twice.', 'a refusal keeps the words');
+
+  await pg.evaluate(() => { window.reply = 'ok'; });
+  await pg.click('.cs-cut-box .cs-cut-go');
+  await pg.waitForSelector('.cs-cut-said');
+  assert.deepEqual(await pg.evaluate(() => window.sent.at(-1)), [0, 'write', '<b>It</b> rang twice.']);
+  assert.equal(await pg.textContent('.cs-cut-said'), '“<b>It</b> rang twice.”', 'the answer is text, never markup');
+  assert.equal(await pg.$('.cs-cut-said b'), null);
+  assert.match(await pg.textContent('.cs-cut-note'), /Your Director reads it before it joins the story/);
+
+  // Escape in the box steps back rather than closing the scene.
+  await pg.click('text=Change my answer');
+  await pg.click('.cs-cut-way >> nth=0');
+  assert.equal(await pg.inputValue('.cs-cut-box textarea'), '<b>It</b> rang twice.', 'changing starts from what was sent');
+  await pg.waitForTimeout(2100);
+  await pg.keyboard.press('Escape');
+  assert.equal(await pg.$('.cs-cut-box'), null);
+  assert.ok(await pg.$('.cs-cut-said'), 'back to the answer as sent');
+  assert.deepEqual(await pg.evaluate(() => window.shut), [], 'Escape in the box did not close the scene');
+
+  // Leave it to your Director sends at once.
+  await pg.click('text=Change my answer');
+  await pg.click('.cs-cut-way >> nth=1');
+  await pg.waitForFunction(() => window.sent.length === 3);
+  assert.deepEqual(await pg.evaluate(() => window.sent.at(-1)), [0, 'director', '']);
+  assert.match(await pg.textContent('.cs-cut-note'), /You left it to your Director/);
+  assert.equal(await pg.evaluate(() => window.run.held()), 0, 'answering never lets the scene go on');
+  assert.deepEqual(errors, []);
+});
+
+test('who else is answering shows under the question, and one person\'s moment shuts for the rest', { skip }, async (t) => {
+  const { pg, errors } = await open(t);
+  await startAnswering(pg, SCENE([{ at: 0.3, ask: ASK, ways: [{ kind: 'write' }], to: 'one' }]));
+  await pg.waitForFunction(() => window.run.held() === 0);
+  await pg.evaluate(() => window.run.status(0, '<i>Ana</i> is answering this one.', true));
+  assert.equal(await pg.textContent('.cs-cut-status'), '<i>Ana</i> is answering this one.');
+  assert.equal(await pg.$eval('.cs-cut-way', (b) => b.disabled), true);
+  await pg.evaluate(() => window.run.status(0, '', false));
+  assert.equal(await pg.$eval('.cs-cut-way', (b) => b.disabled), false);
+  assert.deepEqual(errors, []);
+});
+
+test('go() shows the lines that joined the story, then the scene runs on; a late screen gets its answer back', { skip }, async (t) => {
+  const { pg, errors } = await open(t);
+  await startAnswering(pg, SCENE([{ at: 0.3, ask: ASK, ways: [{ kind: 'write' }] }, { at: 0.6, ask: 'And then?', ways: [{ kind: 'write' }] }]));
+  await pg.waitForFunction(() => window.run.held() === 0);
+  await pg.evaluate(() => window.run.answered(0, { way: 'write', text: 'Sent before the reload.' }));
+  assert.equal(await pg.textContent('.cs-cut-said'), '“Sent before the reload.”');
+
+  await pg.evaluate(() => window.run.go(0, [{ line: '<em>It</em> rang.', from: 'Ana' }, { line: '', from: 'Bo' }]));
+  const lines = await pg.$$eval('.cs-cut-lines li', (ls) => ls.map((l) => l.textContent));
+  assert.deepEqual(lines, ['“<em>It</em> rang.”from Ana'], 'only real lines, as text');
+  assert.equal(await pg.textContent('.cs-cut-turn'), 'Joins the story');
+  assert.equal(await pg.evaluate(() => window.run.held()), 0, 'the lines stay a while');
+  await pg.waitForFunction(() => window.run.held() === 1, null, { timeout: 8000 });
+  assert.equal(await pg.$('.cs-cut-lines'), null);
+
+  // Let go with nothing added: straight on.
+  await pg.evaluate(() => window.run.go(1, []));
+  assert.equal(await pg.evaluate(() => window.run.held()), -1);
+  assert.deepEqual(errors, []);
+});
+
+test('moments already let go are played past', { skip }, async (t) => {
+  const { pg, errors } = await open(t);
+  await startAnswering(pg, SCENE([{ at: 0.2, ask: ASK, ways: [{ kind: 'write' }] }, { at: 0.4, ask: 'And then?', ways: [{ kind: 'write' }] }]), { released: [0] });
+  await pg.waitForFunction(() => window.run.held() === 1);
+  assert.equal(await pg.textContent('.cs-cut-q'), 'And then?');
+  assert.deepEqual(errors, []);
+});
+
+test('without onAnswer the ways stay drawn but not answerable', { skip }, async (t) => {
+  const { pg, errors } = await open(t);
+  await start(pg, SCENE([{ at: 0.2, ask: ASK, ways: [{ kind: 'write' }] }]));
+  await pg.waitForFunction(() => window.run.held() === 0);
+  assert.equal(await pg.$('button.cs-cut-way'), null);
+  assert.equal(await pg.getAttribute('li.cs-cut-way', 'aria-disabled'), 'true');
   assert.deepEqual(errors, []);
 });

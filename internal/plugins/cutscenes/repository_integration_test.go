@@ -242,3 +242,102 @@ func TestDBScenesAndShowings(t *testing.T) {
 		}
 	})
 }
+
+// Answers: one per viewer per moment, replaced while it waits and fixed once
+// decided; every read and write stays in its campaign; a moment let go is
+// remembered on the showing; deleting the showing takes its answers along.
+func TestDBMomentAnswers(t *testing.T) {
+	db := scratch(t)
+	ctx := context.Background()
+	repo := NewRepository(db)
+	dir, ana, bo := seedUser(t, db, "Dir"), seedUser(t, db, "Ana"), seedUser(t, db, "Bo")
+	c1, c2 := seedCampaign(t, db, dir, "One"), seedCampaign(t, db, dir, "Two")
+	in := NewScene()
+	in.Name = "Asks"
+	in.Moments = []Moment{{At: 1, Ask: "Q", Ways: []Way{{Kind: WayWrite}}}, {At: 2, Ask: "R", Ways: []Way{{Kind: WayWrite}}}}
+	sc, err := Normalize(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc.ID = uuid.NewString()
+	if err := repo.CreateScene(ctx, c1, dir, sc); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	sh := Showing{ID: uuid.NewString(), CampaignID: c1, SceneID: sc.ID, Scene: sc, ShownBy: dir, ShownAt: now, RewatchUntil: now.Add(time.Hour),
+		Viewers: []ShowingViewer{{UserID: ana}, {UserID: bo}}}
+	if err := repo.CreateShowing(ctx, sh); err != nil {
+		t.Fatal(err)
+	}
+	answer := func(user, text string) Answer {
+		return Answer{ID: uuid.NewString(), ShowingID: sh.ID, Moment: 0, UserID: user, Way: WayWrite, Text: text, Status: AnswerWaiting, CreatedAt: now}
+	}
+
+	if err := repo.SaveAnswer(ctx, c1, answer(ana, "first")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveAnswer(ctx, c1, answer(ana, "second")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveAnswer(ctx, c1, answer(bo, "Bo's")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveAnswer(ctx, c2, answer(bo, "elsewhere")); code(err) != 404 {
+		t.Errorf("another campaign's address saved an answer: %v", err)
+	}
+	all, err := repo.ListAnswers(ctx, c1, sh.ID, "")
+	if err != nil || len(all) != 2 {
+		t.Fatalf("answers %+v, %v", all, err)
+	}
+	mine, _ := repo.ListAnswers(ctx, c1, sh.ID, ana)
+	if len(mine) != 1 || mine[0].Text != "second" || mine[0].Status != AnswerWaiting {
+		t.Errorf("Ana's answers %+v", mine)
+	}
+	if l, _ := repo.ListAnswers(ctx, c2, sh.ID, ""); len(l) != 0 {
+		t.Errorf("another campaign listed %d answers", len(l))
+	}
+	if _, err := repo.GetAnswer(ctx, c2, sh.ID, mine[0].ID); code(err) != 404 {
+		t.Errorf("another campaign read an answer: %v", err)
+	}
+
+	page := uuid.NewString()
+	if err := repo.ResolveAnswer(ctx, c2, mine[0].ID, AnswerChanged, "x", page, now); code(err) != 409 {
+		t.Errorf("another campaign decided it: %v", err)
+	}
+	if err := repo.ResolveAnswer(ctx, c1, mine[0].ID, AnswerChanged, "It rang twice.", page, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ResolveAnswer(ctx, c1, mine[0].ID, AnswerDeclined, "", "", now); code(err) != 409 {
+		t.Errorf("decided twice: %v", err)
+	}
+	got, err := repo.GetAnswer(ctx, c1, sh.ID, mine[0].ID)
+	if err != nil || got.Status != AnswerChanged || got.Line != "It rang twice." || got.PageID != page || got.Text != "second" || got.ResolvedAt == nil {
+		t.Errorf("decided answer %+v, %v", got, err)
+	}
+	if err := repo.SaveAnswer(ctx, c1, answer(ana, "third")); code(err) != 409 {
+		t.Errorf("replaced a decided answer: %v", err)
+	}
+
+	if err := repo.ReleaseMoment(ctx, c2, sh.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := repo.GetShowing(ctx, c1, sh.ID); s.Released != 0 {
+		t.Errorf("another campaign let a moment go: %b", s.Released)
+	}
+	for _, i := range []int{1, 1, 0} {
+		if err := repo.ReleaseMoment(ctx, c1, sh.ID, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s, _ := repo.GetShowing(ctx, c1, sh.ID); s.Released != 0b11 || s.Current() != -1 {
+		t.Errorf("released %b", s.Released)
+	}
+
+	if _, err := db.Exec(`DELETE FROM cutscene_showings WHERE id = ?`, sh.ID); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cutscene_moment_answers WHERE showing_id = ?`, sh.ID).Scan(&n); err != nil || n != 0 {
+		t.Errorf("answers left = %d, %v", n, err)
+	}
+}

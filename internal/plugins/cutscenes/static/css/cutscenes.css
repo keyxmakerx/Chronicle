@@ -154,6 +154,31 @@ html[data-motion="off"] .csw-sheet { animation: none; }
 .csw-rewatch { margin: 12px 0 0; padding: 0; border: 0; }
 .csw-sheet-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
 
+/* The moments panel: each showing that holds on a moment, as a sheet on the
+ * scene's page, with what the viewers answered and what to do with it. */
+.csw-moments:empty { display: none; }
+.csw-moments > .csw-err { margin: 0 0 8px; max-width: 36rem; }
+.csw-mo { margin: 8px 0 12px; padding: 12px 16px 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: var(--elev-hover); max-width: 36rem; }
+.csw-mo-ask { margin: 0 0 4px; font-size: 1rem; font-weight: 600; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.csw-mo-note { margin: 0 0 8px; font-size: 0.875rem; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.csw-mo-note .csw-only { margin: 0 6px 0 0; }
+.csw-mo-ans { margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--color-border-light); }
+.csw-mo-by { margin: 0 0 4px; font-size: 0.8125rem; font-weight: 500; color: var(--color-text-secondary); }
+.csw-mo-said { margin: 0 0 8px; font-size: 0.9375rem; line-height: 1.5; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.csw-mo-page { max-width: 22rem; margin-bottom: 8px; }
+.csw-mo-acts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin: 0 0 6px; }
+.csw-mo-change[open] { flex-basis: 100%; }
+.csw-mo-change > summary { list-style: none; cursor: pointer; }
+.csw-mo-change > summary::-webkit-details-marker { display: none; }
+.csw-mo-change[open] > summary { box-shadow: inset 0 -2px 0 var(--color-accent); }
+.csw-mo-change > .csw-field { margin: 8px 0; }
+.csw-mo-go { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 16px; }
+
+@media (max-width: 640px) {
+	.csw-mo { padding: 12px; }
+	.csw-mo-acts > button, .csw-mo-change > summary, .csw-mo-change > button, .csw-mo-go > button { min-height: 44px; }
+}
+
 @media (max-width: 640px) {
 	.csw-num { width: 5.5rem; }
 	.csw-item { gap: 0 14px; }
