@@ -3,6 +3,7 @@ package cutscenes
 import (
 	"math"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,10 +33,76 @@ func TestNormalize(t *testing.T) {
 			}
 		}},
 		{name: "invalid utf-8 refused", edit: func(s *Scene) { s.Name = "bad\xff" }, wantErr: "UTF-8"},
+		{name: "no moments stay nil", edit: func(s *Scene) { s.Moments = []Moment{} }, check: func(t *testing.T, s Scene) {
+			if s.Moments != nil {
+				t.Errorf("moments %+v", s.Moments)
+			}
+		}},
+		{name: "a moment is clamped, trimmed and its ways put in order; none is writing it", edit: func(s *Scene) {
+			s.Moments = []Moment{{At: 500, Ask: " What\ndo they whisper? ", Ways: []Way{{Kind: "Director"}, {Kind: "write"}, {Kind: "write"}}, To: "one", Note: " the\tbell "}, {At: -2, Ask: "Q", To: "each"}}
+		}, check: func(t *testing.T, s Scene) {
+			want := []Moment{{At: MaxAt, Ask: "What do they whisper?", Ways: []Way{{Kind: WayWrite}, {Kind: WayDirector}}, To: ToOne, Note: "the bell"}, {At: 0, Ask: "Q", Ways: []Way{{Kind: WayWrite}}}}
+			if !reflect.DeepEqual(s.Moments, want) {
+				t.Errorf("moments %+v", s.Moments)
+			}
+		}},
+		{name: "a moment needs a question", edit: func(s *Scene) { s.Moments = []Moment{{At: 1, Ask: " "}} }, wantErr: "moment 1 has no question"},
+		{name: "a question too long", edit: func(s *Scene) { s.Moments = []Moment{{Ask: strings.Repeat("a", MaxAskChars+1)}} }, wantErr: "the most is 200"},
+		{name: "a note too long", edit: func(s *Scene) { s.Moments = []Moment{{Ask: "Q", Note: strings.Repeat("a", MaxNoteChars+1)}} }, wantErr: "note is 501 characters"},
+		{name: "too many moments", edit: func(s *Scene) { s.Moments = make([]Moment, MaxMoments+1) }, wantErr: "at most 6 moments"},
+		{name: "an unknown way refused by name", edit: func(s *Scene) { s.Moments = []Moment{{Ask: "Q", Ways: []Way{{Kind: "roll"}}}} }, wantErr: `the way to answer "roll" is not one of write, director`},
+		{name: "an unknown answerer refused by name", edit: func(s *Scene) { s.Moments = []Moment{{Ask: "Q", To: "ana"}} }, wantErr: `who answers "ana" is not one of each, one`},
 		{name: "unknown background refused", edit: func(s *Scene) { s.Background.Kind = "explode" }, wantErr: `the background "explode" is not one of fall-asleep`},
 		{name: "empty background defaults to falling asleep", edit: func(s *Scene) { s.Background = Background{} }, check: func(t *testing.T, s Scene) {
 			if s.Background.Kind != BackgroundFallAsleep || s.Background.Seconds != DefaultSeconds {
 				t.Errorf("bg %+v", s.Background)
+			}
+		}},
+		{name: "a black background's separate arrival is stored as its old kind name", edit: func(s *Scene) {
+			s.Background = Background{Kind: BackgroundBlack, In: ArriveFade, Seconds: 3}
+		}, check: func(t *testing.T, s Scene) {
+			if s.Background != (Background{Kind: BackgroundFadeToBlack, Seconds: 3}) {
+				t.Errorf("bg %+v", s.Background)
+			}
+		}},
+		{name: "an arrival wins over an old kind name, and nothing stays nothing", edit: func(s *Scene) {
+			s.Background = Background{Kind: BackgroundFallAsleep, In: ArriveCut}
+		}, check: func(t *testing.T, s Scene) {
+			if s.Background.Kind != BackgroundBlack || s.Background.In != "" {
+				t.Errorf("bg %+v", s.Background)
+			}
+			n, err := Normalize(Scene{Name: "N", Background: Background{Kind: BackgroundNone, In: ArriveFallAsleep}})
+			if err != nil || n.Background.Kind != BackgroundNone {
+				t.Errorf("none: %+v %v", n.Background, err)
+			}
+		}},
+		{name: "an unknown arrival is refused", edit: func(s *Scene) { s.Background.In = "swirl" }, wantErr: `the background's arrival "swirl" is not one of cut, fade, fall-asleep`},
+		{name: "a line's place, arrival and leaving are kept, the defaults stored blank", edit: func(s *Scene) {
+			s.Text = []TextLine{
+				{Say: "Saltreach", Style: StyleTitle, Layout: " Corner ", In: TextSlide, Out: TextSlide},
+				{Say: "Middle", Layout: LayoutMiddle},
+				{Say: "Chapter two", Style: StyleCaption, In: TextSettle, Out: TextSink},
+			}
+		}, check: func(t *testing.T, s Scene) {
+			want := []TextLine{
+				{Say: "Saltreach", Seconds: 0, Style: StyleTitle, Layout: LayoutCorner, In: TextSlide, Out: TextSlide},
+				{Say: "Middle", Style: StylePlain},
+				{Say: "Chapter two", Style: StyleCaption, In: TextSettle, Out: TextSink},
+			}
+			for i := range want {
+				if s.Text[i] != want[i] {
+					t.Errorf("line %d: %+v, want %+v", i+1, s.Text[i], want[i])
+				}
+			}
+		}},
+		{name: "an unknown place is refused", edit: func(s *Scene) { s.Text[0].Layout = "top" }, wantErr: `words 1: the place "top" is not one of middle, corner`},
+		{name: "an unknown arrival for words is refused", edit: func(s *Scene) { s.Text[0].In = "spin" }, wantErr: `words 1: the arrival "spin" is not one of fade, rise, settle, slide`},
+		{name: "an unknown leaving for words is refused", edit: func(s *Scene) { s.Text[0].Out = "explode" }, wantErr: `words 1: the leaving "explode" is not one of fade, sink, slide`},
+		{name: "film bars take no colour", edit: func(s *Scene) {
+			s.Overlays = append(s.Overlays, Overlay{Kind: OverlayLetterbox, Seconds: 1, Params: Params{Color: "#ff0000"}})
+		}, check: func(t *testing.T, s Scene) {
+			if s.Overlays[1] != (Overlay{Kind: OverlayLetterbox, Seconds: 1}) {
+				t.Errorf("letterbox %+v", s.Overlays[1])
 			}
 		}},
 		{name: "background params are dropped", edit: func(s *Scene) { s.Background.Params.Color = "#ffffff" }, check: func(t *testing.T, s Scene) {
@@ -253,6 +320,18 @@ func TestSceneFromForm(t *testing.T) {
 				t.Errorf("looks: bg %+v overlays %+v", s.Background, s.Overlays)
 			}
 		}},
+		{name: "the background's arrival and each line's place, arrival and leaving are read by row", form: url.Values{
+			"name": {"N"}, "bg_kind": {"black"}, "bg_in": {"fall-asleep"},
+			"tx_say": {"one", "", "three"}, "tx_layout": {"corner", "corner", "middle"}, "tx_in": {"slide", "fade", ""}, "tx_out": {"", "sink", "fade"},
+		}, check: func(t *testing.T, s Scene) {
+			if s.Background.Kind != BackgroundBlack || s.Background.In != ArriveFallAsleep {
+				t.Errorf("bg %+v", s.Background)
+			}
+			if len(s.Text) != 2 || s.Text[0].Layout != LayoutCorner || s.Text[0].In != TextSlide || s.Text[0].Out != "" ||
+				s.Text[1].Layout != LayoutMiddle || s.Text[1].In != "" || s.Text[1].Out != TextFade {
+				t.Errorf("text %+v", s.Text)
+			}
+		}},
 		{name: "empty numbers read as 0", form: url.Values{"name": {"N"}, "tx_say": {"x"}}, check: func(t *testing.T, s Scene) {
 			if s.Text[0].At != 0 || s.Text[0].Seconds != 0 {
 				t.Errorf("text %+v", s.Text)
@@ -263,6 +342,16 @@ func TestSceneFromForm(t *testing.T) {
 				t.Errorf("after read on tap")
 			}
 		}},
+		{name: "moments line up by row, their ways split, and spare rows are skipped", form: url.Values{
+			"name": {"N"}, "mo_ask": {"Why?", " ", "Who?"}, "mo_at": {"4", "9", "7,5"}, "mo_ways": {"write director", "write", "director"},
+			"mo_to": {"", "each", "one"}, "mo_note": {"mine", "", ""},
+		}, check: func(t *testing.T, s Scene) {
+			want := []Moment{{At: 4, Ask: "Why?", Ways: []Way{{Kind: "write"}, {Kind: "director"}}, Note: "mine"}, {At: 7.5, Ask: "Who?", Ways: []Way{{Kind: "director"}}, To: "one"}}
+			if !reflect.DeepEqual(s.Moments, want) {
+				t.Errorf("moments %+v", s.Moments)
+			}
+		}},
+		{name: "a moment's time is a number", form: url.Values{"name": {"N"}, "mo_ask": {"Q"}, "mo_at": {"soon"}}, wantErr: "moment 1's time"},
 		{name: "a word is not a number", form: url.Values{"name": {"N"}, "bg_seconds": {"seven"}}, wantErr: "the background's time must be a number"},
 		{name: "NaN is not a number", form: url.Values{"name": {"N"}, "ov_kind": {"eye"}, "ov_at": {"NaN"}}, wantErr: "layer on top 1's start"},
 		{name: "Inf is not a number", form: url.Values{"name": {"N"}, "tx_say": {"x"}, "tx_seconds": {"Inf"}}, wantErr: "words 1's time on screen"},

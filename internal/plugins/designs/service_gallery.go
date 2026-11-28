@@ -22,7 +22,7 @@ type Gallery interface {
 	Unpublish(ctx context.Context, campaignID, userID, entryID string) error
 	Mine(ctx context.Context, campaignID, userID string) ([]GalleryMine, error)
 	Browse(ctx context.Context, campaignID, userID string, in BrowseInput) (*GalleryPage, error)
-	Copy(ctx context.Context, campaignID, userID, entryID string) (*Design, error)
+	Copy(ctx context.Context, campaignID, userID, entryID string) (*Taken, error)
 	Report(ctx context.Context, campaignID, userID, entryID string, in ReportInput) error
 
 	AdminQueue(ctx context.Context, status string, page int) (*AdminPage, error)
@@ -159,7 +159,7 @@ func orDefault(s, alt string) string {
 // it. Publishing over an entry an admin refused, and "Update in gallery", both
 // come through here, so neither can skip the review the entry is under.
 func (g *gallery) snapshot(ctx context.Context, userID string, e *GalleryEntry, d *Design, name, note, maker string) (*GalleryMine, error) {
-	data, err := g.lib.validData(d.Kind, d.Data)
+	data, err := g.lib.cleanData(d.Kind, d.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (g *gallery) Publish(ctx context.Context, campaignID, userID, designID stri
 		}
 		return nil, apperror.NewConflict(msgAlreadyPub)
 	}
-	data, err := g.lib.validData(d.Kind, d.Data)
+	data, err := g.lib.cleanData(d.Kind, d.Data)
 	if err != nil {
 		return nil, err
 	}

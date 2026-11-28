@@ -2,6 +2,7 @@ package cutscenes
 
 import (
 	"fmt"
+	"strings"
 	"text/template"
 	"time"
 
@@ -175,14 +176,38 @@ func endingOnChange() templ.ComponentScript {
 // bgKindOnChange shows the background's Look picker only for the kind that
 // has looks. The hidden picker still posts; the server drops a look on a kind
 // without looks, so a hidden choice never reaches the scene.
+// The background is two pickers, what it is and how it arrives: the arrival
+// and its time only mean something on black.
 func bgKindOnChange() templ.ComponentScript {
-	return inline("cswBgKind", `(function(s){var f=s.closest('form');if(!f){return;}var l=f.querySelector('[data-csw-bg-look]');if(l){l.hidden=s.value!==`+jsStr(BackgroundFallAsleep)+`;}})(this)`)
+	return inline("cswBgKind", `(function(s){var f=s.closest('form');if(!f){return;}var k=f.querySelector('[name=bg_kind]'),a=f.querySelector('[name=bg_in]');if(!k||!a){return;}var black=k.value!==`+jsStr(BackgroundNone)+`;f.querySelectorAll('[data-csw-bg-in]').forEach(function(e){e.hidden=!black;});var l=f.querySelector('[data-csw-bg-look]');if(l){l.hidden=!black||a.value!==`+jsStr(ArriveFallAsleep)+`;}var t=f.querySelector('[data-csw-bg-sec]');if(t){t.hidden=!black||a.value===`+jsStr(ArriveCut)+`;}})(this)`)
 }
 
 // ovKindOnChange does the same for one layer on top: only an eye has looks
 // and a pupil.
 func ovKindOnChange() templ.ComponentScript {
-	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});})(this)`)
+	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});var c=r.querySelector('[data-csw-ov-color]');if(c){c.hidden=s.value===`+jsStr(OverlayLetterbox)+`;}})(this)`)
+}
+
+// wayChoices are the editor's ways to answer a moment, as the Director
+// reads them: the value is the kinds it stores, space-separated.
+func wayChoices() []Kind {
+	return []Kind{
+		{Key: WayWrite, Name: "They write it"},
+		{Key: WayDirector, Name: "You answer it"},
+		{Key: WayWrite + " " + WayDirector, Name: "They write it, or leave it to you"},
+	}
+}
+
+// waysValue is a moment's ways as the editor's select value.
+func waysValue(ws []Way) string {
+	ks := make([]string, 0, len(ws))
+	for _, w := range ws {
+		ks = append(ks, w.Kind)
+	}
+	if len(ks) == 0 {
+		return WayWrite
+	}
+	return strings.Join(ks, " ")
 }
 
 func afterValue(e Ending) string {

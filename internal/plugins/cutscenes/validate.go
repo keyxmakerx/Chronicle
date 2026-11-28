@@ -42,6 +42,12 @@ func Normalize(in Scene) (Scene, error) {
 	if !known(BackgroundKinds, bg.Kind) {
 		return out, apperror.NewBadRequest(fmt.Sprintf("the background %q is not one of %s", bg.Kind, keys(BackgroundKinds)))
 	}
+	if bg.In != "" {
+		if !known(Arrivals, bg.In) {
+			return out, apperror.NewBadRequest(fmt.Sprintf("the background's arrival %q is not one of %s", bg.In, keys(Arrivals)))
+		}
+		bg.Kind = KindFor(BackdropOf(bg.Kind), bg.In)
+	}
 	out.Background = Background{Kind: bg.Kind, Seconds: seconds(bg.Seconds, DefaultSeconds), Params: Params{Look: look(bg.Kind, bg.Params.Look)}}
 
 	if len(in.Overlays) > MaxOverlays {
@@ -55,6 +61,9 @@ func Normalize(in Scene) (Scene, error) {
 		c, err := color(o.Params.Color, defaultColor(o.Kind))
 		if err != nil {
 			return out, apperror.NewBadRequest(fmt.Sprintf("layer on top %d: %s", i+1, err.Error()))
+		}
+		if o.Kind == OverlayLetterbox {
+			c = "" // film bars are always black
 		}
 		out.Overlays = append(out.Overlays, Overlay{Kind: o.Kind, At: at(o.At), Seconds: seconds(o.Seconds, DefaultSeconds), Params: Params{Color: c, Look: look(o.Kind, o.Params.Look), Pupil: pupil(o.Kind, o.Params.Pupil)}})
 	}
@@ -81,7 +90,21 @@ func Normalize(in Scene) (Scene, error) {
 		if !known(TextStyles, style) {
 			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the style %q is not one of %s", i+1, style, keys(TextStyles)))
 		}
-		out.Text = append(out.Text, TextLine{Say: say, At: at(t.At), Seconds: lineSeconds(t.Seconds), Style: style})
+		line := TextLine{Say: say, At: at(t.At), Seconds: lineSeconds(t.Seconds), Style: style}
+		if line.Layout, err = choice(TextLayouts, t.Layout, LayoutMiddle); err != nil {
+			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the place %s", i+1, err.Error()))
+		}
+		if line.In, err = choice(TextArrivals, t.In, ""); err != nil {
+			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the arrival %s", i+1, err.Error()))
+		}
+		if line.Out, err = choice(TextLeavings, t.Out, ""); err != nil {
+			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the leaving %s", i+1, err.Error()))
+		}
+		out.Text = append(out.Text, line)
+	}
+
+	if out.Moments, err = checkMoments(in.Moments); err != nil {
+		return out, err
 	}
 
 	end := in.Ending
@@ -103,6 +126,62 @@ func Normalize(in Scene) (Scene, error) {
 	return out, nil
 }
 
+// checkMoments checks each moment: a question is needed, ways are known kinds
+// (none means writing it), and the note stays within its limit. A scene
+// with no moments keeps a nil list, so an older scene is stored unchanged.
+func checkMoments(in []Moment) ([]Moment, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	if len(in) > MaxMoments {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("a scene can have at most %d moments", MaxMoments))
+	}
+	out := make([]Moment, 0, len(in))
+	for i, m := range in {
+		ask, err := plainText(m.Ask)
+		if err != nil {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d: %s", i+1, err.Error()))
+		}
+		if ask == "" {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d has no question; write one or remove the moment", i+1))
+		}
+		if n := utf8.RuneCountInString(ask); n > MaxAskChars {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d's question is %d characters; the most is %d", i+1, n, MaxAskChars))
+		}
+		note, err := plainText(m.Note)
+		if err != nil {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d's note: %s", i+1, err.Error()))
+		}
+		if n := utf8.RuneCountInString(note); n > MaxNoteChars {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d's note is %d characters; the most is %d", i+1, n, MaxNoteChars))
+		}
+		mo := Moment{At: at(m.At), Ask: ask, Note: note}
+		if mo.To, err = choice(Answerers, m.To, ToEach); err != nil {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d: who answers %s", i+1, err.Error()))
+		}
+		seen := map[string]bool{}
+		for _, w := range m.Ways {
+			k := strings.ToLower(strings.TrimSpace(w.Kind))
+			if !known(WayKinds, k) {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("moment %d: the way to answer %q is not one of %s", i+1, w.Kind, keys(WayKinds)))
+			}
+			seen[k] = true
+		}
+		// Kept in WayKinds' order, the order the engine draws them, so the
+		// same choice is always stored the same way.
+		for _, k := range WayKinds {
+			if seen[k.Key] {
+				mo.Ways = append(mo.Ways, Way{Kind: k.Key})
+			}
+		}
+		if len(mo.Ways) == 0 {
+			mo.Ways = []Way{{Kind: WayKinds[0].Key}}
+		}
+		out = append(out, mo)
+	}
+	return out, nil
+}
+
 // NewScene is the scene a "New scene" page starts from: the first built-in
 // animation, the screen falling asleep and a green eye opening, with one
 // whispered line under it.
@@ -113,6 +192,19 @@ func NewScene() Scene {
 		Text:       []TextLine{{Say: "Something has noticed you.", At: 11, Seconds: 5, Style: StyleWhisper}},
 		Ending:     Ending{Kind: EndingTap},
 	}
+}
+
+// choice reads an optional pick from list: blank or the default is stored
+// blank, so only a choice that differs from the default is kept.
+func choice(list []Kind, key, def string) (string, error) {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if key == "" || key == def {
+		return "", nil
+	}
+	if !known(list, key) {
+		return "", fmt.Errorf("%q is not one of %s", key, keys(list))
+	}
+	return key, nil
 }
 
 func known(list []Kind, key string) bool {

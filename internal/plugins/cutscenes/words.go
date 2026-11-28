@@ -47,9 +47,13 @@ func BackgroundWords(b Background) string {
 // OverlayWords says one layer on top: "green eye at 7.5 s".
 func OverlayWords(o Overlay) string {
 	noun := "eye"
-	if o.Kind == OverlayEmbers {
+	switch o.Kind {
+	case OverlayEye:
+	case OverlayEmbers:
 		noun = "embers"
-	} else if o.Kind != OverlayEye {
+	case OverlayLetterbox:
+		noun = "film bars"
+	default:
 		noun = o.Kind
 	}
 	c := ColorName(o.Params.Color)
@@ -123,6 +127,37 @@ func TextWords(t TextLine) string {
 	}
 	if t.Style != "" && t.Style != StylePlain {
 		s += ", " + strings.ToLower(kindName(TextStyles, t.Style))
+	}
+	if t.Layout != "" {
+		s += ", " + strings.ToLower(kindName(TextLayouts, t.Layout))
+	}
+	if t.In != "" {
+		s += ", " + strings.ToLower(kindName(TextArrivals, t.In))
+	}
+	if t.Out != "" {
+		s += ", " + strings.ToLower(kindName(TextLeavings, t.Out))
+	}
+	return s
+}
+
+// MomentWords says one moment: "holds at 12 s to ask 'What do the
+// fishermen whisper?', each person writes it". The note is the Director's and
+// is said apart, so a summary meant for others can leave it out.
+func MomentWords(m Moment) string {
+	s := fmt.Sprintf("holds at %s to ask %q", Secs(m.At), m.Ask)
+	who := "each person"
+	if m.To == ToOne {
+		who = "one person"
+	}
+	ways := make([]string, 0, len(m.Ways))
+	for _, w := range m.Ways {
+		ways = append(ways, strings.ToLower(kindName(WayKinds, w.Kind)))
+	}
+	if len(ways) > 0 {
+		s += ", " + who + ": " + strings.Join(ways, " or ")
+	}
+	if m.Note != "" {
+		s += fmt.Sprintf(" (your note: %q)", m.Note)
 	}
 	return s
 }

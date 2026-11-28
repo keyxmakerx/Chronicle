@@ -236,6 +236,7 @@ type spyFoundry struct {
 	offered   bool
 	connected bool
 	sent      []string
+	scenes    []Scene
 }
 
 func (f *spyFoundry) Offered(context.Context, string) bool { return f.offered }
@@ -247,6 +248,7 @@ func (f *spyFoundry) Preview(campaignID, directorID string, sc Scene) bool {
 		return false
 	}
 	f.sent = append(f.sent, campaignID+"/"+directorID+"/"+sc.Name)
+	f.scenes = append(f.scenes, sc)
 	return true
 }
 
@@ -256,11 +258,11 @@ type clock struct{ t time.Time }
 func (c *clock) now() time.Time { return c.t }
 
 type rig struct {
-	repo  *memRepo
+	repo    *memRepo
 	pub     *spyPublisher
 	foundry *spyFoundry
 	clock   *clock
-	svc   Service
+	svc     Service
 }
 
 var (

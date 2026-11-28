@@ -20,8 +20,13 @@ const EYE_SCENE = {
 
 test('the kinds the engine lists are the ones it is built to draw', () => {
   assert.deepEqual(engine.kinds.background, ['fall-asleep', 'black', 'fade-to-black', 'none']);
-  assert.deepEqual(engine.kinds.overlays, ['eye', 'embers']);
-  assert.deepEqual(engine.kinds.textStyles, ['whisper', 'title', 'plain']);
+  assert.deepEqual(engine.kinds.arrivals, ['cut', 'fade', 'fall-asleep']);
+  assert.deepEqual(engine.kinds.overlays, ['eye', 'embers', 'letterbox']);
+  assert.deepEqual(engine.kinds.textStyles, ['whisper', 'title', 'plain', 'caption']);
+  assert.deepEqual(engine.kinds.layouts, ['middle', 'corner']);
+  assert.deepEqual(engine.kinds.textArrivals, ['fade', 'rise', 'settle', 'slide']);
+  assert.deepEqual(engine.kinds.textLeavings, ['fade', 'sink', 'slide']);
+  assert.deepEqual(engine.kinds.ways, ['write', 'director']);
   // Every look has a plain name for the editor and the AI, and the default is one of them.
   for (const [kind, looks] of Object.entries(engine.looks)) {
     assert.ok(looks.length >= 3, kind);
@@ -137,12 +142,41 @@ test('timeline knows when the last layer has finished arriving', () => {
     { name: 'a line that stays counts once it has arrived', scene: { ...EYE_SCENE, text: [{ say: 'x', at: 11, seconds: 0 }] }, last: 11 + TEXT_IN, closeAt: null },
     { name: 'black is there at once', scene: { background: { kind: 'black', seconds: 30 } }, last: 0, closeAt: null },
     { name: 'auto closes after the last layer', scene: { background: { kind: 'fade-to-black', seconds: 4 }, ending: { kind: 'auto', after: 3 } }, last: 4, closeAt: 7 },
-    { name: 'an overlay counts once built', scene: { background: { kind: 'none' }, overlays: [{ kind: 'embers', at: 2, seconds: 5 }] }, last: 7, closeAt: null }
+    { name: 'an overlay counts once built', scene: { background: { kind: 'none' }, overlays: [{ kind: 'embers', at: 2, seconds: 5 }] }, last: 7, closeAt: null },
+    { name: 'a moment after every layer is reached before Close', scene: { ...EYE_SCENE, moments: [{ at: 20, ask: 'Who is it?' }] }, last: 20, closeAt: null }
   ];
   for (const c of cases) {
     const tl = timeline(c.scene);
     assert.equal(tl.last, c.last, c.name);
     assert.equal(tl.closeAt, c.closeAt, c.name);
+  }
+});
+
+test('normalise reads moments and never keeps the Director\'s note', () => {
+  const cases = [
+    { name: 'a scene without moments has no moments key', in: EYE_SCENE, want: undefined },
+    { name: 'an empty list is the same as none', in: { ...EYE_SCENE, moments: [] }, want: undefined },
+    {
+      name: 'a moment keeps its time, question and ways, and drops the note',
+      in: { moments: [{ at: 12, ask: '  What do the\nfishermen whisper? ', ways: [{ kind: 'director' }, { kind: 'write' }], to: 'one', note: 'they lie' }] },
+      want: [{ at: 12, ask: 'What do the fishermen whisper?', ways: [{ kind: 'write' }, { kind: 'director' }], to: 'one' }]
+    },
+    {
+      name: 'no known way is writing it; bare names are read too; each person is the default',
+      in: { moments: [{ at: 3, ask: 'A', ways: ['juggle'] }, { at: 4, ask: 'B', ways: ['director'], to: 'everyone' }] },
+      want: [{ at: 3, ask: 'A', ways: [{ kind: 'write' }] }, { at: 4, ask: 'B', ways: [{ kind: 'director' }] }]
+    },
+    {
+      name: 'a moment with no question is dropped, times are clamped, and only the first six entries are read',
+      in: { moments: [{ at: 500, ask: 'late' }, { ask: ' ' }, null, ...Array.from({ length: 8 }, (_, i) => ({ at: i, ask: 'q' + i }))] },
+      check: (m) => { assert.equal(m.length, 4); assert.equal(m[0].at, 120); assert.equal(m[0].ask, 'late'); }
+    }
+  ];
+  for (const c of cases) {
+    const got = normalise(c.in).moments;
+    if (c.check) c.check(got);
+    else assert.deepEqual(got, c.want, c.name);
+    assert.ok(!JSON.stringify(normalise(c.in)).includes('note'), c.name + ': no note');
   }
 });
 

@@ -148,6 +148,79 @@ func TestShow(t *testing.T) {
 	}
 }
 
+// A moment's note is the Director's: the editor keeps it, and nothing that
+// plays the scene elsewhere carries it. Until answers can travel, a showing
+// plays without its moments at all.
+func TestMomentsStayWithTheDirector(t *testing.T) {
+	r := newRig()
+	in := NewScene()
+	in.Name = "Asks"
+	in.Moments = []Moment{{At: 3, Ask: "What do they whisper?", Note: "the bell"}}
+	sc, err := r.svc.Create(ctx, "camp-1", vDir, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := r.svc.Get(ctx, "camp-1", sc.ID, vDir)
+	if len(got.Moments) != 1 || got.Moments[0].Note != "the bell" || got.Moments[0].Ways[0].Kind != WayWrite {
+		t.Fatalf("the editor lost the moment: %+v", got.Moments)
+	}
+
+	back, err := r.svc.PreviewInFoundry(ctx, "camp-1", vDir, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.foundry.scenes) != 1 || len(r.foundry.scenes[0].Moments) != 1 || r.foundry.scenes[0].Moments[0].Note != "" || r.foundry.scenes[0].Moments[0].Ask == "" {
+		t.Errorf("Foundry's preview: %+v", r.foundry.scenes)
+	}
+	if back.Moments[0].Note != "the bell" {
+		t.Errorf("the Director's own copy lost the note")
+	}
+
+	sh, err := r.svc.Show(ctx, "camp-1", sc.ID, vDir, ShowInput{To: []string{"ana"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sh.Scene.Moments != nil || r.pub.shown[len(r.pub.shown)-1].Scene.Moments != nil {
+		t.Errorf("a showing carried moments: %+v", sh.Scene.Moments)
+	}
+
+	// A showing stored with a note (written by hand, or by a later build)
+	// still reads without it.
+	old := *sh
+	old.ID = "old-showing"
+	old.Scene.Moments = []Moment{{At: 1, Ask: "Q", Ways: []Way{{Kind: WayWrite}}, Note: "secret"}}
+	if err := r.repo.CreateShowing(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	read, err := r.svc.Read(ctx, "camp-1", "old-showing", vAna)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := r.svc.MemberShowings(ctx, "camp-1", "ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := append([]Moment{}, read.Scene.Moments...)
+	for _, ms := range list {
+		seen = append(seen, ms.Scene.Moments...)
+	}
+	if len(seen) != 2 {
+		t.Errorf("moments read %+v", seen)
+	}
+	for _, m := range seen {
+		if m.Note != "" {
+			t.Errorf("a player read the note: %+v", m)
+		}
+	}
+	if len(read.Scene.Moments) != 1 {
+		t.Errorf("read moments %+v", read.Scene.Moments)
+	}
+	stored, _ := r.repo.GetShowing(ctx, "camp-1", "old-showing")
+	if stored.Scene.Moments[0].Note != "secret" {
+		t.Errorf("reading changed the stored showing")
+	}
+}
+
 // A showing keeps the scene as it was shown: a later edit or delete does not
 // change what its people can watch again.
 func TestShowingIsASnapshot(t *testing.T) {

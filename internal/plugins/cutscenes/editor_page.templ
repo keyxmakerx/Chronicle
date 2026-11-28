@@ -50,14 +50,23 @@ templ editorForm(p editorPage) {
 			<label for="csw-name">Name</label>
 			<input class="csw-line csw-name" id="csw-name" name="name" type="text" required maxlength={ strconv.Itoa(MaxNameChars) } value={ p.Scene.Name } placeholder="The Eye Opens"/>
 		</div>
+		@timeline()
 		<section class="csw-layer" aria-labelledby="csw-bg-h">
-			<h2 class="csw-lab" id="csw-bg-h">Background <span class="csw-quiet">how the screen goes dark</span></h2>
+			<h2 class="csw-lab" id="csw-bg-h">Background <span class="csw-quiet">what is behind everything, and how it arrives</span></h2>
 			<div class="csw-row-fields">
 				<div class="csw-field">
-					<label for="csw-bg-kind">Effect</label>
+					<label for="csw-bg-kind">Background</label>
 					<select class="csw-select" id="csw-bg-kind" name="bg_kind" onchange={ bgKindOnChange() }>
-						for _, k := range BackgroundKinds {
-							<option value={ k.Key } selected?={ p.Scene.Background.Kind == k.Key }>{ k.Name }</option>
+						for _, k := range Backdrops {
+							<option value={ k.Key } selected?={ BackdropOf(p.Scene.Background.Kind) == k.Key }>{ k.Name }</option>
+						}
+					</select>
+				</div>
+				<div class="csw-field" data-csw-bg-in hidden?={ p.Scene.Background.Kind == BackgroundNone }>
+					<label for="csw-bg-in">Arrives</label>
+					<select class="csw-select" id="csw-bg-in" name="bg_in" onchange={ bgKindOnChange() }>
+						for _, k := range Arrivals {
+							<option value={ k.Key } selected?={ ArrivalOf(p.Scene.Background.Kind) == k.Key }>{ k.Name }</option>
 						}
 					</select>
 				</div>
@@ -69,12 +78,12 @@ templ editorForm(p editorPage) {
 						}
 					</select>
 				</div>
-				<div class="csw-field">
+				<div class="csw-field" data-csw-bg-sec hidden?={ p.Scene.Background.Kind == BackgroundBlack || p.Scene.Background.Kind == BackgroundNone }>
 					<label for="csw-bg-sec">Takes (seconds)</label>
 					<input class="csw-line csw-num" id="csw-bg-sec" name="bg_seconds" type="number" inputmode="decimal" min="0.5" max="60" step="0.1" value={ num(p.Scene.Background.Seconds) }/>
 				</div>
 			</div>
-			<p class="csw-hint">The look changes how falling asleep is drawn. Black ignores the time.</p>
+			<p class="csw-hint">The look changes how falling asleep is drawn.</p>
 		</section>
 		<section class="csw-layer" aria-labelledby="csw-ov-h">
 			<h2 class="csw-lab" id="csw-ov-h">On top <span class="csw-quiet">drawn over the background, in order</span></h2>
@@ -99,6 +108,18 @@ templ editorForm(p editorPage) {
 				@textRow(TextLine{Style: StylePlain, Seconds: DefaultSeconds})
 			</template>
 			<button type="button" class="quiet-word" onclick={ addRowOnClick("csw-tx-list", "csw-tx-tpl", MaxTextLines) }>Add words</button>
+		</section>
+		<section class="csw-layer" aria-labelledby="csw-mo-h">
+			<h2 class="csw-lab" id="csw-mo-h">Moments <span class="csw-quiet">the scene stops and asks a question, and holds until you go on</span></h2>
+			<div class="csw-rows" id="csw-mo-list">
+				for _, m := range p.Scene.Moments {
+					@momentRow(m)
+				}
+			</div>
+			<template id="csw-mo-tpl">
+				@momentRow(Moment{Ways: []Way{{Kind: WayWrite}}})
+			</template>
+			<button type="button" class="quiet-word" onclick={ addRowOnClick("csw-mo-list", "csw-mo-tpl", MaxMoments) }>Add a moment</button>
 		</section>
 		<fieldset class="csw-layer csw-ending">
 			<legend class="csw-lab">Ending</legend>
@@ -192,11 +213,49 @@ templ overlayRow(o Overlay) {
 			<span class="csw-flabel">Builds over (s)</span>
 			<input class="csw-line csw-num" name="ov_seconds" type="number" inputmode="decimal" min="0.5" max="60" step="0.1" value={ num(o.Seconds) }/>
 		</label>
-		<label class="csw-field">
+		<label class="csw-field" data-csw-ov-color hidden?={ o.Kind == OverlayLetterbox }>
 			<span class="csw-flabel">Colour</span>
 			<input class="csw-color" name="ov_color" type="color" value={ colorOr(o.Params.Color, defaultColor(o.Kind)) }/>
 		</label>
 		<button type="button" class="csw-icon" aria-label="Remove this layer" title="Remove" onclick={ removeRowOnClick() }>
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+	</div>
+}
+
+// momentRow is one moment. Its ways are one select whose value lists the
+// kinds, so the row stays one value per field.
+templ momentRow(m Moment) {
+	<div class="csw-item csw-item-moment" data-csw-row>
+		<label class="csw-field csw-say">
+			<span class="csw-flabel">Question</span>
+			<input class="csw-line" name="mo_ask" type="text" maxlength={ strconv.Itoa(MaxAskChars) } value={ m.Ask } placeholder="What do the fishermen whisper about the bell?"/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Holds at (s)</span>
+			<input class="csw-line csw-num" name="mo_at" type="number" inputmode="decimal" min="0" max="120" step="0.1" value={ num(m.At) }/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">How they answer</span>
+			<select class="csw-select" name="mo_ways">
+				for _, w := range wayChoices() {
+					<option value={ w.Key } selected?={ waysValue(m.Ways) == w.Key }>{ w.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Who answers</span>
+			<select class="csw-select" name="mo_to">
+				for _, k := range Answerers {
+					<option value={ k.Key } selected?={ m.To == k.Key || (m.To == "" && k.Key == ToEach) }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field csw-say csw-note">
+			<span class="csw-flabel">Your note <span class="csw-only">Only you</span></span>
+			<input class="csw-line" name="mo_note" type="text" maxlength={ strconv.Itoa(MaxNoteChars) } value={ m.Note } placeholder="What you hope they say, or what happens next"/>
+		</label>
+		<button type="button" class="csw-icon" aria-label="Remove this moment" title="Remove" onclick={ removeRowOnClick() }>
 			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 		</button>
 	</div>
@@ -222,6 +281,32 @@ templ textRow(t TextLine) {
 			<select class="csw-select" name="tx_style">
 				for _, k := range TextStyles {
 					<option value={ k.Key } selected?={ t.Style == k.Key }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Place</span>
+			<select class="csw-select" name="tx_layout">
+				for _, k := range TextLayouts {
+					<option value={ k.Key } selected?={ t.Layout == k.Key || (t.Layout == "" && k.Key == LayoutMiddle) }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Arrives</span>
+			<select class="csw-select" name="tx_in">
+				<option value="" selected?={ t.In == "" }>The style's own</option>
+				for _, k := range TextArrivals {
+					<option value={ k.Key } selected?={ t.In == k.Key }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Leaves</span>
+			<select class="csw-select" name="tx_out">
+				<option value="" selected?={ t.Out == "" }>Blurs away</option>
+				for _, k := range TextLeavings {
+					<option value={ k.Key } selected?={ t.Out == k.Key }>{ k.Name }</option>
 				}
 			</select>
 		</label>

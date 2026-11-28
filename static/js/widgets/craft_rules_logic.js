@@ -55,7 +55,8 @@
     ['Locust Swarm', 'cloud'], ['Smog', 'fog'], ['Butterfly Days', 'clear'], ['Wisp Lights', 'fog'], ['Dreamfog', 'fog'],
     ['Shadowfall', 'cloud'], ['Sky Rift', 'storm'], ['Golden Rain', 'rain'], ['Ink Rain', 'rain'], ['Glass Rain', 'storm'],
     ['Cinder Rain', 'storm'], ['Star Rain', 'clear'], ['Glimmersnow', 'snow'], ['Witchfire', 'storm'], ['Brimstone', 'fog'],
-    ['Featherfall', 'cloud'], ['Fey Lights', 'clear']];
+    ['Featherfall', 'cloud'], ['Fey Lights', 'clear'],
+    ['Mammatus Sky', 'cloud'], ['Lens Clouds', 'clear'], ['St Elmo’s Fire', 'storm'], ['Ball Lightning', 'storm'], ['Eruption', 'storm'], ['Sky Leviathans', 'clear']];
   var WEATHER = WEATHER_TABLE.map(function (w) { return w[0]; });
   var GLYPHS = ['clear', 'cloud', 'rain', 'snow', 'storm', 'fog'];
   /* Conditions that are not about the day: the preview can't know them, so

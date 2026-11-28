@@ -1333,4 +1333,219 @@
     { name: 'The Glasshouse', version: 1, skeleton: { shape: 'conservatory', opening: 'garden-door', display: 'plant-stand', counter: 'potting-bench' },
       theme: { wall: 'glazing', wood: '#6a5a44', cloth: '#2a5a3a', accent: '#ff8ab0', trim: '#c8b070', light: 'lamp', warmth: .7, outside: 'day' }, props: ['hanging-baskets', 'palm', 'watering-can', 'butterflies', 'motes'] }
   );
+
+  /* ---- Views: what stands outside under the sky, besides the room's own
+     town. Each draws into the strip an opening asks for, standing on its
+     bottom edge: a far layer softened into the sky and a near layer in the
+     colour the opening gives, with lights only once the day has gone. ---- */
+  var CM_SCENES = K.CM_SCENES;
+  var SC_HAZE = { '': '#a8b8c8', dusk: '#8a6a7a', night: '#2a3450', rain: '#6a7686' };
+  function scDark(tm) { return tm === 'night' || tm === 'rain' || tm === 'dusk'; }
+  function scFar(col, tm) { return mix(col, SC_HAZE[tm] || SC_HAZE[''], .5); }
+  // A soft ridge through n points, standing on the strip's bottom edge.
+  function scRidge(x, y, w, h, n, lo, hi, col, r, sharp) {
+    var b = y + h, pts = [], i, d;
+    for (i = 0; i <= n; i++) pts.push([x + w * i / n, b - h * (lo + r() * (hi - lo))]);
+    d = 'M' + f1(x) + ',' + f1(b) + ' L' + f1(pts[0][0]) + ',' + f1(pts[0][1]);
+    for (i = 1; i <= n; i++) d += sharp ? ' L' + f1(pts[i][0]) + ',' + f1(pts[i][1]) : ' Q' + f1(pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) / 2) + ',' + f1(pts[i - 1][1]) + ' ' + f1(pts[i][0]) + ',' + f1(pts[i][1]);
+    return { d: '<path d="' + d + ' L' + f1(x + w) + ',' + f1(b) + ' Z" fill="' + col + '"/>', pts: pts };
+  }
+  function scPine(x, b, hh, col) {
+    var w = hh * .42;
+    return '<path d="M' + f1(x) + ',' + f1(b - hh) + ' L' + f1(x + w * .45) + ',' + f1(b - hh * .5) + ' L' + f1(x + w * .25) + ',' + f1(b - hh * .5) + ' L' + f1(x + w * .55) + ',' + f1(b - hh * .08) + ' L' + f1(x - w * .55) + ',' + f1(b - hh * .08) + ' L' + f1(x - w * .25) + ',' + f1(b - hh * .5) + ' L' + f1(x - w * .45) + ',' + f1(b - hh * .5) + ' Z" fill="' + col + '"/><rect x="' + f1(x - 1.5) + '" y="' + f1(b - hh * .1) + '" width="3" height="' + f1(hh * .1) + '" fill="' + col + '"/>';
+  }
+  function scWin(x, y, w, h, tm, r, p) {
+    return scDark(tm) && r() < (p || .7) ? '<rect x="' + f1(x) + '" y="' + f1(y) + '" width="' + f1(w) + '" height="' + f1(h) + '" fill="#f0c070" opacity="' + f1(.5 + r() * .4) + '"/>' : '';
+  }
+  function scWater(x, y, w, h, col, tm, r) {
+    var s = '<rect x="' + f1(x) + '" y="' + f1(y) + '" width="' + f1(w) + '" height="' + f1(h) + '" fill="' + mix(col, SC_HAZE[tm] || SC_HAZE[''], .3) + '"/>', i;
+    for (i = 0; i < Math.round(w / 24); i++) s += '<rect x="' + f1(x + r() * w) + '" y="' + f1(y + 3 + r() * (h - 4)) + '" width="' + f1(8 + r() * 22) + '" height="1.2" fill="#fff" opacity="' + f1(.12 + r() * .18) + '"/>';
+    return s;
+  }
+  function scDots(x, y, w, h, n, c, r, rad0) {
+    var s = '', i;
+    for (i = 0; i < n; i++) s += '<circle cx="' + f1(x + r() * w) + '" cy="' + f1(y + r() * h) + '" r="' + f1(rad0 * (.6 + r() * .8)) + '" fill="' + c + '" opacity="' + f1(.45 + r() * .45) + '"/>';
+    return s;
+  }
+
+  CM_SCENES.forest = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 3), b = y + h, s = scRidge(x, y, w, h, 6, .3, .55, scFar(col, tm), r).d, cx = x - 10;
+    while (cx < x + w + 10) { s += scPine(cx, b - h * .05, h * (.45 + r() * .45), col); cx += 10 + r() * 16; }
+    return s + '<rect x="' + f1(x) + '" y="' + f1(b - h * .1) + '" width="' + f1(w) + '" height="' + f1(h * .1) + '" fill="' + col + '"/>';
+  };
+  CM_SCENES.mountains = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 4), far = scRidge(x, y, w, h, 7, .5, .98, scFar(col, tm), r, true), s = far.d, cap = mix(scFar(col, tm), '#ffffff', tm === 'night' ? .35 : .7);
+    far.pts.forEach(function (p, i) {
+      if (i && i < far.pts.length - 1 && p[1] < y + h * .35) {
+        var a = far.pts[i - 1], c = far.pts[i + 1], u = .22;
+        s += '<path d="M' + f1(p[0]) + ',' + f1(p[1]) + ' L' + f1(p[0] + (c[0] - p[0]) * u) + ',' + f1(p[1] + (c[1] - p[1]) * u) + ' L' + f1(p[0]) + ',' + f1(p[1] + 6) + ' L' + f1(p[0] + (a[0] - p[0]) * u) + ',' + f1(p[1] + (a[1] - p[1]) * u) + ' Z" fill="' + cap + '"/>';
+      }
+    });
+    return s + scRidge(x, y, w, h, 5, .12, .3, col, r).d;
+  };
+  CM_SCENES.coast = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 6), b = y + h, sea = b - h * .32, s = scWater(x, sea, w, h * .32, col, tm, r), hx = x + w * (.55 + r() * .2);
+    s += '<path d="M' + f1(hx - w * .3) + ',' + f1(sea) + ' Q' + f1(hx - w * .1) + ',' + f1(sea - h * .3) + ' ' + f1(hx + w * .05) + ',' + f1(sea - h * .34) + ' L' + f1(x + w) + ',' + f1(sea - h * .4) + ' V' + f1(sea) + ' Z" fill="' + scFar(col, tm) + '"/>';
+    var lx = hx + w * .02, lt = sea - h * .34;
+    s += '<path d="M' + f1(lx - 4) + ',' + f1(lt) + ' L' + f1(lx - 2.5) + ',' + f1(lt - h * .3) + ' h5 L' + f1(lx + 4) + ',' + f1(lt) + ' Z" fill="' + col + '"/><rect x="' + f1(lx - 3.5) + '" y="' + f1(lt - h * .36) + '" width="7" height="' + f1(h * .06) + '" fill="' + (scDark(tm) ? '#ffe090' : mix(col, '#ffffff', .3)) + '"/>';
+    if (scDark(tm)) s += '<circle cx="' + f1(lx) + '" cy="' + f1(lt - h * .33) + '" r="' + f1(h * .2) + '" fill="#ffe090" opacity=".16" filter="url(#src-blur5)"/>';
+    return s + '<path d="M' + f1(x) + ',' + f1(b) + ' V' + f1(b - h * .12) + ' Q' + f1(x + w * .15) + ',' + f1(b - h * .2) + ' ' + f1(x + w * .3) + ',' + f1(b - h * .06) + ' V' + f1(b) + ' Z" fill="' + col + '"/>';
+  };
+  CM_SCENES.desert = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 8), b = y + h, sand = tm === 'night' ? col : mix(col, '#c89a5a', .45), s = '', i, mx;
+    for (i = 0; i < 2; i++) { mx = x + w * (i ? .62 + r() * .25 : .1 + r() * .25); s += '<path d="M' + f1(mx - 26) + ',' + f1(b - h * .3) + ' L' + f1(mx - 20) + ',' + f1(b - h * .62) + ' H' + f1(mx + 22) + ' L' + f1(mx + 30) + ',' + f1(b - h * .3) + ' Z" fill="' + scFar(col, tm) + '"/>'; }
+    s += scRidge(x, y, w, h, 4, .18, .34, mix(sand, SC_HAZE[tm] || SC_HAZE[''], .25), r).d + scRidge(x, y, w, h, 3, .05, .18, sand, r).d;
+    for (i = 0; i < 3; i++) { var cx = x + w * (.1 + r() * .8), ch = h * (.22 + r() * .14), bb = b - h * .08; s += '<path d="M' + f1(cx) + ',' + f1(bb) + ' V' + f1(bb - ch) + ' M' + f1(cx) + ',' + f1(bb - ch * .5) + ' h-7 v-' + f1(ch * .25) + ' M' + f1(cx) + ',' + f1(bb - ch * .62) + ' h7 v-' + f1(ch * .22) + '" stroke="' + col + '" stroke-width="4.5" stroke-linecap="round" fill="none"/>'; }
+    return s;
+  };
+  CM_SCENES.swamp = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 11), b = y + h, wl = b - h * .22, s = scWater(x, wl, w, h * .22, col, tm, r), cx = x + 10;
+    s += scRidge(x, y, w, h * .78, 5, .25, .45, scFar(col, tm), r).d;
+    while (cx < x + w) {
+      var th = h * (.4 + r() * .4), lean = (r() - .5) * 14;
+      s += '<path d="M' + f1(cx - 5) + ',' + f1(wl + 2) + ' Q' + f1(cx + lean / 2) + ',' + f1(wl - th * .5) + ' ' + f1(cx + lean) + ',' + f1(wl - th) + ' M' + f1(cx + lean * .7) + ',' + f1(wl - th * .7) + ' q' + f1(14 + r() * 10) + ',-6 ' + f1(18 + r() * 8) + ',' + f1(12 + r() * 10) + ' M' + f1(cx + lean * .5) + ',' + f1(wl - th * .55) + ' q-' + f1(12 + r() * 8) + ',-8 -' + f1(18 + r() * 8) + ',' + f1(8 + r() * 10) + '" stroke="' + col + '" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M' + f1(cx - 9) + ',' + f1(wl + 2) + ' L' + f1(cx) + ',' + f1(wl - 10) + ' L' + f1(cx + 9) + ',' + f1(wl + 2) + ' Z" fill="' + col + '"/>';
+      cx += 40 + r() * 60;
+    }
+    if (scDark(tm)) s += scDots(x, y + h * .3, w, h * .55, Math.round(w / 30), '#d8ff70', r, 1.4);
+    return s;
+  };
+  CM_SCENES.snowfield = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 12), b = y + h, snow = mix('#e8eef6', SC_HAZE[tm] || SC_HAZE[''], tm === 'night' ? .7 : tm === 'dusk' ? .4 : .15), s = scRidge(x, y, w, h, 5, .35, .6, scFar(col, tm), r).d, cx = x + 4, i;
+    while (cx < x + w) { var ph = h * (.3 + r() * .35); s += scPine(cx, b - h * .12, ph, col) + '<path d="M' + f1(cx) + ',' + f1(b - h * .12 - ph) + ' l' + f1(ph * .08) + ',' + f1(ph * .2) + ' h-' + f1(ph * .16) + ' Z" fill="' + snow + '"/>'; cx += 18 + r() * 40; }
+    s += scRidge(x, y, w, h, 4, .08, .16, snow, r).d;
+    for (i = 0; i < Math.round(w / 9); i++) s += '<circle cx="' + f1(x + r() * w) + '" cy="' + f1(y - h * .4 + r() * h * 1.4) + '" r="' + f1(.7 + r() * 1.1) + '" fill="#fff" opacity="' + f1(.35 + r() * .45) + '"/>';
+    return s;
+  };
+  CM_SCENES.fields = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 14), b = y + h, s = scRidge(x, y, w, h, 4, .25, .45, scFar(col, tm), r).d, grass = tm === 'night' ? col : mix(col, '#5a7a3a', .4), i;
+    var near = scRidge(x, y, w, h, 3, .1, .22, grass, r);
+    s += near.d;
+    for (i = 1; i < 6; i++) s += '<path d="M' + f1(x) + ',' + f1(b - h * .2 + i * h * .035) + ' Q' + f1(x + w / 2) + ',' + f1(b - h * .26 + i * h * .04) + ' ' + f1(x + w) + ',' + f1(b - h * .18 + i * h * .035) + '" stroke="#000" stroke-opacity=".14" stroke-width="1" fill="none"/>';
+    var mx = x + w * (.25 + r() * .5), mb = b - h * .26, mh = h * .42;
+    s += '<path d="M' + f1(mx - 8) + ',' + f1(mb) + ' L' + f1(mx - 5) + ',' + f1(mb - mh) + ' h10 L' + f1(mx + 8) + ',' + f1(mb) + ' Z" fill="' + col + '"/><path d="M' + f1(mx) + ',' + f1(mb - mh * .9) + ' m-' + f1(mh * .5) + ',-' + f1(mh * .5) + ' l' + f1(mh) + ',' + f1(mh) + ' m0,-' + f1(mh) + ' l-' + f1(mh) + ',' + f1(mh) + '" stroke="' + col + '" stroke-width="2.2"/>' + scWin(mx - 2, mb - mh * .45, 4, 5, tm, r, 1);
+    for (i = 0; i < 3; i++) { var hx = x + w * (.1 + r() * .8); s += '<path d="M' + f1(hx - 9) + ',' + f1(b - h * .12) + ' Q' + f1(hx) + ',' + f1(b - h * .3) + ' ' + f1(hx + 9) + ',' + f1(b - h * .12) + ' Z" fill="' + mix(grass, '#c8a050', tm === 'night' ? .15 : .5) + '"/>'; }
+    return s;
+  };
+  CM_SCENES.jungle = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 15), b = y + h, s = scRidge(x, y, w, h, 8, .45, .75, scFar(col, tm), r).d, cx = x, i;
+    while (cx < x + w + 20) {
+      var th = h * (.5 + r() * .45), lean = (r() - .5) * 20, tx = cx + lean, ty = b - th;
+      s += '<path d="M' + f1(cx) + ',' + f1(b) + ' Q' + f1(cx + lean * .2) + ',' + f1(b - th * .5) + ' ' + f1(tx) + ',' + f1(ty) + '" stroke="' + col + '" stroke-width="3" fill="none"/>';
+      for (i = 0; i < 6; i++) { var a = i / 6 * Math.PI * 2 + r() * .3, L = 14 + r() * 10; s += '<path d="M' + f1(tx) + ',' + f1(ty) + ' Q' + f1(tx + Math.cos(a) * L * .6) + ',' + f1(ty + Math.sin(a) * L * .6 - 6) + ' ' + f1(tx + Math.cos(a) * L) + ',' + f1(ty + Math.abs(Math.sin(a)) * L * .4 + 4) + '" stroke="' + col + '" stroke-width="3.5" fill="none" stroke-linecap="round"/>'; }
+      cx += 26 + r() * 40;
+    }
+    return s + scRidge(x, y, w, h, 10, .06, .2, col, r).d;
+  };
+  CM_SCENES.volcano = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 16), b = y + h, vx = x + w * (.4 + r() * .2), top = b - h * .85, s = '', i;
+    for (i = 0; i < 6; i++) s += '<circle cx="' + f1(vx + (r() - .3) * 20 + i * 9) + '" cy="' + f1(top - 8 - i * 13) + '" r="' + f1(8 + i * 5) + '" fill="' + mix(col, '#6a6a6a', .45) + '" opacity="' + f1(.55 - i * .07) + '" filter="url(#src-blur5)"/>';
+    s += '<path d="M' + f1(vx - w * .4) + ',' + f1(b) + ' L' + f1(vx - 14) + ',' + f1(top) + ' H' + f1(vx + 14) + ' L' + f1(vx + w * .42) + ',' + f1(b) + ' Z" fill="' + scFar(col, tm) + '"/>';
+    s += '<ellipse cx="' + f1(vx) + '" cy="' + f1(top) + '" rx="26" ry="10" fill="#ff8a30" opacity="' + (scDark(tm) ? .5 : .3) + '" filter="url(#src-blur5)"/><path d="M' + f1(vx - 13) + ',' + f1(top + 1) + ' H' + f1(vx + 13) + '" stroke="#ffb040" stroke-width="2.5"/><path d="M' + f1(vx + 3) + ',' + f1(top + 1) + ' q-6,' + f1(h * .12) + ' 2,' + f1(h * .25) + ' t-1,' + f1(h * .3) + '" stroke="#ff6a20" stroke-width="2.2" fill="none" opacity="' + (scDark(tm) ? .95 : .75) + '"/>';
+    return s + scRidge(x, y, w, h, 6, .08, .22, col, r, true).d;
+  };
+  CM_SCENES.ruins = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 17), b = y + h, far = scFar(col, tm), s = scRidge(x, y, w, h, 4, .12, .25, far, r).d, cx = x + 8, i;
+    while (cx < x + w) {
+      var kind = r(), ch = h * (.3 + r() * .5), cw = 9 + r() * 5;
+      if (kind < .45) s += '<path d="M' + f1(cx) + ',' + f1(b) + ' V' + f1(b - ch) + ' l' + f1(cw * .4) + ',-' + f1(4 + r() * 6) + ' l' + f1(cw * .6) + ',' + f1(3 + r() * 5) + ' V' + f1(b) + ' Z" fill="' + col + '"/>';
+      else if (kind < .75) { var aw = 30 + r() * 20; s += '<path d="M' + f1(cx) + ',' + f1(b) + ' V' + f1(b - ch) + ' H' + f1(cx + aw) + ' V' + f1(b) + ' H' + f1(cx + aw - 7) + ' V' + f1(b - ch + 18) + ' A' + f1(aw / 2 - 7) + ',' + f1(aw / 2 - 7) + ' 0 0 0 ' + f1(cx + 7) + ',' + f1(b - ch + 18) + ' V' + f1(b) + ' Z" fill="' + col + '"/>'; cx += aw - cw; }
+      else s += '<rect x="' + f1(cx) + '" y="' + f1(b - 8) + '" width="' + f1(cw * 2) + '" height="8" fill="' + col + '"/>';
+      cx += cw + 12 + r() * 30;
+    }
+    for (i = 0; i < 4; i++) s += '<path d="M' + f1(x + r() * w) + ',' + f1(b) + ' q4,-12 9,-2 q3,-10 7,2" stroke="' + mix(col, '#4a6a3a', .4) + '" stroke-width="2" fill="none"/>';
+    return s;
+  };
+  CM_SCENES.spires = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 18), b = y + h, far = scFar(col, tm), s = '', cx = x + 6, layer;
+    for (layer = 0; layer < 2; layer++) {
+      cx = x + 6 + layer * 14;
+      while (cx < x + w) {
+        var c = layer ? col : far, sh = h * (layer ? .45 + r() * .5 : .6 + r() * .4), sw = 8 + r() * 8;
+        s += '<path d="M' + f1(cx) + ',' + f1(b) + ' V' + f1(b - sh * .7) + ' h-3 l' + f1(sw / 2 + 3) + ',-' + f1(sh * .3) + ' l' + f1(sw / 2 + 3) + ',' + f1(sh * .3) + ' h-3 V' + f1(b) + ' Z" fill="' + c + '"/>';
+        if (layer) s += scWin(cx + sw / 2 - 1.5, b - sh * .6, 3, 5, tm, r, .8) + scWin(cx + sw / 2 - 1.5, b - sh * .35, 3, 5, tm, r, .5);
+        cx += sw + 14 + r() * (layer ? 46 : 30);
+      }
+    }
+    s += '<path d="M' + f1(x + w * .7) + ',' + f1(b - h * .95) + ' l6,9 l-6,9 l-6,-9 Z" fill="#a8e0ff" opacity=".85"/><circle cx="' + f1(x + w * .7) + '" cy="' + f1(b - h * .95 + 9) + '" r="14" fill="#a8e0ff" opacity=".2" filter="url(#src-blur5)"/>';
+    return s;
+  };
+  CM_SCENES.harbour = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 19), b = y + h, wl = b - h * .25, s = '', cx = x + 20;
+    s += cmTownLike(x, y, w, h * .75, scFar(col, tm), r, tm) + scWater(x, wl, w, h * .25, col, tm, r);
+    while (cx < x + w - 20) {
+      var mh = h * (.45 + r() * .3), hw = 34 + r() * 20;
+      s += '<path d="M' + f1(cx - hw / 2) + ',' + f1(wl - 6) + ' H' + f1(cx + hw / 2) + ' l-6,10 H' + f1(cx - hw / 2 + 4) + ' Z" fill="' + col + '"/><path d="M' + f1(cx) + ',' + f1(wl - 6) + ' V' + f1(wl - mh) + ' M' + f1(cx - hw * .35) + ',' + f1(wl - mh * .75) + ' H' + f1(cx + hw * .35) + ' M' + f1(cx) + ',' + f1(wl - mh) + ' L' + f1(cx + hw / 2) + ',' + f1(wl - 6) + ' M' + f1(cx) + ',' + f1(wl - mh) + ' L' + f1(cx - hw / 2) + ',' + f1(wl - 6) + '" stroke="' + col + '" stroke-width="1.4" fill="none"/>';
+      if (scDark(tm)) s += '<circle cx="' + f1(cx + hw * .3) + '" cy="' + f1(wl - 10) + '" r="1.8" fill="#ffd080"/>';
+      cx += hw + 30 + r() * 50;
+    }
+    return s + '<rect x="' + f1(x) + '" y="' + f1(b - 6) + '" width="' + f1(w) + '" height="6" fill="' + col + '"/>';
+  };
+  // Low roofs for the harbour's far shore: the town's own skyline, made quieter.
+  function cmTownLike(x, y, w, h, col, r, tm) {
+    var s = '', cx = x, bw, bh, b = y + h;
+    while (cx < x + w) {
+      bw = 16 + r() * 24; bh = 10 + r() * h * .28;
+      s += '<path d="M' + f1(cx) + ',' + f1(b) + ' V' + f1(b - bh) + ' L' + f1(cx + bw / 2) + ',' + f1(b - bh - 7) + ' L' + f1(cx + bw) + ',' + f1(b - bh) + ' V' + f1(b) + ' Z" fill="' + col + '"/>' + scWin(cx + bw / 2 - 1, b - bh + 4, 2.5, 3, tm, r, .5);
+      cx += bw + 1 + r() * 4;
+    }
+    return s;
+  }
+  CM_SCENES.underdark = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 20), b = y + h, far = scFar(col, 'night'), s = scRidge(x, y, w, h, 9, .2, .6, far, r, true).d, cx = x + 10, glow = ['#7affd8', '#c08aff', '#7ab8ff'];
+    while (cx < x + w) {
+      var mh = h * (.25 + r() * .45), cw = 16 + r() * 22, g = glow[Math.floor(r() * 3)];
+      s += '<path d="M' + f1(cx - 2.5) + ',' + f1(b) + ' Q' + f1(cx - 1) + ',' + f1(b - mh * .5) + ' ' + f1(cx - 2) + ',' + f1(b - mh) + ' h5 Q' + f1(cx + 1) + ',' + f1(b - mh * .5) + ' ' + f1(cx + 2.5) + ',' + f1(b) + ' Z" fill="' + col + '"/>';
+      s += '<ellipse cx="' + f1(cx) + '" cy="' + f1(b - mh - 2) + '" rx="' + f1(cw * .9) + '" ry="' + f1(cw * .5) + '" fill="' + g + '" opacity=".22" filter="url(#src-blur5)"/><path d="M' + f1(cx - cw / 2) + ',' + f1(b - mh) + ' Q' + f1(cx) + ',' + f1(b - mh - cw * .7) + ' ' + f1(cx + cw / 2) + ',' + f1(b - mh) + ' Z" fill="' + mix(col, g, .55) + '"/>';
+      cx += cw + 16 + r() * 40;
+    }
+    return s + scDots(x, y, w, h * .8, Math.round(w / 40), '#c0ffe8', r, 1.1) + scRidge(x, y, w, h, 12, .03, .12, col, r, true).d;
+  };
+  CM_SCENES.astral = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 21), s = '', i;
+    for (i = 0; i < 3; i++) s += '<ellipse cx="' + f1(x + r() * w) + '" cy="' + f1(y + h * (.2 + r() * .4)) + '" rx="' + f1(w * (.12 + r() * .1)) + '" ry="' + f1(h * .12) + '" fill="' + ['#8a5aff', '#ff6ab0', '#5ab8ff'][i] + '" opacity=".16" filter="url(#src-blur14)"/>';
+    s += scDots(x, y, w, h, Math.round(w / 14), '#ffffff', r, .9);
+    for (i = 0; i < Math.max(2, Math.round(w / 120)); i++) {
+      var ix = x + w * (i + .2 + r() * .6) / Math.max(2, Math.round(w / 120)), iy = y + h * (.3 + r() * .45), iw = 22 + r() * 30;
+      s += '<path d="M' + f1(ix - iw) + ',' + f1(iy) + ' Q' + f1(ix) + ',' + f1(iy - 6) + ' ' + f1(ix + iw) + ',' + f1(iy) + ' L' + f1(ix + iw * .2) + ',' + f1(iy + iw * .9) + ' Z" fill="' + col + '"/><path d="M' + f1(ix - iw) + ',' + f1(iy) + ' Q' + f1(ix) + ',' + f1(iy - 6) + ' ' + f1(ix + iw) + ',' + f1(iy) + '" stroke="#b8a0ff" stroke-opacity=".55" stroke-width="1.2" fill="none"/>';
+    }
+    return s;
+  };
+  CM_SCENES['sky-islands'] = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 22), b = y + h, cloud = mix('#ffffff', SC_HAZE[tm] || SC_HAZE[''], tm === 'night' ? .75 : .35), s = '', i;
+    for (i = 0; i < Math.max(2, Math.round(w / 110)); i++) {
+      var ix = x + w * (i + .5) / Math.max(2, Math.round(w / 110)) + (r() - .5) * 30, iy = y + h * (.25 + r() * .3), iw = 24 + r() * 26, c = i % 2 ? col : scFar(col, tm);
+      s += '<path d="M' + f1(ix - iw) + ',' + f1(iy) + ' H' + f1(ix + iw) + ' L' + f1(ix + iw * .3) + ',' + f1(iy + iw * .8) + ' L' + f1(ix) + ',' + f1(iy + iw * 1.1) + ' L' + f1(ix - iw * .4) + ',' + f1(iy + iw * .7) + ' Z" fill="' + c + '"/>';
+      s += '<circle cx="' + f1(ix - iw * .4) + '" cy="' + f1(iy - 8) + '" r="9" fill="' + c + '"/><circle cx="' + f1(ix + iw * .2) + '" cy="' + f1(iy - 11) + '" r="12" fill="' + c + '"/>' + scWin(ix + iw * .55, iy - 9, 4, 5, tm, r, 1);
+    }
+    for (i = 0; i < Math.round(w / 40); i++) s += '<ellipse cx="' + f1(x + r() * w) + '" cy="' + f1(b - h * (.02 + r() * .18)) + '" rx="' + f1(24 + r() * 36) + '" ry="' + f1(8 + r() * 8) + '" fill="' + cloud + '" opacity=".9"/>';
+    return s;
+  };
+  CM_SCENES.castle = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 23), b = y + h, far = scFar(col, tm), cx = x + w * (.35 + r() * .3), hb = b - h * .35, s = scRidge(x, y, w, h, 5, .2, .38, far, r).d, i;
+    s += '<path d="M' + f1(cx - w * .32) + ',' + f1(b) + ' Q' + f1(cx) + ',' + f1(2 * hb - b + 6) + ' ' + f1(cx + w * .32) + ',' + f1(b) + ' Z" fill="' + col + '"/>';
+    var bw = Math.min(90, w * .4), bh = h * .25, cl = '';
+    for (i = 0; i < 13; i++) cl += ' h' + f1(bw / 13) + ' v' + (i === 12 ? '0' : i % 2 ? '4' : '-4');
+    s += '<path d="M' + f1(cx - bw / 2) + ',' + f1(hb) + ' V' + f1(hb - bh) + cl + ' V' + f1(hb) + ' Z" fill="' + col + '"/>';
+    [-1, 1, 0].forEach(function (sd) {
+      var tx = cx + sd * bw * .5, th = bh * (sd ? 1.7 : 2.3), tw = 12;
+      s += '<path d="M' + f1(tx - tw / 2) + ',' + f1(hb) + ' V' + f1(hb - th) + ' l' + f1(tw / 2) + ',-' + f1(tw * 1.1) + ' l' + f1(tw / 2) + ',' + f1(tw * 1.1) + ' V' + f1(hb) + ' Z" fill="' + col + '"/>' + scWin(tx - 1.5, hb - th * .7, 3, 5, tm, r, 1);
+      if (!sd) s += '<path d="M' + f1(tx) + ',' + f1(hb - th - tw * 1.1) + ' v-12 l9,3 -9,3" stroke="' + col + '" fill="' + col + '" stroke-width="1"/>';
+    });
+    return s + scRidge(x, y, w, h, 6, .04, .12, col, r).d;
+  };
+  CM_SCENES.graveyard = function (x, y, w, h, col, seed, tm) {
+    var r = rng(seed || 24), b = y + h, far = scFar(col, tm), s = scRidge(x, y, w, h, 4, .15, .3, far, r).d, cx = x + 10, i;
+    var tx = x + w * (.15 + r() * .2), th = h * .75;
+    s += '<path d="M' + f1(tx) + ',' + f1(b) + ' Q' + f1(tx + 3) + ',' + f1(b - th * .5) + ' ' + f1(tx - 2) + ',' + f1(b - th) + ' M' + f1(tx + 1) + ',' + f1(b - th * .6) + ' q20,-14 34,-10 M' + f1(tx) + ',' + f1(b - th * .75) + ' q-16,-8 -26,-2 M' + f1(tx + 18) + ',' + f1(b - th * .68) + ' q6,-10 12,-12" stroke="' + col + '" stroke-width="3" fill="none" stroke-linecap="round"/>';
+    while (cx < x + w) {
+      var k = r(), sh = h * (.1 + r() * .14);
+      s += k < .4 ? '<path d="M' + f1(cx - 1.5) + ',' + f1(b) + ' v-' + f1(sh * 1.4) + ' h-5 v-3 h5 v-5 h3 v5 h5 v3 h-5 v' + f1(sh * 1.4 - 8) + ' Z" fill="' + col + '"/>' : '<path d="M' + f1(cx - 6) + ',' + f1(b) + ' V' + f1(b - sh) + ' A6,6 0 0 1 ' + f1(cx + 6) + ',' + f1(b - sh) + ' V' + f1(b) + ' Z" fill="' + col + '"/>';
+      cx += 16 + r() * 30;
+    }
+    s += '<path d="M' + f1(x) + ',' + f1(b - h * .1) + ' H' + f1(x + w) + '" stroke="' + col + '" stroke-width="1.5"/>';
+    for (i = 0; i < w / 10; i++) s += '<path d="M' + f1(x + i * 10) + ',' + f1(b) + ' v-' + f1(h * .14) + '" stroke="' + col + '" stroke-width="1.5"/>';
+    if (scDark(tm)) s += '<ellipse cx="' + f1(x + w / 2) + '" cy="' + f1(b - 4) + '" rx="' + f1(w * .6) + '" ry="8" fill="#c8d8e8" opacity=".14" filter="url(#src-blur5)"/>';
+    return s;
+  };
+  CM_OPT.scene.push('forest', 'mountains', 'coast', 'desert', 'swamp', 'snowfield', 'fields', 'jungle', 'volcano', 'ruins', 'spires', 'harbour', 'underdark', 'astral', 'sky-islands', 'castle', 'graveyard');
 })();

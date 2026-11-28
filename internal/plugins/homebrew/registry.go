@@ -33,7 +33,22 @@ type PartKind struct {
 	// Sync, when set, keeps records the owner holds for this kind's parts
 	// in step with the recipes that hold them.
 	Sync *PartSync
+	// Share, when set, is the owner's say over what leaves the campaign in a
+	// shared recipe: it returns the data without any Director-only text and
+	// without links to the campaign's own records (ids mean nothing in
+	// another campaign), plus what to pick to restore each dropped link. It
+	// holds no campaign, so it can't read one. waiting is what the sender
+	// wrote as already waiting to be chosen; the owner keeps only the ones it
+	// would itself have made (a link it names that the data really lacks), so
+	// a marker is always the owner's word, never the sender's. A kind without
+	// Share holds only names, is shared as it is, and may carry no markers.
+	Share func(raw json.RawMessage, waiting []Unlinked) (json.RawMessage, []Unlinked, error)
 }
+
+// ShareArgsFunc is an event's or action's say over what leaves the campaign
+// in a shared recipe: the args without Director-only text, or an error
+// saying why the step can't be shared at all. Args hold names, never ids.
+type ShareArgsFunc func(raw json.RawMessage) (json.RawMessage, error)
 
 // PartSync keeps an owner's own records in step with a kind's parts: a
 // tracker part is saved as a tracker kind. Each call gets every part of the
@@ -60,6 +75,8 @@ type EventDef struct {
 	// button the Director presses to say it happened.
 	Preview *Preview
 	Check   CheckFunc
+	// Share, when set, strips the args for a shared recipe (ShareArgsFunc).
+	Share ShareArgsFunc
 	// Press, when set, is the label of a drawer button the Director uses to
 	// say the event happened ("Log a respite"). Only an event from no part
 	// can have one.
@@ -79,6 +96,10 @@ type EventDef struct {
 	// given what happened (the payload the owner fired it with). Nil
 	// matches every firing.
 	Match func(args, payload json.RawMessage) (bool, error)
+	// Ask, when set, makes the event an owner's own ask: the owner puts it to
+	// the Director through Service.AskFor instead of firing it, and every
+	// saved rule on it waits behind that one ask, its steps running on Yes.
+	Ask *EventAsk
 }
 
 // Field is one arg of an event or action, as the Workshop's inspector asks
@@ -113,6 +134,8 @@ type ActionDef struct {
 	// line saying what would happen.
 	Preview *Preview
 	Check   CheckFunc
+	// Share, when set, strips the args for a shared recipe (ShareArgsFunc).
+	Share ShareArgsFunc
 	// Run carries the action out on the server and says in one line what
 	// changed. Without it, and always for a ClientRun action, a rule that
 	// uses the action waits in the Homebrew drawer for the Director.
@@ -246,6 +269,46 @@ type Registry struct {
 	parts   map[string]PartKind
 	events  map[string]EventDef
 	actions map[string]ActionDef
+	// system names a campaign's game system, for the Store's "needs".
+	system func(ctx context.Context, campaignID string) string
+}
+
+type waitingKey struct{}
+
+// WithWaiting marks, on ctx, the links a part is still waiting to have chosen,
+// by their pick. Only a recipe added from the Store has any.
+func WithWaiting(ctx context.Context, picks []Unlinked) context.Context {
+	set := map[string]bool{}
+	for _, u := range picks {
+		set[u.Pick] = true
+	}
+	return context.WithValue(ctx, waitingKey{}, set)
+}
+
+// Waiting says whether the part being checked is waiting to have the link
+// with this pick chosen. An owner's Check honours it for exactly that field,
+// leaving the field empty and checking every other one as usual.
+func Waiting(ctx context.Context, pick string) bool {
+	set, _ := ctx.Value(waitingKey{}).(map[string]bool)
+	return set[pick]
+}
+
+// SetSystem tells the registry how to read a campaign's game system; without
+// it a shared recipe records no system.
+func (r *Registry) SetSystem(fn func(ctx context.Context, campaignID string) string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.system = fn
+}
+
+func (r *Registry) systemOf(ctx context.Context, campaignID string) string {
+	r.mu.RLock()
+	fn := r.system
+	r.mu.RUnlock()
+	if fn == nil {
+		return ""
+	}
+	return fn(ctx, campaignID)
 }
 
 // NewRegistry returns an empty registry.
@@ -327,6 +390,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 		return fmt.Errorf("homebrew: event %q comes from a part, so it can't be a drawer button", e.Name)
 	}
 	if err := checkPressArg(e); err != nil {
+		return err
+	}
+	if err := checkEventAsk(e); err != nil {
 		return err
 	}
 	r.mu.Lock()

@@ -3,6 +3,7 @@ package armory
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -646,5 +647,112 @@ func TestNormalizeShopRoomCounterDesign_DropsPicture(t *testing.T) {
 	bad, _ := json.Marshal(m)
 	if _, err := NormalizeShopRoomCounterDesign(bad); err == nil {
 		t.Error("a design with a bad picture is refused, not quietly cleaned")
+	}
+}
+
+func TestNormalizeShopRoomLayout_CounterScene(t *testing.T) {
+	tests := []struct {
+		name, scene, want string
+		bad               bool
+	}{
+		{"a known view is kept", "castle", "castle", false},
+		{"a pack's view is kept", "sky-islands", "sky-islands", false},
+		{"the town is saved as none", "town", "", false},
+		{"none stays none", "", "", false},
+		{"an unknown view is refused", "atlantis", "", true},
+		{"a different case is refused", "Castle", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "scene", tc.scene)))
+			if tc.bad {
+				if err == nil {
+					t.Fatalf("accepted %q", tc.scene)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var l ShopRoomLayout
+			if err := json.Unmarshal(out, &l); err != nil {
+				t.Fatal(err)
+			}
+			if l.Counter.Theme.Scene != tc.want {
+				t.Errorf("scene = %q, want %q", l.Counter.Theme.Scene, tc.want)
+			}
+			if tc.want == "" && strings.Contains(string(out), `"scene"`) {
+				t.Errorf("scene written for the town: %s", out)
+			}
+		})
+	}
+}
+
+func TestNormalizeShopRoomLayout_CounterLiveSky(t *testing.T) {
+	out, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "live")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l ShopRoomLayout
+	if err := json.Unmarshal(out, &l); err != nil {
+		t.Fatal(err)
+	}
+	if l.Counter.Theme.Outside != "live" {
+		t.Errorf("outside = %q, want live", l.Counter.Theme.Outside)
+	}
+	if _, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "Live"))); err == nil {
+		t.Error("accepted a different case")
+	}
+}
+
+func TestNormalizeShopRoomLayout_CounterMoves(t *testing.T) {
+	out, err := NormalizeShopRoomLayout(withCounter(func(c map[string]any) {
+		c["moves"] = map[string]any{
+			"display": []any{120.4, -2.5, 1.204},
+			"anvil":   []any{-9000, 9000, 7},
+			"sparks":  []any{0, 0, 1},
+			"banner":  []any{40, 0, 1},
+		}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l ShopRoomLayout
+	if err := json.Unmarshal(out, &l); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]float64{"display": {120, -2, 1.2}, "anvil": {-600, 350, 2}}
+	if len(l.Counter.Moves) != len(want) {
+		t.Fatalf("moves = %v, want %v (a move that moves nothing and one for a prop not in the room are dropped)", l.Counter.Moves, want)
+	}
+	for k, v := range want {
+		if fmt.Sprint(l.Counter.Moves[k]) != fmt.Sprint(v) {
+			t.Errorf("moves[%s] = %v, want %v", k, l.Counter.Moves[k], v)
+		}
+	}
+
+	out, err = NormalizeShopRoomLayout(withCounter(func(c map[string]any) { c["moves"] = map[string]any{"display": []any{0, 0, 1}} }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), `"moves"`) {
+		t.Errorf("an empty set of moves was kept: %s", out)
+	}
+
+	for name, mv := range map[string]any{
+		"too short":     map[string]any{"display": []any{1, 2}},
+		"not a number":  map[string]any{"display": []any{"left", 0, 1}},
+		"not an object": []any{1, 2, 3},
+	} {
+		if _, err := NormalizeShopRoomLayout(withCounter(func(c map[string]any) { c["moves"] = mv })); err == nil {
+			t.Errorf("%s: accepted %v", name, mv)
+		}
+	}
+	many := map[string]any{}
+	for i := 0; i <= maxShopRoomCounterProps+1; i++ {
+		many[fmt.Sprintf("p%d", i)] = []any{1, 1, 1}
+	}
+	if _, err := NormalizeShopRoomLayout(withCounter(func(c map[string]any) { c["moves"] = many })); err == nil {
+		t.Error("accepted more moves than the room has pieces")
 	}
 }

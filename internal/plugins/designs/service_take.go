@@ -19,7 +19,9 @@ type incoming struct {
 // says what that campaign lacks. The kind validates again here, never trusting
 // what an earlier preview, a stored row or a pasted code claims.
 func (s *service) preview(ctx context.Context, target *CampaignInfo, in incoming) (*Preview, json.RawMessage, error) {
-	data, err := s.validData(in.kind, in.data)
+	// Strip on every add, whatever the source: the payload is never trusted to
+	// have been stripped by whoever sent it.
+	data, err := s.cleanData(in.kind, in.data)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -76,7 +78,7 @@ func (s *service) PreviewCode(ctx context.Context, campaignID, userID, code stri
 // TakeCode adds a code's design to the campaign as its own copy. A code from
 // another game system is allowed (the preview warns), because the parts may
 // still exist here; the kind's check is what refuses an unknown part.
-func (s *service) TakeCode(ctx context.Context, campaignID, userID, code string) (*Design, error) {
+func (s *service) TakeCode(ctx context.Context, campaignID, userID, code string) (*Taken, error) {
 	c, in, err := s.codeFor(ctx, campaignID, userID, code)
 	if err != nil {
 		return nil, err
@@ -86,24 +88,32 @@ func (s *service) TakeCode(ctx context.Context, campaignID, userID, code string)
 		return nil, err
 	}
 	// The maker of a code is only what its sender typed, so no account is linked.
-	return s.store(ctx, c, newDesign{kind: in.kind, name: p.Name, data: data, makerName: in.makerName, origin: OriginCode})
+	return s.place(ctx, c, userID, newDesign{kind: in.kind, name: p.Name, data: data, makerName: in.makerName, origin: OriginCode})
 }
 
-// fromDesign reads a stored design as an incoming one; callers check the
+// fromDesign reads a stored design as an incoming one, stripped of its
+// Director-only parts because it is leaving its campaign; callers check the
 // reader's access first.
-func fromDesign(d *Design) incoming {
-	return incoming{kind: d.Kind, name: d.Name, note: d.Note, makerName: d.MakerName, makerUser: d.MakerUserID, systemID: d.SystemID, data: d.Data}
+func (s *service) fromDesign(d *Design) (incoming, error) {
+	data, err := s.cleanData(d.Kind, d.Data)
+	if err != nil {
+		return incoming{}, err
+	}
+	return incoming{kind: d.Kind, name: d.Name, note: d.Note, makerName: d.MakerName, makerUser: d.MakerUserID, systemID: d.SystemID, data: data}, nil
 }
 
 // copyInto stores a copy of a design the reader may see into a campaign they
 // own. The game system must match: a design shared by link or by name is
 // meant for the same game, and refusing here is what keeps a room theme from
 // landing in a game it was not built for.
-func (s *service) copyInto(ctx context.Context, target *CampaignInfo, src *Design) (*Design, error) {
+func (s *service) copyInto(ctx context.Context, target *CampaignInfo, userID string, src *Design) (*Taken, error) {
 	if src.SystemID != target.SystemID {
 		return nil, apperror.NewBadRequest(msgOtherSystem)
 	}
-	in := fromDesign(src)
+	in, err := s.fromDesign(src)
+	if err != nil {
+		return nil, err
+	}
 	p, data, err := s.preview(ctx, target, in)
 	if err != nil {
 		return nil, err
@@ -111,7 +121,7 @@ func (s *service) copyInto(ctx context.Context, target *CampaignInfo, src *Desig
 	// The maker's name is already shown with the copy; the source campaign's
 	// name is not the receiver's to learn.
 	ref := in.makerName
-	return s.store(ctx, target, newDesign{
+	return s.place(ctx, target, userID, newDesign{
 		kind: in.kind, name: p.Name, note: in.note, data: data,
 		makerUser: in.makerUser, makerName: in.makerName, origin: OriginShared, ref: ref,
 	})
@@ -173,13 +183,17 @@ func (s *service) PreviewLink(ctx context.Context, userID, token string) (*LinkP
 	if err != nil {
 		return nil, err
 	}
+	in, err := s.fromDesign(d)
+	if err != nil {
+		return nil, err
+	}
 	out := &LinkPreview{Targets: []LinkTarget{}}
 	out.Preview = Preview{Name: d.Name, Note: d.Note, Kind: d.Kind, MakerName: d.MakerName, SystemID: d.SystemID, Lacks: []string{}}
 	for _, c := range camps {
 		if c.SystemID != d.SystemID {
 			continue
 		}
-		p, _, err := s.preview(ctx, &c, fromDesign(d))
+		p, _, err := s.preview(ctx, &c, in)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +203,7 @@ func (s *service) PreviewLink(ctx context.Context, userID, token string) (*LinkP
 	return out, nil
 }
 
-func (s *service) TakeLink(ctx context.Context, userID, token, targetCampaignID string) (*Design, error) {
+func (s *service) TakeLink(ctx context.Context, userID, token, targetCampaignID string) (*Taken, error) {
 	if _, err := s.linkReader(ctx, userID); err != nil {
 		return nil, err
 	}
@@ -201,7 +215,7 @@ func (s *service) TakeLink(ctx context.Context, userID, token, targetCampaignID 
 	if err != nil {
 		return nil, err
 	}
-	return s.copyInto(ctx, target, d)
+	return s.copyInto(ctx, target, userID, d)
 }
 
 func (s *service) SharedWithMe(ctx context.Context, campaignID, userID, kind string) ([]SharedDesign, error) {
@@ -262,11 +276,15 @@ func (s *service) PreviewShared(ctx context.Context, campaignID, userID, designI
 	if err != nil {
 		return nil, err
 	}
-	p, _, err := s.preview(ctx, c, fromDesign(d))
+	in, err := s.fromDesign(d)
+	if err != nil {
+		return nil, err
+	}
+	p, _, err := s.preview(ctx, c, in)
 	return p, err
 }
 
-func (s *service) TakeShared(ctx context.Context, campaignID, userID, designID string) (*Design, error) {
+func (s *service) TakeShared(ctx context.Context, campaignID, userID, designID string) (*Taken, error) {
 	c, _, err := s.requireOwner(ctx, campaignID, userID)
 	if err != nil {
 		return nil, err
@@ -275,5 +293,5 @@ func (s *service) TakeShared(ctx context.Context, campaignID, userID, designID s
 	if err != nil {
 		return nil, err
 	}
-	return s.copyInto(ctx, c, d)
+	return s.copyInto(ctx, c, userID, d)
 }

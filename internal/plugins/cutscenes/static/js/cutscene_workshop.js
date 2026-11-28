@@ -17,6 +17,8 @@
  * scene the same way and hands it to the campaign's Foundry module to play
  * on the Director's own Foundry screen; this page only says it was sent.
  *
+ * The timeline above the rows is cutscene_timeline.js, mounted here.
+ *
  * Both buttons call window.ChronicleCutsceneWorkshop from an inline handler,
  * so a form HTMX swaps in after a save keeps working.
  */
@@ -53,6 +55,7 @@
   }
 
   var playing = null;
+  var timelines = new WeakMap(); // mount → its timeline (cutscene_timeline.js)
 
   function preview(btn) {
     var form = btn && btn.closest('form[data-csw-form]');
@@ -79,6 +82,9 @@
       if (playing && playing.stop) playing.stop();
       var run = got[1].play(document.body, got[0], {
         label: 'Preview: ' + (got[0].name || 'cut scene'),
+        // A moment holds until the Director goes on; in a preview the
+        // Director is the one watching, so the question offers Continue.
+        canContinue: true,
         onClose: function () {
           if (playing === run) playing = null;
           if (btn.isConnected) btn.focus();
@@ -130,10 +136,15 @@
 
   if (C.register) {
     C.register('cutscene-workshop', {
-      init: function () {},
-      destroy: function () {
+      init: function (el) {
+        if (window.ChronicleCutsceneTimeline) timelines.set(el, window.ChronicleCutsceneTimeline.mount(el));
+      },
+      destroy: function (el) {
         if (playing && playing.stop) playing.stop();
         playing = null;
+        var tl = timelines.get(el);
+        if (tl) tl.destroy();
+        timelines.delete(el);
       }
     });
   }

@@ -14,15 +14,42 @@ const (
 	BackgroundFadeToBlack = "fade-to-black"
 	BackgroundNone        = "none"
 
-	OverlayEye    = "eye"
-	OverlayEmbers = "embers"
+	OverlayEye       = "eye"
+	OverlayEmbers    = "embers"
+	OverlayLetterbox = "letterbox"
 
 	StyleWhisper = "whisper"
 	StyleTitle   = "title"
 	StylePlain   = "plain"
+	StyleCaption = "caption"
+
+	// How a black background arrives, chosen apart from what it is. Each
+	// keeps its old kind name on the wire (KindFor), so a player that
+	// predates the split plays it the same.
+	ArriveCut        = "cut"
+	ArriveFade       = "fade"
+	ArriveFallAsleep = "fall-asleep"
+
+	// Where a line sits, and how it arrives and leaves. Blank is the default
+	// for each (the middle, the style's own arrival, a soft blur upwards),
+	// and only a choice that differs is stored.
+	LayoutMiddle = "middle"
+	LayoutCorner = "corner"
+	TextFade     = "fade"
+	TextRise     = "rise"
+	TextSettle   = "settle"
+	TextSlide    = "slide"
+	TextSink     = "sink"
 
 	EndingTap  = "tap"
 	EndingAuto = "auto"
+
+	// Ways a moment can be answered, and who answers it. Blank To is each
+	// person watching; only "one" is stored.
+	WayWrite    = "write"
+	WayDirector = "director"
+	ToEach      = "each"
+	ToOne       = "one"
 )
 
 // Kind is one choice a layer offers, with the plain words the editor and the
@@ -45,17 +72,90 @@ var (
 	OverlayKinds = []Kind{
 		{OverlayEye, "An eye opens", "a single eye opens in the middle of the screen, burning with light in its colour, with fire blooming round it"},
 		{OverlayEmbers, "Embers", "glowing sparks drift up from the bottom of the screen in its colour"},
+		{OverlayLetterbox, "Film bars", "black bars slide in from the top and bottom and stay, framing the screen like a widescreen film"},
 	}
 	TextStyles = []Kind{
 		{StyleWhisper, "Whisper", "small, spaced italic letters that fade in softly"},
 		{StyleTitle, "Title", "large display letters, like a chapter heading"},
 		{StylePlain, "Plain", "ordinary reading text"},
+		{StyleCaption, "Caption", "small, widely spaced capitals, for a chapter number or the line under a place"},
+	}
+	// Backdrops and Arrivals are the background split the way the editor
+	// offers it: what the background is, then how it arrives.
+	Backdrops = []Kind{
+		{BackgroundBlack, "Black", "the screen goes black"},
+		{BackgroundNone, "Nothing", "no background of its own; only the layers on top and the words are drawn"},
+	}
+	Arrivals = []Kind{
+		{ArriveCut, "At once", "the background is there from the first moment"},
+		{ArriveFade, "Fades in", "the whole screen dims evenly"},
+		{ArriveFallAsleep, "Falling asleep", "darkness creeps in from the edges in soft, blurred patches, like eyes closing"},
+	}
+	TextLayouts = []Kind{
+		{LayoutMiddle, "In the middle", "centred on the screen, under the eye when there is one"},
+		{LayoutCorner, "Corner card", "small, at the bottom left, like a film's place and time line"},
+	}
+	TextArrivals = []Kind{
+		{TextFade, "Fades in", "the line fades in where it stands"},
+		{TextRise, "Rises", "the line rises a little as it fades in"},
+		{TextSettle, "Settles", "the letters start blurred and wide apart and draw together into place"},
+		{TextSlide, "Slides in", "the line slides in from the left"},
+	}
+	TextLeavings = []Kind{
+		{TextFade, "Fades", "the line fades away where it stands"},
+		{TextSink, "Sinks", "the line sinks a little as it fades"},
+		{TextSlide, "Slides away", "the line slides back out to the left"},
+	}
+	// WayKinds are the ways a moment offers, in the order they are stored
+	// and drawn; the first is the default for a moment that names none.
+	WayKinds = []Kind{
+		{WayWrite, "Write it", "the player writes the answer in their own words"},
+		{WayDirector, "Leave it to the Director", "the Director answers it for them"},
+	}
+	Answerers = []Kind{
+		{ToEach, "Each person watching", "everyone the scene is shown to answers"},
+		{ToOne, "One person", "one person answers, picked when it is shown"},
 	}
 	EndingKinds = []Kind{
 		{EndingTap, "When they tap", "a quiet Close appears once the last layer has finished; a tap, click or Esc closes it"},
 		{EndingAuto, "By itself", "it closes on its own a few seconds after the last layer has finished"},
 	}
 )
+
+// KindFor is the background kind stored for a backdrop and an arrival: a
+// black backdrop is named by its arrival, as it was before the two were
+// separate choices.
+func KindFor(backdrop, arrival string) string {
+	if backdrop == BackgroundNone {
+		return BackgroundNone
+	}
+	switch arrival {
+	case ArriveCut:
+		return BackgroundBlack
+	case ArriveFade:
+		return BackgroundFadeToBlack
+	}
+	return BackgroundFallAsleep
+}
+
+// BackdropOf and ArrivalOf split a stored background kind back into the
+// editor's two choices.
+func BackdropOf(kind string) string {
+	if kind == BackgroundNone {
+		return BackgroundNone
+	}
+	return BackgroundBlack
+}
+
+func ArrivalOf(kind string) string {
+	switch kind {
+	case BackgroundBlack, BackgroundNone:
+		return ArriveCut
+	case BackgroundFadeToBlack:
+		return ArriveFade
+	}
+	return ArriveFallAsleep
+}
 
 // Look is one way a kind can be drawn. The ids and names mirror the engine's
 // ChronicleCutscene.looks table, in its order, the first being the one the
@@ -124,6 +224,9 @@ const (
 	MaxOverlays    = 8
 	MaxTextLines   = 12
 	MaxSayChars    = 280
+	MaxMoments     = 6
+	MaxAskChars    = 200
+	MaxNoteChars   = 500
 	MinSeconds     = 0.5
 	MaxSeconds     = 60.0
 	MaxAt          = 120.0
@@ -149,8 +252,42 @@ type Scene struct {
 	Background Background `json:"background"`
 	Overlays   []Overlay  `json:"overlays"`
 	Text       []TextLine `json:"text"`
+	Moments    []Moment   `json:"moments,omitempty"`
 	Ending     Ending     `json:"ending"`
 	UpdatedAt  time.Time  `json:"-"`
+}
+
+// Moment is a beat on the timeline where the scene stops and asks one
+// question, holding until the Director lets it go on. Note is the
+// Director's own text: PlayerScene drops it before a scene leaves the
+// editor, so it never reaches a player or a Foundry client.
+type Moment struct {
+	At   float64 `json:"at"`
+	Ask  string  `json:"ask"`
+	Ways []Way   `json:"ways"`
+	To   string  `json:"to,omitempty"`
+	Note string  `json:"note,omitempty"`
+}
+
+// Way is one way to answer a moment.
+type Way struct {
+	Kind string `json:"kind"`
+}
+
+// PlayerScene is the scene as it may leave the editor: every moment without
+// the Director's note. The moments list is copied, so the caller's scene
+// keeps its notes.
+func PlayerScene(sc Scene) Scene {
+	if len(sc.Moments) == 0 {
+		return sc
+	}
+	ms := make([]Moment, len(sc.Moments))
+	for i, m := range sc.Moments {
+		m.Note = ""
+		ms[i] = m
+	}
+	sc.Moments = ms
+	return sc
 }
 
 // Params are a layer's settings beyond kind and timing: an overlay's colour,
@@ -163,8 +300,12 @@ type Params struct {
 }
 
 // Background is the bottom layer: how the screen goes dark.
+//
+// In is how it arrives when written apart from Kind; Normalize folds it into
+// Kind's name and stores it empty.
 type Background struct {
 	Kind    string  `json:"kind"`
+	In      string  `json:"in,omitempty"`
 	Seconds float64 `json:"seconds"`
 	Params  Params  `json:"params"`
 }
@@ -177,12 +318,17 @@ type Overlay struct {
 	Params  Params  `json:"params"`
 }
 
-// TextLine is one line of words. Say is plain text, never HTML.
+// TextLine is one line of words. Say is plain text, never HTML. Layout, In
+// and Out are empty for the defaults, so a line written before they existed
+// is stored unchanged.
 type TextLine struct {
 	Say     string  `json:"say"`
 	At      float64 `json:"at"`
 	Seconds float64 `json:"seconds"`
 	Style   string  `json:"style"`
+	Layout  string  `json:"layout,omitempty"`
+	In      string  `json:"in,omitempty"`
+	Out     string  `json:"out,omitempty"`
 }
 
 // Ending says how the scene closes. After (auto only) is seconds after the

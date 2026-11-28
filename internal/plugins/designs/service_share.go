@@ -54,7 +54,14 @@ func (s *service) state(ctx context.Context, d *Design) (*ShareState, error) {
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
-	code, err := BuildCode(d)
+	// The code leaves the campaign, so it is built from the stripped data.
+	data, err := s.cleanData(d.Kind, d.Data)
+	if err != nil {
+		return nil, err
+	}
+	shared := *d
+	shared.Data = data
+	code, err := BuildCode(&shared)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}

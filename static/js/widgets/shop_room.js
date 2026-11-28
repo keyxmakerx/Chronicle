@@ -1736,7 +1736,7 @@
       function counterModel() {
         return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0,
           today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null,
-          counter: S.counter, edit: S.mode === 'arr' && cbPlace };
+          counter: S.counter, edit: S.mode === 'arr' && cbPlace, dress: S.mode === 'arr' && cbOn(), campaignId: campaignId };
       }
       // The counter scene puts goods on the pile through the same rules as the wares list's Add.
       function addable(id) {
@@ -1766,7 +1766,13 @@
         talk: function (el, said) { talk(el, said); },
         // Place by hand: which props found a spot, and a press on the opening.
         placed: function (m) { if (window.ShopRoomBuilder) window.ShopRoomBuilder.placed(m); },
-        opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); }
+        // Moving the shelves and props by hand: a piece was picked, or moved to [dx, dy, size].
+        picked: function (k) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.picked) window.ShopRoomBuilder.picked(k); },
+        moved: function (k, v, soft) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.moved) window.ShopRoomBuilder.moved(k, v, soft); },
+        opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); },
+        // Dressing by part: a press on a part of the room or a layer opens its choices; the layers were put back together.
+        part: function (k) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.part) window.ShopRoomBuilder.part(k); },
+        layered: function (on) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.layered) window.ShopRoomBuilder.layered(on); }
       };
       /* The counter-room builder (shop_room_builder.js, owner only) reads and
          writes the theme through this. A change is drawn at once and waits for
@@ -1779,7 +1785,10 @@
         set: function (t, soft) { S.counter = t; save(); clearTimeout(cbT); if (soft) cbT = setTimeout(draw, 140); else draw(); },
         reset: function () { S.counter = null; save(); draw(); },
         place: function (v) { if (v === undefined) return cbPlace; cbPlace = !!v; draw(); return cbPlace; },
-        campaign: function () { return { url: campaignUrl, csrf: ds.csrfToken }; }
+        campaign: function () { return { url: campaignUrl, csrf: ds.csrfToken }; },
+        // A small picture of the room dressed as t (cropped to [x, y, w, h]), and the room pulled into its layers.
+        thumb: function (t, crop, cb, alive) { var C = window.ShopRoomCounter; if (C.thumb && counterOn() && dlg.open) C.thumb(cel, t, crop, cb, alive); else cb(''); },
+        layers: function (on) { var C = window.ShopRoomCounter; return !!(C.layers && counterOn() && dlg.open && C.layers(cel, on)); }
       };
       // The scene keeps the drawing's shape and grows to the biggest size the
       // window leaves it, so the portrait and paper stay on their spots.
@@ -2338,6 +2347,9 @@
         if (picking !== null) { closePicker(); return; }
         var fp = document.activeElement; if (S.mode === 'arr' && fp && root.contains(fp) && fp.matches('[data-p]')) { fp.blur(); return; }
         say.classList.remove('on');
+        // The room pulled into its layers goes back together before Arrange is left.
+        var CR = window.ShopRoomCounter;
+        if (S.mode === 'arr' && counterOn() && CR && CR.layers && CR.layers(cel)) { CR.layers(cel, false); return; }
         if (S.mode === 'arr') { tryLeave(); return; }
         if (open) { setOpen(false); cartBtn.focus({ preventScroll: true }); return; }
         // A counter that fails to answer must not swallow the way out.
@@ -2608,7 +2620,7 @@
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
-        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0); else cbPlace = false;
+        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0); else { cbPlace = false; if (window.ShopRoomCounter && window.ShopRoomCounter.layers) window.ShopRoomCounter.layers(cel, false); }
         root.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === S.mode); });
         if (canArrange && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); scene.appendChild(panel); panel.addEventListener('animationend', function () { panel.classList.remove('nag'); }); panel.addEventListener('pointerdown', onPanelDown); }
         if (panel) {

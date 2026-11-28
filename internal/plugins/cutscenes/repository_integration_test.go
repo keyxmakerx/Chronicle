@@ -91,6 +91,36 @@ func TestDBScenesAndShowings(t *testing.T) {
 		}
 	})
 
+	t.Run("moments are stored, cleared and read back; a scene without them reads none", func(t *testing.T) {
+		if got, _ := repo.GetScene(ctx, c1, sc.ID); got.Moments != nil {
+			t.Errorf("a scene without moments read %+v", got.Moments)
+		}
+		asks := sc
+		asks.ID, asks.Name = uuid.NewString(), "Asks"
+		asks.Moments = []Moment{{At: 3, Ask: "What do they whisper?", Ways: []Way{{Kind: WayWrite}, {Kind: WayDirector}}, To: ToOne, Note: "the bell"}}
+		if err := repo.CreateScene(ctx, c1, dir, asks); err != nil {
+			t.Fatal(err)
+		}
+		got, err := repo.GetScene(ctx, c1, asks.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Moments) != 1 || got.Moments[0].Note != "the bell" || len(got.Moments[0].Ways) != 2 || got.Moments[0].To != ToOne {
+			t.Errorf("moments read back %+v", got.Moments)
+		}
+		asks.Moments = nil
+		if err := repo.UpdateScene(ctx, c1, asks); err != nil {
+			t.Fatal(err)
+		}
+		var stored sql.NullString
+		if err := db.QueryRow(`SELECT moments FROM cutscenes WHERE id = ?`, asks.ID).Scan(&stored); err != nil || stored.Valid {
+			t.Errorf("cleared moments stored %v (%v)", stored, err)
+		}
+		if err := repo.DeleteScene(ctx, c1, asks.ID); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("names are unique per campaign, ignoring case", func(t *testing.T) {
 		dup := sc
 		dup.ID, dup.Name = uuid.NewString(), "the eye opens"

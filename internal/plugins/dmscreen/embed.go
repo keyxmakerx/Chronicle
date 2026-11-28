@@ -3,11 +3,12 @@ package dmscreen
 import "embed"
 
 // PluginSlug names this plugin in the registry and the health/migration
-// bookkeeping. Only the Adventures tab needs a table; a failed migration
-// leaves the rest of the screen working and the tab out.
+// bookkeeping. Only the Adventures tab and the saved screen layouts need
+// tables; a failed migration leaves the rest of the screen working, the tab
+// out and layouts kept in the browser alone.
 const PluginSlug = "dmscreen"
 
-// MigrationsFS contains the embedded SQL migration files so the table is
+// MigrationsFS contains the embedded SQL migration files so the tables are
 // created from the compiled binary regardless of the working directory (same
 // pattern as the other plugins).
 //

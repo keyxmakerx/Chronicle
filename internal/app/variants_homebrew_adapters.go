@@ -70,10 +70,10 @@ func registerVariantParts(reg *homebrew.Registry, states variantStates, pages va
 	marks := []string{"creature-mark"}
 	regs := []func() error{
 		func() error {
-			return reg.RegisterPart(homebrew.PartKind{Name: "creature-recipe", Label: "Creature recipe", ForceSee: "director", Check: v.checkRecipeLink})
+			return reg.RegisterPart(homebrew.PartKind{Name: "creature-recipe", Label: "Creature recipe", ForceSee: "director", Check: v.checkRecipeLink, Share: shareRecipeLink})
 		},
 		func() error {
-			return reg.RegisterPart(homebrew.PartKind{Name: "creature-mark", Label: "Creature mark", ForceSee: "director", Check: v.checkMark})
+			return reg.RegisterPart(homebrew.PartKind{Name: "creature-mark", Label: "Creature mark", ForceSee: "director", Check: v.checkMark, Share: shareCreatureMark})
 		},
 		func() error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: "creature.dies", Label: "A marked creature dies", PartKinds: marks, Check: none})
@@ -119,6 +119,10 @@ func (v variantChecker) checkRecipeLink(ctx context.Context, campaignID string, 
 	if err != nil {
 		return nil, err
 	}
+	if d.Page == "" && homebrew.Waiting(ctx, pickCreatureRecipe) {
+		// A recipe from the Store waits for the Director to pick the page.
+		return json.Marshal(d)
+	}
 	if _, err := v.recipePart(ctx, campaignID, sys, d.Page); err != nil {
 		return nil, err
 	}
@@ -134,12 +138,15 @@ func (v variantChecker) checkMark(ctx context.Context, campaignID string, raw js
 	if err != nil {
 		return nil, err
 	}
-	part, err := v.recipePart(ctx, campaignID, sys, d.Recipe)
-	if err != nil {
-		return nil, err
-	}
-	if part != "base" {
-		return nil, apperror.NewValidation("the recipe is an add-on; pick the recipe it adds to")
+	// Only the recipe itself may wait; every other field is checked as usual.
+	if d.Recipe != "" || !homebrew.Waiting(ctx, pickCreatureRecipe) {
+		part, err := v.recipePart(ctx, campaignID, sys, d.Recipe)
+		if err != nil {
+			return nil, err
+		}
+		if part != "base" {
+			return nil, apperror.NewValidation("the recipe is an add-on; pick the recipe it adds to")
+		}
 	}
 	if len(d.Addons) > maxMarkAddons {
 		return nil, apperror.NewValidation(fmt.Sprintf("has more than %d add-ons", maxMarkAddons))
