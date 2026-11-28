@@ -66,9 +66,20 @@ type fakeMaps struct {
 	byID map[string]MapInfo
 	camp map[string]string
 	off  bool // the maps addon is off: nothing is found, as the adapter does
+	// hidden maps are not given to any player in the test.
+	hidden map[string]bool
 }
 
 func (f *fakeMaps) Enabled(context.Context, string) (bool, error) { return !f.off, nil }
+
+// Seen lets a viewer see every map unless the map is in hidden and the viewer
+// is below Scribe and not the DM.
+func (f *fakeMaps) Seen(_ context.Context, _ string, v Viewer) (func(string) bool, error) {
+	if v.IsDM || v.VisibilityRole >= 2 {
+		return func(string) bool { return true }, nil
+	}
+	return func(id string) bool { return !f.hidden[id] }, nil
+}
 
 func newFakeMaps() *fakeMaps { return &fakeMaps{byID: map[string]MapInfo{}, camp: map[string]string{}} }
 

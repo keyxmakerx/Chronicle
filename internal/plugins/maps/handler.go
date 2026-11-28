@@ -45,6 +45,12 @@ func (h *Handler) Index(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// A Player sees only the maps given to a character of theirs.
+	mf, err := h.svc.MapFilterFor(ctx, cc.Campaign.ID, cc.VisibilityRole(), getUserID(c))
+	if err != nil {
+		return err
+	}
+	mapList = mf.Keep(mapList)
 	// The cards show each map's picture, so they get the viewer's version of it.
 	mapList, err = h.svc.ForViewerList(ctx, mapList, cc.VisibilityRole())
 	if err != nil {
@@ -159,7 +165,7 @@ func (h *Handler) mapViewData(c *echo.Context, cc *campaigns.CampaignContext) (M
 
 	// The trail is display only: ResolveTrail keeps ids that name maps of this
 	// campaign and nothing in it grants access to anything.
-	trail, err := h.svc.ResolveTrail(c.Request().Context(), cc.Campaign.ID, mapID, ParseTrailParam(c.QueryParam("from")))
+	trail, err := h.svc.ResolveTrail(c.Request().Context(), cc.Campaign.ID, mapID, ParseTrailParam(c.QueryParam("from")), cc.VisibilityRole(), getUserID(c))
 	if err != nil {
 		return MapViewData{}, err
 	}
@@ -202,7 +208,11 @@ func (h *Handler) linkMapOptions(c *echo.Context, cc *campaigns.CampaignContext,
 	if err != nil {
 		return nil, err
 	}
-	ms, err = h.svc.ForViewerList(ctx, ms, cc.VisibilityRole())
+	mf, err := h.svc.MapFilterFor(ctx, cc.Campaign.ID, cc.VisibilityRole(), getUserID(c))
+	if err != nil {
+		return nil, err
+	}
+	ms, err = h.svc.ForViewerList(ctx, mf.Keep(ms), cc.VisibilityRole())
 	if err != nil {
 		return nil, err
 	}

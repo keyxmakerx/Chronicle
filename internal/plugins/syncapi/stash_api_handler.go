@@ -30,6 +30,16 @@ type StashAPIService interface {
 	Decline(ctx context.Context, campaignID, keyUserID, actingUserID string, moveID int64) (any, error)
 	Downtime(ctx context.Context, campaignID string) (any, error)
 	SetDowntime(ctx context.Context, campaignID, keyUserID, actingUserID string, open bool) (any, error)
+	Give(ctx context.Context, campaignID, keyUserID string, req StashGiveRequest) (any, error)
+}
+
+// StashGiveRequest is a decoded POST /stashes/give body.
+type StashGiveRequest struct {
+	ActingUserID string
+	CharacterID  string
+	ItemID       string
+	MapID        string
+	Quantity     int
 }
 
 // StashEndpoint is one side of a move on the wire.
@@ -103,6 +113,15 @@ type stashMoveBody struct {
 	To           stashEndpointBody `json:"to"`
 }
 
+// stashGiveBody is the body of POST /stashes/give.
+type stashGiveBody struct {
+	ActingUserID string `json:"actingUserId"`
+	CharacterID  string `json:"characterId"`
+	ItemID       string `json:"itemId"`
+	MapID        string `json:"mapId"`
+	Quantity     int    `json:"quantity"`
+}
+
 // actingBody is the optional body of the answer endpoints.
 type actingBody struct {
 	ActingUserID string `json:"actingUserId"`
@@ -168,6 +187,25 @@ func (h *StashAPIHandler) Move(c *echo.Context) error {
 		From: StashEndpoint{Kind: body.From.Kind, ID: string(body.From.ID)},
 		To:   StashEndpoint{Kind: body.To.Kind, ID: string(body.To.ID)},
 	})
+	if err != nil {
+		return err
+	}
+	noteSyncActor(c, body.ActingUserID)
+	return c.JSON(http.StatusOK, out)
+}
+
+// Give hands a character an item or a map; only the campaign owner may.
+// POST /api/v1/campaigns/:id/stashes/give
+func (h *StashAPIHandler) Give(c *echo.Context) error {
+	uid, err := keyUser(c)
+	if err != nil {
+		return err
+	}
+	var body stashGiveBody
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	out, err := h.svc.Give(c.Request().Context(), c.Param("id"), uid, StashGiveRequest(body))
 	if err != nil {
 		return err
 	}

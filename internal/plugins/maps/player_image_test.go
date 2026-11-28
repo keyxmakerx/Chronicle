@@ -68,6 +68,7 @@ func shadowedMapService(areas []ShadowArea, lookupErr error) *mapService {
 	}
 	s := NewMapService(repo).(*mapService)
 	s.SetShadowLookup(fakeShadowLookup{areas: areas, err: lookupErr})
+	s.SetMapGrants(allGiven{repo})
 	return s
 }
 

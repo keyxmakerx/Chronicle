@@ -277,6 +277,16 @@ func (s *boardService) buildViews(ctx context.Context, campaignID string, v View
 		if maps, err = s.maps.Maps(ctx, campaignID, mapIDs); err != nil {
 			return nil, nil, apperrorInternal(err)
 		}
+		// A map pin v may not see goes as if its map were gone.
+		seen, err := s.maps.Seen(ctx, campaignID, v)
+		if err != nil {
+			return nil, nil, apperrorInternal(err)
+		}
+		for id := range maps {
+			if !seen(id) {
+				delete(maps, id)
+			}
+		}
 	}
 	if len(noticeIDs) > 0 {
 		if docs, err = s.quests.GetMany(ctx, campaignID, noticeIDs); err != nil {
@@ -663,7 +673,11 @@ func (s *boardService) CreateItem(ctx context.Context, campaignID string, h Home
 		if err != nil {
 			return nil, apperrorInternal(err)
 		}
-		if _, ok := found[in.RefID]; !ok {
+		seen, err := s.maps.Seen(ctx, campaignID, v)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		if _, ok := found[in.RefID]; !ok || !seen(in.RefID) {
 			return nil, errInvalid("that map is not in this campaign")
 		}
 		it.RefID = in.RefID

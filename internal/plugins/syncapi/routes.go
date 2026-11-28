@@ -424,6 +424,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		stashGroup.GET("/stashes/requests", stashAPI.Requests, RequirePermission(PermRead))
 		stashGroup.GET("/stashes/downtime", stashAPI.Downtime, RequirePermission(PermRead))
 		stashGroup.POST("/stashes/moves", stashAPI.Move, RequirePermission(PermWrite))
+		stashGroup.POST("/stashes/give", stashAPI.Give, RequirePermission(PermWrite))
 		stashGroup.POST("/stashes/requests/:moveId/approve", stashAPI.Approve, RequirePermission(PermWrite))
 		stashGroup.POST("/stashes/requests/:moveId/decline", stashAPI.Decline, RequirePermission(PermWrite))
 		stashGroup.PUT("/stashes/downtime", stashAPI.SetDowntime, RequirePermission(PermWrite))

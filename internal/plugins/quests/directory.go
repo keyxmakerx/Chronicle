@@ -57,6 +57,10 @@ type MapDirectory interface {
 	// Enabled reports whether the campaign has the maps addon on. When it is
 	// off, Maps and ListMaps find nothing, so map pins and links are refused.
 	Enabled(ctx context.Context, campaignID string) (bool, error)
+	// Seen is which maps v may know about: every map for a Scribe or the DM,
+	// else only the maps given to a character v owns. Everything a non-DM
+	// is shown passes through it.
+	Seen(ctx context.Context, campaignID string, v Viewer) (func(mapID string) bool, error)
 }
 
 // MemberNames resolves campaign members' display names.

@@ -170,6 +170,12 @@ func (s *mapService) WhereIs(ctx context.Context, campaignID, entityID string, r
 	if err != nil {
 		return nil, fmt.Errorf("list maps for where-is: %w", err)
 	}
+	// A map the viewer may not see is left out of every step.
+	f, err := s.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	ms = f.Keep(ms)
 	w := &whereWalk{
 		s: s, ctx: ctx, campaignID: campaignID, role: role, userID: userID,
 		dm: permissions.CanSeeDmOnly(role), byID: make(map[string]*Map, len(ms)), memo: map[whereKey][]Marker{},

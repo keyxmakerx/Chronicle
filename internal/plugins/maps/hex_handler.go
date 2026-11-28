@@ -14,9 +14,15 @@ import (
 // renders; who may see or write what is decided in HexService.
 type HexHandler struct {
 	svc HexService
+	// mapSvc answers which maps a viewer may see; unset, Players are refused
+	// every hex route.
+	mapSvc MapService
 }
 
 // NewHexHandler creates a new HexHandler.
+// SetMapService wires the check that a viewer may see the map at all.
+func (h *HexHandler) SetMapService(m MapService) { h.mapSvc = m }
+
 func NewHexHandler(svc HexService) *HexHandler {
 	return &HexHandler{svc: svc}
 }

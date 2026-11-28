@@ -69,7 +69,7 @@ type MapService interface {
 	RestoreMap(ctx context.Context, campaignID, id string) error
 	ListTrashedMaps(ctx context.Context, campaignID string) ([]TrashedMap, error)
 	PurgeTrashedMaps(ctx context.Context, cutoff time.Time) (int, error)
-	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+	SearchMaps(ctx context.Context, campaignID, query string, role int, userID string) ([]map[string]string, error)
 
 	// Map look. GetCampaignFrame returns the campaign-wide frame (the default
 	// when the campaign has never chosen); SetCampaignFrame validates and
@@ -107,7 +107,7 @@ type MapService interface {
 	// only maps of the campaign; it is display only and grants nothing.
 	// LinkTree is the campaign's linked maps as this viewer can follow them,
 	// built from ListMarkers for the viewer so hidden pins add nothing.
-	ResolveTrail(ctx context.Context, campaignID, mapID string, from []string) ([]TrailStep, error)
+	ResolveTrail(ctx context.Context, campaignID, mapID string, from []string, role int, userID string) ([]TrailStep, error)
 	LinkTree(ctx context.Context, campaignID string, role int, userID string) (*LinkTree, error)
 	// WhereIs is an entity's place in the maps, closest first: the map it is
 	// pinned on, then the map holding a pin that opens it, out to the top,
@@ -121,6 +121,13 @@ type MapService interface {
 	// Every handler that sends a map to a user passes it through here.
 	ForViewer(ctx context.Context, m *Map, role int) (*Map, error)
 	ForViewerList(ctx context.Context, ms []Map, role int) ([]Map, error)
+	// MapFilterFor is which maps the viewer may know about at all (given.go):
+	// every map for a Scribe or above, else the maps given to a character
+	// the user owns. CanSeeMap asks for one map. MapAudience is the Players who
+	// may hear live news of a map. Every user-facing map read asks first.
+	MapFilterFor(ctx context.Context, campaignID string, role int, userID string) (MapFilter, error)
+	CanSeeMap(ctx context.Context, campaignID, mapID string, role int, userID string) (bool, error)
+	MapAudience(ctx context.Context, campaignID, mapID string) ([]string, error)
 	// PlayerImage renders (or reads from cache) the player copy of the map's
 	// picture as JPEG. It errors rather than ever returning the original.
 	PlayerImage(ctx context.Context, m *Map) ([]byte, error)
@@ -133,9 +140,15 @@ type MapService interface {
 	// the picture of any map at all, or such a withheld picture.
 	IsShadowedMapImage(ctx context.Context, campaignID, mediaID string) (bool, error)
 	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
+	// HiddenMapPicture is whether the file is the picture only of maps the
+	// viewer may not see (given.go); the media server then refuses it.
+	HiddenMapPicture(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error)
 
 	// Wiring.
 	SetEventPublisher(pub MapEventPublisher)
+	// SetMapGrants is on the interface so a wiring that stops matching fails
+	// to compile; unwired, Players see no maps.
+	SetMapGrants(g MapGrants)
 	// SetShadowLookup is on the interface (not reached by type assertion) so a
 	// wiring that stops matching fails to compile instead of silently showing
 	// players every pin.
@@ -191,6 +204,7 @@ type mapService struct {
 	media          MediaVerifier
 	imageCacheDir  string
 	pictureCache   *pictureStatusCache
+	grants         MapGrants
 }
 
 // BindingCleaner sweeps a deleted instance's widget bindings. Implemented by
@@ -885,6 +899,21 @@ func (s *mapService) ListMarkers(ctx context.Context, campaignID, mapID string, 
 		markers = kept
 	}
 
+	// A pin that opens a map the viewer may not see keeps its place but not
+	// the link, which would name that map.
+	mf, err := s.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !mf.SeesAll() {
+		for i := range markers {
+			if l := markers[i].LinkedMapID; l != nil && *l != "" && !mf.Sees(*l) {
+				markers[i].LinkedMapID = nil
+				markers[i].LinkedMapName = ""
+			}
+		}
+	}
+
 	entityIDs := make([]string, 0, len(markers))
 	seen := make(map[string]bool, len(markers))
 	for _, mk := range markers {
@@ -933,11 +962,16 @@ func (s *mapService) ListMarkers(ctx context.Context, campaignID, mapID string, 
 
 // SearchMaps returns maps matching a query as map results for the quick search system.
 // Results are formatted to match the entity search JSON format.
-func (s *mapService) SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error) {
+func (s *mapService) SearchMaps(ctx context.Context, campaignID, query string, role int, userID string) ([]map[string]string, error) {
 	maps, err := s.repo.SearchMaps(ctx, campaignID, query)
 	if err != nil {
 		return nil, fmt.Errorf("search maps: %w", err)
 	}
+	f, err := s.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	maps = f.Keep(maps)
 
 	results := make([]map[string]string, 0, len(maps))
 	for _, m := range maps {

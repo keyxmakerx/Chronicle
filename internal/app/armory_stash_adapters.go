@@ -364,7 +364,7 @@ func (a *armoryHasItemAdapter) ListByCharacter(ctx context.Context, campaignID, 
 		}
 		out = append(out, armory.HasItemRelation{
 			ID: r.ID, ItemEntityID: r.TargetEntityID, ItemName: r.TargetEntityName,
-			Metadata: r.Metadata, DmOnly: r.DmOnly,
+			Metadata: r.Metadata, DmOnly: r.DmOnly, CreatedBy: r.CreatedBy,
 		})
 	}
 	return out, nil
@@ -480,6 +480,17 @@ var _ syncapi.StashAPIService = (*syncStashAPIAdapter)(nil)
 
 func (a *syncStashAPIAdapter) View(ctx context.Context, campaignID, keyUserID, actingUserID, characterID string) (any, error) {
 	v, err := a.api.View(ctx, campaignID, keyUserID, actingUserID, characterID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) Give(ctx context.Context, campaignID, keyUserID string, req syncapi.StashGiveRequest) (any, error) {
+	v, err := a.api.Give(ctx, campaignID, keyUserID, armory.APIGiveRequest{
+		ActingUserID: req.ActingUserID, CharacterID: req.CharacterID,
+		ItemID: req.ItemID, MapID: req.MapID, Quantity: req.Quantity,
+	})
 	if err != nil {
 		return nil, err
 	}

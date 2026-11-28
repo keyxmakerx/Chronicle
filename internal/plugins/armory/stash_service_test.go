@@ -292,7 +292,7 @@ func (f *fakeRels) ListByCharacter(_ context.Context, _, cid string) ([]HasItemR
 	}
 	return out, nil
 }
-func (f *fakeRels) Create(_ context.Context, _, cid, item, _ string, meta []byte) (int, error) {
+func (f *fakeRels) Create(_ context.Context, _, cid, item, by string, meta []byte) (int, error) {
 	if f.fail {
 		return 0, errors.New("boom")
 	}
@@ -300,7 +300,7 @@ func (f *fakeRels) Create(_ context.Context, _, cid, item, _ string, meta []byte
 		return 0, apperror.NewConflict("exists")
 	}
 	f.next++
-	f.rels[cid] = append(f.rels[cid], &HasItemRelation{ID: f.next, ItemEntityID: item, ItemName: item, Metadata: meta})
+	f.rels[cid] = append(f.rels[cid], &HasItemRelation{ID: f.next, ItemEntityID: item, ItemName: item, Metadata: meta, CreatedBy: by})
 	return f.next, nil
 }
 func (f *fakeRels) find(id int) *HasItemRelation {

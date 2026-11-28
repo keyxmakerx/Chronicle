@@ -26,9 +26,9 @@ import (
 const (
 	// giveReplayReason is what run answers when handed a give.
 	giveReplayReason = "A gift is already given and can't be moved again."
-	// handoutPrefix names a map handout item. The prefix plus the map name is
+	// HandoutPrefix names a map handout item. The prefix plus the map name is
 	// how an earlier handout for the same map is found again.
-	handoutPrefix = "Map: "
+	HandoutPrefix = "Map: "
 	// maxHandoutMapName leaves room for the prefix inside the 200-byte entity
 	// name limit, whatever the map's name is made of.
 	maxHandoutMapName = 150
@@ -222,7 +222,7 @@ func (s *stashService) playerNames(ctx context.Context, campaignID string, userI
 func (s *stashService) markMaps(ctx context.Context, campaignID string, held []HeldItem) map[string]bool {
 	maps := map[string]bool{}
 	for i := range held {
-		if !strings.HasPrefix(held[i].Name, handoutPrefix) {
+		if !strings.HasPrefix(held[i].Name, HandoutPrefix) {
 			continue
 		}
 		ref, err := s.Directory.GetEntity(ctx, campaignID, held[i].ItemID)
@@ -259,7 +259,7 @@ func handoutName(mapName string) string {
 	if utf8.RuneCountInString(mapName) > maxHandoutMapName {
 		mapName = string([]rune(mapName)[:maxHandoutMapName])
 	}
-	return handoutPrefix + mapName
+	return HandoutPrefix + mapName
 }
 
 func (s *stashService) Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error) {
@@ -324,6 +324,20 @@ func (s *stashService) give(ctx context.Context, campaignID string, a Actor, cha
 	if s.Handouts != nil && char.OwnerUserID != "" {
 		if _, err := s.Handouts.AllowViewers(ctx, campaignID, item.ID, []string{char.OwnerUserID}); err != nil {
 			return nil, err
+		}
+	}
+
+	// A map shows to the holder's player only on a line the Director made, so
+	// a line someone else added by hand is replaced rather than raised.
+	if mp != nil {
+		rel, err := s.hasItem(ctx, campaignID, char.ID, item.ID, true)
+		if err != nil {
+			return nil, err
+		}
+		if rel != nil && rel.CreatedBy != a.UserID {
+			if err := s.Relations.Delete(ctx, rel.ID); err != nil {
+				return nil, err
+			}
 		}
 	}
 

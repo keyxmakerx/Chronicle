@@ -138,6 +138,16 @@ func (w *mapWidgetType) renderInner(ctx context.Context, rc widgetbindings.Block
 		// SECURITY: only render an in-campaign map (cross-campaign / dangling →
 		// fall through to the choose/empty branch rather than leak or 500).
 		if err == nil && m != nil && m.CampaignID == rc.CC.Campaign.ID {
+			// A map not given to this Player reads as no map at all.
+			ok, gerr := w.svc.CanSeeMap(ctx, m.CampaignID, m.ID, rc.Role, rc.UserID)
+			if gerr != nil {
+				slog.Error("map widget RenderBlock: cannot check who may see the map",
+					slog.String("map_id", mapID), slog.Any("error", gerr))
+				return templ.NopComponent
+			}
+			if !ok {
+				return BlockEntityMapEmpty()
+			}
 			// No markers: the preview is a picture. The live viewer fetches its own,
 			// role-filtered, when it is opened.
 			display, _ := w.svc.ResolveDisplay(ctx, m)

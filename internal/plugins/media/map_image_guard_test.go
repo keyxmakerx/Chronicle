@@ -15,6 +15,10 @@ type fakeMapImageGuard struct {
 	isPic  bool
 	err    error
 	asked  int
+	// notGiven: the picture is of a map the viewer was not given.
+	notGiven  bool
+	askedRole int
+	askedUser string
 }
 
 func (f *fakeMapImageGuard) IsShadowedMapImage(context.Context, string, string) (bool, error) {
@@ -24,6 +28,57 @@ func (f *fakeMapImageGuard) IsShadowedMapImage(context.Context, string, string) 
 
 func (f *fakeMapImageGuard) IsMapPicture(context.Context, string, string) (bool, error) {
 	return f.isPic || f.hidden, f.err
+}
+
+func (f *fakeMapImageGuard) HiddenMapPicture(_ context.Context, _, _ string, role int, user string) (bool, error) {
+	f.askedRole, f.askedUser = role, user
+	return f.notGiven, f.err
+}
+
+// The picture of a map not given to the viewer is refused like a missing
+// file; the owner and the owner's sync module (an api-key link) are never
+// asked, and a signed-in viewer is asked with their own role and id.
+func TestCheckMediaAccess_PictureOfAMapNotGiven(t *testing.T) {
+	const camp = "camp-1"
+	signer := NewURLSigner("test-secret")
+	apiExp, apiSig := signMediaURL(t, signer, "file-1", ViewerAPIKey, time.Minute)
+	checker := &stubMemberChecker{
+		members: map[string]map[string]bool{camp: {"player": true, "owner": true}},
+		roles:   map[string]map[string]int{camp: {"player": 1, "owner": 3}},
+	}
+	cases := []struct {
+		name     string
+		notGiven bool
+		user     string
+		query    map[string]string
+		allowed  bool
+		wantRole int
+	}{
+		{"player, map given", false, "player", nil, true, 1},
+		{"player, map not given", true, "player", nil, false, 1},
+		{"anonymous, map not given", true, "", nil, false, 0},
+		{"owner is never refused", true, "owner", nil, true, -1},
+		{"owner's sync module link", true, "", map[string]string{"expires": apiExp, "sig": apiSig}, true, -1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &fakeMapImageGuard{notGiven: tc.notGiven, askedRole: -1}
+			h := &Handler{signer: signer, memberChecker: checker, mapImages: g}
+			var sess *auth.Session
+			if tc.user != "" {
+				sess = &auth.Session{UserID: tc.user}
+			}
+			err := accessErr(h.checkMapImageGuard(newAccessTestContext(tc.query, sess), privateMediaFile(), false, ""))
+			if tc.allowed {
+				mustAllow(t, err, tc.name)
+			} else {
+				mustDeny(t, err, tc.name)
+			}
+			if g.askedRole != tc.wantRole || (tc.wantRole >= 0 && g.askedUser != tc.user) {
+				t.Fatalf("asked as role %d user %q, want role %d", g.askedRole, g.askedUser, tc.wantRole)
+			}
+		})
+	}
 }
 
 // The original (and every thumbnail) of a map picture that has a shadow is

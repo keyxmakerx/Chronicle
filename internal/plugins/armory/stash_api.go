@@ -177,6 +177,26 @@ type APIMoveResult struct {
 	Move   APIMove `json:"move"`
 }
 
+// APIGiveRequest is the body of POST /stashes/give: the GM hands a character
+// an item or a map, exactly as the Give box does. Exactly one of ItemID and
+// MapID is set.
+type APIGiveRequest struct {
+	ActingUserID string
+	CharacterID  string
+	ItemID       string
+	MapID        string
+	Quantity     int
+}
+
+// APIGiveResult answers a give. ItemID is the item now held: for a map, its
+// handout page.
+type APIGiveResult struct {
+	Move          APIMove `json:"move"`
+	ItemID        string  `json:"itemId"`
+	ItemName      string  `json:"itemName"`
+	CharacterName string  `json:"characterName"`
+}
+
 // APIHistory is a list of move lines.
 type APIHistory struct {
 	History []APIMoveLine `json:"history"`
@@ -298,6 +318,27 @@ func (a *StashAPI) Move(ctx context.Context, campaignID, keyUserID string, req A
 		return nil, err
 	}
 	return &APIMoveResult{Status: out.Move.Status, Move: apiMove(out.Move)}, nil
+}
+
+// Give hands a character an item or a map as the caller (or the member they
+// name). Only the campaign owner may give, as on the web.
+func (a *StashAPI) Give(ctx context.Context, campaignID, keyUserID string, req APIGiveRequest) (*APIGiveResult, error) {
+	actor, err := a.ActorFor(ctx, campaignID, keyUserID, req.ActingUserID)
+	if err != nil {
+		return nil, err
+	}
+	qty := req.Quantity
+	if qty == 0 {
+		qty = 1
+	}
+	out, err := a.svc.Give(ctx, campaignID, actor, GiveInput{
+		CharacterID: req.CharacterID, ItemID: req.ItemID, MapID: req.MapID, Quantity: qty,
+	})
+	if err != nil {
+		return nil, err
+	}
+	m := apiMove(out.Move)
+	return &APIGiveResult{Move: m, ItemID: m.ItemID, ItemName: out.ItemName, CharacterName: out.CharacterName}, nil
 }
 
 // History returns the move history of one character or one stash, as the

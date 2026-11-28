@@ -64,7 +64,8 @@ type TimelineSearcher interface {
 // MapSearcher provides map search results for the quick search popup.
 // Implemented by the maps plugin and injected via SetMapSearcher.
 type MapSearcher interface {
-	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+	// role and userID decide which maps the viewer may know about.
+	SearchMaps(ctx context.Context, campaignID, query string, role int, userID string) ([]map[string]string, error)
 }
 
 // CalendarSearcher provides calendar event search results for the quick search popup.
@@ -1283,7 +1284,7 @@ func (h *Handler) SearchAPI(c *echo.Context) error {
 		}
 		if h.mapSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "maps") {
 			if mapResults, err := h.mapSearcher.SearchMaps(
-				ctx, cc.Campaign.ID, query,
+				ctx, cc.Campaign.ID, query, role, userID,
 			); err == nil {
 				items = append(items, toAnyMaps(mapResults)...)
 				total += len(mapResults)

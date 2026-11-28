@@ -18,10 +18,17 @@ import (
 // live updates a plain player's socket receives. The hub treats a message with
 // no chosen audience as DM-only, so every publisher of player-visible content
 // has to say so; this is where a publisher that forgets shows up.
+// fixedHolders names who was given each map.
+type fixedHolders map[string][]string
+
+func (f fixedHolders) MapAudience(_ context.Context, _, mapID string) ([]string, error) {
+	return f[mapID], nil
+}
+
 func TestPublishers_PlayerReach(t *testing.T) {
 	adv := entities.PresetCategoryAdventures
 	newMaps := func(bus ws.EventBus) *mapEventPublisherAdapter {
-		return &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}, fog: fixedFogLookup{}}
+		return &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}, fog: fixedFogLookup{}, holders: fixedHolders{"m1": {"u-player"}}}
 	}
 	tests := []struct {
 		name string
@@ -46,7 +53,18 @@ func TestPublishers_PlayerReach(t *testing.T) {
 		{"quest", func(b ws.EventBus) { (&questAnnouncerAdapter{bus: b}).QuestChanged("c1", "e1", 1, false) }, true},
 		{"hidden quest", func(b ws.EventBus) { (&questAnnouncerAdapter{bus: b}).QuestChanged("c1", "e1", 1, true) }, false},
 		{"boards", func(b ws.EventBus) { (&questAnnouncerAdapter{bus: b}).BoardsChanged("c1", quests.TypeHome(3), false) }, true},
-		{"layer", func(b ws.EventBus) { newMaps(b).PublishLayerEvent("created", "c1", &maps.Layer{ID: "l1"}) }, true},
+		{"layer", func(b ws.EventBus) { newMaps(b).PublishLayerEvent("created", "c1", &maps.Layer{ID: "l1", MapID: "m1"}) }, true},
+		// A map not given to the player is news they never hear.
+		{"layer of a map not given", func(b ws.EventBus) { newMaps(b).PublishLayerEvent("created", "c1", &maps.Layer{ID: "l1", MapID: "m2"}) }, false},
+		{"hex of a map not given", func(b ws.EventBus) { newMaps(b).PublishHexChanged("c1", "m2", 2, nil) }, false},
+		{"pin of a map not given", func(b ws.EventBus) {
+			newMaps(b).PublishMarkerEvent("created", "c1", &maps.Marker{ID: "p1", MapID: "m2", Visibility: "everyone"})
+		}, false},
+		{"pin opening a map not given", func(b ws.EventBus) {
+			other := "m2"
+			newMaps(b).PublishMarkerEvent("created", "c1", &maps.Marker{ID: "p1", MapID: "m1", Visibility: "everyone", LinkedMapID: &other})
+		}, false},
+		{"token move on a map not given", func(b ws.EventBus) { newMaps(b).PublishTokenPositionEvent("c1", "m2", "t1", 1, 1, false) }, false},
 		{"hex", func(b ws.EventBus) { newMaps(b).PublishHexChanged("c1", "m1", 2, nil) }, true},
 		{"pin", func(b ws.EventBus) {
 			newMaps(b).PublishMarkerEvent("created", "c1", &maps.Marker{ID: "p1", MapID: "m1", Visibility: "everyone"})

@@ -242,7 +242,7 @@ func TestWhereIs(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := NewMapService(whRepo(tc.maps, tc.pins))
+			svc := givenAllMapService(whRepo(tc.maps, tc.pins))
 			svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
 			got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", tc.role, "u-1")
 			if err != nil {
@@ -265,7 +265,7 @@ func TestWhereIs(t *testing.T) {
 // first step the entity's own pin.
 func TestWhereIs_PinSpots(t *testing.T) {
 	repo := whRepo([]string{"room", "inn"}, []whPin{{on: "room", ent: "ent-1"}, {on: "inn", opens: "room"}})
-	svc := NewMapService(repo)
+	svc := givenAllMapService(repo)
 	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
 	got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
 	if err != nil {
@@ -280,7 +280,7 @@ func TestWhereIs_PinSpots(t *testing.T) {
 // entity before the ladder looks at it.
 func TestWhereIs_EntityHiddenFromViewer(t *testing.T) {
 	repo := whRepo([]string{"room"}, []whPin{{on: "room", ent: "ent-1"}})
-	svc := NewMapService(repo)
+	svc := givenAllMapService(repo)
 	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{}})
 	got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
 	if err != nil {
@@ -301,7 +301,7 @@ func TestWhereIs_HiddenPinsDoNotUseTheCap(t *testing.T) {
 		ids = append(ids, id)
 		pins = append(pins, whPin{on: id, ent: "ent-1", dmOnly: i < 55})
 	}
-	svc := NewMapService(whRepo(ids, pins))
+	svc := givenAllMapService(whRepo(ids, pins))
 	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
 	got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
 	if err != nil {
@@ -324,7 +324,7 @@ func TestWhereIs_VisibleStartsCapMarksTruncated(t *testing.T) {
 		ids = append(ids, id)
 		pins = append(pins, whPin{on: id, ent: "ent-1"})
 	}
-	svc := NewMapService(whRepo(ids, pins))
+	svc := givenAllMapService(whRepo(ids, pins))
 	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
 	got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
 	if err != nil {
@@ -352,7 +352,7 @@ func TestWhereIs_ParentFanOutIsBounded(t *testing.T) {
 		reads++
 		return inner(c, mapID, role)
 	}
-	svc := NewMapService(repo)
+	svc := givenAllMapService(repo)
 	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
 	for _, role := range []int{int(permissions.RolePlayer), int(permissions.RoleOwner)} {
 		reads = 0
@@ -373,7 +373,7 @@ func TestWhereIs_NoMapSkipsListMaps(t *testing.T) {
 		t.Error("ListMaps must not run for a page on no map")
 		return nil, nil
 	}
-	got, err := NewMapService(repo).WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
+	got, err := givenAllMapService(repo).WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
 	if err != nil || len(got.Steps) != 0 {
 		t.Fatalf("steps %v err %v", got, err)
 	}
@@ -383,7 +383,7 @@ func TestWhereIs_NoMapSkipsListMaps(t *testing.T) {
 // the original.
 func TestWhereIs_PlayersGetThePlayerSafePicture(t *testing.T) {
 	pins := []whPin{{on: "room", ent: "ent-1"}, {on: "inn", opens: "room"}, {on: "coast", ent: "ent-1"}}
-	svc := NewMapService(whRepo([]string{"room", "inn", "coast"}, pins)).(*mapService)
+	svc := givenAllMapService(whRepo([]string{"room", "inn", "coast"}, pins)).(*mapService)
 	svc.SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
 	svc.SetShadowLookup(fakeShadowLookup{areas: []ShadowArea{{MinX: 80, MinY: 80, MaxX: 95, MaxY: 95, Strength: ShadowAlphaHint}}})
 	cases := []struct {

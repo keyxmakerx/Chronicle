@@ -129,7 +129,23 @@ func (h *MapAPIHandler) requireMapInCampaign(c *echo.Context) (*maps.Map, error)
 	if m.CampaignID != campaignID {
 		return nil, apperror.NewForbidden("map does not belong to this campaign")
 	}
+	// A browser session reaches these routes as its own member, so a Player
+	// gets only the maps given to a character of theirs; the rest read as
+	// missing.
+	if ok, err := h.mapSvc.CanSeeMap(ctx, campaignID, m.ID, h.viewRole(c), h.keyUserID(c)); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, apperror.NewNotFound("map not found")
+	}
 	return m, nil
+}
+
+// keyUserID is the member the key or session belongs to, or "".
+func (h *MapAPIHandler) keyUserID(c *echo.Context) string {
+	if key := GetAPIKey(c); key != nil {
+		return key.UserID
+	}
+	return ""
 }
 
 // requireMarkerOnMap loads a marker and checks it sits on the map the URL
@@ -161,6 +177,12 @@ func (h *MapAPIHandler) ListMaps(c *echo.Context) error {
 		slog.Error("api: list maps failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
 	}
+	mf, err := h.mapSvc.MapFilterFor(ctx, campaignID, h.viewRole(c), h.keyUserID(c))
+	if err != nil {
+		slog.Error("api: list maps failed", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
+	}
+	result = mf.Keep(result)
 	// The player-copy address is worked out from the stored maps, before
 	// ForViewerList strips the original id from a below-owner key's copy.
 	apiURLs := make([]string, len(result))

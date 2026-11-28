@@ -116,10 +116,10 @@ func (s *questService) Get(ctx context.Context, campaignID, entityID string, v V
 	if v.IsDM {
 		return s.dmView(ctx, campaignID, q, version)
 	}
-	return s.playerView(ctx, campaignID, q)
+	return s.playerView(ctx, campaignID, q, v)
 }
 
-func (s *questService) playerView(ctx context.Context, campaignID string, q Quest) (*PlayerQuestView, error) {
+func (s *questService) playerView(ctx context.Context, campaignID string, q Quest, v Viewer) (*PlayerQuestView, error) {
 	out := &PlayerQuestView{
 		CanEdit:   false,
 		Status:    q.Status,
@@ -155,7 +155,11 @@ func (s *questService) playerView(ctx context.Context, campaignID string, q Ques
 		if err != nil {
 			return nil, apperrorInternal(err)
 		}
-		if m, ok := maps[q.MapID]; ok {
+		seen, err := s.maps.Seen(ctx, campaignID, v)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		if m, ok := maps[q.MapID]; ok && seen(m.ID) {
 			out.Map = &MapRef{ID: m.ID, Name: m.Name}
 		}
 	}

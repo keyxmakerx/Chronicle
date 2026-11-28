@@ -61,6 +61,7 @@ func TestMapAPIHandler_PlayerImageAPIURL(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := maps.NewMapService(pictureRepo{})
+			svc.SetMapGrants(miraGrants{}) // the test's map is given to its player
 			svc.SetShadowLookup(tc.shadows)
 			h := NewMapAPIHandler(nil, svc, nil, &stubCampaignSvcOwnerGate{role: tc.role})
 			key := &APIKey{CampaignID: "camp-1", UserID: "u1"}
@@ -83,6 +84,7 @@ func TestMapAPIHandler_PlayerImage(t *testing.T) {
 	original := smallPNG(t)
 	for _, wired := range []bool{true, false} {
 		svc := maps.NewMapService(pictureRepo{})
+		svc.SetMapGrants(miraGrants{}) // the test's map is given to its player
 		svc.SetShadowLookup(pictureShadows{})
 		if wired {
 			svc.SetPlayerImageSource(pngSource{data: original}, t.TempDir())

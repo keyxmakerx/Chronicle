@@ -17,6 +17,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
+		requireMapVisible(func() MapService { return h.svc }),
 	)
 
 	// Map CRUD (Owner can create/update/delete maps).
@@ -55,6 +56,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
+		requireMapVisible(func() MapService { return h.svc }),
 	)
 	pub.GET("/maps", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/maps/:mid", h.Show, campaigns.RequireViewAccess())
@@ -82,6 +84,7 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
+		requireMapVisible(func() MapService { return dh.mapSvc }),
 	)
 
 	// Drawings (Scribe+ can create/edit; delete is Scribe+ but the service limits a
@@ -122,6 +125,7 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
+		requireMapVisible(func() MapService { return dh.mapSvc }),
 	)
 	pub.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireViewAccess())
 	pub.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireViewAccess())
@@ -136,6 +140,7 @@ func RegisterHexRoutes(e *echo.Echo, hh *HexHandler, campaignSvc campaigns.Campa
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
+		requireMapVisible(func() MapService { return hh.mapSvc }),
 	)
 	cg.PATCH("/maps/:mid/hexes/cells", hh.PatchHexCells, campaigns.RequireRole(campaigns.RolePlayer))
 	// Same membership-only gate: a DM-granted player is not an owner by role,
@@ -153,6 +158,7 @@ func RegisterHexRoutes(e *echo.Echo, hh *HexHandler, campaignSvc campaigns.Campa
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
+		requireMapVisible(func() MapService { return hh.mapSvc }),
 	)
 	pub.GET("/maps/:mid/hexes", hh.GetHexes, campaigns.RequireViewAccess())
 }
