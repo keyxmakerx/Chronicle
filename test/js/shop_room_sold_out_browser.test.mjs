@@ -47,17 +47,21 @@ async function shop(t, refusal, opts = {}) {
     self.emit = function (m) { (on.message || []).forEach(function (f) { f({ data: JSON.stringify(m) }); }); };
     setTimeout(function () { (on.open || []).forEach(function (f) { f({}); }); }, 0);
   };` });
-  await p.addScriptTag({ content: `window.__posts = []; window.__reads = 0; window.__after = false; window.Chronicle = {
-    register: function (n, impl) { impl.init(document.getElementById('w')); },
-    apiFetch: function (url, o) {
-      if (o && o.method === 'POST') { window.__posts.push(o.body); return Promise.resolve({ ok: false, status: ${refusal.status}, json: function () { return Promise.resolve({ type: 'bad_request', message: ${JSON.stringify(refusal.message)} }); } }); }
-      if (url === '/rel') window.__reads++;
-      var body = /\\/room$/.test(url) ? ${JSON.stringify(ROOM)} : /\\/buyers$/.test(url) ? ${JSON.stringify(BUYERS)} : window.__posts.length || window.__after ? ${JSON.stringify(opts.after || AFTER)} : ${JSON.stringify(BEFORE)};
-      return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(JSON.parse(JSON.stringify(body))); } });
-    }
-  };` });
+  // The fixtures go in as data, so no test value is ever built into script text.
+  await p.evaluate((fx) => {
+    window.__posts = []; window.__reads = 0; window.__after = false;
+    window.Chronicle = {
+      register: function (n, impl) { impl.init(document.getElementById('w')); },
+      apiFetch: function (url, o) {
+        if (o && o.method === 'POST') { window.__posts.push(o.body); return Promise.resolve({ ok: false, status: fx.refusal.status, json: function () { return Promise.resolve({ type: 'bad_request', message: fx.refusal.message }); } }); }
+        if (url === '/rel') window.__reads++;
+        var body = /\/room$/.test(url) ? fx.room : /\/buyers$/.test(url) ? fx.buyers : window.__posts.length || window.__after ? fx.after : fx.before;
+        return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(JSON.parse(JSON.stringify(body))); } });
+      }
+    };
+  }, { refusal, room: ROOM, buyers: BUYERS, before: BEFORE, after: opts.after || AFTER });
   for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_keeper.js', 'shop_room_counter.js', 'shop_room.js']) await p.addScriptTag({ content: read(f) });
-  if (opts.before) await p.addScriptTag({ content: opts.before });
+  if (opts.before) await p.evaluate(opts.before);
   await p.waitForSelector('#w:not([hidden]) .shr-front');
   await p.click('.shr-front');
   await p.waitForSelector('.src-svg [data-k="keeper"]');
@@ -126,7 +130,7 @@ test("another shopper's buy reaches an open room: the wares are read again and t
 });
 
 test("a host's own connection stands in for the socket", { skip, timeout: 60000 }, async (t) => {
-  const p = await shop(t, { status: 400, message: 'unused' }, { before: 'window.ShopRoom.live = function (cid, sid, cb) { window.__live = { cid: cid, sid: sid, cb: cb }; return function () { window.__stopped = true; }; };' });
+  const p = await shop(t, { status: 400, message: 'unused' }, { before: () => { window.ShopRoom.live = function (cid, sid, cb) { window.__live = { cid: cid, sid: sid, cb: cb }; return function () { window.__stopped = true; }; }; } });
   await p.waitForFunction(() => !!window.__live);
   assert.deepEqual(await p.evaluate(() => [window.__live.cid, window.__live.sid, window.__ws.length]), ['c1', 's1', 0]);
   await p.evaluate(() => { window.__after = true; window.__live.cb(); });
