@@ -23,6 +23,7 @@ func entryFieldsManifest(t *testing.T, fieldJSON string) *SystemManifest {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	m.sanitizeEntryFields()
+	m.sanitizeEntryEffects()
 	return &m
 }
 

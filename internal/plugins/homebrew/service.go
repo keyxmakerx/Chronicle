@@ -54,6 +54,20 @@ type Service interface {
 	// are for whoever set the ask off, player or Director.
 	MyAsks(ctx context.Context, campaignID string, v Viewer) ([]AskView, error)
 	TakeBack(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
+
+	// AskFor puts an owner's own ask to the Directors (owner_ask.go), with
+	// the steps of every saved rule on its event waiting behind it; it
+	// returns the waiting run's id, "" when runs aren't kept. AnswerFor
+	// answers the one waiting under the owner's key; found is false when
+	// none does.
+	AskFor(ctx context.Context, campaignID string, v Viewer, a OwnerAsk) (string, error)
+	AnswerFor(ctx context.Context, campaignID, event, key string, v Viewer, in AnswerInput) (out *RunView, found bool, err error)
+	// CloseFor ends the owner's ask waiting under key without an answer,
+	// when what it asked about is gone; line says why, for the drawer.
+	CloseFor(ctx context.Context, campaignID, event, key string, v Viewer, line string) (found bool, err error)
+	// Roll makes the roll a "rolls first" step waits on (roll.go), only as
+	// the player it waits on; the server rolls and judges it.
+	Roll(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
 }
 
 type service struct {
@@ -67,6 +81,9 @@ type service struct {
 	people AskPeople
 	bell   Bell
 	live   Live
+	// players finds the player of a run's page, for a roll; nil means the
+	// roll waits on whoever set the rule off.
+	players Players
 }
 
 // NewService builds the service over a repository and the registry the app
