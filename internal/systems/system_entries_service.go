@@ -888,8 +888,8 @@ func entryChoice(e SystemEntry, actor EntryActor) Choice {
 }
 
 // normalizeEntry validates and cleans the editable fields in place. The
-// description is sanitized here, at the one write path, so no caller can
-// store script or event-handler markup.
+// description and list-item texts are sanitized here, at the one write path,
+// so no caller can store script or event-handler markup.
 func normalizeEntry(e *SystemEntry) error { return normalizeEntryCarrying(e, nil) }
 
 // normalizeEntryCarrying is normalizeEntry for a write onto stored
@@ -922,7 +922,13 @@ func normalizeEntryCarrying(e *SystemEntry, stored map[string]any) error {
 	default:
 		return apperror.NewValidation("Visibility must be \"everyone\", \"directors\" or \"character\".")
 	}
-	return validateEntryProperties(e.Properties, stored)
+	if err := validateEntryProperties(e.Properties, stored); err != nil {
+		return err
+	}
+	// Item texts get the description's HTML policy after validation, so a
+	// list carried unchanged still compares equal to the stored one.
+	cleanItemTexts(e.Properties)
+	return nil
 }
 
 // wholeNumber reads a cost from JSON (float64) or YAML (int) input.
