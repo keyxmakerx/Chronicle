@@ -3,6 +3,9 @@
  * "Ask the Director" step waits for an answer; this widget shows each of the
  * viewer's asks while it waits ("Your Director is answering", with "Take back
  * my ask") and what came back: yes, yes with changes, no, or a written reply.
+ * A "The player rolls first" step waiting on the viewer shows a roll button
+ * ("Roll Might (2d10 + 2)"); the server rolls, judges and answers with the
+ * result, which this shows ("Rolled 15. The rule carries on.").
  *
  * It reads GET <endpoint>/asks/mine, which holds only the viewer's own words
  * and the answer, never the recipe or its rule, and reads it again when the
@@ -22,9 +25,38 @@
     return w ? w.charAt(0).toUpperCase() + w.slice(1) : 'Your ask';
   }
 
+  // spaced writes a formula the way people read it: "2d10 + 2".
+  function spaced(f) {
+    return String(f || '').replace(/\s*([+-])\s*/g, ' $1 ').trim();
+  }
+
+  // rollButton is what the roll button says: "Roll Might (2d10 + 2)".
+  function rollButton(r) {
+    if (!r) return 'Roll';
+    return r.label ? 'Roll ' + r.label + ' (' + spaced(r.formula) + ')' : 'Roll ' + spaced(r.formula);
+  }
+
+  // condition is the roll as a condition: "roll Might 12 or more".
+  function condition(r) {
+    if (!r) return 'roll first';
+    return r.label ? 'roll ' + r.label + ' ' + r.target + ' or more' : 'roll ' + r.target + ' or more on ' + spaced(r.formula);
+  }
+
+  // result is the line after the roll, from the server's total.
+  function result(a) {
+    var r = a.roll || {};
+    if (a.state === 'rolled') return 'Rolled ' + r.total + '. The rule carries on.';
+    if (a.state === 'missed') return 'Rolled ' + r.total + ', under ' + r.target + '. The rule stops here.';
+    return '';
+  }
+
   // pill is the state's short word and its colour class.
   function pill(a, gm) {
     switch (a.state) {
+      case 'roll': return a.answered === 'yes' ? ['Yes, with a step first', 'ok'] : ['Your roll first', 'wait'];
+      case 'rolled': return ['Made the roll', 'ok'];
+      case 'missed': return ['Roll fell short', 'bad'];
+      case 'set_aside': return ['Set aside', 'off'];
       case 'waiting': return ['Your ' + gm + ' is answering', 'wait'];
       case 'yes': return [(a.changes && a.changes.length) ? 'Yes, with changes' : 'Yes', 'ok'];
       case 'no': return ['No', 'bad'];
@@ -37,6 +69,10 @@
   // said is the first line of what came back, or "" while it waits.
   function said(a) {
     switch (a.state) {
+      case 'roll': case 'rolled': case 'missed':
+        var c = condition(a.roll);
+        return a.answered === 'yes' ? 'Yes, if you ' + c + ' first.' : upper(c) + ' first.';
+      case 'set_aside': return 'Set aside before the roll. The rule stops here.';
       case 'yes': return (a.changes && a.changes.length) ? 'Yes, with these changes:' : 'Yes. The rule goes on.';
       case 'no': return 'No. The rule stops here.';
       case 'other': return a.reply || '';
@@ -44,7 +80,9 @@
     return '';
   }
 
-  var H = { title: title, pill: pill, said: said };
+  function upper(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
+
+  var H = { title: title, pill: pill, said: said, rollButton: rollButton, condition: condition, result: result, spaced: spaced };
   if (typeof window !== 'undefined') window.HomebrewAsks = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
 
@@ -96,8 +134,22 @@
     });
   }
 
+  // FOCUS_KEYS are the attributes that name a focusable part of one ask, so
+  // a redraw (a live reload lands moments after a roll) can put focus back.
+  var FOCUS_KEYS = ['data-hba-result', 'data-hba-roll'];
+
+  function focusedPart(el) {
+    var a = document.activeElement;
+    if (!a || !el.contains(a)) return null;
+    for (var i = 0; i < FOCUS_KEYS.length; i++) {
+      if (a.hasAttribute(FOCUS_KEYS[i])) return [FOCUS_KEYS[i], a.getAttribute(FOCUS_KEYS[i])];
+    }
+    return null;
+  }
+
   function draw(S) {
     var el = S.el;
+    var keep = focusedPart(el);
     el.textContent = '';
     if (S.asks === false) {
       el.appendChild(h('p', 'hba-muted', 'Your asks could not be read. Reload the page to try again.'));
@@ -110,6 +162,15 @@
     var list = h('ul', 'hba-list', '', { 'aria-live': 'polite' });
     S.asks.forEach(function (a) { list.appendChild(card(S, a)); });
     el.appendChild(list);
+    // After a roll its button is gone; the result takes the focus it had.
+    // Any other redraw puts focus back on the part of the ask that had it.
+    var want = S.focus ? ['data-hba-result', S.focus] : keep;
+    if (!want) return;
+    var n = list.querySelector('[' + want[0] + '="' + String(want[1]).replace(/["\\]/g, '\\$&') + '"]');
+    if (n) {
+      n.focus();
+      S.focus = '';
+    }
   }
 
   function card(S, a) {
@@ -129,6 +190,7 @@
       return li;
     }
     if (a.state === 'taken_back') return li;
+    if (a.state === 'roll' || a.state === 'rolled' || a.state === 'missed') return rollCard(S, a, li);
     var box = h('div', 'hba-said');
     box.appendChild(h('p', 'hba-said-h', 'Your ' + S.gm + ' said'));
     box.appendChild(h('p', 'hba-said-t', said(a)));
@@ -140,6 +202,51 @@
     if (a.state !== 'other' && a.reply) box.appendChild(h('p', 'hba-said-t', a.reply));
     li.appendChild(box);
     return li;
+  }
+
+  // rollCard is a roll step: what the ask's answer said, the roll button
+  // while it waits on this viewer, then the server's result. The total
+  // always comes from the server; this page only asks for the roll.
+  function rollCard(S, a, li) {
+    var box = h('div', 'hba-said');
+    if (a.answered) box.appendChild(h('p', 'hba-said-h', 'Your ' + S.gm + ' said'));
+    box.appendChild(h('p', 'hba-said-t', said(a)));
+    if (a.changes && a.changes.length) {
+      var ul = h('ul', 'hba-changes');
+      a.changes.forEach(function (c) { ul.appendChild(h('li', '', c)); });
+      box.appendChild(ul);
+    }
+    if (a.reply) box.appendChild(h('p', 'hba-said-t', a.reply));
+    li.appendChild(box);
+    if (a.state === 'roll') {
+      var r = a.roll || {};
+      if (a.canRoll) {
+        li.appendChild(h('button', 'hba-rollbtn', S.busy === a.id ? 'Rolling…' : rollButton(r),
+          { type: 'button', disabled: !!S.busy, 'data-hba-roll': a.id }, { click: function () { roll(S, a); } }));
+        li.appendChild(h('p', 'hba-muted', 'Chronicle rolls the dice and checks the total. Under ' + r.target + ', the rule stops and says so.'));
+      } else if (r.problem) {
+        li.appendChild(h('p', 'hba-err', r.problem));
+      } else {
+        li.appendChild(h('p', 'hba-muted', 'Waiting for the player to roll.'));
+      }
+      if (S.error && S.busy === '' && S.errorFor === a.id) li.appendChild(h('p', 'hba-err', S.error, { role: 'alert' }));
+      return li;
+    }
+    li.appendChild(h('p', 'hba-result hba-' + a.state, result(a), { tabindex: '-1', 'data-hba-result': a.id }));
+    return li;
+  }
+
+  function roll(S, a) {
+    S.busy = a.id; S.error = ''; draw(S);
+    api(S.cfg.endpoint + '/asks/' + encodeURIComponent(a.id) + '/roll', 'POST', csrf(S)).then(function (got) {
+      S.busy = '';
+      if (got && got.id) {
+        S.asks = S.asks.map(function (x) { return x.id === got.id ? got : x; });
+        S.focus = got.id;
+      }
+    }).catch(function (e) {
+      S.busy = ''; S.error = e.message; S.errorFor = a.id;
+    }).then(function () { return load(S); });
   }
 
   function takeBack(S, a) {

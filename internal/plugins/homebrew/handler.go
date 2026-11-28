@@ -251,6 +251,21 @@ func (h *Handler) TakeBack(c *echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// Roll handles POST /campaigns/:id/homebrew/asks/:run/roll: the player a
+// "rolls first" step waits on makes the roll. The body is ignored: the
+// server rolls, and no result a client sends is read.
+func (h *Handler) Roll(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Roll(c.Request().Context(), cid, c.Param("run"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // AsksPage handles GET /campaigns/:id/homebrew/asks: the viewer's own asks
 // to the Director, where the bell's answers lead.
 func (h *Handler) AsksPage(c *echo.Context) error {

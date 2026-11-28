@@ -53,6 +53,40 @@ type Design struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// Taken is the answer to adding a design to a campaign. A kind with an Adder
+// made the thing itself, so only ID and LeftToPoint are set; otherwise it is
+// the library copy, flattened beside them. ID shadows the copy's own id so the
+// JSON carries one `id` either way.
+type Taken struct {
+	*Design
+	ID          string   `json:"id"`
+	LeftToPoint []string `json:"leftToPoint"`
+}
+
+// StoreKind is one rail entry of the Store, from a kind's Describer.
+type StoreKind struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	One   string `json:"one"`
+	Where string `json:"where"`
+}
+
+// StoreCatalog is what the Store reads from the server: its kinds, and the
+// installed game systems' display names by id.
+type StoreCatalog struct {
+	Kinds   []StoreKind       `json:"kinds"`
+	Systems map[string]string `json:"systems"`
+	// Things says, per registered design kind, which rail entry it belongs to
+	// and the word for one of it, since one group can hold several kinds.
+	Things map[string]StoreThing `json:"things"`
+}
+
+// StoreThing is one design kind's group and its word for one thing.
+type StoreThing struct {
+	Group string `json:"group"`
+	One   string `json:"one"`
+}
+
 // SaveInput is what the Owner sends to put a design in the library.
 type SaveInput struct {
 	Kind string

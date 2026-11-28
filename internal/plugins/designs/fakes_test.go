@@ -203,6 +203,11 @@ func (k themeKind) Validate(raw json.RawMessage) (json.RawMessage, error) {
 	return json.RawMessage(fmt.Sprintf(`{"part":%q}`, v.Part)), nil
 }
 
+// Describe files room themes under the Store's rooms group, as the app does.
+func (k themeKind) Describe() KindDescription {
+	return KindDescription{Group: KindFilterRooms, Label: "Shop rooms", One: "Shop room", Where: "Find it in your designs.", Order: 10}
+}
+
 func (k themeKind) Lacks(_ context.Context, campaignID string, raw json.RawMessage) ([]string, error) {
 	if k.lack[campaignID] && strings.Contains(string(raw), "silver") {
 		return []string{"This campaign has no silver."}, nil
