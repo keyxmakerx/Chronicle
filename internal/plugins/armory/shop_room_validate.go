@@ -102,7 +102,8 @@ var (
 	shopRoomCounterLights = setOf("lamp", "forge", "candles", "lanterns", "moonlight",
 		"crystals", "brazier", "wisps", "star", "halo", "witchfire", "orb", "firelight", "votives", "frostfire",
 		"jellyfish", "pierced-lamp", "cauldron", "filament", "sunlight", "candelabra")
-	shopRoomCounterOutsides = setOf("day", "dusk", "night", "rain")
+	// "live" is the campaign's own sky, read from its calendar where the room is drawn.
+	shopRoomCounterOutsides = setOf("day", "dusk", "night", "rain", "live")
 	// What stands outside; "town" is the room's own and is saved as no scene.
 	shopRoomCounterScenes = setOf("town", "forest", "mountains", "coast", "desert", "swamp", "snowfield", "fields",
 		"jungle", "volcano", "ruins", "spires", "harbour", "underdark", "astral", "sky-islands", "castle", "graveyard")

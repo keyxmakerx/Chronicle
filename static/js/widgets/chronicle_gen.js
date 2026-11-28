@@ -2069,7 +2069,13 @@ var PRESET_ROWS = {
   'witchfire': ['Witchfire', 'Fantasy', 'storm', '#5fe08a', 0.3, 0, 0.2, 'fleeting', null, 0, 1, 1, 0.8, 6, 0, 'fantasy', 'witchfire'],
   'brimstone': ['Brimstone', 'Fantasy', 'fog', '#c9ae3a', 0.6, 0.05, 0.2, 'stable', null, 0, 2, 3, 0.6, -4, 0, 'fantasy', 'brimstone'],
   'featherfall': ['Featherfall', 'Fantasy', 'cloud', '#e6e2f0', 0.45, 0, 0.2, 'fleeting', null, 0, 0, 0, 0.9, 2, 0, 'fantasy', 'feathers'],
-  'fey-lights': ['Fey Lights', 'Fantasy', 'clear', '#ff9ad6', 0.1, 0, 0.1, 'fleeting', null, 0, 0, 0, 1.1, 0, 0, 'fantasy', 'fey-lights']
+  'fey-lights': ['Fey Lights', 'Fantasy', 'clear', '#ff9ad6', 0.1, 0, 0.1, 'fleeting', null, 0, 0, 0, 1.1, 0, 0, 'fantasy', 'fey-lights'],
+  'mammatus-sky': ['Mammatus Sky', 'Environmental', 'cloud', '#a3869a', 0.7, 0.2, 0.45, 'fleeting', null, 0, 0, -1, 0.7, 6, 0, 'storms', 'mammatus'],
+  'lenticular': ['Lens Clouds', 'Environmental', 'clear', '#d6b8c8', 0.12, 0, 0.55, 'fleeting', null, 0, -1, 0, 1.1, 14, 0, 'wind', 'lenticular'],
+  'st-elmos-fire': ['St Elmo’s Fire', 'Severe', 'storm', '#6fa8ff', 0.95, 0.5, 0.8, 'fleeting', null, 0, 0, -2, 0.6, 14, 0, 'storms', 'st-elmo'],
+  'ball-lightning': ['Ball Lightning', 'Severe', 'storm', '#b8ccff', 0.85, 0.4, 0.6, 'fleeting', null, 0, 0, -2, 0.7, 4, 0, 'storms', 'ball-lightning'],
+  'eruption': ['Eruption', 'Environmental', 'storm', '#d2552a', 0.3, 0, 0.6, 'fleeting', null, 0, 1, 1, 0.8, 6, 0, 'smoke-ash', 'volcano'],
+  'leviathans': ['Sky Leviathans', 'Fantasy', 'clear', '#8aa0c0', 0.15, 0, 0.2, 'fleeting', null, 0, 0, 0, 1, 0, 0, 'fantasy', 'leviathans']
 };
 var PRESETS = {};
 var PERSIST = { stable: 1, normal: 0.75, fleeting: 0.3 };
@@ -2136,7 +2142,7 @@ var SYSTEMS = {
   'ice-storm': { label: 'An ice storm', group: 'blizzards', len: [2, 3], when: 'freezing', steps: [
     { role: 'lead', p: 'overcast' }, { role: 'peak', p: 'ice-storm', wind: 14 }, { role: 'tail', p: 'cloudy|clear', dT: -3 }] },
   'ash-plume': { label: 'An ash plume', group: 'smoke-ash', len: [3, 6], steps: [
-    { role: 'lead', p: 'wildfire-smoke', wind: 6 }, { role: 'peak', p: 'ashfall', dT: -2, repeat: true }, { role: 'tail', p: 'overcast|cloudy' }] },
+    { role: 'lead', p: 'eruption|wildfire-smoke', wind: 6 }, { role: 'peak', p: 'ashfall', dT: -2, repeat: true }, { role: 'tail', p: 'overcast|cloudy' }] },
   'acid-front': { label: 'A caustic front', group: 'fantasy', len: [2, 3], steps: [
     { role: 'lead', p: 'overcast' }, { role: 'peak', p: 'acid-rain', repeat: true }, { role: 'tail', p: 'cloudy' }] },
   'veil-thinning': { label: 'The veil thins', group: 'fantasy', len: [3, 5], steps: [
@@ -2205,7 +2211,7 @@ var CLIMATES = {
     seasons: {
       winter: S([-3, 7], 18, 6, 'clear:2 partly-cloudy:2.5 cloudy:3 overcast:3.5 fog:1.5 mist:1 drizzle:1.5 rain:2.5 sleet:1 snow:2 windy:1 hard-frost:0.8 flurries:0.8 gloom:0.8 ground-mist:0.4 freezing-rain:0.15 sun-halo:0.15 gale:0.2', 'rain-front:0.22 winter-storm:0.08 cold-snap:0.07 fog-spell:0.06 gale:0.06 hard-frost-spell:0.05 glaze:0.02 dull-spell:0.04'),
       spring: S([5, 16], 16, 9, 'clear:3 partly-cloudy:3.5 cloudy:2.5 overcast:1.5 drizzle:1.5 rain:2.5 sunshower:1 windy:1.5 fog:0.6 mist:0.8 thunderstorm:0.3 sleet:0.3 snow:0.2 hail:0.1 showers:1.5 rainbow:0.4 sunbeams:0.5 ground-mist:0.5 pollen-haze:0.4 gale:0.15 thaw:0.2', 'rain-front:0.22 cold-front:0.08 gale:0.04 showery-spell:0.08'),
-      summer: S([16, 28], 11, 10, 'clear:4 partly-cloudy:3.5 cloudy:1.8 overcast:0.8 rain:1.5 drizzle:0.6 sunshower:0.7 thunderstorm:1 heat-wave:0.5 windy:0.4 mist:0.3 hail:0.15 tornado:0.02 showers:0.8 sunbeams:0.5 butterfly-days:0.5 firefly-dusk:0.5 rainbow:0.3 red-sky:0.3 thistledown:0.3 dry-lightning:0.08 night-clouds:0.1', 'rain-front:0.18 thunder-break:0.12 heat-wave:0.07 cold-front:0.1 high-summer:0.05'),
+      summer: S([16, 28], 11, 10, 'clear:4 partly-cloudy:3.5 cloudy:1.8 overcast:0.8 rain:1.5 drizzle:0.6 sunshower:0.7 thunderstorm:1 heat-wave:0.5 windy:0.4 mist:0.3 hail:0.15 tornado:0.02 showers:0.8 sunbeams:0.5 butterfly-days:0.5 firefly-dusk:0.5 rainbow:0.3 red-sky:0.3 thistledown:0.3 dry-lightning:0.08 night-clouds:0.1 mammatus-sky:0.15 ball-lightning:0.03', 'rain-front:0.18 thunder-break:0.12 heat-wave:0.07 cold-front:0.1 high-summer:0.05'),
       autumn: S([6, 17], 17, 8, 'clear:2 partly-cloudy:2.5 cloudy:3 overcast:2.5 fog:2 mist:1.5 drizzle:2 rain:3 windy:2 thunderstorm:0.2 sleet:0.2 autumn-leaves:0.6 showers:1 gloom:0.6 ground-mist:0.8 gossamer:0.4 red-sky:0.3 sunbeams:0.4 gale:0.3 thistledown:0.2 hard-frost:0.2', 'rain-front:0.26 gale:0.1 fog-spell:0.08 seed-drift:0.03 squall-line:0.04')
     }
   },
@@ -2243,10 +2249,10 @@ var CLIMATES = {
     name: 'Highland', blurb: 'Mountain weather: deep snow in winter, fog in the valleys, bright hard days and sudden summer storms.',
     latitude: 'mid', flavor: 'highland', dirs: 'W:2 NW:2 SW:1.5 N:1 E:1 S:1', inertia: 0.5,
     seasons: {
-      winter: S([-10, 0], 22, 10, 'snow:3.5 clear:3 partly-cloudy:2 cloudy:2 overcast:2 blizzard:0.6 windy:1.5 fog:1 flurries:1.2 hard-frost:1 bitter-cold:0.4 sun-halo:0.3 thundersnow:0.05 gale:0.3', 'winter-storm:0.14 cold-snap:0.08 hard-frost-spell:0.05 deep-freeze:0.04'),
-      spring: S([-1, 11], 20, 12, 'partly-cloudy:3 cloudy:2.5 clear:2.5 snow:1.2 sleet:1 rain:1.5 windy:2 fog:1 showers:1 flurries:0.6 thaw:0.5 rainbow:0.3 sunbeams:0.5 ground-mist:0.5 gale:0.3', 'rain-front:0.12 thaw:0.08 gale:0.05 slow-thaw:0.05'),
-      summer: S([10, 22], 14, 13, 'clear:3.5 partly-cloudy:3 cloudy:1.5 thunderstorm:1.5 rain:1 hail:0.3 mist:1 showers:0.8 sunbeams:0.6 rainbow:0.3 butterfly-days:0.3 ground-mist:0.5 dry-lightning:0.1 thistledown:0.2', 'thunder-break:0.1'),
-      autumn: S([0, 11], 20, 11, 'clear:3 partly-cloudy:2.5 cloudy:2.5 overcast:1.5 fog:1.5 rain:1.5 snow:1 sleet:0.8 windy:2 flurries:0.6 hard-frost:0.5 ground-mist:0.8 sunbeams:0.4 gale:0.3 gossamer:0.2 red-sky:0.2', 'rain-front:0.12 winter-storm:0.05 fog-spell:0.05')
+      winter: S([-10, 0], 22, 10, 'snow:3.5 clear:3 partly-cloudy:2 cloudy:2 overcast:2 blizzard:0.6 windy:1.5 fog:1 flurries:1.2 hard-frost:1 bitter-cold:0.4 sun-halo:0.3 thundersnow:0.05 gale:0.3 lenticular:0.3', 'winter-storm:0.14 cold-snap:0.08 hard-frost-spell:0.05 deep-freeze:0.04'),
+      spring: S([-1, 11], 20, 12, 'partly-cloudy:3 cloudy:2.5 clear:2.5 snow:1.2 sleet:1 rain:1.5 windy:2 fog:1 showers:1 flurries:0.6 thaw:0.5 rainbow:0.3 sunbeams:0.5 ground-mist:0.5 gale:0.3 lenticular:0.3', 'rain-front:0.12 thaw:0.08 gale:0.05 slow-thaw:0.05'),
+      summer: S([10, 22], 14, 13, 'clear:3.5 partly-cloudy:3 cloudy:1.5 thunderstorm:1.5 rain:1 hail:0.3 mist:1 showers:0.8 sunbeams:0.6 rainbow:0.3 butterfly-days:0.3 ground-mist:0.5 dry-lightning:0.1 thistledown:0.2 st-elmos-fire:0.08 mammatus-sky:0.1', 'thunder-break:0.1'),
+      autumn: S([0, 11], 20, 11, 'clear:3 partly-cloudy:2.5 cloudy:2.5 overcast:1.5 fog:1.5 rain:1.5 snow:1 sleet:0.8 windy:2 flurries:0.6 hard-frost:0.5 ground-mist:0.8 sunbeams:0.4 gale:0.3 gossamer:0.2 red-sky:0.2 lenticular:0.3', 'rain-front:0.12 winter-storm:0.05 fog-spell:0.05')
     }
   },
   mediterranean: {
@@ -2275,7 +2281,7 @@ var CLIMATES = {
     seasons: {
       winter: S([-14, -2], 22, 9, 'clear:3 partly-cloudy:2.5 cloudy:2 overcast:1.5 snow:2 flurries:1.5 windy:2.5 hard-frost:1.5 bitter-cold:0.8 blizzard:0.4 sun-halo:0.4 gale:0.4', 'winter-storm:0.08 deep-freeze:0.06 cold-snap:0.08'),
       spring: S([4, 17], 22, 12, 'clear:3 partly-cloudy:3.5 cloudy:2 windy:3 showers:1.5 rain:1 thunderstorm:0.5 dust-devil:0.5 gale:0.4 thaw:0.4 pollen-haze:0.5 rainbow:0.3 hail:0.15', 'cold-front:0.08 gale:0.06 slow-thaw:0.04'),
-      summer: S([20, 33], 16, 14, 'clear:5 partly-cloudy:3 windy:1.5 heat-wave:0.8 thunderstorm:1 dry-lightning:0.4 dust-devil:0.8 showers:0.6 red-sky:0.5 thistledown:0.5 butterfly-days:0.4 locust-swarm:0.08 dust-wall:0.15 hail:0.2 tornado:0.03', 'thunder-break:0.1 heat-wave:0.07 haboob:0.02 locusts:0.01 seed-drift:0.04'),
+      summer: S([20, 33], 16, 14, 'clear:5 partly-cloudy:3 windy:1.5 heat-wave:0.8 thunderstorm:1 dry-lightning:0.4 dust-devil:0.8 showers:0.6 red-sky:0.5 thistledown:0.5 butterfly-days:0.4 locust-swarm:0.08 dust-wall:0.15 hail:0.2 tornado:0.03 mammatus-sky:0.2 ball-lightning:0.04', 'thunder-break:0.1 heat-wave:0.07 haboob:0.02 locusts:0.01 seed-drift:0.04'),
       autumn: S([3, 16], 20, 12, 'clear:3.5 partly-cloudy:3 cloudy:2 windy:3 showers:1 rain:0.8 hard-frost:0.6 gossamer:0.5 thistledown:0.6 red-sky:0.4 gale:0.4 flurries:0.3', 'gale:0.08 cold-front:0.06 seed-drift:0.05')
     }
   },
@@ -2313,10 +2319,10 @@ var CLIMATES = {
     name: 'Storm isles', blurb: 'Small islands in a big ocean: mild all year and never dry for long, with squalls, spray and rainbows chasing each other across the sky.',
     latitude: 'mid', flavor: 'coastal', dirs: 'W:3 SW:3 NW:2 S:1 N:1', inertia: 0.45,
     seasons: {
-      winter: S([3, 9], 30, 4, 'showers:3 rain:2.5 squall:1 gale:1.5 sea-spray:2 overcast:2.5 cloudy:2.5 windy:2 partly-cloudy:1.5 clear:0.8 sleet:0.5 gloom:0.8 rainbow:0.5 hail:0.2', 'sea-gale:0.16 squall-line:0.08 rain-front:0.14'),
+      winter: S([3, 9], 30, 4, 'showers:3 rain:2.5 squall:1 gale:1.5 sea-spray:2 overcast:2.5 cloudy:2.5 windy:2 partly-cloudy:1.5 clear:0.8 sleet:0.5 gloom:0.8 rainbow:0.5 hail:0.2 st-elmos-fire:0.08', 'sea-gale:0.16 squall-line:0.08 rain-front:0.14'),
       spring: S([7, 13], 24, 5, 'showers:3 partly-cloudy:2.5 cloudy:2.5 rain:1.8 sea-spray:1.5 windy:2 clear:1.5 rainbow:1 sunbeams:1 gale:0.6 squall:0.4 fog:0.6', 'showery-spell:0.12 sea-gale:0.08 sea-fog:0.05'),
       summer: S([12, 18], 18, 5, 'partly-cloudy:3 cloudy:2.5 showers:2.5 clear:2 sunbeams:1.2 rainbow:1 sea-spray:1 fog:1 mist:0.8 drizzle:1.2 windy:1.2 night-clouds:0.3 waterspout:0.03', 'showery-spell:0.1 sea-fog:0.08'),
-      autumn: S([8, 14], 28, 4, 'showers:3 rain:2.5 gale:1.2 squall:1 sea-spray:2 overcast:2 cloudy:2.5 windy:2 partly-cloudy:1.5 rainbow:0.6 gloom:0.6 waterspout:0.05', 'sea-gale:0.16 squall-line:0.1 rain-front:0.12')
+      autumn: S([8, 14], 28, 4, 'showers:3 rain:2.5 gale:1.2 squall:1 sea-spray:2 overcast:2 cloudy:2.5 windy:2 partly-cloudy:1.5 rainbow:0.6 gloom:0.6 waterspout:0.05 st-elmos-fire:0.08', 'sea-gale:0.16 squall-line:0.1 rain-front:0.12')
     }
   },
   bayou: {
@@ -2335,7 +2341,7 @@ var CLIMATES = {
     seasons: {
       winter: S([3, 10], 10, 7, 'clear:2 partly-cloudy:2 mist:2 fog:1.5 drizzle:1 cloudy:1.5 snow:1 luminous-sky:0.6 aether-haze:0.4 fey-lights:0.5 glimmersnow:0.6 wisp-lights:0.4 dreamfog:0.4 hard-frost:0.3 star-rain:0.15', 'ley-storm:0.03 dream-tide:0.03'),
       spring: S([10, 19], 10, 8, 'sakura-bloom:2.5 sunshower:2.5 partly-cloudy:3 clear:2.5 mist:1.2 drizzle:1 luminous-sky:0.6 rainbow:1 butterfly-days:1 golden-rain:0.3 pollen-haze:0.5 fey-lights:0.4 showers:0.6', 'bloom:0.15 gilded-days:0.02'),
-      summer: S([17, 25], 8, 9, 'clear:3.5 partly-cloudy:2.5 sunshower:1.5 thunderstorm:0.6 luminous-sky:1 mist:0.6 aether-haze:0.6 firefly-dusk:1.2 butterfly-days:0.8 fey-lights:0.6 featherfall:0.2 rainbow:0.5 star-rain:0.2 golden-rain:0.2', 'ley-storm:0.04 high-summer:0.06'),
+      summer: S([17, 25], 8, 9, 'clear:3.5 partly-cloudy:2.5 sunshower:1.5 thunderstorm:0.6 luminous-sky:1 mist:0.6 aether-haze:0.6 firefly-dusk:1.2 butterfly-days:0.8 fey-lights:0.6 featherfall:0.2 rainbow:0.5 star-rain:0.2 golden-rain:0.2 leviathans:0.2', 'ley-storm:0.04 high-summer:0.06'),
       autumn: S([9, 18], 12, 7, 'autumn-leaves:3 mist:2 fog:1.5 partly-cloudy:2 clear:1.5 drizzle:1.5 rain:1 luminous-sky:0.6 aether-haze:0.5 wisp-lights:0.6 dreamfog:0.6 gossamer:0.6 thistledown:0.5 fey-lights:0.4 featherfall:0.2', 'ley-storm:0.04 fog-spell:0.05 dream-tide:0.04 seed-drift:0.03')
     }
   },
@@ -2343,10 +2349,10 @@ var CLIMATES = {
     name: 'Ashlands', blurb: 'Volcanic country: smoke on the wind, days of ashfall when the mountain speaks, bitter rain.',
     latitude: 'mid', flavor: 'ash', dirs: 'W:2 NW:2 SW:1 N:1 E:1', inertia: 0.55, magic: true,
     seasons: {
-      winter: S([8, 18], 16, 8, 'overcast:2.5 ashfall:2 cloudy:2 partly-cloudy:1.5 clear:1 wildfire-smoke:1 acid-rain:0.6 windy:1 black-sun:0.15 brimstone:0.8 smog:0.6 gloom:0.6 cinder-rain:0.2 red-sky:0.4', 'ash-plume:0.12 acid-front:0.05 fire-rain:0.03'),
-      spring: S([14, 25], 16, 10, 'ashfall:1.5 cloudy:2 partly-cloudy:2 clear:1.5 wildfire-smoke:1.2 thunderstorm:0.8 acid-rain:0.6 windy:1.2 dust-devil:0.5 brimstone:0.6 dry-lightning:0.4 cinder-rain:0.25 red-sky:0.5 smog:0.4', 'ash-plume:0.14 acid-front:0.06 fire-rain:0.03'),
-      summer: S([22, 34], 14, 11, 'clear:2 wildfire-smoke:2 heat-wave:1.2 ashfall:1.2 partly-cloudy:1.5 dust-devil:1 thunderstorm:0.8 black-sun:0.2 firestorm:0.25 dry-lightning:0.5 cinder-rain:0.3 brimstone:0.6 red-sky:0.6 dust-wall:0.2', 'ash-plume:0.12 heat-wave:0.06 fire-weather:0.04 fire-rain:0.03'),
-      autumn: S([14, 26], 16, 9, 'overcast:2 ashfall:1.8 cloudy:2 acid-rain:0.8 rain:0.6 wildfire-smoke:1 partly-cloudy:1.5 windy:1.2 brimstone:0.8 smog:0.5 cinder-rain:0.2 red-sky:0.4 gloom:0.5', 'ash-plume:0.12 acid-front:0.07 fire-rain:0.03')
+      winter: S([8, 18], 16, 8, 'overcast:2.5 ashfall:2 cloudy:2 partly-cloudy:1.5 clear:1 wildfire-smoke:1 acid-rain:0.6 windy:1 black-sun:0.15 brimstone:0.8 smog:0.6 gloom:0.6 cinder-rain:0.2 red-sky:0.4 eruption:0.2', 'ash-plume:0.12 acid-front:0.05 fire-rain:0.03'),
+      spring: S([14, 25], 16, 10, 'ashfall:1.5 cloudy:2 partly-cloudy:2 clear:1.5 wildfire-smoke:1.2 thunderstorm:0.8 acid-rain:0.6 windy:1.2 dust-devil:0.5 brimstone:0.6 dry-lightning:0.4 cinder-rain:0.25 red-sky:0.5 smog:0.4 eruption:0.2', 'ash-plume:0.14 acid-front:0.06 fire-rain:0.03'),
+      summer: S([22, 34], 14, 11, 'clear:2 wildfire-smoke:2 heat-wave:1.2 ashfall:1.2 partly-cloudy:1.5 dust-devil:1 thunderstorm:0.8 black-sun:0.2 firestorm:0.25 dry-lightning:0.5 cinder-rain:0.3 brimstone:0.6 red-sky:0.6 dust-wall:0.2 eruption:0.2', 'ash-plume:0.12 heat-wave:0.06 fire-weather:0.04 fire-rain:0.03'),
+      autumn: S([14, 26], 16, 9, 'overcast:2 ashfall:1.8 cloudy:2 acid-rain:0.8 rain:0.6 wildfire-smoke:1 partly-cloudy:1.5 windy:1.2 brimstone:0.8 smog:0.5 cinder-rain:0.2 red-sky:0.4 gloom:0.5 eruption:0.2', 'ash-plume:0.12 acid-front:0.07 fire-rain:0.03')
     }
   },
   gloomfen: {
@@ -2375,8 +2381,8 @@ var CLIMATES = {
     seasons: {
       winter: S([-1, 8], 16, 7, 'cloudy:2.5 partly-cloudy:2.5 clear:2 overcast:2 snow:1 flurries:0.8 aether-haze:1 arcane-winds:0.8 witchfire:0.5 star-rain:0.4 ley-surge:0.3 sky-rift:0.12 glass-rain:0.2 nullfront:0.3 fey-lights:0.3', 'ley-storm:0.06 rift-storm:0.03'),
       spring: S([7, 17], 16, 9, 'partly-cloudy:3 clear:2.5 cloudy:2 showers:1.5 rain:1 aether-haze:1 arcane-winds:1 golden-rain:0.4 rainbow:0.6 ley-surge:0.4 witchfire:0.4 sky-rift:0.12 featherfall:0.2 thunderstorm:0.4', 'ley-storm:0.07 gilded-days:0.03 rift-storm:0.03'),
-      summer: S([17, 27], 12, 10, 'clear:3.5 partly-cloudy:3 cloudy:1.5 thunderstorm:1 aether-haze:1 ley-surge:0.6 witchfire:0.6 star-rain:0.5 dry-lightning:0.4 sky-rift:0.15 divine-light:0.3 fey-lights:0.4 meteor-shower:0.3 glass-rain:0.15', 'ley-storm:0.08 rift-storm:0.04 thunder-break:0.06'),
-      autumn: S([7, 16], 16, 8, 'cloudy:2.5 partly-cloudy:2.5 clear:2 rain:1.2 showers:1 mist:1 aether-haze:1.2 arcane-winds:1.2 nullfront:0.4 witchfire:0.5 star-rain:0.4 ley-surge:0.4 sky-rift:0.12 featherfall:0.2 ink-rain:0.15', 'ley-storm:0.07 rift-storm:0.03 ink-tide:0.02')
+      summer: S([17, 27], 12, 10, 'clear:3.5 partly-cloudy:3 cloudy:1.5 thunderstorm:1 aether-haze:1 ley-surge:0.6 witchfire:0.6 star-rain:0.5 dry-lightning:0.4 sky-rift:0.15 divine-light:0.3 fey-lights:0.4 meteor-shower:0.3 glass-rain:0.15 leviathans:0.15 ball-lightning:0.1 st-elmos-fire:0.1', 'ley-storm:0.08 rift-storm:0.04 thunder-break:0.06'),
+      autumn: S([7, 16], 16, 8, 'cloudy:2.5 partly-cloudy:2.5 clear:2 rain:1.2 showers:1 mist:1 aether-haze:1.2 arcane-winds:1.2 nullfront:0.4 witchfire:0.5 star-rain:0.4 ley-surge:0.4 sky-rift:0.12 featherfall:0.2 ink-rain:0.15 leviathans:0.15', 'ley-storm:0.07 rift-storm:0.03 ink-tide:0.02')
     }
   },
   duskmarch: {
@@ -3124,6 +3130,12 @@ function readingCandidates(d, prev, next, f, hist, reg) {
     case 'brimstone': add('Yellow air, a reek of sulphur', 2); add('Brimstone on the wind'); add('Stinking yellow haze'); break;
     case 'featherfall': add('White feathers falling', 2); add('Feathers drifting from nowhere'); add('A sky full of feathers'); break;
     case 'fey-lights': add('Coloured lights in the dusk', 2); add('Clear; fey lights after dark'); add('Dancing lights, faint music'); break;
+    case 'mammatus-sky': add('Pouched clouds after the storm', 2); add('Sagging storm clouds at dusk'); add('A strange, lumpy sky'); break;
+    case 'lenticular': add('Lens clouds over the peaks', 2); add('Still clouds on a high wind'); add('Saucer clouds over the hills'); break;
+    case 'st-elmos-fire': add('Blue fire on the treetops', 2); add('Storm; blue fire on the spires'); add('Crackling blue light at night'); break;
+    case 'ball-lightning': add('Ball lightning drifting low', 2); add('Slow lights in the storm'); add('Glowing orbs in the thunder'); break;
+    case 'eruption': add('The mountain erupting', 2); add('Fire and ash from the peak'); add('Lava glow on the horizon'); break;
+    case 'leviathans': add('Great shapes in the far sky', 2); add('Sky whales passing over'); add('Leviathans drifting high'); break;
   }
   if (!c.length) add(P.label, 1);
   if (z >= 1.6 && rank >= 3 && !wet) add('Unseasonably warm', 1.2);
@@ -3539,7 +3551,10 @@ var EFFECT_ROWS = [
   ['gossamer', 'Gossamer', 'Living things', false], ['wisps', 'Will-o’-wisps', 'Magic', false],
   ['dreamfog', 'Dream fog', 'Magic', false], ['shadow', 'Shadowfall', 'Magic', false],
   ['rift', 'Sky rift', 'Magic', false], ['bubbles', 'Bubbles', 'Magic', false],
-  ['fey-lights', 'Fey lights', 'Magic', false]
+  ['fey-lights', 'Fey lights', 'Magic', false],
+  ['mammatus', 'Hanging pouches', 'Clouds and sky', false], ['lenticular', 'Lens clouds', 'Clouds and sky', false],
+  ['st-elmo', 'St Elmo’s fire', 'Rain and snow', false], ['ball-lightning', 'Ball lightning', 'Rain and snow', false],
+  ['volcano', 'Eruption', 'Fire and smoke', false], ['leviathans', 'Sky leviathans', 'Living things', false]
 ];
 var EFFECTS = EFFECT_ROWS.map(function (r) { return r[0]; });
 var EFFECT_INFO = {};

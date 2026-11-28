@@ -169,6 +169,23 @@
     return {get:get, base:base, trees:trees, made:function(){ return made; }};
   })();
 
+  /* Where the land's ridges stand, for effects that sit on them: ridge i's top at x (the wood's tree crowns included
+     unless ground is asked for). */
+  window.SkyFX.ridgeAt = function(i, x, W, H, ground){ return LAND.base(i, x, W, H) - (i === 2 && !ground ? LAND.trees(x, W, H) : 0); };
+  /* The tips of the near wood's tree crowns that stand clear of the foreground, left to right, worked out once per size. */
+  var CROWNS = [];
+  window.SkyFX.crowns = function(W, H){
+    var key = W.toFixed(1) + 'x' + H.toFixed(1);
+    for (var c = 0; c < CROWNS.length; c++) if (CROWNS[c].key === key) return CROWNS[c].pts;
+    var pts = [], top = function(x){ return LAND.base(2, x, W, H) - LAND.trees(x, W, H); };
+    for (var x = 1; x < W - 1; x += .5){
+      var y = top(x);
+      if (y < top(x - .5) && y <= top(x + .5) && LAND.trees(x, W, H) > 1.2 && LAND.base(3, x, W, H) > y + 2) pts.push([x, y]);
+    }
+    CROWNS.unshift({key:key, pts:pts}); if (CROWNS.length > 4) CROWNS.pop();
+    return pts;
+  };
+
   /* Lightning is a plan made from a seed, so any moment of it can be drawn again exactly: a live frame, a filmed frame
      and a still one agree. A strike flickers twice at most, strikes are seconds apart, and only the bolt and the cloud
      round it light up, so a storm never flashes more than three times a second or over a large area. */
@@ -427,7 +444,7 @@
     var sunVis = (1 - wx.cloud * .82) * (1 - wx.fog * .5) * (1 - wx.dark * .5) * (1 - clamp(wx.rain, 0, 1) * .85) * (1 - (lk ? lk.sun.dim : 0));
     /* An eclipse covers the disc; near totality the corona and the diamond ring show. */
     U.uSunK = [sunVis * smooth01(-4, .5, sunAlt), ecl, ecl > .985 ? smooth01(.985, 1, ecl) : 0, lk ? lk.sun['void'] : 0];
-    U.uSunT = lk && lk.sun.tint ? PAL.hexLin(lk.sun.tint).concat([.6]) : [1, 1, 1, 0];
+    U.uSunT = lk && lk.sun.tint ? PAL.hexLin(lk.sun.tint).concat([.6 * (lk.sun.tk != null ? lk.sun.tk : 1)]) : [1, 1, 1, 0];
     /* Moons: four slots, a moon's slot its place in the calendar's list. */
     var mv = [], ma = [], mk = [], mc = [], me = [], rects = {};
     /* The atlas only grows, and growing clears it, so the largest moon takes its slot first. */
@@ -505,8 +522,13 @@
       if (!a2){ AA.push(0, 0, 0, 0); AB.push(0, 1, -1, 1); AD.push(0, 0, 0, 0); AC.push(0, 0, 0); continue; }
       AA.push(Math.min(1.2, a2.k), LOOKS.AIR[a2.t], a2.sx || 0, a2.sy || 0);
       AB.push(a2.v[0], a2.v[1], a2.cx != null ? a2.cx : -1, a2.hw || 1);
-      AD.push(a2.d || 0, a2.rb ? 1 : 0, a2.e || 0, i * 3.7 + 1.3);
-      var lc = LOOKS.lit(a2.c, a2.t === 'void' ? 'shade' : a2.e > .4 ? 'glow' : 'air', st.sl); AC.push(lc[0], lc[1], lc[2]);
+      /* Seeded by what the layer is, not by its rank, so a layer keeps its pattern while strengths cross in a glide. */
+      AD.push(a2.d || 0, a2.rb ? 1 : 0, a2.e || 0, 1.3 + 11.1 * SW.hash01(a2.t + ':' + a2.c + ':' + (a2.v ? a2.v.join(',') : '') + ':' + (a2.d || 0)));
+      var lc = LOOKS.lit(a2.c, a2.t === 'void' ? 'shade' : a2.e > .4 ? 'glow' : 'air', st.sl);
+      /* Pouches are the underside of a storm deck, so they take the clouds' own light and shade, darkened by the storm
+         as the clouds are, with a little of their colour. */
+      if (a2.t === 'pouch') lc = PAL.scale(PAL.mixLin(PAL.mixLin(P.cshade, P.clit, .3), lc, .2), 1 - .4 * wx.dark);
+      AC.push(lc[0], lc[1], lc[2]);
     }
     U.uAirA = AA; U.uAirB = AB; U.uAirD = AD; U.uAirC = AC;
     /* A funnel cloud, and where its debris swirls. */
@@ -518,6 +540,10 @@
     U.uEv = [bm ? .8 * bm.k * smooth01(-3, 8, bm.M.m.alt / D2R) * Math.max(.35, st.dark) : 0, bm ? bm.M.i : 0, 0, ecl];
     U.uEvC = PAL.hexLin(bm ? bm.color : '#b8472f');
     U.uFxLight = [1, 1, 1, wx.fog];
+    /* An eruption's crater lights the cloud over it, mostly by night. */
+    var er = (st.fxItems || []).filter(function(f){ return f.shape === 'eruption'; })[0];
+    U.uGlowL = er ? [er.x, er.y - st.H * .22 * er.sz, er.k * (.15 + .85 * er.night), .22] : [0, 0, 0, .22];
+    U.uGlowC = er ? er.col : [0, 0, 0];
     var dark = document.documentElement.classList.contains('dark');
     U.uInk = PAL.hexLin(dark ? '#e9ebf2' : '#2b3040'); U.uPaper = PAL.hexLin(dark ? '#2a2d34' : '#fdfcf9');
     U.uGrade = [.012, 0, st.almanac ? 1 : 0, 0];

@@ -20,8 +20,12 @@ const EYE_SCENE = {
 
 test('the kinds the engine lists are the ones it is built to draw', () => {
   assert.deepEqual(engine.kinds.background, ['fall-asleep', 'black', 'fade-to-black', 'none']);
-  assert.deepEqual(engine.kinds.overlays, ['eye', 'embers']);
-  assert.deepEqual(engine.kinds.textStyles, ['whisper', 'title', 'plain']);
+  assert.deepEqual(engine.kinds.arrivals, ['cut', 'fade', 'fall-asleep']);
+  assert.deepEqual(engine.kinds.overlays, ['eye', 'embers', 'letterbox']);
+  assert.deepEqual(engine.kinds.textStyles, ['whisper', 'title', 'plain', 'caption']);
+  assert.deepEqual(engine.kinds.layouts, ['middle', 'corner']);
+  assert.deepEqual(engine.kinds.textArrivals, ['fade', 'rise', 'settle', 'slide']);
+  assert.deepEqual(engine.kinds.textLeavings, ['fade', 'sink', 'slide']);
   // Every look has a plain name for the editor and the AI, and the default is one of them.
   for (const [kind, looks] of Object.entries(engine.looks)) {
     assert.ok(looks.length >= 3, kind);
