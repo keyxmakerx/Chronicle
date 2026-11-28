@@ -51,3 +51,39 @@ func KitTryCSS(ctx context.Context) string {
 	}
 	return extra.String() + out.String()
 }
+
+// DockKitsCSS is each style kit's faces and campaign colour for a docked
+// screen, keyed on the dock's own data-dms-kit and on the Style drawer's kit
+// tiles (.dms-kt), so a kit picked in the drawer shows at once, without a
+// reload. Palettes and boxes come from style_kits.css and input.css, which
+// key the same attribute; this adds what only the server works out: the
+// faces (the owner's own heading and text faces still win) and the campaign
+// colour checked against each kit. Material resets them, so the dock can
+// drop a kit the page wears. A docked screen wears its kit whatever the page
+// look, so unlike KitTryCSS this is never empty.
+func DockKitsCSS(ctx context.Context) string {
+	a := GetAppearance(ctx)
+	if a == nil {
+		a = &AppearanceData{}
+	}
+	accent := GetAccentColor(ctx)
+	var extra, out strings.Builder
+	faces := map[string]bool{}
+	for _, id := range czKitOrder {
+		var root, dark, kitExtra strings.Builder
+		root.WriteString(kitTryResets)
+		if k, ok := czKits[id]; ok {
+			kitCSS(&root, &dark, &kitExtra, a, k, accent)
+		}
+		if f := kitExtra.String(); f != "" && !faces[f] {
+			faces[f] = true
+			extra.WriteString(f)
+		}
+		key := `[data-dms-kit="` + id + `"]`
+		out.WriteString(".dms-dock" + key + ",.dms-kt" + key + "{" + root.String() + "}")
+		if dark.Len() > 0 {
+			out.WriteString(".dark .dms-dock" + key + ",.dark .dms-kt" + key + "{" + dark.String() + "}")
+		}
+	}
+	return extra.String() + out.String()
+}

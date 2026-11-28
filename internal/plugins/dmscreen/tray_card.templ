@@ -1,0 +1,17 @@
+package dmscreen
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// trayCard is the Dice tray card on both screens. The card only holds the
+// mount: the dock mounts the "dice-tray" widget when the card is first shown,
+// which is when the tray's scripts and the dice engine load, so no page pays
+// for them until someone opens it. The stylesheet comes with the card for the
+// same reason.
+templ trayCard(campaignID string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/dice_tray.css") }/>
+	<div class="dtr" data-widget="dice-tray" data-campaign-id={ campaignID }>
+		<p class="dms-small">Setting out the dice tray…</p>
+	</div>
+}

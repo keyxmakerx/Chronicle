@@ -304,3 +304,12 @@ html[data-tt-sheet] .tt-pn { display: inline; }
   .tt-pw { display: none; }
   .tt-pn { display: inline; }
 }
+
+/* A section drawn into a players' screen card (data-tt-mount): the card is its
+   frame, so the leaf's own border goes, and the log keeps a height the card
+   can hold. */
+.tt-mount { display: flex; flex-direction: column; min-width: 0; margin: 0 -12px -12px; }
+.tt-mount > .tt-log { flex: none; max-height: 16rem; min-height: 0; }
+.tt-mount > .tt-tonight { max-height: 22rem; }
+.tt-mount .tt-roller { border-radius: 0 0 var(--dms-r, 12px) var(--dms-r, 12px); }
+.tt-mount > .tt-empty { padding: 0 12px 12px; }

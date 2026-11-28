@@ -44,6 +44,9 @@ type ScreenNote struct {
 	// Legacy is the text of an old block-style note with no Entry; such a note
 	// is shown read-only.
 	Legacy string
+	// Shared is true when the note is shared with anyone besides its owner;
+	// the players' screen says so rather than "only you".
+	Shared bool
 }
 
 // ErrNoteChanged is returned by NotesSource.Save when the note's body no longer
@@ -61,6 +64,18 @@ var ErrNoteChanged = apperror.NewConflict("changed elsewhere")
 type NotesSource interface {
 	Find(ctx context.Context, campaignID, nightKey string, v Viewer) (*ScreenNote, error)
 	Save(ctx context.Context, campaignID, nightKey string, v Viewer, title, entry, entryHTML, version string) (*ScreenNote, error)
+}
+
+// PlayerNotesSource keeps each player's own note for the players' screen: one
+// note per member per campaign, private to them, in the notes widget so it
+// also shows in their Journal. Its id is derived from the campaign and the
+// viewer, so nothing here owns a table, and only a note the viewer owns is
+// ever read or written. FindMine returns nil, nil before the first save;
+// SaveMine creates it (titled title) or replaces only its body, refusing
+// with ErrNoteChanged when version no longer matches.
+type PlayerNotesSource interface {
+	FindMine(ctx context.Context, campaignID string, v Viewer) (*ScreenNote, error)
+	SaveMine(ctx context.Context, campaignID string, v Viewer, title, entry, entryHTML, version string) (*ScreenNote, error)
 }
 
 // WorldSource reads the default calendar's current date and today's weather.
@@ -111,11 +126,30 @@ type Hero struct {
 	// are GM-only or owner-only; a narrower withholds them along with the
 	// category's restricted fields.
 	PageRestricted []string
+
+	// The rest is filled only by PlayerPartySource, for the players' screen.
+	// GMOnly names the values no player may see and OwnerOnly those only the
+	// hero's own player may see, from the category's fields and the page's
+	// own. RestrictionsKnown is false when they could not be read; a player
+	// then gets none of the hero's values, since unknown is treated as hidden.
+	GMOnly            []string
+	OwnerOnly         []string
+	RestrictionsKnown bool
+	// UpdatedAt picks the viewer's own hero when they have several: the one
+	// played most recently, as the Table's power roll line does.
+	UpdatedAt time.Time
 }
 
 // PartySource lists the campaign's player characters.
 type PartySource interface {
 	Heroes(ctx context.Context, campaignID string, v Viewer) ([]Hero, error)
+}
+
+// PlayerPartySource lists the claimed heroes a player may open (pages hidden
+// from them are left out), each with its restriction keys filled, for the
+// players' screen.
+type PlayerPartySource interface {
+	PlayerHeroes(ctx context.Context, campaignID string, v Viewer) ([]Hero, error)
 }
 
 // Hidden is a character entity players can't see.
@@ -183,6 +217,10 @@ type Sources struct {
 	Homebrew HomebrewSource
 	Fight    FightSource
 	Decks    DecksSource
+
+	// PlayerParty and PlayerNotes feed the players' screen only.
+	PlayerParty PlayerPartySource
+	PlayerNotes PlayerNotesSource
 
 	// Board and Adventures together feed the Adventures tab; with either
 	// missing (the table failed to migrate) the tab is left out.

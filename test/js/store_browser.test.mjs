@@ -181,7 +181,9 @@ test('on a phone the sheet fits the window and its choices are 44 tall', { skip 
   });
   assert.deepEqual(fit, { left: 0, width: 390, over: false });
   const heights = await page.$$eval('.st-rail .st-k', (b) => b.map((x) => x.getBoundingClientRect().height));
-  assert.ok(heights.every((h) => h >= 44), JSON.stringify(heights));
+  // Layout can land a hair under a whole pixel (43.99999); a 44px target is
+  // what is checked, not the runner's rounding.
+  assert.ok(heights.every((h) => h >= 44 - 0.01), JSON.stringify(heights));
   await page.close();
 });
 

@@ -48,6 +48,12 @@ type Service interface {
 	AddNote(ctx context.Context, campaignID string, v Viewer, text string) error
 	RemoveItem(ctx context.Context, campaignID string, v Viewer, itemID string) error
 	PickPages(ctx context.Context, campaignID string, v Viewer, query string) (*PickResult, error)
+
+	// The players' screen (player_service.go), for players and scribes only:
+	// the view, and the viewer's own private note.
+	BuildPlayer(ctx context.Context, campaignID string, v Viewer) (*PlayerView, error)
+	PlayerNote(ctx context.Context, campaignID string, v Viewer) (*NotesView, error)
+	SavePlayerNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error)
 }
 
 // DowntimeResult reports a downtime switch: the new state and how many

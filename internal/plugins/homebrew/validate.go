@@ -128,6 +128,51 @@ func listHas(list []string, s string) bool {
 // part's data and each rule's args to its owner. It returns the doc as it
 // will be stored.
 func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) (Doc, error) {
+	return validateDocMode(ctx, reg, campaignID, in, modeSave)
+}
+
+// docMode is who is asking for a doc to be checked.
+type docMode int
+
+const (
+	// modeSave is a Director's own save: every owner decides on its data in
+	// this campaign, and a part still waiting to be re-linked is refused.
+	modeSave docMode = iota
+	// modeShape checks a shared recipe without a campaign: its form, limits
+	// and references, and that nothing is left in it that sharing drops. An
+	// owner's Check needs the campaign's own records, so it cannot run here,
+	// and a kind this server doesn't know passes, for PackageLacks to name.
+	modeShape
+	// modeAdd checks a shared recipe for the campaign adding it: every owner
+	// decides, except on a part that is waiting to be re-linked, which has
+	// nothing to check until the Director points it at a record.
+	modeAdd
+)
+
+// shapeJSON bounds and canonicalises an object an owner has not been asked
+// about, so a shared recipe carries nothing but plain JSON objects.
+func shapeJSON(where string, raw json.RawMessage, max int) (json.RawMessage, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return emptyJSON, nil
+	}
+	if len(raw) > max {
+		return nil, errInvalid(fmt.Sprintf("%s is too large", where))
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber() // a large whole number must come back as written
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil || obj == nil || dec.More() {
+		return nil, errInvalid(where + " is not a JSON object")
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return nil, errInvalid(where + " is not valid JSON")
+	}
+	return out, nil
+}
+
+func validateDocMode(ctx context.Context, reg *Registry, campaignID string, in Doc, mode docMode) (Doc, error) {
 	out := Doc{Parts: []Part{}, Rules: []Rule{}}
 	if len(in.Parts) > MaxParts {
 		return out, errInvalid(fmt.Sprintf("a recipe holds at most %d parts", MaxParts))
@@ -149,8 +194,24 @@ func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) 
 			return out, err
 		}
 		k, ok := reg.part(p.Kind)
+		if !ok && mode == modeShape && nameRe.MatchString(p.Kind) {
+			ok = true // unknown here; PackageLacks says so
+		}
 		if !ok {
 			return out, errInvalid(fmt.Sprintf("%s (%s) is a kind this campaign doesn't have", label, p.Kind))
+		}
+		unlinked, err := cleanUnlinked(label, p.Unlinked)
+		if err != nil {
+			return out, err
+		}
+		if len(unlinked) > 0 && mode == modeSave {
+			return out, errInvalid(label + " still has " + pickList(unlinked) + " to choose before it can be saved")
+		}
+		// A marker is its owner's word. A kind with no Share has none to give,
+		// so one here is a sender's, and it would only exempt the data from
+		// checking.
+		if len(unlinked) > 0 && k.Share == nil {
+			return out, errInvalid(label + " can't have a link to choose")
 		}
 		see := p.See
 		if see == "" {
@@ -162,28 +223,52 @@ func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) 
 		if k.ForceSee != "" {
 			see = k.ForceSee
 		}
-		data, err := runCheck(ctx, campaignID, label, p.Data, MaxDataBytes, k.Check)
+		var data json.RawMessage
+		if mode == modeShape {
+			data, err = shapeJSON(label, p.Data, MaxDataBytes)
+			if err == nil && k.Share != nil {
+				err = sharedAsIs(label, k, data, unlinked)
+			}
+		} else {
+			// The owner checks every field; a link still waiting to be chosen
+			// is the one thing it lets be empty (homebrew.Waiting).
+			data, err = runCheck(WithWaiting(ctx, unlinked), campaignID, label, p.Data, MaxDataBytes, k.Check)
+		}
 		if err != nil {
 			return out, err
 		}
 		kinds[p.Key] = p.Kind
-		out.Parts = append(out.Parts, Part{Key: p.Key, Kind: p.Kind, Label: label, See: see, Data: data})
+		out.Parts = append(out.Parts, Part{Key: p.Key, Kind: p.Kind, Label: label, See: see, Data: data, Unlinked: unlinked})
 	}
 
 	for i, r := range in.Rules {
 		where := fmt.Sprintf("rule %d", i+1)
 		ev, ok := reg.event(r.When.Event)
-		if !ok {
+		unknownEv := !ok && mode == modeShape && nameRe.MatchString(r.When.Event)
+		if !ok && !unknownEv {
 			return out, errInvalid(fmt.Sprintf("%s starts on %q, which this campaign doesn't have", where, r.When.Event))
 		}
-		if err := checkTarget(where+"'s when", r.When.Part, ev.PartKinds, kinds); err != nil {
+		if unknownEv {
+			ev = EventDef{Name: r.When.Event}
+			if err := checkNamedPart(where+"'s when", r.When.Part, kinds); err != nil {
+				return out, err
+			}
+		} else if err := checkTarget(where+"'s when", r.When.Part, ev.PartKinds, kinds); err != nil {
 			return out, err
 		}
 		test, err := cleanText(where+"'s test", r.When.Test, MaxTestChars)
 		if err != nil {
 			return out, err
 		}
-		args, err := runCheck(ctx, campaignID, where+"'s when", r.When.Args, MaxArgsBytes, ev.Check)
+		var args json.RawMessage
+		if mode == modeShape {
+			args, err = shapeJSON(where+"'s when", r.When.Args, MaxArgsBytes)
+			if err == nil && ev.Share != nil {
+				err = argsSharedAsIs(where+"'s when", ev.Share, args)
+			}
+		} else {
+			args, err = runCheck(ctx, campaignID, where+"'s when", r.When.Args, MaxArgsBytes, ev.Check)
+		}
 		if err != nil {
 			return out, err
 		}
@@ -199,7 +284,30 @@ func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) 
 		}
 		rule := Rule{When: When{Event: ev.Name, Part: r.When.Part, Args: args, Test: test}, Timing: timing, Then: []Do{}}
 		for j, d := range r.Then {
-			step, err := checkStep(ctx, reg, campaignID, fmt.Sprintf("%s, step %d", where, j+1), d, kinds)
+			dw := fmt.Sprintf("%s, step %d", where, j+1)
+			act, ok := reg.action(d.Action)
+			unknownAct := !ok && mode == modeShape && nameRe.MatchString(d.Action)
+			if !ok && !unknownAct {
+				return out, errInvalid(fmt.Sprintf("%s does %q, which this campaign doesn't have", dw, d.Action))
+			}
+			if unknownAct {
+				act = ActionDef{Name: d.Action}
+				if err := checkNamedPart(dw, d.Part, kinds); err != nil {
+					return out, err
+				}
+			} else if err := checkTarget(dw, d.Part, act.PartKinds, kinds); err != nil {
+				return out, err
+			}
+			var a json.RawMessage
+			if mode == modeShape {
+				a, err = shapeJSON(dw, d.Args, MaxArgsBytes)
+				if err == nil && act.Share != nil {
+					err = argsSharedAsIs(dw, act.Share, a)
+				}
+			} else {
+				a, err = runCheck(ctx, campaignID, dw, d.Args, MaxArgsBytes, act.Check)
+			}
+			step := Do{Action: act.Name, Part: d.Part, Args: a}
 			if err != nil {
 				return out, err
 			}
@@ -208,13 +316,119 @@ func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) 
 		out.Rules = append(out.Rules, rule)
 	}
 	out.Layout = cleanLayout(in.Layout, out)
+	out.Off = mode != modeSave
 	return out, nil
 }
 
+// maxUnlinked and maxPickChars bound the markers a part may carry.
+const (
+	maxUnlinked  = 10
+	maxPickChars = 60
+)
+
+// cleanUnlinked checks a part's markers: a few short lines of plain text, each
+// once.
+func cleanUnlinked(label string, in []Unlinked) ([]Unlinked, error) {
+	if len(in) > maxUnlinked {
+		return nil, errInvalid(fmt.Sprintf("%s has more than %d links to choose", label, maxUnlinked))
+	}
+	var out []Unlinked
+	seen := map[string]bool{}
+	for _, u := range in {
+		pick, err := cleanText(label+"'s link to choose", u.Pick, maxPickChars)
+		if err != nil {
+			return nil, err
+		}
+		if pick == "" {
+			return nil, errInvalid(label + " has a link to choose that doesn't say what to pick")
+		}
+		if !seen[pick] {
+			seen[pick] = true
+			out = append(out, Unlinked{Pick: pick})
+		}
+	}
+	return out, nil
+}
+
+func pickList(us []Unlinked) string {
+	picks := make([]string, len(us))
+	for i, u := range us {
+		picks[i] = u.Pick
+	}
+	return strings.Join(picks, " and ")
+}
+
+// sharedAsIs refuses a part whose owner would still strip something from its
+// data: a shared recipe holds only what sharing leaves, so a sender who kept
+// Director-only text or a campaign's own link in it is turned away, not
+// trusted.
+func sharedAsIs(label string, k PartKind, data json.RawMessage, markers []Unlinked) error {
+	clean, picks, err := k.Share(data, markers)
+	if err != nil {
+		return errInvalid(label + ": " + shareMessage(err))
+	}
+	if !sameJSON(clean, data) || !samePicks(picks, markers) {
+		return errInvalid(label + " still holds Director-only text, a link to a record of another campaign, or a link to choose its owner did not make; a shared recipe leaves them out")
+	}
+	return nil
+}
+
+// argsSharedAsIs is sharedAsIs for an event's or action's args.
+func argsSharedAsIs(where string, share ShareArgsFunc, args json.RawMessage) error {
+	clean, err := share(args)
+	if err != nil {
+		return errInvalid(where + ": " + shareMessage(err))
+	}
+	if !sameJSON(clean, args) {
+		return errInvalid(where + " still holds Director-only text, which a shared recipe leaves out")
+	}
+	return nil
+}
+
+// samePicks says whether two marker lists name the same picks.
+func samePicks(a, b []Unlinked) bool {
+	set := map[string]bool{}
+	for _, u := range a {
+		set[u.Pick] = true
+	}
+	if len(set) != len(a) {
+		return false
+	}
+	for _, u := range b {
+		if !set[u.Pick] {
+			return false
+		}
+		delete(set, u.Pick)
+	}
+	return len(set) == 0
+}
+
+// shareMessage keeps an owner's message when it is meant for the Director.
+func shareMessage(err error) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code < 500 {
+		return ae.Message
+	}
+	return "can't be read"
+}
+
+// checkNamedPart is checkTarget for an event or action this server doesn't
+// know: it can't say which kinds the step takes, only that a part it names
+// is one the recipe has.
+func checkNamedPart(where, key string, kinds map[string]string) error {
+	if key == "" {
+		return nil
+	}
+	if _, ok := kinds[key]; !ok {
+		return errInvalid(fmt.Sprintf("%s names a part %q this recipe doesn't have", where, key))
+	}
+	return nil
+}
+
 // checkStep checks one Then against the registry and the recipe's parts and
-// hands its args to the action's owner. A saved recipe and a Director's
-// "Yes, and…" answer both go through it, so an answer can change a step only
-// to something the recipe itself could have said.
+// hands its args to the action's owner, as a saved step is checked. A
+// Director's "Yes, and…" answer goes through it, so an answer can change a
+// step only to something the recipe itself could have said.
 func checkStep(ctx context.Context, reg *Registry, campaignID, where string, d Do, kinds map[string]string) (Do, error) {
 	act, ok := reg.action(d.Action)
 	if !ok {
