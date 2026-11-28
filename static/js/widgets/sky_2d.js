@@ -5,7 +5,8 @@
  * moon sprites turned toward the sun and eclipse-shadowed, a land
  * silhouette, a cloud wash, a still of rain/snow, and fog, plus soft
  * overlays for the day's sky events (blood wash, conjunction thread,
- * harvest glow; see drawEventFX). The painted sky has the full versions.
+ * harvest glow; see drawEventFX), and cheap eruption and lens clouds (see
+ * drawLookShapes). The painted sky has the full versions.
  *
  * LAND has no terrain data to draw from, so it's generated from a stable
  * per-calendar seed, so different calendars don't look identical.
@@ -93,6 +94,44 @@
     }
   }
 
+  // The look's drawn shapes the basic sky can afford, still and behind the cloud wash and the land: an eruption's
+  // cone, crater glow and a leaning plume, and lens clouds over the far ridge's two highest points. Leviathans,
+  // hanging pouches, St Elmo's fire and ball lightning are left to the painted sky.
+  function drawLookShapes(ctx, st) {
+    var R = st.look; if (!R || !R.shapes) return;
+    var P = st.P, Wpx = st.W, H = st.H, seed = st.landSeed || 1, N = Math.max(24, Math.round(Wpx / 6)), night = smooth01(.25, .75, st.dark);
+    function ridge(x) { return (.82 - .09 * ridgeAt(seed, 0, x / Wpx * (N - 1) / N)) * H; }
+    R.shapes.forEach(function (q) {
+      if (q.k <= .01) return;
+      if (q.s === 'eruption') {
+        var x = Wpx * .7, base = ridge(x) + H * .02, ch = H * .275, py = base - ch, col = LOOKS.lit(q.c || '#ff5a1a', 'glow', st.sl);
+        [[.25, .3], [.45, .22], [.65, .16]].forEach(function (u) {
+          var g = ctx.createRadialGradient(x + u[0] * H * .3, py - u[0] * H * .6, 0, x + u[0] * H * .3, py - u[0] * H * .6, H * u[1]);
+          g.addColorStop(0, css(W.PAL.mixLin(P.cshade, P.hor, .3), .6 * q.k)); g.addColorStop(1, css(P.cshade, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, Wpx, H);
+        });
+        ctx.fillStyle = css(W.PAL.scale(W.PAL.mixLin(P.hor, P.h0, .62), .8), q.k); ctx.beginPath(); ctx.moveTo(x - ch * 4, H);
+        ctx.lineTo(x - ch * .16, py); ctx.lineTo(x + ch * .16, py); ctx.lineTo(x + ch * 4, H); ctx.closePath(); ctx.fill();
+        var gl = ctx.createRadialGradient(x, py, 0, x, py, ch * .7);
+        gl.addColorStop(0, css(col, (.25 + .7 * night) * q.k)); gl.addColorStop(1, css(col, 0)); ctx.fillStyle = gl; ctx.fillRect(x - ch, py - ch, ch * 2, ch * 2);
+      } else if (q.s === 'lens') {
+        var pts = [];
+        for (var x2 = Wpx * .12; x2 <= Wpx * .88; x2 += 4) pts.push([x2, ridge(x2)]);
+        pts.sort(function (a, b) { return a[1] - b[1]; });
+        var top = [];
+        pts.forEach(function (p) { if (top.length < 2 && top.every(function (o) { return Math.abs(o[0] - p[0]) > Wpx * .2; })) top.push(p); });
+        top.forEach(function (p, j) {
+          var w = H * .62 * (j ? .72 : 1), hh = H * .03 * (j ? .72 : 1), y = p[1] - H * (.12 + .04 * j);
+          for (var k = 0; k < 3; k++) {
+            var ww = w * (1 - k * .18), yy = y - k * hh * 1.35, g2 = ctx.createLinearGradient(0, yy - hh * 1.2, 0, yy + hh);
+            g2.addColorStop(0, css(P.clit, .9 * q.k)); g2.addColorStop(1, css(P.cshade, .85 * q.k)); ctx.fillStyle = g2;
+            ctx.beginPath(); ctx.moveTo(p[0] - ww / 2, yy); ctx.bezierCurveTo(p[0] - ww * .3, yy - hh * 2.1, p[0] + ww * .3, yy - hh * 2.1, p[0] + ww / 2, yy);
+            ctx.bezierCurveTo(p[0] + ww * .25, yy + hh * 1.1, p[0] - ww * .25, yy + hh * 1.1, p[0] - ww / 2, yy); ctx.fill();
+          }
+        });
+      }
+    });
+  }
+
   var X = {};
   // draw(ctx, st, dpr, oy): st is the state builder's per-frame object (see
   // sky_pane.js's buildState) — the same shape the contract's Surface.state
@@ -133,6 +172,7 @@
       ctx.restore();
     });
     drawEventFX(ctx, st);
+    drawLookShapes(ctx, st);
     if (wx.cloud > .15) {
       var cc = P.clit || [.8, .8, .82];
       for (var c = 0; c < 9; c++) { var cx = Wpx * h(c, 7), cy = H * (.12 + .45 * h(c, 8)), rx = Wpx * (.12 + .12 * h(c, 9)); var cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx); cg.addColorStop(0, css(cc, .55 * wx.cloud)); cg.addColorStop(1, css(cc, 0)); ctx.fillStyle = cg; ctx.fillRect(cx - rx, cy - rx, rx * 2, rx * 2); }

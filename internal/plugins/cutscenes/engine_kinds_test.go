@@ -21,7 +21,7 @@ func TestEngineDrawsEveryAcceptedKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(src)
-	for _, list := range [][]Kind{BackgroundKinds, OverlayKinds, TextStyles, EndingKinds} {
+	for _, list := range [][]Kind{BackgroundKinds, Arrivals, OverlayKinds, TextStyles, TextLayouts, TextArrivals, TextLeavings, EndingKinds} {
 		for _, k := range list {
 			if !strings.Contains(body, "'"+k.Key+"'") && !strings.Contains(body, `"`+k.Key+`"`) {
 				t.Errorf("the engine does not name %q", k.Key)

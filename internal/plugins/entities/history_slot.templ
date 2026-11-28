@@ -1,0 +1,13 @@
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+
+// pageHistorySlot is where the History panel loads. A link that asked for the
+// history (?history=) loads it as the page opens.
+templ pageHistorySlot(cc *campaigns.CampaignContext, entity *Entity) {
+	if u := openHistoryURL(ctx, cc.Campaign.ID, entity.ID); u != "" {
+		<div id="page-history-slot" hx-get={ u } hx-trigger="load"></div>
+	} else {
+		<div id="page-history-slot"></div>
+	}
+}

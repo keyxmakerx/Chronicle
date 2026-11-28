@@ -20,6 +20,7 @@ const (
 	fBgKind    = "bg_kind"
 	fBgSeconds = "bg_seconds"
 	fBgLook    = "bg_look"
+	fBgIn      = "bg_in"
 	fOvKind    = "ov_kind"
 	fOvAt      = "ov_at"
 	fOvSeconds = "ov_seconds"
@@ -30,6 +31,9 @@ const (
 	fTxAt      = "tx_at"
 	fTxSeconds = "tx_seconds"
 	fTxStyle   = "tx_style"
+	fTxLayout  = "tx_layout"
+	fTxIn      = "tx_in"
+	fTxOut     = "tx_out"
 	fEndKind   = "end_kind"
 	fEndAfter  = "end_after"
 )
@@ -43,6 +47,7 @@ func SceneFromForm(f url.Values) (Scene, error) {
 	var err error
 	s.Name = f.Get(fName)
 	s.Background.Kind = f.Get(fBgKind)
+	s.Background.In = f.Get(fBgIn)
 	s.Background.Params.Look = f.Get(fBgLook)
 	if s.Background.Seconds, err = number(f.Get(fBgSeconds), "the background's time"); err != nil {
 		return s, err
@@ -63,11 +68,12 @@ func SceneFromForm(f url.Values) (Scene, error) {
 		s.Overlays = append(s.Overlays, o)
 	}
 	says, tats, tsecs, styles := f[fTxSay], f[fTxAt], f[fTxSeconds], f[fTxStyle]
+	layouts, ins, outs := f[fTxLayout], f[fTxIn], f[fTxOut]
 	for i, say := range says {
 		if strings.TrimSpace(say) == "" {
 			continue
 		}
-		t := TextLine{Say: say, Style: nth(styles, i)}
+		t := TextLine{Say: say, Style: nth(styles, i), Layout: nth(layouts, i), In: nth(ins, i), Out: nth(outs, i)}
 		if t.At, err = number(nth(tats, i), fmt.Sprintf("words %d's start", len(s.Text)+1)); err != nil {
 			return s, err
 		}

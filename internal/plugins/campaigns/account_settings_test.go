@@ -49,7 +49,8 @@ func TestSettingsCampaigns(t *testing.T) {
 
 // What each viewer gets on a campaign's settings page: a player with parts
 // open picks them in place; a player with none is told who decides; the
-// owner is sent to Customize and gets the brush; only a member can leave.
+// owner is sent to Customize and gets the brush and the Store icon choice;
+// only a member can leave.
 func TestCampaignSettingsPage(t *testing.T) {
 	cp := &Campaign{ID: "c1", Name: "Ashen Reach"}
 	rail := auth.CampaignSettingsList{Campaigns: []auth.CampaignSettingsRef{{ID: "c1", Name: "Ashen Reach"}}}
@@ -71,18 +72,18 @@ func TestCampaignSettingsPage(t *testing.T) {
 			name: "player with a part open",
 			v:    campaignSettingsView{Rail: rail, Campaign: cp, Parts: []yourLookPart{{Part: sheet, URL: "/campaigns/c1/my-look/sheet"}}},
 			want: []string{`data-look-part="sheet"`, `data-url="/campaigns/c1/my-look/sheet"`, `aria-current="page"`, `data-widget="account-campaign"`, "Leave Ashen Reach", `data-leave-then="/account"`},
-			not:  []string{"data-acct-brush", "/customize/look"},
+			not:  []string{"data-acct-brush", "data-acct-store", "/customize/look"},
 		},
 		{
 			name: "player with nothing open",
 			v:    campaignSettingsView{Rail: rail, Campaign: cp},
 			want: []string{"sets the look for everyone here", "Leave Ashen Reach"},
-			not:  []string{"data-look-part", "data-acct-brush"},
+			not:  []string{"data-look-part", "data-acct-brush", "data-acct-store"},
 		},
 		{
 			name: "owner",
 			v:    campaignSettingsView{Rail: rail, Campaign: cp, IsOwner: true},
-			want: []string{"/campaigns/c1/customize/look", `data-acct-brush="c1"`},
+			want: []string{"/campaigns/c1/customize/look", `data-acct-brush="c1"`, `data-acct-store="c1"`, `data-store="shown" aria-pressed="true"`, `data-store="hidden" aria-pressed="false"`},
 			not:  []string{"data-look-part", "Leave Ashen Reach", "data-leave-url"},
 		},
 	}

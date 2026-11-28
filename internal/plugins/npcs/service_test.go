@@ -426,3 +426,42 @@ func TestListNPCs_PaginatesTheFilteredSet(t *testing.T) {
 		t.Fatalf("page 1 = %v, want [a b] (restricted skipped, no gap left in the page)", repo.lastByIDsArg)
 	}
 }
+
+type fixedParty bool
+
+func (p fixedParty) ShowsParty(context.Context, string) bool { return bool(p) }
+
+// A playable character leaves the list only while the campaign shows a
+// party to put it in; otherwise this list is the only place it shows.
+func TestNPCService_PlayableLeavesOnlyForAParty(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		party PartyCheck
+		want  bool
+	}{
+		{"no check wired", nil, false},
+		{"claiming off", fixedParty(false), false},
+		{"claiming on", fixedParty(true), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []bool
+			repo := &mockNPCRepo{listIDsFn: func(_ context.Context, _ string, _ []int, opts NPCListOptions) ([]string, error) {
+				got = append(got, opts.hidePlayable)
+				return nil, nil
+			}}
+			svc := NewNPCService(repo, &mockTypeFinder{typeID: 3}, &mockVisibilityFilter{})
+			if tc.party != nil {
+				svc.SetPartyCheck(tc.party)
+			}
+			if _, _, err := svc.ListNPCs(context.Background(), "c1", int(permissions.RoleOwner), "u1", NPCListOptions{Page: 1, PerPage: 24, hidePlayable: !tc.want}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := svc.CountNPCs(context.Background(), "c1", int(permissions.RolePlayer), "u1"); err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 2 || got[0] != tc.want || got[1] != tc.want {
+				t.Fatalf("hidePlayable = %v, want %v for the list and the count", got, tc.want)
+			}
+		})
+	}
+}

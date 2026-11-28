@@ -101,7 +101,7 @@ func checkCraftingTeach(_ context.Context, _ string, raw json.RawMessage) (json.
 
 func registerCraftingParts(reg *homebrew.Registry, svc crafting.Service) error {
 	if err := reg.RegisterPart(homebrew.PartKind{Name: craftingPartKind, Label: "Crafting recipes", ForceSee: "director",
-		Widget: craftingPartWidget, Check: craftingPartCheck(svc)}); err != nil {
+		Widget: craftingPartWidget, Check: craftingPartCheck(svc), Share: shareCraftingPart}); err != nil {
 		return err
 	}
 	return reg.RegisterAction(homebrew.ActionDef{

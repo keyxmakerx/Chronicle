@@ -636,6 +636,52 @@ type EntityPresetDef struct {
 	// in this order; any other step follows in field order. Unknown keys are
 	// ignored, so a system can name a step a campaign has no list for.
 	CreatorOrder []string `json:"creator_order,omitempty"`
+
+	// CreatorNumbers lets the hero creator fill in a new hero's starting
+	// numbers from the entries picked at its steps. Absent: the creator
+	// leaves every number for the sheet.
+	CreatorNumbers *CreatorNumbersDef `json:"creator_numbers,omitempty"`
+}
+
+// CreatorNumbersDef is how a system's starting numbers come from the picked
+// entries. Core keeps no game system's field or property names: the package
+// names them here.
+type CreatorNumbersDef struct {
+	// Characteristics, when set, adds a creator step where the player puts
+	// one of the picked entry's arrays on the fields it does not fix.
+	Characteristics *CreatorCharacteristicsDef `json:"characteristics,omitempty"`
+
+	// Sums set fields to the total of numbers read from picked entries
+	// (Stamina from a class and a kit).
+	Sums []CreatorSumDef `json:"sums,omitempty"`
+}
+
+// CreatorCharacteristicsDef names the fields an array is placed on and the
+// properties of the entry picked at Step that fix some of them and list the
+// arrays. An array entry is text such as "2, 1, 0, −1".
+type CreatorCharacteristicsDef struct {
+	Label          string   `json:"label,omitempty"`
+	Step           string   `json:"step"`
+	Fields         []string `json:"fields"`
+	FixedProperty  string   `json:"fixed_property,omitempty"`
+	FixedValue     int      `json:"fixed_value,omitempty"`
+	ArraysProperty string   `json:"arrays_property"`
+}
+
+// CreatorSumDef sets each of Fields to the sum of Parts. A part whose step
+// has no pick, or whose entry lacks the number, adds nothing; a sum with no
+// part found sets nothing.
+type CreatorSumDef struct {
+	Fields []string         `json:"fields"`
+	Parts  []CreatorSumPart `json:"parts"`
+	// Half sets the fields to half the sum, rounded down (a winded value).
+	Half bool `json:"half,omitempty"`
+}
+
+// CreatorSumPart reads a number property of the entry picked at Step.
+type CreatorSumPart struct {
+	Step     string `json:"step"`
+	Property string `json:"property"`
 }
 
 // PresetSwitchDef is how a preset takes over a category the campaign already

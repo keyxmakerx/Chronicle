@@ -97,9 +97,9 @@ type hbWordsPart struct {
 // sync saves what the parts describe when a recipe is saved.
 func registerFieldRuleParts(reg *homebrew.Registry, placeName func(ctx context.Context, campaignID, entityID string) (string, bool), sync fieldRuleSync) error {
 	parts := []homebrew.PartKind{
-		{Name: "field", Label: "Field", Check: checkFieldPart, Sync: sync.syncFor("field")},
-		{Name: "item", Label: "Item fields", Check: checkItemPart, Sync: sync.syncFor("item")},
-		{Name: "words", Label: "Local words", Sync: sync.syncFor("words"),
+		{Name: "field", Label: "Field", Check: checkFieldPart, Share: shareFieldPart, Sync: sync.syncFor("field")},
+		{Name: "item", Label: "Item fields", Check: checkItemPart, Share: shareItemPart, Sync: sync.syncFor("item")},
+		{Name: "words", Label: "Local words", Sync: sync.syncFor("words"), Share: shareWordsPart,
 			Check: func(ctx context.Context, campaignID string, raw json.RawMessage) (json.RawMessage, error) {
 				return checkWordsPart(ctx, campaignID, raw, placeName)
 			}},

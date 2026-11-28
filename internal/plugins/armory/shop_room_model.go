@@ -163,6 +163,21 @@ type ShopRoomCounterTheme struct {
 	Light   string  `json:"light"`
 	Warmth  float64 `json:"warmth"`
 	Outside string  `json:"outside"`
+	// Scene is what stands outside under that sky; empty is the room's own town.
+	Scene string `json:"scene,omitempty"`
+	// Picture is the owner's own picture for the room, absent for none.
+	Picture *ShopRoomCounterPicture `json:"picture,omitempty"`
+}
+
+// ShopRoomCounterPicture is one of the campaign's own pictures used in the
+// room. ID names a media file, never a URL, so the room can only show a file
+// the media rules already let the viewer open. On is where it goes ("wall"
+// covers the back wall, "outside" is the view through the opening); Fit is how
+// it fills that space ("fill" crops, "fit" shows it whole, "repeat" tiles it).
+type ShopRoomCounterPicture struct {
+	ID  string `json:"id"`
+	On  string `json:"on"`
+	Fit string `json:"fit"`
 }
 
 // ShopRoomRolls is the owner's settings for the counter rolls. Every number is

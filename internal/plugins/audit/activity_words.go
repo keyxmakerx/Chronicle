@@ -97,8 +97,24 @@ func entryLabel(e AuditEntry) string {
 		if len(words) > 0 {
 			return "changed the campaign's " + listWords(words)
 		}
+		// A save that changed nothing still logs an empty list; say so
+		// rather than claim settings were updated.
+		if f, ok := e.Details["fields"]; ok && e.Action == ActionCampaignUpdated && emptyList(f) {
+			return "saved the campaign's settings without changing them"
+		}
 	}
 	return actionLabel(e.Action)
+}
+
+// emptyList reports a details list with nothing in it, however it decoded.
+func emptyList(v any) bool {
+	switch l := v.(type) {
+	case []string:
+		return len(l) == 0
+	case []any:
+		return len(l) == 0
+	}
+	return false
 }
 
 // listWords joins words as "a", "a and b" or "a, b and c".

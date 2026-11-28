@@ -164,14 +164,21 @@ test('the sun saves its kind at once, and Escape or a press elsewhere puts the t
   await p.click('#cal5-stage .day >> nth=20');
   await p.waitForSelector('#cal5-skytray:not(.live)', { state: 'attached' });
   assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), false, 'a press elsewhere puts the menu away too');
+  // That press opened the day's card, and the Moons button puts it away
+  // again. Its film is slowed here, as a loaded machine slows it, so the
+  // card is still folding when Escape sends focus to the Moons button: the
+  // card ending must not pull focus back to itself or its day.
+  const cdp = await p.context().newCDPSession(p);
+  await cdp.send('Animation.enable');
+  await cdp.send('Animation.setPlaybackRate', { playbackRate: 0.25 });
   await menu(p);
   await p.focus('#cal5-sr-sun');
   await p.keyboard.press('Escape');
   assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), false);
-  // Focus goes back to the Moons button a frame after the rail closes; a
-  // loaded runner can read it before that, so wait for it, bounded, then check.
-  await p.waitForFunction(() => document.activeElement && document.activeElement.id === 'cal5-moonbtn', null, { timeout: 1500 }).catch(() => {});
   assert.equal(await p.evaluate(() => document.activeElement && document.activeElement.id), 'cal5-moonbtn');
+  await p.waitForSelector('#cal5-wing:not(.live)', { state: 'attached', timeout: 20000 });
+  await cdp.send('Animation.setPlaybackRate', { playbackRate: 1 });
+  assert.equal(await p.evaluate(() => document.activeElement && document.activeElement.id), 'cal5-moonbtn', 'focus stays on the Moons button after the day card has gone');
 });
 
 test('hiding a moon saves and marks it, and the menu leads on to the moon phases', { skip }, async (t) => {

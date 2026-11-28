@@ -110,6 +110,12 @@ func (m *memRuns) ListRuns(context.Context, string, bool, int) ([]homebrew.Run, 
 	return nil, nil
 }
 func (m *memRuns) PruneRuns(context.Context, string, int) error { return nil }
+func (m *memRuns) ListAsks(context.Context, string, string, int) ([]homebrew.Run, error) {
+	return nil, nil
+}
+func (m *memRuns) ListRunningAsks(context.Context, string, int) ([]homebrew.Run, error) {
+	return nil, nil
+}
 
 // A "Dose" button sets two trackers to 0 at once, and each log line says the
 // button and the recipe.

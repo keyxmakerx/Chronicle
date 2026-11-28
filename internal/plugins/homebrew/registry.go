@@ -33,7 +33,22 @@ type PartKind struct {
 	// Sync, when set, keeps records the owner holds for this kind's parts
 	// in step with the recipes that hold them.
 	Sync *PartSync
+	// Share, when set, is the owner's say over what leaves the campaign in a
+	// shared recipe: it returns the data without any Director-only text and
+	// without links to the campaign's own records (ids mean nothing in
+	// another campaign), plus what to pick to restore each dropped link. It
+	// holds no campaign, so it can't read one. waiting is what the sender
+	// wrote as already waiting to be chosen; the owner keeps only the ones it
+	// would itself have made (a link it names that the data really lacks), so
+	// a marker is always the owner's word, never the sender's. A kind without
+	// Share holds only names, is shared as it is, and may carry no markers.
+	Share func(raw json.RawMessage, waiting []Unlinked) (json.RawMessage, []Unlinked, error)
 }
+
+// ShareArgsFunc is an event's or action's say over what leaves the campaign
+// in a shared recipe: the args without Director-only text, or an error
+// saying why the step can't be shared at all. Args hold names, never ids.
+type ShareArgsFunc func(raw json.RawMessage) (json.RawMessage, error)
 
 // PartSync keeps an owner's own records in step with a kind's parts: a
 // tracker part is saved as a tracker kind. Each call gets every part of the
@@ -60,6 +75,8 @@ type EventDef struct {
 	// button the Director presses to say it happened.
 	Preview *Preview
 	Check   CheckFunc
+	// Share, when set, strips the args for a shared recipe (ShareArgsFunc).
+	Share ShareArgsFunc
 	// Press, when set, is the label of a drawer button the Director uses to
 	// say the event happened ("Log a respite"). Only an event from no part
 	// can have one.
@@ -79,6 +96,10 @@ type EventDef struct {
 	// given what happened (the payload the owner fired it with). Nil
 	// matches every firing.
 	Match func(args, payload json.RawMessage) (bool, error)
+	// Ask, when set, makes the event an owner's own ask: the owner puts it to
+	// the Director through Service.AskFor instead of firing it, and every
+	// saved rule on it waits behind that one ask, its steps running on Yes.
+	Ask *EventAsk
 }
 
 // Field is one arg of an event or action, as the Workshop's inspector asks
@@ -113,6 +134,8 @@ type ActionDef struct {
 	// line saying what would happen.
 	Preview *Preview
 	Check   CheckFunc
+	// Share, when set, strips the args for a shared recipe (ShareArgsFunc).
+	Share ShareArgsFunc
 	// Run carries the action out on the server and says in one line what
 	// changed. Without it, and always for a ClientRun action, a rule that
 	// uses the action waits in the Homebrew drawer for the Director.
@@ -122,11 +145,45 @@ type ActionDef struct {
 	// it is timed, and Run does it when the Director presses Run. It is for
 	// anything bigger than a number moving, which runs at once.
 	Waits bool
+	// Asks marks the step that puts the rule to the Director: a run stops
+	// there until a Director answers, having done the steps before it, and
+	// runs the steps after it only on Yes. It has no Run of its own.
+	Asks bool
 	// Says, when set, is the line the Workshop's preview writes for the
 	// action instead of its label: each {field} is that arg's value and
 	// {part} the label of the part it acts on, so the preview reads like the
 	// table without knowing the owner.
 	Says string
+	// Rolls marks a step a player rolls for on their own screen: a run stops
+	// there, waiting on that player rather than a Director, and goes on only
+	// if the server's roll meets the step's target.
+	Rolls *PlayerRoll
+}
+
+// PlayerRoll is how a "rolls first" step's owner makes its roll. Both run as
+// the player who rolls (Act.By), so the owner can use that player's hero.
+type PlayerRoll struct {
+	// Offer says what the player would roll now, worked out for them, so
+	// their button can name it; an error is shown instead of the button.
+	Offer func(ctx context.Context, campaignID string, a Act) (RollOffer, error)
+	// Roll makes the roll on the server, through the owner's own record of
+	// rolls, and says what it came to. The homebrew service judges it
+	// against the target; nothing a client sends is a result.
+	Roll func(ctx context.Context, campaignID string, a Act) (Rolled, error)
+}
+
+// RollOffer is a roll as a player is offered it: "Might", "2d10+2", 12.
+type RollOffer struct {
+	Label   string `json:"label,omitempty"`
+	Formula string `json:"formula"`
+	Target  int    `json:"target"`
+}
+
+// Rolled is a roll the owner made, with the target it was made against.
+type Rolled struct {
+	RollOffer
+	Total  int    `json:"total"`
+	RollID string `json:"rollId,omitempty"`
 }
 
 // Act is one action a rule is carrying out.
@@ -212,6 +269,46 @@ type Registry struct {
 	parts   map[string]PartKind
 	events  map[string]EventDef
 	actions map[string]ActionDef
+	// system names a campaign's game system, for the Store's "needs".
+	system func(ctx context.Context, campaignID string) string
+}
+
+type waitingKey struct{}
+
+// WithWaiting marks, on ctx, the links a part is still waiting to have chosen,
+// by their pick. Only a recipe added from the Store has any.
+func WithWaiting(ctx context.Context, picks []Unlinked) context.Context {
+	set := map[string]bool{}
+	for _, u := range picks {
+		set[u.Pick] = true
+	}
+	return context.WithValue(ctx, waitingKey{}, set)
+}
+
+// Waiting says whether the part being checked is waiting to have the link
+// with this pick chosen. An owner's Check honours it for exactly that field,
+// leaving the field empty and checking every other one as usual.
+func Waiting(ctx context.Context, pick string) bool {
+	set, _ := ctx.Value(waitingKey{}).(map[string]bool)
+	return set[pick]
+}
+
+// SetSystem tells the registry how to read a campaign's game system; without
+// it a shared recipe records no system.
+func (r *Registry) SetSystem(fn func(ctx context.Context, campaignID string) string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.system = fn
+}
+
+func (r *Registry) systemOf(ctx context.Context, campaignID string) string {
+	r.mu.RLock()
+	fn := r.system
+	r.mu.RUnlock()
+	if fn == nil {
+		return ""
+	}
+	return fn(ctx, campaignID)
 }
 
 // NewRegistry returns an empty registry.
@@ -295,6 +392,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 	if err := checkPressArg(e); err != nil {
 		return err
 	}
+	if err := checkEventAsk(e); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.events[e.Name]; dup {
@@ -343,6 +443,15 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 	}
 	if a.ClientRun && a.Run != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't run on the server", a.Name)
+	}
+	if a.Asks && (a.ClientRun || a.Run != nil || a.Waits || a.Preview != nil || len(a.PartKinds) > 0) {
+		return fmt.Errorf("homebrew: action %q asks the Director, so it takes no part and can't run, wait or preview", a.Name)
+	}
+	if a.Rolls != nil && (a.Rolls.Offer == nil || a.Rolls.Roll == nil) {
+		return fmt.Errorf("homebrew: action %q has a player roll without both Offer and Roll", a.Name)
+	}
+	if a.Rolls != nil && (a.Asks || a.ClientRun || a.Run != nil || a.Waits || a.Preview != nil || len(a.PartKinds) > 0) {
+		return fmt.Errorf("homebrew: action %q waits on a player's roll, so it takes no part and can't ask, run, wait or preview", a.Name)
 	}
 	if err := checkPreview("action", a.Name, a.Preview, a.Fields, a.PartKinds, PreviewAdd, PreviewSet); err != nil {
 		return err
@@ -461,7 +570,13 @@ type CatalogEntry struct {
 	ClientRun bool     `json:"clientRun,omitempty"`
 	// Waits is an action's Waits, so the editor can say a rule that ends in it
 	// is held for the Director however it is timed.
-	Waits  bool    `json:"waits,omitempty"`
+	Waits bool `json:"waits,omitempty"`
+	// Asks is an action's Asks, so the editor can say the rule stops there
+	// for the Director's answer.
+	Asks bool `json:"asks,omitempty"`
+	// Rolls is set on an action a player rolls for, so the editor can say
+	// the rule stops there for the player's roll.
+	Rolls  bool    `json:"rolls,omitempty"`
 	Fields []Field `json:"fields,omitempty"`
 	// PressArg is an event's PressArg, so the Workshop can name the drawer
 	// button a When stands for.
@@ -493,7 +608,7 @@ func (r *Registry) Catalog() Catalog {
 		c.Events = append(c.Events, ce)
 	}
 	for _, a := range r.actions {
-		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Fields: a.Fields, Says: a.Says}
+		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Asks: a.Asks, Rolls: a.Rolls != nil, Fields: a.Fields, Says: a.Says}
 		if a.Preview != nil {
 			ce.Preview = a.Preview
 		}

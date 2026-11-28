@@ -204,3 +204,78 @@ func (h *Handler) Delete(c *echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+// Answer handles POST /campaigns/:id/homebrew/runs/:run/answer: a Director
+// answers an ask with yes (and any changes to the steps after it), no, or a
+// written reply.
+func (h *Handler) Answer(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	var in AnswerInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	out, err := h.svc.Answer(c.Request().Context(), cid, c.Param("run"), v, in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// MyAsks handles GET /campaigns/:id/homebrew/asks/mine: the viewer's own
+// asks, as {data, total}.
+func (h *Handler) MyAsks(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.MyAsks(c.Request().Context(), cid, v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": out, "total": len(out)})
+}
+
+// TakeBack handles POST /campaigns/:id/homebrew/asks/:run/take-back.
+func (h *Handler) TakeBack(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.TakeBack(c.Request().Context(), cid, c.Param("run"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Roll handles POST /campaigns/:id/homebrew/asks/:run/roll: the player a
+// "rolls first" step waits on makes the roll. The body is ignored: the
+// server rolls, and no result a client sends is read.
+func (h *Handler) Roll(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Roll(c.Request().Context(), cid, c.Param("run"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// AsksPage handles GET /campaigns/:id/homebrew/asks: the viewer's own asks
+// to the Director, where the bell's answers lead.
+func (h *Handler) AsksPage(c *echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	asks, err := h.svc.MyAsks(c.Request().Context(), cid, v)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, AsksPage(cid, len(asks) == 0, middleware.GetCSRFToken(c)))
+}

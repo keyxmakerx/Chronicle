@@ -97,7 +97,7 @@ func TestDecksHomebrewRegistration(t *testing.T) {
 	for _, a := range c.Actions {
 		actions[a.Name] = a
 	}
-	for _, name := range []string{cardPlayedEvent, cardDrawnEvent} {
+	for _, name := range []string{cardPlayedEvent, cardDrawnEvent, cardPlayAsked} {
 		e, ok := events[name]
 		if !ok || len(e.Fields) != 2 || e.Fields[0].Name != "deck" || e.Fields[1].Name != "card" || len(e.PartKinds) != 0 {
 			t.Errorf("event %s = %+v", name, e)

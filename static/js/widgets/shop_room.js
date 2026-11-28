@@ -1697,7 +1697,7 @@
       function counterModel() {
         return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0,
           today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null,
-          counter: S.counter, edit: S.mode === 'arr' && cbPlace };
+          counter: S.counter, edit: S.mode === 'arr' && cbPlace, campaignId: campaignId };
       }
       // The counter scene puts goods on the pile through the same rules as the wares list's Add.
       function addable(id) {

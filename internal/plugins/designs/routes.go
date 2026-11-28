@@ -24,6 +24,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, gh *GalleryHandler, campaignSvc ca
 	// Fixed paths first so they never read as a design id.
 	cg.GET("/designs/package", h.Package, owner)
 	cg.POST("/designs/package/:pid/copy", h.CopyPackage, owner)
+	cg.GET("/designs/store", h.Store, owner)
 	cg.GET("/designs/gallery", gh.Browse, owner)
 	cg.GET("/designs/gallery/mine", gh.Mine, owner)
 	cg.POST("/designs/gallery/:gid/copy", gh.Copy, owner)

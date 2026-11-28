@@ -92,14 +92,27 @@ func (n galleryUserNames) DisplayName(ctx context.Context, userID string) (strin
 }
 
 // roomThemeKind is the armory's say over designs of kind room-theme: the same
-// counter-theme rules a saved room is held to. It has no needs of the
-// receiving campaign, so Lacks says nothing.
+// counter-theme rules a saved room is held to, less the owner's picture, which
+// stays with its campaign. It has no needs of the receiving campaign, so Lacks
+// says nothing.
 type roomThemeKind struct{}
 
-var _ designs.Kind = roomThemeKind{}
+var (
+	_ designs.Kind      = roomThemeKind{}
+	_ designs.Describer = roomThemeKind{}
+)
+
+// Describe puts room themes under the Store's "rooms" group, which is also the
+// gallery's kind filter.
+func (roomThemeKind) Describe() designs.KindDescription {
+	return designs.KindDescription{
+		Group: designs.KindFilterRooms, Label: "Shop rooms", One: "Shop room",
+		Where: "Find it in your designs when you arrange a shop room.", Order: 10,
+	}
+}
 
 func (roomThemeKind) Validate(raw json.RawMessage) (json.RawMessage, error) {
-	return armory.NormalizeShopRoomCounter(raw)
+	return armory.NormalizeShopRoomCounterDesign(raw)
 }
 
 func (roomThemeKind) Lacks(context.Context, string, json.RawMessage) ([]string, error) {
@@ -133,6 +146,18 @@ func (designsPackageSource) Package(ctx context.Context, systemID string) (strin
 		items[i] = designs.PackageItem{Kind: d.Kind, Name: d.Name, Note: d.Note, Maker: d.Maker, File: d.File, Data: d.Data}
 	}
 	return m.Name, items
+}
+
+// SystemNames lists every game system the loader has, by id, the way Package
+// reads one's name, so the Store can name a system without a list of its own.
+func (designsPackageSource) SystemNames(context.Context) map[string]string {
+	out := map[string]string{}
+	for _, m := range systems.Registry() {
+		if m.ID != "" && m.Name != "" {
+			out[m.ID] = m.Name
+		}
+	}
+	return out
 }
 
 // designKindChecker lends the designs kind registry to the systems loader, so
