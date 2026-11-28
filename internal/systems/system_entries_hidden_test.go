@@ -2,6 +2,7 @@ package systems
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -74,5 +75,67 @@ func TestKeepHidden(t *testing.T) {
 	got = keepHidden(map[string]any{"benefit": "b", EntryHiddenKey: []any{"benefit"}}, map[string]any{})
 	if _, ok := got[EntryHiddenKey]; ok {
 		t.Fatalf("a player hid a detail: %v", got)
+	}
+}
+
+// A GM-only part inside a detail's text (a signature trait, a list of
+// abilities) reaches no player view, at any depth; the rest of the text does,
+// and Directors read it all.
+func TestSystemEntryService_SecretsInDetailsHiddenFromPlayers(t *testing.T) {
+	svc, _ := newEntrySvc(entryTestManifest())
+	ctx := context.Background()
+	secret := `<p>Quiet. <span data-secret="true">DIRSECRET</span></p>`
+	props := map[string]any{
+		"speed":            5,
+		"signature_traits": []any{map[string]any{"name": "Hidden", "description": secret}},
+		"note":             secret,
+		"plain":            "No <markup> & no secret",
+	}
+	if _, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "Shade", Properties: props}); err != nil {
+		t.Fatal(err)
+	}
+	ch, _ := svc.Choices(ctx, "c1", "ancestry")
+	pl, _ := svc.List(ctx, "c1", "ancestry", playerActor)
+	pf, _ := svc.FindByName(ctx, "c1", "ancestry", "shade", playerActor)
+	dl, _ := svc.List(ctx, "c1", "ancestry", dirActor)
+	text := func(p map[string]any) string { return fmt.Sprint(p) }
+	for name, p := range map[string]map[string]any{"choice": ch[0].Properties, "player list": pl[0].Properties, "player find": pf.Properties} {
+		if strings.Contains(text(p), "DIRSECRET") {
+			t.Errorf("%s shows the GM-only part: %v", name, p)
+		}
+		if !strings.Contains(text(p), "Quiet.") || !strings.Contains(text(p), "Hidden") {
+			t.Errorf("%s lost the rest of the text: %v", name, p)
+		}
+		if p["speed"] != 5 {
+			t.Errorf("%s changed a number: %v", name, p["speed"])
+		}
+	}
+	if !strings.Contains(text(dl[0].Properties), "DIRSECRET") {
+		t.Errorf("director list lost the GM-only part: %v", dl[0].Properties)
+	}
+	if !strings.Contains(text(dirChoice(t, svc)[0].Properties), "DIRSECRET") {
+		t.Error("director choice lost the GM-only part")
+	}
+	// The entry as stored is untouched by a player's read.
+	if !strings.Contains(text(props), "DIRSECRET") {
+		t.Error("PlayerProperties changed the stored details")
+	}
+}
+
+func TestPlayerProperties_StripsAtAnyDepth(t *testing.T) {
+	p := map[string]any{
+		"a": []string{`x <span data-secret="true">S1</span>`, "plain"},
+		"b": map[string]any{"c": []any{`<span data-secret="true">S2</span>y`}},
+		"n": nil,
+	}
+	got := fmt.Sprint(PlayerProperties(p))
+	if strings.Contains(got, "S1") || strings.Contains(got, "S2") {
+		t.Errorf("secret kept: %s", got)
+	}
+	if !strings.Contains(got, "plain") || !strings.Contains(got, "y") {
+		t.Errorf("text lost: %s", got)
+	}
+	if PlayerProperties(nil) != nil {
+		t.Error("nil in, nil out")
 	}
 }

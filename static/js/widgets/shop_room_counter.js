@@ -520,7 +520,9 @@
     counter: ['straight', 'curved', 'stall-table'],
     wall: ['plaster', 'stone', 'timber', 'brick', 'canvas', 'night-sky'],
     light: ['lamp', 'forge', 'candles', 'lanterns', 'moonlight'],
-    outside: ['day', 'dusk', 'night', 'rain']
+    outside: ['day', 'dusk', 'night', 'rain'],
+    // What stands outside under that sky; the town is the room's own, the parts packs add the rest.
+    scene: ['town']
   };
   var CM_PROPS = ['anvil', 'alembic', 'jars', 'crystal', 'herbs', 'floating-books', 'orrery', 'ladder', 'banner', 'sconce', 'sparks', 'lanterns', 'rain', 'steam-cart', 'motes'];
   /* What a parts pack (shop_room_parts_*.js) adds besides the option lists:
@@ -564,6 +566,8 @@
       skeleton: { shape: cmPick(sk.shape, CM_OPT.shape, D.skeleton.shape), opening: cmPick(sk.opening, CM_OPT.opening, D.skeleton.opening), display: cmPick(sk.display, CM_OPT.display, D.skeleton.display), counter: cmPick(sk.counter, CM_OPT.counter, D.skeleton.counter) },
       theme: { wall: cmPick(th.wall, CM_OPT.wall, D.theme.wall), wood: cmHex(th.wood, D.theme.wood), cloth: cmHex(th.cloth, D.theme.cloth), accent: cmHex(th.accent, D.theme.accent), trim: cmHex(th.trim, D.theme.trim),
         light: cmPick(th.light, CM_OPT.light, D.theme.light), warmth: w >= 0 && w <= 1 ? w : D.theme.warmth, outside: cmPick(th.outside, CM_OPT.outside, D.theme.outside) }, props: props };
+    var scene = cmPick(th.scene, CM_OPT.scene, 'town');
+    if (scene !== 'town') out.theme.scene = scene;
     var pic = cmPic(th.picture);
     if (pic) out.theme.picture = pic;
     return out;
@@ -592,6 +596,7 @@
     t.amb = mix(L.amb, '#4a3a4c', w * .4); t.L = L;
     t.time = { day: '', dusk: 'dusk', night: 'night', rain: 'rain' }[th.outside];
     t.pic = th.picture || null; skyPic = false;
+    t.scene = th.scene || 'town'; curScene = t;
     // Where the light sits: on the counter, hung from the ceiling over a stall, in the forge's mouth, or from above through the opening.
     var lx = t.mx(404), ly = 372;
     var lq = CM_LPOS[th.light]; if (typeof lq === 'function') lq = lq(sk);
@@ -669,8 +674,18 @@
     for (i = 0; i < 6; i++) s += '<ellipse cx="' + f1(x + r() * w) + '" cy="' + f1(y + h * (.08 + r() * .4)) + '" rx="' + f1(w * (.14 + r() * .12)) + '" ry="' + f1(h * (.05 + r() * .04)) + '" fill="#2c3648" opacity="' + f1(.28 + r() * .22) + '" filter="url(#src-blur14)"/>';
     return s;
   }
+  /* What stands outside, drawn by the scene the theme names. Openings ask for
+     it as a skyline in the lower part of their view (anything drawn above
+     that is clipped by the opening). The room in hand is the one cmCtx last
+     worked out: a room is composed in one synchronous pass, so this is the
+     room being drawn. */
+  var curScene = null, CM_SCENES = { town: cmTown };
   function cmSkyline(x, y, w, h, col, seed) {
     if (skyPic) return '';
+    var t = curScene, f = (t && CM_SCENES[t.scene]) || cmTown;
+    return f(x, y, w, h, col, seed, t ? t.time : 'night');
+  }
+  function cmTown(x, y, w, h, col, seed) {
     var r = rng(seed || 5), s = '', cx = x, bw, bh;
     while (cx < x + w) {
       bw = 26 + r() * 36; bh = 20 + r() * h * .5;
@@ -1543,9 +1558,10 @@
       var s = '<g data-k="door"><rect x="54" y="96" width="212" height="384" fill="#000" opacity=".5" filter="url(#src-blur8)"/><rect x="58" y="98" width="204" height="378" fill="url(#src-frame)"/>';
       s += '<rect x="72" y="112" width="176" height="364" fill="#6a4426"/><rect x="72" y="112" width="176" height="364" fill="#000" opacity=".35" filter="url(#src-cloth)"/>';
       for (var i = 1; i < 5; i++) s += '<path d="M' + (72 + i * 35) + ',300 V476" stroke="#120a04" stroke-opacity=".7" stroke-width="2"/>';
-      s += '<g clip-path="url(#srcf-paneclip)">' + skyArt('srcf-sky', 98, 148, 124, 140, R.model.time) +
-        '<path d="M98,288 L98,250 L112,250 L112,240 L128,230 L144,240 L144,256 L170,256 L170,246 L188,238 L204,246 L204,262 L222,262 L222,288 Z" fill="#090d1a"/>' +
-        '<g fill="#e8b860" opacity=".6"><rect x="120" y="258" width="3" height="4"/><rect x="180" y="252" width="3" height="4"/></g><rect x="98" y="148" width="124" height="140" fill="url(#src-fog)" opacity=".5"/></g>';
+      // The panes show what the counter room's window shows: its sky, its view outside, or the owner's picture.
+      var t = cmCtx(R.model.counter || starterFor(R.model.roomType)), dark = t.time === 'night' || t.time === 'rain' ? '#090d1a' : t.time === 'dusk' ? '#2a1e30' : '#6a7684';
+      s += '<g clip-path="url(#srcf-paneclip)">' + cmSky(t, 'srcf-sky', 98, 148, 124, 140) + cmSkyline(98, 226, 124, 62, dark, 3) +
+        '<rect x="98" y="148" width="124" height="140" fill="url(#src-fog)" opacity=".5"/></g>';
       s += '<rect x="157" y="148" width="7" height="140" fill="#2e1e10"/><rect x="98" y="214" width="124" height="7" fill="#2e1e10"/><rect x="92" y="142" width="136" height="152" fill="none" stroke="#2e1e10" stroke-width="8"/>';
       [330, 420].forEach(function (y) { s += '<rect x="72" y="' + y + '" width="176" height="10" fill="url(#src-iron)"/>'; });
       s += '<circle cx="226" cy="372" r="8" fill="url(#src-iron)"/><path d="M262,96 h26 v6 h-20 v8" stroke="#2a2a2a" stroke-width="4" fill="none"/>' +
@@ -1976,6 +1992,7 @@
     var gr = grain(); if (gr) stage.querySelector('.src-grain').style.backgroundImage = 'url(' + gr + ')';
 
     function themeKey() { return JSON.stringify([R.model.counter || R.model.roomType, !!R.model.edit]); }
+    function lookKey() { return JSON.stringify(R.model.counter || R.model.roomType); }
     function setModel(m) {
       R.model = { its: m.its || [], basket: m.basket || {}, icons: m.icons || window.ShopRoomIcons || {}, image: m.image || '', name: m.name || 'Shop', roomType: m.roomType || 'general', time: m.time || '', lines: !!m.lines,
         today: m.today && m.today.line ? { line: String(m.today.line), said: String(m.today.said || '') } : null,
@@ -2213,9 +2230,12 @@
     mountView('counter'); pause(false);
     return {
       update: function (m) {
-        var was = themeKey(); setModel(m);
-        // A changed theme (or place mode) redraws the counter room in place; the other views never read it.
-        if (view && where === 'counter' && !busy && was !== themeKey()) mountView('counter'); else if (view) view.sync();
+        var was = themeKey(), look = lookKey(); setModel(m);
+        // A changed theme (or place mode) redraws the counter room in place. The shop floor
+        // redraws only for a new look, since its door shows the window; the case never reads it.
+        if (view && where === 'counter' && !busy && was !== themeKey()) mountView('counter');
+        else if (view && where === 'floor' && !busy && look !== lookKey()) mountView('floor');
+        else if (view) view.sync();
       },
       escape: function () {
         if (!menuEl.hidden) { closeMenu(); return true; }
@@ -2246,9 +2266,9 @@
   function call(host, fn, a) { var c = host && host._counter; return c ? c[fn](a) : false; }
   window.ShopRoomCounter = {
     render: render, layout: layout, starters: CM_STARTERS, starterFor: starterFor, normalise: cmNorm,
-    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside }, picture: CM_PIC, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
+    options: { skeleton: { shape: CM_OPT.shape, opening: CM_OPT.opening, display: CM_OPT.display, counter: CM_OPT.counter }, theme: { wall: CM_OPT.wall, light: CM_OPT.light, outside: CM_OPT.outside, scene: CM_OPT.scene }, picture: CM_PIC, props: CM_PROPS, propAt: PROP_AT, slots: CM_SLOTS }, family: family, floorPiece: floorPiece, shade: shade, initials: initials, safeUrl: safeUrl, ware: ware, CAP: CAP,
     // What the parts packs are written with: the room's tables and its drawing helpers.
-    kit: { CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
+    kit: { CM_SCENES: CM_SCENES, CM_COLS: CM_COLS, CM_CSS: CM_CSS, CM_LAYER: CM_LAYER, CM_LIGHT: CM_LIGHT, CM_LPOS: CM_LPOS, CM_OPEN_INFO: CM_OPEN_INFO, CM_OPT: CM_OPT, CM_PROPS: CM_PROPS, CM_ROWS: CM_ROWS, CM_STARTERS: CM_STARTERS, CM_TALL: CM_TALL, CM_WALLFQ: CM_WALLFQ, CM_WHERE: CM_WHERE, cmCandle: cmCandle, cmFrame: cmFrame, cmGrid: cmGrid, cmM: cmM, cmPost: cmPost, cmRainIn: cmRainIn, cmShelfBoard: cmShelfBoard, cmSky: cmSky, cmSkyline: cmSkyline, cmTop: cmTop, cmUnitFrame: cmUnitFrame, COUNTERS: COUNTERS, DISPLAYS: DISPLAYS, f1: f1, hex: hex, LIGHTS: LIGHTS, lin: lin, mix: mix, OPENINGS: OPENINGS, PROP_AT: PROP_AT, PROPS: PROPS, rad: rad, rng: rng, SHAPES: SHAPES, WALLS: WALLS },
     sync: function (host, model) { if (host && host._counter) host._counter.update(model); },
     escape: function (host) { return !!call(host, 'escape'); },
     pause: function (host, on) { call(host, 'pause', on); },

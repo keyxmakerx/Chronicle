@@ -123,3 +123,17 @@ func (h *Handler) Delete(c *echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+// Store handles GET /campaigns/:id/designs/store: the kinds and game system
+// names the Store builds its rail from, so the page keeps no list of its own.
+func (h *Handler) Store(c *echo.Context) error {
+	cid, uid, err := ctxOf(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.StoreCatalog(c.Request().Context(), cid, uid)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}

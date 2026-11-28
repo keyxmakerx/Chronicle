@@ -20,6 +20,8 @@ func (f fakePkgs) Package(_ context.Context, systemID string) (string, []Package
 	return f.names[systemID], f.items[systemID]
 }
 
+func (f fakePkgs) SystemNames(context.Context) map[string]string { return f.names }
+
 func pkgWorld() (*service, *memRepo) {
 	s, repo, _ := newWorld()
 	s.pkgs = fakePkgs{

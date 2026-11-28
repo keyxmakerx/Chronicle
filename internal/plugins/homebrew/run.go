@@ -102,6 +102,9 @@ type RunStore interface {
 	// ListAsks lists the runs one person set off, or that wait or waited on
 	// their roll, that stopped for an ask or a roll, newest first.
 	ListAsks(ctx context.Context, campaignID, userID string, limit int) ([]Run, error)
+	// ListRunningAsks lists the runs that asked and are being answered right
+	// now (claimed by a Yes, not yet finished), newest first.
+	ListRunningAsks(ctx context.Context, campaignID string, limit int) ([]Run, error)
 	// PruneRuns deletes all but the newest keep finished runs.
 	PruneRuns(ctx context.Context, campaignID string, keep int) error
 }
@@ -199,6 +202,9 @@ func (s *service) Fire(ctx context.Context, campaignID string, v Viewer, f Fired
 	def, ok := s.reg.event(f.Event)
 	if !ok {
 		return fmt.Errorf("homebrew: fired an unknown event %q", f.Event)
+	}
+	if def.Ask != nil {
+		return fmt.Errorf("homebrew: %q is an owner's ask, put through AskFor", f.Event)
 	}
 	recipes, err := s.recipesFor(ctx, campaignID, f.RecipeID)
 	if err != nil {
@@ -395,9 +401,10 @@ func (s *service) waitsOnPurpose(rule Rule) bool {
 // (-1 otherwise).
 func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule Rule, from int, scope string, payload json.RawMessage, v Viewer) (status string, lines []string, at int) {
 	lines = []string{}
-	note := s.note(r, rule, payload)
+	docs := s.stepRecipes(ctx, campaignID, r)
 	for i := from; i < len(rule.Then); i++ {
 		d := rule.Then[i]
+		rec := docs.of(d)
 		a, ok := s.reg.action(d.Action)
 		if !ok {
 			lines = append(lines, "An action this server no longer has was skipped.")
@@ -410,9 +417,9 @@ func (s *service) execute(ctx context.Context, campaignID string, r Recipe, rule
 			lines = append(lines, a.Label+": "+map[bool]string{true: "run in your browser", false: "for you to do"}[a.ClientRun]+".")
 			continue
 		}
-		act := Act{RecipeID: r.ID, Args: d.Args, Scope: scope, By: v, Note: note}
+		act := Act{RecipeID: rec.ID, Args: d.Args, Scope: scope, By: v, Note: s.note(rec, rule, payload)}
 		if d.Part != "" {
-			p, ok := partByKey(r.Doc, d.Part)
+			p, ok := partByKey(rec.Doc, d.Part)
 			if !ok {
 				lines = append(lines, a.Label+" did not run: its part is no longer in the recipe.")
 				return RunFailed, lines, -1
@@ -623,7 +630,7 @@ func (s *service) Drawer(ctx context.Context, campaignID string, v Viewer) (*Dra
 		}
 		for _, r := range rs {
 			rv := s.view(r)
-			s.fillAsk(ctx, campaignID, &rv, recipes)
+			s.fillAsk(ctx, campaignID, r, &rv, recipes, v)
 			s.fillRoll(ctx, campaignID, &rv, r)
 			if held {
 				out.Waiting = append(out.Waiting, rv)
