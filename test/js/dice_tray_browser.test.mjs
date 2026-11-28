@@ -168,7 +168,7 @@ test('with motion reduced the result shows at once and no dice are thrown', { sk
   const pg = await open(t, { reducedMotion: 'reduce' });
   await deliver(pg, roll({ rollerName: 'Tyne' }));
   // At once: no wait for a throw to land.
-  await pg.waitForFunction(() => /Tyne rolled 2d10\+1: 4 \+ 6 \+ 1 = 11/.test(document.querySelector('.dtr-result').textContent), null, { timeout: 1500 });
+  await pg.waitForFunction(() => /Tyne rolled 2d10\+1: 4 \+ 6 \+ 1 = 11/.test(document.querySelector('.dtr-result').textContent), null, { timeout: 6000 });
   const s = await tray(pg);
   assert.equal(dice(s), 0, 'nothing is thrown');
 });

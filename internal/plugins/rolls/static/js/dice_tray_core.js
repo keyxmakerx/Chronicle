@@ -13,8 +13,8 @@
  * opts: level, finish, shape, others (the starting choices), own (false leaves the member's own
  * tray out), tokens() and kit() and dark() (the host page's colours, kit and theme, for a host that
  * is not Chronicle), look(view) (the roller's { set, colour }), color(view) (a roller's tag colour),
- * motion() ('full' | 'calm' | 'off'), engine and libs (where the dice engine and its libraries are,
- * for a host that has no layout to read them from).
+ * motion() ('full' | 'calm' | 'off'). The 3D dice come from Chronicle.diceTrayStage; a host without
+ * it (or without WebGL) gets the flat dice at every level.
  *
  * Privacy comes first: the mat draws only a roll whose mode is "public". A private, blind or
  * Director-only roll is skipped here whatever the feed delivered, so a screen that holds one (the
@@ -161,7 +161,10 @@
     function ensureMat() {
       if (mat) return Promise.resolve(mat);
       if (matInit) return matInit;
-      var t = new Stage.Tray({ style: 'mat' });
+      // A host without the 3D stage (the Foundry module) draws flat dice.
+      var S = W.Chronicle.diceTrayStage || Stage;
+      if (!S || !S.Tray) { st.glBad = true; return Promise.resolve(null); }
+      var t = new S.Tray({ style: 'mat' });
       matInit = t.init().then(function () {
         if (st.dead) { t.destroy(); return null; }
         t.setMode('shared'); t.setStyle('mat'); t.setLook(look());
@@ -180,7 +183,9 @@
       if (!ownEl) return Promise.resolve(null);
       if (own) return Promise.resolve(own);
       if (ownInit) return ownInit;
-      var t = new Stage.Tray({ style: st.shape, cls: 'dtr-own-tray' });
+      var S = W.Chronicle.diceTrayStage || Stage;
+      if (!S || !S.Tray) return Promise.resolve(null);
+      var t = new S.Tray({ style: st.shape, cls: 'dtr-own-tray' });
       ownInit = t.init().then(function () {
         if (st.dead) { t.destroy(); return null; }
         t.setMode('solo'); t.setStyle(st.shape); t.setLook(look());
