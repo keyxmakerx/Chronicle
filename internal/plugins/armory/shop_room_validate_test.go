@@ -679,3 +679,20 @@ func TestNormalizeShopRoomLayout_CounterScene(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeShopRoomLayout_CounterLiveSky(t *testing.T) {
+	out, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "live")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l ShopRoomLayout
+	if err := json.Unmarshal(out, &l); err != nil {
+		t.Fatal(err)
+	}
+	if l.Counter.Theme.Outside != "live" {
+		t.Errorf("outside = %q, want live", l.Counter.Theme.Outside)
+	}
+	if _, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "Live"))); err == nil {
+		t.Error("accepted a different case")
+	}
+}

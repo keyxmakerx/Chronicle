@@ -98,6 +98,8 @@ func TestShopRoomCounterEdit(t *testing.T) {
 					t.Fatalf("%+v", c.Theme)
 				}
 			}},
+		{"the campaign's own sky", custom, "Ember Forge", map[string]any{"outside": "skypane"},
+			"Ember Forge's room: counter: outside live", "", nil},
 		{"the town is no view", custom, "Ember Forge", map[string]any{"scene": "town"}, "changes nothing in Ember Forge's room", "", nil},
 		{"a bad view", custom, "Ember Forge", map[string]any{"scene": "atlantis"}, "", `counter.scene: "atlantis" is not one of`, nil},
 		{"a part from the newer rooms", custom, "Ember Forge", map[string]any{"opening": "porthole", "add": "hanging baskets"},
