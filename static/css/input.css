@@ -6441,6 +6441,12 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-arranging .dms-sec-x { display: none; }
   .dms-arranging .dms-sec-t { cursor: grab; }
   .dms-arranging .dms-sec-t .dms-sec-sum { display: none; }
+  /* While arranging the title gives way to the card's tools: it shortens with
+     an ellipsis, and where even that is too tight the tools wrap below it. */
+  .dms-arranging .dms-sec-h { flex-wrap: wrap; }
+  .dms-arranging .dms-sec-t { flex: 1 1 7rem; overflow: hidden; }
+  .dms-arranging .dms-sec-t > span:not(.dms-sec-sum) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dms-arranging .dms-arr { margin-left: auto; }
   .dms-arranging .dms-sec-grip { opacity: 1; }
   .dms-arranging .dms-sec-b { pointer-events: none; opacity: .7; }
   .dms-dock:not(.dms-cols2) [data-dms-wide] { display: none; }
@@ -6467,6 +6473,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     background: color-mix(in srgb, var(--surface-alt) 82%, transparent);
   }
   .dms-leafslot.dms-hot { outline: none; border-color: var(--dms-acc); color: var(--dms-acc); }
+  .dms-styling .dms-leafslot { display: none; }
   .dms-leafslot .dms-dropghost { order: -1; }
 
   /* The layout menu grows out of its rail icon, toward the page. */

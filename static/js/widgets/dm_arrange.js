@@ -696,6 +696,17 @@
         '<div class="dms-sd-sec"><div class="dms-lbl">Density</div>' + seg('Density', 'data-dms-dens', DENSITIES, P.style.density) + '</div>' +
         '<p class="dms-sd-foot">Kept with your account, on every device. The campaign’s pages keep their own look.</p>';
       dock.appendChild(drawer);
+      // The dock is last on the page, so a Tab past the drawer lands at the
+      // page's top: focus leaving the screen closes the drawer behind it.
+      drawer.addEventListener('focusout', function () {
+        // Checked a moment later, when focus has landed; leaving the window
+        // keeps focus where it was, so that never closes it.
+        setTimeout(function () {
+          var a = document.activeElement;
+          if (a && a !== document.body && !dock.contains(a)) closeDrawer(false);
+          else if ((!a || a === document.body) && document.hasFocus()) closeDrawer(false);
+        }, 0);
+      });
     }
 
     // The kits' faces load once, the first time the drawer can offer them.
@@ -716,6 +727,8 @@
       loadKits();
       drawer.hidden = false;
       drawer.setAttribute('data-open', '1');
+      // The new-leaf slot sits where the drawer lies, so it steps aside.
+      dock.classList.add('dms-styling');
       paintStyle();
       var m = motion();
       if (m !== 'off' && drawer.animate) {
@@ -729,6 +742,7 @@
     function closeDrawer(refocus) {
       if (!drawer || drawer.getAttribute('data-open') !== '1') return;
       drawer.setAttribute('data-open', '0');
+      dock.classList.remove('dms-styling');
       paintStyle();
       var tab = root() && root().querySelector('[data-dms-styletab]');
       if (refocus && tab) tab.focus({ preventScroll: true });
@@ -830,7 +844,9 @@
       // arrange mode. True when it closed something.
       escape: function () {
         if (menu) { closeMenu(true); return true; }
-        if (drawer && drawer.getAttribute('data-open') === '1') { closeDrawer(true); return true; }
+        // Focus goes back to the Style tab only from inside the drawer; focus
+        // that has moved on elsewhere stays where it is.
+        if (drawer && drawer.getAttribute('data-open') === '1') { closeDrawer(drawer.contains(document.activeElement)); return true; }
         if (arranging) { setArranging(false); return true; }
         return false;
       },

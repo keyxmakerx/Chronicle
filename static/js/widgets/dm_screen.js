@@ -1548,7 +1548,7 @@
           st: st, dock: st.dock, cid: cid, screen: el.getAttribute('data-screen') || 'dm',
           // The account copy's local cache sits beside the dock's other keys.
           prefsKey: OPEN_KEY.replace('.open.', '.prefs.'),
-          factoryOpen: DEFAULT_OPEN,
+          factoryOpen: defOpen,
           root: root, applyOpen: applyOpen, saveAll: saveAll, homeCard: homeCard, sectionEl: sectionEl,
           sectionTitle: sectionTitle, leafRoom: leafRoom, phone: phone
         });
