@@ -10,6 +10,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // postRestoreSchema returns the step the admin restore page runs after the
@@ -42,6 +43,9 @@ func postRestoreSchema(cfg *config.Config, db *sql.DB, health *database.PluginHe
 		}
 		if n, err := database.ReconcilePublicTextColumns(ctx, db, app.PublicTextColumns()); err != nil {
 			slog.Error("restore: public text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+		}
+		if n, err := systems.ReconcileEntryItemTexts(ctx, db); err != nil {
+			slog.Error("restore: entry item text reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
 		}
 		return nil
 	}
