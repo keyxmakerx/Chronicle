@@ -139,7 +139,7 @@
       function play(id, scene, name, past) {
         if (!alive || !scene) return Promise.resolve();
         if (current) { var was = current; current = null; was.run.stop(); }
-        var mine = { id: id, scene: scene, who: {}, run: { stop: function () { mine.cancelled = true; } } };
+        var mine = { id: id, scene: scene, who: new Map(), run: { stop: function () { mine.cancelled = true; } } };
         current = mine;
         past = past || {};
         return loadEngine(engineSrc).then(function (CS) {
@@ -193,9 +193,12 @@
       // answering puts who else is answering under the question.
       function answering(id, i, uid, name) {
         if (!current || current.id !== id || !current.run.status || !uid) return;
-        var who = current.who[i] = current.who[i] || {};
-        who[uid] = name || 'Someone';
-        var names = Object.keys(who).map(function (k) { return who[k]; });
+        // Maps, not objects: the ids come off the socket, so a key such as
+        // "__proto__" must stay a plain key.
+        var who = current.who.get(i);
+        if (!who) { who = new Map(); current.who.set(i, who); }
+        who.set(String(uid), name || 'Someone');
+        var names = Array.from(who.values());
         var m = current.scene && current.scene.moments && current.scene.moments[i];
         var one = !!(m && m.to === 'one');
         current.run.status(i, whoText(names, one), one);
