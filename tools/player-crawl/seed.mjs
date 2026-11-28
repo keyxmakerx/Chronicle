@@ -40,6 +40,12 @@ export async function liveEdits(s, log = console.log) {
     delete out[t]; out.__control = t;
     J(await owner.post(`${C}/maps/${ids.map}/markers`, { json: { name: t, x: 9, y: 9, icon: 'fa-flag', color: '#00ff00', visibility: 'everyone' } }), 'marker');
   });
+  await tryit('pin on a map given to no one', async () => {
+    if (!ids.hiddenMap) throw new Error('no hidden map');
+    const t = mkm('LIVEHIDDENMAP', 'live: pin open to everyone on a map given to no player');
+    out.__scribeMay = [...(out.__scribeMay || []), t]; // Scribes see every map
+    J(await owner.post(`${C}/maps/${ids.hiddenMap}/markers`, { json: { name: t, x: 7, y: 7, icon: 'fa-flag', color: '#00ff00', visibility: 'everyone' } }), 'marker');
+  });
   await tryit('hidden page text', async () => {
     const t = mkm('LIVEPAGE', 'live: edit of a hidden page');
     J(await owner.put(`${C}/entities/${ids.hidden}/entry`, { json: { entry: doc(t), entry_html: `<p>${t}</p>` } }), 'entry');
@@ -465,6 +471,24 @@ export async function seed(base, log = console.log) {
     postProbes.push({ path: `${hand}/${deck}/copies/${copy}/turn`, who: ['other player', 'scribe', 'signedout'] });
   });
 
+  // 14d2. Maps are hidden from players until given. The first map is given to
+  // both heroes as its handout item, so its visible pin stays the live
+  // control; a second map, with a pin open to everyone, is given to no one,
+  // so no player, other player or stranger may learn its name or its pin.
+  await step('the map given to both heroes', async () => {
+    if (!ids.map || !ids.heroA || !ids.heroB) throw new Error('needs the map and both heroes');
+    for (const h of [ids.heroA, ids.heroB]) {
+      must(await owner.post(`${C}/armory/give`, { body: { character_id: h, map_id: ids.map, csrf_token: owner.csrf() } }), 'give map');
+    }
+  });
+  await step('a map given to no one', async () => {
+    r = must(await postJSON(`${C}/maps`, { name: m('HIDDENMAP', 'name of a map given to no player', { scribe: true }), image_width: 800, image_height: 600 }), 'hidden map');
+    const mid = idOf(r) || JSON.parse(r.text)?.map?.id;
+    if (!mid) throw new Error('no map id ' + r.text.slice(0, 100));
+    ids.hiddenMap = mid;
+    must(await postJSON(`${C}/maps/${mid}/markers`, { name: m('HIDDENMAPPIN', 'pin open to everyone on a map given to no player', { scribe: true }), x: 30, y: 30, icon: 'fa-flag', color: '#0f0', visibility: 'everyone' }), 'pin');
+  });
+
   // 14e. A card that waits for its moment. Its tests are the Director's own and
   // name things no player may read: a Director-only tag on a player's hero, a
   // layer on a page no player can open, and a tracker kind shown to Directors
@@ -583,7 +607,7 @@ export async function seed(base, log = console.log) {
     if (r.status >= 400) throw new Error('player page note -> ' + r.status + ' ' + r.text.slice(0, 120));
   });
 
-  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ids.handDeck, ids.heroA, ids.heroB, ids.handCard, ids.handCopy, ids.whenDeck, ids.whenCard, ids.moment, ...ids.extra);
+  ids.all = hidden(cid, ids.open, ids.item, ids.hidden, ids.npc, ids.cal, ids.tl, ids.map, ids.hiddenMap, ids.session, ids.shop, ids.shopB, ids.goodVis, ids.goodHid, ids.goodFlip, ids.deck, ids.handDeck, ids.heroA, ids.heroB, ids.handCard, ids.handCopy, ids.whenDeck, ids.whenCard, ids.moment, ...ids.extra);
 
   return { owner, player, player2, scribe, guest, playerOnly, ids, postProbes, markers, scribeMay, controls: [mk('PUBTEXT'), mk('PUBFIELD'), ...controlsExtra], mayShow, extraUrls, pictureUrls, skipped, C, emails: { ownerEmail, playerEmail, scribeEmail } };
 }

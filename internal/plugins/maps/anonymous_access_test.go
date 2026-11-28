@@ -57,8 +57,19 @@ func (guardMapSvc) ResolveDisplay(_ context.Context, m *Map) (ResolvedDisplay, e
 func (guardMapSvc) ListMarkers(_ context.Context, _, _ string, _ int, _ string) ([]Marker, error) {
 	return []Marker{}, nil
 }
-func (guardMapSvc) ResolveTrail(_ context.Context, _, _ string, _ []string) ([]TrailStep, error) {
+func (guardMapSvc) ResolveTrail(_ context.Context, _, _ string, _ []string, _ int, _ string) ([]TrailStep, error) {
 	return nil, nil
+}
+
+// An anonymous visitor owns no character, so no map is given to them.
+func (guardMapSvc) CanSeeMap(_ context.Context, _, _ string, role int, _ string) (bool, error) {
+	return SeesAllMaps(role), nil
+}
+func (guardMapSvc) MapFilterFor(_ context.Context, _ string, role int, _ string) (MapFilter, error) {
+	if SeesAllMaps(role) {
+		return AllMaps(), nil
+	}
+	return MapFilter{}, nil
 }
 
 type guardDrawingSvc struct {

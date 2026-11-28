@@ -8,6 +8,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
@@ -975,7 +976,7 @@ func TestSearchMaps_Success(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	results, err := svc.SearchMaps(context.Background(), "camp-1", "world")
+	results, err := svc.SearchMaps(context.Background(), "camp-1", "world", permissions.RoleOwner, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1001,7 +1002,7 @@ func TestSearchMaps_Empty(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	results, err := svc.SearchMaps(context.Background(), "camp-1", "nonexistent")
+	results, err := svc.SearchMaps(context.Background(), "camp-1", "nonexistent", permissions.RoleOwner, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

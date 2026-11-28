@@ -26,9 +26,9 @@ import (
 const (
 	// giveReplayReason is what run answers when handed a give.
 	giveReplayReason = "A gift is already given and can't be moved again."
-	// handoutPrefix names a map handout item. The prefix plus the map name is
+	// HandoutPrefix names a map handout item. The prefix plus the map name is
 	// how an earlier handout for the same map is found again.
-	handoutPrefix = "Map: "
+	HandoutPrefix = "Map: "
 	// maxHandoutMapName leaves room for the prefix inside the 200-byte entity
 	// name limit, whatever the map's name is made of.
 	maxHandoutMapName = 150
@@ -222,7 +222,7 @@ func (s *stashService) playerNames(ctx context.Context, campaignID string, userI
 func (s *stashService) markMaps(ctx context.Context, campaignID string, held []HeldItem) map[string]bool {
 	maps := map[string]bool{}
 	for i := range held {
-		if !strings.HasPrefix(held[i].Name, handoutPrefix) {
+		if !strings.HasPrefix(held[i].Name, HandoutPrefix) {
 			continue
 		}
 		ref, err := s.Directory.GetEntity(ctx, campaignID, held[i].ItemID)
@@ -259,7 +259,7 @@ func handoutName(mapName string) string {
 	if utf8.RuneCountInString(mapName) > maxHandoutMapName {
 		mapName = string([]rune(mapName)[:maxHandoutMapName])
 	}
-	return handoutPrefix + mapName
+	return HandoutPrefix + mapName
 }
 
 func (s *stashService) Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error) {

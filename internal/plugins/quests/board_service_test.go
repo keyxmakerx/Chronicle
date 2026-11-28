@@ -752,3 +752,22 @@ func TestHomesListsOnlyWhatTheViewerMayOpen(t *testing.T) {
 		})
 	}
 }
+
+// A map not given to a player is left out of the picker for them; the DM
+// still finds it.
+func TestPickerLeavesOutMapsNotGiven(t *testing.T) {
+	e := newBoardEnv()
+	m := newFakeMaps()
+	m.add(camp, "m-given", "Saltreach")
+	m.add(camp, "m-hidden", "Imix")
+	m.hidden = map[string]bool{"m-hidden": true}
+	p := NewPickerService(e.ents, m, nil)
+	pl := Viewer{UserID: "pl", MemberRole: 1, VisibilityRole: 1}
+	got, err := p.Search(context.Background(), camp, pl, PickMap, "")
+	if err != nil || len(got) != 1 || got[0].ID != "m-given" {
+		t.Fatalf("player picker = %+v %v, want only the given map", got, err)
+	}
+	if got, err := p.Search(context.Background(), camp, dm, PickMap, ""); err != nil || len(got) != 2 {
+		t.Fatalf("DM picker = %+v %v, want both maps", got, err)
+	}
+}

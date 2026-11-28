@@ -292,7 +292,7 @@ func (s *mapService) linkTarget(ctx context.Context, sourceMapID, targetID strin
 }
 
 // ResolveTrail implements MapService.
-func (s *mapService) ResolveTrail(ctx context.Context, campaignID, mapID string, from []string) ([]TrailStep, error) {
+func (s *mapService) ResolveTrail(ctx context.Context, campaignID, mapID string, from []string, role int, userID string) ([]TrailStep, error) {
 	if len(from) == 0 {
 		return nil, nil
 	}
@@ -300,6 +300,13 @@ func (s *mapService) ResolveTrail(ctx context.Context, campaignID, mapID string,
 	if err != nil {
 		return nil, fmt.Errorf("list maps for trail: %w", err)
 	}
+	// The ids come from the address, so a map the viewer may not see must not
+	// lend the trail its name.
+	f, err := s.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	ms = f.Keep(ms)
 	known := make(map[string]string, len(ms))
 	for _, m := range ms {
 		known[m.ID] = m.Name
@@ -315,6 +322,12 @@ func (s *mapService) LinkTree(ctx context.Context, campaignID string, role int, 
 	if err != nil {
 		return nil, fmt.Errorf("list maps for link tree: %w", err)
 	}
+	// A map the viewer may not see is neither a source nor a target.
+	f, err := s.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	ms = f.Keep(ms)
 	inCampaign := make(map[string]bool, len(ms))
 	for _, m := range ms {
 		inCampaign[m.ID] = true

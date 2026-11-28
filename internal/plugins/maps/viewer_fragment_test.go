@@ -48,6 +48,8 @@ func serveHandler(t *testing.T, h echo.HandlerFunc, path string, cc *campaigns.C
 	c := e.NewContext(req, rec)
 	c.SetPathValues(echo.PathValues{{Name: "id", Value: "camp-1"}, {Name: "mid", Value: mapID}})
 	c.Set("campaign_context", cc)
+	// A signed-in member: a Player is shown maps given to them by user id.
+	c.Set("auth_user_id", "user-1")
 	err := h(c)
 	return rec, err
 }
@@ -150,8 +152,10 @@ func TestViewer_RouteAccessMatchesMapPage(t *testing.T) {
 			if got := isLoginRedirect(rec); got != tt.wantLogin {
 				t.Fatalf("login-redirect=%v (code=%d), want %v", got, rec.Code, tt.wantLogin)
 			}
-			if !tt.wantLogin && rec.Code != http.StatusOK {
-				t.Fatalf("code=%d, want 200", rec.Code)
+			// An anonymous visitor owns no character, so no map is given to
+			// them: past the login check the map reads as missing.
+			if !tt.wantLogin && rec.Code == http.StatusOK {
+				t.Fatalf("code=%d, want the map withheld", rec.Code)
 			}
 		})
 	}

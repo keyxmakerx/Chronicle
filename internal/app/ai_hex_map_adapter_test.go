@@ -209,6 +209,11 @@ func (oneHexMap) ListMaps(context.Context, string) ([]records.MapRef, error) {
 	return []records.MapRef{{ID: "m", CampaignID: "camp", Name: "Imix"}}, nil
 }
 
+// The test's player was given the map.
+func (oneHexMap) SeenMaps(context.Context, string, int, string) (func(string) bool, error) {
+	return func(string) bool { return true }, nil
+}
+
 func (oneHexMap) ListPins(context.Context, string, string, int, string) ([]records.PinRef, error) {
 	return nil, nil
 }

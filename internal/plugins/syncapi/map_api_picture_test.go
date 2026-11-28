@@ -50,6 +50,7 @@ func TestMapAPIHandler_MapPicture_ByRole(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.role.String(), func(t *testing.T) {
 			svc := maps.NewMapService(pictureRepo{})
+			svc.SetMapGrants(miraGrants{}) // the test's map is given to its player
 			svc.SetShadowLookup(pictureShadows{})
 			h := NewMapAPIHandler(nil, svc, nil, &stubCampaignSvcOwnerGate{role: tc.role})
 			key := &APIKey{CampaignID: "camp-1", UserID: "u1"}
@@ -87,6 +88,10 @@ func (g picturesMediaGuard) IsMapPicture(context.Context, string, string) (bool,
 
 func (g picturesMediaGuard) IsShadowedMapImage(context.Context, string, string) (bool, error) {
 	return g.hidden, g.err
+}
+
+func (g picturesMediaGuard) HiddenMapPicture(context.Context, string, string, int, string) (bool, error) {
+	return false, g.err
 }
 
 // The API's media links are accepted without cookies, so for a caller below
@@ -159,6 +164,7 @@ func TestMapAPIHandler_MapPicture_CoDMGrant(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := maps.NewMapService(pictureRepo{})
+			svc.SetMapGrants(miraGrants{}) // the test's map is given to its player
 			svc.SetShadowLookup(pictureShadows{})
 			camp := &stubCampaignSvcGrant{stubCampaignSvcOwnerGate: stubCampaignSvcOwnerGate{role: tc.role}, granted: tc.granted, grantedErr: tc.grantErr}
 			h := NewMapAPIHandler(nil, svc, nil, camp)

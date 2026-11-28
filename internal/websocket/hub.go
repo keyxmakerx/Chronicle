@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"log/slog"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -287,6 +288,10 @@ func (m *Message) DeliversTo(client *Client) bool {
 	// AdmitScribes widens that bypass to co-DMs.
 	bypass := dmLike || (m.AdmitScribes && client.Role >= permissions.RoleScribe)
 	if (m.StrictAudience || !bypass) && !m.AudienceAllows(client.UserID) {
+		return false
+	}
+	// A map's news reaches Scribes, DMs and the Players it was given to.
+	if m.OnlyPlayers != nil && !dmLike && client.Role < permissions.RoleScribe && !slices.Contains(m.OnlyPlayers, client.UserID) {
 		return false
 	}
 	return true

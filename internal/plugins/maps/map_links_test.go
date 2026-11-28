@@ -332,7 +332,7 @@ func TestLinkTree_UsesTheViewersMarkerList(t *testing.T) {
 	repo.listMarkersFn = func(_ context.Context, mapID string, _ int) ([]Marker, error) {
 		return append([]Marker(nil), pins[mapID]...), nil
 	}
-	svc := NewMapService(repo)
+	svc := givenAllMapService(repo)
 	svc.SetHexFogLookup(fakeFogLookup{mask: fogMaskFixture()})
 
 	player, err := svc.LinkTree(context.Background(), "camp-1", int(permissions.RolePlayer), "u-1")
@@ -378,7 +378,7 @@ func TestLinkTree_ReadCapMarksTruncated(t *testing.T) {
 		}
 		return []Marker{{ID: "pin", MapID: mapID, LinkedMapID: &target, Visibility: "everyone"}}, nil
 	}
-	tree, err := NewMapService(repo).LinkTree(context.Background(), "camp-1", int(permissions.RoleOwner), "u-owner")
+	tree, err := givenAllMapService(repo).LinkTree(context.Background(), "camp-1", int(permissions.RoleOwner), "u-owner")
 	if err != nil {
 		t.Fatal(err)
 	}

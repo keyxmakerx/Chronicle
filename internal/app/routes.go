@@ -1668,6 +1668,44 @@ type mapEventPublisherAdapter struct {
 	// them is published to DM-equivalent clients only. Nil fails closed, like
 	// shadows.
 	fog maps.HexFogLookup
+	// holders names the Players a map was given to; every message about a map
+	// reaches only them among Players. Nil fails closed: no Player hears.
+	holders interface {
+		MapAudience(ctx context.Context, campaignID, mapID string) ([]string, error)
+	}
+}
+
+// onlyHolders narrows msg to the Players who were given every map in mapIDs.
+// A lookup failure admits no Player, since a missed live update is
+// recoverable and a hidden map's news is not.
+func (a *mapEventPublisherAdapter) onlyHolders(msg *ws.Message, campaignID string, mapIDs ...string) {
+	msg.OnlyPlayers = []string{}
+	if a.holders == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var keep map[string]bool
+	for _, id := range mapIDs {
+		if id == "" {
+			continue
+		}
+		users, err := a.holders.MapAudience(ctx, campaignID, id)
+		if err != nil {
+			slog.Error("maps: map holders lookup failed; no player gets this map event", slog.String("map_id", id), slog.Any("error", err))
+			return
+		}
+		next := map[string]bool{}
+		for _, u := range users {
+			if keep == nil || keep[u] {
+				next[u] = true
+			}
+		}
+		keep = next
+	}
+	for u := range keep {
+		msg.OnlyPlayers = append(msg.OnlyPlayers, u)
+	}
 }
 
 // wireHexFog gives pins, drawings, tokens, the event publisher, the map picture
@@ -1806,6 +1844,7 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	}
 	msg := ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload)
 	msg.Public = true
+	a.onlyHolders(msg, campaignID, mapID)
 	a.bus.Publish(msg)
 }
 
@@ -1843,6 +1882,7 @@ func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind s
 		msg.AllowedUsers = rules.AllowedUsers
 		msg.DeniedUsers = rules.DeniedUsers
 	}
+	a.onlyHolders(msg, campaignID, mapID)
 	a.bus.Publish(msg)
 }
 
@@ -1857,13 +1897,19 @@ func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind s
 // The hub (internal/websocket/hub.go) is what actually enforces this per
 // recipient — this method only computes the audience, per ADR-055 rule 3:
 // broadcasting to everyone and hoping the client hides it is forbidden.
-func (a *mapEventPublisherAdapter) publishWithAudience(msgType ws.MessageType, campaignID, resourceID string, payload any, dmOnly bool, rules *maps.VisibilityRules) {
+//
+// mapIDs are the maps the message is about (a pin's map, and the map it
+// opens): only Players given all of them hear it.
+func (a *mapEventPublisherAdapter) publishWithAudience(msgType ws.MessageType, campaignID, resourceID string, payload any, dmOnly bool, rules *maps.VisibilityRules, mapIDs ...string) {
 	msg := ws.NewMessage(msgType, campaignID, resourceID, payload)
 	msg.RequiresDM = dmOnly
 	msg.Public = !dmOnly
 	if rules != nil {
 		msg.AllowedUsers = rules.AllowedUsers
 		msg.DeniedUsers = rules.DeniedUsers
+	}
+	if !dmOnly {
+		a.onlyHolders(msg, campaignID, mapIDs...)
 	}
 	a.bus.Publish(msg)
 }
@@ -1910,7 +1956,7 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	} else {
 		a.publishItemsChanged(campaignID, drawing.MapID, kind, dmOnly, rules)
 	}
-	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, rules)
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, rules, drawing.MapID)
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
@@ -1933,7 +1979,7 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 		return
 	}
 	dmOnly := token.IsHidden || a.underFog(token.MapID, func(f *maps.FogMask) bool { return f.HidesToken(token) })
-	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil)
+	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil, token.MapID)
 }
 
 // PublishTokenPositionEvent broadcasts a token position update via WebSocket.
@@ -1948,7 +1994,7 @@ func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, mapID, 
 	a.publishWithAudience(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
 		"x": x,
 		"y": y,
-	}, dmOnly, nil)
+	}, dmOnly, nil, mapID)
 }
 
 // PublishLayerEvent broadcasts a map layer event via WebSocket. Layers
@@ -1974,6 +2020,7 @@ func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignI
 	}
 	msg := ws.NewMessage(msgType, campaignID, layer.ID, layer)
 	msg.Public = true
+	a.onlyHolders(msg, campaignID, layer.MapID)
 	a.bus.Publish(msg)
 }
 
@@ -2033,7 +2080,14 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	} else {
 		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, dmOnly, rules)
 	}
-	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, rules)
+	// A pin that opens another map carries that map's name, so a Player hears
+	// it only when given both maps; the rest refetch on the notice above and
+	// get the pin without its link.
+	linked := ""
+	if marker.LinkedMapID != nil {
+		linked = *marker.LinkedMapID
+	}
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, rules, marker.MapID, linked)
 }
 
 // (The campaigns show page lazy-loads the Foundry banner via
@@ -4516,7 +4570,9 @@ func (a *App) RegisterRoutes() {
 		campaignHandler.RegisterCustomizeTab(mapsHandler.CustomizeTabFactory())
 		drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
 		maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService, addonService)
-		maps.RegisterHexRoutes(e, maps.NewHexHandler(hexService), campaignService, authService, addonService)
+		hexHandler := maps.NewHexHandler(hexService)
+		hexHandler.SetMapService(mapsService)
+		maps.RegisterHexRoutes(e, hexHandler, campaignService, authService, addonService)
 	} else {
 		slog.Warn("maps plugin degraded — routes not registered")
 	}
@@ -4730,6 +4786,8 @@ func (a *App) RegisterRoutes() {
 	relRepo := relations.NewRelationRepository(a.DB)
 	relService := relations.NewRelationService(relRepo)
 	relService.SetMentionLinkProvider(&mentionLinkAdapter{svc: entityService})
+	// Players see a map only once it is given to a character of theirs.
+	mapsService.SetMapGrants(&mapGrantsAdapter{entities: entityService, relations: relService, members: campaignService})
 	// Entity-privacy gate: hide private-entity nodes from the graph, and
 	// enforce entity privacy + campaign binding on the list.
 	relEntityGate := &entityAccessAdapter{svc: entityService}
@@ -7641,6 +7699,7 @@ func (a *App) RegisterRoutes() {
 
 	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
 	drawingService.SetEventPublisher(mapEvents)
+	mapEvents.holders = mapsService
 	drawingService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
 		m, err := mapsService.GetMap(ctx, mapID)
 		if err != nil {
@@ -8238,6 +8297,14 @@ func (m aiMapsAdapter) ListMaps(ctx context.Context, campaignID string) ([]recor
 		out[i] = records.MapRef{ID: x.ID, CampaignID: x.CampaignID, Name: x.Name}
 	}
 	return out, err
+}
+
+func (m aiMapsAdapter) SeenMaps(ctx context.Context, campaignID string, role int, userID string) (func(string) bool, error) {
+	f, err := m.svc.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	return f.Sees, nil
 }
 
 func (m aiMapsAdapter) ListPins(ctx context.Context, campaignID, mapID string, role int, userID string) ([]records.PinRef, error) {

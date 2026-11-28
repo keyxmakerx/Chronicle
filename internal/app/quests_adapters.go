@@ -115,6 +115,15 @@ func (a *questMapAdapter) Maps(ctx context.Context, campaignID string, ids []str
 	return out, nil
 }
 
+// Seen asks the maps service which maps the viewer may know about.
+func (a *questMapAdapter) Seen(ctx context.Context, campaignID string, v quests.Viewer) (func(string) bool, error) {
+	f, err := a.svc.MapFilterFor(ctx, campaignID, v.VisibilityRole, v.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return f.Sees, nil
+}
+
 func (a *questMapAdapter) ListMaps(ctx context.Context, campaignID string) ([]quests.MapInfo, error) {
 	on, err := a.Enabled(ctx, campaignID)
 	if err != nil || !on {

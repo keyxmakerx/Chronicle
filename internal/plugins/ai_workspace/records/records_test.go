@@ -140,6 +140,10 @@ type fakeMaps struct {
 }
 
 func (f *fakeMaps) ListMaps(context.Context, string) ([]MapRef, error) { return f.maps, nil }
+
+func (f *fakeMaps) SeenMaps(context.Context, string, int, string) (func(string) bool, error) {
+	return func(string) bool { return true }, nil
+}
 func (f *fakeMaps) ListPins(context.Context, string, string, int, string) ([]PinRef, error) {
 	return f.pins, nil
 }

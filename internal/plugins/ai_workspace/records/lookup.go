@@ -1427,6 +1427,17 @@ func (run *lookupRun) pins(mapName, rows string) (LookupAnswer, error) {
 	if err != nil {
 		return ans, err
 	}
+	seen, err := run.l.Maps.SeenMaps(run.ctx, run.campaignID, run.a.Role, run.a.UserID)
+	if err != nil {
+		return ans, err
+	}
+	kept := ms[:0:0]
+	for _, m := range ms {
+		if seen(m.ID) {
+			kept = append(kept, m)
+		}
+	}
+	ms = kept
 	var b strings.Builder
 	if mapName == "" {
 		ans.Chip = fmt.Sprintf("Maps · %d", len(ms))

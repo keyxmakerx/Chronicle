@@ -158,6 +158,7 @@ try {
   const live = await liveEdits(s);
   const skippedLive = live.__skipped || []; delete live.__skipped;
   const control = live.__control; delete live.__control;
+  const scribeMayLive = new Set(live.__scribeMay || []); delete live.__scribeMay;
   await new Promise((r) => setTimeout(r, 2500));
   const ownerBlob = socks.owner.messages.join('\n');
   console.log(`\nlive channel: owner socket got ${socks.owner.messages.length} message(s)`);
@@ -169,6 +170,7 @@ try {
   for (const [k, what] of Object.entries(live)) {
     if (!ownerBlob.includes(k)) console.log(`  not carried live to the owner (nothing to compare): ${what}`);
     for (const who of ['player', 'scribe']) {
+      if (who === 'scribe' && scribeMayLive.has(k)) continue;
       if (socks[who].messages.some((x) => x.includes(k))) { leaks++; console.log(`  LEAK  ${who} socket received: ${what}`); }
     }
   }

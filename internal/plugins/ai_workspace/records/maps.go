@@ -16,6 +16,9 @@ import (
 // through ListPins on that map.
 type MapsAPI interface {
 	ListMaps(ctx context.Context, campaignID string) ([]MapRef, error)
+	// SeenMaps is which maps a reader of this role may know about: a Player
+	// sees only the maps given to a character they own.
+	SeenMaps(ctx context.Context, campaignID string, role int, userID string) (func(mapID string) bool, error)
 	ListPins(ctx context.Context, campaignID, mapID string, role int, userID string) ([]PinRef, error)
 	CreatePin(ctx context.Context, mapID, userID string, in PinInput) error
 	UpdatePin(ctx context.Context, pinID string, in PinInput, canAuthorDmOnly bool) error

@@ -49,8 +49,15 @@ func (s *pickerService) Search(ctx context.Context, campaignID string, v Viewer,
 		if err != nil {
 			return nil, apperrorInternal(err)
 		}
+		seen, err := s.maps.Seen(ctx, campaignID, v)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
 		needle := strings.ToLower(q)
 		for _, m := range maps {
+			if !seen(m.ID) {
+				continue
+			}
 			if needle == "" || strings.Contains(strings.ToLower(m.Name), needle) {
 				out = append(out, PickerItem{ID: m.ID, Name: m.Name})
 				if len(out) == MaxPickerResults {

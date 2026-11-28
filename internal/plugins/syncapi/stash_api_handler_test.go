@@ -23,6 +23,7 @@ import (
 type fakeStashSvc struct {
 	calls   []string
 	move    StashMoveRequest
+	give    StashGiveRequest
 	moveID  int64
 	open    bool
 	ctxSrc  changesource.Source
@@ -44,6 +45,10 @@ func (f *fakeStashSvc) View(ctx context.Context, cid, key, acting, char string) 
 func (f *fakeStashSvc) Move(ctx context.Context, cid, key string, r StashMoveRequest) (any, error) {
 	f.move = r
 	return f.rec(ctx, "move:"+cid+":"+key)
+}
+func (f *fakeStashSvc) Give(ctx context.Context, cid, key string, r StashGiveRequest) (any, error) {
+	f.give = r
+	return f.rec(ctx, "give:"+cid+":"+key)
 }
 func (f *fakeStashSvc) History(ctx context.Context, cid, key, acting, char, stash string) (any, error) {
 	return f.rec(ctx, "history:"+acting+":"+char+":"+stash)
@@ -228,6 +233,18 @@ func TestStashRoutes_MoveBodyDecoding(t *testing.T) {
 	}
 }
 
+func TestStashRoutes_GiveBodyDecoding(t *testing.T) {
+	f := newStashRouteFixture(t, allPerms, allAddons())
+	body := `{"actingUserId":"u1","characterId":"c1","mapId":"m1","quantity":1}`
+	if rec := f.do("POST", base+"/give", body, false); rec.Code != 200 {
+		t.Fatalf("code = %d (%s)", rec.Code, rec.Body.String())
+	}
+	want := StashGiveRequest{ActingUserID: "u1", CharacterID: "c1", MapID: "m1", Quantity: 1}
+	if f.svc.give != want {
+		t.Fatalf("decoded = %+v, want %+v", f.svc.give, want)
+	}
+}
+
 func TestStashRoutes_Gates(t *testing.T) {
 	readOnly := []APIKeyPermission{PermRead}
 	tests := []struct {
@@ -241,6 +258,7 @@ func TestStashRoutes_Gates(t *testing.T) {
 	}{
 		{"read key can read", readOnly, allAddons(), "GET", base + "/downtime", "", 200},
 		{"read key cannot move", readOnly, allAddons(), "POST", base + "/moves", `{}`, 403},
+		{"read key cannot give", readOnly, allAddons(), "POST", base + "/give", `{}`, 403},
 		{"read key cannot approve", readOnly, allAddons(), "POST", base + "/requests/1/approve", `{}`, 403},
 		{"read key cannot flip downtime", readOnly, allAddons(), "PUT", base + "/downtime", `{"open":true}`, 403},
 		{"stash addon off is addon_disabled", allPerms, slugChecker{SyncAPIAddonSlug: true}, "GET", base + "/downtime", "", 403},

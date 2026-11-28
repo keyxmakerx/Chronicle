@@ -281,7 +281,7 @@ func TestGive_MapToUnclaimedCharacterStaysGMOnly(t *testing.T) {
 }
 
 func TestGive_LongMapNameStaysInsideTheEntityNameLimit(t *testing.T) {
-	if got := handoutName(strings.Repeat("é", 400)); len([]rune(got)) != len(handoutPrefix)+maxHandoutMapName || len(got) > 400 {
+	if got := handoutName(strings.Repeat("é", 400)); len([]rune(got)) != len(HandoutPrefix)+maxHandoutMapName || len(got) > 400 {
 		t.Fatalf("name length %d runes / %d bytes", len([]rune(got)), len(got))
 	}
 }

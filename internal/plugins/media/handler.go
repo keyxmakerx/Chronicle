@@ -76,6 +76,10 @@ type NoteMediaAccess interface {
 type MapImageGuard interface {
 	IsShadowedMapImage(ctx context.Context, campaignID, mediaID string) (bool, error)
 	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
+	// HiddenMapPicture is whether the file is the picture only of maps this
+	// viewer may not see: a Player sees a map once it is given to a character
+	// of theirs.
+	HiddenMapPicture(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error)
 }
 
 // CardPictureViewer is who is asking about a card's picture: the same three
@@ -715,6 +719,25 @@ func (h *Handler) checkMapImageGuard(c *echo.Context, file *MediaFile, isThumb b
 	}
 	if hidden && !h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
 		return false, apperror.NewNotFound("media file not found")
+	}
+	// The picture of a map the viewer was not given is refused like a missing
+	// file, however its id or a link was obtained. The owner's sync module
+	// (a cookieless link minted for an API key) sees every map.
+	if !h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
+		userID := auth.GetUserID(c)
+		role := 0
+		if userID != "" {
+			role = promotedVisibilityRole(h.memberChecker, *file.CampaignID, userID)
+		}
+		notGiven, err := h.mapImages.HiddenMapPicture(c.Request().Context(), *file.CampaignID, file.ID, role, userID)
+		if err != nil {
+			slog.Error("media: map picture given check failed; denying access",
+				slog.String("file_id", file.ID), slog.Any("error", err))
+			return false, apperror.NewNotFound("media file not found")
+		}
+		if notGiven {
+			return false, apperror.NewNotFound("media file not found")
+		}
 	}
 	return hidden, nil
 }

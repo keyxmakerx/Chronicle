@@ -22,6 +22,8 @@ const (
 type pictureStatus struct {
 	isMapPicture bool
 	shadowed     bool
+	// mapIDs are the maps that use the file as their picture.
+	mapIDs []string
 }
 
 type pictureStatusEntry struct {
@@ -108,6 +110,7 @@ func (s *mapService) pictureStatusOf(ctx context.Context, campaignID, mediaID st
 			continue
 		}
 		st.isMapPicture = true
+		st.mapIDs = append(st.mapIDs, m.ID)
 		if st.shadowed {
 			continue
 		}
@@ -173,6 +176,32 @@ func (s *mapService) IsShadowedMapImage(ctx context.Context, campaignID, mediaID
 func (s *mapService) IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error) {
 	st, err := s.pictureStatusOf(ctx, campaignID, mediaID)
 	return st.isMapPicture, err
+}
+
+// HiddenMapPicture implements media.MapImageGuard: whether the file is the
+// picture of maps the viewer may see none of. A Scribe or above sees every
+// map. A failed lookup answers true.
+func (s *mapService) HiddenMapPicture(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	if SeesAllMaps(role) {
+		return false, nil
+	}
+	st, err := s.pictureStatusOf(ctx, campaignID, mediaID)
+	if err != nil {
+		return true, err
+	}
+	if len(st.mapIDs) == 0 {
+		return false, nil
+	}
+	f, err := s.MapFilterFor(ctx, campaignID, role, userID)
+	if err != nil {
+		return true, err
+	}
+	for _, id := range st.mapIDs {
+		if f.Sees(id) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // InvalidateMapPictures drops the campaign's cached picture answers. Shadow and

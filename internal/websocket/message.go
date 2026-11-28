@@ -337,6 +337,13 @@ type Message struct {
 	// kind, as before. It narrows only; the audience gates above still
 	// apply. `json:"-"`: server-side routing, never sent.
 	Sources []string `json:"-"`
+
+	// OnlyPlayers, when non-nil, admits only these users among clients below
+	// Scribe; Scribes and DM-equivalent clients pass. News of a map goes only
+	// to the Players it was given to (a map is hidden from the rest). An
+	// empty, non-nil list admits no Player at all. `json:"-"` like the other
+	// audience fields.
+	OnlyPlayers []string `json:"-"`
 }
 
 // sourceAllowed reports whether a socket of this kind may receive m.
