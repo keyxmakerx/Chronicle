@@ -185,6 +185,8 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: accent-text";            ./tools/check-accent-text.sh
 	@echo "==> guard: css-emissions (self-test)"; ./tools/test-css-emissions.sh
 	@echo "==> guard: css-emissions";          ./tools/check-css-emissions.sh
+	@echo "==> guard: foundry-vendored (self-test)"; ./tools/test-foundry-vendored.sh
+	@echo "==> guard: foundry-vendored";       ./tools/check-foundry-vendored.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
 	@echo "==> verify: OK"

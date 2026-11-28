@@ -103,8 +103,10 @@ func (r *request) lookupCopy(d Deck, id string) (Copy, error) {
 
 func conflict(msg string) error { return errConflictMsg(msg) }
 
-// applyMove stores a move and turns a lost race into a conflict.
-func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, action string) error {
+// applyMoveReply stores a move and turns a lost race into a conflict. A
+// Director's written reply, when there is one, rides on the asker's bell with
+// a turn-down.
+func (s *service) applyMoveReply(ctx context.Context, d Deck, card string, m Move, action, reply string) error {
 	m.Log.Action = action
 	if err := s.repo.Move(ctx, m); err != nil {
 		if errors.Is(err, errLostClaim) {
@@ -112,7 +114,7 @@ func (s *service) applyMove(ctx context.Context, d Deck, card string, m Move, ac
 		}
 		return apperrorInternal(err)
 	}
-	s.announce(ctx, m.CampaignID, moveNote{Deck: d, Move: m, Action: action, Card: card})
+	s.announce(ctx, m.CampaignID, moveNote{Deck: d, Move: m, Action: action, Card: card, Reply: reply})
 	s.poked(m.CampaignID)
 	return nil
 }
@@ -337,6 +339,12 @@ func (s *service) DealCard(ctx context.Context, campaignID, deckID string, v Vie
 }
 
 func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput) (*ActionResult, error) {
+	return s.act(ctx, campaignID, deckID, copyID, verb, v, in, nil)
+}
+
+// act applies a verb. answer is set when an approve or turn-down comes back
+// from Asks, so it is done here rather than asked again.
+func (s *service) act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput, answer *AskAnswer) (*ActionResult, error) {
 	if !verbs[verb] {
 		return nil, errNotFound("page")
 	}
@@ -498,6 +506,21 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		if c.AskedAt == nil {
 			return nil, conflict("that card is not waiting for an answer")
 		}
+		if answer == nil && s.asks != nil {
+			// One ask, answered in one place: Let them and Not now answer the
+			// ask the drawer shows, which comes back through AnswerAsk. A play
+			// with no ask waiting is answered here, as before.
+			found, err := s.asks.Answer(ctx, campaignID, d.ID, c.ID, v, verb == verbApprove)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				if verb == verbApprove && afterPlay(fateOf(d, card), c.HolderEntityID).Zone == ZonePile {
+					return r.result(d, "")
+				}
+				return r.result(d, c.ID)
+			}
+		}
 		m.ExpectAsked, m.Asked = true, AskedClear
 		if verb == verbApprove {
 			m.To, action = afterPlay(fateOf(d, card), c.HolderEntityID), ActApprove
@@ -541,16 +564,28 @@ func (s *service) Act(ctx context.Context, campaignID, deckID, copyID, verb stri
 		m.Log.Seen = c.FaceUp
 	}
 
-	if err := s.applyMove(ctx, d, card.Name, m, action); err != nil {
+	reply := ""
+	if answer != nil && action == ActTurnDown {
+		reply = answer.Reply
+	}
+	if err := s.applyMoveReply(ctx, d, card.Name, m, action, reply); err != nil {
 		return nil, err
 	}
 	// Only a stored deal or a play that really happened is told; an ask, a
-	// turn-down and every other verb are not.
+	// turn-down and every other verb are not. An ask is put to the Director.
 	switch action {
+	case ActAsk:
+		s.askOpened(ctx, campaignID, d, card, c, v)
 	case ActDeal:
 		s.tell(ctx, campaignID, false, d, card, m.To.HolderEntityID, v)
 	case ActPlay, ActApprove:
 		s.tell(ctx, campaignID, true, d, card, c.HolderEntityID, v)
+	}
+	// A waiting card a Director moved another way takes its ask with it.
+	if c.AskedAt != nil {
+		if why := goneWhy[action]; why != "" {
+			s.asksGone(ctx, campaignID, d.ID, []string{c.ID}, v, why)
+		}
 	}
 	// A copy back in the pile has a new id, so the old one names nothing.
 	if m.To.Zone == ZonePile {
@@ -574,9 +609,10 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 		return nil, err
 	}
 	log := LogLine{Action: action, ActorUserID: v.UserID}
-	var before []string
+	var before, asked []string
 	if action == ActGather {
 		before = s.holdersOf(ctx, campaignID, d)
+		asked = s.askedCopies(ctx, campaignID, d.ID, "")
 	}
 	if action == ActShuffle {
 		_, err = s.repo.Shuffle(ctx, campaignID, d.ID, log)
@@ -592,6 +628,7 @@ func (s *service) bulk(ctx context.Context, campaignID, deckID string, v Viewer,
 	s.announce(ctx, campaignID, moveNote{Deck: d, Action: action, Before: before,
 		Move: Move{CampaignID: campaignID, DeckID: d.ID, From: Place{Zone: ZoneUsed}, To: Place{Zone: ZonePile}, Log: log}})
 	s.poked(campaignID)
+	s.asksGone(ctx, campaignID, d.ID, asked, v, goneWhy[ActGather])
 	return r.result(d, "")
 }
 
@@ -637,6 +674,9 @@ func (s *service) keep(r *request, d Deck, c Copy, here Place, in ActInput) (*Ac
 	s.announce(r.ctx, r.cid, moveNote{Deck: d, Action: ActKeep, Target: &target,
 		Move: Move{CampaignID: r.cid, DeckID: d.ID, CopyID: c.ID, From: here, To: Place{Zone: ZoneGone}, Log: plan.Log}})
 	s.poked(r.cid)
+	if c.AskedAt != nil {
+		s.asksGone(r.ctx, r.cid, d.ID, []string{c.ID}, r.v, goneWhy[ActKeep])
+	}
 	return r.result(d, c.ID)
 }
 

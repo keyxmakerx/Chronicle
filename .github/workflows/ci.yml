@@ -205,6 +205,15 @@ jobs:
           ./tools/test-css-emissions.sh
           ./tools/check-css-emissions.sh
 
+      - name: Foundry vendored files guard
+        # The Foundry module keeps byte-for-byte copies of some page scripts
+        # and stylesheets; fails when one changes without its hash moving in
+        # internal/plugins/foundry_vtt/vendored-assets.txt, so the module
+        # refresh isn't forgotten.
+        run: |
+          ./tools/test-foundry-vendored.sh
+          ./tools/check-foundry-vendored.sh
+
       - name: Test
         # Includes the cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW

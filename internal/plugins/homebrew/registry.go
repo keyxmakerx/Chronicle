@@ -79,6 +79,10 @@ type EventDef struct {
 	// given what happened (the payload the owner fired it with). Nil
 	// matches every firing.
 	Match func(args, payload json.RawMessage) (bool, error)
+	// Ask, when set, makes the event an owner's own ask: the owner puts it to
+	// the Director through Service.AskFor instead of firing it, and every
+	// saved rule on it waits behind that one ask, its steps running on Yes.
+	Ask *EventAsk
 }
 
 // Field is one arg of an event or action, as the Workshop's inspector asks
@@ -131,6 +135,36 @@ type ActionDef struct {
 	// {part} the label of the part it acts on, so the preview reads like the
 	// table without knowing the owner.
 	Says string
+	// Rolls marks a step a player rolls for on their own screen: a run stops
+	// there, waiting on that player rather than a Director, and goes on only
+	// if the server's roll meets the step's target.
+	Rolls *PlayerRoll
+}
+
+// PlayerRoll is how a "rolls first" step's owner makes its roll. Both run as
+// the player who rolls (Act.By), so the owner can use that player's hero.
+type PlayerRoll struct {
+	// Offer says what the player would roll now, worked out for them, so
+	// their button can name it; an error is shown instead of the button.
+	Offer func(ctx context.Context, campaignID string, a Act) (RollOffer, error)
+	// Roll makes the roll on the server, through the owner's own record of
+	// rolls, and says what it came to. The homebrew service judges it
+	// against the target; nothing a client sends is a result.
+	Roll func(ctx context.Context, campaignID string, a Act) (Rolled, error)
+}
+
+// RollOffer is a roll as a player is offered it: "Might", "2d10+2", 12.
+type RollOffer struct {
+	Label   string `json:"label,omitempty"`
+	Formula string `json:"formula"`
+	Target  int    `json:"target"`
+}
+
+// Rolled is a roll the owner made, with the target it was made against.
+type Rolled struct {
+	RollOffer
+	Total  int    `json:"total"`
+	RollID string `json:"rollId,omitempty"`
 }
 
 // Act is one action a rule is carrying out.
@@ -299,6 +333,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 	if err := checkPressArg(e); err != nil {
 		return err
 	}
+	if err := checkEventAsk(e); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.events[e.Name]; dup {
@@ -350,6 +387,12 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 	}
 	if a.Asks && (a.ClientRun || a.Run != nil || a.Waits || a.Preview != nil || len(a.PartKinds) > 0) {
 		return fmt.Errorf("homebrew: action %q asks the Director, so it takes no part and can't run, wait or preview", a.Name)
+	}
+	if a.Rolls != nil && (a.Rolls.Offer == nil || a.Rolls.Roll == nil) {
+		return fmt.Errorf("homebrew: action %q has a player roll without both Offer and Roll", a.Name)
+	}
+	if a.Rolls != nil && (a.Asks || a.ClientRun || a.Run != nil || a.Waits || a.Preview != nil || len(a.PartKinds) > 0) {
+		return fmt.Errorf("homebrew: action %q waits on a player's roll, so it takes no part and can't ask, run, wait or preview", a.Name)
 	}
 	if err := checkPreview("action", a.Name, a.Preview, a.Fields, a.PartKinds, PreviewAdd, PreviewSet); err != nil {
 		return err
@@ -471,7 +514,10 @@ type CatalogEntry struct {
 	Waits bool `json:"waits,omitempty"`
 	// Asks is an action's Asks, so the editor can say the rule stops there
 	// for the Director's answer.
-	Asks   bool    `json:"asks,omitempty"`
+	Asks bool `json:"asks,omitempty"`
+	// Rolls is set on an action a player rolls for, so the editor can say
+	// the rule stops there for the player's roll.
+	Rolls  bool    `json:"rolls,omitempty"`
 	Fields []Field `json:"fields,omitempty"`
 	// PressArg is an event's PressArg, so the Workshop can name the drawer
 	// button a When stands for.
@@ -503,7 +549,7 @@ func (r *Registry) Catalog() Catalog {
 		c.Events = append(c.Events, ce)
 	}
 	for _, a := range r.actions {
-		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Asks: a.Asks, Fields: a.Fields, Says: a.Says}
+		ce := CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Waits: a.Waits, Asks: a.Asks, Rolls: a.Rolls != nil, Fields: a.Fields, Says: a.Says}
 		if a.Preview != nil {
 			ce.Preview = a.Preview
 		}

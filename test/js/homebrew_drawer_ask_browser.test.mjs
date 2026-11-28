@@ -52,7 +52,11 @@ async function page(t, answerReply) {
       apiFetch: (url, opts) => {
         if (url.endsWith('/drawer')) return json(200, { presses: [], waiting, recent: [] });
         window.__posts.push({ url, body: opts.body ? JSON.parse(opts.body) : null });
-        if (reply.status >= 400) return json(reply.status, { message: reply.message });
+        if (reply.status >= 400) {
+          // A 409 means the ask was answered elsewhere: it is gone on reload.
+          if (reply.status === 409) waiting = [];
+          return json(reply.status, { message: reply.message });
+        }
         waiting = [];
         return json(200, { id: ask.id, status: 'done', lines: ['Answered yes.'] });
       },
@@ -110,6 +114,15 @@ test('Other needs words, and a refused change keeps the card with the reason', {
   assert.equal(await p.textContent('.hbd-err'), 'step 2: give a whole number of copies from 1 to 20');
   assert.ok(await p.$('.hbd-ask'), 'the card stays to fix the change');
   assert.equal(await p.inputValue('[aria-label="Shuffle copies of a card into a deck: Copies"]'), '99', 'what was typed is kept');
+});
+
+test('an answer that lost to another one says why on the status line', { skip }, async (t) => {
+  const p = await page(t, { status: 409, message: 'this ask is already being answered' });
+  await p.click('.hbd-choice:text("Yes")');
+  await p.click('.hbd-send');
+  await p.waitForFunction(() => !document.querySelector('.hbd-ask'));
+  assert.equal(await p.textContent('.hbd-status'), 'this ask is already being answered');
+  assert.match(await p.getAttribute('.hbd-status', 'class'), /\berr\b/);
 });
 
 test('the answer card fits a phone without sideways scroll', { skip }, async (t) => {

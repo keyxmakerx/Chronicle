@@ -1007,13 +1007,22 @@
     return anim.finished.catch(function () {});
   }
 
+  // A card moves focus when its film ends, which can be well after it
+  // started; only when focus is still with the card (or nowhere), so it
+  // never pulls focus back from somewhere the person has since moved to.
+  function focusStaysWith() {
+    var a = document.activeElement;
+    if (!a || a === document.body) return true;
+    for (var i = 0; i < arguments.length; i++) if (arguments[i] && arguments[i].contains(a)) return true;
+    return false;
+  }
   function growClose(panel, opener, opts) {
     var had = panel.contains(document.activeElement);
     var finish = function () {
       panel.classList.remove('open', 'live');
       panel.removeAttribute('style');
       panel.innerHTML = '';
-      if (had && opener) opener.focus({ preventScroll: true });
+      if (had && opener && focusStaysWith(panel)) opener.focus({ preventScroll: true });
     };
     if ((opts && opts.instant) || byKey() || motionOff()) { panel.getAnimations().forEach(function (a) { a.cancel(); }); finish(); return Promise.resolve(); }
     var frames = reducedMotion()
@@ -6402,7 +6411,8 @@
       openCard(P, this.calEl).then(function (ok) {
         if (!ok) return;
         if (self._wingStale === self.wingFor) { self._wingStale = null; self.refreshWing(); }
-        self.wingEl.focus({ preventScroll: true });
+        // A close asked for while it opened runs next; the card keeps out of focus's way.
+        if (!P.next && focusStaysWith(self.wingEl, btn)) self.wingEl.focus({ preventScroll: true });
         if (row && row.isConnected) row.classList.add('pulse');
         var n = P.next; P.next = null; if (n) n();
       });
@@ -6539,7 +6549,7 @@
         self.wingFor = null;
         P.closing = null;
         self._updateScrim();
-        if (!o.quiet && had && btn && btn.isConnected) btn.focus({ preventScroll: true });
+        if (!o.quiet && had && btn && btn.isConnected && focusStaysWith(self.wingEl, self.evpEl)) btn.focus({ preventScroll: true });
         var n = P.next; P.next = null; if (n) n();
       });
       this._updateScrim();
@@ -7102,7 +7112,7 @@
         self.flapEl.innerHTML = '';
         P.closing = null;
         self._updateScrim();
-        if (!o.quiet && had) btn.focus({ preventScroll: true });
+        if (!o.quiet && had && focusStaysWith(self.flapEl)) btn.focus({ preventScroll: true });
         var n = P.next; P.next = null; if (n) n();
       });
       this._updateScrim();
