@@ -52,6 +52,11 @@ func TestPanel(t *testing.T) {
 			want: []string{`aria-expanded="false"`, `data-dms-hrow`, `<span class="dms-chip">Focus 3</span>`, "34/42", "Played by Sam", "Recoveries", "data-dms-party", "Tactician", `title="Bleeding, Slowed"`, "<span>Slowed</span>"},
 		},
 		{
+			name: "the Dice tray card is always offered, with its widget mount",
+			view: View{CampaignID: "c1"},
+			want: []string{`data-dms-open="tray"`, `data-dms-sec="tray"`, `data-widget="dice-tray"`, `data-campaign-id="c1"`, "/static/css/dice_tray.css"},
+		},
+		{
 			name:    "no conditions leaves the rules section out",
 			view:    View{CampaignID: "c1"},
 			want:    []string{`data-dms-open="reveal"`, `data-dms-sec="reveal"`, "Nothing hidden right now."},

@@ -16,6 +16,14 @@ type SectionView struct {
 	Badge   int
 }
 
+// trayID is the Dice tray card's section id, on both screens.
+const trayID = "tray"
+
+// traySection is the Dice tray card. It needs no source: the shared mat is
+// fed by the rolls the page's Table already receives, so the card is always
+// offered.
+var traySection = SectionView{ID: trayID, Title: "Dice tray", Icon: "dice-d20", Summary: "Everyone's public rolls on one mat"}
+
 // Waiting counts the requests waiting on the viewer: the listed ones plus
 // those past the list, or the armory's pending count when no list is shown.
 func (v *View) Waiting() int {
@@ -66,6 +74,7 @@ func (v *View) Sections() []SectionView {
 	if n := len(v.Conditions); n > 0 {
 		out = append(out, SectionView{ID: "rules", Title: "Rules", Icon: "book", Summary: plural(n, "condition", "conditions")})
 	}
+	out = append(out, traySection)
 	reveal := SectionView{ID: "reveal", Title: "Reveal", Icon: "eye", Summary: "Nothing hidden"}
 	if n := len(v.Hidden); n > 0 {
 		reveal.Summary = plural(n, "character", "characters") + " hidden"

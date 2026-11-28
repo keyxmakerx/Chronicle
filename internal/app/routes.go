@@ -6858,6 +6858,10 @@ func (a *App) RegisterRoutes() {
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
+		// The players' screen: the party as a player may see it, and each
+		// player's own private note (player_screen_adapters.go).
+		PlayerParty: &dmPartyAdapter{entities: entityService, campaigns: campaignService},
+		PlayerNotes: &playerNotesAdapter{notes: noteSvc},
 	}
 	// The Adventures tab needs its table; with the plugin degraded the rest of
 	// the screen still works and the tab is simply left out.
@@ -6881,6 +6885,13 @@ func (a *App) RegisterRoutes() {
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
+	// Each person's screen layouts and style follow them between devices.
+	// With the plugin degraded they stay in the browser alone.
+	var screenPrefs dmscreen.PrefsRepository
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		screenPrefs = dmscreen.NewPrefsRepository(a.DB)
+	}
+	dmscreen.RegisterPrefsRoutes(e, dmscreen.NewPrefsHandler(dmscreen.NewPrefsService(screenPrefs, &screenKitAdapter{members: campaignService})), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
 	syncAPIHandler.SetDMScreen(&dmScreenSyncAPIAdapter{svc: dmScreenSvc})
@@ -7172,6 +7183,12 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
+			// The Table's Rolls, Tonight, Hand and Dice drawn into a players' screen card.
+			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js", "js/table_leaf.js"}},
+			// The Dice tray card on both screens: the shared game mat and the member's own
+			// tray. The art, the 3D stage and the mountable tray are one reusable set (the
+			// Foundry module loads the same three); the last file is the card's widget.
+			{Name: "dice-tray", Scripts: []string{"js/roll_dice.js", "js/dice_tray_art.js", "js/dice_tray_stage.js", "js/dice_tray_core.js", "js/dice_tray.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -7350,7 +7367,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     cutscenes.PluginSlug,
 		StaticFS: echo.MustSubFS(cutscenes.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_workshop.js"}},
+			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_timeline.js", "js/cutscene_workshop.js"}},
 		},
 	})
 	var aiCutscenes cutscenes.Service
@@ -7401,6 +7418,9 @@ func (a *App) RegisterRoutes() {
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		homebrewAskAPI.attach(homebrewSvc)
 		aiWorkshop = homebrewSvc
+		// Recipes join the Store only while the Workshop is up; without it
+		// the kind is unknown and the Store refuses it.
+		designKinds.Register(homebrewRecipeKind, homebrewStoreKind{svc: homebrewSvc, members: campaignService})
 		craftingRespites.homebrew = homebrewSvc
 		decksStory.bindHomebrew(homebrewSvc)
 		// A saved recipe is placed with the Customizer only while the
@@ -7720,7 +7740,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
-	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_layout.js", "/static/js/widgets/dm_arrange.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "store", Scripts: []string{"/static/js/widgets/store.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},

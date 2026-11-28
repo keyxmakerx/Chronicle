@@ -108,8 +108,9 @@ func init() {
 	// page_tests: the Tests block's table; foreign keys point at core
 	// tables (entities, campaigns) only.
 	addPluginSchema(170, pagetests.PluginSlug, pagetests.MigrationsFS)
-	// dmscreen: the Adventures tab's pins and loose notes. Foreign keys
-	// point at core campaigns and entities only.
+	// dmscreen: the Adventures tab's pins and loose notes, and each
+	// person's screen layouts. Foreign keys point at core campaigns,
+	// entities and users only.
 	addPluginSchema(180, dmscreen.PluginSlug, dmscreen.MigrationsFS)
 	// entity_standing: the Standing block's tables (how a page feels about
 	// the party, and why). Foreign keys point at core campaigns and

@@ -5972,46 +5972,61 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     --dms-ok: rgb(var(--color-ok-rgb)); --dms-ok-soft: rgb(var(--color-ok-rgb) / .15);
     --dms-warn: rgb(var(--color-warn-rgb));
     --dms-r: .75rem; --dms-shadow: 0 1px 2px rgb(0 0 0 / .06);
+    /* Spacing, which Compact density tightens. */
+    --dms-gap: 8px; --dms-pad: 12px;
   }
   .dms-dock {
     position: fixed; top: var(--dms-top, 3.5rem); right: 0; bottom: 0; z-index: 15;
-    width: 320px; max-width: 100vw; color: var(--dms-ink);
+    width: var(--dms-w, 320px); max-width: 100vw; color: var(--dms-ink);
     box-shadow: var(--elev-hover);
   }
   /* A kit's palette is set on <html> but only wears on Material pages; the
-     dock sits on <body>, outside #main-content, so it takes it here. */
-  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock,
-  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock {
+     dock sits on <body>, outside #main-content, so it takes it here. A kit
+     picked in the Style drawer sets data-dms-kit on the dock itself, and the
+     rules keyed on <html> then step aside for it. */
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]),
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock:not([data-dms-kit]),
+  .dms-dock[data-dms-kit]:not([data-dms-kit="material"]) {
     --surface-raised: var(--k-paper); --surface-alt: color-mix(in srgb, var(--k-ink) 6%, var(--k-paper));
     --surface-text: var(--k-ink); --surface-text-muted: var(--k-mut); --surface-border: var(--k-hair);
     --color-text-secondary: var(--k-mut); --color-accent: var(--kit-acc);
     font-family: var(--kit-bf, inherit);
   }
-  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock .dms-sec-t,
-  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock .dms-sec-t { font-family: var(--kit-hf, inherit); }
-  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock .dms-lbl,
-  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock .dms-lbl { font-family: var(--kit-lf, inherit); }
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]) .dms-sec-t,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock:not([data-dms-kit]) .dms-sec-t,
+  .dms-dock[data-dms-kit]:not([data-dms-kit="material"]) .dms-sec-t { font-family: var(--kit-hf, inherit); }
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]) .dms-lbl,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-dock:not([data-dms-kit]) .dms-lbl,
+  .dms-dock[data-dms-kit]:not([data-dms-kit="material"]) .dms-lbl { font-family: var(--kit-lf, inherit); }
   /* Each kit's boxes, from its row under ui-standard.md "Style kits". */
-  [data-cz-page="annals"][data-cz-kit="sharp"]:not([data-dms-kit]) .dms-dock,
-  [data-dms-kit="sharp"] .dms-dock { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
-  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-dock,
-  [data-dms-kit="ornate"] .dms-dock { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
-  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-dock .dms-sec,
-  [data-dms-kit="ornate"] .dms-dock .dms-sec { outline: 1px solid var(--k-gilt); outline-offset: -4px; }
-  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-dock,
-  [data-dms-kit="flowing"] .dms-dock { --dms-r: 1rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 6px 18px var(--k-shadow); }
-  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-dock .dms-sec,
-  [data-dms-kit="flowing"] .dms-dock .dms-sec { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 6rem); }
-  [data-cz-page="annals"][data-cz-kit="lumen"]:not([data-dms-kit]) .dms-dock,
-  [data-dms-kit="lumen"] .dms-dock { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 14px var(--k-glow); }
-  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-dock,
-  [data-dms-kit="sketchbook"] .dms-dock { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: .9rem .35rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
-  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-dock .dms-sec,
-  [data-dms-kit="sketchbook"] .dms-dock .dms-sec { border-width: 1.5px; }
+  [data-cz-page="annals"][data-cz-kit="sharp"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]),
+  [data-dms-kit="sharp"] .dms-dock:not([data-dms-kit]),
+  .dms-dock[data-dms-kit="sharp"] { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
+  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]),
+  [data-dms-kit="ornate"] .dms-dock:not([data-dms-kit]),
+  .dms-dock[data-dms-kit="ornate"] { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
+  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]) .dms-sec,
+  [data-dms-kit="ornate"] .dms-dock:not([data-dms-kit]) .dms-sec,
+  .dms-dock[data-dms-kit="ornate"] .dms-sec { outline: 1px solid var(--k-gilt); outline-offset: -4px; }
+  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]),
+  [data-dms-kit="flowing"] .dms-dock:not([data-dms-kit]),
+  .dms-dock[data-dms-kit="flowing"] { --dms-r: 1rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 6px 18px var(--k-shadow); }
+  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]) .dms-sec,
+  [data-dms-kit="flowing"] .dms-dock:not([data-dms-kit]) .dms-sec,
+  .dms-dock[data-dms-kit="flowing"] .dms-sec { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 6rem); }
+  [data-cz-page="annals"][data-cz-kit="lumen"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]),
+  [data-dms-kit="lumen"] .dms-dock:not([data-dms-kit]),
+  .dms-dock[data-dms-kit="lumen"] { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 14px var(--k-glow); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]),
+  [data-dms-kit="sketchbook"] .dms-dock:not([data-dms-kit]),
+  .dms-dock[data-dms-kit="sketchbook"] { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: .9rem .35rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-dock:not([data-dms-kit]) .dms-sec,
+  [data-dms-kit="sketchbook"] .dms-dock:not([data-dms-kit]) .dms-sec,
+  .dms-dock[data-dms-kit="sketchbook"] .dms-sec { border-width: 1.5px; }
 
   /* The page, and the strips above it, make room for the dock on a wide window. */
   @media (min-width: 701px) {
-    html.dms-docked :is(#beside-row, .cta-host, #checkup-strip) { margin-right: 320px; }
+    html.dms-docked :is(#beside-row, .cta-host, #checkup-strip) { margin-right: var(--dms-w, 320px); }
   }
   @media (min-width: 701px) and (prefers-reduced-motion: no-preference) {
     html:not([data-motion]):not(.nav-rm) :is(#beside-row, .cta-host, #checkup-strip) { transition: margin-right var(--dur-standard) var(--ease-standard); }
@@ -6060,7 +6075,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   .dms-strip b { color: var(--dms-ink); font-weight: 600; }
   .dms-empty { padding: 16px 12px; font-size: .85rem; color: var(--dms-ink-muted); }
-  .dms-cards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; scrollbar-width: thin; }
+  .dms-cards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--dms-gap); padding: var(--dms-gap); scrollbar-width: thin; }
 
   /* A section card: whole or folded to one line carrying its summary, each
      on its own. */
@@ -6093,7 +6108,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-sec.dms-lifting { opacity: .45; }
   .dms-sec.dms-drop-before { box-shadow: 0 -3px 0 0 var(--dms-acc); }
   .dms-sec.dms-drop-after { box-shadow: 0 3px 0 0 var(--dms-acc); }
-  .dms-sec-b { display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; padding: 4px 12px 12px; }
+  .dms-sec-b { display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; padding: 4px var(--dms-pad) var(--dms-pad); }
 
   /* Leaves: a section dragged out of the rail opens on a leaf hinged off the
      column's outer edge, lying over the page. They sit in a zero-width box at
@@ -6120,7 +6135,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-leaf-t { font-weight: 600; letter-spacing: .02em; }
   .dms-leaf-tools { display: flex; gap: 2px; margin-left: auto; }
   .dms-ic-sm { width: 28px; height: 28px; font-size: .75rem; }
-  .dms-leaf-b { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; scrollbar-width: thin; }
+  .dms-leaf-b { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--dms-gap); padding: var(--dms-gap); scrollbar-width: thin; }
   .dms-leaf .dms-sec:not(.dms-folded) { border-color: color-mix(in srgb, var(--dms-acc) 45%, var(--dms-leaf-edge)); }
   .dms-leaf-ghost { pointer-events: none; z-index: 2; }
   .dms-leaf.dms-lifting { opacity: .55; filter: saturate(.7); }
@@ -6343,6 +6358,239 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   @media (max-width: 700px) {
     .dms-sheet-p { inset: 0; border-radius: 0; }
+  }
+}
+
+/* The players' screen (dmscreen player_panel.templ): the DM Screen's dock
+   with the players' cards, so it wears every .dms-* rule above. Only My
+   hero's whole-hero layout is its own. */
+@layer components {
+  .pls-hero { display: grid; gap: .6rem; }
+  .pls-id { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+  .pls-id > div { min-width: 0; }
+  .pls-id b { display: block; font-size: .95rem; line-height: 1.2; color: var(--dms-ink); overflow-wrap: anywhere; }
+  .pls-id span { font-size: .78rem; color: var(--dms-ink-muted); }
+  .pls-av {
+    flex: none; display: grid; place-items: center; width: 2.1rem; height: 2.1rem; border-radius: 50%;
+    font-size: .75rem; font-weight: 700; color: var(--dms-acc); background: var(--dms-acc-soft);
+  }
+  .pls-meter { display: grid; gap: .25rem; }
+  .pls-mtop { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+  .pls-num { font-size: .78rem; color: var(--dms-ink-muted); font-variant-numeric: tabular-nums; }
+  .pls-num b { font-size: .95rem; color: var(--dms-ink); }
+  .pls-meter .dms-bar { flex: none; height: .5rem; }
+  .pls-res { display: flex; flex-wrap: wrap; gap: .4rem 1rem; }
+  .pls-res > span { display: inline-flex; align-items: baseline; gap: .4rem; }
+  .pls-res b { font-size: .95rem; font-variant-numeric: tabular-nums; color: var(--dms-ink); }
+  .pls-acts { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .8rem; }
+  .pls-acts .dms-quiet { font-size: .85rem; font-weight: 600; }
+  .pls-table { min-width: 0; }
+}
+
+/* ============================================================ */
+/* Docked screen: Arrange mode, layouts and the Style drawer
+   (static/js/widgets/dm_arrange.js). Same tokens as the block above; the
+   kit, surface and density are attributes on the dock, so nothing here is
+   per kit. */
+@layer components {
+  /* Card heights: the body scrolls inside a short or medium card; L is the
+     whole card. */
+  .dms-sec[data-dms-size="S"]:not(.dms-folded) > .dms-sec-b { max-height: 9rem; overflow-y: auto; scrollbar-width: thin; }
+  .dms-sec[data-dms-size="M"]:not(.dms-folded) > .dms-sec-b { max-height: 18rem; overflow-y: auto; scrollbar-width: thin; }
+
+  /* Two columns, on a window with room for them; the page makes room too. */
+  @media (min-width: 1180px) {
+    html.dms-two { --dms-w: 528px; }
+    .dms-cols2 .dms-col { width: 480px; }
+    .dms-cols2 .dms-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; grid-auto-flow: row dense; }
+    .dms-cols2 .dms-cards > :is(.dms-sec.dms-wide, .dms-dropghost.dms-wide) { grid-column: span 2; }
+  }
+
+  /* The rail's Arrange and Layouts icons, and the Style tab at its foot. */
+  .dms-rail .dms-ic.dms-hid { opacity: .45; }
+  .dms-styletab {
+    flex: none; margin-top: auto; writing-mode: vertical-rl; transform: rotate(180deg); min-height: 64px; padding: 10px 7px;
+    font-family: var(--kit-lf, inherit); font-size: .66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--dms-ink-muted); border-right: 1px solid var(--surface-border); border-top: 1px solid var(--surface-border);
+    border-radius: 0 8px 8px 0; transition: color var(--dur-micro), border-color var(--dur-micro);
+  }
+  .dms-styletab:hover { color: var(--dms-ink); }
+  .dms-styletab[aria-expanded="true"] { color: var(--dms-acc); border-color: var(--dms-acc); }
+
+  /* Arrange mode: the bar at the top of the column and each card's tools. */
+  .dms-arrbar { display: none; flex-direction: column; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--surface-border); background: var(--surface-raised); }
+  .dms-arranging .dms-arrbar { display: flex; }
+  .dms-arr-top { display: flex; align-items: center; gap: 8px; }
+  .dms-arr-top b { font-weight: 650; color: var(--dms-ink); }
+  .dms-arr-lay { flex: 1; min-width: 0; font-size: .78rem; color: var(--dms-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dms-arr-done {
+    flex: none; min-height: 32px; padding: 0 14px; border-radius: 8px; font-size: .85rem; font-weight: 600;
+    background: var(--dms-acc); color: #fff; transition: filter var(--dur-micro), transform 60ms;
+  }
+  .dms-arr-done:hover { filter: brightness(1.08); }
+  .dms-arr-done:active { transform: scale(.96); }
+  .dms-arr-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .dms-seg2 { display: inline-flex; flex-wrap: wrap; max-width: 100%; padding: 2px; gap: 2px; border: 1px solid var(--surface-border); border-radius: 8px; }
+  .dms-seg2 button { min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: .8rem; color: var(--dms-ink-muted); transition: background-color var(--dur-micro), color var(--dur-micro); }
+  .dms-seg2 button:hover:not(:disabled) { color: var(--dms-ink); background: var(--surface-alt); }
+  .dms-seg2 button[aria-pressed="true"] { background: var(--dms-acc-soft); color: var(--dms-acc); font-weight: 600; }
+  .dms-seg2 button:disabled { opacity: .45; cursor: not-allowed; }
+
+  .dms-arr { display: none; align-items: center; gap: 2px; flex: none; }
+  .dms-arranging .dms-arr { display: flex; }
+  .dms-arranging .dms-sec-x { display: none; }
+  .dms-arranging .dms-sec-t { cursor: grab; }
+  .dms-arranging .dms-sec-t .dms-sec-sum { display: none; }
+  /* While arranging the title gives way to the card's tools: it shortens with
+     an ellipsis, and where even that is too tight the tools wrap below it. */
+  .dms-arranging .dms-sec-h { flex-wrap: wrap; }
+  .dms-arranging .dms-sec-t { flex: 1 1 7rem; overflow: hidden; }
+  .dms-arranging .dms-sec-t > span:not(.dms-sec-sum) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dms-arranging .dms-arr { margin-left: auto; }
+  .dms-arranging .dms-sec-grip { opacity: 1; }
+  .dms-arranging .dms-sec-b { pointer-events: none; opacity: .7; }
+  .dms-dock:not(.dms-cols2) [data-dms-wide] { display: none; }
+  .dms-sz { display: inline-flex; border: 1px solid var(--surface-border); border-radius: 6px; overflow: hidden; margin-right: 2px; }
+  .dms-sz button { width: 24px; height: 24px; font-size: .68rem; font-weight: 700; color: var(--dms-ink-muted); }
+  .dms-sz button + button { border-left: 1px solid var(--surface-border); }
+  .dms-sz button:hover { color: var(--dms-ink); background: var(--surface-alt); }
+  .dms-sz button[aria-pressed="true"] { background: var(--dms-acc-soft); color: var(--dms-acc); }
+  /* A hidden card stays in view while arranging, tinted, title only. */
+  .dms-arranging .dms-sec.dms-hid { opacity: .6; background: color-mix(in srgb, var(--dms-ink) 6%, var(--surface-alt)); box-shadow: none; outline: none; }
+  .dms-arranging .dms-sec.dms-hid .dms-sec-t > span[id]::after { content: " · hidden"; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--dms-ink-muted); }
+  .dms-arranging .dms-sec.dms-hid .dms-sz, .dms-arranging .dms-sec.dms-hid [data-dms-wide] { visibility: hidden; }
+
+  /* Where a dragged card lands: an outline the card's own shape. */
+  .dms-sec.dms-lifted { display: none; }
+  .dms-dropghost {
+    flex: none; min-height: 40px; border: 2px dashed color-mix(in srgb, var(--dms-acc) 60%, transparent); border-radius: var(--dms-r);
+    background: var(--dms-acc-soft);
+  }
+  .dms-leafslot {
+    position: absolute; top: 10px; bottom: 10px; width: 228px; z-index: 2; display: flex; flex-direction: column; justify-content: center; gap: 8px;
+    padding: 10px; text-align: center; font-size: .8rem; color: var(--dms-ink-muted);
+    border: 2px dashed color-mix(in srgb, var(--dms-ink-muted) 50%, transparent); border-radius: var(--dms-r);
+    background: color-mix(in srgb, var(--surface-alt) 82%, transparent);
+  }
+  .dms-leafslot.dms-hot { outline: none; border-color: var(--dms-acc); color: var(--dms-acc); }
+  .dms-styling .dms-leafslot { display: none; }
+  .dms-leafslot .dms-dropghost { order: -1; }
+
+  /* The layout menu grows out of its rail icon, toward the page. */
+  .dms-laymenu {
+    position: absolute; right: 54px; z-index: var(--z-raised); width: 248px; padding: 6px; transform-origin: top right;
+    background: var(--surface-raised); color: var(--dms-ink); border: 1px solid var(--surface-border); border-radius: var(--dms-r);
+    box-shadow: var(--elev-hover); font-size: .85rem;
+  }
+  .dms-lm-h { padding: 4px 8px 6px; font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dms-acc); }
+  .dms-lm-row { display: flex; align-items: center; gap: 2px; }
+  .dms-lm-pick { flex: 1; min-width: 0; display: grid; grid-template-columns: 16px 1fr; gap: 0 8px; align-items: center; text-align: left; padding: 7px 8px; border-radius: 8px; color: var(--dms-ink); }
+  .dms-lm-pick:hover { background: var(--surface-alt); }
+  .dms-lm-pick span { min-width: 0; overflow-wrap: anywhere; }
+  .dms-lm-pick small { display: block; font-size: .72rem; color: var(--dms-ink-muted); }
+  .dms-lm-ck { font-size: .62rem; color: var(--dms-acc); visibility: hidden; }
+  .dms-lm-pick[aria-current="true"] .dms-lm-ck { visibility: visible; }
+  .dms-lm-pick[aria-current="true"] span { font-weight: 600; }
+  .dms-lm-row .dms-ic-sm { opacity: .7; }
+  .dms-lm-row .dms-ic-sm:hover, .dms-lm-row .dms-ic-sm:focus-visible { opacity: 1; }
+  .dms-lm-acts { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px 0; padding: 8px; border-top: 1px solid var(--surface-border); }
+  .dms-lm-acts .dms-quiet:disabled { color: var(--dms-ink-muted); text-decoration: none; cursor: not-allowed; }
+  .dms-lm-note { font-size: .74rem; color: var(--dms-ink-muted); }
+  .dms-lm-form { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px; }
+  .dms-lm-form input { flex: 1; min-width: 0; min-height: 32px; padding: 0 8px; font: inherit; color: var(--dms-ink); background: transparent; border: 1px solid var(--surface-border); border-radius: 6px; }
+  .dms-lm-form input:focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 1px; }
+  .dms-lm-err { flex-basis: 100%; margin: 0; font-size: .74rem; color: rgb(var(--color-danger-rgb, 220 38 38)); }
+  .dms-lm-ask { flex: 1; padding: 7px 8px; font-size: .82rem; }
+  .dms-lm-yes { color: rgb(var(--color-danger-rgb, 220 38 38)); }
+  .dms-lm-foot { margin: 0; padding: 8px 8px 4px; border-top: 1px solid var(--surface-border); font-size: .74rem; color: var(--dms-ink-muted); line-height: 1.4; }
+
+  /* The Style drawer slides out from behind the screen, level with its tab,
+     and lies over the page beside it, so the screen stays in view. */
+  .dms-sdrawer {
+    position: absolute; right: 100%; bottom: 8px; z-index: -1; width: 272px; max-height: calc(100% - 16px); overflow: auto; scrollbar-width: thin;
+    display: flex; flex-direction: column; gap: 14px; padding: 12px 12px 14px;
+    background: var(--surface-raised); color: var(--dms-ink); border: 1px solid var(--surface-border); border-right: 0;
+    border-radius: var(--dms-r) 0 0 var(--dms-r); box-shadow: -10px 4px 24px -10px rgb(0 0 0 / .35); font-size: .85rem;
+  }
+  .dms-sd-h { display: flex; align-items: center; gap: 8px; }
+  .dms-sd-h b { font-weight: 650; }
+  .dms-sd-h span { flex: 1; font-size: .78rem; color: var(--dms-ink-muted); }
+  .dms-sd-sec { display: flex; flex-direction: column; gap: 6px; }
+  .dms-sd-sec .dms-seg2 { align-self: flex-start; }
+  .dms-sd-note { margin: 0; font-size: .82rem; color: var(--dms-ink-muted); line-height: 1.45; }
+  .dms-sd-foot { margin: 0; padding-top: 10px; border-top: 1px solid var(--surface-border); font-size: .74rem; color: var(--dms-ink-muted); line-height: 1.4; }
+  .dms-kt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .dms-ktile { display: flex; flex-direction: column; gap: 4px; padding: 3px; border-radius: 8px; text-align: left; border: 1px solid transparent; transition: background-color var(--dur-micro); }
+  .dms-ktile:hover { background: var(--surface-alt); }
+  .dms-ktile[aria-pressed="true"] { border-color: var(--dms-acc); box-shadow: 0 0 0 1px var(--dms-acc); }
+  .dms-ktile[data-dms-kitpick=""] { grid-column: span 3; flex-direction: row; align-items: center; gap: 10px; }
+  .dms-ktile[data-dms-kitpick=""] .dms-kt { width: 76px; flex: none; }
+  /* A tile is the kit's own page, paper and accent in miniature. Material
+     has no palette of its own, so its tile takes the site's. */
+  .dms-kt[data-dms-kit="material"] {
+    --k-page: var(--color-bg-primary); --k-paper: var(--color-card-bg); --k-ink: var(--color-text-primary);
+    --k-hair: var(--color-border); --kit-acc: var(--color-accent);
+  }
+  .dms-kt { display: block; height: 50px; padding: 7px; border-radius: 6px; background: var(--k-page, var(--surface-alt)); border: 1px solid var(--surface-border); }
+  .dms-kt-card {
+    display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 4px 6px; overflow: hidden;
+    background: var(--k-paper, var(--surface-raised)); border: 1px solid var(--k-hair, var(--surface-border)); border-radius: 6px;
+  }
+  .dms-kt[data-dms-kit="sharp"] .dms-kt-card { border-radius: 0; border-color: var(--k-ink); }
+  .dms-kt[data-dms-kit="ornate"] .dms-kt-card { outline: 1px solid var(--k-gilt); outline-offset: -3px; }
+  .dms-kt[data-dms-kit="flowing"] .dms-kt-card { border-radius: 10px; border-color: transparent; background: linear-gradient(180deg, var(--k-wash), var(--k-paper)); }
+  .dms-kt[data-dms-kit="lumen"] .dms-kt-card { box-shadow: 0 0 0 1px var(--k-hair), 0 0 8px var(--k-glow); }
+  .dms-kt[data-dms-kit="sketchbook"] .dms-kt-card { border: 1.5px solid var(--k-line); border-radius: 10px 4px 9px 5px; box-shadow: 2px 2px 0 var(--k-hair); }
+  .dms-kt-h { font-family: var(--kit-hf, inherit); font-size: .75rem; line-height: 1; font-weight: 600; color: var(--kit-acc, var(--dms-acc)); }
+  .dms-kt-bar { display: block; height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--k-ink, var(--dms-ink)) 12%, transparent); }
+  .dms-kt-bar i { display: block; width: 70%; height: 100%; border-radius: 4px; background: var(--dms-ok); }
+  .dms-kt-l { display: block; height: 3px; width: 60%; border-radius: 2px; background: color-mix(in srgb, var(--k-ink, var(--dms-ink)) 22%, transparent); }
+  .dms-kt-n { font-size: .74rem; color: var(--dms-ink); line-height: 1.2; }
+
+  /* Density: Compact changes spacing only. */
+  .dms-dock[data-dms-density="compact"] { --dms-gap: 5px; --dms-pad: 8px; }
+  .dms-dock[data-dms-density="compact"] .dms-sec-h { padding: 2px; }
+
+  /* Table felt: the column is green baize, drawn from two tokens and a
+     faint weave, in light and dark; the cards keep the kit. */
+  .dms-dock[data-dms-surface="felt"] { --dms-felt: #24543f; --dms-felt-ink: #e8f1ea; --dms-felt-line: rgb(255 255 255 / .16); }
+  .dark .dms-dock[data-dms-surface="felt"] { --dms-felt: #16382a; --dms-felt-ink: #dbe9df; --dms-felt-line: rgb(255 255 255 / .12); }
+  .dms-dock[data-dms-surface="felt"] :is(.dms-col, .dms-leaf) {
+    background:
+      radial-gradient(circle at 30% 20%, rgb(255 255 255 / .06), transparent 60%),
+      repeating-radial-gradient(circle at 10% 10%, rgb(0 0 0 / .05) 0 1px, transparent 1px 3px),
+      var(--dms-felt);
+    border-left-color: var(--dms-felt-line);
+  }
+  .dms-dock[data-dms-surface="felt"] :is(.dms-colhead, .dms-strip, .dms-empty, .dms-phonehead, .dms-leafbar) { color: var(--dms-felt-ink); border-color: var(--dms-felt-line); }
+  .dms-dock[data-dms-surface="felt"] :is(.dms-strip b, .dms-phonehead-t) { color: var(--dms-felt-ink); }
+  .dms-dock[data-dms-surface="felt"] .dms-colhead .dms-quiet { color: var(--dms-felt-ink); text-decoration: underline; text-decoration-color: rgb(255 255 255 / .4); text-underline-offset: 2px; }
+
+  /* Glass over the page: the screen lies over the page, which shows
+     through blurred, instead of narrowing it. Where the browser cannot
+     blur, or the person asks for less transparency, it stays solid and
+     beside the page. */
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .dms-dock[data-dms-surface="glass"] .dms-col { background: color-mix(in srgb, var(--surface-alt) 55%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
+    .dms-dock[data-dms-surface="glass"] .dms-rail { background: color-mix(in srgb, var(--surface-raised) 62%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
+    .dms-dock[data-dms-surface="glass"] .dms-sec { background: color-mix(in srgb, var(--dms-leaf) 76%, transparent); }
+    @media (min-width: 701px) {
+      html.dms-docked.dms-glass :is(#beside-row, .cta-host, #checkup-strip) { margin-right: 0; }
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .dms-dock[data-dms-surface="glass"] .dms-col { background: var(--surface-alt); -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .dms-dock[data-dms-surface="glass"] .dms-rail { background: var(--surface-raised); -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .dms-dock[data-dms-surface="glass"] .dms-sec { background: var(--dms-leaf); }
+  }
+  @media (min-width: 701px) and (prefers-reduced-transparency: reduce) {
+    html.dms-docked.dms-glass :is(#beside-row, .cta-host, #checkup-strip) { margin-right: var(--dms-w, 320px); }
+  }
+
+  /* No arrange mode or drawer on phone lines: there is no rail. Their
+     surface, density and kit still apply. */
+  @media (max-width: 700px), (hover: none) and (pointer: coarse) {
+    .dms-arrbar, .dms-arr, .dms-laymenu, .dms-sdrawer, .dms-leafslot { display: none !important; }
   }
 }
 

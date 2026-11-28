@@ -84,7 +84,7 @@ func registerCalendarHomebrew(reg *homebrew.Registry) error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: "calendar.roll", Label: "A calendar event is rolled", Check: checkCalendarRoll})
 		},
 		func() error {
-			return reg.RegisterAction(homebrew.ActionDef{Name: "party.effect", Label: "Put an effect on the party", Check: checkPartyEffect})
+			return reg.RegisterAction(homebrew.ActionDef{Name: "party.effect", Label: "Put an effect on the party", Check: checkPartyEffect, Share: sharePartyEffect})
 		},
 	}
 	for _, r := range regs {

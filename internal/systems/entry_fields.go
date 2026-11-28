@@ -28,6 +28,11 @@ const (
 type EntryFieldDef struct {
 	Path   string `json:"path"`
 	Format string `json:"format"`
+	// Once writes the value only when the item is made, never when the entry
+	// changes later: for a value the game system counts into the hero when
+	// the item arrives and takes back when it goes (a career's renown), so a
+	// later rewrite would take back a different amount than it gave.
+	Once bool `json:"once,omitempty"`
 }
 
 // entryFieldPath allows only the item's own system data: never its name,

@@ -194,7 +194,7 @@ func strict(v any, dst any, what, shape string) error {
 }
 
 const (
-	bgShape     = "{kind, seconds, look}"
+	bgShape     = "{kind, in, seconds, look}"
 	ovShape     = "a list of {kind, at, seconds, color, look, pupil}"
 	textShape   = "a list of {say, at, seconds, style, layout, in, out}"
 	endingShape = "{kind: tap} or {kind: auto, after}"
@@ -202,6 +202,7 @@ const (
 
 type aiBackground struct {
 	Kind    string   `json:"kind"`
+	In      string   `json:"in"`
 	Seconds *float64 `json:"seconds"`
 	Look    string   `json:"look"`
 	Params  *Params  `json:"params"`
@@ -327,6 +328,12 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 		if kind == "" {
 			kind = BackgroundFallAsleep
 		}
+		// The look belongs to how it arrives: black that falls asleep takes
+		// falling asleep's looks. An unknown arrival is Normalize's refusal.
+		b.In = strings.ToLower(strings.TrimSpace(b.In))
+		if b.In != "" && known(Arrivals, b.In) {
+			kind = KindFor(BackdropOf(kind), b.In)
+		}
 		lk, err := aiLook(kind, lk, "background")
 		if err != nil {
 			return e, err
@@ -334,7 +341,7 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 		if b.Params != nil && b.Params.Pupil != "" {
 			return e, aiplug.BadRequestf("background: only an eye on top has a pupil")
 		}
-		bg := Background{Kind: b.Kind, Seconds: or(b.Seconds, DefaultSeconds), Params: Params{Look: lk}}
+		bg := Background{Kind: b.Kind, In: b.In, Seconds: or(b.Seconds, DefaultSeconds), Params: Params{Look: lk}}
 		e.background = &bg
 	}
 	if v, ok := r.Fields["overlays"]; ok {
@@ -664,21 +671,32 @@ func (*sceneKind) Export(context.Context, string, aiplug.Actor) (string, error) 
 
 func (*sceneKind) Doc() string {
 	return fmt.Sprintf("A cut scene: a short full-screen moment the Director shows chosen players, matched by `name`. It has three separate layers and an ending; times are seconds from the start. "+
-		"`background` is `{kind, seconds, look}`: kind one of %s, seconds %s to %s (how long it takes to reach full dark; black ignores it), `look` only for fall-asleep: %s. "+
-		"`overlays` (the layers drawn on top, in order, at most %d) is a list of `{kind, at, seconds, color, look, pupil}`: kind one of %s, `at` 0 to %s (when it starts), `seconds` %s to %s (how long it builds up), `color` written #rrggbb (eye default %s; letterbox is always black and takes none), `look` only for eye: %s, `pupil` only for eye: %s. "+
-		"`text` (the words, at most %d lines) is a list of `{say, at, seconds, style, layout, in, out}`: `say` plain text of 1 to %d characters (never HTML or markdown), `at` 0 to %s, `seconds` how long it stays on screen (%s to %s, or 0 to stay to the end), style one of %s. "+
+		"The editor draws a scene as a timeline, one bar per layer, and the block is that timeline written out: a bar starts at `at`, lasts `seconds`, arrives with `in` and leaves with `out`, so the numbers written are the bars the Director sees and can drag. "+
+		"`background` is `{kind, in, seconds, look}`, the first bar, always from the start and to the end: kind %s; `in` how it arrives, one of %s (left out, black is there at once); seconds %s to %s (how long the arrival takes; cut ignores it); `look` only when it falls asleep: %s. The older single kinds %s are still read (`fade-to-black` is black with `in: fade`, `fall-asleep` black with `in: fall-asleep`). "+
+		"`overlays` (the layers drawn on top, in order, at most %d) is a list of `{kind, at, seconds, color, look, pupil}`, each a bar from `at` to the end: kind one of %s, `at` 0 to %s (when it starts), `seconds` %s to %s (how long it builds up, its bar's faded start), `color` written #rrggbb (eye default %s; letterbox is always black and takes none), `look` only for eye: %s, `pupil` only for eye: %s. "+
+		"`text` (the words, at most %d lines) is a list of `{say, at, seconds, style, layout, in, out}`: `say` plain text of 1 to %d characters (never HTML or markdown), `at` 0 to %s, `seconds` how long it stays on screen before it starts to leave (%s to %s, or 0 to stay to the end, with no leaving), style one of %s. "+
 		"`layout` is where it sits, one of %s (leave it out for the middle); lines with the same layout stack in order. `in` is how it arrives, one of %s (leave it out for the style's own), and `out` how it leaves, one of %s (leave it out for a soft blur upwards). "+
 		"Transitions combine freely with any style and background: a title card is a `letterbox` on top with a `caption` line and a `title` line that `in: settle`, and a place card is a `title` and a `whisper` line with `layout: corner, in: slide`. "+
 		"`ending` is `{kind: tap}` (a quiet Close appears once the last layer has finished) or `{kind: auto, after: 3}` (closes by itself that many seconds after the last layer, 0 to %s). "+
 		"Leaving `look` out plays the first look named; leaving `pupil` out draws the look's own (round for rift, slit for almond and gather), and `pupil: slit` makes any eye a dragon's. Numbers outside their range are brought to the nearest allowed value and the review says so; an unknown kind, style, look or pupil, a look on a kind that has none, a pupil on anything but an eye, or a colour not written #rrggbb is refused. "+
 		"On update only the layers written change, and a list (`overlays`, `text`) written replaces that whole list; `rename_to` renames. `action: delete` removes the scene named by `name` and takes no other key. "+
 		"The AI never shows a scene to anyone: who sees it and when is the Director's live choice on the Cut scenes page, so a block naming players, `show`, `to` or a rewatch time is refused. "+
-		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: fall-asleep, seconds: 7, look: ink}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: rift, pupil: slit}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
-		keys(BackgroundKinds), num(MinSeconds), num(MaxSeconds), lookList(BackgroundFallAsleep),
+		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: black, in: fall-asleep, seconds: 7, look: ink}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: rift, pupil: slit}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
+		backdropList(), keys(Arrivals), num(MinSeconds), num(MaxSeconds), lookList(BackgroundFallAsleep), keys(BackgroundKinds),
 		MaxOverlays, keys(OverlayKinds), num(MaxAt), num(MinSeconds), num(MaxSeconds), DefaultEyeColor, lookList(OverlayEye), pupilList(),
 		MaxTextLines, MaxSayChars, num(MaxAt), num(MinSeconds), num(MaxSeconds), keys(TextStyles),
 		keys(TextLayouts), keys(TextArrivals), keys(TextLeavings),
 		num(MaxAfter))
+}
+
+// backdropList names what can be behind the layers: "`black` (the screen
+// goes black) or `none` (…)".
+func backdropList() string {
+	parts := make([]string, 0, len(Backdrops))
+	for _, k := range Backdrops {
+		parts = append(parts, fmt.Sprintf("`%s` (%s)", k.Key, k.Looks))
+	}
+	return strings.Join(parts, " or ")
 }
 
 // pupilList names the eye's pupils for the block's description: "`round`

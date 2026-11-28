@@ -32,6 +32,12 @@ weight that `TestEveryPageScriptBudget` counts.
   was at the end. `numeral` draws the landed number flat on the page, and
   `tarot` deals cards.
 
+**Beside the throw.** The engine also exports the die, light and teardown pieces the
+Dice tray builds its own flat-drawn scene from (`makeDie`, `coloursOf`, `environment`,
+`highlight`, `clearHighlight`, `disposeDie`, `libs`, `shadowTex`, `STEP`); see the rolls
+plugin's `.ai.md`, "The Dice tray". The tray imports the engine by the same bare URL as
+`dice.js`, so there is still one copy.
+
 **Module identity.** Set and crit files `import … from '../engine.js'`. Every
 importer must name the engine by the same bare URL, or the browser runs two
 copies with two registries. That is why `dice.js` imports it with no `?v=`.
