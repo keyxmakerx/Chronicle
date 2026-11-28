@@ -3,6 +3,7 @@ package cutscenes
 import (
 	"math"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,6 +33,25 @@ func TestNormalize(t *testing.T) {
 			}
 		}},
 		{name: "invalid utf-8 refused", edit: func(s *Scene) { s.Name = "bad\xff" }, wantErr: "UTF-8"},
+		{name: "no moments stay nil", edit: func(s *Scene) { s.Moments = []Moment{} }, check: func(t *testing.T, s Scene) {
+			if s.Moments != nil {
+				t.Errorf("moments %+v", s.Moments)
+			}
+		}},
+		{name: "a moment is clamped, trimmed and its ways put in order; none is writing it", edit: func(s *Scene) {
+			s.Moments = []Moment{{At: 500, Ask: " What\ndo they whisper? ", Ways: []Way{{Kind: "Director"}, {Kind: "write"}, {Kind: "write"}}, To: "one", Note: " the\tbell "}, {At: -2, Ask: "Q", To: "each"}}
+		}, check: func(t *testing.T, s Scene) {
+			want := []Moment{{At: MaxAt, Ask: "What do they whisper?", Ways: []Way{{Kind: WayWrite}, {Kind: WayDirector}}, To: ToOne, Note: "the bell"}, {At: 0, Ask: "Q", Ways: []Way{{Kind: WayWrite}}}}
+			if !reflect.DeepEqual(s.Moments, want) {
+				t.Errorf("moments %+v", s.Moments)
+			}
+		}},
+		{name: "a moment needs a question", edit: func(s *Scene) { s.Moments = []Moment{{At: 1, Ask: " "}} }, wantErr: "moment 1 has no question"},
+		{name: "a question too long", edit: func(s *Scene) { s.Moments = []Moment{{Ask: strings.Repeat("a", MaxAskChars+1)}} }, wantErr: "the most is 200"},
+		{name: "a note too long", edit: func(s *Scene) { s.Moments = []Moment{{Ask: "Q", Note: strings.Repeat("a", MaxNoteChars+1)}} }, wantErr: "note is 501 characters"},
+		{name: "too many moments", edit: func(s *Scene) { s.Moments = make([]Moment, MaxMoments+1) }, wantErr: "at most 6 moments"},
+		{name: "an unknown way refused by name", edit: func(s *Scene) { s.Moments = []Moment{{Ask: "Q", Ways: []Way{{Kind: "roll"}}}} }, wantErr: `the way to answer "roll" is not one of write, director`},
+		{name: "an unknown answerer refused by name", edit: func(s *Scene) { s.Moments = []Moment{{Ask: "Q", To: "ana"}} }, wantErr: `who answers "ana" is not one of each, one`},
 		{name: "unknown background refused", edit: func(s *Scene) { s.Background.Kind = "explode" }, wantErr: `the background "explode" is not one of fall-asleep`},
 		{name: "empty background defaults to falling asleep", edit: func(s *Scene) { s.Background = Background{} }, check: func(t *testing.T, s Scene) {
 			if s.Background.Kind != BackgroundFallAsleep || s.Background.Seconds != DefaultSeconds {
@@ -322,6 +342,16 @@ func TestSceneFromForm(t *testing.T) {
 				t.Errorf("after read on tap")
 			}
 		}},
+		{name: "moments line up by row, their ways split, and spare rows are skipped", form: url.Values{
+			"name": {"N"}, "mo_ask": {"Why?", " ", "Who?"}, "mo_at": {"4", "9", "7,5"}, "mo_ways": {"write director", "write", "director"},
+			"mo_to": {"", "each", "one"}, "mo_note": {"mine", "", ""},
+		}, check: func(t *testing.T, s Scene) {
+			want := []Moment{{At: 4, Ask: "Why?", Ways: []Way{{Kind: "write"}, {Kind: "director"}}, Note: "mine"}, {At: 7.5, Ask: "Who?", Ways: []Way{{Kind: "director"}}, To: "one"}}
+			if !reflect.DeepEqual(s.Moments, want) {
+				t.Errorf("moments %+v", s.Moments)
+			}
+		}},
+		{name: "a moment's time is a number", form: url.Values{"name": {"N"}, "mo_ask": {"Q"}, "mo_at": {"soon"}}, wantErr: "moment 1's time"},
 		{name: "a word is not a number", form: url.Values{"name": {"N"}, "bg_seconds": {"seven"}}, wantErr: "the background's time must be a number"},
 		{name: "NaN is not a number", form: url.Values{"name": {"N"}, "ov_kind": {"eye"}, "ov_at": {"NaN"}}, wantErr: "layer on top 1's start"},
 		{name: "Inf is not a number", form: url.Values{"name": {"N"}, "tx_say": {"x"}, "tx_seconds": {"Inf"}}, wantErr: "words 1's time on screen"},

@@ -106,6 +106,22 @@ func SceneBlock(s Scene) string {
 				optField("layout", t.Layout), optField("in", t.In), optField("out", t.Out))
 		}
 	}
+	// Moments only when there are some, so an older scene's block reads as
+	// it always did.
+	if len(s.Moments) > 0 {
+		b.WriteString("moments:\n")
+		for _, m := range s.Moments {
+			ways := make([]string, 0, len(m.Ways))
+			for _, w := range m.Ways {
+				ways = append(ways, w.Kind)
+			}
+			note := ""
+			if m.Note != "" {
+				note = ", note: " + aiplug.Quote(m.Note)
+			}
+			fmt.Fprintf(&b, "  - {at: %s, ask: %s, ways: [%s]%s%s}\n", num(m.At), aiplug.Quote(m.Ask), strings.Join(ways, ", "), optField("to", m.To), note)
+		}
+	}
 	if s.Ending.Kind == EndingAuto {
 		after := DefaultAfter
 		if s.Ending.After != nil {
@@ -184,6 +200,8 @@ func writeCatalog(b *strings.Builder) {
 	section("Where words sit (`text[].layout`); left out, the middle", TextLayouts)
 	section("How words arrive (`text[].in`); left out, the style's own", TextArrivals)
 	section("How words leave (`text[].out`); left out, a soft blur upwards", TextLeavings)
+	section("Ways to answer a moment (`moments[].ways`); left out, they write it", WayKinds)
+	section("Who answers a moment (`moments[].to`); left out, each person watching", Answerers)
 	section("Endings (`ending.kind`)", EndingKinds)
 	fmt.Fprintf(b, "Players can always close a scene with Esc or a small close mark after 2 seconds. A good scene is short: the background reaches dark, one or two things appear, a line or two of words, all within about %s.\n", Secs(20))
 }
