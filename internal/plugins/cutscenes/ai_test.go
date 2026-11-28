@@ -95,6 +95,17 @@ func TestAIPlan(t *testing.T) {
 		{name: "update with nothing", actor: aDirector, on: true, r: rec("update", "Existing", nil), wantErr: "nothing to change"},
 		{name: "update says only what changes", actor: aDirector, on: true, r: rec("update", "Existing", map[string]any{"ending": map[string]any{"kind": "auto", "after": 4}, "rename_to": "Renamed"}),
 			want: []string{`changes the cut scene "Existing"`, `renames it to "Renamed"`, "Ending: closes by itself 4 s after the last layer"}},
+		{name: "moments are read and said, the note marked as the Director's", actor: aDirector, on: true, r: rec("create", "Asks", map[string]any{
+			"moment": []any{map[any]any{"at": 12, "ask": "What do they whisper?", "ways": []any{"director", "write"}, "to": "one", "note": "the bell"}}}),
+			want: []string{`Moment: holds at 12 s to ask "What do they whisper?", one person: write it or leave it to the director (your note: "the bell")`}},
+		{name: "an unknown way to answer is refused by name", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"moments": []any{map[string]any{"ask": "Q", "ways": []any{"dance"}}}}),
+			wantErr: `the way to answer "dance" is not one of write, director`},
+		{name: "a moment with no question is refused", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"moments": []any{map[string]any{"at": 3}}}),
+			wantErr: "moment 1 has no question"},
+		{name: "an unknown key in a moment is refused by name", actor: aDirector, on: true, r: rec("create", "X", map[string]any{"moments": []any{map[string]any{"ask": "Q", "answer": "yes"}}}),
+			wantErr: `no key "answer"`},
+		{name: "moments: [] clears them", actor: aDirector, on: true, r: rec("update", "Existing", map[string]any{"moments": []any{}}),
+			want: []string{"Moments: none"}},
 		{name: "delete takes the name only", actor: aDirector, on: true, r: rec("delete", "Existing", map[string]any{"text": []any{}}), wantErr: "nothing else"},
 		{name: "delete warns", actor: aDirector, on: true, r: rec("delete", "Existing", nil), want: []string{`deletes the cut scene "Existing" for good`}},
 	}

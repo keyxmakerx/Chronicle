@@ -2,6 +2,7 @@ package cutscenes
 
 import (
 	"fmt"
+	"strings"
 	"text/template"
 	"time"
 
@@ -185,6 +186,28 @@ func bgKindOnChange() templ.ComponentScript {
 // and a pupil.
 func ovKindOnChange() templ.ComponentScript {
 	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});var c=r.querySelector('[data-csw-ov-color]');if(c){c.hidden=s.value===`+jsStr(OverlayLetterbox)+`;}})(this)`)
+}
+
+// wayChoices are the editor's ways to answer a moment, as the Director
+// reads them: the value is the kinds it stores, space-separated.
+func wayChoices() []Kind {
+	return []Kind{
+		{Key: WayWrite, Name: "They write it"},
+		{Key: WayDirector, Name: "You answer it"},
+		{Key: WayWrite + " " + WayDirector, Name: "They write it, or leave it to you"},
+	}
+}
+
+// waysValue is a moment's ways as the editor's select value.
+func waysValue(ws []Way) string {
+	ks := make([]string, 0, len(ws))
+	for _, w := range ws {
+		ks = append(ks, w.Kind)
+	}
+	if len(ks) == 0 {
+		return WayWrite
+	}
+	return strings.Join(ks, " ")
 }
 
 func afterValue(e Ending) string {
