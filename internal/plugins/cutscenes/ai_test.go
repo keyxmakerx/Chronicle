@@ -232,7 +232,7 @@ func TestAILookup(t *testing.T) {
 func TestAIDocNamesEveryKind(t *testing.T) {
 	_, ai := newAIRig(true)
 	doc := ai.Kinds()[0].Doc()
-	for _, list := range [][]Kind{BackgroundKinds, OverlayKinds, TextStyles, EndingKinds} {
+	for _, list := range [][]Kind{BackgroundKinds, OverlayKinds, TextStyles, TextLayouts, TextArrivals, TextLeavings, EndingKinds} {
 		for _, k := range list {
 			if !strings.Contains(doc, k.Key) {
 				t.Errorf("Doc lacks %q", k.Key)

@@ -8,7 +8,7 @@
 # this one, so the sync bench tests the two together.
 # tools/check-foundry-vendored.sh and TestVendoredManifestMatchesFiles fail
 # when a listed file no longer matches its hash.
-69533c967f80  static/js/cutscene_engine.js  cutscenes
+a35d95a9a6bf  static/js/cutscene_engine.js  cutscenes
 58a97f609643  static/js/widgets/gl_shared.js  sky
 3d40b9a9065f  static/js/widgets/shop_room.js  shop
 2c4a64793ff5  static/js/widgets/shop_room_counter.js  shop

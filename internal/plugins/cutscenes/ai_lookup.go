@@ -84,7 +84,11 @@ func SceneBlock(s Scene) string {
 	} else {
 		b.WriteString("overlays:\n")
 		for _, o := range s.Overlays {
-			fmt.Fprintf(&b, "  - {kind: %s, at: %s, seconds: %s, color: %s%s}\n", o.Kind, num(o.At), num(o.Seconds), strconv.Quote(o.Params.Color), lookField(o.Params.Look)+pupilField(o.Params.Pupil))
+			color := ""
+			if o.Params.Color != "" {
+				color = ", color: " + strconv.Quote(o.Params.Color)
+			}
+			fmt.Fprintf(&b, "  - {kind: %s, at: %s, seconds: %s%s%s}\n", o.Kind, num(o.At), num(o.Seconds), color, lookField(o.Params.Look)+pupilField(o.Params.Pupil))
 		}
 	}
 	if len(s.Text) == 0 {
@@ -92,7 +96,8 @@ func SceneBlock(s Scene) string {
 	} else {
 		b.WriteString("text:\n")
 		for _, t := range s.Text {
-			fmt.Fprintf(&b, "  - {say: %s, at: %s, seconds: %s, style: %s}\n", aiplug.Quote(t.Say), num(t.At), num(t.Seconds), t.Style)
+			fmt.Fprintf(&b, "  - {say: %s, at: %s, seconds: %s, style: %s%s%s%s}\n", aiplug.Quote(t.Say), num(t.At), num(t.Seconds), t.Style,
+				optField("layout", t.Layout), optField("in", t.In), optField("out", t.Out))
 		}
 	}
 	if s.Ending.Kind == EndingAuto {
@@ -105,6 +110,15 @@ func SceneBlock(s Scene) string {
 		b.WriteString("ending: {kind: tap}\n")
 	}
 	return b.String()
+}
+
+// optField is a block's `key: value` for a choice left at its default when
+// empty, so pasting the block back keeps it so.
+func optField(key, v string) string {
+	if v == "" {
+		return ""
+	}
+	return ", " + key + ": " + v
 }
 
 // pupilField is a block's `pupil:` for an eye that names one.
@@ -161,6 +175,9 @@ func writeCatalog(b *strings.Builder) {
 	}
 	b.WriteString("\n")
 	section("Text styles (`text[].style`)", TextStyles)
+	section("Where words sit (`text[].layout`); left out, the middle", TextLayouts)
+	section("How words arrive (`text[].in`); left out, the style's own", TextArrivals)
+	section("How words leave (`text[].out`); left out, a soft blur upwards", TextLeavings)
 	section("Endings (`ending.kind`)", EndingKinds)
 	fmt.Fprintf(b, "Players can always close a scene with Esc or a small close mark after 2 seconds. A good scene is short: the background reaches dark, one or two things appear, a line or two of words, all within about %s.\n", Secs(20))
 }
