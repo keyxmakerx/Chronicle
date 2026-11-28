@@ -21,7 +21,7 @@ group() {
   local f
   case "$1" in
     general)    for f in test/js/*.test.mjs; do [[ $f == test/js/dice_*browser.test.mjs ]] || echo "$f"; done ;;
-    dice)       echo test/js/dice_browser.test.mjs ;;
+    dice)       echo test/js/dice_browser.test.mjs; echo test/js/dice_tray_browser.test.mjs ;;
     crits-succ) echo test/js/dice_crits_succ_browser.test.mjs ;;
     crits-fail) echo test/js/dice_crits_fail_browser.test.mjs ;;
     all)        ls test/js/*.test.mjs ;;
