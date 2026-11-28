@@ -8,7 +8,9 @@
 // room its own address for the picture. In Arrange the owner picks one of the
 // campaign's pictures (other files are left out), moves it, uploads a new one
 // and takes it away, and Save room sends it in the theme. The view outside
-// (a scene in place of the town) is picked and saved the same way.
+// (a scene in place of the town) is picked and saved the same way. The
+// campaign's own sky (outside: live) is painted by the header's sky into the
+// window and the shop door's panes, and lights the room for its hour.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -206,4 +208,48 @@ test('the owner picks the view outside, and Save room sends it', { skip, timeout
   await p.waitForFunction(() => window.__calls.filter((c) => c.m === 'PUT').length === 2);
   assert.equal('scene' in (await p.evaluate(() => window.__calls.filter((c) => c.m === 'PUT')[1])).body.counter.theme, false, 'the town is saved as no view');
   assert.deepEqual(errors, []);
+});
+
+// The campaign's own sky: the window holds a box the header's sky paints
+// into, for the default calendar this viewer may see, and the room is lit
+// for the hour that calendar is at.
+const LIVE_STUBS = (alt, weather, hold) => `
+  window.__skies = [];
+  var gate = ${hold ? 'new Promise(function (r) { window.__release = r; })' : 'Promise.resolve()'};
+  window.SkyPane = { Scene: {
+    getJSON: function (u) { window.__calls.push({ m: 'GET', url: u }); return gate.then(function () { return /\\/calendars\\/list$/.test(u) ? [{ id: 'other', is_default: false }, { id: 'cal9', is_default: true }] : { current_year: 1, current_month: 1, current_day: 1, current_hour: 12 }; }); },
+    dayWeather: function () { return Promise.resolve(${JSON.stringify(weather)}); } } };
+  window.SkyWorld = { D2R: Math.PI / 180, hour24: function () { return 12; }, makeSkym: function () { return { sun: function () { return { alt: ${alt} * Math.PI / 180 }; } }; } };
+  window.SkyLooks = { spec: function (w) { return { like: w && w.preset_id || 'clear' }; } };
+  Chronicle.headerSky = { mount: function (el, o) { window.__skies.push({ o: o, inWindow: !!el.closest('[clip-path="url(#cm-oclip)"]'), canvas: !!el.querySelector('canvas') }); var k = { live: true, destroy: function () { k.live = false; } }; window.__skies[window.__skies.length - 1].k = k; return k; } };`;
+
+test("the campaign's own sky fills the window and lights the room for its hour", { skip, timeout: 120000 }, async (t) => {
+  const browser = await launch(t);
+  const live = () => { const c = smithy(null); c.theme.outside = 'live'; return c; };
+  const showing = (p) => p.evaluate(() => window.__skies.filter((s) => s.k.live).map((s) => ({ o: s.o, inWindow: s.inWindow, canvas: s.canvas })));
+  const { p, errors } = await open(browser, live(), { before: LIVE_STUBS(40, null) });
+  // The sun is up, so the room is drawn again for the day: the drawn sky under the live one is the day's.
+  await p.waitForFunction(() => !!document.querySelector('#cm-osky stop[stop-color="#5a86c0"]') && window.__skies.some((s) => s.k.live));
+  assert.deepEqual(await showing(p), [{ o: { campaignId: 'c1', calendarId: 'cal9' }, inWindow: true, canvas: true }], 'one sky, in the window, from the default calendar');
+  assert.equal(await p.evaluate(() => document.querySelectorAll('[data-live-sky]').length), 1);
+  assert.equal(await p.evaluate(() => window.__calls.filter((c) => /calendars\/list$/.test(c.url)).length), 1, 'the calendar is looked up once');
+  await p.click('.src-turn');
+  // On the shop floor the door's panes show the same sky, and the window's is put away.
+  await p.waitForFunction(() => !!document.querySelector('[data-k="door"] [data-live-sky]') && window.__skies.filter((s) => s.k.live).length === 1 && !document.querySelector('#cm-osky'));
+  assert.equal(await p.evaluate(() => window.__skies.filter((s) => s.k.live)[0].inWindow), false);
+  const { p: wet } = await open(browser, live(), { before: LIVE_STUBS(40, { preset_id: 'thunderstorm' }) });
+  await wet.waitForFunction(() => !!document.querySelector('[clip-path="url(#cm-oclip)"] .cm-rain'));
+  const { p: dark } = await open(browser, live(), { before: LIVE_STUBS(-40, null) });
+  await dark.waitForFunction(() => window.__skies.some((s) => s.k.live));
+  assert.ok(await dark.evaluate(() => !!document.querySelector('#cm-osky stop[stop-color="#0b1430"]')), 'night until and after the reading');
+  // Closed before the calendar answers: the late reading draws no room and mounts no sky.
+  const { p: shut, errors: shutErrors } = await open(browser, live(), { before: LIVE_STUBS(40, null, true) });
+  await shut.waitForFunction(() => typeof window.__release === 'function' && window.__calls.some((c) => /calendars\/list$/.test(c.url)));
+  await shut.evaluate(() => { const h = document.querySelector('.shr-counter'); window.__stage = h.querySelector('.src-stage'); window.__svg = window.__stage.querySelector('.src-svg'); window.ShopRoomCounter.destroy(h); window.__release(); });
+  await shut.waitForTimeout(400);
+  assert.equal(await shut.evaluate(() => document.querySelector('.shr-counter').innerHTML), '', 'the closed room stays empty');
+  assert.equal(await shut.evaluate(() => window.__stage.querySelector('.src-svg') === window.__svg), true, 'the closed room is not drawn again');
+  assert.equal(await shut.evaluate(() => window.__skies.length), 0, 'no sky is mounted');
+  assert.deepEqual(errors, []);
+  assert.deepEqual(shutErrors, []);
 });

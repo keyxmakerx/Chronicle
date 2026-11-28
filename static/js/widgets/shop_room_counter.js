@@ -371,8 +371,8 @@
     return GRAIN;
   }
 
-  /* The window's sky, from the room's time of day. TODO(#1839): the
-     campaign calendar's own sky, as the header shows it. */
+  /* The window's drawn sky for a time of day. With the theme's outside set
+     to 'live' the campaign calendar's own sky is painted over it (cmLiveBox). */
   var SKY = { '': ['#5a86c0', '#a8c4e0'], dawn: ['#3a4a7a', '#e8a888'], dusk: ['#2a2a5a', '#d87a5a'], night: ['#0b1430', '#2a3b66'] };
   function skyArt(id, x, y, w, h, time) {
     var c = SKY[time] || SKY[''], s = lin(id, 1, [[0, c[0]], [1, c[1]]]), R = rng(7), i;
@@ -520,7 +520,8 @@
     counter: ['straight', 'curved', 'stall-table'],
     wall: ['plaster', 'stone', 'timber', 'brick', 'canvas', 'night-sky'],
     light: ['lamp', 'forge', 'candles', 'lanterns', 'moonlight'],
-    outside: ['day', 'dusk', 'night', 'rain'],
+    // 'live' is the campaign's own sky: its calendar's time and the day's weather.
+    outside: ['day', 'dusk', 'night', 'rain', 'live'],
     // What stands outside under that sky; the town is the room's own, the parts packs add the rest.
     scene: ['town']
   };
@@ -594,7 +595,8 @@
     var L = CM_LIGHT[th.light], w = th.warmth;
     t.lc = th.light === 'moonlight' ? mix(L.base, '#ffd8b0', w * .4) : mix(mix(L.base, '#c0d0ff', .55), L.base, w);
     t.amb = mix(L.amb, '#4a3a4c', w * .4); t.L = L;
-    t.time = { day: '', dusk: 'dusk', night: 'night', rain: 'rain' }[th.outside];
+    t.live = th.outside === 'live';
+    t.time = t.live ? cmLiveNow : { day: '', dusk: 'dusk', night: 'night', rain: 'rain' }[th.outside];
     t.pic = th.picture || null; skyPic = false;
     t.scene = th.scene || 'town'; curScene = t;
     // Where the light sits: on the counter, hung from the ceiling over a stall, in the forge's mouth, or from above through the opening.
@@ -634,7 +636,7 @@
       rad('cm-glow', [[0, t.L.glow, .9], [.4, t.L.glow, .25], [1, t.L.glow, 0]]) + rad('cm-bloom', [[0, '#fffbea', .95], [.14, t.L.glow, .55], [.45, t.L.glow, .1], [1, t.L.glow, 0]]) +
       rad('cm-acc', [[0, acc, .85], [.5, acc, .22], [1, acc, 0]]) +
       rad('cm-shade', shade(t.shadeStops), ' gradientUnits="userSpaceOnUse" cx="' + f1(cx) + '" cy="' + f1(cy) + '" r="' + t.L.reach + '" gradientTransform="translate(' + f1(cx) + ' ' + f1(cy) + ') scale(1 .74) translate(' + f1(-cx) + ' ' + f1(-cy) + ')"') +
-      rad('cm-vig', [[.55, '#000', 0], [1, '#000', .55]], ' cx=".5" cy=".46" r=".8"') + lin('cm-shaft', 1, [[0, th.outside === 'day' ? '#fff0c0' : '#a9bcff', th.outside === 'day' ? .22 : .2], [1, '#a9bcff', 0]]) +
+      rad('cm-vig', [[.55, '#000', 0], [1, '#000', .55]], ' cx=".5" cy=".46" r=".8"') + lin('cm-shaft', 1, [[0, t.time === '' ? '#fff0c0' : '#a9bcff', t.time === '' ? .22 : .2], [1, '#a9bcff', 0]]) +
       lin('cm-glass', 1, [[0, '#cfe8ff', .22], [.5, '#ffffff', .05], [1, '#cfe8ff', .18]]) +
       '<clipPath id="cm-tclip"><circle cx="641" cy="250" r="92"/></clipPath>';
   }
@@ -669,11 +671,65 @@
     return cmSkyOwn(t, id, x, y, w, h);
   }
   function cmSkyOwn(t, id, x, y, w, h) {
+    return cmSkyDrawn(t, id, x, y, w, h) + (t.live ? cmLiveBox(x, y, w, h) : '');
+  }
+  function cmSkyDrawn(t, id, x, y, w, h) {
     if (t.time !== 'rain') return skyArt(id, x, y, w, h, t.time);
     var c = CM_SKY.rain, r = rng(13), s = '<defs>' + lin(id, 1, [[0, c[0]], [1, c[1]]]) + '</defs><rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#' + id + ')"/>', i;
     for (i = 0; i < 6; i++) s += '<ellipse cx="' + f1(x + r() * w) + '" cy="' + f1(y + h * (.08 + r() * .4)) + '" rx="' + f1(w * (.14 + r() * .12)) + '" ry="' + f1(h * (.05 + r() * .04)) + '" fill="#2c3648" opacity="' + f1(.28 + r() * .22) + '" filter="url(#src-blur14)"/>';
     return s;
   }
+  /* ---- The campaign's own sky (outside: 'live'). The window holds a box the
+     header's sky (header_sky.js, Chronicle.headerSky) paints into, over the
+     drawn sky of the same hour, which shows until the live one is ready and
+     stays if it can't be read. Inside a baked layer (the open-air lane) the
+     box is lost with the bake and the drawn sky of that hour is what shows.
+     The room's own light follows the calendar too: cmLiveNow is the time of
+     day the last reading gave, set before a room is composed. ---- */
+  var cmLiveNow = 'night', CM_LIVE = {}, CM_LIVE_MS = 5 * 60 * 1000;
+  function cmLiveBox(x, y, w, h) {
+    return '<foreignObject x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" data-live-sky="1" pointer-events="none"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%"><canvas style="display:block;width:100%;height:100%"></canvas></div></foreignObject>';
+  }
+  // Which calendar draws a campaign's sky: a host (the Foundry module) may
+  // say through skySource; otherwise the default calendar this viewer may see.
+  function cmLiveSource(cid) {
+    var f = window.ShopRoomCounter && window.ShopRoomCounter.skySource, S = window.SkyPane && window.SkyPane.Scene;
+    if (typeof f === 'function') return Promise.resolve(f(cid)).catch(function () { return null; });
+    if (!cid || !S) return Promise.resolve(null);
+    return S.getJSON('/campaigns/' + encodeURIComponent(cid) + '/calendars/list').then(function (l) {
+      l = Array.isArray(l) ? l : (l && l.data) || [];
+      var c = l.filter(function (x) { return x && x.is_default; })[0] || l[0];
+      return c && c.id ? { campaignId: cid, calendarId: String(c.id) } : null;
+    }, function () { return null; });
+  }
+  // The room's time of day from the calendar's sun and the day's weather:
+  // day, dusk (the sun near the horizon either side of it), night, or rain.
+  function cmLiveTime(src) {
+    var S = window.SkyPane && window.SkyPane.Scene, SW = window.SkyWorld, LK = window.SkyLooks;
+    if (!S || !SW) return Promise.resolve(null);
+    var base = '/campaigns/' + encodeURIComponent(src.campaignId) + '/calendars/' + encodeURIComponent(src.calendarId);
+    return S.getJSON(base).then(function (cal) {
+      return S.dayWeather(src.campaignId, src.calendarId, cal).then(function (w) {
+        var like = w && LK && LK.spec ? String(LK.spec(w).like || '') : '';
+        if (/rain|drizzle|storm|monsoon|shower|sleet|hail|lightning/.test(like)) return 'rain';
+        var sun = SW.makeSkym(cal).sun(cal.current_year, cal.current_month, cal.current_day, SW.hour24(cal, cal.current_hour || 0, cal.current_minute || 0));
+        var alt = sun.alt / (SW.D2R || Math.PI / 180);
+        return alt > 4 ? '' : alt > -14 ? 'dusk' : 'night';
+      });
+    }).catch(function () { return null; });
+  }
+  // One reading per campaign, read again once it is a few minutes old.
+  function cmLive(cid) {
+    var e = CM_LIVE[cid];
+    if (e && Date.now() - e.at < CM_LIVE_MS) return e.p;
+    e = CM_LIVE[cid] = { at: Date.now(), time: e ? e.time : null };
+    e.p = cmLiveSource(cid).then(function (src) {
+      if (!src) return null;
+      return cmLiveTime(src).then(function (tm) { if (tm !== null) e.time = tm; return { src: src, time: e.time }; });
+    });
+    return e.p;
+  }
+
   /* What stands outside, drawn by the scene the theme names. Openings ask for
      it as a skyline in the lower part of their view (anything drawn above
      that is clipped by the opening). The room in hand is the one cmCtx last
@@ -1996,7 +2052,7 @@
     function setModel(m) {
       R.model = { its: m.its || [], basket: m.basket || {}, icons: m.icons || window.ShopRoomIcons || {}, image: m.image || '', name: m.name || 'Shop', roomType: m.roomType || 'general', time: m.time || '', lines: !!m.lines,
         today: m.today && m.today.line ? { line: String(m.today.line), said: String(m.today.said || '') } : null,
-        counter: m.counter && typeof m.counter === 'object' ? m.counter : null, edit: !!m.edit };
+        counter: m.counter && typeof m.counter === 'object' ? m.counter : null, edit: !!m.edit, campaignId: m.campaignId ? String(m.campaignId) : '' };
       R.place = layout(R.model.its); R.icons = R.model.icons; R.seed = seedOf(R.model.name);
     }
     setModel(model);
@@ -2143,6 +2199,7 @@
     function mountView(which) {
       if (view && view.destroy) view.destroy();
       where = which; R.dragging = false; hov = null; hideCard(); closeMenu();
+      var lv = CM_LIVE[R.model.campaignId]; cmLiveNow = lv && lv.time !== null ? lv.time : 'night'; liveDrawn = cmLiveNow;
       view = VIEWS[which](R);
       var defs = common() + view.defs(), s = document.createElementNS(NS, 'svg');
       s.setAttribute('viewBox', '0 0 ' + W + ' ' + H); s.setAttribute('class', 'src-svg'); s.setAttribute('role', 'img'); s.setAttribute('aria-label', view.label);
@@ -2154,7 +2211,28 @@
       stage.classList.add('src-baking'); clearTimeout(veilT);
       veilT = setTimeout(function () { if (stage.classList.contains('src-baking')) stage.classList.add('src-veil'); }, 60);
       bake(s, defs, function () { if (R.svg !== s) return; clearTimeout(veilT); stage.classList.remove('src-baking', 'src-veil'); prebake(); });
-      view.afterDraw(); view.hint(); addNav(); camApply();
+      view.afterDraw(); view.hint(); addNav(); camApply(); liveMount(s);
+    }
+    /* The live sky: each box the room drew outside a baked layer gets the
+       campaign's sky. Once the calendar is read, a room lit for another hour
+       is drawn again for this one. */
+    var skies = [], liveDrawn = 'night', dead = false;
+    function liveDrop() { skies.forEach(function (k) { try { k.destroy(); } catch (e) { /* already gone */ } }); skies = []; }
+    function liveMount(s) {
+      liveDrop();
+      var boxes = [].slice.call(s.querySelectorAll('[data-live-sky] canvas'));
+      if (!boxes.length) return;
+      cmLive(R.model.campaignId).then(function (got) {
+        // A reading that lands after the room was closed or redrawn draws nothing.
+        if (!got || dead || R.svg !== s || !s.isConnected) return;
+        var H = window.Chronicle && window.Chronicle.headerSky;
+        boxes.forEach(function (c) {
+          if (!H || c.closest('[data-bake]') || !c.isConnected) return;
+          var k = H.mount(c.parentNode, { campaignId: got.src.campaignId, calendarId: got.src.calendarId });
+          if (k) skies.push(k);
+        });
+        if (got.time !== null && got.time !== liveDrawn && where === 'counter' && !busy) mountView('counter');
+      });
     }
     /* Once the first view is lit, the other views' lighting is baked out of
        sight, one at a time, so turning round or opening the case never waits
@@ -2250,7 +2328,7 @@
       where: function () { return where; },
       go: go,
       destroy: function () {
-        pause(true); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
+        dead = true; pause(true); liveDrop(); clearTimeout(veilT); clearTimeout(goT); clearTimeout(preT); pre = null; clearTimeout(arriveT); if (view && view.destroy) view.destroy();
         document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey);
         host.innerHTML = '';
       }

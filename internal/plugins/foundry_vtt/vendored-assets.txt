@@ -10,8 +10,8 @@
 # when a listed file no longer matches its hash.
 a35d95a9a6bf  static/js/cutscene_engine.js  cutscenes
 58a97f609643  static/js/widgets/gl_shared.js  sky
-3d40b9a9065f  static/js/widgets/shop_room.js  shop
-2c4a64793ff5  static/js/widgets/shop_room_counter.js  shop
+2c7ceb7cd2e6  static/js/widgets/shop_room.js  shop
+4078e91d6455  static/js/widgets/shop_room_counter.js  shop
 c20c1dbc2311  static/js/widgets/shop_room_icons.js  shop
 88519f50100b  static/js/widgets/shop_room_keeper.js  shop
 58550cb3b961  static/js/widgets/shop_room_paper.js  shop
