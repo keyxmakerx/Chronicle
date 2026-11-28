@@ -205,10 +205,7 @@ func (h *StashAPIHandler) Give(c *echo.Context) error {
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	out, err := h.svc.Give(c.Request().Context(), c.Param("id"), uid, StashGiveRequest{
-		ActingUserID: body.ActingUserID, CharacterID: body.CharacterID,
-		ItemID: body.ItemID, MapID: body.MapID, Quantity: body.Quantity,
-	})
+	out, err := h.svc.Give(c.Request().Context(), c.Param("id"), uid, StashGiveRequest(body))
 	if err != nil {
 		return err
 	}
