@@ -174,6 +174,24 @@ func (s *sqlRunStore) ListRuns(ctx context.Context, campaignID string, held bool
 	return out, rows.Err()
 }
 
+func (s *sqlRunStore) ListRunningAsks(ctx context.Context, campaignID string, limit int) ([]Run, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+runCols+` FROM homebrew_runs
+		WHERE campaign_id = ? AND status = ? AND ask_at IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT ?`, campaignID, RunRunning, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list running asks: %w", err)
+	}
+	defer rows.Close()
+	out := []Run{}
+	for rows.Next() {
+		r, err := scanRun(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list running asks: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (s *sqlRunStore) ListAsks(ctx context.Context, campaignID, userID string, limit int) ([]Run, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+runCols+` FROM homebrew_runs
 		WHERE campaign_id = ? AND (created_by = ? OR wait_for = ?) AND ask_at IS NOT NULL

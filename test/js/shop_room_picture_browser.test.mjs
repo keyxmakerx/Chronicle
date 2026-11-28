@@ -7,7 +7,8 @@
 // opening's view with the drawn skyline standing down. A host may hand the
 // room its own address for the picture. In Arrange the owner picks one of the
 // campaign's pictures (other files are left out), moves it, uploads a new one
-// and takes it away, and Save room sends it in the theme.
+// and takes it away, and Save room sends it in the theme. The view outside
+// (a scene in place of the town) is picked and saved the same way.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -142,5 +143,67 @@ test('the owner picks, moves, uploads and takes away the picture, and Save room 
   await p.evaluate(() => { document.querySelector('[data-cb-pic]').closest('details').open = true; });
   await p.click('[data-cb-picoff]');
   await p.waitForFunction(() => !document.querySelector('.src-svg [data-pic]'));
+  assert.deepEqual(errors, []);
+});
+
+// The view outside is part of the same backdrop: picked in Arrange, drawn in
+// the opening in place of the town, and saved without a word for the town.
+test("the shop floor's door shows the window's sky, view and picture", { skip, timeout: 120000 }, async (t) => {
+  const browser = await launch(t);
+  const pane = async (counter) => {
+    const { p, errors } = await open(browser, counter);
+    await p.click('.src-turn');
+    await p.waitForSelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]');
+    const h = await p.evaluate(() => document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]').innerHTML);
+    assert.deepEqual(errors, []);
+    return h;
+  };
+  const night = (scene, picture) => { const c = smithy(picture || null); c.theme.outside = 'night'; if (scene) c.theme.scene = scene; return c; };
+  const town = await pane(night(''));
+  const castle = await pane(night('castle'));
+  assert.match(town, /stop-color="#0b1430"/, 'the night the theme names, not the shop’s own time');
+  assert.notEqual(castle, town, 'the view outside follows the theme');
+  const dusk = smithy(null); dusk.theme.scene = 'castle';
+  assert.match(await pane(dusk), /stop-color="#2a2a5a"/, 'and so does the sky');
+  assert.match(await pane(night('', { id: A, on: 'outside', fit: 'fill' })), /data-pic/, 'a picture through the window is through the door too');
+  // Arranging while facing the door shows a new view there straight away, not after turning round.
+  const { p, errors } = await open(browser, night(''));
+  const door = () => p.evaluate(() => document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]').innerHTML);
+  await p.click('[data-mode="arr"]');
+  await p.click('.src-turn');
+  await p.waitForSelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]');
+  const was = await door();
+  const sel = '.shr-cb select[data-cb-path="theme.scene"]';
+  await p.waitForSelector(sel, { state: 'attached' });
+  await p.evaluate((s) => { document.querySelector(s).closest('details').open = true; }, sel);
+  await p.selectOption(sel, 'castle');
+  await p.waitForFunction((w) => { const g = document.querySelector('[data-k="door"] [clip-path="url(#srcf-paneclip)"]'); return g && g.innerHTML !== w; }, was);
+  assert.equal(await door(), castle, 'the door shows the castle the theme now names');
+  assert.deepEqual(errors, []);
+});
+
+test('the owner picks the view outside, and Save room sends it', { skip, timeout: 120000 }, async (t) => {
+  const browser = await launch(t);
+  const { p, errors } = await open(browser, smithy(null));
+  const view = () => p.evaluate(() => document.querySelector('[clip-path="url(#cm-oclip)"]').innerHTML);
+  const town = await view();
+  await p.click('[data-mode="arr"]');
+  const sel = '.shr-cb select[data-cb-path="theme.scene"]';
+  await p.waitForSelector(sel, { state: 'attached' });
+  await p.evaluate((s) => { document.querySelector(s).closest('details').open = true; }, sel);
+  assert.equal(await p.$eval(sel, (e) => e.value), 'town', 'a theme with no view shows the town');
+  await p.selectOption(sel, 'castle');
+  await p.waitForFunction((was) => document.querySelector('[clip-path="url(#cm-oclip)"]').innerHTML !== was, town);
+  await p.click('button:has-text("Save room")');
+  await p.waitForFunction(() => window.__calls.some((c) => c.m === 'PUT'));
+  assert.equal((await p.evaluate(() => window.__calls.find((c) => c.m === 'PUT'))).body.counter.theme.scene, 'castle');
+  await p.click('[data-mode="arr"]');
+  await p.waitForSelector(sel, { state: 'attached' });
+  await p.evaluate((s) => { document.querySelector(s).closest('details').open = true; }, sel);
+  await p.selectOption(sel, 'town');
+  await p.waitForFunction((was) => document.querySelector('[clip-path="url(#cm-oclip)"]').innerHTML === was, town);
+  await p.click('button:has-text("Save room")');
+  await p.waitForFunction(() => window.__calls.filter((c) => c.m === 'PUT').length === 2);
+  assert.equal('scene' in (await p.evaluate(() => window.__calls.filter((c) => c.m === 'PUT')[1])).body.counter.theme, false, 'the town is saved as no view');
   assert.deepEqual(errors, []);
 });

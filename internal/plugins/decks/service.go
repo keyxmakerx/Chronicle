@@ -38,6 +38,9 @@ type Service interface {
 	Draw(ctx context.Context, campaignID, deckID string, v Viewer, in DrawInput) (*ActionResult, error)
 	// Act applies a verb to one copy.
 	Act(ctx context.Context, campaignID, deckID, copyID, verb string, v Viewer, in ActInput) (*ActionResult, error)
+	// AnswerAsk is a Director's answer to a waiting play arriving from Asks
+	// (asks.go): the approve or turn-down itself.
+	AnswerAsk(ctx context.Context, campaignID, deckID, copyID string, v Viewer, a AskAnswer) (*ActionResult, error)
 	// DealCard deals a random pile copy of a named card.
 	DealCard(ctx context.Context, campaignID, deckID string, v Viewer, in DealCardInput) (*ActionResult, error)
 	Shuffle(ctx context.Context, campaignID, deckID string, v Viewer) (*ActionResult, error)
@@ -212,7 +215,10 @@ type service struct {
 	momentNote MomentNotifier
 	poke       func(campaignID string)
 	// story hears stored draws, deals and plays; nil tells no one.
-	story      Story
+	story Story
+	// asks puts waiting plays to the Director; nil leaves them on the deck's
+	// page.
+	asks       Asks
 	switchedOn func(ctx context.Context, campaignID string) bool
 	// looked is when each campaign's moments were last rechecked on a read.
 	looked   map[string]time.Time
@@ -1064,9 +1070,11 @@ func (s *service) Delete(ctx context.Context, campaignID, deckID string, v Viewe
 		return err
 	}
 	before := s.seersNow(ctx, campaignID, cur)
+	asked := s.askedCopies(ctx, campaignID, cur.ID, "")
 	if err := s.repo.DeleteDeck(ctx, campaignID, deckID); err != nil {
 		return apperrorInternal(err)
 	}
+	s.asksGone(ctx, campaignID, cur.ID, asked, v, goneWhy["removed"])
 	s.momentChanged(campaignID)
 	// The deck's cards leave every hand with it, so whoever saw it is told.
 	cur.Players = nil
@@ -1344,9 +1352,11 @@ func (s *service) DeleteCard(ctx context.Context, campaignID, deckID, cardID str
 			invited = om.InvitedUserID
 		}
 	}
+	asked := s.askedCopies(ctx, campaignID, d.ID, cardID)
 	if err := s.repo.DeleteCard(ctx, campaignID, d.ID, cardID); err != nil {
 		return nil, apperrorInternal(err)
 	}
+	s.asksGone(ctx, campaignID, d.ID, asked, v, goneWhy["removed"])
 	if invited != "" && s.notify != nil {
 		s.notify.Changed(campaignID, Audience{Users: []string{invited}})
 	}
