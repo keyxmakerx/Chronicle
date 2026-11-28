@@ -1323,7 +1323,46 @@
     });
   }
 
-  window.ShopRoom = { wealthPrices: wealthPrices, payingWithWealth: payingWithWealth, signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  /* Tells onChange when a shop's wares change, until the returned stop is
+     called. The server's shop.changed carries no content, so the room reads
+     its wares again over HTTP, filtered for the viewer as always. A host with
+     its own connection (the Foundry module) may supply ShopRoom.live(campaignId,
+     shopId, onChange) returning a stop; otherwise this opens the campaign's
+     socket, as an open page does, and reconnects with backoff. A reconnect
+     reads once, since a change meanwhile was announced to nobody. */
+  function liveShelves(cid, sid, onChange) {
+    var host = window.ShopRoom && window.ShopRoom.live;
+    if (typeof host === 'function') {
+      try { var stop = host(cid, sid, onChange); return typeof stop === 'function' ? stop : function () {}; } catch (e) { return function () {}; }
+    }
+    if (!cid || !sid || typeof WebSocket === 'undefined') return function () {};
+    var ws = null, dead = false, timer = 0, delay = 2000, dropped = false, ever = false;
+    function connect() {
+      if (dead) return;
+      var s;
+      try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws?campaign=' + encodeURIComponent(cid)); } catch (e) { return; }
+      ws = s;
+      s.addEventListener('open', function () { ever = true; delay = 2000; if (dropped) { dropped = false; onChange(); } });
+      s.addEventListener('message', function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m && m.type === 'shop.changed' && m.campaignId === cid && m.resourceId === sid) onChange();
+      });
+      s.addEventListener('error', function (e) { if (e.preventDefault) e.preventDefault(); });
+      s.addEventListener('close', function () {
+        if (ws !== s) return;
+        ws = null;
+        // The first socket never opening means not signed in: nothing to
+        // follow. Once one has opened, a retry that fails (the server
+        // restarting, the network gone) keeps retrying with the backoff.
+        if (dead || !ever) return;
+        dropped = true; timer = setTimeout(connect, delay); delay = Math.min(delay * 2, 60000);
+      });
+    }
+    connect();
+    return function () { dead = true; clearTimeout(timer); if (ws) { var s = ws; ws = null; try { s.close(); } catch (e) { /* already closed */ } } };
+  }
+
+  window.ShopRoom = { live: null, wealthPrices: wealthPrices, payingWithWealth: payingWithWealth, signLines: signLines, MOODS: MOODS, MOOD_ORDER: MOOD_ORDER, MOOD_KIND: MOOD_KIND, moodEfx: moodEfx, createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, openRoom: openRoom, shopItems: shopItems, todayShelf: todayShelf, dawnLine: dawnLine, TODAY_SAID: TODAY_SAID, basketSummary: basketSummary, haggled: haggled, normRolls: normRolls, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1697,7 +1736,7 @@
       function counterModel() {
         return { its: S.its, basket: basket, icons: ICONS, image: ds.shopImage, name: S.name, roomType: S.roomType, time: (S.efx || moodEfx(S.mood)).time, lines: S.lines.length > 0,
           today: today && today.today && today.today.length ? { line: dawnLine(today), said: TODAY_SAID } : null,
-          counter: S.counter, edit: S.mode === 'arr' && cbPlace, campaignId: campaignId };
+          counter: S.counter, edit: S.mode === 'arr' && cbPlace, dress: S.mode === 'arr' && cbOn(), campaignId: campaignId };
       }
       // The counter scene puts goods on the pile through the same rules as the wares list's Add.
       function addable(id) {
@@ -1730,7 +1769,10 @@
         // Moving the shelves and props by hand: a piece was picked, or moved to [dx, dy, size].
         picked: function (k) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.picked) window.ShopRoomBuilder.picked(k); },
         moved: function (k, v, soft) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.moved) window.ShopRoomBuilder.moved(k, v, soft); },
-        opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); }
+        opening: function () { if (window.ShopRoomBuilder) window.ShopRoomBuilder.opening(); },
+        // Dressing by part: a press on a part of the room or a layer opens its choices; the layers were put back together.
+        part: function (k) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.part) window.ShopRoomBuilder.part(k); },
+        layered: function (on) { if (window.ShopRoomBuilder && window.ShopRoomBuilder.layered) window.ShopRoomBuilder.layered(on); }
       };
       /* The counter-room builder (shop_room_builder.js, owner only) reads and
          writes the theme through this. A change is drawn at once and waits for
@@ -1743,7 +1785,10 @@
         set: function (t, soft) { S.counter = t; save(); clearTimeout(cbT); if (soft) cbT = setTimeout(draw, 140); else draw(); },
         reset: function () { S.counter = null; save(); draw(); },
         place: function (v) { if (v === undefined) return cbPlace; cbPlace = !!v; draw(); return cbPlace; },
-        campaign: function () { return { url: campaignUrl, csrf: ds.csrfToken }; }
+        campaign: function () { return { url: campaignUrl, csrf: ds.csrfToken }; },
+        // A small picture of the room dressed as t (cropped to [x, y, w, h]), and the room pulled into its layers.
+        thumb: function (t, crop, cb, alive) { var C = window.ShopRoomCounter; if (C.thumb && counterOn() && dlg.open) C.thumb(cel, t, crop, cb, alive); else cb(''); },
+        layers: function (on) { var C = window.ShopRoomCounter; return !!(C.layers && counterOn() && dlg.open && C.layers(cel, on)); }
       };
       // The scene keeps the drawing's shape and grows to the biggest size the
       // window leaves it, so the portrait and paper stay on their spots.
@@ -1854,11 +1899,12 @@
         // A failed read keeps the wares already shown and says so, rather
         // than drawing an empty shop the player can't tell from a sold-out one.
         return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return null; }).catch(function () { return null; }).then(function (j) {
-          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return; }
+          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return false; }
           rels = (Array.isArray(j) ? j : (j && j.data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
             if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
             r.metadata = r.metadata || {}; return r;
           });
+          return true;
         });
       }
       function doBuy() {
@@ -1866,10 +1912,15 @@
         var items = S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) { return { relationId: it.id, quantity: basket[String(it.id)] }; });
         if (!items.length || busy) return;
         busy = true; note = ''; renderBasket();
-        var bought = false;
+        var bought = false, gone = false, was = shelfSnap();
         Chronicle.apiFetch(buyEndpoint, { method: 'POST', body: { buyerEntityId: payer, items: items }, csrfToken: ds.csrfToken }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
-            if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
+            if (!r.ok) {
+              var msg = (j && (j.message || j.error)) || '', err = new Error(msg || 'That didn’t go through. Try again.');
+              // The server words its stock refusals for the API; the room reads the shelves again and says it for players.
+              err.stock = r.status === 400 && /^(insufficient stock|this item is out of stock)/.test(msg);
+              throw err;
+            }
             var who = buyer(), name = who ? who.name : 'They';
             var what = sm.count + (sm.count === 1 ? ' item' : ' items');
             if (j.status !== 'requested' && counterOn()) window.ShopRoomCounter.bought(cel, sm.count);
@@ -1885,10 +1936,81 @@
             return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
+          // A reload that failed keeps its own note: the basket can't be settled against shelves it couldn't read.
+          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function (ok) {
+            if (!ok[0]) return;
+            draw(); var c = settleBasket(was); note = refusedWords(c); gone = c.sold.length > 0;
+          });
           // A network failure's own text ("Failed to fetch") means nothing
-          // to a player; the server's refusals are already in plain words.
+          // to a player; the server's other refusals are already in plain words.
           note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
-        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); });
+        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); else if (gone) speak('gone'); });
+      }
+      // The wares as they are now, by id: what settleBasket compares against
+      // once the shelves have been read again.
+      function shelfSnap() {
+        var was = {};
+        S.its.forEach(function (it) { was[String(it.id)] = { n: it.n, p: it.p }; });
+        return was;
+      }
+      // After the shelves changed under the basket: it keeps only what is still
+      // for sale, no more than is left. sold is what ran out, off what the GM
+      // took off sale or away, less what was cut to the count left, priced what
+      // now costs something else, so the total never changes unexplained. was
+      // holds the wares as they were, so a listing taken away can still be named.
+      function settleBasket(was) {
+        var now = {}, c = { sold: [], off: [], less: [], priced: [] };
+        S.its.forEach(function (it) { now[String(it.id)] = it; });
+        Object.keys(basket).forEach(function (k) {
+          var it = now[k], q = basket[k];
+          if (!it || it.out) { (it && it.qty === 0 ? c.sold : c.off).push(it ? it.n : (was[k] && was[k].n) || 'item'); delete basket[k]; return; }
+          if (it.qty !== null && q > it.qty) { basket[k] = it.qty; c.less.push(it.qty + ' ' + it.n); }
+          if (was[k] && was[k].p !== it.p) c.priced.push([it.n, it.price]);
+        });
+        return c;
+      }
+      // What changed, in a player's words; empty when the basket didn't.
+      function basketWords(c) {
+        var w = [];
+        if (c.sold.length === 1) w.push('Someone just bought the last ' + c.sold[0] + '.');
+        else if (c.sold.length) w.push('These sold out while you shopped: ' + c.sold.join(', ') + '.');
+        if (c.off.length) w.push(c.off.join(', ') + (c.off.length === 1 ? ' is' : ' are') + ' no longer for sale.');
+        if (c.less.length) w.push((c.sold.length || c.off.length ? 'Only ' : 'Someone just bought some of these. Only ') + c.less.join(', ') + ' left.');
+        if (c.priced.length === 1) w.push(c.priced[0][0] + ' now costs ' + c.priced[0][1] + '.');
+        else if (c.priced.length) w.push('New prices: ' + c.priced.map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + '.');
+        return w.join(' ');
+      }
+      // A buy the server refused whole, so nothing was charged.
+      function refusedWords(c) {
+        var w = basketWords(c);
+        return w ? w + ' Nothing was charged, and your basket is updated.' : 'Some of that just sold out. Nothing was charged; the shelves are up to date, so check your basket and try again.';
+      }
+      // The shelves changed under an open room; empty when the basket didn't.
+      function liveWords(c) {
+        var w = basketWords(c);
+        return w ? w + ' Your basket is updated.' : '';
+      }
+      /* Live shelves: while the room is open, another shopper's purchase, a
+         restock or a new price reads the wares again. A burst of writes (a
+         basket is one per line) is one read, a buy in flight reads them
+         itself, and an owner arranging is left alone until they are done. */
+      var stopLive = null, liveT = 0;
+      function liveOn(on) {
+        if (stopLive) { stopLive(); stopLive = null; }
+        clearTimeout(liveT);
+        if (on) stopLive = liveShelves(campaignId, eid.split('/')[0], function () { clearTimeout(liveT); liveT = setTimeout(shelvesChanged, 700); });
+      }
+      function shelvesChanged() {
+        if (!dlg.open) return;
+        if (busy || S.mode === 'arr') { liveT = setTimeout(shelvesChanged, 1500); return; }
+        var was = shelfSnap();
+        loadGoods().then(function (ok) {
+          if (!ok || !dlg.open) return;
+          draw();
+          var said = liveWords(settleBasket(was));
+          if (said) note = said;
+          renderList();
+        });
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {
@@ -1942,7 +2064,7 @@
       function speak(moment) {
         var KP = window.ShopRoomKeeper; if (!KP || S.mode === 'arr' || !dlg.open) return;
         if (moment === 'look' || moment === 'poor') { var now = Date.now(); if (now - lookAt < 8000) return; lookAt = now; }
-        var text = KP.pick(S.manner, S.moments, moment);
+        var text = KP.pick(S.manner, S.moments, moment) || (moment === 'gone' ? KP.GONE || '' : '');
         if (text) talk(null, text);
       }
       // After something goes on the pile: the keeper remarks on it, or on the purse coming up short.
@@ -2225,6 +2347,9 @@
         if (picking !== null) { closePicker(); return; }
         var fp = document.activeElement; if (S.mode === 'arr' && fp && root.contains(fp) && fp.matches('[data-p]')) { fp.blur(); return; }
         say.classList.remove('on');
+        // The room pulled into its layers goes back together before Arrange is left.
+        var CR = window.ShopRoomCounter;
+        if (S.mode === 'arr' && counterOn() && CR && CR.layers && CR.layers(cel)) { CR.layers(cel, false); return; }
         if (S.mode === 'arr') { tryLeave(); return; }
         if (open) { setOpen(false); cartBtn.focus({ preventScroll: true }); return; }
         // A counter that fails to answer must not swallow the way out.
@@ -2302,7 +2427,7 @@
           h += '<div class="shr-field"><span>When</span><span class="shr-chips" role="group" aria-label="Moment of the visit">' + KP.MOMENTS.map(function (m) { return '<button type="button" class="shr-chip" data-moment="' + m[0] + '" aria-pressed="' + (momTab === m[0]) + '">' + esc(m[1]) + (S.moments[m[0]] ? ' ·' : '') + '</button>'; }).join('') + '</span></div>';
           var start = KP.linesFor(S.manner, null, momTab);
           h += '<label class="shr-field"><span>What the keeper says then (one line each, up to five)</span><textarea rows="3" data-moment-lines="1" maxlength="1100" placeholder="' + esc(start.length ? start.join('\n') : 'Pick a manner for lines to start from, or write your own.') + '"></textarea></label>' +
-            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : 'Leave it empty and the keeper says nothing then.') + '</small>';
+            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : momTab === 'gone' ? 'Leave it empty and the keeper says “' + esc(KP.GONE || '') + '”' : 'Leave it empty and the keeper says nothing then.') + '</small>';
         }
         return h + '<label class="shr-field"><span>When someone presses the keeper (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>';
       }
@@ -2495,7 +2620,7 @@
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
-        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0); else cbPlace = false;
+        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0); else { cbPlace = false; if (window.ShopRoomCounter && window.ShopRoomCounter.layers) window.ShopRoomCounter.layers(cel, false); }
         root.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === S.mode); });
         if (canArrange && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); scene.appendChild(panel); panel.addEventListener('animationend', function () { panel.classList.remove('nag'); }); panel.addEventListener('pointerdown', onPanelDown); }
         if (panel) {
@@ -2514,7 +2639,7 @@
       function showRoom() {
         root.classList.remove('closed'); root.classList.add('inside');
         if (!dlg.open) dlg.showModal();
-        draw(); alive(true);
+        draw(); alive(true); liveOn(true);
       }
       // Opening: the door swings open in place, then its dark doorway grows
       // past the edges of the window and the room is behind it.
@@ -2571,6 +2696,7 @@
       // won't close leaves the visitor no way back to the page.
       function leave() {
         var shut = function () {
+          liveOn(false);
           if (dlg.open) dlg.close();
           dlg.classList.remove('leaving'); dlg.style.transformOrigin = '';
           root.classList.remove('inside'); root.classList.add('closed');
@@ -2676,7 +2802,7 @@
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
           clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); clearTimeout(cbT); if (raf) cancelAnimationFrame(raf);
-          dropHole(); if (dlg.open) dlg.close();
+          dropHole(); liveOn(false); if (dlg.open) dlg.close();
           themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
           document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey); document.removeEventListener('shop-rolls:result', onRollResult); if (window.ShopRolls) window.ShopRolls.close();

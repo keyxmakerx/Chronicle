@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -117,6 +119,71 @@ func TestPageChangedNudge(t *testing.T) {
 			}
 			if last := bus.msgs[len(bus.msgs)-1]; last.Type != ws.MsgEntityUpdated || last.DeliversTo(player) {
 				t.Error("the full entity event stays last and DM-only")
+			}
+		})
+	}
+}
+
+// fixedPages answers a shop page lookup with one page, or none.
+type fixedPages struct{ e *entities.Entity }
+
+func (f fixedPages) GetByID(_ context.Context, _ string) (*entities.Entity, error) {
+	if f.e == nil {
+		return nil, errors.New("not found")
+	}
+	return f.e, nil
+}
+
+// TestShopChangedNudge pins who is told that an open shop's wares changed: a
+// write to a shop's listing nudges players only for a shop page everyone may
+// read and a listing that isn't GM-only, the owner always, and any other
+// relation nobody.
+func TestShopChangedNudge(t *testing.T) {
+	shared := &entities.Entity{ID: "s1", CampaignID: "c1"}
+	tests := []struct {
+		name   string
+		page   *entities.Entity
+		rel    relations.Relation
+		sent   bool
+		player bool
+	}{
+		{"shared shop", shared, relations.Relation{CampaignID: "c1", SourceEntityID: "s1", RelationType: "sells"}, true, true},
+		{"GM-only listing", shared, relations.Relation{CampaignID: "c1", SourceEntityID: "s1", RelationType: "sells", DmOnly: true}, true, false},
+		{"private shop", &entities.Entity{ID: "s1", CampaignID: "c1", IsPrivate: true}, relations.Relation{CampaignID: "c1", SourceEntityID: "s1", RelationType: "sells"}, true, false},
+		{"another campaign's page", &entities.Entity{ID: "s1", CampaignID: "c2"}, relations.Relation{CampaignID: "c1", SourceEntityID: "s1", RelationType: "sells"}, false, false},
+		{"missing page", nil, relations.Relation{CampaignID: "c1", SourceEntityID: "s1", RelationType: "sells"}, false, false},
+		{"not a listing", shared, relations.Relation{CampaignID: "c1", SourceEntityID: "s1", RelationType: "Has Item"}, false, false},
+	}
+	player := &ws.Client{UserID: "u-player", Role: permissions.RolePlayer, Source: "browser"}
+	owner := &ws.Client{UserID: "u-owner", Role: permissions.RoleOwner, Source: "browser"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bus := &noteCaptureBus{}
+			rel := tt.rel
+			(&relationEventPublisherAdapter{bus: bus, pages: fixedPages{tt.page}}).PublishRelationEvent(relations.RelationEventMetadataUpdated, &rel)
+			var nudge *ws.Message
+			for _, m := range bus.msgs {
+				if m.Type == ws.MsgShopChanged {
+					nudge = m
+				}
+			}
+			if (nudge != nil) != tt.sent {
+				t.Fatalf("nudge sent = %v, want %v", nudge != nil, tt.sent)
+			}
+			if last := bus.msgs[len(bus.msgs)-1]; last.Type != ws.MsgRelationMetadataUpdated {
+				t.Errorf("the relation event must stay the last one published; got %s", last.Type)
+			}
+			if nudge == nil {
+				return
+			}
+			if nudge.ResourceID != "s1" || nudge.CampaignID != "c1" || len(nudge.Payload) != 0 {
+				t.Errorf("nudge = %s %s %s", nudge.CampaignID, nudge.ResourceID, nudge.Payload)
+			}
+			if got := nudge.DeliversTo(player); got != tt.player {
+				t.Errorf("player receives = %v, want %v", got, tt.player)
+			}
+			if !nudge.DeliversTo(owner) {
+				t.Error("the owner must be nudged")
 			}
 		})
 	}

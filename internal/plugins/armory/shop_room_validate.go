@@ -63,7 +63,7 @@ var (
 	// Must match MANNERS and MOMENTS in static/js/widgets/shop_room_keeper.js.
 	shopRoomManners     = setOf("", "warm", "gruff", "shrewd", "nervous", "grand")
 	shopRoomKeeperSpots = setOf("", "left", "middle", "right")
-	shopRoomMoments     = setOf("hello", "look", "buy", "poor", "bye", "refuse")
+	shopRoomMoments     = setOf("hello", "look", "buy", "poor", "gone", "bye", "refuse")
 	shopRoomFurnish     = setOf("", "room", "mood")
 	shopRollStubborn    = setOf("easy", "usual", "hard")
 	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
