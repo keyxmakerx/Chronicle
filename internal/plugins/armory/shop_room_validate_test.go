@@ -641,3 +641,58 @@ func TestNormalizeShopRoomCounterDesign_DropsPicture(t *testing.T) {
 		t.Error("a design with a bad picture is refused, not quietly cleaned")
 	}
 }
+
+func TestNormalizeShopRoomLayout_CounterScene(t *testing.T) {
+	tests := []struct {
+		name, scene, want string
+		bad               bool
+	}{
+		{"a known view is kept", "castle", "castle", false},
+		{"a pack's view is kept", "sky-islands", "sky-islands", false},
+		{"the town is saved as none", "town", "", false},
+		{"none stays none", "", "", false},
+		{"an unknown view is refused", "atlantis", "", true},
+		{"a different case is refused", "Castle", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "scene", tc.scene)))
+			if tc.bad {
+				if err == nil {
+					t.Fatalf("accepted %q", tc.scene)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var l ShopRoomLayout
+			if err := json.Unmarshal(out, &l); err != nil {
+				t.Fatal(err)
+			}
+			if l.Counter.Theme.Scene != tc.want {
+				t.Errorf("scene = %q, want %q", l.Counter.Theme.Scene, tc.want)
+			}
+			if tc.want == "" && strings.Contains(string(out), `"scene"`) {
+				t.Errorf("scene written for the town: %s", out)
+			}
+		})
+	}
+}
+
+func TestNormalizeShopRoomLayout_CounterLiveSky(t *testing.T) {
+	out, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "live")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l ShopRoomLayout
+	if err := json.Unmarshal(out, &l); err != nil {
+		t.Fatal(err)
+	}
+	if l.Counter.Theme.Outside != "live" {
+		t.Errorf("outside = %q, want live", l.Counter.Theme.Outside)
+	}
+	if _, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "Live"))); err == nil {
+		t.Error("accepted a different case")
+	}
+}

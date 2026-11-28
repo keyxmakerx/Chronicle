@@ -35,6 +35,8 @@ type PackageSource interface {
 	// Package returns the system's display name and its designs. A system with
 	// none, or an unknown one, returns no items.
 	Package(ctx context.Context, systemID string) (name string, items []PackageItem)
+	// SystemNames maps every installed game system's id to its display name.
+	SystemNames(ctx context.Context) map[string]string
 }
 
 // PackageDesign is a package design as the library shows it. The id is
@@ -126,7 +128,7 @@ func (s *service) Package(ctx context.Context, campaignID, userID, kind string) 
 // CopyPackage makes an independent library row from a package design, with
 // origin package. The package is never edited, and the row is re-validated
 // through the kind like any take.
-func (s *service) CopyPackage(ctx context.Context, campaignID, userID, id string) (*Design, error) {
+func (s *service) CopyPackage(ctx context.Context, campaignID, userID, id string) (*Taken, error) {
 	c, _, err := s.requireOwner(ctx, campaignID, userID)
 	if err != nil {
 		return nil, err
@@ -136,7 +138,7 @@ func (s *service) CopyPackage(ctx context.Context, campaignID, userID, id string
 		if packageID(it.Kind, it.File) != id {
 			continue
 		}
-		data, err := s.validData(it.Kind, it.Data)
+		data, err := s.cleanData(it.Kind, it.Data)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +146,7 @@ func (s *service) CopyPackage(ctx context.Context, campaignID, userID, id string
 		if maker == "" {
 			maker = sysName
 		}
-		return s.store(ctx, c, newDesign{kind: it.Kind, name: it.Name, note: it.Note, data: data, makerName: maker, origin: OriginPackage, ref: sysName})
+		return s.place(ctx, c, userID, newDesign{kind: it.Kind, name: it.Name, note: it.Note, data: data, makerName: maker, origin: OriginPackage, ref: sysName})
 	}
 	return nil, apperror.NewNotFound(msgNotFound)
 }
@@ -176,8 +178,9 @@ func (s *service) Suggest(ctx context.Context, campaignID, userID, id string, in
 		return nil, err
 	}
 	// The data is checked again so a design made before a part was retired is
-	// never exported as a suggestion.
-	data, err := s.validData(d.Kind, d.Data)
+	// never exported as a suggestion, and stripped because the file leaves
+	// this instance.
+	data, err := s.cleanData(d.Kind, d.Data)
 	if err != nil {
 		return nil, err
 	}

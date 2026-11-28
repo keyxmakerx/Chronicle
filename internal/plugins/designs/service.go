@@ -44,11 +44,15 @@ type Service interface {
 	Update(ctx context.Context, campaignID, userID, id string, in UpdateDesignInput) (*Design, error)
 	Delete(ctx context.Context, campaignID, userID, id string) error
 
+	// StoreCatalog lists the Store's kinds (from the kinds' Describers) and the
+	// installed game systems' names.
+	StoreCatalog(ctx context.Context, campaignID, userID string) (*StoreCatalog, error)
+
 	// Package is the read-only group of designs the campaign's game system
 	// package ships; CopyPackage makes an independent library row from one;
 	// Suggest builds the file an Owner sends a package maintainer.
 	Package(ctx context.Context, campaignID, userID, kind string) (*PackageGroup, error)
-	CopyPackage(ctx context.Context, campaignID, userID, id string) (*Design, error)
+	CopyPackage(ctx context.Context, campaignID, userID, id string) (*Taken, error)
 	Suggest(ctx context.Context, campaignID, userID, id string, in SuggestInput) (*Suggestion, error)
 
 	ShareState(ctx context.Context, campaignID, userID, id string) (*ShareState, error)
@@ -59,12 +63,12 @@ type Service interface {
 	StopSharing(ctx context.Context, campaignID, userID, id string) (*ShareState, error)
 
 	PreviewCode(ctx context.Context, campaignID, userID, code string) (*Preview, error)
-	TakeCode(ctx context.Context, campaignID, userID, code string) (*Design, error)
+	TakeCode(ctx context.Context, campaignID, userID, code string) (*Taken, error)
 	PreviewLink(ctx context.Context, userID, token string) (*LinkPreview, error)
-	TakeLink(ctx context.Context, userID, token, targetCampaignID string) (*Design, error)
+	TakeLink(ctx context.Context, userID, token, targetCampaignID string) (*Taken, error)
 	SharedWithMe(ctx context.Context, campaignID, userID, kind string) ([]SharedDesign, error)
 	PreviewShared(ctx context.Context, campaignID, userID, designID string) (*Preview, error)
-	TakeShared(ctx context.Context, campaignID, userID, designID string) (*Design, error)
+	TakeShared(ctx context.Context, campaignID, userID, designID string) (*Taken, error)
 }
 
 type service struct {

@@ -170,7 +170,9 @@ type BellEntry struct {
 	Users   []string
 	Kind    string
 	Message string
-	Link    string
+	// Detail is a second line: a Director's written reply.
+	Detail string
+	Link   string
 }
 
 // bellFacts is what bellFor needs. Card is the card's name; bellFor says it
@@ -181,8 +183,10 @@ type bellFacts struct {
 	DeckID     string
 	DeckName   string
 	Card       string
-	HeroName   string
-	From, To   Place
+	// Reply is a Director's written reply to an ask they turned down.
+	Reply    string
+	HeroName string
+	From, To Place
 	// FromOwner and ToOwner are the players of the heroes before and after.
 	FromOwner, ToOwner string
 	Actor              string
@@ -237,10 +241,13 @@ func bellFor(f bellFacts) []BellEntry {
 		if f.From.Zone == ZoneHand && f.From.HolderEntityID != "" {
 			if u := not([]string{f.FromOwner}); len(u) > 0 {
 				msg := "Your Director let you play " + f.Card
-				if f.Action == ActTurnDown {
+				switch {
+				case f.Action == ActTurnDown && f.Reply != "":
+					msg = "Your Director replied to your ask to play " + f.Card
+				case f.Action == ActTurnDown:
 					msg = "Your Director turned down your ask to play " + f.Card
 				}
-				return []BellEntry{{Users: u, Kind: BellAnswered, Message: msg, Link: handLink(f.CampaignID)}}
+				return []BellEntry{{Users: u, Kind: BellAnswered, Message: msg, Detail: f.Reply, Link: handLink(f.CampaignID)}}
 			}
 		}
 	}

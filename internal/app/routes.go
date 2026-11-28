@@ -4902,7 +4902,7 @@ func (a *App) RegisterRoutes() {
 		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
 		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
 		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
-		decks.WithSwitch(decksOn), decks.WithStory(decksStory),
+		decks.WithSwitch(decksOn), decks.WithStory(decksStory), decks.WithAsks(decksStory),
 		decks.WithScreen(decks.NewScreenRepository(a.DB)),
 	}
 	// "From a rolling table" is offered only while the rolling tables plugin is
@@ -4969,8 +4969,12 @@ func (a *App) RegisterRoutes() {
 		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)
 	}
 
+	// Hashes of the page scripts the Foundry module copies; filled after
+	// every plugin's static files are mounted, at the end of RegisterRoutes.
+	vendoredAssets := syncapi.NewVendoredAssetsHandler()
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithHomebrewAsks(syncapi.NewHomebrewAskAPIHandler(homebrewAskAPI, campaignService)))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)), syncapi.WithCrafting(syncapi.NewCraftingAPIHandler(craftingAPI, crafting.AddonSlug)), syncapi.WithCutscenes(cutsceneSyncHandler), syncapi.WithVendoredAssets(vendoredAssets), syncapi.WithHomebrewAsks(syncapi.NewHomebrewAskAPIHandler(homebrewAskAPI, campaignService)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -6854,6 +6858,10 @@ func (a *App) RegisterRoutes() {
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
+		// The players' screen: the party as a player may see it, and each
+		// player's own private note (player_screen_adapters.go).
+		PlayerParty: &dmPartyAdapter{entities: entityService, campaigns: campaignService},
+		PlayerNotes: &playerNotesAdapter{notes: noteSvc},
 	}
 	// The Adventures tab needs its table; with the plugin degraded the rest of
 	// the screen still works and the tab is simply left out.
@@ -6877,6 +6885,13 @@ func (a *App) RegisterRoutes() {
 	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
+	// Each person's screen layouts and style follow them between devices.
+	// With the plugin degraded they stay in the browser alone.
+	var screenPrefs dmscreen.PrefsRepository
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		screenPrefs = dmscreen.NewPrefsRepository(a.DB)
+	}
+	dmscreen.RegisterPrefsRoutes(e, dmscreen.NewPrefsHandler(dmscreen.NewPrefsService(screenPrefs, &screenKitAdapter{members: campaignService})), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
 	syncAPIHandler.SetDMScreen(&dmScreenSyncAPIAdapter{svc: dmScreenSvc})
@@ -7168,6 +7183,12 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(rolls.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
+			// The Table's Rolls, Tonight, Hand and Dice drawn into a players' screen card.
+			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js", "js/table_leaf.js"}},
+			// The Dice tray card on both screens: the shared game mat and the member's own
+			// tray. The art, the 3D stage and the mountable tray are one reusable set (the
+			// Foundry module loads the same three); the last file is the card's widget.
+			{Name: "dice-tray", Scripts: []string{"js/roll_dice.js", "js/dice_tray_art.js", "js/dice_tray_stage.js", "js/dice_tray_core.js", "js/dice_tray.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},
@@ -7175,12 +7196,17 @@ func (a *App) RegisterRoutes() {
 	var rollsPower *rollsPowerAdapter     // nil while the roll log is degraded; layers join it later
 	var rollLog crafting.RollLog          // nil while the roll log is degraded
 	var shopRollLogger armory.ShopRollLog // nil while the roll log is degraded
+	// The Workshop's "rolls first" step rolls through the roll log; both are
+	// nil while it is degraded, and the step is then not offered.
+	var homebrewRolls rollTable
+	var homebrewPower rollFirstStats
 	if a.PluginHealth.IsHealthy(rolls.PluginSlug) {
 		rollsSvc := rolls.NewService(rolls.NewRepository(a.DB), &rollsPublisher{bus: wsEventBus}, &rollsCritAdapter{sys: systemHandler},
 			&rollsCharacterAdapter{entities: entityService})
 		rollsHandler := rolls.NewHandler(rollsSvc)
 		rollsPower = &rollsPowerAdapter{sys: systemHandler, entities: entityService, characters: characterListService}
 		rollsHandler.SetPowerRolls(rollsPower)
+		homebrewRolls, homebrewPower = rollsSvc, rollsPower
 		rolls.RegisterRoutes(e, rollsHandler, campaignService, authService)
 		// The campaign's dice are a "Dice" tab on the Customize page; the
 		// campaigns plugin only hosts it, rolls owns what is in it.
@@ -7341,7 +7367,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     cutscenes.PluginSlug,
 		StaticFS: echo.MustSubFS(cutscenes.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_workshop.js"}},
+			{Name: "cutscene-workshop", Scripts: []string{"js/cutscene_timeline.js", "js/cutscene_workshop.js"}},
 		},
 	})
 	var aiCutscenes cutscenes.Service
@@ -7369,6 +7395,8 @@ func (a *App) RegisterRoutes() {
 		Respites:       craftingListener,
 		Crafting:       craftingWorkshop,
 		Decks:          decksStory,
+		Rolls:          homebrewRolls,
+		PowerRolls:     homebrewPower,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
@@ -7385,10 +7413,14 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
 			homebrew.NewRunStore(a.DB), homebrew.WithAskPeople(&homebrewAskPeople{svc: campaignService}),
-			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}))
+			homebrew.WithBell(&homebrewAskBell{notify: sessionsService}), homebrew.WithLive(&homebrewAskLive{bus: wsEventBus}),
+			homebrew.WithPlayers(&homebrewScopePlayers{entities: entityService}))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		homebrewAskAPI.attach(homebrewSvc)
 		aiWorkshop = homebrewSvc
+		// Recipes join the Store only while the Workshop is up; without it
+		// the kind is unknown and the Store refuses it.
+		designKinds.Register(homebrewRecipeKind, homebrewStoreKind{svc: homebrewSvc, members: campaignService})
 		craftingRespites.homebrew = homebrewSvc
 		decksStory.bindHomebrew(homebrewSvc)
 		// A saved recipe is placed with the Customizer only while the
@@ -7637,6 +7669,14 @@ func (a *App) RegisterRoutes() {
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
 
+	// Hash the vendored files from the same mounts, so the sync API reports
+	// what this deploy serves rather than what the repo manifest says.
+	var vendoredPaths []string
+	for _, va := range foundry_vtt.VendoredAssets() {
+		vendoredPaths = append(vendoredPaths, va.Path)
+	}
+	vendoredAssets.SetAssets(a.hashVendoredAssets(vendoredPaths))
+
 	// A wiring mistake leaves only the widgets it names unloaded, so it is
 	// logged rather than stopping the site.
 	m, err := buildWidgetManifest(coreWidgets, a.registeredPlugins, layouts.AssetURL)
@@ -7700,7 +7740,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
-	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_layout.js", "/static/js/widgets/dm_arrange.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "store", Scripts: []string{"/static/js/widgets/store.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "roll-tables-page", Scripts: []string{"/static/js/widgets/roll_tables_page.js"}},

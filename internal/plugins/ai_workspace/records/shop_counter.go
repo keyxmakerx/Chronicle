@@ -13,7 +13,7 @@ import (
 const counterDoc = "`counter` is the theme of the counter look (standing at the counter), a map with these optional keys. " +
 	"`start` first resets the theme to a starter (plain, smithy, apothecary, arcane, night market, ship's hold, hollow tree, crystal cavern, undercroft, smugglers' cave, fey glade, caldera, star deck, shop at nowhere, whispering vault, sanctum, taproom, cutting room, chart room, menagerie, reliquary, trading post, frost hall, drowned arcade, caravan tent, sky barge, bog witch's hut, gearworks, dragon's hoard, sun court, haunted parlour, glasshouse); without it the change is made on the saved theme, or on the starter that suits the room's `type` while none is saved. " +
 	"`name` (at most 60 characters); the room's shape: `shape` (square, round, open-air, alcove, cavern, hold, hollow, tunnel, glade, void, ribs, taproom, parlour, study, barn, chapel, cabin, ice-cave, reef, tent, gondola, hut, works, colonnade, conservatory), `opening` (none, window-left, window-right, window-centre, round-window, doorway, porthole, grate, knothole, lava-fall, planet, lone-door, rift, portal, hearth, bay-window, harbour-window, stable-door, rose-window, frost-window, aurora, sea-arch, tent-flap, cloud-sea, bog-window, clock-face, dragon-eye, sun-disc, tall-mirror, garden-door), `display` (shelves, pegboard, drawers, pigeonholes, domes, roots, adrift, orbits, columns, tendrils, circles, casks, bolts, scroll-rack, hutches, niches, gear-wall, ice-ledges, shells, carpet-wall, cargo-nets, crooked-shelves, cogs, hoard, clouds, curio, plant-stand), `counter` (straight, curved, stall-table, log, slab, adrift, bar, cutting, plan-chest, feed-stall, altar, woodpile, ice-block, wreck, carpet, gunwale, driftwood, engine, coin-drift, marble-slab, sheeted, potting-bench); " +
-	"the paint and light: `wall` (plaster, stone, timber, brick, canvas, night-sky, rock, hull, bark, glade, basalt, nebula, white, obsidian, runestone, daub, damask, chart, barnboard, ashlar, logs, glacier, deepwater, tent-stripes, open-sky, wattle, brass-plate, lair, marble, faded-paper, glazing), `light` (lamp, forge, candles, lanterns, moonlight, crystals, brazier, wisps, star, halo, witchfire, orb, firelight, votives, frostfire, jellyfish, pierced-lamp, cauldron, filament, sunlight, candelabra), `warmth` (0 cool to 1 warm), `outside` (day, dusk, night, rain), `wood`, `cloth`, `accent` and `trim` (each `#rrggbb`); " +
+	"the paint and light: `wall` (plaster, stone, timber, brick, canvas, night-sky, rock, hull, bark, glade, basalt, nebula, white, obsidian, runestone, daub, damask, chart, barnboard, ashlar, logs, glacier, deepwater, tent-stripes, open-sky, wattle, brass-plate, lair, marble, faded-paper, glazing), `light` (lamp, forge, candles, lanterns, moonlight, crystals, brazier, wisps, star, halo, witchfire, orb, firelight, votives, frostfire, jellyfish, pierced-lamp, cauldron, filament, sunlight, candelabra), `warmth` (0 cool to 1 warm), `outside` (day, dusk, night, rain, or live for the campaign calendar's own sky, its time and weather), `scene` for what stands out there (town, forest, mountains, coast, desert, swamp, snowfield, fields, jungle, volcano, ruins, spires, harbour, underdark, astral, sky-islands, castle, graveyard), `wood`, `cloth`, `accent` and `trim` (each `#rrggbb`); " +
 	"and the props: `props` replaces the list (up to 24; none empties it), `add` and `remove` change it (anvil, alembic, jars, crystal, herbs, floating-books, orrery, ladder, banner, sconce, sparks, lanterns, rain, steam-cart, motes, fireflies, drips, cobwebs, nets, chains, mushrooms, tentacle, petals, butterflies, embers, smoke, comets, floating-stones, eyes, glyphs, magic-circle, dew, beads, rune-chase, arcs, bubbles, ghostlights, crumbs, dust, tankards, keg, antlers, mannequin, ribbons, shears, globe, charts, inkwell, birdcages, perch, feathers, haybale, critters, censer, casket, stove, pelts, sacks, snowfall, ice-swan, fish, kelp, caustics, crab, glass-lamps, hookah, cobra, pennants, propeller, grapnel, toad, bottle-tree, gears, steam-puffs, automaton, gauge, glints, dragon-tail, doves, laurel, lyre, ghost, portrait, phonograph, hanging-baskets, palm, watering-can). " +
 	"A theme change never lays the furniture out again. The stock lookup prints the saved theme as this same map."
 
@@ -43,6 +43,8 @@ type counterPaint struct {
 	Light   string  `json:"light"`
 	Warmth  float64 `json:"warmth"`
 	Outside string  `json:"outside"`
+	// Scene is what stands outside; empty is the town.
+	Scene string `json:"scene,omitempty"`
 	// Picture is the owner's own picture. The AI never sets it; it is carried
 	// through unchanged so an edit keeps it.
 	Picture json.RawMessage `json:"picture,omitempty"`
@@ -93,8 +95,13 @@ var (
 	counterLights = with(wordsOf("lamp", "forge", "candles", "lanterns", "moonlight",
 		"crystals", "brazier", "wisps", "star", "halo", "witchfire", "orb", "firelight", "votives", "frostfire",
 		"jellyfish", "pierced-lamp", "cauldron", "filament", "sunlight", "candelabra"), "candle", "candles", "lantern", "lanterns", "moon", "moonlight")
-	counterOutsides = wordsOf("day", "dusk", "night", "rain")
-	counterProps    = with(wordsOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
+	counterOutsides = with(wordsOf("day", "dusk", "night", "rain", "live"), "campaign", "live", "skypane", "live", "synced", "live")
+	counterScenes   = with(wordsOf("town", "forest", "mountains", "coast", "desert", "swamp", "snowfield", "fields",
+		"jungle", "volcano", "ruins", "spires", "harbour", "underdark", "astral", "sky-islands", "castle", "graveyard"),
+		"city", "town", "woods", "forest", "mountain", "mountains", "sea", "coast", "beach", "coast", "dunes", "desert", "snow", "snowfield",
+		"farm", "fields", "farmland", "fields", "ruin", "ruins", "towers", "spires", "harbor", "harbour", "port", "harbour",
+		"cave", "underdark", "stars", "astral", "islands", "sky-islands", "cemetery", "graveyard")
+	counterProps = with(wordsOf("anvil", "alembic", "jars", "crystal", "herbs", "floating-books", "orrery", "ladder", "banner", "sconce", "sparks", "lanterns", "rain", "steam-cart", "motes",
 		"fireflies", "drips", "cobwebs", "nets", "chains", "mushrooms", "tentacle", "petals", "butterflies", "embers",
 		"smoke", "comets", "floating-stones", "eyes", "glyphs", "magic-circle", "dew", "beads", "rune-chase", "arcs",
 		"bubbles", "ghostlights", "crumbs", "dust", "tankards", "keg", "antlers", "mannequin", "ribbons", "shears",
@@ -104,8 +111,16 @@ var (
 		"gauge", "glints", "dragon-tail", "doves", "laurel", "lyre", "ghost", "portrait", "phonograph", "hanging-baskets",
 		"palm", "watering-can"),
 		"jar", "jars", "herb", "herbs", "spark", "sparks", "lantern", "lanterns", "mote", "motes", "books", "floating-books", "banners", "banner", "sconces", "sconce", "steam", "steam-cart", "cart", "steam-cart")
-	counterKeys = []string{"start", "name", "shape", "opening", "display", "counter", "wall", "light", "warmth", "outside", "wood", "cloth", "accent", "trim", "props", "add", "remove"}
+	counterKeys = []string{"start", "name", "shape", "opening", "display", "counter", "wall", "light", "warmth", "outside", "scene", "wood", "cloth", "accent", "trim", "props", "add", "remove"}
 )
+
+// sceneWord names a saved scene the way the AI writes it: no scene is the town.
+func sceneWord(s string) string {
+	if s == "" {
+		return "town"
+	}
+	return s
+}
 
 // counterRoomType is the shop type whose starter each `start` word names.
 var counterRoomType = map[string]string{"plain": "general", "smithy": "forge", "apothecary": "apothecary", "arcane": "library", "night-market": "market"}
@@ -200,6 +215,7 @@ func (k ShopRoomKind) counter(room map[string]any, v any) (string, error) {
 		{"shape", &next.Skeleton.Shape, counterShapes}, {"opening", &next.Skeleton.Opening, counterOpenings},
 		{"display", &next.Skeleton.Display, counterDisplays}, {"counter", &next.Skeleton.Counter, counterCounters},
 		{"wall", &next.Theme.Wall, counterWalls}, {"light", &next.Theme.Light, counterLights}, {"outside", &next.Theme.Outside, counterOutsides},
+		{"scene", &next.Theme.Scene, counterScenes},
 	} {
 		if r, has := m[f.key]; has {
 			w, err := counterWord(f.key, fmt.Sprint(r), f.words)
@@ -208,6 +224,10 @@ func (k ShopRoomKind) counter(room map[string]any, v any) (string, error) {
 			}
 			*f.field = w
 		}
+	}
+	// The town is the room's own view and is saved as no scene.
+	if next.Theme.Scene == "town" {
+		next.Theme.Scene = ""
 	}
 	for _, f := range []struct {
 		key   string
@@ -287,7 +307,7 @@ func counterChanges(cur, next counterTheme, start string) []string {
 		{"display", cur.Skeleton.Display, next.Skeleton.Display}, {"counter", cur.Skeleton.Counter, next.Skeleton.Counter},
 		{"wall", cur.Theme.Wall, next.Theme.Wall}, {"light", cur.Theme.Light, next.Theme.Light},
 		{"warmth", strconv.FormatFloat(cur.Theme.Warmth, 'g', -1, 64), strconv.FormatFloat(next.Theme.Warmth, 'g', -1, 64)},
-		{"outside", cur.Theme.Outside, next.Theme.Outside}, {"wood", cur.Theme.Wood, next.Theme.Wood}, {"cloth", cur.Theme.Cloth, next.Theme.Cloth},
+		{"outside", cur.Theme.Outside, next.Theme.Outside}, {"scene", sceneWord(cur.Theme.Scene), sceneWord(next.Theme.Scene)}, {"wood", cur.Theme.Wood, next.Theme.Wood}, {"cloth", cur.Theme.Cloth, next.Theme.Cloth},
 		{"accent", cur.Theme.Accent, next.Theme.Accent}, {"trim", cur.Theme.Trim, next.Theme.Trim},
 	} {
 		if d[1] != d[2] {
@@ -353,6 +373,7 @@ func counterBlock(raw json.RawMessage) string {
 	line("light", c.Theme.Light)
 	line("warmth", strconv.FormatFloat(c.Theme.Warmth, 'g', -1, 64))
 	line("outside", c.Theme.Outside)
+	line("scene", c.Theme.Scene)
 	for _, kv := range [][2]string{{"wood", c.Theme.Wood}, {"cloth", c.Theme.Cloth}, {"accent", c.Theme.Accent}, {"trim", c.Theme.Trim}} {
 		if kv[1] != "" {
 			line(kv[0], quote(kv[1]))

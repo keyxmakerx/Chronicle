@@ -1,0 +1,35 @@
+# Chronicle files the Foundry module keeps unchanged copies of, in its
+# vendor/chronicle/ folder (the copy is named by the file's basename).
+#
+# Each line: <first 12 hex of the file's sha256>  <repo path>  <engine>
+#
+# A hash change here means the module's copy is now out of date: refresh it
+# with the module's tools/refresh-vendor.mjs on a module branch named like
+# this one, so the sync bench tests the two together.
+# tools/check-foundry-vendored.sh and TestVendoredManifestMatchesFiles fail
+# when a listed file no longer matches its hash.
+a35d95a9a6bf  static/js/cutscene_engine.js  cutscenes
+58a97f609643  static/js/widgets/gl_shared.js  sky
+2c7ceb7cd2e6  static/js/widgets/shop_room.js  shop
+4078e91d6455  static/js/widgets/shop_room_counter.js  shop
+c20c1dbc2311  static/js/widgets/shop_room_icons.js  shop
+88519f50100b  static/js/widgets/shop_room_keeper.js  shop
+58550cb3b961  static/js/widgets/shop_room_paper.js  shop
+b6f7f2e14c95  static/js/widgets/shop_room_parts_places.js  shop
+e7e1dda536ae  static/js/widgets/shop_room_parts_strange.js  shop
+118bc019657c  static/js/widgets/shop_room_parts_trades.js  shop
+558f714daeba  static/js/widgets/sky_2d.js  sky
+494946e9464a  static/js/widgets/sky_events.js  sky
+81d6f13ed18d  static/js/widgets/sky_gl.js  sky
+34a4f4e2979e  static/js/widgets/sky_looks.js  sky
+2a530ca4278a  static/js/widgets/sky_moon.js  sky
+e3ab11ccd3e8  static/js/widgets/sky_pane.js  sky
+2e89e8d30253  static/js/widgets/sky_shaders.js  sky
+07a69640716b  static/js/widgets/sky_world.js  sky
+7c89a0bb6e26  internal/plugins/crafting/static/js/crafting_lib.js  crafting
+f54f053a1260  internal/plugins/crafting/static/js/crafting_tray.js  crafting
+a8cbf348587f  internal/plugins/crafting/static/js/crafting_block.js  crafting
+5923751e2ffd  internal/plugins/crafting/static/css/crafting.css  crafting
+eed01b5e6662  internal/plugins/crafting/static/css/spoils.css  crafting
+4314ba71f2d0  internal/plugins/rolls/static/js/dice_tray_art.js  dice
+cbc6453e3291  internal/plugins/rolls/static/js/dice_tray_core.js  dice

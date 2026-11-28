@@ -1,0 +1,14 @@
+package cutscenes
+
+// timeline is the empty frame cutscene_timeline.js draws the scene's bars
+// into, above the rows. It stays hidden without script, where the rows do
+// everything, and it holds no field of its own: every bar is a row's numbers.
+templ timeline() {
+	<section class="csw-tl" data-csw-timeline aria-labelledby="csw-tl-h" hidden>
+		<h2 class="csw-lab" id="csw-tl-h">Timeline</h2>
+		<div class="csw-tl-lanes" data-csw-tl-lanes></div>
+		<p class="csw-tl-empty" data-csw-tl-empty hidden>Add a layer on top or some words and they appear here as bars.</p>
+		<div class="csw-tl-axis" data-csw-tl-axis aria-hidden="true"></div>
+		<p class="csw-hint">Each layer is a bar. Its faded start is how it arrives and its faded end how it leaves: press one to choose. Drag a bar to move it, or its right end to change how long it stays.</p>
+	</section>
+}

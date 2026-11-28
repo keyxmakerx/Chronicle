@@ -28,6 +28,11 @@ const (
 type EntryFieldDef struct {
 	Path   string `json:"path"`
 	Format string `json:"format"`
+	// Once writes the value only when the item is made, never when the entry
+	// changes later: for a value the game system counts into the hero when
+	// the item arrives and takes back when it goes (a career's renown), so a
+	// later rewrite would take back a different amount than it gave.
+	Once bool `json:"once,omitempty"`
 }
 
 // entryFieldPath allows only the item's own system data: never its name,
@@ -73,17 +78,8 @@ func (m *SystemManifest) sanitizeEntryFields() {
 					slog.String("field", f.Key),
 					slog.String("reason", reason))
 			}
-			switch {
-			case f.FoundryCollection != "items" || !f.FoundryItemSingle:
-				warn("ignored: the field is not a single Foundry item")
-				f.FoundryEntryFields = nil
-				continue
-			case f.GMOnly:
-				warn("ignored: the field is GM-only")
-				f.FoundryEntryFields = nil
-				continue
-			case len(f.FoundryEntryFields) > maxEntryFields:
-				warn(fmt.Sprintf("ignored: more than %d properties", maxEntryFields))
+			if reason := entryMappingRefused(f, len(f.FoundryEntryFields)); reason != "" {
+				warn(reason)
 				f.FoundryEntryFields = nil
 				continue
 			}
@@ -103,6 +99,20 @@ func (m *SystemManifest) sanitizeEntryFields() {
 			}
 		}
 	}
+}
+
+// entryMappingRefused returns why a field can't carry entry mappings at all,
+// or "" when it can.
+func entryMappingRefused(f *FieldDef, n int) string {
+	switch {
+	case f.FoundryCollection != "items" || !f.FoundryItemSingle:
+		return "ignored: the field is not a single Foundry item"
+	case f.GMOnly:
+		return "ignored: the field is GM-only"
+	case n > maxEntryFields:
+		return fmt.Sprintf("ignored: more than %d properties", maxEntryFields)
+	}
+	return ""
 }
 
 // validateEntryField returns why one mapping is unusable, or "" when it is

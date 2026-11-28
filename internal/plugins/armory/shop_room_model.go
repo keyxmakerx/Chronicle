@@ -163,6 +163,8 @@ type ShopRoomCounterTheme struct {
 	Light   string  `json:"light"`
 	Warmth  float64 `json:"warmth"`
 	Outside string  `json:"outside"`
+	// Scene is what stands outside under that sky; empty is the room's own town.
+	Scene string `json:"scene,omitempty"`
 	// Picture is the owner's own picture for the room, absent for none.
 	Picture *ShopRoomCounterPicture `json:"picture,omitempty"`
 }

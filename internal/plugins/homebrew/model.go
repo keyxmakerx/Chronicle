@@ -26,6 +26,9 @@ type Viewer struct {
 	// VisibilityRole is passed on to owners whose actions check page
 	// access as this person.
 	VisibilityRole int
+	// Name is the person's display name where the service knows it, for an
+	// owner that writes it into its own record (the roll log).
+	Name string
 }
 
 // Recipe is one saved recipe. Doc is the part the Workshop edits.
@@ -48,6 +51,12 @@ type Doc struct {
 	// "p:<part key>", "r<rule>" for a rule's When, "r<rule>.<step>" for one
 	// of its Thens (both counted from 0). Only the Workshop reads it.
 	Layout map[string]Pos `json:"layout,omitempty"`
+	// Off keeps a recipe that arrived from the Store from running until a
+	// Director has pointed its unlinked parts at this campaign's own records.
+	// Only the Store's add sets it; any save through the Workshop clears it
+	// (and refuses while a part is still unlinked), so a Director's own
+	// recipes are never off.
+	Off bool `json:"off,omitempty"`
 }
 
 // Pos is a card's top-left corner on the canvas, in canvas pixels.
@@ -64,6 +73,17 @@ type Part struct {
 	Label string          `json:"label"`
 	See   string          `json:"see"`
 	Data  json.RawMessage `json:"data,omitempty"`
+	// Unlinked lists the links this part had to a record of the campaign it
+	// was shared from (a page, a deck), which sharing drops because an id
+	// means nothing elsewhere. Only a recipe that arrived from the Store has
+	// any; the Director points each at one of this campaign's own.
+	Unlinked []Unlinked `json:"unlinked,omitempty"`
+}
+
+// Unlinked is one dropped link: what kind of thing the Director picks to
+// restore it, in the words of a sentence ("a creature recipe page").
+type Unlinked struct {
+	Pick string `json:"pick"`
 }
 
 // RecipePart is one part of a saved recipe, with the recipe it belongs to.
@@ -93,6 +113,10 @@ type Do struct {
 	Action string          `json:"action"`
 	Part   string          `json:"part,omitempty"`
 	Args   json.RawMessage `json:"args,omitempty"`
+	// Recipe is the recipe a step comes from, set only in the rule of an
+	// owner's ask, which gathers steps from several recipes. A saved
+	// recipe's steps never carry it: checkStep drops it.
+	Recipe string `json:"recipe,omitempty"`
 }
 
 // RecipeInput is a create or update body. Version is required on update and
@@ -111,7 +135,9 @@ type RecipeSummary struct {
 	Rules int    `json:"rules"`
 	// PartKinds are the kinds of part the recipe has, sorted, so a caller
 	// can tell what a recipe can put on a page without loading it.
-	PartKinds []string  `json:"partKinds"`
+	PartKinds []string `json:"partKinds"`
+	// Off is true for a recipe from the Store that has not been switched on.
+	Off       bool      `json:"off"`
 	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
