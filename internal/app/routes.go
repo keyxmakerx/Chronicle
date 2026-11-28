@@ -1216,7 +1216,16 @@ type relationEventPublisherAdapter struct {
 	shares interface {
 		ReleaseLetGoShares(ctx context.Context, campaignID, characterID string)
 	}
+	// pages, when set, looks up a shop's page so a change to what it sells
+	// can nudge open shop rooms; without it no nudge is sent.
+	pages interface {
+		GetByID(ctx context.Context, id string) (*entities.Entity, error)
+	}
 }
+
+// shopSellsRelation is the relation type of a shop's listing, the row whose
+// writes (purchases, restocks, prices) change what an open shop room shows.
+const shopSellsRelation = "sells"
 
 // PublishRelationEvent translates a relation row write into a WebSocket
 // message keyed on the row's source entity.
@@ -1235,6 +1244,9 @@ func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, r
 	default:
 		return
 	}
+	if rel.RelationType == shopSellsRelation {
+		a.nudgeShop(rel)
+	}
 	// A relation can name a private entity or be dm_only, and the row
 	// carries none of the per-viewer filtering the HTTP reads apply, so it
 	// only goes to DM-equivalent sockets, like entity events.
@@ -1250,6 +1262,29 @@ func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, r
 			a.shares.ReleaseLetGoShares(ctx, campaignID, characterID)
 		}()
 	}
+}
+
+// nudgeShop tells open rooms of the listing's shop to read their wares
+// again. The nudge is content-free, but a shop page not everyone may read, or
+// a GM-only listing, still never announces itself to a player's socket: those
+// reach DM-equivalent sockets only.
+func (a *relationEventPublisherAdapter) nudgeShop(rel *relations.Relation) {
+	if a.pages == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	shop, err := a.pages.GetByID(ctx, rel.SourceEntityID)
+	if err != nil || shop == nil || shop.CampaignID != rel.CampaignID {
+		return
+	}
+	nudge := ws.NewMessage(ws.MsgShopChanged, rel.CampaignID, rel.SourceEntityID, nil)
+	if !rel.DmOnly && entityReadableByAll(shop) {
+		nudge.Public = true
+	} else {
+		nudge.RequiresDM = true
+	}
+	a.bus.Publish(nudge)
 }
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
@@ -6929,7 +6964,7 @@ func (a *App) RegisterRoutes() {
 	// events also reach them once the quests service exists (attached below).
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetEventPublisher(&decksEntityEvents{next: questEntityEvts, poke: decksWatch.Poke})
-	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc, pages: entityService})
 	// Calendar writes reach the Foundry module live; without this it only
 	// sees them on reconnect or a manual Pull. Reached by type assertion like
 	// the visibility gate, so the CalendarService interface stays unchanged.
