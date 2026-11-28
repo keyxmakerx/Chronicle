@@ -37,15 +37,19 @@ async function shop(t, refusal, after = AFTER) {
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
   await p.setContent(HOST);
-  await p.addScriptTag({ content: `window.__posts = []; window.__reads = 0; window.Chronicle = {
-    register: function (n, impl) { impl.init(document.getElementById('w')); },
-    apiFetch: function (url, o) {
-      if (o && o.method === 'POST') { window.__posts.push(o.body); return Promise.resolve({ ok: false, status: ${refusal.status}, json: function () { return Promise.resolve({ type: 'bad_request', message: ${JSON.stringify(refusal.message)} }); } }); }
-      if (url === '/rel') window.__reads++;
-      var body = /\\/room$/.test(url) ? ${JSON.stringify(ROOM)} : /\\/buyers$/.test(url) ? ${JSON.stringify(BUYERS)} : window.__posts.length ? ${JSON.stringify(after)} : ${JSON.stringify(BEFORE)};
-      return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(JSON.parse(JSON.stringify(body))); } });
-    }
-  };` });
+  // The fixtures go in as data, so no test value is ever built into script text.
+  await p.evaluate((fx) => {
+    window.__posts = []; window.__reads = 0;
+    window.Chronicle = {
+      register: function (n, impl) { impl.init(document.getElementById('w')); },
+      apiFetch: function (url, o) {
+        if (o && o.method === 'POST') { window.__posts.push(o.body); return Promise.resolve({ ok: false, status: fx.refusal.status, json: function () { return Promise.resolve({ type: 'bad_request', message: fx.refusal.message }); } }); }
+        if (url === '/rel') window.__reads++;
+        var body = /\/room$/.test(url) ? fx.room : /\/buyers$/.test(url) ? fx.buyers : window.__posts.length ? fx.after : fx.before;
+        return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(JSON.parse(JSON.stringify(body))); } });
+      }
+    };
+  }, { refusal, room: ROOM, buyers: BUYERS, before: BEFORE, after });
   for (const f of ['shop_room_icons.js', 'shop_room_paper.js', 'shop_room_keeper.js', 'shop_room_counter.js', 'shop_room.js']) await p.addScriptTag({ content: read(f) });
   await p.waitForSelector('#w:not([hidden]) .shr-front');
   await p.click('.shr-front');
