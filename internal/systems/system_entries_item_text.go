@@ -22,7 +22,7 @@ func cleanItemText(s string) (string, bool) {
 		return s, false
 	}
 	clean := sanitize.HTML(s)
-	if html.UnescapeString(clean) == s {
+	if clean == s || html.UnescapeString(clean) == s {
 		return s, false
 	}
 	return clean, true
@@ -98,12 +98,15 @@ func ReconcileEntryItemTexts(ctx context.Context, db *sql.DB) (int, error) {
 			rows.Close()
 			return 0, fmt.Errorf("scanning row: %w", err)
 		}
+		// UseNumber keeps large whole numbers exact through the rewrite.
 		var p map[string]any
-		if json.Unmarshal([]byte(raw.String), &p) != nil || !cleanItemTexts(p) {
+		dec := json.NewDecoder(strings.NewReader(raw.String))
+		dec.UseNumber()
+		if dec.Decode(&p) != nil || !cleanItemTexts(p) {
 			continue
 		}
 		out, err := json.Marshal(p)
-		if err != nil {
+		if err != nil || string(out) == raw.String {
 			continue
 		}
 		r.old, r.new = raw.String, string(out)

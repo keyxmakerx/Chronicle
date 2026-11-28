@@ -16,6 +16,8 @@ func TestCleanItemText(t *testing.T) {
 		{"secret span", `<span data-secret="">only the Director</span> ok`, false},
 		{"event handler", `<img src="x" onerror="alert(1)">hi`, true},
 		{"script tag", `before<script>alert(1)</script>after`, true},
+		{"removed markup beside kept markup and entities", `<script>x</script>it's & "q" <b>a</b>`, true},
+		{"removed attribute around an entity", `<p onclick=x>Tom &amp; Jerry</p>`, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
