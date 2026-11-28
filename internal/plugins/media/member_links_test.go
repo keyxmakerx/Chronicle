@@ -137,3 +137,40 @@ func TestSignedLinksForMember_FailsClosed(t *testing.T) {
 		t.Fatalf("visibility error still signed: %v", got)
 	}
 }
+
+// A map's picture gets no link for a member below Owner, whatever the map
+// rules would say for a signed-in request: the link would open the original
+// for its whole lifetime. An Owner or co-DM still gets one, and a failed check
+// leaves the file out.
+func TestSignedLinksForMember_MapPicture(t *testing.T) {
+	path := "/media/" + linkNoteAudio
+	roles := map[string]map[string]int{"camp-l": {"player": 1, "owner": 3, "codm": 2}}
+	cases := []struct {
+		name  string
+		user  string
+		guard *fakeMapImageGuard
+		want  bool
+	}{
+		{"a player, a map picture", "player", &fakeMapImageGuard{isPic: true}, false},
+		{"a player, a shadowed map picture", "player", &fakeMapImageGuard{hidden: true}, false},
+		{"a player, a failed check", "player", &fakeMapImageGuard{err: errors.New("db down")}, false},
+		{"a player, not a map picture", "player", &fakeMapImageGuard{}, true},
+		{"the owner, a shadowed map picture", "owner", &fakeMapImageGuard{hidden: true}, true},
+		{"a co-DM, a shadowed map picture", "codm", &fakeMapImageGuard{hidden: true}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newLinkHandler()
+			h.memberChecker = &stubMemberChecker{
+				members:   map[string]map[string]bool{"camp-l": {"player": true, "owner": true, "codm": true}},
+				roles:     roles,
+				dmGranted: map[string]map[string]bool{"camp-l": {"codm": true}},
+			}
+			h.mapImages = tc.guard
+			got := h.SignedLinksForMember(context.Background(), "camp-l", tc.user, []string{path})
+			if (got[path] != "") != tc.want {
+				t.Fatalf("linked = %v, want %v", got[path] != "", tc.want)
+			}
+		})
+	}
+}
