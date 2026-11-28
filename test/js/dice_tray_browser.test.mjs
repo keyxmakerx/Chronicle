@@ -136,6 +136,11 @@ test('Others\' dice Off hides other members\' dice and keeps your own', { skip }
   await pg.click('[data-dtr-set="trayOthers"][data-v="on"]');
   await settle(pg, 3);
   assert.deepEqual((await tray(pg)).tags.sort(), ['Tyne', 'You']);
+  // Another member's roll on the result line goes when Off is chosen.
+  await deliver(pg, roll({ id: 'r-late', rollerName: 'Tyne' }));
+  await pg.waitForFunction(() => /^Tyne rolled/.test(document.querySelector('.dtr-result').textContent), null, { timeout: 20000 });
+  await pg.click('[data-dtr-set="trayOthers"][data-v="off"]');
+  assert.equal((await tray(pg)).result, '', 'Off clears another member\'s result line');
 });
 
 test('the level switch changes the drawing: 3D dice at Detailed, flat dice at the others', { skip }, async (t) => {
@@ -162,6 +167,37 @@ test('the level switch changes the drawing: 3D dice at Detailed, flat dice at th
   await pg.click('[data-dtr-set="trayLevel"][data-v="detailed"]');
   await pg.waitForFunction(() => { const s = document.querySelector('#card')._dtr.tray.state(); return s.three === 2 && s.flat === 0; }, null, { timeout: 20000 });
   assert.deepEqual(await pg.evaluate(() => window.__sets.map((x) => x[1])), ['flat', 'simple', 'detailed'], 'each choice is saved');
+});
+
+test('at Flat paper and Simple a name tag never covers its roller\'s own dice', { skip }, async (t) => {
+  const pg = await open(t);
+  await pg.click('[data-dtr-set="trayLevel"][data-v="flat"]');
+  const six = [4, 6, 8, 10, 12, 20].map((s) => ({ sides: s, value: 2 }));
+  // Rollers on different sides, one with two rows of dice.
+  for (const [id, name, n] of [['u2', 'Tyne', 6], ['u3', 'Kell', 2], ['u4', 'Ash', 1], ['u5', 'Bryn', 1]]) {
+    await deliver(pg, roll({ id: 'r-' + id, rollerId: id, rollerName: name, dice: six.slice(0, n), formula: n + 'd', modifier: 0, total: 2 * n }));
+  }
+  await pg.waitForFunction(() => document.querySelectorAll('.dtr-fd').length === 10 && document.querySelectorAll('.dtr-tag').length === 4, null, { timeout: 20000 });
+  await pg.waitForTimeout(700);
+  for (const look of ['flat', 'simple']) {
+    if (look === 'simple') { await pg.click('[data-dtr-set="trayLevel"][data-v="simple"]'); await pg.waitForFunction(() => document.querySelectorAll('.dtr-fd[data-look="simple"]').length === 10); }
+    const hits = await pg.evaluate(() => {
+      const out = [];
+      const tags = [...document.querySelectorAll('.dtr-tag')];
+      // A roll's elements are its dice, then its tag, in order.
+      let dice = [];
+      for (const n of document.querySelector('.dtr-flat').children) {
+        if (n.classList.contains('dtr-fd')) { dice.push(n); continue; }
+        if (!n.classList.contains('dtr-tag')) continue;
+        const a = n.getBoundingClientRect();
+        dice.forEach((d) => { const b = d.getBoundingClientRect(); if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(n.textContent); });
+        dice = [];
+      }
+      return { out, n: tags.length };
+    });
+    assert.equal(hits.n, 4);
+    assert.deepEqual(hits.out, [], look + ': a tag covers its own die');
+  }
 });
 
 test('with motion reduced the result shows at once and no dice are thrown', { skip }, async (t) => {

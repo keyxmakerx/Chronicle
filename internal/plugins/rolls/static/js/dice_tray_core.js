@@ -128,7 +128,8 @@
     }
     function motion() { return o.motion ? o.motion() : motionNow(); }
     function matGL() { return st.level === 'detailed' && !st.glBad; }
-    function say(text) { resEl.textContent = text; }
+    var saidKey = '';
+    function say(text, key) { resEl.textContent = text; saidKey = text ? key || '' : ''; }
 
     // ---------- Roller identity: a colour and a side of the mat ----------
     function keyOf(v) { return v.mine ? 'me' : (v.rollerId || 'n:' + (v.rollerName || '')); }
@@ -273,11 +274,15 @@
           setTimeout(function () { if (txt.isConnected) txt.textContent = String(die.value); if (i === d.dice.length - 1) done(); }, dur);
         } else if (i === d.dice.length - 1) setTimeout(done, m === 'calm' ? fadeMs() : 0);
       });
-      // The name goes over the first die, in the roller's colour.
+      // The name goes above the roll's topmost die, in the roller's colour, so it never covers one of
+      // them; below the lowest die when the top edge leaves no room.
       var tag = document.createElement('span');
       tag.className = 'tray3d-tag dtr-tag'; tag.textContent = d.name; tag.style.setProperty('--tag', d.color);
-      var tc = px(at[0].x, at[0].z);
-      tag.style.transform = 'translate(' + Math.round(tc.x) + 'px,' + Math.round(tc.y - size * 0.62) + 'px) translate(-50%,-100%)';
+      var cs = at.map(function (q) { return px(q.x, q.z); }), top = cs[0], low = cs[0];
+      cs.forEach(function (c) { if (c.y < top.y) top = c; if (c.y > low.y) low = c; });
+      var gapPx = size * 0.56;
+      if (top.y - gapPx - 22 >= 0) tag.style.transform = 'translate(' + Math.round(top.x) + 'px,' + Math.round(top.y - gapPx) + 'px) translate(-50%,-100%)';
+      else tag.style.transform = 'translate(' + Math.round(low.x) + 'px,' + Math.round(low.y + gapPx) + 'px) translate(-50%,0)';
       flatEl.appendChild(tag); els.push(tag);
       st.flat.push(rec);
       return p;
@@ -302,7 +307,7 @@
       var vals = d.dice.map(function (x) { return x.value; });
       var mod = typeof v.modifier === 'number' ? v.modifier : 0;
       var total = typeof v.total === 'number' ? v.total : vals.reduce(function (s, x) { return s + x; }, 0) + mod;
-      say(d.name + ' rolled ' + (v.formula || '') + ': ' + vals.join(' + ') + (mod ? (mod > 0 ? ' + ' : ' − ') + Math.abs(mod) : '') + ' = ' + total);
+      say(d.name + ' rolled ' + (v.formula || '') + ': ' + vals.join(' + ') + (mod ? (mod > 0 ? ' + ' : ' − ') + Math.abs(mod) : '') + ' = ' + total, d.key);
     }
     function clearMat(now) {
       st.flat.slice().forEach(function (r) { dropFlat(r, !now); });
@@ -357,7 +362,12 @@
       st.shape = s;
       if (own) { own.clearAll(true); own.setStyle(s); own.setLook(look()); }
     };
-    self.setOthers = function (on) { on = !!on; if (on === st.others) return; st.others = on; redraw(); };
+    self.setOthers = function (on) {
+      on = !!on; if (on === st.others) return; st.others = on;
+      // Off hides other members' rolls from the result line too.
+      if (!on && saidKey !== 'me') say('');
+      redraw();
+    };
     self.clear = function () { st.round = []; st.seen = {}; clearMat(false); say(''); };
     // What is on show, for tests and for a host that wants to know.
     self.state = function () {

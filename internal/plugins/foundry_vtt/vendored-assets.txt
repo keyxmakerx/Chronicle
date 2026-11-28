@@ -32,4 +32,4 @@ a8cbf348587f  internal/plugins/crafting/static/js/crafting_block.js  crafting
 5923751e2ffd  internal/plugins/crafting/static/css/crafting.css  crafting
 eed01b5e6662  internal/plugins/crafting/static/css/spoils.css  crafting
 4314ba71f2d0  internal/plugins/rolls/static/js/dice_tray_art.js  dice
-be3e427d1565  internal/plugins/rolls/static/js/dice_tray_core.js  dice
+cbc6453e3291  internal/plugins/rolls/static/js/dice_tray_core.js  dice
