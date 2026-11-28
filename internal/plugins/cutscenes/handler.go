@@ -152,7 +152,11 @@ func (h *Handler) Editor(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, EditorPage(editorPage{CampaignID: cid, Scene: *sc, Live: live, Foundry: h.foundry(c, cid, v)}))
+	moments, err := h.svc.LiveMoments(ctx, cid, sc.ID, v)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, EditorPage(editorPage{CampaignID: cid, Scene: *sc, Live: live, Moments: moments, Foundry: h.foundry(c, cid, v)}))
 }
 
 // Save handles POST /campaigns/:id/cutscenes/:sid. The editor posts the whole
@@ -303,6 +307,11 @@ func (h *Handler) Show(c *echo.Context) error {
 		c.Response().Header().Set("HX-Reswap", "innerHTML")
 		return middleware.Render(c, http.StatusOK, ShowSheet(showSheet{CampaignID: cid, Scene: *sc, Rows: rows, Rewatch: in.Rewatch, Picked: picked, Error: msg}))
 	}
+	if len(sh.Scene.Moments) > 0 {
+		// The moments panel on the scene's page redraws to hold the new
+		// showing's first moment.
+		c.Response().Header().Set("HX-Trigger", "cutscene-moment")
+	}
 	return middleware.Render(c, http.StatusOK, ShownRow(cid, *sh, true))
 }
 
@@ -318,6 +327,10 @@ func (h *Handler) Stop(c *echo.Context) error {
 	}
 	if !middleware.IsHTMX(c) {
 		return c.JSON(http.StatusOK, map[string]any{"showingId": sh.ID, "stopped": true})
+	}
+	if len(sh.Scene.Moments) > 0 {
+		// The moments panel drops the stopped showing's card.
+		c.Response().Header().Set("HX-Trigger", "cutscene-moment")
 	}
 	// The same stop is pressed from a scene's live list or the "Shown
 	// lately" list; each gets its own row back.

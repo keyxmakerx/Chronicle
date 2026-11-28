@@ -524,6 +524,44 @@ export async function seed(base, log = console.log) {
     postProbes.push({ path: `${C}/decks/from`, who });
   });
 
+  // 14f. A cut scene that holds on a moment, shown to the first player. The
+  // moment's note is the Director's alone; the scene's name and the player's
+  // answer are the first player's and the Director's; the line the Director
+  // changes the answer into goes on the hidden page and reaches no player
+  // before Continue. The panel, a decision and Continue are asked as every
+  // other viewer and must refuse, and nobody else may answer.
+  await step('a cut scene that holds on a moment', async () => {
+    if (!ids.hidden) throw new Error('needs the hidden page');
+    const name = mk('CSNAME'), said = mk('CSANSWER');
+    playerOnly[name] = 'name of a cut scene shown to the first player only';
+    playerOnly[said] = "the first player's answer at a cut scene's moment";
+    const note = m('CSNOTE', "the Director's note on a cut scene's moment");
+    const draft = m('CSDRAFT', "the line the Director changed an answer into, before Continue");
+    r = must(await owner.post(`${C}/cutscenes`, { body: { name, csrf_token: owner.csrf() } }), 'create scene');
+    const sid = (r.url.match(/cutscenes\/([0-9a-f-]{36})/) || [])[1];
+    if (!sid) throw new Error('no scene id in ' + r.url);
+    must(await owner.post(`${C}/cutscenes/${sid}`, { body: { name, bg_kind: 'black', mo_at: '1', mo_ask: 'What do they whisper? ' + RUN, mo_ways: 'write director', mo_to: '', mo_note: note, end_kind: 'tap', csrf_token: owner.csrf() } }), 'save scene');
+    r = must(await owner.get(`${C}/cutscenes/${sid}/show`), 'show sheet');
+    const pat = (r.text.match(/value="([0-9a-f-]{36})"[^>]*>\s*<span class="csw-person-name">\s*Pat Player/) || [])[1];
+    if (!pat) throw new Error('the first player is not on the Show sheet');
+    must(await owner.post(`${C}/cutscenes/${sid}/show`, { body: { to: pat, csrf_token: owner.csrf() } }), 'show');
+    r = must(await player.get(`${C}/cutscenes/mine`, { headers: { Accept: 'application/json' } }), 'mine');
+    const row = (JSON.parse(r.text).data || []).find((x) => x.name === name);
+    if (!row || !row.holding) throw new Error('the showing is not holding for the player');
+    const shid = row.showingId;
+    must(await player.post(`${C}/cutscenes/showings/${shid}/moments/0/answer`, { body: { way: 'write', text: said, csrf_token: player.csrf() } }), 'answer');
+    r = must(await owner.get(`${C}/cutscenes/${sid}/live`, { headers: { 'HX-Request': 'true' } }), 'panel');
+    const aid = (r.text.match(/\/answers\/([0-9a-f-]{36})/) || [])[1];
+    if (!aid) throw new Error('the panel shows no answer');
+    must(await owner.post(`${C}/cutscenes/showings/${shid}/answers/${aid}`, { body: { action: 'change', line: draft, page: ids.hidden, csrf_token: owner.csrf() }, headers: { 'HX-Request': 'true' } }), 'change the answer');
+    ids.extra.push(sid, shid);
+    extraUrls.push(`${C}/cutscenes/${sid}`, `${C}/cutscenes/${sid}/live`, `${C}/cutscenes/showings/${shid}`, `${C}/cutscenes/mine`);
+    const who = ['player', 'other player', 'scribe', 'signedout'];
+    postProbes.push({ path: `${C}/cutscenes/showings/${shid}/answers/${aid}`, who });
+    postProbes.push({ path: `${C}/cutscenes/showings/${shid}/moments/0/go`, who });
+    postProbes.push({ path: `${C}/cutscenes/showings/${shid}/moments/0/answer`, who: ['other player', 'scribe', 'signedout'] });
+  });
+
   // 15. Make the campaign public so the signed-out walk sees what a stranger can.
   await step('public campaign', async () => {
     must(await owner.put(C, { json: { name: 'Crawl ' + RUN, description: '', is_public: true } }), 'update campaign');

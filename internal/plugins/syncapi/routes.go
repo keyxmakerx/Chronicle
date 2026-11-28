@@ -396,12 +396,14 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	}
 
 	// Cut scenes: a member's showings still inside their rewatch window, for
-	// the Foundry GM client to play again for that player. Owner or co-DM
+	// the Foundry GM client to play again for that player, and a Foundry
+	// player's answer at a moment, relayed by that client. Owner or co-DM
 	// only (checked in the handler); gated by the Cut scenes addon (slug
 	// supplied by the wiring).
 	if cs := api.cutscenes; cs != nil {
 		cuts := addonRoutes{cg, RequireAddonAPI(addonChecker, cs.addonSlug)}
 		cuts.GET("/cutscenes/showings", cs.Showings, RequirePermission(PermRead))
+		cuts.POST("/cutscenes/showings/:shid/moments/:m/answer", cs.Answer, RequirePermission(PermWrite))
 	}
 
 	// Homebrew asks: rules waiting at an "Ask the Director" step, for the

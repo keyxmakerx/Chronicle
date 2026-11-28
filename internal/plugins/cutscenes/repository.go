@@ -44,6 +44,24 @@ type Repository interface {
 	ViewerShowings(ctx context.Context, campaignID, userID string, now time.Time) ([]Showing, error)
 	// MarkWatched stamps watched_at the first time only.
 	MarkWatched(ctx context.Context, campaignID, showingID, userID string, at time.Time) error
+	// ReleaseMoment marks moment i of the showing let go; again changes
+	// nothing.
+	ReleaseMoment(ctx context.Context, campaignID, showingID string, i int) error
+
+	// SaveAnswer stores a viewer's answer at a moment, replacing their own
+	// while it waits; one the Director already decided answers Conflict.
+	SaveAnswer(ctx context.Context, campaignID string, a Answer) error
+	// ListAnswers lists a showing's answers, oldest first; userID "" for
+	// everyone's.
+	ListAnswers(ctx context.Context, campaignID, showingID, userID string) ([]Answer, error)
+	// GetAnswer answers NotFound for an answer that is not the showing's.
+	GetAnswer(ctx context.Context, campaignID, showingID, answerID string) (*Answer, error)
+	// ResolveAnswer decides a waiting answer once; a second decision answers
+	// Conflict.
+	ResolveAnswer(ctx context.Context, campaignID, answerID, status, line, pageID string, at time.Time) error
+	// ReopenAnswer puts an answer the Director added back to waiting, for
+	// when the page refused the line after the answer was claimed.
+	ReopenAnswer(ctx context.Context, campaignID, answerID string) error
 }
 
 type sqlRepository struct{ db *sql.DB }
@@ -245,14 +263,14 @@ func (r *sqlRepository) CreateShowing(ctx context.Context, s Showing) error {
 	return nil
 }
 
-const showingColumns = "s.id, s.campaign_id, s.scene_id, s.scene, s.shown_by, s.shown_at, s.rewatch_until, s.stopped_at"
+const showingColumns = "s.id, s.campaign_id, s.scene_id, s.scene, s.shown_by, s.shown_at, s.rewatch_until, s.stopped_at, s.released"
 
 func scanShowing(row scanner, extra ...any) (Showing, error) {
 	var sh Showing
 	var sceneID sql.NullString
 	var snap string
 	var stopped sql.NullTime
-	dest := append([]any{&sh.ID, &sh.CampaignID, &sceneID, &snap, &sh.ShownBy, &sh.ShownAt, &sh.RewatchUntil, &stopped}, extra...)
+	dest := append([]any{&sh.ID, &sh.CampaignID, &sceneID, &snap, &sh.ShownBy, &sh.ShownAt, &sh.RewatchUntil, &stopped, &sh.Released}, extra...)
 	if err := row.Scan(dest...); err != nil {
 		return sh, err
 	}
@@ -377,6 +395,146 @@ func (r *sqlRepository) MarkWatched(ctx context.Context, campaignID, showingID, 
 		at.UTC(), campaignID, showingID, userID)
 	if err != nil {
 		return fmt.Errorf("marking showing watched: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlRepository) ReleaseMoment(ctx context.Context, campaignID, showingID string, i int) error {
+	if i < 0 || i >= 31 {
+		return apperror.NewBadRequest("no such moment")
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE cutscene_showings SET released = released | ? WHERE campaign_id = ? AND id = ?`, 1<<uint(i), campaignID, showingID)
+	if err != nil {
+		return fmt.Errorf("letting a moment go: %w", err)
+	}
+	return nil
+}
+
+func answerDecided() error {
+	return apperror.NewConflict("Your Director has already read this answer.")
+}
+
+func (r *sqlRepository) SaveAnswer(ctx context.Context, campaignID string, a Answer) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("starting answer: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var id, status string
+	err = tx.QueryRowContext(ctx, `SELECT a.id, a.status FROM cutscene_moment_answers a JOIN cutscene_showings s ON s.id = a.showing_id
+		WHERE s.campaign_id = ? AND a.showing_id = ? AND a.moment = ? AND a.user_id = ? FOR UPDATE`,
+		campaignID, a.ShowingID, a.Moment, a.UserID).Scan(&id, &status)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// The showing is read through its campaign, so an id from another
+		// campaign inserts nothing.
+		res, err := tx.ExecContext(ctx, "INSERT INTO cutscene_moment_answers (id, showing_id, moment, user_id, way, `text`, status, created_at) "+
+			"SELECT ?, s.id, ?, ?, ?, ?, ?, ? FROM cutscene_showings s WHERE s.campaign_id = ? AND s.id = ?",
+			a.ID, a.Moment, a.UserID, a.Way, a.Text, AnswerWaiting, a.CreatedAt.UTC(), campaignID, a.ShowingID)
+		if isDuplicate(err) {
+			return answerDecided()
+		}
+		if err != nil {
+			return fmt.Errorf("saving answer: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return apperror.NewNotFound("showing not found")
+		}
+	case err != nil:
+		return fmt.Errorf("reading answer: %w", err)
+	case status != AnswerWaiting:
+		return answerDecided()
+	default:
+		if _, err := tx.ExecContext(ctx, "UPDATE cutscene_moment_answers SET way = ?, `text` = ?, created_at = ? WHERE id = ?",
+			a.Way, a.Text, a.CreatedAt.UTC(), id); err != nil {
+			return fmt.Errorf("saving answer: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing answer: %w", err)
+	}
+	return nil
+}
+
+const answerColumns = "a.id, a.showing_id, a.moment, a.user_id, a.way, a.`text`, a.status, a.line, a.page_id, a.created_at, a.resolved_at"
+
+func scanAnswer(row scanner) (Answer, error) {
+	var a Answer
+	var line, page sql.NullString
+	var resolved sql.NullTime
+	if err := row.Scan(&a.ID, &a.ShowingID, &a.Moment, &a.UserID, &a.Way, &a.Text, &a.Status, &line, &page, &a.CreatedAt, &resolved); err != nil {
+		return a, err
+	}
+	a.Line, a.PageID = line.String, page.String
+	if resolved.Valid {
+		t := resolved.Time
+		a.ResolvedAt = &t
+	}
+	return a, nil
+}
+
+func (r *sqlRepository) ListAnswers(ctx context.Context, campaignID, showingID, userID string) ([]Answer, error) {
+	q := `SELECT ` + answerColumns + ` FROM cutscene_moment_answers a JOIN cutscene_showings s ON s.id = a.showing_id
+		WHERE s.campaign_id = ? AND a.showing_id = ?`
+	args := []any{campaignID, showingID}
+	if userID != "" {
+		q += ` AND a.user_id = ?`
+		args = append(args, userID)
+	}
+	rows, err := r.db.QueryContext(ctx, q+` ORDER BY a.created_at, a.id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing answers: %w", err)
+	}
+	defer rows.Close()
+	out := []Answer{}
+	for rows.Next() {
+		a, err := scanAnswer(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning answer: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlRepository) GetAnswer(ctx context.Context, campaignID, showingID, answerID string) (*Answer, error) {
+	a, err := scanAnswer(r.db.QueryRowContext(ctx, `SELECT `+answerColumns+` FROM cutscene_moment_answers a JOIN cutscene_showings s ON s.id = a.showing_id
+		WHERE s.campaign_id = ? AND a.showing_id = ? AND a.id = ?`, campaignID, showingID, answerID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("answer not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading answer: %w", err)
+	}
+	return &a, nil
+}
+
+func (r *sqlRepository) ResolveAnswer(ctx context.Context, campaignID, answerID, status, line, pageID string, at time.Time) error {
+	var l, p any
+	if line != "" {
+		l = line
+	}
+	if pageID != "" {
+		p = pageID
+	}
+	res, err := r.db.ExecContext(ctx, `UPDATE cutscene_moment_answers a JOIN cutscene_showings s ON s.id = a.showing_id
+		SET a.status = ?, a.line = ?, a.page_id = ?, a.resolved_at = ?
+		WHERE s.campaign_id = ? AND a.id = ? AND a.status = ?`, status, l, p, at.UTC(), campaignID, answerID, AnswerWaiting)
+	if err != nil {
+		return fmt.Errorf("deciding answer: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewConflict("This answer was already decided.")
+	}
+	return nil
+}
+
+func (r *sqlRepository) ReopenAnswer(ctx context.Context, campaignID, answerID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE cutscene_moment_answers a JOIN cutscene_showings s ON s.id = a.showing_id
+		SET a.status = ?, a.line = NULL, a.page_id = NULL, a.resolved_at = NULL
+		WHERE s.campaign_id = ? AND a.id = ? AND a.status IN (?, ?)`, AnswerWaiting, campaignID, answerID, AnswerAdded, AnswerChanged)
+	if err != nil {
+		return fmt.Errorf("reopening answer: %w", err)
 	}
 	return nil
 }

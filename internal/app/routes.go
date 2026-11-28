@@ -4998,7 +4998,8 @@ func (a *App) RegisterRoutes() {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
 	}}
 	cutscenesSvc := cutscenes.NewService(cutscenes.NewRepository(a.DB), &cutsceneMembersAdapter{svc: campaignService},
-		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive), cutscenes.WithFoundryPreview(cutsceneFoundry))
+		cutscenes.WithPresence(cutscenePresence), cutscenes.WithPublisher(cutsceneLive), cutscenes.WithFoundryPreview(cutsceneFoundry),
+		cutscenes.WithStory(cutsceneStoryAdapter{svc: entityService}))
 	var cutsceneSyncHandler *syncapi.CutsceneAPIHandler
 	if a.PluginHealth.IsHealthy(cutscenes.PluginSlug) {
 		cutsceneSyncHandler = syncapi.NewCutsceneAPIHandler(cutsceneSyncAdapter{svc: cutscenesSvc}, campaignService, cutscenes.AddonSlug)

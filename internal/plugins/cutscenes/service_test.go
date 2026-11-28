@@ -148,9 +148,8 @@ func TestShow(t *testing.T) {
 	}
 }
 
-// A moment's note is the Director's: the editor keeps it, and nothing that
-// plays the scene elsewhere carries it. Until answers can travel, a showing
-// plays without its moments at all.
+// A moment's note is the Director's: the editor and the stored showing keep
+// it, and nothing that plays the scene elsewhere carries it.
 func TestMomentsStayWithTheDirector(t *testing.T) {
 	r := newRig()
 	in := NewScene()
@@ -180,8 +179,11 @@ func TestMomentsStayWithTheDirector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sh.Scene.Moments != nil || r.pub.shown[len(r.pub.shown)-1].Scene.Moments != nil {
-		t.Errorf("a showing carried moments: %+v", sh.Scene.Moments)
+	if len(sh.Scene.Moments) != 1 || sh.Scene.Moments[0].Note != "the bell" {
+		t.Errorf("the stored showing lost its moment or note: %+v", sh.Scene.Moments)
+	}
+	if live := r.pub.shown[len(r.pub.shown)-1].Scene.Moments; len(live) != 1 || live[0].Note != "" || live[0].Ask == "" {
+		t.Errorf("the showing that went to screens: %+v", live)
 	}
 
 	// A showing stored with a note (written by hand, or by a later build)
@@ -204,7 +206,7 @@ func TestMomentsStayWithTheDirector(t *testing.T) {
 	for _, ms := range list {
 		seen = append(seen, ms.Scene.Moments...)
 	}
-	if len(seen) != 2 {
+	if len(seen) != 3 {
 		t.Errorf("moments read %+v", seen)
 	}
 	for _, m := range seen {

@@ -59,6 +59,19 @@ type Service interface {
 	// with the scenes, for the Foundry GM client. The sync API checks the
 	// caller is a Director before it asks.
 	MemberShowings(ctx context.Context, campaignID, userID string) ([]MemberShowing, error)
+
+	// Answer stores a viewer's answer at a moment their showing holds on and
+	// tells the Director's screens. Only the showing's viewers may answer.
+	Answer(ctx context.Context, campaignID, showingID string, moment int, v Viewer, in AnswerInput) (*MyAnswer, error)
+	// LiveMoments lists a scene's live showings that have moments, each with
+	// the moment it holds on and the answers there, for the Director.
+	LiveMoments(ctx context.Context, campaignID, sceneID string, v Viewer) ([]LiveMoment, error)
+	// Resolve adds a waiting answer to the story (as written or changed) or
+	// turns it down. Nothing joins a page any other way.
+	Resolve(ctx context.Context, campaignID, showingID, answerID string, v Viewer, in ResolveInput) (*Answer, error)
+	// Go lets a moment go on every viewer's screen, with the lines that
+	// joined the story there.
+	Go(ctx context.Context, campaignID, showingID string, moment int, v Viewer) (*Showing, error)
 }
 
 // Presence says where each member is now; implemented in internal/app over
@@ -77,9 +90,18 @@ type Members interface {
 // Publisher puts a showing on screens and takes it off; implemented in
 // internal/app over the websocket bus. It is told after the database has
 // the showing, so a screen that asks right away can read it.
+//
+// Every showing it is handed carries the scene as players may see it (no
+// Director's notes); the service strips them before it calls.
 type Publisher interface {
 	Show(campaignID string, s Showing)
 	Stop(campaignID string, s Showing)
+	// Answered tells the Director's screens that a viewer answered, and the
+	// other viewers that they are adding to the story, without the words.
+	Answered(campaignID string, s Showing, a Answer)
+	// Go lets moment i go on the viewers' screens, with the lines that
+	// joined the story there.
+	Go(campaignID string, s Showing, i int, lines []ShownLine)
 }
 
 // FoundryPreviewer plays a Director's scene on their own Foundry screen;
@@ -101,6 +123,7 @@ type service struct {
 	presence Presence
 	pub      Publisher
 	foundry  FoundryPreviewer
+	story    Story
 	now      func() time.Time
 }
 
@@ -321,11 +344,6 @@ func (s *service) Show(ctx context.Context, campaignID, sceneID string, v Viewer
 	if err != nil {
 		return nil, err
 	}
-	// A moment holds the scene until the Director lets it go on, and a
-	// showing has no way yet to carry that or an answer, so it plays without
-	// its moments; the preview plays them.
-	// TODO(#2939): keep the moments once answers reach the Director.
-	snap.Moments = nil
 	now := s.now().UTC().Truncate(time.Second)
 	sh := Showing{
 		ID: uuid.NewString(), CampaignID: campaignID, SceneID: sc.ID, Scene: snap, ShownBy: v.UserID,
@@ -335,7 +353,7 @@ func (s *service) Show(ctx context.Context, campaignID, sceneID string, v Viewer
 		return nil, err
 	}
 	if s.pub != nil {
-		s.pub.Show(campaignID, sh)
+		s.pub.Show(campaignID, playerShowing(sh))
 	}
 	return &sh, nil
 }
@@ -355,7 +373,7 @@ func (s *service) Stop(ctx context.Context, campaignID, showingID string, v View
 		}
 		sh.StoppedAt = &now
 		if s.pub != nil {
-			s.pub.Stop(campaignID, *sh)
+			s.pub.Stop(campaignID, playerShowing(*sh))
 		}
 	}
 	s.name(ctx, campaignID, []*Showing{sh})
@@ -439,7 +457,8 @@ func (s *service) Mine(ctx context.Context, campaignID string, v Viewer) ([]Mine
 	out := make([]MineItem, 0, len(list))
 	for _, sh := range list {
 		watched := len(sh.Viewers) > 0 && sh.Viewers[0].WatchedAt != nil
-		out = append(out, MineItem{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Watched: watched, Stopped: sh.StoppedAt != nil})
+		out = append(out, MineItem{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Watched: watched,
+			Stopped: sh.StoppedAt != nil, Holding: sh.Holding(s.now())})
 	}
 	return out, nil
 }
@@ -477,7 +496,8 @@ func (s *service) Read(ctx context.Context, campaignID, showingID string, v View
 	if err != nil {
 		return nil, err
 	}
-	return &ShowingRead{ShowingID: sh.ID, RewatchUntil: sh.RewatchUntil, Scene: PlayerScene(sh.Scene)}, nil
+	return &ShowingRead{ShowingID: sh.ID, RewatchUntil: sh.RewatchUntil, Scene: PlayerScene(sh.Scene),
+		Released: sh.ReleasedList(), Answers: s.myAnswers(ctx, campaignID, sh, v.UserID)}, nil
 }
 
 func (s *service) Watched(ctx context.Context, campaignID, showingID string, v Viewer) error {
@@ -500,7 +520,16 @@ func (s *service) MemberShowings(ctx context.Context, campaignID, userID string)
 	}
 	out := make([]MemberShowing, 0, len(list))
 	for _, sh := range list {
-		out = append(out, MemberShowing{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Scene: PlayerScene(sh.Scene)})
+		sh := sh
+		out = append(out, MemberShowing{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Scene: PlayerScene(sh.Scene),
+			Holding: sh.Holding(s.now()), Released: sh.ReleasedList(), Answers: s.myAnswers(ctx, campaignID, &sh, userID)})
 	}
 	return out, nil
+}
+
+// playerShowing is the showing as it may leave for screens: its scene
+// without the Director's notes.
+func playerShowing(sh Showing) Showing {
+	sh.Scene = PlayerScene(sh.Scene)
+	return sh
 }

@@ -17,6 +17,7 @@ import (
 const (
 	showRateLimit    = 30
 	watchedRateLimit = 120
+	answerRateLimit  = 30
 )
 
 // RegisterRoutes mounts the routes under the campaign group. Every route needs
@@ -36,6 +37,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	shows := middleware.UserRateLimit(user, showRateLimit, time.Minute)
 	watched := middleware.UserRateLimit(user, watchedRateLimit, time.Minute)
 	foundryPreviews := middleware.UserRateLimit(user, showRateLimit, time.Minute)
+	answers := middleware.UserRateLimit(user, answerRateLimit, time.Minute)
 
 	// Director only (404 for anyone else). Static paths win over :sid, so
 	// none of "new", "mine", "showings" or "preview" is read as a scene id.
@@ -46,9 +48,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/cutscenes/preview/foundry", h.PreviewInFoundry, foundryPreviews)
 	cg.GET("/cutscenes/showings", h.Showings)
 	cg.POST("/cutscenes/showings/:shid/stop", h.Stop)
+	cg.POST("/cutscenes/showings/:shid/answers/:aid", h.Resolve)
+	cg.POST("/cutscenes/showings/:shid/moments/:m/go", h.Go)
 	cg.GET("/cutscenes/:sid", h.Editor)
 	cg.POST("/cutscenes/:sid", h.Save)
 	cg.POST("/cutscenes/:sid/delete", h.Delete)
+	cg.GET("/cutscenes/:sid/live", h.Live)
 	cg.GET("/cutscenes/:sid/show", h.ShowSheet)
 	cg.POST("/cutscenes/:sid/show", h.Show, shows)
 
@@ -56,4 +61,5 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/cutscenes/mine", h.Mine)
 	cg.GET("/cutscenes/showings/:shid", h.ReadShowing)
 	cg.POST("/cutscenes/showings/:shid/watched", h.Watched, watched)
+	cg.POST("/cutscenes/showings/:shid/moments/:m/answer", h.Answer, answers)
 }

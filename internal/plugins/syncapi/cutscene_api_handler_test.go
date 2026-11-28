@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -29,7 +30,17 @@ func (s *cutsceneCampaigns) IsUserDmGranted(context.Context, string, string) (bo
 	return s.granted, s.grantErr
 }
 
-type fakeCutsceneAPI struct{ gotCampaign, gotUser string }
+type fakeCutsceneAPI struct {
+	gotCampaign, gotUser string
+	gotShowing           string
+	gotMoment            int
+	gotWay, gotText      string
+}
+
+func (f *fakeCutsceneAPI) Answer(_ context.Context, campaignID, showingID string, moment int, userID, way, text string) (any, error) {
+	f.gotCampaign, f.gotShowing, f.gotMoment, f.gotUser, f.gotWay, f.gotText = campaignID, showingID, moment, userID, way, text
+	return map[string]any{"moment": moment, "way": way, "text": text}, nil
+}
 
 func (f *fakeCutsceneAPI) MemberShowings(_ context.Context, campaignID, userID string) (any, int, error) {
 	f.gotCampaign, f.gotUser = campaignID, userID
@@ -74,6 +85,48 @@ func TestCutsceneAPIDMUser(t *testing.T) {
 			}
 			if tt.want != http.StatusOK && api.gotUser != "" {
 				t.Errorf("a refused key reached the service")
+			}
+		})
+	}
+}
+
+// A Foundry player's answer goes through only on an owner's or co-DM's key,
+// for the player the body names, at the moment in the path.
+func TestCutsceneAPIAnswer(t *testing.T) {
+	tests := []struct {
+		name   string
+		svc    *cutsceneCampaigns
+		body   string
+		moment string
+		want   int
+	}{
+		{name: "the owner relays an answer", svc: &cutsceneCampaigns{role: campaigns.RoleOwner}, body: `{"user":"ana","way":"write","text":"The bell rang twice."}`, moment: "1", want: http.StatusOK},
+		{name: "a co-DM relays an answer", svc: &cutsceneCampaigns{role: campaigns.RolePlayer, granted: true}, body: `{"user":"ana","way":"director"}`, moment: "0", want: http.StatusOK},
+		{name: "a player's key", svc: &cutsceneCampaigns{role: campaigns.RolePlayer}, body: `{"user":"ana","way":"write","text":"x"}`, moment: "0", want: http.StatusForbidden},
+		{name: "no player named", svc: &cutsceneCampaigns{role: campaigns.RoleOwner}, body: `{"way":"write","text":"x"}`, moment: "0", want: http.StatusBadRequest},
+		{name: "moment not a number", svc: &cutsceneCampaigns{role: campaigns.RoleOwner}, body: `{"user":"ana","way":"write","text":"x"}`, moment: "one", want: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api := &fakeCutsceneAPI{gotMoment: -1}
+			h := NewCutsceneAPIHandler(api, tt.svc, "cutscenes")
+			c, rec := dmScreenContext(http.MethodPost, tt.body, 1, "shid", "sh-1", "m", tt.moment)
+			err := h.Answer(c)
+			got := rec.Code
+			if err != nil {
+				got = dmStatusOf(t, err)
+			}
+			if got != tt.want {
+				t.Fatalf("status %d, want %d", got, tt.want)
+			}
+			if tt.want != http.StatusOK {
+				if api.gotUser != "" {
+					t.Errorf("a refused call reached the service")
+				}
+				return
+			}
+			if api.gotCampaign != "camp-1" || api.gotShowing != "sh-1" || api.gotUser != "ana" || strconv.Itoa(api.gotMoment) != tt.moment {
+				t.Errorf("answered %+v", api)
 			}
 		})
 	}

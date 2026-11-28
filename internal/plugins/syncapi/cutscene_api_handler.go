@@ -3,6 +3,7 @@ package syncapi
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v5"
 
@@ -17,6 +18,9 @@ type CutsceneAPIService interface {
 	// MemberShowings lists one member's showings still inside their rewatch
 	// window, newest first, each with the scene as it was shown.
 	MemberShowings(ctx context.Context, campaignID, userID string) (items any, total int, err error)
+	// Answer records a player's answer at a moment, sent on their behalf by
+	// the GM client; the service checks they are one of the showing's viewers.
+	Answer(ctx context.Context, campaignID, showingID string, moment int, userID, way, text string) (any, error)
 }
 
 // CutsceneAPIHandler serves the cut scene endpoint the Foundry module's GM
@@ -69,4 +73,38 @@ func (h *CutsceneAPIHandler) Showings(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": items, "total": total})
+}
+
+// AnswerBody is what the GM client relays when a player in Foundry answers a
+// moment.
+type AnswerBody struct {
+	User string `json:"user"`
+	Way  string `json:"way"`
+	Text string `json:"text"`
+}
+
+// Answer records a Foundry player's answer at a moment.
+// POST /api/v1/campaigns/:id/cutscenes/showings/:shid/moments/:m/answer
+// Body: {"user": "<chronicleUserId>", "way": "write", "text": "..."}
+// Response: {"moment": N, "way": "...", "text": "..."}
+func (h *CutsceneAPIHandler) Answer(c *echo.Context) error {
+	if _, err := h.dmUser(c); err != nil {
+		return err
+	}
+	m, err := strconv.Atoi(c.Param("m"))
+	if err != nil {
+		return apperror.NewBadRequest("moment must be a number")
+	}
+	var body AnswerBody
+	if err := c.Bind(&body); err != nil {
+		return apperror.NewBadRequest("invalid body")
+	}
+	if body.User == "" {
+		return apperror.NewBadRequest("user is required")
+	}
+	out, err := h.svc.Answer(c.Request().Context(), c.Param("id"), c.Param("shid"), m, body.User, body.Way, body.Text)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
 }

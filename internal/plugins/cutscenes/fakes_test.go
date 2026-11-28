@@ -17,10 +17,99 @@ type memRepo struct {
 	scenes   map[string]Scene  // id -> scene
 	sceneCmp map[string]string // id -> campaign
 	showings map[string]Showing
+	answers  []Answer
 }
 
 func newMemRepo() *memRepo {
 	return &memRepo{scenes: map[string]Scene{}, sceneCmp: map[string]string{}, showings: map[string]Showing{}}
+}
+
+func (r *memRepo) inCampaign(campaignID, showingID string) bool {
+	s, ok := r.showings[showingID]
+	return ok && s.CampaignID == campaignID
+}
+
+func (r *memRepo) ReleaseMoment(_ context.Context, campaignID, showingID string, i int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.showings[showingID]; ok && s.CampaignID == campaignID {
+		s.Released |= 1 << uint(i)
+		r.showings[showingID] = s
+	}
+	return nil
+}
+
+func (r *memRepo) SaveAnswer(_ context.Context, campaignID string, a Answer) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.inCampaign(campaignID, a.ShowingID) {
+		return apperror.NewNotFound("showing not found")
+	}
+	for i, x := range r.answers {
+		if x.ShowingID == a.ShowingID && x.Moment == a.Moment && x.UserID == a.UserID {
+			if x.Status != AnswerWaiting {
+				return answerDecided()
+			}
+			x.Way, x.Text, x.CreatedAt = a.Way, a.Text, a.CreatedAt
+			r.answers[i] = x
+			return nil
+		}
+	}
+	a.Name = ""
+	r.answers = append(r.answers, a)
+	return nil
+}
+
+func (r *memRepo) ListAnswers(_ context.Context, campaignID, showingID, userID string) ([]Answer, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []Answer{}
+	if !r.inCampaign(campaignID, showingID) {
+		return out, nil
+	}
+	for _, a := range r.answers {
+		if a.ShowingID == showingID && (userID == "" || a.UserID == userID) {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+func (r *memRepo) GetAnswer(_ context.Context, campaignID, showingID, answerID string) (*Answer, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, a := range r.answers {
+		if a.ID == answerID && a.ShowingID == showingID && r.inCampaign(campaignID, showingID) {
+			return &a, nil
+		}
+	}
+	return nil, apperror.NewNotFound("answer not found")
+}
+
+func (r *memRepo) ResolveAnswer(_ context.Context, campaignID, answerID, status, line, pageID string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, a := range r.answers {
+		if a.ID == answerID && r.inCampaign(campaignID, a.ShowingID) && a.Status == AnswerWaiting {
+			t := at
+			a.Status, a.Line, a.PageID, a.ResolvedAt = status, line, pageID, &t
+			r.answers[i] = a
+			return nil
+		}
+	}
+	return apperror.NewConflict("This answer was already decided.")
+}
+
+func (r *memRepo) ReopenAnswer(_ context.Context, campaignID, answerID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, a := range r.answers {
+		if a.ID == answerID && r.inCampaign(campaignID, a.ShowingID) && a.InStory() {
+			a.Status, a.Line, a.PageID, a.ResolvedAt = AnswerWaiting, "", "", nil
+			r.answers[i] = a
+		}
+	}
+	return nil
 }
 
 func (r *memRepo) ListScenes(_ context.Context, campaignID string) ([]Scene, error) {
@@ -207,15 +296,57 @@ func (fakeMembers) Members(_ context.Context, campaignID string) ([]Member, erro
 	}, nil
 }
 
+// spyStory is the campaign's pages: two pages, and every line added.
+type spyStory struct {
+	mu    sync.Mutex
+	added []string // page/from/line
+	fail  error
+}
+
+func (st *spyStory) Pages(context.Context, string) ([]PageRef, error) {
+	return []PageRef{{ID: "page-bell", Name: "The Drowned Bell"}, {ID: "page-vell", Name: "Harbourmaster Vell"}}, nil
+}
+
+func (st *spyStory) AddLine(_ context.Context, _, pageID, line, from string) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.fail != nil {
+		return st.fail
+	}
+	st.added = append(st.added, pageID+"/"+from+"/"+line)
+	return nil
+}
+
 type fakePresence map[string]Place
 
 func (p fakePresence) Places(context.Context, string) (map[string]Place, error) { return p, nil }
 
 // spyPublisher records what went out live.
 type spyPublisher struct {
-	mu    sync.Mutex
-	shown []Showing
-	stops []Showing
+	mu       sync.Mutex
+	shown    []Showing
+	stops    []Showing
+	answered []Answer
+	gone     []spyGo
+}
+
+// spyGo is one moment let go, with the showing as it was handed over.
+type spyGo struct {
+	showing Showing
+	moment  int
+	lines   []ShownLine
+}
+
+func (p *spyPublisher) Answered(_ string, _ Showing, a Answer) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.answered = append(p.answered, a)
+}
+
+func (p *spyPublisher) Go(_ string, s Showing, i int, lines []ShownLine) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.gone = append(p.gone, spyGo{showing: s, moment: i, lines: lines})
 }
 
 func (p *spyPublisher) Show(_ string, s Showing) {
@@ -261,6 +392,7 @@ type rig struct {
 	repo    *memRepo
 	pub     *spyPublisher
 	foundry *spyFoundry
+	story   *spyStory
 	clock   *clock
 	svc     Service
 }
@@ -274,10 +406,10 @@ var (
 )
 
 func newRig() *rig {
-	r := &rig{repo: newMemRepo(), pub: &spyPublisher{}, foundry: &spyFoundry{offered: true, connected: true}, clock: &clock{t: time.Date(2026, 11, 20, 20, 0, 0, 0, time.UTC)}}
+	r := &rig{repo: newMemRepo(), pub: &spyPublisher{}, foundry: &spyFoundry{offered: true, connected: true}, story: &spyStory{}, clock: &clock{t: time.Date(2026, 11, 20, 20, 0, 0, 0, time.UTC)}}
 	r.svc = NewService(r.repo, fakeMembers{},
 		WithPresence(fakePresence{"ana": {Chronicle: true}, "bo": {Foundry: true}, "dir": {Chronicle: true, Foundry: true}}),
-		WithPublisher(r.pub), WithFoundryPreview(r.foundry), WithClock(r.clock.now))
+		WithPublisher(r.pub), WithFoundryPreview(r.foundry), WithStory(r.story), WithClock(r.clock.now))
 	return r
 }
 

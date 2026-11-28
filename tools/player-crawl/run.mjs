@@ -19,8 +19,10 @@ try {
   console.log(`\nseeded ${names} markers in ${s.ids.cid}; ${s.skipped.length} step(s) not seeded`);
   const o = await crawl(s.owner, s.ids.cid, s.ids.all, s.markers, { term: 'ZQ' + RUN, controls: s.controls, extraUrls: s.extraUrls });
   let unreachable = Object.entries(s.markers).filter(([k]) => !o.seen.has(k));
-  // The author's own walk must find their private notes, or the check on the others proves nothing.
-  const own = await crawl(s.player, s.ids.cid, s.ids.all, s.playerOnly, { term: 'ZQ' + RUN });
+  // The author's own walk must find their private notes, or the check on the
+  // others proves nothing. It walks the extra URLs too: a cut scene's answer
+  // is the player's own only on their list of scenes shown to them.
+  const own = await crawl(s.player, s.ids.cid, s.ids.all, s.playerOnly, { term: 'ZQ' + RUN, extraUrls: s.extraUrls });
   for (const [k, v] of Object.entries(s.playerOnly)) if (!own.seen.has(k)) { console.log('  UNREACHABLE (even the author never sees it):', v); unreachable.push([k, v]); }
   console.log(`owner walk: ${o.requests} requests, saw ${o.seen.size}/${names} markers`);
   for (const [, v] of unreachable) console.log('  UNREACHABLE (no page shows it to the owner):', v);

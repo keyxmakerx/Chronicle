@@ -114,7 +114,7 @@ var (
 	}
 	Answerers = []Kind{
 		{ToEach, "Each person watching", "everyone the scene is shown to answers"},
-		{ToOne, "One person", "one person answers, picked when it is shown"},
+		{ToOne, "One person", "one person answers: whoever answers first"},
 	}
 	EndingKinds = []Kind{
 		{EndingTap, "When they tap", "a quiet Close appears once the last layer has finished; a tap, click or Esc closes it"},
@@ -369,6 +369,7 @@ type Showing struct {
 	ShownAt      time.Time
 	RewatchUntil time.Time
 	StoppedAt    *time.Time
+	Released     int // a bit per moment the Director let go
 	Viewers      []ShowingViewer
 }
 
@@ -379,10 +380,10 @@ type ShowingViewer struct {
 	WatchedAt *time.Time
 }
 
-// Live reports whether the showing was put on screens moments ago, which is
-// when the editor lists it as showing.
+// Live reports whether the showing was put on screens moments ago, or still
+// holds on a moment, which is when the editor lists it as showing.
 func (s Showing) Live(now time.Time) bool {
-	return s.StoppedAt == nil && now.Sub(s.ShownAt) < LiveFor
+	return s.StoppedAt == nil && (now.Sub(s.ShownAt) < LiveFor || s.Holding(now))
 }
 
 // Stoppable reports whether Stop still means something: a scene that waits
@@ -453,6 +454,9 @@ type MineItem struct {
 	RewatchUntil time.Time `json:"rewatchUntil"`
 	Watched      bool      `json:"watched"`
 	Stopped      bool      `json:"stopped"`
+	// Holding is a showing still waiting on the Director at a moment: the
+	// stage puts it back on a screen that opens, watched or not.
+	Holding bool `json:"holding,omitempty"`
 }
 
 // ShowingRead is one showing as a viewer reads it to play it.
@@ -460,16 +464,24 @@ type ShowingRead struct {
 	ShowingID    string    `json:"showingId"`
 	RewatchUntil time.Time `json:"rewatchUntil"`
 	Scene        Scene     `json:"scene"`
+	// Released lists the moments the Director let go and Answers the
+	// caller's own, so a screen that opens mid-hold lands on the beat with
+	// what they already sent. Both are left out when empty.
+	Released []int      `json:"released,omitempty"`
+	Answers  []MyAnswer `json:"answers,omitempty"`
 }
 
 // MemberShowing is one showing as the sync API hands it to the Foundry GM
 // client, with the scene to play.
 type MemberShowing struct {
-	ShowingID    string    `json:"showingId"`
-	Name         string    `json:"name"`
-	ShownAt      time.Time `json:"shownAt"`
-	RewatchUntil time.Time `json:"rewatchUntil"`
-	Scene        Scene     `json:"scene"`
+	ShowingID    string     `json:"showingId"`
+	Name         string     `json:"name"`
+	ShownAt      time.Time  `json:"shownAt"`
+	RewatchUntil time.Time  `json:"rewatchUntil"`
+	Scene        Scene      `json:"scene"`
+	Holding      bool       `json:"holding,omitempty"`
+	Released     []int      `json:"released,omitempty"`
+	Answers      []MyAnswer `json:"answers,omitempty"`
 }
 
 // ShowingReport is one showing on the Director's recent list.
