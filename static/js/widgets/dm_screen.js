@@ -682,6 +682,17 @@
         applyOpen();
       }
 
+      // A pulled section dropped on the column opens there in front, leaving
+      // any leaf it was on.
+      function openInColumn(id) {
+        setFolded(id, false);
+        st.leaves = st.leaves.map(function (l) { return l.filter(function (x) { return x !== id; }); }).filter(function (l) { return l.length; });
+        st.open = st.open.filter(function (x) { return x !== id; }).concat([id]);
+        saveOpen();
+        saveLeaves();
+        applyOpen(id);
+      }
+
       // With every leaf open, a pulled section joins the leaf it is dropped on
       // as its front card.
       function dropOnLeaf(i, id) {
@@ -967,9 +978,11 @@
           setProgress(d.ghost, d.p);
         }
         if (d.full) {
+          // With every leaf out, the column is a place to drop it too.
           var over = under(e), leaf = over && over.closest('.dms-leaf:not(.dms-leaf-ghost)');
-          d.over = leaf ? parseInt(leaf.getAttribute('data-dms-leaf'), 10) : null;
-          if (leaf) leaf.classList.add('dms-hot');
+          var onCol = !leaf && over && over.closest('.dms-col');
+          d.over = leaf ? parseInt(leaf.getAttribute('data-dms-leaf'), 10) : onCol ? 'col' : null;
+          if (leaf) leaf.classList.add('dms-hot'); else if (onCol) onCol.classList.add('dms-hot');
         }
       }
 
@@ -1012,8 +1025,9 @@
           return;
         }
         if (d.full) {
-          if (d.over !== null && d.over !== undefined) dropOnLeaf(d.over, d.id);
-          else if (Chronicle.notify) Chronicle.notify('The screen opens to ' + (leafRoom() + 1) + ' leaves at most here. Drop it on a leaf.', 'info');
+          if (d.over === 'col') openInColumn(d.id);
+          else if (d.over !== null && d.over !== undefined) dropOnLeaf(d.over, d.id);
+          else if (Chronicle.notify) Chronicle.notify('The screen opens to ' + (leafRoom() + 1) + ' leaves at most here. Drop it on a leaf or on the screen.', 'info');
           return;
         }
         var g = d.ghost;
