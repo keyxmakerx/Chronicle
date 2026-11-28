@@ -1,11 +1,12 @@
 package app
 
 // decks_homebrew.go puts card decks in the Homebrew Workshop: two events a
-// deck fires after a move is stored (a card is played, a card is drawn), a
-// part that points at one of the campaign's decks, and the actions a rule can
-// end in. A number on a sheet or a tracker moves at once; anything bigger
-// waits for a Director, so every deck action is marked Waits, and the one that
-// deals cards to a hero (decks_homebrew_draw.go) does it only when a Director
+// deck fires after a move is stored (a card is played, a card is drawn), the
+// ask a deck puts to the Director before an "ask first" card is played, a part
+// that points at one of the campaign's decks, and the actions a rule can end
+// in. A number on a sheet or a tracker moves at once; anything bigger waits for
+// a Director, so every deck action is marked Waits, and the one that deals
+// cards to a hero (decks_homebrew_draw.go) does it only when a Director
 // presses Run.
 
 import (
@@ -28,6 +29,9 @@ import (
 const (
 	cardPlayedEvent = "card.played"
 	cardDrawnEvent  = "card.drawn"
+	// cardPlayAsked is the ask a waiting "ask first" play puts to the
+	// Director; rules on it add steps that run on Yes.
+	cardPlayAsked   = "card.play-asked"
 	deckAddCopies   = "deck.add-copies"
 	deckTakeOut     = "deck.take-out"
 	deckShuffleBack = "deck.shuffle-back"
@@ -89,7 +93,10 @@ func (s *decksStory) services() (decks.Service, homebrew.Service) {
 	return s.decks, s.homebrew
 }
 
-var _ decks.Story = (*decksStory)(nil)
+var (
+	_ decks.Story = (*decksStory)(nil)
+	_ decks.Asks  = (*decksStory)(nil)
+)
 
 func (s *decksStory) CardDrawn(_ context.Context, campaignID string, e decks.CardEvent) {
 	s.fire(campaignID, cardDrawnEvent, e)
@@ -145,6 +152,110 @@ func (s *decksStory) fire(campaignID, event string, e decks.CardEvent) {
 			slog.Warn("decks: a rule could not be started", slog.String("campaign_id", campaignID), slog.String("event", event), slog.Any("error", err))
 		}
 	})
+}
+
+// playAskPayload is what a waiting play's ask carries: the card event's names
+// for Match, and the copy and hero the answer acts on.
+type playAskPayload struct {
+	cardPayload
+	CopyID string `json:"copyId"`
+	HeroID string `json:"heroId,omitempty"`
+	Hero   string `json:"hero"`
+}
+
+// Ask puts a waiting play to the Directors as the Workshop's ask, so the
+// drawer, the Foundry module and the deck's page answer the same one. With
+// the Workshop away it does nothing, and the play waits on the deck's page.
+func (s *decksStory) Ask(ctx context.Context, campaignID string, a decks.PlayAsk) error {
+	_, hb := s.services()
+	if hb == nil {
+		return nil
+	}
+	payload, err := json.Marshal(playAskPayload{cardPayload: cardPayload{DeckID: a.DeckID, Deck: a.DeckName, CardID: a.CardID, Card: a.CardName},
+		CopyID: a.CopyID, HeroID: a.HeroID, Hero: a.HeroName})
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, decksStoryBudget)
+	defer cancel()
+	// As with the card events, the player's move starts the Director's own
+	// rules with a Director's standing, and the player is the one who asked.
+	v := homebrew.Viewer{UserID: a.By.UserID, Director: true, VisibilityRole: permissions.RoleOwner}
+	_, err = hb.AskFor(ctx, campaignID, v, homebrew.OwnerAsk{Event: cardPlayAsked, Key: a.CopyID, Scope: a.HeroID, Payload: payload})
+	return err
+}
+
+// Answer answers the Workshop's ask for a waiting play, for Let them and Not
+// now on the deck's page. found is false when no ask waits for the copy.
+func (s *decksStory) Answer(ctx context.Context, campaignID, _, copyID string, v decks.Viewer, yes bool) (bool, error) {
+	_, hb := s.services()
+	if hb == nil {
+		return false, nil
+	}
+	in := homebrew.AnswerInput{Answer: homebrew.AnswerNo}
+	if yes {
+		in.Answer = homebrew.AnswerYes
+	}
+	_, found, err := hb.AnswerFor(ctx, campaignID, cardPlayAsked, copyID,
+		homebrew.Viewer{UserID: v.UserID, Director: v.Director, VisibilityRole: v.VisibilityRole}, in)
+	return found, err
+}
+
+// Close ends the Workshop's ask for a copy whose wait ended without an
+// answer, so the drawer stops offering one for a card that moved.
+func (s *decksStory) Close(ctx context.Context, campaignID, _, copyID string, v decks.Viewer, why string) error {
+	_, hb := s.services()
+	if hb == nil {
+		return nil
+	}
+	_, err := hb.CloseFor(ctx, campaignID, cardPlayAsked, copyID,
+		homebrew.Viewer{UserID: v.UserID, Director: v.Director, VisibilityRole: v.VisibilityRole}, why)
+	return err
+}
+
+// playAskWords says a waiting play to one reader: "Tam wants to play Pact
+// from Omens" to a Director, and to anyone else only what the deck shows
+// them. A reader the deck is hidden from reads "play a card".
+func (s *decksStory) playAskWords(ctx context.Context, campaignID string, raw json.RawMessage, reader homebrew.Viewer) homebrew.AskWords {
+	var p playAskPayload
+	if json.Unmarshal(raw, &p) != nil {
+		return homebrew.AskWords{What: "play a card"}
+	}
+	named := homebrew.AskWords{Who: p.Hero, What: "play " + p.Card + " from " + p.Deck}
+	if reader.Director {
+		return named
+	}
+	svc, _ := s.services()
+	if svc == nil || reader.UserID == "" {
+		return homebrew.AskWords{What: "play a card"}
+	}
+	if _, err := svc.Get(ctx, campaignID, p.DeckID, decks.Viewer{UserID: reader.UserID, MemberRole: reader.VisibilityRole, VisibilityRole: reader.VisibilityRole}); err != nil {
+		return homebrew.AskWords{What: "play a card"}
+	}
+	return named
+}
+
+// playAnswered does what the Director answered: Yes lets the card through,
+// No or a written reply turns it down, with the reply for the player.
+func (s *decksStory) playAnswered(ctx context.Context, campaignID string, a homebrew.AskAnswered) error {
+	svc, _ := s.services()
+	if svc == nil {
+		return apperror.NewValidation("Card decks are not available right now.")
+	}
+	var p playAskPayload
+	if err := json.Unmarshal(a.Payload, &p); err != nil {
+		return fmt.Errorf("card.play-asked payload: %w", err)
+	}
+	dv, err := asDirector(a.By)
+	if err != nil {
+		return err
+	}
+	ans := decks.AskAnswer{Yes: a.Kind == homebrew.AnswerYes}
+	if a.Kind == homebrew.AnswerOther {
+		ans.Reply = a.Reply
+	}
+	_, err = svc.AnswerAsk(ctx, campaignID, p.DeckID, p.CopyID, dv, ans)
+	return err
 }
 
 // cardNameArgs is a card event's test: which deck and which card, by name so a
@@ -218,6 +329,11 @@ func registerDecksHomebrew(reg *homebrew.Registry, st *decksStory) error {
 		},
 		func() error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: cardDrawnEvent, Label: "A card is drawn", Fields: names, Check: checkCardNames, Match: cardMatches})
+		},
+		func() error {
+			return reg.RegisterEvent(homebrew.EventDef{Name: cardPlayAsked, Label: "A card is about to be played (runs on the Director's yes)",
+				Fields: names, Check: checkCardNames, Match: cardMatches,
+				Ask: &homebrew.EventAsk{Owner: "Card decks", Words: st.playAskWords, Answered: st.playAnswered}})
 		},
 		func() error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: deckAddCopies, Label: "Shuffle copies of a card into a deck", Waits: true,
