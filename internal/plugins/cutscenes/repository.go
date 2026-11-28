@@ -59,6 +59,9 @@ type Repository interface {
 	// ResolveAnswer decides a waiting answer once; a second decision answers
 	// Conflict.
 	ResolveAnswer(ctx context.Context, campaignID, answerID, status, line, pageID string, at time.Time) error
+	// ReopenAnswer puts an answer the Director added back to waiting, for
+	// when the page refused the line after the answer was claimed.
+	ReopenAnswer(ctx context.Context, campaignID, answerID string) error
 }
 
 type sqlRepository struct{ db *sql.DB }
@@ -522,6 +525,16 @@ func (r *sqlRepository) ResolveAnswer(ctx context.Context, campaignID, answerID,
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return apperror.NewConflict("This answer was already decided.")
+	}
+	return nil
+}
+
+func (r *sqlRepository) ReopenAnswer(ctx context.Context, campaignID, answerID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE cutscene_moment_answers a JOIN cutscene_showings s ON s.id = a.showing_id
+		SET a.status = ?, a.line = NULL, a.page_id = NULL, a.resolved_at = NULL
+		WHERE s.campaign_id = ? AND a.id = ? AND a.status IN (?, ?)`, AnswerWaiting, campaignID, answerID, AnswerAdded, AnswerChanged)
+	if err != nil {
+		return fmt.Errorf("reopening answer: %w", err)
 	}
 	return nil
 }

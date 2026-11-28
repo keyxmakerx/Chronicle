@@ -100,6 +100,18 @@ func (r *memRepo) ResolveAnswer(_ context.Context, campaignID, answerID, status,
 	return apperror.NewConflict("This answer was already decided.")
 }
 
+func (r *memRepo) ReopenAnswer(_ context.Context, campaignID, answerID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, a := range r.answers {
+		if a.ID == answerID && r.inCampaign(campaignID, a.ShowingID) && a.InStory() {
+			a.Status, a.Line, a.PageID, a.ResolvedAt = AnswerWaiting, "", "", nil
+			r.answers[i] = a
+		}
+	}
+	return nil
+}
+
 func (r *memRepo) ListScenes(_ context.Context, campaignID string) ([]Scene, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

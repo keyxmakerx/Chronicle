@@ -317,6 +317,23 @@ func TestDBMomentAnswers(t *testing.T) {
 	if err := repo.SaveAnswer(ctx, c1, answer(ana, "third")); code(err) != 409 {
 		t.Errorf("replaced a decided answer: %v", err)
 	}
+	// A page that refused the line puts the answer back to waiting; another
+	// campaign cannot.
+	if err := repo.ReopenAnswer(ctx, c2, mine[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := repo.GetAnswer(ctx, c1, sh.ID, mine[0].ID); got.Status != AnswerChanged {
+		t.Errorf("another campaign reopened it: %s", got.Status)
+	}
+	if err := repo.ReopenAnswer(ctx, c1, mine[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := repo.GetAnswer(ctx, c1, sh.ID, mine[0].ID); got.Status != AnswerWaiting || got.Line != "" || got.PageID != "" || got.ResolvedAt != nil || got.Text != "second" {
+		t.Errorf("reopened answer %+v", got)
+	}
+	if err := repo.ResolveAnswer(ctx, c1, mine[0].ID, AnswerChanged, "It rang twice.", page, now); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := repo.ReleaseMoment(ctx, c2, sh.ID, 0); err != nil {
 		t.Fatal(err)

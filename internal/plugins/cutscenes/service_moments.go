@@ -91,6 +91,9 @@ func (s *service) Answer(ctx context.Context, campaignID, showingID string, mome
 	if sh.IsReleased(moment) {
 		return nil, apperror.NewConflict("The scene has moved on from this moment.")
 	}
+	if moment != sh.Current() {
+		return nil, apperror.NewConflict("The scene hasn't reached this moment yet.")
+	}
 	m := sh.Scene.Moments[moment]
 	offered := false
 	for _, w := range m.Ways {
@@ -252,15 +255,23 @@ func (s *service) Resolve(ctx context.Context, campaignID, showingID, answerID s
 			return nil, err
 		}
 		pageID = page.ID
-		if err := s.story.AddLine(ctx, campaignID, pageID, line, a.Name); err != nil {
-			return nil, err
-		}
 	default:
 		return nil, apperror.NewBadRequest("choose Add to the story, Change it or Turn down")
 	}
+	// Claim the answer before touching the page, so a second press (or a
+	// second Director) gets Conflict instead of adding the line twice.
 	now := s.now().UTC().Truncate(time.Second)
 	if err := s.repo.ResolveAnswer(ctx, campaignID, a.ID, status, line, pageID, now); err != nil {
 		return nil, err
+	}
+	if pageID != "" {
+		if err := s.story.AddLine(ctx, campaignID, pageID, line, a.Name); err != nil {
+			// The line never joined the page: the answer waits again.
+			if rerr := s.repo.ReopenAnswer(ctx, campaignID, a.ID); rerr != nil {
+				slog.Warn("cutscenes: reopening an answer", slog.String("answer_id", a.ID), slog.Any("error", rerr))
+			}
+			return nil, err
+		}
 	}
 	a.Status, a.Line, a.PageID, a.ResolvedAt = status, line, pageID, &now
 	return a, nil

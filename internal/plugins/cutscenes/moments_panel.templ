@@ -61,6 +61,7 @@ templ momentCard(campaignID, sceneID string, lm LiveMoment) {
 				hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + lm.Showing.ID + "/moments/" + strconv.Itoa(lm.Current) + "/go" }
 				hx-target={ "#" + momentsID(sceneID) }
 				hx-swap="outerHTML"
+				hx-disabled-elt="this"
 			>Continue the scene</button>
 			if lm.Waiting() > 0 {
 				<span class="csw-quiet">Answers you haven't decided stay out of the story.</span>
@@ -79,9 +80,11 @@ templ answerRow(campaignID, sceneID string, lm LiveMoment, a Answer) {
 			case AnswerWaiting:
 				<form
 					class="csw-mo-form"
+					id={ "csw-mo-form-" + a.ID }
 					hx-post={ "/campaigns/" + campaignID + "/cutscenes/showings/" + lm.Showing.ID + "/answers/" + a.ID }
 					hx-target={ "#" + momentsID(sceneID) }
 					hx-swap="outerHTML"
+					hx-disabled-elt={ "#csw-mo-form-" + a.ID + " button" }
 				>
 					<div class="csw-field csw-mo-page">
 						<label class="csw-flabel" for={ "csw-mo-page-" + a.ID }>Page</label>

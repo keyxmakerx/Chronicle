@@ -39,6 +39,14 @@ func codeOf(err error) int {
 	return 0
 }
 
+// passFirst lets the scene's first moment go, so the second is the one it
+// holds on.
+func passFirst(r *rig, sh *Showing) {
+	if _, err := r.svc.Go(ctx, "camp-1", sh.ID, 0, vDir); err != nil {
+		panic(err)
+	}
+}
+
 // Who may answer, and what an answer has to be.
 func TestAnswerRules(t *testing.T) {
 	tests := []struct {
@@ -56,7 +64,8 @@ func TestAnswerRules(t *testing.T) {
 		{name: "nobody signed in", v: Viewer{}, in: AnswerInput{Way: WayWrite, Text: "x"}, want: 404},
 		{name: "an empty written answer", v: vAna, in: AnswerInput{Way: WayWrite, Text: " \t\n"}, want: 400},
 		{name: "too long", v: vAna, in: AnswerInput{Way: WayWrite, Text: strings.Repeat("a", MaxAnswer+1)}, want: 400},
-		{name: "a way the moment does not offer", v: vAna, moment: 1, in: AnswerInput{Way: WayDirector}, want: 400},
+		{name: "a way the moment does not offer", v: vAna, moment: 1, in: AnswerInput{Way: WayDirector}, want: 400, setup: passFirst},
+		{name: "a moment the scene hasn't reached", v: vAna, moment: 1, in: AnswerInput{Way: WayWrite, Text: "Vell"}, want: 409},
 		{name: "a way nobody knows", v: vAna, in: AnswerInput{Way: "dance"}, want: 400},
 		{name: "no such moment", v: vAna, moment: 7, in: AnswerInput{Way: WayWrite, Text: "x"}, want: 400},
 		{name: "a moment let go", v: vAna, in: AnswerInput{Way: WayWrite, Text: "x"}, want: 409,
@@ -75,12 +84,14 @@ func TestAnswerRules(t *testing.T) {
 			setup: func(r *rig, sh *Showing) { r.clock.t = sh.RewatchUntil }},
 		{name: "one person's moment someone else started", v: vBo, moment: 1, in: AnswerInput{Way: WayWrite, Text: "Bo"}, want: 409,
 			setup: func(r *rig, sh *Showing) {
+				passFirst(r, sh)
 				if _, err := r.svc.Answer(ctx, "camp-1", sh.ID, 1, vAna, AnswerInput{Way: WayWrite, Text: "Vell"}); err != nil {
 					t.Fatal(err)
 				}
 			}},
 		{name: "one person's moment, changed by the one answering", v: vAna, moment: 1, in: AnswerInput{Way: WayWrite, Text: "Vell, at dawn"}, want: 0,
 			setup: func(r *rig, sh *Showing) {
+				passFirst(r, sh)
 				if _, err := r.svc.Answer(ctx, "camp-1", sh.ID, 1, vAna, AnswerInput{Way: WayWrite, Text: "Vell"}); err != nil {
 					t.Fatal(err)
 				}
@@ -195,8 +206,8 @@ func TestResolve(t *testing.T) {
 			}
 			stored, _ := r.repo.GetAnswer(ctx, "camp-1", sh.ID, list[0].ID)
 			if tt.want != 0 {
-				if stored.Status != AnswerWaiting || len(r.story.added) != 0 {
-					t.Errorf("a refusal changed something: %s, %v", stored.Status, r.story.added)
+				if stored.Status != AnswerWaiting || stored.Line != "" || stored.PageID != "" || len(r.story.added) != 0 {
+					t.Errorf("a refusal changed something: %s %q %q, %v", stored.Status, stored.Line, stored.PageID, r.story.added)
 				}
 				return
 			}
@@ -216,6 +227,26 @@ func TestResolve(t *testing.T) {
 				t.Errorf("the player's words changed: %q", stored.Text)
 			}
 		})
+	}
+}
+
+// A second press on Add, or a second Director, finds the answer already
+// claimed: the line joins the page once.
+func TestResolveTwiceAddsOnce(t *testing.T) {
+	r, sh := momentRig(t)
+	if _, err := r.svc.Answer(ctx, "camp-1", sh.ID, 0, vAna, AnswerInput{Way: WayWrite, Text: "It rang."}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := r.repo.ListAnswers(ctx, "camp-1", sh.ID, "ana")
+	in := ResolveInput{Action: ResolveAdd, Page: "page-bell"}
+	if _, err := r.svc.Resolve(ctx, "camp-1", sh.ID, list[0].ID, vDir, in); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.Resolve(ctx, "camp-1", sh.ID, list[0].ID, vCoDM, in); codeOf(err) != 409 {
+		t.Fatalf("second press: %v, want 409", err)
+	}
+	if len(r.story.added) != 1 {
+		t.Errorf("the line joined the page %d times", len(r.story.added))
 	}
 }
 
