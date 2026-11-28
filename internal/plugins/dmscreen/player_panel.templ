@@ -115,6 +115,8 @@ templ playerBody(v *PlayerView, id string) {
 			<div class="pls-table" data-widget="table-leaf" data-tt-mount={ id }>
 				<p class="dms-small">Reading the Table…</p>
 			</div>
+		case "tray":
+			@trayCard(v.CampaignID)
 		case "rules":
 			<input type="search" class="dms-search" placeholder="Find a condition" aria-label="Find a condition" data-dms-filter/>
 			for _, cond := range v.Conditions {

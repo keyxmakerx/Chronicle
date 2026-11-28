@@ -365,6 +365,8 @@
       if (s.surface === 'solid') dock.removeAttribute('data-dms-surface'); else dock.setAttribute('data-dms-surface', s.surface);
       if (s.density === 'roomy') dock.removeAttribute('data-dms-density'); else dock.setAttribute('data-dms-density', s.density);
       document.documentElement.classList.toggle('dms-glass', s.surface === 'glass');
+      // The Dice tray card (rolls plugin) draws from these; it hears the saved copy when it arrives.
+      dock.dispatchEvent(new CustomEvent('dms-style', { detail: s }));
       var tab = root() && root().querySelector('[data-dms-styletab]');
       if (tab) tab.setAttribute('aria-expanded', String(!!(drawer && !drawer.hidden && drawer.getAttribute('data-open') === '1')));
     }
@@ -819,6 +821,17 @@
     function onRoom() { if (st.cols === 2) api.applyOpen(); else paintBar(); }
     try { if (mq) mq.addEventListener('change', onRoom); } catch (e) { /* the next redraw catches up */ }
 
+    // The Dice tray card reads its four choices here and saves a change through the same mark and
+    // flush as the surface and density, so they ride the screen's prefs to the account.
+    dock._dmsTray = {
+      get: function () { return { trayLevel: P.style.trayLevel, trayFinish: P.style.trayFinish, trayShape: P.style.trayShape, trayOthers: P.style.trayOthers }; },
+      set: function (key, value) {
+        if (key.indexOf('tray') !== 0 || !(key in P.style)) return;
+        P.style[key] = value;
+        mark(['style']);
+      }
+    };
+
     load();
 
     return {
@@ -841,6 +854,7 @@
         document.removeEventListener('focusin', onFocusAway, true);
         try { if (mq) mq.removeEventListener('change', onRoom); } catch (e) { /* gone with the page */ }
         document.documentElement.classList.remove('dms-two', 'dms-glass');
+        delete dock._dmsTray;
       }
     };
   };

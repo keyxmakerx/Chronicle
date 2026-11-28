@@ -101,7 +101,12 @@
       layouts: layouts,
       style: {
         surface: ['glass', 'felt'].indexOf(style.surface) >= 0 ? style.surface : 'solid',
-        density: style.density === 'compact' ? 'compact' : 'roomy'
+        density: style.density === 'compact' ? 'compact' : 'roomy',
+        // The Dice tray card's own choices; the starting ones fill what is absent.
+        trayLevel: ['simple', 'flat'].indexOf(style.trayLevel) >= 0 ? style.trayLevel : 'detailed',
+        trayFinish: style.trayFinish === 'kit' ? 'kit' : 'paper',
+        trayShape: style.trayShape === 'bowl' ? 'bowl' : 'tower',
+        trayOthers: style.trayOthers === 'off' ? 'off' : 'on'
       }
     };
   };
@@ -220,7 +225,11 @@
       if (k === 'style') {
         out.style = {
           surface: p.style.surface === 'solid' ? '' : p.style.surface,
-          density: p.style.density === 'roomy' ? '' : p.style.density
+          density: p.style.density === 'roomy' ? '' : p.style.density,
+          trayLevel: p.style.trayLevel === 'detailed' ? '' : p.style.trayLevel,
+          trayFinish: p.style.trayFinish === 'paper' ? '' : p.style.trayFinish,
+          trayShape: p.style.trayShape === 'tower' ? '' : p.style.trayShape,
+          trayOthers: p.style.trayOthers === 'on' ? '' : p.style.trayOthers
         };
       } else if (k === 'layouts') {
         out.layouts = p.layouts.map(L.copy);

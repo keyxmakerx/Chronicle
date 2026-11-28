@@ -7181,6 +7181,10 @@ func (a *App) RegisterRoutes() {
 			{Name: "table", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js"}},
 			// The Table's Rolls, Tonight, Hand and Dice drawn into a players' screen card.
 			{Name: "table-leaf", Scripts: []string{"js/table_dice.js", "js/power_roll.js", "js/roll_dice.js", "js/table.js", "js/table_leaf.js"}},
+			// The Dice tray card on both screens: the shared game mat and the member's own
+			// tray. The art, the 3D stage and the mountable tray are one reusable set (the
+			// Foundry module loads the same three); the last file is the card's widget.
+			{Name: "dice-tray", Scripts: []string{"js/roll_dice.js", "js/dice_tray_art.js", "js/dice_tray_stage.js", "js/dice_tray_core.js", "js/dice_tray.js"}},
 			// The Dice tab on the Customize page.
 			{Name: "dice-customize", Scripts: []string{"js/dice_customize.js"}},
 		},

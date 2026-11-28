@@ -214,7 +214,7 @@ func TestPlayerPanel_NeverDrawsGMOnly(t *testing.T) {
 	if strings.Contains(html, "stitched") {
 		t.Error("an owner-only value was drawn (the screen never draws backstory at all)")
 	}
-	for _, want := range []string{`data-dms-open="hero"`, `data-dms-open="party"`, `data-tt-mount="rolls"`, `data-tt-mount="tonight"`, `data-tt-mount="dice"`, "Orrin", "Tyne"} {
+	for _, want := range []string{`data-dms-open="hero"`, `data-dms-open="party"`, `data-tt-mount="rolls"`, `data-tt-mount="tonight"`, `data-tt-mount="dice"`, `data-dms-open="tray"`, `data-widget="dice-tray"`, "Orrin", "Tyne"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("panel is missing %s", want)
 		}
@@ -263,11 +263,11 @@ func TestPlayerSections_Order(t *testing.T) {
 		v    PlayerView
 		want string
 	}{
-		{"nothing but the Table", PlayerView{}, "tonight,rolls,dice"},
+		{"nothing but the Table", PlayerView{}, "tonight,rolls,dice,tray"},
 		{"everything", PlayerView{
 			HasParty: true, World: &WorldView{DateLabel: "d"},
 			Conditions: []ConditionView{{Name: "Bleeding"}}, Notes: &NotesView{Label: "Only you can see this"},
-		}, "hero,party,world,tonight,rolls,dice,rules,notes"},
+		}, "hero,party,world,tonight,rolls,dice,tray,rules,notes"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -286,7 +286,7 @@ func TestPlayerSectionsIn_Hand(t *testing.T) {
 		t.Errorf("without Card decks: sections = %s, want no hand", got)
 	}
 	ctx := layouts.SetEnabledAddons(context.Background(), map[string]bool{"decks": true})
-	if got := sectionIDs(v.SectionsIn(ctx)); got != "hero,party,tonight,rolls,hand,dice" {
+	if got := sectionIDs(v.SectionsIn(ctx)); got != "hero,party,tonight,rolls,hand,dice,tray" {
 		t.Errorf("with Card decks: sections = %s", got)
 	}
 }

@@ -67,6 +67,15 @@ var (
 	prefsDensities = []string{"", "roomy", "compact"}
 )
 
+// The dice tray's own choices. As with surface and density, the starting value
+// (Detailed, Paper, tower, On) is the empty string so it is never stored.
+var (
+	prefsTrayLevels  = []string{"", "simple", "flat", "detailed"}
+	prefsTrayFinishs = []string{"", "paper", "kit"}
+	prefsTrayShapes  = []string{"", "tower", "bowl"}
+	prefsTrayOthers  = []string{"", "on", "off"}
+)
+
 // Arrangement is one way of laying out a screen.
 type Arrangement struct {
 	// Open lists the column's open cards in the order they were opened; the
@@ -92,11 +101,18 @@ type Layout struct {
 	Arrangement
 }
 
-// Style is the screen's surface and density. The kit is not here: it is a
-// member look pick, governed by the owner's "who can change" setting.
+// Style is the screen's surface and density, and how this person's Dice tray
+// card draws: its level of detail, its finish at the detailed level, tower or
+// bowl for their own tray, and whether other members' dice show on the shared
+// mat. The kit is not here: it is a member look pick, governed by the owner's
+// "who can change" setting.
 type Style struct {
-	Surface string `json:"surface,omitempty"`
-	Density string `json:"density,omitempty"`
+	Surface    string `json:"surface,omitempty"`
+	Density    string `json:"density,omitempty"`
+	TrayLevel  string `json:"trayLevel,omitempty"`
+	TrayFinish string `json:"trayFinish,omitempty"`
+	TrayShape  string `json:"trayShape,omitempty"`
+	TrayOthers string `json:"trayOthers,omitempty"`
 }
 
 // ScreenPrefs is the stored document.
@@ -325,20 +341,34 @@ func cleanArrangement(a Arrangement) (Arrangement, error) {
 	return out, nil
 }
 
-// cleanStyle checks the surface and density, storing the defaults as empty.
+// cleanStyle checks the style's values against their allow-lists, storing the
+// defaults as empty. The tray's keys only choose how a drawing looks, so an
+// unknown value is refused rather than guessed at.
 func cleanStyle(s Style) (Style, error) {
-	if !oneOfStr(s.Surface, prefsSurfaces) {
-		return Style{}, apperror.NewBadRequest(fmt.Sprintf("%q is not a surface", s.Surface))
+	checks := []struct {
+		v, what string
+		list    []string
+	}{
+		{s.Surface, "a surface", prefsSurfaces},
+		{s.Density, "a density", prefsDensities},
+		{s.TrayLevel, "a dice tray level", prefsTrayLevels},
+		{s.TrayFinish, "a dice tray finish", prefsTrayFinishs},
+		{s.TrayShape, "a dice tray shape", prefsTrayShapes},
+		{s.TrayOthers, "an Others' dice setting", prefsTrayOthers},
 	}
-	if !oneOfStr(s.Density, prefsDensities) {
-		return Style{}, apperror.NewBadRequest(fmt.Sprintf("%q is not a density", s.Density))
+	for _, c := range checks {
+		if !oneOfStr(c.v, c.list) {
+			return Style{}, apperror.NewBadRequest(fmt.Sprintf("%q is not %s", c.v, c.what))
+		}
 	}
 	out := s
-	if out.Surface == "solid" {
-		out.Surface = ""
-	}
-	if out.Density == "roomy" {
-		out.Density = ""
+	for _, d := range []struct {
+		field *string
+		dflt  string
+	}{{&out.Surface, "solid"}, {&out.Density, "roomy"}, {&out.TrayLevel, "detailed"}, {&out.TrayFinish, "paper"}, {&out.TrayShape, "tower"}, {&out.TrayOthers, "on"}} {
+		if *d.field == d.dflt {
+			*d.field = ""
+		}
 	}
 	return out, nil
 }
