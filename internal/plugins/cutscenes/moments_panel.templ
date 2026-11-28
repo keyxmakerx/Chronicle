@@ -49,8 +49,8 @@ templ momentCard(campaignID, sceneID string, lm LiveMoment) {
 		}
 		if len(lm.Pages) > 0 {
 			<datalist id={ pagesListID(lm.Showing.ID) }>
-				for _, p := range lm.Pages {
-					<option value={ p.Name }></option>
+				for _, p := range pageChoices(lm.Pages) {
+					<option value={ p.Value }>{ p.Label }</option>
 				}
 			</datalist>
 		}

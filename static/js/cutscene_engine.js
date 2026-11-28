@@ -435,6 +435,7 @@
     '.cs-cut-box textarea:focus{outline:2px solid rgba(255,255,255,.85);outline-offset:1px}',
     '.cs-cut-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px}',
     '.cs-cut-row .cs-cut-go{margin:0}',
+    '.cs-cut-note+.cs-cut-row,.cs-cut-said+.cs-cut-row{margin-top:16px}',
     '.cs-cut-go:disabled{opacity:.6;cursor:default}',
     '.cs-cut-quiet{min-height:44px;margin:0;padding:0 14px;border:0;border-radius:22px;background:none;color:rgba(255,255,255,.7);font:500 15px/44px system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer;transition:color .12s,background-color .12s}',
     '.cs-cut-quiet:hover{color:#fff;background:rgba(255,255,255,.08)}',

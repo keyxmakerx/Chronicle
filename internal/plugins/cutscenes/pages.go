@@ -235,6 +235,28 @@ func viewersOf(s Showing) string { return names(s.Viewers) }
 func momentsID(sceneID string) string     { return "csw-moments-" + sceneID }
 func pagesListID(showingID string) string { return "csw-pages-" + showingID }
 
+// pageChoice is one entry of the page picker: what picking it fills in, and
+// what the list shows.
+type pageChoice struct{ Value, Label string }
+
+// pageChoices offers each page by its name, or by its id where two pages
+// share a name, so every page can be picked; the service takes either.
+func pageChoices(pages []PageRef) []pageChoice {
+	seen := map[string]int{}
+	for _, p := range pages {
+		seen[strings.ToLower(strings.TrimSpace(p.Name))]++
+	}
+	out := make([]pageChoice, 0, len(pages))
+	for _, p := range pages {
+		if seen[strings.ToLower(strings.TrimSpace(p.Name))] > 1 {
+			out = append(out, pageChoice{Value: p.ID, Label: p.Name + " (one of several pages with this name)"})
+			continue
+		}
+		out = append(out, pageChoice{Value: p.Name, Label: p.Name})
+	}
+	return out
+}
+
 // answerBy says who answered and how, in the panel.
 func answerBy(a Answer) string {
 	if a.Way == WayDirector {

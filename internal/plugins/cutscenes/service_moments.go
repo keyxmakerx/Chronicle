@@ -218,6 +218,9 @@ func (s *service) Resolve(ctx context.Context, campaignID, showingID, answerID s
 	if err != nil {
 		return nil, err
 	}
+	if sh.StoppedAt != nil {
+		return nil, apperror.NewConflict("You ended this scene, so its answers can't be decided now.")
+	}
 	a, err := s.repo.GetAnswer(ctx, campaignID, sh.ID, answerID)
 	if err != nil {
 		return nil, err
@@ -287,6 +290,9 @@ func (s *service) Go(ctx context.Context, campaignID, showingID string, moment i
 	}
 	if moment < 0 || moment >= len(sh.Scene.Moments) {
 		return nil, apperror.NewBadRequest("this scene has no such moment")
+	}
+	if sh.StoppedAt != nil {
+		return nil, apperror.NewConflict("You ended this scene, so it can't go on.")
 	}
 	if sh.IsReleased(moment) {
 		return sh, nil

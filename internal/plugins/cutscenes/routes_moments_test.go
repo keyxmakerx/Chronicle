@@ -99,6 +99,11 @@ func TestMomentPanelAnswers(t *testing.T) {
 	if rec.Code != 200 || rec.Header().Get("HX-Trigger") != "cutscene-moment" {
 		t.Errorf("show: %d trigger %q", rec.Code, rec.Header().Get("HX-Trigger"))
 	}
+	// Stop redraws the panel, which then drops the stopped showing.
+	rec = r.do("POST", base+"/showings/"+sh.ID+"/stop", "dir", url.Values{}, "HX-Request", "true")
+	if rec.Code != 200 || rec.Header().Get("HX-Trigger") != "cutscene-moment" {
+		t.Errorf("stop: %d trigger %q", rec.Code, rec.Header().Get("HX-Trigger"))
+	}
 	// The editor page draws the panel.
 	rec = r.do("GET", base+"/"+sh.SceneID, "dir", nil)
 	if !strings.Contains(rec.Body.String(), `id="`+momentsID(sh.SceneID)+`"`) {

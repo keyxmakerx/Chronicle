@@ -386,3 +386,37 @@ func TestNoDirectorTextReachesPlayers(t *testing.T) {
 		t.Errorf("the line let through: %+v", g.lines)
 	}
 }
+
+// Once the Director ends the scene, its answers can't be decided and it
+// can't go on: a panel left open from before the stop changes nothing.
+func TestStoppedShowingIsFinal(t *testing.T) {
+	r, sh := momentRig(t)
+	if _, err := r.svc.Answer(ctx, "camp-1", sh.ID, 0, vAna, AnswerInput{Way: WayWrite, Text: "It rang."}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := r.repo.ListAnswers(ctx, "camp-1", sh.ID, "ana")
+	if _, err := r.svc.Stop(ctx, "camp-1", sh.ID, vDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.Resolve(ctx, "camp-1", sh.ID, list[0].ID, vDir, ResolveInput{Action: ResolveAdd, Page: "page-bell"}); codeOf(err) != 409 {
+		t.Errorf("decided after stop: %v", err)
+	}
+	if _, err := r.svc.Go(ctx, "camp-1", sh.ID, 0, vDir); codeOf(err) != 409 {
+		t.Errorf("went on after stop: %v", err)
+	}
+	if len(r.story.added) != 0 || len(r.pub.gone) != 0 {
+		t.Errorf("a stopped showing changed: %v, %d gone", r.story.added, len(r.pub.gone))
+	}
+	if lm, err := r.svc.LiveMoments(ctx, "camp-1", sh.SceneID, vDir); err != nil || len(lm) != 0 {
+		t.Errorf("the panel still lists the stopped showing: %d, %v", len(lm), err)
+	}
+}
+
+// Two pages that share a name are each offered by id, so both can be
+// picked; the rest by name.
+func TestPageChoices(t *testing.T) {
+	got := pageChoices([]PageRef{{ID: "p1", Name: "Twin"}, {ID: "p2", Name: "twin "}, {ID: "p3", Name: "Vell"}})
+	if len(got) != 3 || got[0].Value != "p1" || got[1].Value != "p2" || got[2].Value != "Vell" || !strings.HasPrefix(got[0].Label, "Twin") {
+		t.Errorf("choices: %+v", got)
+	}
+}
