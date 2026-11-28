@@ -694,17 +694,7 @@
         '<div class="dms-sd-sec"><div class="dms-lbl">Density</div>' + seg('Density', 'data-dms-dens', DENSITIES, P.style.density) + '</div>' +
         '<p class="dms-sd-foot">Kept with your account, on every device. The campaign’s pages keep their own look.</p>';
       dock.appendChild(drawer);
-      // The dock is last on the page, so a Tab past the drawer lands at the
-      // page's top: focus leaving the screen closes the drawer behind it.
-      drawer.addEventListener('focusout', function () {
-        // Checked a moment later, when focus has landed; leaving the window
-        // keeps focus where it was, so that never closes it.
-        setTimeout(function () {
-          var a = document.activeElement;
-          if (a && a !== document.body && !dock.contains(a)) closeDrawer(false);
-          else if ((!a || a === document.body) && document.hasFocus()) closeDrawer(false);
-        }, 0);
-      });
+
     }
 
     // The kits' faces load once, the first time the drawer can offer them.
@@ -727,6 +717,7 @@
       drawer.setAttribute('data-open', '1');
       // The new-leaf slot sits where the drawer lies, so it steps aside.
       dock.classList.add('dms-styling');
+      document.addEventListener('focusin', onFocusAway, true);
       paintStyle();
       var m = motion();
       if (m !== 'off' && drawer.animate) {
@@ -737,10 +728,18 @@
       if (f) f.focus({ preventScroll: true });
     }
 
+    // The dock is last on the page, so a Tab past the drawer goes through the
+    // browser's toolbar and back into the page at its top. Focus arriving
+    // anywhere outside the screen closes the drawer behind it.
+    function onFocusAway(e) {
+      if (e.target && e.target.nodeType === 1 && !dock.contains(e.target)) closeDrawer(false);
+    }
+
     function closeDrawer(refocus) {
       if (!drawer || drawer.getAttribute('data-open') !== '1') return;
       drawer.setAttribute('data-open', '0');
       dock.classList.remove('dms-styling');
+      document.removeEventListener('focusin', onFocusAway, true);
       paintStyle();
       var tab = root() && root().querySelector('[data-dms-styletab]');
       if (refocus && tab) tab.focus({ preventScroll: true });
@@ -839,6 +838,7 @@
       },
       destroy: function () {
         document.removeEventListener('click', onDoc, true);
+        document.removeEventListener('focusin', onFocusAway, true);
         try { if (mq) mq.removeEventListener('change', onRoom); } catch (e) { /* gone with the page */ }
         document.documentElement.classList.remove('dms-two', 'dms-glass');
       }

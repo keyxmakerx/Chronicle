@@ -424,11 +424,13 @@ test('tabbing out past the Style drawer closes it', { skip }, async () => {
   await page.waitForSelector('[data-dms-sec="world"]:not([hidden])');
   await page.click('[data-dms-styletab]');
   await page.waitForSelector('.dms-sdrawer[data-open="1"]');
-  // Something after the screen to Tab to, as the browser wraps to the page's
-  // first link in the app.
-  await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<a href="#main-content" id="after">Skip to content</a>'));
+  // As in the app: nothing follows the screen, so Tab leaves the page through
+  // the browser's toolbar (focus on the body) and comes back in at the top.
+  await page.evaluate(() => document.body.insertAdjacentHTML('afterbegin', '<a href="#main-content" id="after">Skip to content</a>'));
   await page.focus('.dms-sdrawer [data-dms-dens]:last-child');
-  await page.keyboard.press('Tab');
+  await page.evaluate(() => document.activeElement.blur());
+  assert.equal(await page.getAttribute('.dms-sdrawer', 'data-open'), '1', 'focus out to the toolbar alone leaves it open');
+  await page.focus('#after');
   await page.waitForFunction(() => document.querySelector('.dms-sdrawer').getAttribute('data-open') === '0');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'after', 'focus moved on past the screen');
   await page.done();
