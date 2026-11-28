@@ -96,6 +96,10 @@ type EventDef struct {
 	// given what happened (the payload the owner fired it with). Nil
 	// matches every firing.
 	Match func(args, payload json.RawMessage) (bool, error)
+	// Ask, when set, makes the event an owner's own ask: the owner puts it to
+	// the Director through Service.AskFor instead of firing it, and every
+	// saved rule on it waits behind that one ask, its steps running on Yes.
+	Ask *EventAsk
 }
 
 // Field is one arg of an event or action, as the Workshop's inspector asks
@@ -386,6 +390,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 		return fmt.Errorf("homebrew: event %q comes from a part, so it can't be a drawer button", e.Name)
 	}
 	if err := checkPressArg(e); err != nil {
+		return err
+	}
+	if err := checkEventAsk(e); err != nil {
 		return err
 	}
 	r.mu.Lock()

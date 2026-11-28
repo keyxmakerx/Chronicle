@@ -86,16 +86,84 @@ func (s *service) validData(kind string, raw json.RawMessage) (json.RawMessage, 
 	}
 	out, err := k.Validate(raw)
 	if err != nil {
-		// A kind that returns a plain error is still a refusal of the data, so
-		// it reads as a 400 with its own words, never as a server fault.
-		var ae *apperror.AppError
-		if errors.As(err, &ae) {
-			return nil, err
-		}
-		return nil, apperror.NewBadRequest(err.Error())
+		return nil, refusal(err)
 	}
 	if len(out) > MaxDataBytes {
 		return nil, apperror.NewBadRequest("design data is too large")
+	}
+	return out, nil
+}
+
+// refusal turns a kind's plain error into a 400 with its own words: a kind
+// that cannot accept the data is refusing it, never faulting the server.
+func refusal(err error) error {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) {
+		return err
+	}
+	return apperror.NewBadRequest(err.Error())
+}
+
+// cleanData is what every share and add path runs a payload through: the
+// kind's Stripper first, so no Director-only part survives, then Validate, so
+// the stripped output is what gets checked and kept.
+func (s *service) cleanData(kind string, raw json.RawMessage) (json.RawMessage, error) {
+	k, err := s.kind(kind)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" || len(raw) > MaxDataBytes {
+		return nil, apperror.NewBadRequest("design data is missing or too large")
+	}
+	stripped, err := stripKind(k, raw)
+	if err != nil {
+		return nil, refusal(err)
+	}
+	return s.validData(kind, stripped)
+}
+
+// place adds a validated design to the campaign. A kind with an Adder makes
+// the thing itself and the library is left alone; every other kind is copied
+// into the library as before.
+func (s *service) place(ctx context.Context, c *CampaignInfo, userID string, n newDesign) (*Taken, error) {
+	if k, err := s.kind(n.kind); err == nil {
+		if a, ok := k.(Adder); ok {
+			res, err := a.Add(ctx, c.ID, userID, n.data)
+			if err != nil {
+				var ae *apperror.AppError
+				if errors.As(err, &ae) {
+					return nil, err
+				}
+				return nil, apperror.NewInternal(err)
+			}
+			if res.LeftToPoint == nil {
+				res.LeftToPoint = []string{}
+			}
+			return &Taken{ID: res.ID, LeftToPoint: res.LeftToPoint}, nil
+		}
+	}
+	d, err := s.store(ctx, c, n)
+	if err != nil {
+		return nil, err
+	}
+	return &Taken{Design: d, ID: d.ID, LeftToPoint: []string{}}, nil
+}
+
+// StoreCatalog is what the Store reads to build its rail and name systems.
+func (s *service) StoreCatalog(ctx context.Context, campaignID, userID string) (*StoreCatalog, error) {
+	if _, _, err := s.requireOwner(ctx, campaignID, userID); err != nil {
+		return nil, err
+	}
+	out := &StoreCatalog{Kinds: storeGroups(s.kinds), Systems: map[string]string{}, Things: map[string]StoreThing{}}
+	for _, d := range describedKinds(s.kinds) {
+		if d.Group != "" {
+			out.Things[d.kind] = StoreThing{Group: d.Group, One: d.One}
+		}
+	}
+	if s.pkgs != nil {
+		for id, name := range s.pkgs.SystemNames(ctx) {
+			out.Systems[id] = name
+		}
 	}
 	return out, nil
 }

@@ -4902,7 +4902,7 @@ func (a *App) RegisterRoutes() {
 		decks.WithNotifier(decksLive), decks.WithBell(&decksBellAdapter{notify: sessionsService}),
 		decks.WithFacts(decksFacts), decks.WithMoments(decks.NewMomentRepository(a.DB)),
 		decks.WithMomentNotifier(decksLive), decks.WithPoke(decksWatch.Poke),
-		decks.WithSwitch(decksOn), decks.WithStory(decksStory),
+		decks.WithSwitch(decksOn), decks.WithStory(decksStory), decks.WithAsks(decksStory),
 		decks.WithScreen(decks.NewScreenRepository(a.DB)),
 	}
 	// "From a rolling table" is offered only while the rolling tables plugin is
