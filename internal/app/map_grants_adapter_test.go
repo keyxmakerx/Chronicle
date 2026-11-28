@@ -37,6 +37,11 @@ func (g grantsMembers) ListMembers(context.Context, string) ([]campaigns.Campaig
 	return g, nil
 }
 
+// codm holds a co-DM grant.
+func (g grantsMembers) IsUserDmGranted(_ context.Context, _, user string) (bool, error) {
+	return user == "codm", nil
+}
+
 func handout(id, mapID, marker string) *entities.Entity {
 	return &entities.Entity{ID: id, CampaignID: "c1", Name: "Map: " + mapID, MapID: &mapID,
 		FieldsData: map[string]any{handoutMarkerField: marker}}
@@ -57,7 +62,7 @@ func TestMapGrantsAdapter(t *testing.T) {
 		},
 	}
 	rel := func(target, name string, dmOnly bool) relations.Relation {
-		return relations.Relation{RelationType: hasItemType, TargetEntityID: target, TargetEntityName: name, DmOnly: dmOnly}
+		return relations.Relation{RelationType: hasItemType, TargetEntityID: target, TargetEntityName: name, DmOnly: dmOnly, CreatedBy: "gm"}
 	}
 	rels := grantsRelations{byEntity: map[string][]relations.Relation{
 		"hero": {
@@ -70,7 +75,8 @@ func TestMapGrantsAdapter(t *testing.T) {
 	}}
 	a := &mapGrantsAdapter{entities: ents, relations: rels, members: grantsMembers{
 		{UserID: "mira", Role: campaigns.RolePlayer}, {UserID: "bram", Role: campaigns.RolePlayer},
-		{UserID: "sam", Role: campaigns.RoleScribe},
+		{UserID: "sam", Role: campaigns.RoleScribe}, {UserID: "gm", Role: campaigns.RoleOwner},
+		{UserID: "codm", Role: campaigns.RolePlayer},
 	}}
 
 	got, err := a.GivenMapIDs(context.Background(), "c1", "mira")
@@ -89,5 +95,45 @@ func TestMapGrantsAdapter(t *testing.T) {
 	holders, err := a.MapHolders(context.Background(), "c1", "m1")
 	if err != nil || len(holders) != 1 || holders[0] != "mira" {
 		t.Fatalf("holders of m1 = %v %v, want [mira]", holders, err)
+	}
+}
+
+// Only a line the Director made is a give. Anyone who can edit a character
+// can add a Has Item line by hand: a Scribe, or the player re-adding a line
+// the GM took back. Neither may show the map.
+func TestMapGrantsAdapter_OnlyTheDirectorGives(t *testing.T) {
+	ents := grantsEntities{
+		owned: map[string][]entities.Entity{"mira": {{ID: "hero"}}},
+		byID:  map[string]*entities.Entity{"i-m1": handout("i-m1", "m1", "m1")},
+	}
+	members := grantsMembers{
+		{UserID: "mira", Role: campaigns.RolePlayer}, {UserID: "sam", Role: campaigns.RoleScribe},
+		{UserID: "gm", Role: campaigns.RoleOwner}, {UserID: "codm", Role: campaigns.RolePlayer},
+	}
+	cases := []struct {
+		name, creator string
+		want          bool
+	}{
+		{"the Owner's give", "gm", true},
+		{"a co-DM's give", "codm", true},
+		{"a line a Scribe added by hand", "sam", false},
+		{"the player re-adding the line", "mira", false},
+		{"a creator who left the campaign", "gone", false},
+		{"no recorded creator", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rels := grantsRelations{byEntity: map[string][]relations.Relation{"hero": {{
+				RelationType: hasItemType, TargetEntityID: "i-m1", TargetEntityName: "Map: m1", CreatedBy: tc.creator,
+			}}}}
+			a := &mapGrantsAdapter{entities: ents, relations: rels, members: members}
+			got, err := a.GivenMapIDs(context.Background(), "c1", "mira")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got["m1"] != tc.want {
+				t.Fatalf("map shown = %v, want %v", got["m1"], tc.want)
+			}
+		})
 	}
 }
