@@ -26,6 +26,9 @@ type Viewer struct {
 	// VisibilityRole is passed on to owners whose actions check page
 	// access as this person.
 	VisibilityRole int
+	// Name is the person's display name where the service knows it, for an
+	// owner that writes it into its own record (the roll log).
+	Name string
 }
 
 // Recipe is one saved recipe. Doc is the part the Workshop edits.
@@ -93,6 +96,10 @@ type Do struct {
 	Action string          `json:"action"`
 	Part   string          `json:"part,omitempty"`
 	Args   json.RawMessage `json:"args,omitempty"`
+	// Recipe is the recipe a step comes from, set only in the rule of an
+	// owner's ask, which gathers steps from several recipes. A saved
+	// recipe's steps never carry it: checkStep drops it.
+	Recipe string `json:"recipe,omitempty"`
 }
 
 // RecipeInput is a create or update body. Version is required on update and

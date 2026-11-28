@@ -43,6 +43,11 @@ func (s *stubSvc) ShareState(context.Context, string, string, string) (*ShareSta
 	return &ShareState{}, s.err
 }
 
+func (s *stubSvc) StoreCatalog(context.Context, string, string) (*StoreCatalog, error) {
+	s.calls++
+	return &StoreCatalog{}, s.err
+}
+
 func dctx(method, body string, role campaigns.Role) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, "/", strings.NewReader(body))
@@ -65,6 +70,7 @@ func TestOwnerGateInFrontOfHandlers(t *testing.T) {
 		for name, call := range map[string]func(h *Handler) echo.HandlerFunc{
 			"list": func(h *Handler) echo.HandlerFunc { return h.List }, "save": func(h *Handler) echo.HandlerFunc { return h.Save },
 			"update": func(h *Handler) echo.HandlerFunc { return h.Update }, "share": func(h *Handler) echo.HandlerFunc { return h.ShareState },
+			"store": func(h *Handler) echo.HandlerFunc { return h.Store },
 		} {
 			t.Run(role.name+"/"+name, func(t *testing.T) {
 				svc := &stubSvc{}

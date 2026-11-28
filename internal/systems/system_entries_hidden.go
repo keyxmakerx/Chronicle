@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // A campaign entry's details can be kept from players one by one: the
@@ -34,11 +35,13 @@ func HiddenDetails(p map[string]any) map[string]bool {
 	return out
 }
 
-// PlayerProperties is p as a player may read it: without the hidden details
-// and without the list naming them. p itself is not changed.
+// PlayerProperties is p as a player may read it: without the hidden details,
+// without the list naming them, and with every GM-only part (a secret span,
+// a GM-only picture or diagram) stripped from the text of the details left,
+// at any depth, as the entry's main text is. p itself is not changed.
 func PlayerProperties(p map[string]any) map[string]any {
-	if _, ok := p[EntryHiddenKey]; !ok {
-		return p
+	if p == nil {
+		return nil
 	}
 	hidden := HiddenDetails(p)
 	out := make(map[string]any, len(p))
@@ -46,9 +49,41 @@ func PlayerProperties(p map[string]any) map[string]any {
 		if k == EntryHiddenKey || hidden[k] {
 			continue
 		}
-		out[k] = v
+		out[k] = playerValue(v)
 	}
 	return out
+}
+
+// playerValue is a detail's value with GM-only parts stripped from every
+// text in it. Text with no markup is returned as it is.
+func playerValue(v any) any {
+	switch t := v.(type) {
+	case string:
+		if strings.Contains(t, "<") {
+			return sanitize.StripSecretsHTML(t)
+		}
+		return t
+	case []any:
+		out := make([]any, len(t))
+		for i, x := range t {
+			out[i] = playerValue(x)
+		}
+		return out
+	case []string:
+		out := make([]string, len(t))
+		for i, x := range t {
+			out[i], _ = playerValue(x).(string)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, x := range t {
+			out[k] = playerValue(x)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 // validateHiddenList checks EntryHiddenKey names only details the entry has,

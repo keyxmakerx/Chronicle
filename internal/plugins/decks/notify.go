@@ -20,6 +20,8 @@ type moveNote struct {
 	Target *Deck
 	// Before are the players who held cards of the deck before a gather.
 	Before []string
+	// Reply is a Director's written reply to an ask they turned down.
+	Reply string
 }
 
 // cast is who is in the campaign, read once per announcement.
@@ -212,7 +214,7 @@ func (s *service) audienceFor(ctx context.Context, cid string, n moveNote) (Audi
 	}
 	aud := audience(f)
 
-	bf := bellFacts{Action: n.Action, CampaignID: cid, DeckID: d.ID, DeckName: d.Name, Card: n.Card, From: m.From, To: m.To,
+	bf := bellFacts{Action: n.Action, CampaignID: cid, DeckID: d.ID, DeckName: d.Name, Card: n.Card, Reply: n.Reply, From: m.From, To: m.To,
 		FromOwner: f.FromOwner, ToOwner: f.ToOwner, Actor: m.Log.ActorUserID, Directors: r.directors}
 	if holder := m.From.HolderEntityID; holder != "" {
 		if h, ok, err := s.heroes.InCampaign(ctx, cid, holder); err == nil && ok {

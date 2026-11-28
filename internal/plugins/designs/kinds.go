@@ -19,6 +19,115 @@ type Kind interface {
 	Lacks(ctx context.Context, campaignID string, raw json.RawMessage) ([]string, error)
 }
 
+// Stripper removes every Director-only part of a payload. It runs on every
+// share path and again on every add, never trusting the sender: a payload that
+// arrives already stripped is not evidence that the sender stripped it.
+type Stripper interface {
+	Strip(raw json.RawMessage) (json.RawMessage, error)
+}
+
+// Adder makes the added thing in the receiving campaign itself, instead of the
+// default copy into the design library. It receives the stripped, validated
+// payload.
+type Adder interface {
+	Add(ctx context.Context, campaignID, userID string, raw json.RawMessage) (AddResult, error)
+}
+
+// AddResult is what an Adder made: its id, and plain sentences on what the
+// Owner still has to point at something (a shop, a bench) in this campaign.
+type AddResult struct {
+	ID          string   `json:"id"`
+	LeftToPoint []string `json:"leftToPoint"`
+}
+
+// Describer lets a kind say how the Store shows it, so the Store learns its
+// rail from the server instead of a list baked into the page. Kinds that share
+// a Group share one rail entry (the first by Order, then kind name, names it).
+type Describer interface {
+	Describe() KindDescription
+}
+
+// KindDescription is one kind's place in the Store.
+type KindDescription struct {
+	// Group is the Store's id for the rail entry and the gallery's kind filter.
+	Group string
+	// Label names the group ("Shop rooms"); One names a single thing in it
+	// ("Shop room"); Where says in a sentence where an added one is found.
+	Label, One, Where string
+	// Order sorts groups on the rail, lowest first; ties fall back to Group.
+	Order int
+}
+
+// stripKind runs the kind's Stripper when it has one.
+func stripKind(k Kind, raw json.RawMessage) (json.RawMessage, error) {
+	if st, ok := k.(Stripper); ok {
+		return st.Strip(raw)
+	}
+	return raw, nil
+}
+
+// described is a registered kind that said how the Store shows it.
+type described struct {
+	kind string
+	KindDescription
+}
+
+// describedKinds lists the registered kinds that have a Describer, in kind
+// name order so every caller sees the same sequence.
+func describedKinds(reg KindRegistry) []described {
+	var out []described
+	for _, n := range reg.Names() {
+		k, ok := reg.Kind(n)
+		if !ok {
+			continue
+		}
+		if d, ok := k.(Describer); ok {
+			out = append(out, described{kind: n, KindDescription: d.Describe()})
+		}
+	}
+	return out
+}
+
+// kindsInGroup is the registered kinds a Store group (the gallery's kind
+// filter) stands for. This is the one place that mapping lives.
+func kindsInGroup(reg KindRegistry, group string) []string {
+	var out []string
+	for _, d := range describedKinds(reg) {
+		if d.Group == group {
+			out = append(out, d.kind)
+		}
+	}
+	return out
+}
+
+// storeGroups is one entry per group, in Order then Group.
+func storeGroups(reg KindRegistry) []StoreKind {
+	type ranked struct {
+		StoreKind
+		order int
+	}
+	seen := map[string]bool{}
+	var groups []ranked
+	for _, d := range describedKinds(reg) {
+		if d.Group == "" || seen[d.Group] {
+			continue
+		}
+		seen[d.Group] = true
+		groups = append(groups, ranked{StoreKind{ID: d.Group, Label: d.Label, One: d.One, Where: d.Where}, d.Order})
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		if groups[i].order != groups[j].order {
+			return groups[i].order < groups[j].order
+		}
+		return groups[i].ID < groups[j].ID
+	})
+	out := make([]StoreKind, len(groups))
+	for i, g := range groups {
+		out[i] = g.StoreKind
+	}
+	return out
+}
+
 // KindRegistry is what the service reads kinds from. App wiring registers a
 // kind per feature, so features never import each other and a feature that
 // starts later (crafting) can still add its kinds.

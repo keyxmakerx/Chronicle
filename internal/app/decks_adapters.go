@@ -243,7 +243,7 @@ type decksBellAdapter struct {
 }
 
 func (a *decksBellAdapter) Ring(ctx context.Context, campaignID string, e decks.BellEntry) error {
-	return a.notify.NotifyUsersWithDetail(ctx, e.Users, campaignID, e.Kind, e.Message, "", e.Link)
+	return a.notify.NotifyUsersWithDetail(ctx, e.Users, campaignID, e.Kind, e.Message, e.Detail, e.Link)
 }
 
 // registerDecksBlock registers the Cards part of a hero's page, behind the
