@@ -5,7 +5,8 @@
  * A shop's saved layout may name a manner and hold the GM's own lines per
  * moment (layout.manner, layout.moments). The GM's lines for a moment always
  * win; a moment with none falls back to the manner's starting lines; with no
- * manner either, the keeper says nothing then. The keeper's general lines
+ * manner either, the keeper says nothing then, except for gone, which has a
+ * plain line of its own (GONE). The keeper's general lines
  * (layout.lines, said when pressed) are separate and unchanged. The refuse
  * moment is what the keeper says when the shop won't serve the party; the
  * player Shops page shows it at a refusing shop's door.
@@ -22,6 +23,7 @@
     ['look', 'You pick something'],
     ['buy', 'You buy'],
     ['poor', 'You can’t afford it'],
+    ['gone', 'Someone beat you to it'],
     ['bye', 'You leave'],
     ['refuse', 'Won’t serve you']
   ];
@@ -32,6 +34,7 @@
       look: ['Ah, that one has a story. Take your time with it.', 'Good eye. I made that one on a rainy week.'],
       buy: ['Lovely choice. I’ll wrap it so it travels well.', 'That’ll serve you well, I promise.'],
       poor: ['Short a coin or two? Come back when the purse is heavier, I’ll keep it aside.', 'Not today, love. It’ll still be here.'],
+      gone: ['Oh, I’m sorry, love. Looks like someone else already bought the last one.', 'Ah, that went just this minute. I’ve fixed your basket for you.'],
       bye: ['Safe roads, and come back and tell me how it went.', 'Mind how you go!'],
       refuse: ['I’m sorry, love, not after last time.', 'Not today. Please go.']
     } },
@@ -40,6 +43,7 @@
       look: ['It’s sharp. That’s the point.', 'Careful with that.'],
       buy: ['Coin on the counter.', 'Fine. It’s yours.'],
       poor: ['Then put it down.', 'Come back with coin.'],
+      gone: ['Sold. Somebody else was quicker.', 'Gone. Should’ve paid sooner.'],
       bye: ['Door sticks. Shove it.', 'Hm.'],
       refuse: ['Your coin’s no good here.', 'Out.']
     } },
@@ -48,6 +52,7 @@
       look: ['For you, a special price. Well. A price.', 'Ah, that one’s very popular. Very.'],
       buy: ['Pleasure doing business. Truly.', 'A fine bargain, for both of us. Mostly for me.'],
       poor: ['No credit. Not even for heroes. Especially not for heroes.', 'Come back richer, friend.'],
+      gone: ['Ah, popular, that one. Someone else got there first.', 'Sold a moment ago, I’m afraid. Perhaps something pricier?'],
       bye: ['Tell your friends. Tell them the prices are fair.', 'Come again, and bring your purse.'],
       refuse: ['Bad for business, you are. Move along.', 'I don’t sell to people who don’t pay.']
     } },
@@ -56,6 +61,7 @@
       look: ['Careful, careful, that one’s, um, mostly safe.', 'That one’s fine. Probably fine.'],
       buy: ['Sold! Oh good. That’s good.', 'Thank you! Don’t open it indoors.'],
       poor: ['I’m so sorry, I really can’t go lower, she checks the books.', 'Oh dear. Maybe next time?'],
+      gone: ['Oh no, oh no, someone already bought that. I’m so sorry!', 'It was there a second ago, I swear. Someone else took it.'],
       bye: ['Bye! Mind the, oh, you’ve found the step.', 'Come back! Or don’t, it’s fine.'],
       refuse: ['I c-can’t, she said not to let you in.', 'Please, I don’t want trouble.']
     } },
@@ -64,6 +70,7 @@
       look: ['Behold! Crafted by my own two hands, in a single sleepless night.', 'Ah, a piece of legend.'],
       buy: ['A purchase worthy of song.', 'Wield it with glory!'],
       poor: ['Alas, even legends must be paid for.', 'Return when fortune smiles on you!'],
+      gone: ['Alas! Another hero has claimed that treasure.', 'Too late, friend, it has found another master!'],
       bye: ['Go forth, and speak my name in every tavern!', 'Farewell, heroes!'],
       refuse: ['This establishment does not serve the likes of you!', 'Begone, and take your reputation with you!']
     } }
@@ -89,5 +96,8 @@
     return ls[i];
   }
 
-  window.ShopRoomKeeper = { MOMENTS: MOMENTS, MANNERS: MANNERS, ORDER: ORDER, linesFor: linesFor, pick: pick };
+  // What the keeper says when someone else bought it first, for a keeper with no manner and no line of the GM's.
+  var GONE = 'Sorry, looks like someone else already bought the last one.';
+
+  window.ShopRoomKeeper = { GONE: GONE, MOMENTS: MOMENTS, MANNERS: MANNERS, ORDER: ORDER, linesFor: linesFor, pick: pick };
 })();

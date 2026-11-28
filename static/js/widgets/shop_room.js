@@ -1860,11 +1860,12 @@
         // A failed read keeps the wares already shown and says so, rather
         // than drawing an empty shop the player can't tell from a sold-out one.
         return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return null; }).catch(function () { return null; }).then(function (j) {
-          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return; }
+          if (j === null) { note = (note ? note + ' ' : '') + 'The wares couldn’t be loaded just now. Close the shop and open it again to try again.'; return false; }
           rels = (Array.isArray(j) ? j : (j && j.data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
             if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
             r.metadata = r.metadata || {}; return r;
           });
+          return true;
         });
       }
       function doBuy() {
@@ -1872,10 +1873,16 @@
         var items = S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) { return { relationId: it.id, quantity: basket[String(it.id)] }; });
         if (!items.length || busy) return;
         busy = true; note = ''; renderBasket();
-        var bought = false;
+        var bought = false, gone = false, names = {};
+        S.its.forEach(function (it) { names[String(it.id)] = it.n; });
         Chronicle.apiFetch(buyEndpoint, { method: 'POST', body: { buyerEntityId: payer, items: items }, csrfToken: ds.csrfToken }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
-            if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
+            if (!r.ok) {
+              var msg = (j && (j.message || j.error)) || '', err = new Error(msg || 'That didn’t go through. Try again.');
+              // The server words its stock refusals for the API; the room reads the shelves again and says it for players.
+              err.stock = r.status === 400 && /^(insufficient stock|this item is out of stock)/.test(msg);
+              throw err;
+            }
             var who = buyer(), name = who ? who.name : 'They';
             var what = sm.count + (sm.count === 1 ? ' item' : ' items');
             if (j.status !== 'requested' && counterOn()) window.ShopRoomCounter.bought(cel, sm.count);
@@ -1891,10 +1898,43 @@
             return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]);
           });
         }).catch(function (e) {
+          // A reload that failed keeps its own note: the basket can't be settled against shelves it couldn't read.
+          if (e && e.stock) return Promise.all([loadGoods(), loadBuyers().then(loadRolls)]).then(function (ok) {
+            if (!ok[0]) return;
+            draw(); var c = settleBasket(names); note = refusedWords(c); gone = c.sold.length > 0;
+          });
           // A network failure's own text ("Failed to fetch") means nothing
-          // to a player; the server's refusals are already in plain words.
+          // to a player; the server's other refusals are already in plain words.
           note = e instanceof TypeError ? 'The shop couldn’t be reached. Nothing was bought; try again.' : e.message;
-        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); });
+        }).then(function () { busy = false; draw(); renderList(); if (bought) speak('buy'); else if (gone) speak('gone'); });
+      }
+      // After the shelves changed under the basket: it keeps only what is still
+      // for sale, no more than is left. sold is what ran out, off what the GM
+      // took off sale or away, less what was cut to the count left. names holds
+      // the wares as they were, so a listing taken away can still be named.
+      function settleBasket(names) {
+        var now = {}, c = { sold: [], off: [], less: [] };
+        S.its.forEach(function (it) { now[String(it.id)] = it; });
+        Object.keys(basket).forEach(function (k) {
+          var it = now[k], q = basket[k];
+          if (!it || it.out) { (it && it.qty === 0 ? c.sold : c.off).push(it ? it.n : names[k] || 'item'); delete basket[k]; }
+          else if (it.qty !== null && q > it.qty) { basket[k] = it.qty; c.less.push(it.qty + ' ' + it.n); }
+        });
+        return c;
+      }
+      // What changed, in a player's words; empty when the basket didn't.
+      function basketWords(c) {
+        var w = [];
+        if (c.sold.length === 1) w.push('Someone just bought the last ' + c.sold[0] + '.');
+        else if (c.sold.length) w.push('These sold out while you shopped: ' + c.sold.join(', ') + '.');
+        if (c.off.length) w.push(c.off.join(', ') + (c.off.length === 1 ? ' is' : ' are') + ' no longer for sale.');
+        if (c.less.length) w.push((c.sold.length || c.off.length ? 'Only ' : 'Someone just bought some of these. Only ') + c.less.join(', ') + ' left.');
+        return w.join(' ');
+      }
+      // A buy the server refused whole, so nothing was charged.
+      function refusedWords(c) {
+        var w = basketWords(c);
+        return w ? w + ' Nothing was charged, and your basket is updated.' : 'Some of that just sold out. Nothing was charged; the shelves are up to date, so check your basket and try again.';
       }
       // The basket's count, and its peek: what's in it and the total, or how to start.
       function renderPeek() {
@@ -1948,7 +1988,7 @@
       function speak(moment) {
         var KP = window.ShopRoomKeeper; if (!KP || S.mode === 'arr' || !dlg.open) return;
         if (moment === 'look' || moment === 'poor') { var now = Date.now(); if (now - lookAt < 8000) return; lookAt = now; }
-        var text = KP.pick(S.manner, S.moments, moment);
+        var text = KP.pick(S.manner, S.moments, moment) || (moment === 'gone' ? KP.GONE || '' : '');
         if (text) talk(null, text);
       }
       // After something goes on the pile: the keeper remarks on it, or on the purse coming up short.
@@ -2311,7 +2351,7 @@
           h += '<div class="shr-field"><span>When</span><span class="shr-chips" role="group" aria-label="Moment of the visit">' + KP.MOMENTS.map(function (m) { return '<button type="button" class="shr-chip" data-moment="' + m[0] + '" aria-pressed="' + (momTab === m[0]) + '">' + esc(m[1]) + (S.moments[m[0]] ? ' ·' : '') + '</button>'; }).join('') + '</span></div>';
           var start = KP.linesFor(S.manner, null, momTab);
           h += '<label class="shr-field"><span>What the keeper says then (one line each, up to five)</span><textarea rows="3" data-moment-lines="1" maxlength="1100" placeholder="' + esc(start.length ? start.join('\n') : 'Pick a manner for lines to start from, or write your own.') + '"></textarea></label>' +
-            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : 'Leave it empty and the keeper says nothing then.') + '</small>';
+            '<small class="shr-hint">' + (start.length ? 'Leave it empty and the keeper uses the manner’s lines, shown faintly above.' : momTab === 'gone' ? 'Leave it empty and the keeper says “' + esc(KP.GONE || '') + '”' : 'Leave it empty and the keeper says nothing then.') + '</small>';
         }
         return h + '<label class="shr-field"><span>When someone presses the keeper (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>';
       }
