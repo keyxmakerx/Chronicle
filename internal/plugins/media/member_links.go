@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // memberLinkPath matches a media path a page embeds: a file, or one of its
@@ -34,6 +36,10 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 	if !h.memberChecker.IsCampaignMember(campaignID, userID) {
 		return out
 	}
+	// A map's picture is signed only for an Owner or co-DM: the link opens the
+	// original for whoever holds it until it expires, without the per-viewer
+	// map rules the media server applies to a signed-in request.
+	seesEveryMap := promotedVisibilityRole(h.memberChecker, campaignID, userID) >= int(campaigns.RoleOwner)
 	// Each distinct file (and thumbnail size) is checked once, however many
 	// spellings of its path arrive, and the cap counts files, not strings:
 	// the access check can be a campaign-wide scan.
@@ -67,6 +73,17 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 		// Only campaign content; avatars and backdrops have their own rules.
 		if file.UsageType != UsageAttachment && file.UsageType != UsageEntityImage && file.UsageType != UsageNoteImage {
 			continue
+		}
+		if !seesEveryMap && h.mapImages != nil {
+			isMap, err := h.mapImages.IsMapPicture(ctx, campaignID, file.ID)
+			if err != nil {
+				slog.Error("media: member link map picture check failed; leaving it out",
+					slog.String("file_id", file.ID), slog.Any("error", err))
+				continue
+			}
+			if isMap {
+				continue
+			}
 		}
 		var allowed bool
 		if file.IsNotePicture() {
