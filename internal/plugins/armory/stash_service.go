@@ -47,6 +47,9 @@ type HasItemRelation struct {
 	ItemName     string
 	Metadata     []byte
 	DmOnly       bool
+	// CreatedBy is the user who made the line; a map handout counts as given
+	// only on a line the Director made.
+	CreatedBy string
 }
 
 // HasItemStore reads and writes the "Has Item" relations that hold a

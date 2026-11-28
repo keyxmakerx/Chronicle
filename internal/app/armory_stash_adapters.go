@@ -364,7 +364,7 @@ func (a *armoryHasItemAdapter) ListByCharacter(ctx context.Context, campaignID, 
 		}
 		out = append(out, armory.HasItemRelation{
 			ID: r.ID, ItemEntityID: r.TargetEntityID, ItemName: r.TargetEntityName,
-			Metadata: r.Metadata, DmOnly: r.DmOnly,
+			Metadata: r.Metadata, DmOnly: r.DmOnly, CreatedBy: r.CreatedBy,
 		})
 	}
 	return out, nil

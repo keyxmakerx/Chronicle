@@ -12,6 +12,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"time"
@@ -82,6 +83,10 @@ func (a *mapGrantsAdapter) GivenMapIDs(ctx context.Context, campaignID, userID s
 			if r.RelationType != hasItemType || r.DmOnly || !strings.HasPrefix(r.TargetEntityName, armory.HandoutPrefix) {
 				continue
 			}
+			// A line held at zero (mid-move, before it is dropped) holds nothing.
+			if carriedQuantity(r.Metadata) < 1 {
+				continue
+			}
 			if directors == nil {
 				if directors, err = a.directorCheck(ctx, campaignID); err != nil {
 					return nil, err
@@ -107,6 +112,24 @@ func (a *mapGrantsAdapter) GivenMapIDs(ctx context.Context, campaignID, userID s
 		}
 	}
 	return out, nil
+}
+
+// carriedQuantity reads a Has Item line's quantity as armory does: absent
+// means one, anything unreadable counts as none.
+func carriedQuantity(meta []byte) float64 {
+	if len(meta) == 0 {
+		return 1
+	}
+	var m struct {
+		Quantity *float64 `json:"quantity"`
+	}
+	if err := json.Unmarshal(meta, &m); err != nil {
+		return 0
+	}
+	if m.Quantity == nil {
+		return 1
+	}
+	return *m.Quantity
 }
 
 // directorCheck answers, for this request, whether a user is the campaign's

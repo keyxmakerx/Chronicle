@@ -267,6 +267,36 @@ func TestGive_MapCreatesOnceThenReuses(t *testing.T) {
 	}
 }
 
+// A map counts as given only on a line the Director made. When the GM took a
+// map back and the player re-added the line by hand, giving it again replaces
+// that line with the GM's own instead of raising the player's.
+func TestGive_MapReplacesALineSomeoneElseMade(t *testing.T) {
+	g := newGiveFx()
+	ctx := context.Background()
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", MapID: "m1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	line := g.rels.rels["c2"][0]
+	if line.CreatedBy != "gm" {
+		t.Fatalf("the give's line was made by %q, want gm", line.CreatedBy)
+	}
+	// Taken back, then re-added by the player.
+	if err := g.rels.Delete(ctx, line.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.rels.Create(ctx, "camp", "c2", "hm1", "u2", []byte(`{"quantity":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", MapID: "m1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	lines := g.rels.rels["c2"]
+	if len(lines) != 1 || lines[0].CreatedBy != "gm" || g.carried("c2", "hm1") != 1 {
+		t.Fatalf("after the second give: %d line(s), made by %q, carried %d; want one line by gm holding 1",
+			len(lines), lines[0].CreatedBy, g.carried("c2", "hm1"))
+	}
+}
+
 func TestGive_MapToUnclaimedCharacterStaysGMOnly(t *testing.T) {
 	g := newGiveFx()
 	if _, err := g.svc.Give(context.Background(), "camp", gm, GiveInput{CharacterID: "c4", MapID: "m1", Quantity: 1}); err != nil {

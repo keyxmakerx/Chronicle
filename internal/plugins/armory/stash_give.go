@@ -327,6 +327,20 @@ func (s *stashService) give(ctx context.Context, campaignID string, a Actor, cha
 		}
 	}
 
+	// A map shows to the holder's player only on a line the Director made, so
+	// a line someone else added by hand is replaced rather than raised.
+	if mp != nil {
+		rel, err := s.hasItem(ctx, campaignID, char.ID, item.ID, true)
+		if err != nil {
+			return nil, err
+		}
+		if rel != nil && rel.CreatedBy != a.UserID {
+			if err := s.Relations.Delete(ctx, rel.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	ok, err := s.adjustCarried(ctx, campaignID, char.ID, item.ID, a.UserID, qty, true, false)
 	if err != nil {
 		return nil, err
