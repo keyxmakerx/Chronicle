@@ -103,11 +103,11 @@ func aiKey(k string) string {
 }
 
 // aiAliases fold the editor's section names onto the stored layer names.
-var aiAliases = map[string]string{"ontop": "overlays", "overlay": "overlays", "words": "text", "lines": "text", "end": "ending"}
+var aiAliases = map[string]string{"ontop": "overlays", "overlay": "overlays", "words": "text", "lines": "text", "end": "ending", "moment": "moments", "beats": "moments"}
 
 var aiEngineKeys = map[string]bool{"kind": true, "action": true, "name": true, "reason": true}
 
-var sceneOwn = map[string]bool{"renameto": true, "background": true, "overlays": true, "text": true, "ending": true}
+var sceneOwn = map[string]bool{"renameto": true, "background": true, "overlays": true, "text": true, "moments": true, "ending": true}
 
 const whyShow = "showing a scene to people is a live act of the Director's, from the Cut scenes page; the AI never shows one"
 
@@ -198,6 +198,8 @@ const (
 	ovShape     = "a list of {kind, at, seconds, color, look, pupil}"
 	textShape   = "a list of {say, at, seconds, style, layout, in, out}"
 	endingShape = "{kind: tap} or {kind: auto, after}"
+	momentShape = "a list of {at, ask, ways, to, note}"
+	wayShape    = "a list of ways, each one of the way names or {kind}"
 )
 
 type aiBackground struct {
@@ -280,6 +282,36 @@ type aiText struct {
 	Out     string   `json:"out"`
 }
 
+type aiMoment struct {
+	At   *float64 `json:"at"`
+	Ask  string   `json:"ask"`
+	Ways []any    `json:"ways"`
+	To   string   `json:"to"`
+	Note string   `json:"note"`
+}
+
+type aiWay struct {
+	Kind string `json:"kind"`
+}
+
+// aiWays reads a moment's ways, each a bare name or `{kind}`, the shape the
+// stored scene uses; Normalize refuses an unknown name.
+func aiWays(list []any, where string) ([]Way, error) {
+	out := make([]Way, 0, len(list))
+	for _, v := range list {
+		if s, ok := v.(string); ok {
+			out = append(out, Way{Kind: s})
+			continue
+		}
+		var w aiWay
+		if err := strict(v, &w, where+"'s ways", wayShape); err != nil {
+			return nil, err
+		}
+		out = append(out, Way(w))
+	}
+	return out, nil
+}
+
 type aiEnding struct {
 	Kind  string   `json:"kind"`
 	After *float64 `json:"after"`
@@ -298,6 +330,7 @@ type sceneEdit struct {
 	background *Background
 	overlays   *[]Overlay
 	text       *[]TextLine
+	moments    *[]Moment
 	ending     *Ending
 }
 
@@ -395,6 +428,23 @@ func parse(r aiplug.Record) (sceneEdit, error) {
 		}
 		e.text = &out
 	}
+	if v, ok := r.Fields["moments"]; ok {
+		var list []aiMoment
+		if v != nil {
+			if err := strict(v, &list, "moments", momentShape); err != nil {
+				return e, err
+			}
+		}
+		out := make([]Moment, 0, len(list))
+		for i, m := range list {
+			ways, err := aiWays(m.Ways, fmt.Sprintf("moment %d", i+1))
+			if err != nil {
+				return e, err
+			}
+			out = append(out, Moment{At: or(m.At, 0), Ask: m.Ask, Ways: ways, To: m.To, Note: m.Note})
+		}
+		e.moments = &out
+	}
 	if v, ok := r.Fields["ending"]; ok {
 		var en aiEnding
 		if s, isStr := v.(string); isStr {
@@ -474,6 +524,9 @@ func (k *sceneKind) workCreate(e sceneEdit, hit *Scene, r aiplug.Record) sceneWo
 	if e.text != nil {
 		raw.Text = *e.text
 	}
+	if e.moments != nil {
+		raw.Moments = *e.moments
+	}
 	if e.ending != nil {
 		raw.Ending = *e.ending
 	}
@@ -505,6 +558,9 @@ func layerLines(sc Scene) []string {
 	for _, t := range sc.Text {
 		out = append(out, "Words: "+TextWords(t))
 	}
+	for _, m := range sc.Moments {
+		out = append(out, "Moment: "+MomentWords(m))
+	}
 	return out
 }
 
@@ -531,6 +587,9 @@ func (k *sceneKind) workUpdate(ctx context.Context, campaignID string, v Viewer,
 	if e.text != nil {
 		raw.Text = *e.text
 	}
+	if e.moments != nil {
+		raw.Moments = *e.moments
+	}
 	if e.ending != nil {
 		raw.Ending = *e.ending
 	}
@@ -551,14 +610,20 @@ func (k *sceneKind) workUpdate(ctx context.Context, campaignID string, v Viewer,
 	if e.text != nil {
 		parts = append(parts, onlyPrefix(layerLines(Scene{Text: sc.Text}), "Words")...)
 	}
+	if e.moments != nil {
+		if len(sc.Moments) == 0 {
+			parts = append(parts, "Moments: none")
+		}
+		parts = append(parts, onlyPrefix(layerLines(Scene{Moments: sc.Moments}), "Moment")...)
+	}
 	if e.ending != nil {
 		parts = append(parts, "Ending: "+EndingWords(sc.Ending))
 	}
 	if len(parts) == 0 {
-		return refuse("nothing to change: write a layer (background, overlays, text, ending) or rename_to")
+		return refuse("nothing to change: write a layer (background, overlays, text, moments, ending) or rename_to")
 	}
 	var warns []string
-	if e.overlays != nil || e.text != nil {
+	if e.overlays != nil || e.text != nil || e.moments != nil {
 		warns = append(warns, "A list written here replaces the scene's whole list of that layer.")
 	}
 	warns = append(warns, clampNotes(raw, sc)...)
@@ -634,6 +699,11 @@ func clampNotes(raw, sc Scene) []string {
 			}
 		}
 	}
+	for i := range sc.Moments {
+		if i < len(raw.Moments) {
+			note(fmt.Sprintf("Moment %d's time", i+1), raw.Moments[i].At, sc.Moments[i].At)
+		}
+	}
 	return out
 }
 
@@ -677,15 +747,17 @@ func (*sceneKind) Doc() string {
 		"`text` (the words, at most %d lines) is a list of `{say, at, seconds, style, layout, in, out}`: `say` plain text of 1 to %d characters (never HTML or markdown), `at` 0 to %s, `seconds` how long it stays on screen before it starts to leave (%s to %s, or 0 to stay to the end, with no leaving), style one of %s. "+
 		"`layout` is where it sits, one of %s (leave it out for the middle); lines with the same layout stack in order. `in` is how it arrives, one of %s (leave it out for the style's own), and `out` how it leaves, one of %s (leave it out for a soft blur upwards). "+
 		"Transitions combine freely with any style and background: a title card is a `letterbox` on top with a `caption` line and a `title` line that `in: settle`, and a place card is a `title` and a `whisper` line with `layout: corner, in: slide`. "+
+		"`moments` (at most %d) is a list of `{at, ask, ways, to, note}`, each a beat where the scene stops and asks one question, holding until the Director lets it go on: `at` 0 to %s, `ask` the question in plain text of 1 to %d characters, `ways` a list of how it can be answered, each one of %s (left out, they write it), `to` who answers, one of %s (left out, each person watching), `note` the Director's own text of up to %d characters, which no player ever sees. "+
 		"`ending` is `{kind: tap}` (a quiet Close appears once the last layer has finished) or `{kind: auto, after: 3}` (closes by itself that many seconds after the last layer, 0 to %s). "+
 		"Leaving `look` out plays the first look named; leaving `pupil` out draws the look's own (round for rift, slit for almond and gather), and `pupil: slit` makes any eye a dragon's. Numbers outside their range are brought to the nearest allowed value and the review says so; an unknown kind, style, look or pupil, a look on a kind that has none, a pupil on anything but an eye, or a colour not written #rrggbb is refused. "+
-		"On update only the layers written change, and a list (`overlays`, `text`) written replaces that whole list; `rename_to` renames. `action: delete` removes the scene named by `name` and takes no other key. "+
+		"On update only the layers written change, and a list (`overlays`, `text`, `moments`) written replaces that whole list; `rename_to` renames. `action: delete` removes the scene named by `name` and takes no other key. "+
 		"The AI never shows a scene to anyone: who sees it and when is the Director's live choice on the Cut scenes page, so a block naming players, `show`, `to` or a rewatch time is refused. "+
 		"Read the scenes and what each kind looks like with `what: cut-scenes`.\n\n```\n---\nkind: cut-scene\nname: The Eye Opens\nbackground: {kind: black, in: fall-asleep, seconds: 7, look: ink}\noverlays:\n  - {kind: eye, at: 7.5, seconds: 3.5, color: \"#3dff7a\", look: rift, pupil: slit}\ntext:\n  - {say: \"Something has noticed you.\", at: 11, seconds: 5, style: whisper}\nending: {kind: tap}\n---\n```",
 		backdropList(), keys(Arrivals), num(MinSeconds), num(MaxSeconds), lookList(BackgroundFallAsleep), keys(BackgroundKinds),
 		MaxOverlays, keys(OverlayKinds), num(MaxAt), num(MinSeconds), num(MaxSeconds), DefaultEyeColor, lookList(OverlayEye), pupilList(),
 		MaxTextLines, MaxSayChars, num(MaxAt), num(MinSeconds), num(MaxSeconds), keys(TextStyles),
 		keys(TextLayouts), keys(TextArrivals), keys(TextLeavings),
+		MaxMoments, num(MaxAt), MaxAskChars, keys(WayKinds), keys(Answerers), MaxNoteChars,
 		num(MaxAfter))
 }
 

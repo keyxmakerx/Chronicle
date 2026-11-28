@@ -176,7 +176,8 @@ func (s *service) PreviewInFoundry(ctx context.Context, campaignID string, v Vie
 	if s.foundry == nil || !s.foundry.Offered(ctx, campaignID) {
 		return Scene{}, apperror.NewConflict("This campaign isn't connected to Foundry. Connect it under Foundry VTT in the campaign's settings.")
 	}
-	if !s.foundry.Preview(campaignID, v.UserID, sc) {
+	// The preview plays on a Foundry client, so it goes without the notes.
+	if !s.foundry.Preview(campaignID, v.UserID, PlayerScene(sc)) {
 		return Scene{}, apperror.NewConflict("Foundry isn't connected right now. Open your world in Foundry as the GM, then try again.")
 	}
 	return sc, nil
@@ -320,6 +321,11 @@ func (s *service) Show(ctx context.Context, campaignID, sceneID string, v Viewer
 	if err != nil {
 		return nil, err
 	}
+	// A moment holds the scene until the Director lets it go on, and a
+	// showing has no way yet to carry that or an answer, so it plays without
+	// its moments; the preview plays them.
+	// TODO(#2939): keep the moments once answers reach the Director.
+	snap.Moments = nil
 	now := s.now().UTC().Truncate(time.Second)
 	sh := Showing{
 		ID: uuid.NewString(), CampaignID: campaignID, SceneID: sc.ID, Scene: snap, ShownBy: v.UserID,
@@ -471,7 +477,7 @@ func (s *service) Read(ctx context.Context, campaignID, showingID string, v View
 	if err != nil {
 		return nil, err
 	}
-	return &ShowingRead{ShowingID: sh.ID, RewatchUntil: sh.RewatchUntil, Scene: sh.Scene}, nil
+	return &ShowingRead{ShowingID: sh.ID, RewatchUntil: sh.RewatchUntil, Scene: PlayerScene(sh.Scene)}, nil
 }
 
 func (s *service) Watched(ctx context.Context, campaignID, showingID string, v Viewer) error {
@@ -494,7 +500,7 @@ func (s *service) MemberShowings(ctx context.Context, campaignID, userID string)
 	}
 	out := make([]MemberShowing, 0, len(list))
 	for _, sh := range list {
-		out = append(out, MemberShowing{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Scene: sh.Scene})
+		out = append(out, MemberShowing{ShowingID: sh.ID, Name: sh.Scene.Name, ShownAt: sh.ShownAt, RewatchUntil: sh.RewatchUntil, Scene: PlayerScene(sh.Scene)})
 	}
 	return out, nil
 }

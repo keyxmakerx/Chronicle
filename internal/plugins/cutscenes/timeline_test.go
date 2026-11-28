@@ -59,13 +59,15 @@ func submitted(doc *goquery.Document) url.Values {
 // reads them by these names), so the editor must keep serving every one.
 func TestEditorHasWhatTheTimelineReads(t *testing.T) {
 	doc := renderEditor(t, Scene{Name: "One", Background: Background{Kind: BackgroundFadeToBlack, Seconds: 2},
-		Overlays: []Overlay{{Kind: OverlayLetterbox, Seconds: 1}}, Text: []TextLine{{Say: "Hi", Seconds: 3, Style: StylePlain}}})
+		Overlays: []Overlay{{Kind: OverlayLetterbox, Seconds: 1}}, Text: []TextLine{{Say: "Hi", Seconds: 3, Style: StylePlain}},
+		Moments: []Moment{{At: 4, Ask: "Why?", Ways: []Way{{Kind: WayWrite}}}}})
 	for _, sel := range []string{
 		"[data-csw-timeline][hidden] [data-csw-tl-lanes]", "[data-csw-timeline] [data-csw-tl-axis]", "[data-csw-timeline] [data-csw-tl-empty]",
 		"select#csw-bg-kind", "select#csw-bg-in", "input#csw-bg-sec",
 		"#csw-ov-list [data-csw-row] select[name=ov_kind]", "#csw-ov-list [data-csw-row] input[name=ov_at]", "#csw-ov-list [data-csw-row] input[name=ov_seconds]",
 		"#csw-tx-list [data-csw-row] input[name=tx_say]", "#csw-tx-list [data-csw-row] input[name=tx_at]", "#csw-tx-list [data-csw-row] input[name=tx_seconds]",
 		"#csw-tx-list [data-csw-row] select[name=tx_in]", "#csw-tx-list [data-csw-row] select[name=tx_out]",
+		"#csw-mo-list [data-csw-row] input[name=mo_ask]", "#csw-mo-list [data-csw-row] input[name=mo_at]",
 	} {
 		if doc.Find(sel).Length() == 0 {
 			t.Errorf("the editor has no %s", sel)
@@ -108,6 +110,14 @@ func TestAITimelineLoadsIntoEditorUnchanged(t *testing.T) {
 			"overlays":   []any{map[any]any{"kind": "eye", "at": 7.5, "seconds": 3.5, "color": "#3dff7a", "look": "almond", "pupil": "round"}},
 			"text":       []any{map[any]any{"say": "Something has noticed you.", "at": 11, "seconds": 5, "style": "whisper"}},
 		}},
+		{name: "moments", fields: map[string]any{
+			"background": map[any]any{"kind": "black", "in": "fade", "seconds": 2},
+			"text":       []any{map[any]any{"say": "Saltreach", "at": 0.5, "seconds": 0, "style": "title"}},
+			"moments": []any{
+				map[any]any{"at": 4, "ask": "What do the fishermen whisper about the bell?", "ways": []any{"director", map[any]any{"kind": "write"}}, "to": "one", "note": "The bell rang the night the tide didn't turn."},
+				map[any]any{"at": 9.5, "ask": "Who rings it now?"},
+			},
+		}},
 		{name: "the older single kind", fields: map[string]any{
 			"background": map[any]any{"kind": "fade-to-black", "seconds": 3},
 			"overlays":   []any{map[any]any{"kind": "embers", "at": 2, "seconds": 2}},
@@ -122,6 +132,9 @@ func TestAITimelineLoadsIntoEditorUnchanged(t *testing.T) {
 			}
 			list, _ := r.svc.List(ctx, "camp-1", vDir)
 			stored := list[0]
+			if ms, ok := tt.fields["moments"].([]any); ok && len(stored.Moments) != len(ms) {
+				t.Fatalf("stored %d moments, want %d", len(stored.Moments), len(ms))
+			}
 
 			back, err := SceneFromForm(submitted(renderEditor(t, stored)))
 			if err != nil {

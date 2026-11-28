@@ -100,6 +100,17 @@
         atInput: q(txs[j], '[name="tx_at"]'), lenInput: q(txs[j], '[name="tx_seconds"]'), shown: len
       });
     }
+    // A moment is a point, not a span: the scene holds there, so it is drawn
+    // as a marker in a lane of its own, named by its question.
+    var mos = form.querySelectorAll('#csw-mo-list [data-csw-row]');
+    for (var k = 0; k < mos.length; k++) {
+      var ask = ((q(mos[k], '[name="mo_ask"]') || {}).value || '').trim() || 'Moment ' + (k + 1);
+      var moAt = q(mos[k], '[name="mo_at"]');
+      bars.push({
+        label: ask, title: 'Moment ' + (k + 1) + ': ' + ask, mark: true,
+        start: num(moAt), end: Infinity, fadeIn: 0, fadeOut: 0, atInput: moAt
+      });
+    }
     return bars;
   }
 
@@ -164,7 +175,7 @@
     this.box = q(form, '[data-csw-timeline]');
     this.rows.disconnect();
     if (!form || !this.box) return;
-    ['#csw-ov-list', '#csw-tx-list'].forEach(function (s) {
+    ['#csw-ov-list', '#csw-tx-list', '#csw-mo-list'].forEach(function (s) {
       var list = q(form, s);
       if (list) this.rows.observe(list, { childList: true });
     }, this);
@@ -198,13 +209,13 @@
     var name = el('span', 'csw-tl-name', b.label);
     name.title = b.title;
     var track = el('div', 'csw-tl-track');
-    var bar = el('div', 'csw-tl-bar' + (b.end === Infinity ? ' is-open' : ''));
+    var bar = el('div', 'csw-tl-bar' + (b.mark ? ' is-mark' : b.end === Infinity ? ' is-open' : ''));
     bar.setAttribute('data-bar', String(i));
     this.place(bar, b);
     if (b.atInput) {
       bar.tabIndex = 0;
       bar.setAttribute('role', 'slider');
-      bar.setAttribute('aria-label', b.title + ', start');
+      bar.setAttribute('aria-label', b.title + (b.mark ? ', holds at' : ', start'));
       bar.setAttribute('aria-valuemin', '0');
       bar.setAttribute('aria-valuemax', String(limit(b.atInput, 'max', 120)));
       this.value(bar, b);
@@ -251,8 +262,10 @@
     // A start typed below zero is refused on save; drawn at zero meanwhile,
     // so the bar never leaves its track.
     var start = Math.max(Math.min(b.start, this.total), 0);
-    var len = Math.max(end - start, 0.0001);
     bar.style.left = (start / this.total * 100) + '%';
+    // A marker's size is its own, centred on its moment.
+    if (b.mark) return;
+    var len = Math.max(end - start, 0.0001);
     bar.style.width = (len / this.total * 100) + '%';
     bar.style.setProperty('--in', (Math.min(b.fadeIn, len) / len * 100) + '%');
     bar.style.setProperty('--out', (Math.min(b.fadeOut, len) / len * 100) + '%');
@@ -271,7 +284,7 @@
 
   Timeline.prototype.value = function (bar, b) {
     bar.setAttribute('aria-valuenow', String(round(b.start)));
-    var text = 'starts at ' + secs(b.start);
+    var text = (b.mark ? 'holds at ' : 'starts at ') + secs(b.start);
     if (b.shown > 0) text += ', on screen ' + secs(b.shown);
     else if (b.lenInput) text += ', stays to the end';
     bar.setAttribute('aria-valuetext', text);

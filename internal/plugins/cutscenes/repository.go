@@ -61,14 +61,14 @@ func nameTaken(name string) error {
 }
 
 // sceneColumns are read in this order by scanScene.
-const sceneColumns = "id, name, background, overlays, `text`, ending, updated_at"
+const sceneColumns = "id, name, background, overlays, `text`, COALESCE(moments, ''), ending, updated_at"
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanScene(row scanner) (Scene, error) {
 	var s Scene
-	var bg, ov, tx, end string
-	if err := row.Scan(&s.ID, &s.Name, &bg, &ov, &tx, &end, &s.UpdatedAt); err != nil {
+	var bg, ov, tx, mo, end string
+	if err := row.Scan(&s.ID, &s.Name, &bg, &ov, &tx, &mo, &end, &s.UpdatedAt); err != nil {
 		return s, err
 	}
 	// A layer that no longer parses reads as empty rather than breaking the
@@ -77,6 +77,9 @@ func scanScene(row scanner) (Scene, error) {
 	_ = json.Unmarshal([]byte(ov), &s.Overlays)
 	_ = json.Unmarshal([]byte(tx), &s.Text)
 	_ = json.Unmarshal([]byte(end), &s.Ending)
+	if mo != "" {
+		_ = json.Unmarshal([]byte(mo), &s.Moments)
+	}
 	if s.Overlays == nil {
 		s.Overlays = []Overlay{}
 	}
@@ -84,6 +87,19 @@ func scanScene(row scanner) (Scene, error) {
 		s.Text = []TextLine{}
 	}
 	return s, nil
+}
+
+// momentsColumn is the moments column: NULL for a scene without any, so a scene
+// saved before moments existed and one saved after without them read alike.
+func momentsColumn(s Scene) (any, error) {
+	if len(s.Moments) == 0 {
+		return nil, nil
+	}
+	b, err := json.Marshal(s.Moments)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 func layers(s Scene) (bg, ov, tx, end []byte, err error) {
@@ -139,9 +155,13 @@ func (r *sqlRepository) CreateScene(ctx context.Context, campaignID, createdBy s
 	if err != nil {
 		return fmt.Errorf("encoding cut scene: %w", err)
 	}
+	mo, err := momentsColumn(s)
+	if err != nil {
+		return fmt.Errorf("encoding cut scene: %w", err)
+	}
 	_, err = r.db.ExecContext(ctx,
-		"INSERT INTO cutscenes (id, campaign_id, name, background, overlays, `text`, ending, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		s.ID, campaignID, s.Name, string(bg), string(ov), string(tx), string(end), createdBy)
+		"INSERT INTO cutscenes (id, campaign_id, name, background, overlays, `text`, moments, ending, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		s.ID, campaignID, s.Name, string(bg), string(ov), string(tx), mo, string(end), createdBy)
 	if isDuplicate(err) {
 		return nameTaken(s.Name)
 	}
@@ -156,9 +176,13 @@ func (r *sqlRepository) UpdateScene(ctx context.Context, campaignID string, s Sc
 	if err != nil {
 		return fmt.Errorf("encoding cut scene: %w", err)
 	}
+	mo, err := momentsColumn(s)
+	if err != nil {
+		return fmt.Errorf("encoding cut scene: %w", err)
+	}
 	res, err := r.db.ExecContext(ctx,
-		"UPDATE cutscenes SET name = ?, background = ?, overlays = ?, `text` = ?, ending = ? WHERE campaign_id = ? AND id = ?",
-		s.Name, string(bg), string(ov), string(tx), string(end), campaignID, s.ID)
+		"UPDATE cutscenes SET name = ?, background = ?, overlays = ?, `text` = ?, moments = ?, ending = ? WHERE campaign_id = ? AND id = ?",
+		s.Name, string(bg), string(ov), string(tx), mo, string(end), campaignID, s.ID)
 	if isDuplicate(err) {
 		return nameTaken(s.Name)
 	}

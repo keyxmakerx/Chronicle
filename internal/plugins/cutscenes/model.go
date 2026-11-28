@@ -43,6 +43,13 @@ const (
 
 	EndingTap  = "tap"
 	EndingAuto = "auto"
+
+	// Ways a moment can be answered, and who answers it. Blank To is each
+	// person watching; only "one" is stored.
+	WayWrite    = "write"
+	WayDirector = "director"
+	ToEach      = "each"
+	ToOne       = "one"
 )
 
 // Kind is one choice a layer offers, with the plain words the editor and the
@@ -98,6 +105,16 @@ var (
 		{TextFade, "Fades", "the line fades away where it stands"},
 		{TextSink, "Sinks", "the line sinks a little as it fades"},
 		{TextSlide, "Slides away", "the line slides back out to the left"},
+	}
+	// WayKinds are the ways a moment offers, in the order they are stored
+	// and drawn; the first is the default for a moment that names none.
+	WayKinds = []Kind{
+		{WayWrite, "Write it", "the player writes the answer in their own words"},
+		{WayDirector, "Leave it to the Director", "the Director answers it for them"},
+	}
+	Answerers = []Kind{
+		{ToEach, "Each person watching", "everyone the scene is shown to answers"},
+		{ToOne, "One person", "one person answers, picked when it is shown"},
 	}
 	EndingKinds = []Kind{
 		{EndingTap, "When they tap", "a quiet Close appears once the last layer has finished; a tap, click or Esc closes it"},
@@ -207,6 +224,9 @@ const (
 	MaxOverlays    = 8
 	MaxTextLines   = 12
 	MaxSayChars    = 280
+	MaxMoments     = 6
+	MaxAskChars    = 200
+	MaxNoteChars   = 500
 	MinSeconds     = 0.5
 	MaxSeconds     = 60.0
 	MaxAt          = 120.0
@@ -232,8 +252,42 @@ type Scene struct {
 	Background Background `json:"background"`
 	Overlays   []Overlay  `json:"overlays"`
 	Text       []TextLine `json:"text"`
+	Moments    []Moment   `json:"moments,omitempty"`
 	Ending     Ending     `json:"ending"`
 	UpdatedAt  time.Time  `json:"-"`
+}
+
+// Moment is a beat on the timeline where the scene stops and asks one
+// question, holding until the Director lets it go on. Note is the
+// Director's own text: PlayerScene drops it before a scene leaves the
+// editor, so it never reaches a player or a Foundry client.
+type Moment struct {
+	At   float64 `json:"at"`
+	Ask  string  `json:"ask"`
+	Ways []Way   `json:"ways"`
+	To   string  `json:"to,omitempty"`
+	Note string  `json:"note,omitempty"`
+}
+
+// Way is one way to answer a moment.
+type Way struct {
+	Kind string `json:"kind"`
+}
+
+// PlayerScene is the scene as it may leave the editor: every moment without
+// the Director's note. The moments list is copied, so the caller's scene
+// keeps its notes.
+func PlayerScene(sc Scene) Scene {
+	if len(sc.Moments) == 0 {
+		return sc
+	}
+	ms := make([]Moment, len(sc.Moments))
+	for i, m := range sc.Moments {
+		m.Note = ""
+		ms[i] = m
+	}
+	sc.Moments = ms
+	return sc
 }
 
 // Params are a layer's settings beyond kind and timing: an overlay's colour,

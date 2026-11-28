@@ -82,6 +82,9 @@
       if (playing && playing.stop) playing.stop();
       var run = got[1].play(document.body, got[0], {
         label: 'Preview: ' + (got[0].name || 'cut scene'),
+        // A moment holds until the Director goes on; in a preview the
+        // Director is the one watching, so the question offers Continue.
+        canContinue: true,
         onClose: function () {
           if (playing === run) playing = null;
           if (btn.isConnected) btn.focus();

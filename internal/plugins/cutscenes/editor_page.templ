@@ -109,6 +109,18 @@ templ editorForm(p editorPage) {
 			</template>
 			<button type="button" class="quiet-word" onclick={ addRowOnClick("csw-tx-list", "csw-tx-tpl", MaxTextLines) }>Add words</button>
 		</section>
+		<section class="csw-layer" aria-labelledby="csw-mo-h">
+			<h2 class="csw-lab" id="csw-mo-h">Moments <span class="csw-quiet">the scene stops and asks a question, and holds until you go on</span></h2>
+			<div class="csw-rows" id="csw-mo-list">
+				for _, m := range p.Scene.Moments {
+					@momentRow(m)
+				}
+			</div>
+			<template id="csw-mo-tpl">
+				@momentRow(Moment{Ways: []Way{{Kind: WayWrite}}})
+			</template>
+			<button type="button" class="quiet-word" onclick={ addRowOnClick("csw-mo-list", "csw-mo-tpl", MaxMoments) }>Add a moment</button>
+		</section>
 		<fieldset class="csw-layer csw-ending">
 			<legend class="csw-lab">Ending</legend>
 			<div class="csw-choices">
@@ -206,6 +218,44 @@ templ overlayRow(o Overlay) {
 			<input class="csw-color" name="ov_color" type="color" value={ colorOr(o.Params.Color, defaultColor(o.Kind)) }/>
 		</label>
 		<button type="button" class="csw-icon" aria-label="Remove this layer" title="Remove" onclick={ removeRowOnClick() }>
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+	</div>
+}
+
+// momentRow is one moment. Its ways are one select whose value lists the
+// kinds, so the row stays one value per field.
+templ momentRow(m Moment) {
+	<div class="csw-item csw-item-moment" data-csw-row>
+		<label class="csw-field csw-say">
+			<span class="csw-flabel">Question</span>
+			<input class="csw-line" name="mo_ask" type="text" maxlength={ strconv.Itoa(MaxAskChars) } value={ m.Ask } placeholder="What do the fishermen whisper about the bell?"/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Holds at (s)</span>
+			<input class="csw-line csw-num" name="mo_at" type="number" inputmode="decimal" min="0" max="120" step="0.1" value={ num(m.At) }/>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">How they answer</span>
+			<select class="csw-select" name="mo_ways">
+				for _, w := range wayChoices() {
+					<option value={ w.Key } selected?={ waysValue(m.Ways) == w.Key }>{ w.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field">
+			<span class="csw-flabel">Who answers</span>
+			<select class="csw-select" name="mo_to">
+				for _, k := range Answerers {
+					<option value={ k.Key } selected?={ m.To == k.Key || (m.To == "" && k.Key == ToEach) }>{ k.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="csw-field csw-say csw-note">
+			<span class="csw-flabel">Your note <span class="csw-only">Only you</span></span>
+			<input class="csw-line" name="mo_note" type="text" maxlength={ strconv.Itoa(MaxNoteChars) } value={ m.Note } placeholder="What you hope they say, or what happens next"/>
+		</label>
+		<button type="button" class="csw-icon" aria-label="Remove this moment" title="Remove" onclick={ removeRowOnClick() }>
 			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 		</button>
 	</div>
