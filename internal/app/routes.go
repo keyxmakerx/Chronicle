@@ -4912,6 +4912,8 @@ func (a *App) RegisterRoutes() {
 	// Needed to resolve the caller's role for ListMedia's Scribe+ gate.
 	mediaAPIHandler.SetCampaignService(campaignService)
 	mediaAPIHandler.SetMapImageGuard(mapsService)
+	// A link the module hands to every player is for a file any player could open.
+	mediaAPIHandler.SetPlayerMediaCheck(mediaHandler)
 	// The decks service is built here, ahead of its routes, because the media
 	// server must be able to refuse a card's picture from the first request. It
 	// asks even where the decks plugin is degraded: a campaign with no decks

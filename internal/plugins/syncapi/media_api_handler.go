@@ -1,6 +1,7 @@
 package syncapi
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -30,6 +31,15 @@ type MediaAPIHandler struct {
 	// no listing, no lookup. Nil means unwired (tests); production wiring is
 	// pinned in app.
 	cardPictures media.CardPictureGuard
+	// players answers GetMedia's ?audience=players. Nil refuses that audience.
+	players PlayerMediaCheck
+}
+
+// PlayerMediaCheck says whether any player of the campaign could open a file
+// with their own session. Implemented by the media server, which owns that
+// rule; see media.Handler.PlainPlayerCanOpen.
+type PlayerMediaCheck interface {
+	PlainPlayerCanOpen(ctx context.Context, file *media.MediaFile) (bool, error)
 }
 
 // NewMediaAPIHandler creates a new media API handler.
@@ -69,6 +79,17 @@ func (h *MediaAPIHandler) SetCardPictureGuard(g media.CardPictureGuard) {
 // test can prove production never serves card pictures without it.
 func (h *MediaAPIHandler) CardPictureGuardWired() bool {
 	return h.cardPictures != nil
+}
+
+// SetPlayerMediaCheck wires the ?audience=players check. Called during wiring
+// in app/routes.go.
+func (h *MediaAPIHandler) SetPlayerMediaCheck(p PlayerMediaCheck) {
+	h.players = p
+}
+
+// PlayerMediaCheckWired reports whether the check is set, for the app's wiring test.
+func (h *MediaAPIHandler) PlayerMediaCheckWired() bool {
+	return h.players != nil
 }
 
 // hidesCardPicture is true when the file is a card's picture and the caller is
@@ -154,6 +175,9 @@ type apiMediaFileResponse struct {
 	ThumbnailURL string            `json:"thumbnail_url,omitempty"`
 	Thumbnails   map[string]string `json:"thumbnails,omitempty"`
 	CreatedAt    time.Time         `json:"created_at"`
+	// Audience echoes an audience the server applied, so a client can tell
+	// a server that checked it from an older one that ignored the parameter.
+	Audience string `json:"audience,omitempty"`
 }
 
 // toAPIResponse converts a MediaFile to an API-safe response with signed
@@ -272,6 +296,11 @@ func (h *MediaAPIHandler) ListMedia(c *echo.Context) error {
 // API-key flow, which the media server honours without the page-visibility
 // check a browser request gets, so a Player who learned a file's id would be
 // handed a working link to a picture on a page hidden from them.
+//
+// ?audience=players answers only for a file any player could open with their
+// own session (PlayerMediaCheck), and 404 otherwise; the answer says so in
+// its audience field. The Foundry module asks this way for a shop room's
+// picture before handing the link to the table.
 func (h *MediaAPIHandler) GetMedia(c *echo.Context) error {
 	mediaID := c.Param("mediaID")
 	ctx := c.Request().Context()
@@ -295,7 +324,28 @@ func (h *MediaAPIHandler) GetMedia(c *echo.Context) error {
 		return apperror.NewNotFound("media file not found")
 	}
 
-	return c.JSON(http.StatusOK, h.response(c, file))
+	switch audience := c.QueryParam("audience"); audience {
+	case "":
+		return c.JSON(http.StatusOK, h.response(c, file))
+	case audiencePlayers:
+		// A failed or unwired check is the same 404 as a file players can't open.
+		if h.players == nil {
+			return apperror.NewNotFound("media file not found")
+		}
+		ok, err := h.players.PlainPlayerCanOpen(ctx, file)
+		if err != nil {
+			slog.Error("api: player audience check failed; refusing",
+				slog.String("file_id", file.ID), slog.Any("error", err))
+		}
+		if err != nil || !ok {
+			return apperror.NewNotFound("media file not found")
+		}
+		resp := h.response(c, file)
+		resp.Audience = audiencePlayers
+		return c.JSON(http.StatusOK, resp)
+	default:
+		return apperror.NewBadRequest("audience must be players")
+	}
 }
 
 // GetMediaStats returns aggregate storage stats for the campaign.
