@@ -106,7 +106,8 @@
     h += '<span class="shr-seg" role="group" aria-label="How to build">' +
       '<button type="button" data-cb-mode="lists" aria-pressed="' + !place + '">Pick from lists</button><button type="button" data-cb-mode="place" aria-pressed="' + place + '">Place it yourself</button></span>';
     if (place) {
-      h += '<p class="shr-note">Dashed slots are on the room. Drag a prop to its slot, or press a prop and then its slot. Press the window to move it: left, centre, right or none.</p>' +
+      h += '<p class="shr-note">Dashed slots are on the room. Drag a prop to its slot, or press a prop and then its slot. Press the window to move it: left, centre, right or none. Drag the shelves or a placed prop to move it, or press it and use the arrow keys.</p>' +
+        '<div class="shr-cbmv" data-cb-mv></div>' +
         '<button type="button" class="shr-link cbside" data-cb-side="1">Move this panel to the other side</button>';
     }
     h += startChips();
@@ -218,7 +219,7 @@
     });
     var r = b.querySelector('[data-cb-reset]'); if (r) r.hidden = !cur.api.custom();
     var sm = b.closest('.shr-sec'), sh = sm && sm.querySelector('.shr-sh small'); if (sh) sh.textContent = t.name;
-    syncPic(); notes(); hilite();
+    syncPic(); syncMv(); notes(); hilite();
   }
   // A prop that found no free spot in this skeleton says so, and is never squeezed in.
   function notes() {
@@ -258,9 +259,11 @@
     if (d.cbMore) { loadPics(true); return; }
     if (d.cbUse) { usePic(d.cbUse); return; }
     if (d.cbPicon || d.cbPicfit) { change(function (t) { if (!t.theme.picture) return; if (d.cbPicon) t.theme.picture.on = d.cbPicon; else t.theme.picture.fit = d.cbPicfit; }); return; }
+    if (d.cbUnmove !== undefined && sel) { var k = sel; setMove(k, [0, 0, 1]); say(mvName(k) + ' is back where it was.'); return; }
     if (d.cbPicoff) { change(function (t) { delete t.theme.picture; }); say('The picture is gone from the room. Save room to keep that.'); }
   }
   function onInput(e) {
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-cb-size')) { if (sel) { var v = mvOf(sel); v[2] = +e.target.value; setMove(sel, v, true); } return; }
     if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-cb-up')) { if (e.type === 'change' && e.target.files && e.target.files[0]) upload(e.target.files[0]); return; }
     var c = e.target, path = c.getAttribute && c.getAttribute('data-cb-path'), pr = c.getAttribute && c.getAttribute('data-cb-prop');
     if (path) { var v = c.type === 'range' ? +c.value : c.value; change(function (t) { pathSet(t, path, v); }, c.type === 'range' || c.type === 'color'); }
@@ -315,8 +318,35 @@
     if (armed) place(s.getAttribute('data-slot'), armed); else say('Press a prop first, then its slot.');
   });
 
+  /* ---- Moving the shelves and props: the room says which piece was picked
+     or where it was dragged; the panel sizes it or puts it back. ---- */
+  var sel = '';
+  function mvName(k) { return k === 'display' ? 'The shelves' : lbl('prop', k); }
+  function mvOf(k) { var m = cur.api.theme().moves || {}; return m[k] ? m[k].slice() : [0, 0, 1]; }
+  function setMove(k, v, soft) {
+    change(function (t) { t.moves = Object.assign({}, t.moves); t.moves[k] = v; if (v[0] === 0 && v[1] === 0 && v[2] === 1) delete t.moves[k]; }, soft);
+  }
+  function syncMv() {
+    var el = cur && cur.box.querySelector('[data-cb-mv]'); if (!el) return;
+    if (sel && sel !== 'display' && cur.api.theme().props.indexOf(sel) < 0) sel = '';
+    if (!sel) { el.innerHTML = ''; el._k = ''; return; }
+    var v = mvOf(sel);
+    // Drawn once per piece, then only its values change, so a slider being dragged is never replaced.
+    if (el._k === sel) {
+      var r = el.querySelector('[data-cb-size]'), o = el.querySelector('output'), b = el.querySelector('[data-cb-unmove]');
+      if (r && document.activeElement !== r) r.value = v[2]; if (o) o.textContent = Math.round(v[2] * 100) + '%'; if (b) b.hidden = !(v[0] || v[1] || v[2] !== 1);
+      return;
+    }
+    el._k = sel;
+    el.innerHTML = '<div class="shr-field" role="group" aria-label="' + esc(mvName(sel)) + '"><span>' + esc(mvName(sel)) + '</span>' +
+      '<label class="shr-rng"><span>Size</span><input type="range" min="0.5" max="2" step="0.05" value="' + v[2] + '" data-cb-size aria-label="Size of ' + esc(mvName(sel).toLowerCase()) + '"><output>' + Math.round(v[2] * 100) + '%</output></label>' +
+      '<button type="button" class="shr-link" data-cb-unmove' + (v[0] || v[1] || v[2] !== 1 ? '' : ' hidden') + '>Put it back where it was</button></div>';
+  }
+  function picked(k) { if (!cur || mode !== 'place') return; sel = k; syncMv(); }
+  function moved(k, v, soft) { if (!cur) return; sel = k; setMove(k, v, soft); say(mvName(k) + ' moved. Save room to keep it.'); }
+
   window.ShopRoomBuilder = {
-    mount: mount, opening: opening,
+    mount: mount, opening: opening, picked: picked, moved: moved,
     // The counter room has just been drawn: remember which props found a spot, and relight the slots once it is in the page.
     placed: function (m) { placedMap = m || {}; clearTimeout(noteT); noteT = setTimeout(function () { notes(); hilite(); }, 0); }
   };

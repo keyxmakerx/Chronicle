@@ -3,6 +3,7 @@ package armory
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -694,5 +695,57 @@ func TestNormalizeShopRoomLayout_CounterLiveSky(t *testing.T) {
 	}
 	if _, err := NormalizeShopRoomLayout(withCounter(counterField("theme", "outside", "Live"))); err == nil {
 		t.Error("accepted a different case")
+	}
+}
+
+func TestNormalizeShopRoomLayout_CounterMoves(t *testing.T) {
+	out, err := NormalizeShopRoomLayout(withCounter(func(c map[string]any) {
+		c["moves"] = map[string]any{
+			"display": []any{120.4, -2.5, 1.204},
+			"anvil":   []any{-9000, 9000, 7},
+			"sparks":  []any{0, 0, 1},
+			"banner":  []any{40, 0, 1},
+		}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l ShopRoomLayout
+	if err := json.Unmarshal(out, &l); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]float64{"display": {120, -2, 1.2}, "anvil": {-600, 350, 2}}
+	if len(l.Counter.Moves) != len(want) {
+		t.Fatalf("moves = %v, want %v (a move that moves nothing and one for a prop not in the room are dropped)", l.Counter.Moves, want)
+	}
+	for k, v := range want {
+		if fmt.Sprint(l.Counter.Moves[k]) != fmt.Sprint(v) {
+			t.Errorf("moves[%s] = %v, want %v", k, l.Counter.Moves[k], v)
+		}
+	}
+
+	out, err = NormalizeShopRoomLayout(withCounter(func(c map[string]any) { c["moves"] = map[string]any{"display": []any{0, 0, 1}} }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), `"moves"`) {
+		t.Errorf("an empty set of moves was kept: %s", out)
+	}
+
+	for name, mv := range map[string]any{
+		"too short":     map[string]any{"display": []any{1, 2}},
+		"not a number":  map[string]any{"display": []any{"left", 0, 1}},
+		"not an object": []any{1, 2, 3},
+	} {
+		if _, err := NormalizeShopRoomLayout(withCounter(func(c map[string]any) { c["moves"] = mv })); err == nil {
+			t.Errorf("%s: accepted %v", name, mv)
+		}
+	}
+	many := map[string]any{}
+	for i := 0; i <= maxShopRoomCounterProps+1; i++ {
+		many[fmt.Sprintf("p%d", i)] = []any{1, 1, 1}
+	}
+	if _, err := NormalizeShopRoomLayout(withCounter(func(c map[string]any) { c["moves"] = many })); err == nil {
+		t.Error("accepted more moves than the room has pieces")
 	}
 }

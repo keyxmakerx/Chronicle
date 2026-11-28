@@ -30,6 +30,7 @@ func savedCounter(t *testing.T, f *fakeShopLooks, shop string) counterTheme {
 
 func TestShopRoomCounterEdit(t *testing.T) {
 	custom := `{"name":"Mine","version":1,"skeleton":{"shape":"round","opening":"doorway","display":"domes","counter":"curved"},"theme":{"wall":"brick","wood":"#111111","cloth":"#222222","accent":"#333333","trim":"#444444","light":"candles","warmth":0.2,"outside":"rain"},"props":["herbs","jars"]}`
+	moved := strings.Replace(custom, `"props"`, `"moves":{"display":[120,-20,1.2],"herbs":[-40,0,1]},"props"`, 1)
 	tests := []struct {
 		name    string
 		saved   string // the forge room's saved counter, "" for none
@@ -110,6 +111,19 @@ func TestShopRoomCounterEdit(t *testing.T) {
 		{"a bad warmth", custom, "Ember Forge", map[string]any{"warmth": 2}, "", "counter.warmth: write a number from 0", nil},
 		{"an unknown key", custom, "Ember Forge", map[string]any{"colour": "red"}, "", `counter: "colour" is not a part of the theme`, nil},
 		{"not a map", custom, "Ember Forge", "round", "", "counter: write it as a map", nil},
+		{"the owner's moves stay through an edit", moved, "Ember Forge", map[string]any{"wall": "stone"},
+			"Ember Forge's room: counter: wall stone", "",
+			func(t *testing.T, c counterTheme) {
+				if string(c.Moves) != `{"display":[120,-20,1.2],"herbs":[-40,0,1]}` {
+					t.Fatalf("moves = %s", c.Moves)
+				}
+			}},
+		{"a starter drops the old room's moves", moved, "Ember Forge", map[string]any{"start": "arcane"}, "", "",
+			func(t *testing.T, c counterTheme) {
+				if c.Moves != nil {
+					t.Fatalf("moves = %s", c.Moves)
+				}
+			}},
 		{"a first room still themes", "", "The Rusty Anchor", map[string]any{"wall": "canvas"}, "sets up The Rusty Anchor's room: counter: wall canvas", "",
 			func(t *testing.T, c counterTheme) {
 				if c.Name != "Plain counter" || c.Theme.Wall != "canvas" {
