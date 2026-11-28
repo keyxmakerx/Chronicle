@@ -2,6 +2,7 @@ package homebrew
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -30,6 +31,15 @@ type Service interface {
 	// holds dataHas (any data when ""), so an owner can find the parts that
 	// point at one of its records without reading every recipe.
 	PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error)
+	// Package writes a recipe as the Store's package: its parts and rules
+	// without Director-only text or links to this campaign's records, and
+	// what it needs. StripPackage, ValidatePackage, PackageLacks and
+	// AddPackaged are the other sides of it (package.go).
+	Package(ctx context.Context, campaignID, recipeID string, v Viewer) (json.RawMessage, error)
+	StripPackage(raw json.RawMessage) (json.RawMessage, error)
+	ValidatePackage(raw json.RawMessage) (json.RawMessage, error)
+	PackageLacks(ctx context.Context, campaignID string, raw json.RawMessage) ([]string, error)
+	AddPackaged(ctx context.Context, campaignID string, v Viewer, raw json.RawMessage) (AddedRecipe, error)
 	// ShareBudget gives ctx one budget of rule runs, so several firings an
 	// owner makes for one change stop together after the same 50 runs.
 	ShareBudget(ctx context.Context) context.Context
@@ -122,7 +132,7 @@ func (s *service) List(ctx context.Context, campaignID string, v Viewer) ([]Reci
 	out := make([]RecipeSummary, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, RecipeSummary{ID: r.ID, Name: r.Name, Parts: len(r.Doc.Parts), Rules: len(r.Doc.Rules),
-			PartKinds: partKinds(r.Doc), Version: r.Version, UpdatedAt: r.UpdatedAt})
+			PartKinds: partKinds(r.Doc), Off: r.Doc.Off, Version: r.Version, UpdatedAt: r.UpdatedAt})
 	}
 	return out, nil
 }
@@ -195,6 +205,11 @@ func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, 
 	}
 	var out []RecipePart
 	for _, r := range rs {
+		// An off recipe's parts are not live, so an owner never finds one
+		// to fire its rules on.
+		if r.Doc.Off {
+			continue
+		}
 		for _, p := range r.Doc.Parts {
 			if dataHas != "" && !strings.Contains(string(p.Data), dataHas) {
 				continue
