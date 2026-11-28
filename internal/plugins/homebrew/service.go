@@ -2,6 +2,7 @@ package homebrew
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -30,6 +31,15 @@ type Service interface {
 	// holds dataHas (any data when ""), so an owner can find the parts that
 	// point at one of its records without reading every recipe.
 	PartsOfKind(ctx context.Context, campaignID string, v Viewer, dataHas string, kinds ...string) ([]RecipePart, error)
+	// Package writes a recipe as the Store's package: its parts and rules
+	// without Director-only text or links to this campaign's records, and
+	// what it needs. StripPackage, ValidatePackage, PackageLacks and
+	// AddPackaged are the other sides of it (package.go).
+	Package(ctx context.Context, campaignID, recipeID string, v Viewer) (json.RawMessage, error)
+	StripPackage(raw json.RawMessage) (json.RawMessage, error)
+	ValidatePackage(raw json.RawMessage) (json.RawMessage, error)
+	PackageLacks(ctx context.Context, campaignID string, raw json.RawMessage) ([]string, error)
+	AddPackaged(ctx context.Context, campaignID string, v Viewer, raw json.RawMessage) (AddedRecipe, error)
 	// ShareBudget gives ctx one budget of rule runs, so several firings an
 	// owner makes for one change stop together after the same 50 runs.
 	ShareBudget(ctx context.Context) context.Context
@@ -54,6 +64,17 @@ type Service interface {
 	// are for whoever set the ask off, player or Director.
 	MyAsks(ctx context.Context, campaignID string, v Viewer) ([]AskView, error)
 	TakeBack(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
+
+	// AskFor puts an owner's own ask to the Directors (owner_ask.go), with
+	// the steps of every saved rule on its event waiting behind it; it
+	// returns the waiting run's id, "" when runs aren't kept. AnswerFor
+	// answers the one waiting under the owner's key; found is false when
+	// none does.
+	AskFor(ctx context.Context, campaignID string, v Viewer, a OwnerAsk) (string, error)
+	AnswerFor(ctx context.Context, campaignID, event, key string, v Viewer, in AnswerInput) (out *RunView, found bool, err error)
+	// CloseFor ends the owner's ask waiting under key without an answer,
+	// when what it asked about is gone; line says why, for the drawer.
+	CloseFor(ctx context.Context, campaignID, event, key string, v Viewer, line string) (found bool, err error)
 	// Roll makes the roll a "rolls first" step waits on (roll.go), only as
 	// the player it waits on; the server rolls and judges it.
 	Roll(ctx context.Context, campaignID, id string, v Viewer) (*AskView, error)
@@ -111,7 +132,7 @@ func (s *service) List(ctx context.Context, campaignID string, v Viewer) ([]Reci
 	out := make([]RecipeSummary, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, RecipeSummary{ID: r.ID, Name: r.Name, Parts: len(r.Doc.Parts), Rules: len(r.Doc.Rules),
-			PartKinds: partKinds(r.Doc), Version: r.Version, UpdatedAt: r.UpdatedAt})
+			PartKinds: partKinds(r.Doc), Off: r.Doc.Off, Version: r.Version, UpdatedAt: r.UpdatedAt})
 	}
 	return out, nil
 }
@@ -184,6 +205,11 @@ func (s *service) PartsOfKind(ctx context.Context, campaignID string, v Viewer, 
 	}
 	var out []RecipePart
 	for _, r := range rs {
+		// An off recipe's parts are not live, so an owner never finds one
+		// to fire its rules on.
+		if r.Doc.Off {
+			continue
+		}
 		for _, p := range r.Doc.Parts {
 			if dataHas != "" && !strings.Contains(string(p.Data), dataHas) {
 				continue

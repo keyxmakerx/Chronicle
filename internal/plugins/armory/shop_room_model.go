@@ -142,6 +142,10 @@ type ShopRoomCounter struct {
 	Skeleton ShopRoomCounterSkeleton `json:"skeleton"`
 	Theme    ShopRoomCounterTheme    `json:"theme"`
 	Props    []string                `json:"props"`
+	// Moves is where the owner moved the shelves ("display") or a prop:
+	// [dx, dy, size] from the room's own place for it, in room units;
+	// validate requires exactly three numbers.
+	Moves map[string][]float64 `json:"moves,omitempty"`
 }
 
 // ShopRoomCounterSkeleton is the room's shape, before any paint.
@@ -163,6 +167,8 @@ type ShopRoomCounterTheme struct {
 	Light   string  `json:"light"`
 	Warmth  float64 `json:"warmth"`
 	Outside string  `json:"outside"`
+	// Scene is what stands outside under that sky; empty is the room's own town.
+	Scene string `json:"scene,omitempty"`
 	// Picture is the owner's own picture for the room, absent for none.
 	Picture *ShopRoomCounterPicture `json:"picture,omitempty"`
 }

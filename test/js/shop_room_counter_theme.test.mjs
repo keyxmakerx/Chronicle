@@ -74,6 +74,28 @@ test('the theme round trips through the saved layout, and no theme is not saved'
   assert.deepEqual(plain(SR.toLayout(S2).counter), plain(S2.counter), 'and on the way out');
 });
 
+test('the view outside is kept when known, and the town is saved as none', () => {
+  const base = plain(C.starters[1]);
+  const withScene = (scene) => plain(C.normalise(Object.assign({}, base, { theme: Object.assign({}, base.theme, { scene }) }))).theme;
+  assert.equal(withScene('castle').scene, 'castle');
+  for (const none of ['town', 'atlantis', 7, null, undefined]) assert.equal('scene' in withScene(none), false, String(none));
+  assert.ok(C.options.theme.scene.length >= 18, 'the parts packs add their views');
+});
+
+test('every view draws cleanly under every sky and at any width', () => {
+  const K = C.kit;
+  for (const s of C.options.theme.scene) {
+    const f = K.CM_SCENES[s];
+    assert.equal(typeof f, 'function', s);
+    for (const tm of ['', 'dusk', 'night', 'rain']) for (const [w, h] of [[212, 92], [1800, 140]]) {
+      const svg = f(10, 200, w, h, '#090d1a', 9, tm);
+      assert.ok(svg.length > 50, s + ' draws something');
+      assert.doesNotMatch(svg, /NaN|undefined|Infinity/, s + ' ' + tm + ' ' + w);
+      assert.equal(f(10, 200, w, h, '#090d1a', 9, tm), svg, s + ' draws the same each time');
+    }
+  }
+});
+
 test("the owner's picture is kept only as a media id, with known placements", () => {
   const id = '0b9c2f4e-1111-4222-8333-444455556666';
   const base = plain(C.starters[1]);
@@ -86,6 +108,20 @@ test("the owner's picture is kept only as a media id, with known placements", ()
   assert.equal('picture' in plain(C.normalise(base)).theme, false, 'a theme without one gains none');
 });
 
+test("the owner's moves are kept for the shelves and the room's own props, clamped and rounded", () => {
+  const base = plain(C.starters[0]);
+  const withMoves = (moves) => plain(C.normalise(Object.assign({}, base, { props: ['anvil', 'sparks'], moves })));
+  const t = withMoves({ sparks: [0, 0, 1], display: [120.4, -2.5, 1.204], anvil: [-9000, 9000, 7], dragon: [5, 5, 1], banner: [40, 0, 1] });
+  assert.deepEqual(t.moves, { anvil: [-600, 350, 2], display: [120, -2, 1.2] }, 'no-op moves and props not in the room are dropped');
+  assert.deepEqual(Object.keys(t.moves), ['anvil', 'display'], 'kept in key order, as the server writes them');
+  for (const bad of [null, 'x', [], { display: [1, 2] }, { display: ['left', 0, 1] }, { display: [0, 0, 1] }, { display: [NaN, 0, 1] }]) {
+    assert.equal('moves' in withMoves(bad), false, 'no moves from ' + JSON.stringify(bad));
+  }
+  const m = goValidate.match(/shopRoomCounterMove = struct\{[^}]*\}\{([^}]*)\}/);
+  assert.ok(m, 'server bounds');
+  assert.deepEqual(m[1].split(',').map(Number), [C.options.move.x, C.options.move.y, C.options.move.min, C.options.move.max], 'the server bounds a move as the widget does');
+});
+
 test('the widget offers the options the server accepts', () => {
   const O = C.options;
   assert.deepEqual([...O.skeleton.shape].sort(), goSet('shopRoomCounterShapes'));
@@ -95,6 +131,7 @@ test('the widget offers the options the server accepts', () => {
   assert.deepEqual([...O.theme.wall].sort(), goSet('shopRoomCounterWalls'));
   assert.deepEqual([...O.theme.light].sort(), goSet('shopRoomCounterLights'));
   assert.deepEqual([...O.theme.outside].sort(), goSet('shopRoomCounterOutsides'));
+  assert.deepEqual([...O.theme.scene].sort(), goSet('shopRoomCounterScenes'));
   assert.deepEqual([...O.props].sort(), goSet('shopRoomCounterProps'));
   assert.deepEqual([...O.picture.on].sort(), goSet('shopRoomPictureOn'));
   assert.deepEqual([...O.picture.fit].sort(), goSet('shopRoomPictureFit'));

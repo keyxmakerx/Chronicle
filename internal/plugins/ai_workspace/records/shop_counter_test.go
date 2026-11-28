@@ -30,6 +30,7 @@ func savedCounter(t *testing.T, f *fakeShopLooks, shop string) counterTheme {
 
 func TestShopRoomCounterEdit(t *testing.T) {
 	custom := `{"name":"Mine","version":1,"skeleton":{"shape":"round","opening":"doorway","display":"domes","counter":"curved"},"theme":{"wall":"brick","wood":"#111111","cloth":"#222222","accent":"#333333","trim":"#444444","light":"candles","warmth":0.2,"outside":"rain"},"props":["herbs","jars"]}`
+	moved := strings.Replace(custom, `"props"`, `"moves":{"display":[120,-20,1.2],"herbs":[-40,0,1]},"props"`, 1)
 	tests := []struct {
 		name    string
 		saved   string // the forge room's saved counter, "" for none
@@ -91,6 +92,17 @@ func TestShopRoomCounterEdit(t *testing.T) {
 					t.Fatalf("%+v", c)
 				}
 			}},
+		{"a view outside, by a friendlier word", custom, "Ember Forge", map[string]any{"scene": "cemetery"},
+			"Ember Forge's room: counter: scene graveyard", "",
+			func(t *testing.T, c counterTheme) {
+				if c.Theme.Scene != "graveyard" {
+					t.Fatalf("%+v", c.Theme)
+				}
+			}},
+		{"the campaign's own sky", custom, "Ember Forge", map[string]any{"outside": "skypane"},
+			"Ember Forge's room: counter: outside live", "", nil},
+		{"the town is no view", custom, "Ember Forge", map[string]any{"scene": "town"}, "changes nothing in Ember Forge's room", "", nil},
+		{"a bad view", custom, "Ember Forge", map[string]any{"scene": "atlantis"}, "", `counter.scene: "atlantis" is not one of`, nil},
 		{"a part from the newer rooms", custom, "Ember Forge", map[string]any{"opening": "porthole", "add": "hanging baskets"},
 			"Ember Forge's room: counter: opening porthole, +hanging-baskets", "", nil},
 		{"a named starter the armory has lost", custom, "Ember Forge", map[string]any{"start": "glasshouse"}, "", "counter.start: the starter can't be read", nil},
@@ -99,6 +111,19 @@ func TestShopRoomCounterEdit(t *testing.T) {
 		{"a bad warmth", custom, "Ember Forge", map[string]any{"warmth": 2}, "", "counter.warmth: write a number from 0", nil},
 		{"an unknown key", custom, "Ember Forge", map[string]any{"colour": "red"}, "", `counter: "colour" is not a part of the theme`, nil},
 		{"not a map", custom, "Ember Forge", "round", "", "counter: write it as a map", nil},
+		{"the owner's moves stay through an edit", moved, "Ember Forge", map[string]any{"wall": "stone"},
+			"Ember Forge's room: counter: wall stone", "",
+			func(t *testing.T, c counterTheme) {
+				if string(c.Moves) != `{"display":[120,-20,1.2],"herbs":[-40,0,1]}` {
+					t.Fatalf("moves = %s", c.Moves)
+				}
+			}},
+		{"a starter drops the old room's moves", moved, "Ember Forge", map[string]any{"start": "arcane"}, "", "",
+			func(t *testing.T, c counterTheme) {
+				if c.Moves != nil {
+					t.Fatalf("moves = %s", c.Moves)
+				}
+			}},
 		{"a first room still themes", "", "The Rusty Anchor", map[string]any{"wall": "canvas"}, "sets up The Rusty Anchor's room: counter: wall canvas", "",
 			func(t *testing.T, c counterTheme) {
 				if c.Name != "Plain counter" || c.Theme.Wall != "canvas" {
@@ -150,7 +175,7 @@ func TestShopRoomCounterEdit(t *testing.T) {
 // What roomBlock prints, read back as a block, plans no change.
 func TestRoomBlockCounterRoundTrip(t *testing.T) {
 	custom := `{"name":"Mine, \"quoted\"","version":1,"skeleton":{"shape":"round","opening":"doorway","display":"domes","counter":"curved"},"theme":{"wall":"brick","wood":"#111111","cloth":"#222222","accent":"#333333","trim":"#444444","light":"candles","warmth":0.25,"outside":"rain"},"props":["herbs","floating-books"]}`
-	for name, saved := range map[string]string{"saved": roomWithCounter(custom), "none saved": arrangedRoom, "empty props": roomWithCounter(strings.Replace(custom, `["herbs","floating-books"]`, `[]`, 1))} {
+	for name, saved := range map[string]string{"saved": roomWithCounter(custom), "none saved": arrangedRoom, "empty props": roomWithCounter(strings.Replace(custom, `["herbs","floating-books"]`, `[]`, 1)), "a view outside": roomWithCounter(strings.Replace(custom, `"outside":"rain"`, `"outside":"rain","scene":"sky-islands"`, 1))} {
 		t.Run(name, func(t *testing.T) {
 			k, _, _ := shopKinds()
 			blk := roomBlock("Ember Forge", json.RawMessage(saved))

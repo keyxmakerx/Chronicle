@@ -4,7 +4,8 @@ import (
 	"github.com/a-h/templ"
 )
 
-// onclick_handlers.go holds the Adventures tab's inline handlers. The panel is
+// onclick_handlers.go holds the inline handlers of the Adventures tab and the
+// players' screen's Power roll. The panel is
 // swapped in by HTMX whenever the screen refreshes, and a script tag or a
 // delegated listener may not run in a swapped fragment, so each control
 // carries its own self-contained handler. The bodies are fixed text: every
@@ -63,3 +64,11 @@ func noteEnterOnKeyDown() templ.ComponentScript {
 	return inlineHandler("dms_note_enter", noteEnterJS)
 }
 func pickPageOnClick() templ.ComponentScript { return inlineHandler("dms_pick_page", pickPageJS) }
+
+// powerRollJS opens the players' screen's Rolls card with its roller in
+// focus. The Table owns the roller; with it missing the word does nothing.
+const powerRollJS = `(function(){` +
+	`if(window.Chronicle&&Chronicle.tableRoller)Chronicle.tableRoller();` +
+	`})()`
+
+func powerRollOnClick() templ.ComponentScript { return inlineHandler("pls_power_roll", powerRollJS) }

@@ -268,6 +268,8 @@ templ sectionBody(v *View, id string, csrf string) {
 				}
 			</span>
 			<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Journal</a>
+		case "tray":
+			@trayCard(v.CampaignID)
 		case "adventures":
 			@adventuresPane(v.CampaignID, v.Adventures)
 		case "homebrew":

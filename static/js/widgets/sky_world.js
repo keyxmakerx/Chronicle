@@ -327,7 +327,7 @@
   window.SkyWorld = {
     D2R: D2R, TAU: TAU, clamp: clamp, mod: mod, smooth01: smooth01, dot3: dot3,
     absoluteDay: absoluteDay, dayIndex: dayIndex, yearLength: yearLength, isLeapYear: isLeapYear, monthDays: monthDays, hour24: hour24,
-    phaseAt: phaseAt, handState: handState, inclinationFor: inclinationFor,
+    phaseAt: phaseAt, handState: handState, inclinationFor: inclinationFor, hash01: hash01,
     makeSkym: makeSkym, PROJ: PROJ, moonTurn: moonTurn,
     PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette, sunHue: sunHue, SUN_KINDS: SUN_KINDS
   };

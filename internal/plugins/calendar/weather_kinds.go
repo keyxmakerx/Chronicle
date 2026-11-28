@@ -117,6 +117,12 @@ var weatherPresets = []weatherPreset{
 	{ID: "brimstone", Label: "Brimstone"},
 	{ID: "featherfall", Label: "Featherfall"},
 	{ID: "fey-lights", Label: "Fey Lights"},
+	{ID: "mammatus-sky", Label: "Mammatus Sky"},
+	{ID: "lenticular", Label: "Lens Clouds"},
+	{ID: "st-elmos-fire", Label: "St Elmo’s Fire"},
+	{ID: "ball-lightning", Label: "Ball Lightning"},
+	{ID: "eruption", Label: "Eruption"},
+	{ID: "leviathans", Label: "Sky Leviathans"},
 }
 
 // weatherEffects is the generator's sky effects in its order.
@@ -203,6 +209,12 @@ var weatherEffects = []weatherEffect{
 	{ID: "rift", Label: "Sky rift"},
 	{ID: "bubbles", Label: "Bubbles"},
 	{ID: "fey-lights", Label: "Fey lights"},
+	{ID: "mammatus", Label: "Hanging pouches"},
+	{ID: "lenticular", Label: "Lens clouds"},
+	{ID: "st-elmo", Label: "St Elmo’s fire"},
+	{ID: "ball-lightning", Label: "Ball lightning"},
+	{ID: "volcano", Label: "Eruption"},
+	{ID: "leviathans", Label: "Sky leviathans"},
 }
 
 const (

@@ -21,8 +21,16 @@
  * unfolds or folds that line in place.
  *
  * Whether the dock is out, and which sections are open in which order, is
- * remembered per browser and per campaign. The dock lives on <body>, so a
- * boosted navigation (which swaps only #main-content) leaves it standing.
+ * remembered per browser and per campaign; the arrangement and its saved
+ * layouts also follow the person between devices (dm_arrange.js, which adds
+ * Arrange mode, the layout menu and the Style drawer). The dock lives on
+ * <body>, so a boosted navigation (which swaps only #main-content) leaves it
+ * standing.
+ *
+ * The players' screen is the same dock on another fragment: its element sets
+ * the storage prefix, name, tab and first cards in data-dms-* attributes and,
+ * having no button of its own, is shown and tucked by the Table through
+ * el._dmsApi.
  *
  * Registered via Chronicle.register; boot.js mounts it on [data-widget="dm-screen"].
  */
@@ -113,26 +121,42 @@
     init: function (el) {
       var toggleBtn = el.querySelector('[data-dms-toggle]');
       var url = el.getAttribute('data-url');
-      if (!toggleBtn || !url) return;
+      // A screen with no button of its own (the players', whose die belongs
+      // to the Table) is marked data-dms-driven and worked through el._dmsApi.
+      if ((!toggleBtn && !el.hasAttribute('data-dms-driven')) || !url) return;
+
+      // The players' screen docks with this same code; its element names its
+      // own storage prefix, name, tucked tab and first cards.
+      var PREFIX = el.getAttribute('data-dms-store') || 'chronicle.dms.';
+      var NAME = el.getAttribute('data-dms-name') || (gmTerm() + ' Screen');
+      var TAB_LABEL = el.getAttribute('data-dms-tab-label') || ('Show the ' + NAME);
+      var TAB_ICON = el.getAttribute('data-dms-tab-icon') || 'fa-angles-left';
+      var LAZY = el.getAttribute('data-dms-lazy') === 'true';
+      function idList(attr, fallback) {
+        var v = (el.getAttribute(attr) || '').split(',').filter(Boolean);
+        return v.length ? v : fallback;
+      }
+      var defOpen = idList('data-dms-default-open', DEFAULT_OPEN);
+      var defLines = idList('data-dms-default-lines', DEFAULT_LINES);
 
       var cid = (url.match(/\/campaigns\/([^/]+)\//) || [])[1] || '';
-      var OUT_KEY = 'chronicle.dms.out.' + cid;
-      var OPEN_KEY = 'chronicle.dms.open.' + cid;
+      var OUT_KEY = PREFIX + 'out.' + cid;
+      var OPEN_KEY = PREFIX + 'open.' + cid;
       // A phone keeps its own unfolded lines, so the computer's order of
       // open cards is never disturbed.
-      var LINES_KEY = 'chronicle.dms.lines.' + cid;
+      var LINES_KEY = PREFIX + 'lines.' + cid;
       // Each leaf beside the column is a list of section ids, front card last.
-      var LEAVES_KEY = 'chronicle.dms.leaves.' + cid;
+      var LEAVES_KEY = PREFIX + 'leaves.' + cid;
       // Cards the person folded to their one line. Each card folds on its own,
       // so any number can sit open in the column or on a leaf.
-      var FOLDED_KEY = 'chronicle.dms.folded.' + cid;
+      var FOLDED_KEY = PREFIX + 'folded.' + cid;
 
-      var savedOpen = readJSON(OPEN_KEY, DEFAULT_OPEN);
-      var savedLines = readJSON(LINES_KEY, DEFAULT_LINES);
+      var savedOpen = readJSON(OPEN_KEY, defOpen);
+      var savedLines = readJSON(LINES_KEY, defLines);
       var st = {
-        lines: Array.isArray(savedLines) ? savedLines.filter(function (x) { return typeof x === 'string'; }) : DEFAULT_LINES.slice(),
+        lines: Array.isArray(savedLines) ? savedLines.filter(function (x) { return typeof x === 'string'; }) : defLines.slice(),
         out: readJSON(OUT_KEY, false) === true,
-        open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : DEFAULT_OPEN.slice(),
+        open: Array.isArray(savedOpen) ? savedOpen.filter(function (s) { return typeof s === 'string'; }) : defOpen.slice(),
         leaves: cleanLeaves(readJSON(LEAVES_KEY, [])),
         folded: cleanIds(readJSON(FOLDED_KEY, [])),
         dock: null, tab: null, loading: null, loaded: false, brewPv: false
@@ -169,9 +193,9 @@
         t.type = 'button';
         t.className = 'dms-tab';
         t.hidden = true;
-        t.setAttribute('aria-label', 'Show the ' + gmTerm() + ' Screen');
-        t.title = gmTerm() + ' Screen';
-        t.innerHTML = '<i class="fa-solid fa-angles-left" aria-hidden="true"></i><span class="dms-tab-n" hidden></span>';
+        t.setAttribute('aria-label', TAB_LABEL);
+        t.title = TAB_LABEL;
+        t.innerHTML = '<i class="fa-solid ' + TAB_ICON + '" aria-hidden="true"></i><span class="dms-tab-n" hidden></span>';
         t.addEventListener('click', function () { show(true); });
         document.body.appendChild(d);
         document.body.appendChild(t);
@@ -251,7 +275,15 @@
 
       // ---- Sections ----------------------------------------------------
 
-      function saveOpen() { writeJSON(OPEN_KEY, st.open); }
+      function saveOpen() { writeJSON(OPEN_KEY, st.open); touched(); }
+
+      // Arrange mode and layouts (dm_arrange.js), keyed by the screen this
+      // dock shows, so the players' screen gets the same. ar is null when the
+      // helper did not load; the dock then works as before.
+      var ar = null;
+      function touched() { if (ar) ar.changed(); }
+      function isHidden(id) { return (st.hidden || []).indexOf(id) >= 0; }
+      function saveAll() { writeJSON(OPEN_KEY, st.open); writeJSON(LEAVES_KEY, st.leaves); writeJSON(FOLDED_KEY, st.folded); }
 
       // A rail icon opens its section as the newest, brings a folded one to
       // the front, or closes the one already in front.
@@ -277,6 +309,7 @@
         else if (!on && i >= 0) st.folded.splice(i, 1);
         else return;
         writeJSON(FOLDED_KEY, st.folded);
+        touched();
       }
 
       // A card's header folds it to its one line or opens it whole; the others
@@ -323,6 +356,7 @@
           setLine(s, open);
           if (open && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(s);
         });
+        if (ar) ar.paint();
         refreshParty();
       }
 
@@ -382,7 +416,7 @@
         var have = {};
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) { have[s.getAttribute('data-dms-sec')] = true; });
         // A section can leave the screen (no fight source any more); forget it.
-        st.open = st.open.filter(function (id, i, a) { return have[id] && a.indexOf(id) === i; });
+        st.open = st.open.filter(function (id, i, a) { return have[id] && a.indexOf(id) === i && !isHidden(id); });
         fitLeaves(have);
         var n = st.open.length;
         r.querySelectorAll('[data-dms-sec]').forEach(function (s) {
@@ -392,7 +426,8 @@
           var front = i >= 0 && !isFolded(id);
           s.hidden = i < 0;
           s.classList.toggle('dms-folded', i >= 0 && !front);
-          s.style.order = i < 0 ? '' : String(n - i);
+          // Doubled, so a drop outline can sit between two cards.
+          s.style.order = i < 0 ? '' : String(2 * (n - i));
           var fold = s.querySelector('[data-dms-fold]');
           if (fold) fold.setAttribute('aria-expanded', front ? 'true' : 'false');
           var body = s.querySelector('.dms-sec-b');
@@ -416,6 +451,7 @@
           var cards = r.querySelector('[data-dms-cards]');
           if (cards) cards.scrollTop = 0;
         }
+        if (ar) ar.paint();
         refreshParty();
       }
 
@@ -426,7 +462,7 @@
       // cards; a refetch puts every card back in the column and this redraws
       // them onto their leaves.
 
-      function saveLeaves() { writeJSON(LEAVES_KEY, st.leaves); }
+      function saveLeaves() { writeJSON(LEAVES_KEY, st.leaves); touched(); }
 
       function leafOf(id) {
         for (var i = 0; i < st.leaves.length; i++) if (st.leaves[i].indexOf(id) >= 0) return i;
@@ -646,6 +682,17 @@
         applyOpen();
       }
 
+      // A pulled section dropped on the column opens there in front, leaving
+      // any leaf it was on.
+      function openInColumn(id) {
+        setFolded(id, false);
+        st.leaves = st.leaves.map(function (l) { return l.filter(function (x) { return x !== id; }); }).filter(function (l) { return l.length; });
+        st.open = st.open.filter(function (x) { return x !== id; }).concat([id]);
+        saveOpen();
+        saveLeaves();
+        applyOpen(id);
+      }
+
       // With every leaf open, a pulled section joins the leaf it is dropped on
       // as its front card.
       function dropOnLeaf(i, id) {
@@ -714,7 +761,8 @@
         var grip = e.target.closest('[data-dms-grip]');
         var title = !grip && e.pointerType !== 'touch' && e.target.closest('.dms-sec-t');
         var card = (grip || title) && (grip || title).closest('[data-dms-sec]');
-        if (card && !phone()) {
+        // A hidden card, shown tinted while arranging, comes back by its eye.
+        if (card && !phone() && !isHidden(card.getAttribute('data-dms-sec'))) {
           st.drag = { kind: 'card', id: card.getAttribute('data-dms-sec'), x: e.clientX, y: e.clientY, live: false };
           return;
         }
@@ -802,8 +850,42 @@
         d.live = true;
         document.documentElement.classList.add('dms-dragging');
         var s = sectionEl(d.id);
-        if (s) s.classList.add('dms-lifting');
+        // While arranging, an outline the card's own shape shows where it
+        // lands; the card itself leaves its place until the drop.
+        if (s && ar && ar.arranging()) {
+          var g = d.shape = document.createElement('div');
+          g.className = 'dms-dropghost' + (s.classList.contains('dms-wide') ? ' dms-wide' : '');
+          g.setAttribute('aria-hidden', 'true');
+          g.style.height = Math.min(s.offsetHeight, 320) + 'px';
+          g.style.order = s.style.order;
+          s.parentNode.insertBefore(g, s);
+          s.classList.add('dms-lifted');
+        } else if (s) s.classList.add('dms-lifting');
         d.chip = makeChip(sectionIcon(d.id), sectionTitle(d.id));
+      }
+
+      // Moves the drop outline to the place under the pointer: beside a
+      // card, at the end of a leaf or the column, or onto the new-leaf slot.
+      // Over the outline itself it stays, so it never jumps away.
+      function placeShape(d, e) {
+        var o = under(e), g = d.shape;
+        if (!o || o.closest('.dms-dropghost')) return;
+        var slot = o.closest('[data-dms-leafslot]');
+        if (slot) { slot.appendChild(g); g.style.order = ''; slot.classList.add('dms-hot'); d.to = { slot: true }; return; }
+        var t = cardTarget(e, d.id);
+        if (!t) return;
+        d.to = t;
+        if (t.id) {
+          t.el.parentNode.insertBefore(g, t.after ? t.el.nextSibling : t.el);
+          var ord = parseInt(t.el.style.order, 10);
+          g.style.order = isNaN(ord) ? '' : String(ord + (t.after ? 1 : -1));
+        } else if (t.leaf !== undefined) {
+          t.el.querySelector('.dms-leaf-b').appendChild(g);
+          g.style.order = '';
+        } else {
+          cardsBox().appendChild(g);
+          g.style.order = '9998';
+        }
       }
 
       function clearDrop() {
@@ -864,6 +946,7 @@
           placeChip(d, e);
           clearHot();
           clearDrop();
+          if (d.shape) { placeShape(d, e); return; }
           d.to = cardTarget(e, d.id);
           if (d.to) {
             if (d.to.id) d.to.el.classList.add(d.to.after ? 'dms-drop-after' : 'dms-drop-before');
@@ -895,9 +978,11 @@
           setProgress(d.ghost, d.p);
         }
         if (d.full) {
+          // With every leaf out, the column is a place to drop it too.
           var over = under(e), leaf = over && over.closest('.dms-leaf:not(.dms-leaf-ghost)');
-          d.over = leaf ? parseInt(leaf.getAttribute('data-dms-leaf'), 10) : null;
-          if (leaf) leaf.classList.add('dms-hot');
+          var onCol = !leaf && over && over.closest('.dms-col');
+          d.over = leaf ? parseInt(leaf.getAttribute('data-dms-leaf'), 10) : onCol ? 'col' : null;
+          if (leaf) leaf.classList.add('dms-hot'); else if (onCol) onCol.classList.add('dms-hot');
         }
       }
 
@@ -910,7 +995,8 @@
         if (d.el) d.el.classList.remove('dms-lifting');
         if (d.kind === 'card') {
           var ls = sectionEl(d.id);
-          if (ls) ls.classList.remove('dms-lifting');
+          if (ls) ls.classList.remove('dms-lifting', 'dms-lifted');
+          if (d.shape) d.shape.remove();
           clearDrop();
         }
         clearHot();
@@ -926,7 +1012,8 @@
         setTimeout(function () { st.eatClick = false; }, 0);
         if (e.type === 'pointercancel') { if (d.ghost) d.ghost.remove(); return; }
         if (d.kind === 'card') {
-          if (e.type !== 'pointercancel' && d.to) moveCard(d.id, d.to);
+          if (d.to && d.to.slot) unfold(d.id);
+          else if (d.to) moveCard(d.id, d.to);
           return;
         }
         if (d.kind === 'leaf') {
@@ -938,8 +1025,9 @@
           return;
         }
         if (d.full) {
-          if (d.over !== null && d.over !== undefined) dropOnLeaf(d.over, d.id);
-          else if (Chronicle.notify) Chronicle.notify('The screen opens to ' + (leafRoom() + 1) + ' leaves at most here. Drop it on a leaf.', 'info');
+          if (d.over === 'col') openInColumn(d.id);
+          else if (d.over !== null && d.over !== undefined) dropOnLeaf(d.over, d.id);
+          else if (Chronicle.notify) Chronicle.notify('The screen opens to ' + (leafRoom() + 1) + ' leaves at most here. Drop it on a leaf or on the screen.', 'info');
           return;
         }
         var g = d.ghost;
@@ -967,14 +1055,17 @@
         var n = waiting(), badge = st.tab.querySelector('.dms-tab-n');
         badge.hidden = n === 0;
         badge.textContent = n;
-        st.tab.setAttribute('aria-label', 'Show the ' + gmTerm() + ' Screen' +
+        st.tab.setAttribute('aria-label', TAB_LABEL +
           (n ? ', ' + n + (n === 1 ? ' request' : ' requests') + ' waiting' : ''));
         st.tab.hidden = st.out;
       }
 
-      function setDocked(on) {
+      // refocus asks a driver with no button here (the Table) to take focus
+      // back, since a narrow window draws no tab to land on.
+      function setDocked(on, refocus) {
         document.documentElement.classList.toggle('dms-docked', on);
-        toggleBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        el.dispatchEvent(new CustomEvent('dms:docked', { detail: { out: on, refocus: !!refocus } }));
       }
 
       function show(focus) {
@@ -1004,13 +1095,14 @@
         var had = st.dock.contains(document.activeElement);
         st.out = false;
         writeJSON(OUT_KEY, false);
-        setDocked(false);
+        var back = narrow() ? toggleBtn : st.tab;
+        setDocked(false, (focus || had) && !back);
         var d = st.dock;
         var done = function () {
           if (st.out) return; // brought back out mid-slide
           d.hidden = true;
           paintTab();
-          if (focus || had) (narrow() ? toggleBtn : st.tab).focus({ preventScroll: true });
+          if ((focus || had) && back) back.focus({ preventScroll: true });
         };
         if (reduce()) { done(); return; }
         d.animate([{ transform: 'none' }, { transform: 'translateX(100%)' }],
@@ -1024,6 +1116,7 @@
         if (!st.dock.contains(document.activeElement)) return;
         var confirm = st.dock.querySelector('[data-dms-confirm]:not([hidden])');
         if (confirm) { showConfirm(false); return; }
+        if (ar && ar.escape()) return;
         tuck(true);
       }
 
@@ -1058,7 +1151,7 @@
           });
         }
         return st.loading.catch(function () {
-          if (asked && Chronicle.notify) Chronicle.notify('The ' + gmTerm() + ' Screen could not load. Try again in a moment.', 'error');
+          if (asked && Chronicle.notify) Chronicle.notify('The ' + NAME + ' could not load. Try again in a moment.', 'error');
         });
       }
 
@@ -1136,6 +1229,7 @@
       }
 
       function afterMount() {
+        if (ar) ar.mounted();
         applyOpen();
         applyBrew();
         paintTab();
@@ -1238,6 +1332,9 @@
       var NOTE_OK = 'Saved · only you and co-' + gmTerm() + 's can see this';
 
       function noteBox() { var r = root(); return r && r.querySelector('[data-dms-note]'); }
+
+      // A note box may say who sees it once saved (a player's own note).
+      function noteOK() { var ta = noteBox(); return (ta && ta.getAttribute('data-dms-note-ok')) || NOTE_OK; }
 
       function noteStatus(text) {
         var r = root(), s = r && r.querySelector('[data-dms-note-status]');
@@ -1342,7 +1439,7 @@
             var box = noteBox();
             if (box && onScreen(n, box)) {
               box.setAttribute('data-dms-note-version', n.version);
-              noteStatus(n.dirty ? 'Unsaved changes' : NOTE_OK);
+              noteStatus(n.dirty ? 'Unsaved changes' : noteOK());
               var r = root(), a = r && r.querySelector('[data-dms-note-link]');
               if (a && j && j.link) { a.setAttribute('href', j.link); a.hidden = false; }
             }
@@ -1421,22 +1518,66 @@
 
       // ---- Start -------------------------------------------------------
 
-      toggleBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (st.out) tuck(true); else show(true);
-      });
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (st.out) tuck(true); else show(true);
+        });
+      }
+
+      // openCard shows a section whole: in the column (newest, first) unless
+      // it sits on a leaf, where it simply unfolds; on a phone its line opens.
+      function openCard(id) {
+        if (!sectionEl(id)) return null;
+        if (phone()) {
+          if (st.lines.indexOf(id) < 0) { st.lines.push(id); saveLines(); }
+          applyLines();
+          return sectionEl(id);
+        }
+        setFolded(id, false);
+        if (leafOf(id) < 0) {
+          st.open = st.open.filter(function (x) { return x !== id; });
+          st.open.push(id);
+          saveOpen();
+        }
+        applyOpen(id);
+        return sectionEl(id);
+      }
+
+      // The driver's handle on a screen with no button of its own.
+      el._dmsApi = {
+        out: function () { return st.out; },
+        toggle: function (focus) { if (st.out) tuck(focus); else show(focus); },
+        // Shows the screen with one section open whole; resolves to its card
+        // (null when the screen could not load or has no such section).
+        open: function (id) {
+          if (!st.out) show(false);
+          return ensure(true).then(function () { return openCard(id); });
+        }
+      };
 
       build();
+      if (Chronicle.dmsArrange) {
+        ar = Chronicle.dmsArrange({
+          st: st, dock: st.dock, cid: cid, screen: el.getAttribute('data-screen') || 'dm',
+          // The account copy's local cache sits beside the dock's other keys.
+          prefsKey: OPEN_KEY.replace('.open.', '.prefs.'),
+          factoryOpen: defOpen,
+          root: root, applyOpen: applyOpen, saveAll: saveAll, homeCard: homeCard, sectionEl: sectionEl,
+          sectionTitle: sectionTitle, leafRoom: leafRoom, phone: phone
+        });
+      }
       setDocked(false);
       if (st.out) {
         // Out last time: back out at once, without the slide, on a wide
         // window. A narrow window starts tucked so the page is readable.
-        if (narrow()) { st.out = false; paintTab(); ensure(false); }
+        if (narrow()) { st.out = false; paintTab(); if (!LAZY) ensure(false); }
         else { st.dock.hidden = false; setDocked(true); ensure(false); }
       } else {
-        // Tucked: the panel still loads so the tab can show the waiting count.
+        // Tucked: the panel still loads so the tab can show the waiting count,
+        // unless the screen has no count to show (data-dms-lazy).
         paintTab();
-        ensure(false);
+        if (!LAZY) ensure(false);
       }
 
       st.onKey = onKey;
@@ -1446,6 +1587,7 @@
       st.dragMove = dragMove;
       st.dragUp = dragUp;
       st.dragEnd = dragEnd;
+      st.ar = ar;
       el._dmsState = st;
     },
     destroy: function (el) {
@@ -1461,6 +1603,7 @@
       window.removeEventListener('pointerup', st.dragUp);
       window.removeEventListener('pointercancel', st.dragUp);
       if (st.dragEnd) st.dragEnd();
+      if (st.ar) st.ar.destroy();
       if (window.Chronicle && Chronicle.destroyWidget) st.dock.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
       st.dock.remove();
       if (st.tab) st.tab.remove();

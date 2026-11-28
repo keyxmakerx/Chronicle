@@ -58,16 +58,28 @@ func clampPage(p int) int {
 }
 
 // browseQuery turns the sheet's filters into a repository query.
-func browseQuery(c *CampaignInfo, in BrowseInput) (BrowseQuery, int, error) {
+func browseQuery(c *CampaignInfo, in BrowseInput, kinds KindRegistry) (BrowseQuery, int, error) {
 	q := BrowseQuery{SystemID: c.SystemID, AnySys: in.AllSystems, Limit: GalleryPageSize}
 	switch in.Kind {
 	case "", KindFilterAll:
-	case KindFilterRooms:
-		q.Kinds = []string{KindRoomTheme}
-	case KindFilterCrafting:
-		q.Prefix = "crafting-"
 	default:
-		return q, 0, apperror.NewBadRequest("kind must be all, rooms or crafting")
+		// A filter is a Store group; the kinds that describe themselves into it
+		// decide what it matches.
+		switch names := kindsInGroup(kinds, in.Kind); {
+		case len(names) > 0:
+			q.Kinds = names
+		case in.Kind == KindFilterCrafting:
+			// The crafting kinds do not describe themselves yet, and entries of
+			// theirs must stay browsable.
+			// TODO(#2910): drop this once they register a Describer.
+			q.Prefix = "crafting-"
+		default:
+			ids := []string{KindFilterAll}
+			for _, k := range storeGroups(kinds) {
+				ids = append(ids, k.ID)
+			}
+			return q, 0, apperror.NewBadRequest("kind must be one of: " + strings.Join(ids, ", "))
+		}
 	}
 	text := cleanText(in.Q)
 	if utf8.RuneCountInString(text) > MaxNameLen {
@@ -85,7 +97,7 @@ func (g *gallery) Browse(ctx context.Context, campaignID, userID string, in Brow
 	if err != nil {
 		return nil, err
 	}
-	q, page, err := browseQuery(c, in)
+	q, page, err := browseQuery(c, in, g.lib.kinds)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +153,7 @@ func (g *gallery) visible(ctx context.Context, id string) (*GalleryEntry, error)
 // Copy takes an independent copy into the route's campaign. A design from
 // another game system is allowed, as a share code is: the kind's check refuses
 // a part that does not exist here, and the card already said what is lacking.
-func (g *gallery) Copy(ctx context.Context, campaignID, userID, entryID string) (*Design, error) {
+func (g *gallery) Copy(ctx context.Context, campaignID, userID, entryID string) (*Taken, error) {
 	c, _, err := g.lib.requireOwner(ctx, campaignID, userID)
 	if err != nil {
 		return nil, err
@@ -155,7 +167,7 @@ func (g *gallery) Copy(ctx context.Context, campaignID, userID, entryID string) 
 	if err != nil {
 		return nil, err
 	}
-	return g.lib.store(ctx, c, newDesign{
+	return g.lib.place(ctx, c, userID, newDesign{
 		kind: e.Kind, name: e.Name, note: e.Note, data: data,
 		makerUser: e.PublisherUserID, makerName: e.MakerName, origin: OriginGallery, ref: e.MakerName,
 	})

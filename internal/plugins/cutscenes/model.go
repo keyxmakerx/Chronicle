@@ -14,12 +14,32 @@ const (
 	BackgroundFadeToBlack = "fade-to-black"
 	BackgroundNone        = "none"
 
-	OverlayEye    = "eye"
-	OverlayEmbers = "embers"
+	OverlayEye       = "eye"
+	OverlayEmbers    = "embers"
+	OverlayLetterbox = "letterbox"
 
 	StyleWhisper = "whisper"
 	StyleTitle   = "title"
 	StylePlain   = "plain"
+	StyleCaption = "caption"
+
+	// How a black background arrives, chosen apart from what it is. Each
+	// keeps its old kind name on the wire (KindFor), so a player that
+	// predates the split plays it the same.
+	ArriveCut        = "cut"
+	ArriveFade       = "fade"
+	ArriveFallAsleep = "fall-asleep"
+
+	// Where a line sits, and how it arrives and leaves. Blank is the default
+	// for each (the middle, the style's own arrival, a soft blur upwards),
+	// and only a choice that differs is stored.
+	LayoutMiddle = "middle"
+	LayoutCorner = "corner"
+	TextFade     = "fade"
+	TextRise     = "rise"
+	TextSettle   = "settle"
+	TextSlide    = "slide"
+	TextSink     = "sink"
 
 	EndingTap  = "tap"
 	EndingAuto = "auto"
@@ -45,17 +65,80 @@ var (
 	OverlayKinds = []Kind{
 		{OverlayEye, "An eye opens", "a single eye opens in the middle of the screen, burning with light in its colour, with fire blooming round it"},
 		{OverlayEmbers, "Embers", "glowing sparks drift up from the bottom of the screen in its colour"},
+		{OverlayLetterbox, "Film bars", "black bars slide in from the top and bottom and stay, framing the screen like a widescreen film"},
 	}
 	TextStyles = []Kind{
 		{StyleWhisper, "Whisper", "small, spaced italic letters that fade in softly"},
 		{StyleTitle, "Title", "large display letters, like a chapter heading"},
 		{StylePlain, "Plain", "ordinary reading text"},
+		{StyleCaption, "Caption", "small, widely spaced capitals, for a chapter number or the line under a place"},
+	}
+	// Backdrops and Arrivals are the background split the way the editor
+	// offers it: what the background is, then how it arrives.
+	Backdrops = []Kind{
+		{BackgroundBlack, "Black", "the screen goes black"},
+		{BackgroundNone, "Nothing", "no background of its own; only the layers on top and the words are drawn"},
+	}
+	Arrivals = []Kind{
+		{ArriveCut, "At once", "the background is there from the first moment"},
+		{ArriveFade, "Fades in", "the whole screen dims evenly"},
+		{ArriveFallAsleep, "Falling asleep", "darkness creeps in from the edges in soft, blurred patches, like eyes closing"},
+	}
+	TextLayouts = []Kind{
+		{LayoutMiddle, "In the middle", "centred on the screen, under the eye when there is one"},
+		{LayoutCorner, "Corner card", "small, at the bottom left, like a film's place and time line"},
+	}
+	TextArrivals = []Kind{
+		{TextFade, "Fades in", "the line fades in where it stands"},
+		{TextRise, "Rises", "the line rises a little as it fades in"},
+		{TextSettle, "Settles", "the letters start blurred and wide apart and draw together into place"},
+		{TextSlide, "Slides in", "the line slides in from the left"},
+	}
+	TextLeavings = []Kind{
+		{TextFade, "Fades", "the line fades away where it stands"},
+		{TextSink, "Sinks", "the line sinks a little as it fades"},
+		{TextSlide, "Slides away", "the line slides back out to the left"},
 	}
 	EndingKinds = []Kind{
 		{EndingTap, "When they tap", "a quiet Close appears once the last layer has finished; a tap, click or Esc closes it"},
 		{EndingAuto, "By itself", "it closes on its own a few seconds after the last layer has finished"},
 	}
 )
+
+// KindFor is the background kind stored for a backdrop and an arrival: a
+// black backdrop is named by its arrival, as it was before the two were
+// separate choices.
+func KindFor(backdrop, arrival string) string {
+	if backdrop == BackgroundNone {
+		return BackgroundNone
+	}
+	switch arrival {
+	case ArriveCut:
+		return BackgroundBlack
+	case ArriveFade:
+		return BackgroundFadeToBlack
+	}
+	return BackgroundFallAsleep
+}
+
+// BackdropOf and ArrivalOf split a stored background kind back into the
+// editor's two choices.
+func BackdropOf(kind string) string {
+	if kind == BackgroundNone {
+		return BackgroundNone
+	}
+	return BackgroundBlack
+}
+
+func ArrivalOf(kind string) string {
+	switch kind {
+	case BackgroundBlack, BackgroundNone:
+		return ArriveCut
+	case BackgroundFadeToBlack:
+		return ArriveFade
+	}
+	return ArriveFallAsleep
+}
 
 // Look is one way a kind can be drawn. The ids and names mirror the engine's
 // ChronicleCutscene.looks table, in its order, the first being the one the
@@ -163,8 +246,12 @@ type Params struct {
 }
 
 // Background is the bottom layer: how the screen goes dark.
+//
+// In is how it arrives when written apart from Kind; Normalize folds it into
+// Kind's name and stores it empty.
 type Background struct {
 	Kind    string  `json:"kind"`
+	In      string  `json:"in,omitempty"`
 	Seconds float64 `json:"seconds"`
 	Params  Params  `json:"params"`
 }
@@ -177,12 +264,17 @@ type Overlay struct {
 	Params  Params  `json:"params"`
 }
 
-// TextLine is one line of words. Say is plain text, never HTML.
+// TextLine is one line of words. Say is plain text, never HTML. Layout, In
+// and Out are empty for the defaults, so a line written before they existed
+// is stored unchanged.
 type TextLine struct {
 	Say     string  `json:"say"`
 	At      float64 `json:"at"`
 	Seconds float64 `json:"seconds"`
 	Style   string  `json:"style"`
+	Layout  string  `json:"layout,omitempty"`
+	In      string  `json:"in,omitempty"`
+	Out     string  `json:"out,omitempty"`
 }
 
 // Ending says how the scene closes. After (auto only) is seconds after the
