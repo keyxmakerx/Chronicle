@@ -24,6 +24,7 @@ func entryFieldsManifest(t *testing.T, fieldJSON string) *SystemManifest {
 	}
 	m.sanitizeEntryFields()
 	m.sanitizeEntryEffects()
+	m.sanitizeEntryItems()
 	return &m
 }
 
