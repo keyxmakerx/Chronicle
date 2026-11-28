@@ -175,14 +175,16 @@ func endingOnChange() templ.ComponentScript {
 // bgKindOnChange shows the background's Look picker only for the kind that
 // has looks. The hidden picker still posts; the server drops a look on a kind
 // without looks, so a hidden choice never reaches the scene.
+// The background is two pickers, what it is and how it arrives: the arrival
+// and its time only mean something on black.
 func bgKindOnChange() templ.ComponentScript {
-	return inline("cswBgKind", `(function(s){var f=s.closest('form');if(!f){return;}var l=f.querySelector('[data-csw-bg-look]');if(l){l.hidden=s.value!==`+jsStr(BackgroundFallAsleep)+`;}})(this)`)
+	return inline("cswBgKind", `(function(s){var f=s.closest('form');if(!f){return;}var k=f.querySelector('[name=bg_kind]'),a=f.querySelector('[name=bg_in]');if(!k||!a){return;}var black=k.value!==`+jsStr(BackgroundNone)+`;f.querySelectorAll('[data-csw-bg-in]').forEach(function(e){e.hidden=!black;});var l=f.querySelector('[data-csw-bg-look]');if(l){l.hidden=!black||a.value!==`+jsStr(ArriveFallAsleep)+`;}var t=f.querySelector('[data-csw-bg-sec]');if(t){t.hidden=!black||a.value===`+jsStr(ArriveCut)+`;}})(this)`)
 }
 
 // ovKindOnChange does the same for one layer on top: only an eye has looks
 // and a pupil.
 func ovKindOnChange() templ.ComponentScript {
-	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});})(this)`)
+	return inline("cswOvKind", `(function(s){var r=s.closest('[data-csw-row]');if(!r){return;}r.querySelectorAll('[data-csw-ov-look],[data-csw-ov-pupil]').forEach(function(l){l.hidden=s.value!==`+jsStr(OverlayEye)+`;});var c=r.querySelector('[data-csw-ov-color]');if(c){c.hidden=s.value===`+jsStr(OverlayLetterbox)+`;}})(this)`)
 }
 
 func afterValue(e Ending) string {

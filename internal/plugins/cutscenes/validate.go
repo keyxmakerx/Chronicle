@@ -42,6 +42,12 @@ func Normalize(in Scene) (Scene, error) {
 	if !known(BackgroundKinds, bg.Kind) {
 		return out, apperror.NewBadRequest(fmt.Sprintf("the background %q is not one of %s", bg.Kind, keys(BackgroundKinds)))
 	}
+	if bg.In != "" {
+		if !known(Arrivals, bg.In) {
+			return out, apperror.NewBadRequest(fmt.Sprintf("the background's arrival %q is not one of %s", bg.In, keys(Arrivals)))
+		}
+		bg.Kind = KindFor(BackdropOf(bg.Kind), bg.In)
+	}
 	out.Background = Background{Kind: bg.Kind, Seconds: seconds(bg.Seconds, DefaultSeconds), Params: Params{Look: look(bg.Kind, bg.Params.Look)}}
 
 	if len(in.Overlays) > MaxOverlays {
@@ -55,6 +61,9 @@ func Normalize(in Scene) (Scene, error) {
 		c, err := color(o.Params.Color, defaultColor(o.Kind))
 		if err != nil {
 			return out, apperror.NewBadRequest(fmt.Sprintf("layer on top %d: %s", i+1, err.Error()))
+		}
+		if o.Kind == OverlayLetterbox {
+			c = "" // film bars are always black
 		}
 		out.Overlays = append(out.Overlays, Overlay{Kind: o.Kind, At: at(o.At), Seconds: seconds(o.Seconds, DefaultSeconds), Params: Params{Color: c, Look: look(o.Kind, o.Params.Look), Pupil: pupil(o.Kind, o.Params.Pupil)}})
 	}
@@ -81,7 +90,17 @@ func Normalize(in Scene) (Scene, error) {
 		if !known(TextStyles, style) {
 			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the style %q is not one of %s", i+1, style, keys(TextStyles)))
 		}
-		out.Text = append(out.Text, TextLine{Say: say, At: at(t.At), Seconds: lineSeconds(t.Seconds), Style: style})
+		line := TextLine{Say: say, At: at(t.At), Seconds: lineSeconds(t.Seconds), Style: style}
+		if line.Layout, err = choice(TextLayouts, t.Layout, LayoutMiddle); err != nil {
+			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the place %s", i+1, err.Error()))
+		}
+		if line.In, err = choice(TextArrivals, t.In, ""); err != nil {
+			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the arrival %s", i+1, err.Error()))
+		}
+		if line.Out, err = choice(TextLeavings, t.Out, ""); err != nil {
+			return out, apperror.NewBadRequest(fmt.Sprintf("words %d: the leaving %s", i+1, err.Error()))
+		}
+		out.Text = append(out.Text, line)
 	}
 
 	end := in.Ending
@@ -113,6 +132,19 @@ func NewScene() Scene {
 		Text:       []TextLine{{Say: "Something has noticed you.", At: 11, Seconds: 5, Style: StyleWhisper}},
 		Ending:     Ending{Kind: EndingTap},
 	}
+}
+
+// choice reads an optional pick from list: blank or the default is stored
+// blank, so only a choice that differs from the default is kept.
+func choice(list []Kind, key, def string) (string, error) {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if key == "" || key == def {
+		return "", nil
+	}
+	if !known(list, key) {
+		return "", fmt.Errorf("%q is not one of %s", key, keys(list))
+	}
+	return key, nil
 }
 
 func known(list []Kind, key string) bool {
