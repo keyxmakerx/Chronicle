@@ -66,6 +66,8 @@
       '<text x="' + g.t[0] + '" y="' + g.t[1] + '">' + (value == null ? '' : Number(value)) + '</text></svg>';
   }
 
+  // A fade takes the page's standard duration; a host without the token helper gets 200ms.
+  function fadeMs() { return W.Chronicle.motionMs ? W.Chronicle.motionMs('--dur-standard', 200) : 200; }
   function pick(v, list, dflt) { return list.indexOf(v) >= 0 ? v : dflt; }
   function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
   function motionNow() {
@@ -229,8 +231,8 @@
       st.flat = st.flat.filter(function (x) { return x !== r; });
       var gone = function () { r.els.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); }); };
       if (!fade || !r.els[0].animate) { gone(); return; }
-      r.els.forEach(function (n) { n.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, fill: 'forwards' }); });
-      setTimeout(gone, 240);
+      r.els.forEach(function (n) { n.animate([{ opacity: 1 }, { opacity: 0 }], { duration: fadeMs(), fill: 'forwards' }); });
+      setTimeout(gone, fadeMs() + 20);
     }
     function trimFlat(incoming) {
       var count = incoming;
@@ -254,7 +256,7 @@
         var cycle = m === 'full';
         n.innerHTML = flatSvg(die.sides, cycle ? '' : die.value);
         flatEl.appendChild(n); els.push(n);
-        if (m === 'calm' && n.animate) n.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, fill: 'backwards' });
+        if (m === 'calm' && n.animate) n.animate([{ opacity: 0 }, { opacity: 1 }], { duration: fadeMs(), fill: 'backwards' });
         if (cycle && n.animate) {
           var dur = 440 + Math.min(i, 4) * 10, sx = Math.cos(d.side) * matEl.clientWidth * 0.55, sy = Math.sin(d.side) * matEl.clientHeight * 0.55, spin = -(600 + i * 70), txt = n.querySelector('text');
           n.animate([
@@ -264,7 +266,7 @@
             { transform: 'none' }], { duration: dur, easing: 'cubic-bezier(0.22,0.8,0.24,1)' });
           [0.2, 0.45, 0.7].forEach(function (f) { setTimeout(function () { if (txt.isConnected) txt.textContent = String(1 + Math.floor(Math.random() * die.sides)); }, dur * f); });
           setTimeout(function () { if (txt.isConnected) txt.textContent = String(die.value); if (i === d.dice.length - 1) done(); }, dur);
-        } else if (i === d.dice.length - 1) setTimeout(done, m === 'calm' ? 220 : 0);
+        } else if (i === d.dice.length - 1) setTimeout(done, m === 'calm' ? fadeMs() : 0);
       });
       // The name goes over the first die, in the roller's colour.
       var tag = document.createElement('span');
